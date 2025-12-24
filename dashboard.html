@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACC Telemetry Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <!-- Splash Screen Overlay -->
+    <div id="splashOverlay" class="splash-overlay">
+        <div class="splash-particles" id="splashParticles"></div>
+        <div class="splash-box">
+            <div class="splash-glow"></div>
+            <div class="splash-content">
+                <div class="splash-logo">
+                    <span class="splash-logo-mark">ACC</span>
+                    <span class="splash-logo-text">TELEMETRY</span>
+                </div>
+                <div class="splash-buttons">
+                    <button class="btn btn-secondary splash-btn" id="splashFolderBtn">
+                        IMPORTA CARTELLA
+                    </button>
+                    <button class="btn btn-primary splash-btn" id="splashFileBtn">
+                        CARICA SESSIONI
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="logo">
+                <span class="logo-mark">ACC</span>
+                <h1>TELEMETRY</h1>
+            </div>
+            <div class="header-controls">
+                <input type="file" id="fileInput" multiple accept=".json" style="display: none;">
+                <input type="file" id="folderInput" webkitdirectory multiple accept=".json" style="display: none;">
+                <button class="btn btn-secondary" onclick="document.getElementById('folderInput').click()">
+                    IMPORTA CARTELLA
+                </button>
+                <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                    CARICA SESSIONI
+                </button>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-view="overview">
+                <span class="tab-label">PANORAMICA</span>
+            </button>
+            <button class="nav-tab" data-view="sessions">
+                <span class="tab-label">SESSIONI</span>
+            </button>
+            <button class="nav-tab disabled" data-view="stints" id="stintTab"
+                title="Seleziona una sessione per vedere i dettagli">
+                <span class="tab-label">STINT</span>
+            </button>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Overview View -->
+            <section id="overview-view" class="view active">
+                <!-- Header with Toggle -->
+                <div class="overview-header">
+                    <div class="overview-title">
+                        <h1>ACC DRIVER DASHBOARD</h1>
+                    </div>
+                    <div class="driver-badge" id="driverName">PILOTA</div>
+                </div>
+
+                <!-- Toggle Switch -->
+                <div class="view-toggle-container">
+                    <div class="view-toggle">
+                        <button class="toggle-btn active" data-mode="week"
+                            onclick="dashboard.setViewMode('week')">ULTIMI 7 GIORNI</button>
+                        <button class="toggle-btn" data-mode="global"
+                            onclick="dashboard.setViewMode('global')">GLOBALE</button>
+                    </div>
+                </div>
+
+                <!-- ATTIVITÀ Section -->
+                <div class="overview-section">
+                    <h2 class="section-title">ATTIVITÀ</h2>
+                    <div class="stats-row-3">
+                        <div class="stat-box highlight">
+                            <span class="stat-label">TEMPO IN PISTA</span>
+                            <span class="stat-value" id="statDriveTime">0h 0m</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">GIORNI TRAINING</span>
+                            <span class="stat-value" id="statTrainingDays">0</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">SESSIONI</span>
+                            <span class="stat-value" id="statSessions">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- QUALITÀ + DISTRIBUZIONE Row -->
+                <div class="two-column-row">
+                    <!-- QUALITÀ -->
+                    <div class="overview-section section-half">
+                        <h2 class="section-title">QUALITÀ</h2>
+                        <div class="quality-compact">
+                            <span class="quality-value-big" id="statValidPercent">0%</span>
+                            <span class="quality-detail" id="statTotalLaps">0 / 0</span>
+                        </div>
+                    </div>
+
+                    <!-- DISTRIBUZIONE -->
+                    <div class="overview-section section-half">
+                        <h2 class="section-title">DISTRIBUZIONE</h2>
+                        <div class="distribution-inline">
+                            <canvas id="distributionChart" width="80" height="80"></canvas>
+                            <div class="legend-inline">
+                                <div class="legend-row"><span class="dot practice"></span>Practice <span
+                                        id="legendPractice">0%</span></div>
+                                <div class="legend-row"><span class="dot qualify"></span>Qualify <span
+                                        id="legendQualify">0%</span></div>
+                                <div class="legend-row"><span class="dot race"></span>Race <span
+                                        id="legendRace">0%</span></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PISTE Section -->
+                <div class="overview-section section-compact">
+                    <h2 class="section-title">PISTE</h2>
+                    <div class="tracks-chips" id="tracksChips">
+                        <span class="track-chip empty">NESSUNA PISTA</span>
+                    </div>
+                </div>
+
+                <!-- RITMO Section -->
+                <div class="overview-section">
+                    <div class="section-header-with-selector">
+                        <h2 class="section-title">RITMO</h2>
+                        <div class="year-selector-container" id="yearSelectorContainer" style="display: none;">
+                            <select id="rhythmYearSelector" class="year-selector">
+                                <option value="rolling">ULTIMI 12 MESI</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="rhythm-chart-wrapper">
+                        <canvas id="rhythmChartCanvas" height="120"></canvas>
+                    </div>
+                </div>
+
+                <!-- AZIONI Section -->
+                <div class="overview-section actions-section">
+                    <button class="btn btn-action" onclick="dashboard.switchView('sessions')">VAI ALLE SESSIONI</button>
+                    <button class="btn btn-action-secondary" onclick="dashboard.goToLastSession()">ULTIMA
+                        SESSIONE</button>
+                </div>
+            </section>
+
+            <!-- Sessions View -->
+            <section id="sessions-view" class="view">
+                <!-- Header -->
+                <div class="sessions-header">
+                    <h1>SESSIONI</h1>
+                    <div class="driver-badge" id="sessionsDriverName">PILOTA</div>
+                </div>
+
+                <!-- Filters -->
+                <div class="filters-bar">
+                    <div class="filter-group">
+                        <label>FILTRI:</label>
+                        <select id="trackFilter" class="filter-select">
+                            <option value="">PISTA ▾</option>
+                        </select>
+                        <select id="carFilter" class="filter-select">
+                            <option value="">AUTO ▾</option>
+                        </select>
+                        <select id="typeFilter" class="filter-select">
+                            <option value="">TIPO ▾</option>
+                            <option value="practice">PRACTICE</option>
+                            <option value="qualify">QUALIFY</option>
+                            <option value="race">RACE</option>
+                        </select>
+                        <select id="periodFilter" class="filter-select">
+                            <option value="">PERIODO ▾</option>
+                            <option value="week">ULTIMA SETTIMANA</option>
+                            <option value="month">ULTIMO MESE</option>
+                            <option value="all">TUTTO</option>
+                        </select>
+                        <input type="text" id="searchFilter" class="filter-input" placeholder="CERCA...">
+                    </div>
+                </div>
+
+                <!-- Sorting -->
+                <div class="sorting-bar">
+                    <span class="sort-label">ORDINA PER:</span>
+                    <button class="sort-btn active" data-sort="date" onclick="dashboard.sortSessions('date')">DATA
+                        ↓</button>
+                    <button class="sort-btn" data-sort="bestlap" onclick="dashboard.sortSessions('bestlap')">BEST
+                        LAP</button>
+                    <button class="sort-btn" data-sort="duration"
+                        onclick="dashboard.sortSessions('duration')">DURATA</button>
+                </div>
+
+                <!-- Sessions List -->
+                <div class="sessions-grid" id="sessionsList">
+                    <div class="empty-state">
+                        <span class="empty-icon">—</span>
+                        <p>Nessuna sessione caricata</p>
+                        <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">
+                            CARICA SESSIONI
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Pagination Controls -->
+                <div class="pagination-controls" id="paginationControls" style="display: none;">
+                    <button class="pagination-btn" id="prevPage" onclick="dashboard.prevPage()">◀ PREC</button>
+                    <div class="pagination-info">
+                        <span class="pagination-current" id="paginationCurrent">Pagina 1 di 1</span>
+                        <span class="pagination-total" id="paginationTotal">(0 sessioni)</span>
+                    </div>
+                    <button class="pagination-btn" id="nextPage" onclick="dashboard.nextPage()">SUCC ▶</button>
+                </div>
+            </section>
+
+            <!-- Session Detail View -->
+            <section id="stints-view" class="view">
+                <!-- Session Header -->
+                <div class="session-detail-header">
+                    <button class="btn btn-back" id="backToSessions">← INDIETRO</button>
+                    <div class="session-info-header">
+                        <h2 id="sessionTrackName">Silverstone</h2>
+                        <div class="session-meta-header">
+                            <span class="session-type-badge" id="sessionTypeBadge">PRACTICE</span>
+                            <span id="sessionCarName">Ferrari 296 GT3</span>
+                            <span id="sessionDate">21 dic 2025</span>
+                            <span class="weather-badge" id="weatherBadge" title="Weather">DRY</span>
+                            <span class="grip-badge" id="gripBadge" title="Track grip">OPTIMUM</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conditions Bar -->
+                <div class="conditions-bar">
+                    <div class="condition-item">
+                        <span class="condition-label">ARIA</span>
+                        <span class="condition-value" id="condAirTemp">22°C</span>
+                    </div>
+                    <div class="condition-item">
+                        <span class="condition-label">ASFALTO</span>
+                        <span class="condition-value" id="condRoadTemp">24°C</span>
+                    </div>
+                    <div class="condition-item">
+                        <span class="condition-label">METEO</span>
+                        <span class="condition-value" id="condWeather">DRY</span>
+                    </div>
+                    <div class="condition-item">
+                        <span class="condition-label">GRIP</span>
+                        <span class="condition-value grip-text" id="condGrip">OPTIMUM</span>
+                    </div>
+                </div>
+
+                <!-- Session Synthesis -->
+                <div class="session-synthesis glass-card">
+                    <div class="synth-item">
+                        <span class="synth-value" id="synthDuration">11m</span>
+                        <span class="synth-label">DURATA</span>
+                    </div>
+                    <div class="synth-item" title="Giri cronometrabili (esclusi pit-stop, out-lap)">
+                        <span class="synth-value" id="synthLaps">5</span>
+                        <span class="synth-label">GIRI</span>
+                    </div>
+                    <div class="synth-item" title="Giri validi / totali cronometrabili">
+                        <span class="synth-value" id="synthValid">4/5</span>
+                        <span class="synth-label">VALIDI</span>
+                    </div>
+                    <div class="synth-item highlight">
+                        <span class="synth-value" id="synthBest">2:00.392</span>
+                        <span class="synth-label">BEST LAP</span>
+                    </div>
+                </div>
+
+                <!-- Stint Timeline -->
+                <div class="session-section">
+                    <h3 class="section-title-sm">TIMELINE STINT</h3>
+                    <div class="stint-timeline" id="stintTimeline">
+                        <!-- Rendered via JS -->
+                    </div>
+                </div>
+
+                <!-- Lap Analysis Filters -->
+                <div class="lap-filters-bar">
+                    <div class="filter-group-inline">
+                        <span class="filter-label">STINT:</span>
+                        <div class="toggle-group" id="stintFilterGroup">
+                            <button class="filter-toggle-btn active" data-stint="all"
+                                onclick="dashboard.setStintFilter('all')">TUTTI</button>
+                            <!-- Dynamic stint buttons added via JS -->
+                        </div>
+                    </div>
+                    <div class="filter-group-inline">
+                        <span class="filter-label">SETTORE:</span>
+                        <div class="toggle-group" id="sectorFilterGroup">
+                            <button class="filter-toggle-btn active" data-sector="all"
+                                onclick="dashboard.setSectorFilter('all')">TUTTI</button>
+                            <button class="filter-toggle-btn" data-sector="s1"
+                                onclick="dashboard.setSectorFilter('s1')">S1</button>
+                            <button class="filter-toggle-btn" data-sector="s2"
+                                onclick="dashboard.setSectorFilter('s2')">S2</button>
+                            <button class="filter-toggle-btn" data-sector="s3"
+                                onclick="dashboard.setSectorFilter('s3')">S3</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Row (Optimal, Average, Delta) -->
+                <div class="lap-stats-row" id="lapStatsRow">
+                    <div class="lap-stat-card">
+                        <span class="lap-stat-value optimal" id="statOptimalLap">--:--.---</span>
+                        <span class="lap-stat-label">GIRO OTTIMALE</span>
+                    </div>
+                    <div class="lap-stat-card">
+                        <span class="lap-stat-value average" id="statAvgLap">--:--.---</span>
+                        <span class="lap-stat-label">MEDIA</span>
+                    </div>
+                    <div class="lap-stat-card">
+                        <span class="lap-stat-value delta" id="statDelta">±0.000</span>
+                        <span class="lap-stat-label">VARIAZIONE</span>
+                    </div>
+                </div>
+
+                <!-- Lap Times Chart (Connected to filters visually) -->
+                <div class="lap-chart-wrapper">
+                    <canvas id="lapTimesChartCanvas" height="180"></canvas>
+                </div>
+
+                <!-- Laps Table -->
+                <div class="session-section">
+                    <h3 class="section-title-sm">DETTAGLIO GIRI</h3>
+                    <div class="laps-table-container">
+                        <table class="laps-table" id="lapsTable">
+                            <thead>
+                                <tr>
+                                    <th>GIRO</th>
+                                    <th>TEMPO</th>
+                                    <th>S1</th>
+                                    <th>S2</th>
+                                    <th>S3</th>
+                                    <th>FUEL</th>
+                                    <th>GRIP</th>
+                                    <th>STATO</th>
+                                </tr>
+                            </thead>
+                            <tbody id="lapsTableBody">
+                                <!-- Rendered via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+
+</html>
