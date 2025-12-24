@@ -5041,7 +5041,7 @@ body::before {
     }
 
     .quality-value-big {
-        font-size: 1.8rem;
+        font-size: 1.8rem !important;
     }
 
     .quality-detail {
@@ -6150,19 +6150,12 @@ body::before {
     /* Legend and chart labels */
     .legend-item,
     .legend-label,
-    .chart-label,
-    [class*="legend"] {
+    .chart-label {
         font-size: 12px !important;
     }
 
-    /* Fallback: Any span, small, label under main content */
-    .main-content span,
-    .main-content small,
-    .main-content label,
-    .view span,
-    .view small {
-        font-size: 12px !important;
-    }
+    /* NOTE: Removed aggressive .main-content span and .view span rules
+       that were overriding larger font sizes like stat values and percentages */
 }
 
 /* Extra Small Mobile (max-width: 360px) */
