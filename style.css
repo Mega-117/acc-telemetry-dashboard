@@ -5646,10 +5646,12 @@ body::before {
         font-size: 1rem;
     }
 
-    /* Navigation Tabs - Smaller */
+    /* Navigation Tabs - Keep horizontal, smaller */
     .nav-tabs {
         padding: 4px;
         gap: 4px;
+        flex-direction: row !important;
+        flex-wrap: nowrap;
     }
 
     .nav-tab {
@@ -5715,149 +5717,192 @@ body::before {
     }
 }
 
-/* Mobile (max-width: 480px) */
+/* Mobile (max-width: 480px) - Minimum 12px font size */
 @media (max-width: 480px) {
-    .app-container {
-        padding: 0.5rem;
+
+    /* Set base font-size to 18px so 0.7rem = 12.6px minimum */
+    html {
+        font-size: 18px !important;
     }
 
-    /* Header - Compact */
-    .header {
-        padding: 12px;
-        gap: 10px;
+    .app-container {
+        padding: 0.75rem;
+    }
+
+    /* Header - Larger */
+    .header,
+    .main-header {
+        padding: 16px;
+        gap: 14px;
     }
 
     .logo {
-        gap: 8px;
+        gap: 10px;
     }
 
     .logo-mark {
-        font-size: 0.8rem;
-        padding: 4px 8px;
-    }
-
-    .logo-text {
-        font-size: 0.9rem;
-        letter-spacing: 0.1em;
-    }
-
-    .driver-badge {
-        padding: 4px 10px;
-        font-size: 0.7rem;
-    }
-
-    .header-actions .btn {
+        font-size: 1rem;
         padding: 6px 12px;
-        font-size: 0.7rem;
     }
 
-    /* Navigation - Full width tabs */
+    .logo-text,
+    .main-header h1 {
+        font-size: 1.15rem;
+        letter-spacing: 0.12em;
+    }
+
+    /* Driver badge - min 12px */
+    .driver-badge {
+        padding: 8px 16px;
+        font-size: 13px !important;
+    }
+
+    /* All buttons - min 12px */
+    .btn,
+    .header-actions .btn,
+    .header-controls .btn {
+        padding: 12px 18px;
+        font-size: 13px !important;
+    }
+
+    /* Navigation - min 12px */
     .nav-tabs-container {
-        padding: 0 8px;
+        padding: 0 10px;
     }
 
     .nav-tabs {
         width: 100%;
+        max-width: 100%;
+        padding: 6px;
+        flex-direction: row !important;
+        flex-wrap: nowrap;
+        margin-bottom: 20px;
+    }
+
+    .nav-tabs::before {
+        top: 6px;
+        left: 6px;
+        width: calc(33.333% - 5px);
+        height: calc(100% - 12px);
     }
 
     .nav-tab {
         flex: 1;
-        padding: 8px 8px;
-        font-size: 0.65rem;
+        padding: 14px 8px;
+        font-size: 13px !important;
         text-align: center;
+        gap: 6px;
     }
 
-    /* View Toggle - Compact */
-    .view-toggle-container {
-        flex-direction: column;
-        gap: 8px;
+    .tab-icon {
+        font-size: 1.1rem;
+    }
+
+    .tab-label {
+        font-size: 13px !important;
+        letter-spacing: 0.5px;
+    }
+
+    /* View Toggle - min 12px */
+    .view-toggle {
+        padding: 5px;
     }
 
     .toggle-btn {
-        padding: 5px 10px;
-        font-size: 0.65rem;
+        padding: 12px 18px;
+        font-size: 13px !important;
     }
 
-    /* Cards - Compact */
+    /* Cards - min 12px */
     .overview-section {
-        padding: 14px;
-        margin-bottom: 12px;
+        padding: 20px;
+        margin-bottom: 18px;
     }
 
     .section-title {
-        font-size: 0.65rem;
-        margin-bottom: 12px;
+        font-size: 0.85rem;
+        margin-bottom: 18px;
     }
 
     .stat-value {
-        font-size: 1.4rem;
+        font-size: 2rem;
     }
 
     .stat-label {
-        font-size: 0.65rem;
+        font-size: 0.9rem;
     }
 
     .stat-box {
-        padding: 12px;
+        padding: 18px;
     }
 
     .card-stats-grid {
-        gap: 8px;
+        gap: 14px;
+    }
+
+    .stats-row-3 {
+        gap: 12px;
+    }
+
+    /* Overview title */
+    .overview-title h1 {
+        font-size: 1.4rem;
     }
 
     /* Charts */
     .chart-container {
-        height: 150px;
+        height: 180px;
     }
 
     /* Tracks Chips */
     .tracks-chips {
-        gap: 6px;
-    }
-
-    .track-chip {
-        font-size: 0.65rem;
-        padding: 4px 8px;
-    }
-
-    /* Splash Screen - Compact */
-    .splash-box {
-        padding: 24px 20px;
-        margin: 12px;
-        border-radius: 12px;
-    }
-
-    .splash-content {
-        gap: 24px;
-    }
-
-    .splash-logo {
         gap: 10px;
     }
 
+    .track-chip {
+        font-size: 0.85rem;
+        padding: 8px 14px;
+    }
+
+    /* Splash Screen - Larger */
+    .splash-box {
+        padding: 32px 28px;
+        margin: 16px;
+        border-radius: 14px;
+    }
+
+    .splash-content {
+        gap: 32px;
+    }
+
+    .splash-logo {
+        gap: 12px;
+    }
+
     .splash-logo-mark {
-        font-size: 1.1rem;
-        padding: 5px 8px;
+        font-size: 1.4rem;
+        padding: 8px 14px;
     }
 
     .splash-logo-text {
-        font-size: 1.1rem;
-        letter-spacing: 0.15em;
+        font-size: 1.4rem;
+        letter-spacing: 0.18em;
     }
 
     .splash-btn {
-        padding: 10px 20px;
-        font-size: 0.75rem;
+        padding: 14px 26px;
+        font-size: 14px;
     }
 
-    /* Sessions Table */
+    /* Sessions Table - min 12px */
     .sessions-table {
-        font-size: 0.75rem;
+        font-size: 13px;
     }
 
     .sessions-table th,
     .sessions-table td {
-        padding: 8px 6px;
+        padding: 12px 10px;
+        font-size: 13px;
     }
 
     /* Hide less important columns on mobile */
@@ -5866,6 +5911,257 @@ body::before {
     .sessions-table th:nth-child(5),
     .sessions-table td:nth-child(5) {
         display: none;
+    }
+
+    /* Legend items - min 12px */
+    .legend-item {
+        font-size: 13px;
+    }
+
+    /* Year Selector */
+    .year-selector {
+        font-size: 13px;
+        padding: 8px 14px;
+    }
+
+    /* Action buttons */
+    .btn-action,
+    .btn-action-secondary {
+        font-size: 14px;
+        padding: 14px 20px;
+    }
+
+    /* Sessions header */
+    .sessions-header h1 {
+        font-size: 1.3rem;
+    }
+
+    /* Filters - min 12px */
+    .filter-group label {
+        font-size: 13px;
+    }
+
+    .filter-group select,
+    .filter-group input {
+        font-size: 13px;
+        padding: 10px 14px;
+    }
+
+    /* Session Cards - min 12px */
+    .session-card,
+    .session-card * {
+        font-size: 12px;
+    }
+
+    .session-card .session-date {
+        font-size: 13px;
+    }
+
+    .session-card .session-track {
+        font-size: 14px;
+    }
+
+    .session-card .session-car {
+        font-size: 12px;
+    }
+
+    .session-card .session-type {
+        font-size: 12px;
+        padding: 4px 10px;
+    }
+
+    .session-card .session-laps,
+    .session-card .session-best {
+        font-size: 12px;
+    }
+
+    /* Session compact cards */
+    .compact-session-card,
+    .compact-session-card * {
+        font-size: 12px;
+    }
+
+    .compact-session-card .date-badge {
+        font-size: 12px;
+    }
+
+    .compact-session-card .track-name {
+        font-size: 13px;
+    }
+
+    .compact-session-card .car-name {
+        font-size: 12px;
+    }
+
+    .compact-session-card .session-badge {
+        font-size: 12px;
+        padding: 4px 8px;
+    }
+
+    .compact-session-card .laps-count,
+    .compact-session-card .best-time {
+        font-size: 12px;
+    }
+
+    /* Stint View - min 12px */
+    .stint-header,
+    .stint-header * {
+        font-size: 12px;
+    }
+
+    .stint-header h1 {
+        font-size: 1.2rem;
+    }
+
+    .condition-label,
+    .condition-value {
+        font-size: 12px;
+    }
+
+    .condition-badge {
+        font-size: 12px;
+        padding: 4px 10px;
+    }
+
+    .synth-label,
+    .synth-value {
+        font-size: 12px;
+    }
+
+    .stint-timeline-title {
+        font-size: 13px;
+    }
+
+    .lap-row,
+    .lap-row * {
+        font-size: 12px !important;
+    }
+
+    /* All small text elements - min 12px */
+    .text-muted,
+    .text-secondary,
+    small,
+    .small {
+        font-size: 12px !important;
+    }
+
+    /* Condition labels and badges - min 12px */
+    .condition-label,
+    .condition-value,
+    .grip-badge,
+    .weather-badge {
+        font-size: 12px !important;
+    }
+
+    /* Session card elements - min 12px */
+    .card-date,
+    .session-date,
+    .date-badge {
+        font-size: 12px !important;
+    }
+
+    .session-type-badge,
+    .type-badge {
+        font-size: 12px !important;
+        padding: 4px 10px;
+    }
+
+    /* Sort buttons - min 12px */
+    .sort-btn,
+    .sort-label,
+    .filter-label {
+        font-size: 12px !important;
+    }
+
+    /* Back button - min 12px */
+    .btn-back {
+        font-size: 12px !important;
+    }
+
+    /* ======= CRITICAL: Force 12px on ALL remaining elements ======= */
+
+    /* All buttons and interactive elements */
+    button,
+    .btn,
+    .btn-primary,
+    .btn-secondary,
+    .btn-action,
+    .btn-action-secondary,
+    [class*="btn"] {
+        font-size: 12px !important;
+    }
+
+    /* All nav tabs and labels */
+    .nav-tab,
+    .nav-tab *,
+    .tab-label,
+    [class*="tab"] span {
+        font-size: 12px !important;
+    }
+
+    /* All badges */
+    .driver-badge,
+    .grip-badge,
+    .weather-badge,
+    .session-badge,
+    .session-type-badge,
+    .type-badge,
+    [class*="badge"] {
+        font-size: 12px !important;
+    }
+
+    /* All labels and titles */
+    .section-title,
+    .stat-label,
+    .condition-label,
+    .condition-value,
+    .synth-label,
+    .synth-value,
+    [class*="label"] {
+        font-size: 12px !important;
+    }
+
+    /* Filter and sort elements */
+    .filter-toggle-btn,
+    .filter-btn,
+    [class*="filter"],
+    [class*="sort"] {
+        font-size: 12px !important;
+    }
+
+    /* Card content */
+    .session-card-compact *,
+    .card-date,
+    .card-info,
+    [class*="card"] span,
+    [class*="card"] small {
+        font-size: 12px !important;
+    }
+
+    /* Stint and timeline elements */
+    .stint-time,
+    .stint-label,
+    .timeline-label,
+    [class*="stint"] span,
+    [class*="timeline"] span {
+        font-size: 12px !important;
+    }
+
+    /* Legend and chart labels */
+    .legend-item,
+    .legend-label,
+    .chart-label,
+    [class*="legend"] {
+        font-size: 12px !important;
+    }
+
+    /* Fallback: Any span, small, label under main content */
+    .main-content span,
+    .main-content small,
+    .main-content label,
+    .view span,
+    .view small {
+        font-size: 12px !important;
     }
 }
 
@@ -5878,15 +6174,50 @@ body::before {
 
     .header-actions .btn {
         width: 100%;
+        font-size: 0.85rem;
+        padding: 12px 16px;
     }
 
     .stat-value {
-        font-size: 1.2rem;
+        font-size: 1.6rem;
+    }
+
+    .stat-label {
+        font-size: 0.85rem;
+    }
+
+    /* Minimum 10px fonts (0.625rem) - using 0.75rem = 12px for readability */
+    .nav-tab {
+        padding: 12px 6px;
+        font-size: 0.75rem;
+    }
+
+    .toggle-btn {
+        padding: 10px 14px;
+        font-size: 0.8rem;
+    }
+
+    .section-title {
+        font-size: 0.8rem;
+    }
+
+    .legend-item {
+        font-size: 0.75rem;
+    }
+
+    .track-chip {
+        font-size: 0.75rem;
+        padding: 6px 12px;
     }
 
     .splash-logo {
         flex-direction: column;
         gap: 8px;
         text-align: center;
+    }
+
+    .splash-logo-mark,
+    .splash-logo-text {
+        font-size: 1.2rem;
     }
 }
