@@ -323,7 +323,10 @@ class ACCDashboard {
             const lastName = this.sessions[0].static_data.playerSurname || '';
             driverName = `${firstName} ${lastName}`.trim() || 'Pilota';
         }
-        document.getElementById('driverName').textContent = driverName;
+
+        const el = document.getElementById('driverName');
+        if (el) el.textContent = driverName;
+
         const sessionsDriverName = document.getElementById('sessionsDriverName');
         if (sessionsDriverName) sessionsDriverName.textContent = driverName;
     }
@@ -409,40 +412,319 @@ class ACCDashboard {
         const sessions = mode === 'week' ? this.getWeekSessions() : this.sessions;
         const stats = this.calculateStats(sessions);
 
-        // ===== ATTIVITÀ Box =====
-        // 4 KPIs
+        // ===== ATTIVITÀ Box (Left) =====
         const totalMins = Math.round(stats.totalDriveTime / 60000);
-        document.getElementById('weekDriveTime').textContent = totalMins;
-        document.getElementById('weekSessions').textContent = stats.totalSessions;
-        document.getElementById('weekDays').textContent = stats.trainingDays + '/7';
+        this.setText('weekDriveTime', totalMins);
+        this.setText('weekSessions', stats.totalSessions);
+        this.setText('weekDays', mode === 'week' ? stats.trainingDays + '/7' : stats.trainingDays);
         const avgPerDay = stats.trainingDays > 0 ? Math.round(totalMins / stats.trainingDays) : 0;
-        document.getElementById('weekAvgPerDay').textContent = avgPerDay;
-
-        // Activity Chart (7 days bar chart)
+        this.setText('weekAvgPerDay', avgPerDay);
         this.renderWeekActivityChart(sessions);
-
-        // Session Types Stacked Bar + Chips
         this.renderSessionStackedBar(sessions);
 
-        // ===== QUALITÀ Box =====
-        document.getElementById('statValidPercent').textContent = stats.validPercent + '%';
-        if (document.getElementById('statTotalLaps')) {
-            document.getElementById('statTotalLaps').textContent = stats.validLaps + ' / ' + stats.totalLaps + ' giri';
+        // ===== FOCUS DI GUIDA Box (Right) =====
+        this.updateFocusBox(stats, sessions);
+    }
+
+    updateFocusBox(stats, sessions) {
+        // Section 1: Giri Validi (Gradient handled by CSS)
+        const color = this.getCleanLapsColor(stats.validPercent);
+
+        const percentEl = document.getElementById('focusValidPercent');
+        if (percentEl) {
+            percentEl.textContent = stats.validPercent + '%';
+            percentEl.style.color = color;
         }
 
-        const qualitaBar = document.getElementById('qualitaBarFill');
-        if (qualitaBar) {
-            qualitaBar.style.width = stats.validPercent + '%';
+        this.setText('focusValidStats', stats.validLaps + ' / ' + stats.totalLaps + ' giri');
+
+        const validBar = document.getElementById('focusValidBar');
+        if (validBar) {
+            validBar.style.width = stats.validPercent + '%';
+            validBar.style.background = color;
+            validBar.style.boxShadow = `0 0 10px ${color}40`;
         }
 
-        // DISTRIBUZIONE (donut in qualità box)
-        this.updateSessionTypeDistribution(stats.sessionTypeTimes);
+        // Section 2: AUTO Variants
+        const carStats = this.getCarStats(sessions);
+        this.renderStorageBar(carStats, 'focusCarsStorage', 'focusCarsLegend', 'focusCarsTotal', 'Nessuna auto utilizzata');
+        this.renderVerticalList(carStats, 'focusCarsList', 'Nessuna auto utilizzata');
 
-        // Update PISTE - chip style, max 5
-        this.updateTracksChips(stats.tracks);
+        // Section 3: PISTE Variants
+        const trackStats = this.getTrackStats(sessions);
+        this.renderStorageBar(trackStats, 'focusTracksStorage', 'focusStorageLegend', 'focusStorageTotal', 'Nessuna pista utilizzata');
+        this.renderVerticalList(trackStats, 'focusTracksList', 'Nessuna pista utilizzata');
 
-        // Update RITMO - dynamic chart, today on right
-        this.updateRhythmChart(sessions);
+        // Disable CTA if no sessions
+        const ctaBtn = document.querySelector('.cta-last-session');
+        if (ctaBtn) {
+            if (sessions.length === 0) {
+                ctaBtn.setAttribute('disabled', 'true');
+                ctaBtn.style.opacity = '0.5';
+                ctaBtn.style.cursor = 'not-allowed';
+            } else {
+                ctaBtn.removeAttribute('disabled');
+                ctaBtn.style.opacity = '1';
+                ctaBtn.style.cursor = 'pointer';
+            }
+        }
+    }
+
+    getCleanLapsColor(pct) {
+        if (pct >= 70) return '#22c55e'; // Green (100-70)
+        if (pct >= 40) return '#eab308'; // Yellow (69-40)
+        return '#ef4444'; // Red (<40)
+    }
+
+    switchFocusVariant(variant) {
+        // Toggle Segmented Buttons
+        document.querySelectorAll('.toggle-segment').forEach(b => b.classList.remove('active'));
+
+        if (variant === 'v2') {
+            const btn = document.getElementById('btn-sintesi');
+            if (btn) btn.classList.add('active');
+        } else if (variant === 'v3') {
+            const btn = document.getElementById('btn-dettaglio');
+            if (btn) btn.classList.add('active');
+        }
+
+        // Toggle Content Sections (Piste + Auto)
+        document.querySelectorAll('.f-variant, .f-variant-cars').forEach(v => v.classList.remove('active'));
+
+        // Activate Piste
+        const trackTarget = document.getElementById('f-variant-' + variant);
+        if (trackTarget) trackTarget.classList.add('active');
+
+        // Activate Auto
+        const carTarget = document.getElementById('f-car-' + variant);
+        if (carTarget) carTarget.classList.add('active');
+    }
+
+    getTrackStats(sessions) {
+        const map = {};
+        sessions.forEach(s => {
+            const t = s.session_info.track;
+            if (!map[t]) {
+                map[t] = { name: t, minutes: 0, sessions: 0 };
+            }
+            const mins = (s.session_info.total_drive_time_ms || 0) / 60000;
+            map[t].minutes += mins;
+            map[t].sessions++;
+        });
+        return Object.values(map).sort((a, b) => b.minutes - a.minutes);
+    }
+
+    getCarStats(sessions) {
+        const map = {};
+        sessions.forEach(s => {
+            let rawName = s.session_info.car || 'Sconosciuta';
+            // Simple formatting: replace underscores, capitalize
+            const name = rawName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+
+            if (!map[name]) {
+                map[name] = { name: name, minutes: 0, sessions: 0 };
+            }
+            const mins = (s.session_info.total_drive_time_ms || 0) / 60000;
+            map[name].minutes += mins;
+            map[name].sessions++;
+        });
+        return Object.values(map).sort((a, b) => b.minutes - a.minutes);
+    }
+
+    // Generic V2: Storage Segmented Bar
+    renderStorageBar(stats, containerId, legendId, totalId, emptyMsg) {
+        const barContainer = document.getElementById(containerId);
+        const legendContainer = document.getElementById(legendId);
+        const totalContainer = document.getElementById(totalId);
+        if (!barContainer || !legendContainer) return;
+
+        const totalMins = stats.reduce((acc, t) => acc + t.minutes, 0);
+
+        if (stats.length === 0 || totalMins === 0) {
+            barContainer.innerHTML = `<div class="storage-segment" style="width: 100%; background: #27272a; display: flex; align-items: center; justify-content: center; color: #71717a; font-size: 0.75rem;">${emptyMsg}</div>`;
+            legendContainer.innerHTML = '';
+            if (totalContainer) totalContainer.textContent = '';
+            return;
+        }
+
+        // Show ALL items (No limit)
+        const topTargets = stats;
+        const othersMins = 0; // Disabled logic
+
+        const colors = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4'];
+
+        // Bar
+        let barHtml = topTargets.map((t, i) => {
+            const pct = (t.minutes / totalMins) * 100;
+            const color = colors[i % colors.length];
+            return `<div class="storage-segment" style="width: ${pct}%; background: ${color}" title="${t.name}: ${Math.round(t.minutes)} min (${Math.round(pct)}%)"></div>`;
+        }).join('');
+
+        if (othersMins > 0) {
+            const pct = (othersMins / totalMins) * 100;
+            barHtml += `<div class="storage-segment" style="width: ${pct}%; background: #3f3f46" title="Altre: ${Math.round(othersMins)} min (${Math.round(pct)}%)"></div>`;
+        }
+        barContainer.innerHTML = barHtml;
+
+        // Legend
+        let legendHtml = topTargets.map((t, i) => {
+            const color = colors[i % colors.length];
+            return `<div class="storage-legend-item">
+                <div class="legend-dot" style="background: ${color}"></div>
+                <span>${t.name}</span>
+            </div>`;
+        }).join('');
+
+        if (othersMins > 0) {
+            legendHtml += `<div class="storage-legend-item">
+                <div class="legend-dot" style="background: #3f3f46"></div>
+                <span>Altre</span>
+            </div>`;
+        }
+        legendContainer.innerHTML = legendHtml;
+
+        // Total Label REMOVED as per user request
+        if (totalContainer) totalContainer.style.display = 'none';
+    }
+
+    // Generic V3: Vertical List with Truncation
+    renderVerticalList(stats, containerId, emptyMsg) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        if (stats.length === 0) {
+            container.innerHTML = `<div style="color: var(--text-muted); font-size: 0.8rem; padding: 10px;">${emptyMsg}</div>`;
+            return;
+        }
+
+        // Show ALL items
+        const visibleItems = stats;
+        const remainingCount = 0;
+        const maxMins = visibleItems.length > 0 ? visibleItems[0].minutes : 1;
+
+        let html = visibleItems.map(t => {
+            const pct = (t.minutes / maxMins) * 100;
+            return `<div class="track-list-item">
+                <div class="track-list-name" title="${t.name}">${t.name}</div>
+                <div class="track-list-bar-bg">
+                    <div class="track-list-bar-fill" style="width: ${pct}%"></div>
+                </div>
+                <div class="track-list-val">${Math.round(t.minutes)} min</div>
+            </div>`;
+        }).join('');
+
+        if (remainingCount > 0) {
+            html += `<div class="track-list-item" style="opacity: 0.7;">
+                <div class="track-list-name" style="font-style: italic;">+ ${remainingCount} altre</div>
+                <div class="track-list-bar-bg" style="background: transparent;"></div>
+                <div class="track-list-val"></div>
+            </div>`;
+        }
+
+        container.innerHTML = html;
+    }
+
+    // V1: Main - Bar + Label (Wireframe style)
+    renderFocusVariantV1(trackStats) {
+        const container = document.getElementById('focusTracksMain');
+        if (!container) return;
+        const topTracks = trackStats.slice(0, 4);
+        const maxMins = topTracks.length > 0 ? topTracks[0].minutes : 1;
+
+        container.innerHTML = topTracks.map(t => {
+            const pct = (t.minutes / maxMins) * 100;
+            return `<div class="focus-track-row" title="${t.name}">
+                <div class="focus-track-info">
+                    <span>${t.name}</span>
+                    <span class="focus-track-mins">${Math.round(t.minutes)} min</span>
+                </div>
+                <div class="focus-track-bar-bg">
+                    <div class="focus-track-bar-fill" style="width: ${pct}%"></div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    // V2: Storage - Single Segmented Bar
+    renderFocusVariantV2(trackStats) {
+        const barContainer = document.getElementById('focusTracksStorage');
+        const legendContainer = document.getElementById('focusStorageLegend');
+        const totalContainer = document.getElementById('focusStorageTotal');
+        if (!barContainer || !legendContainer) return;
+
+        const totalMins = trackStats.reduce((acc, t) => acc + t.minutes, 0);
+
+        // Handle 0 sessions
+        if (trackStats.length === 0 || totalMins === 0) {
+            barContainer.innerHTML = '<div class="storage-segment" style="width: 100%; background: #27272a; display: flex; align-items: center; justify-content: center; color: #71717a; font-size: 0.75rem;">Nessuna sessione</div>';
+            legendContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.75rem;">Nessuna sessione negli ultimi 7 giorni</div>';
+            if (totalContainer) totalContainer.textContent = '';
+            return;
+        }
+
+        const topTargets = trackStats.slice(0, 5);
+        const othersMins = totalMins - topTargets.reduce((acc, t) => acc + t.minutes, 0);
+
+        // Extended Palette
+        const colors = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#06b6d4'];
+
+        // Bar
+        let barHtml = topTargets.map((t, i) => {
+            const pct = (t.minutes / totalMins) * 100;
+            const color = colors[i % colors.length];
+            return `<div class="storage-segment" style="width: ${pct}%; background: ${color}" title="${t.name}: ${Math.round(t.minutes)} min (${Math.round(pct)}%)"></div>`;
+        }).join('');
+
+        if (othersMins > 0) {
+            const pct = (othersMins / totalMins) * 100;
+            barHtml += `<div class="storage-segment" style="width: ${pct}%; background: #3f3f46" title="Altre: ${Math.round(othersMins)} min (${Math.round(pct)}%)"></div>`;
+        }
+        barContainer.innerHTML = barHtml;
+
+        // Legend
+        let legendHtml = topTargets.map((t, i) => {
+            const color = colors[i % colors.length];
+            return `<div class="storage-legend-item">
+                <div class="legend-dot" style="background: ${color}"></div>
+                <span>${t.name}</span>
+            </div>`;
+        }).join('');
+
+        if (othersMins > 0) {
+            legendHtml += `<div class="storage-legend-item">
+                <div class="legend-dot" style="background: #3f3f46"></div>
+                <span>Altre</span>
+            </div>`;
+        }
+        legendContainer.innerHTML = legendHtml;
+
+        // Total
+        if (totalContainer) totalContainer.textContent = `${Math.round(totalMins)} min totali`;
+    }
+
+    // V3: List - Inline (All Tracks)
+    renderFocusVariantV3(trackStats) {
+        const container = document.getElementById('focusTracksList');
+        if (!container) return;
+
+        if (trackStats.length === 0) {
+            container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.8rem; padding: 10px;">Nessun dato</div>';
+            return;
+        }
+
+        const topTracks = trackStats; // Use all
+        const maxMins = topTracks.length > 0 ? topTracks[0].minutes : 1;
+
+        container.innerHTML = topTracks.map(t => {
+            const pct = (t.minutes / maxMins) * 100;
+            return `<div class="track-list-item">
+                <div class="track-list-name" title="${t.name}">${t.name}</div>
+                <div class="track-list-bar-bg">
+                    <div class="track-list-bar-fill" style="width: ${pct}%"></div>
+                </div>
+                <div class="track-list-val">${Math.round(t.minutes)} min</div>
+            </div>`;
+        }).join('');
     }
 
     setText(id, text) {
@@ -570,192 +852,59 @@ class ACCDashboard {
         });
 
         const totalTime = types.practice + types.qualy + types.race;
-        const pct = (v) => totalTime > 0 ? Math.round(v / totalTime * 100) : 0;
+        const pct = (v) => totalTime > 0 ? (v / totalTime) * 100 : 0;
         const mins = (v) => Math.round(v / 60000);
 
-        // Update stacked bar
-        var practiceW = pct(types.practice);
-        var qualyW = pct(types.qualy);
-        var raceW = pct(types.race);
-        stackedBar.innerHTML = '<div class="stacked-segment practice" style="width:' + practiceW + '%"></div>' +
-            '<div class="stacked-segment qualy" style="width:' + qualyW + '%"></div>' +
-            '<div class="stacked-segment race" style="width:' + raceW + '%"></div>';
-
-        // Update chips
-        var practiceM = mins(types.practice);
-        var qualyM = mins(types.qualy);
-        var raceM = mins(types.race);
-        chipsContainer.innerHTML = '<span class="session-chip practice">Practice ' + practiceM + ' MIN (' + counts.practice + ' SESS)</span>' +
-            '<span class="session-chip qualy">Qualy ' + qualyM + ' MIN (' + counts.qualy + ' SESS)</span>' +
-            '<span class="session-chip race">Race ' + raceM + ' MIN (' + counts.race + ' SESS)</span>';
-    }
-
-    updateTracksChips(tracks) {
-        const container = document.getElementById('tracksChips');
-        if (!container) return;
-
-        if (tracks.length === 0) {
-            container.innerHTML = '<span class="track-chip empty">Nessuna pista</span>';
+        if (totalTime === 0) {
+            stackedBar.innerHTML = '<div style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; color: #52525b; font-size: 0.7rem;">Nessuna sessione</div>';
+            chipsContainer.innerHTML = '<div style="color: var(--text-muted); font-size: 0.8rem;">Nessuna sessione negli ultimi 7 giorni</div>';
             return;
         }
 
-        const maxVisible = 5;
-        const visibleTracks = tracks.slice(0, maxVisible);
-        const extraCount = tracks.length - maxVisible;
+        // Update stacked bar with Tooltips
+        const segments = [];
+        if (types.practice > 0) segments.push({ type: 'practice', name: 'Practice', width: pct(types.practice), mins: mins(types.practice) });
+        if (types.qualy > 0) segments.push({ type: 'qualy', name: 'Qualify', width: pct(types.qualy), mins: mins(types.qualy) });
+        if (types.race > 0) segments.push({ type: 'race', name: 'Race', width: pct(types.race), mins: mins(types.race) });
 
-        let html = visibleTracks.map(t => `<span class="track-chip">${t}</span>`).join('');
-        if (extraCount > 0) {
-            html += `<span class="track-chip extra">+${extraCount}</span>`;
+        stackedBar.innerHTML = segments.map(s =>
+            `<div class="stacked-segment ${s.type}" style="width:${s.width}%" title="${s.name} — ${s.mins} min"></div>`
+        ).join('');
+
+        // Update chips with New Format: [ Practice · 68 min · 4 sessioni ]
+        const chipHtml = [];
+        if (counts.practice > 0) {
+            chipHtml.push(`<div class="session-chip practice">
+                <span class="chip-type">Practice</span>
+                <span class="chip-separator">·</span>
+                <span class="chip-details">${mins(types.practice)} min</span>
+                <span class="chip-separator">·</span>
+                <span class="chip-details">${counts.practice} sessioni</span>
+            </div>`);
         }
-        container.innerHTML = html;
+        if (counts.qualy > 0) {
+            chipHtml.push(`<div class="session-chip qualy">
+                <span class="chip-type">Qualify</span>
+                <span class="chip-separator">·</span>
+                <span class="chip-details">${mins(types.qualy)} min</span>
+                <span class="chip-separator">·</span>
+                <span class="chip-details">${counts.qualy} sessioni</span>
+            </div>`);
+        }
+        if (counts.race > 0) {
+            chipHtml.push(`<div class="session-chip race">
+                <span class="chip-type">Race</span>
+                <span class="chip-separator">·</span>
+                <span class="chip-details">${mins(types.race)} min</span>
+                <span class="chip-separator">·</span>
+                <span class="chip-details">${counts.race} sessioni</span>
+            </div>`);
+        }
+
+        chipsContainer.innerHTML = chipHtml.join('');
     }
 
-    updateRhythmChart(sessions) {
-        const canvas = document.getElementById('rhythmChartCanvas');
-        if (!canvas) return;
 
-        // Destroy existing chart if present
-        if (this.rhythmChart) {
-            this.rhythmChart.destroy();
-        }
-
-        const now = new Date();
-        let periods = [];
-        let xLabel = '';
-        let yUnit = 'm'; // minutes per default
-
-        if (this.viewMode === 'global') {
-            const monthNames = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic'];
-            const yearFilter = this.rhythmYearFilter || 'rolling';
-
-            if (yearFilter === 'rolling') {
-                // Modalità Rolling: ultimi 12 mesi
-                for (let i = 11; i >= 0; i--) {
-                    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-                    periods.push({
-                        date: date,
-                        label: monthNames[date.getMonth()] + (date.getFullYear() !== now.getFullYear() ? ` '${date.getFullYear().toString().slice(-2)}` : ''),
-                        time: 0,
-                        sessions: 0,
-                        month: date.getMonth(),
-                        year: date.getFullYear()
-                    });
-                }
-            } else {
-                // Modalità Anno Specifico: tutti i 12 mesi dell'anno selezionato
-                const selectedYear = parseInt(yearFilter);
-                for (let m = 0; m < 12; m++) {
-                    periods.push({
-                        date: new Date(selectedYear, m, 1),
-                        label: monthNames[m],
-                        time: 0,
-                        sessions: 0,
-                        month: m,
-                        year: selectedYear
-                    });
-                }
-            }
-            xLabel = 'Mese';
-            yUnit = 'h'; // ore per vista annuale
-
-            // Aggregate session time by month
-            sessions.forEach(session => {
-                const sessionDate = new Date(session.session_info.date_start);
-                const sessionMonth = sessionDate.getMonth();
-                const sessionYear = sessionDate.getFullYear();
-
-                periods.forEach(p => {
-                    if (p.month === sessionMonth && p.year === sessionYear) {
-                        p.time += session.session_info.total_drive_time_ms || 0;
-                        p.sessions++;
-                    }
-                });
-            });
-        } else {
-            // Modalità Week: ultimi 7 giorni
-            const dayNames = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
-            for (let i = 6; i >= 0; i--) {
-                const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-                periods.push({
-                    date: date,
-                    label: i === 0 ? 'Oggi' : dayNames[date.getDay()],
-                    time: 0,
-                    sessions: 0
-                });
-            }
-            xLabel = 'Giorno';
-
-            // Aggregate session time by day
-            sessions.forEach(session => {
-                const sessionDate = new Date(session.session_info.date_start);
-                const sessionDay = new Date(sessionDate.getFullYear(), sessionDate.getMonth(), sessionDate.getDate());
-
-                periods.forEach(p => {
-                    if (p.date.getTime() === sessionDay.getTime()) {
-                        p.time += session.session_info.total_drive_time_ms || 0;
-                        p.sessions++;
-                    }
-                });
-            });
-        }
-
-        const labels = periods.map(p => p.label);
-        const data = periods.map(p => {
-            if (yUnit === 'h') {
-                return Math.round(p.time / 3600000 * 10) / 10; // ore con 1 decimale
-            }
-            return Math.round(p.time / 60000); // minuti
-        });
-        const sessionCounts = periods.map(p => p.sessions);
-
-        this.rhythmChart = new Chart(canvas, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: yUnit === 'h' ? 'Ore' : 'Minuti',
-                    data: data,
-                    backgroundColor: 'rgba(99, 102, 241, 0.8)',
-                    borderColor: 'rgba(99, 102, 241, 1)',
-                    borderWidth: 1,
-                    borderRadius: 4,
-                    sessionCounts: sessionCounts
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => {
-                                const value = context.raw;
-                                const sessions = context.dataset.sessionCounts[context.dataIndex];
-                                if (value === 0) return 'Nessuna attività';
-                                const unit = yUnit === 'h' ? 'ore' : 'min';
-                                return `${value}${yUnit} – ${sessions} session${sessions !== 1 ? 'i' : 'e'}`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: { color: 'rgba(255,255,255,0.05)' },
-                        ticks: {
-                            color: '#71717a',
-                            callback: (v) => v > 0 ? v + yUnit : ''
-                        }
-                    },
-                    x: {
-                        grid: { display: false },
-                        ticks: { color: '#a1a1aa' }
-                    }
-                }
-            }
-        });
-    }
 
     getWeekSessions() {
         // Rolling window: oggi - 6 giorni (ultimi 7 giorni REALI)
