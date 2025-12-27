@@ -2078,6 +2078,12 @@ body::before {
 }
 
 /* ===== Sessions View ===== */
+#sessions-view {
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
+}
+
 .sessions-header {
     display: flex;
     justify-content: space-between;
@@ -7908,6 +7914,7 @@ body::before {
     background: var(--accent-primary);
     color: white;
 }
+
 /*  */
 /* OVERVIEW PAGE VARIANTS                                                       */
 /*  */
@@ -7935,7 +7942,8 @@ body::before {
     transition: all 0.2s;
 }
 
-.btn-variant.active, .btn-variant:hover {
+.btn-variant.active,
+.btn-variant:hover {
     background: var(--accent-primary);
     color: white;
     border-color: var(--accent-primary);
@@ -7958,10 +7966,21 @@ body::before {
     gap: 16px;
 }
 
-.col-12 { grid-column: span 12; }
-.col-7 { grid-column: span 7; }
-.col-6 { grid-column: span 6; }
-.col-5 { grid-column: span 5; }
+.col-12 {
+    grid-column: span 12;
+}
+
+.col-7 {
+    grid-column: span 7;
+}
+
+.col-6 {
+    grid-column: span 6;
+}
+
+.col-5 {
+    grid-column: span 5;
+}
 
 /* Components Styling Updates */
 .overview-section {
@@ -7976,7 +7995,8 @@ body::before {
 }
 
 .section-hero .chart-container {
-    height: 220px; /* Taller chart */
+    height: 220px;
+    /* Taller chart */
 }
 
 /* KPI STRIP (V3) */
@@ -8015,9 +8035,18 @@ body::before {
 
 /* Responsive */
 @media (max-width: 1200px) {
+
     /* Tablet behavior */
-    .overview-grid-v1 .box-attivita, .overview-grid-v1 .box-qualita { grid-column: span 12; }
-    .col-7, .col-6, .col-5 { grid-column: span 12 !important; }
+    .overview-grid-v1 .box-attivita,
+    .overview-grid-v1 .box-qualita {
+        grid-column: span 12;
+    }
+
+    .col-7,
+    .col-6,
+    .col-5 {
+        grid-column: span 12 !important;
+    }
 }
 
 @media (max-width: 768px) {
@@ -8026,21 +8055,1126 @@ body::before {
         flex-direction: column;
         gap: 12px;
     }
-    
+
     .kpi-strip {
         grid-template-columns: repeat(2, 1fr);
     }
-    
+
     .kpi-strip .kpi-card-mini:last-child {
         grid-column: span 2;
     }
-    
+
     .actions-section {
         flex-direction: column;
     }
-    
-    .btn-action, .btn-action-secondary {
+
+    .btn-action,
+    .btn-action-secondary {
         width: 100%;
+    }
+
+    /* Wrap KPI row on mobile */
+    .attivita-kpi-row {
+        flex-wrap: wrap;
+    }
+
+    .attivita-kpi-item {
+        flex: 1 1 45%;
+        min-width: 140px;
     }
 }
 
+
+/* ===== Quality Box Variants ===== */
+.box-qualita {
+    display: flex;
+    flex-direction: column;
+}
+
+.section-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    width: 100%;
+}
+
+.quality-switcher {
+    display: flex;
+    gap: 4px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 3px;
+    border-radius: 6px;
+}
+
+.q-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.q-btn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.q-btn.active {
+    background: var(--accent-primary);
+    color: white;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.quality-variants-content {
+    flex: 1;
+    position: relative;
+    min-height: 120px;
+}
+
+.q-variant {
+    display: none;
+    width: 100%;
+    animation: fadeIn 0.3s ease;
+}
+
+.q-variant.active {
+    display: block;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Variant A: Top Bars */
+.variant-header {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+}
+
+.tracks-bars-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.track-bar-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.track-bar-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.track-info-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.track-stats-minor {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.track-progress-bg {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.track-progress-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 3px;
+    transition: width 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.variant-footer {
+    font-size: 0.8rem;
+    color: var(--accent-primary);
+    margin-top: 12px;
+    cursor: pointer;
+    text-align: right;
+}
+
+.variant-footer:hover {
+    text-decoration: underline;
+}
+
+/* Variant B: Treemap */
+.treemap-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 2px;
+    height: 180px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.treemap-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex-grow: 1;
+    min-width: 60px;
+    min-height: 40px;
+    padding: 4px;
+    transition: all 0.2s;
+    cursor: pointer;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    background-size: cover;
+    background-position: center;
+}
+
+.treemap-item::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: inherit;
+    filter: brightness(0.8);
+    z-index: 0;
+}
+
+.treemap-item:hover {
+    z-index: 10;
+    transform: scale(1.05);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.treemap-label {
+    position: relative;
+    z-index: 1;
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: white;
+    text-align: center;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.treemap-value {
+    position: relative;
+    z-index: 1;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+    margin-top: 2px;
+}
+
+/* Variant C: Table */
+.tracks-table-container {
+    display: flex;
+    flex-direction: column;
+}
+
+.table-header,
+.table-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1.5fr;
+    gap: 8px;
+    padding: 6px 4px;
+    font-size: 0.8rem;
+    align-items: center;
+}
+
+.table-header {
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.table-row {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    transition: background 0.2s;
+    cursor: pointer;
+}
+
+.table-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.text-right {
+    text-align: right;
+}
+
+.sparkline-cell svg {
+    width: 100%;
+    height: 24px;
+    display: block;
+    overflow: visible;
+}
+
+.sparkline-path {
+    fill: none;
+    stroke: var(--accent-success);
+    stroke-width: 2px;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.stat-best {
+    font-family: monospace;
+    color: var(--text-secondary);
+}
+
+
+/* ===== FOCUS DI GUIDA Box ===== */
+.box-focus {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.header-text-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.section-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: -2px;
+}
+
+/* Focus Switcher */
+.focus-switcher {
+    display: flex;
+    gap: 4px;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 3px;
+    border-radius: 6px;
+    align-self: flex-start;
+}
+
+.f-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    padding: 4px 8px;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s;
+}
+
+.f-btn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.f-btn.active {
+    background: var(--accent-primary);
+    color: white;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+/* Clean Section */
+.focus-clean-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.clean-header-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.clean-percent {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--accent-primary);
+    letter-spacing: -1px;
+    line-height: 1;
+}
+
+.clean-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.clean-bar-container {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.clean-bar-bg {
+    flex: 1;
+    height: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.clean-bar-fill {
+    height: 100%;
+    background: var(--accent-primary);
+    border-radius: 5px;
+    transition: width 0.6s ease;
+}
+
+.clean-stats {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+/* Tracks Section */
+.focus-tracks-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    border-top: 1px solid var(--border-color);
+    padding-top: 16px;
+    margin-top: 8px;
+}
+
+.subsection-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+}
+
+.f-variant {
+    display: none;
+    animation: fadeIn 0.3s ease;
+}
+
+.f-variant.active {
+    display: block;
+}
+
+/* V1: Main (Bars) */
+.tracks-main-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.focus-track-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    cursor: pointer;
+}
+
+.focus-track-bar-bg {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.focus-track-bar-fill {
+    height: 100%;
+    width: 0;
+    background: var(--accent-primary);
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.focus-track-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.focus-track-mins {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.focus-track-row:hover .focus-track-bar-fill {
+    filter: brightness(1.2);
+}
+
+/* V2: Storage (Single Bar) */
+.storage-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.tracks-storage-bar {
+    display: flex;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    overflow: hidden;
+    width: 100%;
+}
+
+.storage-segment {
+    height: 100%;
+    transition: width 0.5s ease;
+    position: relative;
+    cursor: pointer;
+}
+
+.storage-segment:hover {
+    filter: brightness(1.2);
+}
+
+.storage-segment:not(:last-child) {
+    border-right: 2px solid var(--bg-card);
+}
+
+.storage-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.storage-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.storage-total-label {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-align: right;
+    margin-top: 8px;
+}
+
+/* V3: List (Inline) */
+.tracks-list-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.track-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.track-list-name {
+    width: 80px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.track-list-bar-bg {
+    flex: 1;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.track-list-bar-fill {
+    height: 100%;
+    background: var(--accent-primary);
+    border-radius: 3px;
+    transition: width 0.5s ease;
+}
+
+.track-list-val {
+    width: 60px;
+    text-align: right;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+
+/* ===== NEW LAYOUT (Grid 50/50) ===== */
+.overview-layout {
+    display: flex;
+    gap: 24px;
+    align-items: stretch;
+    /* Align heights */
+}
+
+.layout-col-left,
+.layout-col-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+    /* Prevent flex overflow */
+}
+
+/* Heights */
+.box-attivita,
+.box-focus {
+    flex: 1;
+    /* Make them expand to fill column height if needed */
+    display: flex;
+    flex-direction: column;
+}
+
+/* Activity Chart Extended Height */
+.extended-height {
+    height: 240px !important;
+    /* Force height increase */
+    min-height: 240px;
+}
+
+.chart-header-compact {
+    margin-bottom: 8px;
+    /* Less space */
+}
+
+.attivita-chart-section {
+    flex: 1;
+    /* Expand chart section to fill space */
+    display: flex;
+    flex-direction: column;
+}
+
+/* CTA Last Session */
+.layout-cta-row {
+    display: flex;
+    justify-content: flex-end;
+    /* Align right */
+}
+
+.cta-last-session {
+    /* Style closer to secondary action but visible */
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: var(--text-secondary);
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.cta-last-session:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Responsive for Overview Layout */
+@media (max-width: 1024px) {
+    .overview-layout {
+        flex-direction: column;
+    }
+
+    .layout-col-left,
+    .layout-col-right {
+        width: 100%;
+        min-width: unset;
+    }
+}
+
+/* Focus Box Refinements */
+.gradient-fill {
+    transition: width 0.6s ease, background-color 0.3s ease;
+}
+
+
+/* V3 Scroll */
+.tracks-list-container {
+    max-height: 180px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.tracks-list-container::-webkit-scrollbar {
+    width: 4px;
+}
+
+.tracks-list-container::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
+}
+
+
+/* Fix Splash Hidden State */
+.splash-overlay.hidden {
+    display: none !important;
+    pointer-events: none;
+}
+
+
+/* KPI Boxes Restoration */
+.attivita-kpi-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.attivita-kpi-item {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 12px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    transition: background 0.2s;
+}
+
+.attivita-kpi-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.attivita-kpi-item .kpi-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+}
+
+.attivita-kpi-item .kpi-unit {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+
+/* ===== Focus Box Refinements (Sintesi/Dettaglio) ===== */
+
+/* Header & Toggles */
+.focus-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 25px;
+    /* Spacing from title to content */
+}
+
+/* Segmented Control - Top Right */
+.focus-toggle-group {
+    display: flex;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.toggle-segment {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 6px 14px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.05em;
+}
+
+.toggle-segment.active {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-segment:hover:not(.active) {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* Clean Laps Gradient Bar */
+.focus-clean-section {
+    margin-bottom: 24px;
+}
+
+.clean-header-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.clean-percent {
+    font-size: 1.8rem;
+    font-weight: 700;
+    line-height: 1;
+    /* Color will be set by JS or gradient text? User said 'Gradient CSS' for bar. */
+    /* Let's keep text white or matching logic. */
+    color: var(--text-primary);
+}
+
+.clean-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+}
+
+.focus-clean-bar-bg {
+    height: 10px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 6px;
+}
+
+.focus-clean-bar-fill.gradient-fill {
+    height: 100%;
+    /* Red -> Orange -> Yellow -> Green Gradient */
+    background: linear-gradient(90deg,
+            #ef4444 0%,
+            #f97316 35%,
+            #eab308 65%,
+            #22c55e 100%);
+    border-radius: 10px;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.clean-stats {
+    text-align: right;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.focus-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.05);
+    margin: 20px 0;
+}
+
+/* Storage Bar Container Styles (V2/Sintesi) */
+.storage-bar-container {
+    height: 16px;
+    /* Slightly taller for visibility */
+    display: flex;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+/* Tracks List (Dettaglio) override */
+.tracks-list-container {
+    max-height: 240px;
+    /* Max 7 rows approx */
+}
+
+
+/* Refined Layout Spacing */
+.focus-clean-section {
+    margin-bottom: 12px !important;
+}
+
+.focus-divider {
+    margin: 12px 0 !important;
+}
+
+/* Focus Box Footer CTA */
+.focus-footer-cta {
+    margin-top: auto;
+    padding-top: 16px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Ensure content fills height for auto margin to work */
+.box-focus {
+    display: flex;
+    flex-direction: column;
+}
+
+.box-focus .focus-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* CTA Button Styling (Purple/Primary) */
+.cta-last-session {
+    background: var(--accent-primary) !important;
+    color: #ffffff !important;
+    border: none !important;
+    padding: 10px 20px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    letter-spacing: 0.05em;
+}
+
+.cta-last-session:hover {
+    background: var(--accent-secondary) !important;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.6);
+}
+
+
+/* Focus Box Variants Toggling */
+.f-variant,
+.f-variant-cars {
+    display: none;
+}
+
+.f-variant.active,
+.f-variant-cars.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(2px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Cars Header same as Piste */
+.cars-header-row {
+    margin-bottom: 12px;
+}
+
+
+/* Focus Box Fluid Scroll Layout */
+.box-focus {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    /* Ensure it fills parent grid cell */
+    min-height: 0;
+}
+
+.box-focus .focus-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Prevent parent scroll */
+    min-height: 0;
+}
+
+/* Dynamic Wrapper - Scrollable */
+.focus-dynamic-content {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    padding-right: 6px;
+    /* Space for scrollbar */
+    /* Custom Scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.focus-dynamic-content::-webkit-scrollbar {
+    width: 4px;
+}
+
+.focus-dynamic-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.focus-dynamic-content::-webkit-scrollbar-thumb {
+    background-color: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.focus-dynamic-content::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Ensure Header & Footer are outside scroll */
+.focus-header-row,
+.focus-clean-section,
+.focus-footer-cta {
+    flex-shrink: 0;
+}
+
+
+/* Spacing compensation for removed divider */
+.focus-cars-section {
+    margin-bottom: 25px;
+}
+
+
+/* ===== Session Type Bar & Chips (Refined) ===== */
+.session-types-section {
+    margin-top: auto;
+    width: 100%;
+}
+
+.session-types-title {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Bar aligned with Focus Box (Storage Bar) */
+.session-stacked-bar {
+    width: 100%;
+    height: 24px;
+    /* Increased to match Focus Box */
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+    display: flex;
+    overflow: hidden;
+    margin-bottom: 12px;
+}
+
+.stacked-segment {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+/* Colors */
+.stacked-segment.practice {
+    background-color: #3b82f6;
+}
+
+.stacked-segment.qualy {
+    background-color: #eab308;
+}
+
+.stacked-segment.race {
+    background-color: #ef4444;
+}
+
+/* Chips Styling (Rectangular, Bordered) */
+.session-chips {
+    display: flex;
+    flex-wrap: wrap;
+    /* Allow wrapping */
+    gap: 8px;
+}
+
+.session-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    padding: 8px 12px;
+    border-radius: 6px;
+    /* Match bar radius */
+    background: rgba(0, 0, 0, 0.2);
+    /* Very dark/transparent */
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    cursor: default;
+    color: var(--text-secondary);
+    width: fit-content;
+    /* Ensure compact width */
+}
+
+.session-chip:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+/* Chip Colors (Border) */
+.session-chip.practice {
+    border-color: #3b82f6;
+}
+
+.session-chip.qualy {
+    border-color: #eab308;
+}
+
+.session-chip.race {
+    border-color: #ef4444;
+}
+
+/* Chip Typography Hierarchy */
+.chip-type {
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.session-chip.practice .chip-type {
+    color: #60a5fa;
+}
+
+.session-chip.qualy .chip-type {
+    color: #facc15;
+}
+
+.session-chip.race .chip-type {
+    color: #f87171;
+}
+
+.chip-details {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.chip-separator {
+    color: var(--text-muted);
+    margin: 0 4px;
+}
