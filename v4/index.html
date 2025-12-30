@@ -1,1 +1,666 @@
+<!DOCTYPE html>
+<html lang="it">
 
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACC Telemetry Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script
+        src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+</head>
+
+<body>
+    <!-- Splash Screen Overlay -->
+    <div id="splashOverlay" class="splash-overlay">
+        <div class="splash-particles" id="splashParticles"></div>
+        <div class="splash-box">
+            <div class="splash-glow"></div>
+            <div class="splash-content">
+                <div class="splash-logo">
+                    <span class="splash-logo-mark">ACC</span>
+                    <span class="splash-logo-text">TELEMETRY</span>
+                </div>
+                <div class="splash-buttons">
+                    <button class="btn btn-secondary splash-btn" id="splashFolderBtn">
+                        IMPORTA CARTELLA
+                    </button>
+                    <button class="btn btn-primary splash-btn" id="splashFileBtn">
+                        CARICA SESSIONI
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="main-header">
+            <div class="logo">
+                <span class="logo-mark">ACC</span>
+                <h1>TELEMETRY</h1>
+            </div>
+            <div class="header-controls">
+                <input type="file" id="fileInput" multiple accept=".json" style="display: none;">
+                <input type="file" id="folderInput" webkitdirectory multiple accept=".json" style="display: none;">
+                <div class="theme-selector">
+                    <select id="themeSelect" onchange="dashboard.changeTheme(this.value)" title="Cambia tema colore">
+                        <option value="default">🎨 Indigo</option>
+                        <option value="neon-cyan">💎 Neon Cyan</option>
+                        <option value="lime-flash">🌿 Lime Flash</option>
+                        <option value="sunset-orange">🌅 Sunset</option>
+                        <option value="pink-fury">💗 Pink Fury</option>
+                        <option value="golden-rush">⭐ Golden Rush</option>
+                        <option value="ice-blue">❄️ Ice Blue</option>
+                        <option value="toxic-green">☢️ Toxic Green</option>
+                        <option value="crimson-red">🔴 Crimson Red</option>
+                        <option value="ultra-violet">💜 Ultra Violet</option>
+                    </select>
+                </div>
+                <button class="btn btn-secondary" onclick="document.getElementById('folderInput').click()">
+                    IMPORTA
+                </button>
+                <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+                    CARICA
+                </button>
+                <button class="btn btn-history" id="driverHistoryBtn" onclick="dashboard.showDriverHistory()">
+                    STORICO
+                </button>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="nav-tabs">
+            <!-- Default navigation buttons -->
+            <div class="nav-tabs-main">
+                <button class="nav-tab active" data-view="overview">
+                    <span class="tab-label">PANORAMICA</span>
+                </button>
+                <button class="nav-tab" data-view="sessions">
+                    <span class="tab-label">SESSIONI</span>
+                </button>
+                <button class="nav-tab disabled" data-view="stints" id="stintTab"
+                    title="Seleziona una sessione per vedere i dettagli">
+                    <span class="tab-label">STINT</span>
+                </button>
+            </div>
+            <!-- Back button for Driver History (hidden by default) -->
+            <div class="nav-tabs-back" style="display: none;">
+                <button class="nav-back-btn" onclick="dashboard.hideDriverHistory()">
+                    <span class="nav-back-arrow">←</span>
+                    <span class="nav-back-label">TORNA ALLA DASHBOARD</span>
+                </button>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Overview View -->
+            <section id="overview-view" class="view active">
+                <div class="overview-layout">
+                    <!-- Left Column: Activity -->
+                    <div class="layout-col-left">
+                        <div class="overview-section box-attivita">
+                            <div class="section-header-row">
+                                <h2 class="section-title">ATTIVITÀ</h2>
+                                <span class="section-subtitle">ultimi 7 giorni</span>
+                            </div>
+
+                            <!-- KPI Row -->
+                            <div class="attivita-kpi-row">
+                                <div class="attivita-kpi-item">
+                                    <span class="kpi-value" id="weekDriveTime">0</span>
+                                    <span class="kpi-unit">MIN</span>
+                                </div>
+                                <div class="attivita-kpi-item">
+                                    <span class="kpi-value" id="weekSessions">0</span>
+                                    <span class="kpi-unit">SESS</span>
+                                </div>
+                                <div class="attivita-kpi-item">
+                                    <span class="kpi-value" id="weekDays">0/7</span>
+                                    <span class="kpi-unit">GIORNI</span>
+                                </div>
+                                <div class="attivita-kpi-item">
+                                    <span class="kpi-value" id="weekAvgPerDay">0</span>
+                                    <span class="kpi-unit">MIN/GG</span>
+                                </div>
+                            </div>
+
+                            <!-- Chart: Minuti per giorno -->
+                            <div class="attivita-chart-section">
+                                <div class="chart-header-compact">
+                                    <span class="attivita-chart-title">Minuti per giorno</span>
+                                </div>
+                                <div class="attivita-chart-container extended-height">
+                                    <canvas id="weekActivityChart"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Session Types -->
+                            <div class="session-types-section">
+                                <span class="session-types-title">Tempo per tipo sessione</span>
+                                <div class="session-stacked-bar" id="weekSessionStackedBar"></div>
+                                <div class="session-chips" id="weekSessionChips"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Focus + CTA -->
+                    <div class="layout-col-right">
+                        <div class="overview-section box-focus" id="focusBox">
+                            <!-- Header with Segmented Toggles -->
+                            <div class="focus-header-row">
+                                <div class="focus-title-block">
+                                    <h2 class="section-title">FOCUS DI GUIDA</h2>
+                                    <span class="section-subtitle">Dove stai investendo tempo (ultimi 7g)</span>
+                                </div>
+
+                                <!-- Segmented Toggle: Sintesi | Dettaglio -->
+                                <div class="focus-toggle-group">
+                                    <button class="toggle-segment active" id="btn-sintesi"
+                                        onclick="dashboard.switchFocusVariant('v2')">SINTESI</button>
+                                    <button class="toggle-segment" id="btn-dettaglio"
+                                        onclick="dashboard.switchFocusVariant('v3')">DETTAGLIO</button>
+                                </div>
+                            </div>
+
+                            <!-- Section 1: Giri Validi (Always Visible) -->
+                            <div class="focus-clean-section">
+                                <div class="clean-header-row">
+                                    <span class="clean-percent" id="focusValidPercent">--%</span>
+                                    <span class="clean-label">GIRI VALIDI</span>
+                                </div>
+
+                                <div class="focus-clean-bar-bg">
+                                    <div class="focus-clean-bar-fill gradient-fill" id="focusValidBar"
+                                        style="width: 0%">
+                                    </div>
+                                </div>
+
+                                <div class="clean-stats" id="focusValidStats">-- / -- giri</div>
+                            </div>
+
+                            <!-- Dynamic Content Wrapper (Scrollable in Detail) -->
+                            <div class="focus-dynamic-content">
+                                <!-- Section 2: AUTO Variants -->
+                                <div class="focus-cars-section">
+                                    <div class="cars-header-row">
+                                        <h3 class="subsection-title">AUTO (ultimi 7 giorni)</h3>
+                                    </div>
+
+                                    <!-- SINTESI (V2 Default) -->
+                                    <div id="f-car-v2" class="f-variant-cars active">
+                                        <div class="storage-bar-container" id="focusCarsStorage"></div>
+                                        <div class="storage-legend" id="focusCarsLegend"></div>
+                                        <div class="storage-total" id="focusCarsTotal"></div>
+                                    </div>
+
+                                    <!-- DETTAGLIO (V3) -->
+                                    <div id="f-car-v3" class="f-variant-cars">
+                                        <div class="tracks-list-container" id="focusCarsList"></div>
+                                    </div>
+                                </div>
+
+
+                                <!-- Section 3: Piste Variants -->
+                                <div class="focus-tracks-section">
+                                    <div class="tracks-header-row">
+                                        <h3 class="subsection-title">PISTE (ultimi 7 giorni)</h3>
+                                    </div>
+
+                                    <!-- SINTESI (V2 Default) -->
+                                    <div id="f-variant-v2" class="f-variant active">
+                                        <div class="storage-bar-container" id="focusTracksStorage">
+                                            <!-- Hardcoded Preview -->
+                                            <div class="storage-segment" style="width: 50%; background: #6366f1"></div>
+                                            <div class="storage-segment" style="width: 30%; background: #8b5cf6"></div>
+                                            <div class="storage-segment" style="width: 15%; background: #10b981"></div>
+                                            <div class="storage-segment" style="width: 5%; background: #3f3f46"></div>
+                                        </div>
+                                        <div class="storage-legend" id="focusStorageLegend">
+                                            <div class="storage-legend-item">
+                                                <div class="legend-dot" style="background: #6366f1"></div>
+                                                <span>Donington</span>
+                                            </div>
+                                            <div class="storage-legend-item">
+                                                <div class="legend-dot" style="background: #8b5cf6"></div>
+                                                <span>Spa</span>
+                                            </div>
+                                            <div class="storage-legend-item">
+                                                <div class="legend-dot" style="background: #10b981"></div>
+                                                <span>Zolder</span>
+                                            </div>
+                                        </div>
+                                        <div class="storage-total" id="focusStorageTotal">~96 min totali</div>
+                                    </div>
+
+                                    <!-- DETTAGLIO (V3) -->
+                                    <div id="f-variant-v3" class="f-variant">
+                                        <div class="tracks-list-container" id="focusTracksList"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- CTA: Ultima Sessione (Bottom Right IN BOX) -->
+                            <div class="focus-footer-cta">
+                                <button class="btn btn-primary cta-last-session" onclick="dashboard.goToLastSession()">
+                                    ULTIMA SESSIONE
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- (Row Removed) -->
+                    </div>
+                </div>
+    </div>
+    </section>
+
+    <!-- Sessions View -->
+    <section id="sessions-view" class="view">
+        <!-- Header -->
+        <div class="sessions-header">
+            <h1>SESSIONI</h1>
+        </div>
+
+        <!-- Period Filter -->
+        <div class="period-tabs period-all">
+            <button class="period-tab" data-period="today" onclick="dashboard.setSessionsPeriod('today')">Oggi</button>
+            <button class="period-tab" data-period="week" onclick="dashboard.setSessionsPeriod('week')">Ultimi
+                7g</button>
+            <button class="period-tab active" data-period="all"
+                onclick="dashboard.setSessionsPeriod('all')">Tutto</button>
+        </div>
+
+        <!-- Filters Bar -->
+        <div class="sessions-filters">
+            <div class="filter-group">
+                <select id="trackFilter" class="filter-select" onchange="dashboard.applyFilters()">
+                    <option value="">Tutte le piste</option>
+                </select>
+                <select id="carFilter" class="filter-select" onchange="dashboard.applyFilters()">
+                    <option value="">Tutte le auto</option>
+                </select>
+                <select id="typeFilter" class="filter-select" onchange="dashboard.applyFilters()">
+                    <option value="">Tutti i tipi</option>
+                    <option value="0">Practice</option>
+                    <option value="1">Qualifying</option>
+                    <option value="2">Race</option>
+                </select>
+            </div>
+            <div class="date-range-container">
+                <span class="date-label">Dal</span>
+                <input type="date" id="dateStart" class="filter-date compact" onchange="dashboard.applyFilters()">
+                <span class="date-label">Al</span>
+                <input type="date" id="dateEnd" class="filter-date compact" onchange="dashboard.applyFilters()">
+            </div>
+        </div>
+
+        <!-- Sessions grouped by day -->
+        <div class="giornate-container" id="giornateList">
+            <!-- Rendered via JS -->
+            <div class="empty-state">
+                <span class="empty-icon">📅</span>
+                <p>Nessuna sessione caricata</p>
+            </div>
+        </div>
+
+    </section>
+
+    <!-- Session Detail View (STINT) - Redesigned -->
+    <section id="stints-view" class="view">
+
+        <!-- Back Button -->
+        <div class="stint-nav">
+            <button class="btn btn-back stint-back" id="backToSessions">← Sessioni</button>
+        </div>
+
+        <!-- Main Header Card -->
+        <div class="stint-header-card">
+
+            <!-- Row 1: Track + Badge -->
+            <div class="stint-title-row">
+                <h1 class="stint-track-name" id="stintTrackName">Barcelona</h1>
+                <span class="stint-badge race" id="stintTypeBadge">RACE</span>
+            </div>
+
+            <!-- Row 2: Car Name -->
+            <div class="stint-car-row">
+                <span class="stint-car-name" id="stintCarName">Ford Mustang GT3</span>
+            </div>
+
+            <!-- Row 3: Date & Time -->
+            <div class="stint-datetime-row">
+                <span class="stint-date" id="stintDate">25 Dic 2025</span>
+                <span class="stint-separator">·</span>
+                <span class="stint-time" id="stintTime">02:33</span>
+            </div>
+
+        </div>
+
+        <!-- Weather & Conditions Row -->
+        <div class="stint-conditions-card">
+            <div class="stint-condition-item">
+                <span class="stint-condition-icon" id="stintWeatherIcon">☀️</span>
+                <span class="stint-condition-value" id="stintWeather">Dry</span>
+            </div>
+            <div class="stint-condition-item">
+                <span class="stint-condition-label">Aria</span>
+                <span class="stint-condition-value" id="stintAirTemp">27°C</span>
+            </div>
+            <div class="stint-condition-item">
+                <span class="stint-condition-label">Asfalto</span>
+                <span class="stint-condition-value" id="stintRoadTemp">28°C</span>
+            </div>
+        </div>
+
+        <!-- Dynamic KPI Box (Changes based on chart selection) -->
+        <div class="stint-kpi-box" id="stintKpiBox">
+            <div class="kpi-header">
+                <span class="kpi-scope-label" id="kpiScopeLabel">SESSIONE COMPLETA</span>
+            </div>
+
+            <!-- Standard Mode: Single Column -->
+            <div class="kpi-standard" id="kpiStandard">
+                <div class="kpi-card kpi-best">
+                    <span class="kpi-value" id="kpiBestLap">1:46.595</span>
+                    <span class="kpi-label">BEST LAP</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-value kpi-theo" id="kpiTheoreticalBest">1:45.890</span>
+                    <span class="kpi-label">TEORICO</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-value" id="kpiDuration">10m 48s</span>
+                    <span class="kpi-label">DURATA</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-value" id="kpiValidPercent">83%</span>
+                    <span class="kpi-valid-count" id="kpiValidCount">5 su 6</span>
+                    <span class="kpi-label">VALIDI</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-value" id="kpiTotalLaps">6</span>
+                    <span class="kpi-label">GIRI</span>
+                </div>
+            </div>
+
+            <!-- Compare Mode: Two Columns -->
+            <div class="kpi-compare hidden" id="kpiCompare">
+                <!-- Column A -->
+                <div class="kpi-column kpi-column-a">
+                    <div class="kpi-column-header" id="kpiColumnAHeader">STINT 1</div>
+                    <div class="kpi-card kpi-best">
+                        <span class="kpi-value" id="kpiABestLap">1:46.595</span>
+                        <span class="kpi-label">BEST</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-value kpi-theo" id="kpiATheoreticalBest">1:45.890</span>
+                        <span class="kpi-label">TEORICO</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-value" id="kpiADuration">10m 48s</span>
+                        <span class="kpi-label">DURATA</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-value" id="kpiAValidPercent">83%</span>
+                        <span class="kpi-valid-count" id="kpiAValidCount">5 su 6</span>
+                        <span class="kpi-label">VALIDI</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-value" id="kpiATotalLaps">6</span>
+                        <span class="kpi-label">GIRI</span>
+                    </div>
+                </div>
+
+                <!-- VS Divider -->
+                <div class="kpi-vs-divider">
+                    <span class="kpi-vs">VS</span>
+                </div>
+
+                <!-- Column B -->
+                <div class="kpi-column kpi-column-b">
+                    <div class="kpi-column-header" id="kpiColumnBHeader">STINT 2</div>
+                    <div class="kpi-card kpi-best">
+                        <span class="kpi-value" id="kpiBBestLap">1:47.102</span>
+                        <span class="kpi-label">BEST</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-value kpi-theo" id="kpiBTheoreticalBest">1:46.200</span>
+                        <span class="kpi-label">TEORICO</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-value" id="kpiBDuration">12m 30s</span>
+                        <span class="kpi-label">DURATA</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-value" id="kpiBValidPercent">75%</span>
+                        <span class="kpi-valid-count" id="kpiBValidCount">6 su 8</span>
+                        <span class="kpi-label">VALIDI</span>
+                    </div>
+                    <div class="kpi-card">
+                        <span class="kpi-value" id="kpiBTotalLaps">8</span>
+                        <span class="kpi-label">GIRI</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ECG Chart Section -->
+        <!-- Advanced Analysis Box -->
+        <div class="stint-analysis-box" id="stintAnalysisBox">
+            <div class="analysis-header">
+                <h2 class="stint-section-title">ANALISI DETTAGLIATA</h2>
+                <div class="analysis-controls">
+                    <!-- Scope / Stint Selector -->
+                    <div class="control-group">
+                        <span class="control-label">STINT</span>
+                        <select id="analStintSelect" class="anal-select"
+                            onchange="dashboard.updateAnalysisState('stint')">
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+
+                    <!-- Metric Selector -->
+                    <div class="control-group">
+                        <span class="control-label">METRICA</span>
+                        <select id="analMetricSelect" class="anal-select"
+                            onchange="dashboard.updateAnalysisState('metric')">
+                            <option value="lap">Tempo Giro</option>
+                            <option value="s1">Settore 1</option>
+                            <option value="s2">Settore 2</option>
+                            <option value="s3">Settore 3</option>
+                        </select>
+                    </div>
+
+                    <!-- Compare Target (Hidden by default) -->
+                    <div class="control-group hidden" id="analCompareGroup">
+                        <span class="control-label">VS</span>
+                        <select id="analCompareTarget" class="anal-select"
+                            onchange="dashboard.updateAnalysisState('compareTarget')">
+                            <!-- Populated by JS -->
+                        </select>
+                    </div>
+
+                    <!-- Filter Preset -->
+                    <div class="control-group">
+                        <span class="control-label">FILTRI</span>
+                        <select id="analPresetSelect" class="anal-select"
+                            onchange="dashboard.updateAnalysisState('preset')">
+                            <option value="none">Nessuno</option>
+                            <option value="no-pit">No Pit Stops</option>
+                            <option value="valid">Solo Validi</option>
+                            <option value="reliable">Solo Affidabili</option>
+                        </select>
+                    </div>
+
+                    <!-- Toggles -->
+                    <div class="control-group toggles">
+                        <label class="anal-toggle" title="Mostra linea di tendenza">
+                            <input type="checkbox" id="analTrendCheck"
+                                onchange="dashboard.updateAnalysisState('trend')">
+                            <span class="toggle-label">Trend</span>
+                        </label>
+                        <label class="anal-toggle" title="Confronta due stint">
+                            <input type="checkbox" id="analCompareCheck" onchange="dashboard.toggleCompareMode()">
+                            <span class="toggle-label">Confronta</span>
+                        </label>
+                    </div>
+
+                    <!-- Lap Manager Trigger -->
+                    <button class="btn btn-sm btn-outline-fluo" id="analLapMgrBtn"
+                        onclick="dashboard.toggleLapManager()">
+                        GIRI...
+                    </button>
+                </div>
+            </div>
+
+            <!-- Lap Manager Panel (Collapsible) -->
+            <div id="analLapManager" class="lap-manager-panel hidden">
+                <div class="lap-manager-header">
+                    <span class="lm-title">Gestione Giri (Click per escludere)</span>
+                    <button class="btn-text-reset" onclick="dashboard.resetExcludedLaps()">Reset Selezione</button>
+                </div>
+                <div class="lap-grid" id="analLapGrid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- Chart Wrapper -->
+            <div class="stint-chart-wrapper">
+                <canvas id="stintEcgChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Lap Table Section -->
+        <div class="stint-table-section">
+            <div class="stint-table-header">
+                <h2 class="stint-section-title">TABELLA GIRI</h2>
+                <div class="table-options">
+                    <label class="table-sync-toggle" title="Sincronizza con filtri grafico">
+                        <input type="checkbox" id="tableSyncCheck" onchange="dashboard.toggleTableSync()" checked>
+                        <span class="sync-label">Sync Filtri</span>
+                    </label>
+                    <label class="table-sync-toggle" title="Nascondi giri con grip sconosciuto (cambio pilota)">
+                        <input type="checkbox" id="hideUnknownGripCheck" onchange="dashboard.toggleTableSync()">
+                        <span class="sync-label">Nascondi Unknown</span>
+                    </label>
+                </div>
+            </div>
+            <table class="stint-lap-table" id="stintLapTable">
+                <thead>
+                    <tr>
+                        <th>GIRO</th>
+                        <th>TEMPO</th>
+                        <th>S1</th>
+                        <th>S2</th>
+                        <th>S3</th>
+                        <th>ARIA</th>
+                        <th>FUEL</th>
+                        <th>GRIP</th>
+                        <th>STATO</th>
+                    </tr>
+                </thead>
+                <tbody id="stintLapTableBody">
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </div>
+
+    </section>
+
+
+    <!-- Driver History View - HIGH-TECH LAYOUT -->
+    <section id="driver-history-view" class="view">
+        <div class="dh-container">
+
+            <!-- Header Bar -->
+            <div class="dh-header-bar">
+                <div class="dh-header-left">
+                    <span class="dh-period" id="dhPilotPeriod">--</span>
+                </div>
+                <button class="dh-last-session-btn" id="dhLastSessionBtn" onclick="dashboard.openLastSession()">
+                    <span class="dh-last-label">Ultima sessione</span>
+                    <span class="dh-last-track" id="dhLastTrack">--</span>
+                    <span class="dh-last-arrow">→</span>
+                </button>
+                <div class="dh-header-stats">
+                    <div class="dh-stat-item"><span class="dh-stat-value" id="dhTotalSessions">0</span><span
+                            class="dh-stat-label">Sessions</span></div>
+                    <div class="dh-stat-item"><span class="dh-stat-value" id="dhTotalTracks">0</span><span
+                            class="dh-stat-label">Tracks</span></div>
+                    <div class="dh-stat-item"><span class="dh-stat-value" id="dhTotalTime">0h</span><span
+                            class="dh-stat-label">Time</span></div>
+                </div>
+            </div>
+
+            <!-- Main Content: Unified Box containing Graph + Tracks -->
+            <div class="dh-unified-box">
+                <div class="dh-main-layout">
+
+                    <!-- SUPERBOX: Records + Chart -->
+                    <div class="dh-superbox">
+
+                        <!-- Records Section (Best Times) -->
+                        <div class="dh-records-section">
+                            <div class="dh-records-header">
+                                <span class="dh-records-title">RECORDS</span>
+                                <span class="dh-records-track" id="dhBestsTrackName">--</span>
+                            </div>
+                            <div class="dh-records-grid">
+                                <div class="dh-record-card dh-record-quali">
+                                    <div class="dh-record-type">QUALIFYING</div>
+                                    <div class="dh-record-time" id="dhBestQualiTime">--:--.---</div>
+                                    <div class="dh-record-meta" id="dhBestQualiMeta">--</div>
+                                    <button class="dh-record-cta" id="dhBestQualiCta"
+                                        onclick="dashboard.openBestQualiSession()">→</button>
+                                </div>
+                                <div class="dh-record-card dh-record-race">
+                                    <div class="dh-record-type">RACE</div>
+                                    <div class="dh-record-time" id="dhBestRaceTime">--:--.---</div>
+                                    <div class="dh-record-meta" id="dhBestRaceMeta">--</div>
+                                    <button class="dh-record-cta" id="dhBestRaceCta"
+                                        onclick="dashboard.openBestRaceSession()">→</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Chart Section -->
+                        <div class="dh-chart-section">
+                            <div class="dh-chart-header">
+                                <span class="dh-chart-title" id="dhChartTitle">STORICO</span>
+                                <div class="dh-chart-legend">
+                                    <span class="dh-legend-item"><span
+                                            class="dh-legend-dot quali"></span>Qualifica</span>
+                                    <span class="dh-legend-item"><span class="dh-legend-dot race"></span>Gara</span>
+                                </div>
+                            </div>
+                            <div class="dh-chart-wrapper">
+                                <canvas id="dhHistoryChart"></canvas>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Track Sidebar (Full Height) -->
+                    <div class="dh-track-sidebar">
+                        <div class="dh-sidebar-header">PISTE</div>
+                        <div class="dh-track-list" id="dhTrackList">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </section>
+    </main>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+
+</html>
