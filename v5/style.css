@@ -7,9 +7,6 @@
     --bg-card-hover: #22222f;
     --bg-elevated: #252533;
 
-    /* Prevent layout shift from scrollbar */
-    scrollbar-gutter: stable;
-
     /* === THEME ACCENT COLORS (Switchable) === */
     --theme-accent: #6366f1;
     --theme-accent-rgb: 99, 102, 241;
@@ -3424,7 +3421,7 @@ body::before {
 /* ===== Sessions View ===== */
 #sessions-view {
     max-width: 1400px;
-    padding: 0 24px;
+    padding: 0 0 40px;
     margin: 0 auto;
     width: 100%;
 }
@@ -5269,7 +5266,7 @@ body::before {
 
 /* ===== Session Detail Layout Improvements ===== */
 #stints-view {
-    padding: 0 20px 40px;
+    padding: 0 0 40px;
     max-width: 1400px;
     margin: 0 auto;
 }
@@ -6481,42 +6478,57 @@ body::before {
 }
 
 /* View Transitions - Liquid Glass 300ms */
-/* Using position absolute/relative swap to ensure container height matches active view */
+/* Using grid stacking to prevent position shift glitch */
 .main-content {
-    position: relative;
-    width: 100%;
-    /* display: grid; REMOVED to prevent max-height locking */
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    align-items: start;
+    /* Ensure grid doesn't expand for hidden content */
 }
 
 .view {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-
+    grid-column: 1;
+    grid-row: 1;
     opacity: 0;
     transform: translateY(12px) scale(0.98);
     pointer-events: none;
     visibility: hidden;
-    will-change: opacity, transform;
+    /* CRITICAL: Collapse inactive views completely */
+    max-height: 0;
+    overflow: hidden;
+    padding: 0;
+    margin: 0;
+    will-change: opacity, transform, max-height;
     transition:
         opacity 0.3s var(--ease-glass),
         transform 0.3s var(--ease-glass),
+        max-height 0s 0.3s,
         visibility 0s 0.3s;
-    z-index: 0;
 }
 
 .view.active {
-    position: relative;
     opacity: 1;
     transform: translateY(0) scale(1);
     pointer-events: auto;
     visibility: visible;
+    /* Allow active view to expand to full height */
+    max-height: none;
+    overflow: visible;
     z-index: 1;
     transition:
         opacity 0.3s var(--ease-glass),
         transform 0.3s var(--ease-glass),
+        max-height 0s 0s,
         visibility 0s 0s;
+}
+
+/* Force complete collapse on inactive views - overrides specific view IDs */
+.view:not(.active) {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
 }
 
 /* Content Fade-In Animation */
@@ -9391,9 +9403,9 @@ body::before {
     padding: 16px;
 }
 
-.section-hero {
-    /* For V2 Activity Hero */
-}
+/* .section-hero {
+     For V2 Activity Hero 
+} */
 
 .section-hero .chart-container {
     height: 220px;
