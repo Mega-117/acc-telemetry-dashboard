@@ -5790,4 +5790,5 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof splashScreen !== 'undefined') {
         window.splashScreen = splashScreen;
     }
+
 });
