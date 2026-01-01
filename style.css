@@ -1587,6 +1587,8 @@
 html {
     font-size: 16px;
     scroll-behavior: smooth;
+    /* Prevent layout shift when scrollbar appears/disappears */
+    scrollbar-gutter: stable;
 }
 
 body {
