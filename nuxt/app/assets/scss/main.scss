@@ -1,0 +1,25 @@
+// ============================================
+// MAIN SCSS - Entry point
+// ============================================
+// Importa tutti i partial nell'ordine corretto
+
+// 1. Variabili e configurazione
+@use 'variables';
+
+// 2. Mixins riutilizzabili
+@use 'mixins';
+
+// 3. Animazioni
+@use 'animations';
+
+// 4. Temi
+@use 'themes';
+
+// 5. Reset e stili base
+@use 'base';
+
+// 6. Componenti (aggiungi qui i nuovi componenti)
+// @use 'components/buttons';
+// @use 'components/inputs';
+// @use 'components/cards';
+// @use 'components/overlay';

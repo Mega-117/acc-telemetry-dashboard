@@ -1,0 +1,82 @@
+// ============================================
+// TEMI - Sistema di temi dinamici
+// ============================================
+// Per aggiungere un tema:
+// 1. Creare un nuovo blocco [data-theme="nome-tema"]
+// 2. Sovrascrivere le CSS custom properties
+// 3. Aggiungere al selettore temi nella dashboard
+
+// === TEMA DEFAULT (Indigo/Viola) ===
+// Già definito in _variables.scss come :root
+
+// === TEMA RME (Romagnoli Esports) ===
+[data-theme="rme"] {
+    --theme-accent: #e11d48;
+    --theme-accent-rgb: 225, 29, 72;
+    --theme-accent-light: #fb7185;
+    --theme-accent-dark: #be123c;
+    --gradient-primary: linear-gradient(135deg, #e11d48 0%, #be123c 100%);
+}
+
+// === TEMA ACC NEON ===
+[data-theme="acc-neon"] {
+    --theme-accent: #00ff88;
+    --theme-accent-rgb: 0, 255, 136;
+    --theme-accent-light: #4dffaa;
+    --theme-accent-dark: #00cc6a;
+    --gradient-primary: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+}
+
+// === TEMA NEON CYAN ===
+[data-theme="neon-cyan"] {
+    --theme-accent: #00d4ff;
+    --theme-accent-rgb: 0, 212, 255;
+    --theme-accent-light: #4de4ff;
+    --theme-accent-dark: #00a8cc;
+    --gradient-primary: linear-gradient(135deg, #00d4ff 0%, #00a8cc 100%);
+}
+
+// === TEMA CRIMSON RED ===
+[data-theme="crimson-red"] {
+    --theme-accent: #dc2626;
+    --theme-accent-rgb: 220, 38, 38;
+    --theme-accent-light: #f87171;
+    --theme-accent-dark: #b91c1c;
+    --gradient-primary: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+}
+
+// === TEMA ULTRA VIOLET ===
+[data-theme="ultra-violet"] {
+    --theme-accent: #a855f7;
+    --theme-accent-rgb: 168, 85, 247;
+    --theme-accent-light: #c084fc;
+    --theme-accent-dark: #9333ea;
+    --gradient-primary: linear-gradient(135deg, #a855f7 0%, #9333ea 100%);
+}
+
+// === TEMA GOLDEN RUSH ===
+[data-theme="golden-rush"] {
+    --theme-accent: #eab308;
+    --theme-accent-rgb: 234, 179, 8;
+    --theme-accent-light: #facc15;
+    --theme-accent-dark: #ca8a04;
+    --gradient-primary: linear-gradient(135deg, #eab308 0%, #ca8a04 100%);
+}
+
+// ============================================
+// HELPER MIXIN PER CREARE NUOVI TEMI
+// ============================================
+// Uso:
+// [data-theme="mio-tema"] {
+//   @include theme-colors(#ff0000, 255, 0, 0);
+// }
+
+@mixin theme-colors($accent, $r, $g, $b) {
+    --theme-accent: #{$accent};
+    --theme-accent-rgb: #{$r},
+    #{$g},
+    #{$b};
+    --theme-accent-light: #{lighten($accent, 15%)};
+    --theme-accent-dark: #{darken($accent, 10%)};
+    --gradient-primary: linear-gradient(135deg, #{$accent} 0%, #{darken($accent, 10%)} 100%);
+}

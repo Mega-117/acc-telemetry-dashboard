@@ -1,0 +1,166 @@
+// ============================================
+// MIXINS - Utility riutilizzabili
+// ============================================
+
+@use 'variables' as *;
+
+// === GLASSMORPHISM ===
+@mixin glassmorphism($blur: 20px, $opacity: 0.8) {
+    background: rgba($bg-secondary, $opacity);
+    backdrop-filter: blur($blur);
+    -webkit-backdrop-filter: blur($blur);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+// === GLOW EFFECT ===
+@mixin glow($color: var(--theme-accent-rgb), $intensity: 0.3, $spread: 20px) {
+    box-shadow: 0 0 $spread rgba($color, $intensity);
+}
+
+@mixin glow-text($color: var(--theme-accent-rgb), $intensity: 0.5) {
+    text-shadow: 0 0 8px rgba($color, $intensity);
+}
+
+// === CARD STYLES ===
+@mixin card($padding: $spacing-lg) {
+    background: var(--bg-card);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: $radius-lg;
+    padding: $padding;
+}
+
+@mixin card-hover() {
+    transition: all $transition-normal $ease-smooth;
+
+    &:hover {
+        border-color: rgba(255, 255, 255, 0.15);
+        transform: translateY(-2px);
+        box-shadow: $shadow-md;
+    }
+}
+
+// === FLEXBOX SHORTCUTS ===
+@mixin flex-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@mixin flex-between {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+@mixin flex-column($gap: 0) {
+    display: flex;
+    flex-direction: column;
+
+    @if $gap !=0 {
+        gap: $gap;
+    }
+}
+
+// === BUTTON BASE ===
+@mixin button-base {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: $spacing-sm;
+    padding: 12px 24px;
+    font-family: var(--font-primary);
+    font-size: $font-size-sm;
+    font-weight: $font-weight-semibold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border: none;
+    border-radius: $radius-md;
+    cursor: pointer;
+    transition: all $transition-normal $ease-smooth;
+
+    &:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+}
+
+// === INPUT BASE ===
+@mixin input-base {
+    width: 100%;
+    padding: 14px 16px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1.5px solid rgba(255, 255, 255, 0.1);
+    border-radius: $radius-md;
+    color: var(--text-primary);
+    font-size: $font-size-base;
+    font-family: var(--font-primary);
+    outline: none;
+    transition: all $transition-normal ease;
+
+    &::placeholder {
+        color: var(--text-muted);
+    }
+
+    &:focus {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(var(--theme-accent-rgb), 0.5);
+        box-shadow:
+            0 0 0 4px rgba(var(--theme-accent-rgb), 0.1),
+            0 4px 12px rgba(var(--theme-accent-rgb), 0.2);
+    }
+
+    &:hover:not(:focus) {
+        border-color: rgba(255, 255, 255, 0.15);
+    }
+}
+
+// === VISUALLY HIDDEN (accessibility) ===
+@mixin visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+// === TRUNCATE TEXT ===
+@mixin truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+// === SCROLLBAR CUSTOM ===
+@mixin custom-scrollbar($width: 6px, $track: transparent, $thumb: rgba(255, 255, 255, 0.2)) {
+    &::-webkit-scrollbar {
+        width: $width;
+        height: $width;
+    }
+
+    &::-webkit-scrollbar-track {
+        background: $track;
+    }
+
+    &::-webkit-scrollbar-thumb {
+        background: $thumb;
+        border-radius: $radius-full;
+
+        &:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    }
+}
+
+// === OVERLAY BACKDROP ===
+@mixin overlay-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: $z-overlay;
+}

@@ -1,6 +1,14 @@
 <template>
-  <div>
+  <div id="app">
     <NuxtRouteAnnouncer />
-    <NuxtWelcome />
+    <!-- Auth Overlay - Mostrato quando non loggato -->
+    <AuthOverlay />
   </div>
 </template>
+
+<style lang="scss">
+#app {
+  min-height: 100vh;
+}
+</style>
+

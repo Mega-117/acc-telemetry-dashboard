@@ -1,0 +1,146 @@
+// ============================================
+// VARIABILI CSS - ACC Telemetry Dashboard
+// ============================================
+// Sistema di design centralizzato per consistenza UI
+
+// === COLORI BASE ===
+$bg-primary: #0a0a0f;
+$bg-secondary: #12121a;
+$bg-tertiary: #1a1a24;
+$bg-card: rgba(18, 18, 26, 0.8);
+$bg-card-solid: #12121a;
+
+// === TEMA ACCENT (Default: Indigo/Viola) ===
+$theme-accent: #8b5cf6;
+$theme-accent-rgb: 139, 92, 246;
+$theme-accent-light: #a78bfa;
+$theme-accent-dark: #7c3aed;
+
+// === COLORI SEMANTICI ===
+$accent-success: #22c55e;
+$accent-success-rgb: 34, 197, 94;
+$accent-danger: #ef4444;
+$accent-danger-rgb: 239, 68, 68;
+$accent-danger-light: #f87171;
+$accent-warning: #f59e0b;
+$accent-warning-rgb: 245, 158, 11;
+$accent-info: #3b82f6;
+$accent-info-rgb: 59, 130, 246;
+
+// === TESTO ===
+$text-primary: #ffffff;
+$text-secondary: #a1a1aa;
+$text-muted: #71717a;
+$text-disabled: #52525b;
+
+// === SPAZIATURE ===
+$spacing-xs: 0.25rem; // 4px
+$spacing-sm: 0.5rem; // 8px
+$spacing-md: 1rem; // 16px
+$spacing-lg: 1.5rem; // 24px
+$spacing-xl: 2rem; // 32px
+$spacing-2xl: 3rem; // 48px
+
+// === FONT ===
+$font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+$font-display: 'Outfit', 'Inter', sans-serif;
+
+$font-size-xs: 0.75rem; // 12px
+$font-size-sm: 0.875rem; // 14px
+$font-size-base: 1rem; // 16px
+$font-size-lg: 1.125rem; // 18px
+$font-size-xl: 1.25rem; // 20px
+$font-size-2xl: 1.5rem; // 24px
+$font-size-3xl: 2rem; // 32px
+
+$font-weight-normal: 400;
+$font-weight-medium: 500;
+$font-weight-semibold: 600;
+$font-weight-bold: 700;
+
+// === BORDER RADIUS ===
+$radius-sm: 6px;
+$radius-md: 10px;
+$radius-lg: 16px;
+$radius-xl: 24px;
+$radius-full: 9999px;
+
+// === TRANSIZIONI ===
+$transition-fast: 0.15s ease;
+$transition-normal: 0.3s ease;
+$transition-slow: 0.5s ease;
+$ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+$ease-bounce: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+
+// === SHADOWS ===
+$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+$shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+$shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+$shadow-glow: 0 0 20px rgba($theme-accent, 0.3);
+
+// === Z-INDEX ===
+$z-base: 1;
+$z-dropdown: 100;
+$z-modal: 1000;
+$z-overlay: 2000;
+$z-tooltip: 3000;
+
+// === BREAKPOINTS (Desktop-first, mobile in secondo piano) ===
+$breakpoint-sm: 640px;
+$breakpoint-md: 768px;
+$breakpoint-lg: 1024px;
+$breakpoint-xl: 1280px;
+$breakpoint-2xl: 1536px;
+
+// ============================================
+// CSS CUSTOM PROPERTIES (per temi dinamici)
+// ============================================
+:root {
+  // Colori base
+  --bg-primary: #{$bg-primary};
+  --bg-secondary: #{$bg-secondary};
+  --bg-tertiary: #{$bg-tertiary};
+  --bg-card: #{$bg-card};
+
+  // Tema accent
+  --theme-accent: #{$theme-accent};
+  --theme-accent-rgb: #{$theme-accent-rgb};
+  --theme-accent-light: #{$theme-accent-light};
+  --theme-accent-dark: #{$theme-accent-dark};
+
+  // Gradient primario
+  --gradient-primary: linear-gradient(135deg, var(--theme-accent) 0%, var(--theme-accent-dark) 100%);
+
+  // Semantici
+  --accent-success: #{$accent-success};
+  --accent-danger: #{$accent-danger};
+  --accent-danger-light: #{$accent-danger-light};
+  --accent-warning: #{$accent-warning};
+  --accent-info: #{$accent-info};
+
+  // Testo
+  --text-primary: #{$text-primary};
+  --text-secondary: #{$text-secondary};
+  --text-muted: #{$text-muted};
+
+  // Spaziature
+  --spacing-xs: #{$spacing-xs};
+  --spacing-sm: #{$spacing-sm};
+  --spacing-md: #{$spacing-md};
+  --spacing-lg: #{$spacing-lg};
+  --spacing-xl: #{$spacing-xl};
+
+  // Font
+  --font-primary: #{$font-primary};
+  --font-display: #{$font-display};
+
+  // Border radius
+  --radius-sm: #{$radius-sm};
+  --radius-md: #{$radius-md};
+  --radius-lg: #{$radius-lg};
+
+  // Transizioni
+  --transition-fast: #{$transition-fast};
+  --transition-normal: #{$transition-normal};
+  --ease-smooth: #{$ease-smooth};
+}
