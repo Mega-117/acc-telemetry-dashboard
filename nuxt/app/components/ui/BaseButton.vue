@@ -57,7 +57,6 @@ const handleClick = (event: MouseEvent) => {
     box-shadow: 0 4px 16px rgba(var(--theme-accent-rgb), 0.3);
     
     &:hover:not(:disabled) {
-      transform: translateY(-2px);
       box-shadow: 0 6px 24px rgba(var(--theme-accent-rgb), 0.4);
     }
     
@@ -74,7 +73,6 @@ const handleClick = (event: MouseEvent) => {
     
     &:hover:not(:disabled) {
       background: rgba(var(--theme-accent-rgb), 0.1);
-      transform: translateY(-2px);
     }
   }
   

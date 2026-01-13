@@ -19,6 +19,8 @@ html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+    // Prevent layout shift when scrollbar appears/disappears
+    scrollbar-gutter: stable;
 }
 
 body {
@@ -29,6 +31,8 @@ body {
     background: var(--bg-primary);
     min-height: 100vh;
     overflow-x: hidden;
+    // Prevent layout shift when scrollbar appears/disappears
+    scrollbar-gutter: stable;
 }
 
 // === LINKS ===

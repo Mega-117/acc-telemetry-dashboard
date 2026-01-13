@@ -1,6 +1,8 @@
 // Determina baseURL: '/' per dev locale, path completo per produzione
 const isDev = process.env.NODE_ENV === 'development'
 const baseURL = isDev ? '/' : '/acc-telemetry-dashboard/docs/'
+// In dev usa _nuxt default, in production usa assets
+const buildAssetsDir = isDev ? '/_nuxt/' : '/assets/'
 
 export default defineNuxtConfig({
   ssr: false,
@@ -11,7 +13,7 @@ export default defineNuxtConfig({
   app: {
     // URL dinamico: locale vs produzione
     baseURL,
-    buildAssetsDir: 'assets',
+    buildAssetsDir,
 
     // Meta tags e font
     head: {

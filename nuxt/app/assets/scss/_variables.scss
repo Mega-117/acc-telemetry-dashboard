@@ -27,6 +27,19 @@ $accent-warning-rgb: 245, 158, 11;
 $accent-info: #3b82f6;
 $accent-info-rgb: 59, 130, 246;
 
+// === RACING THEME ===
+$racing-red: #e10600;
+$racing-red-rgb: 225, 6, 0;
+$racing-orange: #ff6b00;
+$racing-gold: #ffd700;
+$gradient-racing: linear-gradient(135deg, $racing-red 0%, $racing-orange 60%, $racing-gold 100%);
+
+// === LINK / INTERAZIONI ===
+$link-color: $racing-red;
+$link-hover: $racing-orange;
+$link-muted: rgba(255, 255, 255, 0.5);
+$link-muted-hover: #ffffff;
+
 // === TESTO ===
 $text-primary: #ffffff;
 $text-secondary: #a1a1aa;
@@ -143,4 +156,17 @@ $breakpoint-2xl: 1536px;
   --transition-fast: #{$transition-fast};
   --transition-normal: #{$transition-normal};
   --ease-smooth: #{$ease-smooth};
+
+  // Racing Theme
+  --racing-red: #{$racing-red};
+  --racing-red-rgb: #{$racing-red-rgb};
+  --racing-orange: #{$racing-orange};
+  --racing-gold: #{$racing-gold};
+  --gradient-racing: #{$gradient-racing};
+
+  // Link / Interazioni
+  --link-color: #{$link-color};
+  --link-hover: #{$link-hover};
+  --link-muted: #{$link-muted};
+  --link-muted-hover: #{$link-muted-hover};
 }

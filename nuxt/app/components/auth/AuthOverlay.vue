@@ -4,6 +4,7 @@
 // ============================================
 
 import { ref, computed } from 'vue'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
 type AuthView = 'login' | 'register' | 'reset'
 
@@ -13,6 +14,16 @@ const currentView = ref<AuthView>('login')
 const loginFormRef = ref()
 const registerFormRef = ref()
 const resetFormRef = ref()
+
+// Firebase Auth
+const { login, register, authError } = useFirebaseAuth()
+const isSubmitting = ref(false)
+
+// Emit events to parent
+const emit = defineEmits<{
+  'login-success': [email: string]
+  'register-success': [email: string]
+}>()
 
 // Determine form height class for Liquid Glass animation
 const formHeightClass = computed(() => {
@@ -38,16 +49,38 @@ const backToLogin = () => {
   resetFormRef.value?.reset()
 }
 
-const handleLogin = (credentials: { email: string; password: string }) => {
-  console.log('[AUTH] Login:', credentials.email)
+const handleLogin = async (credentials: { email: string; password: string }) => {
+  isSubmitting.value = true
+  
+  const result = await login(credentials.email, credentials.password)
+  
+  isSubmitting.value = false
+  
+  if (result.success) {
+    emit('login-success', credentials.email)
+  } else {
+    // Error is already set in authError by the composable
+    loginFormRef.value?.setError(result.error)
+  }
 }
 
-const handleRegister = (data: { nickname: string; email: string; password: string }) => {
-  console.log('[AUTH] Register:', data.email)
+const handleRegister = async (data: { nickname: string; email: string; password: string }) => {
+  isSubmitting.value = true
+  
+  const result = await register(data.email, data.password, data.nickname)
+  
+  isSubmitting.value = false
+  
+  if (result.success) {
+    emit('register-success', data.email)
+  } else {
+    registerFormRef.value?.setError(result.error)
+  }
 }
 
 const handleResetPassword = (email: string) => {
   console.log('[AUTH] Reset:', email)
+  // TODO: Implement password reset with Firebase
   resetFormRef.value?.setSuccess(true)
 }
 </script>
@@ -154,9 +187,9 @@ $radius-xl: 28px;
 $shadow-glow-sm: 0 0 30px rgba($color-racing-red, 0.25);
 $shadow-glow-lg: 0 0 60px rgba($color-racing-red, 0.4);
 
-// Liquid Glass spring timing
-$liquid-timing: cubic-bezier(0.34, 1.56, 0.64, 1);
-$liquid-duration: 0.4s;
+// Liquid Glass timing - fast and snappy
+$liquid-timing: cubic-bezier(0.2, 0, 0, 1);
+$liquid-duration: 0.2s;
 
 // === OVERLAY ===
 .auth-overlay {
@@ -294,6 +327,9 @@ $liquid-duration: 0.4s;
 
 // === NAVIGATION TABS ===
 .auth-nav {
+  max-width: 240px;
+  margin-left: auto;
+  margin-right: auto;
   display: flex;
   gap: 12px;
   margin-bottom: 32px;
@@ -337,19 +373,19 @@ $liquid-duration: 0.4s;
 // === LIQUID GLASS TRANSITION ===
 .liquid-enter-active,
 .liquid-leave-active {
-  transition: all $liquid-duration $liquid-timing;
+  transition: opacity $liquid-duration $liquid-timing,
+              transform $liquid-duration $liquid-timing;
+  will-change: opacity, transform;
 }
 
 .liquid-enter-from {
   opacity: 0;
-  transform: translateY(16px) scale(0.97);
-  filter: blur(4px);
+  transform: translateY(8px);
 }
 
 .liquid-leave-to {
   opacity: 0;
-  transform: translateY(-10px) scale(0.98);
-  filter: blur(2px);
+  transform: translateY(-6px);
 }
 
 // === FORM STYLES ===
@@ -403,15 +439,14 @@ $liquid-duration: 0.4s;
   letter-spacing: 1.5px;
   cursor: pointer;
   box-shadow: $shadow-glow-sm;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
 
   &:hover {
-    transform: translateY(-3px);
-    box-shadow: $shadow-glow-lg;
+    box-shadow: 0 0 40px rgba($color-racing-red, 0.5);
   }
 
   &:active {
-    transform: translateY(-1px);
+    box-shadow: $shadow-glow-sm;
   }
 }
 
@@ -427,11 +462,10 @@ $liquid-duration: 0.4s;
   color: $color-racing-red;
   text-align: center;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: color 0.2s ease;
 
   &:hover {
     color: $color-racing-orange;
-    text-decoration: underline;
   }
 }
 
@@ -456,5 +490,152 @@ $liquid-duration: 0.4s;
 :deep(.reset-form__description) {
   font-family: $font-family;
   font-size: 16px;
+}
+
+// ============================================
+// RESPONSIVE - Mobile First Breakpoints
+// ============================================
+
+// Tablet and below (< 768px)
+@media (max-width: 768px) {
+  .auth-card {
+    max-width: 100%;
+    margin: 0 16px;
+  }
+
+  .auth-card__body {
+    padding: 48px 40px;
+    border-radius: $radius-lg;
+  }
+
+  .auth-card__glow {
+    border-radius: $radius-lg + 4px;
+    filter: blur(16px);
+  }
+
+  .brand {
+    gap: 10px;
+
+    &__badge {
+      font-size: 22px;
+      padding: 8px 12px;
+    }
+
+    &__name {
+      font-size: 24px;
+      letter-spacing: 3px;
+    }
+  }
+
+  .auth-header {
+    margin-bottom: 32px;
+  }
+
+  .auth-nav {
+    max-width: 100%;
+    margin-bottom: 28px;
+  }
+
+  .auth-nav__item {
+    padding: 12px 14px;
+    font-size: 15px;
+  }
+
+  .auth-form-container {
+    max-width: 100%;
+  }
+}
+
+// Mobile small (< 480px)
+@media (max-width: 480px) {
+  .auth-overlay {
+    padding: 16px;
+  }
+
+  .auth-card {
+    margin: 0;
+  }
+
+  .auth-card__body {
+    padding: 36px 28px;
+    border-radius: $radius-md;
+  }
+
+  .auth-card__glow {
+    border-radius: $radius-md + 4px;
+    filter: blur(12px);
+    inset: -3px;
+  }
+
+  .brand {
+    flex-direction: column;
+    gap: 8px;
+
+    &__badge {
+      font-size: 20px;
+      padding: 6px 10px;
+    }
+
+    &__name {
+      font-size: 20px;
+      letter-spacing: 2px;
+    }
+  }
+
+  .auth-header {
+    margin-bottom: 28px;
+  }
+
+  .auth-nav {
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .auth-nav__item {
+    padding: 10px 12px;
+    font-size: 14px;
+  }
+
+  :deep(.auth-form) {
+    gap: 14px;
+  }
+
+  :deep(.form-input) {
+    padding: 12px 14px;
+    font-size: 16px; // Keep 16px to prevent iOS zoom
+  }
+
+  :deep(.btn--primary) {
+    padding: 12px 16px;
+    font-size: 15px;
+  }
+
+  :deep(.btn--link) {
+    padding: 12px;
+    font-size: 15px;
+  }
+
+  // Reduce ambient glows on mobile for performance
+  .ambient-glow {
+    filter: blur(80px);
+    opacity: 0.25;
+  }
+}
+
+// Extra small (< 360px)
+@media (max-width: 360px) {
+  .auth-card__body {
+    padding: 28px 20px;
+  }
+
+  .brand {
+    &__badge {
+      font-size: 18px;
+    }
+
+    &__name {
+      font-size: 18px;
+    }
+  }
 }
 </style>
