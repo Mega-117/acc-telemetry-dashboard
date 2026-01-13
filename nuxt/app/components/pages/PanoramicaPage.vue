@@ -5,8 +5,8 @@
 
 // Import images
 import mustangImg from '@/assets/images/cars/mustang_gt3.png'
-import spaImg from '@/assets/images/tracks/spa.png'
-import monzaImg from '@/assets/images/tracks/monza.png'
+import spaImg from '@/assets/images/tracks/spa.jpg'
+import monzaImg from '@/assets/images/tracks/monza.jpg'
 </script>
 
 <template>

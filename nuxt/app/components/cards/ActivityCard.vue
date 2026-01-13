@@ -156,6 +156,7 @@ const formatSession = (count: number) => count === 1 ? 'sess.' : 'sess.'
 
 <style lang="scss" scoped>
 @use '@/assets/scss/variables' as *;
+@use 'sass:color';
 
 // Session colors
 $color-practice: $accent-info;    // Blue
@@ -266,17 +267,17 @@ $color-race: $racing-red;         // Red
   transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 
   &--practice {
-    background: linear-gradient(180deg, lighten($color-practice, 8%) 0%, $color-practice 100%);
+    background: linear-gradient(180deg, color.adjust($color-practice, $lightness: 8%) 0%, $color-practice 100%);
     box-shadow: 0 2px 8px rgba($color-practice, 0.4);
   }
 
   &--qualify {
-    background: linear-gradient(180deg, lighten($color-qualify, 8%) 0%, $color-qualify 100%);
+    background: linear-gradient(180deg, color.adjust($color-qualify, $lightness: 8%) 0%, $color-qualify 100%);
     box-shadow: 0 2px 8px rgba($color-qualify, 0.4);
   }
 
   &--race {
-    background: linear-gradient(180deg, lighten($color-race, 8%) 0%, $color-race 100%);
+    background: linear-gradient(180deg, color.adjust($color-race, $lightness: 8%) 0%, $color-race 100%);
     box-shadow: 0 2px 8px rgba($color-race, 0.4);
   }
 }
