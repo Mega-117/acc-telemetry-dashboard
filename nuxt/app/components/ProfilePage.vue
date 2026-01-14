@@ -72,6 +72,9 @@ const handleSave = async () => {
 
 const handleLogout = () => emit('logout')
 const handleGoToProfile = () => {} // Already on profile
+const handleBackToDashboard = () => {
+  emit('back')
+}
 </script>
 
 <template>
@@ -80,7 +83,7 @@ const handleGoToProfile = () => {} // Already on profile
     <header class="profile-header">
       <div class="header-inner">
         <div class="header-left">
-          <button class="back-btn" @click="emit('back')">
+          <button class="back-btn" @click="handleBackToDashboard">
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
               <path d="M12 4L6 10L12 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>

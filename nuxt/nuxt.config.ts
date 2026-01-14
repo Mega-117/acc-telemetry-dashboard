@@ -15,6 +15,9 @@ export default defineNuxtConfig({
     baseURL,
     buildAssetsDir,
 
+    // Page transitions
+    pageTransition: { name: 'page-fade', mode: 'out-in' },
+
     // Meta tags e font
     head: {
       title: 'ACC Telemetry Dashboard',

@@ -22,9 +22,13 @@ const activeTab = ref<TabId>('panoramica')
 // Session detail state
 const selectedSessionId = ref<string | null>(null)
 
+// Track detail state
+const selectedTrackId = ref<string | null>(null)
+
 const handleNavigate = (tab: string) => {
   activeTab.value = tab as TabId
   selectedSessionId.value = null // Reset detail when changing tabs
+  selectedTrackId.value = null
 }
 
 // Navigate to session detail
@@ -37,8 +41,19 @@ const handleBackFromSession = () => {
   selectedSessionId.value = null
 }
 
+// Navigate to track detail
+const handleGoToTrack = (trackId: string) => {
+  selectedTrackId.value = trackId
+}
+
+// Back from track detail
+const handleBackFromTrack = () => {
+  selectedTrackId.value = null
+}
+
 // Provide session navigation to children
 provide('goToSession', handleGoToSession)
+provide('goToTrack', handleGoToTrack)
 
 // Display name
 const displayName = computed(() => {
@@ -65,6 +80,14 @@ const displayName = computed(() => {
         :session-id="selectedSessionId"
         @back="handleBackFromSession"
       />
+
+      <!-- Track Detail View -->
+      <PagesTrackDetailPage 
+        v-else-if="activeTab === 'piste' && selectedTrackId" 
+        key="track-detail"
+        :track-id="selectedTrackId"
+        @back="handleBackFromTrack"
+      />
       
       <!-- Panoramica -->
       <PagesPanoramicaPage v-else-if="activeTab === 'panoramica'" key="panoramica" />
@@ -77,7 +100,11 @@ const displayName = computed(() => {
       />
       
       <!-- Piste -->
-      <PagesPistePage v-else-if="activeTab === 'piste'" key="piste" />
+      <PagesPistePage 
+        v-else-if="activeTab === 'piste'" 
+        key="piste" 
+        @go-to-track="handleGoToTrack"
+      />
     </Transition>
   </LayoutMainLayout>
 </template>

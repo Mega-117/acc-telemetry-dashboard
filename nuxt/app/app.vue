@@ -3,8 +3,11 @@
 // App.vue - Main Application with Auth Flow
 // ============================================
 
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+
+// === NUXT ROUTER ===
+const route = useRoute()
 
 // === FIREBASE AUTH ===
 const { 
@@ -18,32 +21,59 @@ const {
 } = useFirebaseAuth()
 
 // === APP STATE ===
-type AppState = 'auth' | 'loading' | 'dashboard' | 'profile'
+type AppState = 'initializing' | 'auth' | 'loading' | 'dashboard' | 'profile'
 type AuthState = 'login' | 'register' | 'reset' | 'register-success'
 type DissolveAnimation = 'fade-zoom' | 'warp' | 'particles' | 'slide-up'
 
-const appState = ref<AppState>('auth')
+const appState = ref<AppState>('initializing')
 const authState = ref<AuthState>('login')
 const userEmail = ref('')
+const hasInitialized = ref(false)
 
 // === CONFIG ===
 const REQUIRE_EMAIL_VERIFICATION = ref(false) // Always require email verification
 const transitionName = 'dissolve-fade-zoom' // Fixed animation
 
-// === WATCH AUTH STATE CHANGES ===
-watch(currentUser, (user) => {
+// === WATCH AUTH LOADING STATE ===
+// This watch handles the INITIAL auth check when the app loads
+watch(authLoading, (loading) => {
+  if (!loading && !hasInitialized.value) {
+    hasInitialized.value = true
+    
+    if (currentUser.value) {
+      // User is already logged in → go directly to dashboard (no loading screen)
+      userEmail.value = currentUser.value.email || ''
+      
+      if (REQUIRE_EMAIL_VERIFICATION.value && !currentUser.value.emailVerified) {
+        appState.value = 'auth'
+        authState.value = 'register-success'
+      } else {
+        appState.value = 'dashboard'
+      }
+    } else {
+      // No user → show login
+      appState.value = 'auth'
+    }
+  }
+}, { immediate: true })
+
+// === WATCH USER CHANGES (after initialization) ===
+// This handles login/logout AFTER the initial load
+watch(currentUser, (user, oldUser) => {
+  // Skip if we haven't initialized yet (handled by authLoading watch)
+  if (!hasInitialized.value) return
+  
   if (user) {
     userEmail.value = user.email || ''
     
     // Check if user needs email verification
     if (REQUIRE_EMAIL_VERIFICATION.value && !user.emailVerified) {
-      // Stay on verification screen or show it
       if (appState.value !== 'auth' || authState.value !== 'register-success') {
         appState.value = 'auth'
         authState.value = 'register-success'
       }
     } else {
-      // User is verified or verification not required → go to dashboard
+      // User logged in after being on auth screen → show loading transition
       if (appState.value === 'auth' && authState.value !== 'register-success') {
         appState.value = 'loading'
         setTimeout(() => {
@@ -51,6 +81,10 @@ watch(currentUser, (user) => {
         }, 1000)
       }
     }
+  } else if (oldUser) {
+    // User logged out
+    appState.value = 'auth'
+    authState.value = 'login'
   }
 })
 
@@ -111,6 +145,9 @@ const handleGoToProfile = () => {
 const handleBackToDashboard = () => {
   appState.value = 'dashboard'
 }
+
+// Provide navigation functions to child components (layouts)
+provide('goToProfile', handleGoToProfile)
 </script>
 
 <template>
@@ -119,9 +156,16 @@ const handleBackToDashboard = () => {
 
     <!-- Main Content with Transitions -->
     <Transition :name="transitionName" mode="out-in">
+      <!-- Initializing - waiting for Firebase auth check -->
+      <div v-if="appState === 'initializing'" key="initializing" class="initializing-screen">
+        <div class="initializing-content">
+          <div class="initializing-spinner"></div>
+        </div>
+      </div>
+
       <!-- Auth Overlay -->
       <AuthOverlay 
-        v-if="appState === 'auth' && authState !== 'register-success'"
+        v-else-if="appState === 'auth' && authState !== 'register-success'"
         key="auth"
         @login-success="handleLoginSuccess"
         @register-success="handleRegisterSuccess"
@@ -151,25 +195,17 @@ const handleBackToDashboard = () => {
         </div>
       </div>
 
-      <!-- Profile Page -->
-      <ProfilePage
-        v-else-if="appState === 'profile'"
-        key="profile"
-        :user-email="userEmail"
-        :user-nickname="userDisplayName"
-        @logout="handleLogout"
-        @back="handleBackToDashboard"
-      />
+      <!-- Dashboard -->
+      <div v-else-if="appState === 'dashboard'" key="dashboard" class="dashboard-wrapper">
+        <NuxtLayout>
+          <NuxtPage />
+        </NuxtLayout>
+      </div>
 
-      <!-- Dashboard (default fallback) -->
-      <DashboardMain 
-        v-else
-        key="dashboard"
-        :user-email="userEmail"
-        :user-nickname="userDisplayName"
-        @logout="handleLogout"
-        @go-to-profile="handleGoToProfile"
-      />
+      <!-- Profile Page -->
+      <div v-else-if="appState === 'profile'" key="profile" class="profile-wrapper">
+        <ProfilePage @back="handleBackToDashboard" />
+      </div>
     </Transition>
   </div>
 </template>
@@ -239,6 +275,35 @@ $color-card: #121218;
   font-family: $font-family;
   font-size: 16px;
   color: rgba(255, 255, 255, 0.6);
+}
+
+// === INITIALIZING SCREEN (minimal, fast) ===
+.initializing-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: $color-bg;
+}
+
+.initializing-content {
+  text-align: center;
+}
+
+.initializing-spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top-color: rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+// === WRAPPERS (for Transition single-root) ===
+.profile-wrapper,
+.dashboard-wrapper {
+  min-height: 100vh;
 }
 
 // ============================================
@@ -316,6 +381,7 @@ $color-card: #121218;
   transform: translateY(-60px);
   filter: blur(4px);
 }
+
 
 // Responsive
 @media (max-width: 768px) {

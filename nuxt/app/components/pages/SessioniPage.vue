@@ -606,11 +606,15 @@ function goToSession(id: string) {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba($racing-red, 0.3);
+    border-color: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+    box-shadow: 
+      0 6px 20px rgba(0, 0, 0, 0.3),
+      0 0 20px rgba(255, 255, 255, 0.1),
+      0 0 40px rgba(255, 255, 255, 0.05);
 
     .row-right {
       background: rgba(255, 255, 255, 0.02);
@@ -618,7 +622,7 @@ function goToSession(id: string) {
 
     .session-cta {
       color: #fff;
-      transform: translateX(2px);
+      transform: translateX(3px);
     }
   }
 }
@@ -906,7 +910,7 @@ function goToSession(id: string) {
   padding: 14px 24px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.04);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 
   &:last-child {
     border-bottom: none;
@@ -914,10 +918,13 @@ function goToSession(id: string) {
 
   &:hover {
     background: rgba(255, 255, 255, 0.03);
+    box-shadow: 
+      0 4px 16px rgba(0, 0, 0, 0.2),
+      0 0 15px rgba(255, 255, 255, 0.06);
 
     .session-cta {
       color: #fff;
-      transform: translateX(2px);
+      transform: translateX(3px);
     }
   }
 }
