@@ -3,6 +3,8 @@
 // TopBar - Application header
 // ============================================
 
+import { computed } from 'vue'
+
 const props = defineProps<{
   userName?: string
 }>()
@@ -12,7 +14,7 @@ const emit = defineEmits<{
   goToProfile: []
 }>()
 
-const displayName = computed(() => props.userName || 'Utente')
+const displayName = computed(() => props.userName ?? 'Utente')
 </script>
 
 <template>

@@ -111,7 +111,7 @@ const sessionsByDay = computed(() => {
     if (!groups[session.date]) {
       groups[session.date] = []
     }
-    groups[session.date].push(session)
+    groups[session.date]!.push(session)
   }
   
   return Object.entries(groups)

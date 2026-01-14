@@ -20,9 +20,9 @@ const emit = defineEmits<{
 const { currentUser, getUserProfile } = useFirebaseAuth()
 
 // Display name computed
-const displayName = computed(() => {
+const displayName = computed((): string => {
   if (props.userNickname) return props.userNickname
-  if (props.userEmail) return props.userEmail.split('@')[0]
+  if (props.userEmail) return props.userEmail.split('@')[0] ?? 'Utente'
   return 'Utente'
 })
 
