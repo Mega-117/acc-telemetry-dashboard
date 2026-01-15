@@ -14,7 +14,12 @@ const emit = defineEmits<{
   goToProfile: []
 }>()
 
+const { isCoach } = useFirebaseAuth()
 const displayName = computed(() => props.userName ?? 'Utente')
+
+const goToCoachArea = () => {
+  navigateTo('/piloti')
+}
 </script>
 
 <template>
@@ -28,6 +33,21 @@ const displayName = computed(() => props.userName ?? 'Utente')
 
       <!-- Spacer -->
       <div class="topbar__spacer"></div>
+
+      <!-- Coach Button (only for coaches) -->
+      <button 
+        v-if="isCoach" 
+        class="coach-button" 
+        @click="goToCoachArea"
+        title="I miei piloti"
+      >
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/>
+          <path d="M16 3.13a4 4 0 010 7.75"/>
+          <path d="M21 21v-2a4 4 0 00-3-3.85"/>
+        </svg>
+      </button>
 
       <!-- User Dropdown -->
       <div class="topbar__user">
@@ -83,6 +103,27 @@ const displayName = computed(() => props.userName ?? 'Utente')
 
 .topbar__spacer {
   flex: 1;
+}
+
+.coach-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-right: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba($racing-orange, 0.15);
+    border-color: rgba($racing-orange, 0.4);
+    color: $racing-orange;
+  }
 }
 
 .topbar__user {

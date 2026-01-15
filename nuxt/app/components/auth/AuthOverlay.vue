@@ -64,10 +64,10 @@ const handleLogin = async (credentials: { email: string; password: string }) => 
   }
 }
 
-const handleRegister = async (data: { nickname: string; email: string; password: string }) => {
+const handleRegister = async (data: { firstName: string; lastName: string; nickname: string; email: string; password: string }) => {
   isSubmitting.value = true
   
-  const result = await register(data.email, data.password, data.nickname)
+  const result = await register(data.email, data.password, data.nickname, data.firstName, data.lastName)
   
   isSubmitting.value = false
   

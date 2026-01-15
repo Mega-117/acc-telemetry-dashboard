@@ -5,6 +5,8 @@
 
 import { ref } from 'vue'
 
+const firstName = ref('')
+const lastName = ref('')
 const nickname = ref('')
 const email = ref('')
 const password = ref('')
@@ -13,7 +15,7 @@ const error = ref('')
 const loading = ref(false)
 
 const emit = defineEmits<{
-  submit: [data: { nickname: string; email: string; password: string }]
+  submit: [data: { firstName: string; lastName: string; nickname: string; email: string; password: string }]
 }>()
 
 const handleSubmit = () => {
@@ -21,6 +23,14 @@ const handleSubmit = () => {
   error.value = ''
   
   // Validazione client-side
+  if (!firstName.value.trim()) {
+    error.value = 'Inserisci il tuo nome.'
+    return
+  }
+  if (!lastName.value.trim()) {
+    error.value = 'Inserisci il tuo cognome.'
+    return
+  }
   if (!nickname.value.trim()) {
     error.value = 'Scegli un nickname.'
     return
@@ -51,6 +61,8 @@ const handleSubmit = () => {
   }
   
   emit('submit', {
+    firstName: firstName.value.trim(),
+    lastName: lastName.value.trim(),
     nickname: nickname.value.trim(),
     email: email.value.trim(),
     password: password.value
@@ -66,6 +78,8 @@ defineExpose({
   setError: (msg: string) => { error.value = msg },
   setLoading: (val: boolean) => { loading.value = val },
   reset: () => {
+    firstName.value = ''
+    lastName.value = ''
     nickname.value = ''
     email.value = ''
     password.value = ''
@@ -78,10 +92,27 @@ defineExpose({
 
 <template>
   <form class="auth-form" @submit.prevent="handleSubmit">
+    <div class="name-row">
+      <UiBaseInput
+        v-model="firstName"
+        type="text"
+        placeholder="Nome"
+        autocomplete="given-name"
+        @input="clearError"
+      />
+      <UiBaseInput
+        v-model="lastName"
+        type="text"
+        placeholder="Cognome"
+        autocomplete="family-name"
+        @input="clearError"
+      />
+    </div>
+    
     <UiBaseInput
       v-model="nickname"
       type="text"
-      placeholder="Nickname"
+      placeholder="Nickname (visibile agli altri)"
       autocomplete="username"
       :maxlength="20"
       @input="clearError"
@@ -131,6 +162,12 @@ defineExpose({
   flex-direction: column;
   gap: $spacing-md;
   animation: authFadeIn 0.3s ease forwards;
+}
+
+.name-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: $spacing-sm;
 }
 
 @keyframes authFadeIn {

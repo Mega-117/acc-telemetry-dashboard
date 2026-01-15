@@ -1,17 +1,21 @@
 <script setup lang="ts">
 // ============================================
 // TabsBarRouter - Navigation tabs with NuxtLink
+// Auto-detects active tab from current route
 // ============================================
 
-defineProps<{
-  activeTab: 'panoramica' | 'sessioni' | 'piste'
-}>()
+const route = useRoute()
 
 const tabs = [
   { id: 'panoramica', label: 'PANORAMICA', to: '/panoramica' },
   { id: 'sessioni', label: 'SESSIONI', to: '/sessioni' },
   { id: 'piste', label: 'PISTE', to: '/piste' }
 ]
+
+// Check if tab is active based on current route
+const isActive = (tabTo: string) => {
+  return route.path.startsWith(tabTo)
+}
 </script>
 
 <template>
@@ -22,7 +26,7 @@ const tabs = [
         :key="tab.id"
         :to="tab.to"
         class="tab"
-        :class="{ 'tab--active': activeTab === tab.id }"
+        :class="{ 'tab--active': isActive(tab.to) }"
       >
         {{ tab.label }}
       </NuxtLink>

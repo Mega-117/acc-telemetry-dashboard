@@ -17,6 +17,7 @@ import { auth, db } from '~/config/firebase'
 
 // Shared state (singleton across components)
 const currentUser = ref<User | null>(null)
+const userRole = ref<string>('pilot') // Default role
 const isLoading = ref(true)
 const authError = ref<string | null>(null)
 
@@ -29,34 +30,77 @@ export function useFirebaseAuth() {
     const isEmailVerified = computed(() => currentUser.value?.emailVerified ?? false)
     const userEmail = computed(() => currentUser.value?.email ?? '')
     const userDisplayName = computed(() => currentUser.value?.displayName ?? '')
+    const isCoach = computed(() => userRole.value === 'coach')
+
+    // === ENSURE USER DOC ===
+    // Checks/Creates user document in Firestore to ensure role availability
+    const ensureUserDocument = async (user: User) => {
+        try {
+            const userDocRef = doc(db, 'users', user.uid)
+            const docSnap = await getDoc(userDocRef)
+
+            if (!docSnap.exists()) {
+                // Create default pilot profile if missing
+                await setDoc(userDocRef, {
+                    email: user.email,
+                    nickname: user.displayName || 'Utente',
+                    role: 'pilot',
+                    createdAt: new Date().toISOString(),
+                    emailVerified: user.emailVerified
+                })
+                userRole.value = 'pilot'
+                console.log('[AUTH] Created missing user profile')
+            } else {
+                // Load existing role
+                const data = docSnap.data()
+                userRole.value = data.role || 'pilot'
+            }
+        } catch (e) {
+            console.error('[AUTH] Failed to ensure user document:', e)
+            // Fallback safe default
+            userRole.value = 'pilot'
+        }
+    }
 
     // === INIT AUTH LISTENER ===
     const initAuthListener = () => {
         if (authListenerInitialized) return
 
         authListenerInitialized = true
-        onAuthStateChanged(auth, (user) => {
+        onAuthStateChanged(auth, async (user) => {
             currentUser.value = user
+
+            if (user) {
+                // Always ensure we have their role loaded
+                await ensureUserDocument(user)
+            } else {
+                userRole.value = 'pilot'
+            }
+
             isLoading.value = false
-            console.log('[AUTH] State changed:', user?.email ?? 'logged out')
+            console.log('[AUTH] State changed:', user?.email ?? 'logged out', '| Role:', userRole.value)
         })
     }
 
     // === REGISTER ===
-    const register = async (email: string, password: string, nickname: string) => {
+    const register = async (email: string, password: string, nickname: string, firstName: string = '', lastName: string = '') => {
         authError.value = null
         try {
             // 1. Create user in Firebase Auth
             const userCredential = await createUserWithEmailAndPassword(auth, email, password)
             const user = userCredential.user
 
-            // 2. Update display name
+            // 2. Update display name (use nickname for display)
             await updateProfile(user, { displayName: nickname })
 
             // 3. Save additional data to Firestore
             await setDoc(doc(db, 'users', user.uid), {
+                firstName,
+                lastName,
                 nickname,
                 email,
+                role: 'pilot',
+                coachId: null,
                 createdAt: new Date().toISOString(),
                 emailVerified: false
             })
@@ -182,6 +226,8 @@ export function useFirebaseAuth() {
         logout,
         resendVerificationEmail,
         checkEmailVerified,
-        getUserProfile
+        getUserProfile,
+        userRole,
+        isCoach
     }
 }

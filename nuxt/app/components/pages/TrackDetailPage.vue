@@ -382,9 +382,10 @@ function getTypeLabel(type: SessionType): string {
   return labels[type]
 }
 
+// Navigate to session detail
+const router = useRouter()
 function goToSession(id: string) {
-  // TODO: Navigate to session detail
-  console.log('Navigate to session:', id)
+  router.push(`/sessioni/${id}`)
 }
 </script>
 
