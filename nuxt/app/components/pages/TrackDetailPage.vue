@@ -4,6 +4,9 @@
 // ============================================
 
 import { ref, computed } from 'vue'
+
+// Composable for public path (GitHub Pages compatibility)
+const { getPublicPath } = usePublicPath()
 import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -398,7 +401,7 @@ function goToSession(id: string) {
     <!-- Track Header -->
     <div class="track-header">
       <div class="track-header-image">
-        <img :src="track.image" :alt="track.name" />
+        <img :src="getPublicPath(track.image)" :alt="track.name" />
       </div>
       <div class="track-header-info">
         <span class="track-country-badge">{{ track.countryCode }}</span>

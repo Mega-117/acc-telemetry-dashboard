@@ -5,10 +5,8 @@
 
 import { ref, computed } from 'vue'
 
-// Emit to parent for navigation
-const emit = defineEmits<{
-  'go-to-track': [trackId: string]
-}>()
+// Composable for public path (GitHub Pages compatibility)
+const { getPublicPath } = usePublicPath()
 
 // Types
 interface Track {
@@ -22,6 +20,11 @@ interface Track {
   bestQualy?: string
   bestRace?: string
 }
+
+// Emit to parent for navigation
+const emit = defineEmits<{
+  'go-to-track': [trackId: string]
+}>()
 
 // === VIEW MODE ===
 type ViewMode = 'card' | 'list'
@@ -135,7 +138,7 @@ function goToTrack(id: string) {
         <div class="card-image-section">
           <img 
             v-if="track.image" 
-            :src="track.image" 
+            :src="getPublicPath(track.image)" 
             :alt="track.name"
             class="card-track-image"
           />
