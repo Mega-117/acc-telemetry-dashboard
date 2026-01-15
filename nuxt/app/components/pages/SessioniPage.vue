@@ -1,9 +1,22 @@
 <script setup lang="ts">
 // ============================================
 // SessioniPage - Sessions list with filters
+// Uses real data from Firebase via useTelemetryData
 // ============================================
 
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
+import { 
+  useTelemetryData, 
+  formatLapTime, 
+  formatCarName, 
+  formatTrackName,
+  formatDateFull,
+  formatTime,
+  getSessionTypeLabel,
+  getSessionTypeDisplay,
+  SESSION_TYPES,
+  type SessionDocument
+} from '~/composables/useTelemetryData'
 
 // Emit to parent for navigation
 const emit = defineEmits<{
@@ -13,7 +26,7 @@ const emit = defineEmits<{
 // Types
 type SessionType = 'practice' | 'qualify' | 'race'
 
-interface Session {
+interface DisplaySession {
   id: string
   date: string
   time: string
@@ -26,6 +39,39 @@ interface Session {
   bestRace?: string
 }
 
+// === TELEMETRY DATA ===
+const { sessions: rawSessions, isLoading, loadSessions } = useTelemetryData()
+
+// Load data on mount
+onMounted(async () => {
+  await loadSessions()
+})
+
+// Transform Firebase sessions to display format
+const sessions = computed<DisplaySession[]>(() => {
+  return rawSessions.value.map(s => {
+    const sessionType = getSessionTypeLabel(s.meta.session_type)
+    const dateStr = s.meta.date_start?.split('T')[0] || ''
+    
+    return {
+      id: s.sessionId,
+      date: dateStr,
+      time: formatTime(s.meta.date_start),
+      type: sessionType,
+      track: formatTrackName(s.meta.track),
+      car: formatCarName(s.meta.car),
+      laps: s.summary.laps || 0,
+      stints: s.summary.stintCount || 1,
+      bestQualy: s.meta.session_type === SESSION_TYPES.QUALIFY 
+        ? formatLapTime(s.summary.bestLap) 
+        : undefined,
+      bestRace: s.meta.session_type === SESSION_TYPES.RACE 
+        ? formatLapTime(s.summary.bestLap) 
+        : undefined
+    }
+  })
+})
+
 // === FILTER STATE ===
 const filterType = ref<'all' | SessionType>('all')
 const filterTrack = ref('all')
@@ -36,92 +82,13 @@ const filterTimeRange = ref<'today' | '7d' | '30d' | 'all'>('all')
 type ViewMode = 'list' | 'card'
 const viewMode = ref<ViewMode>('list')
 
-// === MOCK DATA ===
-const sessions: Session[] = [
-  // 13 Gennaio 2026
-  { id: 's1', date: '2026-01-13', time: '19:34', type: 'practice', track: 'Donington', car: 'Ford Mustang GT3', laps: 18, stints: 2, bestQualy: '1:29.456' },
-  { id: 's2', date: '2026-01-13', time: '18:22', type: 'practice', track: 'Valencia', car: 'Ford Mustang GT3', laps: 12, stints: 1, bestQualy: '1:31.890' },
-  
-  // 10 Gennaio 2026
-  { id: 's3', date: '2026-01-10', time: '20:15', type: 'race', track: 'Spa', car: 'AMR V8 Vantage GT3', laps: 18, stints: 2, bestRace: '2:17.890' },
-  { id: 's4', date: '2026-01-10', time: '18:45', type: 'practice', track: 'Spa', car: 'AMR V8 Vantage GT3', laps: 24, stints: 3, bestQualy: '2:16.543', bestRace: '2:18.234' },
-  { id: 's5', date: '2026-01-10', time: '15:30', type: 'qualify', track: 'Spa', car: 'AMR V8 Vantage GT3', laps: 8, stints: 1, bestQualy: '2:16.874' },
-  
-  // 6 Gennaio 2026
-  { id: 's6', date: '2026-01-06', time: '21:00', type: 'race', track: 'Monza', car: 'Ford Mustang GT3', laps: 22, stints: 2, bestRace: '1:48.345' },
-  { id: 's7', date: '2026-01-06', time: '19:12', type: 'qualify', track: 'Monza', car: 'Ford Mustang GT3', laps: 6, stints: 1, bestQualy: '1:47.234' },
-  { id: 's8', date: '2026-01-06', time: '17:45', type: 'practice', track: 'Monza', car: 'Ford Mustang GT3', laps: 32, stints: 3, bestQualy: '1:47.890', bestRace: '1:48.567' },
-  { id: 's9', date: '2026-01-06', time: '15:30', type: 'practice', track: 'Monza', car: 'Ford Mustang GT3', laps: 28, stints: 2, bestQualy: '1:48.234' },
-  { id: 's10', date: '2026-01-06', time: '13:00', type: 'race', track: 'Monza', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestRace: '1:48.567', bestQualy: '1:47.890' },
-  { id: 's11', date: '2026-01-06', time: '11:30', type: 'qualify', track: 'Monza', car: 'Ford Mustang GT3', laps: 5, stints: 1, bestQualy: '1:47.678' },
-  { id: 's12', date: '2026-01-06', time: '09:00', type: 'race', track: 'Monza', car: 'Ford Mustang GT3', laps: 18, stints: 2, bestRace: '1:48.123' },
-  
-  // 3 Gennaio 2026
-  { id: 's13', date: '2026-01-03', time: '20:30', type: 'race', track: 'Monza', car: 'Ford Mustang GT3', laps: 16, stints: 2, bestRace: '1:49.234' },
-  { id: 's14', date: '2026-01-03', time: '18:00', type: 'practice', track: 'Monza', car: 'Ford Mustang GT3', laps: 24, stints: 2, bestQualy: '1:48.567' },
-  { id: 's15', date: '2026-01-03', time: '16:30', type: 'qualify', track: 'Monza', car: 'Ford Mustang GT3', laps: 6, stints: 1, bestQualy: '1:48.012', bestRace: '1:49.890' },
-  
-  // 31 Dicembre 2025
-  { id: 's16', date: '2025-12-31', time: '22:00', type: 'practice', track: 'Paul Ricard', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestQualy: '1:54.234' },
-  { id: 's17', date: '2025-12-31', time: '19:30', type: 'practice', track: 'Donington', car: 'Ford Mustang GT3', laps: 18, stints: 2, bestQualy: '1:29.890' },
-  
-  // 30 Dicembre 2025
-  { id: 's18', date: '2025-12-30', time: '21:15', type: 'practice', track: 'Donington', car: 'Ford Mustang GT3', laps: 27, stints: 3, bestQualy: '1:29.123' },
-  { id: 's19', date: '2025-12-30', time: '18:00', type: 'practice', track: 'Paul Ricard', car: 'Ford Mustang GT3', laps: 22, stints: 2, bestQualy: '1:54.567' },
-  { id: 's20', date: '2025-12-30', time: '15:30', type: 'practice', track: 'Donington', car: 'AMR V8 Vantage GT3', laps: 16, stints: 2, bestQualy: '1:30.234' },
-  { id: 's21', date: '2025-12-30', time: '12:00', type: 'practice', track: 'Donington', car: 'Ford Mustang GT3', laps: 30, stints: 3, bestQualy: '1:29.456', bestRace: '1:30.890' },
-  
-  // 28 Dicembre 2025
-  { id: 's22', date: '2025-12-28', time: '20:00', type: 'race', track: 'Spa', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestRace: '2:18.456' },
-  { id: 's23', date: '2025-12-28', time: '18:30', type: 'qualify', track: 'Spa', car: 'Ford Mustang GT3', laps: 8, stints: 1, bestQualy: '2:17.890' },
-  { id: 's24', date: '2025-12-28', time: '16:00', type: 'practice', track: 'Spa', car: 'Ford Mustang GT3', laps: 24, stints: 2, bestQualy: '2:18.234' },
-  
-  // 25 Dicembre 2025
-  { id: 's25', date: '2025-12-25', time: '15:00', type: 'practice', track: 'Monza', car: 'AMR V8 Vantage GT3', laps: 18, stints: 2, bestQualy: '1:49.123' },
-  { id: 's26', date: '2025-12-25', time: '12:00', type: 'race', track: 'Monza', car: 'AMR V8 Vantage GT3', laps: 16, stints: 2, bestRace: '1:49.890' },
-  
-  // 22 Dicembre 2025
-  { id: 's27', date: '2025-12-22', time: '21:00', type: 'practice', track: 'Valencia', car: 'Ford Mustang GT3', laps: 22, stints: 2, bestQualy: '1:32.456' },
-  { id: 's28', date: '2025-12-22', time: '19:00', type: 'qualify', track: 'Valencia', car: 'Ford Mustang GT3', laps: 6, stints: 1, bestQualy: '1:31.890' },
-  { id: 's29', date: '2025-12-22', time: '17:00', type: 'race', track: 'Valencia', car: 'Ford Mustang GT3', laps: 18, stints: 2, bestRace: '1:32.234' },
-  
-  // 20 Dicembre 2025
-  { id: 's30', date: '2025-12-20', time: '20:30', type: 'practice', track: 'Donington', car: 'Ford Mustang GT3', laps: 28, stints: 3, bestQualy: '1:28.890' },
-  { id: 's31', date: '2025-12-20', time: '18:00', type: 'practice', track: 'Donington', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestQualy: '1:29.234' },
-  { id: 's32', date: '2025-12-20', time: '15:30', type: 'qualify', track: 'Donington', car: 'Ford Mustang GT3', laps: 5, stints: 1, bestQualy: '1:28.567' },
-  { id: 's33', date: '2025-12-20', time: '13:00', type: 'race', track: 'Donington', car: 'Ford Mustang GT3', laps: 16, stints: 2, bestRace: '1:29.123' },
-  
-  // 18 Dicembre 2025
-  { id: 's34', date: '2025-12-18', time: '21:30', type: 'practice', track: 'Paul Ricard', car: 'AMR V8 Vantage GT3', laps: 24, stints: 2, bestQualy: '1:55.234' },
-  { id: 's35', date: '2025-12-18', time: '19:00', type: 'practice', track: 'Paul Ricard', car: 'AMR V8 Vantage GT3', laps: 20, stints: 2, bestQualy: '1:55.890' },
-  
-  // 15 Dicembre 2025
-  { id: 's36', date: '2025-12-15', time: '20:00', type: 'race', track: 'Monza', car: 'Ford Mustang GT3', laps: 22, stints: 2, bestRace: '1:47.890' },
-  { id: 's37', date: '2025-12-15', time: '18:00', type: 'qualify', track: 'Monza', car: 'Ford Mustang GT3', laps: 6, stints: 1, bestQualy: '1:47.234' },
-  { id: 's38', date: '2025-12-15', time: '16:00', type: 'practice', track: 'Monza', car: 'Ford Mustang GT3', laps: 28, stints: 3, bestQualy: '1:47.567', bestRace: '1:48.123' },
-  
-  // 12 Dicembre 2025
-  { id: 's39', date: '2025-12-12', time: '21:00', type: 'practice', track: 'Spa', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestQualy: '2:17.456' },
-  { id: 's40', date: '2025-12-12', time: '19:00', type: 'practice', track: 'Spa', car: 'Ford Mustang GT3', laps: 18, stints: 2, bestQualy: '2:18.123' },
-  { id: 's41', date: '2025-12-12', time: '17:00', type: 'race', track: 'Spa', car: 'Ford Mustang GT3', laps: 16, stints: 2, bestRace: '2:18.567' },
-  
-  // 10 Dicembre 2025
-  { id: 's42', date: '2025-12-10', time: '20:30', type: 'practice', track: 'Donington', car: 'AMR V8 Vantage GT3', laps: 22, stints: 2, bestQualy: '1:30.456' },
-  { id: 's43', date: '2025-12-10', time: '18:00', type: 'qualify', track: 'Donington', car: 'AMR V8 Vantage GT3', laps: 6, stints: 1, bestQualy: '1:30.123' },
-  { id: 's44', date: '2025-12-10', time: '15:30', type: 'race', track: 'Donington', car: 'AMR V8 Vantage GT3', laps: 18, stints: 2, bestRace: '1:30.890' },
-  
-  // 8 Dicembre 2025
-  { id: 's45', date: '2025-12-08', time: '21:00', type: 'practice', track: 'Valencia', car: 'Ford Mustang GT3', laps: 24, stints: 2, bestQualy: '1:32.789' },
-  { id: 's46', date: '2025-12-08', time: '18:30', type: 'practice', track: 'Valencia', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestQualy: '1:33.123' },
-]
-
 // Extract unique values for filters
-const tracks = computed(() => [...new Set(sessions.map(s => s.track))].sort())
-const cars = computed(() => [...new Set(sessions.map(s => s.car))].sort())
+const tracks = computed(() => [...new Set(sessions.value.map(s => s.track))].sort())
+const cars = computed(() => [...new Set(sessions.value.map(s => s.car))].sort())
 
 // Filtered sessions
 const filteredSessions = computed(() => {
-  return sessions.filter(session => {
+  return sessions.value.filter(session => {
     // Type filter
     if (filterType.value !== 'all' && session.type !== filterType.value) return false
     
@@ -131,9 +98,9 @@ const filteredSessions = computed(() => {
     // Car filter
     if (filterCar.value !== 'all' && session.car !== filterCar.value) return false
     
-    // Time range filter (mock - just for UI)
+    // Time range filter
     if (filterTimeRange.value !== 'all') {
-      const today = new Date('2026-01-13') // Mock "today"
+      const today = new Date()
       const sessionDate = new Date(session.date)
       const diffDays = Math.floor((today.getTime() - sessionDate.getTime()) / (1000 * 60 * 60 * 24))
       
@@ -148,7 +115,7 @@ const filteredSessions = computed(() => {
 
 // Group filtered sessions by date
 const sessionsByDay = computed(() => {
-  const groups: Record<string, Session[]> = {}
+  const groups: Record<string, DisplaySession[]> = {}
   
   for (const session of filteredSessions.value) {
     if (!groups[session.date]) {
@@ -179,7 +146,7 @@ const paginatedSessionsByDay = computed(() => {
   const paginatedList = filteredSessions.value.slice(start, end)
   
   // Group paginated sessions by day
-  const groups: Record<string, Session[]> = {}
+  const groups: Record<string, DisplaySession[]> = {}
   for (const session of paginatedList) {
     if (!groups[session.date]) {
       groups[session.date] = []
@@ -198,7 +165,6 @@ function resetPage() {
 }
 
 // Watch filters and reset page
-import { watch } from 'vue'
 watch([filterType, filterTrack, filterCar, filterTimeRange], resetPage)
 
 // Pagination navigation

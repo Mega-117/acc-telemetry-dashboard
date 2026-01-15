@@ -1,15 +1,20 @@
 <script setup lang="ts">
 // ============================================
 // PistePage - Tracks overview with Card/List
+// Uses Firebase data for session stats
 // ============================================
 
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { 
+  useTelemetryData, 
+  formatLapTime
+} from '~/composables/useTelemetryData'
 
 // Composable for public path (GitHub Pages compatibility)
 const { getPublicPath } = usePublicPath()
 
 // Types
-interface Track {
+interface TrackDisplay {
   id: string
   name: string
   country: string
@@ -26,44 +31,90 @@ const emit = defineEmits<{
   'go-to-track': [trackId: string]
 }>()
 
+// === TELEMETRY DATA ===
+const { sessions, trackStats, isLoading, loadSessions } = useTelemetryData()
+
+// Load data on mount
+onMounted(async () => {
+  await loadSessions()
+})
+
 // === VIEW MODE ===
 type ViewMode = 'card' | 'list'
 const viewMode = ref<ViewMode>('card')
 
-// === MOCK DATA: All ACC Tracks ===
-const tracks: Track[] = [
-  // Piste con sessioni (dati aggregati)
-  { id: 'monza', name: 'Monza', country: 'IT', length: '5.793 km', image: '/tracks/track_monza.png', sessions: 12, lastSession: '2026-01-06', bestQualy: '1:47.234', bestRace: '1:48.123' },
-  { id: 'donington', name: 'Donington Park', country: 'GB', length: '4.020 km', image: '/tracks/track_donington.png', sessions: 8, lastSession: '2026-01-13', bestQualy: '1:29.123', bestRace: '1:30.456' },
-  { id: 'spa', name: 'Spa-Francorchamps', country: 'BE', length: '7.004 km', image: '/tracks/track_spa.png', sessions: 5, lastSession: '2026-01-10', bestQualy: '2:16.543', bestRace: '2:17.890' },
-  { id: 'paul_ricard', name: 'Paul Ricard', country: 'FR', length: '5.842 km', image: '/tracks/track_paul_ricard.png', sessions: 4, lastSession: '2025-12-31', bestQualy: '1:54.234', bestRace: '1:55.678' },
-  { id: 'valencia', name: 'Valencia', country: 'ES', length: '4.005 km', image: '/tracks/track_valencia.png', sessions: 2, lastSession: '2026-01-13', bestQualy: '1:31.890' },
-  
-  // Piste senza sessioni
-  { id: 'barcelona', name: 'Barcelona-Catalunya', country: 'ES', length: '4.655 km', image: '/tracks/track_barcelona.png', sessions: 0 },
-  { id: 'brands_hatch', name: 'Brands Hatch', country: 'GB', length: '3.908 km', image: '/tracks/track_brands_hatch.png', sessions: 0 },
-  { id: 'hungaroring', name: 'Hungaroring', country: 'HU', length: '4.381 km', image: '/tracks/track_hungaroring.png', sessions: 0 },
-  { id: 'imola', name: 'Imola', country: 'IT', length: '4.909 km', image: '/tracks/track_imola.png', sessions: 0 },
-  { id: 'kyalami', name: 'Kyalami', country: 'ZA', length: '4.522 km', image: '/tracks/track_kyalami.png', sessions: 0 },
-  { id: 'laguna_seca', name: 'Laguna Seca', country: 'US', length: '3.602 km', image: '/tracks/track_laguna_seca.png', sessions: 0 },
-  { id: 'misano', name: 'Misano', country: 'IT', length: '4.226 km', image: '/tracks/track_misano.png', sessions: 0 },
-  { id: 'mount_panorama', name: 'Mount Panorama', country: 'AU', length: '6.213 km', image: '/tracks/track_mount_panorama.png', sessions: 0 },
-  { id: 'nurburgring', name: 'Nürburgring', country: 'DE', length: '5.148 km', image: '/tracks/track_nurburgring.png', sessions: 0 },
-  { id: 'oulton_park', name: 'Oulton Park', country: 'GB', length: '4.307 km', image: '/tracks/track_oulton_park.png', sessions: 0 },
-  { id: 'silverstone', name: 'Silverstone', country: 'GB', length: '5.891 km', image: '/tracks/track_silverstone.png', sessions: 0 },
-  { id: 'snetterton', name: 'Snetterton', country: 'GB', length: '4.779 km', image: '/tracks/track_snetterton.png', sessions: 0 },
-  { id: 'suzuka', name: 'Suzuka', country: 'JP', length: '5.807 km', image: '/tracks/track_suzuka.png', sessions: 0 },
-  { id: 'watkins_glen', name: 'Watkins Glen', country: 'US', length: '5.472 km', image: '/tracks/track_watkins_glen.png', sessions: 0 },
-  { id: 'zandvoort', name: 'Zandvoort', country: 'NL', length: '4.259 km', image: '/tracks/track_zandvoort.png', sessions: 0 },
-  { id: 'zolder', name: 'Zolder', country: 'BE', length: '4.011 km', image: '/tracks/track_zolder.png', sessions: 0 },
-  { id: 'cota', name: 'COTA', country: 'US', length: '5.513 km', image: '/tracks/track_cota.png', sessions: 0 },
-  { id: 'indianapolis', name: 'Indianapolis', country: 'US', length: '4.192 km', image: '/tracks/track_indianapolis.png', sessions: 0 },
-  { id: 'red_bull_ring', name: 'Red Bull Ring', country: 'AT', length: '4.318 km', image: '/tracks/track_red_bull_ring.png', sessions: 0 },
-]
+// === STATIC TRACK METADATA (all ACC tracks) ===
+const trackMetadata: Record<string, { name: string; country: string; length: string; image: string }> = {
+  'monza': { name: 'Monza', country: 'IT', length: '5.793 km', image: '/tracks/track_monza.png' },
+  'donington': { name: 'Donington Park', country: 'GB', length: '4.020 km', image: '/tracks/track_donington.png' },
+  'spa': { name: 'Spa-Francorchamps', country: 'BE', length: '7.004 km', image: '/tracks/track_spa.png' },
+  'paul_ricard': { name: 'Paul Ricard', country: 'FR', length: '5.842 km', image: '/tracks/track_paul_ricard.png' },
+  'valencia': { name: 'Valencia', country: 'ES', length: '4.005 km', image: '/tracks/track_valencia.png' },
+  'barcelona': { name: 'Barcelona-Catalunya', country: 'ES', length: '4.655 km', image: '/tracks/track_barcelona.png' },
+  'brands_hatch': { name: 'Brands Hatch', country: 'GB', length: '3.908 km', image: '/tracks/track_brands_hatch.png' },
+  'hungaroring': { name: 'Hungaroring', country: 'HU', length: '4.381 km', image: '/tracks/track_hungaroring.png' },
+  'imola': { name: 'Imola', country: 'IT', length: '4.909 km', image: '/tracks/track_imola.png' },
+  'kyalami': { name: 'Kyalami', country: 'ZA', length: '4.522 km', image: '/tracks/track_kyalami.png' },
+  'laguna_seca': { name: 'Laguna Seca', country: 'US', length: '3.602 km', image: '/tracks/track_laguna_seca.png' },
+  'misano': { name: 'Misano', country: 'IT', length: '4.226 km', image: '/tracks/track_misano.png' },
+  'mount_panorama': { name: 'Mount Panorama', country: 'AU', length: '6.213 km', image: '/tracks/track_mount_panorama.png' },
+  'nurburgring': { name: 'Nürburgring', country: 'DE', length: '5.148 km', image: '/tracks/track_nurburgring.png' },
+  'oulton_park': { name: 'Oulton Park', country: 'GB', length: '4.307 km', image: '/tracks/track_oulton_park.png' },
+  'silverstone': { name: 'Silverstone', country: 'GB', length: '5.891 km', image: '/tracks/track_silverstone.png' },
+  'snetterton': { name: 'Snetterton', country: 'GB', length: '4.779 km', image: '/tracks/track_snetterton.png' },
+  'suzuka': { name: 'Suzuka', country: 'JP', length: '5.807 km', image: '/tracks/track_suzuka.png' },
+  'watkins_glen': { name: 'Watkins Glen', country: 'US', length: '5.472 km', image: '/tracks/track_watkins_glen.png' },
+  'zandvoort': { name: 'Zandvoort', country: 'NL', length: '4.259 km', image: '/tracks/track_zandvoort.png' },
+  'zolder': { name: 'Zolder', country: 'BE', length: '4.011 km', image: '/tracks/track_zolder.png' },
+  'cota': { name: 'COTA', country: 'US', length: '5.513 km', image: '/tracks/track_cota.png' },
+  'indianapolis': { name: 'Indianapolis', country: 'US', length: '4.192 km', image: '/tracks/track_indianapolis.png' },
+  'red_bull_ring': { name: 'Red Bull Ring', country: 'AT', length: '4.318 km', image: '/tracks/track_red_bull_ring.png' },
+}
+
+// Merge static metadata with real session data
+const tracks = computed<TrackDisplay[]>(() => {
+  // Start with all known tracks
+  const result: TrackDisplay[] = Object.entries(trackMetadata).map(([id, meta]) => ({
+    id,
+    ...meta,
+    sessions: 0,
+    lastSession: undefined,
+    bestQualy: undefined,
+    bestRace: undefined
+  }))
+
+  // Merge with real session stats
+  for (const stat of trackStats.value) {
+    const trackId = stat.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
+    const existing = result.find(t => t.id === trackId || t.name.toLowerCase() === stat.track.toLowerCase())
+    
+    if (existing) {
+      existing.sessions = stat.sessions
+      existing.lastSession = stat.lastSession?.split('T')[0]
+      existing.bestQualy = stat.bestQualy ? formatLapTime(stat.bestQualy) : undefined
+      existing.bestRace = stat.bestRace ? formatLapTime(stat.bestRace) : undefined
+    } else {
+      // Track not in metadata (new track?), add it
+      result.push({
+        id: trackId,
+        name: stat.track,
+        country: '??',
+        length: '?.??? km',
+        image: undefined,
+        sessions: stat.sessions,
+        lastSession: stat.lastSession?.split('T')[0],
+        bestQualy: stat.bestQualy ? formatLapTime(stat.bestQualy) : undefined,
+        bestRace: stat.bestRace ? formatLapTime(stat.bestRace) : undefined
+      })
+    }
+  }
+
+  return result
+})
 
 // Sorted tracks: with sessions first (by lastSession desc), then without sessions
 const sortedTracks = computed(() => {
-  return [...tracks].sort((a, b) => {
+  return [...tracks.value].sort((a, b) => {
     // Both have sessions: sort by lastSession desc
     if (a.sessions > 0 && b.sessions > 0) {
       return (b.lastSession || '').localeCompare(a.lastSession || '')
@@ -76,8 +127,8 @@ const sortedTracks = computed(() => {
   })
 })
 
-// Format date
-function formatDate(dateStr?: string): string {
+// Format date for display
+function formatDateDisplay(dateStr?: string): string {
   if (!dateStr) return 'Nessuna sessione'
   const date = new Date(dateStr)
   const day = date.getDate()
@@ -154,7 +205,7 @@ function goToTrack(id: string) {
           <div class="track-stats">
             <span class="track-sessions">{{ track.sessions }} sessioni</span>
             <span class="track-separator">·</span>
-            <span class="track-last">{{ formatDate(track.lastSession) }}</span>
+            <span class="track-last">{{ formatDateDisplay(track.lastSession) }}</span>
           </div>
           
           <div class="track-times">
@@ -201,7 +252,7 @@ function goToTrack(id: string) {
           {{ track.name }}
         </span>
         <span class="lr-sessions">{{ track.sessions }}</span>
-        <span class="lr-last">{{ formatDate(track.lastSession) }}</span>
+        <span class="lr-last">{{ formatDateDisplay(track.lastSession) }}</span>
         <span :class="['lr-time', 'lr-time--qualy', { 'lr-time--empty': !track.bestQualy }]">
           Q {{ track.bestQualy || '—:—.---' }}
         </span>

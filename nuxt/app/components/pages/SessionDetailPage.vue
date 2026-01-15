@@ -1,10 +1,10 @@
 <script setup lang="ts">
 // ============================================
 // SessionDetailPage - Master / Detail Layout
-// Phase 1: UX Improvements (header, KPI delta, contrast, labels)
+// Now connected to Firebase for real data
 // ============================================
 
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -17,6 +17,18 @@ import {
   Legend,
   Filler
 } from 'chart.js'
+import { 
+  useTelemetryData, 
+  formatLapTime,
+  formatCarName,
+  formatTrackName,
+  formatDateFull,
+  formatTime,
+  getSessionTypeLabel,
+  type FullSession,
+  type StintData,
+  type LapData
+} from '~/composables/useTelemetryData'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
 
@@ -24,27 +36,53 @@ const props = defineProps<{ sessionId: string }>()
 const emit = defineEmits<{ back: [], 'open-track': [trackId: string] }>()
 
 const showDetailedLaps = ref(false)
+const showInfoTempi = ref(false)
+const showInfoTeo = ref(false)
+
+// ========================================
+// FIREBASE DATA LOADING
+// ========================================
+const { fetchSessionFull, trackStats, loadSessions } = useTelemetryData()
+const fullSession = ref<FullSession | null>(null)
+const isLoading = ref(true)
+const loadError = ref<string | null>(null)
+
+onMounted(async () => {
+  isLoading.value = true
+  loadError.value = null
+  try {
+    // Load sessions first to populate trackStats (needed for theoretical times)
+    await loadSessions()
+    
+    const data = await fetchSessionFull(props.sessionId)
+    if (data) {
+      fullSession.value = data
+      console.log('[SESSION_DETAIL] Loaded session:', data.session_info.track, data.stints.length, 'stints')
+    } else {
+      loadError.value = 'Sessione non trovata'
+    }
+  } catch (e: any) {
+    loadError.value = e.message || 'Errore caricamento'
+  } finally {
+    isLoading.value = false
+  }
+})
 
 // ========================================
 // COMPARE MODE STATE - Checkbox-based
 // ========================================
-const compareModeActive = ref(false)  // Toggle for compare mode
-const compareSelection = ref<number[]>([])  // Max 2 stint numbers
-const activeTableTab = ref<'A' | 'B'>('A')  // Which lap table to show
+const compareModeActive = ref(false)
+const compareSelection = ref<number[]>([])
+const activeTableTab = ref<'A' | 'B'>('A')
 
-// Computed: are we actively comparing 2 stints?
 const isCompareMode = computed(() => compareModeActive.value && compareSelection.value.length === 2)
-
-// The first selected stint for comparison (or the normally selected stint)
 const stintA = computed(() => compareSelection.value[0] ?? selectedStintNumber.value)
 const stintB = computed(() => compareSelection.value[1] ?? null)
 
 function handleStintClick(stintNum: number) {
   if (compareModeActive.value) {
-    // In compare mode, clicking toggles selection
     toggleCompareSelection(stintNum)
   } else {
-    // Normal mode: just select the stint
     selectedStintNumber.value = stintNum
   }
 }
@@ -52,19 +90,15 @@ function handleStintClick(stintNum: number) {
 function toggleCompareSelection(stintNum: number) {
   const idx = compareSelection.value.indexOf(stintNum)
   if (idx >= 0) {
-    // Already selected - remove it
     compareSelection.value.splice(idx, 1)
   } else if (compareSelection.value.length < 2) {
-    // Not selected yet and we have room - add it
     compareSelection.value.push(stintNum)
   }
-  // If already 2 selected, do nothing (must deselect one first)
 }
 
 function toggleCompareMode() {
   compareModeActive.value = !compareModeActive.value
   if (!compareModeActive.value) {
-    // Exiting compare mode - clear selection
     compareSelection.value = []
     activeTableTab.value = 'A'
   }
@@ -77,209 +111,213 @@ function clearCompare() {
 }
 
 // ========================================
-// MOCK DATA - Realistic varied session
+// TRANSFORMED SESSION DATA
 // ========================================
-const session = computed(() => ({
-  id: props.sessionId,
-  track: 'Monza',
-  trackId: 'monza',
-  type: 'practice' as const,
-  date: '6 Gennaio 2026',
-  time: '19:12',
-  car: 'Ford Mustang GT3',
-  startConditions: { weather: 'Clear', airTemp: 12, trackTemp: 17 },
-  // Session-level KPIs with theoretical comparison
-  bestQualy: '1:47.112',
-  bestRace: '1:49.234',
-  theoQualy: '1:46.900',
-  theoRace: '1:49.500',
-  bestDeltaQ: { value: '+0.212', stintNum: 3 },
-  bestDeltaR: { value: '-0.266', stintNum: 4 },
-  stints: [
-    // Stint 1: Out lap + 1 timed (warm-up)
-    { number: 1, type: 'Q', intent: 'Out Lap', fuelStart: 10, laps: 2, best: '1:52.456', avg: '1:55.678', theoretical: '1:46.900', deltaVsTheo: '+5.556', conditions: { weather: 'Dry', avgAirTemp: 11, avgTrackTemp: 15 }, breakdown: { base: '1:46.500', deltaTemp: '+0.250', deltaGrip: '+0.150' } },
-    // Stint 2: Short qualy run (5 laps)
-    { number: 2, type: 'Q', intent: 'Qualy Push', fuelStart: 8, laps: 5, best: '1:47.456', avg: '1:48.234', theoretical: '1:46.900', deltaVsTheo: '+0.556', conditions: { weather: 'Dry', avgAirTemp: 12, avgTrackTemp: 18 }, breakdown: { base: '1:46.500', deltaTemp: '+0.250', deltaGrip: '+0.150' } },
-    // Stint 3: Best qualy stint (6 laps)
-    { number: 3, type: 'Q', intent: 'Qualy Push', fuelStart: 6, laps: 6, best: '1:47.112', avg: '1:47.890', theoretical: '1:46.900', deltaVsTheo: '+0.212', conditions: { weather: 'Dry', avgAirTemp: 13, avgTrackTemp: 21 }, breakdown: { base: '1:46.500', deltaTemp: '+0.300', deltaGrip: '+0.100' } },
-    // Stint 4: Best race pace (10 laps)
-    { number: 4, type: 'R', intent: 'Race Pace', fuelStart: 55, laps: 10, best: '1:49.234', avg: '1:49.678', theoretical: '1:49.500', deltaVsTheo: '-0.266', conditions: { weather: 'Dry', avgAirTemp: 14, avgTrackTemp: 24 }, breakdown: { base: '1:49.100', deltaTemp: '+0.300', deltaGrip: '+0.100' } },
-    // Stint 5: Long run (20 laps)
-    { number: 5, type: 'R', intent: 'Long Run', fuelStart: 70, laps: 20, best: '1:49.567', avg: '1:50.234', theoretical: '1:49.500', deltaVsTheo: '+0.067', conditions: { weather: 'Dry', avgAirTemp: 15, avgTrackTemp: 26 }, breakdown: { base: '1:49.100', deltaTemp: '+0.350', deltaGrip: '+0.050' } },
-    // Stint 6: Single lap abort
-    { number: 6, type: 'Q', intent: 'Aborted', fuelStart: 5, laps: 1, best: '1:53.123', avg: '1:53.123', theoretical: '1:46.900', deltaVsTheo: '+6.223', conditions: { weather: 'Dry', avgAirTemp: 14, avgTrackTemp: 23 }, breakdown: { base: '1:46.500', deltaTemp: '+0.250', deltaGrip: '+0.150' } },
-    // Stint 7: Short race stint (3 laps)
-    { number: 7, type: 'R', intent: 'Race Pace', fuelStart: 45, laps: 3, best: '1:49.890', avg: '1:50.345', theoretical: '1:49.500', deltaVsTheo: '+0.390', conditions: { weather: 'Dry', avgAirTemp: 13, avgTrackTemp: 22 }, breakdown: { base: '1:49.100', deltaTemp: '+0.250', deltaGrip: '+0.150' } },
-    // Stint 8: End of session race stint (12 laps)
-    { number: 8, type: 'R', intent: 'Race Pace', fuelStart: 60, laps: 12, best: '1:49.456', avg: '1:50.012', theoretical: '1:49.500', deltaVsTheo: '-0.044', conditions: { weather: 'Dry', avgAirTemp: 12, avgTrackTemp: 20 }, breakdown: { base: '1:49.100', deltaTemp: '+0.200', deltaGrip: '+0.200' } },
-    // Stint 9: Full race distance (30 laps) - 7 invalid, 12 on-target (4 invalid), last=pit
-    { number: 9, type: 'R', intent: 'Race Distance', fuelStart: 110, laps: 30, best: '1:49.345', avg: '1:50.123', theoretical: '1:49.500', deltaVsTheo: '-0.155', conditions: { weather: 'Dry', avgAirTemp: 16, avgTrackTemp: 28 }, breakdown: { base: '1:49.100', deltaTemp: '+0.300', deltaGrip: '+0.100' } },
-    // Stint 10: Wet transition stint (15 laps) - grip changes: Opt → Green → Greasy → Damp → Wet
-    { number: 10, type: 'R', intent: 'Wet Transition', fuelStart: 80, laps: 15, best: '1:50.234', avg: '1:53.567', theoretical: '1:49.500', deltaVsTheo: '+0.734', conditions: { weather: 'Rain', avgAirTemp: 14, avgTrackTemp: 20 }, breakdown: { base: '1:49.100', deltaTemp: '+0.300', deltaGrip: '+1.200' } },
-  ],
-  lapsData: {
-    // Stint 1: 2 laps (out lap warm-up)
-    1: [
-      { lap: 1, time: '1:58.901', delta: '+12.001', valid: false, pit: false, sectors: ['35.2', '45.6', '38.1'], fuel: 10, trackTemp: 15, grip: 'Grn' },
-      { lap: 2, time: '1:52.456', delta: '+5.556', valid: true, pit: true, sectors: ['33.1', '43.2', '36.2'], fuel: 9, trackTemp: 16, grip: 'Opt' }
-    ],
-    // Stint 2: 5 laps qualy
-    2: [
-      { lap: 1, time: '1:49.234', delta: '+2.334', valid: true, pit: false, sectors: ['31.5', '41.2', '36.5'], fuel: 8, trackTemp: 17, grip: 'Opt' },
-      { lap: 2, time: '1:48.012', delta: '+1.112', valid: true, pit: false, sectors: ['31.1', '40.8', '36.1'], fuel: 7, trackTemp: 18, grip: 'Opt' },
-      { lap: 3, time: '1:47.890', delta: '+0.990', valid: true, pit: false, sectors: ['31.0', '40.7', '36.2'], fuel: 6, trackTemp: 18, grip: 'Opt' },
-      { lap: 4, time: '1:47.456', delta: '+0.556', valid: true, pit: false, sectors: ['30.8', '40.5', '36.2'], fuel: 5, trackTemp: 18, grip: 'Opt' },
-      { lap: 5, time: '1:48.579', delta: '+1.679', valid: true, pit: true, sectors: ['31.2', '41.0', '36.4'], fuel: 4, trackTemp: 19, grip: 'Opt' }
-    ],
-    // Stint 3: 6 laps best qualy
-    3: [
-      { lap: 1, time: '1:48.567', delta: '+1.667', valid: true, pit: false, sectors: ['31.2', '41.0', '36.4'], fuel: 6, trackTemp: 20, grip: 'Opt' },
-      { lap: 2, time: '1:47.890', delta: '+0.990', valid: false, pit: false, sectors: ['31.0', '40.7', '36.2'], fuel: 5, trackTemp: 21, grip: 'Opt' }, // Invalid (track limits)
-      { lap: 3, time: '1:47.456', delta: '+0.556', valid: true, pit: false, sectors: ['30.8', '40.5', '36.2'], fuel: 4, trackTemp: 21, grip: 'Opt' },
-      { lap: 4, time: '1:47.112', delta: '+0.212', valid: true, pit: false, sectors: ['30.6', '40.3', '36.2'], fuel: 3, trackTemp: 21, grip: 'Opt' },
-      { lap: 5, time: '1:47.234', delta: '+0.334', valid: true, pit: false, sectors: ['30.7', '40.4', '36.1'], fuel: 2, trackTemp: 22, grip: 'Opt' },
-      { lap: 6, time: '1:49.101', delta: '+2.201', valid: true, pit: true, sectors: ['31.5', '41.2', '36.4'], fuel: 1, trackTemp: 22, grip: 'Opt' }
-    ],
-    // Stint 4: 10 laps best race pace (with invalid laps for testing)
-    4: [
-      { lap: 1, time: '1:51.234', delta: '+1.734', valid: true, pit: false, sectors: ['32.5', '42.0', '36.7'], fuel: 55, trackTemp: 23, grip: 'Opt' },
-      { lap: 2, time: '1:50.123', delta: '+0.623', valid: false, pit: false, sectors: ['32.1', '41.5', '36.5'], fuel: 53, trackTemp: 24, grip: 'Opt' }, // Invalid OFF-target (red/red)
-      { lap: 3, time: '1:49.567', delta: '+0.067', valid: true, pit: false, sectors: ['31.8', '41.2', '36.6'], fuel: 51, trackTemp: 24, grip: 'Opt' },
-      { lap: 4, time: '1:49.345', delta: '-0.155', valid: true, pit: false, sectors: ['31.6', '41.1', '36.6'], fuel: 49, trackTemp: 24, grip: 'Opt' },
-      { lap: 5, time: '1:49.234', delta: '-0.266', valid: true, pit: false, sectors: ['31.5', '41.0', '36.7'], fuel: 47, trackTemp: 24, grip: 'Opt' },
-      { lap: 6, time: '1:49.456', delta: '-0.044', valid: true, pit: false, sectors: ['31.6', '41.1', '36.8'], fuel: 45, trackTemp: 25, grip: 'Opt' },
-      { lap: 7, time: '1:49.567', delta: '+0.067', valid: false, pit: false, sectors: ['31.7', '41.2', '36.7'], fuel: 43, trackTemp: 25, grip: 'Opt' }, // Invalid ON-target (red/green border 2px)
-      { lap: 8, time: '1:49.678', delta: '+0.178', valid: true, pit: false, sectors: ['31.7', '41.3', '36.7'], fuel: 41, trackTemp: 25, grip: 'Opt' },
-      { lap: 9, time: '1:49.890', delta: '+0.390', valid: true, pit: false, sectors: ['31.8', '41.4', '36.7'], fuel: 39, trackTemp: 25, grip: 'Opt' },
-      { lap: 10, time: '1:50.687', delta: '+1.187', valid: true, pit: true, sectors: ['32.0', '41.8', '36.9'], fuel: 37, trackTemp: 25, grip: 'Opt' }
-    ],
-    // Stint 5: 20 laps long run
-    5: [
-      { lap: 1, time: '1:51.890', delta: '+2.390', valid: true, pit: false, sectors: ['32.8', '42.3', '36.8'], fuel: 70, trackTemp: 25, grip: 'Opt' },
-      { lap: 2, time: '1:50.567', delta: '+1.067', valid: true, pit: false, sectors: ['32.2', '41.7', '36.7'], fuel: 68, trackTemp: 25, grip: 'Opt' },
-      { lap: 3, time: '1:50.123', delta: '+0.623', valid: true, pit: false, sectors: ['32.0', '41.4', '36.7'], fuel: 66, trackTemp: 26, grip: 'Opt' },
-      { lap: 4, time: '1:49.890', delta: '+0.390', valid: true, pit: false, sectors: ['31.9', '41.3', '36.7'], fuel: 64, trackTemp: 26, grip: 'Opt' },
-      { lap: 5, time: '1:49.678', delta: '+0.178', valid: true, pit: false, sectors: ['31.8', '41.2', '36.7'], fuel: 62, trackTemp: 26, grip: 'Opt' },
-      { lap: 6, time: '1:49.567', delta: '+0.067', valid: false, pit: false, sectors: ['31.7', '41.2', '36.7'], fuel: 60, trackTemp: 26, grip: 'Opt' }, // Invalid ON-target
-      { lap: 7, time: '1:49.789', delta: '+0.289', valid: true, pit: false, sectors: ['31.8', '41.3', '36.7'], fuel: 58, trackTemp: 27, grip: 'Opt' },
-      { lap: 8, time: '1:49.890', delta: '+0.390', valid: true, pit: false, sectors: ['31.9', '41.3', '36.7'], fuel: 56, trackTemp: 27, grip: 'Opt' },
-      { lap: 9, time: '1:50.012', delta: '+0.512', valid: true, pit: false, sectors: ['31.9', '41.4', '36.7'], fuel: 54, trackTemp: 27, grip: 'Opt' },
-      { lap: 10, time: '1:50.234', delta: '+0.734', valid: true, pit: false, sectors: ['32.0', '41.5', '36.7'], fuel: 52, trackTemp: 27, grip: 'Opt' },
-      { lap: 11, time: '1:50.345', delta: '+0.845', valid: true, pit: false, sectors: ['32.1', '41.5', '36.7'], fuel: 50, trackTemp: 27, grip: 'Opt' },
-      { lap: 12, time: '1:50.456', delta: '+0.956', valid: false, pit: false, sectors: ['32.1', '41.6', '36.8'], fuel: 48, trackTemp: 26, grip: 'Opt' }, // Invalid OFF-target
-      { lap: 13, time: '1:50.567', delta: '+1.067', valid: true, pit: false, sectors: ['32.2', '41.6', '36.8'], fuel: 46, trackTemp: 26, grip: 'Opt' },
-      { lap: 14, time: '1:50.678', delta: '+1.178', valid: true, pit: false, sectors: ['32.2', '41.7', '36.8'], fuel: 44, trackTemp: 26, grip: 'Opt' },
-      { lap: 15, time: '1:50.789', delta: '+1.289', valid: true, pit: false, sectors: ['32.3', '41.7', '36.8'], fuel: 42, trackTemp: 26, grip: 'Opt' },
-      { lap: 16, time: '1:50.890', delta: '+1.390', valid: false, pit: false, sectors: ['32.3', '41.8', '36.8'], fuel: 40, trackTemp: 25, grip: 'Opt' }, // Invalid
-      { lap: 17, time: '1:50.012', delta: '+0.512', valid: true, pit: false, sectors: ['32.0', '41.4', '36.6'], fuel: 38, trackTemp: 25, grip: 'Opt' },
-      { lap: 18, time: '1:49.890', delta: '+0.390', valid: true, pit: false, sectors: ['31.9', '41.3', '36.7'], fuel: 36, trackTemp: 25, grip: 'Opt' },
-      { lap: 19, time: '1:49.789', delta: '+0.289', valid: true, pit: false, sectors: ['31.8', '41.3', '36.7'], fuel: 34, trackTemp: 24, grip: 'Opt' },
-      { lap: 20, time: '1:51.234', delta: '+1.734', valid: true, pit: true, sectors: ['32.5', '42.0', '36.7'], fuel: 32, trackTemp: 24, grip: 'Opt' }
-    ],
-    // Stint 6: 1 lap abort
-    6: [
-      { lap: 1, time: '1:53.123', delta: '+6.223', valid: false, pit: true, sectors: ['33.5', '43.2', '36.4'], fuel: 5, trackTemp: 23, grip: 'Opt' }
-    ],
-    // Stint 7: 3 laps short race
-    7: [
-      { lap: 1, time: '1:51.234', delta: '+1.734', valid: true, pit: false, sectors: ['32.5', '42.0', '36.7'], fuel: 45, trackTemp: 22, grip: 'Opt' },
-      { lap: 2, time: '1:50.345', delta: '+0.845', valid: true, pit: false, sectors: ['32.1', '41.5', '36.7'], fuel: 43, trackTemp: 22, grip: 'Opt' },
-      { lap: 3, time: '1:49.890', delta: '+0.390', valid: true, pit: true, sectors: ['31.9', '41.3', '36.7'], fuel: 41, trackTemp: 22, grip: 'Opt' }
-    ],
-    // Stint 8: 12 laps end of session
-    8: [
-      { lap: 1, time: '1:51.567', delta: '+2.067', valid: true, pit: false, sectors: ['32.6', '42.1', '36.9'], fuel: 60, trackTemp: 20, grip: 'Opt' },
-      { lap: 2, time: '1:50.456', delta: '+0.956', valid: true, pit: false, sectors: ['32.1', '41.6', '36.8'], fuel: 58, trackTemp: 20, grip: 'Opt' },
-      { lap: 3, time: '1:49.890', delta: '+0.390', valid: true, pit: false, sectors: ['31.9', '41.3', '36.7'], fuel: 56, trackTemp: 20, grip: 'Opt' },
-      { lap: 4, time: '1:49.567', delta: '+0.067', valid: false, pit: false, sectors: ['31.7', '41.2', '36.7'], fuel: 54, trackTemp: 20, grip: 'Opt' }, // Invalid ON-target
-      { lap: 5, time: '1:49.456', delta: '-0.044', valid: true, pit: false, sectors: ['31.6', '41.1', '36.8'], fuel: 52, trackTemp: 20, grip: 'Opt' },
-      { lap: 6, time: '1:49.678', delta: '+0.178', valid: true, pit: false, sectors: ['31.7', '41.2', '36.8'], fuel: 50, trackTemp: 20, grip: 'Opt' },
-      { lap: 7, time: '1:49.890', delta: '+0.390', valid: true, pit: false, sectors: ['31.9', '41.3', '36.7'], fuel: 48, trackTemp: 20, grip: 'Opt' },
-      { lap: 8, time: '1:50.012', delta: '+0.512', valid: true, pit: false, sectors: ['32.0', '41.4', '36.6'], fuel: 46, trackTemp: 19, grip: 'Opt' },
-      { lap: 9, time: '1:50.234', delta: '+0.734', valid: false, pit: false, sectors: ['32.1', '41.5', '36.6'], fuel: 44, trackTemp: 19, grip: 'Opt' }, // Invalid
-      { lap: 10, time: '1:50.345', delta: '+0.845', valid: true, pit: false, sectors: ['32.2', '41.5', '36.6'], fuel: 42, trackTemp: 19, grip: 'Opt' },
-      { lap: 11, time: '1:50.123', delta: '+0.623', valid: true, pit: false, sectors: ['32.0', '41.4', '36.7'], fuel: 40, trackTemp: 19, grip: 'Opt' },
-      { lap: 12, time: '1:51.789', delta: '+2.289', valid: true, pit: true, sectors: ['32.8', '42.2', '36.8'], fuel: 38, trackTemp: 19, grip: 'Opt' }
-    ],
-    // Stint 9: 30 laps full race distance - 7 invalid (4 on-target), 12 on-target total, last=pit
-    9: [
-      { lap: 1, time: '1:52.345', delta: '+2.845', valid: true, pit: false, sectors: ['33.0', '42.5', '36.8'], fuel: 110, trackTemp: 27, grip: 'Opt' }, // Above target, valid
-      { lap: 2, time: '1:50.890', delta: '+1.390', valid: true, pit: false, sectors: ['32.3', '41.8', '36.8'], fuel: 108, trackTemp: 27, grip: 'Opt' }, // Above target, valid
-      { lap: 3, time: '1:50.123', delta: '+0.623', valid: false, pit: false, sectors: ['32.0', '41.4', '36.7'], fuel: 106, trackTemp: 27, grip: 'Opt' }, // Above target, INVALID (1/7)
-      { lap: 4, time: '1:49.678', delta: '+0.178', valid: true, pit: false, sectors: ['31.8', '41.2', '36.7'], fuel: 104, trackTemp: 28, grip: 'Opt' }, // ON-TARGET, valid (1/12)
-      { lap: 5, time: '1:49.567', delta: '+0.067', valid: true, pit: false, sectors: ['31.7', '41.1', '36.8'], fuel: 102, trackTemp: 28, grip: 'Opt' }, // ON-TARGET, valid (2/12)
-      { lap: 6, time: '1:49.456', delta: '-0.044', valid: false, pit: false, sectors: ['31.6', '41.1', '36.8'], fuel: 100, trackTemp: 28, grip: 'Opt' }, // ON-TARGET, INVALID (2/7, 1/4 on-target invalid)
-      { lap: 7, time: '1:50.234', delta: '+0.734', valid: true, pit: false, sectors: ['32.0', '41.5', '36.7'], fuel: 98, trackTemp: 28, grip: 'Opt' }, // Above target, valid
-      { lap: 8, time: '1:49.789', delta: '+0.289', valid: true, pit: false, sectors: ['31.9', '41.2', '36.7'], fuel: 96, trackTemp: 28, grip: 'Opt' }, // ON-TARGET, valid (3/12)
-      { lap: 9, time: '1:49.345', delta: '-0.155', valid: true, pit: false, sectors: ['31.5', '41.1', '36.7'], fuel: 94, trackTemp: 28, grip: 'Opt' }, // ON-TARGET, valid (4/12) BEST LAP
-      { lap: 10, time: '1:50.456', delta: '+0.956', valid: false, pit: false, sectors: ['32.1', '41.6', '36.8'], fuel: 92, trackTemp: 28, grip: 'Opt' }, // Above target, INVALID (3/7)
-      { lap: 11, time: '1:49.678', delta: '+0.178', valid: true, pit: false, sectors: ['31.8', '41.2', '36.7'], fuel: 90, trackTemp: 28, grip: 'Opt' }, // ON-TARGET, valid (5/12)
-      { lap: 12, time: '1:49.567', delta: '+0.067', valid: false, pit: false, sectors: ['31.7', '41.1', '36.8'], fuel: 88, trackTemp: 28, grip: 'Opt' }, // ON-TARGET, INVALID (4/7, 2/4 on-target invalid)
-      { lap: 13, time: '1:50.012', delta: '+0.512', valid: true, pit: false, sectors: ['31.9', '41.4', '36.7'], fuel: 86, trackTemp: 28, grip: 'Opt' }, // Above target, valid
-      { lap: 14, time: '1:49.890', delta: '+0.390', valid: true, pit: false, sectors: ['31.9', '41.3', '36.7'], fuel: 84, trackTemp: 27, grip: 'Opt' }, // Above target, valid
-      { lap: 15, time: '1:49.456', delta: '-0.044', valid: true, pit: false, sectors: ['31.6', '41.1', '36.8'], fuel: 82, trackTemp: 27, grip: 'Opt' }, // ON-TARGET, valid (6/12)
-      { lap: 16, time: '1:50.567', delta: '+1.067', valid: true, pit: false, sectors: ['32.2', '41.6', '36.8'], fuel: 80, trackTemp: 27, grip: 'Opt' }, // Above target, valid
-      { lap: 17, time: '1:49.678', delta: '+0.178', valid: false, pit: false, sectors: ['31.8', '41.2', '36.7'], fuel: 78, trackTemp: 27, grip: 'Opt' }, // ON-TARGET, INVALID (5/7, 3/4 on-target invalid)
-      { lap: 18, time: '1:50.234', delta: '+0.734', valid: true, pit: false, sectors: ['32.0', '41.5', '36.7'], fuel: 76, trackTemp: 27, grip: 'Opt' }, // Above target, valid
-      { lap: 19, time: '1:49.567', delta: '+0.067', valid: true, pit: false, sectors: ['31.7', '41.1', '36.8'], fuel: 74, trackTemp: 27, grip: 'Opt' }, // ON-TARGET, valid (7/12)
-      { lap: 20, time: '1:50.789', delta: '+1.289', valid: false, pit: false, sectors: ['32.3', '41.7', '36.8'], fuel: 72, trackTemp: 27, grip: 'Opt' }, // Above target, INVALID (6/7)
-      { lap: 21, time: '1:49.789', delta: '+0.289', valid: true, pit: false, sectors: ['31.9', '41.2', '36.7'], fuel: 70, trackTemp: 26, grip: 'Opt' }, // ON-TARGET, valid (8/12)
-      { lap: 22, time: '1:50.123', delta: '+0.623', valid: true, pit: false, sectors: ['32.0', '41.4', '36.7'], fuel: 68, trackTemp: 26, grip: 'Opt' }, // Above target, valid
-      { lap: 23, time: '1:49.678', delta: '+0.178', valid: true, pit: false, sectors: ['31.8', '41.2', '36.7'], fuel: 66, trackTemp: 26, grip: 'Opt' }, // ON-TARGET, valid (9/12)
-      { lap: 24, time: '1:50.345', delta: '+0.845', valid: true, pit: false, sectors: ['32.1', '41.5', '36.7'], fuel: 64, trackTemp: 26, grip: 'Opt' }, // Above target, valid
-      { lap: 25, time: '1:49.456', delta: '-0.044', valid: false, pit: false, sectors: ['31.6', '41.1', '36.8'], fuel: 62, trackTemp: 26, grip: 'Opt' }, // ON-TARGET, INVALID (7/7, 4/4 on-target invalid)
-      { lap: 26, time: '1:49.567', delta: '+0.067', valid: true, pit: false, sectors: ['31.7', '41.1', '36.8'], fuel: 60, trackTemp: 26, grip: 'Opt' }, // ON-TARGET, valid (10/12)
-      { lap: 27, time: '1:50.012', delta: '+0.512', valid: true, pit: false, sectors: ['31.9', '41.4', '36.7'], fuel: 58, trackTemp: 25, grip: 'Opt' }, // Above target, valid
-      { lap: 28, time: '1:49.789', delta: '+0.289', valid: true, pit: false, sectors: ['31.9', '41.2', '36.7'], fuel: 56, trackTemp: 25, grip: 'Opt' }, // ON-TARGET, valid (11/12)
-      { lap: 29, time: '1:49.678', delta: '+0.178', valid: true, pit: false, sectors: ['31.8', '41.2', '36.7'], fuel: 54, trackTemp: 25, grip: 'Opt' }, // ON-TARGET, valid (12/12)
-      { lap: 30, time: '1:52.123', delta: '+2.623', valid: true, pit: true, sectors: ['33.2', '42.1', '36.8'], fuel: 52, trackTemp: 25, grip: 'Opt' } // PIT ENTRY
-    ],
-    // Stint 10: 15 laps wet transition - grip: Opt(1-3) → Green(4-6) → Greasy(7-9) → Damp(10-12) → Wet(13-15)
-    10: [
-      // Opt grip (laps 1-3) - normal times
-      { lap: 1, time: '1:50.234', delta: '+0.734', valid: true, pit: false, sectors: ['32.0', '41.4', '36.8'], fuel: 80, trackTemp: 22, grip: 'Opt' },
-      { lap: 2, time: '1:50.123', delta: '+0.623', valid: true, pit: false, sectors: ['31.9', '41.4', '36.8'], fuel: 78, trackTemp: 22, grip: 'Opt' },
-      { lap: 3, time: '1:49.890', delta: '+0.390', valid: false, pit: false, sectors: ['31.8', '41.3', '36.8'], fuel: 76, trackTemp: 21, grip: 'Opt' }, // Invalid
-      // Green grip (laps 4-6) - slightly slower
-      { lap: 4, time: '1:51.234', delta: '+1.734', valid: true, pit: false, sectors: ['32.4', '41.9', '36.9'], fuel: 74, trackTemp: 20, grip: 'Green' },
-      { lap: 5, time: '1:51.567', delta: '+2.067', valid: true, pit: false, sectors: ['32.5', '42.1', '37.0'], fuel: 72, trackTemp: 19, grip: 'Green' },
-      { lap: 6, time: '1:51.890', delta: '+2.390', valid: true, pit: false, sectors: ['32.6', '42.2', '37.1'], fuel: 70, trackTemp: 19, grip: 'Green' },
-      // Greasy grip (laps 7-9) - slower, some invalids
-      { lap: 7, time: '1:53.234', delta: '+3.734', valid: true, pit: false, sectors: ['33.2', '42.9', '37.1'], fuel: 68, trackTemp: 18, grip: 'Greasy' },
-      { lap: 8, time: '1:54.567', delta: '+5.067', valid: false, pit: false, sectors: ['33.8', '43.5', '37.3'], fuel: 66, trackTemp: 18, grip: 'Greasy' }, // Invalid - off track
-      { lap: 9, time: '1:53.890', delta: '+4.390', valid: true, pit: false, sectors: ['33.4', '43.3', '37.2'], fuel: 64, trackTemp: 17, grip: 'Greasy' },
-      // Damp grip (laps 10-12) - much slower
-      { lap: 10, time: '1:55.234', delta: '+5.734', valid: true, pit: false, sectors: ['34.0', '43.8', '37.4'], fuel: 62, trackTemp: 17, grip: 'Damp' },
-      { lap: 11, time: '1:56.567', delta: '+7.067', valid: false, pit: false, sectors: ['34.5', '44.5', '37.6'], fuel: 60, trackTemp: 16, grip: 'Damp' }, // Invalid - spin
-      { lap: 12, time: '1:55.890', delta: '+6.390', valid: true, pit: false, sectors: ['34.2', '44.2', '37.5'], fuel: 58, trackTemp: 16, grip: 'Damp' },
-      // Wet grip (laps 13-15) - very slow, pit at end
-      { lap: 13, time: '1:58.234', delta: '+8.734', valid: true, pit: false, sectors: ['35.0', '45.2', '38.0'], fuel: 56, trackTemp: 15, grip: 'Wet' },
-      { lap: 14, time: '1:59.567', delta: '+10.067', valid: true, pit: false, sectors: ['35.5', '45.8', '38.3'], fuel: 54, trackTemp: 15, grip: 'Wet' },
-      { lap: 15, time: '2:02.123', delta: '+12.623', valid: true, pit: true, sectors: ['36.2', '46.5', '39.4'], fuel: 52, trackTemp: 14, grip: 'Wet' } // PIT IN
-    ]
+const session = computed(() => {
+  if (!fullSession.value) {
+    return {
+      id: props.sessionId,
+      track: 'Caricamento...',
+      trackId: '',
+      type: 'practice' as const,
+      date: '-',
+      time: '-',
+      car: '-',
+      startConditions: { weather: '-', airTemp: 0, trackTemp: 0 },
+      bestQualy: '--:--.---',
+      bestRace: '--:--.---',
+      theoQualy: '--:--.---',
+      theoRace: '--:--.---',
+      bestDeltaQ: { value: '-', stintNum: 0 },
+      bestDeltaR: { value: '-', stintNum: 0 },
+      stints: [] as any[],
+      lapsData: {} as Record<number, any[]>
+    }
   }
-}))
+
+  const fs = fullSession.value
+  const info = fs.session_info
+  
+  // Transform stints to expected format
+  const stints = fs.stints.map(stint => {
+    const validLaps = stint.laps.filter(l => l.is_valid && !l.has_pit_stop)
+    const bestLapMs = validLaps.length > 0 
+      ? Math.min(...validLaps.map(l => l.lap_time_ms))
+      : null
+    const avgLapMs = validLaps.length > 0
+      ? validLaps.reduce((sum, l) => sum + l.lap_time_ms, 0) / validLaps.length
+      : null
+    
+    return {
+      number: stint.stint_number,
+      type: stint.type === 'Qualify' ? 'Q' : 'R',
+      intent: stint.type === 'Qualify' ? 'Qualy Push' : 'Race Pace',
+      fuelStart: stint.fuel_start,
+      laps: stint.laps.length,
+      best: bestLapMs ? formatLapTime(bestLapMs) : '--:--.---',
+      avg: avgLapMs ? formatLapTime(avgLapMs) : '--:--.---',
+      theoretical: formatLapTime(info.session_best_lap), // Simplified: use session best as theo
+      deltaVsTheo: bestLapMs ? `+${((bestLapMs - info.session_best_lap) / 1000).toFixed(3)}` : '-',
+      conditions: { 
+        weather: info.start_weather, 
+        avgAirTemp: info.start_air_temp, 
+        avgTrackTemp: info.start_road_temp 
+      },
+      breakdown: { base: '-', deltaTemp: '-', deltaGrip: '-' }
+    }
+  })
+
+  // Transform laps data
+  const lapsData: Record<number, any[]> = {}
+  fs.stints.forEach(stint => {
+    lapsData[stint.stint_number] = stint.laps.map(lap => ({
+      lap: lap.lap_number,
+      time: formatLapTime(lap.lap_time_ms),
+      delta: `+${((lap.lap_time_ms - info.session_best_lap) / 1000).toFixed(3)}`,
+      valid: lap.is_valid,
+      pit: lap.has_pit_stop,
+      sectors: lap.sector_times_ms?.map(s => (s / 1000).toFixed(1)) || ['-', '-', '-'],
+      fuel: Math.round(lap.fuel_remaining),
+      trackTemp: Math.round(lap.road_temp),
+      grip: lap.track_grip_status || 'Opt'
+    }))
+  })
+
+  // Find best Q and R times
+  let bestQualyMs: number | null = null
+  let bestRaceMs: number | null = null
+  let bestQualyStintNum = 0
+  let bestRaceStintNum = 0
+
+  fs.stints.forEach(stint => {
+    const validLaps = stint.laps.filter(l => l.is_valid && !l.has_pit_stop)
+    if (validLaps.length === 0) return
+    const bestMs = Math.min(...validLaps.map(l => l.lap_time_ms))
+    
+    if (stint.type === 'Qualify') {
+      if (!bestQualyMs || bestMs < bestQualyMs) {
+        bestQualyMs = bestMs
+        bestQualyStintNum = stint.stint_number
+      }
+    } else {
+      if (!bestRaceMs || bestMs < bestRaceMs) {
+        bestRaceMs = bestMs
+        bestRaceStintNum = stint.stint_number
+      }
+    }
+  })
+
+  return {
+    id: props.sessionId,
+    track: info.track,
+    trackId: info.track.toLowerCase().replace(/[^a-z0-9]/g, '_'),
+    type: getSessionTypeLabel(info.session_type),
+    date: formatDateFull(info.date_start),
+    time: formatTime(info.date_start),
+    car: formatCarName(info.car),
+    startConditions: { 
+      weather: info.start_weather, 
+      airTemp: info.start_air_temp, 
+      trackTemp: info.start_road_temp 
+    },
+    bestQualy: bestQualyMs ? formatLapTime(bestQualyMs) : '--:--.---',
+    bestRace: bestRaceMs ? formatLapTime(bestRaceMs) : '--:--.---',
+    theoQualy: formatLapTime(info.session_best_lap),
+    theoRace: formatLapTime(info.session_best_lap),
+    bestDeltaQ: { 
+      value: bestQualyMs ? `+${((bestQualyMs - info.session_best_lap) / 1000).toFixed(3)}` : '-', 
+      stintNum: bestQualyStintNum 
+    },
+    bestDeltaR: { 
+      value: bestRaceMs ? `+${((bestRaceMs - info.session_best_lap) / 1000).toFixed(3)}` : '-', 
+      stintNum: bestRaceStintNum 
+    },
+    stints,
+    lapsData
+  }
+})
+
+// ========================================
+// THEORETICAL TIMES - Based on track historic bests + temp adjustment
+// ========================================
+const theoreticalTimes = computed(() => {
+  if (!fullSession.value) {
+    return { theoQualy: null, theoRace: null, theoAvgRace: null }
+  }
+  
+  const fs = fullSession.value
+  const info = fs.session_info
+  const sessionTemp = info.start_air_temp || 23 // Default temp
+  
+  // Get session grip from first stint's first lap
+  const firstLap = fs.stints[0]?.laps[0]
+  const sessionGrip = firstLap?.track_grip_status || 'Optimum'
+  
+  // Find track stats for this track
+  const trackId = (info.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
+  const trackStat = trackStats.value.find(t => {
+    const statTrackId = t.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
+    return statTrackId.includes(trackId) || trackId.includes(statTrackId)
+  })
+  
+  if (!trackStat?.bestByGrip) {
+    return { theoQualy: null, theoRace: null, theoAvgRace: null, sessionGrip, sessionTemp }
+  }
+  
+  const gripBests = trackStat.bestByGrip[sessionGrip]
+  if (!gripBests) {
+    return { theoQualy: null, theoRace: null, theoAvgRace: null, sessionGrip, sessionTemp }
+  }
+  
+  // Calculate theoretical times with temperature adjustment
+  // Formula: Theoretical = Historic + (SessionTemp - HistoricTemp) × 100ms per °C
+  function calculateTheoretical(historicMs: number | null, historicTemp: number | null): number | null {
+    if (!historicMs) return null
+    const tempDiff = sessionTemp - (historicTemp || sessionTemp)
+    const adjustmentMs = tempDiff * 100 // 0.1s = 100ms per degree
+    return Math.round(historicMs + adjustmentMs)
+  }
+  
+  return {
+    theoQualy: calculateTheoretical(gripBests.bestQualy, gripBests.bestQualyTemp),
+    theoRace: calculateTheoretical(gripBests.bestRace, gripBests.bestRaceTemp),
+    theoAvgRace: calculateTheoretical(gripBests.bestAvgRace, gripBests.bestAvgRaceTemp),
+    sessionGrip,
+    sessionTemp,
+    // Historic values for display
+    historicQualy: gripBests.bestQualy,
+    historicQualyTemp: gripBests.bestQualyTemp,
+    historicRace: gripBests.bestRace,
+    historicRaceTemp: gripBests.bestRaceTemp,
+    historicAvgRace: gripBests.bestAvgRace,
+    historicAvgRaceTemp: gripBests.bestAvgRaceTemp
+  }
+})
 
 // ========================================
 // SMART PRESELECTION - Best stint with >= 2 laps
 // ========================================
 const selectedStintNumber = ref(1)
 
-onMounted(() => {
-  const validStints = session.value.stints.filter(s => s.laps >= 2)
-  if (validStints.length > 0) {
-    let best = validStints[0]!
-    let bestDelta = parseFloat(best.deltaVsTheo)
-    validStints.forEach(s => {
-      const d = parseFloat(s.deltaVsTheo)
-      if (d < bestDelta) { best = s; bestDelta = d }
-    })
-    selectedStintNumber.value = best.number
+watch(() => session.value.stints, (stints) => {
+  if (stints.length > 0) {
+    const validStints = stints.filter(s => s.laps >= 2)
+    if (validStints.length > 0) {
+      let best = validStints[0]!
+      let bestDelta = parseFloat(best.deltaVsTheo) || 999
+      validStints.forEach(s => {
+        const d = parseFloat(s.deltaVsTheo) || 999
+        if (d < bestDelta) { best = s; bestDelta = d }
+      })
+      selectedStintNumber.value = best.number
+    } else {
+      selectedStintNumber.value = stints[0]?.number || 1
+    }
   }
-})
+}, { immediate: true })
 
 const selectedStint = computed(() => session.value.stints.find(s => s.number === selectedStintNumber.value))
-const selectedStintLaps = computed(() => session.value.lapsData[selectedStintNumber.value as keyof typeof session.value.lapsData] || session.value.lapsData[1])
+const selectedStintLaps = computed(() => session.value.lapsData[selectedStintNumber.value] || [])
 const isLimitedData = computed(() => selectedStintLaps.value.length <= 1)
 const isSingleStint = computed(() => session.value.stints.length === 1)
 
@@ -729,6 +767,21 @@ const gripZones = computed(() => {
       </button>
     </div>
 
+    <!-- LOADING STATE -->
+    <div v-if="isLoading" class="loading-state">
+      <div class="loading-spinner"></div>
+      <p>Caricamento sessione...</p>
+    </div>
+
+    <!-- ERROR STATE -->
+    <div v-else-if="loadError" class="error-state">
+      <p class="error-icon">⚠️</p>
+      <p class="error-text">{{ loadError }}</p>
+      <button class="nav-btn" @click="emit('back')">Torna alle sessioni</button>
+    </div>
+
+    <template v-else>
+
     <!-- HEADER SESSIONE -->
     <header class="session-header">
       <div class="header-row">
@@ -872,7 +925,21 @@ const gripZones = computed(() => {
           
           <div class="tc-main">
             <div class="tc-column tc-actual">
-              <h5 class="tc-header">TEMPI STINT</h5>
+              <h5 class="tc-header">
+                TEMPI STINT
+                <span class="info-icon" @click="showInfoTempi = !showInfoTempi">
+                  <svg width="14" height="14" viewBox="0 0 512 512">
+                    <circle cx="256" cy="256" r="256" fill="currentColor"/>
+                    <text x="256" y="380" text-anchor="middle" font-size="340" font-weight="700" font-family="Arial" fill="#1a1a2e">i</text>
+                  </svg>
+                </span>
+                <div v-if="showInfoTempi" class="info-popup">
+                  <strong>Tempi Stint</strong><br>
+                  <b>BEST:</b> Giro più veloce tra i giri validi dello stint.<br>
+                  <b>AVG:</b> Media dei giri "puliti" (validi, no pit, no outlap, entro 115% del best).<br>
+                  <span class="info-close" @click.stop="showInfoTempi = false">✕</span>
+                </div>
+              </h5>
               <div class="tc-row">
                 <span class="tc-label">BEST:</span>
                 <span class="tc-value">{{ selectedStint?.best ?? '-' }}</span>
@@ -884,15 +951,39 @@ const gripZones = computed(() => {
             </div>
             <div class="tc-divider"></div>
             <div class="tc-column tc-theo">
-              <h5 class="tc-header">TEORICI</h5>
-              <div class="tc-row">
-                <span class="tc-label">THEO BEST:</span>
-                <span class="tc-value">{{ selectedStint?.theoretical ?? '-' }}</span>
-              </div>
-              <div class="tc-row">
-                <span class="tc-label">THEO AVG:</span>
-                <span class="tc-value">{{ getTheoAvg() }}</span>
-              </div>
+              <h5 class="tc-header">
+                TEORICI ({{ theoreticalTimes.sessionGrip || 'Optimum' }})
+                <span class="info-icon" @click="showInfoTeo = !showInfoTeo">
+                  <svg width="14" height="14" viewBox="0 0 512 512">
+                    <circle cx="256" cy="256" r="256" fill="currentColor"/>
+                    <text x="256" y="380" text-anchor="middle" font-size="340" font-weight="700" font-family="Arial" fill="#1a1a2e">i</text>
+                  </svg>
+                </span>
+                <div v-if="showInfoTeo" class="info-popup info-popup-right">
+                  <strong>Tempi Teorici</strong><br>
+                  Best storico per questo grip + aggiustamento temperatura:<br>
+                  <code>Teorico = Storico + (TempSessione - TempStorico) × 0.1s/°C</code><br>
+                  <span class="info-close" @click.stop="showInfoTeo = false">✕</span>
+                </div>
+              </h5>
+              <!-- Qualify stint: show only Theo Best Qualifying -->
+              <template v-if="selectedStint?.type === 'Q'">
+                <div class="tc-row">
+                  <span class="tc-label">THEO BEST Q:</span>
+                  <span class="tc-value">{{ theoreticalTimes.theoQualy ? formatLapTime(theoreticalTimes.theoQualy) : '—:—.---' }}</span>
+                </div>
+              </template>
+              <!-- Race/Practice stint: show Theo Best Race + Theo Avg -->
+              <template v-else>
+                <div class="tc-row">
+                  <span class="tc-label">THEO BEST R:</span>
+                  <span class="tc-value">{{ theoreticalTimes.theoRace ? formatLapTime(theoreticalTimes.theoRace) : '—:—.---' }}</span>
+                </div>
+                <div class="tc-row">
+                  <span class="tc-label">THEO AVG:</span>
+                  <span class="tc-value">{{ theoreticalTimes.theoAvgRace ? formatLapTime(theoreticalTimes.theoAvgRace) : '—:—.---' }}</span>
+                </div>
+              </template>
             </div>
             <div class="tc-divider"></div>
             <div class="tc-column tc-deltas">
@@ -1030,6 +1121,7 @@ const gripZones = computed(() => {
         </div>
       </section>
     </div>
+    </template>
   </LayoutPageContainer>
 </template>
 
@@ -1049,6 +1141,30 @@ const gripZones = computed(() => {
   svg { width: 14px; height: 14px; }
   &:hover { background: rgba(255,255,255,0.08); color: #fff; }
   &--accent { border-color: rgba($racing-red,0.3); color: rgba($racing-red,0.8); &:hover { border-color: $racing-red; color: $racing-red; } }
+}
+
+// LOADING & ERROR STATES
+.loading-state, .error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  color: rgba(255,255,255,0.6);
+  p { margin: 16px 0; font-size: 14px; }
+}
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: $racing-red;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-state {
+  .error-icon { font-size: 48px; margin-bottom: 8px; }
+  .error-text { color: rgba(255,100,100,0.8); }
 }
 
 // HEADER
@@ -1329,6 +1445,7 @@ const gripZones = computed(() => {
 }
 .tc-column { display: flex; flex-direction: column; gap: 8px; }
 .tc-header {
+  position: relative;
   font-size: 11px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 1px;
   color: rgba(255,255,255,0.6);
@@ -1563,5 +1680,86 @@ const gripZones = computed(() => {
   .stint-fuel, .stint-laps, .stint-avg { display: none; }
   .stint-header { grid-template-columns: 32px 32px 1fr auto; }
   .sh-fuel, .sh-laps, .sh-avg { display: none; }
+}
+
+// INFO ICON & POPUP
+.info-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  margin-left: 6px;
+  transition: color 0.2s, transform 0.2s;
+  vertical-align: middle;
+  
+  svg {
+    display: block;
+  }
+  
+  &:hover {
+    color: rgba(255, 255, 255, 0.9);
+    transform: scale(1.1);
+  }
+}
+
+.info-popup {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 100;
+  width: 280px;
+  padding: 12px 14px;
+  margin-top: 8px;
+  background: linear-gradient(145deg, #1e1e2a, #15151d);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.8);
+  text-transform: none;
+  letter-spacing: 0;
+  
+  strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: #fff;
+  }
+  
+  b {
+    color: $accent-info;
+  }
+  
+  code {
+    display: block;
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: $accent-success;
+  }
+}
+
+.info-popup-right {
+  left: auto;
+  right: 0;
+}
+
+.info-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 12px;
+  
+  &:hover {
+    color: rgba(255, 255, 255, 0.8);
+  }
 }
 </style>

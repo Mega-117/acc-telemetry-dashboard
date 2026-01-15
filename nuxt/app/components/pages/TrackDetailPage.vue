@@ -1,9 +1,9 @@
 <script setup lang="ts">
 // ============================================
-// TrackDetailPage - Track detail view (placeholder)
+// TrackDetailPage - Track detail with Firebase data
 // ============================================
 
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 
 // Composable for public path (GitHub Pages compatibility)
 const { getPublicPath } = usePublicPath()
@@ -19,6 +19,15 @@ import {
   Legend,
   Filler
 } from 'chart.js'
+import { 
+  useTelemetryData, 
+  formatLapTime,
+  formatCarName,
+  formatTrackName,
+  formatDate,
+  getSessionTypeLabel,
+  type TelemetrySession
+} from '~/composables/useTelemetryData'
 
 // Register Chart.js components
 ChartJS.register(
@@ -40,6 +49,108 @@ const emit = defineEmits<{
   back: []
 }>()
 
+// ========================================
+// FIREBASE DATA LOADING
+// ========================================
+const { sessions, trackStats, isLoading, loadSessions } = useTelemetryData()
+
+onMounted(async () => {
+  await loadSessions()
+})
+
+// Filter sessions for this track
+const trackSessions = computed(() => {
+  const trackIdNorm = props.trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
+  return sessions.value.filter(s => {
+    const sessionTrackId = s.meta.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
+    return sessionTrackId.includes(trackIdNorm) || trackIdNorm.includes(sessionTrackId)
+  }).sort((a, b) => b.meta.date_start.localeCompare(a.meta.date_start))
+})
+
+// Get stats for this track from trackStats
+const currentTrackStats = computed(() => {
+  const trackIdNorm = props.trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
+  return trackStats.value.find(t => {
+    const statTrackId = t.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
+    return statTrackId.includes(trackIdNorm) || trackIdNorm.includes(statTrackId)
+  })
+})
+
+// Track metadata (static for display)
+const trackMetadata: Record<string, { name: string, fullName: string, country: string, countryCode: string, length: string, turns: number, image: string }> = {
+  'monza': { name: 'Monza', fullName: 'Autodromo Nazionale Monza', country: 'Italia', countryCode: 'IT', length: '5.793 km', turns: 11, image: '/tracks/track_monza.png' },
+  'spa': { name: 'Spa-Francorchamps', fullName: 'Circuit de Spa-Francorchamps', country: 'Belgio', countryCode: 'BE', length: '7.004 km', turns: 19, image: '/tracks/track_spa.png' },
+  'spa_francorchamps': { name: 'Spa-Francorchamps', fullName: 'Circuit de Spa-Francorchamps', country: 'Belgio', countryCode: 'BE', length: '7.004 km', turns: 19, image: '/tracks/track_spa.png' },
+  'suzuka': { name: 'Suzuka', fullName: 'Suzuka International Racing Course', country: 'Giappone', countryCode: 'JP', length: '5.807 km', turns: 18, image: '/tracks/track_suzuka.png' },
+  'donington': { name: 'Donington Park', fullName: 'Donington Park Racing Circuit', country: 'Regno Unito', countryCode: 'GB', length: '4.020 km', turns: 12, image: '/tracks/track_donington.png' },
+  'donington_park': { name: 'Donington Park', fullName: 'Donington Park Racing Circuit', country: 'Regno Unito', countryCode: 'GB', length: '4.020 km', turns: 12, image: '/tracks/track_donington.png' },
+  'valencia': { name: 'Valencia', fullName: 'Circuit Ricardo Tormo', country: 'Spagna', countryCode: 'ES', length: '4.005 km', turns: 14, image: '/tracks/track_valencia.png' },
+  'nurburgring': { name: 'Nürburgring', fullName: 'Nürburgring Grand Prix Strecke', country: 'Germania', countryCode: 'DE', length: '5.148 km', turns: 16, image: '/tracks/track_nurburgring.png' },
+  'silverstone': { name: 'Silverstone', fullName: 'Silverstone Circuit', country: 'Regno Unito', countryCode: 'GB', length: '5.891 km', turns: 18, image: '/tracks/track_silverstone.png' },
+  'imola': { name: 'Imola', fullName: 'Autodromo Enzo e Dino Ferrari', country: 'Italia', countryCode: 'IT', length: '4.909 km', turns: 19, image: '/tracks/track_imola.png' },
+  'barcelona': { name: 'Barcelona', fullName: 'Circuit de Barcelona-Catalunya', country: 'Spagna', countryCode: 'ES', length: '4.655 km', turns: 16, image: '/tracks/track_barcelona.png' },
+}
+
+// Grip conditions for dropdown
+const gripConditions = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
+const selectedGrip = ref('Optimum')
+
+// Track computed data
+const track = computed(() => {
+  const trackIdNorm = props.trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
+  const meta = trackMetadata[trackIdNorm] || trackMetadata[props.trackId] || {
+    name: formatTrackName(props.trackId),
+    fullName: formatTrackName(props.trackId),
+    country: '-',
+    countryCode: '??',
+    length: '-',
+    turns: 0,
+    image: '/tracks/track_default.png'
+  }
+  
+  const stats = currentTrackStats.value
+  const grip = selectedGrip.value
+  const gripBests = stats?.bestByGrip?.[grip]
+  
+  // Use ONLY grip-specific bests (no fallback to overall)
+  const bestQualy = gripBests?.bestQualy || null
+  const bestRace = gripBests?.bestRace || null
+  const bestAvgRace = gripBests?.bestAvgRace || null
+  
+  // Build conditions for grip-specific bests
+  const bestQualyConditions = bestQualy ? {
+    airTemp: gripBests?.bestQualyTemp || 0,
+    roadTemp: 0,
+    grip
+  } : null
+  
+  const bestRaceConditions = bestRace ? {
+    airTemp: gripBests?.bestRaceTemp || 0,
+    roadTemp: 0,
+    grip
+  } : null
+  
+  const bestAvgRaceConditions = bestAvgRace ? {
+    airTemp: gripBests?.bestAvgRaceTemp || 0,
+    roadTemp: 0,
+    grip
+  } : null
+  
+  return {
+    id: props.trackId,
+    ...meta,
+    sessions: trackSessions.value.length,
+    lastSession: stats?.lastSession || '-',
+    bestQualy: bestQualy ? formatLapTime(bestQualy) : null,
+    bestRace: bestRace ? formatLapTime(bestRace) : null,
+    bestAvgRace: bestAvgRace ? formatLapTime(bestAvgRace) : null,
+    bestQualyConditions,
+    bestRaceConditions,
+    bestAvgRaceConditions,
+    hasGripData: !!bestQualy || !!bestRace || !!bestAvgRace
+  }
+})
+
 // Types
 type SessionType = 'practice' | 'qualify' | 'race'
 
@@ -55,115 +166,53 @@ interface Session {
   bestRace?: string
 }
 
-// Mock track data (will be dynamic later)
-const track = ref({
-  id: props.trackId,
-  name: 'Monza',
-  fullName: 'Autodromo Nazionale Monza',
-  country: 'Italia',
-  countryCode: 'IT',
-  length: '5.793 km',
-  turns: 11,
-  image: '/tracks/track_monza.png',
-  sessions: 12,
-  lastSession: '2026-01-06',
-  bestQualy: '1:47.234',
-  bestQualyConditions: {
-    airTemp: 22,
-    trackTemp: 28,
-    grip: 'Optimum'
-  },
-  bestRace: '1:48.123',
-  bestRaceConditions: {
-    airTemp: 19,
-    trackTemp: 24,
-    grip: 'Fast'
-  },
-  bestAvgRace: '1:48.890',
-  bestAvgRaceConditions: {
-    airTemp: 21,
-    trackTemp: 26,
-    grip: 'Optimum'
-  }
+// Transform Firebase sessions to display format
+const recentSessions = computed<Session[]>(() => {
+  return trackSessions.value.map(s => {
+    const sessionType = getSessionTypeLabel(s.meta.session_type) as SessionType
+    const dateObj = new Date(s.meta.date_start)
+    const summary = s.summary || {} as any
+    
+    // Determine Q/R times: use specific fields if available, otherwise use bestLap based on session_type
+    // session_type: 0=Race, 1=Qualify, 2=Practice (has both Q and R stints)
+    let bestQualy: string | undefined
+    let bestRace: string | undefined
+    
+    if (summary.best_qualy_ms) {
+      bestQualy = formatLapTime(summary.best_qualy_ms)
+    }
+    if (summary.best_race_ms) {
+      bestRace = formatLapTime(summary.best_race_ms)
+    }
+    
+    // Fallback: use bestLap based on session type
+    if (!bestQualy && !bestRace && summary.bestLap) {
+      const lapTime = formatLapTime(summary.bestLap)
+      if (s.meta.session_type === 1) {
+        // Qualify session - assign to Q
+        bestQualy = lapTime
+      } else if (s.meta.session_type === 0) {
+        // Race session - assign to R
+        bestRace = lapTime
+      } else {
+        // Practice (2) - could have both, default to R for best lap
+        bestRace = lapTime
+      }
+    }
+    
+    return {
+      id: s.sessionId,
+      date: s.meta.date_start.split('T')[0],
+      time: dateObj.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+      type: sessionType,
+      car: formatCarName(s.meta.car),
+      laps: summary.laps || 0,
+      stints: summary.stintCount || 0,
+      bestQualy,
+      bestRace
+    }
+  })
 })
-
-// Skill level targets (static for now - will be fetched later)
-const skillTargets = ref({
-  qualy: {
-    pro: '1:46.500',
-    amateur: '1:48.000',
-    rookie: '1:50.000'
-  },
-  race: {
-    pro: '1:47.500',
-    amateur: '1:49.000',
-    rookie: '1:51.000'
-  },
-  avgRace: {
-    pro: '1:48.000',
-    amateur: '1:49.500',
-    rookie: '1:51.500'
-  }
-})
-
-// Determine skill level based on time
-type SkillLevel = 'pro' | 'amateur' | 'rookie'
-
-function getSkillLevel(time: string | undefined, targets: { pro: string, amateur: string, rookie: string }): SkillLevel {
-  if (!time) return 'rookie'
-  const timeSeconds = timeToSeconds(time)
-  const proSeconds = timeToSeconds(targets.pro)
-  const amateurSeconds = timeToSeconds(targets.amateur)
-  
-  if (timeSeconds <= proSeconds) return 'pro'
-  if (timeSeconds <= amateurSeconds) return 'amateur'
-  return 'rookie'
-}
-
-const skillRatings = computed(() => ({
-  qualy: getSkillLevel(track.value.bestQualy, skillTargets.value.qualy),
-  race: getSkillLevel(track.value.bestRace, skillTargets.value.race),
-  avgRace: getSkillLevel(track.value.bestAvgRace, skillTargets.value.avgRace)
-}))
-
-// Activity stats for this track (last 7 days)
-const activityStats = ref({
-  totalLaps: 127,
-  validLaps: 98,
-  validPercentage: 77,
-  timeOnTrack: '3h 42m',
-  sessionsCount: 5,
-  lastActivity: '2026-01-06'
-})
-
-// Mock session history (same structure as SessioniPage)
-const recentSessions = ref<Session[]>([
-  { id: '1', date: '2026-01-06', time: '21:00', type: 'race', car: 'Ford Mustang GT3', laps: 22, stints: 2, bestRace: '1:48.123' },
-  { id: '2', date: '2026-01-06', time: '19:12', type: 'qualify', car: 'Ford Mustang GT3', laps: 6, stints: 1, bestQualy: '1:47.234' },
-  { id: '3', date: '2026-01-06', time: '17:45', type: 'practice', car: 'Ford Mustang GT3', laps: 32, stints: 3, bestQualy: '1:47.890', bestRace: '1:48.567' },
-  { id: '4', date: '2026-01-03', time: '20:30', type: 'race', car: 'Ford Mustang GT3', laps: 16, stints: 2, bestRace: '1:49.234' },
-  { id: '5', date: '2026-01-03', time: '18:00', type: 'practice', car: 'Ford Mustang GT3', laps: 24, stints: 2, bestQualy: '1:48.567' },
-  { id: '6', date: '2025-12-28', time: '21:15', type: 'practice', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestQualy: '1:48.890' },
-  { id: '7', date: '2025-12-28', time: '19:00', type: 'qualify', car: 'Ford Mustang GT3', laps: 5, stints: 1, bestQualy: '1:48.234' },
-  { id: '8', date: '2025-12-20', time: '20:30', type: 'race', car: 'Ford Mustang GT3', laps: 18, stints: 2, bestRace: '1:49.567' },
-  { id: '9', date: '2025-12-20', time: '18:00', type: 'practice', car: 'Ford Mustang GT3', laps: 28, stints: 3, bestQualy: '1:48.123', bestRace: '1:49.234' },
-  { id: '10', date: '2025-12-12', time: '21:00', type: 'practice', car: 'Ford Mustang GT3', laps: 22, stints: 2, bestQualy: '1:49.567' },
-  { id: '11', date: '2025-12-12', time: '19:00', type: 'qualify', car: 'Ford Mustang GT3', laps: 6, stints: 1, bestQualy: '1:49.123' },
-  { id: '12', date: '2025-12-05', time: '20:00', type: 'race', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestRace: '1:50.234' },
-  { id: '13', date: '2025-12-05', time: '18:00', type: 'practice', car: 'Ford Mustang GT3', laps: 26, stints: 2, bestQualy: '1:49.890' },
-  { id: '14', date: '2025-11-28', time: '21:30', type: 'practice', car: 'Ford Mustang GT3', laps: 24, stints: 2, bestQualy: '1:50.567' },
-  { id: '15', date: '2025-11-28', time: '19:15', type: 'race', car: 'Ford Mustang GT3', laps: 16, stints: 2, bestRace: '1:51.234' },
-  { id: '16', date: '2025-11-20', time: '20:00', type: 'practice', car: 'Ford Mustang GT3', laps: 22, stints: 2, bestQualy: '1:51.890' },
-  { id: '17', date: '2025-11-20', time: '18:00', type: 'qualify', car: 'Ford Mustang GT3', laps: 5, stints: 1, bestQualy: '1:51.234' },
-  { id: '18', date: '2025-11-15', time: '21:00', type: 'race', car: 'Ford Mustang GT3', laps: 18, stints: 2, bestRace: '1:52.567' },
-  { id: '19', date: '2025-11-15', time: '19:00', type: 'practice', car: 'Ford Mustang GT3', laps: 28, stints: 3, bestQualy: '1:52.123' },
-  { id: '20', date: '2025-11-10', time: '20:30', type: 'practice', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestQualy: '1:52.890' },
-  { id: '21', date: '2025-11-10', time: '18:00', type: 'qualify', car: 'Ford Mustang GT3', laps: 6, stints: 1, bestQualy: '1:52.456' },
-  { id: '22', date: '2025-11-05', time: '21:00', type: 'race', car: 'Ford Mustang GT3', laps: 16, stints: 2, bestRace: '1:53.234' },
-  { id: '23', date: '2025-11-05', time: '19:00', type: 'practice', car: 'Ford Mustang GT3', laps: 24, stints: 2, bestQualy: '1:53.890' },
-  { id: '24', date: '2025-10-28', time: '20:00', type: 'practice', car: 'Ford Mustang GT3', laps: 22, stints: 2, bestQualy: '1:54.123' },
-  { id: '25', date: '2025-10-28', time: '18:00', type: 'race', car: 'Ford Mustang GT3', laps: 18, stints: 2, bestRace: '1:54.567' },
-])
 
 // === PAGINATION ===
 const currentPage = ref(1)
@@ -199,23 +248,64 @@ function onPageChange() {
   isChangingPage.value = true
 }
 
-// Historical best times data for the chart (mock data - chronological order)
+// Activity stats computed from real data
+const activityStats = computed(() => {
+  const totalLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.laps || 0), 0)
+  const validLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.lapsValid || 0), 0)
+  const totalTimeMs = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.totalTime || 0), 0)
+  const hours = Math.floor(totalTimeMs / 3600000)
+  const minutes = Math.floor((totalTimeMs % 3600000) / 60000)
+  
+  return {
+    totalLaps,
+    validLaps,
+    validPercentage: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
+    timeOnTrack: `${hours}h ${minutes}m`,
+    sessionsCount: trackSessions.value.length,
+    lastActivity: currentTrackStats.value?.lastSession || '-'
+  }
+})
+
+// Historical best times data from real sessions (one point per session, chronological)
 interface HistoricalTime {
   date: string
+  sessionId: string
   bestQualy?: string
   bestRace?: string
 }
 
-const historicalTimes = ref<HistoricalTime[]>([
-  { date: '2025-11-15', bestQualy: '1:52.456', bestRace: '1:53.890' },
-  { date: '2025-11-28', bestQualy: '1:51.234', bestRace: '1:52.567' },
-  { date: '2025-12-05', bestQualy: '1:50.123', bestRace: '1:51.234' },
-  { date: '2025-12-12', bestQualy: '1:49.567', bestRace: '1:50.890' },
-  { date: '2025-12-20', bestQualy: '1:48.890', bestRace: '1:49.567' },
-  { date: '2025-12-28', bestQualy: '1:48.234', bestRace: '1:49.123' },
-  { date: '2026-01-03', bestQualy: '1:47.890', bestRace: '1:48.890' },
-  { date: '2026-01-06', bestQualy: '1:47.234', bestRace: '1:48.123' },
-])
+const historicalTimes = computed<HistoricalTime[]>(() => {
+  // Sort chronologically
+  const sorted = [...trackSessions.value].sort((a, b) => a.meta.date_start.localeCompare(b.meta.date_start))
+  
+  return sorted.map(s => {
+    const summary = s.summary as any
+    // Format date manually to avoid Invalid Date issues
+    const dateStr = s.meta.date_start?.split('T')[0] || ''
+    const [year, month, day] = dateStr.split('-')
+    const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
+    const dateLabel = day && month ? `${parseInt(day)} ${months[parseInt(month) - 1]}` : 'N/A'
+    
+    // Get Q time: use best_qualy_ms or fallback to bestLap for Qualify sessions
+    let qualyTime: number | null = summary?.best_qualy_ms || null
+    if (!qualyTime && s.meta.session_type === 1 && summary?.bestLap) {
+      qualyTime = summary.bestLap
+    }
+    
+    // Get R time: use best_race_ms or fallback to bestLap for Race/Practice sessions
+    let raceTime: number | null = summary?.best_race_ms || null
+    if (!raceTime && (s.meta.session_type === 0 || s.meta.session_type === 2) && summary?.bestLap) {
+      raceTime = summary.bestLap
+    }
+    
+    return {
+      date: dateLabel,
+      sessionId: s.sessionId,
+      bestQualy: qualyTime ? formatLapTime(qualyTime) : undefined,
+      bestRace: raceTime ? formatLapTime(raceTime) : undefined
+    }
+  })
+})
 
 // Convert time string to seconds for chart calculations
 function timeToSeconds(time: string): number {
@@ -240,10 +330,8 @@ function secondsToTimeString(seconds: number): string {
 const chartJsData = computed(() => {
   const times = historicalTimes.value
   
-  // Labels (dates)
-  const labels = times.map(t => 
-    new Date(t.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })
-  )
+  // Labels (dates) - already formatted in historicalTimes
+  const labels = times.map(t => t.date)
   
   // Qualifying times (convert to seconds for Y axis)
   const qualyData = times.map(t => t.bestQualy ? timeToSeconds(t.bestQualy) : null)
@@ -527,47 +615,45 @@ function goToSession(id: string) {
       <aside class="sidebar">
         <!-- Best Times Section -->
         <div class="sidebar-section">
-          <h2 class="section-title">Migliori Tempi</h2>
+          <div class="section-header-row">
+            <h2 class="section-title">Migliori Tempi</h2>
+            <select v-model="selectedGrip" class="grip-selector">
+              <option v-for="grip in gripConditions" :key="grip" :value="grip">
+                {{ grip }}
+              </option>
+            </select>
+          </div>
           <div class="best-times-stack">
             <div class="best-time-card best-time-card--qualy">
-              <span class="time-label">Best Qualifying</span>
+              <span class="time-label">Best Stint Qualifying</span>
               <span class="time-value">{{ track.bestQualy || '—:—.---' }}</span>
               <span v-if="track.bestQualyConditions" class="time-conditions">
                 <span>Aria {{ track.bestQualyConditions.airTemp }}°C</span>
-                <span class="condition-separator">·</span>
-                <span>Asfalto {{ track.bestQualyConditions.trackTemp }}°C</span>
-                <span class="condition-separator">·</span>
-                <span>{{ track.bestQualyConditions.grip }}</span>
               </span>
+              <span v-else-if="!track.bestQualy" class="no-data-hint">Nessun dato per {{ selectedGrip }}</span>
             </div>
             <div class="best-time-card best-time-card--race">
-              <span class="time-label">Best Race</span>
+              <span class="time-label">Best Stint Race</span>
               <span class="time-value">{{ track.bestRace || '—:—.---' }}</span>
               <span v-if="track.bestRaceConditions" class="time-conditions">
                 <span>Aria {{ track.bestRaceConditions.airTemp }}°C</span>
-                <span class="condition-separator">·</span>
-                <span>Asfalto {{ track.bestRaceConditions.trackTemp }}°C</span>
-                <span class="condition-separator">·</span>
-                <span>{{ track.bestRaceConditions.grip }}</span>
               </span>
+              <span v-else-if="!track.bestRace" class="no-data-hint">Nessun dato per {{ selectedGrip }}</span>
             </div>
             <div class="best-time-card best-time-card--avg">
-              <span class="time-label">Best Average Race</span>
+              <span class="time-label">Best Stint Avg Race</span>
               <span class="time-value">{{ track.bestAvgRace || '—:—.---' }}</span>
               <span v-if="track.bestAvgRaceConditions" class="time-conditions">
                 <span>Aria {{ track.bestAvgRaceConditions.airTemp }}°C</span>
-                <span class="condition-separator">·</span>
-                <span>Asfalto {{ track.bestAvgRaceConditions.trackTemp }}°C</span>
-                <span class="condition-separator">·</span>
-                <span>{{ track.bestAvgRaceConditions.grip }}</span>
               </span>
+              <span v-else-if="!track.bestAvgRace" class="no-data-hint">Nessun dato per {{ selectedGrip }}</span>
             </div>
           </div>
         </div>
 
         <!-- Activity Stats Section -->
         <div class="sidebar-section">
-          <h2 class="section-title">Attività Ultimi 7 Giorni</h2>
+          <h2 class="section-title">Attività Totale</h2>
           <div class="activity-stack">
             <div class="activity-item">
               <span class="activity-value">{{ activityStats.totalLaps }}</span>
@@ -767,6 +853,44 @@ function goToSession(id: string) {
   margin: 0 0 16px 0;
 }
 
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  
+  .section-title {
+    margin: 0;
+  }
+}
+
+.grip-selector {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+  
+  &:focus {
+    outline: none;
+    border-color: $accent-info;
+  }
+  
+  option {
+    background: #1a1a2e;
+    color: #fff;
+  }
+}
+
 // === BEST TIMES ===
 .best-times-grid {
   display: grid;
@@ -838,6 +962,13 @@ function goToSession(id: string) {
 
 .condition-separator {
   opacity: 0.4;
+}
+
+.no-data-hint {
+  font-size: 11px;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.4);
+  margin-top: 8px;
 }
 
 // === CHART ===
