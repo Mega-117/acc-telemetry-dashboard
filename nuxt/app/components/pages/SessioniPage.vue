@@ -70,6 +70,49 @@ const sessions: Session[] = [
   { id: 's19', date: '2025-12-30', time: '18:00', type: 'practice', track: 'Paul Ricard', car: 'Ford Mustang GT3', laps: 22, stints: 2, bestQualy: '1:54.567' },
   { id: 's20', date: '2025-12-30', time: '15:30', type: 'practice', track: 'Donington', car: 'AMR V8 Vantage GT3', laps: 16, stints: 2, bestQualy: '1:30.234' },
   { id: 's21', date: '2025-12-30', time: '12:00', type: 'practice', track: 'Donington', car: 'Ford Mustang GT3', laps: 30, stints: 3, bestQualy: '1:29.456', bestRace: '1:30.890' },
+  
+  // 28 Dicembre 2025
+  { id: 's22', date: '2025-12-28', time: '20:00', type: 'race', track: 'Spa', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestRace: '2:18.456' },
+  { id: 's23', date: '2025-12-28', time: '18:30', type: 'qualify', track: 'Spa', car: 'Ford Mustang GT3', laps: 8, stints: 1, bestQualy: '2:17.890' },
+  { id: 's24', date: '2025-12-28', time: '16:00', type: 'practice', track: 'Spa', car: 'Ford Mustang GT3', laps: 24, stints: 2, bestQualy: '2:18.234' },
+  
+  // 25 Dicembre 2025
+  { id: 's25', date: '2025-12-25', time: '15:00', type: 'practice', track: 'Monza', car: 'AMR V8 Vantage GT3', laps: 18, stints: 2, bestQualy: '1:49.123' },
+  { id: 's26', date: '2025-12-25', time: '12:00', type: 'race', track: 'Monza', car: 'AMR V8 Vantage GT3', laps: 16, stints: 2, bestRace: '1:49.890' },
+  
+  // 22 Dicembre 2025
+  { id: 's27', date: '2025-12-22', time: '21:00', type: 'practice', track: 'Valencia', car: 'Ford Mustang GT3', laps: 22, stints: 2, bestQualy: '1:32.456' },
+  { id: 's28', date: '2025-12-22', time: '19:00', type: 'qualify', track: 'Valencia', car: 'Ford Mustang GT3', laps: 6, stints: 1, bestQualy: '1:31.890' },
+  { id: 's29', date: '2025-12-22', time: '17:00', type: 'race', track: 'Valencia', car: 'Ford Mustang GT3', laps: 18, stints: 2, bestRace: '1:32.234' },
+  
+  // 20 Dicembre 2025
+  { id: 's30', date: '2025-12-20', time: '20:30', type: 'practice', track: 'Donington', car: 'Ford Mustang GT3', laps: 28, stints: 3, bestQualy: '1:28.890' },
+  { id: 's31', date: '2025-12-20', time: '18:00', type: 'practice', track: 'Donington', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestQualy: '1:29.234' },
+  { id: 's32', date: '2025-12-20', time: '15:30', type: 'qualify', track: 'Donington', car: 'Ford Mustang GT3', laps: 5, stints: 1, bestQualy: '1:28.567' },
+  { id: 's33', date: '2025-12-20', time: '13:00', type: 'race', track: 'Donington', car: 'Ford Mustang GT3', laps: 16, stints: 2, bestRace: '1:29.123' },
+  
+  // 18 Dicembre 2025
+  { id: 's34', date: '2025-12-18', time: '21:30', type: 'practice', track: 'Paul Ricard', car: 'AMR V8 Vantage GT3', laps: 24, stints: 2, bestQualy: '1:55.234' },
+  { id: 's35', date: '2025-12-18', time: '19:00', type: 'practice', track: 'Paul Ricard', car: 'AMR V8 Vantage GT3', laps: 20, stints: 2, bestQualy: '1:55.890' },
+  
+  // 15 Dicembre 2025
+  { id: 's36', date: '2025-12-15', time: '20:00', type: 'race', track: 'Monza', car: 'Ford Mustang GT3', laps: 22, stints: 2, bestRace: '1:47.890' },
+  { id: 's37', date: '2025-12-15', time: '18:00', type: 'qualify', track: 'Monza', car: 'Ford Mustang GT3', laps: 6, stints: 1, bestQualy: '1:47.234' },
+  { id: 's38', date: '2025-12-15', time: '16:00', type: 'practice', track: 'Monza', car: 'Ford Mustang GT3', laps: 28, stints: 3, bestQualy: '1:47.567', bestRace: '1:48.123' },
+  
+  // 12 Dicembre 2025
+  { id: 's39', date: '2025-12-12', time: '21:00', type: 'practice', track: 'Spa', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestQualy: '2:17.456' },
+  { id: 's40', date: '2025-12-12', time: '19:00', type: 'practice', track: 'Spa', car: 'Ford Mustang GT3', laps: 18, stints: 2, bestQualy: '2:18.123' },
+  { id: 's41', date: '2025-12-12', time: '17:00', type: 'race', track: 'Spa', car: 'Ford Mustang GT3', laps: 16, stints: 2, bestRace: '2:18.567' },
+  
+  // 10 Dicembre 2025
+  { id: 's42', date: '2025-12-10', time: '20:30', type: 'practice', track: 'Donington', car: 'AMR V8 Vantage GT3', laps: 22, stints: 2, bestQualy: '1:30.456' },
+  { id: 's43', date: '2025-12-10', time: '18:00', type: 'qualify', track: 'Donington', car: 'AMR V8 Vantage GT3', laps: 6, stints: 1, bestQualy: '1:30.123' },
+  { id: 's44', date: '2025-12-10', time: '15:30', type: 'race', track: 'Donington', car: 'AMR V8 Vantage GT3', laps: 18, stints: 2, bestRace: '1:30.890' },
+  
+  // 8 Dicembre 2025
+  { id: 's45', date: '2025-12-08', time: '21:00', type: 'practice', track: 'Valencia', car: 'Ford Mustang GT3', laps: 24, stints: 2, bestQualy: '1:32.789' },
+  { id: 's46', date: '2025-12-08', time: '18:30', type: 'practice', track: 'Valencia', car: 'Ford Mustang GT3', laps: 20, stints: 2, bestQualy: '1:33.123' },
 ]
 
 // Extract unique values for filters
@@ -118,6 +161,68 @@ const sessionsByDay = computed(() => {
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([date, sessions]) => ({ date, sessions }))
 })
+
+// === PAGINATION ===
+const currentPage = ref(1)
+const itemsPerPage = 20
+
+// Total filtered sessions count
+const totalFilteredSessions = computed(() => filteredSessions.value.length)
+
+// Total pages
+const totalPages = computed(() => Math.max(1, Math.ceil(totalFilteredSessions.value / itemsPerPage)))
+
+// Paginated sessions (flat list first, then group by day)
+const paginatedSessionsByDay = computed(() => {
+  const start = (currentPage.value - 1) * itemsPerPage
+  const end = start + itemsPerPage
+  const paginatedList = filteredSessions.value.slice(start, end)
+  
+  // Group paginated sessions by day
+  const groups: Record<string, Session[]> = {}
+  for (const session of paginatedList) {
+    if (!groups[session.date]) {
+      groups[session.date] = []
+    }
+    groups[session.date]!.push(session)
+  }
+  
+  return Object.entries(groups)
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([date, sessions]) => ({ date, sessions }))
+})
+
+// Reset page when filters change
+function resetPage() {
+  currentPage.value = 1
+}
+
+// Watch filters and reset page
+import { watch } from 'vue'
+watch([filterType, filterTrack, filterCar, filterTimeRange], resetPage)
+
+// Pagination navigation
+function goToPage(page: number) {
+  if (page >= 1 && page <= totalPages.value) {
+    currentPage.value = page
+  }
+}
+
+function prevPage() {
+  if (currentPage.value > 1) currentPage.value--
+}
+
+function nextPage() {
+  if (currentPage.value < totalPages.value) currentPage.value++
+}
+
+// Smooth page change animation
+const sessionsRef = ref<HTMLElement | null>(null)
+const isChangingPage = ref(false)
+
+function onPageChange() {
+  isChangingPage.value = true
+}
 
 // Format date for header
 function formatDateHeader(dateStr: string): string {
@@ -240,13 +345,18 @@ function goToSession(id: string) {
     </div>
     
     <!-- No results -->
-    <div v-if="sessionsByDay.length === 0" class="no-results">
+    <div v-if="paginatedSessionsByDay.length === 0" class="no-results">
       <p>Nessuna sessione trovata con i filtri selezionati.</p>
     </div>
     
     <!-- LIST VIEW (original) -->
-    <div v-else-if="viewMode === 'list'" class="day-groups">
-      <div v-for="group in sessionsByDay" :key="group.date" class="day-group">
+    <div 
+      v-else-if="viewMode === 'list'" 
+      ref="sessionsRef"
+      :class="['day-groups', { 'day-groups--fading': isChangingPage }]"
+      @transitionend="isChangingPage = false"
+    >
+      <div v-for="group in paginatedSessionsByDay" :key="group.date" class="day-group">
         <!-- Day header -->
         <div class="day-header">
           <span class="day-date">{{ formatDateHeader(group.date) }}</span>
@@ -313,7 +423,7 @@ function goToSession(id: string) {
     
     <!-- CARD VIEW (grouped) -->
     <div v-else class="day-cards">
-      <div v-for="group in sessionsByDay" :key="group.date" class="day-card">
+      <div v-for="group in paginatedSessionsByDay" :key="group.date" class="day-card">
         <!-- Card header with date -->
         <div class="card-header">
           <div class="card-header-info">
@@ -379,6 +489,16 @@ function goToSession(id: string) {
         </div>
       </div>
     </div>
+
+    <!-- PAGINATION CONTROLS -->
+    <UiPaginationControls
+      v-model:currentPage="currentPage"
+      :total-pages="totalPages"
+      :total-items="totalFilteredSessions"
+      :scroll-target="sessionsRef"
+      item-label="sessioni"
+      @page-change="onPageChange"
+    />
   </LayoutPageContainer>
 </template>
 
@@ -561,6 +681,13 @@ function goToSession(id: string) {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  opacity: 1;
+  transition: opacity 0.15s ease-out;
+
+  // Fade out state during page change
+  &--fading {
+    opacity: 0;
+  }
 }
 
 .day-group {
