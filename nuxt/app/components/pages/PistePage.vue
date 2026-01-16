@@ -34,9 +34,12 @@ const emit = defineEmits<{
 // === TELEMETRY DATA ===
 const { sessions, trackStats, isLoading, loadSessions } = useTelemetryData()
 
-// Load data on mount
+// Get pilot context (will be set when coach views a pilot)
+const targetUserId = usePilotContext()
+
+// Load data on mount - use pilot context if available
 onMounted(async () => {
-  await loadSessions()
+  await loadSessions(targetUserId.value || undefined)
 })
 
 // === VIEW MODE ===

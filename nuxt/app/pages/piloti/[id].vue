@@ -15,6 +15,10 @@ definePageMeta({
 const route = useRoute()
 const pilotId = route.params.id as string
 
+// Provide pilot context to all child components
+// This makes child components load this pilot's data instead of the coach's
+providePilotContext(pilotId)
+
 interface PilotData {
   firstName?: string
   lastName?: string

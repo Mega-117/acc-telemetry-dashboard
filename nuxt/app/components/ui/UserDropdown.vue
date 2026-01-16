@@ -30,8 +30,8 @@ const handleProfile = () => {
 }
 
 const handleLogout = () => {
-  closeDropdown()
   emit('logout')
+  closeDropdown()
 }
 </script>
 

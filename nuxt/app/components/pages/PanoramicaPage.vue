@@ -42,8 +42,10 @@ const carImages: Record<string, string> = {
   '720s': mclarenImg,
 }
 
-// Composable for public path
 const { getPublicPath } = usePublicPath()
+
+// Get pilot context (will be set when coach views a pilot)
+const targetUserId = usePilotContext()
 
 // Telemetry data
 const { 
@@ -61,9 +63,9 @@ const {
 // Activity chart data
 const activityData = computed(() => getActivityData(7))
 
-// Load on mount
+// Load on mount - use pilot context if available
 onMounted(async () => {
-  await loadSessions()
+  await loadSessions(targetUserId.value || undefined)
 })
 
 // === COMPUTED DATA ===

@@ -55,10 +55,51 @@ const fetchPilots = async () => {
     )
     const querySnapshot = await getDocs(q)
     
-    pilots.value = querySnapshot.docs.map(doc => ({
+    // Get basic pilot data first
+    const pilotsData = querySnapshot.docs.map(doc => ({
       uid: doc.id,
       ...doc.data()
     })) as Pilot[]
+    
+    // Fetch session stats for each pilot
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString()
+    
+    for (const pilot of pilotsData) {
+      try {
+        // Fetch all sessions for this pilot
+        const sessionsRef = collection(db, `users/${pilot.uid}/sessions`)
+        const sessionsSnap = await getDocs(sessionsRef)
+        
+        let lastSessionDate: string | undefined = undefined
+        let sessionsLast7Days = 0
+        
+        sessionsSnap.docs.forEach(sessionDoc => {
+          const data = sessionDoc.data()
+          const sessionDate = data.meta?.date_start
+          
+          if (sessionDate) {
+            // Track last session
+            if (!lastSessionDate || sessionDate > lastSessionDate) {
+              lastSessionDate = sessionDate
+            }
+            
+            // Count sessions in last 7 days
+            if (sessionDate >= sevenDaysAgoStr) {
+              sessionsLast7Days++
+            }
+          }
+        })
+        
+        pilot.lastSession = lastSessionDate
+        pilot.totalSessions = sessionsLast7Days
+      } catch (e) {
+        console.warn(`Could not fetch sessions for pilot ${pilot.uid}:`, e)
+      }
+    }
+    
+    pilots.value = pilotsData
   } catch (e) {
     console.error('Error fetching pilots:', e)
   } finally {
@@ -138,7 +179,7 @@ onMounted(() => {
       <div class="list-header">
         <span class="lh-name">Pilota</span>
         <span class="lh-nickname">Nickname</span>
-        <span class="lh-sessions">Sessioni</span>
+        <span class="lh-sessions">Sessioni (7gg)</span>
         <span class="lh-last">Ultima attività</span>
         <span class="lh-cta"></span>
       </div>
