@@ -44,6 +44,7 @@ const isActive = (tabTo: string) => {
 
 .tabsbar__inner {
   display: flex;
+  justify-content: center;
   gap: 8px;
   max-width: 1400px;
   margin: 0 auto;

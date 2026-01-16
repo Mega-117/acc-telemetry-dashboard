@@ -147,12 +147,14 @@ const trackImages: Record<string, string> = {
 
 const lastTrackImage = computed(() => {
   const trackId = lastTrack.value?.track.toLowerCase().replace(/[^a-z0-9]/g, '_') || ''
-  return trackImages[trackId] || spaImg
+  const imagePath = trackImages[trackId]
+  return imagePath ? getPublicPath(imagePath) : spaImg
 })
 
 const prevTrackImage = computed(() => {
   const trackId = prevTrack.value?.track.toLowerCase().replace(/[^a-z0-9]/g, '_') || ''
-  return trackImages[trackId] || monzaImg
+  const imagePath = trackImages[trackId]
+  return imagePath ? getPublicPath(imagePath) : monzaImg
 })
 
 // Navigation handlers
