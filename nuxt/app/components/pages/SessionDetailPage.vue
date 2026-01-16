@@ -17,6 +17,7 @@ import {
   Legend,
   Filler
 } from 'chart.js'
+import zoomPlugin from 'chartjs-plugin-zoom'
 import { 
   useTelemetryData, 
   formatLapTime,
@@ -30,15 +31,63 @@ import {
   type LapData
 } from '~/composables/useTelemetryData'
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler)
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
 const props = defineProps<{ sessionId: string }>()
 const emit = defineEmits<{ back: [], 'open-track': [trackId: string] }>()
 
 const showDetailedLaps = ref(false)
-const showInfoTempi = ref(false)
-const showInfoTeo = ref(false)
 
+// ========================================
+// LAP EXCLUSION SYSTEM
+// ========================================
+const excludedLaps = ref<Set<number>>(new Set())
+const showLapManager = ref(false)
+const chartRef = ref<any>(null)
+
+function toggleLapExclusion(lapNum: number) {
+  const newSet = new Set(excludedLaps.value)
+  if (newSet.has(lapNum)) {
+    newSet.delete(lapNum)
+  } else {
+    newSet.add(lapNum)
+  }
+  excludedLaps.value = newSet
+}
+
+function resetExcludedLaps() {
+  excludedLaps.value = new Set()
+}
+
+function resetZoom() {
+  if (chartRef.value?.chart) {
+    chartRef.value.chart.resetZoom()
+  }
+}
+
+function zoomIn() {
+  if (chartRef.value?.chart) {
+    chartRef.value.chart.zoom(1.2)
+  }
+}
+
+function zoomOut() {
+  if (chartRef.value?.chart) {
+    chartRef.value.chart.zoom(0.8)
+  }
+}
+
+// Auto-exclude first 2 laps when stint has >20 laps (warmup preset)
+function applyWarmupExclusion() {
+  const laps = selectedStintLaps.value
+  if (laps.length > 20) {
+    // Exclude first 2 laps
+    const first2 = laps.slice(0, 2).map(l => l.lap)
+    excludedLaps.value = new Set(first2)
+  } else {
+    excludedLaps.value = new Set()
+  }
+}
 // ========================================
 // FIREBASE DATA LOADING
 // ========================================
@@ -144,9 +193,9 @@ const session = computed(() => {
     const bestLapMs = validLaps.length > 0 
       ? Math.min(...validLaps.map(l => l.lap_time_ms))
       : null
-    const avgLapMs = validLaps.length > 0
-      ? validLaps.reduce((sum, l) => sum + l.lap_time_ms, 0) / validLaps.length
-      : null
+    
+    // Use avg_clean_lap from JSON (pre-calculated, excludes outliers >115% of best)
+    const avgLapMs = stint.avg_clean_lap || null
     
     return {
       number: stint.stint_number,
@@ -156,6 +205,7 @@ const session = computed(() => {
       laps: stint.laps.length,
       best: bestLapMs ? formatLapTime(bestLapMs) : '--:--.---',
       avg: avgLapMs ? formatLapTime(avgLapMs) : '--:--.---',
+      durationMs: stint.stint_drive_time_ms || 0, // Use pre-calculated duration from JSON
       theoretical: formatLapTime(info.session_best_lap), // Simplified: use session best as theo
       deltaVsTheo: bestLapMs ? `+${((bestLapMs - info.session_best_lap) / 1000).toFixed(3)}` : '-',
       conditions: { 
@@ -179,6 +229,8 @@ const session = computed(() => {
       sectors: lap.sector_times_ms?.map(s => (s / 1000).toFixed(1)) || ['-', '-', '-'],
       fuel: Math.round(lap.fuel_remaining),
       trackTemp: Math.round(lap.road_temp),
+      airTemp: lap.air_temp || 0,
+      weather: lap.rain_intensity || 'No Rain',
       grip: lap.track_grip_status || 'Opt'
     }))
   })
@@ -247,11 +299,11 @@ const theoreticalTimes = computed(() => {
   
   const fs = fullSession.value
   const info = fs.session_info
-  const sessionTemp = info.start_air_temp || 23 // Default temp
   
-  // Get session grip from first stint's first lap
-  const firstLap = fs.stints[0]?.laps[0]
-  const sessionGrip = firstLap?.track_grip_status || 'Optimum'
+  // Use dominant grip from stintConditions (selected stint)
+  const dominantGrip = stintConditions.value.grip.dominant || 'Optimum'
+  // Use average temperature of the stint
+  const stintTemp = stintConditions.value.airTemp.avg || Math.round(info.start_air_temp || 23)
   
   // Find track stats for this track
   const trackId = (info.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
@@ -261,20 +313,22 @@ const theoreticalTimes = computed(() => {
   })
   
   if (!trackStat?.bestByGrip) {
-    return { theoQualy: null, theoRace: null, theoAvgRace: null, sessionGrip, sessionTemp }
+    return { theoQualy: null, theoRace: null, theoAvgRace: null, dominantGrip, stintTemp }
   }
   
-  const gripBests = trackStat.bestByGrip[sessionGrip]
+  const gripBests = trackStat.bestByGrip[dominantGrip]
   if (!gripBests) {
-    return { theoQualy: null, theoRace: null, theoAvgRace: null, sessionGrip, sessionTemp }
+    return { theoQualy: null, theoRace: null, theoAvgRace: null, dominantGrip, stintTemp }
   }
   
-  // Calculate theoretical times with temperature adjustment
-  // Formula: Theoretical = Historic + (SessionTemp - HistoricTemp) × 100ms per °C
+  // Temperature adjustment formula:
+  // Teorico = Storico + (TempStint - TempStorico) × 100ms/°C
+  // Colder = faster (negative adjustment), Hotter = slower (positive adjustment)
   function calculateTheoretical(historicMs: number | null, historicTemp: number | null): number | null {
     if (!historicMs) return null
-    const tempDiff = sessionTemp - (historicTemp || sessionTemp)
-    const adjustmentMs = tempDiff * 100 // 0.1s = 100ms per degree
+    const historicTempRounded = Math.round(historicTemp || stintTemp)
+    const tempDiff = stintTemp - historicTempRounded
+    const adjustmentMs = tempDiff * 100 // 100ms per degree
     return Math.round(historicMs + adjustmentMs)
   }
   
@@ -282,8 +336,8 @@ const theoreticalTimes = computed(() => {
     theoQualy: calculateTheoretical(gripBests.bestQualy, gripBests.bestQualyTemp),
     theoRace: calculateTheoretical(gripBests.bestRace, gripBests.bestRaceTemp),
     theoAvgRace: calculateTheoretical(gripBests.bestAvgRace, gripBests.bestAvgRaceTemp),
-    sessionGrip,
-    sessionTemp,
+    dominantGrip,
+    stintTemp,
     // Historic values for display
     historicQualy: gripBests.bestQualy,
     historicQualyTemp: gripBests.bestQualyTemp,
@@ -320,6 +374,19 @@ const selectedStint = computed(() => session.value.stints.find(s => s.number ===
 const selectedStintLaps = computed(() => session.value.lapsData[selectedStintNumber.value] || [])
 const isLimitedData = computed(() => selectedStintLaps.value.length <= 1)
 const isSingleStint = computed(() => session.value.stints.length === 1)
+
+// Auto-apply warmup exclusion when stint changes
+watch(selectedStintLaps, (laps) => {
+  if (laps.length > 20) {
+    // Exclude first and last lap (outlap + inlap)
+    const firstLap = laps[0]?.lap
+    const lastLap = laps[laps.length - 1]?.lap
+    const toExclude = [firstLap, lastLap].filter(Boolean)
+    excludedLaps.value = new Set(toExclude)
+  } else {
+    excludedLaps.value = new Set()
+  }
+}, { immediate: true })
 
 // Compare mode stint data
 const compareStintA = computed(() => stintA.value ? session.value.stints.find(s => s.number === stintA.value) : null)
@@ -383,18 +450,99 @@ function getStintWarning(stint: typeof session.value.stints[0]): { icon: string;
   return null
 }
 
+function getBarColor(pct: number): string {
+  if (pct < 35) return '#ef4444'      // Red
+  if (pct < 75) return '#f97316'       // Orange
+  return '#10b981'                     // Green
+}
+
 // ========================================
-// CHART - supports Compare Mode + Target Zone
+// STINT CONDITIONS - Temp, Grip evolution with percentages
+// ========================================
+const stintConditions = computed(() => {
+  const laps = selectedStintLaps.value.filter(l => !l.pit)
+  if (laps.length === 0) {
+    return {
+      airTemp: { start: 0, mid: 0, end: 0, changed: false },
+      grip: { dominant: 'Optimum', percentages: [], changed: false, display: 'Optimum' }
+    }
+  }
+  
+  const midIndex = Math.floor(laps.length / 2)
+  const endIndex = laps.length - 1
+  
+  // Air Temperature (rounded to integers)
+  const tempStart = Math.round(laps[0]?.airTemp || 0)
+  const tempMid = Math.round(laps[midIndex]?.airTemp || tempStart)
+  const tempEnd = Math.round(laps[endIndex]?.airTemp || tempStart)
+  const tempChanged = Math.abs(tempStart - tempEnd) >= 2 || Math.abs(tempStart - tempMid) >= 2
+  
+  // Grip - count occurrences, filter Unknown, track first occurrence order
+  const gripCounts: Record<string, number> = {}
+  const gripOrder: string[] = []  // Track order of first occurrence
+  let validGripLaps = 0
+  
+  for (const lap of laps) {
+    const grip = lap.grip || 'Unknown'
+    if (grip !== 'Unknown' && grip !== 'Opt') {  // Filter Unknown and abbreviations
+      if (!gripCounts[grip]) {
+        gripOrder.push(grip)  // Add to order on first occurrence
+      }
+      gripCounts[grip] = (gripCounts[grip] || 0) + 1
+      validGripLaps++
+    }
+  }
+  
+  // Calculate percentages and find dominant
+  const percentages: { grip: string; pct: number }[] = []
+  let dominant = 'Optimum'
+  let maxCount = 0
+  
+  for (const grip of gripOrder) {  // Iterate in first-occurrence order
+    const count = gripCounts[grip]
+    const pct = Math.round((count / validGripLaps) * 100)
+    percentages.push({ grip, pct })
+    if (count > maxCount) {
+      maxCount = count
+      dominant = grip
+    }
+  }
+  
+  // Build display string (already in chronological order)
+  const changed = percentages.length > 1
+  let display = dominant
+  if (changed) {
+    display = percentages.map(p => `${p.grip} (${p.pct}%)`).join(' → ')
+  }
+  
+  // Calculate average temperature for the stint
+  const avgTemp = tempChanged 
+    ? Math.round((tempStart + tempMid + tempEnd) / 3)
+    : tempStart
+  
+  return {
+    airTemp: { start: tempStart, mid: tempMid, end: tempEnd, changed: tempChanged, avg: avgTemp },
+    grip: { dominant, percentages, changed, display }
+  }
+})
+
+// ========================================
+// CHART - supports Compare Mode + Target Zone + Lap Exclusion
 // ========================================
 const chartData = computed(() => {
   // Use compare stint data when in compare mode, otherwise selected stint
-  const lapsA = isCompareMode.value ? compareStintALaps.value : selectedStintLaps.value
+  const allLapsA = isCompareMode.value ? compareStintALaps.value : selectedStintLaps.value
+  // Filter out excluded laps
+  const lapsA = allLapsA.filter(l => !excludedLaps.value.has(l.lap))
   const stintData = isCompareMode.value ? compareStintA.value : selectedStint.value
-  const theoSecA = timeToSeconds(stintData?.theoretical)
-  const isRace = stintData?.type === 'R'
+  const isQualy = stintData?.type === 'Q'
+  
+  // Get theoretical from computed (with temp adjustment)
+  const theoMs = isQualy ? theoreticalTimes.value.theoQualy : theoreticalTimes.value.theoRace
+  const theoSecA = theoMs ? theoMs / 1000 : 0
   
   // Target Zone = Theoretical + 0.3s
-  const targetLine = theoSecA + 0.3
+  const targetLine = theoSecA > 0 ? theoSecA + 0.3 : 0
   
   // Find best lap time in stint (for purple marker)
   const bestLapTime = stintData?.best
@@ -471,6 +619,7 @@ const chartData = computed(() => {
   ]
   
   // Add target zone line for Race stints (when toggle is on)
+  const isRace = !isQualy
   if (isRace && showTargetZone.value && lapsA.length > 0) {
     datasets.push({
       label: 'Target (+0.3s)',
@@ -558,6 +707,28 @@ const chartOptions = {
           return `${ctx.dataset.label}: ${secondsToTime(ctx.raw)}`
         }
       }
+    },
+    zoom: {
+      pan: {
+        enabled: true,
+        mode: 'x' as const,
+        modifierKey: undefined as undefined
+      },
+      zoom: {
+        wheel: {
+          enabled: true
+        },
+        pinch: {
+          enabled: true
+        },
+        mode: 'x' as const,
+        drag: {
+          enabled: false
+        }
+      },
+      limits: {
+        x: { min: 'original' as const, max: 'original' as const }
+      }
     }
   },
   scales: {
@@ -578,8 +749,47 @@ function timeToSeconds(t: string | undefined): number {
 }
 function secondsToTime(s: number): string { const m = Math.floor(s / 60); return `${m}:${(s % 60).toFixed(3).padStart(6, '0')}` }
 function getTypeLabel(t: string) { return { practice: 'PRACTICE', qualify: 'QUALIFY', race: 'RACE' }[t] || t.toUpperCase() }
-function getDeltaClass(d: string | undefined) { if (!d) return 'far'; const v = parseFloat(d); if (v <= 0) return 'fast'; if (v <= 0.3) return 'ok'; if (v <= 0.5) return 'margin'; return 'far' }
-function getDeltaLabel(d: string) { const v = parseFloat(d); if (v <= 0) return 'FAST'; if (v <= 0.3) return 'OK'; if (v <= 0.5) return 'MARGIN'; return 'LONTANO' }
+// Delta color scheme: green=on-target/faster, yellow=close, orange=margin, red=far
+function getDeltaClass(d: string | undefined) { 
+  if (!d || d === '-') return 'far'
+  const v = parseFloat(d)
+  if (isNaN(v)) return 'far'
+  if (v < 0) return 'faster'      // Negative = faster than theoretical (green)
+  if (v === 0) return 'ontarget'  // Exact match (green, same as faster)
+  if (v <= 0.3) return 'close'    // Close but slower (yellow like Q badge)
+  if (v <= 0.5) return 'margin'   // Acceptable margin (orange)
+  return 'far'                    // Far from target (red)
+}
+function getDeltaLabel(d: string) { 
+  if (!d || d === '-') return '-'
+  const v = parseFloat(d)
+  if (isNaN(v)) return '-'
+  if (v < 0) return 'FASTER'
+  if (v === 0) return 'TARGET'
+  if (v <= 0.3) return 'VICINO'
+  if (v <= 0.5) return 'MARGINE'
+  return 'LONTANO'
+}
+
+// Calculate delta vs theoretical for a stint (using correct grip-based theoretical with temp adjustment)
+function getStintDeltaVsTheo(stint: typeof session.value.stints[0]): string {
+  if (!stint) return '-'
+  
+  // Get theoretical time based on stint type
+  const isQualy = stint.type === 'Q'
+  const theoMs = isQualy ? theoreticalTimes.value.theoQualy : theoreticalTimes.value.theoRace
+  
+  if (!theoMs) return '-'
+  
+  // Parse actual best time from stint
+  const actualSec = timeToSeconds(stint.best)
+  if (actualSec === 0) return '-'
+  
+  const theoSec = theoMs / 1000
+  const delta = actualSec - theoSec
+  
+  return delta >= 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3)
+}
 
 // For colored dots in comparison box
 function getDeltaDotClass(d: string | undefined) {
@@ -611,11 +821,26 @@ function getTheoAvg(): string {
 
 // ========================================
 // DELTA CALCULATIONS (explicit for Best and Avg)
+// Uses theoreticalTimes computed for accurate comparison
 // ========================================
 const deltaBest = computed(() => {
   if (!selectedStint.value) return { value: '-', seconds: 0, class: 'neutral' }
+  
+  // Parse actual best time from stint (string format M:SS.mmm)
   const actualSec = timeToSeconds(selectedStint.value.best)
-  const theoSec = timeToSeconds(selectedStint.value.theoretical)
+  if (actualSec === 0) return { value: '-', seconds: 0, class: 'neutral' }
+  
+  // Get theoretical based on stint type
+  let theoMs: number | null = null
+  if (selectedStint.value.type === 'Q') {
+    theoMs = theoreticalTimes.value.theoQualy
+  } else {
+    theoMs = theoreticalTimes.value.theoRace
+  }
+  
+  if (!theoMs) return { value: '-', seconds: 0, class: 'neutral' }
+  
+  const theoSec = theoMs / 1000
   const delta = actualSec - theoSec
   const formatted = delta >= 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3)
   return { 
@@ -627,9 +852,18 @@ const deltaBest = computed(() => {
 
 const deltaAvg = computed(() => {
   if (!selectedStint.value) return { value: '-', seconds: 0, class: 'neutral' }
+  
+  // Parse actual avg time from stint
   const actualSec = timeToSeconds(selectedStint.value.avg)
-  const theoSec = timeToSeconds(selectedStint.value.theoretical)
-  const theoAvgSec = theoSec + 0.5 // Theo avg = theo best + 0.5s
+  if (actualSec === 0) return { value: '-', seconds: 0, class: 'neutral' }
+  
+  // Avg delta only meaningful for Race stints
+  if (selectedStint.value.type === 'Q') return { value: '-', seconds: 0, class: 'neutral' }
+  
+  const theoAvgMs = theoreticalTimes.value.theoAvgRace
+  if (!theoAvgMs) return { value: '-', seconds: 0, class: 'neutral' }
+  
+  const theoAvgSec = theoAvgMs / 1000
   const delta = actualSec - theoAvgSec
   const formatted = delta >= 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3)
   return { 
@@ -647,15 +881,24 @@ const consistencyStats = computed(() => {
     return { onTarget: 0, total: 0, pct: 0, targetLine: '-' }
   }
   
+  // Get theoretical time based on stint type (with temp adjustment)
+  const isQualy = selectedStint.value.type === 'Q'
+  const theoMs = isQualy ? theoreticalTimes.value.theoQualy : theoreticalTimes.value.theoRace
+  
+  if (!theoMs) {
+    return { onTarget: 0, total: 0, pct: 0, targetLine: '-' }
+  }
+  
   // Target = Theoretical + 0.3s
-  const theoSec = timeToSeconds(selectedStint.value.theoretical)
+  const theoSec = theoMs / 1000
   const targetLine = theoSec + 0.3
   
-  const validLaps = selectedStintLaps.value.filter(l => l.valid && !l.pit)
-  const total = validLaps.length
+  // Include all laps (valid and invalid), excluding only pit laps
+  const allLaps = selectedStintLaps.value.filter(l => !l.pit)
+  const total = allLaps.length
   
   let onTarget = 0
-  validLaps.forEach(lap => {
+  allLaps.forEach(lap => {
     const lapSec = timeToSeconds(lap.time)
     if (lapSec <= targetLine) onTarget++
   })
@@ -686,31 +929,51 @@ const validityStats = computed(() => {
 })
 
 // ========================================
-// STINT DURATION (sum of all lap times)
+// STINT DURATION (from JSON stint_drive_time_ms)
 // ========================================
 const stintDuration = computed(() => {
-  if (!selectedStintLaps.value || selectedStintLaps.value.length === 0) {
-    return { minutes: 0, seconds: 0, formatted: '0:00' }
+  if (!selectedStint.value) {
+    return { hours: 0, minutes: 0, seconds: 0, formatted: '0min 00sec', showSeconds: true }
   }
   
-  // Sum all lap times in seconds
+  // Use pre-calculated duration from JSON (fallback to 0 if missing)
+  const durationMs = selectedStint.value.durationMs || 0
+  
   let totalSeconds = 0
-  selectedStintLaps.value.forEach(lap => {
-    totalSeconds += timeToSeconds(lap.time)
-  })
   
-  const minutes = Math.floor(totalSeconds / 60)
+  if (durationMs === 0 && selectedStintLaps.value.length > 0) {
+    // Fallback: sum lap times if durationMs not available
+    selectedStintLaps.value.forEach(lap => {
+      totalSeconds += timeToSeconds(lap.time)
+    })
+  } else {
+    totalSeconds = Math.floor(durationMs / 1000)
+  }
+  
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = Math.floor(totalSeconds % 60)
-  const formatted = `${minutes}:${seconds.toString().padStart(2, '0')}`
   
-  return { minutes, seconds, formatted }
+  // Smart format: omit seconds when > 1h
+  let formatted = ''
+  const showSeconds = hours === 0
+  
+  if (hours > 0) {
+    // "1h 04min" - pad minutes to 2 digits
+    formatted = `${hours}h ${minutes.toString().padStart(2, '0')}min`
+  } else {
+    // "64min 31sec" - show seconds
+    formatted = `${minutes}min ${seconds.toString().padStart(2, '0')}sec`
+  }
+  
+  return { hours, minutes, seconds, formatted, showSeconds }
 })
 
 // Toggle for showing target zone on chart
 const showTargetZone = ref(true)
 
 // Toggle for showing grip zones on chart
-const showGripZones = ref(true)
+const showGripZones = ref(false)
 
 // Grip level colors for visualization
 const gripColors: Record<string, { bg: string; border: string; label: string }> = {
@@ -864,9 +1127,9 @@ const gripZones = computed(() => {
             <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stint.type }}</span>
             <span class="stint-num">#{{ stint.number }}</span>
             <span class="stint-laps">{{ stint.laps }}</span>
-            <span :class="['stint-delta', `delta--${getDeltaClass(stint.deltaVsTheo)}`]">
-              <span class="delta-val">{{ stint.deltaVsTheo }}</span>
-              <span class="delta-lbl">{{ getDeltaLabel(stint.deltaVsTheo) }}</span>
+            <span :class="['stint-delta', `delta--${getDeltaClass(getStintDeltaVsTheo(stint))}`]">
+              <span class="delta-val">{{ getStintDeltaVsTheo(stint) }}</span>
+              <span class="delta-lbl">{{ getDeltaLabel(getStintDeltaVsTheo(stint)) }}</span>
             </span>
           </button>
         </div>
@@ -903,23 +1166,22 @@ const gripZones = computed(() => {
         <!-- CONFRONTO DINAMICO: TEMPI vs TEMPI TEORICI -->
         <!-- ========================================== -->
         <div class="times-comparison">
-          <!-- Weather conditions bar -->
+          <!-- Conditions bar - shows evolution during stint -->
           <div class="tc-conditions">
-            <span class="tc-cond-item">
-              <span class="tc-cond-icon">☀️</span>
-              <span class="tc-cond-val">{{ selectedStint?.conditions?.weather ?? 'Dry' }}</span>
-            </span>
+            <!-- Air Temperature (integers, start/mid/end) -->
             <span class="tc-cond-item">
               <span class="tc-cond-lbl">Aria</span>
-              <span class="tc-cond-val">{{ session.startConditions.airTemp }}°</span>
+              <span class="tc-cond-val">
+                <template v-if="stintConditions.airTemp.changed">
+                  {{ stintConditions.airTemp.start }}° → {{ stintConditions.airTemp.mid }}° → {{ stintConditions.airTemp.end }}°
+                </template>
+                <template v-else>{{ stintConditions.airTemp.start }}°</template>
+              </span>
             </span>
-            <span class="tc-cond-item">
-              <span class="tc-cond-lbl">Asfalto</span>
-              <span class="tc-cond-val">{{ selectedStint?.conditions?.avgTrackTemp ?? '-' }}°</span>
-            </span>
+            <!-- Grip with percentages -->
             <span class="tc-cond-item">
               <span class="tc-cond-lbl">Grip</span>
-              <span class="tc-cond-val">{{ selectedStintLaps[0]?.grip ?? 'Opt' }}</span>
+              <span class="tc-cond-val">{{ stintConditions.grip.display }}</span>
             </span>
           </div>
           
@@ -927,44 +1189,29 @@ const gripZones = computed(() => {
             <div class="tc-column tc-actual">
               <h5 class="tc-header">
                 TEMPI STINT
-                <span class="info-icon" @click="showInfoTempi = !showInfoTempi">
-                  <svg width="14" height="14" viewBox="0 0 512 512">
-                    <circle cx="256" cy="256" r="256" fill="currentColor"/>
-                    <text x="256" y="380" text-anchor="middle" font-size="340" font-weight="700" font-family="Arial" fill="#1a1a2e">i</text>
-                  </svg>
-                </span>
-                <div v-if="showInfoTempi" class="info-popup">
-                  <strong>Tempi Stint</strong><br>
+                <UiInfoPopup title="Tempi Stint" position="left">
                   <b>BEST:</b> Giro più veloce tra i giri validi dello stint.<br>
-                  <b>AVG:</b> Media dei giri "puliti" (validi, no pit, no outlap, entro 115% del best).<br>
-                  <span class="info-close" @click.stop="showInfoTempi = false">✕</span>
-                </div>
+                  <b>AVG:</b> Media dei giri "puliti" (validi, no pit, no outlap, entro 115% del best).
+                </UiInfoPopup>
               </h5>
               <div class="tc-row">
-                <span class="tc-label">BEST:</span>
+                <span class="tc-label">{{ selectedStint?.type === 'Q' ? 'BEST STINT Q:' : 'BEST STINT R:' }}</span>
                 <span class="tc-value">{{ selectedStint?.best ?? '-' }}</span>
               </div>
               <div class="tc-row">
-                <span class="tc-label">AVG:</span>
+                <span class="tc-label">{{ selectedStint?.type === 'Q' ? 'AVG STINT Q:' : 'AVG STINT R:' }}</span>
                 <span class="tc-value">{{ selectedStint?.avg ?? '-' }}</span>
               </div>
             </div>
             <div class="tc-divider"></div>
             <div class="tc-column tc-theo">
               <h5 class="tc-header">
-                TEORICI ({{ theoreticalTimes.sessionGrip || 'Optimum' }})
-                <span class="info-icon" @click="showInfoTeo = !showInfoTeo">
-                  <svg width="14" height="14" viewBox="0 0 512 512">
-                    <circle cx="256" cy="256" r="256" fill="currentColor"/>
-                    <text x="256" y="380" text-anchor="middle" font-size="340" font-weight="700" font-family="Arial" fill="#1a1a2e">i</text>
-                  </svg>
-                </span>
-                <div v-if="showInfoTeo" class="info-popup info-popup-right">
-                  <strong>Tempi Teorici</strong><br>
-                  Best storico per questo grip + aggiustamento temperatura:<br>
-                  <code>Teorico = Storico + (TempSessione - TempStorico) × 0.1s/°C</code><br>
-                  <span class="info-close" @click.stop="showInfoTeo = false">✕</span>
-                </div>
+                TEORICI ({{ stintConditions.grip.dominant || 'Optimum' }} {{ stintConditions.airTemp.avg }}°)
+                <UiInfoPopup title="Tempi Teorici" position="right">
+                  Best storico per il grip dominante + aggiustamento temperatura:<br>
+                  <code>Teorico = Storico + (TempStint - TempStorico) × 0.1s/°C</code><br>
+                  Pista più fredda = tempo più veloce
+                </UiInfoPopup>
               </h5>
               <!-- Qualify stint: show only Theo Best Qualifying -->
               <template v-if="selectedStint?.type === 'Q'">
@@ -987,7 +1234,15 @@ const gripZones = computed(() => {
             </div>
             <div class="tc-divider"></div>
             <div class="tc-column tc-deltas">
-              <h5 class="tc-header">DELTA</h5>
+              <h5 class="tc-header">
+                DELTA
+                <UiInfoPopup title="Legenda Colori Delta" position="right">
+                  <span style="color: #10b981;">●</span> <b>Verde</b> = Più veloce o = al teorico<br>
+                  <span style="color: #eab308;">●</span> <b>Giallo</b> = Vicino (+0.0 - +0.3s)<br>
+                  <span style="color: #f97316;">●</span> <b>Arancione</b> = Margine (+0.3 - +0.5s)<br>
+                  <span style="color: #ef4444;">●</span> <b>Rosso</b> = Lontano (> +0.5s)
+                </UiInfoPopup>
+              </h5>
               <div class="tc-row">
                 <span :class="['tc-delta-inline', deltaBest.class]">{{ deltaBest.value }}</span>
               </div>
@@ -1000,22 +1255,23 @@ const gripZones = computed(() => {
           <!-- Stint Duration -->
           <div class="tc-duration">
             <span class="tc-duration-label">DURATA STINT:</span>
-            <span class="tc-duration-value">{{ stintDuration.minutes }}</span>
-            <span class="tc-duration-unit">min</span>
-            <span class="tc-duration-value">{{ stintDuration.seconds.toString().padStart(2, '0') }}</span>
-            <span class="tc-duration-unit">sec</span>
+            <span class="tc-duration-value">{{ stintDuration.formatted }}</span>
           </div>
           
           <!-- Consistency Stats (Race stints only) - simplified -->
           <div v-if="selectedStint?.type === 'R' && consistencyStats.total > 0" class="tc-consistency">
-            <span class="tc-cons-title">COSTANZA</span>
+            <span class="tc-cons-title">
+              GIRI NEL TARGET
+              <UiInfoPopup title="Target = Teorico + 0.3s" position="left" size="small">
+                Conta quanti giri dello stint hanno un tempo ≤ al target.<br>
+                Include tutti i giri (validi e invalidi), esclusi i pit.
+              </UiInfoPopup>
+            </span>
             <div class="tc-cons-simple">
-              <span class="tc-cons-number">{{ consistencyStats.onTarget }}/{{ consistencyStats.total }}</span>
-              <span class="tc-cons-desc">giri sotto target (theo +0.3s)</span>
               <div class="tc-cons-bar-wide">
-                <div class="tc-cons-fill tc-cons-fill--target" :style="{ width: consistencyStats.pct + '%' }"></div>
+                <div class="tc-cons-fill" :style="{ width: consistencyStats.pct + '%', background: getBarColor(consistencyStats.pct) }"></div>
               </div>
-              <span class="tc-cons-pct">{{ consistencyStats.pct }}%</span>
+              <span class="tc-cons-pct" :style="{ color: getBarColor(consistencyStats.pct) }">{{ consistencyStats.pct }}%</span>
             </div>
             <div class="tc-toggles-row">
               <label class="tc-toggle" title="Mostra target zone sul grafico">
@@ -1033,14 +1289,12 @@ const gripZones = computed(() => {
           
           <!-- Validity Stats -->
           <div v-if="validityStats.total > 0" class="tc-validity">
-            <span class="tc-cons-title">VALIDITÀ</span>
+            <span class="tc-cons-title">GIRI VALIDI</span>
             <div class="tc-cons-simple">
-              <span class="tc-cons-number">{{ validityStats.valid }}/{{ validityStats.total }}</span>
-              <span class="tc-cons-desc">giri validi</span>
               <div class="tc-cons-bar-wide">
-                <div class="tc-cons-fill tc-cons-fill--validity" :style="{ width: validityStats.pct + '%' }"></div>
+                <div class="tc-cons-fill" :style="{ width: validityStats.pct + '%', background: getBarColor(validityStats.pct) }"></div>
               </div>
-              <span :class="['tc-cons-pct', validityStats.pct < 100 ? 'tc-cons-pct--warning' : '']">{{ validityStats.pct }}%</span>
+              <span class="tc-cons-pct" :style="{ color: getBarColor(validityStats.pct) }">{{ validityStats.pct }}%</span>
             </div>
             <span v-if="validityStats.invalid > 0" class="tc-invalid-badge">
               <span class="tc-invalid-dot"></span>
@@ -1051,12 +1305,60 @@ const gripZones = computed(() => {
 
         <!-- Chart -->
         <div class="chart-section">
-          <h4 class="chart-title">
-            <template v-if="isCompareMode">Confronto Tempi — A: Stint #{{ stintA }} vs B: Stint #{{ stintB }}</template>
-            <template v-else>Tempi Giro — Stint {{ selectedStintNumber }}</template>
-          </h4>
+          <div class="chart-header-row">
+            <h4 class="chart-title">
+              <template v-if="isCompareMode">Confronto Tempi — A: Stint #{{ stintA }} vs B: Stint #{{ stintB }}</template>
+              <template v-else>Tempi Giro — Stint {{ selectedStintNumber }}</template>
+            </h4>
+            <!-- Chart Toolbar -->
+            <div class="chart-toolbar">
+              <button class="toolbar-btn" @click="zoomIn" title="Zoom In">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              </button>
+              <button class="toolbar-btn" @click="zoomOut" title="Zoom Out">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+              </button>
+              <button class="toolbar-btn" @click="resetZoom" title="Reset Zoom">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+              </button>
+              <div class="toolbar-divider"></div>
+              <button :class="['toolbar-btn', { 'toolbar-btn--active': showLapManager }]" @click="showLapManager = !showLapManager" title="Gestisci Giri">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Lap Manager Panel -->
+          <div v-if="showLapManager" class="lap-manager">
+            <div class="lap-manager-header">
+              <span class="lap-manager-title">Escludi Giri dal Grafico</span>
+              <button class="lap-manager-reset" @click="resetExcludedLaps" :disabled="excludedLaps.size === 0">
+                Reset
+              </button>
+            </div>
+            <div class="lap-manager-grid">
+              <button 
+                v-for="lap in selectedStintLaps" 
+                :key="lap.lap"
+                :class="[
+                  'lap-toggle-btn',
+                  { 'lap-toggle-btn--excluded': excludedLaps.has(lap.lap) },
+                  { 'lap-toggle-btn--invalid': !lap.valid && !lap.pit },
+                  { 'lap-toggle-btn--pit': lap.pit }
+                ]"
+                @click="toggleLapExclusion(lap.lap)"
+                :title="`Giro ${lap.lap} - ${lap.time}${!lap.valid ? ' (Invalido)' : ''}${lap.pit ? ' (Pit)' : ''}`"
+              >
+                {{ lap.lap }}
+              </button>
+            </div>
+            <div v-if="excludedLaps.size > 0" class="lap-manager-info">
+              {{ excludedLaps.size }} giri esclusi
+            </div>
+          </div>
+          
           <div class="chart-wrap">
-            <Line :data="chartData" :options="chartOptions" />
+            <Line ref="chartRef" :data="chartData" :options="chartOptions" />
           </div>
           <!-- Grip Legend -->
           <div v-if="hasGripVariation && showGripZones" class="grip-legend">
@@ -1101,7 +1403,7 @@ const gripZones = computed(() => {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="lap in (isCompareMode ? currentTabLaps : selectedStintLaps)" :key="lap.lap" :class="{ invalid: !lap.valid, pit: lap.pit }">
+                <tr v-for="lap in (isCompareMode ? currentTabLaps : selectedStintLaps)" :key="lap.lap" :class="{ invalid: !lap.valid, pit: lap.pit, excluded: excludedLaps.has(lap.lap) }">
                   <td>{{ lap.lap }}</td>
                   <td class="time">{{ lap.time }}</td>
                   <td :class="['delta', `delta--${getDeltaClass(lap.delta)}`]">{{ lap.delta }}</td>
@@ -1335,9 +1637,10 @@ const gripZones = computed(() => {
 .stint-delta { display: flex; align-items: center; gap: 6px; justify-self: end; padding: 4px 8px; border-radius: 4px; }
 .delta-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; }
 .delta-lbl { font-size: 8px; font-weight: 700; opacity: 0.8; }
-.delta--fast { background: rgba($accent-success,0.12); .delta-val, .delta-lbl { color: $accent-success; } }
-.delta--ok { background: rgba(#22c55e,0.1); .delta-val, .delta-lbl { color: #22c55e; } }
-.delta--margin { background: rgba($accent-warning,0.1); .delta-val, .delta-lbl { color: $accent-warning; } }
+.delta--faster { background: rgba($accent-success,0.12); .delta-val, .delta-lbl { color: $accent-success; } }
+.delta--ontarget { background: rgba($accent-success,0.12); .delta-val, .delta-lbl { color: $accent-success; } }
+.delta--close { background: rgba($accent-warning,0.12); .delta-val, .delta-lbl { color: $accent-warning; } }
+.delta--margin { background: rgba(#f97316,0.1); .delta-val, .delta-lbl { color: #f97316; } }
 .delta--far { background: rgba(255,100,100,0.1); .delta-val, .delta-lbl { color: rgb(255,100,100); } }
 
 // DETAIL
@@ -1480,17 +1783,19 @@ const gripZones = computed(() => {
 .tc-delta-label { font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.5); letter-spacing: 1px; }
 .tc-delta-value {
   font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700;
-  &.fast { color: $accent-success; text-shadow: 0 0 8px rgba($accent-success, 0.4); }
-  &.ok { color: #22c55e; }
-  &.margin { color: $accent-warning; }
+  &.faster { color: $accent-success; text-shadow: 0 0 8px rgba($accent-success, 0.4); }
+  &.ontarget { color: $accent-success; text-shadow: 0 0 8px rgba($accent-success, 0.4); }
+  &.close { color: $accent-warning; }
+  &.margin { color: #f97316; }
   &.far { color: #ef4444; }
 }
 // Inline delta (for column layout)
 .tc-delta-inline {
   font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700;
-  &.fast { color: $accent-success; }
-  &.ok { color: #22c55e; }
-  &.margin { color: $accent-warning; }
+  &.faster { color: $accent-success; }
+  &.ontarget { color: $accent-success; }
+  &.close { color: $accent-warning; }
+  &.margin { color: #f97316; }
   &.far { color: #ef4444; }
   &.neutral { color: rgba(255,255,255,0.4); }
 }
@@ -1530,6 +1835,7 @@ const gripZones = computed(() => {
   border-top: 1px solid rgba(255,255,255,0.06);
 }
 .tc-cons-title {
+  position: relative;
   font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 1px;
   color: rgba(255,255,255,0.4);
@@ -1682,84 +1988,177 @@ const gripZones = computed(() => {
   .sh-fuel, .sh-laps, .sh-avg { display: none; }
 }
 
-// INFO ICON & POPUP
-.info-icon {
-  display: inline-flex;
+// ========================================
+// CHART TOOLBAR
+// ========================================
+.chart-header-row {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  color: rgba(255, 255, 255, 0.35);
-  cursor: pointer;
-  margin-left: 6px;
-  transition: color 0.2s, transform 0.2s;
-  vertical-align: middle;
-  
-  svg {
-    display: block;
-  }
-  
-  &:hover {
-    color: rgba(255, 255, 255, 0.9);
-    transform: scale(1.1);
-  }
+  margin-bottom: 12px;
 }
 
-.info-popup {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 100;
-  width: 280px;
-  padding: 12px 14px;
-  margin-top: 8px;
-  background: linear-gradient(145deg, #1e1e2a, #15151d);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.chart-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-  font-size: 11px;
-  font-weight: 400;
-  line-height: 1.6;
-  color: rgba(255, 255, 255, 0.8);
-  text-transform: none;
-  letter-spacing: 0;
+}
+
+.toolbar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: rgba(255,255,255,0.6);
+  cursor: pointer;
+  transition: all 0.15s;
   
-  strong {
-    display: block;
-    margin-bottom: 6px;
-    font-size: 12px;
+  svg { width: 16px; height: 16px; }
+  
+  &:hover {
+    background: rgba(255,255,255,0.08);
     color: #fff;
   }
   
-  b {
-    color: $accent-info;
+  &--active {
+    background: rgba($racing-red, 0.2);
+    color: $racing-red;
+  }
+}
+
+.toolbar-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255,255,255,0.15);
+  margin: 0 4px;
+}
+
+// ========================================
+// LAP MANAGER PANEL
+// ========================================
+.lap-manager {
+  padding: 16px;
+  margin-bottom: 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+}
+
+.lap-manager-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.lap-manager-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lap-manager-reset {
+  padding: 4px 10px;
+  background: rgba($racing-red, 0.1);
+  border: 1px solid rgba($racing-red, 0.3);
+  border-radius: 4px;
+  color: $racing-red;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+  
+  &:hover:not(:disabled) {
+    background: rgba($racing-red, 0.2);
   }
   
-  code {
-    display: block;
-    margin-top: 6px;
-    padding: 6px 8px;
-    background: rgba(0, 0, 0, 0.3);
-    border-radius: 4px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: $accent-success;
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 }
 
-.info-popup-right {
-  left: auto;
-  right: 0;
+.lap-manager-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.info-close {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  cursor: pointer;
-  color: rgba(255, 255, 255, 0.4);
+.lap-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 32px;
+  padding: 0 8px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 6px;
+  color: #3b82f6;
   font-size: 12px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  transition: all 0.15s;
   
   &:hover {
-    color: rgba(255, 255, 255, 0.8);
+    background: rgba(59, 130, 246, 0.25);
+    transform: scale(1.05);
+  }
+  
+  // Invalid lap
+  &--invalid {
+    background: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #ef4444;
+  }
+  
+  // Pit lap
+  &--pit {
+    background: rgba(107, 114, 128, 0.15);
+    border-color: rgba(107, 114, 128, 0.4);
+    color: #6b7280;
+  }
+  
+  // Excluded state
+  &--excluded {
+    background: rgba(255,255,255,0.05);
+    border-color: rgba(255,255,255,0.15);
+    color: rgba(255,255,255,0.3);
+    text-decoration: line-through;
+    
+    &:hover {
+      background: rgba(255,255,255,0.1);
+    }
+  }
+}
+
+.lap-manager-info {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+}
+
+// ========================================
+// EXCLUDED TABLE ROW
+// ========================================
+.laps-table tbody tr.excluded {
+  opacity: 0.35;
+  
+  td {
+    background: rgba(255,255,255,0.02) !important;
   }
 }
 </style>

@@ -13,10 +13,34 @@ import {
   formatDate
 } from '~/composables/useTelemetryData'
 
-// Default images for fallback
+// Car images
 import mustangImg from '@/assets/images/cars/mustang_gt3.png'
+import astonMartinImg from '@/assets/images/cars/aston_martin_gt3.png'
+import ferrariImg from '@/assets/images/cars/ferrari_296_gt3.png'
+import bmwImg from '@/assets/images/cars/bmw_m4_gt3.png'
+import mclarenImg from '@/assets/images/cars/mclaren_720s_gt3.png'
+import defaultCarImg from '@/assets/images/cars/default_gt3.png'
+
+// Track images
 import spaImg from '@/assets/images/tracks/spa.jpg'
 import monzaImg from '@/assets/images/tracks/monza.jpg'
+
+// Car image mapping (key patterns from session data)
+const carImages: Record<string, string> = {
+  'mustang': mustangImg,
+  'ford_mustang': mustangImg,
+  'amr': astonMartinImg,
+  'aston': astonMartinImg,
+  'aston_martin': astonMartinImg,
+  'v8_vantage': astonMartinImg,
+  'ferrari_296': ferrariImg,
+  '296_gt3': ferrariImg,
+  'bmw': bmwImg,
+  'm4': bmwImg,
+  'm4_gt3': bmwImg,
+  'mclaren': mclarenImg,
+  '720s': mclarenImg,
+}
 
 // Composable for public path
 const { getPublicPath } = usePublicPath()
@@ -29,9 +53,13 @@ const {
   lastUsedTrack, 
   trackStats,
   getActivityData,
+  activityTotals,
   isLoading, 
   loadSessions 
 } = useTelemetryData()
+
+// Activity chart data
+const activityData = computed(() => getActivityData(7))
 
 // Load on mount
 onMounted(async () => {
@@ -39,6 +67,22 @@ onMounted(async () => {
 })
 
 // === COMPUTED DATA ===
+
+// Get car image based on car name from session
+const lastCarImage = computed(() => {
+  if (!lastUsedCar.value) return defaultCarImg
+  const carName = lastUsedCar.value.toLowerCase()
+  
+  // Try to find a matching image
+  for (const [key, img] of Object.entries(carImages)) {
+    if (carName.includes(key)) {
+      return img
+    }
+  }
+  
+  // Fallback to default
+  return defaultCarImg
+})
 
 // Last car info
 const lastCarName = computed(() => {
@@ -127,7 +171,7 @@ const goToTrack = (track: { track: string } | null) => {
       <!-- Top Left: Featured Car -->
       <CardsFeaturedCarCard 
         :car-name="lastCarName"
-        :car-image="mustangImg"
+        :car-image="lastCarImage"
         subtitle="Ultima auto utilizzata"
         :date="lastCarDate"
       />
@@ -144,7 +188,12 @@ const goToTrack = (track: { track: string } | null) => {
       />
       
       <!-- Bottom Left: Activity -->
-      <CardsActivityCard />
+      <CardsActivityCard 
+        :data="activityData"
+        :practice-total="activityTotals.practice"
+        :qualify-total="activityTotals.qualify"
+        :race-total="activityTotals.race"
+      />
       
       <!-- Bottom Right: Penultima Pista -->
       <CardsTrackPerformanceCard
@@ -164,6 +213,7 @@ const goToTrack = (track: { track: string } | null) => {
 .panoramica-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 1fr;
   gap: 24px;
 }
 

@@ -451,7 +451,7 @@ export function useTelemetryData() {
         return sessions.value.find(s => s.sessionId === sessionId)
     }
 
-    // Get activity data for last N days
+    // Get activity data for last N days (real data from sessions)
     function getActivityData(days: number = 7) {
         const now = new Date()
         const dayLabels = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
@@ -465,33 +465,75 @@ export function useTelemetryData() {
                 s.meta.date_start?.startsWith(dateStr)
             )
 
+            // Sum actual minutes from totalTime (ms -> minutes)
+            let practiceMinutes = 0
+            let qualifyMinutes = 0
+            let raceMinutes = 0
+
+            for (const session of daySessions) {
+                const totalMs = session.summary?.totalTime || 0
+                const minutes = Math.round(totalMs / 60000)
+
+                switch (session.meta.session_type) {
+                    case SESSION_TYPES.PRACTICE:
+                        practiceMinutes += minutes
+                        break
+                    case SESSION_TYPES.QUALIFY:
+                        qualifyMinutes += minutes
+                        break
+                    case SESSION_TYPES.RACE:
+                        raceMinutes += minutes
+                        break
+                }
+            }
+
             activity.push({
                 day: dayLabels[date.getDay()],
-                practice: daySessions.filter(s => s.meta.session_type === SESSION_TYPES.PRACTICE).length,
-                qualify: daySessions.filter(s => s.meta.session_type === SESSION_TYPES.QUALIFY).length,
-                race: daySessions.filter(s => s.meta.session_type === SESSION_TYPES.RACE).length
+                practice: practiceMinutes,
+                qualify: qualifyMinutes,
+                race: raceMinutes
             })
         }
 
         return activity
     }
 
-    // Calculate totals for activity summary
+    // Calculate totals for activity summary (real durations)
     const activityTotals = computed(() => {
-        const data = getActivityData(7)
-        return {
-            practice: {
-                minutes: data.reduce((sum, d) => sum + d.practice * 15, 0), // Estimate 15min per session
-                sessions: data.reduce((sum, d) => sum + d.practice, 0)
-            },
-            qualify: {
-                minutes: data.reduce((sum, d) => sum + d.qualify * 10, 0),
-                sessions: data.reduce((sum, d) => sum + d.qualify, 0)
-            },
-            race: {
-                minutes: data.reduce((sum, d) => sum + d.race * 25, 0),
-                sessions: data.reduce((sum, d) => sum + d.race, 0)
+        const now = new Date()
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+
+        let practiceMinutes = 0, practiceCount = 0
+        let qualifyMinutes = 0, qualifyCount = 0
+        let raceMinutes = 0, raceCount = 0
+
+        for (const session of sessions.value) {
+            const sessionDate = new Date(session.meta.date_start)
+            if (sessionDate < sevenDaysAgo) continue
+
+            const totalMs = session.summary?.totalTime || 0
+            const minutes = Math.round(totalMs / 60000)
+
+            switch (session.meta.session_type) {
+                case SESSION_TYPES.PRACTICE:
+                    practiceMinutes += minutes
+                    practiceCount++
+                    break
+                case SESSION_TYPES.QUALIFY:
+                    qualifyMinutes += minutes
+                    qualifyCount++
+                    break
+                case SESSION_TYPES.RACE:
+                    raceMinutes += minutes
+                    raceCount++
+                    break
             }
+        }
+
+        return {
+            practice: { minutes: practiceMinutes, sessions: practiceCount },
+            qualify: { minutes: qualifyMinutes, sessions: qualifyCount },
+            race: { minutes: raceMinutes, sessions: raceCount }
         }
     })
 

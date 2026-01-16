@@ -43,6 +43,7 @@ ChartJS.register(
 
 const props = defineProps<{
   trackId: string
+  fromSession?: string
 }>()
 
 const emit = defineEmits<{
@@ -484,7 +485,7 @@ function goToSession(id: string) {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M19 12H5M12 19l-7-7 7-7"/>
       </svg>
-      Torna alle piste
+      {{ props.fromSession ? 'Torna alla sessione' : 'Torna alle piste' }}
     </button>
 
     <!-- Track Header -->
