@@ -162,11 +162,19 @@ const emit = defineEmits<{
   'go-to-track': [trackId: string]
 }>()
 
+// Router for direct navigation
+const router = useRouter()
+
 // Navigation handlers
 const goToTrack = (track: { track: string } | null) => {
   if (!track) return
   const trackId = track.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
+  
+  // Emit for parent component (coach view)
   emit('go-to-track', trackId)
+  
+  // Also navigate directly via router for standalone view
+  router.push(`/piste/${trackId}`)
 }
 </script>
 

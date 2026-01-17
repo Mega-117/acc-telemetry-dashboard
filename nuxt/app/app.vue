@@ -113,6 +113,8 @@ const handleLoginSuccess = (email: string) => {
   appState.value = 'loading'
   setTimeout(() => {
     appState.value = 'dashboard'
+    // Navigate to panoramica as the starting page
+    router.push('/panoramica')
   }, 1500)
 }
 
@@ -127,6 +129,7 @@ const handleRegisterSuccess = (email: string) => {
     appState.value = 'loading'
     setTimeout(() => {
       appState.value = 'dashboard'
+      router.push('/panoramica')
     }, 1500)
   }
 }
@@ -136,6 +139,7 @@ const handleGoToDashboard = () => {
   appState.value = 'loading'
   setTimeout(() => {
     appState.value = 'dashboard'
+    router.push('/panoramica')
   }, 1500)
 }
 
@@ -164,6 +168,9 @@ provide('goToProfile', handleGoToProfile)
 
 <template>
   <div id="app">
+    <!-- Electron Titlebar (only visible in Electron) -->
+    <ElectronTitlebar />
+    
     <NuxtRouteAnnouncer />
 
     <!-- Main Content with Transitions -->
@@ -216,7 +223,7 @@ provide('goToProfile', handleGoToProfile)
 
       <!-- Profile Page -->
       <div v-else-if="appState === 'profile'" key="profile" class="profile-wrapper">
-        <ProfilePage @back="handleBackToDashboard" />
+        <ProfilePage @back="handleBackToDashboard" @logout="handleLogout" />
       </div>
     </Transition>
   </div>
@@ -232,6 +239,11 @@ $color-card: #121218;
 #app {
   min-height: 100vh;
   background: $color-bg;
+}
+
+// When Electron titlebar is visible, add padding to avoid content overlap
+#app:has(.electron-titlebar) {
+  padding-top: 36px;
 }
 
 // === AUTH WRAPPER ===
