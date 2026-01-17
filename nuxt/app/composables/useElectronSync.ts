@@ -85,9 +85,10 @@ export function useElectronSync() {
         }
     }
 
-    // Extract metadata from raw JSON object
+    // Extract metadata from raw JSON object (matches dev-upload.vue logic)
     function extractMetadata(rawObj: any) {
         const sessionInfo = rawObj.session_info || {}
+        const stints = rawObj.stints || []
 
         const meta = {
             track: sessionInfo.track || rawObj.track || 'Unknown',
@@ -98,13 +99,114 @@ export function useElectronSync() {
             driver: sessionInfo.driver || null
         }
 
+        // Track best times by grip
+        type GripBest = {
+            bestQualy: number | null
+            bestQualyTemp: number | null
+            bestRace: number | null
+            bestRaceTemp: number | null
+            bestAvgRace: number | null
+            bestAvgRaceTemp: number | null
+        }
+
+        const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
+        const bestByGrip: Record<string, GripBest> = {}
+
+        gripConditions.forEach(grip => {
+            bestByGrip[grip] = {
+                bestQualy: null, bestQualyTemp: null,
+                bestRace: null, bestRaceTemp: null,
+                bestAvgRace: null, bestAvgRaceTemp: null
+            }
+        })
+
+        // Track overall bests
+        let bestQualyMs: number | null = null
+        let bestQualyConditions: { airTemp: number, roadTemp: number, grip: string } | null = null
+        let bestRaceMs: number | null = null
+        let bestRaceConditions: { airTemp: number, roadTemp: number, grip: string } | null = null
+        let bestAvgRaceMs: number | null = null
+        let bestAvgRaceConditions: { airTemp: number, roadTemp: number, grip: string } | null = null
+
+        stints.forEach((stint: any) => {
+            const isQualy = stint.type === 'Qualify'
+            const laps = stint.laps || []
+
+            laps.forEach((lap: any) => {
+                if (lap.is_valid && !lap.has_pit_stop && lap.lap_time_ms) {
+                    const grip = lap.track_grip_status || 'Unknown'
+                    const airTemp = lap.air_temp || 0
+                    const conditions = { airTemp, roadTemp: lap.road_temp || 0, grip }
+
+                    // Update grip-specific bests
+                    if (bestByGrip[grip]) {
+                        if (isQualy) {
+                            if (!bestByGrip[grip].bestQualy || lap.lap_time_ms < bestByGrip[grip].bestQualy!) {
+                                bestByGrip[grip].bestQualy = lap.lap_time_ms
+                                bestByGrip[grip].bestQualyTemp = airTemp
+                            }
+                        } else {
+                            if (!bestByGrip[grip].bestRace || lap.lap_time_ms < bestByGrip[grip].bestRace!) {
+                                bestByGrip[grip].bestRace = lap.lap_time_ms
+                                bestByGrip[grip].bestRaceTemp = airTemp
+                            }
+                        }
+                    }
+
+                    // Update overall bests
+                    if (isQualy) {
+                        if (!bestQualyMs || lap.lap_time_ms < bestQualyMs) {
+                            bestQualyMs = lap.lap_time_ms
+                            bestQualyConditions = conditions
+                        }
+                    } else {
+                        if (!bestRaceMs || lap.lap_time_ms < bestRaceMs) {
+                            bestRaceMs = lap.lap_time_ms
+                            bestRaceConditions = conditions
+                        }
+                    }
+                }
+            })
+
+            // Best avg race: use stint.avg_clean_lap (only for race stints with >= 5 laps)
+            if (!isQualy && stint.avg_clean_lap && laps.length >= 5) {
+                const firstValidLap = laps.find((l: any) => l.is_valid && !l.has_pit_stop)
+                const grip = firstValidLap?.track_grip_status || laps[0]?.track_grip_status || 'Unknown'
+                const airTemp = firstValidLap?.air_temp || laps[0]?.air_temp || 0
+
+                if (bestByGrip[grip]) {
+                    if (!bestByGrip[grip].bestAvgRace || stint.avg_clean_lap < bestByGrip[grip].bestAvgRace!) {
+                        bestByGrip[grip].bestAvgRace = stint.avg_clean_lap
+                        bestByGrip[grip].bestAvgRaceTemp = airTemp
+                    }
+                }
+
+                if (!bestAvgRaceMs || stint.avg_clean_lap < bestAvgRaceMs) {
+                    bestAvgRaceMs = stint.avg_clean_lap
+                    bestAvgRaceConditions = {
+                        airTemp,
+                        roadTemp: firstValidLap?.road_temp || 0,
+                        grip
+                    }
+                }
+            }
+        })
+
         const summary = {
             laps: sessionInfo.laps_total || rawObj.laps?.length || 0,
             lapsValid: sessionInfo.laps_valid || 0,
             bestLap: sessionInfo.session_best_lap || rawObj.bestLap || null,
             avgCleanLap: sessionInfo.avg_clean_lap || null,
             totalTime: sessionInfo.total_drive_time_ms || 0,
-            stintCount: rawObj.stints?.length || 0
+            stintCount: stints.length || 0,
+            // Best times from stint types
+            best_qualy_ms: bestQualyMs,
+            best_qualy_conditions: bestQualyConditions,
+            best_race_ms: bestRaceMs,
+            best_race_conditions: bestRaceConditions,
+            best_avg_race_ms: bestAvgRaceMs,
+            best_avg_race_conditions: bestAvgRaceConditions,
+            best_by_grip: bestByGrip
         }
 
         return { meta, summary }
@@ -151,17 +253,21 @@ export function useElectronSync() {
             const existing = await getExistingSession(uid, sessionId)
 
             let isUpdate = false
+            let chunksNeedUpdate = true
+
             if (existing) {
-                if ((existing as any).fileHash === fileHash) {
-                    return { status: 'unchanged', fileName, sessionId }
-                }
                 isUpdate = true
-                await deleteOldChunks(uid, sessionId)
+                // Only rewrite chunks if content actually changed
+                if ((existing as any).fileHash === fileHash) {
+                    chunksNeedUpdate = false
+                } else {
+                    await deleteOldChunks(uid, sessionId)
+                }
             }
 
             const chunks = splitIntoChunks(rawText, CHUNK_SIZE)
 
-            // Upload session document
+            // Upload session document (always, to refresh summary)
             const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
             await setDoc(sessionRef, {
                 fileHash,
@@ -179,16 +285,24 @@ export function useElectronSync() {
             const uploadRef = doc(db, `users/${uid}/uploads/${fileHash}`)
             await setDoc(uploadRef, { fileName, uploadedAt: serverTimestamp(), sessionId })
 
-            // Upload chunks
-            for (let idx = 0; idx < chunks.length; idx++) {
-                const chunkRef = doc(db, `users/${uid}/sessions/${sessionId}/rawChunks/${idx}`)
-                await setDoc(chunkRef, { idx, chunk: chunks[idx] })
+            // Upload chunks only if content changed
+            if (chunksNeedUpdate) {
+                for (let idx = 0; idx < chunks.length; idx++) {
+                    const chunkRef = doc(db, `users/${uid}/sessions/${sessionId}/rawChunks/${idx}`)
+                    await setDoc(chunkRef, { idx, chunk: chunks[idx] })
+                }
             }
 
-            console.log(`[SYNC] ${isUpdate ? 'Updated' : 'Created'}: ${fileName} -> ${sessionId}`)
+            // Determine status: created, updated (new content), or refreshed (just summary update)
+            let status: 'created' | 'updated' | 'refreshed' = 'created'
+            if (isUpdate) {
+                status = chunksNeedUpdate ? 'updated' : 'refreshed'
+            }
+
+            console.log(`[SYNC] ${status}: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})`)
 
             return {
-                status: isUpdate ? 'updated' : 'created',
+                status,
                 fileName,
                 sessionId
             }

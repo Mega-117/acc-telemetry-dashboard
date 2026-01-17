@@ -170,6 +170,14 @@ function extractMetadata(rawObj: any) {
     best_by_grip: bestByGrip
   }
 
+  // DEBUG: Log calculated best times
+  console.log('[UPLOAD] Extracted summary:', {
+    track: meta.track,
+    stintCount: stints.length,
+    best_qualy_ms: bestQualyMs,
+    best_race_ms: bestRaceMs
+  })
+
   return { meta, summary }
 }
 

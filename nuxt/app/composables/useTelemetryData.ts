@@ -96,27 +96,30 @@ export interface FullSession {
     ownerEmail: string
 }
 
-// Session type mapping
+// Session type mapping (ACC game values)
+// 0 = Practice, 1 = Qualify, 2 = Race
 export const SESSION_TYPES = {
-    RACE: 0,
+    PRACTICE: 0,
     QUALIFY: 1,
-    PRACTICE: 2
+    RACE: 2
 } as const
 
 export type SessionType = 'race' | 'qualify' | 'practice'
 
 export function getSessionTypeLabel(type: number): SessionType {
     switch (type) {
-        case 0: return 'race'
+        case 0: return 'practice'
         case 1: return 'qualify'
+        case 2: return 'race'
         default: return 'practice'
     }
 }
 
 export function getSessionTypeDisplay(type: number): string {
     switch (type) {
-        case 0: return 'RACE'
+        case 0: return 'PRACTICE'
         case 1: return 'QUALIFY'
+        case 2: return 'RACE'
         default: return 'PRACTICE'
     }
 }

@@ -65,11 +65,12 @@ const sessions = computed<DisplaySession[]>(() => {
       car: formatCarName(s.meta.car),
       laps: s.summary.laps || 0,
       stints: s.summary.stintCount || 1,
-      bestQualy: s.meta.session_type === SESSION_TYPES.QUALIFY 
-        ? formatLapTime(s.summary.bestLap) 
+      // Use stint-based best times (available for any session type with Q/R stints)
+      bestQualy: s.summary.best_qualy_ms 
+        ? formatLapTime(s.summary.best_qualy_ms) 
         : undefined,
-      bestRace: s.meta.session_type === SESSION_TYPES.RACE 
-        ? formatLapTime(s.summary.bestLap) 
+      bestRace: s.summary.best_race_ms 
+        ? formatLapTime(s.summary.best_race_ms) 
         : undefined
     }
   })
