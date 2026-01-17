@@ -8,7 +8,19 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
 // === NUXT ROUTER ===
 const route = useRoute()
+const router = useRouter()
 
+// === SPA REDIRECT HANDLING (GitHub Pages 404 fix) ===
+onMounted(() => {
+  const savedPath = sessionStorage.getItem('spa-redirect-path')
+  if (savedPath) {
+    sessionStorage.removeItem('spa-redirect-path')
+    // Navigate to the saved path after a small delay to let the app initialize
+    setTimeout(() => {
+      router.push(savedPath)
+    }, 100)
+  }
+})
 // === FIREBASE AUTH ===
 const { 
   currentUser, 
