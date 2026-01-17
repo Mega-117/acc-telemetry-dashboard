@@ -12,7 +12,11 @@ const isElectronVisible = ref(false)
 const isMaximized = ref(false)
 
 // Sync composable
-const { isSyncing, syncTelemetryFiles, setupAutoSync } = useElectronSync()
+const { isSyncing, syncTelemetryFiles, setupAutoSync, syncResults } = useElectronSync()
+
+// Notification state
+const showNotification = ref(false)
+const notificationResults = ref<any[]>([])
 
 // Check if running in Electron
 onMounted(async () => {
@@ -40,6 +44,10 @@ const handleSync = async () => {
   console.log('[TITLEBAR] Manual sync triggered')
   const results = await syncTelemetryFiles()
   console.log('[TITLEBAR] Sync complete:', results)
+  
+  // Show notification
+  notificationResults.value = results
+  showNotification.value = true
 }
 
 const handleMinimize = () => {
@@ -53,6 +61,10 @@ const handleMaximize = async () => {
 
 const handleClose = () => {
   (window as any).electronAPI?.windowClose()
+}
+
+const closeNotification = () => {
+  showNotification.value = false
 }
 </script>
 
@@ -103,6 +115,13 @@ const handleClose = () => {
         </svg>
       </button>
     </div>
+    
+    <!-- Sync Notification Banner -->
+    <ElectronSyncNotification 
+      :results="notificationResults" 
+      :visible="showNotification"
+      @close="closeNotification"
+    />
   </div>
 </template>
 
@@ -167,9 +186,15 @@ const handleClose = () => {
     color: #fff;
   }
   
-  &.titlebar-close:hover {
-    background: #e10600;
-    color: #fff;
+  // Close button - larger and extends to edge
+  &.titlebar-close {
+    width: 50px;
+    margin-right: 0;
+    
+    &:hover {
+      background: #e10600;
+      color: #fff;
+    }
   }
   
   // Syncing animation
@@ -178,7 +203,8 @@ const handleClose = () => {
     cursor: wait;
     
     svg {
-      animation: spin 1s linear infinite;
+      animation: spin 0.8s ease-in-out infinite;
+      transform-origin: center center;
     }
   }
   
@@ -189,10 +215,10 @@ const handleClose = () => {
 }
 
 @keyframes spin {
-  from {
+  0% {
     transform: rotate(0deg);
   }
-  to {
+  100% {
     transform: rotate(360deg);
   }
 }

@@ -265,9 +265,12 @@ body:has(.electron-titlebar) {
   // All direct children except titlebar should be in scrollable area
   > *:not(.electron-titlebar) {
     flex: 1;
-    width: 100%;
-    overflow-y: auto;
+    // Force scrollbar to NOT take space - calc trick
+    width: calc(100% + 8px);
+    margin-right: -8px;
+    overflow-y: scroll;
     overflow-x: hidden;
+    padding-right: 8px;
   }
 }
 
@@ -289,12 +292,6 @@ body:has(.electron-titlebar) {
   &:hover {
     background: rgba(255, 255, 255, 0.25);
   }
-}
-
-// Scrollbar position
-#app:has(.electron-titlebar) > *:not(.electron-titlebar) {
-  overflow-y: auto;
-  overflow-x: hidden;
 }
 
 // === AUTH WRAPPER ===
