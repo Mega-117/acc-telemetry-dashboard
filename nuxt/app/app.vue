@@ -240,10 +240,8 @@ $color-card: #121218;
 html, body {
   margin: 0;
   padding: 0;
-  overflow: hidden; // Prevent body scrollbar
   height: 100%;
   width: 100%;
-  scrollbar-gutter: auto; // No extra space reserved for scrollbar
 }
 
 #app {
@@ -254,6 +252,11 @@ html, body {
 }
 
 // When Electron titlebar is visible, make content scrollable below it
+html:has(.electron-titlebar),
+body:has(.electron-titlebar) {
+  overflow: hidden;
+}
+
 #app:has(.electron-titlebar) {
   height: 100vh;
   width: 100vw;
