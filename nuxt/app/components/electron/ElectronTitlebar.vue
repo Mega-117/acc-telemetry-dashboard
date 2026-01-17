@@ -6,21 +6,28 @@
 // It provides: Refresh, Sync, Minimize, Maximize, Close buttons
 
 import { ref, onMounted } from 'vue'
+import { useElectronSync } from '~/composables/useElectronSync'
 
-const isElectron = ref(false)
+const isElectronVisible = ref(false)
 const isMaximized = ref(false)
+
+// Sync composable
+const { isSyncing, syncTelemetryFiles, setupAutoSync } = useElectronSync()
 
 // Check if running in Electron
 onMounted(async () => {
-  isElectron.value = !!(window as any).electronAPI
+  isElectronVisible.value = !!(window as any).electronAPI
   
-  if (isElectron.value) {
+  if (isElectronVisible.value) {
     // Check initial maximized state
     try {
       isMaximized.value = await (window as any).electronAPI.windowIsMaximized()
     } catch (e) {
       console.log('[TITLEBAR] Could not get maximized state')
     }
+    
+    // Setup auto-sync for file changes
+    setupAutoSync()
   }
 })
 
@@ -30,12 +37,9 @@ const handleRefresh = () => {
 }
 
 const handleSync = async () => {
-  try {
-    const result = await (window as any).electronAPI?.checkForChanges()
-    console.log('[TITLEBAR] Sync result:', result)
-  } catch (e) {
-    console.error('[TITLEBAR] Sync error:', e)
-  }
+  console.log('[TITLEBAR] Manual sync triggered')
+  const results = await syncTelemetryFiles()
+  console.log('[TITLEBAR] Sync complete:', results)
 }
 
 const handleMinimize = () => {
@@ -53,7 +57,7 @@ const handleClose = () => {
 </script>
 
 <template>
-  <div v-if="isElectron" class="electron-titlebar">
+  <div v-if="isElectronVisible" class="electron-titlebar">
     <div class="titlebar-drag-region">
       <span class="titlebar-title">ACC Telemetry Dashboard</span>
     </div>
@@ -66,7 +70,13 @@ const handleClose = () => {
           <path d="M21 3v5h-5" />
         </svg>
       </button>
-      <button class="titlebar-btn" title="Sincronizza file" @click="handleSync">
+      <button 
+        class="titlebar-btn" 
+        :class="{ 'syncing': isSyncing }"
+        :title="isSyncing ? 'Sincronizzazione in corso...' : 'Sincronizza file'"
+        :disabled="isSyncing"
+        @click="handleSync"
+      >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M23 4v6h-6" />
           <path d="M1 20v-6h6" />
@@ -160,6 +170,30 @@ const handleClose = () => {
   &.titlebar-close:hover {
     background: #e10600;
     color: #fff;
+  }
+  
+  // Syncing animation
+  &.syncing {
+    color: #00ff88;
+    cursor: wait;
+    
+    svg {
+      animation: spin 1s linear infinite;
+    }
+  }
+  
+  &:disabled {
+    opacity: 0.7;
+    cursor: wait;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
   }
 }
 </style>
