@@ -34,7 +34,7 @@ import {
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
 const props = defineProps<{ sessionId: string }>()
-const emit = defineEmits<{ back: [], 'open-track': [trackId: string] }>()
+const emit = defineEmits<{ back: [], 'go-to-track': [trackId: string] }>()
 
 const showDetailedLaps = ref(false)
 
@@ -96,14 +96,17 @@ const fullSession = ref<FullSession | null>(null)
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
 
+// Get pilot context (will be set when coach views a pilot)
+const targetUserId = usePilotContext()
+
 onMounted(async () => {
   isLoading.value = true
   loadError.value = null
   try {
     // Load sessions first to populate trackStats (needed for theoretical times)
-    await loadSessions()
+    await loadSessions(targetUserId.value || undefined)
     
-    const data = await fetchSessionFull(props.sessionId)
+    const data = await fetchSessionFull(props.sessionId, targetUserId.value || undefined)
     if (data) {
       fullSession.value = data
       console.log('[SESSION_DETAIL] Loaded session:', data.session_info.track, data.stints.length, 'stints')
@@ -499,7 +502,8 @@ const stintConditions = computed(() => {
   let maxCount = 0
   
   for (const grip of gripOrder) {  // Iterate in first-occurrence order
-    const count = gripCounts[grip]
+    const count = gripCounts[grip] || 0
+    if (count === 0) continue
     const pct = Math.round((count / validGripLaps) * 100)
     percentages.push({ grip, pct })
     if (count > maxCount) {
@@ -1024,7 +1028,7 @@ const gripZones = computed(() => {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
         Torna alle sessioni
       </button>
-      <button class="nav-btn nav-btn--accent" @click="emit('open-track', session.trackId)">
+      <button class="nav-btn nav-btn--accent" @click="emit('go-to-track', session.trackId)">
         Apri pista
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </button>

@@ -51,6 +51,14 @@ export interface SessionSummary {
     avgCleanLap: number | null
     totalTime: number
     stintCount: number
+    // Optional grip-specific best times
+    best_qualy_ms?: number
+    best_race_ms?: number
+    best_avg_race_ms?: number
+    best_qualy_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
+    best_race_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
+    best_avg_race_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
+    best_by_grip?: Record<string, any>
 }
 
 export interface SessionDocument {
@@ -371,6 +379,7 @@ export function useTelemetryData() {
                     if (!sessionGrip) continue
 
                     const trackGrip = stats[track].bestByGrip[grip]
+                    if (!trackGrip) continue
 
                     // Update best qualy for this grip
                     if (sessionGrip.bestQualy) {
@@ -454,12 +463,12 @@ export function useTelemetryData() {
     // Get activity data for last N days (real data from sessions)
     function getActivityData(days: number = 7) {
         const now = new Date()
-        const dayLabels = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
+        const dayLabels: string[] = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
         const activity: { day: string; practice: number; qualify: number; race: number }[] = []
 
         for (let i = days - 1; i >= 0; i--) {
             const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
-            const dateStr = date.toISOString().split('T')[0]
+            const dateStr = date.toISOString().split('T')[0] || ''
 
             const daySessions = sessions.value.filter(s =>
                 s.meta.date_start?.startsWith(dateStr)
@@ -488,7 +497,7 @@ export function useTelemetryData() {
             }
 
             activity.push({
-                day: dayLabels[date.getDay()],
+                day: dayLabels[date.getDay()] || 'N/A',
                 practice: practiceMinutes,
                 qualify: qualifyMinutes,
                 race: raceMinutes

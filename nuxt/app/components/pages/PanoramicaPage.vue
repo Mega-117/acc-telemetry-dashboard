@@ -157,11 +157,16 @@ const prevTrackImage = computed(() => {
   return imagePath ? getPublicPath(imagePath) : monzaImg
 })
 
+// Emit to parent for navigation (used when in coach pilot view)
+const emit = defineEmits<{
+  'go-to-track': [trackId: string]
+}>()
+
 // Navigation handlers
 const goToTrack = (track: { track: string } | null) => {
   if (!track) return
   const trackId = track.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
-  navigateTo(`/piste/${trackId}`)
+  emit('go-to-track', trackId)
 }
 </script>
 

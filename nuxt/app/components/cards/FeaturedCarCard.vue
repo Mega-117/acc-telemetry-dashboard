@@ -12,7 +12,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="featured-car" @click="$emit('click')">
+  <div class="featured-car">
     <!-- Car Image Container -->
     <div class="car-image-container">
       <!-- Placeholder image using gradient as fallback -->

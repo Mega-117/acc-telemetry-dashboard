@@ -99,13 +99,6 @@ defineProps<{
             </svg>
           </div>
         </div>
-        <!-- CTA Button at bottom right -->
-        <button class="cta-button" title="Vedi sessioni" @click.stop="$emit('cta-click')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 12h14"/>
-            <path d="M12 5l7 7-7 7"/>
-          </svg>
-        </button>
       </div>
     </div>
     
@@ -303,41 +296,6 @@ defineProps<{
   filter: drop-shadow(0 2px 4px rgba(141, 110, 99, 0.3));
 }
 
-// === CTA BUTTON (inside track-right, at bottom) ===
-.cta-button {
-  align-self: flex-end;
-  margin-top: 8px;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  backdrop-filter: blur(8px);
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  svg {
-    width: 18px;
-    height: 18px;
-    color: rgba(255, 255, 255, 0.8);
-    transition: color 0.2s ease;
-  }
-
-  &:hover {
-    background: rgba($racing-red, 0.7);
-    border-color: rgba($racing-red, 0.8);
-    box-shadow: 0 0 20px rgba($racing-red, 0.4);
-    transform: scale(1.05);
-
-    svg {
-      color: #fff;
-    }
-  }
-}
 
 // === ACCENT GLOW ===
 .accent-glow {

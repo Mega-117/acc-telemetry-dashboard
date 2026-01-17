@@ -30,6 +30,11 @@ const pilot = ref<PilotData | null>(null)
 const isLoading = ref(true)
 const activeTab = ref<'panoramica' | 'sessioni' | 'piste'>('panoramica')
 
+// Detail view state (inline navigation within pilot context)
+const detailView = ref<'none' | 'track' | 'session'>('none')
+const selectedTrackId = ref<string | null>(null)
+const selectedSessionId = ref<string | null>(null)
+
 // Pilot navigation tabs
 const pilotTabs = [
   { id: 'panoramica', label: 'PANORAMICA' },
@@ -58,6 +63,27 @@ const pilotName = computed(() => {
   }
   return pilot.value?.nickname || 'Pilota'
 })
+
+// === NAVIGATION HANDLERS ===
+// Handle navigation within pilot context (don't leave pilot view)
+
+function handleGoToTrack(trackId: string) {
+  selectedTrackId.value = trackId
+  selectedSessionId.value = null
+  detailView.value = 'track'
+}
+
+function handleGoToSession(sessionId: string) {
+  selectedSessionId.value = sessionId
+  selectedTrackId.value = null
+  detailView.value = 'session'
+}
+
+function goBackToList() {
+  detailView.value = 'none'
+  selectedTrackId.value = null
+  selectedSessionId.value = null
+}
 </script>
 
 <template>
@@ -80,8 +106,8 @@ const pilotName = computed(() => {
       </div>
     </div>
 
-    <!-- Pilot Sub-Tabs -->
-    <nav class="pilot-tabs">
+    <!-- Pilot Sub-Tabs (hidden when showing detail view) -->
+    <nav v-if="detailView === 'none'" class="pilot-tabs">
       <button 
         v-for="tab in pilotTabs" 
         :key="tab.id"
@@ -93,25 +119,55 @@ const pilotName = computed(() => {
       </button>
     </nav>
 
+    <!-- Back button for detail views -->
+    <div v-if="detailView !== 'none'" class="detail-back-bar">
+      <button class="detail-back-btn" @click="goBackToList">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Torna a {{ activeTab === 'panoramica' ? 'Panoramica' : activeTab === 'sessioni' ? 'Sessioni' : 'Piste' }}
+      </button>
+    </div>
+
     <!-- Content Area -->
     <div class="pilot-content">
       <div v-if="isLoading" class="loading">Caricamento...</div>
       
       <template v-else>
-        <!-- Panoramica -->
-        <div v-if="activeTab === 'panoramica'" class="tab-content">
-          <PagesPanoramicaPage />
-        </div>
+        <!-- Show detail views when selected -->
+        <template v-if="detailView === 'track' && selectedTrackId">
+          <PagesTrackDetailPage 
+            :track-id="selectedTrackId" 
+            @back="goBackToList"
+            @go-to-session="handleGoToSession" 
+          />
+        </template>
 
-        <!-- Sessioni -->
-        <div v-if="activeTab === 'sessioni'" class="tab-content">
-          <PagesSessioniPage />
-        </div>
+        <template v-else-if="detailView === 'session' && selectedSessionId">
+          <PagesSessionDetailPage 
+            :session-id="selectedSessionId" 
+            @back="goBackToList"
+            @go-to-track="handleGoToTrack" 
+          />
+        </template>
 
-        <!-- Piste -->
-        <div v-if="activeTab === 'piste'" class="tab-content">
-          <PagesPistePage />
-        </div>
+        <!-- Show main tab content when no detail selected -->
+        <template v-else>
+          <!-- Panoramica -->
+          <div v-if="activeTab === 'panoramica'" class="tab-content">
+            <PagesPanoramicaPage @go-to-track="handleGoToTrack" />
+          </div>
+
+          <!-- Sessioni -->
+          <div v-if="activeTab === 'sessioni'" class="tab-content">
+            <PagesSessioniPage @go-to-session="handleGoToSession" />
+          </div>
+
+          <!-- Piste -->
+          <div v-if="activeTab === 'piste'" class="tab-content">
+            <PagesPistePage @go-to-track="handleGoToTrack" />
+          </div>
+        </template>
       </template>
     </div>
   </div>
@@ -220,5 +276,36 @@ const pilotName = computed(() => {
   text-align: center;
   padding: 60px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+// === DETAIL BACK BAR ===
+.detail-back-bar {
+  margin-bottom: 16px;
+}
+
+.detail-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: $font-primary;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #fff;
+  }
+
+  svg {
+    flex-shrink: 0;
+  }
 }
 </style>

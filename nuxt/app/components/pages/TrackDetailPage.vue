@@ -25,8 +25,7 @@ import {
   formatCarName,
   formatTrackName,
   formatDate,
-  getSessionTypeLabel,
-  type TelemetrySession
+  getSessionTypeLabel
 } from '~/composables/useTelemetryData'
 
 // Register Chart.js components
@@ -48,7 +47,11 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   back: []
+  'go-to-session': [sessionId: string]
 }>()
+
+// Get pilot context (will be set when coach views a pilot)
+const targetUserId = usePilotContext()
 
 // ========================================
 // FIREBASE DATA LOADING
@@ -56,7 +59,7 @@ const emit = defineEmits<{
 const { sessions, trackStats, isLoading, loadSessions } = useTelemetryData()
 
 onMounted(async () => {
-  await loadSessions()
+  await loadSessions(targetUserId.value || undefined)
 })
 
 // Filter sessions for this track
@@ -172,7 +175,7 @@ const recentSessions = computed<Session[]>(() => {
   return trackSessions.value.map(s => {
     const sessionType = getSessionTypeLabel(s.meta.session_type) as SessionType
     const dateObj = new Date(s.meta.date_start)
-    const summary = s.summary || {} as any
+    const summary = s.summary || {}
     
     // Determine Q/R times: use specific fields if available, otherwise use bestLap based on session_type
     // session_type: 0=Race, 1=Qualify, 2=Practice (has both Q and R stints)
@@ -203,7 +206,7 @@ const recentSessions = computed<Session[]>(() => {
     
     return {
       id: s.sessionId,
-      date: s.meta.date_start.split('T')[0],
+      date: s.meta.date_start?.split('T')[0] || '',
       time: dateObj.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
       type: sessionType,
       car: formatCarName(s.meta.car),
@@ -354,7 +357,8 @@ const chartJsData = computed(() => {
         pointBackgroundColor: '#f0b400',
         pointBorderColor: '#f0b400',
         tension: 0.3,
-        fill: false
+        fill: false,
+        spanGaps: false
       },
       {
         label: 'Best Race',
@@ -367,7 +371,8 @@ const chartJsData = computed(() => {
         pointBackgroundColor: '#ff6464',
         pointBorderColor: '#ff6464',
         tension: 0.3,
-        fill: false
+        fill: false,
+        spanGaps: false
       }
     ]
   }
@@ -471,10 +476,9 @@ function getTypeLabel(type: SessionType): string {
   return labels[type]
 }
 
-// Navigate to session detail
-const router = useRouter()
+// Navigate to session detail via emit (for pilot context)
 function goToSession(id: string) {
-  router.push(`/sessioni/${id}`)
+  emit('go-to-session', id)
 }
 </script>
 
