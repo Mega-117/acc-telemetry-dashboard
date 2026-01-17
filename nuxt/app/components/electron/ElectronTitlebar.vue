@@ -98,10 +98,9 @@ const handleClose = () => {
 
 <style lang="scss" scoped>
 .electron-titlebar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
   height: 36px;
   background: #0a0a0f;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -117,6 +116,7 @@ const handleClose = () => {
   align-items: center;
   padding-left: 12px;
   height: 100%;
+  min-width: 0; // Allow shrinking
 }
 
 .titlebar-title {
@@ -125,18 +125,19 @@ const handleClose = () => {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.7);
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 
 .titlebar-buttons-left,
 .titlebar-buttons-right {
   display: flex;
+  flex-shrink: 0;
   height: 100%;
   -webkit-app-region: no-drag;
 }
 
 .titlebar-buttons-left {
-  margin-left: auto;
-  margin-right: 8px;
+  margin-right: 4px;
 }
 
 .titlebar-btn {

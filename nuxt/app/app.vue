@@ -236,14 +236,62 @@ $color-racing-orange: #ff6b00;
 $color-bg: #0d0d12;
 $color-card: #121218;
 
+// Base app styles
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden; // Prevent body scrollbar
+  height: 100%;
+  width: 100%;
+  scrollbar-gutter: auto; // No extra space reserved for scrollbar
+}
+
 #app {
   min-height: 100vh;
   background: $color-bg;
+  display: flex;
+  flex-direction: column;
 }
 
-// When Electron titlebar is visible, add padding to avoid content overlap
+// When Electron titlebar is visible, make content scrollable below it
 #app:has(.electron-titlebar) {
-  padding-top: 36px;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  
+  // All direct children except titlebar should be in scrollable area
+  > *:not(.electron-titlebar) {
+    flex: 1;
+    width: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+}
+
+// === CUSTOM SCROLLBAR STYLING ===
+// Webkit scrollbar styling (Chrome/Electron)
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.25);
+  }
+}
+
+// Scrollbar position
+#app:has(.electron-titlebar) > *:not(.electron-titlebar) {
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 // === AUTH WRAPPER ===
