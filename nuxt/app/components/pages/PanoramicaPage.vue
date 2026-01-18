@@ -138,11 +138,30 @@ const prevTrackBestRace = computed(() => {
 
 // Track images - use static mapping, fallback to default
 const trackImages: Record<string, string> = {
-  spa: '/tracks/track_spa.png',
   monza: '/tracks/track_monza.png',
   donington: '/tracks/track_donington.png',
-  suzuka: '/tracks/track_suzuka.png',
+  spa: '/tracks/track_spa.png',
+  paul_ricard: '/tracks/track_paul_ricard.png',
   valencia: '/tracks/track_valencia.png',
+  barcelona: '/tracks/track_barcelona.png',
+  brands_hatch: '/tracks/track_brands_hatch.png',
+  hungaroring: '/tracks/track_hungaroring.png',
+  imola: '/tracks/track_imola.png',
+  kyalami: '/tracks/track_kyalami.png',
+  laguna_seca: '/tracks/track_laguna_seca.png',
+  misano: '/tracks/track_misano.png',
+  mount_panorama: '/tracks/track_mount_panorama.png',
+  nurburgring: '/tracks/track_nurburgring.png',
+  oulton_park: '/tracks/track_oulton_park.png',
+  silverstone: '/tracks/track_silverstone.png',
+  snetterton: '/tracks/track_snetterton.png',
+  suzuka: '/tracks/track_suzuka.png',
+  watkins_glen: '/tracks/track_watkins_glen.png',
+  zandvoort: '/tracks/track_zandvoort.png',
+  zolder: '/tracks/track_zolder.png',
+  cota: '/tracks/track_cota.png',
+  indianapolis: '/tracks/track_indianapolis.png',
+  red_bull_ring: '/tracks/track_red_bull_ring.png',
 }
 
 const lastTrackImage = computed(() => {

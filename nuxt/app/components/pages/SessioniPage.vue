@@ -34,6 +34,7 @@ interface DisplaySession {
   track: string
   car: string
   laps: number
+  lapsValid: number
   stints: number
   bestQualy?: string
   bestRace?: string
@@ -64,6 +65,7 @@ const sessions = computed<DisplaySession[]>(() => {
       track: formatTrackName(s.meta.track),
       car: formatCarName(s.meta.car),
       laps: s.summary.laps || 0,
+      lapsValid: s.summary.lapsValid || 0,
       stints: s.summary.stintCount || 1,
       // Use stint-based best times (available for any session type with Q/R stints)
       bestQualy: s.summary.best_qualy_ms 
@@ -81,6 +83,7 @@ const filterType = ref<'all' | SessionType>('all')
 const filterTrack = ref('all')
 const filterCar = ref('all')
 const filterTimeRange = ref<'today' | '7d' | '30d' | 'all'>('all')
+const filterHideEmpty = ref(false) // Hide sessions with 0 valid laps (off by default)
 
 // === VIEW MODE ===
 type ViewMode = 'list' | 'card'
@@ -93,6 +96,9 @@ const cars = computed(() => [...new Set(sessions.value.map(s => s.car))].sort())
 // Filtered sessions
 const filteredSessions = computed(() => {
   return sessions.value.filter(session => {
+    // Hide empty sessions (0 valid laps)
+    if (filterHideEmpty.value && session.lapsValid === 0) return false
+    
     // Type filter
     if (filterType.value !== 'all' && session.type !== filterType.value) return false
     
@@ -283,6 +289,19 @@ function goToSession(id: string) {
               @click="filterTimeRange = 'all'"
             >Tutto</button>
           </div>
+        </div>
+        
+        <!-- Hide empty sessions toggle -->
+        <div class="filter-group filter-group--toggle">
+          <label class="toggle-label">
+            <input 
+              type="checkbox" 
+              v-model="filterHideEmpty"
+              class="toggle-checkbox"
+            />
+            <span class="toggle-switch"></span>
+            <span class="toggle-text">Nascondi vuote</span>
+          </label>
         </div>
       </div>
       
@@ -550,6 +569,61 @@ function goToSession(id: string) {
 .filter-group {
   display: flex;
   align-items: center;
+  
+  &--toggle {
+    margin-left: 8px;
+  }
+}
+
+// Toggle switch for filtering
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-checkbox {
+  display: none;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  transition: background 0.2s ease;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    background: rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    transition: all 0.2s ease;
+  }
+}
+
+.toggle-checkbox:checked + .toggle-switch {
+  background: rgba($racing-red, 0.4);
+  
+  &::after {
+    left: 18px;
+    background: $racing-red;
+  }
+}
+
+.toggle-text {
+  font-family: $font-primary;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.2px;
 }
 
 // Segmented control
