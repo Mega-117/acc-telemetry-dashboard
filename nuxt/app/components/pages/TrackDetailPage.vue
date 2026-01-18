@@ -290,16 +290,23 @@ const historicalTimes = computed<HistoricalTime[]>(() => {
     const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
     const dateLabel = day && month ? `${parseInt(day)} ${months[parseInt(month) - 1]}` : 'N/A'
     
-    // Get Q time: use best_qualy_ms or fallback to bestLap for Qualify sessions
+    // Use same logic as recentSessions for consistency
     let qualyTime: number | null = summary?.best_qualy_ms || null
-    if (!qualyTime && s.meta.session_type === 1 && summary?.bestLap) {
-      qualyTime = summary.bestLap
-    }
-    
-    // Get R time: use best_race_ms or fallback to bestLap for Race/Practice sessions
     let raceTime: number | null = summary?.best_race_ms || null
-    if (!raceTime && (s.meta.session_type === 0 || s.meta.session_type === 2) && summary?.bestLap) {
-      raceTime = summary.bestLap
+    
+    // Fallback: use bestLap based on session type (same as recentSessions)
+    if (!qualyTime && !raceTime && summary?.bestLap) {
+      const sessionType = s.meta.session_type
+      if (sessionType === 1) {
+        // Qualify session - assign to Q
+        qualyTime = summary.bestLap
+      } else if (sessionType === 0) {
+        // Race session - assign to R
+        raceTime = summary.bestLap
+      } else {
+        // Practice (2) - default to R for best lap
+        raceTime = summary.bestLap
+      }
     }
     
     return {
@@ -330,25 +337,33 @@ function secondsToTimeString(seconds: number): string {
   return `${mins}:${secs.padStart(6, '0')}`
 }
 
-// Chart.js data configuration
+// Chart.js data configuration - Using Scatter format for independent lines
 const chartJsData = computed(() => {
   const times = historicalTimes.value
   
-  // Labels (dates) - already formatted in historicalTimes
+  // Create separate point arrays - each with {x: index, y: value}
+  // Only include points where we have actual data
+  const qualyPoints: {x: number, y: number, label: string}[] = []
+  const racePoints: {x: number, y: number, label: string}[] = []
+  
+  times.forEach((t, index) => {
+    if (t.bestQualy) {
+      qualyPoints.push({ x: index, y: timeToSeconds(t.bestQualy), label: t.date })
+    }
+    if (t.bestRace) {
+      racePoints.push({ x: index, y: timeToSeconds(t.bestRace), label: t.date })
+    }
+  })
+  
+  // Labels for X axis - all dates
   const labels = times.map(t => t.date)
-  
-  // Qualifying times (convert to seconds for Y axis)
-  const qualyData = times.map(t => t.bestQualy ? timeToSeconds(t.bestQualy) : null)
-  
-  // Race times
-  const raceData = times.map(t => t.bestRace ? timeToSeconds(t.bestRace) : null)
   
   return {
     labels,
     datasets: [
       {
         label: 'Best Qualifying',
-        data: qualyData,
+        data: qualyPoints,
         borderColor: '#f0b400',
         backgroundColor: 'rgba(240, 180, 0, 0.1)',
         borderWidth: 2.5,
@@ -356,13 +371,13 @@ const chartJsData = computed(() => {
         pointHoverRadius: 7,
         pointBackgroundColor: '#f0b400',
         pointBorderColor: '#f0b400',
-        tension: 0.3,
+        tension: 0,
         fill: false,
-        spanGaps: false
+        showLine: true
       },
       {
         label: 'Best Race',
-        data: raceData,
+        data: racePoints,
         borderColor: '#ff6464',
         backgroundColor: 'rgba(255, 100, 100, 0.1)',
         borderWidth: 2.5,
@@ -370,9 +385,9 @@ const chartJsData = computed(() => {
         pointHoverRadius: 7,
         pointBackgroundColor: '#ff6464',
         pointBorderColor: '#ff6464',
-        tension: 0.3,
+        tension: 0,
         fill: false,
-        spanGaps: false
+        showLine: true
       }
     ]
   }
@@ -384,15 +399,18 @@ const chartOptions = computed(() => {
   const qualyTimes = times.filter(t => t.bestQualy).map(t => timeToSeconds(t.bestQualy!))
   const raceTimes = times.filter(t => t.bestRace).map(t => timeToSeconds(t.bestRace!))
   const allTimes = [...qualyTimes, ...raceTimes]
-  const minTime = Math.min(...allTimes) - 0.5
-  const maxTime = Math.max(...allTimes) + 0.5
+  const minTime = allTimes.length > 0 ? Math.min(...allTimes) - 0.5 : 0
+  const maxTime = allTimes.length > 0 ? Math.max(...allTimes) + 0.5 : 120
+  
+  // Labels for X axis tick display
+  const labels = times.map(t => t.date)
   
   return {
     responsive: true,
     maintainAspectRatio: false,
     interaction: {
       intersect: false,
-      mode: 'index' as const
+      mode: 'nearest' as const
     },
     plugins: {
       legend: {
@@ -418,9 +436,14 @@ const chartOptions = computed(() => {
         cornerRadius: 8,
         padding: 12,
         callbacks: {
+          title: function(context: any) {
+            // Get date label from the raw data point
+            const point = context[0]?.raw
+            return point?.label || labels[context[0]?.parsed?.x] || ''
+          },
           label: function(context: any) {
             const value = context.parsed.y
-            if (value === null) return ''
+            if (value === null || value === undefined) return ''
             return `${context.dataset.label}: ${secondsToTimeString(value)}`
           }
         }
@@ -428,6 +451,9 @@ const chartOptions = computed(() => {
     },
     scales: {
       x: {
+        type: 'linear' as const,
+        min: -0.5,
+        max: times.length - 0.5,
         grid: {
           color: 'rgba(255, 255, 255, 0.06)',
           drawBorder: false
@@ -437,6 +463,10 @@ const chartOptions = computed(() => {
           font: {
             family: "'Inter', sans-serif",
             size: 11
+          },
+          stepSize: 1,
+          callback: function(value: number) {
+            return labels[Math.round(value)] || ''
           }
         }
       },

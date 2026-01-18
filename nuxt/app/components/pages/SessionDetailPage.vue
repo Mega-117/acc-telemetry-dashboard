@@ -609,7 +609,7 @@ const chartData = computed(() => {
       pointBorderColor: pointBorderColors,
       pointBorderWidth: pointBorderWidths,
       pointRadius: 5,
-      tension: 0.2,
+      tension: 0,
       order: 1
     },
     {
@@ -677,15 +677,12 @@ const chartData = computed(() => {
       backgroundColor: 'rgba(139,92,246,0.1)',
       pointBackgroundColor: lapsB.map(l => l.pit ? '#6b7280' : !l.valid ? '#ef4444' : '#8b5cf6'),
       pointRadius: 5,
-      tension: 0.2
+      tension: 0
     })
   }
   
-  // Use max laps for X axis labels
-  const maxLaps = isCompareMode.value 
-    ? Math.max(lapsA.length, compareStintBLaps.value.length)
-    : lapsA.length
-  const labels = Array.from({ length: maxLaps }, (_, i) => `G${i + 1}`)
+  // Use actual lap numbers from data for X axis labels
+  const labels = lapsA.map(lap => `G${lap.lap}`)
   
   return { labels, datasets }
 })

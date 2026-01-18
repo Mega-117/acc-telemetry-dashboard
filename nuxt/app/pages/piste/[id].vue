@@ -14,6 +14,10 @@ function handleBack() {
     navigateTo('/piste')
   }
 }
+
+function handleGoToSession(sessionId: string) {
+  navigateTo(`/sessioni/${sessionId}`)
+}
 </script>
 
 <template>
@@ -21,5 +25,6 @@ function handleBack() {
     :track-id="trackId"
     :from-session="fromSession"
     @back="handleBack"
+    @go-to-session="handleGoToSession"
   />
 </template>

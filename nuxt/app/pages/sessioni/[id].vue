@@ -11,6 +11,6 @@ const sessionId = computed(() => route.params.id as string)
   <PagesSessionDetailPage 
     :session-id="sessionId" 
     @back="navigateTo('/sessioni')"
-    @open-track="(trackId: string) => navigateTo(`/piste/${trackId}?from=${sessionId}`)"
+    @go-to-track="(trackId: string) => navigateTo(`/piste/${trackId}?from=${sessionId}`)"
   />
 </template>
