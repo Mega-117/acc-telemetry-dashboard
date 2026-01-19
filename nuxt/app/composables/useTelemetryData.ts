@@ -199,7 +199,202 @@ export function useTelemetryData() {
 
     const { currentUser } = useFirebaseAuth()
 
-    // Load session metadata for a user from Firestore
+    // Check if running in Electron
+    const isElectron = computed(() => {
+        if (typeof window === 'undefined') return false
+        return !!(window as any).electronAPI
+    })
+
+    // Helper: Generate session ID from date_start and track
+    function generateSessionId(dateStart: string, track: string): string {
+        const base = `${dateStart}_${track}`.replace(/[^a-zA-Z0-9]/g, '_')
+        return base.substring(0, 100)
+    }
+
+    // Helper: Extract metadata from raw session object (reused from useElectronSync logic)
+    function extractMetadata(rawObj: any): { meta: SessionMeta; summary: SessionSummary } {
+        const sessionInfo = rawObj.session_info || {}
+        const stints = rawObj.stints || []
+
+        const meta: SessionMeta = {
+            track: sessionInfo.track || rawObj.track || 'Unknown',
+            date_start: sessionInfo.date_start || rawObj.date || new Date().toISOString(),
+            date_end: sessionInfo.date_end || null,
+            car: sessionInfo.car_model || sessionInfo.car || rawObj.car || '',
+            session_type: sessionInfo.session_type ?? 0,
+            driver: sessionInfo.driver || null
+        }
+
+        // Track best times by grip
+        const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
+        const bestByGrip: Record<string, any> = {}
+        gripConditions.forEach(grip => {
+            bestByGrip[grip] = {
+                bestQualy: null, bestQualyTemp: null,
+                bestRace: null, bestRaceTemp: null,
+                bestAvgRace: null, bestAvgRaceTemp: null
+            }
+        })
+
+        let bestQualyMs: number | null = null
+        let bestQualyConditions: any = null
+        let bestRaceMs: number | null = null
+        let bestRaceConditions: any = null
+        let bestAvgRaceMs: number | null = null
+        let bestAvgRaceConditions: any = null
+
+        stints.forEach((stint: any) => {
+            const isQualy = stint.type === 'Qualify'
+            const laps = stint.laps || []
+
+            laps.forEach((lap: any) => {
+                if (lap.is_valid && !lap.has_pit_stop && lap.lap_time_ms) {
+                    const grip = lap.track_grip_status || 'Unknown'
+                    const airTemp = lap.air_temp || 0
+                    const conditions = { airTemp, roadTemp: lap.road_temp || 0, grip }
+
+                    if (bestByGrip[grip]) {
+                        if (isQualy) {
+                            if (!bestByGrip[grip].bestQualy || lap.lap_time_ms < bestByGrip[grip].bestQualy) {
+                                bestByGrip[grip].bestQualy = lap.lap_time_ms
+                                bestByGrip[grip].bestQualyTemp = airTemp
+                            }
+                        } else {
+                            if (!bestByGrip[grip].bestRace || lap.lap_time_ms < bestByGrip[grip].bestRace) {
+                                bestByGrip[grip].bestRace = lap.lap_time_ms
+                                bestByGrip[grip].bestRaceTemp = airTemp
+                            }
+                        }
+                    }
+
+                    if (isQualy) {
+                        if (!bestQualyMs || lap.lap_time_ms < bestQualyMs) {
+                            bestQualyMs = lap.lap_time_ms
+                            bestQualyConditions = conditions
+                        }
+                    } else {
+                        if (!bestRaceMs || lap.lap_time_ms < bestRaceMs) {
+                            bestRaceMs = lap.lap_time_ms
+                            bestRaceConditions = conditions
+                        }
+                    }
+                }
+            })
+
+            // Best avg race from stint
+            if (!isQualy && stint.avg_clean_lap && laps.length >= 5) {
+                const firstValidLap = laps.find((l: any) => l.is_valid && !l.has_pit_stop)
+                const grip = firstValidLap?.track_grip_status || laps[0]?.track_grip_status || 'Unknown'
+                const airTemp = firstValidLap?.air_temp || laps[0]?.air_temp || 0
+
+                if (bestByGrip[grip]) {
+                    if (!bestByGrip[grip].bestAvgRace || stint.avg_clean_lap < bestByGrip[grip].bestAvgRace) {
+                        bestByGrip[grip].bestAvgRace = stint.avg_clean_lap
+                        bestByGrip[grip].bestAvgRaceTemp = airTemp
+                    }
+                }
+
+                if (!bestAvgRaceMs || stint.avg_clean_lap < bestAvgRaceMs) {
+                    bestAvgRaceMs = stint.avg_clean_lap
+                    bestAvgRaceConditions = { airTemp, roadTemp: firstValidLap?.road_temp || 0, grip }
+                }
+            }
+        })
+
+        const summary: SessionSummary = {
+            laps: sessionInfo.laps_total || rawObj.laps?.length || 0,
+            lapsValid: sessionInfo.laps_valid || 0,
+            bestLap: sessionInfo.session_best_lap || rawObj.bestLap || null,
+            avgCleanLap: sessionInfo.avg_clean_lap || null,
+            totalTime: sessionInfo.total_drive_time_ms || 0,
+            stintCount: stints.length || 0,
+            best_qualy_ms: bestQualyMs,
+            best_qualy_conditions: bestQualyConditions,
+            best_race_ms: bestRaceMs,
+            best_race_conditions: bestRaceConditions,
+            best_avg_race_ms: bestAvgRaceMs,
+            best_avg_race_conditions: bestAvgRaceConditions,
+            best_by_grip: bestByGrip
+        }
+
+        return { meta, summary }
+    }
+
+    // Load sessions from LOCAL files (Electron only)
+    async function loadFromLocalFiles(): Promise<SessionDocument[]> {
+        if (!isElectron.value) return []
+
+        const electronAPI = (window as any).electronAPI
+        const files = await electronAPI.getTelemetryFiles()
+
+        if (!files || files.length === 0) return []
+
+        const uid = currentUser.value?.uid
+        const localSessions: SessionDocument[] = []
+
+        for (const file of files) {
+            try {
+                const rawObj = await electronAPI.readFile(file.path)
+                if (!rawObj) continue
+
+                // Skip files belonging to other users
+                if (rawObj.ownerId && rawObj.ownerId !== uid) continue
+
+                const { meta, summary } = extractMetadata(rawObj)
+                const sessionId = generateSessionId(meta.date_start, meta.track)
+
+                localSessions.push({
+                    sessionId,
+                    fileHash: '', // Not needed for display
+                    fileName: file.name,
+                    uploadedAt: null,
+                    meta,
+                    summary,
+                    rawChunkCount: 0,
+                    rawSizeBytes: 0
+                })
+            } catch (e) {
+                console.warn(`[TELEMETRY] Error reading local file ${file.name}:`, e)
+            }
+        }
+
+        // Sort by date descending
+        localSessions.sort((a, b) =>
+            (b.meta.date_start || '').localeCompare(a.meta.date_start || '')
+        )
+
+        return localSessions
+    }
+
+    // Load sessions from Firebase
+    async function loadFromFirebase(targetUserId: string): Promise<SessionDocument[]> {
+        const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
+
+        let querySnapshot
+        try {
+            const q = query(sessionsRef, orderBy('uploadedAt', 'desc'))
+            querySnapshot = await getDocs(q)
+        } catch (orderError) {
+            console.warn('[TELEMETRY] orderBy failed, fetching without order')
+            querySnapshot = await getDocs(sessionsRef)
+        }
+
+        return querySnapshot.docs.map(docSnap => {
+            const data = docSnap.data()
+            return {
+                sessionId: docSnap.id,
+                fileHash: data.fileHash || null,
+                fileName: data.fileName || null,
+                uploadedAt: data.uploadedAt || null,
+                meta: data.meta || {},
+                summary: data.summary || {},
+                rawChunkCount: data.rawChunkCount || 0,
+                rawSizeBytes: data.rawSizeBytes || 0
+            } as SessionDocument
+        })
+    }
+
+    // Load session metadata - HYBRID: local files (Electron) or Firebase
     async function loadSessions(userId?: string): Promise<SessionDocument[]> {
         const targetUserId = userId || currentUser.value?.uid
         if (!targetUserId) {
@@ -211,38 +406,33 @@ export function useTelemetryData() {
         error.value = null
 
         try {
-            const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
+            // OPTIMIZATION: If in Electron and loading OWN data, use local files
+            const isLoadingOwnData = !userId || userId === currentUser.value?.uid
 
-            // Try with orderBy, fallback without if index not ready
-            let querySnapshot
-            try {
-                const q = query(sessionsRef, orderBy('uploadedAt', 'desc'))
-                querySnapshot = await getDocs(q)
-            } catch (orderError) {
-                console.warn('[TELEMETRY] orderBy failed, fetching without order')
-                querySnapshot = await getDocs(sessionsRef)
+            if (isElectron.value && isLoadingOwnData) {
+                try {
+                    const localSessions = await loadFromLocalFiles()
+                    if (localSessions.length > 0) {
+                        sessions.value = localSessions
+                        console.log(`[TELEMETRY] ⚡ Loaded ${localSessions.length} sessions from LOCAL files (0 Firebase reads)`)
+                        return sessions.value
+                    }
+                    console.log('[TELEMETRY] No local files found, falling back to Firebase')
+                } catch (localError) {
+                    console.warn('[TELEMETRY] Local load failed, falling back to Firebase:', localError)
+                }
             }
 
-            sessions.value = querySnapshot.docs.map(docSnap => {
-                const data = docSnap.data()
-                return {
-                    sessionId: docSnap.id,
-                    fileHash: data.fileHash || null,
-                    fileName: data.fileName || null,
-                    uploadedAt: data.uploadedAt || null,
-                    meta: data.meta || {},
-                    summary: data.summary || {},
-                    rawChunkCount: data.rawChunkCount || 0,
-                    rawSizeBytes: data.rawSizeBytes || 0
-                } as SessionDocument
-            })
+            // FALLBACK: Load from Firebase (web, coach/admin, or no local files)
+            const firebaseSessions = await loadFromFirebase(targetUserId)
+            sessions.value = firebaseSessions
 
             // Sort by date if not already
             sessions.value.sort((a, b) =>
                 (b.meta.date_start || '').localeCompare(a.meta.date_start || '')
             )
 
-            console.log(`[TELEMETRY] Loaded ${sessions.value.length} sessions for user ${targetUserId}`)
+            console.log(`[TELEMETRY] Loaded ${sessions.value.length} sessions from Firebase for user ${targetUserId}`)
             return sessions.value
         } catch (e: any) {
             console.error('[TELEMETRY] Error loading sessions:', e)
@@ -253,11 +443,44 @@ export function useTelemetryData() {
         }
     }
 
-    // Fetch full session with raw data (reconstructed from chunks)
+    // Fetch full session with raw data - HYBRID: local file (Electron) or Firebase chunks
     async function fetchSessionFull(sessionId: string, userId?: string): Promise<FullSession | null> {
         const targetUserId = userId || currentUser.value?.uid
         if (!targetUserId) return null
 
+        const isLoadingOwnData = !userId || userId === currentUser.value?.uid
+
+        // OPTIMIZATION: If in Electron and loading OWN data, read from local file
+        if (isElectron.value && isLoadingOwnData) {
+            try {
+                const electronAPI = (window as any).electronAPI
+                const files = await electronAPI.getTelemetryFiles()
+
+                // Find matching file by sessionId pattern
+                for (const file of files) {
+                    const rawObj = await electronAPI.readFile(file.path)
+                    if (!rawObj) continue
+
+                    // Skip files belonging to other users
+                    if (rawObj.ownerId && rawObj.ownerId !== targetUserId) continue
+
+                    const sessionInfo = rawObj.session_info || {}
+                    const localSessionId = generateSessionId(
+                        sessionInfo.date_start || rawObj.date || '',
+                        sessionInfo.track || rawObj.track || ''
+                    )
+
+                    if (localSessionId === sessionId) {
+                        console.log(`[TELEMETRY] ⚡ Loaded full session from LOCAL file (0 Firebase reads)`)
+                        return rawObj as FullSession
+                    }
+                }
+            } catch (localError) {
+                console.warn('[TELEMETRY] Local fetchSessionFull failed, falling back to Firebase:', localError)
+            }
+        }
+
+        // FALLBACK: Load from Firebase chunks
         try {
             // Get session document
             const sessionRef = doc(db, `users/${targetUserId}/sessions/${sessionId}`)
@@ -286,6 +509,7 @@ export function useTelemetryData() {
             const rawText = chunks.map(c => c.chunk).join('')
 
             // Parse JSON
+            console.log(`[TELEMETRY] Loaded full session from Firebase chunks`)
             return JSON.parse(rawText) as FullSession
         } catch (e) {
             console.error('[TELEMETRY] Error fetching full session:', e)
