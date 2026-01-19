@@ -352,26 +352,11 @@ const theoreticalTimes = computed(() => {
 })
 
 // ========================================
-// SMART PRESELECTION - Best stint with >= 2 laps
+// SMART PRESELECTION - Best stint (R priority, then Q)
 // ========================================
 const selectedStintNumber = ref(1)
-
-watch(() => session.value.stints, (stints) => {
-  if (stints.length > 0) {
-    const validStints = stints.filter(s => s.laps >= 2)
-    if (validStints.length > 0) {
-      let best = validStints[0]!
-      let bestDelta = parseFloat(best.deltaVsTheo) || 999
-      validStints.forEach(s => {
-        const d = parseFloat(s.deltaVsTheo) || 999
-        if (d < bestDelta) { best = s; bestDelta = d }
-      })
-      selectedStintNumber.value = best.number
-    } else {
-      selectedStintNumber.value = stints[0]?.number || 1
-    }
-  }
-}, { immediate: true })
+const hasPreselected = ref(false)
+// NOTE: Watch is defined after bestRaceStint/bestQualyStint computeds
 
 const selectedStint = computed(() => session.value.stints.find(s => s.number === selectedStintNumber.value))
 const selectedStintLaps = computed(() => session.value.lapsData[selectedStintNumber.value] || [])
@@ -420,6 +405,24 @@ const bestRaceStint = computed(() => {
     if (parseFloat(s.deltaVsTheo) < parseFloat(best.deltaVsTheo)) best = s
   })
   return best
+})
+
+// Watch bestRaceStint and bestQualyStint for reliable preselection
+// These computeds are stable and contain the correct best stint data
+watch([bestRaceStint, bestQualyStint], ([rBest, qBest]) => {
+  // Only preselect once when data first loads
+  if (hasPreselected.value) return
+  
+  // Priority: Race stint, then Qualy stint
+  if (rBest) {
+    selectedStintNumber.value = rBest.number
+    hasPreselected.value = true
+    console.log('[PRESELECTION] Best R stint:', rBest.number, 'delta:', rBest.deltaVsTheo)
+  } else if (qBest) {
+    selectedStintNumber.value = qBest.number
+    hasPreselected.value = true
+    console.log('[PRESELECTION] Best Q stint:', qBest.number, 'delta:', qBest.deltaVsTheo)
+  }
 })
 
 // Helper to check if stint is best in its category
@@ -1269,6 +1272,7 @@ const gripZones = computed(() => {
               </UiInfoPopup>
             </span>
             <div class="tc-cons-simple">
+              <span class="tc-cons-count">{{ consistencyStats.onTarget }} su {{ consistencyStats.total }}</span>
               <div class="tc-cons-bar-wide">
                 <div class="tc-cons-fill" :style="{ width: consistencyStats.pct + '%', background: getBarColor(consistencyStats.pct) }"></div>
               </div>
@@ -1292,6 +1296,7 @@ const gripZones = computed(() => {
           <div v-if="validityStats.total > 0" class="tc-validity">
             <span class="tc-cons-title">GIRI VALIDI</span>
             <div class="tc-cons-simple">
+              <span class="tc-cons-count">{{ validityStats.valid }} su {{ validityStats.total }}</span>
               <div class="tc-cons-bar-wide">
                 <div class="tc-cons-fill" :style="{ width: validityStats.pct + '%', background: getBarColor(validityStats.pct) }"></div>
               </div>
@@ -1552,7 +1557,7 @@ const gripZones = computed(() => {
   &.compare-selected { background: rgba(#8b5cf6,0.08); border-color: rgba(#8b5cf6,0.25); }
   &.compare-a { background: rgba(#3b82f6,0.1); border-color: rgba(#3b82f6,0.35); }
   &.compare-b { background: rgba(#8b5cf6,0.1); border-color: rgba(#8b5cf6,0.35); }
-  &.best-stint { border-color: rgba($accent-success, 0.3); }
+  //&.best-stint { border-color: rgba($accent-success, 0.3); }
 }
 .stint-laps { font-size: 11px; color: rgba(255,255,255,0.5); text-align: center; }
 
@@ -1848,20 +1853,25 @@ const gripZones = computed(() => {
   font-size: 16px; font-weight: 700; color: #fff;
 }
 .tc-cons-desc { font-size: 11px; color: rgba(255,255,255,0.5); }
+.tc-cons-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 700; color: #fff;
+  white-space: nowrap;
+}
 .tc-cons-bar-wide {
-  flex: 1; height: 8px; max-width: 120px;
+  flex: 1; height: 12px; max-width: 140px;
   background: rgba(255,255,255,0.08);
-  border-radius: 4px;
+  border-radius: 6px;
   overflow: hidden;
 }
 .tc-cons-fill {
-  height: 100%; border-radius: 4px;
+  height: 100%; border-radius: 6px;
   transition: width 0.3s ease;
   &--target { background: linear-gradient(90deg, #3b82f6, #60a5fa); }
 }
 .tc-cons-pct {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 12px; font-weight: 600; color: #3b82f6;
+  font-size: 14px; font-weight: 700; color: #3b82f6;
 }
 // Toggle switch for chart visualization
 .tc-toggle {
