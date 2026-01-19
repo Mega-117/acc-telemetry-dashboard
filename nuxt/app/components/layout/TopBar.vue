@@ -14,7 +14,7 @@ const emit = defineEmits<{
   goToProfile: []
 }>()
 
-const { isCoach } = useFirebaseAuth()
+const { isCoach, isAdmin } = useFirebaseAuth()
 const displayName = computed(() => props.userName ?? 'Utente')
 
 const goToCoachArea = () => {
@@ -34,12 +34,13 @@ const goToCoachArea = () => {
       <!-- Spacer -->
       <div class="topbar__spacer"></div>
 
-      <!-- Coach Button (only for coaches) -->
+      <!-- Coach/Admin Button (for coaches and admins) -->
       <button 
-        v-if="isCoach" 
+        v-if="isCoach || isAdmin" 
         class="coach-button" 
+        :class="{ 'coach-button--admin': isAdmin }"
         @click="goToCoachArea"
-        title="I miei piloti"
+        :title="isAdmin ? 'Gestione utenti' : 'I miei piloti'"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="9" cy="7" r="4"/>
@@ -123,6 +124,12 @@ const goToCoachArea = () => {
     background: rgba($racing-orange, 0.15);
     border-color: rgba($racing-orange, 0.4);
     color: $racing-orange;
+  }
+  
+  &--admin:hover {
+    background: rgba(#8b5cf6, 0.15);
+    border-color: rgba(#8b5cf6, 0.4);
+    color: #8b5cf6;
   }
 }
 

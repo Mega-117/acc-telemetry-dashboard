@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // ============================================
-// Coach Layout - Separate area for coach tools
+// Coach/Admin Layout - Area for coach tools and admin management
 // ============================================
 
-const { userDisplayName, logout: firebaseLogout, isCoach } = useFirebaseAuth()
+const { userDisplayName, logout: firebaseLogout, isCoach, isAdmin, userRole } = useFirebaseAuth()
 
-// Redirect non-coaches
+// Redirect non-coaches and non-admins
 onMounted(() => {
-  if (!isCoach.value) {
+  if (!isCoach.value && !isAdmin.value) {
     navigateTo('/panoramica')
   }
 })
@@ -24,12 +24,16 @@ const goToDashboard = () => {
 const goToProfile = () => {
   navigateTo('/profilo')
 }
+
+// Dynamic badge and title based on role
+const areaBadge = computed(() => isAdmin.value ? 'ADMIN' : 'COACH')
+const areaTitle = computed(() => isAdmin.value ? 'GESTIONE UTENTI' : 'AREA PILOTI')
 </script>
 
 <template>
   <div class="coach-layout">
     <!-- Coach Header -->
-    <header class="coach-header">
+    <header class="coach-header" :class="{ 'coach-header--admin': isAdmin }">
       <div class="coach-header__inner">
         <!-- Back to Dashboard -->
         <button class="back-button" @click="goToDashboard">
@@ -41,8 +45,8 @@ const goToProfile = () => {
 
         <!-- Area Title -->
         <div class="area-title">
-          <span class="area-badge">COACH</span>
-          <span class="area-name">AREA PILOTI</span>
+          <span class="area-badge" :class="{ 'area-badge--admin': isAdmin }">{{ areaBadge }}</span>
+          <span class="area-name">{{ areaTitle }}</span>
         </div>
 
         <!-- Spacer -->
@@ -122,6 +126,16 @@ const goToProfile = () => {
   border: 2px solid $racing-orange;
   border-radius: 5px;
   letter-spacing: 1px;
+  
+  &--admin {
+    color: #8b5cf6;
+    border-color: #8b5cf6;
+  }
+}
+
+.coach-header--admin {
+  background: rgba(#8b5cf6, 0.08);
+  border-bottom-color: rgba(#8b5cf6, 0.2);
 }
 
 .area-name {

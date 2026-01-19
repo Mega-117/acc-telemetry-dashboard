@@ -31,6 +31,7 @@ export function useFirebaseAuth() {
     const userEmail = computed(() => currentUser.value?.email ?? '')
     const userDisplayName = computed(() => currentUser.value?.displayName ?? '')
     const isCoach = computed(() => userRole.value === 'coach')
+    const isAdmin = computed(() => userRole.value === 'admin')
 
     // === ENSURE USER DOC ===
     // Checks/Creates user document in Firestore to ensure role availability
@@ -228,6 +229,7 @@ export function useFirebaseAuth() {
         checkEmailVerified,
         getUserProfile,
         userRole,
-        isCoach
+        isCoach,
+        isAdmin
     }
 }

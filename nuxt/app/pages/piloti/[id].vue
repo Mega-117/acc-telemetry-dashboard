@@ -9,7 +9,7 @@ import { db } from '~/config/firebase'
 
 definePageMeta({
   layout: 'coach',
-  middleware: ['coach']
+  middleware: ['coach-or-admin']
 })
 
 const route = useRoute()

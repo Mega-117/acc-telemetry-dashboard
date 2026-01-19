@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // ============================================
-// PilotiPage - Pilots list for coaches (row style)
+// PilotiPage - Pilots list for coaches and admins
 // ============================================
 
 import { ref, computed, onMounted } from 'vue'
@@ -9,10 +9,10 @@ import { db } from '~/config/firebase'
 
 definePageMeta({
   layout: 'coach',
-  middleware: ['coach']
+  middleware: ['coach-or-admin']
 })
 
-const { currentUser } = useFirebaseAuth()
+const { currentUser, isAdmin, userRole } = useFirebaseAuth()
 
 interface Pilot {
   uid: string
@@ -20,6 +20,7 @@ interface Pilot {
   lastName?: string
   nickname: string
   email: string
+  role?: string  // Add role field for admin view
   coachId?: string
   createdAt?: string
   lastSession?: string
@@ -48,18 +49,29 @@ const fetchPilots = async () => {
   if (!currentUser.value) return
   
   try {
-    const q = query(
-      collection(db, 'users'), 
-      where('role', '==', 'pilot'),
-      where('coachId', '==', currentUser.value.uid)
-    )
+    let q
+    
+    if (isAdmin.value) {
+      // Admin vede TUTTI gli utenti (piloti e coach)
+      q = query(collection(db, 'users'))
+    } else {
+      // Coach vede solo i propri piloti assegnati
+      q = query(
+        collection(db, 'users'), 
+        where('role', '==', 'pilot'),
+        where('coachId', '==', currentUser.value.uid)
+      )
+    }
+    
     const querySnapshot = await getDocs(q)
     
-    // Get basic pilot data first
-    const pilotsData = querySnapshot.docs.map(doc => ({
-      uid: doc.id,
-      ...doc.data()
-    })) as Pilot[]
+    // Get basic pilot data first (filter out self for admin)
+    const pilotsData = querySnapshot.docs
+      .filter(doc => doc.id !== currentUser.value?.uid)  // Exclude self
+      .map(doc => ({
+        uid: doc.id,
+        ...doc.data()
+      })) as Pilot[]
     
     // Fetch session stats for each pilot
     const sevenDaysAgo = new Date()
@@ -138,10 +150,10 @@ onMounted(() => {
 
 <template>
   <div class="piloti-page">
-    <h1 class="page-title">I MIEI PILOTI</h1>
+    <h1 class="page-title">{{ isAdmin ? 'TUTTI GLI UTENTI' : 'I MIEI PILOTI' }}</h1>
     
     <div class="page-header">
-      <p class="page-subtitle">{{ pilots.length }} piloti assegnati</p>
+      <p class="page-subtitle">{{ pilots.length }} {{ isAdmin ? 'utenti' : 'piloti assegnati' }}</p>
       
       <!-- Search Bar -->
       <div class="search-box">
@@ -193,6 +205,9 @@ onMounted(() => {
         <span class="lr-name">
           <span class="pilot-avatar">{{ getInitials(pilot) }}</span>
           {{ getDisplayName(pilot) }}
+          <span v-if="isAdmin && pilot.role" class="role-badge" :class="`role-badge--${pilot.role}`">
+            {{ pilot.role === 'coach' ? 'COACH' : 'PILOT' }}
+          </span>
         </span>
         <span class="lr-nickname">{{ pilot.nickname }}</span>
         <span class="lr-sessions">{{ pilot.totalSessions || 0 }}</span>
@@ -355,6 +370,26 @@ onMounted(() => {
   font-family: $font-primary;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.5);
+}
+
+// Role badge for admin view
+.role-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  
+  &--pilot {
+    background: rgba($racing-orange, 0.15);
+    color: $racing-orange;
+  }
+  
+  &--coach {
+    background: rgba(#3b82f6, 0.15);
+    color: #3b82f6;
+  }
 }
 
 .lr-sessions {
