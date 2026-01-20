@@ -4,7 +4,7 @@
 // Uses Firebase data for real session info
 // ============================================
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { 
   useTelemetryData, 
   formatLapTime,
@@ -13,12 +13,23 @@ import {
   formatDate
 } from '~/composables/useTelemetryData'
 
+
 // Car images
 import mustangImg from '@/assets/images/cars/mustang_gt3.png'
 import astonMartinImg from '@/assets/images/cars/aston_martin_gt3.png'
 import ferrariImg from '@/assets/images/cars/ferrari_296_gt3.png'
+import ferrari488Img from '@/assets/images/cars/ferrari_488_gt3.png'
 import bmwImg from '@/assets/images/cars/bmw_m4_gt3.png'
 import mclarenImg from '@/assets/images/cars/mclaren_720s_gt3.png'
+import audiImg from '@/assets/images/cars/audi_r8_gt3.png'
+import bentleyImg from '@/assets/images/cars/bentley_continental_gt3.png'
+import hondaImg from '@/assets/images/cars/honda_nsx_gt3.png'
+import lamborghiniImg from '@/assets/images/cars/lamborghini_huracan_gt3.png'
+import mercedesImg from '@/assets/images/cars/mercedes_amg_gt3.png'
+import porscheImg from '@/assets/images/cars/porsche_911_gt3.png'
+import nissanImg from '@/assets/images/cars/nissan_gtr_gt3.png'
+import lexusImg from '@/assets/images/cars/lexus_rcf_gt3.png'
+import jaguarImg from '@/assets/images/cars/jaguar_gt3.png'
 import defaultCarImg from '@/assets/images/cars/default_gt3.png'
 
 // Track images
@@ -27,19 +38,66 @@ import monzaImg from '@/assets/images/tracks/monza.jpg'
 
 // Car image mapping (key patterns from session data)
 const carImages: Record<string, string> = {
+  // Ford
   'mustang': mustangImg,
   'ford_mustang': mustangImg,
+  // Aston Martin
   'amr': astonMartinImg,
   'aston': astonMartinImg,
   'aston_martin': astonMartinImg,
   'v8_vantage': astonMartinImg,
+  'v12_vantage': astonMartinImg,
+  // Ferrari
   'ferrari_296': ferrariImg,
   '296_gt3': ferrariImg,
+  'ferrari_488': ferrari488Img,
+  '488_gt3': ferrari488Img,
+  '488': ferrari488Img,
+  // BMW
   'bmw': bmwImg,
   'm4': bmwImg,
   'm4_gt3': bmwImg,
+  'm6': bmwImg,
+  'm6_gt3': bmwImg,
+  // McLaren
   'mclaren': mclarenImg,
   '720s': mclarenImg,
+  '650s': mclarenImg,
+  // Audi
+  'audi': audiImg,
+  'r8': audiImg,
+  'r8_lms': audiImg,
+  // Bentley
+  'bentley': bentleyImg,
+  'continental': bentleyImg,
+  // Honda
+  'honda': hondaImg,
+  'nsx': hondaImg,
+  // Lamborghini
+  'lamborghini': lamborghiniImg,
+  'huracan': lamborghiniImg,
+  'huracán': lamborghiniImg,
+  // Mercedes
+  'mercedes': mercedesImg,
+  'amg': mercedesImg,
+  'amg_gt': mercedesImg,
+  // Porsche
+  'porsche': porscheImg,
+  '911': porscheImg,
+  '991': porscheImg,
+  '992': porscheImg,
+  // Nissan
+  'nissan': nissanImg,
+  'gtr': nissanImg,
+  'gt-r': nissanImg,
+  'nismo': nissanImg,
+  // Lexus
+  'lexus': lexusImg,
+  'rcf': lexusImg,
+  'rc_f': lexusImg,
+  // Jaguar
+  'jaguar': jaguarImg,
+  'emil_frey': jaguarImg,
 }
 
 const { getPublicPath } = usePublicPath()
@@ -47,7 +105,7 @@ const { getPublicPath } = usePublicPath()
 // Get pilot context (will be set when coach views a pilot)
 const targetUserId = usePilotContext()
 
-// Telemetry data
+// Telemetry data (using centralized getBestAvgRaceForTrack for recalculation)
 const { 
   sessions, 
   lastSession,
@@ -57,11 +115,15 @@ const {
   getActivityData,
   activityTotals,
   isLoading, 
-  loadSessions 
+  loadSessions,
+  getBestAvgRaceForTrack
 } = useTelemetryData()
 
 // Activity chart data
 const activityData = computed(() => getActivityData(7))
+
+// Recalculated avg times (loaded from full session data)
+const recalculatedAvgByTrack = ref<Record<string, number | null>>({})
 
 // Load on mount - use pilot context if available
 onMounted(async () => {
@@ -134,6 +196,37 @@ const prevTrackBestQualy = computed(() => {
 
 const prevTrackBestRace = computed(() => {
   return prevTrack.value?.bestRace ? formatLapTime(prevTrack.value.bestRace) : '--:--.---'
+})
+
+// AVG TIME - Recalculated using centralized function (5+ valid lap filter)
+// Trigger recalculation when track stats change
+watch([lastTrack, prevTrack], async () => {
+  // Recalculate for last track using centralized function
+  if (lastTrack.value?.track) {
+    const avg = await getBestAvgRaceForTrack(lastTrack.value.track, targetUserId.value || undefined)
+    recalculatedAvgByTrack.value[lastTrack.value.track.toLowerCase()] = avg
+  }
+  
+  // Recalculate for previous track
+  if (prevTrack.value?.track) {
+    const avg = await getBestAvgRaceForTrack(prevTrack.value.track, targetUserId.value || undefined)
+    recalculatedAvgByTrack.value[prevTrack.value.track.toLowerCase()] = avg
+  }
+}, { immediate: true })
+
+// Computed that uses recalculated values
+const lastTrackAvgTime = computed(() => {
+  if (!lastTrack.value?.track) return '--:--.---'
+  const trackKey = lastTrack.value.track.toLowerCase()
+  const avg = recalculatedAvgByTrack.value[trackKey]
+  return avg ? formatLapTime(avg) : '--:--.---'
+})
+
+const prevTrackAvgTime = computed(() => {
+  if (!prevTrack.value?.track) return '--:--.---'
+  const trackKey = prevTrack.value.track.toLowerCase()
+  const avg = recalculatedAvgByTrack.value[trackKey]
+  return avg ? formatLapTime(avg) : '--:--.---'
 })
 
 // Track images - use static mapping, fallback to default
@@ -219,7 +312,7 @@ const goToTrack = (track: { track: string } | null) => {
         :track-image="lastTrackImage"
         :best-qualy="lastTrackBestQualy"
         :best-race="lastTrackBestRace"
-        avg-time="--:--.---"
+        :avg-time="lastTrackAvgTime"
         @click="goToTrack(lastTrack)"
       />
       
@@ -238,7 +331,7 @@ const goToTrack = (track: { track: string } | null) => {
         :track-image="prevTrackImage"
         :best-qualy="prevTrackBestQualy"
         :best-race="prevTrackBestRace"
-        avg-time="--:--.---"
+        :avg-time="prevTrackAvgTime"
         @click="goToTrack(prevTrack)"
       />
     </div>

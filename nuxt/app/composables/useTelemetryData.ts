@@ -281,11 +281,12 @@ export function useTelemetryData() {
                 }
             })
 
-            // Best avg race from stint
-            if (!isQualy && stint.avg_clean_lap && laps.length >= 5) {
-                const firstValidLap = laps.find((l: any) => l.is_valid && !l.has_pit_stop)
-                const grip = firstValidLap?.track_grip_status || laps[0]?.track_grip_status || 'Unknown'
-                const airTemp = firstValidLap?.air_temp || laps[0]?.air_temp || 0
+            // Best avg race from stint - ONLY if 5+ VALID laps
+            const validStintLaps = laps.filter((l: any) => l.is_valid && !l.has_pit_stop)
+            if (!isQualy && stint.avg_clean_lap && validStintLaps.length >= 5) {
+                const firstValidLap = validStintLaps[0]
+                const grip = firstValidLap?.track_grip_status || 'Unknown'
+                const airTemp = firstValidLap?.air_temp || 0
 
                 if (bestByGrip[grip]) {
                     if (!bestByGrip[grip].bestAvgRace || stint.avg_clean_lap < bestByGrip[grip].bestAvgRace) {
@@ -515,6 +516,100 @@ export function useTelemetryData() {
             console.error('[TELEMETRY] Error fetching full session:', e)
             return null
         }
+    }
+
+    // === CENTRALIZED BEST AVG RACE CALCULATION ===
+    // Minimum valid laps required for avg race calculation
+    const MIN_VALID_LAPS_FOR_AVG = 5
+
+    // Cache for calculated values (to avoid redundant fetches)
+    const calculatedAvgCache = ref<Record<string, Record<string, number | null>>>({})
+
+    /**
+     * Calculate the best avg race for a track by fetching full session data
+     * and filtering for stints with 5+ valid laps.
+     * This bypasses Firebase summary caching which may have incorrect values.
+     * 
+     * @param trackId - Track ID to calculate for
+     * @param userId - Optional user ID (default: current user)
+     * @returns Promise with best avg per grip condition
+     */
+    async function calculateBestAvgRaceForTrack(
+        trackId: string,
+        userId?: string
+    ): Promise<Record<string, { bestAvgRace: number | null, bestAvgRaceTemp: number | null }>> {
+        const targetUserId = userId || currentUser.value?.uid
+        const trackIdNorm = trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
+
+        const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
+        const gripBests: Record<string, { bestAvgRace: number | null, bestAvgRaceTemp: number | null }> = {}
+
+        gripConditions.forEach(grip => {
+            gripBests[grip] = { bestAvgRace: null, bestAvgRaceTemp: null }
+        })
+
+        // Get sessions for this track
+        const trackSessionsList = sessions.value.filter(s => {
+            const sessionTrackId = s.meta.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
+            return sessionTrackId.includes(trackIdNorm) || trackIdNorm.includes(sessionTrackId)
+        })
+
+        if (trackSessionsList.length === 0) return gripBests
+
+        // Process each session's full data
+        for (const session of trackSessionsList) {
+            try {
+                const fullSession = await fetchSessionFull(session.sessionId, targetUserId)
+                if (!fullSession?.stints) continue
+
+                for (const stint of fullSession.stints) {
+                    // Skip Qualify stints - only Race/Practice for avg race
+                    if (stint.type === 'Qualify') continue
+
+                    // Count valid laps (excluding pit stops)
+                    const validLaps = stint.laps?.filter((l: any) => l.is_valid && !l.has_pit_stop) || []
+
+                    // CRITICAL: Only use stints with 5+ valid laps
+                    if (validLaps.length < MIN_VALID_LAPS_FOR_AVG) continue
+                    if (!stint.avg_clean_lap || stint.avg_clean_lap <= 0) continue
+
+                    // Get grip from first valid lap
+                    const firstValidLap = validLaps[0]
+                    const grip = firstValidLap?.track_grip_status || 'Unknown'
+                    const airTemp = firstValidLap?.air_temp || 0
+
+                    // Update grip best if this is better
+                    if (gripBests[grip]) {
+                        if (!gripBests[grip].bestAvgRace || stint.avg_clean_lap < gripBests[grip].bestAvgRace!) {
+                            gripBests[grip].bestAvgRace = stint.avg_clean_lap
+                            gripBests[grip].bestAvgRaceTemp = airTemp
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn(`[TELEMETRY] Error loading session ${session.sessionId}:`, e)
+            }
+        }
+
+        return gripBests
+    }
+
+    /**
+     * Get simple best avg race for a track (any grip condition)
+     * Returns the best avg race time regardless of grip.
+     */
+    async function getBestAvgRaceForTrack(trackId: string, userId?: string): Promise<number | null> {
+        const gripBests = await calculateBestAvgRaceForTrack(trackId, userId)
+
+        let best: number | null = null
+        for (const grip of Object.keys(gripBests)) {
+            const val = gripBests[grip].bestAvgRace
+            if (val && (!best || val < best)) {
+                best = val
+            }
+        }
+
+        return best
     }
 
     // === COMPUTED AGGREGATIONS ===
@@ -785,6 +880,8 @@ export function useTelemetryData() {
         getSessionsForTrack,
         getSession,
         getActivityData,
+        calculateBestAvgRaceForTrack,
+        getBestAvgRaceForTrack,
 
         // Computed
         lastSession,

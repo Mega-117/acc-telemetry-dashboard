@@ -56,7 +56,7 @@ const targetUserId = usePilotContext()
 // ========================================
 // FIREBASE DATA LOADING
 // ========================================
-const { sessions, trackStats, isLoading, loadSessions } = useTelemetryData()
+const { sessions, trackStats, isLoading, loadSessions, calculateBestAvgRaceForTrack } = useTelemetryData()
 
 onMounted(async () => {
   await loadSessions(targetUserId.value || undefined)
@@ -99,6 +99,22 @@ const trackMetadata: Record<string, { name: string, fullName: string, country: s
 const gripConditions = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
 const selectedGrip = ref('Optimum')
 
+// Recalculated best avg race from full session data (using centralized function)
+const recalculatedBestByGrip = ref<Record<string, { bestAvgRace: number | null, bestAvgRaceTemp: number | null }>>({})
+const isRecalculating = ref(false)
+
+// Trigger recalculation when track sessions change
+watch(trackSessions, async () => {
+  if (trackSessions.value.length > 0) {
+    isRecalculating.value = true
+    recalculatedBestByGrip.value = await calculateBestAvgRaceForTrack(
+      props.trackId,
+      targetUserId.value || undefined
+    )
+    isRecalculating.value = false
+  }
+}, { immediate: true })
+
 // Track computed data
 const track = computed(() => {
   const trackIdNorm = props.trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
@@ -119,7 +135,12 @@ const track = computed(() => {
   // Use ONLY grip-specific bests (no fallback to overall)
   const bestQualy = gripBests?.bestQualy || null
   const bestRace = gripBests?.bestRace || null
-  const bestAvgRace = gripBests?.bestAvgRace || null
+  
+  // IMPORTANT: Use recalculated bestAvgRace (from full session data with 5+ valid lap filter)
+  // This bypasses Firebase summary caching which may have incorrect values
+  const recalcGrip = recalculatedBestByGrip.value[grip]
+  const bestAvgRace = recalcGrip?.bestAvgRace || null
+  const bestAvgRaceTemp = recalcGrip?.bestAvgRaceTemp || null
   
   // Build conditions for grip-specific bests
   const bestQualyConditions = bestQualy ? {
@@ -135,7 +156,7 @@ const track = computed(() => {
   } : null
   
   const bestAvgRaceConditions = bestAvgRace ? {
-    airTemp: gripBests?.bestAvgRaceTemp || 0,
+    airTemp: bestAvgRaceTemp || 0,
     roadTemp: 0,
     grip
   } : null

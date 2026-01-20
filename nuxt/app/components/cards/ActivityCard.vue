@@ -59,6 +59,19 @@ const qualifySummary = computed(() => props.qualifyTotal || { minutes: 23, sessi
 const raceSummary = computed(() => props.raceTotal || { minutes: 133, sessions: 2 })
 
 const formatSession = (count: number) => count === 1 ? 'sess.' : 'sess.'
+
+// Format duration: if >= 60min, show as "Xh" or "XhYY", else show as minutes
+const formatDuration = (minutes: number): { value: string; unit: string } => {
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    if (mins === 0) {
+      return { value: `${hours}`, unit: 'h' }
+    }
+    return { value: `${hours}h ${mins.toString().padStart(2, '0')}`, unit: '' }
+  }
+  return { value: `${minutes}`, unit: 'min' }
+}
 </script>
 
 <template>
@@ -124,7 +137,7 @@ const formatSession = (count: number) => count === 1 ? 'sess.' : 'sess.'
           <span class="legend-dot"></span>
           <div class="legend-text">
             <span class="legend-label">PRACTICE</span>
-            <span class="legend-value">{{ practiceSummary.minutes }}<small>min</small></span>
+            <span class="legend-value">{{ formatDuration(practiceSummary.minutes).value }}<small>{{ formatDuration(practiceSummary.minutes).unit }}</small></span>
             <span class="legend-sessions">{{ practiceSummary.sessions }} {{ formatSession(practiceSummary.sessions) }}</span>
           </div>
         </div>
@@ -133,7 +146,7 @@ const formatSession = (count: number) => count === 1 ? 'sess.' : 'sess.'
           <span class="legend-dot"></span>
           <div class="legend-text">
             <span class="legend-label">QUALIFY</span>
-            <span class="legend-value">{{ qualifySummary.minutes }}<small>min</small></span>
+            <span class="legend-value">{{ formatDuration(qualifySummary.minutes).value }}<small>{{ formatDuration(qualifySummary.minutes).unit }}</small></span>
             <span class="legend-sessions">{{ qualifySummary.sessions }} {{ formatSession(qualifySummary.sessions) }}</span>
           </div>
         </div>
@@ -142,7 +155,7 @@ const formatSession = (count: number) => count === 1 ? 'sess.' : 'sess.'
           <span class="legend-dot"></span>
           <div class="legend-text">
             <span class="legend-label">RACE</span>
-            <span class="legend-value">{{ raceSummary.minutes }}<small>min</small></span>
+            <span class="legend-value">{{ formatDuration(raceSummary.minutes).value }}<small>{{ formatDuration(raceSummary.minutes).unit }}</small></span>
             <span class="legend-sessions">{{ raceSummary.sessions }} {{ formatSession(raceSummary.sessions) }}</span>
           </div>
         </div>

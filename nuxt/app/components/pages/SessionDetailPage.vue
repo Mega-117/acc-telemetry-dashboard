@@ -193,12 +193,24 @@ const session = computed(() => {
   // Transform stints to expected format
   const stints = fs.stints.map(stint => {
     const validLaps = stint.laps.filter(l => l.is_valid && !l.has_pit_stop)
-    const bestLapMs = validLaps.length > 0 
+    const validLapsCount = validLaps.length
+    const bestLapMs = validLapsCount > 0 
       ? Math.min(...validLaps.map(l => l.lap_time_ms))
       : null
     
-    // Use avg_clean_lap from JSON (pre-calculated, excludes outliers >115% of best)
-    const avgLapMs = stint.avg_clean_lap || null
+    // Use avg_clean_lap from JSON ONLY if stint has 5+ valid laps
+    // Otherwise the average is not statistically reliable
+    const MIN_VALID_LAPS_FOR_AVG = 5
+    const avgLapMs = validLapsCount >= MIN_VALID_LAPS_FOR_AVG && stint.avg_clean_lap 
+      ? stint.avg_clean_lap 
+      : null
+    
+    // Short warning text for display when avg is not available
+    const avgDisplay = avgLapMs 
+      ? formatLapTime(avgLapMs) 
+      : (validLapsCount > 0 && validLapsCount < MIN_VALID_LAPS_FOR_AVG 
+          ? '⚠️ min 5 giri validi' 
+          : '--:--.---')
     
     return {
       number: stint.stint_number,
@@ -206,8 +218,10 @@ const session = computed(() => {
       intent: stint.type === 'Qualify' ? 'Qualy Push' : 'Race Pace',
       fuelStart: stint.fuel_start,
       laps: stint.laps.length,
+      validLapsCount, // NEW: track valid laps count for filtering
       best: bestLapMs ? formatLapTime(bestLapMs) : '--:--.---',
-      avg: avgLapMs ? formatLapTime(avgLapMs) : '--:--.---',
+      avg: avgDisplay,
+      avgMs: avgLapMs, // Keep raw ms for calculations
       durationMs: stint.stint_drive_time_ms || 0, // Use pre-calculated duration from JSON
       theoretical: formatLapTime(info.session_best_lap), // Simplified: use session best as theo
       deltaVsTheo: bestLapMs ? `+${((bestLapMs - info.session_best_lap) / 1000).toFixed(3)}` : '-',
