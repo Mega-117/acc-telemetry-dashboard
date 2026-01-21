@@ -105,7 +105,14 @@ const { getPublicPath } = usePublicPath()
 // Get pilot context (will be set when coach views a pilot)
 const targetUserId = usePilotContext()
 
-// Telemetry data (using centralized getBestAvgRaceForTrack for recalculation)
+// Type for recalculated track best times
+type TrackBestTimes = {
+  bestQualy: number | null
+  bestRace: number | null
+  bestAvgRace: number | null
+}
+
+// Telemetry data (using centralized getBestTimesForGrip for recalculation)
 const { 
   sessions, 
   lastSession,
@@ -116,14 +123,14 @@ const {
   activityTotals,
   isLoading, 
   loadSessions,
-  getBestAvgRaceForTrack
+  getBestTimesForGrip
 } = useTelemetryData()
 
 // Activity chart data
 const activityData = computed(() => getActivityData(7))
 
-// Recalculated avg times (loaded from full session data)
-const recalculatedAvgByTrack = ref<Record<string, number | null>>({})
+// Recalculated best times (loaded from full session data with Optimum grip)
+const recalculatedByTrack = ref<Record<string, TrackBestTimes>>({})
 
 // Load on mount - use pilot context if available
 onMounted(async () => {
@@ -173,14 +180,6 @@ const lastTrackName = computed(() => {
   return lastTrack.value ? formatTrackName(lastTrack.value.track).toUpperCase() : 'NESSUNA PISTA'
 })
 
-const lastTrackBestQualy = computed(() => {
-  return lastTrack.value?.bestQualy ? formatLapTime(lastTrack.value.bestQualy) : '--:--.---'
-})
-
-const lastTrackBestRace = computed(() => {
-  return lastTrack.value?.bestRace ? formatLapTime(lastTrack.value.bestRace) : '--:--.---'
-})
-
 // Second to last track
 const prevTrack = computed(() => {
   return sortedTrackStats.value[1] || null
@@ -190,43 +189,71 @@ const prevTrackName = computed(() => {
   return prevTrack.value ? formatTrackName(prevTrack.value.track).toUpperCase() : 'NESSUNA PISTA'
 })
 
-const prevTrackBestQualy = computed(() => {
-  return prevTrack.value?.bestQualy ? formatLapTime(prevTrack.value.bestQualy) : '--:--.---'
-})
-
-const prevTrackBestRace = computed(() => {
-  return prevTrack.value?.bestRace ? formatLapTime(prevTrack.value.bestRace) : '--:--.---'
-})
-
-// AVG TIME - Recalculated using centralized function (5+ valid lap filter)
-// Trigger recalculation when track stats change
+// === CENTRALIZED RECALCULATION FOR OPTIMUM GRIP ===
+// Trigger recalculation when tracks change - get ALL best times for Optimum grip
 watch([lastTrack, prevTrack], async () => {
-  // Recalculate for last track using centralized function
+  // Recalculate for last track using centralized function (Optimum grip)
   if (lastTrack.value?.track) {
-    const avg = await getBestAvgRaceForTrack(lastTrack.value.track, targetUserId.value || undefined)
-    recalculatedAvgByTrack.value[lastTrack.value.track.toLowerCase()] = avg
+    const bests = await getBestTimesForGrip(lastTrack.value.track, 'Optimum', targetUserId.value || undefined)
+    recalculatedByTrack.value[lastTrack.value.track.toLowerCase()] = {
+      bestQualy: bests.bestQualy,
+      bestRace: bests.bestRace,
+      bestAvgRace: bests.bestAvgRace
+    }
   }
   
   // Recalculate for previous track
   if (prevTrack.value?.track) {
-    const avg = await getBestAvgRaceForTrack(prevTrack.value.track, targetUserId.value || undefined)
-    recalculatedAvgByTrack.value[prevTrack.value.track.toLowerCase()] = avg
+    const bests = await getBestTimesForGrip(prevTrack.value.track, 'Optimum', targetUserId.value || undefined)
+    recalculatedByTrack.value[prevTrack.value.track.toLowerCase()] = {
+      bestQualy: bests.bestQualy,
+      bestRace: bests.bestRace,
+      bestAvgRace: bests.bestAvgRace
+    }
   }
 }, { immediate: true })
 
-// Computed that uses recalculated values
+// Computed that use recalculated values (from Optimum grip)
+const lastTrackBestQualy = computed(() => {
+  if (!lastTrack.value?.track) return '--:--.---'
+  const trackKey = lastTrack.value.track.toLowerCase()
+  const val = recalculatedByTrack.value[trackKey]?.bestQualy
+  return val ? formatLapTime(val) : '--:--.---'
+})
+
+const lastTrackBestRace = computed(() => {
+  if (!lastTrack.value?.track) return '--:--.---'
+  const trackKey = lastTrack.value.track.toLowerCase()
+  const val = recalculatedByTrack.value[trackKey]?.bestRace
+  return val ? formatLapTime(val) : '--:--.---'
+})
+
 const lastTrackAvgTime = computed(() => {
   if (!lastTrack.value?.track) return '--:--.---'
   const trackKey = lastTrack.value.track.toLowerCase()
-  const avg = recalculatedAvgByTrack.value[trackKey]
-  return avg ? formatLapTime(avg) : '--:--.---'
+  const val = recalculatedByTrack.value[trackKey]?.bestAvgRace
+  return val ? formatLapTime(val) : '--:--.---'
+})
+
+const prevTrackBestQualy = computed(() => {
+  if (!prevTrack.value?.track) return '--:--.---'
+  const trackKey = prevTrack.value.track.toLowerCase()
+  const val = recalculatedByTrack.value[trackKey]?.bestQualy
+  return val ? formatLapTime(val) : '--:--.---'
+})
+
+const prevTrackBestRace = computed(() => {
+  if (!prevTrack.value?.track) return '--:--.---'
+  const trackKey = prevTrack.value.track.toLowerCase()
+  const val = recalculatedByTrack.value[trackKey]?.bestRace
+  return val ? formatLapTime(val) : '--:--.---'
 })
 
 const prevTrackAvgTime = computed(() => {
   if (!prevTrack.value?.track) return '--:--.---'
   const trackKey = prevTrack.value.track.toLowerCase()
-  const avg = recalculatedAvgByTrack.value[trackKey]
-  return avg ? formatLapTime(avg) : '--:--.---'
+  const val = recalculatedByTrack.value[trackKey]?.bestAvgRace
+  return val ? formatLapTime(val) : '--:--.---'
 })
 
 // Track images - use static mapping, fallback to default

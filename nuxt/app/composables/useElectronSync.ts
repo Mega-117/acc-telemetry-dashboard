@@ -61,8 +61,11 @@ export function useElectronSync() {
     }
 
     // Generate stable session ID from date_start and track
+    // Normalize: remove microseconds for consistent IDs
     function generateSessionId(dateStart: string, track: string): string {
-        const base = `${dateStart}_${track}`.replace(/[^a-zA-Z0-9]/g, '_')
+        // Remove microseconds: "2026-01-04T17:11:38.128663" -> "2026-01-04T17:11:38"
+        const normalized = dateStart.split('.')[0]
+        const base = `${normalized}_${track}`.replace(/[^a-zA-Z0-9]/g, '_')
         return base.substring(0, 100)
     }
 
@@ -120,6 +123,12 @@ export function useElectronSync() {
             }
         })
 
+        // Normalize grip values (handle abbreviations from logger)
+        const normalizeGrip = (grip: string) => {
+            if (grip === 'Opt') return 'Optimum'
+            return grip
+        }
+
         // Track overall bests
         let bestQualyMs: number | null = null
         let bestQualyConditions: { airTemp: number, roadTemp: number, grip: string } | null = null
@@ -128,13 +137,18 @@ export function useElectronSync() {
         let bestAvgRaceMs: number | null = null
         let bestAvgRaceConditions: { airTemp: number, roadTemp: number, grip: string } | null = null
 
+        // Detect if this is a Qualify session (session_type 1 = Qualify, 2 = Race)
+        // Note: Logger may incorrectly set stint.type='Race' even for Qualify sessions
+        const isQualySession = sessionInfo.session_type === 1
+
         stints.forEach((stint: any) => {
-            const isQualy = stint.type === 'Qualify'
+            // Use session-level type OR stint-level type for Qualy detection
+            const isQualy = isQualySession || stint.type === 'Qualify'
             const laps = stint.laps || []
 
             laps.forEach((lap: any) => {
                 if (lap.is_valid && !lap.has_pit_stop && lap.lap_time_ms) {
-                    const grip = lap.track_grip_status || 'Unknown'
+                    const grip = normalizeGrip(lap.track_grip_status || 'Unknown')
                     const airTemp = lap.air_temp || 0
                     const conditions = { airTemp, roadTemp: lap.road_temp || 0, grip }
 
@@ -171,7 +185,8 @@ export function useElectronSync() {
             // Best avg race: use stint.avg_clean_lap (only for race stints with >= 5 laps)
             if (!isQualy && stint.avg_clean_lap && laps.length >= 5) {
                 const firstValidLap = laps.find((l: any) => l.is_valid && !l.has_pit_stop)
-                const grip = firstValidLap?.track_grip_status || laps[0]?.track_grip_status || 'Unknown'
+                const rawGrip = firstValidLap?.track_grip_status || laps[0]?.track_grip_status || 'Unknown'
+                const grip = normalizeGrip(rawGrip)
                 const airTemp = firstValidLap?.air_temp || laps[0]?.air_temp || 0
 
                 if (bestByGrip[grip]) {
@@ -293,13 +308,19 @@ export function useElectronSync() {
                 }
             }
 
+            // Update trackBests with any new best times
+            await updateTrackBests(uid, meta.track, sessionId, meta.date_start, summary)
+
+            // Auto-cleanup: find and delete any old format duplicates of this session
+            const cleanedCount = await findAndDeleteOldFormatDuplicates(uid, meta.track, meta.date_start, sessionId)
+
             // Determine status: created, updated (new content), or refreshed (just summary update)
             let status: 'created' | 'updated' | 'refreshed' = 'created'
             if (isUpdate) {
                 status = chunksNeedUpdate ? 'updated' : 'refreshed'
             }
 
-            console.log(`[SYNC] ${status}: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})`)
+            console.log(`[SYNC] ${status}: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})${cleanedCount > 0 ? ` [cleaned ${cleanedCount} old duplicate(s)]` : ''}`)
 
             return {
                 status,
@@ -310,6 +331,190 @@ export function useElectronSync() {
         } catch (error: any) {
             console.error('[SYNC] Error:', error)
             return { status: 'error', fileName, error: error.message }
+        }
+    }
+
+    // Find and delete old format duplicate sessions (automatic cleanup)
+    // Called after uploading a session with new format to remove any legacy duplicates
+    async function findAndDeleteOldFormatDuplicates(
+        uid: string,
+        track: string,
+        dateStart: string,
+        newSessionId: string
+    ): Promise<number> {
+        try {
+            // Get all sessions for this user
+            const sessionsRef = collection(db, `users/${uid}/sessions`)
+            const snapshot = await getDocs(sessionsRef)
+
+            // Normalize track and date for comparison
+            const trackNorm = track.toLowerCase().replace(/\s+/g, '_')
+            const dateNormalized = dateStart.split('.')[0] // Remove microseconds
+            const datePrefix = dateNormalized.split(':').slice(0, 2).join(':') // YYYY-MM-DDTHH:MM
+
+            let deletedCount = 0
+
+            for (const docSnap of snapshot.docs) {
+                const sessionId = docSnap.id
+                const data = docSnap.data()
+
+                // Skip if this is the new session we just uploaded
+                if (sessionId === newSessionId) continue
+
+                // Check if old format: starts with Unix timestamp (13 digits)
+                const isOldFormat = /^\d{13}_/.test(sessionId)
+                if (!isOldFormat) continue
+
+                // Check if same track
+                const sessionTrack = (data.meta?.track || '').toLowerCase().replace(/\s+/g, '_')
+                if (sessionTrack !== trackNorm) continue
+
+                // Check if same date (minute precision)
+                const sessionDate = data.meta?.date_start || ''
+                const sessionDatePrefix = sessionDate.split(':').slice(0, 2).join(':')
+                if (sessionDatePrefix !== datePrefix) continue
+
+                // This is an old format duplicate - delete it
+                console.log(`[SYNC] 🗑️ Auto-deleting old format duplicate: ${sessionId}`)
+
+                // Delete rawChunks subcollection first
+                const chunksRef = collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`)
+                const chunksSnap = await getDocs(chunksRef)
+                for (const chunk of chunksSnap.docs) {
+                    await deleteDoc(chunk.ref)
+                }
+
+                // Delete session document
+                await deleteDoc(docSnap.ref)
+                deletedCount++
+            }
+
+            if (deletedCount > 0) {
+                console.log(`[SYNC] ✅ Auto-cleaned ${deletedCount} old format duplicate(s) for ${track}`)
+            }
+
+            return deletedCount
+        } catch (e: any) {
+            console.warn(`[SYNC] ⚠️ Error during auto-cleanup:`, e.message)
+            return 0
+        }
+    }
+
+    // Update trackBests collection with new best times from session
+    async function updateTrackBests(
+        uid: string,
+        trackId: string,
+        sessionId: string,
+        dateStart: string,
+        summary: any
+    ) {
+        const trackIdNorm = trackId.toLowerCase().replace(/\s+/g, '_')
+        const trackBestsRef = doc(db, `users/${uid}/trackBests/${trackIdNorm}`)
+
+        try {
+            // Get existing trackBests
+            const existingSnap = await getDoc(trackBestsRef)
+            const existing = existingSnap.exists() ? existingSnap.data() : null
+
+            const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
+            // Support both formats: existing.bests (new) OR existing at root (legacy)
+            const newBests: Record<string, any> = existing?.bests ||
+                (existing ? Object.fromEntries(gripConditions.filter(g => existing[g]).map(g => [g, existing[g]])) : {})
+            let hasUpdates = false
+
+            // Check each grip condition for improvements
+            gripConditions.forEach(grip => {
+                const sessionBest = summary.best_by_grip?.[grip]
+                if (!sessionBest) return
+
+                if (!newBests[grip]) {
+                    newBests[grip] = {
+                        bestQualy: null, bestQualyTemp: null, bestQualySessionId: null, bestQualyDate: null,
+                        bestRace: null, bestRaceTemp: null, bestRaceSessionId: null, bestRaceDate: null,
+                        bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
+                    }
+                }
+
+                // Check if new session has better qualy time
+                if (sessionBest.bestQualy && (!newBests[grip].bestQualy || sessionBest.bestQualy < newBests[grip].bestQualy)) {
+                    newBests[grip].bestQualy = sessionBest.bestQualy
+                    newBests[grip].bestQualyTemp = sessionBest.bestQualyTemp
+                    newBests[grip].bestQualySessionId = sessionId
+                    newBests[grip].bestQualyDate = dateStart
+                    hasUpdates = true
+                }
+
+                // Check if new session has better race time
+                if (sessionBest.bestRace && (!newBests[grip].bestRace || sessionBest.bestRace < newBests[grip].bestRace)) {
+                    newBests[grip].bestRace = sessionBest.bestRace
+                    newBests[grip].bestRaceTemp = sessionBest.bestRaceTemp
+                    newBests[grip].bestRaceSessionId = sessionId
+                    newBests[grip].bestRaceDate = dateStart
+                    hasUpdates = true
+                }
+
+                // Check if new session has better avg race time
+                if (sessionBest.bestAvgRace && (!newBests[grip].bestAvgRace || sessionBest.bestAvgRace < newBests[grip].bestAvgRace)) {
+                    newBests[grip].bestAvgRace = sessionBest.bestAvgRace
+                    newBests[grip].bestAvgRaceTemp = sessionBest.bestAvgRaceTemp
+                    newBests[grip].bestAvgRaceSessionId = sessionId
+                    newBests[grip].bestAvgRaceDate = dateStart
+                    hasUpdates = true
+                }
+            })
+
+            // === ACTIVITY AGGREGATES ===
+            // Always update activity on every session sync (not just when bests improve)
+            const existingActivity = existing?.activity || {
+                totalLaps: 0,
+                validLaps: 0,
+                totalTimeMs: 0,
+                sessionCount: 0
+            }
+
+            // Check if this session was already counted (by tracking last synced session)
+            const lastSyncedSessions = existing?.syncedSessionIds || []
+            const alreadyCounted = lastSyncedSessions.includes(sessionId)
+
+            // Only add to activity if this is a new session (not a re-sync)
+            const sessionLaps = summary.laps || 0
+            const sessionValidLaps = summary.lapsValid || 0
+            const sessionTimeMs = summary.totalTime || 0
+
+            const newActivity = alreadyCounted ? existingActivity : {
+                totalLaps: existingActivity.totalLaps + sessionLaps,
+                validLaps: existingActivity.validLaps + sessionValidLaps,
+                totalTimeMs: existingActivity.totalTimeMs + sessionTimeMs,
+                sessionCount: existingActivity.sessionCount + 1,
+                lastSessionDate: dateStart
+            }
+
+            // Track synced sessions to avoid double-counting
+            const newSyncedSessions = alreadyCounted
+                ? lastSyncedSessions
+                : [...lastSyncedSessions, sessionId].slice(-100) // Keep last 100
+
+            // Always save (bests + activity updates)
+            await setDoc(trackBestsRef, {
+                trackId: trackIdNorm,
+                bests: newBests,
+                activity: newActivity,
+                syncedSessionIds: newSyncedSessions,
+                lastUpdated: serverTimestamp()
+            })
+
+            if (hasUpdates) {
+                console.log(`[SYNC] ✅ Updated trackBests for ${trackIdNorm} (bests + activity)`)
+            } else if (!alreadyCounted) {
+                console.log(`[SYNC] ✅ Updated trackBests activity for ${trackIdNorm}`)
+            } else {
+                console.log(`[SYNC] ℹ️ No trackBests changes for ${trackIdNorm}`)
+            }
+
+            return hasUpdates || !alreadyCounted
+        } catch (e: any) {
+            console.warn(`[SYNC] ⚠️ Error updating trackBests for ${trackIdNorm}:`, e.message)
+            return false
         }
     }
 

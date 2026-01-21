@@ -85,9 +85,13 @@ function extractMetadata(rawObj: any) {
   let bestRaceConditions: { airTemp: number, roadTemp: number, grip: string } | null = null
   let bestAvgRaceMs: number | null = null
   let bestAvgRaceConditions: { airTemp: number, roadTemp: number, grip: string } | null = null
+  // Detect if this is a Qualify session (session_type 1 = Qualify, 2 = Race)
+  // Note: Logger may incorrectly set stint.type='Race' even for Qualify sessions
+  const isQualySession = sessionInfo.session_type === 1
 
   stints.forEach((stint: any) => {
-    const isQualy = stint.type === 'Qualify'
+    // Use session-level type OR stint-level type for Qualy detection
+    const isQualy = isQualySession || stint.type === 'Qualify'
     const laps = stint.laps || []
     
     laps.forEach((lap: any) => {
@@ -198,6 +202,89 @@ async function getExistingSession(uid: string, sessionId: string) {
   return snap.exists() ? { id: sessionId, ...snap.data() } : null
 }
 
+// === TRACKBESTS UPDATE ===
+// Updates the trackBests collection when a new session is uploaded
+async function updateTrackBests(
+  uid: string, 
+  trackId: string, 
+  sessionId: string,
+  dateStart: string,
+  summary: any
+) {
+  const trackIdNorm = trackId.toLowerCase().replace(/\s+/g, '_')
+  const trackBestsRef = doc(db, `users/${uid}/trackBests/${trackIdNorm}`)
+  
+  try {
+    // Get existing trackBests
+    const existingSnap = await getDoc(trackBestsRef)
+    const existing = existingSnap.exists() ? existingSnap.data() : null
+    
+    const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
+    // Support both formats: existing.bests (new) OR existing at root (legacy)
+    const newBests: Record<string, any> = existing?.bests || 
+      (existing ? Object.fromEntries(gripConditions.filter(g => existing[g]).map(g => [g, existing[g]])) : {})
+    let hasUpdates = false
+    
+    // Check each grip condition for improvements
+    gripConditions.forEach(grip => {
+      const sessionBest = summary.best_by_grip?.[grip]
+      if (!sessionBest) return
+      
+      if (!newBests[grip]) {
+        newBests[grip] = {
+          bestQualy: null, bestQualyTemp: null, bestQualySessionId: null, bestQualyDate: null,
+          bestRace: null, bestRaceTemp: null, bestRaceSessionId: null, bestRaceDate: null,
+          bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
+        }
+      }
+      
+      // Check if new session has better qualy time
+      if (sessionBest.bestQualy && (!newBests[grip].bestQualy || sessionBest.bestQualy < newBests[grip].bestQualy)) {
+        newBests[grip].bestQualy = sessionBest.bestQualy
+        newBests[grip].bestQualyTemp = sessionBest.bestQualyTemp
+        newBests[grip].bestQualySessionId = sessionId
+        newBests[grip].bestQualyDate = dateStart
+        hasUpdates = true
+      }
+      
+      // Check if new session has better race time
+      if (sessionBest.bestRace && (!newBests[grip].bestRace || sessionBest.bestRace < newBests[grip].bestRace)) {
+        newBests[grip].bestRace = sessionBest.bestRace
+        newBests[grip].bestRaceTemp = sessionBest.bestRaceTemp
+        newBests[grip].bestRaceSessionId = sessionId
+        newBests[grip].bestRaceDate = dateStart
+        hasUpdates = true
+      }
+      
+      // Check if new session has better avg race time
+      if (sessionBest.bestAvgRace && (!newBests[grip].bestAvgRace || sessionBest.bestAvgRace < newBests[grip].bestAvgRace)) {
+        newBests[grip].bestAvgRace = sessionBest.bestAvgRace
+        newBests[grip].bestAvgRaceTemp = sessionBest.bestAvgRaceTemp
+        newBests[grip].bestAvgRaceSessionId = sessionId
+        newBests[grip].bestAvgRaceDate = dateStart
+        hasUpdates = true
+      }
+    })
+    
+    // Save if there were any updates
+    if (hasUpdates) {
+      await setDoc(trackBestsRef, {
+        trackId: trackIdNorm,
+        bests: newBests,
+        lastUpdated: serverTimestamp()
+      })
+      console.log(`[UPLOAD] ✅ Updated trackBests for ${trackIdNorm}`)
+    } else {
+      console.log(`[UPLOAD] ℹ️ No improvements for ${trackIdNorm}, skipping trackBests update`)
+    }
+    
+    return hasUpdates
+  } catch (e: any) {
+    console.warn(`[UPLOAD] ⚠️ Error updating trackBests for ${trackIdNorm}:`, e.message)
+    return false
+  }
+}
+
 // === UPLOAD LOGIC ===
 
 async function uploadSession(rawObj: any, rawText: string, fileName: string, uid: string) {
@@ -258,12 +345,17 @@ async function uploadSession(rawObj: any, rawText: string, fileName: string, uid
       }
     }
 
+    // === TRACKBESTS UPDATE ===
+    // Update trackBests collection with this session's best times
+    const trackBestsUpdated = await updateTrackBests(uid, meta.track, sessionId, meta.date_start, summary)
+
     return {
       status: isUpdate ? (chunksNeedUpdate ? 'updated' : 'refreshed') : 'created',
       fileName,
       sessionId,
       meta,
-      summary
+      summary,
+      trackBestsUpdated
     }
 
   } catch (error: any) {
@@ -273,17 +365,30 @@ async function uploadSession(rawObj: any, rawText: string, fileName: string, uid
 
 // === FILE HANDLERS ===
 
+// Filter to only include valid session files (exclude .upload_registry.json and other non-session files)
+function isValidSessionFile(fileName: string): boolean {
+  // Must end with .json
+  if (!fileName.endsWith('.json')) return false
+  // Must start with 'session_' (telemetry session files)
+  if (!fileName.startsWith('session_')) return false
+  // Exclude hidden files (starting with .)
+  if (fileName.startsWith('.')) return false
+  // Exclude upload registry
+  if (fileName.includes('upload_registry')) return false
+  return true
+}
+
 function onFileSelect(event: Event) {
   const input = event.target as HTMLInputElement
   if (input.files) {
-    selectedFiles.value = Array.from(input.files).filter(f => f.name.endsWith('.json'))
+    selectedFiles.value = Array.from(input.files).filter(f => isValidSessionFile(f.name))
   }
 }
 
 function onFolderSelect(event: Event) {
   const input = event.target as HTMLInputElement
   if (input.files) {
-    selectedFiles.value = Array.from(input.files).filter(f => f.name.endsWith('.json'))
+    selectedFiles.value = Array.from(input.files).filter(f => isValidSessionFile(f.name))
   }
 }
 

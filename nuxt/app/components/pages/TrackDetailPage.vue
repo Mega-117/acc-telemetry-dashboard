@@ -53,10 +53,19 @@ const emit = defineEmits<{
 // Get pilot context (will be set when coach views a pilot)
 const targetUserId = usePilotContext()
 
+// Format date to short readable format (e.g., "19 gen 2026")
+function formatShortDate(isoDate: string | null): string {
+  if (!isoDate) return ''
+  const dateStr = isoDate.split('T')[0]
+  const [year, month, day] = dateStr.split('-')
+  const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
+  return `${parseInt(day)} ${months[parseInt(month) - 1]} ${year}`
+}
+
 // ========================================
 // FIREBASE DATA LOADING
 // ========================================
-const { sessions, trackStats, isLoading, loadSessions, calculateBestAvgRaceForTrack } = useTelemetryData()
+const { sessions, trackStats, isLoading, loadSessions, getTrackBests, getTrackActivity } = useTelemetryData()
 
 onMounted(async () => {
   await loadSessions(targetUserId.value || undefined)
@@ -99,15 +108,24 @@ const trackMetadata: Record<string, { name: string, fullName: string, country: s
 const gripConditions = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
 const selectedGrip = ref('Optimum')
 
-// Recalculated best avg race from full session data (using centralized function)
-const recalculatedBestByGrip = ref<Record<string, { bestAvgRace: number | null, bestAvgRaceTemp: number | null }>>({})
+// Recalculated ALL best times from full session data (using centralized function)
+type GripBestTimes = {
+  bestQualy: number | null
+  bestQualyTemp: number | null
+  bestRace: number | null
+  bestRaceTemp: number | null
+  bestAvgRace: number | null
+  bestAvgRaceTemp: number | null
+}
+const recalculatedBestByGrip = ref<Record<string, GripBestTimes>>({})
 const isRecalculating = ref(false)
 
 // Trigger recalculation when track sessions change
 watch(trackSessions, async () => {
   if (trackSessions.value.length > 0) {
     isRecalculating.value = true
-    recalculatedBestByGrip.value = await calculateBestAvgRaceForTrack(
+    // Use getTrackBests for optimized loading (with lazy caching)
+    recalculatedBestByGrip.value = await getTrackBests(
       props.trackId,
       targetUserId.value || undefined
     )
@@ -130,33 +148,31 @@ const track = computed(() => {
   
   const stats = currentTrackStats.value
   const grip = selectedGrip.value
-  const gripBests = stats?.bestByGrip?.[grip]
   
-  // Use ONLY grip-specific bests (no fallback to overall)
-  const bestQualy = gripBests?.bestQualy || null
-  const bestRace = gripBests?.bestRace || null
-  
-  // IMPORTANT: Use recalculated bestAvgRace (from full session data with 5+ valid lap filter)
+  // IMPORTANT: Use recalculated values for ALL bests (from full session data)
   // This bypasses Firebase summary caching which may have incorrect values
   const recalcGrip = recalculatedBestByGrip.value[grip]
+  
+  // All values now come from recalculated data
+  const bestQualy = recalcGrip?.bestQualy || null
+  const bestRace = recalcGrip?.bestRace || null
   const bestAvgRace = recalcGrip?.bestAvgRace || null
-  const bestAvgRaceTemp = recalcGrip?.bestAvgRaceTemp || null
   
   // Build conditions for grip-specific bests
   const bestQualyConditions = bestQualy ? {
-    airTemp: gripBests?.bestQualyTemp || 0,
+    airTemp: recalcGrip?.bestQualyTemp || 0,
     roadTemp: 0,
     grip
   } : null
   
   const bestRaceConditions = bestRace ? {
-    airTemp: gripBests?.bestRaceTemp || 0,
+    airTemp: recalcGrip?.bestRaceTemp || 0,
     roadTemp: 0,
     grip
   } : null
   
   const bestAvgRaceConditions = bestAvgRace ? {
-    airTemp: bestAvgRaceTemp || 0,
+    airTemp: recalcGrip?.bestAvgRaceTemp || 0,
     roadTemp: 0,
     grip
   } : null
@@ -172,6 +188,14 @@ const track = computed(() => {
     bestQualyConditions,
     bestRaceConditions,
     bestAvgRaceConditions,
+    // Session IDs for navigation
+    bestQualySessionId: recalcGrip?.bestQualySessionId || null,
+    bestRaceSessionId: recalcGrip?.bestRaceSessionId || null,
+    bestAvgRaceSessionId: recalcGrip?.bestAvgRaceSessionId || null,
+    // Session dates for display
+    bestQualyDate: recalcGrip?.bestQualyDate || null,
+    bestRaceDate: recalcGrip?.bestRaceDate || null,
+    bestAvgRaceDate: recalcGrip?.bestAvgRaceDate || null,
     hasGripData: !!bestQualy || !!bestRace || !!bestAvgRace
   }
 })
@@ -273,23 +297,44 @@ function onPageChange() {
   isChangingPage.value = true
 }
 
-// Activity stats computed from real data
-const activityStats = computed(() => {
-  const totalLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.laps || 0), 0)
-  const validLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.lapsValid || 0), 0)
-  const totalTimeMs = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.totalTime || 0), 0)
-  const hours = Math.floor(totalTimeMs / 3600000)
-  const minutes = Math.floor((totalTimeMs % 3600000) / 60000)
-  
-  return {
-    totalLaps,
-    validLaps,
-    validPercentage: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
-    timeOnTrack: `${hours}h ${minutes}m`,
-    sessionsCount: trackSessions.value.length,
-    lastActivity: currentTrackStats.value?.lastSession || '-'
-  }
+// Activity stats from Firebase (with fallback to calculated)
+const activityStats = ref({
+  totalLaps: 0,
+  validLaps: 0,
+  validPercent: 0,
+  totalTimeMs: 0,
+  totalTimeFormatted: '0h 0m',
+  sessionCount: 0
 })
+
+// Load activity from Firebase when track data is ready
+watch(trackSessions, async () => {
+  if (trackSessions.value.length > 0) {
+    try {
+      const activity = await getTrackActivity(
+        props.trackId,
+        targetUserId.value || undefined
+      )
+      activityStats.value = activity
+    } catch (e) {
+      console.warn('[TRACK] Error loading activity from Firebase:', e)
+      // Fallback: calculate locally
+      const totalLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.laps || 0), 0)
+      const validLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.lapsValid || 0), 0)
+      const totalTimeMs = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.totalTime || 0), 0)
+      const hours = Math.floor(totalTimeMs / 3600000)
+      const minutes = Math.floor((totalTimeMs % 3600000) / 60000)
+      activityStats.value = {
+        totalLaps,
+        validLaps,
+        validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
+        totalTimeMs,
+        totalTimeFormatted: `${hours}h ${minutes}m`,
+        sessionCount: trackSessions.value.length
+      }
+    }
+  }
+}, { immediate: true })
 
 // Historical best times data from real sessions (one point per session, chronological)
 interface HistoricalTime {
@@ -684,25 +729,67 @@ function goToSession(id: string) {
               <span class="time-label">Best Stint Qualifying</span>
               <span class="time-value">{{ track.bestQualy || '—:—.---' }}</span>
               <span v-if="track.bestQualyConditions" class="time-conditions">
-                <span>Aria {{ track.bestQualyConditions.airTemp }}°C</span>
+                <span>{{ formatShortDate(track.bestQualyDate) }}</span>
+                <span class="condition-sep">•</span>
+                <span>{{ track.bestQualyConditions.airTemp }}°C</span>
               </span>
               <span v-else-if="!track.bestQualy" class="no-data-hint">Nessun dato per {{ selectedGrip }}</span>
+              <button 
+                v-if="track.bestQualySessionId" 
+                class="session-link-btn"
+                title="Vai alla sessione"
+                @click.stop="$router.push(`/sessioni/${track.bestQualySessionId}`)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </button>
             </div>
             <div class="best-time-card best-time-card--race">
               <span class="time-label">Best Stint Race</span>
               <span class="time-value">{{ track.bestRace || '—:—.---' }}</span>
               <span v-if="track.bestRaceConditions" class="time-conditions">
-                <span>Aria {{ track.bestRaceConditions.airTemp }}°C</span>
+                <span>{{ formatShortDate(track.bestRaceDate) }}</span>
+                <span class="condition-sep">•</span>
+                <span>{{ track.bestRaceConditions.airTemp }}°C</span>
               </span>
               <span v-else-if="!track.bestRace" class="no-data-hint">Nessun dato per {{ selectedGrip }}</span>
+              <button 
+                v-if="track.bestRaceSessionId" 
+                class="session-link-btn"
+                title="Vai alla sessione"
+                @click.stop="$router.push(`/sessioni/${track.bestRaceSessionId}`)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </button>
             </div>
             <div class="best-time-card best-time-card--avg">
               <span class="time-label">Best Stint Avg Race</span>
               <span class="time-value">{{ track.bestAvgRace || '—:—.---' }}</span>
               <span v-if="track.bestAvgRaceConditions" class="time-conditions">
-                <span>Aria {{ track.bestAvgRaceConditions.airTemp }}°C</span>
+                <span>{{ formatShortDate(track.bestAvgRaceDate) }}</span>
+                <span class="condition-sep">•</span>
+                <span>{{ track.bestAvgRaceConditions.airTemp }}°C</span>
               </span>
               <span v-else-if="!track.bestAvgRace" class="no-data-hint">Nessun dato per {{ selectedGrip }}</span>
+              <button 
+                v-if="track.bestAvgRaceSessionId" 
+                class="session-link-btn"
+                title="Vai alla sessione"
+                @click.stop="$router.push(`/sessioni/${track.bestAvgRaceSessionId}`)"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </button>
             </div>
           </div>
         </div>
@@ -717,14 +804,14 @@ function goToSession(id: string) {
             </div>
             <div class="activity-item">
               <span class="activity-value">{{ activityStats.validLaps }}</span>
-              <span class="activity-label">Giri Validi ({{ activityStats.validPercentage }}%)</span>
+              <span class="activity-label">Giri Validi ({{ activityStats.validPercent }}%)</span>
             </div>
             <div class="activity-item">
-              <span class="activity-value">{{ activityStats.timeOnTrack }}</span>
+              <span class="activity-value">{{ activityStats.totalTimeFormatted }}</span>
               <span class="activity-label">Tempo in Pista</span>
             </div>
             <div class="activity-item">
-              <span class="activity-value">{{ activityStats.sessionsCount }}</span>
+              <span class="activity-value">{{ activityStats.sessionCount }}</span>
               <span class="activity-label">Sessioni</span>
             </div>
           </div>
@@ -967,6 +1054,7 @@ function goToSession(id: string) {
   padding: 24px;
   border-radius: 12px;
   text-align: center;
+  position: relative;
 
   &--qualy {
     background: rgba($accent-warning, 0.1);
@@ -981,6 +1069,33 @@ function goToSession(id: string) {
   &--avg {
     background: rgba($accent-info, 0.1);
     border: 1px solid rgba($accent-info, 0.3);
+  }
+}
+
+.session-link-btn {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 6px;
+  padding: 6px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.5);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff;
+    transform: scale(1.1);
+  }
+
+  svg {
+    width: 16px;
+    height: 16px;
   }
 }
 
@@ -1018,6 +1133,11 @@ function goToSession(id: string) {
 
 .condition-separator {
   opacity: 0.4;
+}
+
+.condition-sep {
+  opacity: 0.4;
+  font-size: 10px;
 }
 
 .no-data-hint {

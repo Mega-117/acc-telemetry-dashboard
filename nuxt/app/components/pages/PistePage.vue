@@ -4,7 +4,7 @@
 // Uses Firebase data for session stats
 // ============================================
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { 
   useTelemetryData, 
   formatLapTime
@@ -21,7 +21,8 @@ interface TrackDisplay {
   length: string
   image?: string
   sessions: number
-  lastSession?: string
+  lastSession?: string       // Display format: "2026-01-19"
+  lastSessionFull?: string   // Full timestamp for sorting
   bestQualy?: string
   bestRace?: string
 }
@@ -32,15 +33,38 @@ const emit = defineEmits<{
 }>()
 
 // === TELEMETRY DATA ===
-const { sessions, trackStats, isLoading, loadSessions } = useTelemetryData()
+const { sessions, trackStats, isLoading, loadSessions, getTrackBests } = useTelemetryData()
 
 // Get pilot context (will be set when coach views a pilot)
 const targetUserId = usePilotContext()
+
+// Store trackBests for each track (same source as TrackDetailPage)
+const trackBestsMap = ref<Record<string, { bestQualy: number | null, bestRace: number | null }>>({})
 
 // Load data on mount - use pilot context if available
 onMounted(async () => {
   await loadSessions(targetUserId.value || undefined)
 })
+
+// Load trackBests for each track when trackStats updates
+watch(trackStats, async () => {
+  if (trackStats.value.length > 0) {
+    for (const stat of trackStats.value) {
+      const trackId = stat.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
+      try {
+        const bests = await getTrackBests(trackId, targetUserId.value || undefined)
+        const optimumBests = bests?.['Optimum']
+        trackBestsMap.value[trackId] = {
+          bestQualy: optimumBests?.bestQualy || null,
+          bestRace: optimumBests?.bestRace || null
+        }
+      } catch (e) {
+        console.warn(`[PISTE] Failed to load trackBests for ${trackId}:`, e)
+      }
+    }
+    console.log('[PISTE] Loaded trackBests from getTrackBests (same source as TrackDetail):', trackBestsMap.value)
+  }
+}, { immediate: true })
 
 // === VIEW MODE ===
 type ViewMode = 'card' | 'list'
@@ -82,6 +106,7 @@ const tracks = computed<TrackDisplay[]>(() => {
     ...meta,
     sessions: 0,
     lastSession: undefined,
+    lastSessionFull: undefined,
     bestQualy: undefined,
     bestRace: undefined
   }))
@@ -91,11 +116,27 @@ const tracks = computed<TrackDisplay[]>(() => {
     const trackId = stat.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
     const existing = result.find(t => t.id === trackId || t.name.toLowerCase() === stat.track.toLowerCase())
     
+    // Use trackBestsMap (same source as TrackDetailPage: getTrackBests)
+    const trackBests = trackBestsMap.value[trackId]
+    const bestQualyOptimum = trackBests?.bestQualy
+    const bestRaceOptimum = trackBests?.bestRace
+    
+    // DEBUG: Log Valencia and Suzuka data
+    if (stat.track.toLowerCase().includes('valencia') || stat.track.toLowerCase().includes('suzuka')) {
+      console.log(`[PISTE DEBUG] ${stat.track}:`, {
+        trackBestsSource: 'trackBestsMap (getTrackBests)',
+        optimumBestQualy: bestQualyOptimum,
+        optimumBestRace: bestRaceOptimum,
+        oldBestByGrip: stat.bestByGrip?.['Optimum']
+      })
+    }
+    
     if (existing) {
       existing.sessions = stat.sessions
-      existing.lastSession = stat.lastSession?.split('T')[0]
-      existing.bestQualy = stat.bestQualy ? formatLapTime(stat.bestQualy) : undefined
-      existing.bestRace = stat.bestRace ? formatLapTime(stat.bestRace) : undefined
+      existing.lastSession = stat.lastSession?.split('T')[0]       // Display format
+      existing.lastSessionFull = stat.lastSession                   // Full timestamp for sorting
+      existing.bestQualy = bestQualyOptimum ? formatLapTime(bestQualyOptimum) : undefined
+      existing.bestRace = bestRaceOptimum ? formatLapTime(bestRaceOptimum) : undefined
     } else {
       // Track not in metadata (new track?), add it
       result.push({
@@ -106,8 +147,9 @@ const tracks = computed<TrackDisplay[]>(() => {
         image: undefined,
         sessions: stat.sessions,
         lastSession: stat.lastSession?.split('T')[0],
-        bestQualy: stat.bestQualy ? formatLapTime(stat.bestQualy) : undefined,
-        bestRace: stat.bestRace ? formatLapTime(stat.bestRace) : undefined
+        lastSessionFull: stat.lastSession,
+        bestQualy: bestQualyOptimum ? formatLapTime(bestQualyOptimum) : undefined,
+        bestRace: bestRaceOptimum ? formatLapTime(bestRaceOptimum) : undefined
       })
     }
   }
@@ -118,9 +160,10 @@ const tracks = computed<TrackDisplay[]>(() => {
 // Sorted tracks: with sessions first (by lastSession desc), then without sessions
 const sortedTracks = computed(() => {
   return [...tracks.value].sort((a, b) => {
-    // Both have sessions: sort by lastSession desc
+    // Both have sessions: sort by full timestamp (most recent first)
     if (a.sessions > 0 && b.sessions > 0) {
-      return (b.lastSession || '').localeCompare(a.lastSession || '')
+      // Use full timestamp for accurate sorting (includes time, not just date)
+      return (b.lastSessionFull || '').localeCompare(a.lastSessionFull || '')
     }
     // Only one has sessions: that one goes first
     if (a.sessions > 0 && b.sessions === 0) return -1

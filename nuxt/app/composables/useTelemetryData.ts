@@ -3,9 +3,66 @@
 // ============================================
 
 import { ref, computed } from 'vue'
-import { collection, query, orderBy, getDocs, doc, getDoc } from 'firebase/firestore'
+import { collection, query, orderBy, getDocs as firebaseGetDocs, doc, getDoc as firebaseGetDoc, setDoc as firebaseSetDoc, deleteDoc as firebaseDeleteDoc, DocumentReference, Query } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 
+// === FIREBASE OPERATIONS TRACKER ===
+// Tracks all Firebase read/write operations for debugging
+let firebaseReadCount = 0
+let firebaseWriteCount = 0
+let currentPageReads = 0
+let currentPageWrites = 0
+
+// Reset page counters (call when navigating)
+export function resetFirebasePageCounters() {
+    currentPageReads = 0
+    currentPageWrites = 0
+    console.log('%c[FIREBASE] 📊 Page counters reset', 'color: #4CAF50; font-weight: bold')
+}
+
+// Get current counts
+export function getFirebaseCounts() {
+    return {
+        totalReads: firebaseReadCount,
+        totalWrites: firebaseWriteCount,
+        pageReads: currentPageReads,
+        pageWrites: currentPageWrites
+    }
+}
+
+// Print summary
+export function printFirebaseSummary() {
+    console.log('%c[FIREBASE] ═══════════════════════════════════', 'color: #2196F3; font-weight: bold')
+    console.log(`%c[FIREBASE] 📖 THIS PAGE: ${currentPageReads} reads, ${currentPageWrites} writes`, 'color: #2196F3; font-weight: bold')
+    console.log(`%c[FIREBASE] 📚 SESSION TOTAL: ${firebaseReadCount} reads, ${firebaseWriteCount} writes`, 'color: #9E9E9E')
+    console.log('%c[FIREBASE] ═══════════════════════════════════', 'color: #2196F3; font-weight: bold')
+}
+
+// Wrapped getDoc with tracking
+async function getDoc(ref: DocumentReference) {
+    firebaseReadCount++
+    currentPageReads++
+    console.log(`%c[FIREBASE] 📖 READ #${currentPageReads}: ${ref.path}`, 'color: #4CAF50')
+    return firebaseGetDoc(ref)
+}
+
+// Wrapped getDocs with tracking
+async function getDocs(q: Query) {
+    firebaseReadCount++
+    currentPageReads++
+    console.log(`%c[FIREBASE] 📖 QUERY #${currentPageReads}: (collection query)`, 'color: #4CAF50')
+    const result = await firebaseGetDocs(q)
+    console.log(`%c[FIREBASE]    ↳ Returned ${result.docs.length} documents`, 'color: #8BC34A')
+    return result
+}
+
+// Wrapped setDoc with tracking
+async function setDoc(ref: DocumentReference, data: any) {
+    firebaseWriteCount++
+    currentPageWrites++
+    console.log(`%c[FIREBASE] ✏️ WRITE #${currentPageWrites}: ${ref.path}`, 'color: #FF9800')
+    return firebaseSetDoc(ref, data)
+}
 // === TYPES ===
 
 export interface LapData {
@@ -190,12 +247,20 @@ export function formatTime(dateStr: string): string {
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
 }
 
+// === GLOBAL STATE (persists across page navigations) ===
+// This singleton pattern ensures sessions are loaded once and reused
+const globalSessions = ref<SessionDocument[]>([])
+const globalIsLoading = ref(false)
+const globalError = ref<string | null>(null)
+const globalLastUserId = ref<string | null>(null)  // Track which user's data is loaded
+
 // === COMPOSABLE ===
 
 export function useTelemetryData() {
-    const sessions = ref<SessionDocument[]>([])
-    const isLoading = ref(false)
-    const error = ref<string | null>(null)
+    // Use global state (shared across all components/pages)
+    const sessions = globalSessions
+    const isLoading = globalIsLoading
+    const error = globalError
 
     const { currentUser } = useFirebaseAuth()
 
@@ -396,12 +461,25 @@ export function useTelemetryData() {
     }
 
     // Load session metadata - HYBRID: local files (Electron) or Firebase
-    async function loadSessions(userId?: string): Promise<SessionDocument[]> {
+    // Added: forceReload parameter to control caching behavior
+    async function loadSessions(userId?: string, forceReload: boolean = false): Promise<SessionDocument[]> {
         const targetUserId = userId || currentUser.value?.uid
         if (!targetUserId) {
             console.warn('[TELEMETRY] No user ID provided')
             return []
         }
+
+        // CACHE: Check if we need to reload due to user change or force reload
+        // This prevents duplicate queries when multiple components call loadSessions
+        const userChanged = globalLastUserId.value !== targetUserId
+
+        if (!forceReload && !userChanged && sessions.value.length > 0) {
+            console.log(`%c[TELEMETRY] ⚡ Using CACHED sessions (${sessions.value.length}), skipping Firebase query`, 'color: #9C27B0')
+            return sessions.value
+        }
+
+        // Track current user for cache invalidation
+        globalLastUserId.value = targetUserId
 
         isLoading.value = true
         error.value = null
@@ -518,34 +596,51 @@ export function useTelemetryData() {
         }
     }
 
-    // === CENTRALIZED BEST AVG RACE CALCULATION ===
+    // === CENTRALIZED BEST TIMES CALCULATION ===
     // Minimum valid laps required for avg race calculation
     const MIN_VALID_LAPS_FOR_AVG = 5
 
-    // Cache for calculated values (to avoid redundant fetches)
-    const calculatedAvgCache = ref<Record<string, Record<string, number | null>>>({})
+    // Type for grip-specific best times
+    type GripBestTimes = {
+        bestQualy: number | null
+        bestQualyTemp: number | null
+        bestQualySessionId: string | null
+        bestQualyDate: string | null
+        bestRace: number | null
+        bestRaceTemp: number | null
+        bestRaceSessionId: string | null
+        bestRaceDate: string | null
+        bestAvgRace: number | null
+        bestAvgRaceTemp: number | null
+        bestAvgRaceSessionId: string | null
+        bestAvgRaceDate: string | null
+    }
 
     /**
-     * Calculate the best avg race for a track by fetching full session data
-     * and filtering for stints with 5+ valid laps.
+     * Calculate ALL best times for a track by loading full session data.
+     * Returns best Qualy, Race, and AvgRace for each grip condition.
      * This bypasses Firebase summary caching which may have incorrect values.
      * 
      * @param trackId - Track ID to calculate for
      * @param userId - Optional user ID (default: current user)
-     * @returns Promise with best avg per grip condition
+     * @returns Promise with all bests per grip condition
      */
-    async function calculateBestAvgRaceForTrack(
+    async function calculateAllBestTimesForTrack(
         trackId: string,
         userId?: string
-    ): Promise<Record<string, { bestAvgRace: number | null, bestAvgRaceTemp: number | null }>> {
+    ): Promise<Record<string, GripBestTimes>> {
         const targetUserId = userId || currentUser.value?.uid
         const trackIdNorm = trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
 
         const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
-        const gripBests: Record<string, { bestAvgRace: number | null, bestAvgRaceTemp: number | null }> = {}
+        const gripBests: Record<string, GripBestTimes> = {}
 
         gripConditions.forEach(grip => {
-            gripBests[grip] = { bestAvgRace: null, bestAvgRaceTemp: null }
+            gripBests[grip] = {
+                bestQualy: null, bestQualyTemp: null, bestQualySessionId: null, bestQualyDate: null,
+                bestRace: null, bestRaceTemp: null, bestRaceSessionId: null, bestRaceDate: null,
+                bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
+            }
         })
 
         // Get sessions for this track
@@ -563,26 +658,64 @@ export function useTelemetryData() {
                 if (!fullSession?.stints) continue
 
                 for (const stint of fullSession.stints) {
-                    // Skip Qualify stints - only Race/Practice for avg race
-                    if (stint.type === 'Qualify') continue
+                    const isQualy = stint.type === 'Qualify'
+                    const laps = stint.laps || []
 
-                    // Count valid laps (excluding pit stops)
-                    const validLaps = stint.laps?.filter((l: any) => l.is_valid && !l.has_pit_stop) || []
+                    // Normalize grip values (handle abbreviations)
+                    const normalizeGrip = (grip: string) => {
+                        if (grip === 'Opt') return 'Optimum'
+                        return grip
+                    }
 
-                    // CRITICAL: Only use stints with 5+ valid laps
-                    if (validLaps.length < MIN_VALID_LAPS_FOR_AVG) continue
-                    if (!stint.avg_clean_lap || stint.avg_clean_lap <= 0) continue
+                    // Process each valid lap for best single lap times
+                    for (const lap of laps) {
+                        if (!lap.is_valid || lap.has_pit_stop || !lap.lap_time_ms) continue
 
-                    // Get grip from first valid lap
-                    const firstValidLap = validLaps[0]
-                    const grip = firstValidLap?.track_grip_status || 'Unknown'
-                    const airTemp = firstValidLap?.air_temp || 0
+                        const grip = normalizeGrip(lap.track_grip_status || 'Unknown')
+                        const airTemp = lap.air_temp || 0
 
-                    // Update grip best if this is better
-                    if (gripBests[grip]) {
-                        if (!gripBests[grip].bestAvgRace || stint.avg_clean_lap < gripBests[grip].bestAvgRace!) {
-                            gripBests[grip].bestAvgRace = stint.avg_clean_lap
-                            gripBests[grip].bestAvgRaceTemp = airTemp
+                        if (!gripBests[grip]) continue
+
+                        // Get session date for storage
+                        const sessionDate = session.meta.date_start || null
+
+                        if (isQualy) {
+                            // Best Qualy lap
+                            if (!gripBests[grip].bestQualy || lap.lap_time_ms < gripBests[grip].bestQualy!) {
+                                gripBests[grip].bestQualy = lap.lap_time_ms
+                                gripBests[grip].bestQualyTemp = airTemp
+                                gripBests[grip].bestQualySessionId = session.sessionId
+                                gripBests[grip].bestQualyDate = sessionDate
+                            }
+                        } else {
+                            // Best Race/Practice lap
+                            if (!gripBests[grip].bestRace || lap.lap_time_ms < gripBests[grip].bestRace!) {
+                                gripBests[grip].bestRace = lap.lap_time_ms
+                                gripBests[grip].bestRaceTemp = airTemp
+                                gripBests[grip].bestRaceSessionId = session.sessionId
+                                gripBests[grip].bestRaceDate = sessionDate
+                            }
+                        }
+                    }
+
+                    // Best Avg Race from stint - ONLY if 5+ valid laps and NOT Qualify
+                    if (!isQualy && stint.avg_clean_lap && stint.avg_clean_lap > 0) {
+                        const validLaps = laps.filter((l: any) => l.is_valid && !l.has_pit_stop)
+
+                        if (validLaps.length >= MIN_VALID_LAPS_FOR_AVG) {
+                            const firstValidLap = validLaps[0]
+                            const grip = normalizeGrip(firstValidLap?.track_grip_status || 'Unknown')
+                            const airTemp = firstValidLap?.air_temp || 0
+                            const sessionDate = session.meta.date_start || null
+
+                            if (gripBests[grip]) {
+                                if (!gripBests[grip].bestAvgRace || stint.avg_clean_lap < gripBests[grip].bestAvgRace!) {
+                                    gripBests[grip].bestAvgRace = stint.avg_clean_lap
+                                    gripBests[grip].bestAvgRaceTemp = airTemp
+                                    gripBests[grip].bestAvgRaceSessionId = session.sessionId
+                                    gripBests[grip].bestAvgRaceDate = sessionDate
+                                }
+                            }
                         }
                     }
                 }
@@ -595,15 +728,330 @@ export function useTelemetryData() {
     }
 
     /**
+     * Get best times for a specific grip condition (e.g., 'Optimum')
+     */
+    async function getBestTimesForGrip(
+        trackId: string,
+        grip: string = 'Optimum',
+        userId?: string
+    ): Promise<GripBestTimes> {
+        const allBests = await getTrackBests(trackId, userId)
+        return allBests[grip] || {
+            bestQualy: null, bestQualyTemp: null, bestQualySessionId: null, bestQualyDate: null,
+            bestRace: null, bestRaceTemp: null, bestRaceSessionId: null, bestRaceDate: null,
+            bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
+        }
+    }
+
+    // Cache for track bests (in-memory for session duration)
+    const trackBestsCache = ref<Record<string, Record<string, GripBestTimes>>>({})
+
+    /**
+     * Get all best times for a track (all grip conditions).
+     * OPTIMIZED: Uses lazy loading with Firebase caching.
+     * 1. Check in-memory cache first
+     * 2. Try to read from Firebase /trackBests/{trackId}
+     * 3. If not found, calculate from sessions and save to Firebase
+     * 
+     * This reduces reads from ~70 (per track) to 1.
+     */
+    async function getTrackBests(
+        trackId: string,
+        userId?: string
+    ): Promise<Record<string, GripBestTimes>> {
+        const targetUserId = userId || currentUser.value?.uid
+        const trackIdNorm = trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
+        const cacheKey = `${trackIdNorm}_${targetUserId || 'anon'}`
+
+        // 1. Check in-memory cache
+        if (trackBestsCache.value[cacheKey]) {
+            console.log(`[TELEMETRY] trackBests cache HIT for ${trackIdNorm}`)
+            return trackBestsCache.value[cacheKey]
+        }
+
+        // 2. Try Firebase /trackBests collection (if user is logged in and not Electron)
+        if (targetUserId && !isElectron.value) {
+            try {
+                const docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)
+                const docSnap = await getDoc(docRef)
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data()
+                    console.log(`[TELEMETRY] trackBests Firebase HIT for ${trackIdNorm}`)
+
+                    // Convert to GripBestTimes format
+                    // Support both formats: data.bests[grip] (upload format) OR data[grip] (legacy)
+                    const result: Record<string, GripBestTimes> = {}
+                    const bestsSource = data.bests || data  // Use 'bests' if exists, otherwise root
+
+                    const standardGrips = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
+
+                    for (const grip of standardGrips) {
+                        if (bestsSource[grip]) {
+                            result[grip] = bestsSource[grip] as GripBestTimes
+                        }
+                    }
+
+                    // Handle legacy 'Opt' -> merge into 'Optimum'
+                    if (bestsSource['Opt']) {
+                        const legacyOpt = bestsSource['Opt'] as GripBestTimes
+                        if (!result['Optimum']) {
+                            result['Optimum'] = legacyOpt
+                        } else {
+                            // Merge: keep better values
+                            const opt = result['Optimum']
+                            if (legacyOpt.bestQualy && (!opt.bestQualy || legacyOpt.bestQualy < opt.bestQualy)) {
+                                opt.bestQualy = legacyOpt.bestQualy
+                                opt.bestQualyTemp = legacyOpt.bestQualyTemp
+                                opt.bestQualySessionId = legacyOpt.bestQualySessionId
+                                opt.bestQualyDate = legacyOpt.bestQualyDate
+                            }
+                            if (legacyOpt.bestRace && (!opt.bestRace || legacyOpt.bestRace < opt.bestRace)) {
+                                opt.bestRace = legacyOpt.bestRace
+                                opt.bestRaceTemp = legacyOpt.bestRaceTemp
+                                opt.bestRaceSessionId = legacyOpt.bestRaceSessionId
+                                opt.bestRaceDate = legacyOpt.bestRaceDate
+                            }
+                            if (legacyOpt.bestAvgRace && (!opt.bestAvgRace || legacyOpt.bestAvgRace < opt.bestAvgRace)) {
+                                opt.bestAvgRace = legacyOpt.bestAvgRace
+                                opt.bestAvgRaceTemp = legacyOpt.bestAvgRaceTemp
+                                opt.bestAvgRaceSessionId = legacyOpt.bestAvgRaceSessionId
+                                opt.bestAvgRaceDate = legacyOpt.bestAvgRaceDate
+                            }
+                        }
+                    }
+
+                    // Cache and return
+                    trackBestsCache.value[cacheKey] = result
+                    return result
+                }
+            } catch (e) {
+                console.warn(`[TELEMETRY] Error reading trackBests from Firebase:`, e)
+            }
+        }
+
+        // 3. Not found - calculate from sessions
+        console.log(`[TELEMETRY] trackBests MISS for ${trackIdNorm}, calculating...`)
+        const calculatedBests = await calculateAllBestTimesForTrack(trackId, userId)
+
+        // 4. Save to Firebase for future use (if user logged in and not Electron)
+        if (targetUserId && !isElectron.value) {
+            try {
+                const docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)
+                // IMPORTANT: Save with 'bests' wrapper to match useElectronSync format
+                await setDoc(docRef, {
+                    trackId: trackIdNorm,
+                    bests: calculatedBests,
+                    lastUpdated: new Date().toISOString()
+                })
+                console.log(`[TELEMETRY] trackBests SAVED to Firebase for ${trackIdNorm}`)
+            } catch (e) {
+                console.warn(`[TELEMETRY] Error saving trackBests to Firebase:`, e)
+            }
+        }
+
+        // Cache and return
+        trackBestsCache.value[cacheKey] = calculatedBests
+        return calculatedBests
+    }
+
+    /**
+     * Invalidate trackBests cache for a track (call after new session upload)
+     * @param clearFirebase - If true, also deletes from Firebase to force fresh calculation
+     */
+    async function invalidateTrackBests(trackId: string, userId?: string, clearFirebase: boolean = false) {
+        const trackIdNorm = trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
+        const targetUserId = userId || currentUser.value?.uid
+        const cacheKey = `${trackIdNorm}_${targetUserId || 'anon'}`
+
+        // Clear in-memory cache
+        delete trackBestsCache.value[cacheKey]
+        console.log(`[TELEMETRY] trackBests cache INVALIDATED for ${trackIdNorm}`)
+
+        // Optionally clear Firebase to force fresh recalculation
+        if (clearFirebase && targetUserId && !isElectron.value) {
+            try {
+                const docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)
+                await firebaseDeleteDoc(docRef)
+                console.log(`[TELEMETRY] trackBests DELETED from Firebase for ${trackIdNorm}`)
+            } catch (e) {
+                console.warn(`[TELEMETRY] Error deleting trackBests from Firebase:`, e)
+            }
+        }
+    }
+
+    /**
+     * Force recalculate trackBests by clearing cache + Firebase, then recalculating
+     * Use when data seems out of sync
+     */
+    async function forceRecalculateTrackBests(trackId: string, userId?: string): Promise<Record<string, GripBestTimes>> {
+        console.log(`[TELEMETRY] FORCE RECALCULATING trackBests for ${trackId}`)
+
+        // Clear both caches
+        await invalidateTrackBests(trackId, userId, true)
+
+        // Recalculate from sessions (this will also save to Firebase)
+        return await getTrackBests(trackId, userId)
+    }
+
+    // Cache for track activity (separate from trackBests for flexibility)
+    const trackActivityCache = ref<Record<string, TrackActivity>>({})
+
+    type TrackActivity = {
+        totalLaps: number
+        validLaps: number
+        validPercent: number
+        totalTimeMs: number
+        totalTimeFormatted: string
+        sessionCount: number
+        lastSessionDate?: string
+    }
+
+    /**
+     * Get activity aggregates for a track (from Firebase trackBests or calculated)
+     * Uses cache for performance
+     */
+    async function getTrackActivity(trackId: string, userId?: string): Promise<TrackActivity> {
+        const trackIdNorm = trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
+        const targetUserId = userId || currentUser.value?.uid
+        const cacheKey = `${trackIdNorm}_${targetUserId || 'anon'}`
+
+        // Check cache first
+        if (trackActivityCache.value[cacheKey]) {
+            return trackActivityCache.value[cacheKey]
+        }
+
+        // Try Firebase trackBests.activity
+        if (targetUserId && !isElectron.value) {
+            try {
+                const docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)
+                const docSnap = await getDoc(docRef)
+
+                if (docSnap.exists()) {
+                    const data = docSnap.data()
+                    if (data.activity) {
+                        const activity = data.activity
+                        const result: TrackActivity = {
+                            totalLaps: activity.totalLaps || 0,
+                            validLaps: activity.validLaps || 0,
+                            validPercent: activity.totalLaps > 0
+                                ? Math.round((activity.validLaps / activity.totalLaps) * 100)
+                                : 0,
+                            totalTimeMs: activity.totalTimeMs || 0,
+                            totalTimeFormatted: formatDriveTime(activity.totalTimeMs || 0),
+                            sessionCount: activity.sessionCount || 0,
+                            lastSessionDate: activity.lastSessionDate
+                        }
+                        trackActivityCache.value[cacheKey] = result
+                        console.log(`[TELEMETRY] trackActivity Firebase HIT for ${trackIdNorm}`)
+                        return result
+                    }
+                }
+            } catch (e) {
+                console.warn(`[TELEMETRY] Error reading trackActivity from Firebase:`, e)
+            }
+        }
+
+        // Fallback: calculate from sessions
+        console.log(`[TELEMETRY] trackActivity MISS for ${trackIdNorm}, calculating...`)
+        const calculated = getTrackActivityTotals(trackId)
+        trackActivityCache.value[cacheKey] = calculated
+        return calculated
+    }
+
+    // Type for theoretical times with temp adjustment
+    type TheoreticalTimes = {
+        theoQualy: number | null
+        theoRace: number | null
+        theoAvgRace: number | null
+        // Historic values for reference
+        historicQualy: number | null
+        historicQualyTemp: number | null
+        historicRace: number | null
+        historicRaceTemp: number | null
+        historicAvgRace: number | null
+        historicAvgRaceTemp: number | null
+        // Context
+        grip: string
+        stintTemp: number
+    }
+
+    /**
+     * CENTRALIZED THEORETICAL TIMES CALCULATION
+     * 
+     * Calculates theoretical times for a track/grip combo with temperature adjustment.
+     * Uses the centralized getBestTimesForGrip for base values.
+     * 
+     * Temperature adjustment formula:
+     *   Teorico = Storico + (TempStint - TempStorico) × 100ms/°C
+     *   - Colder = faster (negative adjustment)
+     *   - Hotter = slower (positive adjustment)
+     * 
+     * @param trackId - Track ID
+     * @param grip - Grip condition (e.g., 'Optimum', 'Wet')
+     * @param stintTemp - Average temperature of the current stint (in °C)
+     * @param userId - Optional user ID
+     * @returns Theoretical times with temp adjustment applied
+     */
+    async function getTheoreticalTimes(
+        trackId: string,
+        grip: string,
+        stintTemp: number,
+        userId?: string
+    ): Promise<TheoreticalTimes> {
+        // Get centralized best times for this grip
+        const bests = await getBestTimesForGrip(trackId, grip, userId)
+
+        // Temperature adjustment helper: 100ms per degree difference
+        function applyTempAdjustment(historicMs: number | null, historicTemp: number | null): number | null {
+            if (!historicMs) return null
+            const historicTempRounded = Math.round(historicTemp || stintTemp)
+            const tempDiff = stintTemp - historicTempRounded
+            const adjustmentMs = tempDiff * 100 // 100ms per degree
+            return Math.round(historicMs + adjustmentMs)
+        }
+
+        return {
+            theoQualy: applyTempAdjustment(bests.bestQualy, bests.bestQualyTemp),
+            theoRace: applyTempAdjustment(bests.bestRace, bests.bestRaceTemp),
+            theoAvgRace: applyTempAdjustment(bests.bestAvgRace, bests.bestAvgRaceTemp),
+            // Include historic values for display/debugging
+            historicQualy: bests.bestQualy,
+            historicQualyTemp: bests.bestQualyTemp,
+            historicRace: bests.bestRace,
+            historicRaceTemp: bests.bestRaceTemp,
+            historicAvgRace: bests.bestAvgRace,
+            historicAvgRaceTemp: bests.bestAvgRaceTemp,
+            grip,
+            stintTemp
+        }
+    }
+
+    // Legacy function - kept for backward compatibility
+    async function calculateBestAvgRaceForTrack(
+        trackId: string,
+        userId?: string
+    ): Promise<Record<string, { bestAvgRace: number | null, bestAvgRaceTemp: number | null }>> {
+        const allBests = await calculateAllBestTimesForTrack(trackId, userId)
+
+        // Extract only avgRace data for backward compatibility
+        const result: Record<string, { bestAvgRace: number | null, bestAvgRaceTemp: number | null }> = {}
+        for (const [grip, times] of Object.entries(allBests)) {
+            result[grip] = { bestAvgRace: times.bestAvgRace, bestAvgRaceTemp: times.bestAvgRaceTemp }
+        }
+        return result
+    }
+
+    /**
      * Get simple best avg race for a track (any grip condition)
      * Returns the best avg race time regardless of grip.
      */
     async function getBestAvgRaceForTrack(trackId: string, userId?: string): Promise<number | null> {
-        const gripBests = await calculateBestAvgRaceForTrack(trackId, userId)
+        const allBests = await calculateAllBestTimesForTrack(trackId, userId)
 
         let best: number | null = null
-        for (const grip of Object.keys(gripBests)) {
-            const val = gripBests[grip].bestAvgRace
+        for (const grip of Object.keys(allBests)) {
+            const val = allBests[grip].bestAvgRace
             if (val && (!best || val < best)) {
                 best = val
             }
@@ -696,8 +1144,15 @@ export function useTelemetryData() {
             // Aggregate best_by_grip from this session
             const sessionGripBests = summary?.best_by_grip
             if (sessionGripBests) {
-                for (const grip of gripConditions) {
-                    const sessionGrip = sessionGripBests[grip]
+                // Normalize grip names (handle legacy 'Opt' -> 'Optimum')
+                const normalizeGrip = (grip: string) => grip === 'Opt' ? 'Optimum' : grip
+
+                // Process ALL grips in session data (including legacy 'Opt')
+                for (const rawGrip in sessionGripBests) {
+                    const grip = normalizeGrip(rawGrip)
+                    if (!gripConditions.includes(grip)) continue
+
+                    const sessionGrip = sessionGripBests[rawGrip]
                     if (!sessionGrip) continue
 
                     const trackGrip = stats[track].bestByGrip[grip]
@@ -780,6 +1235,62 @@ export function useTelemetryData() {
     // Get session by ID
     function getSession(sessionId: string): SessionDocument | undefined {
         return sessions.value.find(s => s.sessionId === sessionId)
+    }
+
+    // Get activity totals for a specific track (for Track Detail page)
+    function getTrackActivityTotals(trackId: string) {
+        const trackSessions = getSessionsForTrack(trackId)
+
+        let totalLaps = 0
+        let validLaps = 0
+        let totalTimeMs = 0
+
+        for (const session of trackSessions) {
+            totalLaps += session.summary?.laps || 0
+            validLaps += session.summary?.lapsValid || 0
+            totalTimeMs += session.summary?.totalTime || 0
+        }
+
+        return {
+            totalLaps,
+            validLaps,
+            validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
+            totalTimeMs,
+            totalTimeFormatted: formatDriveTime(totalTimeMs),
+            sessionCount: trackSessions.length
+        }
+    }
+
+    // Get historical best times for a track (for chart)
+    function getHistoricalBestTimes(trackId: string, grip?: string) {
+        const trackSessions = getSessionsForTrack(trackId)
+            .sort((a, b) => (a.meta.date_start || '').localeCompare(b.meta.date_start || ''))
+
+        return trackSessions
+            .map(s => {
+                const summary = s.summary
+                let bestQualy: number | null = null
+                let bestRace: number | null = null
+
+                // If grip specified, get from best_by_grip
+                if (grip && summary?.best_by_grip?.[grip]) {
+                    bestQualy = summary.best_by_grip[grip].bestQualy
+                    bestRace = summary.best_by_grip[grip].bestRace
+                } else {
+                    // Otherwise use overall bests
+                    bestQualy = summary?.best_qualy_ms || null
+                    bestRace = summary?.best_race_ms || null
+                }
+
+                return {
+                    date: s.meta.date_start,
+                    sessionId: s.sessionId,
+                    bestQualy,
+                    bestRace,
+                    sessionType: s.meta.session_type
+                }
+            })
+            .filter(t => t.bestQualy || t.bestRace)
     }
 
     // Get activity data for last N days (real data from sessions)
@@ -880,8 +1391,21 @@ export function useTelemetryData() {
         getSessionsForTrack,
         getSession,
         getActivityData,
+        // Track activity totals (for track detail page)
+        getTrackActivityTotals,
+        getHistoricalBestTimes,
+        // Centralized best times calculation
+        calculateAllBestTimesForTrack,
         calculateBestAvgRaceForTrack,
         getBestAvgRaceForTrack,
+        getBestTimesForGrip,
+        getTheoreticalTimes,
+        // Optimized track bests (with lazy caching)
+        getTrackBests,
+        invalidateTrackBests,
+        forceRecalculateTrackBests,
+        // Track activity from Firebase (with fallback to calculated)
+        getTrackActivity,
 
         // Computed
         lastSession,

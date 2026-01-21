@@ -91,7 +91,7 @@ function applyWarmupExclusion() {
 // ========================================
 // FIREBASE DATA LOADING
 // ========================================
-const { fetchSessionFull, trackStats, loadSessions } = useTelemetryData()
+const { fetchSessionFull, loadSessions, getTheoreticalTimes } = useTelemetryData()
 const fullSession = ref<FullSession | null>(null)
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
@@ -245,7 +245,6 @@ const session = computed(() => {
       pit: lap.has_pit_stop,
       sectors: lap.sector_times_ms?.map(s => (s / 1000).toFixed(1)) || ['-', '-', '-'],
       fuel: Math.round(lap.fuel_remaining),
-      trackTemp: Math.round(lap.road_temp),
       airTemp: lap.air_temp || 0,
       weather: lap.rain_intensity || 'No Rain',
       grip: lap.track_grip_status || 'Opt'
@@ -307,63 +306,30 @@ const session = computed(() => {
 })
 
 // ========================================
-// THEORETICAL TIMES - Based on track historic bests + temp adjustment
+// THEORETICAL TIMES - Using centralized getTheoreticalTimes with temp adjustment
 // ========================================
-const theoreticalTimes = computed(() => {
-  if (!fullSession.value) {
-    return { theoQualy: null, theoRace: null, theoAvgRace: null }
-  }
-  
-  const fs = fullSession.value
-  const info = fs.session_info
-  
-  // Use dominant grip from stintConditions (selected stint)
-  const dominantGrip = stintConditions.value.grip.dominant || 'Optimum'
-  // Use average temperature of the stint
-  const stintTemp = stintConditions.value.airTemp.avg || Math.round(info.start_air_temp || 23)
-  
-  // Find track stats for this track
-  const trackId = (info.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
-  const trackStat = trackStats.value.find(t => {
-    const statTrackId = t.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
-    return statTrackId.includes(trackId) || trackId.includes(statTrackId)
-  })
-  
-  if (!trackStat?.bestByGrip) {
-    return { theoQualy: null, theoRace: null, theoAvgRace: null, dominantGrip, stintTemp }
-  }
-  
-  const gripBests = trackStat.bestByGrip[dominantGrip]
-  if (!gripBests) {
-    return { theoQualy: null, theoRace: null, theoAvgRace: null, dominantGrip, stintTemp }
-  }
-  
-  // Temperature adjustment formula:
-  // Teorico = Storico + (TempStint - TempStorico) × 100ms/°C
-  // Colder = faster (negative adjustment), Hotter = slower (positive adjustment)
-  function calculateTheoretical(historicMs: number | null, historicTemp: number | null): number | null {
-    if (!historicMs) return null
-    const historicTempRounded = Math.round(historicTemp || stintTemp)
-    const tempDiff = stintTemp - historicTempRounded
-    const adjustmentMs = tempDiff * 100 // 100ms per degree
-    return Math.round(historicMs + adjustmentMs)
-  }
-  
-  return {
-    theoQualy: calculateTheoretical(gripBests.bestQualy, gripBests.bestQualyTemp),
-    theoRace: calculateTheoretical(gripBests.bestRace, gripBests.bestRaceTemp),
-    theoAvgRace: calculateTheoretical(gripBests.bestAvgRace, gripBests.bestAvgRaceTemp),
-    dominantGrip,
-    stintTemp,
-    // Historic values for display
-    historicQualy: gripBests.bestQualy,
-    historicQualyTemp: gripBests.bestQualyTemp,
-    historicRace: gripBests.bestRace,
-    historicRaceTemp: gripBests.bestRaceTemp,
-    historicAvgRace: gripBests.bestAvgRace,
-    historicAvgRaceTemp: gripBests.bestAvgRaceTemp
-  }
+type TheoreticalTimesData = {
+  theoQualy: number | null
+  theoRace: number | null
+  theoAvgRace: number | null
+  dominantGrip: string
+  stintTemp: number
+  historicQualy: number | null
+  historicQualyTemp: number | null
+  historicRace: number | null
+  historicRaceTemp: number | null
+  historicAvgRace: number | null
+  historicAvgRaceTemp: number | null
+}
+
+const theoreticalTimes = ref<TheoreticalTimesData>({
+  theoQualy: null, theoRace: null, theoAvgRace: null,
+  dominantGrip: 'Optimum', stintTemp: 23,
+  historicQualy: null, historicQualyTemp: null,
+  historicRace: null, historicRaceTemp: null,
+  historicAvgRace: null, historicAvgRaceTemp: null
 })
+// NOTE: Watch for theo recalculation is defined AFTER stintConditions (around line 550)
 
 // ========================================
 // SMART PRESELECTION - Best stint (R priority, then Q)
@@ -502,9 +468,17 @@ const stintConditions = computed(() => {
   const gripOrder: string[] = []  // Track order of first occurrence
   let validGripLaps = 0
   
+  // Normalize grip values (handle abbreviations)
+  const normalizeGrip = (grip: string) => {
+    if (grip === 'Opt') return 'Optimum'
+    return grip
+  }
+  
   for (const lap of laps) {
-    const grip = lap.grip || 'Unknown'
-    if (grip !== 'Unknown' && grip !== 'Opt') {  // Filter Unknown and abbreviations
+    let grip = lap.grip || 'Unknown'
+    grip = normalizeGrip(grip)
+    
+    if (grip !== 'Unknown') {
       if (!gripCounts[grip]) {
         gripOrder.push(grip)  // Add to order on first occurrence
       }
@@ -515,7 +489,7 @@ const stintConditions = computed(() => {
   
   // Calculate percentages and find dominant
   const percentages: { grip: string; pct: number }[] = []
-  let dominant = 'Optimum'
+  let dominant = 'Optimum'  // Default fallback
   let maxCount = 0
   
   for (const grip of gripOrder) {  // Iterate in first-occurrence order
@@ -546,6 +520,44 @@ const stintConditions = computed(() => {
     grip: { dominant, percentages, changed, display }
   }
 })
+
+// ========================================
+// THEORETICAL TIMES WATCHER - Recalculate when stint/session changes
+// ========================================
+watch(
+  [() => fullSession.value, () => stintConditions.value],
+  async ([fs, conditions]) => {
+    if (!fs) return
+    
+    const info = fs.session_info
+    const trackId = (info.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
+    const dominantGrip = conditions.grip.dominant || 'Optimum'
+    const stintTemp = conditions.airTemp.avg || Math.round(info.start_air_temp || 23)
+    
+    // Use centralized getTheoreticalTimes with temp adjustment
+    const theo = await getTheoreticalTimes(
+      trackId,
+      dominantGrip,
+      stintTemp,
+      targetUserId.value || undefined
+    )
+    
+    theoreticalTimes.value = {
+      theoQualy: theo.theoQualy,
+      theoRace: theo.theoRace,
+      theoAvgRace: theo.theoAvgRace,
+      dominantGrip,
+      stintTemp,
+      historicQualy: theo.historicQualy,
+      historicQualyTemp: theo.historicQualyTemp,
+      historicRace: theo.historicRace,
+      historicRaceTemp: theo.historicRaceTemp,
+      historicAvgRace: theo.historicAvgRace,
+      historicAvgRaceTemp: theo.historicAvgRaceTemp
+    }
+  },
+  { immediate: true }
+)
 
 // ========================================
 // CHART - supports Compare Mode + Target Zone + Lap Exclusion
@@ -1418,7 +1430,7 @@ const gripZones = computed(() => {
                   <th>Δ Teorico</th>
                   <th>Stato</th>
                   <template v-if="showDetailedLaps">
-                    <th>S1</th><th>S2</th><th>S3</th><th>Fuel</th><th>Track°</th><th>Grip</th>
+                    <th>S1</th><th>S2</th><th>S3</th><th>Fuel</th><th>Air°</th><th>Grip</th>
                   </template>
                 </tr>
               </thead>
@@ -1433,7 +1445,7 @@ const gripZones = computed(() => {
                     <td>{{ lap.sectors[1] }}</td>
                     <td>{{ lap.sectors[2] }}</td>
                     <td>{{ lap.fuel }}L</td>
-                    <td>{{ lap.trackTemp }}°</td>
+                    <td>{{ Math.round(lap.airTemp) }}°</td>
                     <td>{{ lap.grip }}</td>
                   </template>
                 </tr>
