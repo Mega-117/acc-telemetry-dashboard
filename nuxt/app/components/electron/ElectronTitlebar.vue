@@ -5,14 +5,20 @@
 // This component is only visible when running inside Electron
 // It provides: Refresh, Sync, Minimize, Maximize, Close buttons
 
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useElectronSync } from '~/composables/useElectronSync'
+import { useTelemetryData } from '~/composables/useTelemetryData'
+
+const route = useRoute()
+const router = useRouter()
 
 const isElectronVisible = ref(false)
 const isMaximized = ref(false)
+const isRefreshing = ref(false)
 
 // Sync composable
 const { isSyncing, syncTelemetryFiles, setupAutoSync, syncResults } = useElectronSync()
+const { loadSessions } = useTelemetryData()
 
 // Notification state
 const showNotification = ref(false)
@@ -35,9 +41,46 @@ onMounted(async () => {
   }
 })
 
+// Check if current route is dynamic (has parameters)
+const isDynamicRoute = () => {
+  // Routes like /sessioni/abc123, /piste/valencia have params
+  return Object.keys(route.params).length > 0
+}
+
 // Window control handlers
-const handleRefresh = () => {
-  (window as any).electronAPI?.pageRefresh()
+const handleRefresh = async () => {
+  // For dynamic routes, use soft refresh to avoid 404 on GitHub Pages
+  if (isDynamicRoute()) {
+    console.log('[TITLEBAR] Soft refresh for dynamic route:', route.fullPath)
+    isRefreshing.value = true
+    
+    try {
+      // Force route re-evaluation by navigating away and back
+      const currentPath = route.fullPath
+      
+      // Navigate to a safe base route momentarily
+      await router.replace({ path: '/panoramica', query: { _refresh: Date.now() } })
+      await nextTick()
+      
+      // Reload fresh data (force=true to bypass cache)
+      await loadSessions(undefined, true)
+      
+      // Navigate back to original route
+      await router.replace(currentPath)
+      
+      console.log('[TITLEBAR] Soft refresh complete')
+    } catch (e) {
+      console.error('[TITLEBAR] Soft refresh failed:', e)
+      // Fallback to hard refresh
+      ;(window as any).electronAPI?.pageRefresh()
+    } finally {
+      isRefreshing.value = false
+    }
+  } else {
+    // For static routes, hard refresh is safe
+    console.log('[TITLEBAR] Hard refresh for static route:', route.fullPath)
+    ;(window as any).electronAPI?.pageRefresh()
+  }
 }
 
 const handleSync = async () => {
@@ -76,7 +119,13 @@ const closeNotification = () => {
     
     <!-- Left buttons: Refresh & Sync -->
     <div class="titlebar-buttons-left">
-      <button class="titlebar-btn" title="Aggiorna pagina (F5)" @click="handleRefresh">
+      <button 
+        class="titlebar-btn" 
+        :class="{ 'refreshing': isRefreshing }"
+        :title="isRefreshing ? 'Aggiornamento in corso...' : 'Aggiorna pagina (Smart Refresh)'"
+        :disabled="isRefreshing"
+        @click="handleRefresh"
+      >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
           <path d="M21 3v5h-5" />
@@ -204,6 +253,17 @@ const closeNotification = () => {
     
     svg {
       animation: spin 0.8s ease-in-out infinite;
+      transform-origin: center center;
+    }
+  }
+  
+  // Refreshing animation (soft refresh)
+  &.refreshing {
+    color: #38bdf8;
+    cursor: wait;
+    
+    svg {
+      animation: spin 0.6s ease-in-out infinite;
       transform-origin: center center;
     }
   }
