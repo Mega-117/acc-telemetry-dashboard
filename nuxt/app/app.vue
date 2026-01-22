@@ -5,6 +5,7 @@
 
 import { ref, computed, onMounted, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useTelemetryData } from '~/composables/useTelemetryData'
 
 // === NUXT ROUTER ===
 const route = useRoute()
@@ -32,6 +33,10 @@ const {
   logout: firebaseLogout
 } = useFirebaseAuth()
 
+// === TELEMETRY DATA (for global prefetch) ===
+const { prefetchAllTrackBests, loadSessions } = useTelemetryData()
+const hasPrefetched = ref(false)
+
 // === APP STATE ===
 type AppState = 'initializing' | 'auth' | 'loading' | 'dashboard' | 'profile'
 type AuthState = 'login' | 'register' | 'reset' | 'register-success'
@@ -45,6 +50,21 @@ const hasInitialized = ref(false)
 // === CONFIG ===
 const REQUIRE_EMAIL_VERIFICATION = ref(false) // Always require email verification
 const transitionName = 'dissolve-fade-zoom' // Fixed animation
+
+// === GLOBAL PREFETCH: Load all trackBests when entering dashboard ===
+watch(appState, async (newState) => {
+  if (newState === 'dashboard' && !hasPrefetched.value && currentUser.value) {
+    hasPrefetched.value = true
+    console.log('[APP] 🚀 Starting global prefetch...')
+    
+    // First load sessions (if not already loaded)
+    await loadSessions()
+    
+    // Then prefetch all trackBests in batch (1 query instead of N)
+    const count = await prefetchAllTrackBests()
+    console.log(`[APP] ✅ Prefetch complete: ${count} trackBests cached`)
+  }
+})
 
 // === WATCH AUTH LOADING STATE ===
 // This watch handles the INITIAL auth check when the app loads

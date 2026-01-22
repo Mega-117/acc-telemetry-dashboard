@@ -108,10 +108,10 @@ export interface SessionSummary {
     avgCleanLap: number | null
     totalTime: number
     stintCount: number
-    // Optional grip-specific best times
-    best_qualy_ms?: number
-    best_race_ms?: number
-    best_avg_race_ms?: number
+    // Optional grip-specific best times (can be null or undefined)
+    best_qualy_ms?: number | null
+    best_race_ms?: number | null
+    best_avg_race_ms?: number | null
     best_qualy_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
     best_race_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
     best_avg_race_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
@@ -253,6 +253,7 @@ const globalSessions = ref<SessionDocument[]>([])
 const globalIsLoading = ref(false)
 const globalError = ref<string | null>(null)
 const globalLastUserId = ref<string | null>(null)  // Track which user's data is loaded
+const globalPrefetchComplete = ref(false)  // Track if batch prefetch has completed
 
 // === COMPOSABLE ===
 
@@ -894,7 +895,119 @@ export function useTelemetryData() {
         return await getTrackBests(trackId, userId)
     }
 
-    // Cache for track activity (separate from trackBests for flexibility)
+    /**
+     * BATCH PREFETCH: Load ALL trackBests in a single query
+     * Call this after login to populate cache for all pages.
+     * Reduces N separate reads to just 1 collection query.
+     * 
+     * @param userId - Optional user ID (default: current user)
+     * @returns Number of trackBests loaded
+     */
+    async function prefetchAllTrackBests(userId?: string): Promise<number> {
+        const targetUserId = userId || currentUser.value?.uid
+        if (!targetUserId) {
+            console.warn('[PREFETCH] No user ID, skipping prefetch')
+            return 0
+        }
+
+        // Skip if in Electron (uses local files)
+        if (isElectron.value) {
+            console.log('[PREFETCH] Electron mode, skipping Firebase prefetch')
+            return 0
+        }
+
+        console.log(`[PREFETCH] 🚀 Starting batch prefetch for user ${targetUserId}`)
+        const startTime = Date.now()
+
+        try {
+            // Single query to get ALL trackBests documents
+            const trackBestsRef = collection(db, `users/${targetUserId}/trackBests`)
+            const snapshot = await getDocs(query(trackBestsRef))
+
+            let loadedCount = 0
+            const standardGrips = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
+
+            snapshot.forEach(docSnap => {
+                const trackIdNorm = docSnap.id
+                const data = docSnap.data()
+                const cacheKey = `${trackIdNorm}_${targetUserId}`
+
+                // Parse bests data
+                const result: Record<string, GripBestTimes> = {}
+                const bestsSource = data.bests || data
+
+                for (const grip of standardGrips) {
+                    if (bestsSource[grip]) {
+                        result[grip] = bestsSource[grip] as GripBestTimes
+                    }
+                }
+
+                // Handle legacy 'Opt' -> merge into 'Optimum'
+                if (bestsSource['Opt']) {
+                    const legacyOpt = bestsSource['Opt'] as GripBestTimes
+                    if (!result['Optimum']) {
+                        result['Optimum'] = legacyOpt
+                    } else {
+                        const opt = result['Optimum']
+                        if (legacyOpt.bestQualy && (!opt.bestQualy || legacyOpt.bestQualy < opt.bestQualy)) {
+                            opt.bestQualy = legacyOpt.bestQualy
+                            opt.bestQualyTemp = legacyOpt.bestQualyTemp
+                            opt.bestQualySessionId = legacyOpt.bestQualySessionId
+                            opt.bestQualyDate = legacyOpt.bestQualyDate
+                        }
+                        if (legacyOpt.bestRace && (!opt.bestRace || legacyOpt.bestRace < opt.bestRace)) {
+                            opt.bestRace = legacyOpt.bestRace
+                            opt.bestRaceTemp = legacyOpt.bestRaceTemp
+                            opt.bestRaceSessionId = legacyOpt.bestRaceSessionId
+                            opt.bestRaceDate = legacyOpt.bestRaceDate
+                        }
+                        if (legacyOpt.bestAvgRace && (!opt.bestAvgRace || legacyOpt.bestAvgRace < opt.bestAvgRace)) {
+                            opt.bestAvgRace = legacyOpt.bestAvgRace
+                            opt.bestAvgRaceTemp = legacyOpt.bestAvgRaceTemp
+                            opt.bestAvgRaceSessionId = legacyOpt.bestAvgRaceSessionId
+                            opt.bestAvgRaceDate = legacyOpt.bestAvgRaceDate
+                        }
+                    }
+                }
+
+                // Store in trackBests cache
+                trackBestsCache.value[cacheKey] = result
+
+                // Also parse and store activity if present (avoids separate read!)
+                if (data.activity) {
+                    const activity = data.activity
+                    trackActivityCache.value[cacheKey] = {
+                        totalLaps: activity.totalLaps || 0,
+                        validLaps: activity.validLaps || 0,
+                        validPercent: activity.totalLaps > 0
+                            ? Math.round((activity.validLaps / activity.totalLaps) * 100)
+                            : 0,
+                        totalTimeMs: activity.totalTimeMs || 0,
+                        totalTimeFormatted: formatDriveTime(activity.totalTimeMs || 0),
+                        sessionCount: activity.sessionCount || 0,
+                        lastSessionDate: activity.lastSessionDate
+                    }
+                }
+
+                loadedCount++
+            })
+
+            const elapsed = Date.now() - startTime
+            console.log(`[PREFETCH] ✅ Loaded ${loadedCount} trackBests in ${elapsed}ms (1 query instead of ${loadedCount})`)
+
+            // Mark prefetch as complete so other components know cache is warm
+            globalPrefetchComplete.value = true
+
+            return loadedCount
+
+        } catch (e) {
+            console.error('[PREFETCH] Error during batch prefetch:', e)
+            globalPrefetchComplete.value = true  // Mark complete even on error to prevent blocking
+            return 0
+        }
+    }
+
+    // Cache for track activity (populated by prefetch or getTrackActivity)
     const trackActivityCache = ref<Record<string, TrackActivity>>({})
 
     type TrackActivity = {
@@ -1051,7 +1164,9 @@ export function useTelemetryData() {
 
         let best: number | null = null
         for (const grip of Object.keys(allBests)) {
-            const val = allBests[grip].bestAvgRace
+            const gripBests = allBests[grip]
+            if (!gripBests) continue
+            const val = gripBests.bestAvgRace
             if (val && (!best || val < best)) {
                 best = val
             }
@@ -1404,6 +1519,10 @@ export function useTelemetryData() {
         getTrackBests,
         invalidateTrackBests,
         forceRecalculateTrackBests,
+        // BATCH PREFETCH - Call after login to load all trackBests in 1 query
+        prefetchAllTrackBests,
+        // Flag to check if prefetch is complete (components should wait for this)
+        isPrefetchComplete: computed(() => globalPrefetchComplete.value),
         // Track activity from Firebase (with fallback to calculated)
         getTrackActivity,
 

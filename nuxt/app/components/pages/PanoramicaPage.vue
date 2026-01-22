@@ -123,7 +123,8 @@ const {
   activityTotals,
   isLoading, 
   loadSessions,
-  getBestTimesForGrip
+  getBestTimesForGrip,
+  isPrefetchComplete  // Wait for batch prefetch to complete
 } = useTelemetryData()
 
 // Activity chart data
@@ -190,12 +191,19 @@ const prevTrackName = computed(() => {
 })
 
 // === CENTRALIZED RECALCULATION FOR OPTIMUM GRIP ===
-// Trigger recalculation when tracks change - get ALL best times for Optimum grip
-watch([lastTrack, prevTrack], async () => {
+// Trigger recalculation when tracks change AND prefetch is complete
+// This prevents redundant Firebase calls during initial load
+watch([lastTrack, prevTrack, isPrefetchComplete], async ([last, prev, prefetchDone]) => {
+  // Wait for prefetch to complete before making calls (will be cache hits)
+  if (!prefetchDone) {
+    console.log('[PANORAMICA] Waiting for prefetch to complete...')
+    return
+  }
+  
   // Recalculate for last track using centralized function (Optimum grip)
-  if (lastTrack.value?.track) {
-    const bests = await getBestTimesForGrip(lastTrack.value.track, 'Optimum', targetUserId.value || undefined)
-    recalculatedByTrack.value[lastTrack.value.track.toLowerCase()] = {
+  if (last?.track) {
+    const bests = await getBestTimesForGrip(last.track, 'Optimum', targetUserId.value || undefined)
+    recalculatedByTrack.value[last.track.toLowerCase()] = {
       bestQualy: bests.bestQualy,
       bestRace: bests.bestRace,
       bestAvgRace: bests.bestAvgRace
@@ -203,9 +211,9 @@ watch([lastTrack, prevTrack], async () => {
   }
   
   // Recalculate for previous track
-  if (prevTrack.value?.track) {
-    const bests = await getBestTimesForGrip(prevTrack.value.track, 'Optimum', targetUserId.value || undefined)
-    recalculatedByTrack.value[prevTrack.value.track.toLowerCase()] = {
+  if (prev?.track) {
+    const bests = await getBestTimesForGrip(prev.track, 'Optimum', targetUserId.value || undefined)
+    recalculatedByTrack.value[prev.track.toLowerCase()] = {
       bestQualy: bests.bestQualy,
       bestRace: bests.bestRace,
       bestAvgRace: bests.bestAvgRace

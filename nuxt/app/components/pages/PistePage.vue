@@ -33,7 +33,7 @@ const emit = defineEmits<{
 }>()
 
 // === TELEMETRY DATA ===
-const { sessions, trackStats, isLoading, loadSessions, getTrackBests } = useTelemetryData()
+const { sessions, trackStats, isLoading, loadSessions, getTrackBests, isPrefetchComplete } = useTelemetryData()
 
 // Get pilot context (will be set when coach views a pilot)
 const targetUserId = usePilotContext()
@@ -46,12 +46,20 @@ onMounted(async () => {
   await loadSessions(targetUserId.value || undefined)
 })
 
-// Load trackBests for each track when trackStats updates
-watch(trackStats, async () => {
-  if (trackStats.value.length > 0) {
-    for (const stat of trackStats.value) {
+// Load trackBests for each track when trackStats updates AND prefetch is complete
+// This ensures all calls are CACHE HITS (0 Firebase reads)
+watch([trackStats, isPrefetchComplete], async ([stats, prefetchDone]) => {
+  // Wait for prefetch to complete
+  if (!prefetchDone) {
+    console.log('[PISTE] Waiting for prefetch to complete...')
+    return
+  }
+  
+  if (stats.length > 0) {
+    for (const stat of stats) {
       const trackId = stat.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
       try {
+        // Guaranteed cache hit after prefetchAllTrackBests() completed
         const bests = await getTrackBests(trackId, targetUserId.value || undefined)
         const optimumBests = bests?.['Optimum']
         trackBestsMap.value[trackId] = {
@@ -62,7 +70,7 @@ watch(trackStats, async () => {
         console.warn(`[PISTE] Failed to load trackBests for ${trackId}:`, e)
       }
     }
-    console.log('[PISTE] Loaded trackBests from getTrackBests (same source as TrackDetail):', trackBestsMap.value)
+    console.log('[PISTE] trackBests loaded (all cache hits):', Object.keys(trackBestsMap.value).length, 'tracks')
   }
 }, { immediate: true })
 
