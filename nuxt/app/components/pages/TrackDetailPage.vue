@@ -307,31 +307,23 @@ const activityStats = ref({
   sessionCount: 0
 })
 
-// Load activity from Firebase when track data is ready
-watch(trackSessions, async () => {
+// Calculate activity from current trackSessions (always accurate)
+// Note: We use local calculation instead of Firebase aggregates to ensure
+// accurate counts after duplicate cleanup operations
+watch(trackSessions, () => {
   if (trackSessions.value.length > 0) {
-    try {
-      const activity = await getTrackActivity(
-        props.trackId,
-        targetUserId.value || undefined
-      )
-      activityStats.value = activity
-    } catch (e) {
-      console.warn('[TRACK] Error loading activity from Firebase:', e)
-      // Fallback: calculate locally
-      const totalLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.laps || 0), 0)
-      const validLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.lapsValid || 0), 0)
-      const totalTimeMs = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.totalTime || 0), 0)
-      const hours = Math.floor(totalTimeMs / 3600000)
-      const minutes = Math.floor((totalTimeMs % 3600000) / 60000)
-      activityStats.value = {
-        totalLaps,
-        validLaps,
-        validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
-        totalTimeMs,
-        totalTimeFormatted: `${hours}h ${minutes}m`,
-        sessionCount: trackSessions.value.length
-      }
+    const totalLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.laps || 0), 0)
+    const validLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.lapsValid || 0), 0)
+    const totalTimeMs = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.totalTime || 0), 0)
+    const hours = Math.floor(totalTimeMs / 3600000)
+    const minutes = Math.floor((totalTimeMs % 3600000) / 60000)
+    activityStats.value = {
+      totalLaps,
+      validLaps,
+      validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
+      totalTimeMs,
+      totalTimeFormatted: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
+      sessionCount: trackSessions.value.length
     }
   }
 }, { immediate: true })

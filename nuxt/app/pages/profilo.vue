@@ -6,7 +6,7 @@ definePageMeta({
   layout: false
 })
 
-const { userDisplayName, logout: firebaseLogout } = useFirebaseAuth()
+const { userDisplayName, logout: firebaseLogout, userRole } = useFirebaseAuth()
 
 // Get user email from Firebase
 const { currentUser } = useFirebaseAuth()
@@ -26,7 +26,9 @@ const handleBack = () => {
   <ProfilePage
     :user-email="userEmail"
     :user-nickname="userDisplayName"
+    :user-role="userRole"
     @logout="handleLogout"
     @back="handleBack"
   />
 </template>
+

@@ -562,6 +562,9 @@ watch(
 // ========================================
 // CHART - supports Compare Mode + Target Zone + Lap Exclusion
 // ========================================
+// Centralized target threshold constant (0.6s = 6 decimi)
+const TARGET_THRESHOLD_S = 0.6
+
 const chartData = computed(() => {
   // Use compare stint data when in compare mode, otherwise selected stint
   const allLapsA = isCompareMode.value ? compareStintALaps.value : selectedStintLaps.value
@@ -574,8 +577,8 @@ const chartData = computed(() => {
   const theoMs = isQualy ? theoreticalTimes.value.theoQualy : theoreticalTimes.value.theoRace
   const theoSecA = theoMs ? theoMs / 1000 : 0
   
-  // Target Zone = Theoretical + 0.3s
-  const targetLine = theoSecA > 0 ? theoSecA + 0.3 : 0
+  // Target Zone = Theoretical + TARGET_THRESHOLD_S
+  const targetLine = theoSecA > 0 ? theoSecA + TARGET_THRESHOLD_S : 0
   
   // Find best lap time in stint (for purple marker)
   const bestLapTime = stintData?.best
@@ -655,7 +658,7 @@ const chartData = computed(() => {
   const isRace = !isQualy
   if (isRace && showTargetZone.value && lapsA.length > 0) {
     datasets.push({
-      label: 'Target (+0.3s)',
+      label: `Target (+${TARGET_THRESHOLD_S}s)`,
       data: lapsA.map(() => targetLine),
       borderColor: 'rgba(16, 185, 129, 0.6)',
       borderWidth: 2,
@@ -919,9 +922,9 @@ const consistencyStats = computed(() => {
     return { onTarget: 0, total: 0, pct: 0, targetLine: '-' }
   }
   
-  // Target = Theoretical + 0.3s
+  // Target = Theoretical + TARGET_THRESHOLD_S
   const theoSec = theoMs / 1000
-  const targetLine = theoSec + 0.3
+  const targetLine = theoSec + TARGET_THRESHOLD_S
   
   // Include all laps (valid and invalid), excluding only pit laps
   const allLaps = selectedStintLaps.value.filter(l => !l.pit)
@@ -1292,7 +1295,7 @@ const gripZones = computed(() => {
           <div v-if="selectedStint?.type === 'R' && consistencyStats.total > 0" class="tc-consistency">
             <span class="tc-cons-title">
               GIRI NEL TARGET
-              <UiInfoPopup title="Target = Teorico + 0.3s" position="left" size="small">
+              <UiInfoPopup title="Target = Teorico + 0.6s" position="left" size="small">
                 Conta quanti giri dello stint hanno un tempo ≤ al target.<br>
                 Include tutti i giri (validi e invalidi), esclusi i pit.
               </UiInfoPopup>
@@ -1303,6 +1306,10 @@ const gripZones = computed(() => {
                 <div class="tc-cons-fill" :style="{ width: consistencyStats.pct + '%', background: getBarColor(consistencyStats.pct) }"></div>
               </div>
               <span class="tc-cons-pct" :style="{ color: getBarColor(consistencyStats.pct) }">{{ consistencyStats.pct }}%</span>
+            </div>
+            <div class="tc-target-time">
+              <span class="tc-target-label">TARGET:</span>
+              <span class="tc-target-value">{{ consistencyStats.targetLine }}</span>
             </div>
             <div class="tc-toggles-row">
               <label class="tc-toggle" title="Mostra target zone sul grafico">
@@ -1898,6 +1905,21 @@ const gripZones = computed(() => {
 .tc-cons-pct {
   font-family: 'JetBrains Mono', monospace;
   font-size: 14px; font-weight: 700; color: #3b82f6;
+}
+// Target time display
+.tc-target-time {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 6px;
+}
+.tc-target-label {
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  color: rgba(255,255,255,0.5);
+}
+.tc-target-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px; font-weight: 600;
+  color: #10b981;
 }
 // Toggle switch for chart visualization
 .tc-toggle {

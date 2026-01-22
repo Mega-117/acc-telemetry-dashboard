@@ -9,6 +9,7 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 const props = defineProps<{
   userEmail?: string
   userNickname?: string
+  userRole?: 'pilot' | 'coach' | 'admin'
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +25,26 @@ const displayName = computed((): string => {
   if (props.userNickname) return props.userNickname
   if (props.userEmail) return props.userEmail.split('@')[0] ?? 'Utente'
   return 'Utente'
+})
+
+// Page title based on role
+const pageTitle = computed((): string => {
+  const titles: Record<string, string> = {
+    pilot: 'Profilo Pilota',
+    coach: 'Profilo Coach',
+    admin: 'Profilo Admin'
+  }
+  return titles[props.userRole || 'pilot']
+})
+
+// Role label for badge
+const roleLabel = computed((): string => {
+  const labels: Record<string, string> = {
+    pilot: 'PILOTA',
+    coach: 'COACH',
+    admin: 'ADMIN'
+  }
+  return labels[props.userRole || 'pilot']
 })
 
 // Form state for equipment
@@ -109,7 +130,7 @@ const handleBackToDashboard = () => {
       <div class="profile-container">
         
         <!-- Page Title -->
-        <h1 class="page-title">Profilo Pilota</h1>
+        <h1 class="page-title">{{ pageTitle }}</h1>
 
         <!-- Profile Grid -->
         <div class="profile-grid">
@@ -139,7 +160,8 @@ const handleBackToDashboard = () => {
             <!-- User Info -->
             <div class="user-info">
               <h2 class="user-nickname">{{ displayName }}</h2>
-              <p class="user-email">{{ userEmail }}</p>
+              <span class="role-badge" :class="`role-badge--${userRole || 'pilot'}`">{{ roleLabel }}</span>
+              <p class="user-email">{{ userEmail || 'Email non disponibile' }}</p>
             </div>
           </div>
 
@@ -362,6 +384,37 @@ $max-width: 1400px;
 .user-email {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.5);
+  margin-top: 8px;
+}
+
+// Role Badge
+.role-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border-radius: 4px;
+  margin-top: 8px;
+  text-transform: uppercase;
+
+  &--pilot {
+    background: rgba($color-racing-red, 0.2);
+    color: $color-racing-red;
+    border: 1px solid rgba($color-racing-red, 0.4);
+  }
+
+  &--coach {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.4);
+  }
+
+  &--admin {
+    background: rgba(234, 179, 8, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(234, 179, 8, 0.4);
+  }
 }
 
 // === CONTENT ===

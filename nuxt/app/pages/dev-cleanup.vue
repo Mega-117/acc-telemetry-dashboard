@@ -138,6 +138,53 @@ async function deleteAllOldFormat() {
   isLoading.value = false
 }
 
+// Smart delete: Keep only newest session in each group (by uploadedAt)
+async function deleteOlderDuplicates() {
+  if (!currentUser.value) return
+  
+  isLoading.value = true
+  const uid = currentUser.value.uid
+  
+  for (const [key, group] of duplicateGroups.value) {
+    if (group.length <= 1) continue
+    
+    // Sort by uploadedAt descending (newest first)
+    const sorted = [...group].sort((a, b) => {
+      const timeA = a.uploadedAt?.toMillis?.() || a.uploadedAt?.seconds * 1000 || 0
+      const timeB = b.uploadedAt?.toMillis?.() || b.uploadedAt?.seconds * 1000 || 0
+      return timeB - timeA  // Newest first
+    })
+    
+    // Keep first (newest), delete rest
+    const toDelete = sorted.slice(1)
+    
+    console.log(`[CLEANUP] Group ${key}: keeping ${sorted[0].sessionId}, deleting ${toDelete.length} older duplicates`)
+    
+    for (const session of toDelete) {
+      try {
+        // Delete rawChunks subcollection first
+        const chunksRef = collection(db, `users/${uid}/sessions/${session.sessionId}/rawChunks`)
+        const chunksSnap = await getDocs(chunksRef)
+        for (const chunk of chunksSnap.docs) {
+          await deleteDoc(chunk.ref)
+        }
+        
+        // Delete session document
+        const sessionRef = doc(db, `users/${uid}/sessions/${session.sessionId}`)
+        await deleteDoc(sessionRef)
+        
+        deletedCount.value++
+        console.log(`[CLEANUP] 🗑️ Deleted older duplicate: ${session.sessionId}`)
+      } catch (e: any) {
+        console.error(`[CLEANUP] Error deleting ${session.sessionId}:`, e.message)
+      }
+    }
+  }
+  
+  isLoading.value = false
+  await loadAndAnalyze()
+}
+
 // Stats
 const totalSessions = computed(() => sessions.value.length)
 const duplicateGroupCount = computed(() => duplicateGroups.value.size)
@@ -145,6 +192,17 @@ const oldFormatCount = computed(() => {
   let count = 0
   for (const [_, group] of duplicateGroups.value) {
     count += group.filter(s => isOldFormat(s.sessionId)).length
+  }
+  return count
+})
+
+// Count of older duplicates to delete (all but one per group)
+const olderDuplicateCount = computed(() => {
+  let count = 0
+  for (const [_, group] of duplicateGroups.value) {
+    if (group.length > 1) {
+      count += group.length - 1  // All except the newest
+    }
   }
   return count
 })
@@ -170,8 +228,8 @@ onMounted(() => {
           <span class="stat-label">Duplicate Groups</span>
         </div>
         <div class="stat-box stat-box--danger">
-          <span class="stat-value">{{ oldFormatCount }}</span>
-          <span class="stat-label">Old Format (to delete)</span>
+          <span class="stat-value">{{ olderDuplicateCount }}</span>
+          <span class="stat-label">Duplicates to Delete</span>
         </div>
         <div class="stat-box stat-box--success">
           <span class="stat-value">{{ deletedCount }}</span>
@@ -185,11 +243,11 @@ onMounted(() => {
           🔄 Refresh
         </button>
         <button 
-          @click="deleteAllOldFormat" 
-          :disabled="isLoading || oldFormatCount === 0" 
+          @click="deleteOlderDuplicates" 
+          :disabled="isLoading || olderDuplicateCount === 0" 
           class="btn btn--danger"
         >
-          🗑️ Delete All Old Format ({{ oldFormatCount }})
+          🗑️ Delete All Duplicates ({{ olderDuplicateCount }})
         </button>
       </div>
       

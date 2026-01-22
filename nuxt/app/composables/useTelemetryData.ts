@@ -193,10 +193,13 @@ export function formatLapTime(ms: number | null | undefined): string {
 }
 
 export function formatDriveTime(ms: number): string {
-    if (!ms || ms <= 0) return '0:00'
-    const minutes = Math.floor(ms / 60000)
-    const seconds = Math.floor((ms % 60000) / 1000)
-    return `${minutes}:${seconds.toString().padStart(2, '0')}`
+    if (!ms || ms <= 0) return '0h 0m'
+    const hours = Math.floor(ms / 3600000)
+    const minutes = Math.floor((ms % 3600000) / 60000)
+    if (hours > 0) {
+        return `${hours}h ${minutes}m`
+    }
+    return `${minutes}m`
 }
 
 export function formatCarName(car: string): string {
@@ -255,6 +258,56 @@ const globalError = ref<string | null>(null)
 const globalLastUserId = ref<string | null>(null)  // Track which user's data is loaded
 const globalPrefetchComplete = ref(false)  // Track if batch prefetch has completed
 
+// === SESSIONSTORAGE PERSISTENCE ===
+// Keys for sessionStorage cache (survives page refresh but not browser close)
+const CACHE_KEY_TRACK_BESTS = 'acc_trackBests_cache'
+const CACHE_KEY_TRACK_ACTIVITY = 'acc_trackActivity_cache'
+const CACHE_KEY_USER_ID = 'acc_cache_userId'
+
+// Helper: Save cache to sessionStorage
+function saveCacheToStorage(key: string, data: any, userId: string): void {
+    if (typeof window === 'undefined') return
+    try {
+        const payload = { userId, data, timestamp: Date.now() }
+        sessionStorage.setItem(key, JSON.stringify(payload))
+        console.log(`[CACHE] 💾 Saved ${key} to sessionStorage`)
+    } catch (e) {
+        console.warn('[CACHE] Failed to save to sessionStorage:', e)
+    }
+}
+
+// Helper: Load cache from sessionStorage (returns null if expired or wrong user)
+function loadCacheFromStorage(key: string, userId: string): any | null {
+    if (typeof window === 'undefined') return null
+    try {
+        const stored = sessionStorage.getItem(key)
+        if (!stored) return null
+
+        const { userId: storedUserId, data, timestamp } = JSON.parse(stored)
+
+        // Invalidate if different user
+        if (storedUserId !== userId) {
+            console.log(`[CACHE] Different user, invalidating ${key}`)
+            sessionStorage.removeItem(key)
+            return null
+        }
+
+        // Invalidate if older than 1 hour (3600000ms)
+        const maxAge = 3600000
+        if (Date.now() - timestamp > maxAge) {
+            console.log(`[CACHE] Cache expired, invalidating ${key}`)
+            sessionStorage.removeItem(key)
+            return null
+        }
+
+        console.log(`[CACHE] ✅ Loaded ${key} from sessionStorage (age: ${Math.round((Date.now() - timestamp) / 1000)}s)`)
+        return data
+    } catch (e) {
+        console.warn('[CACHE] Failed to load from sessionStorage:', e)
+        return null
+    }
+}
+
 // === COMPOSABLE ===
 
 export function useTelemetryData() {
@@ -272,8 +325,11 @@ export function useTelemetryData() {
     })
 
     // Helper: Generate session ID from date_start and track
+    // IMPORTANT: Must match useElectronSync.generateSessionId for consistency
     function generateSessionId(dateStart: string, track: string): string {
-        const base = `${dateStart}_${track}`.replace(/[^a-zA-Z0-9]/g, '_')
+        // Remove microseconds: "2026-01-04T17:11:38.128663" -> "2026-01-04T17:11:38"
+        const normalized = dateStart.split('.')[0]
+        const base = `${normalized}_${track}`.replace(/[^a-zA-Z0-9]/g, '_')
         return base.substring(0, 100)
     }
 
@@ -505,7 +561,36 @@ export function useTelemetryData() {
 
             // FALLBACK: Load from Firebase (web, coach/admin, or no local files)
             const firebaseSessions = await loadFromFirebase(targetUserId)
-            sessions.value = firebaseSessions
+
+            // DEDUPLICATION: Remove duplicates based on date_start + track (logical key)
+            // Sessions with same date_start (ignoring microseconds) and track are duplicates
+            const sessionMap = new Map<string, SessionDocument>()
+            for (const session of firebaseSessions) {
+                // Create logical key from date_start + track (normalized like generateSessionId)
+                // Remove microseconds: "2026-01-04T17:11:38.128663" -> "2026-01-04T17:11:38"
+                const dateKey = (session.meta.date_start || '').split('.')[0]
+                const trackKey = (session.meta.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
+                const logicalKey = `${dateKey}_${trackKey}`
+
+                const existing = sessionMap.get(logicalKey)
+                if (!existing) {
+                    sessionMap.set(logicalKey, session)
+                } else {
+                    // Keep the one with newer uploadedAt (or the existing one if no uploadedAt)
+                    const existingTime = existing.uploadedAt?.toMillis?.() || 0
+                    const newTime = session.uploadedAt?.toMillis?.() || 0
+                    if (newTime > existingTime) {
+                        sessionMap.set(logicalKey, session)
+                    }
+                }
+            }
+
+            const deduplicatedCount = firebaseSessions.length - sessionMap.size
+            if (deduplicatedCount > 0) {
+                console.log(`[TELEMETRY] ⚠️ Removed ${deduplicatedCount} duplicate sessions (same date + track)`)
+            }
+
+            sessions.value = Array.from(sessionMap.values())
 
             // Sort by date if not already
             sessions.value.sort((a, b) =>
@@ -913,7 +998,25 @@ export function useTelemetryData() {
         // Skip if in Electron (uses local files)
         if (isElectron.value) {
             console.log('[PREFETCH] Electron mode, skipping Firebase prefetch')
+            globalPrefetchComplete.value = true
             return 0
+        }
+
+        // 1. Try loading from sessionStorage first (avoids Firebase call on refresh)
+        const storedBests = loadCacheFromStorage(CACHE_KEY_TRACK_BESTS, targetUserId)
+        const storedActivity = loadCacheFromStorage(CACHE_KEY_TRACK_ACTIVITY, targetUserId)
+
+        if (storedBests && Object.keys(storedBests).length > 0) {
+            console.log(`[PREFETCH] ⚡ Using sessionStorage cache: ${Object.keys(storedBests).length} trackBests`)
+
+            // Restore in-memory caches from sessionStorage
+            Object.assign(trackBestsCache.value, storedBests)
+            if (storedActivity) {
+                Object.assign(trackActivityCache.value, storedActivity)
+            }
+
+            globalPrefetchComplete.value = true
+            return Object.keys(storedBests).length
         }
 
         console.log(`[PREFETCH] 🚀 Starting batch prefetch for user ${targetUserId}`)
@@ -994,6 +1097,10 @@ export function useTelemetryData() {
 
             const elapsed = Date.now() - startTime
             console.log(`[PREFETCH] ✅ Loaded ${loadedCount} trackBests in ${elapsed}ms (1 query instead of ${loadedCount})`)
+
+            // Save to sessionStorage for persistence across page refresh
+            saveCacheToStorage(CACHE_KEY_TRACK_BESTS, trackBestsCache.value, targetUserId)
+            saveCacheToStorage(CACHE_KEY_TRACK_ACTIVITY, trackActivityCache.value, targetUserId)
 
             // Mark prefetch as complete so other components know cache is warm
             globalPrefetchComplete.value = true
