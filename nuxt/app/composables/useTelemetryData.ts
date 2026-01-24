@@ -763,7 +763,11 @@ export function useTelemetryData() {
 
             // Check each grip condition
             for (const grip of gripConditions) {
-                const sessionBest = bestByGrip[grip]
+                const sessionBest = bestByGrip[grip] as {
+                    bestQualy?: number | null; bestQualyTemp?: number | null;
+                    bestRace?: number | null; bestRaceTemp?: number | null;
+                    bestAvgRace?: number | null; bestAvgRaceTemp?: number | null;
+                } | undefined
                 if (!sessionBest) continue
 
                 // Best Qualy
