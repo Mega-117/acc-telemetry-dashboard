@@ -718,9 +718,9 @@ export function useTelemetryData() {
     }
 
     /**
-     * Calculate ALL best times for a track by loading full session data.
+     * Calculate ALL best times for a track using session summaries (NO EXTRA QUERIES).
      * Returns best Qualy, Race, and AvgRace for each grip condition.
-     * This bypasses Firebase summary caching which may have incorrect values.
+     * Uses summary.best_by_grip which is already loaded with session metadata.
      * 
      * @param trackId - Track ID to calculate for
      * @param userId - Optional user ID (default: current user)
@@ -730,7 +730,6 @@ export function useTelemetryData() {
         trackId: string,
         userId?: string
     ): Promise<Record<string, GripBestTimes>> {
-        const targetUserId = userId || currentUser.value?.uid
         const trackIdNorm = trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
 
         const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
@@ -744,7 +743,7 @@ export function useTelemetryData() {
             }
         })
 
-        // Get sessions for this track
+        // Get sessions for this track (already loaded, no query needed)
         const trackSessionsList = sessions.value.filter(s => {
             const sessionTrackId = s.meta.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
             return sessionTrackId.includes(trackIdNorm) || trackIdNorm.includes(sessionTrackId)
@@ -752,79 +751,48 @@ export function useTelemetryData() {
 
         if (trackSessionsList.length === 0) return gripBests
 
-        // Process each session's full data
+        // Normalize grip helper
+        const normalizeGrip = (grip: string) => grip === 'Opt' ? 'Optimum' : grip
+
+        // Process each session's SUMMARY (already loaded, no extra queries!)
         for (const session of trackSessionsList) {
-            try {
-                const fullSession = await fetchSessionFull(session.sessionId, targetUserId)
-                if (!fullSession?.stints) continue
+            const sessionDate = session.meta.date_start || null
+            const bestByGrip = session.summary?.best_by_grip
 
-                for (const stint of fullSession.stints) {
-                    const isQualy = stint.type === 'Qualify'
-                    const laps = stint.laps || []
+            if (!bestByGrip) continue
 
-                    // Normalize grip values (handle abbreviations)
-                    const normalizeGrip = (grip: string) => {
-                        if (grip === 'Opt') return 'Optimum'
-                        return grip
-                    }
+            // Check each grip condition
+            for (const grip of gripConditions) {
+                const sessionBest = bestByGrip[grip]
+                if (!sessionBest) continue
 
-                    // Process each valid lap for best single lap times
-                    for (const lap of laps) {
-                        if (!lap.is_valid || lap.has_pit_stop || !lap.lap_time_ms) continue
-
-                        const grip = normalizeGrip(lap.track_grip_status || 'Unknown')
-                        const airTemp = lap.air_temp || 0
-
-                        if (!gripBests[grip]) continue
-
-                        // Get session date for storage
-                        const sessionDate = session.meta.date_start || null
-
-                        if (isQualy) {
-                            // Best Qualy lap
-                            if (!gripBests[grip].bestQualy || lap.lap_time_ms < gripBests[grip].bestQualy!) {
-                                gripBests[grip].bestQualy = lap.lap_time_ms
-                                gripBests[grip].bestQualyTemp = airTemp
-                                gripBests[grip].bestQualySessionId = session.sessionId
-                                gripBests[grip].bestQualyDate = sessionDate
-                            }
-                        } else {
-                            // Best Race/Practice lap
-                            if (!gripBests[grip].bestRace || lap.lap_time_ms < gripBests[grip].bestRace!) {
-                                gripBests[grip].bestRace = lap.lap_time_ms
-                                gripBests[grip].bestRaceTemp = airTemp
-                                gripBests[grip].bestRaceSessionId = session.sessionId
-                                gripBests[grip].bestRaceDate = sessionDate
-                            }
-                        }
-                    }
-
-                    // Best Avg Race from stint - ONLY if 5+ valid laps and NOT Qualify
-                    if (!isQualy && stint.avg_clean_lap && stint.avg_clean_lap > 0) {
-                        const validLaps = laps.filter((l: any) => l.is_valid && !l.has_pit_stop)
-
-                        if (validLaps.length >= MIN_VALID_LAPS_FOR_AVG) {
-                            const firstValidLap = validLaps[0]
-                            const grip = normalizeGrip(firstValidLap?.track_grip_status || 'Unknown')
-                            const airTemp = firstValidLap?.air_temp || 0
-                            const sessionDate = session.meta.date_start || null
-
-                            if (gripBests[grip]) {
-                                if (!gripBests[grip].bestAvgRace || stint.avg_clean_lap < gripBests[grip].bestAvgRace!) {
-                                    gripBests[grip].bestAvgRace = stint.avg_clean_lap
-                                    gripBests[grip].bestAvgRaceTemp = airTemp
-                                    gripBests[grip].bestAvgRaceSessionId = session.sessionId
-                                    gripBests[grip].bestAvgRaceDate = sessionDate
-                                }
-                            }
-                        }
-                    }
+                // Best Qualy
+                if (sessionBest.bestQualy && (!gripBests[grip].bestQualy || sessionBest.bestQualy < gripBests[grip].bestQualy!)) {
+                    gripBests[grip].bestQualy = sessionBest.bestQualy
+                    gripBests[grip].bestQualyTemp = sessionBest.bestQualyTemp
+                    gripBests[grip].bestQualySessionId = session.sessionId
+                    gripBests[grip].bestQualyDate = sessionDate
                 }
-            } catch (e) {
-                console.warn(`[TELEMETRY] Error loading session ${session.sessionId}:`, e)
+
+                // Best Race
+                if (sessionBest.bestRace && (!gripBests[grip].bestRace || sessionBest.bestRace < gripBests[grip].bestRace!)) {
+                    gripBests[grip].bestRace = sessionBest.bestRace
+                    gripBests[grip].bestRaceTemp = sessionBest.bestRaceTemp
+                    gripBests[grip].bestRaceSessionId = session.sessionId
+                    gripBests[grip].bestRaceDate = sessionDate
+                }
+
+                // Best Avg Race
+                if (sessionBest.bestAvgRace && (!gripBests[grip].bestAvgRace || sessionBest.bestAvgRace < gripBests[grip].bestAvgRace!)) {
+                    gripBests[grip].bestAvgRace = sessionBest.bestAvgRace
+                    gripBests[grip].bestAvgRaceTemp = sessionBest.bestAvgRaceTemp
+                    gripBests[grip].bestAvgRaceSessionId = session.sessionId
+                    gripBests[grip].bestAvgRaceDate = sessionDate
+                }
             }
         }
 
+        console.log(`[TELEMETRY] ⚡ Calculated trackBests for ${trackIdNorm} from ${trackSessionsList.length} sessions (0 extra queries)`)
         return gripBests
     }
 

@@ -1,1 +1,0 @@
-import{_ as t}from"./BPlL82aG.js";import{b as a,L as i,F as r,M as p,n as m}from"./BtVV03O3.js";import"./DHnQj81a.js";import"./BB2bT6Yu.js";import"./6jWmhFls.js";const d=a({__name:"index",setup(_){return(o,n)=>{const e=t;return r(),i(e,{onGoToSession:n[0]||(n[0]=s=>("navigateTo"in o?o.navigateTo:p(m))(`/sessioni/${s}`))})}}});export{d as default};
