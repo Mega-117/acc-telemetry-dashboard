@@ -74,8 +74,45 @@ export function useFirebaseAuth() {
             if (user) {
                 // Always ensure we have their role loaded
                 await ensureUserDocument(user)
+
+                // === ELECTRON: Save user identity to local file ===
+                // This creates .user_identity.json so the Logger can associate sessions
+                try {
+                    const electronAPI = (window as any).electronAPI
+                    console.log('[AUTH] electronAPI exists:', !!electronAPI)
+                    console.log('[AUTH] saveUserIdentity exists:', !!electronAPI?.saveUserIdentity)
+
+                    if (electronAPI?.saveUserIdentity) {
+                        console.log('[AUTH] Calling saveUserIdentity with:', {
+                            userId: user.uid,
+                            email: user.email,
+                            displayName: user.displayName
+                        })
+                        const result = await electronAPI.saveUserIdentity({
+                            userId: user.uid,
+                            email: user.email,
+                            displayName: user.displayName || user.email?.split('@')[0] || 'User'
+                        })
+                        console.log('[AUTH] Electron identity saved:', result ? '✅' : '❌')
+                    } else {
+                        console.log('[AUTH] Not in Electron environment (electronAPI not available)')
+                    }
+                } catch (e) {
+                    console.error('[AUTH] Identity save failed:', e)
+                }
             } else {
                 userRole.value = 'pilot'
+
+                // === ELECTRON: Clear identity on logout ===
+                try {
+                    const electronAPI = (window as any).electronAPI
+                    if (electronAPI?.clearUserIdentity) {
+                        await electronAPI.clearUserIdentity()
+                        console.log('[AUTH] Electron identity cleared')
+                    }
+                } catch (e) {
+                    // Ignore - not in Electron
+                }
             }
 
             isLoading.value = false

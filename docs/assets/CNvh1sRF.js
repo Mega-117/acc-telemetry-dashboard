@@ -1,1 +1,0 @@
-import{u as o}from"./n-h4XRH2.js";function u(){const e=o();function s(n){const i=n.startsWith("/")?n.slice(1):n,t=e.app.baseURL||"/";return(t.endsWith("/")?t:t+"/")+i}return{getPublicPath:s}}export{u};
