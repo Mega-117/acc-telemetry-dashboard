@@ -763,35 +763,34 @@ export function useTelemetryData() {
 
             // Check each grip condition
             for (const grip of gripConditions) {
-                const sessionBest = bestByGrip[grip] as {
-                    bestQualy?: number | null; bestQualyTemp?: number | null;
-                    bestRace?: number | null; bestRaceTemp?: number | null;
-                    bestAvgRace?: number | null; bestAvgRaceTemp?: number | null;
-                } | undefined
+                const sessionBest = bestByGrip[grip]
                 if (!sessionBest) continue
 
+                const currentBest = gripBests[grip]
+                if (!currentBest) continue // TypeScript safety
+
                 // Best Qualy
-                if (sessionBest.bestQualy && (!gripBests[grip].bestQualy || sessionBest.bestQualy < gripBests[grip].bestQualy!)) {
-                    gripBests[grip].bestQualy = sessionBest.bestQualy
-                    gripBests[grip].bestQualyTemp = sessionBest.bestQualyTemp
-                    gripBests[grip].bestQualySessionId = session.sessionId
-                    gripBests[grip].bestQualyDate = sessionDate
+                if (sessionBest.bestQualy && (!currentBest.bestQualy || sessionBest.bestQualy < currentBest.bestQualy)) {
+                    currentBest.bestQualy = sessionBest.bestQualy
+                    currentBest.bestQualyTemp = sessionBest.bestQualyTemp
+                    currentBest.bestQualySessionId = session.sessionId
+                    currentBest.bestQualyDate = sessionDate
                 }
 
                 // Best Race
-                if (sessionBest.bestRace && (!gripBests[grip].bestRace || sessionBest.bestRace < gripBests[grip].bestRace!)) {
-                    gripBests[grip].bestRace = sessionBest.bestRace
-                    gripBests[grip].bestRaceTemp = sessionBest.bestRaceTemp
-                    gripBests[grip].bestRaceSessionId = session.sessionId
-                    gripBests[grip].bestRaceDate = sessionDate
+                if (sessionBest.bestRace && (!currentBest.bestRace || sessionBest.bestRace < currentBest.bestRace)) {
+                    currentBest.bestRace = sessionBest.bestRace
+                    currentBest.bestRaceTemp = sessionBest.bestRaceTemp
+                    currentBest.bestRaceSessionId = session.sessionId
+                    currentBest.bestRaceDate = sessionDate
                 }
 
                 // Best Avg Race
-                if (sessionBest.bestAvgRace && (!gripBests[grip].bestAvgRace || sessionBest.bestAvgRace < gripBests[grip].bestAvgRace!)) {
-                    gripBests[grip].bestAvgRace = sessionBest.bestAvgRace
-                    gripBests[grip].bestAvgRaceTemp = sessionBest.bestAvgRaceTemp
-                    gripBests[grip].bestAvgRaceSessionId = session.sessionId
-                    gripBests[grip].bestAvgRaceDate = sessionDate
+                if (sessionBest.bestAvgRace && (!currentBest.bestAvgRace || sessionBest.bestAvgRace < currentBest.bestAvgRace)) {
+                    currentBest.bestAvgRace = sessionBest.bestAvgRace
+                    currentBest.bestAvgRaceTemp = sessionBest.bestAvgRaceTemp
+                    currentBest.bestAvgRaceSessionId = session.sessionId
+                    currentBest.bestAvgRaceDate = sessionDate
                 }
             }
         }
