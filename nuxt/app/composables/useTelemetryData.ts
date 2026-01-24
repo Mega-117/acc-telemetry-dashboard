@@ -542,24 +542,22 @@ export function useTelemetryData() {
         error.value = null
 
         try {
-            // OPTIMIZATION: If in Electron and loading OWN data, use local files
+            // HYBRID APPROACH: Always load from Firebase + merge local files not yet uploaded
+            // This ensures we see ALL sessions regardless of local file state
             const isLoadingOwnData = !userId || userId === currentUser.value?.uid
 
+            // 1. Load local files (if Electron and own data)
+            let localSessions: SessionDocument[] = []
             if (isElectron.value && isLoadingOwnData) {
                 try {
-                    const localSessions = await loadFromLocalFiles()
-                    if (localSessions.length > 0) {
-                        sessions.value = localSessions
-                        console.log(`[TELEMETRY] ⚡ Loaded ${localSessions.length} sessions from LOCAL files (0 Firebase reads)`)
-                        return sessions.value
-                    }
-                    console.log('[TELEMETRY] No local files found, falling back to Firebase')
+                    localSessions = await loadFromLocalFiles()
+                    console.log(`[TELEMETRY] Found ${localSessions.length} local files`)
                 } catch (localError) {
-                    console.warn('[TELEMETRY] Local load failed, falling back to Firebase:', localError)
+                    console.warn('[TELEMETRY] Local load failed:', localError)
                 }
             }
 
-            // FALLBACK: Load from Firebase (web, coach/admin, or no local files)
+            // 2. ALWAYS load from Firebase for complete data
             const firebaseSessions = await loadFromFirebase(targetUserId)
 
             // DEDUPLICATION: Remove duplicates based on date_start + track (logical key)
@@ -590,6 +588,23 @@ export function useTelemetryData() {
                 console.log(`[TELEMETRY] ⚠️ Removed ${deduplicatedCount} duplicate sessions (same date + track)`)
             }
 
+            // 3. MERGE: Add local sessions that are not yet on Firebase
+            let mergedCount = 0
+            for (const localSession of localSessions) {
+                const dateKey = (localSession.meta.date_start || '').split('.')[0]
+                const trackKey = (localSession.meta.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
+                const logicalKey = `${dateKey}_${trackKey}`
+
+                if (!sessionMap.has(logicalKey)) {
+                    sessionMap.set(logicalKey, localSession)
+                    mergedCount++
+                }
+            }
+
+            if (mergedCount > 0) {
+                console.log(`[TELEMETRY] 📁 Merged ${mergedCount} local-only sessions (not yet uploaded)`)
+            }
+
             sessions.value = Array.from(sessionMap.values())
 
             // Sort by date if not already
@@ -597,7 +612,7 @@ export function useTelemetryData() {
                 (b.meta.date_start || '').localeCompare(a.meta.date_start || '')
             )
 
-            console.log(`[TELEMETRY] Loaded ${sessions.value.length} sessions from Firebase for user ${targetUserId}`)
+            console.log(`[TELEMETRY] ⚡ Loaded ${sessions.value.length} sessions (${firebaseSessions.length} Firebase + ${mergedCount} local-only)`)
             return sessions.value
         } catch (e: any) {
             console.error('[TELEMETRY] Error loading sessions:', e)
@@ -995,12 +1010,7 @@ export function useTelemetryData() {
             return 0
         }
 
-        // Skip if in Electron (uses local files)
-        if (isElectron.value) {
-            console.log('[PREFETCH] Electron mode, skipping Firebase prefetch')
-            globalPrefetchComplete.value = true
-            return 0
-        }
+        // NOTE: Prefetch ora funziona ANCHE in Electron per garantire ottimizzazione query
 
         // 1. Try loading from sessionStorage first (avoids Firebase call on refresh)
         const storedBests = loadCacheFromStorage(CACHE_KEY_TRACK_BESTS, targetUserId)
