@@ -2056,9 +2056,17 @@ const gripZones = computed(() => {
         <div class="builder-panel">
           <div class="builder-panel-header">
             <span class="builder-panel-title">Strategy Builder</span>
-            <button v-if="hasBuilderContent" class="builder-reset-btn" @click="resetBuilder" title="Azzera selezione">
-              🗑️ Reset
-            </button>
+            <!-- Combo Status/Reset Button - Option 5 -->
+            <template v-if="hasBuilderContent">
+              <button v-if="isBuilderCompareReady" class="builder-combo-btn builder-combo-btn--active" @click="resetBuilder" title="Confronto attivo - Clicca per resettare">
+                <span class="combo-status">✓ Attivo</span>
+                <span class="combo-divider">|</span>
+                <span class="combo-reset">×</span>
+              </button>
+              <button v-else class="builder-combo-btn" @click="resetBuilder" title="Azzera selezione">
+                × Reset
+              </button>
+            </template>
           </div>
           
           <!-- Slot A -->
@@ -2095,11 +2103,6 @@ const gripZones = computed(() => {
                 </span>
               </template>
             </div>
-          </div>
-          
-          <!-- Compare status indicator -->
-          <div v-if="isBuilderCompareReady" class="builder-status builder-status--ready">
-            ✓ Confronto attivo
           </div>
         </div>
         
@@ -2191,8 +2194,10 @@ const gripZones = computed(() => {
         </template>
         
         <!-- NORMAL MODE: Single stint list with [+A] [+B] buttons -->
-        <div v-else class="stint-list stint-list--builder">
-          <div
+        <template v-else>
+          <h4 class="master-title">STINT</h4>
+          <div class="stint-list stint-list--builder">
+            <div
             v-for="stint in session.stints"
             :key="stint.number"
             :class="['stint-item stint-item--builder', { 
@@ -2219,28 +2224,33 @@ const gripZones = computed(() => {
               @click.stop="addToBuilderB(stint.number)"
             >+B</button>
             
-            <!-- Best stint indicator OR Warning icon -->
-            <span v-if="isBestStint(stint)" class="stint-best-pill">BEST</span>
-            <span v-else-if="getStintWarning(stint)" class="stint-best-icon" :title="getStintWarning(stint)?.message">{{ getStintWarning(stint)?.icon }}</span>
-            <span v-else class="stint-best-icon"></span>
+            <!-- Trophy for best stint OR Warning icon OR empty space -->
+            <span class="stint-icon-slot">
+              <template v-if="isBestStint(stint)">🏆</template>
+              <template v-else-if="getStintWarning(stint)">{{ getStintWarning(stint)?.icon }}</template>
+            </span>
+            
+            <!-- Stint Type badge -->
             <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stint.type }}</span>
-            <span class="stint-num">#{{ stint.number }}</span>
-            <span class="stint-laps">{{ stint.laps }}g</span>
+            
+            <!-- Laps count -->
+            <span class="stint-laps">{{ stint.laps }} Giri</span>
+            
+            <!-- Delta value only (no label) -->
             <span :class="['stint-delta', `delta--${getDeltaClass(getStintDeltaVsTheo(stint))}`]">
-              <span class="delta-val">{{ getStintDeltaVsTheo(stint) }}</span>
-              <span class="delta-lbl">{{ getDeltaLabel(getStintDeltaVsTheo(stint)) }}</span>
+              {{ getStintDeltaVsTheo(stint) }}
             </span>
           </div>
         </div>
         
         <!-- ALTRA SESSIONE BUTTON: Below stint list, hidden when cross-session active -->
         <button 
-          v-if="!isCrossSessionMode"
           class="altra-sessione-btn"
           @click="openSessionPicker"
         >
           Altra sessione
         </button>
+        </template>
       </aside>
 
       <!-- DETAIL: Analysis Panel -->
@@ -2896,7 +2906,7 @@ const gripZones = computed(() => {
 }
 
 // MASTER / DETAIL
-.master-detail { display: grid; grid-template-columns: 380px 1fr; gap: 20px; flex: 1; min-height: 0; }
+.master-detail { display: grid; grid-template-columns: 380px 1fr; gap: 32px; flex: 1; min-height: 0; align-items: start; }
 
 // MASTER
 .master {
@@ -2904,6 +2914,8 @@ const gripZones = computed(() => {
   background: linear-gradient(145deg,#151520,#0d0d12);
   border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
   padding: 16px; overflow: hidden;
+  position: sticky; top: 20px; // Resta visibile durante scroll
+  max-height: calc(100vh - 140px); // Evita overflow su schermi piccoli
 }
 .master-title { font-size: 12px; font-weight: 700; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin: 0 0 12px 0; }
 
@@ -4035,6 +4047,23 @@ const gripZones = computed(() => {
 // ========================================
 // CHART TOOLBAR
 // ========================================
+
+// === HIERARCHY SPACING: Chart Section ===
+// Creates visual separation between KPI (Livello 1) and Chart (Livello 2)
+.chart-section {
+  margin-top: 32px; // Stacco dal blocco KPI sopra
+  padding-top: 24px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+// === HIERARCHY SPACING: Laps Table Section ===
+// Creates visual separation between Chart (Livello 2) and Table (Livello 3)
+.laps-section {
+  margin-top: 40px; // Stacco forte dal grafico
+  padding-top: 24px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+}
+
 .chart-header-row {
   display: flex;
   justify-content: space-between;
@@ -4584,65 +4613,87 @@ const gripZones = computed(() => {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: linear-gradient(135deg, rgba(30,30,40,0.98) 0%, rgba(25,25,35,0.98) 100%);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(25, 25, 35, 0.95);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 8px;
-  padding: 12px 14px;
-  margin-bottom: 12px;
-  backdrop-filter: blur(10px);
+  padding: 16px 18px;
+  margin-bottom: 32px;
+  overflow: hidden;
 }
 
 .builder-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 14px;
+  // Altezza fissa per combo button
+  min-height: 26px;
 }
 
 .builder-panel-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255,255,255,0.5);
+  font-size: 10px; // Più piccolo
+  font-weight: 500; // Meno bold
+  color: rgba(255,255,255,0.4); // Più tenue
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
-.builder-reset-btn {
+// Combo Status/Reset Button - Option 5
+.builder-combo-btn {
   background: rgba(239, 68, 68, 0.1);
   border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 4px;
   color: #ef4444;
   font-size: 11px;
-  padding: 4px 8px;
+  padding: 4px 10px;
   cursor: pointer;
   transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   
   &:hover {
     background: rgba(239, 68, 68, 0.2);
     border-color: rgba(239, 68, 68, 0.4);
   }
-}
-
-.builder-status {
-  margin-top: 10px;
-  padding: 6px 10px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  text-align: center;
   
-  &--ready {
+  // Stato attivo - verde con status
+  &--active {
     background: rgba(34, 197, 94, 0.1);
-    border: 1px solid rgba(34, 197, 94, 0.2);
+    border-color: rgba(34, 197, 94, 0.3);
     color: #22c55e;
+    
+    .combo-status {
+      font-weight: 600;
+    }
+    
+    .combo-divider {
+      color: rgba(34, 197, 94, 0.4);
+      margin: 0 2px;
+    }
+    
+    .combo-reset {
+      color: rgba(255,255,255,0.5);
+      font-size: 13px;
+      
+      &:hover {
+        color: #ef4444;
+      }
+    }
+    
+    &:hover {
+      background: rgba(34, 197, 94, 0.15);
+      border-color: rgba(34, 197, 94, 0.5);
+    }
   }
 }
 
 .builder-slot {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 0;
+  gap: 14px;
+  padding: 10px 0;
+  min-height: 45px;
   
   &:not(:last-child) {
     border-bottom: 1px solid rgba(255,255,255,0.05);
@@ -4659,41 +4710,56 @@ const gripZones = computed(() => {
 .builder-slot--a .builder-slot-label { color: #3b82f6; }
 .builder-slot--b .builder-slot-label { color: #a855f7; }
 
+.builder-slot--a{
+  padding-top: 0px;
+}
+
+.builder-slot--b{
+  padding-bottom: 0px;
+}
+
 .builder-slot-content {
   display: flex;
   align-items: center;
   gap: 6px;
   flex: 1;
   flex-wrap: wrap;
+  // Altezza fissa per evitare shift quando chip sostituisce testo
+  min-height: 24px;
 }
 
 .builder-slot-empty {
   color: rgba(255,255,255,0.35);
   font-style: italic;
   font-size: 12px;
+  // Altezza linea fissa per allinearsi con le chip
+  line-height: 24px;
 }
 
 .builder-chip {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
+  gap: 6px;
+  padding: 5px 5px 5px 10px;
   border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
   font-family: 'JetBrains Mono', monospace;
+  // Altezza fissa uguale a placeholder per evitare micro-shift
+  height: 24px;
+  box-sizing: border-box;
 }
 
 .builder-chip--a1, .builder-chip--a2 {
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.12); // Meno saturo
+  color: rgba(96, 165, 250, 0.85);
+  border: 1px solid rgba(59, 130, 246, 0.2);
 }
 
 .builder-chip--b1, .builder-chip--b2 {
-  background: rgba(168, 85, 247, 0.2);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.3);
+  background: rgba(168, 85, 247, 0.12); // Meno saturo
+  color: rgba(192, 132, 252, 0.85);
+  border: 1px solid rgba(168, 85, 247, 0.2);
 }
 
 .chip-remove {
@@ -4716,7 +4782,7 @@ const gripZones = computed(() => {
 // CROSS-SESSION HEADERS
 // ========================================
 .cross-session-section {
-  margin-bottom: 8px;
+  margin-bottom: 24px; // Aumentato per separare Questa Sessione da Altra Sessione
 }
 
 .cross-session-header {
@@ -4884,13 +4950,62 @@ const gripZones = computed(() => {
   }
 }
 
+// Icon slot for trophy/warning (fixed width for alignment)
+.stint-icon-slot {
+  width: 20px;
+  text-align: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+// Laps display
+.stint-laps {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  white-space: nowrap;
+}
+
+// Delta display (compact, no label)
+.stint-delta {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  
+  // Green: on target (perfect)
+  &.delta--ontarget {
+    background: rgba(16, 185, 129, 0.15);
+    color: #10b981;
+  }
+  
+  // Yellow/Gold: close to target
+  &.delta--close {
+    background: rgba(234, 179, 8, 0.15);
+    color: #eab308;
+  }
+  
+  // Orange: margin (mid range)
+  &.delta--margin {
+    background: rgba(249, 115, 22, 0.15);
+    color: #f97316;
+  }
+  
+  // Red: far from target
+  &.delta--far {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+  }
+}
+
 // ========================================
 // ALTRA SESSIONE BUTTON - Dashed style below stint list
 // ========================================
 .altra-sessione-btn {
   width: 100%;
   padding: 12px 16px;
-  margin-top: 12px;
+  margin-top: 32px; // Aumentato per separare dalla lista stint
   background: transparent;
   border: 2px dashed rgba(255, 255, 255, 0.2);
   border-radius: 6px;
