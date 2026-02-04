@@ -2143,7 +2143,7 @@ const gripZones = computed(() => {
                   @click.stop="addToBuilderB(stint.number)"
                 >+B</button>
                 
-                <span v-if="isBestStint(stint)" class="stint-best-pill">BEST</span>
+                <span v-if="isBestStint(stint)" class="stint-best-pill">🏆</span>
                 <span v-else class="stint-best-icon"></span>
                 <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stint.type }}</span>
                 <span class="stint-num">#{{ stint.number }}</span>
@@ -2248,7 +2248,7 @@ const gripZones = computed(() => {
           class="altra-sessione-btn"
           @click="openSessionPicker"
         >
-          Altra sessione
+          Confronta con altra sessione
         </button>
         </template>
       </aside>
@@ -4958,11 +4958,50 @@ const gripZones = computed(() => {
   flex-shrink: 0;
 }
 
-// Laps display
+// Laps display - reduced visual weight per UX audit
 .stint-laps {
   font-size: 11px;
-  color: rgba(255,255,255,0.6);
+  color: rgba(255,255,255,0.4); // Più tenue
   white-space: nowrap;
+}
+
+// Type badge (R/Q) - using site colors
+.stint-type {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  
+  // Race = rosso
+  &--r {
+    background: rgba(239, 68, 68, 0.15);
+    color: #ef4444;
+  }
+  
+  // Quali = giallo
+  &--q {
+    background: rgba(234, 179, 8, 0.15);
+    color: #fbbf24;
+  }
+}
+
+// Stint number - secondary
+.stint-num {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.5);
+}
+
+// Best stint emoji 🏆
+.stint-best-pill {
+  font-size: 14px;
+  line-height: 1;
+}
+
+// Empty placeholder for non-best stints (keeps alignment)
+.stint-best-icon {
+  width: 32px; // Same as BEST pill
 }
 
 // Delta display (compact, no label)
@@ -5000,26 +5039,25 @@ const gripZones = computed(() => {
 }
 
 // ========================================
-// ALTRA SESSIONE BUTTON - Dashed style below stint list
+// ALTRA SESSIONE BUTTON - Inviting CTA per UX audit
 // ========================================
 .altra-sessione-btn {
   width: 100%;
-  padding: 12px 16px;
-  margin-top: 32px; // Aumentato per separare dalla lista stint
-  background: transparent;
-  border: 2px dashed rgba(255, 255, 255, 0.2);
+  padding: 14px 16px;
+  margin-top: 32px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 2px dashed rgba(255, 255, 255, 0.35);
   border-radius: 6px;
-  color: rgba(255, 255, 255, 0.5);
+  color: #fff;
   font-size: 13px;
-  font-weight: bold;
+  font-weight: 700;
   text-align: center;
   cursor: pointer;
   transition: all 0.15s ease;
   
   &:hover {
-    border-color: rgba(255, 255, 255, 0.4);
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.03);
+    border-color: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.08);
   }
 }
 
