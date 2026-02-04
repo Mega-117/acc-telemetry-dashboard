@@ -2143,11 +2143,17 @@ const gripZones = computed(() => {
                   @click.stop="addToBuilderB(stint.number)"
                 >+B</button>
                 
-                <span v-if="isBestStint(stint)" class="stint-best-pill">🏆</span>
-                <span v-else class="stint-best-icon"></span>
+                <!-- Trophy for best stint OR Warning icon OR empty space -->
+                <span class="stint-icon-slot">
+                  <template v-if="isBestStint(stint)">🏆</template>
+                  <template v-else-if="getStintWarning(stint)">{{ getStintWarning(stint)?.icon }}</template>
+                </span>
+                
+                <!-- Stint Type badge -->
                 <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stint.type }}</span>
-                <span class="stint-num">#{{ stint.number }}</span>
-                <span class="stint-laps">{{ stint.laps }}g</span>
+                
+                <!-- Laps count -->
+                <span class="stint-laps">{{ stint.laps }} Giri</span>
               </div>
             </div>
           </div>
@@ -2184,10 +2190,17 @@ const gripZones = computed(() => {
                   @click.stop="addToBuilderBCross(stint.number)"
                 >+B</button>
                 
-                <span class="stint-best-icon"></span>
+                <!-- Trophy for best stint OR Warning icon OR empty space -->
+                <span class="stint-icon-slot">
+                  <template v-if="isBestStint(stint)">🏆</template>
+                  <template v-else-if="getStintWarning(stint)">{{ getStintWarning(stint)?.icon }}</template>
+                </span>
+                
+                <!-- Stint Type badge -->
                 <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stint.type }}</span>
-                <span class="stint-num">#{{ stint.number }}</span>
-                <span class="stint-laps">{{ stint.laps }}g</span>
+                
+                <!-- Laps count -->
+                <span class="stint-laps">{{ stint.laps }} Giri</span>
               </div>
             </div>
           </div>
@@ -2266,16 +2279,7 @@ const gripZones = computed(() => {
           <button class="compare-close" @click="isBuilderSameSessionCompare ? resetBuilder() : clearCompare()">✕ Chiudi confronto</button>
         </div>
         
-        <!-- CROSS-SESSION COMPARE HEADER -->
-        <div v-if="isCrossSessionCompare" class="compare-header compare-header--cross">
-          <div class="compare-info">
-            <span class="compare-label">Confronto Cross-Session:</span>
-            <span class="compare-a">Strategia A: Stint #{{ selectedCrossStintA }} {{ crossStintA?.type }}</span>
-            <span class="compare-vs">vs</span>
-            <span class="compare-b">Strategia B: Stint #{{ selectedCrossStintB }} {{ crossStintB?.type }}</span>
-          </div>
-          <button class="compare-close" @click="clearCrossSession">✕ Chiudi confronto</button>
-        </div>
+        <!-- CROSS-SESSION COMPARE HEADER removed per user request -->
 
         <!-- Stint Header removed per user request (RACE/BEST pills) -->
 
@@ -3154,23 +3158,14 @@ const gripZones = computed(() => {
   min-width: 24px;
 }
 
-// BEST PILL (professional indicator)
+// BEST EMOJI 🏆 (no background)
 .stint-best-pill,
 .best-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 2px 6px;
-  min-width: 24px;
-  background: rgba($accent-success, 0.15);
-  border: 1px solid rgba($accent-success, 0.4);
-  border-radius: 4px;
-  font-family: $font-primary;
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  color: $accent-success;
-  text-transform: uppercase;
+  font-size: 14px;
+  line-height: 1;
 }
 
 // BUILDER ACTIVE PILL (indicates builder is source)
