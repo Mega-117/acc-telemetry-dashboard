@@ -3,7 +3,7 @@
 // ============================================
 
 import { ref, computed } from 'vue'
-import { collection, query, orderBy, getDocs as firebaseGetDocs, doc, getDoc as firebaseGetDoc, setDoc as firebaseSetDoc, deleteDoc as firebaseDeleteDoc, DocumentReference, Query } from 'firebase/firestore'
+import { collection, query, orderBy, getDocs as firebaseGetDocs, doc, getDoc as firebaseGetDoc, setDoc as firebaseSetDoc, deleteDoc as firebaseDeleteDoc, updateDoc as firebaseUpdateDoc, writeBatch, where, DocumentReference, Query } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 
 // === FIREBASE OPERATIONS TRACKER ===
@@ -662,6 +662,9 @@ export function useTelemetryData() {
 
         // FALLBACK: Load from Firebase chunks
         try {
+            // Determine if we're loading our own data or external user's data
+            const isExternalSession = targetUserId !== currentUser.value?.uid
+
             // Get session document
             const sessionRef = doc(db, `users/${targetUserId}/sessions/${sessionId}`)
             const sessionSnap = await getDoc(sessionRef)
@@ -674,8 +677,13 @@ export function useTelemetryData() {
             if (chunkCount === 0) return null
 
             // Fetch and reconstruct chunks
+            // For external sessions, we MUST filter by isPublic to satisfy Firebase rules
+            // Note: We skip orderBy for external sessions to avoid requiring a composite index
+            // The in-memory sort below handles ordering correctly
             const chunksRef = collection(db, `users/${targetUserId}/sessions/${sessionId}/rawChunks`)
-            const q = query(chunksRef, orderBy('idx', 'asc'))
+            const q = isExternalSession
+                ? query(chunksRef, where('isPublic', '==', true))
+                : query(chunksRef, orderBy('idx', 'asc'))
             const chunksSnap = await getDocs(q)
 
             const chunks: { idx: number; chunk: string }[] = []
@@ -689,7 +697,7 @@ export function useTelemetryData() {
             const rawText = chunks.map(c => c.chunk).join('')
 
             // Parse JSON
-            console.log(`[TELEMETRY] Loaded full session from Firebase chunks`)
+            console.log(`[TELEMETRY] Loaded full session from Firebase chunks${isExternalSession ? ' (EXTERNAL)' : ''}`)
             return JSON.parse(rawText) as FullSession
         } catch (e) {
             console.error('[TELEMETRY] Error fetching full session:', e)
@@ -1582,6 +1590,90 @@ export function useTelemetryData() {
         }
     })
 
+    // ========================================
+    // SESSION SHARING (Cross-User)
+    // ========================================
+
+    /**
+     * Set a session as public or private.
+     * Uses denormalization: updates isPublic on session AND all chunks.
+     * This optimizes read costs at the expense of write costs.
+     */
+    async function setSessionPublic(sessionId: string, isPublic: boolean): Promise<void> {
+        const userId = currentUser.value?.uid
+        if (!userId) throw new Error('Not authenticated')
+
+        // 1. Update session document
+        const sessionRef = doc(db, `users/${userId}/sessions/${sessionId}`)
+        await firebaseUpdateDoc(sessionRef, { isPublic })
+        console.log(`[SHARING] Session ${sessionId} set isPublic=${isPublic}`)
+
+        // 2. Batch update all chunks (denormalization for 0 extra reads)
+        const chunksRef = collection(db, `users/${userId}/sessions/${sessionId}/rawChunks`)
+        const chunksSnap = await getDocs(query(chunksRef))
+
+        if (chunksSnap.docs.length > 0) {
+            const batch = writeBatch(db)
+            chunksSnap.docs.forEach(chunkDoc => {
+                batch.update(chunkDoc.ref, { isPublic })
+            })
+            await batch.commit()
+            console.log(`[SHARING] Updated ${chunksSnap.docs.length} chunks with isPublic=${isPublic}`)
+        }
+    }
+
+    /**
+     * Count how many sessions are currently shared (isPublic=true)
+     */
+    async function countSharedSessions(): Promise<number> {
+        const userId = currentUser.value?.uid
+        if (!userId) return 0
+
+        const sessionsRef = collection(db, `users/${userId}/sessions`)
+        const q = query(sessionsRef, where('isPublic', '==', true))
+        const snap = await getDocs(q)
+        return snap.docs.length
+    }
+
+    /**
+     * Revoke all shared sessions (set isPublic=false on all)
+     * Returns the number of sessions revoked
+     */
+    async function revokeAllSharedSessions(): Promise<number> {
+        const userId = currentUser.value?.uid
+        if (!userId) throw new Error('Not authenticated')
+
+        // Find all public sessions
+        const sessionsRef = collection(db, `users/${userId}/sessions`)
+        const q = query(sessionsRef, where('isPublic', '==', true))
+        const snap = await getDocs(q)
+
+        let count = 0
+        for (const sessionDoc of snap.docs) {
+            await setSessionPublic(sessionDoc.id, false)
+            count++
+        }
+
+        console.log(`[SHARING] Revoked ${count} shared sessions`)
+        return count
+    }
+
+    /**
+     * Generate a shareable link for a session.
+     * Also sets the session as public if not already.
+     */
+    async function generateShareLink(sessionId: string): Promise<string> {
+        const userId = currentUser.value?.uid
+        if (!userId) throw new Error('Not authenticated')
+
+        // Ensure session is public
+        await setSessionPublic(sessionId, true)
+
+        // Generate link
+        const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+        return `${baseUrl}/sessioni/${sessionId}?userId=${userId}`
+    }
+
     return {
         // State
         sessions,
@@ -1619,6 +1711,12 @@ export function useTelemetryData() {
         lastUsedCar,
         lastUsedTrack,
         trackStats,
-        activityTotals
+        activityTotals,
+
+        // Session Sharing (Cross-User)
+        setSessionPublic,
+        countSharedSessions,
+        revokeAllSharedSessions,
+        generateShareLink
     }
 }

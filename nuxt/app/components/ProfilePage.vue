@@ -5,6 +5,7 @@
 
 import { ref, computed, onMounted } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useTelemetryData } from '~/composables/useTelemetryData'
 
 const props = defineProps<{
   userEmail?: string
@@ -65,8 +66,42 @@ onMounted(async () => {
     if (profile?.equipment) {
       equipment.value = { ...equipment.value, ...profile.equipment }
     }
+    // Load shared sessions count
+    await loadSharedCount()
   }
 })
+
+// ========================================
+// SESSION SHARING MANAGEMENT
+// ========================================
+const { countSharedSessions, revokeAllSharedSessions } = useTelemetryData()
+const sharedSessionsCount = ref(0)
+const isRevoking = ref(false)
+const revokeSuccess = ref(false)
+
+async function loadSharedCount() {
+  sharedSessionsCount.value = await countSharedSessions()
+}
+
+async function revokeAll() {
+  if (isRevoking.value) return
+  
+  isRevoking.value = true
+  revokeSuccess.value = false
+  
+  try {
+    const count = await revokeAllSharedSessions()
+    sharedSessionsCount.value = 0
+    revokeSuccess.value = true
+    console.log(`[PROFILE] Revoked ${count} shared sessions`)
+    
+    setTimeout(() => revokeSuccess.value = false, 2000)
+  } catch (e) {
+    console.error('[PROFILE] Revoke error:', e)
+  } finally {
+    isRevoking.value = false
+  }
+}
 
 // Save equipment to Firestore
 const handleSave = async () => {
@@ -228,6 +263,39 @@ const handleBackToDashboard = () => {
                   <template v-if="isSaving">Salvataggio...</template>
                   <template v-else-if="saveSuccess">✓ Salvato</template>
                   <template v-else>Salva Modifiche</template>
+                </button>
+              </div>
+            </div>
+
+            <!-- Sharing Card -->
+            <div class="profile-card sharing-card">
+              <h3 class="card-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <polyline points="15 3 21 3 21 9" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <line x1="10" y1="14" x2="21" y2="3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Sessioni Condivise
+              </h3>
+
+              <div class="sharing-info">
+                <p v-if="sharedSessionsCount > 0" class="sharing-count">
+                  Hai <strong>{{ sharedSessionsCount }}</strong> sessioni condivise pubblicamente.
+                </p>
+                <p v-else class="sharing-count sharing-count--empty">
+                  Nessuna sessione condivisa.
+                </p>
+                
+                <button 
+                  v-if="sharedSessionsCount > 0"
+                  class="revoke-btn"
+                  :class="{ 'revoke-btn--success': revokeSuccess }"
+                  :disabled="isRevoking"
+                  @click="revokeAll"
+                >
+                  <template v-if="isRevoking">Revocando...</template>
+                  <template v-else-if="revokeSuccess">✓ Revocate</template>
+                  <template v-else>🚫 Revoca tutte le condivisioni</template>
                 </button>
               </div>
             </div>
@@ -508,6 +576,62 @@ $max-width: 1400px;
 
   &--success {
     background: #22c55e;
+  }
+}
+
+// === SHARING CARD ===
+.sharing-card {
+  margin-top: 24px;
+}
+
+.sharing-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sharing-count {
+  font-size: 15px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+  
+  strong {
+    color: var(--gold, #ffc800);
+    font-weight: 700;
+  }
+  
+  &--empty {
+    color: rgba(255, 255, 255, 0.5);
+  }
+}
+
+.revoke-btn {
+  padding: 12px 20px;
+  background: rgba(255, 100, 100, 0.15);
+  border: 1px solid rgba(255, 100, 100, 0.4);
+  border-radius: 10px;
+  color: rgb(255, 100, 100);
+  font-family: $font-family;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  align-self: flex-start;
+  
+  &:hover:not(:disabled) {
+    background: rgba(255, 100, 100, 0.25);
+    border-color: rgba(255, 100, 100, 0.6);
+  }
+  
+  &:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
+  
+  &--success {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: #22c55e;
   }
 }
 

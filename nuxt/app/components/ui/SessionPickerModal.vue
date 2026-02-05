@@ -17,10 +17,77 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'select', sessionId: string): void
+  (e: 'select', sessionId: string, userId?: string, nickname?: string): void
 }>()
 
-const { sessions } = useTelemetryData()
+const { sessions, fetchSessionFull } = useTelemetryData()
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+const { getUserProfile } = useFirebaseAuth()
+
+// === SHARED LINK INPUT ===
+const sharedLink = ref('')
+const linkError = ref('')
+const isLoadingLink = ref(false)
+
+// Parse shared link to extract sessionId and userId
+function parseSharedLink(url: string): { sessionId: string, userId: string } | null {
+  // Pattern: /sessioni/SESSION_ID?userId=USER_ID
+  const match = url.match(/\/sessioni\/([^?]+)\?userId=([^&]+)/)
+  if (match && match[1] && match[2]) return { sessionId: match[1], userId: match[2] }
+  return null
+}
+
+async function loadSharedLink() {
+  linkError.value = ''
+  
+  const parsed = parseSharedLink(sharedLink.value)
+  if (!parsed) {
+    linkError.value = 'Link non valido. Formato atteso: .../sessioni/ID?userId=...'
+    return
+  }
+  
+  isLoadingLink.value = true
+  
+  try {
+    // 1. Fetch session from external user
+    const data = await fetchSessionFull(parsed.sessionId, parsed.userId)
+    
+    if (!data) {
+      linkError.value = 'Sessione non trovata o non più condivisa'
+      return
+    }
+    
+    // 2. Check track match
+    const sessionTrack = (data.session_info?.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
+    const currentTrackNorm = props.currentTrack.toLowerCase().replace(/[^a-z0-9]/g, '_')
+    
+    if (!sessionTrack.includes(currentTrackNorm) && !currentTrackNorm.includes(sessionTrack)) {
+      linkError.value = `Pista non corrispondente: ${data.session_info?.track || 'sconosciuta'} vs ${props.currentTrack}`
+      return
+    }
+    
+    // 3. Fetch nickname
+    let nickname = 'Utente Esterno'
+    try {
+      const profile = await getUserProfile(parsed.userId)
+      nickname = profile?.nickname || profile?.displayName || 'Utente Esterno'
+    } catch (e) {
+      // Ignore - use default
+    }
+    
+    // 4. Emit with userId and nickname
+    emit('select', parsed.sessionId, parsed.userId, nickname)
+    emit('close')
+    
+  } catch (e: any) {
+    console.error('[SHARE] Error loading shared session:', e)
+    linkError.value = e?.code === 'permission-denied' 
+      ? 'Sessione non più condivisa o accesso negato'
+      : 'Errore nel caricamento della sessione'
+  } finally {
+    isLoadingLink.value = false
+  }
+}
 
 // Filter sessions by same track, exclude current session
 const filteredSessions = computed(() => {
@@ -80,6 +147,32 @@ function closeModal() {
           <h2 class="spm-title">Aggiungi Sorgente Dati</h2>
           <p class="spm-subtitle">{{ formatTrackName(currentTrack) }} · {{ filteredSessions.length }} sessioni disponibili</p>
           <button class="spm-close" @click="closeModal">✕</button>
+        </div>
+        
+        <!-- Link Input Section -->
+        <div class="spm-link-section">
+          <label class="link-label">📋 Incolla link sessione condivisa</label>
+          <div class="link-input-row">
+            <input 
+              v-model="sharedLink"
+              type="text"
+              class="link-input"
+              placeholder="https://...?userId=..."
+              @keyup.enter="loadSharedLink"
+            />
+            <button 
+              class="link-load-btn" 
+              :disabled="isLoadingLink || !sharedLink"
+              @click="loadSharedLink"
+            >
+              {{ isLoadingLink ? '...' : 'Carica' }}
+            </button>
+          </div>
+          <p v-if="linkError" class="link-error">{{ linkError }}</p>
+        </div>
+
+        <div class="spm-divider">
+          <span>oppure seleziona dalle tue sessioni</span>
         </div>
         
         <!-- Session List -->
@@ -370,5 +463,89 @@ function closeModal() {
   padding: 48px 20px;
   color: rgba(255, 255, 255, 0.4);
   font-size: 14px;
+}
+
+// === LINK INPUT SECTION ===
+.spm-link-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.link-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 10px;
+}
+
+.link-input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.link-input {
+  flex: 1;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-family: $font-primary;
+  transition: all 0.2s;
+
+  &::placeholder {
+    color: rgba(255, 255, 255, 0.3);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.link-load-btn {
+  padding: 10px 20px;
+  background: $racing-red;
+  border: 1px solid $racing-red;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background: lighten($racing-red, 8%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba($racing-red, 0.4);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.4);
+    cursor: not-allowed;
+  }
+}
+
+.link-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #ff6b6b;
+}
+
+.spm-divider {
+  text-align: center;
+  padding: 12px 20px;
+  color: rgba(255, 255, 255, 0.35);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: rgba(0, 0, 0, 0.1);
 }
 </style>

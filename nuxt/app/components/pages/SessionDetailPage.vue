@@ -30,11 +30,19 @@ import {
   type StintData,
   type LapData
 } from '~/composables/useTelemetryData'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
-const props = defineProps<{ sessionId: string }>()
+// Get current user info for "Session A" label
+const { currentUser, getUserProfile } = useFirebaseAuth()
+const currentUserNickname = ref<string>('')
+
+const props = defineProps<{ sessionId: string; externalUserId?: string }>()
 const emit = defineEmits<{ back: [], 'go-to-track': [trackId: string] }>()
+
+// Is this a shared session from another user?
+const isSharedSession = computed(() => !!props.externalUserId)
 
 const showDetailedLaps = ref(false)
 
@@ -129,10 +137,39 @@ function applyWarmupExclusion() {
 // ========================================
 // FIREBASE DATA LOADING
 // ========================================
-const { fetchSessionFull, loadSessions, getTheoreticalTimes } = useTelemetryData()
+const { fetchSessionFull, loadSessions, getTheoreticalTimes, generateShareLink } = useTelemetryData()
 const fullSession = ref<FullSession | null>(null)
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
+
+// ========================================
+// SESSION SHARING
+// ========================================
+const isSharing = ref(false)
+const shareSuccess = ref(false)
+
+async function shareSession() {
+  if (!props.sessionId || isSharing.value) return
+  
+  isSharing.value = true
+  shareSuccess.value = false
+  
+  try {
+    const link = await generateShareLink(props.sessionId)
+    await navigator.clipboard.writeText(link)
+    shareSuccess.value = true
+    console.log('[SHARE] Link copied:', link)
+    
+    // Reset success state after 2 seconds
+    setTimeout(() => {
+      shareSuccess.value = false
+    }, 2000)
+  } catch (e) {
+    console.error('[SHARE] Error sharing session:', e)
+  } finally {
+    isSharing.value = false
+  }
+}
 
 // Get pilot context (will be set when coach views a pilot)
 const targetUserId = usePilotContext()
@@ -141,18 +178,35 @@ onMounted(async () => {
   isLoading.value = true
   loadError.value = null
   try {
-    // Load sessions first to populate trackStats (needed for theoretical times)
-    await loadSessions(targetUserId.value || undefined)
+    // Load current user's nickname from profile
+    if (currentUser.value?.uid) {
+      const profile = await getUserProfile(currentUser.value.uid)
+      currentUserNickname.value = profile?.nickname || currentUser.value.displayName || 'Tu'
+    }
     
-    const data = await fetchSessionFull(props.sessionId, targetUserId.value || undefined)
+    // Determine which user's data to load:
+    // 1. If externalUserId prop is set (shared link), use it
+    // 2. Otherwise use targetUserId (coach context) or current user
+    const userIdToLoad = props.externalUserId || targetUserId.value || undefined
+    
+    // Load sessions first to populate trackStats (needed for theoretical times)
+    // For external sessions, we skip this as we don't need stats
+    if (!props.externalUserId) {
+      await loadSessions(userIdToLoad)
+    }
+    
+    const data = await fetchSessionFull(props.sessionId, userIdToLoad)
     if (data) {
       fullSession.value = data
-      console.log('[SESSION_DETAIL] Loaded session:', data.session_info.track, data.stints.length, 'stints')
+      console.log('[SESSION_DETAIL] Loaded session:', data.session_info.track, data.stints.length, 'stints', props.externalUserId ? '(SHARED)' : '')
     } else {
       loadError.value = 'Sessione non trovata'
     }
   } catch (e: any) {
-    loadError.value = e.message || 'Errore caricamento'
+    console.error('[SESSION_DETAIL] Load error:', e)
+    loadError.value = e.code === 'permission-denied' 
+      ? 'Sessione non condivisa o accesso negato'
+      : (e.message || 'Errore caricamento')
   } finally {
     isLoading.value = false
   }
@@ -210,26 +264,35 @@ const crossSessionId = ref<string | null>(null)
 const crossSessionData = ref<FullSession | null>(null)
 const isCrossSessionMode = computed(() => crossSessionId.value !== null)
 
+// External session (from shared link)
+const crossSessionUserId = ref<string | null>(null)
+const crossSessionNickname = ref<string | null>(null)
+const isExternalSession = computed(() => crossSessionUserId.value !== null)
+
 function openSessionPicker() {
   showSessionPicker.value = true
 }
 
-async function handleSessionBSelect(sessionId: string) {
+async function handleSessionBSelect(sessionId: string, userId?: string, nickname?: string) {
   crossSessionId.value = sessionId
+  crossSessionUserId.value = userId || null
+  crossSessionNickname.value = nickname || null
   showSessionPicker.value = false
   
-  // Load the full session data
+  // Load the full session data (with optional external userId)
   const { fetchSessionFull } = useTelemetryData()
-  const data = await fetchSessionFull(sessionId)
+  const data = await fetchSessionFull(sessionId, userId)
   if (data) {
     crossSessionData.value = data
-    console.log('[CROSS-SESSION] Loaded session B:', sessionId, data.session_info.track)
+    console.log('[CROSS-SESSION] Loaded session B:', sessionId, userId ? `(external: ${nickname})` : '(own)', data.session_info.track)
   }
 }
 
 function clearCrossSession() {
   crossSessionId.value = null
   crossSessionData.value = null
+  crossSessionUserId.value = null
+  crossSessionNickname.value = null
   selectedCrossStintA.value = null
   selectedCrossStintB.value = null
   // Also clear multi-stint strategy selections
@@ -1881,17 +1944,30 @@ const chartData = computed(() => {
   }
   
   // Calculate max lap count for X-axis labels (use both strategies)
-  const maxLapCount = isBuilderSameSessionCompare.value 
-    ? Math.max(lapsA.length, lapsBForChart.length)
-    : lapsA.length
+  // Include cross-session compare mode with crossStintBLaps
+  let maxLapCount = lapsA.length
+  
+  if (isBuilderSameSessionCompare.value) {
+    maxLapCount = Math.max(lapsA.length, lapsBForChart.length)
+  } else if (isCrossSessionCompare.value) {
+    // For cross-session, get total laps from Session B (including second stint if active)
+    let crossBLength = crossStintBLaps.value.length
+    if (isStrategyMode.value && strategyBSecond.value) {
+      crossBLength += crossStintB2Laps.value.length
+    }
+    maxLapCount = Math.max(lapsA.length, crossBLength)
+  } else if (isCompareMode.value) {
+    // Same-session compare mode (legacy)
+    maxLapCount = Math.max(lapsA.length, compareStintBLaps.value.length)
+  }
   
   // Generate labels from 1 to maxLapCount
   const labels = Array.from({ length: maxLapCount }, (_, i) => `G${i + 1}`)
   
   // Extend Strategy A data with null values if shorter than max (so line stops where data ends)
-  if (isBuilderSameSessionCompare.value && lapsA.length < maxLapCount) {
+  if ((isBuilderSameSessionCompare.value || isCrossSessionCompare.value || isCompareMode.value) && lapsA.length < maxLapCount) {
     // Find Strategy A dataset and extend with nulls
-    const strategyADataset = datasets.find(d => d.label?.startsWith('Strategia A'))
+    const strategyADataset = datasets.find(d => d.label?.startsWith('Strategia A') || d.label?.startsWith('A:'))
     if (strategyADataset && Array.isArray(strategyADataset.data)) {
       const currentLength = strategyADataset.data.length
       for (let i = currentLength; i < maxLapCount; i++) {
@@ -1899,11 +1975,14 @@ const chartData = computed(() => {
         if (Array.isArray(strategyADataset.pointBackgroundColor)) {
           strategyADataset.pointBackgroundColor.push('transparent')
         }
+        if (Array.isArray(strategyADataset.pointRadius)) {
+          strategyADataset.pointRadius.push(0)
+        }
       }
     }
     
     // Extend theo and target lines to max length
-    const theoDataset = datasets.find(d => d.label === 'Teorico')
+    const theoDataset = datasets.find(d => d.label?.startsWith('Teorico'))
     if (theoDataset && Array.isArray(theoDataset.data) && theoDataset.data.length < maxLapCount) {
       const theoValue = theoDataset.data[0]
       for (let i = theoDataset.data.length; i < maxLapCount; i++) {
@@ -2190,15 +2269,15 @@ const stintDuration = computed(() => {
   const seconds = Math.floor(totalSeconds % 60)
   const milliseconds = Math.round(totalMs % 1000) // Only round ms to integer
   
-  // Precise format: "51:34.765" or "1:04:31.123" for >1h
+  // Precise format: "15m 34.465s" or "1h 04m 31.123s" for >1h
   let formatted = ''
   
   if (hours > 0) {
-    // "1:04:31.123" - full format with hours
-    formatted = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`
+    // "1h 04m 31.123s" - full format with hours
+    formatted = `${hours}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}s`
   } else {
-    // "51:34.765" - minutes:seconds.milliseconds
-    formatted = `${minutes}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`
+    // "15m 34.465s" - minutes + seconds.milliseconds
+    formatted = `${minutes}m ${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}s`
   }
   
   return { hours, minutes, seconds, milliseconds, formatted, totalMs }
@@ -2253,6 +2332,15 @@ const gripZones = computed(() => {
 
 <template>
   <div class="session-detail-wrapper">
+  <!-- Share Success Notification (teleported to body for fixed position) -->
+  <Teleport to="body">
+    <Transition name="slide-notification">
+      <div v-if="shareSuccess" class="share-notification">
+        <span class="share-notification-icon">✓</span>
+        <span class="share-notification-text">Link copiato nella clipboard!</span>
+      </div>
+    </Transition>
+  </Teleport>
   <LayoutPageContainer class="session-detail-page">
     <!-- NAV -->
     <div class="nav-bar">
@@ -2286,6 +2374,9 @@ const gripZones = computed(() => {
       <div class="header-row">
         <h1 class="track-name">{{ session.track.toUpperCase() }}</h1>
         <span :class="['type-badge', `type-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
+        <button class="share-session-btn" @click="shareSession" title="Condividi questa sessione">
+          🔗 Condividi
+        </button>
       </div>
       <div class="header-meta">
         <span>{{ session.date }}</span>
@@ -2371,7 +2462,7 @@ const gripZones = computed(() => {
           <!-- Session A Section -->
           <div class="cross-session-section">
             <div class="cross-session-header cross-session-header--a">
-              <span class="cross-session-label">Sorgente: Questa sessione</span>
+              <span class="cross-session-label">Sessione di {{ currentUserNickname || 'Te' }}</span>
               <span class="cross-session-date">{{ session.date }}</span>
             </div>
             
@@ -2423,7 +2514,14 @@ const gripZones = computed(() => {
           <!-- Session B Section -->
           <div class="cross-session-section">
             <div class="cross-session-header cross-session-header--b">
-              <span class="cross-session-label">Sorgente: Altra sessione</span>
+              <span class="cross-session-label">
+                <template v-if="isExternalSession">
+                  Sessione di {{ crossSessionNickname || 'Utente Esterno' }}
+                </template>
+                <template v-else>
+                  Sessione di {{ currentUserNickname || 'Te' }} (altra)
+                </template>
+              </span>
               <button class="cross-session-close" @click="clearCrossSession" title="Rimuovi questa sorgente">✕</button>
             </div>
             
@@ -2457,6 +2555,9 @@ const gripZones = computed(() => {
                   <template v-if="isBestStint(stint)">🏆</template>
                   <template v-else-if="getStintWarning(stint)">{{ getStintWarning(stint)?.icon }}</template>
                 </span>
+                
+                <!-- Stint Number -->
+                <span class="stint-number">#{{ stint.number }}</span>
                 
                 <!-- Stint Type badge -->
                 <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stint.type }}</span>
@@ -2627,7 +2728,7 @@ const gripZones = computed(() => {
                 
                 <!-- GIRI + DURATA combined row -->
                 <div class="ssc-table-row ssc-table-row--compact">
-                  <div class="ssc-td ssc-td--label">GIRI</div>
+                  <div class="ssc-td ssc-td--label">GIRI VALIDI</div>
                   <div class="ssc-td ssc-td--compact">
                     <template v-if="strategyAStints[stintIndex]">
                       {{ strategyAStints[stintIndex].validLapsCount ?? 0 }} su {{ strategyAStints[stintIndex].laps ?? 0 }}
@@ -3145,9 +3246,78 @@ const gripZones = computed(() => {
   &--qualify { background: rgba($accent-warning,0.15); border: 1px solid rgba($accent-warning,0.4); color: $accent-warning; }
   &--race { background: rgba(255,100,100,0.15); border: 1px solid rgba(255,100,100,0.4); color: rgb(255,100,100); }
 }
+.share-session-btn {
+  margin-left: auto;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: $racing-red;
+    border-color: $racing-red;
+    color: #fff;
+    box-shadow: 0 0 12px rgba($racing-red, 0.4);
+  }
+}
 .header-meta { display: flex; gap: 8px; font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 10px; .sep { color: rgba(255,255,255,0.2); } .car { color: rgba(255,255,255,0.5); } }
 .start-cond { display: flex; gap: 14px; font-size: 12px; color: rgba(255,255,255,0.7); }
 .cond-label { font-size: 9px; font-weight: 700; letter-spacing: 1px; color: rgba(255,255,255,0.5); padding: 3px 8px; background: rgba(255,255,255,0.05); border-radius: 4px; }
+
+// === SHARE NOTIFICATION BANNER (Fixed top-right viewport) ===
+.share-notification {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: rgba(20, 30, 20, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(34, 197, 94, 0.5);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(34, 197, 94, 0.2);
+}
+
+.share-notification-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: rgba(34, 197, 94, 0.25);
+  border-radius: 50%;
+  color: #22c55e;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.share-notification-text {
+  color: #22c55e;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+// Transition animation (slide from right)
+.slide-notification-enter-active,
+.slide-notification-leave-active {
+  transition: all 0.3s ease;
+}
+.slide-notification-enter-from {
+  opacity: 0;
+  transform: translateX(30px);
+}
+.slide-notification-leave-to {
+  opacity: 0;
+  transform: translateX(30px);
+}
 
 // === KPI SESSIONE CON DELTA ===
 .summary { display: flex; gap: 16px; margin-bottom: 20px; }
@@ -3521,11 +3691,11 @@ const gripZones = computed(() => {
 .stint-delta { display: flex; align-items: center; gap: 6px; justify-self: end; padding: 4px 8px; border-radius: 4px; }
 .delta-val { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; }
 .delta-lbl { font-size: 8px; font-weight: 700; opacity: 0.8; }
-.delta--faster { background: rgba($accent-success,0.12); .delta-val, .delta-lbl { color: $accent-success; } }
-.delta--ontarget { background: rgba($accent-success,0.12); .delta-val, .delta-lbl { color: $accent-success; } }
-.delta--close { background: rgba($accent-warning,0.12); .delta-val, .delta-lbl { color: $accent-warning; } }
-.delta--margin { background: rgba(#f97316,0.1); .delta-val, .delta-lbl { color: #f97316; } }
-.delta--far { background: rgba(255,100,100,0.1); .delta-val, .delta-lbl { color: rgb(255,100,100); } }
+.delta--faster { background: rgba($accent-success,0.12); color: $accent-success; .delta-val, .delta-lbl { color: $accent-success; } }
+.delta--ontarget { background: rgba($accent-success,0.12); color: $accent-success; .delta-val, .delta-lbl { color: $accent-success; } }
+.delta--close { background: rgba($accent-warning,0.12); color: $accent-warning; .delta-val, .delta-lbl { color: $accent-warning; } }
+.delta--margin { background: rgba(#f97316,0.1); color: #f97316; .delta-val, .delta-lbl { color: #f97316; } }
+.delta--far { background: rgba(255,100,100,0.1); color: rgb(255,100,100); .delta-val, .delta-lbl { color: rgb(255,100,100); } }
 
 // DETAIL
 .detail {
@@ -4704,7 +4874,7 @@ const gripZones = computed(() => {
 }
 .ssc-table-header {
   display: grid;
-  grid-template-columns: 80px 1fr 1fr 100px;
+  grid-template-columns: 95px 1fr 1fr 100px;
   gap: 12px;
   padding: 0 0 12px 0;
   border-bottom: 2px solid rgba(239,68,68,0.2);
@@ -4719,7 +4889,7 @@ const gripZones = computed(() => {
 }
 .ssc-table-row {
   display: grid;
-  grid-template-columns: 80px 1fr 1fr 100px;
+  grid-template-columns: 95px 1fr 1fr 100px;
   gap: 12px;
   padding: 10px 0;
   border-bottom: 1px solid rgba(255,255,255,0.04);
@@ -6367,3 +6537,57 @@ const gripZones = computed(() => {
 
 
 </style>
+
+<!-- Global styles for Teleported notification banner -->
+<style lang="scss">
+// === SHARE NOTIFICATION BANNER (Teleported to body) ===
+.share-notification {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: rgba(20, 30, 20, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(34, 197, 94, 0.5);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(34, 197, 94, 0.2);
+}
+
+.share-notification-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: rgba(34, 197, 94, 0.25);
+  border-radius: 50%;
+  color: #22c55e;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.share-notification-text {
+  color: #22c55e;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+// Transition animation (slide from right)
+.slide-notification-enter-active,
+.slide-notification-leave-active {
+  transition: all 0.3s ease;
+}
+.slide-notification-enter-from {
+  opacity: 0;
+  transform: translateX(30px);
+}
+.slide-notification-leave-to {
+  opacity: 0;
+  transform: translateX(30px);
+}
+</style>
+
