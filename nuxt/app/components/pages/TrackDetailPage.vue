@@ -3,7 +3,7 @@
 // TrackDetailPage - Track detail with Firebase data
 // ============================================
 
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 
 // Composable for public path (GitHub Pages compatibility)
 const { getPublicPath } = usePublicPath()
@@ -24,9 +24,11 @@ import {
   formatLapTime,
   formatCarName,
   formatTrackName,
-  formatDate,
-  getSessionTypeLabel
+  getSessionTypeLabel,
+  CAR_CATEGORIES,
+  type CarCategory
 } from '~/composables/useTelemetryData'
+import { runTrackValidation } from '~/composables/useDebugValidator'
 
 // Register Chart.js components
 ChartJS.register(
@@ -56,10 +58,10 @@ const targetUserId = usePilotContext()
 // Format date to short readable format (e.g., "19 gen 2026")
 function formatShortDate(isoDate: string | null): string {
   if (!isoDate) return ''
-  const dateStr = isoDate.split('T')[0]
-  const [year, month, day] = dateStr.split('-')
+  const dateStr = isoDate.split('T')[0] ?? isoDate
+  const [year = '0', month = '0', day = '0'] = dateStr.split('-')
   const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
-  return `${parseInt(day)} ${months[parseInt(month) - 1]} ${year}`
+  return `${parseInt(day)} ${months[parseInt(month) - 1] ?? ''} ${year}`
 }
 
 // ========================================
@@ -108,28 +110,50 @@ const trackMetadata: Record<string, { name: string, fullName: string, country: s
 const gripConditions = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
 const selectedGrip = ref('Optimum')
 
+// Car categories for dropdown
+const selectedCategory = ref<CarCategory>('GT3')
+
 // Recalculated ALL best times from full session data (using centralized function)
 type GripBestTimes = {
   bestQualy: number | null
   bestQualyTemp: number | null
+  bestQualySessionId: string | null
+  bestQualyDate: string | null
   bestRace: number | null
   bestRaceTemp: number | null
+  bestRaceSessionId: string | null
+  bestRaceDate: string | null
   bestAvgRace: number | null
   bestAvgRaceTemp: number | null
+  bestAvgRaceSessionId: string | null
+  bestAvgRaceDate: string | null
 }
 const recalculatedBestByGrip = ref<Record<string, GripBestTimes>>({})
 const isRecalculating = ref(false)
 
-// Trigger recalculation when track sessions change
-watch(trackSessions, async () => {
+// Trigger recalculation when track sessions change or category changes
+watch([trackSessions, selectedCategory], async () => {
   if (trackSessions.value.length > 0) {
     isRecalculating.value = true
     // Use getTrackBests for optimized loading (with lazy caching)
     recalculatedBestByGrip.value = await getTrackBests(
       props.trackId,
+      selectedCategory.value,
       targetUserId.value || undefined
     )
     isRecalculating.value = false
+    
+    // DEV: Auto-run validation tests
+    if (import.meta.env.DEV) {
+      nextTick(() => {
+        runTrackValidation(
+          track.value,
+          trackSessions.value,
+          recalculatedBestByGrip.value,
+          selectedGrip.value
+        )
+      })
+    }
   }
 }, { immediate: true })
 
@@ -523,8 +547,8 @@ const chartOptions = computed(() => {
             size: 11
           },
           stepSize: 1,
-          callback: function(value: number) {
-            return labels[Math.round(value)] || ''
+          callback: function(value: string | number) {
+            return labels[Math.round(Number(value))] || ''
           }
         }
       },
@@ -710,11 +734,18 @@ function goToSession(id: string) {
         <div class="sidebar-section">
           <div class="section-header-row">
             <h2 class="section-title">Migliori Tempi</h2>
-            <select v-model="selectedGrip" class="grip-selector">
-              <option v-for="grip in gripConditions" :key="grip" :value="grip">
-                {{ grip }}
-              </option>
-            </select>
+            <div class="filters-row">
+              <select v-model="selectedCategory" class="category-selector">
+                <option v-for="cat in CAR_CATEGORIES" :key="cat" :value="cat">
+                  {{ cat }}
+                </option>
+              </select>
+              <select v-model="selectedGrip" class="grip-selector">
+                <option v-for="grip in gripConditions" :key="grip" :value="grip">
+                  {{ grip }}
+                </option>
+              </select>
+            </div>
           </div>
           <div class="best-times-stack">
             <div class="best-time-card best-time-card--qualy">
@@ -725,7 +756,7 @@ function goToSession(id: string) {
                 <span class="condition-sep">•</span>
                 <span>{{ track.bestQualyConditions.airTemp }}°C</span>
               </span>
-              <span v-else-if="!track.bestQualy" class="no-data-hint">Nessun dato per {{ selectedGrip }}</span>
+              <span v-else-if="!track.bestQualy" class="no-data-hint">Nessun dato {{ selectedCategory }} / {{ selectedGrip }}</span>
               <button 
                 v-if="track.bestQualySessionId" 
                 class="session-link-btn"
@@ -999,6 +1030,12 @@ function goToSession(id: string) {
   }
 }
 
+.filters-row {
+  display: flex;
+  gap: 8px;
+}
+
+.category-selector,
 .grip-selector {
   padding: 6px 12px;
   border-radius: 8px;
@@ -1023,6 +1060,18 @@ function goToSession(id: string) {
   option {
     background: #1a1a2e;
     color: #fff;
+  }
+}
+
+.category-selector {
+  border-color: rgba($racing-orange, 0.4);
+  
+  &:hover {
+    border-color: rgba($racing-orange, 0.6);
+  }
+  
+  &:focus {
+    border-color: $racing-orange;
   }
 }
 

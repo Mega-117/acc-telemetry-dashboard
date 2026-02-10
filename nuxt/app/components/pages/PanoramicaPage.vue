@@ -202,7 +202,7 @@ watch([lastTrack, prevTrack, isPrefetchComplete], async ([last, prev, prefetchDo
   
   // Recalculate for last track using centralized function (Optimum grip)
   if (last?.track) {
-    const bests = await getBestTimesForGrip(last.track, 'Optimum', targetUserId.value || undefined)
+    const bests = await getBestTimesForGrip(last.track, 'Optimum', 'GT3', targetUserId.value || undefined)
     recalculatedByTrack.value[last.track.toLowerCase()] = {
       bestQualy: bests.bestQualy,
       bestRace: bests.bestRace,
@@ -212,7 +212,7 @@ watch([lastTrack, prevTrack, isPrefetchComplete], async ([last, prev, prefetchDo
   
   // Recalculate for previous track
   if (prev?.track) {
-    const bests = await getBestTimesForGrip(prev.track, 'Optimum', targetUserId.value || undefined)
+    const bests = await getBestTimesForGrip(prev.track, 'Optimum', 'GT3', targetUserId.value || undefined)
     recalculatedByTrack.value[prev.track.toLowerCase()] = {
       bestQualy: bests.bestQualy,
       bestRace: bests.bestRace,

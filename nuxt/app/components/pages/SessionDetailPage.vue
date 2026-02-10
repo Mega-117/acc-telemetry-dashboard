@@ -4,7 +4,7 @@
 // Now connected to Firebase for real data
 // ============================================
 
-import { computed, ref, onMounted, watch } from 'vue'
+import { computed, ref, onMounted, watch, nextTick } from 'vue'
 import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -26,11 +26,13 @@ import {
   formatDateFull,
   formatTime,
   getSessionTypeLabel,
+  getCarCategory,
   type FullSession,
   type StintData,
   type LapData
 } from '~/composables/useTelemetryData'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { runSessionValidation } from '~/composables/useDebugValidator'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
@@ -209,6 +211,14 @@ onMounted(async () => {
       : (e.message || 'Errore caricamento')
   } finally {
     isLoading.value = false
+    
+    // DEV: Auto-run validation tests
+    if (import.meta.env.DEV && fullSession.value) {
+      // Use nextTick to ensure session computed is updated
+      nextTick(() => {
+        runSessionValidation(session.value, fullSession.value)
+      })
+    }
   }
 })
 
@@ -872,10 +882,12 @@ const session = computed(() => {
     lapsData[stint.stint_number] = stint.laps.map(lap => ({
       lap: lap.lap_number,
       time: formatLapTime(lap.lap_time_ms),
+      lap_time_ms: lap.lap_time_ms,
       delta: `+${((lap.lap_time_ms - info.session_best_lap) / 1000).toFixed(3)}`,
       valid: lap.is_valid,
       pit: lap.has_pit_stop,
-      sectors: lap.sector_times_ms?.map(s => (s / 1000).toFixed(1)) || ['-', '-', '-'],
+      sectors: lap.sector_times_ms?.map(s => (s / 1000).toFixed(3)) || ['-', '-', '-'],
+      sector_times_ms: lap.sector_times_ms || [],
       fuel: Math.round(lap.fuel_remaining),
       airTemp: lap.air_temp || 0,
       weather: lap.rain_intensity || 'No Rain',
@@ -1131,6 +1143,52 @@ function getLapsForTable() {
   
   // Fallback: selected stint laps
   return selectedStintLaps.value
+}
+
+// ========================================
+// BEST SECTORS & BEST LAP HIGHLIGHTING
+// ========================================
+// Computes best S1, S2, S3 and best lap time for the currently displayed laps.
+// Uses raw ms values for accurate comparison.
+const bestSectors = computed(() => {
+  const laps = getLapsForTable()
+  let bestS1 = Infinity
+  let bestS2 = Infinity
+  let bestS3 = Infinity
+  let bestLapMs = Infinity
+
+  for (const lap of laps) {
+    // Solo giri validi e non-pit contano per best sectors e best lap
+    if (!lap.valid || lap.pit) continue
+    const sms = lap.sector_times_ms || []
+    if (sms[0] && sms[0] > 0 && sms[0] < bestS1) bestS1 = sms[0]
+    if (sms[1] && sms[1] > 0 && sms[1] < bestS2) bestS2 = sms[1]
+    if (sms[2] && sms[2] > 0 && sms[2] < bestS3) bestS3 = sms[2]
+    const ms = lap.lap_time_ms || lap.lapTimeMs
+    if (ms && ms > 0 && ms < bestLapMs) {
+      bestLapMs = ms
+    }
+  }
+
+  return {
+    s1: bestS1 === Infinity ? null : bestS1,
+    s2: bestS2 === Infinity ? null : bestS2,
+    s3: bestS3 === Infinity ? null : bestS3,
+    lapMs: bestLapMs === Infinity ? null : bestLapMs,
+  }
+})
+
+function isBestSector(lap: any, sectorIndex: number): boolean {
+  const sms = lap.sector_times_ms || []
+  const val = sms[sectorIndex]
+  if (!val || val <= 0) return false
+  const best = [bestSectors.value.s1, bestSectors.value.s2, bestSectors.value.s3][sectorIndex]
+  return best !== null && val === best
+}
+
+function isBestLap(lap: any): boolean {
+  const ms = lap.lap_time_ms || lap.lapTimeMs
+  return bestSectors.value.lapMs !== null && ms === bestSectors.value.lapMs
 }
 
 // ========================================
@@ -1477,24 +1535,24 @@ function formatSectorTime(sectorTime: string | number | null | undefined): strin
 // Positive = B is slower than A, Negative = B is faster than A
 function formatCompareDelta(aMs: number | undefined, bMs: number | undefined): string {
   if (!aMs || !bMs) return '—'
-  const deltaMs = bMs - aMs
+  const deltaMs = aMs - bMs
   const deltaSec = deltaMs / 1000
   if (deltaSec === 0) return '0.000'
   const sign = deltaSec > 0 ? '+' : ''
   return `${sign}${deltaSec.toFixed(3)}`
 }
 
-// Get delta class for coloring (same logic as lap table)
+// Get delta class for coloring (A vs B)
 function getCompareDeltaClass(aMs: number | undefined, bMs: number | undefined): string {
   if (!aMs || !bMs) return 'far'
-  const deltaMs = bMs - aMs
+  const deltaMs = aMs - bMs
   const deltaSec = deltaMs / 1000
   
-  if (deltaSec < 0) return 'faster'     // B is faster (green for B)
+  if (deltaSec < 0) return 'faster'     // A is faster (green)
   if (deltaSec === 0) return 'ontarget'
-  if (deltaSec <= 0.3) return 'close'   // B is slightly slower (yellow)
-  if (deltaSec <= 0.5) return 'margin'  // B is moderately slower (orange)
-  return 'far'                          // B is much slower (red)
+  if (deltaSec <= 0.3) return 'close'   // A is slightly slower (yellow)
+  if (deltaSec <= 0.5) return 'margin'  // A is moderately slower (orange)
+  return 'far'                          // A is much slower (red)
 }
 
 // CROSS-SESSION delta functions
@@ -1512,7 +1570,7 @@ function getCrossCompareDelta(metric: 'best' | 'avg'): string {
   
   if (!msA || !msB) return '—'
   
-  const deltaMs = msB - msA
+  const deltaMs = msA - msB
   const deltaSec = deltaMs / 1000
   if (deltaSec === 0) return '0.000'
   const sign = deltaSec > 0 ? '+' : ''
@@ -1532,7 +1590,7 @@ function getCrossCompareDeltaClass(metric: 'best' | 'avg'): string {
   
   if (!msA || !msB) return 'far'
   
-  const deltaSec = (msB - msA) / 1000
+  const deltaSec = (msA - msB) / 1000
   
   if (deltaSec < 0) return 'faster'
   if (deltaSec === 0) return 'ontarget'
@@ -1643,11 +1701,15 @@ watch(
     const dominantGrip = conditions.grip.dominant || 'Optimum'
     const stintTemp = conditions.airTemp.avg || Math.round(info.start_air_temp || 23)
     
-    // Use centralized getTheoreticalTimes with temp adjustment
+    // Get car category from session
+    const carCategory = getCarCategory(info.car || '')
+    
+    // Use centralized getTheoreticalTimes with temp adjustment and category
     const theo = await getTheoreticalTimes(
       trackId,
       dominantGrip,
       stintTemp,
+      carCategory,
       targetUserId.value || undefined
     )
     
@@ -2794,7 +2856,10 @@ const gripZones = computed(() => {
               <div class="ssc-table-header">
                 <div class="ssc-th ssc-th--label"></div>
                 <div class="ssc-th">TEMPI STINT</div>
-                <div class="ssc-th">TEORICO</div>
+                <div class="ssc-th ssc-th--theo">
+                  TEORICO
+                  <span class="theo-info" title="Tempo Teorico = Storico + (TempStint - TempStorico) × 100ms/°C">?</span>
+                </div>
                 <div class="ssc-th">- DELTA</div>
               </div>
               <div class="ssc-table-row">
@@ -3154,15 +3219,16 @@ const gripZones = computed(() => {
                   :key="lap.lap || lap.lapNumber" 
                   :class="{ 
                     'lap-pit': lap.pit, 
-                    'lap-excluded': excludedLaps.has(lap.lap || lap.lapNumber) 
+                    'lap-excluded': excludedLaps.has(lap.lap || lap.lapNumber),
+                    'lap-best': isBestLap(lap)
                   }"
                 >
                   <td>{{ lap.lap || lap.lapNumber }}</td>
                   <td class="time">{{ lap.time || lap.lapTime }}</td>
                   <td :class="['delta', `delta--${getDeltaClass(lap.delta)}`]">{{ lap.delta || '—' }}</td>
-                  <td class="sector">{{ formatSectorTime(lap.sectors?.[0] || lap.s1) }}</td>
-                  <td class="sector">{{ formatSectorTime(lap.sectors?.[1] || lap.s2) }}</td>
-                  <td class="sector">{{ formatSectorTime(lap.sectors?.[2] || lap.s3) }}</td>
+                  <td :class="['sector', { 'sector--best': isBestSector(lap, 0) }]">{{ formatSectorTime(lap.sectors?.[0] || lap.s1) }}</td>
+                  <td :class="['sector', { 'sector--best': isBestSector(lap, 1) }]">{{ formatSectorTime(lap.sectors?.[1] || lap.s2) }}</td>
+                  <td :class="['sector', { 'sector--best': isBestSector(lap, 2) }]">{{ formatSectorTime(lap.sectors?.[2] || lap.s3) }}</td>
                   <td>{{ lap.fuel }}L</td>
                   <td>{{ Math.round(lap.airTemp || lap.air || 0) }}°</td>
                   <td>{{ lap.grip }}</td>
@@ -4306,7 +4372,7 @@ const gripZones = computed(() => {
 // CHART - IMPROVED CONTRAST
 .chart-section { margin-bottom: 20px; }
 .chart-title { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 10px 0; }
-.chart-wrap { height: 220px; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px; }
+.chart-wrap { height: 400px; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 12px; }
 
 // LAPS TABLE - IMPROVED CONTRAST
 .laps-section { flex: 1; display: flex; flex-direction: column; min-height: 0; }
@@ -4381,6 +4447,8 @@ const gripZones = computed(() => {
   }
 }
 .laps-table .sector { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.8); }
+.laps-table .sector--best { color: #e040fb; font-weight: 700; }
+.laps-table tr.lap-best .time { color: #e040fb; font-weight: 700; }
 .laps-table .stato { text-align: center; }
 
 // Badge styles for status column
@@ -4495,10 +4563,10 @@ const gripZones = computed(() => {
 .chart-toolbar {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
+  gap: 6px;
+  padding: 6px 10px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 8px;
 }
 
@@ -4506,31 +4574,33 @@ const gripZones = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: transparent;
-  border: none;
+  width: 34px;
+  height: 34px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 6px;
-  color: rgba(255,255,255,0.6);
+  color: rgba(255,255,255,0.5);
   cursor: pointer;
   transition: all 0.15s;
   
   svg { width: 16px; height: 16px; }
   
   &:hover {
-    background: rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.2);
     color: #fff;
   }
   
   &--active {
     background: rgba($racing-red, 0.2);
+    border-color: rgba($racing-red, 0.4);
     color: $racing-red;
   }
 }
 
 .toolbar-divider {
   width: 1px;
-  height: 20px;
+  height: 22px;
   background: rgba(255,255,255,0.15);
   margin: 0 4px;
 }
@@ -4886,6 +4956,30 @@ const gripZones = computed(() => {
   text-transform: uppercase;
   letter-spacing: 1px;
   color: rgba(255,255,255,0.85);
+}
+.ssc-th--theo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.theo-info {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+  font-weight: 700;
+  background: rgba(239,68,68,0.3);
+  color: rgba(255,255,255,0.9);
+  border-radius: 50%;
+  cursor: help;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: rgba(239,68,68,0.6);
+    transform: scale(1.1);
+  }
 }
 .ssc-table-row {
   display: grid;

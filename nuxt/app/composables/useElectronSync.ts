@@ -6,7 +6,7 @@
 
 import { ref, computed } from 'vue'
 import { useFirebaseAuth } from './useFirebaseAuth'
-import { useTelemetryData } from './useTelemetryData'
+import { useTelemetryData, getCarCategory, CAR_CATEGORIES, type CarCategory } from './useTelemetryData'
 import {
     doc,
     setDoc,
@@ -309,15 +309,15 @@ export function useElectronSync() {
             }
 
             // Update trackBests with any new best times
-            await updateTrackBests(uid, meta.track, sessionId, meta.date_start, summary)
+            await updateTrackBests(uid, meta.track, sessionId, meta.date_start, summary, meta.car)
 
             // Auto-cleanup: find and delete any old format duplicates of this session
             const cleanedCount = await findAndDeleteOldFormatDuplicates(uid, meta.track, meta.date_start, sessionId)
 
-            // Determine status: created, updated (new content), or refreshed (just summary update)
-            let status: 'created' | 'updated' | 'refreshed' = 'created'
+            // Determine status: created, updated (new content), or unchanged (just summary update)
+            let status: 'created' | 'updated' | 'unchanged' = 'created'
             if (isUpdate) {
-                status = chunksNeedUpdate ? 'updated' : 'refreshed'
+                status = chunksNeedUpdate ? 'updated' : 'unchanged'
             }
 
             console.log(`[SYNC] ${status}: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})${cleanedCount > 0 ? ` [cleaned ${cleanedCount} old duplicate(s)]` : ''}`)
@@ -349,7 +349,7 @@ export function useElectronSync() {
 
             // Normalize track and date for comparison
             const trackNorm = track.toLowerCase().replace(/\s+/g, '_')
-            const dateNormalized = dateStart.split('.')[0] // Remove microseconds
+            const dateNormalized = dateStart.split('.')[0] ?? dateStart // Remove microseconds
             const datePrefix = dateNormalized.split(':').slice(0, 2).join(':') // YYYY-MM-DDTHH:MM
 
             let deletedCount = 0
@@ -400,65 +400,115 @@ export function useElectronSync() {
         }
     }
 
-    // Update trackBests collection with new best times from session
+    // Update trackBests collection with new best times from session (V2 - with categories)
+    // Schema version: 2 - bests organized by category then grip
+    const TRACK_BESTS_SCHEMA_VERSION = 2
+
     async function updateTrackBests(
         uid: string,
         trackId: string,
         sessionId: string,
         dateStart: string,
-        summary: any
+        summary: any,
+        car?: string
     ) {
         const trackIdNorm = trackId.toLowerCase().replace(/\s+/g, '_')
         const trackBestsRef = doc(db, `users/${uid}/trackBests/${trackIdNorm}`)
+
+        // Determine category from car model
+        const category = getCarCategory(car || '')
 
         try {
             // Get existing trackBests
             const existingSnap = await getDoc(trackBestsRef)
             const existing = existingSnap.exists() ? existingSnap.data() : null
+            const existingVersion = existing?.version || 1
 
             const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
-            // Support both formats: existing.bests (new) OR existing at root (legacy)
-            const newBests: Record<string, any> = existing?.bests ||
-                (existing ? Object.fromEntries(gripConditions.filter(g => existing[g]).map(g => [g, existing[g]])) : {})
+
+            // Initialize V2 structure (Category -> Grip -> Bests)
+            type GripBest = {
+                bestQualy: number | null, bestQualyTemp: number | null, bestQualySessionId: string | null, bestQualyDate: string | null,
+                bestRace: number | null, bestRaceTemp: number | null, bestRaceSessionId: string | null, bestRaceDate: string | null,
+                bestAvgRace: number | null, bestAvgRaceTemp: number | null, bestAvgRaceSessionId: string | null, bestAvgRaceDate: string | null
+            }
+
+            const emptyGripBests = (): GripBest => ({
+                bestQualy: null, bestQualyTemp: null, bestQualySessionId: null, bestQualyDate: null,
+                bestRace: null, bestRaceTemp: null, bestRaceSessionId: null, bestRaceDate: null,
+                bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
+            })
+
+            // Get or create V2 bests structure
+            let newBests: Record<CarCategory, Record<string, GripBest>> = {} as any
+
+            if (existingVersion >= TRACK_BESTS_SCHEMA_VERSION && existing?.bests) {
+                // Already V2 - copy existing
+                for (const cat of CAR_CATEGORIES) {
+                    newBests[cat] = existing.bests[cat] || {}
+                }
+            } else if (existing?.bests || existing) {
+                // V1 -> migrate to V2 (all old data goes to GT3)
+                const legacyBests = existing.bests ||
+                    Object.fromEntries(gripConditions.filter(g => existing[g]).map(g => [g, existing[g]]))
+
+                for (const cat of CAR_CATEGORIES) {
+                    newBests[cat] = {}
+                    for (const grip of gripConditions) {
+                        // Put legacy data in GT3, empty in others
+                        newBests[cat][grip] = cat === 'GT3' && legacyBests[grip]
+                            ? legacyBests[grip]
+                            : emptyGripBests()
+                    }
+                }
+                console.log(`[SYNC] Migrating trackBests V1 -> V2 for ${trackIdNorm}`)
+            } else {
+                // New - initialize empty
+                for (const cat of CAR_CATEGORIES) {
+                    newBests[cat] = {}
+                    for (const grip of gripConditions) {
+                        newBests[cat][grip] = emptyGripBests()
+                    }
+                }
+            }
+
             let hasUpdates = false
 
-            // Check each grip condition for improvements
+            // Check each grip condition for improvements (update only the current category)
             gripConditions.forEach(grip => {
                 const sessionBest = summary.best_by_grip?.[grip]
                 if (!sessionBest) return
 
-                if (!newBests[grip]) {
-                    newBests[grip] = {
-                        bestQualy: null, bestQualyTemp: null, bestQualySessionId: null, bestQualyDate: null,
-                        bestRace: null, bestRaceTemp: null, bestRaceSessionId: null, bestRaceDate: null,
-                        bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
-                    }
+                if (!newBests[category][grip]) {
+                    newBests[category][grip] = emptyGripBests()
                 }
 
+                const catGrip = newBests[category][grip]
+
                 // Check if new session has better qualy time
-                if (sessionBest.bestQualy && (!newBests[grip].bestQualy || sessionBest.bestQualy < newBests[grip].bestQualy)) {
-                    newBests[grip].bestQualy = sessionBest.bestQualy
-                    newBests[grip].bestQualyTemp = sessionBest.bestQualyTemp
-                    newBests[grip].bestQualySessionId = sessionId
-                    newBests[grip].bestQualyDate = dateStart
+                if (sessionBest.bestQualy && (!catGrip.bestQualy || sessionBest.bestQualy < catGrip.bestQualy)) {
+                    catGrip.bestQualy = sessionBest.bestQualy
+                    catGrip.bestQualyTemp = sessionBest.bestQualyTemp
+                    catGrip.bestQualySessionId = sessionId
+                    catGrip.bestQualyDate = dateStart
                     hasUpdates = true
                 }
 
                 // Check if new session has better race time
-                if (sessionBest.bestRace && (!newBests[grip].bestRace || sessionBest.bestRace < newBests[grip].bestRace)) {
-                    newBests[grip].bestRace = sessionBest.bestRace
-                    newBests[grip].bestRaceTemp = sessionBest.bestRaceTemp
-                    newBests[grip].bestRaceSessionId = sessionId
-                    newBests[grip].bestRaceDate = dateStart
+                if (sessionBest.bestRace && (!catGrip.bestRace || sessionBest.bestRace < catGrip.bestRace)) {
+                    catGrip.bestRace = sessionBest.bestRace
+                    catGrip.bestRaceTemp = sessionBest.bestRaceTemp
+                    catGrip.bestRaceSessionId = sessionId
+                    catGrip.bestRaceDate = dateStart
                     hasUpdates = true
                 }
 
                 // Check if new session has better avg race time
-                if (sessionBest.bestAvgRace && (!newBests[grip].bestAvgRace || sessionBest.bestAvgRace < newBests[grip].bestAvgRace)) {
-                    newBests[grip].bestAvgRace = sessionBest.bestAvgRace
-                    newBests[grip].bestAvgRaceTemp = sessionBest.bestAvgRaceTemp
-                    newBests[grip].bestAvgRaceSessionId = sessionId
-                    newBests[grip].bestAvgRaceDate = dateStart
+                if (sessionBest.bestAvgRace && (!catGrip.bestAvgRace || sessionBest.bestAvgRace < catGrip.bestAvgRace)) {
+                    catGrip.bestAvgRace = sessionBest.bestAvgRace
+                    catGrip.bestAvgRaceTemp = sessionBest.bestAvgRaceTemp
+                    catGrip.bestAvgRaceSessionId = sessionId
+                    catGrip.bestAvgRaceDate = dateStart
                     hasUpdates = true
                 }
             })
@@ -494,17 +544,19 @@ export function useElectronSync() {
                 ? lastSyncedSessions
                 : [...lastSyncedSessions, sessionId].slice(-100) // Keep last 100
 
-            // Always save (bests + activity updates)
+            // Always save (V2 structure with version)
             await setDoc(trackBestsRef, {
+                version: TRACK_BESTS_SCHEMA_VERSION,
                 trackId: trackIdNorm,
                 bests: newBests,
                 activity: newActivity,
                 syncedSessionIds: newSyncedSessions,
+                lastSessionDate: dateStart,
                 lastUpdated: serverTimestamp()
             })
 
             if (hasUpdates) {
-                console.log(`[SYNC] ✅ Updated trackBests for ${trackIdNorm} (bests + activity)`)
+                console.log(`[SYNC] ✅ Updated trackBests V2 for ${trackIdNorm} (${category}) (bests + activity)`)
             } else if (!alreadyCounted) {
                 console.log(`[SYNC] ✅ Updated trackBests activity for ${trackIdNorm}`)
             } else {
@@ -556,6 +608,7 @@ export function useElectronSync() {
             // Process each file
             for (let i = 0; i < files.length; i++) {
                 const file = files[i]
+                if (!file) continue
                 syncProgress.value = Math.round((i / files.length) * 100)
 
                 try {

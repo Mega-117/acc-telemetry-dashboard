@@ -60,7 +60,7 @@ watch([trackStats, isPrefetchComplete], async ([stats, prefetchDone]) => {
       const trackId = stat.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
       try {
         // Guaranteed cache hit after prefetchAllTrackBests() completed
-        const bests = await getTrackBests(trackId, targetUserId.value || undefined)
+        const bests = await getTrackBests(trackId, 'GT3', targetUserId.value || undefined)
         const optimumBests = bests?.['Optimum']
         trackBestsMap.value[trackId] = {
           bestQualy: optimumBests?.bestQualy || null,

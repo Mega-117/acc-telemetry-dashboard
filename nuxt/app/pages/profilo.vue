@@ -26,7 +26,7 @@ const handleBack = () => {
   <ProfilePage
     :user-email="userEmail"
     :user-nickname="userDisplayName"
-    :user-role="userRole"
+    :user-role="(userRole as 'pilot' | 'coach' | 'admin')"
     @logout="handleLogout"
     @back="handleBack"
   />

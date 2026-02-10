@@ -35,7 +35,7 @@ const pageTitle = computed((): string => {
     coach: 'Profilo Coach',
     admin: 'Profilo Admin'
   }
-  return titles[props.userRole || 'pilot']
+  return titles[props.userRole || 'pilot'] ?? 'Profilo Pilota'
 })
 
 // Role label for badge
@@ -45,7 +45,7 @@ const roleLabel = computed((): string => {
     coach: 'COACH',
     admin: 'ADMIN'
   }
-  return labels[props.userRole || 'pilot']
+  return labels[props.userRole || 'pilot'] ?? 'PILOTA'
 })
 
 // Form state for equipment
@@ -74,10 +74,17 @@ onMounted(async () => {
 // ========================================
 // SESSION SHARING MANAGEMENT
 // ========================================
-const { countSharedSessions, revokeAllSharedSessions } = useTelemetryData()
+const { countSharedSessions, revokeAllSharedSessions, resetAllTrackBests } = useTelemetryData()
 const sharedSessionsCount = ref(0)
 const isRevoking = ref(false)
 const revokeSuccess = ref(false)
+
+// ========================================
+// HISTORICAL BESTS RESET
+// ========================================
+const isResettingBests = ref(false)
+const resetBestsSuccess = ref(false)
+const resetBestsCount = ref(0)
 
 async function loadSharedCount() {
   sharedSessionsCount.value = await countSharedSessions()
@@ -100,6 +107,31 @@ async function revokeAll() {
     console.error('[PROFILE] Revoke error:', e)
   } finally {
     isRevoking.value = false
+  }
+}
+
+async function resetHistoricalBests() {
+  if (isResettingBests.value) return
+  
+  // Confirm with user
+  if (!confirm('Sei sicuro di voler eliminare tutti i tempi storici? I best verranno ricalcolati automaticamente alla prossima sincronizzazione.')) {
+    return
+  }
+  
+  isResettingBests.value = true
+  resetBestsSuccess.value = false
+  
+  try {
+    const count = await resetAllTrackBests()
+    resetBestsCount.value = count
+    resetBestsSuccess.value = true
+    console.log(`[PROFILE] Reset ${count} track bests`)
+    
+    setTimeout(() => resetBestsSuccess.value = false, 3000)
+  } catch (e) {
+    console.error('[PROFILE] Reset bests error:', e)
+  } finally {
+    isResettingBests.value = false
   }
 }
 
@@ -296,6 +328,33 @@ const handleBackToDashboard = () => {
                   <template v-if="isRevoking">Revocando...</template>
                   <template v-else-if="revokeSuccess">✓ Revocate</template>
                   <template v-else>🚫 Revoca tutte le condivisioni</template>
+                </button>
+              </div>
+            </div>
+
+            <!-- Reset Historical Bests Card -->
+            <div class="profile-card reset-card">
+              <h3 class="card-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Reset Tempi Storici
+              </h3>
+
+              <div class="reset-info">
+                <p class="reset-description">
+                  Elimina tutti i best storici salvati. Alla prossima sincronizzazione verranno ricalcolati automaticamente dalle sessioni.
+                </p>
+                
+                <button 
+                  class="reset-btn"
+                  :class="{ 'reset-btn--success': resetBestsSuccess }"
+                  :disabled="isResettingBests"
+                  @click="resetHistoricalBests"
+                >
+                  <template v-if="isResettingBests">Eliminando...</template>
+                  <template v-else-if="resetBestsSuccess">✓ Eliminati {{ resetBestsCount }} tracciati</template>
+                  <template v-else>🗑️ Elimina tutti i best</template>
                 </button>
               </div>
             </div>
@@ -621,6 +680,54 @@ $max-width: 1400px;
   &:hover:not(:disabled) {
     background: rgba(255, 100, 100, 0.25);
     border-color: rgba(255, 100, 100, 0.6);
+  }
+  
+  &:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
+  
+  &--success {
+    background: rgba(34, 197, 94, 0.15);
+    border-color: rgba(34, 197, 94, 0.4);
+    color: #22c55e;
+  }
+}
+
+// === RESET BESTS CARD ===
+.reset-card {
+  margin-top: 24px;
+}
+
+.reset-info {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.reset-description {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.reset-btn {
+  padding: 12px 20px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 10px;
+  color: $color-racing-red;
+  font-family: $font-family;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  align-self: flex-start;
+  
+  &:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.25);
+    border-color: rgba(239, 68, 68, 0.6);
   }
   
   &:disabled {
