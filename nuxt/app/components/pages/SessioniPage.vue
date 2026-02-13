@@ -87,7 +87,7 @@ const filterHideEmpty = ref(false) // Hide sessions with 0 valid laps (off by de
 
 // === VIEW MODE ===
 type ViewMode = 'list' | 'card'
-const viewMode = ref<ViewMode>('list')
+const viewMode = ref<ViewMode>('card')
 
 // Extract unique values for filters
 const tracks = computed(() => [...new Set(sessions.value.map(s => s.track))].sort())

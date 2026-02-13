@@ -25,6 +25,7 @@ import {
   formatCarName,
   formatTrackName,
   getSessionTypeLabel,
+  getCarCategory,
   CAR_CATEGORIES,
   type CarCategory
 } from '~/composables/useTelemetryData'
@@ -67,7 +68,7 @@ function formatShortDate(isoDate: string | null): string {
 // ========================================
 // FIREBASE DATA LOADING
 // ========================================
-const { sessions, trackStats, isLoading, loadSessions, getTrackBests, getTrackActivity } = useTelemetryData()
+const { sessions, trackStats, isLoading, loadSessions, getTrackBests, getTrackActivity, fetchSessionFull } = useTelemetryData()
 
 onMounted(async () => {
   await loadSessions(targetUserId.value || undefined)
@@ -80,6 +81,13 @@ const trackSessions = computed(() => {
     const sessionTrackId = s.meta.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
     return sessionTrackId.includes(trackIdNorm) || trackIdNorm.includes(sessionTrackId)
   }).sort((a, b) => b.meta.date_start.localeCompare(a.meta.date_start))
+})
+
+// Filter track sessions by selected category
+const filteredTrackSessions = computed(() => {
+  return trackSessions.value.filter(s =>
+    getCarCategory(s.meta.car) === selectedCategory.value
+  )
 })
 
 // Get stats for this track from trackStats
@@ -117,14 +125,17 @@ const selectedCategory = ref<CarCategory>('GT3')
 type GripBestTimes = {
   bestQualy: number | null
   bestQualyTemp: number | null
+  bestQualyFuel: number | null
   bestQualySessionId: string | null
   bestQualyDate: string | null
   bestRace: number | null
   bestRaceTemp: number | null
+  bestRaceFuel: number | null
   bestRaceSessionId: string | null
   bestRaceDate: string | null
   bestAvgRace: number | null
   bestAvgRaceTemp: number | null
+  bestAvgRaceFuel: number | null
   bestAvgRaceSessionId: string | null
   bestAvgRaceDate: string | null
 }
@@ -155,6 +166,87 @@ watch([trackSessions, selectedCategory], async () => {
       })
     }
   }
+}, { immediate: true })
+
+// ========================================
+// LAZY FUEL FETCHING
+// Fetch fuel data for best laps from full session data
+// ========================================
+const bestFuelData = ref<{
+  qualyFuel: number | null
+  raceFuel: number | null
+}>({
+  qualyFuel: null,
+  raceFuel: null
+})
+
+// Helper: find fuel_remaining for the best lap in a session
+function findBestLapFuel(fullSession: any, bestTimeMs: number, isQualy: boolean): number | null {
+  const stints = fullSession?.stints || []
+  for (const stint of stints) {
+    const stintIsQualy = stint.type === 'Qualify'
+    if (stintIsQualy !== isQualy) continue
+    const laps = stint.laps || []
+    for (const lap of laps) {
+      if (lap.is_valid && !lap.has_pit_stop && lap.lap_time_ms === bestTimeMs) {
+        return lap.fuel_remaining ?? null
+      }
+    }
+  }
+  return null
+}
+
+// Watch for changes in best times and fetch fuel lazily
+watch([recalculatedBestByGrip, selectedGrip], async () => {
+  const grip = selectedGrip.value
+  const gripBests = recalculatedBestByGrip.value[grip]
+  if (!gripBests) {
+    bestFuelData.value = { qualyFuel: null, raceFuel: null }
+    return
+  }
+
+  // Collect unique session IDs that need to be fetched
+  const sessionsToFetch = new Map<string, { type: 'qualy' | 'race' | 'avgRace'; bestTime: number }[]>()
+  
+  if (gripBests.bestQualySessionId && gripBests.bestQualy) {
+    const id = gripBests.bestQualySessionId
+    if (!sessionsToFetch.has(id)) sessionsToFetch.set(id, [])
+    sessionsToFetch.get(id)!.push({ type: 'qualy', bestTime: gripBests.bestQualy })
+  }
+  if (gripBests.bestRaceSessionId && gripBests.bestRace) {
+    const id = gripBests.bestRaceSessionId
+    if (!sessionsToFetch.has(id)) sessionsToFetch.set(id, [])
+    sessionsToFetch.get(id)!.push({ type: 'race', bestTime: gripBests.bestRace })
+  }
+
+
+  if (sessionsToFetch.size === 0) {
+    bestFuelData.value = { qualyFuel: null, raceFuel: null }
+    return
+  }
+
+  const result = { qualyFuel: null as number | null, raceFuel: null as number | null }
+
+  // Fetch sessions in parallel (max 1-3)
+  const fetchPromises = Array.from(sessionsToFetch.entries()).map(async ([sessionId, lookups]) => {
+    try {
+      const fullSession = await fetchSessionFull(sessionId, targetUserId.value || undefined)
+      if (!fullSession) return
+
+      for (const lookup of lookups) {
+        if (lookup.type === 'qualy') {
+          result.qualyFuel = findBestLapFuel(fullSession, lookup.bestTime, true)
+        } else if (lookup.type === 'race') {
+          result.raceFuel = findBestLapFuel(fullSession, lookup.bestTime, false)
+        }
+      }
+    } catch (e) {
+      console.warn(`[TRACK] Error fetching fuel for session ${sessionId}:`, e)
+    }
+  })
+
+  await Promise.all(fetchPromises)
+  bestFuelData.value = result
 }, { immediate: true })
 
 // Track computed data
@@ -220,6 +312,9 @@ const track = computed(() => {
     bestQualyDate: recalcGrip?.bestQualyDate || null,
     bestRaceDate: recalcGrip?.bestRaceDate || null,
     bestAvgRaceDate: recalcGrip?.bestAvgRaceDate || null,
+    // Fuel at best lap (from lazy fetch)
+    bestQualyFuel: bestFuelData.value.qualyFuel,
+    bestRaceFuel: bestFuelData.value.raceFuel,
     hasGripData: !!bestQualy || !!bestRace || !!bestAvgRace
   }
 })
@@ -241,7 +336,7 @@ interface Session {
 
 // Transform Firebase sessions to display format
 const recentSessions = computed<Session[]>(() => {
-  return trackSessions.value.map(s => {
+  return filteredTrackSessions.value.map(s => {
     const sessionType = getSessionTypeLabel(s.meta.session_type) as SessionType
     const dateObj = new Date(s.meta.date_start)
     const summary = s.summary || {}
@@ -334,11 +429,11 @@ const activityStats = ref({
 // Calculate activity from current trackSessions (always accurate)
 // Note: We use local calculation instead of Firebase aggregates to ensure
 // accurate counts after duplicate cleanup operations
-watch(trackSessions, () => {
-  if (trackSessions.value.length > 0) {
-    const totalLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.laps || 0), 0)
-    const validLaps = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.lapsValid || 0), 0)
-    const totalTimeMs = trackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.totalTime || 0), 0)
+watch(filteredTrackSessions, () => {
+  if (filteredTrackSessions.value.length > 0) {
+    const totalLaps = filteredTrackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.laps || 0), 0)
+    const validLaps = filteredTrackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.lapsValid || 0), 0)
+    const totalTimeMs = filteredTrackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.totalTime || 0), 0)
     const hours = Math.floor(totalTimeMs / 3600000)
     const minutes = Math.floor((totalTimeMs % 3600000) / 60000)
     activityStats.value = {
@@ -347,7 +442,7 @@ watch(trackSessions, () => {
       validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
       totalTimeMs,
       totalTimeFormatted: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
-      sessionCount: trackSessions.value.length
+      sessionCount: filteredTrackSessions.value.length
     }
   }
 }, { immediate: true })
@@ -362,7 +457,7 @@ interface HistoricalTime {
 
 const historicalTimes = computed<HistoricalTime[]>(() => {
   // Sort chronologically
-  const sorted = [...trackSessions.value].sort((a, b) => a.meta.date_start.localeCompare(b.meta.date_start))
+  const sorted = [...filteredTrackSessions.value].sort((a, b) => a.meta.date_start.localeCompare(b.meta.date_start))
   
   return sorted.map(s => {
     const summary = s.summary as any
@@ -636,9 +731,21 @@ function goToSession(id: string) {
               <line x1="8" y1="2" x2="8" y2="6"/>
               <line x1="3" y1="10" x2="21" y2="10"/>
             </svg>
-            {{ track.sessions }} sessioni
+            {{ track.sessions }} sessioni ({{ filteredTrackSessions.length }} {{ selectedCategory }})
           </span>
         </div>
+      </div>
+    </div>
+
+    <!-- Control Bar: Global Category Filter -->
+    <div class="control-bar">
+      <div class="control-bar__group">
+        <label class="control-bar__label">Categoria</label>
+        <select v-model="selectedCategory" class="control-bar__select">
+          <option v-for="cat in CAR_CATEGORIES" :key="cat" :value="cat">
+            {{ cat }}
+          </option>
+        </select>
       </div>
     </div>
 
@@ -735,11 +842,6 @@ function goToSession(id: string) {
           <div class="section-header-row">
             <h2 class="section-title">Migliori Tempi</h2>
             <div class="filters-row">
-              <select v-model="selectedCategory" class="category-selector">
-                <option v-for="cat in CAR_CATEGORIES" :key="cat" :value="cat">
-                  {{ cat }}
-                </option>
-              </select>
               <select v-model="selectedGrip" class="grip-selector">
                 <option v-for="grip in gripConditions" :key="grip" :value="grip">
                   {{ grip }}
@@ -755,13 +857,17 @@ function goToSession(id: string) {
                 <span>{{ formatShortDate(track.bestQualyDate) }}</span>
                 <span class="condition-sep">•</span>
                 <span>{{ track.bestQualyConditions.airTemp }}°C</span>
+                <template v-if="track.bestQualyFuel != null">
+                  <span class="condition-sep">•</span>
+                  <span>{{ Math.round(track.bestQualyFuel) }}L</span>
+                </template>
               </span>
               <span v-else-if="!track.bestQualy" class="no-data-hint">Nessun dato {{ selectedCategory }} / {{ selectedGrip }}</span>
               <button 
                 v-if="track.bestQualySessionId" 
                 class="session-link-btn"
                 title="Vai alla sessione"
-                @click.stop="$router.push(`/sessioni/${track.bestQualySessionId}`)"
+                @click.stop="emit('go-to-session', track.bestQualySessionId!)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
@@ -777,13 +883,17 @@ function goToSession(id: string) {
                 <span>{{ formatShortDate(track.bestRaceDate) }}</span>
                 <span class="condition-sep">•</span>
                 <span>{{ track.bestRaceConditions.airTemp }}°C</span>
+                <template v-if="track.bestRaceFuel != null">
+                  <span class="condition-sep">•</span>
+                  <span>{{ Math.round(track.bestRaceFuel) }}L</span>
+                </template>
               </span>
               <span v-else-if="!track.bestRace" class="no-data-hint">Nessun dato per {{ selectedGrip }}</span>
               <button 
                 v-if="track.bestRaceSessionId" 
                 class="session-link-btn"
                 title="Vai alla sessione"
-                @click.stop="$router.push(`/sessioni/${track.bestRaceSessionId}`)"
+                @click.stop="emit('go-to-session', track.bestRaceSessionId!)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
@@ -799,13 +909,14 @@ function goToSession(id: string) {
                 <span>{{ formatShortDate(track.bestAvgRaceDate) }}</span>
                 <span class="condition-sep">•</span>
                 <span>{{ track.bestAvgRaceConditions.airTemp }}°C</span>
+
               </span>
               <span v-else-if="!track.bestAvgRace" class="no-data-hint">Nessun dato per {{ selectedGrip }}</span>
               <button 
                 v-if="track.bestAvgRaceSessionId" 
                 class="session-link-btn"
                 title="Vai alla sessione"
-                @click.stop="$router.push(`/sessioni/${track.bestAvgRaceSessionId}`)"
+                @click.stop="emit('go-to-session', track.bestAvgRaceSessionId!)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
@@ -873,6 +984,65 @@ function goToSession(id: string) {
     background: rgba(255, 255, 255, 0.08);
     border-color: rgba(255, 255, 255, 0.2);
     color: #fff;
+  }
+}
+
+// === CONTROL BAR (Global Category Filter) ===
+.control-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  margin-bottom: 24px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+
+  &__group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  &__label {
+    font-family: $font-primary;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 255, 255, 0.5);
+  }
+
+  &__select {
+    padding: 6px 28px 6px 12px;
+    background-color: #1a1d2e;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    color: #fff;
+    font-family: $font-primary;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='rgba(255,255,255,0.5)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    transition: all 0.15s ease;
+
+    &:hover {
+      background-color: #222540;
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    &:focus {
+      outline: none;
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    option {
+      background-color: #1a1d2e;
+      color: #fff;
+    }
   }
 }
 

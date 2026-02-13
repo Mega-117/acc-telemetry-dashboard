@@ -27,6 +27,7 @@ import {
   formatTime,
   getSessionTypeLabel,
   getCarCategory,
+  MAX_REASONABLE_LAP_MS,
   type FullSession,
   type StintData,
   type LapData
@@ -125,13 +126,12 @@ function zoomOut() {
   }
 }
 
-// Auto-exclude first 2 laps when stint has >20 laps (warmup preset)
+// Auto-exclude first lap (outlap/warmup)
 function applyWarmupExclusion() {
   const laps = selectedStintLaps.value
-  if (laps.length > 20) {
-    // Exclude first 2 laps
-    const first2 = laps.slice(0, 2).map(l => l.lap)
-    excludedLaps.value = new Set(first2)
+  if (laps.length > 0) {
+    const firstLap = laps[0]?.lap
+    excludedLaps.value = new Set(firstLap != null ? [firstLap] : [])
   } else {
     excludedLaps.value = new Set()
   }
@@ -197,7 +197,7 @@ onMounted(async () => {
       await loadSessions(userIdToLoad)
     }
     
-    const data = await fetchSessionFull(props.sessionId, userIdToLoad)
+    const data = await fetchSessionFull(props.sessionId, userIdToLoad, !!targetUserId.value && !props.externalUserId)
     if (data) {
       fullSession.value = data
       console.log('[SESSION_DETAIL] Loaded session:', data.session_info.track, data.stints.length, 'stints', props.externalUserId ? '(SHARED)' : '')
@@ -829,6 +829,11 @@ const session = computed(() => {
   const fs = fullSession.value
   const info = fs.session_info
   
+  // Sanitize session_best_lap: ACC shared memory returns INT_MAX (2^31-1) when no valid laps exist
+  const sessionBestLap = (info.session_best_lap && info.session_best_lap > 0 && info.session_best_lap <= MAX_REASONABLE_LAP_MS)
+    ? info.session_best_lap
+    : 0
+
   // Transform stints to expected format
   const stints = fs.stints.map(stint => {
     const validLaps = stint.laps.filter(l => l.is_valid && !l.has_pit_stop)
@@ -865,8 +870,8 @@ const session = computed(() => {
       avgWarning, // NEW: flag for template to style warning differently
       avgMs: avgLapMs, // Keep raw ms for calculations
       durationMs: stint.stint_drive_time_ms || 0, // Use pre-calculated duration from JSON
-      theoretical: formatLapTime(info.session_best_lap), // Simplified: use session best as theo
-      deltaVsTheo: bestLapMs ? `+${((bestLapMs - info.session_best_lap) / 1000).toFixed(3)}` : '-',
+      theoretical: formatLapTime(sessionBestLap), // Simplified: use session best as theo
+      deltaVsTheo: bestLapMs && sessionBestLap ? `+${((bestLapMs - sessionBestLap) / 1000).toFixed(3)}` : '-',
       conditions: { 
         weather: info.start_weather, 
         avgAirTemp: info.start_air_temp, 
@@ -883,7 +888,7 @@ const session = computed(() => {
       lap: lap.lap_number,
       time: formatLapTime(lap.lap_time_ms),
       lap_time_ms: lap.lap_time_ms,
-      delta: `+${((lap.lap_time_ms - info.session_best_lap) / 1000).toFixed(3)}`,
+      delta: sessionBestLap ? `+${((lap.lap_time_ms - sessionBestLap) / 1000).toFixed(3)}` : '-',
       valid: lap.is_valid,
       pit: lap.has_pit_stop,
       sectors: lap.sector_times_ms?.map(s => (s / 1000).toFixed(3)) || ['-', '-', '-'],
@@ -934,14 +939,14 @@ const session = computed(() => {
     },
     bestQualy: bestQualyMs ? formatLapTime(bestQualyMs) : '--:--.---',
     bestRace: bestRaceMs ? formatLapTime(bestRaceMs) : '--:--.---',
-    theoQualy: formatLapTime(info.session_best_lap),
-    theoRace: formatLapTime(info.session_best_lap),
+    theoQualy: formatLapTime(sessionBestLap),
+    theoRace: formatLapTime(sessionBestLap),
     bestDeltaQ: { 
-      value: bestQualyMs ? `+${((bestQualyMs - info.session_best_lap) / 1000).toFixed(3)}` : '-', 
+      value: bestQualyMs && sessionBestLap ? `+${((bestQualyMs - sessionBestLap) / 1000).toFixed(3)}` : '-', 
       stintNum: bestQualyStintNum 
     },
     bestDeltaR: { 
-      value: bestRaceMs ? `+${((bestRaceMs - info.session_best_lap) / 1000).toFixed(3)}` : '-', 
+      value: bestRaceMs && sessionBestLap ? `+${((bestRaceMs - sessionBestLap) / 1000).toFixed(3)}` : '-', 
       stintNum: bestRaceStintNum 
     },
     stints,
@@ -1011,14 +1016,11 @@ const displayedStintLaps = computed(() => {
 const isLimitedData = computed(() => displayedStintLaps.value.length <= 1)
 const isSingleStint = computed(() => session.value.stints.length === 1)
 
-// Auto-apply warmup exclusion when stint changes
+// Auto-apply warmup exclusion when stint changes — always exclude first lap
 watch(selectedStintLaps, (laps) => {
-  if (laps.length > 20) {
-    // Exclude first and last lap (outlap + inlap)
+  if (laps.length > 0) {
     const firstLap = laps[0]?.lap
-    const lastLap = laps[laps.length - 1]?.lap
-    const toExclude = [firstLap, lastLap].filter(Boolean)
-    excludedLaps.value = new Set(toExclude)
+    excludedLaps.value = new Set(firstLap != null ? [firstLap] : [])
   } else {
     excludedLaps.value = new Set()
   }
@@ -1226,7 +1228,7 @@ const comparisonLapsData = computed(() => {
       const timeA = timeToSeconds(lapA.time || lapA.lapTime || '')
       const timeB = timeToSeconds(lapB.time || lapB.lapTime || '')
       if (timeA > 0 && timeB > 0) {
-        delta = timeB - timeA // Positive = B slower, Negative = B faster
+        delta = timeA - timeB // Positive = A slower, Negative = A faster
       }
     }
     
@@ -2005,26 +2007,31 @@ const chartData = computed(() => {
     })
   }
   
-  // Calculate max lap count for X-axis labels (use both strategies)
-  // Include cross-session compare mode with crossStintBLaps
-  let maxLapCount = lapsA.length
+  // Generate X-axis labels from actual lap numbers (skipping excluded laps)
+  // In normal mode: labels come directly from filtered lapsA lap numbers
+  // In compare modes: use max range to align both series
+  let labels: string[]
   
-  if (isBuilderSameSessionCompare.value) {
-    maxLapCount = Math.max(lapsA.length, lapsBForChart.length)
-  } else if (isCrossSessionCompare.value) {
-    // For cross-session, get total laps from Session B (including second stint if active)
-    let crossBLength = crossStintBLaps.value.length
-    if (isStrategyMode.value && strategyBSecond.value) {
-      crossBLength += crossStintB2Laps.value.length
+  if (isBuilderSameSessionCompare.value || isCrossSessionCompare.value || isCompareMode.value) {
+    // Compare mode: use continuous numbering for alignment
+    let maxLapCount = lapsA.length
+    if (isBuilderSameSessionCompare.value) {
+      maxLapCount = Math.max(lapsA.length, lapsBForChart.length)
+    } else if (isCrossSessionCompare.value) {
+      let crossBLength = crossStintBLaps.value.length
+      if (isStrategyMode.value && strategyBSecond.value) {
+        crossBLength += crossStintB2Laps.value.length
+      }
+      maxLapCount = Math.max(lapsA.length, crossBLength)
+    } else if (isCompareMode.value) {
+      maxLapCount = Math.max(lapsA.length, compareStintBLaps.value.length)
     }
-    maxLapCount = Math.max(lapsA.length, crossBLength)
-  } else if (isCompareMode.value) {
-    // Same-session compare mode (legacy)
-    maxLapCount = Math.max(lapsA.length, compareStintBLaps.value.length)
+    labels = Array.from({ length: maxLapCount }, (_, i) => `G${i + 1}`)
+  } else {
+    // Normal mode: labels from actual lap numbers, skipping excluded
+    labels = lapsA.map(l => `G${l.lap}`)
   }
-  
-  // Generate labels from 1 to maxLapCount
-  const labels = Array.from({ length: maxLapCount }, (_, i) => `G${i + 1}`)
+  const maxLapCount = labels.length
   
   // Extend Strategy A data with null values if shorter than max (so line stops where data ends)
   if ((isBuilderSameSessionCompare.value || isCrossSessionCompare.value || isCompareMode.value) && lapsA.length < maxLapCount) {
@@ -2080,6 +2087,11 @@ const chartOptions = {
     tooltip: {
       backgroundColor: 'rgba(15,15,25,0.95)',
       callbacks: {
+        title: (items: any[]) => {
+          if (!items.length) return ''
+          // Show the lap label (e.g. "G5") from the X-axis labels
+          return `Giro ${items[0].label?.replace('G', '') || ''}`
+        },
         label: (ctx: any) => {
           if (ctx.dataset.label?.startsWith('_')) return '' // Hide internal tooltip
           return `${ctx.dataset.label}: ${secondsToTime(ctx.raw)}`

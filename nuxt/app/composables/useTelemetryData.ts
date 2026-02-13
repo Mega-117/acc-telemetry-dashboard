@@ -168,7 +168,7 @@ export type SessionType = 'race' | 'qualify' | 'practice'
 export const CAR_CATEGORIES = ['GT3', 'GT4', 'CUP', 'GT2', 'ST', 'TCX'] as const
 export type CarCategory = typeof CAR_CATEGORIES[number]
 
-// Current schema version for trackBests documents
+// Current schema version for trackBests documents (v2: category-based, fuel fields added gracefully)
 export const TRACK_BESTS_SCHEMA_VERSION = 2
 
 /**
@@ -218,8 +218,11 @@ export function getSessionTypeDisplay(type: number): string {
 
 // === FORMAT HELPERS ===
 
+// Maximum reasonable lap time (10 minutes). Values above this (e.g. INT_MAX from ACC shared memory) are treated as invalid.
+export const MAX_REASONABLE_LAP_MS = 600000
+
 export function formatLapTime(ms: number | null | undefined): string {
-    if (!ms || ms <= 0) return '--:--.---'
+    if (!ms || ms <= 0 || ms > MAX_REASONABLE_LAP_MS) return '--:--.---'
     const msInt = Math.round(ms) // Ensure integer to avoid decimal artifacts
     const minutes = Math.floor(msInt / 60000)
     const seconds = Math.floor((msInt % 60000) / 1000)
@@ -387,9 +390,9 @@ export function useTelemetryData() {
         const bestByGrip: Record<string, any> = {}
         gripConditions.forEach(grip => {
             bestByGrip[grip] = {
-                bestQualy: null, bestQualyTemp: null,
-                bestRace: null, bestRaceTemp: null,
-                bestAvgRace: null, bestAvgRaceTemp: null
+                bestQualy: null, bestQualyTemp: null, bestQualyFuel: null,
+                bestRace: null, bestRaceTemp: null, bestRaceFuel: null,
+                bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceFuel: null
             }
         })
 
@@ -415,11 +418,13 @@ export function useTelemetryData() {
                             if (!bestByGrip[grip].bestQualy || lap.lap_time_ms < bestByGrip[grip].bestQualy) {
                                 bestByGrip[grip].bestQualy = lap.lap_time_ms
                                 bestByGrip[grip].bestQualyTemp = airTemp
+                                bestByGrip[grip].bestQualyFuel = lap.fuel_remaining ?? null
                             }
                         } else {
                             if (!bestByGrip[grip].bestRace || lap.lap_time_ms < bestByGrip[grip].bestRace) {
                                 bestByGrip[grip].bestRace = lap.lap_time_ms
                                 bestByGrip[grip].bestRaceTemp = airTemp
+                                bestByGrip[grip].bestRaceFuel = lap.fuel_remaining ?? null
                             }
                         }
                     }
@@ -449,6 +454,7 @@ export function useTelemetryData() {
                     if (!bestByGrip[grip].bestAvgRace || stint.avg_clean_lap < bestByGrip[grip].bestAvgRace) {
                         bestByGrip[grip].bestAvgRace = stint.avg_clean_lap
                         bestByGrip[grip].bestAvgRaceTemp = airTemp
+                        bestByGrip[grip].bestAvgRaceFuel = firstValidLap?.fuel_remaining ?? null
                     }
                 }
 
@@ -659,7 +665,7 @@ export function useTelemetryData() {
     }
 
     // Fetch full session with raw data - HYBRID: local file (Electron) or Firebase chunks
-    async function fetchSessionFull(sessionId: string, userId?: string): Promise<FullSession | null> {
+    async function fetchSessionFull(sessionId: string, userId?: string, isCoachAccess: boolean = false): Promise<FullSession | null> {
         const targetUserId = userId || currentUser.value?.uid
         if (!targetUserId) return null
 
@@ -698,7 +704,8 @@ export function useTelemetryData() {
         // FALLBACK: Load from Firebase chunks
         try {
             // Determine if we're loading our own data or external user's data
-            const isExternalSession = targetUserId !== currentUser.value?.uid
+            // Coach/admin access is NOT external - they have direct read permissions
+            const isExternalSession = targetUserId !== currentUser.value?.uid && !isCoachAccess
 
             // Get session document
             const sessionRef = doc(db, `users/${targetUserId}/sessions/${sessionId}`)
@@ -712,7 +719,8 @@ export function useTelemetryData() {
             if (chunkCount === 0) return null
 
             // Fetch and reconstruct chunks
-            // For external sessions, we MUST filter by isPublic to satisfy Firebase rules
+            // For external sessions (shared links), we MUST filter by isPublic to satisfy Firebase rules
+            // For coach/admin access, we use normal ordered query (they have read permissions)
             // Note: We skip orderBy for external sessions to avoid requiring a composite index
             // The in-memory sort below handles ordering correctly
             const chunksRef = collection(db, `users/${targetUserId}/sessions/${sessionId}/rawChunks`)
@@ -748,14 +756,17 @@ export function useTelemetryData() {
     type GripBestTimes = {
         bestQualy: number | null
         bestQualyTemp: number | null
+        bestQualyFuel: number | null
         bestQualySessionId: string | null
         bestQualyDate: string | null
         bestRace: number | null
         bestRaceTemp: number | null
+        bestRaceFuel: number | null
         bestRaceSessionId: string | null
         bestRaceDate: string | null
         bestAvgRace: number | null
         bestAvgRaceTemp: number | null
+        bestAvgRaceFuel: number | null
         bestAvgRaceSessionId: string | null
         bestAvgRaceDate: string | null
     }
@@ -773,9 +784,9 @@ export function useTelemetryData() {
 
     // Empty GripBestTimes helper
     const emptyGripBests = (): GripBestTimes => ({
-        bestQualy: null, bestQualyTemp: null, bestQualySessionId: null, bestQualyDate: null,
-        bestRace: null, bestRaceTemp: null, bestRaceSessionId: null, bestRaceDate: null,
-        bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
+        bestQualy: null, bestQualyTemp: null, bestQualyFuel: null, bestQualySessionId: null, bestQualyDate: null,
+        bestRace: null, bestRaceTemp: null, bestRaceFuel: null, bestRaceSessionId: null, bestRaceDate: null,
+        bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceFuel: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
     })
 
     /**
@@ -848,6 +859,7 @@ export function useTelemetryData() {
                 if (sessionBest.bestQualy && (!currentBest.bestQualy || sessionBest.bestQualy < currentBest.bestQualy)) {
                     currentBest.bestQualy = sessionBest.bestQualy
                     currentBest.bestQualyTemp = sessionBest.bestQualyTemp
+                    currentBest.bestQualyFuel = sessionBest.bestQualyFuel ?? null
                     currentBest.bestQualySessionId = session.sessionId
                     currentBest.bestQualyDate = sessionDate
                 }
@@ -856,6 +868,7 @@ export function useTelemetryData() {
                 if (sessionBest.bestRace && (!currentBest.bestRace || sessionBest.bestRace < currentBest.bestRace)) {
                     currentBest.bestRace = sessionBest.bestRace
                     currentBest.bestRaceTemp = sessionBest.bestRaceTemp
+                    currentBest.bestRaceFuel = sessionBest.bestRaceFuel ?? null
                     currentBest.bestRaceSessionId = session.sessionId
                     currentBest.bestRaceDate = sessionDate
                 }
@@ -864,6 +877,7 @@ export function useTelemetryData() {
                 if (sessionBest.bestAvgRace && (!currentBest.bestAvgRace || sessionBest.bestAvgRace < currentBest.bestAvgRace)) {
                     currentBest.bestAvgRace = sessionBest.bestAvgRace
                     currentBest.bestAvgRaceTemp = sessionBest.bestAvgRaceTemp
+                    currentBest.bestAvgRaceFuel = sessionBest.bestAvgRaceFuel ?? null
                     currentBest.bestAvgRaceSessionId = session.sessionId
                     currentBest.bestAvgRaceDate = sessionDate
                 }

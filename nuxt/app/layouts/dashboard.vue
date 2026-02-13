@@ -42,15 +42,17 @@ const handleGoToProfile = () => {
 
 <template>
   <div class="dashboard-layout">
-    <!-- TopBar -->
-    <LayoutTopBar
-      :user-name="displayName"
-      @logout="handleLogout"
-      @go-to-profile="handleGoToProfile"
-    />
+    <!-- Sticky Header: TopBar + TabsBar -->
+    <div class="dashboard-sticky-header">
+      <LayoutTopBar
+        :user-name="displayName"
+        @logout="handleLogout"
+        @go-to-profile="handleGoToProfile"
+      />
 
-    <!-- TabsBar with NuxtLink navigation -->
-    <LayoutTabsBarRouter :active-tab="activeTab" />
+      <!-- TabsBar with NuxtLink navigation -->
+      <LayoutTabsBarRouter :active-tab="activeTab" />
+    </div>
 
     <!-- Page Content with transitions -->
     <main class="main-content">
@@ -62,6 +64,13 @@ const handleGoToProfile = () => {
 <style lang="scss" scoped>
 .dashboard-layout {
   min-height: 100vh;
+  background: #0d0d12;
+}
+
+.dashboard-sticky-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   background: #0d0d12;
 }
 

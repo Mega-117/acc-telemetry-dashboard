@@ -309,7 +309,10 @@ const emit = defineEmits<{
   'go-to-track': [trackId: string]
 }>()
 
-// Router for direct navigation
+// Get pilot context (set when coach/admin views a pilot)
+const pilotContext = usePilotContext()
+
+// Router for direct navigation (standalone mode only)
 const router = useRouter()
 
 // Navigation handlers
@@ -317,11 +320,13 @@ const goToTrack = (track: { track: string } | null) => {
   if (!track) return
   const trackId = track.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
   
-  // Emit for parent component (coach view)
+  // Emit for parent component (coach/admin view)
   emit('go-to-track', trackId)
   
-  // Also navigate directly via router for standalone view
-  router.push(`/piste/${trackId}`)
+  // Navigate directly only in standalone mode (not pilot context)
+  if (!pilotContext.value) {
+    router.push(`/piste/${trackId}`)
+  }
 }
 </script>
 

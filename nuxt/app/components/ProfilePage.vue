@@ -386,8 +386,11 @@ $max-width: 1400px;
 
 // === HEADER ===
 .profile-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   padding: 16px 24px;
-  background: rgba(255, 255, 255, 0.02);
+  background: #0d0d12;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 

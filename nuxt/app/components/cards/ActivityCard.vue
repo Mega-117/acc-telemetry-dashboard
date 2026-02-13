@@ -24,11 +24,15 @@ const props = defineProps<{
 // Animation state
 const isAnimated = ref(false)
 
+
 onMounted(() => {
   setTimeout(() => {
     isAnimated.value = true
   }, 100)
 })
+
+// Day total
+const dayTotal = (day: { practice: number; qualify: number; race: number }) => day.practice + day.qualify + day.race
 
 // Mock data - will be replaced with real API data
 const chartData = computed(() => props.data || [
@@ -72,6 +76,18 @@ const formatDuration = (minutes: number): { value: string; unit: string } => {
   }
   return { value: `${minutes}`, unit: 'min' }
 }
+
+// Format Y-axis label: "0", "30", "1h", "1h30", "2h" etc.
+const formatYLabel = (minutes: number): string => {
+  if (minutes === 0) return '0'
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60)
+    const mins = minutes % 60
+    if (mins === 0) return `${hours}h`
+    return `${hours}h${mins.toString().padStart(2, '0')}`
+  }
+  return `${minutes}min`
+}
 </script>
 
 <template>
@@ -85,7 +101,7 @@ const formatDuration = (minutes: number): { value: string; unit: string } => {
       <div class="chart-area">
         <!-- Y-axis labels -->
         <div class="y-axis">
-          <span v-for="label in yLabels.slice().reverse()" :key="label">{{ label }}</span>
+          <span v-for="label in yLabels.slice().reverse()" :key="label">{{ formatYLabel(label) }}</span>
         </div>
         
         <!-- Bars container -->
@@ -95,14 +111,22 @@ const formatDuration = (minutes: number): { value: string; unit: string } => {
             :key="day.day" 
             class="bar-column"
           >
-            <!-- Stacked bar -->
-            <div class="bar-stack">
+            <!-- Total label above bar -->
+            <span 
+              v-if="dayTotal(day) > 0"
+              class="bar-total"
+            >{{ formatYLabel(dayTotal(day)) }}</span>
+            <!-- Stacked bar (height = total percentage of max) -->
+            <div 
+              class="bar-stack"
+              :style="{ height: `${(dayTotal(day) / maxValue) * 100}%` }"
+            >
               <!-- Race (Red) - Top -->
               <div 
                 v-if="day.race > 0"
                 class="bar bar--race"
                 :style="{ 
-                  height: isAnimated ? `${(day.race / maxValue) * 100}%` : '0%',
+                  height: isAnimated ? `${(day.race / dayTotal(day)) * 100}%` : '0%',
                   transitionDelay: `${i * 40 + 200}ms`
                 }"
               ></div>
@@ -111,7 +135,7 @@ const formatDuration = (minutes: number): { value: string; unit: string } => {
                 v-if="day.qualify > 0"
                 class="bar bar--qualify"
                 :style="{ 
-                  height: isAnimated ? `${(day.qualify / maxValue) * 100}%` : '0%',
+                  height: isAnimated ? `${(day.qualify / dayTotal(day)) * 100}%` : '0%',
                   transitionDelay: `${i * 40 + 100}ms`
                 }"
               ></div>
@@ -120,7 +144,7 @@ const formatDuration = (minutes: number): { value: string; unit: string } => {
                 v-if="day.practice > 0"
                 class="bar bar--practice"
                 :style="{ 
-                  height: isAnimated ? `${(day.practice / maxValue) * 100}%` : '0%',
+                  height: isAnimated ? `${(day.practice / dayTotal(day)) * 100}%` : '0%',
                   transitionDelay: `${i * 40}ms`
                 }"
               ></div>
@@ -212,6 +236,17 @@ $color-race: $racing-red;         // Red
   margin: 0 0 20px 0;
 }
 
+// === BAR TOTAL LABELS ===
+.bar-total {
+  font-size: 12px;
+  font-weight: 600;
+  font-family: $font-primary;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+  margin-bottom: 2px;
+  white-space: nowrap;
+}
+
 // === MAIN CONTENT LAYOUT ===
 .card-content {
   flex: 1;
@@ -259,12 +294,12 @@ $color-race: $racing-red;         // Red
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: flex-end;
   height: 100%;
   max-width: 36px;
 }
 
 .bar-stack {
-  flex: 1;
   width: 100%;
   display: flex;
   flex-direction: column-reverse;
