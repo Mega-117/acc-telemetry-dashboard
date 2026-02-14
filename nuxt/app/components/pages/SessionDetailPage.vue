@@ -149,6 +149,8 @@ const loadError = ref<string | null>(null)
 // ========================================
 const isSharing = ref(false)
 const shareSuccess = ref(false)
+const showAutoSelectToast = ref(false)
+let autoSelectToastTimer: ReturnType<typeof setTimeout> | null = null
 
 async function shareSession() {
   if (!props.sessionId || isSharing.value) return
@@ -283,6 +285,64 @@ function openSessionPicker() {
   showSessionPicker.value = true
 }
 
+// Auto-select best stints when Session B is loaded for immediate comparison
+function autoSelectBestStints(sessionBData: FullSession): void {
+  // --- Find best S1 stint ---
+  // Priority: best Race stint, then best Qualy stint, then first available
+  const s1Best = bestRaceStint.value || bestQualyStint.value
+  const s1StintNum = s1Best?.number || session.value.stints[0]?.number
+  
+  if (!s1StintNum) {
+    console.warn('[AUTO-SELECT] No S1 stints available')
+    return
+  }
+  
+  // --- Find best S2 stint ---
+  const s2Stints = sessionBData.stints || []
+  let s2BestStintNum: number | null = null
+  let s2BestLapMs: number | null = null
+  
+  s2Stints.forEach((stint: any) => {
+    const validLaps = (stint.laps || []).filter((l: any) => l.is_valid && !l.has_pit_stop)
+    if (validLaps.length === 0) return
+    const bestMs = Math.min(...validLaps.map((l: any) => l.lap_time_ms))
+    
+    // Prefer Race stints over Qualify
+    const isRace = stint.type !== 'Qualify'
+    const currentIsRace = s2BestStintNum !== null && s2Stints.find((s: any) => s.stint_number === s2BestStintNum)?.type !== 'Qualify'
+    
+    if (s2BestLapMs === null || (isRace && !currentIsRace) || (isRace === currentIsRace && bestMs < s2BestLapMs)) {
+      s2BestLapMs = bestMs
+      s2BestStintNum = stint.stint_number
+    }
+  })
+  
+  // Fallback: first S2 stint
+  if (s2BestStintNum === null && s2Stints.length > 0) {
+    s2BestStintNum = s2Stints[0]?.stint_number ?? null
+  }
+  
+  if (!s2BestStintNum) {
+    console.warn('[AUTO-SELECT] No S2 stints available')
+    return
+  }
+  
+  // --- Apply selections ---
+  selectedCrossStintA.value = s1StintNum
+  stintASource.value = 'a'
+  selectedCrossStintB.value = s2BestStintNum
+  stintBSource.value = 'b'
+  
+  console.log(`[AUTO-SELECT] S1 best: #${s1StintNum}, S2 best: #${s2BestStintNum}`)
+  
+  // Show toast notification
+  if (autoSelectToastTimer) clearTimeout(autoSelectToastTimer)
+  showAutoSelectToast.value = true
+  autoSelectToastTimer = setTimeout(() => {
+    showAutoSelectToast.value = false
+  }, 5000)
+}
+
 async function handleSessionBSelect(sessionId: string, userId?: string, nickname?: string) {
   crossSessionId.value = sessionId
   crossSessionUserId.value = userId || null
@@ -295,6 +355,10 @@ async function handleSessionBSelect(sessionId: string, userId?: string, nickname
   if (data) {
     crossSessionData.value = data
     console.log('[CROSS-SESSION] Loaded session B:', sessionId, userId ? `(external: ${nickname})` : '(own)', data.session_info.track)
+    
+    // Auto-select best stints for immediate comparison
+    await nextTick()
+    autoSelectBestStints(data)
   }
 }
 
@@ -308,11 +372,22 @@ function clearCrossSession() {
   // Also clear multi-stint strategy selections
   strategyASecond.value = null
   strategyBSecond.value = null
+  // Reset source tracking
+  stintASource.value = 'a'
+  stintBSource.value = 'b'
+  stintASecondSource.value = 'a'
+  stintBSecondSource.value = 'b'
 }
 
 // Cross-session stint selection (separate from same-session compare)
-const selectedCrossStintA = ref<number | null>(null)  // Stint from Session A
-const selectedCrossStintB = ref<number | null>(null)  // Stint from Session B
+const selectedCrossStintA = ref<number | null>(null)  // Stint for Strategy A
+const selectedCrossStintB = ref<number | null>(null)  // Stint for Strategy B
+
+// Source tracking: which session each stint comes from ('a' = main, 'b' = cross)
+const stintASource = ref<'a' | 'b'>('a')
+const stintBSource = ref<'a' | 'b'>('b')
+const stintASecondSource = ref<'a' | 'b'>('a')
+const stintBSecondSource = ref<'a' | 'b'>('b')
 
 // Computed: stints from Session B formatted for display
 const crossSessionStints = computed(() => {
@@ -357,26 +432,73 @@ const isStrategyMode = computed(() =>
   strategyASecond.value !== null || strategyBSecond.value !== null
 )
 
+// Helper: get stints array for a given source
+function getStintsForSource(source: 'a' | 'b') {
+  if (source === 'a') return session.value.stints
+  // Source 'b': cross-session data
+  if (!crossSessionData.value) return session.value.stints
+  return (crossSessionData.value.stints || []).map((s: any) => ({
+    number: s.stint_number,
+    type: s.type === 'Qualify' ? 'Q' : s.type === 'Race' ? 'R' : 'P',
+    laps: s.laps?.length || 0,
+    best: formatLapTime(s.laps?.reduce((min: number | null, lap: any) => {
+      if (!lap.is_valid || lap.has_pit_stop) return min
+      return min === null ? lap.lap_time_ms : Math.min(min, lap.lap_time_ms)
+    }, null)),
+    bestMs: s.laps?.reduce((min: number | null, lap: any) => {
+      if (!lap.is_valid || lap.has_pit_stop) return min
+      return min === null ? lap.lap_time_ms : Math.min(min, lap.lap_time_ms)
+    }, null),
+    avg: formatLapTime(s.avg_clean_lap),
+    avgMs: s.avg_clean_lap,
+    avgWarning: (s.laps?.filter((l: any) => l.is_valid && !l.has_pit_stop).length || 0) < 5,
+    validLapsCount: s.laps?.filter((l: any) => l.is_valid && !l.has_pit_stop).length || 0,
+    durationMs: s.laps?.reduce((sum: number, lap: any) => sum + (lap.lap_time_ms || 0), 0) || 0
+  }))
+}
+
+// Helper: get laps data for a given source and stint number
+function getLapsForSource(source: 'a' | 'b', stintNum: number): any[] {
+  if (source === 'a') {
+    return session.value.lapsData[stintNum as keyof typeof session.value.lapsData] || []
+  }
+  // Source 'b': cross-session raw laps
+  if (!crossSessionData.value) return []
+  const crossStint = (crossSessionData.value.stints || []).find((s: any) => s.stint_number === stintNum)
+  if (!crossStint?.laps) return []
+  return crossStint.laps.map((lap: any, idx: number) => ({
+    number: idx + 1,
+    time: formatLapTime(lap.lap_time_ms),
+    timeMs: lap.lap_time_ms,
+    valid: lap.is_valid,
+    pit: lap.has_pit_stop,
+    grip: lap.grip_level || 'Opt',
+    temp: lap.air_temp || 0
+  }))
+}
+
 // Check if next consecutive stint exists for Strategy A
 const canAddNextStintA = computed(() => {
   if (!selectedCrossStintA.value) return false
-  if (strategyASecond.value !== null) return false  // Already has second
+  if (strategyASecond.value !== null) return false
   const nextStint = selectedCrossStintA.value + 1
-  return session.value.stints.some(s => s.number === nextStint)
+  const stints = getStintsForSource(stintASource.value)
+  return stints.some((s: any) => s.number === nextStint)
 })
 
 // Check if next consecutive stint exists for Strategy B
 const canAddNextStintB = computed(() => {
-  if (!selectedCrossStintB.value || !crossSessionData.value) return false
+  if (!selectedCrossStintB.value) return false
   if (strategyBSecond.value !== null) return false
   const nextStint = selectedCrossStintB.value + 1
-  const stints = crossSessionData.value.stints || []
-  return stints.some((s: any) => s.stint_number === nextStint)
+  const stints = getStintsForSource(stintBSource.value)
+  return stints.some((s: any) => s.number === nextStint)
 })
 
 function addNextStintA() {
   if (!selectedCrossStintA.value || !canAddNextStintA.value) return
   strategyASecond.value = selectedCrossStintA.value + 1
+  stintASecondSource.value = stintASource.value
 }
 
 function removeSecondStintA() {
@@ -386,6 +508,7 @@ function removeSecondStintA() {
 function addNextStintB() {
   if (!selectedCrossStintB.value || !canAddNextStintB.value) return
   strategyBSecond.value = selectedCrossStintB.value + 1
+  stintBSecondSource.value = stintBSource.value
 }
 
 function removeSecondStintB() {
@@ -467,49 +590,32 @@ const builderStintBLaps = computed(() => {
 })
 
 // Multi-stint strategy support: Array of all stints in each strategy
+// Now reads from correct session based on source tracking
 const strategyAStints = computed(() => {
-  const stints: typeof session.value.stints = []
+  const stints: any[] = []
   if (selectedCrossStintA.value) {
-    const stint1 = session.value.stints.find(s => s.number === selectedCrossStintA.value)
+    const sourceStints = getStintsForSource(stintASource.value)
+    const stint1 = sourceStints.find((s: any) => s.number === selectedCrossStintA.value)
     if (stint1) stints.push(stint1)
   }
   if (strategyASecond.value) {
-    const stint2 = session.value.stints.find(s => s.number === strategyASecond.value)
+    const sourceStints = getStintsForSource(stintASecondSource.value)
+    const stint2 = sourceStints.find((s: any) => s.number === strategyASecond.value)
     if (stint2) stints.push(stint2)
   }
   return stints
 })
 
 const strategyBStints = computed(() => {
-  const stints: typeof session.value.stints = []
-  
-  // Determine data source: cross-session or same-session
-  const sourceStints = isCrossSessionMode.value && crossSessionData.value
-    ? (crossSessionData.value.stints || []).map((s: any) => ({
-        number: s.stint_number,
-        type: s.type === 'Qualify' ? 'Q' : s.type === 'Race' ? 'R' : 'P',
-        laps: s.laps?.length || 0,
-        best: formatLapTime(s.laps?.reduce((min: number | null, lap: any) => {
-          if (!lap.is_valid || lap.has_pit_stop) return min
-          return min === null ? lap.lap_time_ms : Math.min(min, lap.lap_time_ms)
-        }, null)),
-        bestMs: s.laps?.reduce((min: number | null, lap: any) => {
-          if (!lap.is_valid || lap.has_pit_stop) return min
-          return min === null ? lap.lap_time_ms : Math.min(min, lap.lap_time_ms)
-        }, null),
-        avg: formatLapTime(s.avg_clean_lap),
-        avgMs: s.avg_clean_lap,
-        avgWarning: (s.laps?.filter((l: any) => l.is_valid && !l.has_pit_stop).length || 0) < 5,
-        validLapsCount: s.laps?.filter((l: any) => l.is_valid && !l.has_pit_stop).length || 0,
-        durationMs: s.laps?.reduce((sum: number, lap: any) => sum + (lap.lap_time_ms || 0), 0) || 0
-      }))
-    : session.value.stints
+  const stints: any[] = []
   
   if (selectedCrossStintB.value) {
+    const sourceStints = getStintsForSource(stintBSource.value)
     const stint1 = sourceStints.find((s: any) => s.number === selectedCrossStintB.value)
     if (stint1) stints.push(stint1 as any)
   }
   if (strategyBSecond.value) {
+    const sourceStints = getStintsForSource(stintBSecondSource.value)
     const stint2 = sourceStints.find((s: any) => s.number === strategyBSecond.value)
     if (stint2) stints.push(stint2 as any)
   }
@@ -531,16 +637,19 @@ const strategyBTotalDurationMs = computed(() => {
 })
 
 // Concatenated laps for all stints in Strategy A (with stint markers)
+// Uses source tracking to read laps from correct session
 const strategyAAllLaps = computed(() => {
   const allLaps: any[] = []
+  const sources = [stintASource.value, stintASecondSource.value]
   strategyAStints.value.forEach((stint, stintIdx) => {
-    const stintLaps = session.value.lapsData[stint.number as keyof typeof session.value.lapsData] || []
+    const source = sources[stintIdx] || 'a'
+    const stintLaps = getLapsForSource(source, stint.number)
     stintLaps.forEach((lap: any, lapIdx: number) => {
       allLaps.push({
         ...lap,
         _stintIndex: stintIdx,
         _stintNumber: stint.number,
-        _isStintStart: lapIdx === 0,  // First lap of every stint
+        _isStintStart: lapIdx === 0,
         _globalIndex: allLaps.length + 1
       })
     })
@@ -549,16 +658,19 @@ const strategyAAllLaps = computed(() => {
 })
 
 // Concatenated laps for all stints in Strategy B (with stint markers)
+// Uses source tracking to read laps from correct session
 const strategyBAllLaps = computed(() => {
   const allLaps: any[] = []
+  const sources = [stintBSource.value, stintBSecondSource.value]
   strategyBStints.value.forEach((stint, stintIdx) => {
-    const stintLaps = session.value.lapsData[stint.number as keyof typeof session.value.lapsData] || []
+    const source = sources[stintIdx] || 'b'
+    const stintLaps = getLapsForSource(source, stint.number)
     stintLaps.forEach((lap: any, lapIdx: number) => {
       allLaps.push({
         ...lap,
         _stintIndex: stintIdx,
         _stintNumber: stint.number,
-        _isStintStart: lapIdx === 0,  // First lap of every stint
+        _isStintStart: lapIdx === 0,
         _globalIndex: allLaps.length + 1
       })
     })
@@ -583,14 +695,18 @@ function resetBuilder(): void {
   strategyASecond.value = null
   selectedCrossStintB.value = null
   strategyBSecond.value = null
+  stintASource.value = 'a'
+  stintBSource.value = 'b'
+  stintASecondSource.value = 'a'
+  stintBSecondSource.value = 'b'
 }
 
 
 // Check if stint can be added to Builder A
 function canAddToBuilderA(stintNum: number): boolean {
-  // NEW RULE: stint cannot be in both strategies - check if already in B
-  if (selectedCrossStintB.value === stintNum) return false
-  if (strategyBSecond.value === stintNum) return false
+  // NEW RULE: stint cannot be in both strategies - check if already in B (from same source)
+  if (selectedCrossStintB.value === stintNum && stintBSource.value === 'a') return false
+  if (strategyBSecond.value === stintNum && stintBSecondSource.value === 'a') return false
   
   // Case 1: No stint selected yet in A - any can be added (if not in B)
   if (!selectedCrossStintA.value) return true
@@ -599,7 +715,10 @@ function canAddToBuilderA(stintNum: number): boolean {
   if (selectedCrossStintA.value === stintNum) return false
   if (strategyASecond.value === stintNum) return false
   
-  // Case 3: Can only add consecutive stint as second
+  // Case 3: If A already has a stint from a DIFFERENT session, block
+  if (stintASource.value !== 'a') return false
+  
+  // Case 4: Can only add consecutive stint as second
   if (!strategyASecond.value) {
     return stintNum === selectedCrossStintA.value + 1
   }
@@ -610,8 +729,8 @@ function canAddToBuilderA(stintNum: number): boolean {
 // Check if stint can be added to Builder B
 function canAddToBuilderB(stintNum: number): boolean {
   // NEW RULE: stint cannot be in both strategies - check if already in A
-  if (selectedCrossStintA.value === stintNum) return false
-  if (strategyASecond.value === stintNum) return false
+  if (selectedCrossStintA.value === stintNum && stintASource.value === 'a') return false
+  if (strategyASecond.value === stintNum && stintASecondSource.value === 'a') return false
   
   // Case 1: No stint selected yet in B - any can be added (if not in A)
   if (!selectedCrossStintB.value) return true
@@ -620,7 +739,10 @@ function canAddToBuilderB(stintNum: number): boolean {
   if (selectedCrossStintB.value === stintNum) return false
   if (strategyBSecond.value === stintNum) return false
   
-  // Case 3: Can only add consecutive stint as second
+  // Case 3: If B already has a stint from a DIFFERENT session, block
+  if (stintBSource.value !== 'a') return false
+  
+  // Case 4: Can only add consecutive stint as second
   if (!strategyBSecond.value) {
     return stintNum === selectedCrossStintB.value + 1
   }
@@ -630,13 +752,15 @@ function canAddToBuilderB(stintNum: number): boolean {
 
 // Get tooltip for [+A] button
 function getAddToBuilderTooltipA(stintNum: number): string {
-  // Check if in Strategy B first (new rule)
-  if (selectedCrossStintB.value === stintNum) return 'Già in Strategia B'
-  if (strategyBSecond.value === stintNum) return 'Già in Strategia B'
+  // Check if in Strategy B first
+  if (selectedCrossStintB.value === stintNum && stintBSource.value === 'a') return 'Già in Strategia B'
+  if (strategyBSecond.value === stintNum && stintBSecondSource.value === 'a') return 'Già in Strategia B'
   
   if (!selectedCrossStintA.value) return 'Aggiungi a Strategia A'
   if (selectedCrossStintA.value === stintNum) return 'Già in Strategia A'
   if (strategyASecond.value === stintNum) return 'Già in Strategia A'
+  // If A has stint from different session, block
+  if (stintASource.value !== 'a') return 'Solo stint dalla stessa sessione'
   if (!strategyASecond.value && stintNum === selectedCrossStintA.value + 1) {
     return 'Aggiungi come secondo stint'
   }
@@ -646,13 +770,15 @@ function getAddToBuilderTooltipA(stintNum: number): string {
 
 // Get tooltip for [+B] button
 function getAddToBuilderTooltipB(stintNum: number): string {
-  // Check if in Strategy A first (new rule)
-  if (selectedCrossStintA.value === stintNum) return 'Già in Strategia A'
-  if (strategyASecond.value === stintNum) return 'Già in Strategia A'
+  // Check if in Strategy A first
+  if (selectedCrossStintA.value === stintNum && stintASource.value === 'a') return 'Già in Strategia A'
+  if (strategyASecond.value === stintNum && stintASecondSource.value === 'a') return 'Già in Strategia A'
   
   if (!selectedCrossStintB.value) return 'Aggiungi a Strategia B'
   if (selectedCrossStintB.value === stintNum) return 'Già in Strategia B'
   if (strategyBSecond.value === stintNum) return 'Già in Strategia B'
+  // If B has stint from different session, block
+  if (stintBSource.value !== 'a') return 'Solo stint dalla stessa sessione'
   if (!strategyBSecond.value && stintNum === selectedCrossStintB.value + 1) {
     return 'Aggiungi come secondo stint'
   }
@@ -660,89 +786,90 @@ function getAddToBuilderTooltipB(stintNum: number): string {
   return 'Solo stint consecutivo ammesso'
 }
 
-// Add stint to Builder A
-function addToBuilderA(stintNum: number): void {
+// Add stint to Builder A (source = which session it comes from)
+function addToBuilderA(stintNum: number, source: 'a' | 'b' = 'a'): void {
   if (!selectedCrossStintA.value) {
     selectedCrossStintA.value = stintNum
+    stintASource.value = source
     return
   }
-  if (!strategyASecond.value && stintNum === selectedCrossStintA.value + 1) {
+  if (!strategyASecond.value && stintNum === selectedCrossStintA.value + 1 && source === stintASource.value) {
     strategyASecond.value = stintNum
+    stintASecondSource.value = source
   }
 }
 
-// Add stint to Builder B
-function addToBuilderB(stintNum: number): void {
+// Add stint to Builder B (source = which session it comes from)
+function addToBuilderB(stintNum: number, source: 'a' | 'b' = 'a'): void {
   if (!selectedCrossStintB.value) {
     selectedCrossStintB.value = stintNum
+    stintBSource.value = source
     return
   }
-  if (!strategyBSecond.value && stintNum === selectedCrossStintB.value + 1) {
+  if (!strategyBSecond.value && stintNum === selectedCrossStintB.value + 1 && source === stintBSource.value) {
     strategyBSecond.value = stintNum
+    stintBSecondSource.value = source
   }
 }
 
 // Cross-session specific: Check if stint from Source B can be added to Strategy A
-// IMPORTANT: In cross-session mode, stints from different sessions are DIFFERENT entities
-// Session A's Stint #1 != Session B's Stint #1, so no cross-conflict check needed
 function canAddToBuilderACross(stintNum: number): boolean {
-  // Only check against stints already in Strategy A (which come from Session A)
-  // We do NOT check against selectedCrossStintB - different session = different stint
-  
-  // For Strategy A, we could allow Session B stints if we wanted cross-assignment
-  // But typically, Session A stints go to A, Session B stints go to B
-  // For now, just check if not already in Strategy A (from session B context, not blocking)
-  
-  // Actually, in cross-session mode, Session B stints should go to Strategy B,
-  // and Session A stints should go to Strategy A. But if user wants to put
-  // Session B stint into Strategy A, that's valid too.
-  
-  // Check if already in Strategy A (from this session - Session B)
-  // Since Strategy A currently stores Session A stints, we need to allow new ones
   if (!selectedCrossStintA.value) return true
-  
-  // Strategy A already has a stint, can only add consecutive from same session
-  // But wait - in cross-session, A comes from main session, not this one
-  // Actually, for simplicity: Session B stints can always go to Strategy B, never to A
-  // This maintains separation: A = main session, B = altra sessione
-  return false  // Session B stints should use +B, not +A
+  // Already selected in A from source 'b'
+  if (selectedCrossStintA.value === stintNum && stintASource.value === 'b') return false
+  if (strategyASecond.value === stintNum && stintASecondSource.value === 'b') return false
+  // If A already has a stint from Session 1 (source 'a'), block ALL Session 2 buttons
+  if (stintASource.value !== 'b') return false
+  // Can add consecutive as second (only if first is also from source 'b')
+  if (!strategyASecond.value && stintNum === selectedCrossStintA.value + 1) {
+    return true
+  }
+  return false
 }
 
-// Cross-session specific: Tooltip for [+A] button on Source B stints  
+// Cross-session specific: Tooltip for [+A] button on Source B stints
 function getAddToBuilderTooltipACross(stintNum: number): string {
-  // In cross-session mode, Session B stints should go to Strategy B
-  return 'Usa +B per stint da altra sessione'
+  if (!selectedCrossStintA.value) return 'Aggiungi a Strategia A (da S2)'
+  if (selectedCrossStintA.value === stintNum && stintASource.value === 'b') return 'Già in Strategia A'
+  if (strategyASecond.value === stintNum && stintASecondSource.value === 'b') return 'Già in Strategia A'
+  // If A has stint from Session 1, block
+  if (stintASource.value !== 'b') return 'Solo stint dalla stessa sessione'
+  if (!strategyASecond.value && stintNum === selectedCrossStintA.value + 1) {
+    return 'Aggiungi come secondo stint'
+  }
+  if (strategyASecond.value) return 'Massimo 2 stint per strategia'
+  return 'Solo stint consecutivi dalla stessa sessione'
 }
 
 // Cross-session specific: Check if stint from Source B can be added to Strategy B
-// IMPORTANT: In cross-session mode, stints from different sessions are DIFFERENT entities
-// even if they have the same number. So Session A's Stint #1 != Session B's Stint #1
 function canAddToBuilderBCross(stintNum: number): boolean {
-  // NOTE: We do NOT check against selectedCrossStintA here!
-  // That's because selectedCrossStintA contains stints from Session A (main session),
-  // while stintNum here is from Session B (altra sessione).
-  // They are completely different stints even if numbers match.
+  // Check if already in Strategy A from source 'b'
+  if (selectedCrossStintA.value === stintNum && stintASource.value === 'b') return false
+  if (strategyASecond.value === stintNum && stintASecondSource.value === 'b') return false
   
-  // Check if already in Strategy B (same session, so check makes sense)
   if (!selectedCrossStintB.value) return true
+  // Already in B
   if (selectedCrossStintB.value === stintNum) return false
   if (strategyBSecond.value === stintNum) return false
-  
+  // If B already has a stint from Session 1 (source 'a'), block ALL Session 2 buttons
+  if (stintBSource.value !== 'b') return false
   // Can add consecutive stint as second
   if (!strategyBSecond.value) {
     return stintNum === selectedCrossStintB.value + 1
   }
-  
   return false
 }
 
 // Cross-session specific: Tooltip for [+B] button on Source B stints
 function getAddToBuilderTooltipBCross(stintNum: number): string {
-  // NOTE: No cross-session conflict check - different sessions = different stints
+  if (selectedCrossStintA.value === stintNum && stintASource.value === 'b') return 'Già in Strategia A'
+  if (strategyASecond.value === stintNum && stintASecondSource.value === 'b') return 'Già in Strategia A'
   
   if (!selectedCrossStintB.value) return 'Aggiungi a Strategia B'
   if (selectedCrossStintB.value === stintNum) return 'Già in Strategia B'
   if (strategyBSecond.value === stintNum) return 'Già in Strategia B'
+  // If B has stint from Session 1, block
+  if (stintBSource.value !== 'b') return 'Solo stint dalla stessa sessione'
   if (!strategyBSecond.value && stintNum === selectedCrossStintB.value + 1) {
     return 'Aggiungi come secondo stint'
   }
@@ -754,10 +881,25 @@ function getAddToBuilderTooltipBCross(stintNum: number): string {
 function addToBuilderBCross(stintNum: number): void {
   if (!selectedCrossStintB.value) {
     selectedCrossStintB.value = stintNum
+    stintBSource.value = 'b'
     return
   }
-  if (!strategyBSecond.value && stintNum === selectedCrossStintB.value + 1) {
+  if (!strategyBSecond.value && stintNum === selectedCrossStintB.value + 1 && stintBSource.value === 'b') {
     strategyBSecond.value = stintNum
+    stintBSecondSource.value = 'b'
+  }
+}
+
+// Cross-session specific: Add stint from Source B to Strategy A
+function addToBuilderACross(stintNum: number): void {
+  if (!selectedCrossStintA.value) {
+    selectedCrossStintA.value = stintNum
+    stintASource.value = 'b'
+    return
+  }
+  if (!strategyASecond.value && stintNum === selectedCrossStintA.value + 1 && stintASource.value === 'b') {
+    strategyASecond.value = stintNum
+    stintASecondSource.value = 'b'
   }
 }
 
@@ -765,22 +907,28 @@ function addToBuilderBCross(stintNum: number): void {
 function removeBuilderStintA1(): void {
   selectedCrossStintA.value = null
   strategyASecond.value = null
+  stintASource.value = 'a'
+  stintASecondSource.value = 'a'
 }
 
 // Remove stint B1 (also clears B2)
 function removeBuilderStintB1(): void {
   selectedCrossStintB.value = null
   strategyBSecond.value = null
+  stintBSource.value = 'b'
+  stintBSecondSource.value = 'b'
 }
 
-// Check if stint is part of Builder A
-function isStintInBuilderA(stintNum: number): boolean {
-  return selectedCrossStintA.value === stintNum || strategyASecond.value === stintNum
+// Check if stint is part of Builder A (with source awareness)
+function isStintInBuilderA(stintNum: number, source: 'a' | 'b' = 'a'): boolean {
+  return (selectedCrossStintA.value === stintNum && stintASource.value === source) ||
+         (strategyASecond.value === stintNum && stintASecondSource.value === source)
 }
 
-// Check if stint is part of Builder B
-function isStintInBuilderB(stintNum: number): boolean {
-  return selectedCrossStintB.value === stintNum || strategyBSecond.value === stintNum
+// Check if stint is part of Builder B (with source awareness)
+function isStintInBuilderB(stintNum: number, source: 'a' | 'b' = 'a'): boolean {
+  return (selectedCrossStintB.value === stintNum && stintBSource.value === source) ||
+         (strategyBSecond.value === stintNum && stintBSecondSource.value === source)
 }
 
 // View functions (navigation only, no selection change)
@@ -2414,6 +2562,16 @@ const gripZones = computed(() => {
         <span class="share-notification-text">Link copiato nella clipboard!</span>
       </div>
     </Transition>
+    <Transition name="slide-notification">
+      <div v-if="showAutoSelectToast" class="autoselect-notification">
+        <span class="autoselect-notification-icon">✓</span>
+        <span class="autoselect-notification-text">
+          Confronto attivato con i migliori stint
+        </span>
+        <button class="autoselect-notification-action" @click="showAutoSelectToast = false; resetBuilder()">Cambia</button>
+        <button class="autoselect-notification-close" @click="showAutoSelectToast = false">✕</button>
+      </div>
+    </Transition>
   </Teleport>
   <LayoutPageContainer class="session-detail-page">
     <!-- NAV -->
@@ -2479,8 +2637,8 @@ const gripZones = computed(() => {
         <!-- BUILDER PANEL: Always visible -->
         <div class="builder-panel">
           <div class="builder-panel-header">
-            <span class="builder-panel-title">Strategy Builder</span>
-            <!-- Combo Status/Reset Button - Option 5 -->
+            <span class="builder-panel-title">CONFRONTA STINT</span>
+            <!-- Combo Status/Reset Button -->
             <template v-if="hasBuilderContent">
               <button v-if="isBuilderCompareReady" class="builder-combo-btn builder-combo-btn--active" @click="resetBuilder" title="Confronto attivo - Clicca per resettare">
                 <span class="combo-status">✓ Attivo</span>
@@ -2499,11 +2657,13 @@ const gripZones = computed(() => {
             <div class="builder-slot-content">
               <span v-if="!selectedCrossStintA" class="builder-slot-empty">Seleziona stint con [+A]</span>
               <template v-else>
-                <span class="builder-chip builder-chip--a1">
+                <span :class="['builder-chip', stintASource === 'a' ? 'builder-chip--s1' : 'builder-chip--s2']">
+                  <span v-if="isCrossSessionMode" class="chip-session-tag">{{ stintASource === 'a' ? 'S1' : 'S2' }}</span>
                   #{{ selectedCrossStintA }}
                   <button class="chip-remove" @click="removeBuilderStintA1" :title="strategyASecond ? 'Rimuovi (rimuoverà anche +' + strategyASecond + ')' : 'Rimuovi'">×</button>
                 </span>
-                <span v-if="strategyASecond" class="builder-chip builder-chip--a2">
+                <span v-if="strategyASecond" :class="['builder-chip', stintASecondSource === 'a' ? 'builder-chip--s1' : 'builder-chip--s2']">
+                  <span v-if="isCrossSessionMode" class="chip-session-tag">{{ stintASecondSource === 'a' ? 'S1' : 'S2' }}</span>
                   + #{{ strategyASecond }}
                   <button class="chip-remove" @click="removeSecondStintA" title="Rimuovi">×</button>
                 </span>
@@ -2517,11 +2677,13 @@ const gripZones = computed(() => {
             <div class="builder-slot-content">
               <span v-if="!selectedCrossStintB" class="builder-slot-empty">Seleziona stint con [+B]</span>
               <template v-else>
-                <span class="builder-chip builder-chip--b1">
+                <span :class="['builder-chip', stintBSource === 'a' ? 'builder-chip--s1' : 'builder-chip--s2']">
+                  <span v-if="isCrossSessionMode" class="chip-session-tag">{{ stintBSource === 'a' ? 'S1' : 'S2' }}</span>
                   #{{ selectedCrossStintB }}
                   <button class="chip-remove" @click="removeBuilderStintB1" :title="strategyBSecond ? 'Rimuovi (rimuoverà anche +' + strategyBSecond + ')' : 'Rimuovi'">×</button>
                 </span>
-                <span v-if="strategyBSecond" class="builder-chip builder-chip--b2">
+                <span v-if="strategyBSecond" :class="['builder-chip', stintBSecondSource === 'a' ? 'builder-chip--s1' : 'builder-chip--s2']">
+                  <span v-if="isCrossSessionMode" class="chip-session-tag">{{ stintBSecondSource === 'a' ? 'S1' : 'S2' }}</span>
                   + #{{ strategyBSecond }}
                   <button class="chip-remove" @click="removeSecondStintB" title="Rimuovi">×</button>
                 </span>
@@ -2536,7 +2698,7 @@ const gripZones = computed(() => {
           <!-- Session A Section -->
           <div class="cross-session-section">
             <div class="cross-session-header cross-session-header--a">
-              <span class="cross-session-label">Sessione di {{ currentUserNickname || 'Te' }}</span>
+              <span class="cross-session-label">S1 — {{ currentUserNickname || 'Te' }}</span>
               <span class="cross-session-date">{{ session.date }}</span>
             </div>
             
@@ -2544,8 +2706,8 @@ const gripZones = computed(() => {
               <div
                 v-for="stint in session.stints"
                 :key="'a-' + stint.number"
-                :class="['stint-item stint-item--builder', { 
-                  'builder-selected': isStintInBuilderA(stint.number),
+                :class="['stint-item stint-item--builder stint-item--session-a', { 
+                  'builder-selected': isStintInBuilderA(stint.number, 'a') || isStintInBuilderB(stint.number, 'a'),
                   'viewing': selectedStintNumber === stint.number,
                   'best-stint': isBestStint(stint)
                 }]"
@@ -2556,7 +2718,7 @@ const gripZones = computed(() => {
                   class="stint-add-btn stint-add-btn--a"
                   :disabled="!canAddToBuilderA(stint.number)"
                   :title="getAddToBuilderTooltipA(stint.number)"
-                  @click.stop="addToBuilderA(stint.number)"
+                  @click.stop="addToBuilderA(stint.number, 'a')"
                 >+A</button>
                 
                 <!-- [+B] Button -->
@@ -2564,7 +2726,7 @@ const gripZones = computed(() => {
                   class="stint-add-btn stint-add-btn--b"
                   :disabled="!canAddToBuilderB(stint.number)"
                   :title="getAddToBuilderTooltipB(stint.number)"
-                  @click.stop="addToBuilderB(stint.number)"
+                  @click.stop="addToBuilderB(stint.number, 'a')"
                 >+B</button>
                 
                 <!-- Trophy for best stint OR Warning icon OR empty space -->
@@ -2574,7 +2736,7 @@ const gripZones = computed(() => {
                 </span>
                 
                 <!-- Stint Number -->
-                <span class="stint-number">#{{ stint.number }}</span>
+                <span class="stint-number">S1 #{{ stint.number }}</span>
                 
                 <!-- Stint Type badge -->
                 <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stint.type }}</span>
@@ -2590,10 +2752,10 @@ const gripZones = computed(() => {
             <div class="cross-session-header cross-session-header--b">
               <span class="cross-session-label">
                 <template v-if="isExternalSession">
-                  Sessione di {{ crossSessionNickname || 'Utente Esterno' }}
+                  S2 — {{ crossSessionNickname || 'Utente Esterno' }}
                 </template>
                 <template v-else>
-                  Sessione di {{ currentUserNickname || 'Te' }} (altra)
+                  S2 — {{ currentUserNickname || 'Te' }} (altra)
                 </template>
               </span>
               <button class="cross-session-close" @click="clearCrossSession" title="Rimuovi questa sorgente">✕</button>
@@ -2603,17 +2765,17 @@ const gripZones = computed(() => {
               <div
                 v-for="stint in crossSessionStints"
                 :key="'b-' + stint.number"
-                :class="['stint-item stint-item--builder stint-item--b', { 
-                  'builder-selected': isStintInBuilderB(stint.number)
+                :class="['stint-item stint-item--builder stint-item--session-b', { 
+                  'builder-selected': isStintInBuilderA(stint.number, 'b') || isStintInBuilderB(stint.number, 'b')
                 }]"
                 @click="viewStintB(stint.number)"
               >
-                <!-- [+A] Button - In cross-session, Session B stints should use +B -->
+                <!-- [+A] Button -->
                 <button 
                   class="stint-add-btn stint-add-btn--a"
                   :disabled="!canAddToBuilderACross(stint.number)"
                   :title="getAddToBuilderTooltipACross(stint.number)"
-                  @click.stop="addToBuilderA(stint.number)"
+                  @click.stop="addToBuilderACross(stint.number)"
                 >+A</button>
                 
                 <!-- [+B] Button -->
@@ -2631,7 +2793,7 @@ const gripZones = computed(() => {
                 </span>
                 
                 <!-- Stint Number -->
-                <span class="stint-number">#{{ stint.number }}</span>
+                <span class="stint-number">S2 #{{ stint.number }}</span>
                 
                 <!-- Stint Type badge -->
                 <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stint.type }}</span>
@@ -2652,8 +2814,7 @@ const gripZones = computed(() => {
             :key="stint.number"
             :class="['stint-item stint-item--builder', { 
               selected: selectedStintNumber === stint.number,
-              'builder-selected-a': isStintInBuilderA(stint.number),
-              'builder-selected-b': isStintInBuilderB(stint.number),
+              'builder-selected': isStintInBuilderA(stint.number) || isStintInBuilderB(stint.number),
               'best-stint': isBestStint(stint)
             }]"
             @click="selectStintForView(stint.number)"
@@ -5964,11 +6125,11 @@ const gripZones = computed(() => {
 }
 
 .builder-panel-title {
-  font-size: 10px; // Più piccolo
-  font-weight: 500; // Meno bold
-  color: rgba(255,255,255,0.4); // Più tenue
+  font-size: 13px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }
 
 // Combo Status/Reset Button - Option 5
@@ -6040,8 +6201,8 @@ const gripZones = computed(() => {
   text-align: center;
 }
 
-.builder-slot--a .builder-slot-label { color: #3b82f6; }
-.builder-slot--b .builder-slot-label { color: #a855f7; }
+.builder-slot--a .builder-slot-label { color: rgba(255, 255, 255, 0.8); }
+.builder-slot--b .builder-slot-label { color: rgba(255, 255, 255, 0.6); }
 
 .builder-slot--a{
   padding-top: 0px;
@@ -6083,16 +6244,40 @@ const gripZones = computed(() => {
   box-sizing: border-box;
 }
 
+// Session-based chip colors (teal for S1, amber for S2)
+.builder-chip--s1 {
+  background: rgba(20, 184, 166, 0.12);
+  color: rgba(94, 234, 212, 0.9);
+  border: 1px solid rgba(20, 184, 166, 0.25);
+}
+
+.builder-chip--s2 {
+  background: rgba(245, 158, 11, 0.12);
+  color: rgba(252, 211, 77, 0.9);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+// Legacy chip colors for normal (non-cross-session) mode
 .builder-chip--a1, .builder-chip--a2 {
-  background: rgba(59, 130, 246, 0.12); // Meno saturo
-  color: rgba(96, 165, 250, 0.85);
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .builder-chip--b1, .builder-chip--b2 {
-  background: rgba(168, 85, 247, 0.12); // Meno saturo
-  color: rgba(192, 132, 252, 0.85);
-  border: 1px solid rgba(168, 85, 247, 0.2);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+// Session tag inside chips
+.chip-session-tag {
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.8;
+  margin-right: 2px;
 }
 
 .chip-remove {
@@ -6131,15 +6316,15 @@ const gripZones = computed(() => {
   letter-spacing: 0.05em;
   
   &--a {
-    background: rgba(59, 130, 246, 0.1);
-    border: 1px solid rgba(59, 130, 246, 0.2);
-    color: #60a5fa;
+    background: rgba(20, 184, 166, 0.1);
+    border: 1px solid rgba(20, 184, 166, 0.25);
+    color: #5eead4;
   }
   
   &--b {
-    background: rgba(168, 85, 247, 0.1);
-    border: 1px solid rgba(168, 85, 247, 0.2);
-    color: #c084fc;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    color: #fcd34d;
   }
 }
 
@@ -6201,34 +6386,38 @@ const gripZones = computed(() => {
     border-color: rgba(255,255,255,0.1);
   }
   
+  // Selected stint (in builder) — session-based color
+  // Default = teal (main session / normal mode)
   &.builder-selected {
-    background: rgba(59, 130, 246, 0.12);
-    border-color: rgba(59, 130, 246, 0.3);
-    border-left: 3px solid #3b82f6;
-  }
-  
-  &.builder-selected-a {
-    background: rgba(59, 130, 246, 0.12);
-    border-color: rgba(59, 130, 246, 0.3);
-    border-left: 3px solid #3b82f6;
-  }
-  
-  &.builder-selected-b {
-    background: rgba(168, 85, 247, 0.12);
-    border-color: rgba(168, 85, 247, 0.3);
-    border-left: 3px solid #a855f7;
-  }
-  
-  &.stint-item--b.builder-selected {
-    background: rgba(168, 85, 247, 0.12);
-    border-color: rgba(168, 85, 247, 0.3);
-    border-left-color: #a855f7;
+    background: rgba(20, 184, 166, 0.08);
+    border-color: rgba(20, 184, 166, 0.25);
+    border-left: 3px solid #14b8a6;
   }
   
   // Currently viewing in detail panel (not in builder)
-  &.viewing:not(.builder-selected):not(.builder-selected-a):not(.builder-selected-b) {
+  &.viewing:not(.builder-selected) {
     background: rgba(255,255,255,0.08);
     border-color: rgba(255,255,255,0.15);
+  }
+  
+  // Session-colored left border (cross-session mode)
+  &.stint-item--session-a {
+    border-left: 3px solid rgba(20, 184, 166, 0.4);
+    
+    &.builder-selected {
+      border-left-color: #14b8a6;
+    }
+  }
+  
+  &.stint-item--session-b {
+    border-left: 3px solid rgba(245, 158, 11, 0.4);
+    
+    // Override: Session B selected = amber
+    &.builder-selected {
+      background: rgba(245, 158, 11, 0.08);
+      border-color: rgba(245, 158, 11, 0.25);
+      border-left-color: #f59e0b;
+    }
   }
 }
 
@@ -6604,13 +6793,13 @@ const gripZones = computed(() => {
   padding: 10px 12px !important;
   
   &--a {
-    background: linear-gradient(90deg, rgba(59, 130, 246, 0.08) 0%, transparent 100%);
-    border-bottom: 2px solid rgba(59, 130, 246, 0.3);
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.15);
   }
   
   &--b {
-    background: linear-gradient(270deg, rgba(139, 92, 246, 0.08) 0%, transparent 100%);
-    border-bottom: 2px solid rgba(139, 92, 246, 0.3);
+    background: linear-gradient(270deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.15);
   }
 }
 
@@ -6622,11 +6811,11 @@ const gripZones = computed(() => {
   white-space: nowrap;
   
   .stint-header-cell--a & {
-    color: #3b82f6;
+    color: rgba(255, 255, 255, 0.7);
   }
   
   .stint-header-cell--b & {
-    color: #8b5cf6;
+    color: rgba(255, 255, 255, 0.5);
   }
 }
 
@@ -6695,5 +6884,75 @@ const gripZones = computed(() => {
   opacity: 0;
   transform: translateX(30px);
 }
+// === AUTO-SELECT TOAST NOTIFICATION ===
+.autoselect-notification {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 20px;
+  background: rgba(15, 30, 30, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(20, 184, 166, 0.5);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(20, 184, 166, 0.15);
+}
+
+.autoselect-notification-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: rgba(20, 184, 166, 0.25);
+  border-radius: 50%;
+  color: #14b8a6;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.autoselect-notification-text {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.autoselect-notification-action {
+  background: rgba(20, 184, 166, 0.15);
+  border: 1px solid rgba(20, 184, 166, 0.35);
+  border-radius: 6px;
+  color: #5eead4;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  
+  &:hover {
+    background: rgba(20, 184, 166, 0.25);
+    border-color: rgba(20, 184, 166, 0.5);
+  }
+}
+
+.autoselect-notification-close {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+  margin-left: 4px;
+  transition: color 0.15s ease;
+  
+  &:hover {
+    color: rgba(255, 255, 255, 0.8);
+  }
+}
+
 </style>
 
