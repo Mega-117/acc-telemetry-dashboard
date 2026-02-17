@@ -323,7 +323,14 @@ export function useElectronSync() {
             if (existing) {
                 isUpdate = true
                 if ((existing as any).fileHash === fileHash) {
-                    chunksNeedUpdate = false
+                    // === IDENTICAL FILE ALREADY ON FIREBASE → skip entirely (0 writes) ===
+                    console.log(`[SYNC] unchanged: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})`)
+                    return {
+                        status: 'unchanged',
+                        fileName,
+                        sessionId,
+                        reason: 'firebase_hash_match'
+                    }
                 } else {
                     await deleteOldChunks(uid, sessionId)
                 }
@@ -353,26 +360,20 @@ export function useElectronSync() {
             batch.set(uploadRef, { fileName, uploadedAt: serverTimestamp(), sessionId })
 
             // Chunks (parallel in batch, not sequential setDoc)
-            if (chunksNeedUpdate) {
-                for (let idx = 0; idx < chunks.length; idx++) {
-                    const chunkRef = doc(db, `users/${uid}/sessions/${sessionId}/rawChunks/${idx}`)
-                    batch.set(chunkRef, { idx, chunk: chunks[idx] })
-                }
+            for (let idx = 0; idx < chunks.length; idx++) {
+                const chunkRef = doc(db, `users/${uid}/sessions/${sessionId}/rawChunks/${idx}`)
+                batch.set(chunkRef, { idx, chunk: chunks[idx] })
             }
 
             // Commit all at once
             await batch.commit()
 
-            // Update trackBests (separate because it needs read-then-write)
+            // Update trackBests ONLY for new/updated sessions (not unchanged)
             await updateTrackBests(uid, meta.track, sessionId, meta.date_start, summary, meta.car)
 
             // NOTE: findAndDeleteOldFormatDuplicates removed — migration completed
 
-            // Determine status: created, updated (new content), or unchanged (just summary update)
-            let status: 'created' | 'updated' | 'unchanged' = 'created'
-            if (isUpdate) {
-                status = chunksNeedUpdate ? 'updated' : 'unchanged'
-            }
+            const status: 'created' | 'updated' = isUpdate ? 'updated' : 'created'
 
             console.log(`[SYNC] ${status}: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})`)
 
@@ -388,71 +389,6 @@ export function useElectronSync() {
         }
     }
 
-    // Find and delete old format duplicate sessions (automatic cleanup)
-    // Called after uploading a session with new format to remove any legacy duplicates
-    async function findAndDeleteOldFormatDuplicates(
-        uid: string,
-        track: string,
-        dateStart: string,
-        newSessionId: string
-    ): Promise<number> {
-        try {
-            // Get all sessions for this user
-            const sessionsRef = collection(db, `users/${uid}/sessions`)
-            const snapshot = await getDocs(sessionsRef)
-
-            // Normalize track and date for comparison
-            const trackNorm = track.toLowerCase().replace(/\s+/g, '_')
-            const dateNormalized = dateStart.split('.')[0] ?? dateStart // Remove microseconds
-            const datePrefix = dateNormalized.split(':').slice(0, 2).join(':') // YYYY-MM-DDTHH:MM
-
-            let deletedCount = 0
-
-            for (const docSnap of snapshot.docs) {
-                const sessionId = docSnap.id
-                const data = docSnap.data()
-
-                // Skip if this is the new session we just uploaded
-                if (sessionId === newSessionId) continue
-
-                // Check if old format: starts with Unix timestamp (13 digits)
-                const isOldFormat = /^\d{13}_/.test(sessionId)
-                if (!isOldFormat) continue
-
-                // Check if same track
-                const sessionTrack = (data.meta?.track || '').toLowerCase().replace(/\s+/g, '_')
-                if (sessionTrack !== trackNorm) continue
-
-                // Check if same date (minute precision)
-                const sessionDate = data.meta?.date_start || ''
-                const sessionDatePrefix = sessionDate.split(':').slice(0, 2).join(':')
-                if (sessionDatePrefix !== datePrefix) continue
-
-                // This is an old format duplicate - delete it
-                console.log(`[SYNC] 🗑️ Auto-deleting old format duplicate: ${sessionId}`)
-
-                // Delete rawChunks subcollection first
-                const chunksRef = collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`)
-                const chunksSnap = await getDocs(chunksRef)
-                for (const chunk of chunksSnap.docs) {
-                    await deleteDoc(chunk.ref)
-                }
-
-                // Delete session document
-                await deleteDoc(docSnap.ref)
-                deletedCount++
-            }
-
-            if (deletedCount > 0) {
-                console.log(`[SYNC] ✅ Auto-cleaned ${deletedCount} old format duplicate(s) for ${track}`)
-            }
-
-            return deletedCount
-        } catch (e: any) {
-            console.warn(`[SYNC] ⚠️ Error during auto-cleanup:`, e.message)
-            return 0
-        }
-    }
 
     // Update trackBests collection with new best times from session (V2 - with categories)
     // Schema version: 2 - bests organized by category then grip
@@ -691,6 +627,29 @@ export function useElectronSync() {
                             size: file.size
                         })
                         // Update in-memory cache too
+                        if (localRegistryCache) {
+                            localRegistryCache[file.name] = {
+                                uploadedBy: uid,
+                                fileHash,
+                                sessionId: result.sessionId || '',
+                                uploadedAt: new Date().toISOString(),
+                                mtime: file.mtime,
+                                size: file.size
+                            }
+                        }
+                    }
+
+                    // ALSO populate registry for unchanged files (migration from old registry format)
+                    if (result.status === 'unchanged' && result.reason !== 'registry_cache_hit') {
+                        const fileHash = await calculateHash(rawText)
+                        await electronAPI.updateRegistry(file.name, {
+                            uploadedBy: uid,
+                            fileHash,
+                            sessionId: result.sessionId,
+                            uploadedAt: new Date().toISOString(),
+                            mtime: file.mtime,
+                            size: file.size
+                        })
                         if (localRegistryCache) {
                             localRegistryCache[file.name] = {
                                 uploadedBy: uid,
