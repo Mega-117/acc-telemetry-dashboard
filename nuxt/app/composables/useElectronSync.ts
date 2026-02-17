@@ -14,12 +14,25 @@ import {
     getDocs,
     collection,
     deleteDoc,
-    serverTimestamp
+    serverTimestamp,
+    writeBatch
 } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 
 // Constants
 const CHUNK_SIZE = 400000
+
+// === LOCAL REGISTRY CACHE ===
+// Cached registry to avoid Firebase reads for already-uploaded files
+interface RegistryCacheEntry {
+    fileHash: string
+    mtime: number
+    size: number
+    uploadedBy: string
+    sessionId: string
+    uploadedAt: string
+}
+let localRegistryCache: Record<string, RegistryCacheEntry> | null = null
 
 // Types
 interface TelemetryFile {
@@ -69,11 +82,40 @@ export function useElectronSync() {
         return base.substring(0, 100)
     }
 
-    // Check if session exists
+    // Check if session exists (only called when registry cache misses)
     async function getExistingSession(uid: string, sessionId: string) {
         const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
         const snap = await getDoc(sessionRef)
         return snap.exists() ? { id: sessionId, ...snap.data() } : null
+    }
+
+    // Load local registry cache from Electron
+    async function loadRegistryCache(): Promise<Record<string, RegistryCacheEntry>> {
+        if (localRegistryCache) return localRegistryCache
+        try {
+            const electronAPI = (window as any).electronAPI
+            if (electronAPI) {
+                localRegistryCache = await electronAPI.getRegistry() || {}
+            } else {
+                localRegistryCache = {}
+            }
+        } catch {
+            localRegistryCache = {}
+        }
+        return localRegistryCache!
+    }
+
+    // Check if file can be skipped via local registry (0 Firebase reads)
+    function canSkipViaRegistry(
+        registry: Record<string, RegistryCacheEntry>,
+        fileName: string,
+        fileHash: string,
+        uid: string
+    ): boolean {
+        const entry = registry[fileName]
+        if (!entry) return false
+        // Skip if same hash AND same user uploaded it
+        return entry.fileHash === fileHash && entry.uploadedBy === uid
     }
 
     // Delete old chunks before re-upload
@@ -265,6 +307,14 @@ export function useElectronSync() {
             const { meta, summary } = extractMetadata(rawObj)
             const sessionId = generateSessionId(meta.date_start, meta.track)
             const fileHash = await calculateHash(rawText)
+
+            // === REGISTRY CACHE CHECK (0 Firebase reads) ===
+            const registry = await loadRegistryCache()
+            if (canSkipViaRegistry(registry, fileName, fileHash, uid)) {
+                return { status: 'unchanged', fileName, sessionId, reason: 'registry_cache_hit' }
+            }
+
+            // Registry miss — check Firebase
             const existing = await getExistingSession(uid, sessionId)
 
             let isUpdate = false
@@ -272,7 +322,6 @@ export function useElectronSync() {
 
             if (existing) {
                 isUpdate = true
-                // Only rewrite chunks if content actually changed
                 if ((existing as any).fileHash === fileHash) {
                     chunksNeedUpdate = false
                 } else {
@@ -282,9 +331,12 @@ export function useElectronSync() {
 
             const chunks = splitIntoChunks(rawText, CHUNK_SIZE)
 
-            // Upload session document (always, to refresh summary)
+            // === ATOMIC BATCH WRITE (1 operation instead of N) ===
+            const batch = writeBatch(db)
+
+            // Session document
             const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
-            await setDoc(sessionRef, {
+            batch.set(sessionRef, {
                 fileHash,
                 fileName,
                 uploadedAt: serverTimestamp(),
@@ -296,23 +348,25 @@ export function useElectronSync() {
                 version: ((existing as any)?.version || 0) + 1
             })
 
-            // Track upload
+            // Upload tracking
             const uploadRef = doc(db, `users/${uid}/uploads/${fileHash}`)
-            await setDoc(uploadRef, { fileName, uploadedAt: serverTimestamp(), sessionId })
+            batch.set(uploadRef, { fileName, uploadedAt: serverTimestamp(), sessionId })
 
-            // Upload chunks only if content changed
+            // Chunks (parallel in batch, not sequential setDoc)
             if (chunksNeedUpdate) {
                 for (let idx = 0; idx < chunks.length; idx++) {
                     const chunkRef = doc(db, `users/${uid}/sessions/${sessionId}/rawChunks/${idx}`)
-                    await setDoc(chunkRef, { idx, chunk: chunks[idx] })
+                    batch.set(chunkRef, { idx, chunk: chunks[idx] })
                 }
             }
 
-            // Update trackBests with any new best times
+            // Commit all at once
+            await batch.commit()
+
+            // Update trackBests (separate because it needs read-then-write)
             await updateTrackBests(uid, meta.track, sessionId, meta.date_start, summary, meta.car)
 
-            // Auto-cleanup: find and delete any old format duplicates of this session
-            const cleanedCount = await findAndDeleteOldFormatDuplicates(uid, meta.track, meta.date_start, sessionId)
+            // NOTE: findAndDeleteOldFormatDuplicates removed — migration completed
 
             // Determine status: created, updated (new content), or unchanged (just summary update)
             let status: 'created' | 'updated' | 'unchanged' = 'created'
@@ -320,7 +374,7 @@ export function useElectronSync() {
                 status = chunksNeedUpdate ? 'updated' : 'unchanged'
             }
 
-            console.log(`[SYNC] ${status}: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})${cleanedCount > 0 ? ` [cleaned ${cleanedCount} old duplicate(s)]` : ''}`)
+            console.log(`[SYNC] ${status}: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})`)
 
             return {
                 status,
@@ -570,8 +624,8 @@ export function useElectronSync() {
         }
     }
 
-    // Main sync function
-    async function syncTelemetryFiles(): Promise<SyncResult[]> {
+    // Main sync function — accepts optional specific files for incremental sync
+    async function syncTelemetryFiles(specificFiles?: TelemetryFile[]): Promise<SyncResult[]> {
         if (!isElectron.value) {
             console.log('[SYNC] Not running in Electron, skipping sync')
             return []
@@ -596,9 +650,10 @@ export function useElectronSync() {
         const results: SyncResult[] = []
 
         try {
-            // Get telemetry files from Electron
-            const files: TelemetryFile[] = await electronAPI.getTelemetryFiles()
-            console.log(`[SYNC] Found ${files.length} files to process`)
+            // INCREMENTAL: use specific files if provided, otherwise scan all
+            const files: TelemetryFile[] = specificFiles || await electronAPI.getTelemetryFiles()
+            const mode = specificFiles ? 'incremental' : 'full'
+            console.log(`[SYNC] ${mode} sync: ${files.length} files to process`)
 
             if (files.length === 0) {
                 isSyncing.value = false
@@ -624,13 +679,28 @@ export function useElectronSync() {
                     const result = await uploadOrUpdateSession(rawObj, rawText, file.name, uid)
                     results.push(result)
 
-                    // Update registry if successful
+                    // Update registry with fileHash for cache (so next sync skips this file)
                     if (result.status === 'created' || result.status === 'updated') {
+                        const fileHash = await calculateHash(rawText)
                         await electronAPI.updateRegistry(file.name, {
                             uploadedBy: uid,
+                            fileHash,
                             sessionId: result.sessionId,
-                            uploadedAt: new Date().toISOString()
+                            uploadedAt: new Date().toISOString(),
+                            mtime: file.mtime,
+                            size: file.size
                         })
+                        // Update in-memory cache too
+                        if (localRegistryCache) {
+                            localRegistryCache[file.name] = {
+                                uploadedBy: uid,
+                                fileHash,
+                                sessionId: result.sessionId || '',
+                                uploadedAt: new Date().toISOString(),
+                                mtime: file.mtime,
+                                size: file.size
+                            }
+                        }
                     }
 
                 } catch (error: any) {
@@ -668,28 +738,43 @@ export function useElectronSync() {
         }
     }
 
-    // Setup auto-sync on file changes
+    // Setup auto-sync on file changes + window focus
     function setupAutoSync() {
         if (!isElectron.value) return
 
         const electronAPI = (window as any).electronAPI
 
-        // Listen for file changes from Electron
+        // TRIGGER 1 (PRIMARY): File-ready — sync only changed files
         electronAPI.onFilesChanged((data: { new: TelemetryFile[], modified: TelemetryFile[] }) => {
-            if (data.new.length > 0 || data.modified.length > 0) {
-                console.log(`[SYNC] Files changed: ${data.new.length} new, ${data.modified.length} modified`)
-                // Auto-sync when files change
-                syncTelemetryFiles()
+            const changedFiles = [...data.new, ...data.modified]
+            if (changedFiles.length > 0) {
+                console.log(`[SYNC] File-ready trigger: ${data.new.length} new, ${data.modified.length} modified`)
+                // Invalidate registry cache to pick up new files
+                localRegistryCache = null
+                // INCREMENTAL: sync only the changed files
+                syncTelemetryFiles(changedFiles)
             }
         })
 
-        // Sync on initial load
+        // TRIGGER 2 (SAFETY NET): Window focus — check for any missed files
+        if (electronAPI.onWindowFocused) {
+            electronAPI.onWindowFocused(() => {
+                console.log('[SYNC] Window focus trigger: checking for pending files')
+                // Full scan but registry cache makes it near-instant for already-synced files
+                syncTelemetryFiles()
+            })
+        }
+
+        // TRIGGER 3 (RECOVERY): Initial load — sync anything missed
         electronAPI.onInitialFiles((data: { files: TelemetryFile[], registry: any }) => {
             console.log(`[SYNC] Initial files: ${data.files.length}`)
-            // Could trigger initial sync here if needed
+            // Cache the registry from initial data
+            localRegistryCache = data.registry || {}
+            // Trigger initial sync (registry cache will skip already-uploaded files)
+            syncTelemetryFiles()
         })
 
-        console.log('[SYNC] Auto-sync setup complete')
+        console.log('[SYNC] Auto-sync setup complete (file-ready + focus + initial)')
     }
 
     return {

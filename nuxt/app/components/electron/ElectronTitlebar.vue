@@ -84,9 +84,9 @@ const handleRefresh = async () => {
 }
 
 const handleSync = async () => {
-  console.log('[TITLEBAR] Manual sync triggered')
+  console.log('[TITLEBAR] Force sync triggered')
   const results = await syncTelemetryFiles()
-  console.log('[TITLEBAR] Sync complete:', results)
+  console.log('[TITLEBAR] Force sync complete:', results)
   
   // Show notification
   notificationResults.value = results
@@ -134,7 +134,7 @@ const closeNotification = () => {
       <button 
         class="titlebar-btn" 
         :class="{ 'syncing': isSyncing }"
-        :title="isSyncing ? 'Sincronizzazione in corso...' : 'Sincronizza file'"
+        :title="isSyncing ? 'Sincronizzazione in corso...' : 'Force Sync (sincronizza tutto)'"
         :disabled="isSyncing"
         @click="handleSync"
       >
@@ -158,7 +158,7 @@ const closeNotification = () => {
           <rect x="1" y="1" width="10" height="10" stroke="currentColor" stroke-width="2" fill="none" />
         </svg>
       </button>
-      <button class="titlebar-btn titlebar-close" title="Chiudi" @click="handleClose">
+      <button class="titlebar-btn titlebar-close" title="Nascondi nel tray (sync continua)" @click="handleClose">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <path d="M1 1l10 10M11 1L1 11" stroke="currentColor" stroke-width="2" />
         </svg>
