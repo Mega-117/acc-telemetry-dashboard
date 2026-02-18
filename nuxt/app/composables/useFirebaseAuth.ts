@@ -18,6 +18,7 @@ import { auth, db } from '~/config/firebase'
 // Shared state (singleton across components)
 const currentUser = ref<User | null>(null)
 const userRole = ref<string>('pilot') // Default role
+const firestoreNickname = ref<string>('') // Nickname from Firestore (source of truth)
 const isLoading = ref(true)
 const authError = ref<string | null>(null)
 
@@ -29,7 +30,8 @@ export function useFirebaseAuth() {
     const isAuthenticated = computed(() => !!currentUser.value)
     const isEmailVerified = computed(() => currentUser.value?.emailVerified ?? false)
     const userEmail = computed(() => currentUser.value?.email ?? '')
-    const userDisplayName = computed(() => currentUser.value?.displayName ?? '')
+    // Priority: Firestore nickname > Firebase Auth displayName > empty
+    const userDisplayName = computed(() => firestoreNickname.value || currentUser.value?.displayName || '')
     const isCoach = computed(() => userRole.value === 'coach')
     const isAdmin = computed(() => userRole.value === 'admin')
 
@@ -52,9 +54,10 @@ export function useFirebaseAuth() {
                 userRole.value = 'pilot'
                 console.log('[AUTH] Created missing user profile')
             } else {
-                // Load existing role
+                // Load existing role and nickname from Firestore
                 const data = docSnap.data()
                 userRole.value = data.role || 'pilot'
+                firestoreNickname.value = data.nickname || ''
             }
         } catch (e) {
             console.error('[AUTH] Failed to ensure user document:', e)

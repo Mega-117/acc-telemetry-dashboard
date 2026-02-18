@@ -50,14 +50,16 @@ interface SyncResult {
     sessionId?: string
 }
 
+// === GLOBAL SINGLETON STATE ===
+const isSyncing = ref(false)
+const syncProgress = ref(0)
+const syncResults = ref<SyncResult[]>([])
+const lastSyncTime = ref<Date | null>(null)
+const autoSyncInitialized = ref(false)
+
 export function useElectronSync() {
     const { currentUser } = useFirebaseAuth()
     const { loadSessions } = useTelemetryData()
-
-    const isSyncing = ref(false)
-    const syncProgress = ref(0)
-    const syncResults = ref<SyncResult[]>([])
-    const lastSyncTime = ref<Date | null>(null)
 
     // Check if running in Electron
     const isElectron = computed(() => {
@@ -697,9 +699,12 @@ export function useElectronSync() {
         }
     }
 
+
+
     // Setup auto-sync on file changes + window focus
     function setupAutoSync() {
-        if (!isElectron.value) return
+        if (!isElectron.value || autoSyncInitialized.value) return
+        autoSyncInitialized.value = true
 
         const electronAPI = (window as any).electronAPI
 

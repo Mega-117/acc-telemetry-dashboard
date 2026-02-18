@@ -33,6 +33,11 @@ const {
   logout: firebaseLogout
 } = useFirebaseAuth()
 
+// === ELECTRON SYNC ===
+// Handles auto-upload of local telemetry files to Firestore
+import { useElectronSync } from '~/composables/useElectronSync'
+const { setupAutoSync, syncTelemetryFiles } = useElectronSync()
+
 // === TELEMETRY DATA (for global prefetch) ===
 const { prefetchAllTrackBests, loadSessions } = useTelemetryData()
 const hasPrefetched = ref(false)
@@ -50,6 +55,21 @@ const hasInitialized = ref(false)
 // === CONFIG ===
 const REQUIRE_EMAIL_VERIFICATION = ref(false) // Always require email verification
 const transitionName = 'dissolve-fade-zoom' // Fixed animation
+
+// === INITIALIZATION ===
+onMounted(() => {
+  // 1. Handle SPA Redirect (GitHub Pages)
+  const savedPath = sessionStorage.getItem('spa-redirect-path')
+  if (savedPath) {
+    sessionStorage.removeItem('spa-redirect-path')
+    setTimeout(() => {
+      router.push(savedPath)
+    }, 100)
+  }
+
+  // 2. Setup Electron Auto-Sync triggers (file watch, window focus)
+  setupAutoSync()
+})
 
 // === GLOBAL PREFETCH: Load all trackBests when entering dashboard ===
 watch(appState, async (newState) => {
@@ -76,6 +96,10 @@ watch(authLoading, (loading) => {
       // User is already logged in → go directly to dashboard (no loading screen)
       userEmail.value = currentUser.value.email || ''
       
+      // TRIGGER SYNC ON INITIAL LOAD
+      console.log('[APP] User logged in at startup, triggering sync...')
+      syncTelemetryFiles()
+      
       if (REQUIRE_EMAIL_VERIFICATION.value && !currentUser.value.emailVerified) {
         appState.value = 'auth'
         authState.value = 'register-success'
@@ -97,6 +121,10 @@ watch(currentUser, (user, oldUser) => {
   
   if (user) {
     userEmail.value = user.email || ''
+    
+    // TRIGGER SYNC ON LOGIN
+    console.log('[APP] User logged in, triggering sync...')
+    syncTelemetryFiles()
     
     // Check if user needs email verification
     if (REQUIRE_EMAIL_VERIFICATION.value && !user.emailVerified) {

@@ -17,7 +17,7 @@ const isMaximized = ref(false)
 const isRefreshing = ref(false)
 
 // Sync composable
-const { isSyncing, syncTelemetryFiles, setupAutoSync, syncResults } = useElectronSync()
+const { isSyncing, syncTelemetryFiles, syncResults } = useElectronSync()
 const { loadSessions } = useTelemetryData()
 
 // Notification state
@@ -37,7 +37,7 @@ onMounted(async () => {
     }
     
     // Setup auto-sync for file changes
-    setupAutoSync()
+    // setupAutoSync() // Moved to App.vue
   }
 })
 
