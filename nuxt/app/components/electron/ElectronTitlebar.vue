@@ -5,7 +5,7 @@
 // This component is only visible when running inside Electron
 // It provides: Refresh, Sync, Minimize, Maximize, Close buttons
 
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
 import { useElectronSync } from '~/composables/useElectronSync'
 import { useTelemetryData } from '~/composables/useTelemetryData'
 
@@ -17,7 +17,7 @@ const isMaximized = ref(false)
 const isRefreshing = ref(false)
 
 // Sync composable
-const { isSyncing, syncTelemetryFiles, syncResults } = useElectronSync()
+const { isSyncing, syncTelemetryFiles, setupAutoSync, syncResults, pendingNotification } = useElectronSync()
 const { loadSessions } = useTelemetryData()
 
 // Notification state
@@ -37,7 +37,17 @@ onMounted(async () => {
     }
     
     // Setup auto-sync for file changes
-    // setupAutoSync() // Moved to App.vue
+    setupAutoSync()
+  }
+})
+
+// Watch for auto-sync notifications (fires only when actual files were synced)
+watch(pendingNotification, (results) => {
+  if (results && results.length > 0) {
+    notificationResults.value = results
+    showNotification.value = true
+    // Clear pending so it can trigger again
+    pendingNotification.value = null
   }
 })
 

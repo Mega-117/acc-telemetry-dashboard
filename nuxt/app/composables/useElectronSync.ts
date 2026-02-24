@@ -4,7 +4,7 @@
 // Handles reading files from Electron, validating ownership,
 // uploading to Firebase, and refreshing the dashboard
 
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { useTelemetryData, getCarCategory, CAR_CATEGORIES, type CarCategory } from './useTelemetryData'
 import {
@@ -50,16 +50,16 @@ interface SyncResult {
     sessionId?: string
 }
 
-// === GLOBAL SINGLETON STATE ===
-const isSyncing = ref(false)
-const syncProgress = ref(0)
-const syncResults = ref<SyncResult[]>([])
-const lastSyncTime = ref<Date | null>(null)
-const autoSyncInitialized = ref(false)
-
 export function useElectronSync() {
     const { currentUser } = useFirebaseAuth()
     const { loadSessions } = useTelemetryData()
+
+    const isSyncing = ref(false)
+    const syncProgress = ref(0)
+    const syncResults = ref<SyncResult[]>([])
+    const lastSyncTime = ref<Date | null>(null)
+    // Auto-sync notification: set when auto-sync produces actual changes
+    const pendingNotification = ref<SyncResult[] | null>(null)
 
     // Check if running in Electron
     const isElectron = computed(() => {
@@ -699,46 +699,67 @@ export function useElectronSync() {
         }
     }
 
-
+    // Helper: check results and notify if actual changes were synced
+    function notifyIfChanged(results: SyncResult[]) {
+        const synced = results.filter(r => r.status === 'created' || r.status === 'updated')
+        if (synced.length > 0) {
+            console.log(`[SYNC] Auto-sync completed: ${synced.length} files synced to Firebase`)
+            pendingNotification.value = results
+        }
+    }
 
     // Setup auto-sync on file changes + window focus
     function setupAutoSync() {
-        if (!isElectron.value || autoSyncInitialized.value) return
-        autoSyncInitialized.value = true
+        if (!isElectron.value) return
 
         const electronAPI = (window as any).electronAPI
 
         // TRIGGER 1 (PRIMARY): File-ready — sync only changed files
-        electronAPI.onFilesChanged((data: { new: TelemetryFile[], modified: TelemetryFile[] }) => {
+        electronAPI.onFilesChanged(async (data: { new: TelemetryFile[], modified: TelemetryFile[] }) => {
             const changedFiles = [...data.new, ...data.modified]
             if (changedFiles.length > 0) {
                 console.log(`[SYNC] File-ready trigger: ${data.new.length} new, ${data.modified.length} modified`)
                 // Invalidate registry cache to pick up new files
                 localRegistryCache = null
                 // INCREMENTAL: sync only the changed files
-                syncTelemetryFiles(changedFiles)
+                const results = await syncTelemetryFiles(changedFiles)
+                notifyIfChanged(results)
             }
         })
 
         // TRIGGER 2 (SAFETY NET): Window focus — check for any missed files
         if (electronAPI.onWindowFocused) {
-            electronAPI.onWindowFocused(() => {
+            electronAPI.onWindowFocused(async () => {
                 console.log('[SYNC] Window focus trigger: checking for pending files')
                 // Full scan but registry cache makes it near-instant for already-synced files
-                syncTelemetryFiles()
+                const results = await syncTelemetryFiles()
+                notifyIfChanged(results)
             })
         }
 
         // TRIGGER 3 (RECOVERY): Initial load — sync anything missed
-        electronAPI.onInitialFiles((data: { files: TelemetryFile[], registry: any }) => {
+        electronAPI.onInitialFiles(async (data: { files: TelemetryFile[], registry: any }) => {
             console.log(`[SYNC] Initial files: ${data.files.length}`)
             // Cache the registry from initial data
             localRegistryCache = data.registry || {}
             // Trigger initial sync (registry cache will skip already-uploaded files)
-            syncTelemetryFiles()
+            const results = await syncTelemetryFiles()
+            notifyIfChanged(results)
         })
 
-        console.log('[SYNC] Auto-sync setup complete (file-ready + focus + initial)')
+        // TRIGGER 4 (AUTH-READY): Sync when Firebase auth resolves
+        // Fixes race condition: initial-files fires ~200ms after load,
+        // but Firebase auth takes ~1-3s. Without this, the first sync
+        // exits early with "No user logged in" and never retries.
+        watch(currentUser, async (user) => {
+            if (user) {
+                console.log(`[SYNC] Auth-ready trigger: user ${user.email} logged in, starting sync`)
+                const results = await syncTelemetryFiles()
+                notifyIfChanged(results)
+            }
+        }, { once: true })
+
+        console.log('[SYNC] Auto-sync setup complete (file-ready + focus + initial + auth-ready)')
     }
 
     return {
@@ -747,6 +768,7 @@ export function useElectronSync() {
         syncProgress,
         syncResults,
         lastSyncTime,
+        pendingNotification,
         syncTelemetryFiles,
         setupAutoSync
     }
