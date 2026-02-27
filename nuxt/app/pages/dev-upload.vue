@@ -289,6 +289,16 @@ async function updateTrackBests(
 
 async function uploadSession(rawObj: any, rawText: string, fileName: string, uid: string) {
   try {
+    // Zero-lap guard: skip sessions with no completed laps
+    const totalLaps = rawObj.session_info?.laps_total || 0
+    if (totalLaps === 0) {
+      return {
+        status: 'skipped',
+        fileName,
+        reason: 'Session has 0 laps (empty session)'
+      }
+    }
+
     // Owner validation
     const fileOwnerId = rawObj.ownerId || null
     if (fileOwnerId && fileOwnerId !== uid) {

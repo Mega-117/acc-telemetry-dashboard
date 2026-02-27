@@ -288,6 +288,13 @@ export function useElectronSync() {
         uid: string
     ): Promise<SyncResult> {
         try {
+            // Zero-lap guard: skip sessions with no completed laps
+            const totalLaps = rawObj.session_info?.laps_total || 0
+            if (totalLaps === 0) {
+                console.log(`[SYNC] Skipped ${fileName}: zero laps (empty session)`)
+                return { status: 'skipped', fileName, reason: 'zero_laps' }
+            }
+
             // Owner validation
             const fileOwnerId = rawObj.ownerId || null
 
@@ -708,6 +715,72 @@ export function useElectronSync() {
         }
     }
 
+    // One-time cleanup: delete zero-lap sessions from Firebase
+    // Runs once per user (localStorage flag prevents re-execution)
+    async function cleanupZeroLapSessions(uid: string): Promise<number> {
+        const CLEANUP_KEY = `zero_lap_cleanup_done_${uid}`
+
+        // Skip if already done for this user
+        if (typeof window !== 'undefined' && localStorage.getItem(CLEANUP_KEY)) {
+            return 0
+        }
+
+        console.log('[CLEANUP] Checking for zero-lap sessions to remove...')
+
+        try {
+            const sessionsRef = collection(db, `users/${uid}/sessions`)
+            const snapshot = await getDocs(sessionsRef)
+
+            const toDelete: string[] = []
+            snapshot.forEach(docSnap => {
+                const data = docSnap.data()
+                const laps = data.summary?.laps || 0
+                if (laps === 0) {
+                    toDelete.push(docSnap.id)
+                }
+            })
+
+            if (toDelete.length === 0) {
+                console.log('[CLEANUP] No zero-lap sessions found')
+                if (typeof window !== 'undefined') {
+                    localStorage.setItem(CLEANUP_KEY, new Date().toISOString())
+                }
+                return 0
+            }
+
+            console.log(`[CLEANUP] Found ${toDelete.length} zero-lap sessions, deleting...`)
+
+            // Delete in batches of 10 to avoid overwhelming Firestore
+            for (let i = 0; i < toDelete.length; i++) {
+                const sessionId = toDelete[i]
+                try {
+                    // Delete rawChunks subcollection first
+                    const chunksRef = collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`)
+                    const chunksSnap = await getDocs(chunksRef)
+                    for (const chunk of chunksSnap.docs) {
+                        await deleteDoc(chunk.ref)
+                    }
+                    // Delete session document
+                    await deleteDoc(doc(db, `users/${uid}/sessions/${sessionId}`))
+                } catch (e: any) {
+                    console.warn(`[CLEANUP] Error deleting ${sessionId}:`, e.message)
+                }
+            }
+
+            console.log(`[CLEANUP] ✅ Deleted ${toDelete.length} zero-lap sessions`)
+
+            // Mark as done
+            if (typeof window !== 'undefined') {
+                localStorage.setItem(CLEANUP_KEY, new Date().toISOString())
+            }
+
+            return toDelete.length
+        } catch (e: any) {
+            console.error('[CLEANUP] Error during cleanup:', e.message)
+            return 0
+        }
+    }
+
     // Setup auto-sync on file changes + window focus
     function setupAutoSync() {
         if (!isElectron.value) return
@@ -754,12 +827,18 @@ export function useElectronSync() {
         watch(currentUser, async (user) => {
             if (user) {
                 console.log(`[SYNC] Auth-ready trigger: user ${user.email} logged in, starting sync`)
+                // One-time cleanup of zero-lap ghost sessions
+                const cleaned = await cleanupZeroLapSessions(user.uid)
+                if (cleaned > 0) {
+                    console.log(`[SYNC] Cleaned ${cleaned} zero-lap sessions, refreshing data...`)
+                    await loadSessions()
+                }
                 const results = await syncTelemetryFiles()
                 notifyIfChanged(results)
             }
         }, { once: true })
 
-        console.log('[SYNC] Auto-sync setup complete (file-ready + focus + initial + auth-ready)')
+        console.log('[SYNC] Auto-sync setup complete (file-ready + focus + initial + auth-ready + cleanup)')
     }
 
     return {
