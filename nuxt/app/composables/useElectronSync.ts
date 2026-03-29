@@ -9,15 +9,22 @@ import { useFirebaseAuth } from './useFirebaseAuth'
 import { useTelemetryData, getCarCategory, CAR_CATEGORIES, type CarCategory } from './useTelemetryData'
 import {
     doc,
-    setDoc,
-    getDoc,
-    getDocs,
     collection,
-    deleteDoc,
     serverTimestamp,
     writeBatch
 } from 'firebase/firestore'
+import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
+
+// Local wrappers auto-tagged with caller name
+const SYNC_CALLER = 'ElectronSync'
+async function getDoc(ref: any) { return trackedGetDoc(ref, SYNC_CALLER) }
+async function getDocs(q: any) { return trackedGetDocs(q, SYNC_CALLER) }
+async function setDoc(ref: any, data: any, options?: any) {
+    if (options) return trackedSetDoc(ref, data, options, SYNC_CALLER)
+    return trackedSetDoc(ref, data, SYNC_CALLER)
+}
+async function deleteDoc(ref: any) { return trackedDeleteDoc(ref, SYNC_CALLER) }
 
 // Constants
 const CHUNK_SIZE = 400000
@@ -713,6 +720,48 @@ export function useElectronSync() {
                 }
             } catch (versionError: any) {
                 console.warn('[SYNC] Could not update suite version:', versionError.message)
+            }
+
+            // Update user stats doc (for admin/coach dashboard — avoids N queries per pilot)
+            try {
+                // loadSessions was already called above if anything changed,
+                // call it again to get the current array (uses cache if no changes)
+                const allSessions = await loadSessions() || []
+                const now = new Date()
+                const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+                let lastSessionDate: string | null = null
+                let sessionsLast7Days = 0
+                const tracksSet = new Set<string>()
+
+                for (const session of allSessions) {
+                    const dateStart = session.meta?.date_start
+                    if (dateStart) {
+                        if (!lastSessionDate || dateStart > lastSessionDate) {
+                            lastSessionDate = dateStart
+                        }
+                        if (dateStart >= sevenDaysAgo) {
+                            sessionsLast7Days++
+                        }
+                    }
+                    if (session.meta?.track) {
+                        tracksSet.add(session.meta.track)
+                    }
+                }
+
+                const statsRef = doc(db, `users/${uid}`)
+                await setDoc(statsRef, {
+                    stats: {
+                        totalSessions: allSessions.length,
+                        sessionsLast7Days,
+                        lastSessionDate,
+                        tracksCount: tracksSet.size,
+                        updatedAt: new Date().toISOString()
+                    }
+                }, { merge: true })
+                console.log(`[SYNC] Stats updated: ${allSessions.length} sessions, ${sessionsLast7Days} last 7d`)
+            } catch (statsError: any) {
+                console.warn('[SYNC] Could not update stats:', statsError.message)
             }
 
             return results

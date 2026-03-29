@@ -12,8 +12,14 @@ import {
     onAuthStateChanged,
     type User
 } from 'firebase/auth'
-import { doc, setDoc, getDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
+import { trackedGetDoc, trackedSetDoc } from './useFirebaseTracker'
 import { auth, db } from '~/config/firebase'
+
+// Local wrappers auto-tagged with caller name
+const AUTH_CALLER = 'Auth'
+async function getDoc(ref: any) { return trackedGetDoc(ref, AUTH_CALLER) }
+async function setDoc(ref: any, data: any) { return trackedSetDoc(ref, data, AUTH_CALLER) }
 
 // Shared state (singleton across components)
 const currentUser = ref<User | null>(null)

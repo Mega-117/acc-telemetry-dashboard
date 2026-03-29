@@ -1,68 +1,17 @@
-// ============================================
-// useTelemetryData - Load and process session data from Firebase
-// ============================================
-
 import { ref, computed } from 'vue'
-import { collection, query, orderBy, getDocs as firebaseGetDocs, doc, getDoc as firebaseGetDoc, setDoc as firebaseSetDoc, deleteDoc as firebaseDeleteDoc, updateDoc as firebaseUpdateDoc, writeBatch, where, DocumentReference, Query } from 'firebase/firestore'
+import { collection, query, orderBy, doc, writeBatch, where, DocumentReference, Query } from 'firebase/firestore'
+import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedUpdateDoc } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
 
-// === FIREBASE OPERATIONS TRACKER ===
-// Tracks all Firebase read/write operations for debugging
-let firebaseReadCount = 0
-let firebaseWriteCount = 0
-let currentPageReads = 0
-let currentPageWrites = 0
+// Local wrappers auto-tagged with caller name
+const CALLER = 'TelemetryData'
+async function getDoc(ref: DocumentReference) { return trackedGetDoc(ref, CALLER) }
+async function getDocs(q: Query) { return trackedGetDocs(q, CALLER) }
+async function setDoc(ref: DocumentReference, data: any) { return trackedSetDoc(ref, data, CALLER) }
+async function deleteDoc(ref: DocumentReference) { return trackedDeleteDoc(ref, CALLER) }
+async function updateDoc(ref: DocumentReference, data: any) { return trackedUpdateDoc(ref, data, CALLER) }
 
-// Reset page counters (call when navigating)
-export function resetFirebasePageCounters() {
-    currentPageReads = 0
-    currentPageWrites = 0
-    console.log('%c[FIREBASE] 📊 Page counters reset', 'color: #4CAF50; font-weight: bold')
-}
 
-// Get current counts
-export function getFirebaseCounts() {
-    return {
-        totalReads: firebaseReadCount,
-        totalWrites: firebaseWriteCount,
-        pageReads: currentPageReads,
-        pageWrites: currentPageWrites
-    }
-}
-
-// Print summary
-export function printFirebaseSummary() {
-    console.log('%c[FIREBASE] ═══════════════════════════════════', 'color: #2196F3; font-weight: bold')
-    console.log(`%c[FIREBASE] 📖 THIS PAGE: ${currentPageReads} reads, ${currentPageWrites} writes`, 'color: #2196F3; font-weight: bold')
-    console.log(`%c[FIREBASE] 📚 SESSION TOTAL: ${firebaseReadCount} reads, ${firebaseWriteCount} writes`, 'color: #9E9E9E')
-    console.log('%c[FIREBASE] ═══════════════════════════════════', 'color: #2196F3; font-weight: bold')
-}
-
-// Wrapped getDoc with tracking
-async function getDoc(ref: DocumentReference) {
-    firebaseReadCount++
-    currentPageReads++
-    console.log(`%c[FIREBASE] 📖 READ #${currentPageReads}: ${ref.path}`, 'color: #4CAF50')
-    return firebaseGetDoc(ref)
-}
-
-// Wrapped getDocs with tracking
-async function getDocs(q: Query) {
-    firebaseReadCount++
-    currentPageReads++
-    console.log(`%c[FIREBASE] 📖 QUERY #${currentPageReads}: (collection query)`, 'color: #4CAF50')
-    const result = await firebaseGetDocs(q)
-    console.log(`%c[FIREBASE]    ↳ Returned ${result.docs.length} documents`, 'color: #8BC34A')
-    return result
-}
-
-// Wrapped setDoc with tracking
-async function setDoc(ref: DocumentReference, data: any) {
-    firebaseWriteCount++
-    currentPageWrites++
-    console.log(`%c[FIREBASE] ✏️ WRITE #${currentPageWrites}: ${ref.path}`, 'color: #FF9800')
-    return firebaseSetDoc(ref, data)
-}
 // === TYPES ===
 
 export interface LapData {
@@ -558,8 +507,9 @@ export function useTelemetryData() {
         })
     }
 
-    // Load session metadata - HYBRID: local files (Electron) or Firebase
-    // Added: forceReload parameter to control caching behavior
+    // Load session metadata - ELECTRON-FIRST strategy
+    // In Electron + own data: use local files ONLY (0 Firebase reads)
+    // In Browser or other user's data: use Firebase
     async function loadSessions(userId?: string, forceReload: boolean = false): Promise<SessionDocument[]> {
         const targetUserId = userId || currentUser.value?.uid
         if (!targetUserId) {
@@ -568,45 +518,45 @@ export function useTelemetryData() {
         }
 
         // CACHE: Check if we need to reload due to user change or force reload
-        // This prevents duplicate queries when multiple components call loadSessions
         const userChanged = globalLastUserId.value !== targetUserId
 
         if (!forceReload && !userChanged && sessions.value.length > 0) {
-            console.log(`%c[TELEMETRY] ⚡ Using CACHED sessions (${sessions.value.length}), skipping Firebase query`, 'color: #9C27B0')
+            console.log(`%c[TELEMETRY] ⚡ Using CACHED sessions (${sessions.value.length}), skipping query`, 'color: #9C27B0')
             return sessions.value
         }
 
-        // Track current user for cache invalidation
         globalLastUserId.value = targetUserId
-
         isLoading.value = true
         error.value = null
 
         try {
-            // HYBRID APPROACH: Always load from Firebase + merge local files not yet uploaded
-            // This ensures we see ALL sessions regardless of local file state
             const isLoadingOwnData = !userId || userId === currentUser.value?.uid
 
-            // 1. Load local files (if Electron and own data)
-            let localSessions: SessionDocument[] = []
+            // === ELECTRON-FIRST: Local files are the source of truth ===
+            // When in Electron loading own data, skip Firebase entirely (saves ~254 reads!)
             if (isElectron.value && isLoadingOwnData) {
                 try {
-                    localSessions = await loadFromLocalFiles()
-                    console.log(`[TELEMETRY] Found ${localSessions.length} local files`)
+                    const localSessions = await loadFromLocalFiles()
+                    
+                    if (localSessions.length > 0) {
+                        sessions.value = localSessions
+                        console.log(`%c[TELEMETRY] ⚡ ELECTRON-FIRST: ${localSessions.length} sessions from LOCAL files (0 Firebase reads!)`, 'color: #00E676; font-weight: bold')
+                        return sessions.value
+                    }
+                    
+                    // Fallback: no local files → try Firebase
+                    console.log('[TELEMETRY] No local files found, falling back to Firebase')
                 } catch (localError) {
-                    console.warn('[TELEMETRY] Local load failed:', localError)
+                    console.warn('[TELEMETRY] Local load failed, falling back to Firebase:', localError)
                 }
             }
 
-            // 2. ALWAYS load from Firebase for complete data
+            // === FIREBASE PATH: Browser or other user's data ===
             const firebaseSessions = await loadFromFirebase(targetUserId)
 
-            // DEDUPLICATION: Remove duplicates based on date_start + track (logical key)
-            // Sessions with same date_start (ignoring microseconds) and track are duplicates
+            // DEDUPLICATION: Remove duplicates based on date_start + track
             const sessionMap = new Map<string, SessionDocument>()
             for (const session of firebaseSessions) {
-                // Create logical key from date_start + track (normalized like generateSessionId)
-                // Remove microseconds: "2026-01-04T17:11:38.128663" -> "2026-01-04T17:11:38"
                 const dateKey = (session.meta.date_start || '').split('.')[0]
                 const trackKey = (session.meta.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
                 const logicalKey = `${dateKey}_${trackKey}`
@@ -615,7 +565,6 @@ export function useTelemetryData() {
                 if (!existing) {
                     sessionMap.set(logicalKey, session)
                 } else {
-                    // Keep the one with newer uploadedAt (or the existing one if no uploadedAt)
                     const existingTime = existing.uploadedAt?.toMillis?.() || 0
                     const newTime = session.uploadedAt?.toMillis?.() || 0
                     if (newTime > existingTime) {
@@ -629,31 +578,14 @@ export function useTelemetryData() {
                 console.log(`[TELEMETRY] ⚠️ Removed ${deduplicatedCount} duplicate sessions (same date + track)`)
             }
 
-            // 3. MERGE: Add local sessions that are not yet on Firebase
-            let mergedCount = 0
-            for (const localSession of localSessions) {
-                const dateKey = (localSession.meta.date_start || '').split('.')[0]
-                const trackKey = (localSession.meta.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
-                const logicalKey = `${dateKey}_${trackKey}`
-
-                if (!sessionMap.has(logicalKey)) {
-                    sessionMap.set(logicalKey, localSession)
-                    mergedCount++
-                }
-            }
-
-            if (mergedCount > 0) {
-                console.log(`[TELEMETRY] 📁 Merged ${mergedCount} local-only sessions (not yet uploaded)`)
-            }
-
             sessions.value = Array.from(sessionMap.values())
 
-            // Sort by date if not already
+            // Sort by date descending
             sessions.value.sort((a, b) =>
                 (b.meta.date_start || '').localeCompare(a.meta.date_start || '')
             )
 
-            console.log(`[TELEMETRY] ⚡ Loaded ${sessions.value.length} sessions (${firebaseSessions.length} Firebase + ${mergedCount} local-only)`)
+            console.log(`[TELEMETRY] ⚡ Loaded ${sessions.value.length} sessions from Firebase`)
             return sessions.value
         } catch (e: any) {
             console.error('[TELEMETRY] Error loading sessions:', e)
@@ -1012,7 +944,7 @@ export function useTelemetryData() {
         if (clearFirebase && targetUserId && !isElectron.value) {
             try {
                 const docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)
-                await firebaseDeleteDoc(docRef)
+                await deleteDoc(docRef)
                 console.log(`[TELEMETRY] trackBests DELETED from Firebase for ${trackIdNorm}`)
             } catch (e) {
                 console.warn(`[TELEMETRY] Error deleting trackBests from Firebase:`, e)
@@ -1781,7 +1713,7 @@ export function useTelemetryData() {
 
         // 1. Update session document
         const sessionRef = doc(db, `users/${userId}/sessions/${sessionId}`)
-        await firebaseUpdateDoc(sessionRef, { isPublic })
+        await updateDoc(sessionRef, { isPublic })
         console.log(`[SHARING] Session ${sessionId} set isPublic=${isPublic}`)
 
         // 2. Batch update all chunks (denormalization for 0 extra reads)
