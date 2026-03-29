@@ -722,32 +722,93 @@ export function useElectronSync() {
                 console.warn('[SYNC] Could not update suite version:', versionError.message)
             }
 
-            // Update user stats doc (for admin/coach dashboard — avoids N queries per pilot)
+            // Update user stats + sessionIndex (for browser clients & admin dashboard)
+            // This single doc write eliminates ~254 reads on browser login!
             try {
-                // loadSessions was already called above if anything changed,
-                // call it again to get the current array (uses cache if no changes)
                 const allSessions = await loadSessions() || []
                 const now = new Date()
-                const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
+                const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+                const sevenDaysAgoStr = sevenDaysAgo.toISOString()
 
+                // --- Stats (for admin/coach dashboard) ---
                 let lastSessionDate: string | null = null
                 let sessionsLast7Days = 0
-                const tracksSet = new Set<string>()
+
+                // --- Activity 7d (for panoramica chart) ---
+                let practiceMinutes = 0, practiceCount = 0
+                let qualifyMinutes = 0, qualifyCount = 0
+                let raceMinutes = 0, raceCount = 0
+                const activityByDay: Record<string, { P: number; Q: number; R: number }> = {}
+
+                // --- Tracks summary (for piste page) ---
+                const tracksMap: Record<string, { track: string; sessions: number; lastPlayed: string }> = {}
+
+                // --- Sessions list (compact, for sessioni page) ---
+                const sessionsList: Array<{
+                    id: string; date: string; track: string; car: string;
+                    type: number; laps: number; lapsValid: number; bestLap: number | null;
+                    totalTime: number; stintCount: number;
+                    bestQualyMs: number | null; bestRaceMs: number | null;
+                    grip?: string
+                }> = []
 
                 for (const session of allSessions) {
-                    const dateStart = session.meta?.date_start
-                    if (dateStart) {
-                        if (!lastSessionDate || dateStart > lastSessionDate) {
-                            lastSessionDate = dateStart
-                        }
-                        if (dateStart >= sevenDaysAgo) {
-                            sessionsLast7Days++
+                    const dateStart = session.meta?.date_start || ''
+                    const track = session.meta?.track || ''
+                    const trackKey = track.toLowerCase()
+
+                    // Last session date
+                    if (dateStart && (!lastSessionDate || dateStart > lastSessionDate)) {
+                        lastSessionDate = dateStart
+                    }
+
+                    // Activity 7d
+                    if (dateStart >= sevenDaysAgoStr) {
+                        sessionsLast7Days++
+                        const totalMs = session.summary?.totalTime || 0
+                        const minutes = Math.round(totalMs / 60000)
+                        const dayKey = dateStart.substring(0, 10) // "2026-03-28"
+
+                        if (!activityByDay[dayKey]) activityByDay[dayKey] = { P: 0, Q: 0, R: 0 }
+
+                        switch (session.meta?.session_type) {
+                            case 0: practiceMinutes += minutes; practiceCount++; activityByDay[dayKey].P++; break
+                            case 1: qualifyMinutes += minutes; qualifyCount++; activityByDay[dayKey].Q++; break
+                            case 2: raceMinutes += minutes; raceCount++; activityByDay[dayKey].R++; break
                         }
                     }
-                    if (session.meta?.track) {
-                        tracksSet.add(session.meta.track)
+
+                    // Tracks summary
+                    if (trackKey) {
+                        if (!tracksMap[trackKey]) {
+                            tracksMap[trackKey] = { track, sessions: 0, lastPlayed: dateStart }
+                        }
+                        tracksMap[trackKey].sessions++
+                        if (dateStart > tracksMap[trackKey].lastPlayed) {
+                            tracksMap[trackKey].lastPlayed = dateStart
+                        }
                     }
+
+                    // Sessions list (compact entry)
+                    sessionsList.push({
+                        id: session.sessionId,
+                        date: dateStart,
+                        track,
+                        car: session.meta?.car || '',
+                        type: session.meta?.session_type ?? 0,
+                        laps: session.summary?.laps || 0,
+                        lapsValid: session.summary?.lapsValid || 0,
+                        bestLap: session.summary?.bestLap || null,
+                        totalTime: session.summary?.totalTime || 0,
+                        stintCount: session.summary?.stintCount || 0,
+                        bestQualyMs: session.summary?.best_qualy_ms || null,
+                        bestRaceMs: session.summary?.best_race_ms || null,
+                        grip: session.summary?.best_race_conditions?.grip || session.summary?.best_qualy_conditions?.grip || undefined
+                    })
                 }
+
+                // Sort sessions list by date descending
+                sessionsList.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
 
                 const statsRef = doc(db, `users/${uid}`)
                 await setDoc(statsRef, {
@@ -755,13 +816,24 @@ export function useElectronSync() {
                         totalSessions: allSessions.length,
                         sessionsLast7Days,
                         lastSessionDate,
-                        tracksCount: tracksSet.size,
+                        tracksCount: Object.keys(tracksMap).length,
+                        updatedAt: new Date().toISOString()
+                    },
+                    sessionIndex: {
+                        sessionsList,
+                        activity7d: {
+                            practice: { minutes: practiceMinutes, sessions: practiceCount },
+                            qualify: { minutes: qualifyMinutes, sessions: qualifyCount },
+                            race: { minutes: raceMinutes, sessions: raceCount },
+                            byDay: Object.entries(activityByDay).map(([date, counts]) => ({ date, ...counts }))
+                        },
+                        tracksSummary: Object.values(tracksMap),
                         updatedAt: new Date().toISOString()
                     }
                 }, { merge: true })
-                console.log(`[SYNC] Stats updated: ${allSessions.length} sessions, ${sessionsLast7Days} last 7d`)
+                console.log(`[SYNC] UserIndex updated: ${sessionsList.length} sessions, ${sessionsLast7Days} last 7d, ${Object.keys(tracksMap).length} tracks`)
             } catch (statsError: any) {
-                console.warn('[SYNC] Could not update stats:', statsError.message)
+                console.warn('[SYNC] Could not update userIndex:', statsError.message)
             }
 
             return results

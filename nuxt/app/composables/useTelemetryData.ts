@@ -552,6 +552,57 @@ export function useTelemetryData() {
             }
 
             // === FIREBASE PATH: Browser or other user's data ===
+            // Strategy: Try sessionIndex first (1 read), fallback to full query
+            
+            // 1. Try sessionIndex from user document (written by sync)
+            try {
+                const userDocRef = doc(db, `users/${targetUserId}`)
+                const userDocSnap = await getDoc(userDocRef)
+                
+                if (userDocSnap.exists()) {
+                    const userData = userDocSnap.data()
+                    const sessionIndex = userData?.sessionIndex
+                    
+                    if (sessionIndex?.sessionsList && sessionIndex.sessionsList.length > 0) {
+                        // Convert compact sessionsList back to SessionDocument format
+                        sessions.value = sessionIndex.sessionsList.map((entry: any) => ({
+                            sessionId: entry.id,
+                            fileHash: '',
+                            fileName: '',
+                            uploadedAt: null,
+                            meta: {
+                                track: entry.track,
+                                car: entry.car,
+                                date_start: entry.date,
+                                date_end: null,
+                                session_type: entry.type,
+                                driver: null
+                            },
+                            summary: {
+                                laps: entry.laps,
+                                lapsValid: entry.lapsValid || 0,
+                                bestLap: entry.bestLap,
+                                avgCleanLap: null,
+                                totalTime: entry.totalTime,
+                                stintCount: entry.stintCount || 0,
+                                best_qualy_ms: entry.bestQualyMs || null,
+                                best_race_ms: entry.bestRaceMs || null,
+                                best_race_conditions: entry.grip ? { airTemp: 0, roadTemp: 0, grip: entry.grip } : null
+                            },
+                            rawChunkCount: 0,
+                            rawSizeBytes: 0
+                        } as SessionDocument))
+
+                        console.log(`%c[TELEMETRY] ⚡ SESSION-INDEX: ${sessions.value.length} sessions from userDoc (1 Firebase read!)`, 'color: #00E676; font-weight: bold')
+                        return sessions.value
+                    }
+                }
+            } catch (indexError) {
+                console.warn('[TELEMETRY] SessionIndex read failed, falling back to full query:', indexError)
+            }
+
+            // 2. Fallback: full Firebase query (for users without sessionIndex)
+            console.log('[TELEMETRY] No sessionIndex found, using full Firebase query')
             const firebaseSessions = await loadFromFirebase(targetUserId)
 
             // DEDUPLICATION: Remove duplicates based on date_start + track
@@ -585,7 +636,7 @@ export function useTelemetryData() {
                 (b.meta.date_start || '').localeCompare(a.meta.date_start || '')
             )
 
-            console.log(`[TELEMETRY] ⚡ Loaded ${sessions.value.length} sessions from Firebase`)
+            console.log(`[TELEMETRY] ⚡ Loaded ${sessions.value.length} sessions from Firebase (full query)`)
             return sessions.value
         } catch (e: any) {
             console.error('[TELEMETRY] Error loading sessions:', e)
