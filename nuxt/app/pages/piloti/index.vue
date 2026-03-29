@@ -25,6 +25,9 @@ interface Pilot {
   createdAt?: string
   lastSession?: string
   totalSessions?: number
+  suiteVersion?: string
+  suiteVersionDetail?: { launcher?: string; logger?: string; webapp?: string }
+  suiteVersionUpdatedAt?: string
 }
 
 const pilots = ref<Pilot[]>([])
@@ -135,6 +138,31 @@ function getInitials(pilot: Pilot): string {
   return pilot.nickname.slice(0, 2).toUpperCase()
 }
 
+// Compare semver strings (e.g. "0.2.1" vs "0.2.2")
+function compareSemver(a: string, b: string): number {
+  const pa = a.split('.').map(Number)
+  const pb = b.split('.').map(Number)
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0)
+  }
+  return 0
+}
+
+// Dynamically find the latest version among all pilots (0 Firebase reads extra)
+const latestVersion = computed(() => {
+  const versions = pilots.value
+    .map(p => p.suiteVersion)
+    .filter((v): v is string => !!v)
+  if (versions.length === 0) return null
+  return versions.sort(compareSemver).pop()!
+})
+
+function getVersionClass(version: string): string {
+  if (!latestVersion.value) return 'version-badge--unknown'
+  if (version === latestVersion.value) return 'version-badge--current'
+  return 'version-badge--outdated'
+}
+
 function formatDate(dateStr?: string): string {
   if (!dateStr) return 'Mai attivo'
   const date = new Date(dateStr)
@@ -188,11 +216,12 @@ onMounted(() => {
 
     <!-- Pilots List -->
     <div v-else class="pilots-list">
-      <div class="list-header">
+      <div class="list-header" :class="{ 'list-header--admin': isAdmin }">
         <span class="lh-name">Pilota</span>
         <span class="lh-nickname">Nickname</span>
         <span class="lh-sessions">Sessioni (7gg)</span>
         <span class="lh-last">Ultima attività</span>
+        <span v-if="isAdmin" class="lh-version">Versione</span>
         <span class="lh-cta"></span>
       </div>
       
@@ -201,6 +230,7 @@ onMounted(() => {
         :key="pilot.uid"
         :to="`/piloti/${pilot.uid}`"
         class="list-row"
+        :class="{ 'list-row--admin': isAdmin }"
       >
         <span class="lr-name">
           <span class="pilot-avatar">{{ getInitials(pilot) }}</span>
@@ -212,6 +242,10 @@ onMounted(() => {
         <span class="lr-nickname">{{ pilot.nickname }}</span>
         <span class="lr-sessions">{{ pilot.totalSessions || 0 }}</span>
         <span class="lr-last">{{ formatDate(pilot.lastSession) }}</span>
+        <span v-if="isAdmin" class="lr-version">
+          <span v-if="pilot.suiteVersion" class="version-badge" :class="getVersionClass(pilot.suiteVersion)">v{{ pilot.suiteVersion }}</span>
+          <span v-else class="version-badge version-badge--unknown">—</span>
+        </span>
         <span class="lr-cta">
           Visualizza
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -311,7 +345,11 @@ onMounted(() => {
   margin-bottom: 4px;
 }
 
-.lh-sessions, .lh-last { text-align: center; }
+.lh-sessions, .lh-last, .lh-version { text-align: center; }
+
+.list-header--admin {
+  grid-template-columns: 1.2fr 1fr 100px 140px 90px 120px;
+}
 
 .list-row {
   display: grid;
@@ -405,6 +443,37 @@ onMounted(() => {
   font-size: 13px;
   color: rgba(255, 255, 255, 0.6);
   text-align: center;
+}
+
+.list-row--admin {
+  grid-template-columns: 1.2fr 1fr 100px 140px 90px 120px;
+}
+
+.lr-version {
+  text-align: center;
+}
+
+.version-badge {
+  font-family: 'JetBrains Mono', $font-primary;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+
+  &--current {
+    background: rgba(#22c55e, 0.15);
+    color: #22c55e;
+  }
+
+  &--outdated {
+    background: rgba(#eab308, 0.15);
+    color: #eab308;
+  }
+
+  &--unknown {
+    color: rgba(255, 255, 255, 0.3);
+  }
 }
 
 .lr-cta {

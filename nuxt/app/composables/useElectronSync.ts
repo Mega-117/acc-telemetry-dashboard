@@ -696,6 +696,25 @@ export function useElectronSync() {
                 await loadSessions()
             }
 
+            // Update Suite version in user profile (1 write per sync)
+            try {
+                const electronAPI = (window as any).electronAPI
+                if (electronAPI?.getSuiteVersion) {
+                    const version = await electronAPI.getSuiteVersion()
+                    if (version) {
+                        const userRef = doc(db, `users/${uid}`)
+                        await setDoc(userRef, {
+                            suiteVersion: version.launcher || version.webapp || null,
+                            suiteVersionDetail: version,
+                            suiteVersionUpdatedAt: new Date().toISOString()
+                        }, { merge: true })
+                        console.log(`[SYNC] Suite version updated: ${version.launcher}`)
+                    }
+                }
+            } catch (versionError: any) {
+                console.warn('[SYNC] Could not update suite version:', versionError.message)
+            }
+
             return results
 
         } catch (error: any) {
