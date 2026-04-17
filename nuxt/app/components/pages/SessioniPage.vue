@@ -37,6 +37,8 @@ interface DisplaySession {
   lapsValid: number
   stints: number
   bestQualy?: string
+  bestRaceSprint?: string
+  bestRaceEndurance?: string
   bestRace?: string
 }
 
@@ -67,10 +69,17 @@ const sessions = computed<DisplaySession[]>(() => {
       laps: s.summary.laps || 0,
       lapsValid: s.summary.lapsValid || 0,
       stints: s.summary.stintCount || 1,
-      // Use stint-based best times (available for any session type with Q/R stints)
+      // Use stint-based best times (fuel-band classified)
       bestQualy: s.summary.best_qualy_ms 
         ? formatLapTime(s.summary.best_qualy_ms) 
         : undefined,
+      bestRaceSprint: s.summary.best_race_sprint_ms 
+        ? formatLapTime(s.summary.best_race_sprint_ms) 
+        : undefined,
+      bestRaceEndurance: s.summary.best_race_endurance_ms 
+        ? formatLapTime(s.summary.best_race_endurance_ms) 
+        : undefined,
+      // Backward compat: if no sprint/endurance, fallback to old best_race_ms
       bestRace: s.summary.best_race_ms 
         ? formatLapTime(s.summary.best_race_ms) 
         : undefined
@@ -388,13 +397,26 @@ function goToSession(id: string) {
                 </span>
               </div>
               
-              <!-- R Badge (fixed slot) -->
+              <!-- RS Badge (Race Sprint) -->
               <div class="time-slot">
-                <span v-if="session.bestRace" class="time-badge time-badge--race">
+                <span v-if="session.bestRaceSprint" class="time-badge time-badge--race-sprint">
+                  RS {{ session.bestRaceSprint }}
+                </span>
+                <span v-else-if="session.bestRace && !session.bestRaceEndurance" class="time-badge time-badge--race">
                   R {{ session.bestRace }}
                 </span>
-                <span v-else class="time-badge time-badge--race time-badge--empty">
-                  R —
+                <span v-else class="time-badge time-badge--race-sprint time-badge--empty">
+                  RS —
+                </span>
+              </div>
+              
+              <!-- RE Badge (Race Endurance) -->
+              <div class="time-slot">
+                <span v-if="session.bestRaceEndurance" class="time-badge time-badge--race-endurance">
+                  RE {{ session.bestRaceEndurance }}
+                </span>
+                <span v-else class="time-badge time-badge--race-endurance time-badge--empty">
+                  RE —
                 </span>
               </div>
               
@@ -460,11 +482,23 @@ function goToSession(id: string) {
             </div>
             
             <div class="card-time-slot">
-              <span v-if="session.bestRace" class="time-badge time-badge--race">
+              <span v-if="session.bestRaceSprint" class="time-badge time-badge--race-sprint">
+                RS {{ session.bestRaceSprint }}
+              </span>
+              <span v-else-if="session.bestRace && !session.bestRaceEndurance" class="time-badge time-badge--race">
                 R {{ session.bestRace }}
               </span>
-              <span v-else class="time-badge time-badge--race time-badge--empty">
-                R —
+              <span v-else class="time-badge time-badge--race-sprint time-badge--empty">
+                RS —
+              </span>
+            </div>
+            
+            <div class="card-time-slot">
+              <span v-if="session.bestRaceEndurance" class="time-badge time-badge--race-endurance">
+                RE {{ session.bestRaceEndurance }}
+              </span>
+              <span v-else class="time-badge time-badge--race-endurance time-badge--empty">
+                RE —
               </span>
             </div>
             
@@ -916,6 +950,18 @@ function goToSession(id: string) {
     background: rgba(255, 100, 100, 0.12);
     border: 1px solid rgba(255, 100, 100, 0.35);
     color: rgb(255, 100, 100);
+  }
+
+  &--race-sprint {
+    background: rgba(255, 140, 60, 0.12);
+    border: 1px solid rgba(255, 140, 60, 0.4);
+    color: rgb(255, 140, 60);
+  }
+
+  &--race-endurance {
+    background: rgba(200, 80, 120, 0.12);
+    border: 1px solid rgba(200, 80, 120, 0.4);
+    color: rgb(200, 80, 120);
   }
 
   // Empty state (no data placeholder)

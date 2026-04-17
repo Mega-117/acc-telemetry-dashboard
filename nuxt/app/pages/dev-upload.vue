@@ -6,6 +6,7 @@
 import { ref } from 'vue'
 import { doc, setDoc, getDoc, getDocs, collection, serverTimestamp, deleteDoc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
+import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
 
 definePageMeta({
   layout: false
@@ -30,159 +31,12 @@ async function calculateHash(input: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-function generateSessionId(dateStart: string, track: string): string {
-  const base = `${dateStart}_${track}`.replace(/[^a-zA-Z0-9]/g, '_')
-  return base.substring(0, 100)
-}
-
 function splitIntoChunks(str: string, size: number): string[] {
   const chunks: string[] = []
   for (let i = 0; i < str.length; i += size) {
     chunks.push(str.slice(i, i + size))
   }
   return chunks
-}
-
-function extractMetadata(rawObj: any) {
-  const sessionInfo = rawObj.session_info || {}
-  const stints = rawObj.stints || []
-
-  const meta = {
-    track: sessionInfo.track || rawObj.track || 'Unknown',
-    date_start: sessionInfo.date_start || rawObj.date || new Date().toISOString(),
-    date_end: sessionInfo.date_end || null,
-    car: sessionInfo.car || rawObj.car || null,
-    session_type: sessionInfo.session_type ?? null,
-    driver: sessionInfo.driver || null
-  }
-
-  // Track best times per grip condition
-  type GripBest = {
-    bestQualy: number | null
-    bestQualyTemp: number | null
-    bestRace: number | null
-    bestRaceTemp: number | null
-    bestAvgRace: number | null
-    bestAvgRaceTemp: number | null
-  }
-  
-  const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
-  const bestByGrip: Record<string, GripBest> = {}
-  
-  // Initialize all grips
-  gripConditions.forEach(grip => {
-    bestByGrip[grip] = {
-      bestQualy: null, bestQualyTemp: null,
-      bestRace: null, bestRaceTemp: null,
-      bestAvgRace: null, bestAvgRaceTemp: null
-    }
-  })
-
-  // Also track overall bests (for backward compatibility)
-  let bestQualyMs: number | null = null
-  let bestQualyConditions: { airTemp: number, roadTemp: number, grip: string } | null = null
-  let bestRaceMs: number | null = null
-  let bestRaceConditions: { airTemp: number, roadTemp: number, grip: string } | null = null
-  let bestAvgRaceMs: number | null = null
-  let bestAvgRaceConditions: { airTemp: number, roadTemp: number, grip: string } | null = null
-  // Detect if this is a Qualify session (session_type 1 = Qualify, 2 = Race)
-  // Note: Logger may incorrectly set stint.type='Race' even for Qualify sessions
-  const isQualySession = sessionInfo.session_type === 1
-
-  stints.forEach((stint: any) => {
-    // Use session-level type OR stint-level type for Qualy detection
-    const isQualy = isQualySession || stint.type === 'Qualify'
-    const laps = stint.laps || []
-    
-    laps.forEach((lap: any) => {
-      if (lap.is_valid && !lap.has_pit_stop && lap.lap_time_ms) {
-        const grip = lap.track_grip_status || 'Unknown'
-        const airTemp = lap.air_temp || 0
-        const conditions = { airTemp, roadTemp: lap.road_temp || 0, grip }
-        
-        // Update grip-specific bests
-        if (bestByGrip[grip]) {
-          if (isQualy) {
-            if (!bestByGrip[grip].bestQualy || lap.lap_time_ms < bestByGrip[grip].bestQualy!) {
-              bestByGrip[grip].bestQualy = lap.lap_time_ms
-              bestByGrip[grip].bestQualyTemp = airTemp
-            }
-          } else {
-            if (!bestByGrip[grip].bestRace || lap.lap_time_ms < bestByGrip[grip].bestRace!) {
-              bestByGrip[grip].bestRace = lap.lap_time_ms
-              bestByGrip[grip].bestRaceTemp = airTemp
-            }
-          }
-        }
-        
-        // Update overall bests (backward compatibility)
-        if (isQualy) {
-          if (!bestQualyMs || lap.lap_time_ms < bestQualyMs) {
-            bestQualyMs = lap.lap_time_ms
-            bestQualyConditions = conditions
-          }
-        } else {
-          if (!bestRaceMs || lap.lap_time_ms < bestRaceMs) {
-            bestRaceMs = lap.lap_time_ms
-            bestRaceConditions = conditions
-          }
-        }
-      }
-    })
-
-    // Best avg race: use stint.avg_clean_lap from logger (only for race stints with >= 5 laps)
-    if (!isQualy && stint.avg_clean_lap && laps.length >= 5) {
-      const firstValidLap = laps.find((l: any) => l.is_valid && !l.has_pit_stop)
-      const grip = firstValidLap?.track_grip_status || laps[0]?.track_grip_status || 'Unknown'
-      const airTemp = firstValidLap?.air_temp || laps[0]?.air_temp || 0
-      
-      // Update grip-specific avg
-      if (bestByGrip[grip]) {
-        if (!bestByGrip[grip].bestAvgRace || stint.avg_clean_lap < bestByGrip[grip].bestAvgRace!) {
-          bestByGrip[grip].bestAvgRace = stint.avg_clean_lap
-          bestByGrip[grip].bestAvgRaceTemp = airTemp
-        }
-      }
-      
-      // Update overall avg (backward compatibility)
-      if (!bestAvgRaceMs || stint.avg_clean_lap < bestAvgRaceMs) {
-        bestAvgRaceMs = stint.avg_clean_lap
-        bestAvgRaceConditions = {
-          airTemp,
-          roadTemp: firstValidLap?.road_temp || 0,
-          grip
-        }
-      }
-    }
-  })
-
-  const summary = {
-    laps: sessionInfo.laps_total || rawObj.laps?.length || 0,
-    lapsValid: sessionInfo.laps_valid || 0,
-    bestLap: sessionInfo.session_best_lap || rawObj.bestLap || null,
-    avgCleanLap: sessionInfo.avg_clean_lap || null,
-    totalTime: sessionInfo.total_drive_time_ms || 0,
-    stintCount: stints.length || 0,
-    // Overall bests (backward compatibility)
-    best_qualy_ms: bestQualyMs,
-    best_qualy_conditions: bestQualyConditions,
-    best_race_ms: bestRaceMs,
-    best_race_conditions: bestRaceConditions,
-    best_avg_race_ms: bestAvgRaceMs,
-    best_avg_race_conditions: bestAvgRaceConditions,
-    // Grip-specific bests (new)
-    best_by_grip: bestByGrip
-  }
-
-  // DEBUG: Log calculated best times
-  console.log('[UPLOAD] Extracted summary:', {
-    track: meta.track,
-    stintCount: stints.length,
-    best_qualy_ms: bestQualyMs,
-    best_race_ms: bestRaceMs
-  })
-
-  return { meta, summary }
 }
 
 async function deleteOldChunks(uid: string, sessionId: string) {

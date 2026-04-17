@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import { collection, query, orderBy, doc, writeBatch, where, DocumentReference, Query } from 'firebase/firestore'
 import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedUpdateDoc } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
+import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
 
 // Local wrappers auto-tagged with caller name
 const CALLER = 'TelemetryData'
@@ -59,11 +60,20 @@ export interface SessionSummary {
     stintCount: number
     // Optional grip-specific best times (can be null or undefined)
     best_qualy_ms?: number | null
-    best_race_ms?: number | null
-    best_avg_race_ms?: number | null
+    best_race_ms?: number | null         // backward compat: best of sprint/endurance
+    best_avg_race_ms?: number | null     // backward compat: best of sprint/endurance avg
     best_qualy_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
     best_race_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
     best_avg_race_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
+    // Fuel-band specific (new)
+    best_race_sprint_ms?: number | null
+    best_race_sprint_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
+    best_race_endurance_ms?: number | null
+    best_race_endurance_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
+    best_avg_sprint_ms?: number | null
+    best_avg_sprint_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
+    best_avg_endurance_ms?: number | null
+    best_avg_endurance_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
     best_by_grip?: Record<string, any>
 }
 
@@ -311,127 +321,6 @@ export function useTelemetryData() {
         return !!(window as any).electronAPI
     })
 
-    // Helper: Generate session ID from date_start and track
-    // IMPORTANT: Must match useElectronSync.generateSessionId for consistency
-    function generateSessionId(dateStart: string, track: string): string {
-        // Remove microseconds: "2026-01-04T17:11:38.128663" -> "2026-01-04T17:11:38"
-        const normalized = dateStart.split('.')[0]
-        const base = `${normalized}_${track}`.replace(/[^a-zA-Z0-9]/g, '_')
-        return base.substring(0, 100)
-    }
-
-    // Helper: Extract metadata from raw session object (reused from useElectronSync logic)
-    function extractMetadata(rawObj: any): { meta: SessionMeta; summary: SessionSummary } {
-        const sessionInfo = rawObj.session_info || {}
-        const stints = rawObj.stints || []
-
-        const meta: SessionMeta = {
-            track: sessionInfo.track || rawObj.track || 'Unknown',
-            date_start: sessionInfo.date_start || rawObj.date || new Date().toISOString(),
-            date_end: sessionInfo.date_end || null,
-            car: sessionInfo.car_model || sessionInfo.car || rawObj.car || '',
-            session_type: sessionInfo.session_type ?? 0,
-            driver: sessionInfo.driver || null
-        }
-
-        // Track best times by grip
-        const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
-        const bestByGrip: Record<string, any> = {}
-        gripConditions.forEach(grip => {
-            bestByGrip[grip] = {
-                bestQualy: null, bestQualyTemp: null, bestQualyFuel: null,
-                bestRace: null, bestRaceTemp: null, bestRaceFuel: null,
-                bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceFuel: null
-            }
-        })
-
-        let bestQualyMs: number | null = null
-        let bestQualyConditions: any = null
-        let bestRaceMs: number | null = null
-        let bestRaceConditions: any = null
-        let bestAvgRaceMs: number | null = null
-        let bestAvgRaceConditions: any = null
-
-        stints.forEach((stint: any) => {
-            const isQualy = stint.type === 'Qualify'
-            const laps = stint.laps || []
-
-            laps.forEach((lap: any) => {
-                if (lap.is_valid && !lap.has_pit_stop && lap.lap_time_ms) {
-                    const grip = lap.track_grip_status || 'Unknown'
-                    const airTemp = lap.air_temp || 0
-                    const conditions = { airTemp, roadTemp: lap.road_temp || 0, grip }
-
-                    if (bestByGrip[grip]) {
-                        if (isQualy) {
-                            if (!bestByGrip[grip].bestQualy || lap.lap_time_ms < bestByGrip[grip].bestQualy) {
-                                bestByGrip[grip].bestQualy = lap.lap_time_ms
-                                bestByGrip[grip].bestQualyTemp = airTemp
-                                bestByGrip[grip].bestQualyFuel = lap.fuel_remaining ?? null
-                            }
-                        } else {
-                            if (!bestByGrip[grip].bestRace || lap.lap_time_ms < bestByGrip[grip].bestRace) {
-                                bestByGrip[grip].bestRace = lap.lap_time_ms
-                                bestByGrip[grip].bestRaceTemp = airTemp
-                                bestByGrip[grip].bestRaceFuel = lap.fuel_remaining ?? null
-                            }
-                        }
-                    }
-
-                    if (isQualy) {
-                        if (!bestQualyMs || lap.lap_time_ms < bestQualyMs) {
-                            bestQualyMs = lap.lap_time_ms
-                            bestQualyConditions = conditions
-                        }
-                    } else {
-                        if (!bestRaceMs || lap.lap_time_ms < bestRaceMs) {
-                            bestRaceMs = lap.lap_time_ms
-                            bestRaceConditions = conditions
-                        }
-                    }
-                }
-            })
-
-            // Best avg race from stint - ONLY if 5+ VALID laps
-            const validStintLaps = laps.filter((l: any) => l.is_valid && !l.has_pit_stop)
-            if (!isQualy && stint.avg_clean_lap && validStintLaps.length >= 5) {
-                const firstValidLap = validStintLaps[0]
-                const grip = firstValidLap?.track_grip_status || 'Unknown'
-                const airTemp = firstValidLap?.air_temp || 0
-
-                if (bestByGrip[grip]) {
-                    if (!bestByGrip[grip].bestAvgRace || stint.avg_clean_lap < bestByGrip[grip].bestAvgRace) {
-                        bestByGrip[grip].bestAvgRace = stint.avg_clean_lap
-                        bestByGrip[grip].bestAvgRaceTemp = airTemp
-                        bestByGrip[grip].bestAvgRaceFuel = firstValidLap?.fuel_remaining ?? null
-                    }
-                }
-
-                if (!bestAvgRaceMs || stint.avg_clean_lap < bestAvgRaceMs) {
-                    bestAvgRaceMs = stint.avg_clean_lap
-                    bestAvgRaceConditions = { airTemp, roadTemp: firstValidLap?.road_temp || 0, grip }
-                }
-            }
-        })
-
-        const summary: SessionSummary = {
-            laps: sessionInfo.laps_total || rawObj.laps?.length || 0,
-            lapsValid: sessionInfo.laps_valid || 0,
-            bestLap: sessionInfo.session_best_lap || rawObj.bestLap || null,
-            avgCleanLap: sessionInfo.avg_clean_lap || null,
-            totalTime: sessionInfo.total_drive_time_ms || 0,
-            stintCount: stints.length || 0,
-            best_qualy_ms: bestQualyMs,
-            best_qualy_conditions: bestQualyConditions,
-            best_race_ms: bestRaceMs,
-            best_race_conditions: bestRaceConditions,
-            best_avg_race_ms: bestAvgRaceMs,
-            best_avg_race_conditions: bestAvgRaceConditions,
-            best_by_grip: bestByGrip
-        }
-
-        return { meta, summary }
-    }
 
     // Load sessions from LOCAL files (Electron only)
     async function loadFromLocalFiles(): Promise<SessionDocument[]> {
@@ -742,6 +631,29 @@ export function useTelemetryData() {
         bestQualyFuel: number | null
         bestQualySessionId: string | null
         bestQualyDate: string | null
+        // Race Sprint (fuel 25-80L)
+        bestRaceSprint: number | null
+        bestRaceSprintTemp: number | null
+        bestRaceSprintFuel: number | null
+        bestRaceSprintSessionId: string | null
+        bestRaceSprintDate: string | null
+        bestAvgSprint: number | null
+        bestAvgSprintTemp: number | null
+        bestAvgSprintFuel: number | null
+        bestAvgSprintSessionId: string | null
+        bestAvgSprintDate: string | null
+        // Race Endurance (fuel > 80L)
+        bestRaceEndurance: number | null
+        bestRaceEnduranceTemp: number | null
+        bestRaceEnduranceFuel: number | null
+        bestRaceEnduranceSessionId: string | null
+        bestRaceEnduranceDate: string | null
+        bestAvgEndurance: number | null
+        bestAvgEnduranceTemp: number | null
+        bestAvgEnduranceFuel: number | null
+        bestAvgEnduranceSessionId: string | null
+        bestAvgEnduranceDate: string | null
+        // Backward compat: best of sprint/endurance (computed)
         bestRace: number | null
         bestRaceTemp: number | null
         bestRaceFuel: number | null
@@ -768,6 +680,10 @@ export function useTelemetryData() {
     // Empty GripBestTimes helper
     const emptyGripBests = (): GripBestTimes => ({
         bestQualy: null, bestQualyTemp: null, bestQualyFuel: null, bestQualySessionId: null, bestQualyDate: null,
+        bestRaceSprint: null, bestRaceSprintTemp: null, bestRaceSprintFuel: null, bestRaceSprintSessionId: null, bestRaceSprintDate: null,
+        bestAvgSprint: null, bestAvgSprintTemp: null, bestAvgSprintFuel: null, bestAvgSprintSessionId: null, bestAvgSprintDate: null,
+        bestRaceEndurance: null, bestRaceEnduranceTemp: null, bestRaceEnduranceFuel: null, bestRaceEnduranceSessionId: null, bestRaceEnduranceDate: null,
+        bestAvgEndurance: null, bestAvgEnduranceTemp: null, bestAvgEnduranceFuel: null, bestAvgEnduranceSessionId: null, bestAvgEnduranceDate: null,
         bestRace: null, bestRaceTemp: null, bestRaceFuel: null, bestRaceSessionId: null, bestRaceDate: null,
         bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceFuel: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
     })
@@ -847,22 +763,69 @@ export function useTelemetryData() {
                     currentBest.bestQualyDate = sessionDate
                 }
 
-                // Best Race
-                if (sessionBest.bestRace && (!currentBest.bestRace || sessionBest.bestRace < currentBest.bestRace)) {
-                    currentBest.bestRace = sessionBest.bestRace
-                    currentBest.bestRaceTemp = sessionBest.bestRaceTemp
-                    currentBest.bestRaceFuel = sessionBest.bestRaceFuel ?? null
-                    currentBest.bestRaceSessionId = session.sessionId
-                    currentBest.bestRaceDate = sessionDate
+                // Best Race Sprint (new field, or fallback from old bestRace if fuel <= 80)
+                const sprintTime = sessionBest.bestRaceSprint || (sessionBest.bestRace && (!sessionBest.bestRaceFuel || sessionBest.bestRaceFuel <= 80) ? sessionBest.bestRace : null)
+                if (sprintTime && (!currentBest.bestRaceSprint || sprintTime < currentBest.bestRaceSprint)) {
+                    currentBest.bestRaceSprint = sprintTime
+                    currentBest.bestRaceSprintTemp = sessionBest.bestRaceSprintTemp || sessionBest.bestRaceTemp
+                    currentBest.bestRaceSprintFuel = sessionBest.bestRaceSprintFuel ?? sessionBest.bestRaceFuel ?? null
+                    currentBest.bestRaceSprintSessionId = session.sessionId
+                    currentBest.bestRaceSprintDate = sessionDate
                 }
 
-                // Best Avg Race
-                if (sessionBest.bestAvgRace && (!currentBest.bestAvgRace || sessionBest.bestAvgRace < currentBest.bestAvgRace)) {
-                    currentBest.bestAvgRace = sessionBest.bestAvgRace
-                    currentBest.bestAvgRaceTemp = sessionBest.bestAvgRaceTemp
-                    currentBest.bestAvgRaceFuel = sessionBest.bestAvgRaceFuel ?? null
-                    currentBest.bestAvgRaceSessionId = session.sessionId
-                    currentBest.bestAvgRaceDate = sessionDate
+                // Best Race Endurance (new field, or fallback from old bestRace if fuel > 80)
+                const enduranceTime = sessionBest.bestRaceEndurance || (sessionBest.bestRace && sessionBest.bestRaceFuel && sessionBest.bestRaceFuel > 80 ? sessionBest.bestRace : null)
+                if (enduranceTime && (!currentBest.bestRaceEndurance || enduranceTime < currentBest.bestRaceEndurance)) {
+                    currentBest.bestRaceEndurance = enduranceTime
+                    currentBest.bestRaceEnduranceTemp = sessionBest.bestRaceEnduranceTemp || sessionBest.bestRaceTemp
+                    currentBest.bestRaceEnduranceFuel = sessionBest.bestRaceEnduranceFuel ?? sessionBest.bestRaceFuel ?? null
+                    currentBest.bestRaceEnduranceSessionId = session.sessionId
+                    currentBest.bestRaceEnduranceDate = sessionDate
+                }
+
+                // Best Avg Sprint
+                const avgSprintTime = sessionBest.bestAvgSprint || (sessionBest.bestAvgRace && (!sessionBest.bestAvgRaceFuel || sessionBest.bestAvgRaceFuel <= 80) ? sessionBest.bestAvgRace : null)
+                if (avgSprintTime && (!currentBest.bestAvgSprint || avgSprintTime < currentBest.bestAvgSprint)) {
+                    currentBest.bestAvgSprint = avgSprintTime
+                    currentBest.bestAvgSprintTemp = sessionBest.bestAvgSprintTemp || sessionBest.bestAvgRaceTemp
+                    currentBest.bestAvgSprintFuel = sessionBest.bestAvgSprintFuel ?? sessionBest.bestAvgRaceFuel ?? null
+                    currentBest.bestAvgSprintSessionId = session.sessionId
+                    currentBest.bestAvgSprintDate = sessionDate
+                }
+
+                // Best Avg Endurance
+                const avgEnduranceTime = sessionBest.bestAvgEndurance || (sessionBest.bestAvgRace && sessionBest.bestAvgRaceFuel && sessionBest.bestAvgRaceFuel > 80 ? sessionBest.bestAvgRace : null)
+                if (avgEnduranceTime && (!currentBest.bestAvgEndurance || avgEnduranceTime < currentBest.bestAvgEndurance)) {
+                    currentBest.bestAvgEndurance = avgEnduranceTime
+                    currentBest.bestAvgEnduranceTemp = sessionBest.bestAvgEnduranceTemp || sessionBest.bestAvgRaceTemp
+                    currentBest.bestAvgEnduranceFuel = sessionBest.bestAvgEnduranceFuel ?? sessionBest.bestAvgRaceFuel ?? null
+                    currentBest.bestAvgEnduranceSessionId = session.sessionId
+                    currentBest.bestAvgEnduranceDate = sessionDate
+                }
+
+                // Backward compat: compute bestRace as min(sprint, endurance)
+                const bestRaceVal = currentBest.bestRaceSprint && currentBest.bestRaceEndurance
+                    ? Math.min(currentBest.bestRaceSprint, currentBest.bestRaceEndurance)
+                    : currentBest.bestRaceSprint || currentBest.bestRaceEndurance
+                if (bestRaceVal) {
+                    const isSprintBetter = currentBest.bestRaceSprint === bestRaceVal
+                    currentBest.bestRace = bestRaceVal
+                    currentBest.bestRaceTemp = isSprintBetter ? currentBest.bestRaceSprintTemp : currentBest.bestRaceEnduranceTemp
+                    currentBest.bestRaceFuel = isSprintBetter ? currentBest.bestRaceSprintFuel : currentBest.bestRaceEnduranceFuel
+                    currentBest.bestRaceSessionId = isSprintBetter ? currentBest.bestRaceSprintSessionId : currentBest.bestRaceEnduranceSessionId
+                    currentBest.bestRaceDate = isSprintBetter ? currentBest.bestRaceSprintDate : currentBest.bestRaceEnduranceDate
+                }
+
+                const bestAvgVal = currentBest.bestAvgSprint && currentBest.bestAvgEndurance
+                    ? Math.min(currentBest.bestAvgSprint, currentBest.bestAvgEndurance)
+                    : currentBest.bestAvgSprint || currentBest.bestAvgEndurance
+                if (bestAvgVal) {
+                    const isSprintBetter = currentBest.bestAvgSprint === bestAvgVal
+                    currentBest.bestAvgRace = bestAvgVal
+                    currentBest.bestAvgRaceTemp = isSprintBetter ? currentBest.bestAvgSprintTemp : currentBest.bestAvgEnduranceTemp
+                    currentBest.bestAvgRaceFuel = isSprintBetter ? currentBest.bestAvgSprintFuel : currentBest.bestAvgEnduranceFuel
+                    currentBest.bestAvgRaceSessionId = isSprintBetter ? currentBest.bestAvgSprintSessionId : currentBest.bestAvgEnduranceSessionId
+                    currentBest.bestAvgRaceDate = isSprintBetter ? currentBest.bestAvgSprintDate : currentBest.bestAvgEnduranceDate
                 }
             }
         }

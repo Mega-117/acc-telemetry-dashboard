@@ -111,6 +111,8 @@ const filteredSessions = computed(() => {
       laps: s.summary.laps || 0,
       stints: s.summary.stintCount || 1,
       bestQualy: s.summary.best_qualy_ms ? formatLapTime(s.summary.best_qualy_ms) : null,
+      bestRaceSprint: s.summary.best_race_sprint_ms ? formatLapTime(s.summary.best_race_sprint_ms) : null,
+      bestRaceEndurance: s.summary.best_race_endurance_ms ? formatLapTime(s.summary.best_race_endurance_ms) : null,
       bestRace: s.summary.best_race_ms ? formatLapTime(s.summary.best_race_ms) : null
     }))
 })
@@ -211,13 +213,26 @@ function closeModal() {
                 </span>
               </div>
               
-              <!-- R Badge -->
+              <!-- RS Badge -->
               <div class="time-slot">
-                <span v-if="session.bestRace" class="time-badge time-badge--race">
+                <span v-if="session.bestRaceSprint" class="time-badge time-badge--race-sprint">
+                  RS {{ session.bestRaceSprint }}
+                </span>
+                <span v-else-if="session.bestRace && !session.bestRaceEndurance" class="time-badge time-badge--race">
                   R {{ session.bestRace }}
                 </span>
-                <span v-else class="time-badge time-badge--race time-badge--empty">
-                  R —
+                <span v-else class="time-badge time-badge--race-sprint time-badge--empty">
+                  RS —
+                </span>
+              </div>
+              
+              <!-- RE Badge -->
+              <div class="time-slot">
+                <span v-if="session.bestRaceEndurance" class="time-badge time-badge--race-endurance">
+                  RE {{ session.bestRaceEndurance }}
+                </span>
+                <span v-else class="time-badge time-badge--race-endurance time-badge--empty">
+                  RE —
                 </span>
               </div>
             </div>
@@ -448,6 +463,18 @@ function closeModal() {
     background: rgba(255, 100, 100, 0.12);
     border: 1px solid rgba(255, 100, 100, 0.3);
     color: rgb(255, 100, 100);
+  }
+
+  &--race-sprint {
+    background: rgba(255, 140, 60, 0.12);
+    border: 1px solid rgba(255, 140, 60, 0.3);
+    color: rgb(255, 140, 60);
+  }
+
+  &--race-endurance {
+    background: rgba(200, 80, 120, 0.12);
+    border: 1px solid rgba(200, 80, 120, 0.3);
+    color: rgb(200, 80, 120);
   }
 
   &--empty {

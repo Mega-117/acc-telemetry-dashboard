@@ -453,7 +453,7 @@ function getStintsForSource(source: 'a' | 'b') {
     avgMs: s.avg_clean_lap,
     avgWarning: (s.laps?.filter((l: any) => l.is_valid && !l.has_pit_stop).length || 0) < 5,
     validLapsCount: s.laps?.filter((l: any) => l.is_valid && !l.has_pit_stop).length || 0,
-    durationMs: s.laps?.reduce((sum: number, lap: any) => sum + (lap.lap_time_ms || 0), 0) || 0
+    durationMs: s.stint_drive_time_ms || s.laps?.reduce((sum: number, lap: any) => sum + (lap.lap_time_ms || 0), 0) || 0
   }))
 }
 
@@ -1429,7 +1429,7 @@ const crossStintB2 = computed(() => {
       return min === null ? lap.lap_time_ms : Math.min(min, lap.lap_time_ms)
     }, null)),
     avgCleanLap: formatLapTime(raw.avg_clean_lap),
-    durationMs: raw.laps?.reduce((sum: number, lap: any) => sum + (lap.lap_time_ms || 0), 0) || 0
+    durationMs: raw.stint_drive_time_ms || raw.laps?.reduce((sum: number, lap: any) => sum + (lap.lap_time_ms || 0), 0) || 0
   }
 })
 
