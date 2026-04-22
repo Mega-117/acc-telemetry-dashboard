@@ -226,9 +226,49 @@ export function formatTrackName(track: string): string {
         .join(' ')
 }
 
+function parseTelemetryDate(dateStr: string): Date | null {
+    if (!dateStr) return null
+
+    // Keep native parsing for explicit timezone strings.
+    if (/[zZ]|[+\-]\d{2}:\d{2}$/.test(dateStr)) {
+        const zoned = new Date(dateStr)
+        return Number.isNaN(zoned.getTime()) ? null : zoned
+    }
+
+    // Logger timestamps are local naive datetimes: treat them as local time, not UTC.
+    const match = dateStr.match(
+        /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?(?:\.(\d+))?$/
+    )
+    if (match) {
+        const [, y, m, d, hh, mm, ss = '0', fraction = '0'] = match
+        const ms = Number(fraction.padEnd(3, '0').slice(0, 3))
+        const local = new Date(
+            Number(y),
+            Number(m) - 1,
+            Number(d),
+            Number(hh),
+            Number(mm),
+            Number(ss),
+            ms
+        )
+        return Number.isNaN(local.getTime()) ? null : local
+    }
+
+    const fallback = new Date(dateStr)
+    return Number.isNaN(fallback.getTime()) ? null : fallback
+}
+
+function formatLocalDateKey(date: Date): string {
+    const year = date.getFullYear()
+    const month = `${date.getMonth() + 1}`.padStart(2, '0')
+    const day = `${date.getDate()}`.padStart(2, '0')
+    return `${year}-${month}-${day}`
+}
+
 export function formatDate(dateStr: string): string {
     if (!dateStr) return '-'
-    const date = new Date(dateStr)
+    const date = parseTelemetryDate(dateStr)
+    if (!date) return '-'
     const day = date.getDate()
     const months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
     return `${day} ${months[date.getMonth()]} ${date.getFullYear()}`
@@ -236,7 +276,8 @@ export function formatDate(dateStr: string): string {
 
 export function formatDateFull(dateStr: string): string {
     if (!dateStr) return '-'
-    const date = new Date(dateStr)
+    const date = parseTelemetryDate(dateStr)
+    if (!date) return '-'
     const day = date.getDate()
     const months = ['GENNAIO', 'FEBBRAIO', 'MARZO', 'APRILE', 'MAGGIO', 'GIUGNO',
         'LUGLIO', 'AGOSTO', 'SETTEMBRE', 'OTTOBRE', 'NOVEMBRE', 'DICEMBRE']
@@ -245,7 +286,8 @@ export function formatDateFull(dateStr: string): string {
 
 export function formatTime(dateStr: string): string {
     if (!dateStr) return '-'
-    const date = new Date(dateStr)
+    const date = parseTelemetryDate(dateStr)
+    if (!date) return '-'
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
 }
 
@@ -894,8 +936,10 @@ export function useTelemetryData() {
             return cached.bests[category] || {}
         }
 
-        // 2. Try Firebase /trackBests collection (if user is logged in and not Electron)
-        if (targetUserId && !isElectron.value) {
+        // 2. Try Firebase /trackBests collection whenever we have an authenticated target user.
+        // In Electron owner mode the compact sessionIndex may not contain the rich best_by_grip
+        // data needed for recalculation, so Firebase remains the source of truth for overview cards.
+        if (targetUserId) {
             try {
                 const docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)
                 const docSnap = await getDoc(docRef)
@@ -979,6 +1023,18 @@ export function useTelemetryData() {
                 console.warn(`[TELEMETRY] Error deleting trackBests from Firebase:`, e)
             }
         }
+    }
+
+    function clearTrackDerivedCaches() {
+        trackBestsCache.value = {}
+        trackActivityCache.value = {}
+        try {
+            sessionStorage.removeItem(CACHE_KEY_TRACK_BESTS)
+            sessionStorage.removeItem(CACHE_KEY_TRACK_ACTIVITY)
+        } catch {
+            // Ignore storage errors in constrained environments.
+        }
+        console.log('[TELEMETRY] Cleared overview caches (trackBests + trackActivity)')
     }
 
     /**
@@ -1649,7 +1705,7 @@ export function useTelemetryData() {
 
         for (let i = days - 1; i >= 0; i--) {
             const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
-            const dateStr = date.toISOString().split('T')[0] || ''
+            const dateStr = formatLocalDateKey(date)
 
             const daySessions = sessions.value.filter(s =>
                 s.meta.date_start?.startsWith(dateStr)
@@ -1692,14 +1748,18 @@ export function useTelemetryData() {
     const activityTotals = computed(() => {
         const now = new Date()
         const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+        const sevenDaysAgoKey = formatLocalDateKey(sevenDaysAgo)
 
         let practiceMinutes = 0, practiceCount = 0
         let qualifyMinutes = 0, qualifyCount = 0
         let raceMinutes = 0, raceCount = 0
 
         for (const session of sessions.value) {
-            const sessionDate = new Date(session.meta.date_start)
-            if (sessionDate < sevenDaysAgo) continue
+            const sessionDate = parseTelemetryDate(session.meta.date_start)
+            if (!sessionDate) continue
+
+            const sessionDateKey = formatLocalDateKey(sessionDate)
+            if (sessionDateKey < sevenDaysAgoKey) continue
 
             const totalMs = session.summary?.totalTime || 0
             const minutes = Math.round(totalMs / 60000)
@@ -1834,6 +1894,7 @@ export function useTelemetryData() {
         getTheoreticalTimes,
         // Optimized track bests (with lazy caching)
         getTrackBests,
+        clearTrackDerivedCaches,
         invalidateTrackBests,
         forceRecalculateTrackBests,
         resetAllTrackBests,

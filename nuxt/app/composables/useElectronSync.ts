@@ -62,7 +62,7 @@ interface SyncResult {
 
 export function useElectronSync() {
     const { currentUser } = useFirebaseAuth()
-    const { loadSessions, resetAllTrackBests } = useTelemetryData()
+    const { loadSessions, resetAllTrackBests, clearTrackDerivedCaches } = useTelemetryData()
 
     const isSyncing = ref(false)
     const syncProgress = ref(0)
@@ -608,10 +608,13 @@ export function useElectronSync() {
                 }
             }
 
+            let freshSessions: Awaited<ReturnType<typeof loadSessions>> | null = null
+
             // Refresh data if something changed
             if (created > 0 || updated > 0) {
+                clearTrackDerivedCaches()
                 console.log('[SYNC] Refreshing dashboard data...')
-                await loadSessions()
+                freshSessions = await loadSessions(undefined, true)
             }
 
             // Update Suite version in user profile (1 write per sync)
@@ -636,7 +639,7 @@ export function useElectronSync() {
             // Update user stats + sessionIndex (for browser clients & admin dashboard)
             // This single doc write eliminates ~254 reads on browser login!
             try {
-                const allSessions = await loadSessions() || []
+                const allSessions = freshSessions || await loadSessions(undefined, true) || []
                 const now = new Date()
                 const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
                 const sevenDaysAgoStr = sevenDaysAgo.toISOString()
@@ -899,8 +902,9 @@ export function useElectronSync() {
                 // One-time cleanup of zero-lap ghost sessions
                 const cleaned = await cleanupZeroLapSessions(user.uid)
                 if (cleaned > 0) {
+                    clearTrackDerivedCaches()
                     console.log(`[SYNC] Cleaned ${cleaned} zero-lap sessions, refreshing data...`)
-                    await loadSessions()
+                    await loadSessions(undefined, true)
                 }
                 const results = await syncTelemetryFiles()
                 notifyIfChanged(results)
