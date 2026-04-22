@@ -19,7 +19,10 @@ import { auth, db } from '~/config/firebase'
 // Local wrappers auto-tagged with caller name
 const AUTH_CALLER = 'Auth'
 async function getDoc(ref: any) { return trackedGetDoc(ref, AUTH_CALLER) }
-async function setDoc(ref: any, data: any) { return trackedSetDoc(ref, data, AUTH_CALLER) }
+async function setDoc(ref: any, data: any, options?: any) {
+    if (options) return trackedSetDoc(ref, data, options, AUTH_CALLER)
+    return trackedSetDoc(ref, data, AUTH_CALLER)
+}
 
 // Shared state (singleton across components)
 const currentUser = ref<User | null>(null)
@@ -48,6 +51,13 @@ export function useFirebaseAuth() {
             const userDocRef = doc(db, 'users', user.uid)
             const docSnap = await getDoc(userDocRef)
 
+            const publicProfileRef = doc(db, 'publicProfiles', user.uid)
+            const publicProfilePayload = {
+                nickname: user.displayName || user.email?.split('@')[0] || 'Utente',
+                avatarUrl: null,
+                updatedAt: new Date().toISOString()
+            }
+
             if (!docSnap.exists()) {
                 // Create default pilot profile if missing
                 await setDoc(userDocRef, {
@@ -57,6 +67,10 @@ export function useFirebaseAuth() {
                     createdAt: new Date().toISOString(),
                     emailVerified: user.emailVerified
                 })
+                await setDoc(publicProfileRef, {
+                    uid: user.uid,
+                    ...publicProfilePayload
+                }, { merge: true })
                 userRole.value = 'pilot'
                 console.log('[AUTH] Created missing user profile')
             } else {
@@ -64,6 +78,12 @@ export function useFirebaseAuth() {
                 const data = docSnap.data()
                 userRole.value = data.role || 'pilot'
                 firestoreNickname.value = data.nickname || ''
+                await setDoc(publicProfileRef, {
+                    uid: user.uid,
+                    nickname: data.nickname || publicProfilePayload.nickname,
+                    avatarUrl: data.avatarUrl || null,
+                    updatedAt: new Date().toISOString()
+                }, { merge: true })
             }
         } catch (e) {
             console.error('[AUTH] Failed to ensure user document:', e)
@@ -151,6 +171,13 @@ export function useFirebaseAuth() {
                 createdAt: new Date().toISOString(),
                 emailVerified: false
             })
+            await setDoc(doc(db, 'publicProfiles', user.uid), {
+                uid: user.uid,
+                nickname,
+                avatarUrl: null,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            }, { merge: true })
 
             // 4. Send verification email
             await sendEmailVerification(user)

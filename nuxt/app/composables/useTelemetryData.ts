@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { collection, query, orderBy, doc, writeBatch, where, DocumentReference, Query } from 'firebase/firestore'
+import { collection, query, orderBy, doc, writeBatch, where, limit, DocumentReference, Query } from 'firebase/firestore'
 import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedUpdateDoc } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
 import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
@@ -86,6 +86,8 @@ export interface SessionDocument {
     summary: SessionSummary
     rawChunkCount: number
     rawSizeBytes: number
+    source?: 'cloud' | 'local'
+    syncState?: 'synced' | 'pending_sync' | 'local_only' | 'sync_failed'
 }
 
 export interface FullSession {
@@ -254,6 +256,7 @@ const globalIsLoading = ref(false)
 const globalError = ref<string | null>(null)
 const globalLastUserId = ref<string | null>(null)  // Track which user's data is loaded
 const globalPrefetchComplete = ref(false)  // Track if batch prefetch has completed
+const FIREBASE_SESSIONS_FALLBACK_LIMIT = 200
 
 // === SESSIONSTORAGE PERSISTENCE ===
 // Keys for sessionStorage cache (survives page refresh but not browser close)
@@ -323,15 +326,18 @@ export function useTelemetryData() {
 
 
     // Load sessions from LOCAL files (Electron only)
-    async function loadFromLocalFiles(): Promise<SessionDocument[]> {
+    // Uses upload registry to classify sync state without extra Firebase reads.
+    async function loadFromLocalFiles(ownerId?: string): Promise<SessionDocument[]> {
         if (!isElectron.value) return []
 
         const electronAPI = (window as any).electronAPI
         const files = await electronAPI.getTelemetryFiles()
+        const registry = (await electronAPI.getRegistry?.()) || {}
 
         if (!files || files.length === 0) return []
 
-        const uid = currentUser.value?.uid
+        const uid = ownerId || currentUser.value?.uid
+        const isOnline = typeof window === 'undefined' ? true : navigator.onLine
         const localSessions: SessionDocument[] = []
 
         for (const file of files) {
@@ -344,16 +350,24 @@ export function useTelemetryData() {
 
                 const { meta, summary } = extractMetadata(rawObj)
                 const sessionId = generateSessionId(meta.date_start, meta.track)
+                const reg = registry[file.name]
+                const isSynced = !!(
+                    reg
+                    && reg.uploadedBy === uid
+                    && reg.sessionId === sessionId
+                )
 
                 localSessions.push({
                     sessionId,
-                    fileHash: '', // Not needed for display
+                    fileHash: '',
                     fileName: file.name,
                     uploadedAt: null,
                     meta,
                     summary,
                     rawChunkCount: 0,
-                    rawSizeBytes: 0
+                    rawSizeBytes: 0,
+                    source: 'local',
+                    syncState: isSynced ? 'synced' : (isOnline ? 'pending_sync' : 'local_only')
                 })
             } catch (e) {
                 console.warn(`[TELEMETRY] Error reading local file ${file.name}:`, e)
@@ -368,17 +382,18 @@ export function useTelemetryData() {
         return localSessions
     }
 
-    // Load sessions from Firebase
-    async function loadFromFirebase(targetUserId: string): Promise<SessionDocument[]> {
+    // Load sessions from Firebase (bounded fallback query)
+    async function loadFromFirebase(targetUserId: string, maxItems: number = FIREBASE_SESSIONS_FALLBACK_LIMIT): Promise<SessionDocument[]> {
         const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
 
         let querySnapshot
         try {
-            const q = query(sessionsRef, orderBy('uploadedAt', 'desc'))
+            const q = query(sessionsRef, orderBy('uploadedAt', 'desc'), limit(maxItems))
             querySnapshot = await getDocs(q)
         } catch (orderError) {
             console.warn('[TELEMETRY] orderBy failed, fetching without order')
-            querySnapshot = await getDocs(sessionsRef)
+            const q = query(sessionsRef, limit(maxItems))
+            querySnapshot = await getDocs(q)
         }
 
         return querySnapshot.docs.map(docSnap => {
@@ -391,14 +406,16 @@ export function useTelemetryData() {
                 meta: data.meta || {},
                 summary: data.summary || {},
                 rawChunkCount: data.rawChunkCount || 0,
-                rawSizeBytes: data.rawSizeBytes || 0
+                rawSizeBytes: data.rawSizeBytes || 0,
+                source: 'cloud',
+                syncState: 'synced'
             } as SessionDocument
         })
     }
 
-    // Load session metadata - ELECTRON-FIRST strategy
-    // In Electron + own data: use local files ONLY (0 Firebase reads)
-    // In Browser or other user's data: use Firebase
+    // Load session metadata - CLOUD-FIRST strategy
+    // Online owner: cloud + pending local outbox
+    // Offline owner: local cache/outbox only
     async function loadSessions(userId?: string, forceReload: boolean = false): Promise<SessionDocument[]> {
         const targetUserId = userId || currentUser.value?.uid
         if (!targetUserId) {
@@ -406,11 +423,9 @@ export function useTelemetryData() {
             return []
         }
 
-        // CACHE: Check if we need to reload due to user change or force reload
         const userChanged = globalLastUserId.value !== targetUserId
-
         if (!forceReload && !userChanged && sessions.value.length > 0) {
-            console.log(`%c[TELEMETRY] ⚡ Using CACHED sessions (${sessions.value.length}), skipping query`, 'color: #9C27B0')
+            console.log(`[TELEMETRY] Using cached sessions (${sessions.value.length}), skipping query`)
             return sessions.value
         }
 
@@ -420,41 +435,30 @@ export function useTelemetryData() {
 
         try {
             const isLoadingOwnData = !userId || userId === currentUser.value?.uid
+            const isOnline = typeof window === 'undefined' ? true : navigator.onLine
 
-            // === ELECTRON-FIRST: Local files are the source of truth ===
-            // When in Electron loading own data, skip Firebase entirely (saves ~254 reads!)
-            if (isElectron.value && isLoadingOwnData) {
-                try {
-                    const localSessions = await loadFromLocalFiles()
-                    
-                    if (localSessions.length > 0) {
-                        sessions.value = localSessions
-                        console.log(`%c[TELEMETRY] ⚡ ELECTRON-FIRST: ${localSessions.length} sessions from LOCAL files (0 Firebase reads!)`, 'color: #00E676; font-weight: bold')
-                        return sessions.value
-                    }
-                    
-                    // Fallback: no local files → try Firebase
-                    console.log('[TELEMETRY] No local files found, falling back to Firebase')
-                } catch (localError) {
-                    console.warn('[TELEMETRY] Local load failed, falling back to Firebase:', localError)
-                }
+            // Offline owner: local cache/outbox only.
+            if (isElectron.value && isLoadingOwnData && !isOnline) {
+                const localSessions = await loadFromLocalFiles(targetUserId)
+                sessions.value = localSessions.map((session) => ({
+                    ...session,
+                    syncState: session.syncState === 'synced' ? 'synced' : 'local_only'
+                }))
+                console.log(`[TELEMETRY] Offline mode: loaded ${sessions.value.length} local sessions`)
+                return sessions.value
             }
 
-            // === FIREBASE PATH: Browser or other user's data ===
-            // Strategy: Try sessionIndex first (1 read), fallback to full query
-            
-            // 1. Try sessionIndex from user document (written by sync)
+            let cloudSessions: SessionDocument[] = []
+
+            // sessionIndex from user document (cheap overview cache).
             try {
                 const userDocRef = doc(db, `users/${targetUserId}`)
                 const userDocSnap = await getDoc(userDocRef)
-                
                 if (userDocSnap.exists()) {
                     const userData = userDocSnap.data()
                     const sessionIndex = userData?.sessionIndex
-                    
                     if (sessionIndex?.sessionsList && sessionIndex.sessionsList.length > 0) {
-                        // Convert compact sessionsList back to SessionDocument format
-                        sessions.value = sessionIndex.sessionsList.map((entry: any) => ({
+                        cloudSessions = sessionIndex.sessionsList.map((entry: any) => ({
                             sessionId: entry.id,
                             fileHash: '',
                             fileName: '',
@@ -479,24 +483,24 @@ export function useTelemetryData() {
                                 best_race_conditions: entry.grip ? { airTemp: 0, roadTemp: 0, grip: entry.grip } : null
                             },
                             rawChunkCount: 0,
-                            rawSizeBytes: 0
+                            rawSizeBytes: 0,
+                            source: 'cloud',
+                            syncState: 'synced'
                         } as SessionDocument))
-
-                        console.log(`%c[TELEMETRY] ⚡ SESSION-INDEX: ${sessions.value.length} sessions from userDoc (1 Firebase read!)`, 'color: #00E676; font-weight: bold')
-                        return sessions.value
                     }
                 }
             } catch (indexError) {
-                console.warn('[TELEMETRY] SessionIndex read failed, falling back to full query:', indexError)
+                console.warn('[TELEMETRY] SessionIndex read failed, fallback to bounded query:', indexError)
             }
 
-            // 2. Fallback: full Firebase query (for users without sessionIndex)
-            console.log('[TELEMETRY] No sessionIndex found, using full Firebase query')
-            const firebaseSessions = await loadFromFirebase(targetUserId)
+            // Fallback query (bounded, no full-history blast).
+            if (cloudSessions.length === 0) {
+                cloudSessions = await loadFromFirebase(targetUserId, FIREBASE_SESSIONS_FALLBACK_LIMIT)
+            }
 
-            // DEDUPLICATION: Remove duplicates based on date_start + track
+            // Deduplicate logical duplicates (date_start + track).
             const sessionMap = new Map<string, SessionDocument>()
-            for (const session of firebaseSessions) {
+            for (const session of cloudSessions) {
                 const dateKey = (session.meta.date_start || '').split('.')[0]
                 const trackKey = (session.meta.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
                 const logicalKey = `${dateKey}_${trackKey}`
@@ -513,19 +517,30 @@ export function useTelemetryData() {
                 }
             }
 
-            const deduplicatedCount = firebaseSessions.length - sessionMap.size
-            if (deduplicatedCount > 0) {
-                console.log(`[TELEMETRY] ⚠️ Removed ${deduplicatedCount} duplicate sessions (same date + track)`)
+            let mergedSessions = Array.from(sessionMap.values())
+
+            // Owner + Electron + online: merge local unsynced outbox only.
+            if (isElectron.value && isLoadingOwnData) {
+                try {
+                    const localSessions = await loadFromLocalFiles(targetUserId)
+                    const cloudIds = new Set(mergedSessions.map((session) => session.sessionId))
+                    const pendingLocal = localSessions.filter((session) =>
+                        session.syncState !== 'synced' && !cloudIds.has(session.sessionId)
+                    )
+                    if (pendingLocal.length > 0) {
+                        mergedSessions = [...pendingLocal, ...mergedSessions]
+                    }
+                } catch (localMergeError) {
+                    console.warn('[TELEMETRY] Local merge failed, continuing with cloud set:', localMergeError)
+                }
             }
 
-            sessions.value = Array.from(sessionMap.values())
-
-            // Sort by date descending
-            sessions.value.sort((a, b) =>
+            mergedSessions.sort((a, b) =>
                 (b.meta.date_start || '').localeCompare(a.meta.date_start || '')
             )
 
-            console.log(`[TELEMETRY] ⚡ Loaded ${sessions.value.length} sessions from Firebase (full query)`)
+            sessions.value = mergedSessions
+            console.log(`[TELEMETRY] Loaded ${sessions.value.length} sessions (cloud-first)`)
             return sessions.value
         } catch (e: any) {
             console.error('[TELEMETRY] Error loading sessions:', e)
@@ -1843,3 +1858,4 @@ export function useTelemetryData() {
         generateShareLink
     }
 }
+

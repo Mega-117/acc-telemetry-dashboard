@@ -202,6 +202,7 @@ onMounted(() => {
 
       <!-- User Dropdown -->
       <div class="topbar__user">
+        <UiNotificationBell />
         <UiUserDropdown
           :user-name="displayName"
           @logout="emit('logout')"

@@ -4,6 +4,7 @@
 .nuxt
 .nitro
 .cache
+.tmp_edge_profile
 dist
 
 # Node dependencies

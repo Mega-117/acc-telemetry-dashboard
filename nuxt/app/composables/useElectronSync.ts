@@ -15,7 +15,7 @@ import {
 } from 'firebase/firestore'
 import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
-import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
+import { BEST_RULES_VERSION, extractMetadata, generateSessionId } from '~/utils/sessionParser'
 
 // Local wrappers auto-tagged with caller name
 const SYNC_CALLER = 'ElectronSync'
@@ -29,6 +29,8 @@ async function deleteDoc(ref: any) { return trackedDeleteDoc(ref, SYNC_CALLER) }
 
 // Constants
 const CHUNK_SIZE = 400000
+const SESSION_INDEX_MAX_ITEMS = 200
+const SYNCED_FILES_RETENTION_DAYS = 30
 
 // === LOCAL REGISTRY CACHE ===
 // Cached registry to avoid Firebase reads for already-uploaded files
@@ -60,7 +62,7 @@ interface SyncResult {
 
 export function useElectronSync() {
     const { currentUser } = useFirebaseAuth()
-    const { loadSessions } = useTelemetryData()
+    const { loadSessions, resetAllTrackBests } = useTelemetryData()
 
     const isSyncing = ref(false)
     const syncProgress = ref(0)
@@ -176,38 +178,64 @@ export function useElectronSync() {
             }
 
             const { meta, summary } = extractMetadata(rawObj)
+            const summaryWithRules = {
+                ...summary,
+                best_rules_version: BEST_RULES_VERSION
+            }
             const sessionId = generateSessionId(meta.date_start, meta.track)
             const fileHash = await calculateHash(rawText)
 
             // === REGISTRY CACHE CHECK (0 Firebase reads) ===
-            const registry = await loadRegistryCache()
-            if (canSkipViaRegistry(registry, fileName, fileHash, uid)) {
-                return { status: 'unchanged', fileName, sessionId, reason: 'registry_cache_hit' }
+            const getExistingRulesVersion = (existingDoc: any): number => {
+                return Number(existingDoc?.summary?.best_rules_version || existingDoc?.summaryRulesVersion || 0)
             }
 
-            // Registry miss — check Firebase
-            const existing = await getExistingSession(uid, sessionId)
+            let existing: any = null
+            let existingChecked = false
+            const registry = await loadRegistryCache()
+            if (canSkipViaRegistry(registry, fileName, fileHash, uid)) {
+                existing = await getExistingSession(uid, sessionId)
+                existingChecked = true
+                const existingRulesVersion = getExistingRulesVersion(existing)
+                if (existing && (existing as any).fileHash === fileHash && existingRulesVersion >= BEST_RULES_VERSION) {
+                    return { status: 'unchanged', fileName, sessionId, reason: 'registry_cache_hit' }
+                }
+            }
+
+            // Registry miss - check Firebase
+            if (!existingChecked) {
+                existing = await getExistingSession(uid, sessionId)
+            }
 
             let isUpdate = false
             let chunksNeedUpdate = true
-
+            let isRulesMigration = false
             if (existing) {
                 isUpdate = true
+                const existingRulesVersion = getExistingRulesVersion(existing)
+                const needsRulesMigration = existingRulesVersion < BEST_RULES_VERSION
                 if ((existing as any).fileHash === fileHash) {
-                    // === IDENTICAL FILE ALREADY ON FIREBASE → skip entirely (0 writes) ===
-                    console.log(`[SYNC] unchanged: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})`)
-                    return {
-                        status: 'unchanged',
-                        fileName,
-                        sessionId,
-                        reason: 'firebase_hash_match'
+                    if (!needsRulesMigration) {
+                        // === IDENTICAL FILE ALREADY ON FIREBASE -> skip entirely (0 writes) ===
+                        console.log(`[SYNC] unchanged: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})`)
+                        return {
+                            status: 'unchanged',
+                            fileName,
+                            sessionId,
+                            reason: 'firebase_hash_match'
+                        }
                     }
+
+                    // Same file hash but old summary rules -> update summary only, keep chunks as-is.
+                    chunksNeedUpdate = false
+                    isRulesMigration = true
+                    console.log(`[SYNC] summary rules migration: ${fileName} -> ${sessionId} (v${existingRulesVersion} -> v${BEST_RULES_VERSION})`)
                 } else {
                     await deleteOldChunks(uid, sessionId)
                 }
             }
 
-            const chunks = splitIntoChunks(rawText, CHUNK_SIZE)
+            const chunks = chunksNeedUpdate ? splitIntoChunks(rawText, CHUNK_SIZE) : []
 
             // === ATOMIC BATCH WRITE (1 operation instead of N) ===
             const batch = writeBatch(db)
@@ -219,10 +247,11 @@ export function useElectronSync() {
                 fileName,
                 uploadedAt: serverTimestamp(),
                 meta,
-                summary,
-                rawChunkCount: chunks.length,
-                rawSizeBytes: rawText.length,
-                rawEncoding: 'json-string',
+                summary: summaryWithRules,
+                summaryRulesVersion: BEST_RULES_VERSION,
+                rawChunkCount: chunksNeedUpdate ? chunks.length : ((existing as any)?.rawChunkCount || 0),
+                rawSizeBytes: chunksNeedUpdate ? rawText.length : ((existing as any)?.rawSizeBytes || rawText.length),
+                rawEncoding: (existing as any)?.rawEncoding || 'json-string',
                 version: ((existing as any)?.version || 0) + 1
             })
 
@@ -231,18 +260,20 @@ export function useElectronSync() {
             batch.set(uploadRef, { fileName, uploadedAt: serverTimestamp(), sessionId })
 
             // Chunks (parallel in batch, not sequential setDoc)
-            for (let idx = 0; idx < chunks.length; idx++) {
-                const chunkRef = doc(db, `users/${uid}/sessions/${sessionId}/rawChunks/${idx}`)
-                batch.set(chunkRef, { idx, chunk: chunks[idx] })
+            if (chunksNeedUpdate) {
+                for (let idx = 0; idx < chunks.length; idx++) {
+                    const chunkRef = doc(db, `users/${uid}/sessions/${sessionId}/rawChunks/${idx}`)
+                    batch.set(chunkRef, { idx, chunk: chunks[idx] })
+                }
             }
 
             // Commit all at once
             await batch.commit()
 
             // Update trackBests ONLY for new/updated sessions (not unchanged)
-            await updateTrackBests(uid, meta.track, sessionId, meta.date_start, summary, meta.car)
+            await updateTrackBests(uid, meta.track, sessionId, meta.date_start, summaryWithRules, meta.car)
 
-            // NOTE: findAndDeleteOldFormatDuplicates removed — migration completed
+            // NOTE: findAndDeleteOldFormatDuplicates removed - migration completed
 
             const status: 'created' | 'updated' = isUpdate ? 'updated' : 'created'
 
@@ -251,7 +282,8 @@ export function useElectronSync() {
             return {
                 status,
                 fileName,
-                sessionId
+                sessionId,
+                reason: isRulesMigration ? 'summary_rules_migration' : undefined
             }
 
         } catch (error: any) {
@@ -408,6 +440,7 @@ export function useElectronSync() {
             // Always save (V2 structure with version)
             await setDoc(trackBestsRef, {
                 version: TRACK_BESTS_SCHEMA_VERSION,
+                bestRulesVersion: BEST_RULES_VERSION,
                 trackId: trackIdNorm,
                 bests: newBests,
                 activity: newActivity,
@@ -417,21 +450,21 @@ export function useElectronSync() {
             })
 
             if (hasUpdates) {
-                console.log(`[SYNC] ✅ Updated trackBests V2 for ${trackIdNorm} (${category}) (bests + activity)`)
+                console.log(`[SYNC] Updated trackBests V2 for ${trackIdNorm} (${category}) (bests + activity)`)
             } else if (!alreadyCounted) {
-                console.log(`[SYNC] ✅ Updated trackBests activity for ${trackIdNorm}`)
+                console.log(`[SYNC] Updated trackBests activity for ${trackIdNorm}`)
             } else {
-                console.log(`[SYNC] ℹ️ No trackBests changes for ${trackIdNorm}`)
+                console.log(`[SYNC] No trackBests changes for ${trackIdNorm}`)
             }
 
             return hasUpdates || !alreadyCounted
         } catch (e: any) {
-            console.warn(`[SYNC] ⚠️ Error updating trackBests for ${trackIdNorm}:`, e.message)
+            console.warn(`[SYNC] Error updating trackBests for ${trackIdNorm}:`, e.message)
             return false
         }
     }
 
-    // Main sync function — accepts optional specific files for incremental sync
+    // Main sync function - accepts optional specific files for incremental sync
     async function syncTelemetryFiles(specificFiles?: TelemetryFile[]): Promise<SyncResult[]> {
         if (!isElectron.value) {
             console.log('[SYNC] Not running in Electron, skipping sync')
@@ -549,8 +582,31 @@ export function useElectronSync() {
             const unchanged = results.filter(r => r.status === 'unchanged').length
             const skipped = results.filter(r => r.status === 'skipped').length
             const errors = results.filter(r => r.status === 'error').length
+            const migrated = results.filter(r => r.reason === 'summary_rules_migration').length
 
-            console.log(`[SYNC] Complete: ${created} created, ${updated} updated, ${unchanged} unchanged, ${skipped} skipped, ${errors} errors`)
+            console.log(`[SYNC] Complete: ${created} created, ${updated} updated, ${unchanged} unchanged, ${skipped} skipped, ${errors} errors (${migrated} summary migrations)`)
+
+            // Rebuild trackBests after summary rules migrations to remove stale race bests.
+            if (migrated > 0) {
+                console.log(`[SYNC] Rebuilding trackBests after ${migrated} summary migrations...`)
+                try {
+                    await resetAllTrackBests(uid)
+                    const allSessions = await loadSessions(undefined, true)
+                    for (const session of allSessions) {
+                        await updateTrackBests(
+                            uid,
+                            session.meta.track,
+                            session.sessionId,
+                            session.meta.date_start,
+                            session.summary,
+                            session.meta.car
+                        )
+                    }
+                    console.log(`[SYNC] trackBests rebuilt from ${allSessions.length} sessions`)
+                } catch (rebuildError: any) {
+                    console.warn('[SYNC] trackBests rebuild after migration failed:', rebuildError.message)
+                }
+            }
 
             // Refresh data if something changed
             if (created > 0 || updated > 0) {
@@ -604,6 +660,7 @@ export function useElectronSync() {
                     type: number; laps: number; lapsValid: number; bestLap: number | null;
                     totalTime: number; stintCount: number;
                     bestQualyMs: number | null; bestRaceMs: number | null;
+                    bestRulesVersion: number;
                     grip?: string
                 }> = []
 
@@ -645,6 +702,8 @@ export function useElectronSync() {
                     }
 
                     // Sessions list (compact entry)
+                    const bestRulesVersion = Number(session.summary?.best_rules_version || 0)
+                    const raceRuleCompatible = bestRulesVersion >= BEST_RULES_VERSION
                     sessionsList.push({
                         id: session.sessionId,
                         date: dateStart,
@@ -657,13 +716,15 @@ export function useElectronSync() {
                         totalTime: session.summary?.totalTime || 0,
                         stintCount: session.summary?.stintCount || 0,
                         bestQualyMs: session.summary?.best_qualy_ms || null,
-                        bestRaceMs: session.summary?.best_race_ms || null,
-                        grip: session.summary?.best_race_conditions?.grip || session.summary?.best_qualy_conditions?.grip || undefined
+                        bestRaceMs: raceRuleCompatible ? (session.summary?.best_race_ms || null) : null,
+                        bestRulesVersion,
+                        grip: (raceRuleCompatible ? session.summary?.best_race_conditions?.grip : null) || session.summary?.best_qualy_conditions?.grip || undefined
                     })
                 }
 
                 // Sort sessions list by date descending
                 sessionsList.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+                const sessionsListCompact = sessionsList.slice(0, SESSION_INDEX_MAX_ITEMS)
 
                 const statsRef = doc(db, `users/${uid}`)
                 await setDoc(statsRef, {
@@ -675,7 +736,8 @@ export function useElectronSync() {
                         updatedAt: new Date().toISOString()
                     },
                     sessionIndex: {
-                        sessionsList,
+                        sessionsList: sessionsListCompact,
+                        totalSessions: allSessions.length,
                         activity7d: {
                             practice: { minutes: practiceMinutes, sessions: practiceCount },
                             qualify: { minutes: qualifyMinutes, sessions: qualifyCount },
@@ -686,9 +748,21 @@ export function useElectronSync() {
                         updatedAt: new Date().toISOString()
                     }
                 }, { merge: true })
-                console.log(`[SYNC] UserIndex updated: ${sessionsList.length} sessions, ${sessionsLast7Days} last 7d, ${Object.keys(tracksMap).length} tracks`)
+                console.log(`[SYNC] UserIndex updated: ${sessionsListCompact.length}/${allSessions.length} sessions cached, ${sessionsLast7Days} last 7d, ${Object.keys(tracksMap).length} tracks`)
             } catch (statsError: any) {
                 console.warn('[SYNC] Could not update userIndex:', statsError.message)
+            }
+
+            // Retention cleanup: keep only synced JSON files newer than retention window.
+            // Files are deleted only when they are present in registry for the current user.
+            try {
+                const electronAPI = (window as any).electronAPI
+                if (electronAPI?.cleanupSyncedFiles && uid) {
+                    const cleanup = await electronAPI.cleanupSyncedFiles(SYNCED_FILES_RETENTION_DAYS, uid)
+                    console.log(`[SYNC] Local retention cleanup: deleted=${cleanup?.deleted ?? 0}, checked=${cleanup?.checked ?? 0}`)
+                }
+            } catch (cleanupError: any) {
+                console.warn('[SYNC] Local retention cleanup failed:', cleanupError.message)
             }
 
             return results
@@ -762,7 +836,7 @@ export function useElectronSync() {
                 }
             }
 
-            console.log(`[CLEANUP] ✅ Deleted ${toDelete.length} zero-lap sessions`)
+            console.log(`[CLEANUP] Deleted ${toDelete.length} zero-lap sessions`)
 
             // Mark as done
             if (typeof window !== 'undefined') {
@@ -782,7 +856,7 @@ export function useElectronSync() {
 
         const electronAPI = (window as any).electronAPI
 
-        // TRIGGER 1 (PRIMARY): File-ready — sync only changed files
+        // TRIGGER 1 (PRIMARY): File-ready - sync only changed files
         electronAPI.onFilesChanged(async (data: { new: TelemetryFile[], modified: TelemetryFile[] }) => {
             const changedFiles = [...data.new, ...data.modified]
             if (changedFiles.length > 0) {
@@ -795,7 +869,7 @@ export function useElectronSync() {
             }
         })
 
-        // TRIGGER 2 (SAFETY NET): Window focus — check for any missed files
+        // TRIGGER 2 (SAFETY NET): Window focus - check for any missed files
         if (electronAPI.onWindowFocused) {
             electronAPI.onWindowFocused(async () => {
                 console.log('[SYNC] Window focus trigger: checking for pending files')
@@ -805,7 +879,7 @@ export function useElectronSync() {
             })
         }
 
-        // TRIGGER 3 (RECOVERY): Initial load — sync anything missed
+        // TRIGGER 3 (RECOVERY): Initial load - sync anything missed
         electronAPI.onInitialFiles(async (data: { files: TelemetryFile[], registry: any }) => {
             console.log(`[SYNC] Initial files: ${data.files.length}`)
             // Cache the registry from initial data
@@ -847,3 +921,4 @@ export function useElectronSync() {
         setupAutoSync
     }
 }
+

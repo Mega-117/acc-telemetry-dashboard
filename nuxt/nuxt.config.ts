@@ -46,6 +46,14 @@ export default defineNuxtConfig({
     '~/assets/scss/main.scss'
   ],
 
+  vite: {
+    server: {
+      watch: {
+        ignored: ['**/.tmp_edge_profile/**']
+      }
+    }
+  },
+
   nitro: {
     preset: 'static',
     output: {
@@ -54,5 +62,4 @@ export default defineNuxtConfig({
     }
   }
 })
-
 

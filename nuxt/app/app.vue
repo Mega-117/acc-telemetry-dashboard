@@ -6,6 +6,7 @@
 import { ref, computed, onMounted, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useTelemetryData } from '~/composables/useTelemetryData'
+import { useActivityFeed } from '~/composables/useActivityFeed'
 
 // === NUXT ROUTER ===
 const route = useRoute()
@@ -36,6 +37,9 @@ const {
 // === TELEMETRY DATA (for global prefetch) ===
 const { prefetchAllTrackBests, loadSessions } = useTelemetryData()
 const hasPrefetched = ref(false)
+
+// === ACTIVITY FEED ===
+const { listenToActivities, stopListening } = useActivityFeed()
 
 // === APP STATE ===
 type AppState = 'initializing' | 'auth' | 'loading' | 'dashboard' | 'profile'
@@ -81,10 +85,12 @@ watch(authLoading, (loading) => {
         authState.value = 'register-success'
       } else {
         appState.value = 'dashboard'
+        listenToActivities(currentUser.value.uid)
       }
     } else {
       // No user → show login
       appState.value = 'auth'
+      stopListening()
     }
   }
 }, { immediate: true })
@@ -110,13 +116,17 @@ watch(currentUser, (user, oldUser) => {
         appState.value = 'loading'
         setTimeout(() => {
           appState.value = 'dashboard'
+          listenToActivities(user.uid)
         }, 1000)
+      } else {
+        listenToActivities(user.uid)
       }
     }
   } else if (oldUser) {
     // User logged out
     appState.value = 'auth'
     authState.value = 'login'
+    stopListening()
   }
 })
 

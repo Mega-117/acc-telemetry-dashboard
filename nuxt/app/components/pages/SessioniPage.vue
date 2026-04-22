@@ -1,22 +1,18 @@
 <script setup lang="ts">
 // ============================================
 // SessioniPage - Sessions list with filters
-// Uses real data from Firebase via useTelemetryData
+// Uses server-side pagination + local offline fallback
 // ============================================
 
 import { ref, computed, onMounted, watch } from 'vue'
 import { 
-  useTelemetryData, 
   formatLapTime, 
   formatCarName, 
   formatTrackName,
-  formatDateFull,
   formatTime,
-  getSessionTypeLabel,
-  getSessionTypeDisplay,
-  SESSION_TYPES,
-  type SessionDocument
+  getSessionTypeLabel
 } from '~/composables/useTelemetryData'
+import { useSessionPager } from '~/composables/useSessionPager'
 
 // Emit to parent for navigation
 const emit = defineEmits<{
@@ -37,21 +33,75 @@ interface DisplaySession {
   lapsValid: number
   stints: number
   bestQualy?: string
-  bestRaceSprint?: string
-  bestRaceEndurance?: string
   bestRace?: string
+  source?: 'cloud' | 'local'
+  syncState?: 'synced' | 'pending_sync' | 'local_only' | 'sync_failed'
 }
 
-// === TELEMETRY DATA ===
-const { sessions: rawSessions, isLoading, loadSessions } = useTelemetryData()
+const ITEMS_PER_PAGE = 25
 
 // Get pilot context (will be set when coach views a pilot)
 const targetUserId = usePilotContext()
 
-// Load data on mount - use pilot context if available
+// === PAGED DATA SOURCE ===
+const {
+  sessions: rawSessions,
+  state: pagerState,
+  isOnline,
+  loadPage
+} = useSessionPager()
+
+const isLoading = computed(() => pagerState.value.loading)
+const currentPage = ref(1)
+
+const filterTypeToNumeric: Record<SessionType, number> = {
+  practice: 0,
+  qualify: 1,
+  race: 2
+}
+
+function getRangeStartIso(range: 'today' | '7d' | '30d' | 'all'): string | null {
+  if (range === 'all') return null
+  const now = new Date()
+  const start = new Date(now)
+  if (range === 'today') {
+    start.setHours(0, 0, 0, 0)
+    return start.toISOString()
+  }
+  const days = range === '7d' ? 7 : 30
+  start.setDate(now.getDate() - days)
+  start.setHours(0, 0, 0, 0)
+  return start.toISOString()
+}
+
+function buildServerFilters(): SessionPagerFilters {
+  return {
+    sessionTypes: filterType.value === 'all' ? [] : [filterTypeToNumeric[filterType.value]],
+    fromDateIso: getRangeStartIso(filterTimeRange.value),
+    toDateIso: filterTimeRange.value === 'all' ? null : new Date().toISOString()
+  }
+}
+
+async function reloadFirstPage() {
+  await loadPage(targetUserId.value || undefined, {
+    reset: true,
+    page: 1,
+    pageSize: ITEMS_PER_PAGE,
+    filters: buildServerFilters()
+  })
+  currentPage.value = pagerState.value.currentPage
+}
+
 onMounted(async () => {
-  await loadSessions(targetUserId.value || undefined)
+  await reloadFirstPage()
 })
+
+watch(
+  () => targetUserId.value,
+  async () => {
+    await reloadFirstPage()
+  }
+)
 
 // Transform Firebase sessions to display format
 const sessions = computed<DisplaySession[]>(() => {
@@ -68,21 +118,16 @@ const sessions = computed<DisplaySession[]>(() => {
       car: formatCarName(s.meta.car),
       laps: s.summary.laps || 0,
       lapsValid: s.summary.lapsValid || 0,
-      stints: s.summary.stintCount || 1,
+      stints: s.summary.stintCount ?? 0,
       // Use stint-based best times (fuel-band classified)
       bestQualy: s.summary.best_qualy_ms 
         ? formatLapTime(s.summary.best_qualy_ms) 
         : undefined,
-      bestRaceSprint: s.summary.best_race_sprint_ms 
-        ? formatLapTime(s.summary.best_race_sprint_ms) 
-        : undefined,
-      bestRaceEndurance: s.summary.best_race_endurance_ms 
-        ? formatLapTime(s.summary.best_race_endurance_ms) 
-        : undefined,
-      // Backward compat: if no sprint/endurance, fallback to old best_race_ms
       bestRace: s.summary.best_race_ms 
         ? formatLapTime(s.summary.best_race_ms) 
-        : undefined
+        : undefined,
+      source: s.source as 'cloud' | 'local' | undefined,
+      syncState: s.syncState as 'synced' | 'pending_sync' | 'local_only' | 'sync_failed' | undefined
     }
   })
 })
@@ -92,7 +137,14 @@ const filterType = ref<'all' | SessionType>('all')
 const filterTrack = ref('all')
 const filterCar = ref('all')
 const filterTimeRange = ref<'today' | '7d' | '30d' | 'all'>('all')
-const filterHideEmpty = ref(false) // Hide sessions with 0 valid laps (off by default)
+const filterHideEmpty = ref(true) // Hide sessions with 0 total laps (on by default)
+
+watch(
+  [filterType, filterTimeRange],
+  async () => {
+    await reloadFirstPage()
+  }
+)
 
 // === VIEW MODE ===
 type ViewMode = 'list' | 'card'
@@ -105,8 +157,8 @@ const cars = computed(() => [...new Set(sessions.value.map(s => s.car))].sort())
 // Filtered sessions
 const filteredSessions = computed(() => {
   return sessions.value.filter(session => {
-    // Hide empty sessions (0 valid laps)
-    if (filterHideEmpty.value && session.lapsValid === 0) return false
+    // Hide empty sessions (0 total laps)
+    if (filterHideEmpty.value && session.laps === 0) return false
     
     // Type filter
     if (filterType.value !== 'all' && session.type !== filterType.value) return false
@@ -132,10 +184,33 @@ const filteredSessions = computed(() => {
   })
 })
 
-// Group filtered sessions by date
-const sessionsByDay = computed(() => {
+// === PAGINATION ===
+const hasOnlyClientFilters = computed(() =>
+  filterTrack.value !== 'all' || filterCar.value !== 'all' || filterHideEmpty.value
+)
+
+// Total filtered sessions count
+const totalFilteredSessions = computed(() => {
+  if (hasOnlyClientFilters.value) {
+    return filteredSessions.value.length
+  }
+  if (pagerState.value.totalItems !== null) {
+    return pagerState.value.totalItems
+  }
+  return filteredSessions.value.length
+})
+
+// Total pages
+const totalPages = computed(() => {
+  if (pagerState.value.totalItems !== null) {
+    return Math.max(1, Math.ceil(pagerState.value.totalItems / ITEMS_PER_PAGE))
+  }
+  return Math.max(1, pagerState.value.currentPage + (pagerState.value.hasNext ? 1 : 0))
+})
+
+// Group sessions by day (server page already loaded)
+const paginatedSessionsByDay = computed(() => {
   const groups: Record<string, DisplaySession[]> = {}
-  
   for (const session of filteredSessions.value) {
     if (!groups[session.date]) {
       groups[session.date] = []
@@ -148,65 +223,18 @@ const sessionsByDay = computed(() => {
     .map(([date, sessions]) => ({ date, sessions }))
 })
 
-// === PAGINATION ===
-const currentPage = ref(1)
-const itemsPerPage = 20
-
-// Total filtered sessions count
-const totalFilteredSessions = computed(() => filteredSessions.value.length)
-
-// Total pages
-const totalPages = computed(() => Math.max(1, Math.ceil(totalFilteredSessions.value / itemsPerPage)))
-
-// Paginated sessions (flat list first, then group by day)
-const paginatedSessionsByDay = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage
-  const end = start + itemsPerPage
-  const paginatedList = filteredSessions.value.slice(start, end)
-  
-  // Group paginated sessions by day
-  const groups: Record<string, DisplaySession[]> = {}
-  for (const session of paginatedList) {
-    if (!groups[session.date]) {
-      groups[session.date] = []
-    }
-    groups[session.date]!.push(session)
-  }
-  
-  return Object.entries(groups)
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([date, sessions]) => ({ date, sessions }))
-})
-
-// Reset page when filters change
-function resetPage() {
-  currentPage.value = 1
-}
-
-// Watch filters and reset page
-watch([filterType, filterTrack, filterCar, filterTimeRange], resetPage)
-
-// Pagination navigation
-function goToPage(page: number) {
-  if (page >= 1 && page <= totalPages.value) {
-    currentPage.value = page
-  }
-}
-
-function prevPage() {
-  if (currentPage.value > 1) currentPage.value--
-}
-
-function nextPage() {
-  if (currentPage.value < totalPages.value) currentPage.value++
-}
-
 // Smooth page change animation
 const sessionsRef = ref<HTMLElement | null>(null)
 const isChangingPage = ref(false)
 
-function onPageChange() {
+async function onPageChange(page: number) {
   isChangingPage.value = true
+  await loadPage(targetUserId.value || undefined, {
+    page,
+    pageSize: ITEMS_PER_PAGE,
+    filters: buildServerFilters()
+  })
+  currentPage.value = pagerState.value.currentPage
 }
 
 // Format date for header
@@ -235,6 +263,10 @@ function goToSession(id: string) {
 <template>
   <LayoutPageContainer>
     <h1 class="page-title">SESSIONI</h1>
+
+    <div v-if="!isOnline" class="offline-banner">
+      Modalità offline: visualizzo dati locali. La sincronizzazione riprenderà quando torni online.
+    </div>
     
     <!-- FILTERS -->
     <div class="filters">
@@ -397,26 +429,13 @@ function goToSession(id: string) {
                 </span>
               </div>
               
-              <!-- RS Badge (Race Sprint) -->
+              <!-- R Badge (Race) -->
               <div class="time-slot">
-                <span v-if="session.bestRaceSprint" class="time-badge time-badge--race-sprint">
-                  RS {{ session.bestRaceSprint }}
-                </span>
-                <span v-else-if="session.bestRace && !session.bestRaceEndurance" class="time-badge time-badge--race">
+                <span v-if="session.bestRace" class="time-badge time-badge--race">
                   R {{ session.bestRace }}
                 </span>
-                <span v-else class="time-badge time-badge--race-sprint time-badge--empty">
-                  RS —
-                </span>
-              </div>
-              
-              <!-- RE Badge (Race Endurance) -->
-              <div class="time-slot">
-                <span v-if="session.bestRaceEndurance" class="time-badge time-badge--race-endurance">
-                  RE {{ session.bestRaceEndurance }}
-                </span>
-                <span v-else class="time-badge time-badge--race-endurance time-badge--empty">
-                  RE —
+                <span v-else class="time-badge time-badge--race time-badge--empty">
+                  R —
                 </span>
               </div>
               
@@ -482,23 +501,11 @@ function goToSession(id: string) {
             </div>
             
             <div class="card-time-slot">
-              <span v-if="session.bestRaceSprint" class="time-badge time-badge--race-sprint">
-                RS {{ session.bestRaceSprint }}
-              </span>
-              <span v-else-if="session.bestRace && !session.bestRaceEndurance" class="time-badge time-badge--race">
+              <span v-if="session.bestRace" class="time-badge time-badge--race">
                 R {{ session.bestRace }}
               </span>
-              <span v-else class="time-badge time-badge--race-sprint time-badge--empty">
-                RS —
-              </span>
-            </div>
-            
-            <div class="card-time-slot">
-              <span v-if="session.bestRaceEndurance" class="time-badge time-badge--race-endurance">
-                RE {{ session.bestRaceEndurance }}
-              </span>
-              <span v-else class="time-badge time-badge--race-endurance time-badge--empty">
-                RE —
+              <span v-else class="time-badge time-badge--race time-badge--empty">
+                R —
               </span>
             </div>
             
@@ -535,6 +542,17 @@ function goToSession(id: string) {
   color: #fff;
   margin-bottom: 20px;
   letter-spacing: 1px;
+}
+
+.offline-banner {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 193, 7, 0.12);
+  border: 1px solid rgba(255, 193, 7, 0.35);
+  color: #ffd54f;
+  font-size: 13px;
+  font-weight: 500;
 }
 
 // === FILTERS ===

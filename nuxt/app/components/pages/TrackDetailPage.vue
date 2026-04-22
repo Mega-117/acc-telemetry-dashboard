@@ -29,6 +29,7 @@ import {
   CAR_CATEGORIES,
   type CarCategory
 } from '~/composables/useTelemetryData'
+import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { runTrackValidation } from '~/composables/useDebugValidator'
 
 // Register Chart.js components
@@ -340,32 +341,24 @@ const recentSessions = computed<Session[]>(() => {
     const sessionType = getSessionTypeLabel(s.meta.session_type) as SessionType
     const dateObj = new Date(s.meta.date_start)
     const summary = s.summary || {}
+    const raceRuleCompatible = Number((summary as any)?.best_rules_version || 0) >= BEST_RULES_VERSION
     
-    // Determine Q/R times: use specific fields if available, otherwise use bestLap based on session_type
-    // session_type: 0=Race, 1=Qualify, 2=Practice (has both Q and R stints)
+    // Determine Q/R times from explicit summary fields.
+    // Legacy fallback from bestLap is allowed only for qualy-only sessions.
     let bestQualy: string | undefined
     let bestRace: string | undefined
     
     if (summary.best_qualy_ms) {
       bestQualy = formatLapTime(summary.best_qualy_ms)
     }
-    if (summary.best_race_ms) {
+    if (raceRuleCompatible && summary.best_race_ms) {
       bestRace = formatLapTime(summary.best_race_ms)
     }
     
-    // Fallback: use bestLap based on session type
-    if (!bestQualy && !bestRace && summary.bestLap) {
+    // Fallback: use bestLap only for legacy qualy-only sessions.
+    if (!bestQualy && summary.bestLap && s.meta.session_type === 1) {
       const lapTime = formatLapTime(summary.bestLap)
-      if (s.meta.session_type === 1) {
-        // Qualify session - assign to Q
-        bestQualy = lapTime
-      } else if (s.meta.session_type === 0) {
-        // Race session - assign to R
-        bestRace = lapTime
-      } else {
-        // Practice (2) - could have both, default to R for best lap
-        bestRace = lapTime
-      }
+      bestQualy = lapTime
     }
     
     return {
@@ -461,6 +454,7 @@ const historicalTimes = computed<HistoricalTime[]>(() => {
   
   return sorted.map(s => {
     const summary = s.summary as any
+    const raceRuleCompatible = Number(summary?.best_rules_version || 0) >= BEST_RULES_VERSION
     // Format date manually to avoid Invalid Date issues
     const dateStr = s.meta.date_start?.split('T')[0] || ''
     const [year, month, day] = dateStr.split('-')
@@ -469,21 +463,11 @@ const historicalTimes = computed<HistoricalTime[]>(() => {
     
     // Use same logic as recentSessions for consistency
     let qualyTime: number | null = summary?.best_qualy_ms || null
-    let raceTime: number | null = summary?.best_race_ms || null
+    let raceTime: number | null = raceRuleCompatible ? (summary?.best_race_ms || null) : null
     
-    // Fallback: use bestLap based on session type (same as recentSessions)
-    if (!qualyTime && !raceTime && summary?.bestLap) {
-      const sessionType = s.meta.session_type
-      if (sessionType === 1) {
-        // Qualify session - assign to Q
-        qualyTime = summary.bestLap
-      } else if (sessionType === 0) {
-        // Race session - assign to R
-        raceTime = summary.bestLap
-      } else {
-        // Practice (2) - default to R for best lap
-        raceTime = summary.bestLap
-      }
+    // Fallback: use bestLap only for legacy qualy-only sessions
+    if (!qualyTime && summary?.bestLap && s.meta.session_type === 1) {
+      qualyTime = summary.bestLap
     }
     
     return {
