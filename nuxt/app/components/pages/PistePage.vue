@@ -1,187 +1,37 @@
 <script setup lang="ts">
 // ============================================
 // PistePage - Tracks overview with Card/List
-// Uses Firebase data for session stats
+// Projection-first via telemetry gateway
 // ============================================
 
-import { ref, computed, onMounted, watch } from 'vue'
-import { 
-  useTelemetryData, 
-  formatLapTime
-} from '~/composables/useTelemetryData'
+import { ref, watch } from 'vue'
+import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
+import type { TrackOverviewProjectionItem } from '~/types/trackProjections'
 
-// Composable for public path (GitHub Pages compatibility)
 const { getPublicPath } = usePublicPath()
 
-// Types
-interface TrackDisplay {
-  id: string
-  name: string
-  country: string
-  length: string
-  image?: string
-  sessions: number
-  lastSession?: string       // Display format: "2026-01-19"
-  lastSessionFull?: string   // Full timestamp for sorting
-  bestQualy?: string
-  bestRace?: string
-}
+type TrackDisplay = TrackOverviewProjectionItem
 
-// Emit to parent for navigation
 const emit = defineEmits<{
   'go-to-track': [trackId: string]
 }>()
 
-// === TELEMETRY DATA ===
-const { sessions, trackStats, isLoading, loadSessions, getTrackBests, isPrefetchComplete } = useTelemetryData()
-
-// Get pilot context (will be set when coach views a pilot)
+const telemetryGateway = useTelemetryGateway()
+const { isLoading } = telemetryGateway
 const targetUserId = usePilotContext()
+const sortedTracks = ref<TrackDisplay[]>([])
 
-// Store trackBests for each track (same source as TrackDetailPage)
-const trackBestsMap = ref<Record<string, { bestQualy: number | null, bestRace: number | null }>>({})
-
-// Load data on mount - use pilot context if available
-onMounted(async () => {
-  await loadSessions(targetUserId.value || undefined)
-})
-
-// Load trackBests for each track when trackStats updates AND prefetch is complete
-// This ensures all calls are CACHE HITS (0 Firebase reads)
-watch([trackStats, isPrefetchComplete], async ([stats, prefetchDone]) => {
-  // Wait for prefetch to complete
-  if (!prefetchDone) {
-    console.log('[PISTE] Waiting for prefetch to complete...')
-    return
-  }
-  
-  if (stats.length > 0) {
-    for (const stat of stats) {
-      const trackId = stat.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
-      try {
-        // Guaranteed cache hit after prefetchAllTrackBests() completed
-        const bests = await getTrackBests(trackId, 'GT3', targetUserId.value || undefined)
-        const optimumBests = bests?.['Optimum']
-        trackBestsMap.value[trackId] = {
-          bestQualy: optimumBests?.bestQualy || null,
-          bestRace: optimumBests?.bestRace || null
-        }
-      } catch (e) {
-        console.warn(`[PISTE] Failed to load trackBests for ${trackId}:`, e)
-      }
-    }
-    console.log('[PISTE] trackBests loaded (all cache hits):', Object.keys(trackBestsMap.value).length, 'tracks')
-  }
-}, { immediate: true })
-
-// === VIEW MODE ===
 type ViewMode = 'card' | 'list'
 const viewMode = ref<ViewMode>('card')
 
-// === STATIC TRACK METADATA (all ACC tracks) ===
-const trackMetadata: Record<string, { name: string; country: string; length: string; image: string }> = {
-  'monza': { name: 'Monza', country: 'IT', length: '5.793 km', image: '/tracks/track_monza.png' },
-  'donington': { name: 'Donington Park', country: 'GB', length: '4.020 km', image: '/tracks/track_donington.png' },
-  'spa': { name: 'Spa-Francorchamps', country: 'BE', length: '7.004 km', image: '/tracks/track_spa.png' },
-  'paul_ricard': { name: 'Paul Ricard', country: 'FR', length: '5.842 km', image: '/tracks/track_paul_ricard.png' },
-  'valencia': { name: 'Valencia', country: 'ES', length: '4.005 km', image: '/tracks/track_valencia.png' },
-  'barcelona': { name: 'Barcelona-Catalunya', country: 'ES', length: '4.655 km', image: '/tracks/track_barcelona.png' },
-  'brands_hatch': { name: 'Brands Hatch', country: 'GB', length: '3.908 km', image: '/tracks/track_brands_hatch.png' },
-  'hungaroring': { name: 'Hungaroring', country: 'HU', length: '4.381 km', image: '/tracks/track_hungaroring.png' },
-  'imola': { name: 'Imola', country: 'IT', length: '4.909 km', image: '/tracks/track_imola.png' },
-  'kyalami': { name: 'Kyalami', country: 'ZA', length: '4.522 km', image: '/tracks/track_kyalami.png' },
-  'laguna_seca': { name: 'Laguna Seca', country: 'US', length: '3.602 km', image: '/tracks/track_laguna_seca.png' },
-  'misano': { name: 'Misano', country: 'IT', length: '4.226 km', image: '/tracks/track_misano.png' },
-  'mount_panorama': { name: 'Mount Panorama', country: 'AU', length: '6.213 km', image: '/tracks/track_mount_panorama.png' },
-  'nurburgring': { name: 'Nürburgring', country: 'DE', length: '5.148 km', image: '/tracks/track_nurburgring.png' },
-  'oulton_park': { name: 'Oulton Park', country: 'GB', length: '4.307 km', image: '/tracks/track_oulton_park.png' },
-  'silverstone': { name: 'Silverstone', country: 'GB', length: '5.891 km', image: '/tracks/track_silverstone.png' },
-  'snetterton': { name: 'Snetterton', country: 'GB', length: '4.779 km', image: '/tracks/track_snetterton.png' },
-  'suzuka': { name: 'Suzuka', country: 'JP', length: '5.807 km', image: '/tracks/track_suzuka.png' },
-  'watkins_glen': { name: 'Watkins Glen', country: 'US', length: '5.472 km', image: '/tracks/track_watkins_glen.png' },
-  'zandvoort': { name: 'Zandvoort', country: 'NL', length: '4.259 km', image: '/tracks/track_zandvoort.png' },
-  'zolder': { name: 'Zolder', country: 'BE', length: '4.011 km', image: '/tracks/track_zolder.png' },
-  'cota': { name: 'COTA', country: 'US', length: '5.513 km', image: '/tracks/track_cota.png' },
-  'indianapolis': { name: 'Indianapolis', country: 'US', length: '4.192 km', image: '/tracks/track_indianapolis.png' },
-  'red_bull_ring': { name: 'Red Bull Ring', country: 'AT', length: '4.318 km', image: '/tracks/track_red_bull_ring.png' },
-}
+watch(
+  () => targetUserId.value,
+  async () => {
+    sortedTracks.value = await telemetryGateway.getTracksOverviewProjection(targetUserId.value || undefined)
+  },
+  { immediate: true }
+)
 
-// Merge static metadata with real session data
-const tracks = computed<TrackDisplay[]>(() => {
-  // Start with all known tracks
-  const result: TrackDisplay[] = Object.entries(trackMetadata).map(([id, meta]) => ({
-    id,
-    ...meta,
-    sessions: 0,
-    lastSession: undefined,
-    lastSessionFull: undefined,
-    bestQualy: undefined,
-    bestRace: undefined
-  }))
-
-  // Merge with real session stats
-  for (const stat of trackStats.value) {
-    const trackId = stat.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
-    const existing = result.find(t => t.id === trackId || t.name.toLowerCase() === stat.track.toLowerCase())
-    
-    // Use trackBestsMap (same source as TrackDetailPage: getTrackBests)
-    const trackBests = trackBestsMap.value[trackId]
-    const bestQualyOptimum = trackBests?.bestQualy
-    const bestRaceOptimum = trackBests?.bestRace
-    
-    // DEBUG: Log Valencia and Suzuka data
-    if (stat.track.toLowerCase().includes('valencia') || stat.track.toLowerCase().includes('suzuka')) {
-      console.log(`[PISTE DEBUG] ${stat.track}:`, {
-        trackBestsSource: 'trackBestsMap (getTrackBests)',
-        optimumBestQualy: bestQualyOptimum,
-        optimumBestRace: bestRaceOptimum,
-        oldBestByGrip: stat.bestByGrip?.['Optimum']
-      })
-    }
-    
-    if (existing) {
-      existing.sessions = stat.sessions
-      existing.lastSession = stat.lastSession?.split('T')[0]       // Display format
-      existing.lastSessionFull = stat.lastSession                   // Full timestamp for sorting
-      existing.bestQualy = bestQualyOptimum ? formatLapTime(bestQualyOptimum) : undefined
-      existing.bestRace = bestRaceOptimum ? formatLapTime(bestRaceOptimum) : undefined
-    } else {
-      // Track not in metadata (new track?), add it
-      result.push({
-        id: trackId,
-        name: stat.track,
-        country: '??',
-        length: '?.??? km',
-        image: undefined,
-        sessions: stat.sessions,
-        lastSession: stat.lastSession?.split('T')[0],
-        lastSessionFull: stat.lastSession,
-        bestQualy: bestQualyOptimum ? formatLapTime(bestQualyOptimum) : undefined,
-        bestRace: bestRaceOptimum ? formatLapTime(bestRaceOptimum) : undefined
-      })
-    }
-  }
-
-  return result
-})
-
-// Sorted tracks: with sessions first (by lastSession desc), then without sessions
-const sortedTracks = computed(() => {
-  return [...tracks.value].sort((a, b) => {
-    // Both have sessions: sort by full timestamp (most recent first)
-    if (a.sessions > 0 && b.sessions > 0) {
-      // Use full timestamp for accurate sorting (includes time, not just date)
-      return (b.lastSessionFull || '').localeCompare(a.lastSessionFull || '')
-    }
-    // Only one has sessions: that one goes first
-    if (a.sessions > 0 && b.sessions === 0) return -1
-    if (a.sessions === 0 && b.sessions > 0) return 1
-    // Both have no sessions: sort alphabetically
-    return a.name.localeCompare(b.name)
-  })
-})
-
-// Format date for display
 function formatDateDisplay(dateStr?: string): string {
   if (!dateStr) return 'Nessuna sessione'
   const date = new Date(dateStr)
@@ -192,12 +42,10 @@ function formatDateDisplay(dateStr?: string): string {
   return `${day} ${month} ${year}`
 }
 
-// Navigate to track detail
 function goToTrack(id: string) {
   emit('go-to-track', id)
 }
 </script>
-
 <template>
   <LayoutPageContainer>
     <h1 class="page-title">PISTE</h1>

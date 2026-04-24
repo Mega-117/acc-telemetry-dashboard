@@ -5,7 +5,7 @@
 
 import { ref, computed, onMounted, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { useTelemetryData } from '~/composables/useTelemetryData'
+import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useActivityFeed } from '~/composables/useActivityFeed'
 
 // === NUXT ROUTER ===
@@ -34,8 +34,9 @@ const {
   logout: firebaseLogout
 } = useFirebaseAuth()
 
-// === TELEMETRY DATA (for global prefetch) ===
-const { prefetchAllTrackBests, loadSessions } = useTelemetryData()
+// === TELEMETRY DATA GATEWAY (single source of truth) ===
+const telemetryGateway = useTelemetryGateway()
+const { prefetchAllTrackBests } = telemetryGateway
 const hasPrefetched = ref(false)
 
 // === ACTIVITY FEED ===
@@ -61,8 +62,8 @@ watch(appState, async (newState) => {
     hasPrefetched.value = true
     console.log('[APP] 🚀 Starting global prefetch...')
     
-    // First load sessions (if not already loaded)
-    await loadSessions()
+    // First load a fresh overview snapshot via gateway
+    await telemetryGateway.getOverviewSnapshot()
     
     // Then prefetch all trackBests in batch (1 query instead of N)
     const count = await prefetchAllTrackBests()

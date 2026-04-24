@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { 
-  useTelemetryData, 
-  formatTrackName, 
+import { computed, ref, watch } from 'vue'
+import {
+  formatTrackName,
   formatLapTime,
   formatTime,
   formatCarName,
   getSessionTypeLabel
 } from '~/composables/useTelemetryData'
+import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 
 const props = defineProps<{
   isOpen: boolean
@@ -20,7 +20,8 @@ const emit = defineEmits<{
   (e: 'select', sessionId: string, userId?: string, nickname?: string): void
 }>()
 
-const { sessions, fetchSessionFull } = useTelemetryData()
+const telemetryGateway = useTelemetryGateway()
+const { sessions } = telemetryGateway
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 const { getUserProfile } = useFirebaseAuth()
 
@@ -50,7 +51,9 @@ async function loadSharedLink() {
   
   try {
     // 1. Fetch session from external user
-    const data = await fetchSessionFull(parsed.sessionId, parsed.userId)
+    const data = await telemetryGateway.getSessionDetail(parsed.sessionId, parsed.userId, {
+      warmupSessions: false
+    })
     
     if (!data) {
       linkError.value = 'Sessione non trovata o non più condivisa'
@@ -102,17 +105,20 @@ const filteredSessions = computed(() => {
       const sessionTrack = s.meta.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
       return sessionTrack.includes(trackNorm) || trackNorm.includes(sessionTrack)
     })
-    .map(s => ({
-      id: s.sessionId,
-      date: formatDateShort(s.meta.date_start),
-      time: formatTime(s.meta.date_start),
-      type: getSessionTypeLabel(s.meta.session_type),
-      car: formatCarName(s.meta.car),
-      laps: s.summary.laps || 0,
-      stints: s.summary.stintCount || 1,
-      bestQualy: s.summary.best_qualy_ms ? formatLapTime(s.summary.best_qualy_ms) : null,
-      bestRace: s.summary.best_race_ms ? formatLapTime(s.summary.best_race_ms) : null
-    }))
+    .map(s => {
+      const sessionRaceTime = s.summary.best_session_race_ms || s.summary.best_race_ms || null
+      return {
+        id: s.sessionId,
+        date: formatDateShort(s.meta.date_start),
+        time: formatTime(s.meta.date_start),
+        type: getSessionTypeLabel(s.meta.session_type),
+        car: formatCarName(s.meta.car),
+        laps: s.summary.laps || 0,
+        stints: s.summary.stintCount ?? 0,
+        bestQualy: s.summary.best_qualy_ms ? formatLapTime(s.summary.best_qualy_ms) : null,
+        bestRace: sessionRaceTime ? formatLapTime(sessionRaceTime) : null
+      }
+    })
 })
 
 function formatDateShort(dateStr: string): string {
@@ -136,6 +142,17 @@ function selectSession(sessionId: string) {
 function closeModal() {
   emit('close')
 }
+
+watch(
+  () => props.isOpen,
+  async (isOpen) => {
+    if (typeof window === 'undefined') return
+    if (isOpen) {
+      await telemetryGateway.getOverviewSnapshot()
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>

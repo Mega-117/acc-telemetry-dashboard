@@ -2,7 +2,24 @@ import { ref, computed } from 'vue'
 import { collection, query, orderBy, doc, writeBatch, where, limit, DocumentReference, Query } from 'firebase/firestore'
 import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedUpdateDoc } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
-import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
+import {
+    loadLocalTelemetrySessions,
+    findLocalFullSessionById
+} from '~/repositories/telemetryLocalRepository'
+import {
+    loadCloudSessionsBounded,
+    loadCloudSessionIndexList,
+    fetchCloudFullSession
+} from '~/repositories/telemetryCloudRepository'
+import {
+    dedupeCloudSessions as dedupeCloudSessionsService,
+    mergeSessionsDeterministic as mergeSessionsDeterministicService
+} from '~/services/telemetry/telemetryMergeService'
+import {
+    buildActivityWindowFromSessions,
+    getTrackActivityTotalsFromSessions,
+    getHistoricalBestTimesFromSessions
+} from '~/services/telemetry/activityProjectionService'
 
 // Local wrappers auto-tagged with caller name
 const CALLER = 'TelemetryData'
@@ -60,11 +77,16 @@ export interface SessionSummary {
     stintCount: number
     // Optional grip-specific best times (can be null or undefined)
     best_qualy_ms?: number | null
-    best_race_ms?: number | null         // backward compat: best of sprint/endurance
-    best_avg_race_ms?: number | null     // backward compat: best of sprint/endurance avg
+    // Session-centric race best (includes 20-40L non-historical race stints)
+    best_session_race_ms?: number | null
+    // Historical race best only (excludes 20-40L race_non_historical)
+    best_race_ms?: number | null
+    best_avg_race_ms?: number | null
     best_qualy_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
+    best_session_race_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
     best_race_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
     best_avg_race_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
+    best_rules_version?: number
     // Fuel-band specific (new)
     best_race_sprint_ms?: number | null
     best_race_sprint_conditions?: { airTemp: number; roadTemp: number; grip: string } | null
@@ -87,7 +109,15 @@ export interface SessionDocument {
     rawChunkCount: number
     rawSizeBytes: number
     source?: 'cloud' | 'local'
+    summarySource?: 'canonical' | 'legacy_fallback' | 'missing_canonical'
     syncState?: 'synced' | 'pending_sync' | 'local_only' | 'sync_failed'
+}
+
+export type LoadSessionsSourceMode = 'auto' | 'cloud_fresh' | 'index_cache' | 'local_first'
+
+export interface LoadSessionsOptions {
+    sourceMode?: LoadSessionsSourceMode
+    context?: string
 }
 
 export interface FullSession {
@@ -367,106 +397,161 @@ export function useTelemetryData() {
     })
 
 
+    function normalizeTrackKey(track: string): string {
+        return (track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
+    }
+
+    function buildLogicalSessionKey(meta: { date_start?: string; track?: string }): string {
+        const dateKey = (meta?.date_start || '').split('.')[0]
+        const trackKey = normalizeTrackKey(meta?.track || '')
+        return `${dateKey}_${trackKey}`
+    }
+
+    function toEpochMs(value: any): number {
+        if (!value) return 0
+        if (typeof value?.toMillis === 'function') {
+            const millis = Number(value.toMillis())
+            return Number.isFinite(millis) ? millis : 0
+        }
+        if (typeof value === 'number') return Number.isFinite(value) ? value : 0
+        if (typeof value === 'string') {
+            const parsed = Date.parse(value)
+            return Number.isFinite(parsed) ? parsed : 0
+        }
+        return 0
+    }
+
+    function dedupeCloudSessions(cloudSessions: SessionDocument[]): SessionDocument[] {
+        const byLogical = new Map<string, SessionDocument>()
+        for (const session of cloudSessions) {
+            const key = buildLogicalSessionKey(session.meta || {}) || session.sessionId
+            const existing = byLogical.get(key)
+            if (!existing) {
+                byLogical.set(key, session)
+                continue
+            }
+            const existingMs = toEpochMs(existing.uploadedAt)
+            const incomingMs = toEpochMs(session.uploadedAt)
+            if (incomingMs >= existingMs) {
+                byLogical.set(key, session)
+            }
+        }
+        return Array.from(byLogical.values())
+    }
+
+    function mergeSessionLocalPreferred(localSession: SessionDocument, cloudSession: SessionDocument): SessionDocument {
+        return {
+            ...cloudSession,
+            ...localSession,
+            meta: {
+                ...(cloudSession.meta || {}),
+                ...(localSession.meta || {})
+            },
+            summary: {
+                ...(cloudSession.summary || {}),
+                ...(localSession.summary || {})
+            },
+            source: 'local',
+            syncState: localSession.syncState || cloudSession.syncState
+        }
+    }
+
+    function mergeSessionsDeterministic(
+        localSessions: SessionDocument[],
+        cloudSessions: SessionDocument[],
+        options: { localWins: boolean; includeSyncedLocal: boolean }
+    ): SessionDocument[] {
+        const byLogical = new Map<string, SessionDocument>()
+        const bySessionId = new Map<string, string>()
+
+        const addCloud = (session: SessionDocument) => {
+            const logicalKey = buildLogicalSessionKey(session.meta || {}) || session.sessionId
+            byLogical.set(logicalKey, session)
+            if (session.sessionId) bySessionId.set(session.sessionId, logicalKey)
+        }
+
+        const addLocal = (session: SessionDocument) => {
+            if (!options.includeSyncedLocal && session.syncState === 'synced') return
+
+            const logicalKey = buildLogicalSessionKey(session.meta || {}) || session.sessionId
+            const idKey = session.sessionId ? bySessionId.get(session.sessionId) : null
+            const targetKey = idKey || logicalKey
+            const existing = byLogical.get(targetKey)
+
+            if (!existing) {
+                byLogical.set(targetKey, session)
+                if (session.sessionId) bySessionId.set(session.sessionId, targetKey)
+                return
+            }
+
+            if (options.localWins) {
+                const merged = mergeSessionLocalPreferred(session, existing)
+                byLogical.set(targetKey, merged)
+                if (session.sessionId) bySessionId.set(session.sessionId, targetKey)
+            }
+        }
+
+        for (const cloud of cloudSessions) addCloud(cloud)
+        for (const local of localSessions) addLocal(local)
+
+        const merged = Array.from(byLogical.values())
+        merged.sort((a, b) => (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))
+        return merged
+    }
+
+    function isSessionFileCandidate(fileName: string, rawObj: any): boolean {
+        const normalized = (fileName || '').toLowerCase()
+        if (!normalized.endsWith('.json')) return false
+        if (normalized === 'live_state.json') return false
+        // Guard: only full session payloads are part of FE session lists.
+        if (!rawObj?.session_info?.date_start) return false
+        if (!rawObj?.session_info?.track) return false
+        return true
+    }
+
     // Load sessions from LOCAL files (Electron only)
     // Uses upload registry to classify sync state without extra Firebase reads.
     async function loadFromLocalFiles(ownerId?: string): Promise<SessionDocument[]> {
         if (!isElectron.value) return []
-
         const electronAPI = (window as any).electronAPI
-        const files = await electronAPI.getTelemetryFiles()
-        const registry = (await electronAPI.getRegistry?.()) || {}
-
-        if (!files || files.length === 0) return []
-
-        const uid = ownerId || currentUser.value?.uid
-        const isOnline = typeof window === 'undefined' ? true : navigator.onLine
-        const localSessions: SessionDocument[] = []
-
-        for (const file of files) {
-            try {
-                const rawObj = await electronAPI.readFile(file.path)
-                if (!rawObj) continue
-
-                // Skip files belonging to other users
-                if (rawObj.ownerId && rawObj.ownerId !== uid) continue
-
-                const { meta, summary } = extractMetadata(rawObj)
-                const sessionId = generateSessionId(meta.date_start, meta.track)
-                const reg = registry[file.name]
-                const isSynced = !!(
-                    reg
-                    && reg.uploadedBy === uid
-                    && reg.sessionId === sessionId
-                )
-
-                localSessions.push({
-                    sessionId,
-                    fileHash: '',
-                    fileName: file.name,
-                    uploadedAt: null,
-                    meta,
-                    summary,
-                    rawChunkCount: 0,
-                    rawSizeBytes: 0,
-                    source: 'local',
-                    syncState: isSynced ? 'synced' : (isOnline ? 'pending_sync' : 'local_only')
-                })
-            } catch (e) {
-                console.warn(`[TELEMETRY] Error reading local file ${file.name}:`, e)
-            }
-        }
-
-        // Sort by date descending
-        localSessions.sort((a, b) =>
-            (b.meta.date_start || '').localeCompare(a.meta.date_start || '')
-        )
-
-        return localSessions
+        return loadLocalTelemetrySessions({
+            electronAPI,
+            ownerId: ownerId || currentUser.value?.uid,
+            isOnline: typeof window === 'undefined' ? true : navigator.onLine
+        })
     }
 
     // Load sessions from Firebase (bounded fallback query)
     async function loadFromFirebase(targetUserId: string, maxItems: number = FIREBASE_SESSIONS_FALLBACK_LIMIT): Promise<SessionDocument[]> {
-        const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
-
-        let querySnapshot
-        try {
-            const q = query(sessionsRef, orderBy('uploadedAt', 'desc'), limit(maxItems))
-            querySnapshot = await getDocs(q)
-        } catch (orderError) {
-            console.warn('[TELEMETRY] orderBy failed, fetching without order')
-            const q = query(sessionsRef, limit(maxItems))
-            querySnapshot = await getDocs(q)
-        }
-
-        return querySnapshot.docs.map(docSnap => {
-            const data = docSnap.data()
-            return {
-                sessionId: docSnap.id,
-                fileHash: data.fileHash || null,
-                fileName: data.fileName || null,
-                uploadedAt: data.uploadedAt || null,
-                meta: data.meta || {},
-                summary: data.summary || {},
-                rawChunkCount: data.rawChunkCount || 0,
-                rawSizeBytes: data.rawSizeBytes || 0,
-                source: 'cloud',
-                syncState: 'synced'
-            } as SessionDocument
+        return loadCloudSessionsBounded({
+            db,
+            targetUserId,
+            maxItems,
+            getDocsFn: getDocs
         })
     }
 
-    // Load session metadata - CLOUD-FIRST strategy
-    // Online owner: cloud + pending local outbox
-    // Offline owner: local cache/outbox only
-    async function loadSessions(userId?: string, forceReload: boolean = false): Promise<SessionDocument[]> {
+    // Load session metadata with selectable source strategy.
+    // local_first: base locale (se disponibile) + integrazione cloud mancanti.
+    // cloud_fresh: forza cloud diretto.
+    // index_cache/auto: cloud cache/index + pending local outbox.
+    async function loadSessions(
+        userId?: string,
+        forceReload: boolean = false,
+        options: LoadSessionsOptions = {}
+    ): Promise<SessionDocument[]> {
         const targetUserId = userId || currentUser.value?.uid
         if (!targetUserId) {
             console.warn('[TELEMETRY] No user ID provided')
             return []
         }
 
+        const sourceMode = options.sourceMode || 'auto'
+        const context = options.context || 'default'
+
         const userChanged = globalLastUserId.value !== targetUserId
-        if (!forceReload && !userChanged && sessions.value.length > 0) {
+        const canUseInMemoryCache = sourceMode !== 'cloud_fresh'
+        if (canUseInMemoryCache && !forceReload && !userChanged && sessions.value.length > 0) {
             console.log(`[TELEMETRY] Using cached sessions (${sessions.value.length}), skipping query`)
             return sessions.value
         }
@@ -478,10 +563,23 @@ export function useTelemetryData() {
         try {
             const isLoadingOwnData = !userId || userId === currentUser.value?.uid
             const isOnline = typeof window === 'undefined' ? true : navigator.onLine
+            const shouldTrySessionIndex = sourceMode !== 'cloud_fresh'
+            let usedSessionIndex = false
+            let sourceLabel = 'cloudQuery'
+            let localSessions: SessionDocument[] = []
+
+            const shouldLoadLocal = isElectron.value && (sourceMode === 'local_first' || isLoadingOwnData)
+            if (shouldLoadLocal) {
+                try {
+                    localSessions = await loadFromLocalFiles(targetUserId)
+                } catch (localReadError) {
+                    localSessions = []
+                    console.warn('[TELEMETRY] Local preload failed:', localReadError)
+                }
+            }
 
             // Offline owner: local cache/outbox only.
             if (isElectron.value && isLoadingOwnData && !isOnline) {
-                const localSessions = await loadFromLocalFiles(targetUserId)
                 sessions.value = localSessions.map((session) => ({
                     ...session,
                     syncState: session.syncState === 'synced' ? 'synced' : 'local_only'
@@ -493,46 +591,17 @@ export function useTelemetryData() {
             let cloudSessions: SessionDocument[] = []
 
             // sessionIndex from user document (cheap overview cache).
-            try {
-                const userDocRef = doc(db, `users/${targetUserId}`)
-                const userDocSnap = await getDoc(userDocRef)
-                if (userDocSnap.exists()) {
-                    const userData = userDocSnap.data()
-                    const sessionIndex = userData?.sessionIndex
-                    if (sessionIndex?.sessionsList && sessionIndex.sessionsList.length > 0) {
-                        cloudSessions = sessionIndex.sessionsList.map((entry: any) => ({
-                            sessionId: entry.id,
-                            fileHash: '',
-                            fileName: '',
-                            uploadedAt: null,
-                            meta: {
-                                track: entry.track,
-                                car: entry.car,
-                                date_start: entry.date,
-                                date_end: null,
-                                session_type: entry.type,
-                                driver: null
-                            },
-                            summary: {
-                                laps: entry.laps,
-                                lapsValid: entry.lapsValid || 0,
-                                bestLap: entry.bestLap,
-                                avgCleanLap: null,
-                                totalTime: entry.totalTime,
-                                stintCount: entry.stintCount || 0,
-                                best_qualy_ms: entry.bestQualyMs || null,
-                                best_race_ms: entry.bestRaceMs || null,
-                                best_race_conditions: entry.grip ? { airTemp: 0, roadTemp: 0, grip: entry.grip } : null
-                            },
-                            rawChunkCount: 0,
-                            rawSizeBytes: 0,
-                            source: 'cloud',
-                            syncState: 'synced'
-                        } as SessionDocument))
-                    }
+            if (shouldTrySessionIndex) {
+                try {
+                    cloudSessions = await loadCloudSessionIndexList({
+                        db,
+                        targetUserId,
+                        getDocFn: getDoc
+                    })
+                    usedSessionIndex = cloudSessions.length > 0
+                } catch (indexError) {
+                    console.warn('[TELEMETRY] SessionIndex read failed, fallback to bounded query:', indexError)
                 }
-            } catch (indexError) {
-                console.warn('[TELEMETRY] SessionIndex read failed, fallback to bounded query:', indexError)
             }
 
             // Fallback query (bounded, no full-history blast).
@@ -540,49 +609,31 @@ export function useTelemetryData() {
                 cloudSessions = await loadFromFirebase(targetUserId, FIREBASE_SESSIONS_FALLBACK_LIMIT)
             }
 
-            // Deduplicate logical duplicates (date_start + track).
-            const sessionMap = new Map<string, SessionDocument>()
-            for (const session of cloudSessions) {
-                const dateKey = (session.meta.date_start || '').split('.')[0]
-                const trackKey = (session.meta.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
-                const logicalKey = `${dateKey}_${trackKey}`
+            const uniqueCloudSessions = dedupeCloudSessionsService(cloudSessions)
+            let mergedSessions = uniqueCloudSessions
 
-                const existing = sessionMap.get(logicalKey)
-                if (!existing) {
-                    sessionMap.set(logicalKey, session)
+            if (sourceMode === 'local_first') {
+                if (localSessions.length > 0) {
+                    mergedSessions = mergeSessionsDeterministicService(localSessions, uniqueCloudSessions, {
+                        localWins: true,
+                        includeSyncedLocal: true
+                    })
+                    sourceLabel = uniqueCloudSessions.length > 0 ? 'local_first+cloud_merge' : 'local_first'
                 } else {
-                    const existingTime = existing.uploadedAt?.toMillis?.() || 0
-                    const newTime = session.uploadedAt?.toMillis?.() || 0
-                    if (newTime > existingTime) {
-                        sessionMap.set(logicalKey, session)
-                    }
+                    sourceLabel = usedSessionIndex ? 'cloud_fallback_sessionIndex' : 'cloud_fallback_query'
                 }
+            } else if (isElectron.value && isLoadingOwnData) {
+                mergedSessions = mergeSessionsDeterministicService(localSessions, uniqueCloudSessions, {
+                    localWins: false,
+                    includeSyncedLocal: false
+                })
+                sourceLabel = usedSessionIndex ? 'sessionIndex+pendingLocal' : 'cloudQuery+pendingLocal'
+            } else {
+                sourceLabel = usedSessionIndex ? 'sessionIndex' : 'cloudQuery'
             }
-
-            let mergedSessions = Array.from(sessionMap.values())
-
-            // Owner + Electron + online: merge local unsynced outbox only.
-            if (isElectron.value && isLoadingOwnData) {
-                try {
-                    const localSessions = await loadFromLocalFiles(targetUserId)
-                    const cloudIds = new Set(mergedSessions.map((session) => session.sessionId))
-                    const pendingLocal = localSessions.filter((session) =>
-                        session.syncState !== 'synced' && !cloudIds.has(session.sessionId)
-                    )
-                    if (pendingLocal.length > 0) {
-                        mergedSessions = [...pendingLocal, ...mergedSessions]
-                    }
-                } catch (localMergeError) {
-                    console.warn('[TELEMETRY] Local merge failed, continuing with cloud set:', localMergeError)
-                }
-            }
-
-            mergedSessions.sort((a, b) =>
-                (b.meta.date_start || '').localeCompare(a.meta.date_start || '')
-            )
 
             sessions.value = mergedSessions
-            console.log(`[TELEMETRY] Loaded ${sessions.value.length} sessions (cloud-first)`)
+            console.log(`[TELEMETRY] Loaded ${sessions.value.length} sessions (mode=${sourceMode}, source=${sourceLabel}, context=${context})`)
             return sessions.value
         } catch (e: any) {
             console.error('[TELEMETRY] Error loading sessions:', e)
@@ -600,77 +651,36 @@ export function useTelemetryData() {
 
         const isLoadingOwnData = !userId || userId === currentUser.value?.uid
 
-        // OPTIMIZATION: If in Electron and loading OWN data, read from local file
         if (isElectron.value && isLoadingOwnData) {
             try {
                 const electronAPI = (window as any).electronAPI
-                const files = await electronAPI.getTelemetryFiles()
-
-                // Find matching file by sessionId pattern
-                for (const file of files) {
-                    const rawObj = await electronAPI.readFile(file.path)
-                    if (!rawObj) continue
-
-                    // Skip files belonging to other users
-                    if (rawObj.ownerId && rawObj.ownerId !== targetUserId) continue
-
-                    const sessionInfo = rawObj.session_info || {}
-                    const localSessionId = generateSessionId(
-                        sessionInfo.date_start || rawObj.date || '',
-                        sessionInfo.track || rawObj.track || ''
-                    )
-
-                    if (localSessionId === sessionId) {
-                        console.log(`[TELEMETRY] ⚡ Loaded full session from LOCAL file (0 Firebase reads)`)
-                        return rawObj as FullSession
-                    }
+                const localSession = await findLocalFullSessionById({
+                    electronAPI,
+                    sessionId,
+                    ownerId: targetUserId
+                })
+                if (localSession) {
+                    console.log(`[TELEMETRY] Loaded full session from LOCAL file (0 Firebase reads)`)
+                    return localSession
                 }
             } catch (localError) {
                 console.warn('[TELEMETRY] Local fetchSessionFull failed, falling back to Firebase:', localError)
             }
         }
 
-        // FALLBACK: Load from Firebase chunks
         try {
-            // Determine if we're loading our own data or external user's data
-            // Coach/admin access is NOT external - they have direct read permissions
             const isExternalSession = targetUserId !== currentUser.value?.uid && !isCoachAccess
-
-            // Get session document
-            const sessionRef = doc(db, `users/${targetUserId}/sessions/${sessionId}`)
-            const sessionSnap = await getDoc(sessionRef)
-
-            if (!sessionSnap.exists()) return null
-
-            const sessionData = sessionSnap.data()
-            const chunkCount = sessionData.rawChunkCount || 0
-
-            if (chunkCount === 0) return null
-
-            // Fetch and reconstruct chunks
-            // For external sessions (shared links), we MUST filter by isPublic to satisfy Firebase rules
-            // For coach/admin access, we use normal ordered query (they have read permissions)
-            // Note: We skip orderBy for external sessions to avoid requiring a composite index
-            // The in-memory sort below handles ordering correctly
-            const chunksRef = collection(db, `users/${targetUserId}/sessions/${sessionId}/rawChunks`)
-            const q = isExternalSession
-                ? query(chunksRef, where('isPublic', '==', true))
-                : query(chunksRef, orderBy('idx', 'asc'))
-            const chunksSnap = await getDocs(q)
-
-            const chunks: { idx: number; chunk: string }[] = []
-            chunksSnap.forEach(docSnap => {
-                const data = docSnap.data()
-                chunks.push({ idx: data.idx, chunk: data.chunk })
+            const raw = await fetchCloudFullSession({
+                db,
+                targetUserId,
+                sessionId,
+                isExternalSession,
+                getDocFn: getDoc,
+                getDocsFn: getDocs
             })
-
-            // Sort and concatenate
-            chunks.sort((a, b) => a.idx - b.idx)
-            const rawText = chunks.map(c => c.chunk).join('')
-
-            // Parse JSON
+            if (!raw) return null
             console.log(`[TELEMETRY] Loaded full session from Firebase chunks${isExternalSession ? ' (EXTERNAL)' : ''}`)
-            return JSON.parse(rawText) as FullSession
+            return raw
         } catch (e) {
             console.error('[TELEMETRY] Error fetching full session:', e)
             return null
@@ -1643,150 +1653,37 @@ export function useTelemetryData() {
 
     // Get activity totals for a specific track (for Track Detail page)
     function getTrackActivityTotals(trackId: string) {
-        const trackSessions = getSessionsForTrack(trackId)
-
-        let totalLaps = 0
-        let validLaps = 0
-        let totalTimeMs = 0
-
-        for (const session of trackSessions) {
-            totalLaps += session.summary?.laps || 0
-            validLaps += session.summary?.lapsValid || 0
-            totalTimeMs += session.summary?.totalTime || 0
-        }
-
-        return {
-            totalLaps,
-            validLaps,
-            validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
-            totalTimeMs,
-            totalTimeFormatted: formatDriveTime(totalTimeMs),
-            sessionCount: trackSessions.length
-        }
+        return getTrackActivityTotalsFromSessions(getSessionsForTrack(trackId), formatDriveTime)
     }
 
     // Get historical best times for a track (for chart)
     function getHistoricalBestTimes(trackId: string, grip?: string) {
-        const trackSessions = getSessionsForTrack(trackId)
-            .sort((a, b) => (a.meta.date_start || '').localeCompare(b.meta.date_start || ''))
-
-        return trackSessions
-            .map(s => {
-                const summary = s.summary
-                let bestQualy: number | null = null
-                let bestRace: number | null = null
-
-                // If grip specified, get from best_by_grip
-                if (grip && summary?.best_by_grip?.[grip]) {
-                    bestQualy = summary.best_by_grip[grip].bestQualy
-                    bestRace = summary.best_by_grip[grip].bestRace
-                } else {
-                    // Otherwise use overall bests
-                    bestQualy = summary?.best_qualy_ms || null
-                    bestRace = summary?.best_race_ms || null
-                }
-
-                return {
-                    date: s.meta.date_start,
-                    sessionId: s.sessionId,
-                    bestQualy,
-                    bestRace,
-                    sessionType: s.meta.session_type
-                }
-            })
-            .filter(t => t.bestQualy || t.bestRace)
+        return getHistoricalBestTimesFromSessions(getSessionsForTrack(trackId), grip)
     }
+
+    function buildActivityWindow(days: number = 7) {
+        return buildActivityWindowFromSessions({
+            sessions: sessions.value,
+            days,
+            sessionTypes: SESSION_TYPES,
+            parseTelemetryDate,
+            formatLocalDateKey
+        })
+    }
+
+    const activityWindow7d = computed(() => buildActivityWindow(7))
 
     // Get activity data for last N days (real data from sessions)
     function getActivityData(days: number = 7) {
-        const now = new Date()
-        const dayLabels: string[] = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
-        const activity: { day: string; practice: number; qualify: number; race: number }[] = []
-
-        for (let i = days - 1; i >= 0; i--) {
-            const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
-            const dateStr = formatLocalDateKey(date)
-
-            const daySessions = sessions.value.filter(s =>
-                s.meta.date_start?.startsWith(dateStr)
-            )
-
-            // Sum actual minutes from totalTime (ms -> minutes)
-            let practiceMinutes = 0
-            let qualifyMinutes = 0
-            let raceMinutes = 0
-
-            for (const session of daySessions) {
-                const totalMs = session.summary?.totalTime || 0
-                const minutes = Math.round(totalMs / 60000)
-
-                switch (session.meta.session_type) {
-                    case SESSION_TYPES.PRACTICE:
-                        practiceMinutes += minutes
-                        break
-                    case SESSION_TYPES.QUALIFY:
-                        qualifyMinutes += minutes
-                        break
-                    case SESSION_TYPES.RACE:
-                        raceMinutes += minutes
-                        break
-                }
-            }
-
-            activity.push({
-                day: dayLabels[date.getDay()] || 'N/A',
-                practice: practiceMinutes,
-                qualify: qualifyMinutes,
-                race: raceMinutes
-            })
+        if (days === 7) {
+            return activityWindow7d.value.data
         }
-
-        return activity
+        return buildActivityWindow(days).data
     }
 
     // Calculate totals for activity summary (real durations)
-    const activityTotals = computed(() => {
-        const now = new Date()
-        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-        const sevenDaysAgoKey = formatLocalDateKey(sevenDaysAgo)
-
-        let practiceMinutes = 0, practiceCount = 0
-        let qualifyMinutes = 0, qualifyCount = 0
-        let raceMinutes = 0, raceCount = 0
-
-        for (const session of sessions.value) {
-            const sessionDate = parseTelemetryDate(session.meta.date_start)
-            if (!sessionDate) continue
-
-            const sessionDateKey = formatLocalDateKey(sessionDate)
-            if (sessionDateKey < sevenDaysAgoKey) continue
-
-            const totalMs = session.summary?.totalTime || 0
-            const minutes = Math.round(totalMs / 60000)
-
-            switch (session.meta.session_type) {
-                case SESSION_TYPES.PRACTICE:
-                    practiceMinutes += minutes
-                    practiceCount++
-                    break
-                case SESSION_TYPES.QUALIFY:
-                    qualifyMinutes += minutes
-                    qualifyCount++
-                    break
-                case SESSION_TYPES.RACE:
-                    raceMinutes += minutes
-                    raceCount++
-                    break
-            }
-        }
-
-        return {
-            practice: { minutes: practiceMinutes, sessions: practiceCount },
-            qualify: { minutes: qualifyMinutes, sessions: qualifyCount },
-            race: { minutes: raceMinutes, sessions: raceCount }
-        }
-    })
-
+    const activityTotals = computed(() => activityWindow7d.value.totals)
+    const legacySessionCount = computed(() => sessions.value.filter((session) => session.summarySource && session.summarySource !== 'canonical').length)
     // ========================================
     // SESSION SHARING (Cross-User)
     // ========================================
@@ -1911,6 +1808,7 @@ export function useTelemetryData() {
         lastUsedTrack,
         trackStats,
         activityTotals,
+        legacySessionCount,
 
         // Session Sharing (Cross-User)
         setSessionPublic,
@@ -1919,4 +1817,6 @@ export function useTelemetryData() {
         generateShareLink
     }
 }
+
+
 

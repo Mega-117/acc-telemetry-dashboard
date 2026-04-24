@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 // ============================================
 // SessionDetailPage - Master / Detail Layout
 // Now connected to Firebase for real data
@@ -32,13 +32,16 @@ import {
   type StintData,
   type LapData
 } from '~/composables/useTelemetryData'
-import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { runSessionValidation } from '~/composables/useDebugValidator'
+import { shareSessionLink } from '~/services/session-detail/sessionShareService'
+import { autoSelectComparisonStints } from '~/services/session-detail/sessionCompareService'
+import { buildBestSectorSummary, buildComparisonRows } from '~/services/session-detail/sessionComparisonTableService'
+import { timeToSeconds, secondsToTime } from '~/services/session-detail/sessionMath'
+import { buildSessionDisplayModel } from '~/services/session-detail/buildSessionDisplayModel'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
-// Get current user info for "Session A" label
-const { currentUser, getUserProfile } = useFirebaseAuth()
 const currentUserNickname = ref<string>('')
 
 const props = defineProps<{ sessionId: string; externalUserId?: string }>()
@@ -139,7 +142,8 @@ function applyWarmupExclusion() {
 // ========================================
 // FIREBASE DATA LOADING
 // ========================================
-const { fetchSessionFull, loadSessions, getTheoreticalTimes, generateShareLink } = useTelemetryData()
+const telemetryGateway = useTelemetryGateway()
+const { getTheoreticalTimes, generateShareLink, fetchSessionFull } = telemetryGateway
 const fullSession = ref<FullSession | null>(null)
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
@@ -159,8 +163,10 @@ async function shareSession() {
   shareSuccess.value = false
   
   try {
-    const link = await generateShareLink(props.sessionId)
-    await navigator.clipboard.writeText(link)
+    const link = await shareSessionLink({
+      sessionId: props.sessionId,
+      generateShareLink
+    })
     shareSuccess.value = true
     console.log('[SHARE] Link copied:', link)
     
@@ -182,29 +188,24 @@ onMounted(async () => {
   isLoading.value = true
   loadError.value = null
   try {
-    // Load current user's nickname from profile
-    if (currentUser.value?.uid) {
-      const profile = await getUserProfile(currentUser.value.uid)
-      currentUserNickname.value = profile?.nickname || currentUser.value.displayName || 'Tu'
-    }
-    
-    // Determine which user's data to load:
-    // 1. If externalUserId prop is set (shared link), use it
-    // 2. Otherwise use targetUserId (coach context) or current user
-    const userIdToLoad = props.externalUserId || targetUserId.value || undefined
-    
-    // Load sessions first to populate trackStats (needed for theoretical times)
-    // For external sessions, we skip this as we don't need stats
-    if (!props.externalUserId) {
-      await loadSessions(userIdToLoad)
-    }
-    
-    const data = await fetchSessionFull(props.sessionId, userIdToLoad, !!targetUserId.value && !props.externalUserId)
-    if (data) {
-      fullSession.value = data
-      console.log('[SESSION_DETAIL] Loaded session:', data.session_info.track, data.stints.length, 'stints', props.externalUserId ? '(SHARED)' : '')
-    } else {
-      loadError.value = 'Sessione non trovata'
+    const result = await telemetryGateway.getSessionDetailViewModel({
+      sessionId: props.sessionId,
+      externalUserId: props.externalUserId,
+      targetUserId: targetUserId.value
+    })
+
+    currentUserNickname.value = result.currentUserNickname
+    fullSession.value = result.fullSession
+    loadError.value = result.loadError
+
+    if (result.fullSession) {
+      console.log(
+        '[SESSION_DETAIL] Loaded session:',
+        result.fullSession.session_info.track,
+        result.fullSession.stints.length,
+        'stints',
+        props.externalUserId ? '(SHARED)' : ''
+      )
     }
   } catch (e: any) {
     console.error('[SESSION_DETAIL] Load error:', e)
@@ -350,7 +351,6 @@ async function handleSessionBSelect(sessionId: string, userId?: string, nickname
   showSessionPicker.value = false
   
   // Load the full session data (with optional external userId)
-  const { fetchSessionFull } = useTelemetryData()
   const data = await fetchSessionFull(sessionId, userId)
   if (data) {
     crossSessionData.value = data
@@ -953,153 +953,16 @@ function selectStintForView(stintNum: number): void {
 // TRANSFORMED SESSION DATA
 // ========================================
 const session = computed(() => {
-  if (!fullSession.value) {
-    return {
-      id: props.sessionId,
-      track: 'Caricamento...',
-      trackId: '',
-      type: 'practice' as const,
-      date: '-',
-      time: '-',
-      car: '-',
-      startConditions: { weather: '-', airTemp: 0, trackTemp: 0 },
-      bestQualy: '--:--.---',
-      bestRace: '--:--.---',
-      theoQualy: '--:--.---',
-      theoRace: '--:--.---',
-      bestDeltaQ: { value: '-', stintNum: 0 },
-      bestDeltaR: { value: '-', stintNum: 0 },
-      stints: [] as any[],
-      lapsData: {} as Record<number, any[]>
-    }
-  }
-
-  const fs = fullSession.value
-  const info = fs.session_info
-  
-  // Sanitize session_best_lap: ACC shared memory returns INT_MAX (2^31-1) when no valid laps exist
-  const sessionBestLap = (info.session_best_lap && info.session_best_lap > 0 && info.session_best_lap <= MAX_REASONABLE_LAP_MS)
-    ? info.session_best_lap
-    : 0
-
-  // Transform stints to expected format
-  const stints = fs.stints.map(stint => {
-    const validLaps = stint.laps.filter(l => l.is_valid && !l.has_pit_stop)
-    const validLapsCount = validLaps.length
-    const bestLapMs = validLapsCount > 0 
-      ? Math.min(...validLaps.map(l => l.lap_time_ms))
-      : null
-    
-    // Use avg_clean_lap from JSON ONLY if stint has 5+ valid laps
-    // Otherwise the average is not statistically reliable
-    const MIN_VALID_LAPS_FOR_AVG = 5
-    const avgLapMs = validLapsCount >= MIN_VALID_LAPS_FOR_AVG && stint.avg_clean_lap 
-      ? stint.avg_clean_lap 
-      : null
-    
-    // Short warning text for display when avg is not available
-    const avgWarning = validLapsCount > 0 && validLapsCount < MIN_VALID_LAPS_FOR_AVG
-    const avgDisplay = avgLapMs 
-      ? formatLapTime(avgLapMs) 
-      : (avgWarning
-          ? 'min 5 giri' 
-          : '—')
-    
-    return {
-      number: stint.stint_number,
-      type: stint.type === 'Qualify' ? 'Q' : 'R',
-      intent: stint.type === 'Qualify' ? 'Qualy Push' : 'Race Pace',
-      fuelStart: stint.fuel_start,
-      laps: stint.laps.length,
-      validLapsCount, // NEW: track valid laps count for filtering
-      best: bestLapMs ? formatLapTime(bestLapMs) : '—',
-      bestMs: bestLapMs, // Keep raw ms for delta calculations
-      avg: avgDisplay,
-      avgWarning, // NEW: flag for template to style warning differently
-      avgMs: avgLapMs, // Keep raw ms for calculations
-      durationMs: stint.stint_drive_time_ms || 0, // Use pre-calculated duration from JSON
-      theoretical: formatLapTime(sessionBestLap), // Simplified: use session best as theo
-      deltaVsTheo: bestLapMs && sessionBestLap ? `+${((bestLapMs - sessionBestLap) / 1000).toFixed(3)}` : '-',
-      conditions: { 
-        weather: info.start_weather, 
-        avgAirTemp: info.start_air_temp, 
-        avgTrackTemp: info.start_road_temp 
-      },
-      breakdown: { base: '-', deltaTemp: '-', deltaGrip: '-' }
-    }
+  return buildSessionDisplayModel({
+    sessionId: props.sessionId,
+    fullSession: fullSession.value,
+    maxReasonableLapMs: MAX_REASONABLE_LAP_MS,
+    formatLapTime,
+    formatCarName,
+    formatDateFull,
+    formatTime,
+    getSessionTypeLabel
   })
-
-  // Transform laps data
-  const lapsData: Record<number, any[]> = {}
-  fs.stints.forEach(stint => {
-    lapsData[stint.stint_number] = stint.laps.map(lap => ({
-      lap: lap.lap_number,
-      time: formatLapTime(lap.lap_time_ms),
-      lap_time_ms: lap.lap_time_ms,
-      delta: sessionBestLap ? `+${((lap.lap_time_ms - sessionBestLap) / 1000).toFixed(3)}` : '-',
-      valid: lap.is_valid,
-      pit: lap.has_pit_stop,
-      sectors: lap.sector_times_ms?.map(s => (s / 1000).toFixed(3)) || ['-', '-', '-'],
-      sector_times_ms: lap.sector_times_ms || [],
-      fuel: Math.round(lap.fuel_remaining),
-      airTemp: lap.air_temp || 0,
-      weather: lap.rain_intensity || 'No Rain',
-      grip: lap.track_grip_status || 'Opt'
-    }))
-  })
-
-  // Find best Q and R times
-  let bestQualyMs: number | null = null
-  let bestRaceMs: number | null = null
-  let bestQualyStintNum = 0
-  let bestRaceStintNum = 0
-
-  fs.stints.forEach(stint => {
-    const validLaps = stint.laps.filter(l => l.is_valid && !l.has_pit_stop)
-    if (validLaps.length === 0) return
-    const bestMs = Math.min(...validLaps.map(l => l.lap_time_ms))
-    
-    if (stint.type === 'Qualify') {
-      if (!bestQualyMs || bestMs < bestQualyMs) {
-        bestQualyMs = bestMs
-        bestQualyStintNum = stint.stint_number
-      }
-    } else {
-      if (!bestRaceMs || bestMs < bestRaceMs) {
-        bestRaceMs = bestMs
-        bestRaceStintNum = stint.stint_number
-      }
-    }
-  })
-
-  return {
-    id: props.sessionId,
-    track: info.track,
-    trackId: info.track.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-    type: getSessionTypeLabel(info.session_type),
-    date: formatDateFull(info.date_start),
-    time: formatTime(info.date_start),
-    car: formatCarName(info.car),
-    startConditions: { 
-      weather: info.start_weather, 
-      airTemp: info.start_air_temp, 
-      trackTemp: info.start_road_temp 
-    },
-    bestQualy: bestQualyMs ? formatLapTime(bestQualyMs) : '--:--.---',
-    bestRace: bestRaceMs ? formatLapTime(bestRaceMs) : '--:--.---',
-    theoQualy: formatLapTime(sessionBestLap),
-    theoRace: formatLapTime(sessionBestLap),
-    bestDeltaQ: { 
-      value: bestQualyMs && sessionBestLap ? `+${((bestQualyMs - sessionBestLap) / 1000).toFixed(3)}` : '-', 
-      stintNum: bestQualyStintNum 
-    },
-    bestDeltaR: { 
-      value: bestRaceMs && sessionBestLap ? `+${((bestRaceMs - sessionBestLap) / 1000).toFixed(3)}` : '-', 
-      stintNum: bestRaceStintNum 
-    },
-    stints,
-    lapsData
-  }
 })
 
 // ========================================
@@ -1300,33 +1163,7 @@ function getLapsForTable() {
 // ========================================
 // Computes best S1, S2, S3 and best lap time for the currently displayed laps.
 // Uses raw ms values for accurate comparison.
-const bestSectors = computed(() => {
-  const laps = getLapsForTable()
-  let bestS1 = Infinity
-  let bestS2 = Infinity
-  let bestS3 = Infinity
-  let bestLapMs = Infinity
-
-  for (const lap of laps) {
-    // Solo giri validi e non-pit contano per best sectors e best lap
-    if (!lap.valid || lap.pit) continue
-    const sms = lap.sector_times_ms || []
-    if (sms[0] && sms[0] > 0 && sms[0] < bestS1) bestS1 = sms[0]
-    if (sms[1] && sms[1] > 0 && sms[1] < bestS2) bestS2 = sms[1]
-    if (sms[2] && sms[2] > 0 && sms[2] < bestS3) bestS3 = sms[2]
-    const ms = lap.lap_time_ms || lap.lapTimeMs
-    if (ms && ms > 0 && ms < bestLapMs) {
-      bestLapMs = ms
-    }
-  }
-
-  return {
-    s1: bestS1 === Infinity ? null : bestS1,
-    s2: bestS2 === Infinity ? null : bestS2,
-    s3: bestS3 === Infinity ? null : bestS3,
-    lapMs: bestLapMs === Infinity ? null : bestLapMs,
-  }
-})
+const bestSectors = computed(() => buildBestSectorSummary(getLapsForTable()))
 
 function isBestSector(lap: any, sectorIndex: number): boolean {
   const sms = lap.sector_times_ms || []
@@ -1348,54 +1185,19 @@ function isBestLap(lap: any): boolean {
 const comparisonLapsData = computed(() => {
   let lapsA: any[] = []
   let lapsB: any[] = []
-  
+
   if (isBuilderSameSessionCompare.value) {
-    // Same-session builder compare - use ALL laps from strategy (multi-stint)
     lapsA = strategyAAllLaps.value || []
     lapsB = strategyBAllLaps.value || []
   } else if (isCrossSessionCompare.value) {
-    // Cross-session compare
     lapsA = crossStintALaps.value || []
     lapsB = crossStintBLaps.value || []
   } else if (isCompareMode.value) {
-    // Regular compare mode
     lapsA = compareStintALaps.value || []
     lapsB = compareStintBLaps.value || []
   }
-  
-  const maxLaps = Math.max(lapsA.length, lapsB.length)
-  const rows = []
-  
-  for (let i = 0; i < maxLaps; i++) {
-    const lapA = lapsA[i] || null
-    const lapB = lapsB[i] || null
-    
-    // Calculate delta between A and B lap times
-    let delta = null
-    if (lapA && lapB) {
-      const timeA = timeToSeconds(lapA.time || lapA.lapTime || '')
-      const timeB = timeToSeconds(lapB.time || lapB.lapTime || '')
-      if (timeA > 0 && timeB > 0) {
-        delta = timeA - timeB // Positive = A slower, Negative = A faster
-      }
-    }
-    
-    rows.push({
-      index: i + 1,
-      lapA,
-      lapB,
-      delta,
-      deltaFormatted: delta !== null ? (delta >= 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3)) : '—',
-      deltaClass: delta !== null ? (delta < 0 ? 'faster' : delta <= 0.3 ? 'close' : delta <= 0.5 ? 'margin' : 'far') : 'neutral',
-      // Stint separation markers (for visual headers in table)
-      _isStintStartA: lapA?._isStintStart || false,
-      _isStintStartB: lapB?._isStintStart || false,
-      _stintNumberA: lapA?._stintNumber || null,
-      _stintNumberB: lapB?._stintNumber || null
-    })
-  }
-  
-  return rows
+
+  return buildComparisonRows({ lapsA, lapsB })
 })
 
 // ========================================
@@ -2278,14 +2080,6 @@ const chartOptions = {
 // ========================================
 // HELPERS
 // ========================================
-function timeToSeconds(t: string | undefined): number {
-  if (!t) return 0
-  const parts = t.split(':')
-  const m = Number(parts[0]) || 0
-  const s = Number(parts[1]) || 0
-  return m * 60 + s
-}
-function secondsToTime(s: number): string { const m = Math.floor(s / 60); return `${m}:${(s % 60).toFixed(3).padStart(6, '0')}` }
 function getTypeLabel(t: string) { return { practice: 'PRACTICE', qualify: 'QUALIFY', race: 'RACE' }[t] || t.toUpperCase() }
 // Delta color scheme: green=on-target/faster, yellow=close, orange=margin, red=far
 function getDeltaClass(d: string | undefined) { 

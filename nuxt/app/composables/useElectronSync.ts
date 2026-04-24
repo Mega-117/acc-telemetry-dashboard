@@ -2,22 +2,34 @@
 // useElectronSync - Telemetry file sync to Firebase
 // ============================================
 // Handles reading files from Electron, validating ownership,
-// uploading to Firebase, and refreshing the dashboard
+// uploading to Firebase, and refreshing the dashboard.
+// The composable now acts as a thin facade over dedicated sync services.
 
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { useFirebaseAuth } from './useFirebaseAuth'
-import { useTelemetryData, getCarCategory, CAR_CATEGORIES, type CarCategory } from './useTelemetryData'
-import {
-    doc,
-    collection,
-    serverTimestamp,
-    writeBatch
-} from 'firebase/firestore'
+import { useTelemetryData } from './useTelemetryData'
+import { doc, collection } from 'firebase/firestore'
 import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
-import { BEST_RULES_VERSION, extractMetadata, generateSessionId } from '~/utils/sessionParser'
+import { BEST_RULES_VERSION } from '~/utils/sessionParser'
+import { ensureLocalTelemetrySummariesCanonical } from '~/utils/localCanonicalSummary'
+import {
+    createSessionUploadService,
+    calculateContentHash,
+    type RegistryCacheEntry
+} from '~/services/sync/sessionUploadService'
+import {
+    canonicalizeTelemetryPayload
+} from '~/services/sync/canonicalSummaryBridge'
+import { migrateLegacyCloudSummaries } from '~/services/sync/legacySummaryMigrationService'
+import { updateTrackBestsProjection } from '~/services/sync/trackBestsProjectionService'
+import {
+    rebuildTrackBestsProjection,
+    writeUserProjectionDocuments
+} from '~/services/sync/projectionRebuildService'
+import { cleanupZeroLapSessions as cleanupZeroLapGhosts } from '~/services/sync/ghostCleanupService'
+import { setupAutoSyncController } from '~/services/sync/autoSyncController'
 
-// Local wrappers auto-tagged with caller name
 const SYNC_CALLER = 'ElectronSync'
 async function getDoc(ref: any) { return trackedGetDoc(ref, SYNC_CALLER) }
 async function getDocs(q: any) { return trackedGetDocs(q, SYNC_CALLER) }
@@ -27,24 +39,12 @@ async function setDoc(ref: any, data: any, options?: any) {
 }
 async function deleteDoc(ref: any) { return trackedDeleteDoc(ref, SYNC_CALLER) }
 
-// Constants
 const CHUNK_SIZE = 400000
-const SESSION_INDEX_MAX_ITEMS = 200
 const SYNCED_FILES_RETENTION_DAYS = 30
 
-// === LOCAL REGISTRY CACHE ===
-// Cached registry to avoid Firebase reads for already-uploaded files
-interface RegistryCacheEntry {
-    fileHash: string
-    mtime: number
-    size: number
-    uploadedBy: string
-    sessionId: string
-    uploadedAt: string
-}
 let localRegistryCache: Record<string, RegistryCacheEntry> | null = null
+let autoSyncInitialized = false
 
-// Types
 interface TelemetryFile {
     name: string
     path: string
@@ -60,6 +60,25 @@ interface SyncResult {
     sessionId?: string
 }
 
+async function updateSuiteVersion(uid: string) {
+    try {
+        const electronAPI = (window as any).electronAPI
+        if (!electronAPI?.getSuiteVersion) return
+        const version = await electronAPI.getSuiteVersion()
+        if (!version) return
+
+        const userRef = doc(db, `users/${uid}`)
+        await setDoc(userRef, {
+            suiteVersion: version.launcher || version.webapp || null,
+            suiteVersionDetail: version,
+            suiteVersionUpdatedAt: new Date().toISOString()
+        }, { merge: true })
+        console.log(`[SYNC] Suite version updated: ${version.launcher}`)
+    } catch (versionError: any) {
+        console.warn('[SYNC] Could not update suite version:', versionError.message)
+    }
+}
+
 export function useElectronSync() {
     const { currentUser } = useFirebaseAuth()
     const { loadSessions, resetAllTrackBests, clearTrackDerivedCaches } = useTelemetryData()
@@ -68,37 +87,24 @@ export function useElectronSync() {
     const syncProgress = ref(0)
     const syncResults = ref<SyncResult[]>([])
     const lastSyncTime = ref<Date | null>(null)
-    // Auto-sync notification: set when auto-sync produces actual changes
     const pendingNotification = ref<SyncResult[] | null>(null)
 
-    // Check if running in Electron
     const isElectron = computed(() => {
         if (typeof window === 'undefined') return false
         return !!(window as any).electronAPI
     })
 
-    // Calculate SHA-256 hash
-    async function calculateHash(input: string): Promise<string> {
-        const data = new TextEncoder().encode(input)
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-        const hashArray = Array.from(new Uint8Array(hashBuffer))
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-    }
-
-
-    // Check if session exists (only called when registry cache misses)
     async function getExistingSession(uid: string, sessionId: string) {
         const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
         const snap = await getDoc(sessionRef)
         return snap.exists() ? { id: sessionId, ...snap.data() } : null
     }
 
-    // Load local registry cache from Electron
     async function loadRegistryCache(): Promise<Record<string, RegistryCacheEntry>> {
         if (localRegistryCache) return localRegistryCache
         try {
             const electronAPI = (window as any).electronAPI
-            if (electronAPI) {
+            if (electronAPI?.getRegistry) {
                 localRegistryCache = await electronAPI.getRegistry() || {}
             } else {
                 localRegistryCache = {}
@@ -109,7 +115,6 @@ export function useElectronSync() {
         return localRegistryCache!
     }
 
-    // Check if file can be skipped via local registry (0 Firebase reads)
     function canSkipViaRegistry(
         registry: Record<string, RegistryCacheEntry>,
         fileName: string,
@@ -118,184 +123,32 @@ export function useElectronSync() {
     ): boolean {
         const entry = registry[fileName]
         if (!entry) return false
-        // Skip if same hash AND same user uploaded it
         return entry.fileHash === fileHash && entry.uploadedBy === uid
     }
 
-    // Delete old chunks before re-upload
     async function deleteOldChunks(uid: string, sessionId: string) {
         try {
             const chunksRef = collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`)
             const snapshot = await getDocs(chunksRef)
-            const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref))
-            await Promise.all(deletePromises)
+            await Promise.all(snapshot.docs.map((chunkDoc: any) => deleteDoc(chunkDoc.ref)))
         } catch (e: any) {
             console.warn('[SYNC] Error deleting old chunks:', e.message)
         }
     }
 
-
-    // Split string into chunks
-    function splitIntoChunks(str: string, size: number): string[] {
-        const chunks: string[] = []
-        for (let i = 0; i < str.length; i += size) {
-            chunks.push(str.slice(i, i + size))
-        }
-        return chunks
-    }
-
-    // Upload or update session (UPSERT)
-    async function uploadOrUpdateSession(
-        rawObj: any,
-        rawText: string,
-        fileName: string,
-        uid: string
-    ): Promise<SyncResult> {
+    async function canonicalizeSummaryFromLocalDomain(rawObj: any): Promise<any | null> {
         try {
-            // Zero-lap guard: skip sessions with no completed laps
-            const totalLaps = rawObj.session_info?.laps_total || 0
-            if (totalLaps === 0) {
-                console.log(`[SYNC] Skipped ${fileName}: zero laps (empty session)`)
-                return { status: 'skipped', fileName, reason: 'zero_laps' }
+            const result = await canonicalizeTelemetryPayload(rawObj)
+            if (!result?.ok || !result?.summary) {
+                console.warn('[SYNC] Local-domain canonicalization failed:', result?.error || 'missing summary')
+                return null
             }
-
-            // Owner validation
-            const fileOwnerId = rawObj.ownerId || null
-
-            // Skip if file belongs to different user
-            if (fileOwnerId && fileOwnerId !== uid) {
-                console.log(`[SYNC] Skipped ${fileName}: owner mismatch (file: ${fileOwnerId}, current: ${uid})`)
-                return {
-                    status: 'skipped',
-                    fileName,
-                    reason: 'owner_mismatch'
-                }
-            }
-
-            // Warn if no owner (pre-login session)
-            if (!fileOwnerId) {
-                console.log(`[SYNC] Warning: ${fileName} has no ownerId (pre-login session)`)
-            }
-
-            const { meta, summary } = extractMetadata(rawObj)
-            const summaryWithRules = {
-                ...summary,
-                best_rules_version: BEST_RULES_VERSION
-            }
-            const sessionId = generateSessionId(meta.date_start, meta.track)
-            const fileHash = await calculateHash(rawText)
-
-            // === REGISTRY CACHE CHECK (0 Firebase reads) ===
-            const getExistingRulesVersion = (existingDoc: any): number => {
-                return Number(existingDoc?.summary?.best_rules_version || existingDoc?.summaryRulesVersion || 0)
-            }
-
-            let existing: any = null
-            let existingChecked = false
-            const registry = await loadRegistryCache()
-            if (canSkipViaRegistry(registry, fileName, fileHash, uid)) {
-                existing = await getExistingSession(uid, sessionId)
-                existingChecked = true
-                const existingRulesVersion = getExistingRulesVersion(existing)
-                if (existing && (existing as any).fileHash === fileHash && existingRulesVersion >= BEST_RULES_VERSION) {
-                    return { status: 'unchanged', fileName, sessionId, reason: 'registry_cache_hit' }
-                }
-            }
-
-            // Registry miss - check Firebase
-            if (!existingChecked) {
-                existing = await getExistingSession(uid, sessionId)
-            }
-
-            let isUpdate = false
-            let chunksNeedUpdate = true
-            let isRulesMigration = false
-            if (existing) {
-                isUpdate = true
-                const existingRulesVersion = getExistingRulesVersion(existing)
-                const needsRulesMigration = existingRulesVersion < BEST_RULES_VERSION
-                if ((existing as any).fileHash === fileHash) {
-                    if (!needsRulesMigration) {
-                        // === IDENTICAL FILE ALREADY ON FIREBASE -> skip entirely (0 writes) ===
-                        console.log(`[SYNC] unchanged: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})`)
-                        return {
-                            status: 'unchanged',
-                            fileName,
-                            sessionId,
-                            reason: 'firebase_hash_match'
-                        }
-                    }
-
-                    // Same file hash but old summary rules -> update summary only, keep chunks as-is.
-                    chunksNeedUpdate = false
-                    isRulesMigration = true
-                    console.log(`[SYNC] summary rules migration: ${fileName} -> ${sessionId} (v${existingRulesVersion} -> v${BEST_RULES_VERSION})`)
-                } else {
-                    await deleteOldChunks(uid, sessionId)
-                }
-            }
-
-            const chunks = chunksNeedUpdate ? splitIntoChunks(rawText, CHUNK_SIZE) : []
-
-            // === ATOMIC BATCH WRITE (1 operation instead of N) ===
-            const batch = writeBatch(db)
-
-            // Session document
-            const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
-            batch.set(sessionRef, {
-                fileHash,
-                fileName,
-                uploadedAt: serverTimestamp(),
-                meta,
-                summary: summaryWithRules,
-                summaryRulesVersion: BEST_RULES_VERSION,
-                rawChunkCount: chunksNeedUpdate ? chunks.length : ((existing as any)?.rawChunkCount || 0),
-                rawSizeBytes: chunksNeedUpdate ? rawText.length : ((existing as any)?.rawSizeBytes || rawText.length),
-                rawEncoding: (existing as any)?.rawEncoding || 'json-string',
-                version: ((existing as any)?.version || 0) + 1
-            })
-
-            // Upload tracking
-            const uploadRef = doc(db, `users/${uid}/uploads/${fileHash}`)
-            batch.set(uploadRef, { fileName, uploadedAt: serverTimestamp(), sessionId })
-
-            // Chunks (parallel in batch, not sequential setDoc)
-            if (chunksNeedUpdate) {
-                for (let idx = 0; idx < chunks.length; idx++) {
-                    const chunkRef = doc(db, `users/${uid}/sessions/${sessionId}/rawChunks/${idx}`)
-                    batch.set(chunkRef, { idx, chunk: chunks[idx] })
-                }
-            }
-
-            // Commit all at once
-            await batch.commit()
-
-            // Update trackBests ONLY for new/updated sessions (not unchanged)
-            await updateTrackBests(uid, meta.track, sessionId, meta.date_start, summaryWithRules, meta.car)
-
-            // NOTE: findAndDeleteOldFormatDuplicates removed - migration completed
-
-            const status: 'created' | 'updated' = isUpdate ? 'updated' : 'created'
-
-            console.log(`[SYNC] ${status}: ${fileName} -> ${sessionId} (Q: ${summary.best_qualy_ms}, R: ${summary.best_race_ms})`)
-
-            return {
-                status,
-                fileName,
-                sessionId,
-                reason: isRulesMigration ? 'summary_rules_migration' : undefined
-            }
-
-        } catch (error: any) {
-            console.error('[SYNC] Error:', error)
-            return { status: 'error', fileName, error: error.message }
+            return result.summary
+        } catch (e: any) {
+            console.warn('[SYNC] Local-domain canonicalization threw:', e.message)
+            return null
         }
     }
-
-
-    // Update trackBests collection with new best times from session (V2 - with categories)
-    // Schema version: 2 - bests organized by category then grip
-    const TRACK_BESTS_SCHEMA_VERSION = 2
 
     async function updateTrackBests(
         uid: string,
@@ -305,166 +158,30 @@ export function useElectronSync() {
         summary: any,
         car?: string
     ) {
-        const trackIdNorm = trackId.toLowerCase().replace(/\s+/g, '_')
-        const trackBestsRef = doc(db, `users/${uid}/trackBests/${trackIdNorm}`)
-
-        // Determine category from car model
-        const category = getCarCategory(car || '')
-
-        try {
-            // Get existing trackBests
-            const existingSnap = await getDoc(trackBestsRef)
-            const existing = existingSnap.exists() ? existingSnap.data() : null
-            const existingVersion = existing?.version || 1
-
-            const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
-
-            // Initialize V2 structure (Category -> Grip -> Bests)
-            type GripBest = {
-                bestQualy: number | null, bestQualyTemp: number | null, bestQualySessionId: string | null, bestQualyDate: string | null,
-                bestRace: number | null, bestRaceTemp: number | null, bestRaceSessionId: string | null, bestRaceDate: string | null,
-                bestAvgRace: number | null, bestAvgRaceTemp: number | null, bestAvgRaceSessionId: string | null, bestAvgRaceDate: string | null
-            }
-
-            const emptyGripBests = (): GripBest => ({
-                bestQualy: null, bestQualyTemp: null, bestQualySessionId: null, bestQualyDate: null,
-                bestRace: null, bestRaceTemp: null, bestRaceSessionId: null, bestRaceDate: null,
-                bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
-            })
-
-            // Get or create V2 bests structure
-            let newBests: Record<CarCategory, Record<string, GripBest>> = {} as any
-
-            if (existingVersion >= TRACK_BESTS_SCHEMA_VERSION && existing?.bests) {
-                // Already V2 - copy existing
-                for (const cat of CAR_CATEGORIES) {
-                    newBests[cat] = existing.bests[cat] || {}
-                }
-            } else if (existing?.bests || existing) {
-                // V1 -> migrate to V2 (all old data goes to GT3)
-                const legacyBests = existing.bests ||
-                    Object.fromEntries(gripConditions.filter(g => existing[g]).map(g => [g, existing[g]]))
-
-                for (const cat of CAR_CATEGORIES) {
-                    newBests[cat] = {}
-                    for (const grip of gripConditions) {
-                        // Put legacy data in GT3, empty in others
-                        newBests[cat][grip] = cat === 'GT3' && legacyBests[grip]
-                            ? legacyBests[grip]
-                            : emptyGripBests()
-                    }
-                }
-                console.log(`[SYNC] Migrating trackBests V1 -> V2 for ${trackIdNorm}`)
-            } else {
-                // New - initialize empty
-                for (const cat of CAR_CATEGORIES) {
-                    newBests[cat] = {}
-                    for (const grip of gripConditions) {
-                        newBests[cat][grip] = emptyGripBests()
-                    }
-                }
-            }
-
-            let hasUpdates = false
-
-            // Check each grip condition for improvements (update only the current category)
-            gripConditions.forEach(grip => {
-                const sessionBest = summary.best_by_grip?.[grip]
-                if (!sessionBest) return
-
-                if (!newBests[category][grip]) {
-                    newBests[category][grip] = emptyGripBests()
-                }
-
-                const catGrip = newBests[category][grip]
-
-                // Check if new session has better qualy time
-                if (sessionBest.bestQualy && (!catGrip.bestQualy || sessionBest.bestQualy < catGrip.bestQualy)) {
-                    catGrip.bestQualy = sessionBest.bestQualy
-                    catGrip.bestQualyTemp = sessionBest.bestQualyTemp
-                    catGrip.bestQualySessionId = sessionId
-                    catGrip.bestQualyDate = dateStart
-                    hasUpdates = true
-                }
-
-                // Check if new session has better race time
-                if (sessionBest.bestRace && (!catGrip.bestRace || sessionBest.bestRace < catGrip.bestRace)) {
-                    catGrip.bestRace = sessionBest.bestRace
-                    catGrip.bestRaceTemp = sessionBest.bestRaceTemp
-                    catGrip.bestRaceSessionId = sessionId
-                    catGrip.bestRaceDate = dateStart
-                    hasUpdates = true
-                }
-
-                // Check if new session has better avg race time
-                if (sessionBest.bestAvgRace && (!catGrip.bestAvgRace || sessionBest.bestAvgRace < catGrip.bestAvgRace)) {
-                    catGrip.bestAvgRace = sessionBest.bestAvgRace
-                    catGrip.bestAvgRaceTemp = sessionBest.bestAvgRaceTemp
-                    catGrip.bestAvgRaceSessionId = sessionId
-                    catGrip.bestAvgRaceDate = dateStart
-                    hasUpdates = true
-                }
-            })
-
-            // === ACTIVITY AGGREGATES ===
-            // Always update activity on every session sync (not just when bests improve)
-            const existingActivity = existing?.activity || {
-                totalLaps: 0,
-                validLaps: 0,
-                totalTimeMs: 0,
-                sessionCount: 0
-            }
-
-            // Check if this session was already counted (by tracking last synced session)
-            const lastSyncedSessions = existing?.syncedSessionIds || []
-            const alreadyCounted = lastSyncedSessions.includes(sessionId)
-
-            // Only add to activity if this is a new session (not a re-sync)
-            const sessionLaps = summary.laps || 0
-            const sessionValidLaps = summary.lapsValid || 0
-            const sessionTimeMs = summary.totalTime || 0
-
-            const newActivity = alreadyCounted ? existingActivity : {
-                totalLaps: existingActivity.totalLaps + sessionLaps,
-                validLaps: existingActivity.validLaps + sessionValidLaps,
-                totalTimeMs: existingActivity.totalTimeMs + sessionTimeMs,
-                sessionCount: existingActivity.sessionCount + 1,
-                lastSessionDate: dateStart
-            }
-
-            // Track synced sessions to avoid double-counting
-            const newSyncedSessions = alreadyCounted
-                ? lastSyncedSessions
-                : [...lastSyncedSessions, sessionId].slice(-100) // Keep last 100
-
-            // Always save (V2 structure with version)
-            await setDoc(trackBestsRef, {
-                version: TRACK_BESTS_SCHEMA_VERSION,
-                bestRulesVersion: BEST_RULES_VERSION,
-                trackId: trackIdNorm,
-                bests: newBests,
-                activity: newActivity,
-                syncedSessionIds: newSyncedSessions,
-                lastSessionDate: dateStart,
-                lastUpdated: serverTimestamp()
-            })
-
-            if (hasUpdates) {
-                console.log(`[SYNC] Updated trackBests V2 for ${trackIdNorm} (${category}) (bests + activity)`)
-            } else if (!alreadyCounted) {
-                console.log(`[SYNC] Updated trackBests activity for ${trackIdNorm}`)
-            } else {
-                console.log(`[SYNC] No trackBests changes for ${trackIdNorm}`)
-            }
-
-            return hasUpdates || !alreadyCounted
-        } catch (e: any) {
-            console.warn(`[SYNC] Error updating trackBests for ${trackIdNorm}:`, e.message)
-            return false
-        }
+        return updateTrackBestsProjection({
+            db,
+            uid,
+            trackId,
+            sessionId,
+            dateStart,
+            summary,
+            car,
+            getDocFn: getDoc,
+            setDocFn: setDoc,
+            bestRulesVersion: BEST_RULES_VERSION
+        })
     }
 
-    // Main sync function - accepts optional specific files for incremental sync
+    const uploadService = createSessionUploadService({
+        db,
+        chunkSize: CHUNK_SIZE,
+        getExistingSession,
+        loadRegistryCache,
+        canSkipViaRegistry,
+        deleteOldChunks,
+        updateTrackBests
+    })
+
     async function syncTelemetryFiles(specificFiles?: TelemetryFile[]): Promise<SyncResult[]> {
         if (!isElectron.value) {
             console.log('[SYNC] Not running in Electron, skipping sync')
@@ -490,82 +207,49 @@ export function useElectronSync() {
         const results: SyncResult[] = []
 
         try {
-            // INCREMENTAL: use specific files if provided, otherwise scan all
             const files: TelemetryFile[] = specificFiles || await electronAPI.getTelemetryFiles()
             const mode = specificFiles ? 'incremental' : 'full'
             console.log(`[SYNC] ${mode} sync: ${files.length} files to process`)
 
             if (files.length === 0) {
-                isSyncing.value = false
                 return []
             }
 
-            // Process each file
+            await ensureLocalTelemetrySummariesCanonical({
+                filePaths: files.map((file) => file.path)
+            })
+
             for (let i = 0; i < files.length; i++) {
                 const file = files[i]
                 if (!file) continue
                 syncProgress.value = Math.round((i / files.length) * 100)
 
                 try {
-                    // Read file content
                     const rawObj = await electronAPI.readFile(file.path)
                     if (!rawObj) {
                         results.push({ status: 'error', fileName: file.name, error: 'Could not read file' })
                         continue
                     }
 
-                    // Upload to Firebase
                     const rawText = JSON.stringify(rawObj)
-                    const result = await uploadOrUpdateSession(rawObj, rawText, file.name, uid)
+                    const result = await uploadService.uploadOrUpdateSession(rawObj, rawText, file.name, uid)
                     results.push(result)
 
-                    // Update registry with fileHash for cache (so next sync skips this file)
-                    if (result.status === 'created' || result.status === 'updated') {
-                        const fileHash = await calculateHash(rawText)
-                        await electronAPI.updateRegistry(file.name, {
+                    if (result.status === 'created' || result.status === 'updated' || (result.status === 'unchanged' && result.reason !== 'registry_cache_hit')) {
+                        const fileHash = await calculateContentHash(rawText)
+                        const entry: RegistryCacheEntry = {
                             uploadedBy: uid,
                             fileHash,
-                            sessionId: result.sessionId,
+                            sessionId: result.sessionId || '',
                             uploadedAt: new Date().toISOString(),
                             mtime: file.mtime,
                             size: file.size
-                        })
-                        // Update in-memory cache too
+                        }
+                        await electronAPI.updateRegistry?.(file.name, entry)
                         if (localRegistryCache) {
-                            localRegistryCache[file.name] = {
-                                uploadedBy: uid,
-                                fileHash,
-                                sessionId: result.sessionId || '',
-                                uploadedAt: new Date().toISOString(),
-                                mtime: file.mtime,
-                                size: file.size
-                            }
+                            localRegistryCache[file.name] = entry
                         }
                     }
-
-                    // ALSO populate registry for unchanged files (migration from old registry format)
-                    if (result.status === 'unchanged' && result.reason !== 'registry_cache_hit') {
-                        const fileHash = await calculateHash(rawText)
-                        await electronAPI.updateRegistry(file.name, {
-                            uploadedBy: uid,
-                            fileHash,
-                            sessionId: result.sessionId,
-                            uploadedAt: new Date().toISOString(),
-                            mtime: file.mtime,
-                            size: file.size
-                        })
-                        if (localRegistryCache) {
-                            localRegistryCache[file.name] = {
-                                uploadedBy: uid,
-                                fileHash,
-                                sessionId: result.sessionId || '',
-                                uploadedAt: new Date().toISOString(),
-                                mtime: file.mtime,
-                                size: file.size
-                            }
-                        }
-                    }
-
                 } catch (error: any) {
                     console.error(`[SYNC] Error processing ${file.name}:`, error)
                     results.push({ status: 'error', fileName: file.name, error: error.message })
@@ -576,190 +260,72 @@ export function useElectronSync() {
             syncResults.value = results
             lastSyncTime.value = new Date()
 
-            // Count results
-            const created = results.filter(r => r.status === 'created').length
-            const updated = results.filter(r => r.status === 'updated').length
-            const unchanged = results.filter(r => r.status === 'unchanged').length
-            const skipped = results.filter(r => r.status === 'skipped').length
-            const errors = results.filter(r => r.status === 'error').length
-            const migrated = results.filter(r => r.reason === 'summary_rules_migration').length
+            const created = results.filter((r) => r.status === 'created').length
+            const updated = results.filter((r) => r.status === 'updated').length
+            const unchanged = results.filter((r) => r.status === 'unchanged').length
+            const skipped = results.filter((r) => r.status === 'skipped').length
+            const errors = results.filter((r) => r.status === 'error').length
+            const migrated = results.filter((r) => r.reason === 'summary_rules_migration').length
+            const cloudMigrated = await migrateLegacyCloudSummaries({
+                uid,
+                bestRulesVersion: BEST_RULES_VERSION,
+                getDocsFn: getDocs,
+                setDocFn: setDoc,
+                canonicalizeSummary: canonicalizeSummaryFromLocalDomain
+            })
+            const totalMigrations = migrated + cloudMigrated
 
-            console.log(`[SYNC] Complete: ${created} created, ${updated} updated, ${unchanged} unchanged, ${skipped} skipped, ${errors} errors (${migrated} summary migrations)`)
+            console.log(`[SYNC] Complete: ${created} created, ${updated} updated, ${unchanged} unchanged, ${skipped} skipped, ${errors} errors (${totalMigrations} summary migrations)`)
 
-            // Rebuild trackBests after summary rules migrations to remove stale race bests.
-            if (migrated > 0) {
-                console.log(`[SYNC] Rebuilding trackBests after ${migrated} summary migrations...`)
+            let freshSessions: Awaited<ReturnType<typeof loadSessions>> | null = null
+            if (created > 0 || updated > 0 || totalMigrations > 0) {
+                clearTrackDerivedCaches()
+                freshSessions = await loadSessions(undefined, true, {
+                    sourceMode: 'cloud_fresh',
+                    context: totalMigrations > 0 ? 'sync_post_migration_refresh' : 'sync_post_apply_refresh'
+                })
+            }
+
+            if (totalMigrations > 0) {
+                console.log(`[SYNC] Rebuilding trackBests after ${totalMigrations} summary migrations...`)
                 try {
-                    await resetAllTrackBests(uid)
-                    const allSessions = await loadSessions(undefined, true)
-                    for (const session of allSessions) {
-                        await updateTrackBests(
-                            uid,
-                            session.meta.track,
-                            session.sessionId,
-                            session.meta.date_start,
-                            session.summary,
-                            session.meta.car
-                        )
-                    }
-                    console.log(`[SYNC] trackBests rebuilt from ${allSessions.length} sessions`)
+                    await rebuildTrackBestsProjection({
+                        db,
+                        uid,
+                        sessions: freshSessions || await loadSessions(undefined, true, {
+                            sourceMode: 'cloud_fresh',
+                            context: 'sync_rebuild_trackBests'
+                        }),
+                        resetAllTrackBests,
+                        getDocFn: getDoc,
+                        setDocFn: setDoc,
+                        bestRulesVersion: BEST_RULES_VERSION
+                    })
+                    clearTrackDerivedCaches()
                 } catch (rebuildError: any) {
                     console.warn('[SYNC] trackBests rebuild after migration failed:', rebuildError.message)
                 }
             }
 
-            let freshSessions: Awaited<ReturnType<typeof loadSessions>> | null = null
+            await updateSuiteVersion(uid)
 
-            // Refresh data if something changed
-            if (created > 0 || updated > 0) {
-                clearTrackDerivedCaches()
-                console.log('[SYNC] Refreshing dashboard data...')
-                freshSessions = await loadSessions(undefined, true)
+            try {
+                const allSessions = freshSessions || await loadSessions(undefined, true, {
+                    sourceMode: 'cloud_fresh',
+                    context: 'sync_user_projection_rebuild'
+                }) || []
+                await writeUserProjectionDocuments({
+                    db,
+                    uid,
+                    sessions: allSessions,
+                    setDocFn: setDoc
+                })
+                console.log(`[SYNC] User projections updated from ${allSessions.length} sessions`)
+            } catch (projectionError: any) {
+                console.warn('[SYNC] Could not update user projections:', projectionError.message)
             }
 
-            // Update Suite version in user profile (1 write per sync)
             try {
-                const electronAPI = (window as any).electronAPI
-                if (electronAPI?.getSuiteVersion) {
-                    const version = await electronAPI.getSuiteVersion()
-                    if (version) {
-                        const userRef = doc(db, `users/${uid}`)
-                        await setDoc(userRef, {
-                            suiteVersion: version.launcher || version.webapp || null,
-                            suiteVersionDetail: version,
-                            suiteVersionUpdatedAt: new Date().toISOString()
-                        }, { merge: true })
-                        console.log(`[SYNC] Suite version updated: ${version.launcher}`)
-                    }
-                }
-            } catch (versionError: any) {
-                console.warn('[SYNC] Could not update suite version:', versionError.message)
-            }
-
-            // Update user stats + sessionIndex (for browser clients & admin dashboard)
-            // This single doc write eliminates ~254 reads on browser login!
-            try {
-                const allSessions = freshSessions || await loadSessions(undefined, true) || []
-                const now = new Date()
-                const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-                const sevenDaysAgoStr = sevenDaysAgo.toISOString()
-
-                // --- Stats (for admin/coach dashboard) ---
-                let lastSessionDate: string | null = null
-                let sessionsLast7Days = 0
-
-                // --- Activity 7d (for panoramica chart) ---
-                let practiceMinutes = 0, practiceCount = 0
-                let qualifyMinutes = 0, qualifyCount = 0
-                let raceMinutes = 0, raceCount = 0
-                const activityByDay: Record<string, { P: number; Q: number; R: number }> = {}
-
-                // --- Tracks summary (for piste page) ---
-                const tracksMap: Record<string, { track: string; sessions: number; lastPlayed: string }> = {}
-
-                // --- Sessions list (compact, for sessioni page) ---
-                const sessionsList: Array<{
-                    id: string; date: string; track: string; car: string;
-                    type: number; laps: number; lapsValid: number; bestLap: number | null;
-                    totalTime: number; stintCount: number;
-                    bestQualyMs: number | null; bestRaceMs: number | null;
-                    bestRulesVersion: number;
-                    grip?: string
-                }> = []
-
-                for (const session of allSessions) {
-                    const dateStart = session.meta?.date_start || ''
-                    const track = session.meta?.track || ''
-                    const trackKey = track.toLowerCase()
-
-                    // Last session date
-                    if (dateStart && (!lastSessionDate || dateStart > lastSessionDate)) {
-                        lastSessionDate = dateStart
-                    }
-
-                    // Activity 7d
-                    if (dateStart >= sevenDaysAgoStr) {
-                        sessionsLast7Days++
-                        const totalMs = session.summary?.totalTime || 0
-                        const minutes = Math.round(totalMs / 60000)
-                        const dayKey = dateStart.substring(0, 10) // "2026-03-28"
-
-                        if (!activityByDay[dayKey]) activityByDay[dayKey] = { P: 0, Q: 0, R: 0 }
-
-                        switch (session.meta?.session_type) {
-                            case 0: practiceMinutes += minutes; practiceCount++; activityByDay[dayKey].P++; break
-                            case 1: qualifyMinutes += minutes; qualifyCount++; activityByDay[dayKey].Q++; break
-                            case 2: raceMinutes += minutes; raceCount++; activityByDay[dayKey].R++; break
-                        }
-                    }
-
-                    // Tracks summary
-                    if (trackKey) {
-                        if (!tracksMap[trackKey]) {
-                            tracksMap[trackKey] = { track, sessions: 0, lastPlayed: dateStart }
-                        }
-                        tracksMap[trackKey].sessions++
-                        if (dateStart > tracksMap[trackKey].lastPlayed) {
-                            tracksMap[trackKey].lastPlayed = dateStart
-                        }
-                    }
-
-                    // Sessions list (compact entry)
-                    const bestRulesVersion = Number(session.summary?.best_rules_version || 0)
-                    const raceRuleCompatible = bestRulesVersion >= BEST_RULES_VERSION
-                    sessionsList.push({
-                        id: session.sessionId,
-                        date: dateStart,
-                        track,
-                        car: session.meta?.car || '',
-                        type: session.meta?.session_type ?? 0,
-                        laps: session.summary?.laps || 0,
-                        lapsValid: session.summary?.lapsValid || 0,
-                        bestLap: session.summary?.bestLap || null,
-                        totalTime: session.summary?.totalTime || 0,
-                        stintCount: session.summary?.stintCount || 0,
-                        bestQualyMs: session.summary?.best_qualy_ms || null,
-                        bestRaceMs: raceRuleCompatible ? (session.summary?.best_race_ms || null) : null,
-                        bestRulesVersion,
-                        grip: (raceRuleCompatible ? session.summary?.best_race_conditions?.grip : null) || session.summary?.best_qualy_conditions?.grip || undefined
-                    })
-                }
-
-                // Sort sessions list by date descending
-                sessionsList.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-                const sessionsListCompact = sessionsList.slice(0, SESSION_INDEX_MAX_ITEMS)
-
-                const statsRef = doc(db, `users/${uid}`)
-                await setDoc(statsRef, {
-                    stats: {
-                        totalSessions: allSessions.length,
-                        sessionsLast7Days,
-                        lastSessionDate,
-                        tracksCount: Object.keys(tracksMap).length,
-                        updatedAt: new Date().toISOString()
-                    },
-                    sessionIndex: {
-                        sessionsList: sessionsListCompact,
-                        totalSessions: allSessions.length,
-                        activity7d: {
-                            practice: { minutes: practiceMinutes, sessions: practiceCount },
-                            qualify: { minutes: qualifyMinutes, sessions: qualifyCount },
-                            race: { minutes: raceMinutes, sessions: raceCount },
-                            byDay: Object.entries(activityByDay).map(([date, counts]) => ({ date, ...counts }))
-                        },
-                        tracksSummary: Object.values(tracksMap),
-                        updatedAt: new Date().toISOString()
-                    }
-                }, { merge: true })
-                console.log(`[SYNC] UserIndex updated: ${sessionsListCompact.length}/${allSessions.length} sessions cached, ${sessionsLast7Days} last 7d, ${Object.keys(tracksMap).length} tracks`)
-            } catch (statsError: any) {
-                console.warn('[SYNC] Could not update userIndex:', statsError.message)
-            }
-
-            // Retention cleanup: keep only synced JSON files newer than retention window.
-            // Files are deleted only when they are present in registry for the current user.
-            try {
-                const electronAPI = (window as any).electronAPI
                 if (electronAPI?.cleanupSyncedFiles && uid) {
                     const cleanup = await electronAPI.cleanupSyncedFiles(SYNCED_FILES_RETENTION_DAYS, uid)
                     console.log(`[SYNC] Local retention cleanup: deleted=${cleanup?.deleted ?? 0}, checked=${cleanup?.checked ?? 0}`)
@@ -769,7 +335,6 @@ export function useElectronSync() {
             }
 
             return results
-
         } catch (error: any) {
             console.error('[SYNC] Sync failed:', error)
             return [{ status: 'error', fileName: 'sync', error: error.message }]
@@ -778,140 +343,57 @@ export function useElectronSync() {
         }
     }
 
-    // Helper: check results and notify if actual changes were synced
     function notifyIfChanged(results: SyncResult[]) {
-        const synced = results.filter(r => r.status === 'created' || r.status === 'updated')
+        const synced = results.filter((r) => r.status === 'created' || r.status === 'updated')
         if (synced.length > 0) {
             console.log(`[SYNC] Auto-sync completed: ${synced.length} files synced to Firebase`)
             pendingNotification.value = results
         }
     }
 
-    // One-time cleanup: delete zero-lap sessions from Firebase
-    // Runs once per user (localStorage flag prevents re-execution)
     async function cleanupZeroLapSessions(uid: string): Promise<number> {
-        const CLEANUP_KEY = `zero_lap_cleanup_done_${uid}`
-
-        // Skip if already done for this user
-        if (typeof window !== 'undefined' && localStorage.getItem(CLEANUP_KEY)) {
-            return 0
-        }
-
-        console.log('[CLEANUP] Checking for zero-lap sessions to remove...')
-
-        try {
-            const sessionsRef = collection(db, `users/${uid}/sessions`)
-            const snapshot = await getDocs(sessionsRef)
-
-            const toDelete: string[] = []
-            snapshot.forEach(docSnap => {
-                const data = docSnap.data()
-                const laps = data.summary?.laps || 0
-                if (laps === 0) {
-                    toDelete.push(docSnap.id)
-                }
-            })
-
-            if (toDelete.length === 0) {
-                console.log('[CLEANUP] No zero-lap sessions found')
-                if (typeof window !== 'undefined') {
-                    localStorage.setItem(CLEANUP_KEY, new Date().toISOString())
-                }
-                return 0
-            }
-
-            console.log(`[CLEANUP] Found ${toDelete.length} zero-lap sessions, deleting...`)
-
-            // Delete in batches of 10 to avoid overwhelming Firestore
-            for (let i = 0; i < toDelete.length; i++) {
-                const sessionId = toDelete[i]
-                try {
-                    // Delete rawChunks subcollection first
-                    const chunksRef = collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`)
-                    const chunksSnap = await getDocs(chunksRef)
-                    for (const chunk of chunksSnap.docs) {
-                        await deleteDoc(chunk.ref)
-                    }
-                    // Delete session document
-                    await deleteDoc(doc(db, `users/${uid}/sessions/${sessionId}`))
-                } catch (e: any) {
-                    console.warn(`[CLEANUP] Error deleting ${sessionId}:`, e.message)
-                }
-            }
-
-            console.log(`[CLEANUP] Deleted ${toDelete.length} zero-lap sessions`)
-
-            // Mark as done
-            if (typeof window !== 'undefined') {
-                localStorage.setItem(CLEANUP_KEY, new Date().toISOString())
-            }
-
-            return toDelete.length
-        } catch (e: any) {
-            console.error('[CLEANUP] Error during cleanup:', e.message)
-            return 0
-        }
+        return cleanupZeroLapGhosts({
+            db,
+            uid,
+            getDocsFn: getDocs,
+            deleteDocFn: deleteDoc
+        })
     }
 
-    // Setup auto-sync on file changes + window focus
     function setupAutoSync() {
-        if (!isElectron.value) return
+        if (!isElectron.value || autoSyncInitialized) return
 
         const electronAPI = (window as any).electronAPI
+        if (!electronAPI) return
 
-        // TRIGGER 1 (PRIMARY): File-ready - sync only changed files
-        electronAPI.onFilesChanged(async (data: { new: TelemetryFile[], modified: TelemetryFile[] }) => {
-            const changedFiles = [...data.new, ...data.modified]
-            if (changedFiles.length > 0) {
-                console.log(`[SYNC] File-ready trigger: ${data.new.length} new, ${data.modified.length} modified`)
-                // Invalidate registry cache to pick up new files
+        autoSyncInitialized = true
+        setupAutoSyncController({
+            isElectron: isElectron.value,
+            electronAPI,
+            currentUser,
+            syncTelemetryFiles,
+            onNotify: notifyIfChanged,
+            onFilesDetected: () => {
                 localRegistryCache = null
-                // INCREMENTAL: sync only the changed files
-                const results = await syncTelemetryFiles(changedFiles)
-                notifyIfChanged(results)
-            }
-        })
-
-        // TRIGGER 2 (SAFETY NET): Window focus - check for any missed files
-        if (electronAPI.onWindowFocused) {
-            electronAPI.onWindowFocused(async () => {
-                console.log('[SYNC] Window focus trigger: checking for pending files')
-                // Full scan but registry cache makes it near-instant for already-synced files
-                const results = await syncTelemetryFiles()
-                notifyIfChanged(results)
-            })
-        }
-
-        // TRIGGER 3 (RECOVERY): Initial load - sync anything missed
-        electronAPI.onInitialFiles(async (data: { files: TelemetryFile[], registry: any }) => {
-            console.log(`[SYNC] Initial files: ${data.files.length}`)
-            // Cache the registry from initial data
-            localRegistryCache = data.registry || {}
-            // Trigger initial sync (registry cache will skip already-uploaded files)
-            const results = await syncTelemetryFiles()
-            notifyIfChanged(results)
-        })
-
-        // TRIGGER 4 (AUTH-READY): Sync when Firebase auth resolves
-        // Fixes race condition: initial-files fires ~200ms after load,
-        // but Firebase auth takes ~1-3s. Without this, the first sync
-        // exits early with "No user logged in" and never retries.
-        watch(currentUser, async (user) => {
-            if (user) {
-                console.log(`[SYNC] Auth-ready trigger: user ${user.email} logged in, starting sync`)
-                // One-time cleanup of zero-lap ghost sessions
-                const cleaned = await cleanupZeroLapSessions(user.uid)
+            },
+            onInitialRegistry: (data) => {
+                localRegistryCache = data?.registry || {}
+                console.log(`[SYNC] Initial files: ${Array.isArray(data?.files) ? data.files.length : 0}`)
+            },
+            onBeforeAuthReady: async (uid) => {
+                const cleaned = await cleanupZeroLapSessions(uid)
                 if (cleaned > 0) {
                     clearTrackDerivedCaches()
                     console.log(`[SYNC] Cleaned ${cleaned} zero-lap sessions, refreshing data...`)
-                    await loadSessions(undefined, true)
+                    await loadSessions(undefined, true, {
+                        sourceMode: 'cloud_fresh',
+                        context: 'sync_cleanup_refresh'
+                    })
                 }
-                const results = await syncTelemetryFiles()
-                notifyIfChanged(results)
             }
-        }, { once: true })
+        })
 
-        console.log('[SYNC] Auto-sync setup complete (file-ready + focus + initial + auth-ready + cleanup)')
+        console.log('[SYNC] Auto-sync setup complete (service-based)')
     }
 
     return {
@@ -925,4 +407,3 @@ export function useElectronSync() {
         setupAutoSync
     }
 }
-

@@ -4,7 +4,7 @@
 // Uses server-side pagination + local offline fallback
 // ============================================
 
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { 
   formatLapTime, 
   formatCarName, 
@@ -12,7 +12,7 @@ import {
   formatTime,
   getSessionTypeLabel
 } from '~/composables/useTelemetryData'
-import { useSessionPager } from '~/composables/useSessionPager'
+import { useTelemetryGateway, type SessionPagerFilters } from '~/composables/useTelemetryGateway'
 
 // Emit to parent for navigation
 const emit = defineEmits<{
@@ -44,12 +44,12 @@ const ITEMS_PER_PAGE = 25
 const targetUserId = usePilotContext()
 
 // === PAGED DATA SOURCE ===
+const telemetryGateway = useTelemetryGateway()
 const {
-  sessions: rawSessions,
-  state: pagerState,
-  isOnline,
-  loadPage
-} = useSessionPager()
+  pagerSessions: rawSessions,
+  pagerState,
+  pagerIsOnline: isOnline
+} = telemetryGateway
 
 const isLoading = computed(() => pagerState.value.loading)
 const currentPage = ref(1)
@@ -58,6 +58,25 @@ const filterTypeToNumeric: Record<SessionType, number> = {
   practice: 0,
   qualify: 1,
   race: 2
+}
+
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function getRangeStartKey(range: 'today' | '7d' | '30d' | 'all'): string | null {
+  if (range === 'all') return null
+  const now = new Date()
+  const start = new Date(now)
+  if (range === 'today') {
+    return formatDateKey(start)
+  }
+  const days = range === '7d' ? 7 : 30
+  start.setDate(now.getDate() - days)
+  return formatDateKey(start)
 }
 
 function getRangeStartIso(range: 'today' | '7d' | '30d' | 'all'): string | null {
@@ -78,17 +97,21 @@ function buildServerFilters(): SessionPagerFilters {
   return {
     sessionTypes: filterType.value === 'all' ? [] : [filterTypeToNumeric[filterType.value]],
     fromDateIso: getRangeStartIso(filterTimeRange.value),
-    toDateIso: filterTimeRange.value === 'all' ? null : new Date().toISOString()
+    toDateIso: filterTimeRange.value === 'all' ? null : new Date().toISOString(),
+    track: filterTrack.value === 'all' ? null : filterTrack.value,
+    car: filterCar.value === 'all' ? null : filterCar.value,
+    hideEmpty: filterHideEmpty.value
   }
 }
 
 async function reloadFirstPage() {
-  await loadPage(targetUserId.value || undefined, {
-    reset: true,
-    page: 1,
-    pageSize: ITEMS_PER_PAGE,
-    filters: buildServerFilters()
-  })
+  await telemetryGateway.getSessionsPage(
+    targetUserId.value || undefined,
+    buildServerFilters(),
+    1,
+    ITEMS_PER_PAGE,
+    true
+  )
   currentPage.value = pagerState.value.currentPage
 }
 
@@ -108,6 +131,7 @@ const sessions = computed<DisplaySession[]>(() => {
   return rawSessions.value.map(s => {
     const sessionType = getSessionTypeLabel(s.meta.session_type)
     const dateStr = s.meta.date_start?.split('T')[0] || ''
+    const sessionRaceTime = s.summary.best_session_race_ms || s.summary.best_race_ms || null
     
     return {
       id: s.sessionId,
@@ -123,8 +147,8 @@ const sessions = computed<DisplaySession[]>(() => {
       bestQualy: s.summary.best_qualy_ms 
         ? formatLapTime(s.summary.best_qualy_ms) 
         : undefined,
-      bestRace: s.summary.best_race_ms 
-        ? formatLapTime(s.summary.best_race_ms) 
+      bestRace: sessionRaceTime 
+        ? formatLapTime(sessionRaceTime) 
         : undefined,
       source: s.source as 'cloud' | 'local' | undefined,
       syncState: s.syncState as 'synced' | 'pending_sync' | 'local_only' | 'sync_failed' | undefined
@@ -140,7 +164,7 @@ const filterTimeRange = ref<'today' | '7d' | '30d' | 'all'>('all')
 const filterHideEmpty = ref(true) // Hide sessions with 0 total laps (on by default)
 
 watch(
-  [filterType, filterTimeRange],
+  [filterType, filterTrack, filterCar, filterTimeRange, filterHideEmpty],
   async () => {
     await reloadFirstPage()
   }
@@ -171,13 +195,13 @@ const filteredSessions = computed(() => {
     
     // Time range filter
     if (filterTimeRange.value !== 'all') {
-      const today = new Date()
-      const sessionDate = new Date(session.date)
-      const diffDays = Math.floor((today.getTime() - sessionDate.getTime()) / (1000 * 60 * 60 * 24))
-      
-      if (filterTimeRange.value === 'today' && diffDays > 0) return false
-      if (filterTimeRange.value === '7d' && diffDays > 7) return false
-      if (filterTimeRange.value === '30d' && diffDays > 30) return false
+      const sessionDateKey = session.date
+      const todayKey = formatDateKey(new Date())
+      const fromKey = getRangeStartKey(filterTimeRange.value)
+
+      if (filterTimeRange.value === 'today' && sessionDateKey !== todayKey) return false
+      if (fromKey && sessionDateKey < fromKey) return false
+      if (sessionDateKey > todayKey) return false
     }
     
     return true
@@ -185,15 +209,8 @@ const filteredSessions = computed(() => {
 })
 
 // === PAGINATION ===
-const hasOnlyClientFilters = computed(() =>
-  filterTrack.value !== 'all' || filterCar.value !== 'all' || filterHideEmpty.value
-)
-
 // Total filtered sessions count
 const totalFilteredSessions = computed(() => {
-  if (hasOnlyClientFilters.value) {
-    return filteredSessions.value.length
-  }
   if (pagerState.value.totalItems !== null) {
     return pagerState.value.totalItems
   }
@@ -229,12 +246,17 @@ const isChangingPage = ref(false)
 
 async function onPageChange(page: number) {
   isChangingPage.value = true
-  await loadPage(targetUserId.value || undefined, {
+  await telemetryGateway.getSessionsPage(
+    targetUserId.value || undefined,
+    buildServerFilters(),
     page,
-    pageSize: ITEMS_PER_PAGE,
-    filters: buildServerFilters()
-  })
+    ITEMS_PER_PAGE,
+    false
+  )
   currentPage.value = pagerState.value.currentPage
+  // Reset fading state after data load - don't rely only on transitionend
+  await nextTick()
+  isChangingPage.value = false
 }
 
 // Format date for header

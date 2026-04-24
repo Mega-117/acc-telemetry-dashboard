@@ -7,7 +7,7 @@
 
 import { ref, onMounted, nextTick, watch } from 'vue'
 import { useElectronSync } from '~/composables/useElectronSync'
-import { useTelemetryData } from '~/composables/useTelemetryData'
+import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,7 +18,7 @@ const isRefreshing = ref(false)
 
 // Sync composable
 const { isSyncing, syncTelemetryFiles, setupAutoSync, syncResults, pendingNotification } = useElectronSync()
-const { loadSessions } = useTelemetryData()
+const telemetryGateway = useTelemetryGateway()
 
 // Notification state
 const showNotification = ref(false)
@@ -72,8 +72,8 @@ const handleRefresh = async () => {
       await router.replace({ path: '/panoramica', query: { _refresh: Date.now() } })
       await nextTick()
       
-      // Reload fresh data (force=true to bypass cache)
-      await loadSessions(undefined, true)
+      // Reload fresh data through the centralized gateway
+      await telemetryGateway.getOverviewSnapshot()
       
       // Navigate back to original route
       await router.replace(currentPath)

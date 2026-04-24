@@ -1,12 +1,9 @@
 <script setup lang="ts">
 // ============================================
-// TrackDetailPage - Track detail with Firebase data
+// TrackDetailPage - Track detail with projection-first data
 // ============================================
 
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
-
-// Composable for public path (GitHub Pages compatibility)
-const { getPublicPath } = usePublicPath()
+import { ref, computed, onMounted, watch } from 'vue'
 import { Line } from 'vue-chartjs'
 import {
   Chart as ChartJS,
@@ -19,20 +16,15 @@ import {
   Legend,
   Filler
 } from 'chart.js'
-import { 
-  useTelemetryData, 
-  formatLapTime,
-  formatCarName,
-  formatTrackName,
-  getSessionTypeLabel,
-  getCarCategory,
+import {
   CAR_CATEGORIES,
   type CarCategory
 } from '~/composables/useTelemetryData'
-import { BEST_RULES_VERSION } from '~/utils/sessionParser'
-import { runTrackValidation } from '~/composables/useDebugValidator'
+import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
+import type { TrackDetailProjection } from '~/types/trackProjections'
 
-// Register Chart.js components
+const { getPublicPath } = usePublicPath()
+
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -54,337 +46,101 @@ const emit = defineEmits<{
   'go-to-session': [sessionId: string]
 }>()
 
-// Get pilot context (will be set when coach views a pilot)
+const telemetryGateway = useTelemetryGateway()
 const targetUserId = usePilotContext()
 
-// Format date to short readable format (e.g., "19 gen 2026")
 function formatShortDate(isoDate: string | null): string {
   if (!isoDate) return ''
   const dateStr = isoDate.split('T')[0] ?? isoDate
   const [year = '0', month = '0', day = '0'] = dateStr.split('-')
   const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
-  return `${parseInt(day)} ${months[parseInt(month) - 1] ?? ''} ${year}`
+  return `${parseInt(day, 10)} ${months[parseInt(month, 10) - 1] ?? ''} ${year}`
 }
 
-// ========================================
-// FIREBASE DATA LOADING
-// ========================================
-const { sessions, trackStats, isLoading, loadSessions, getTrackBests, getTrackActivity, fetchSessionFull } = useTelemetryData()
-
-onMounted(async () => {
-  await loadSessions(targetUserId.value || undefined)
-})
-
-// Filter sessions for this track
-const trackSessions = computed(() => {
-  const trackIdNorm = props.trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
-  return sessions.value.filter(s => {
-    const sessionTrackId = s.meta.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
-    return sessionTrackId.includes(trackIdNorm) || trackIdNorm.includes(sessionTrackId)
-  }).sort((a, b) => b.meta.date_start.localeCompare(a.meta.date_start))
-})
-
-// Filter track sessions by selected category
-const filteredTrackSessions = computed(() => {
-  return trackSessions.value.filter(s =>
-    getCarCategory(s.meta.car) === selectedCategory.value
-  )
-})
-
-// Get stats for this track from trackStats
-const currentTrackStats = computed(() => {
-  const trackIdNorm = props.trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
-  return trackStats.value.find(t => {
-    const statTrackId = t.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
-    return statTrackId.includes(trackIdNorm) || trackIdNorm.includes(statTrackId)
-  })
-})
-
-// Track metadata (static for display)
-const trackMetadata: Record<string, { name: string, fullName: string, country: string, countryCode: string, length: string, turns: number, image: string }> = {
-  'monza': { name: 'Monza', fullName: 'Autodromo Nazionale Monza', country: 'Italia', countryCode: 'IT', length: '5.793 km', turns: 11, image: '/tracks/track_monza.png' },
-  'spa': { name: 'Spa-Francorchamps', fullName: 'Circuit de Spa-Francorchamps', country: 'Belgio', countryCode: 'BE', length: '7.004 km', turns: 19, image: '/tracks/track_spa.png' },
-  'spa_francorchamps': { name: 'Spa-Francorchamps', fullName: 'Circuit de Spa-Francorchamps', country: 'Belgio', countryCode: 'BE', length: '7.004 km', turns: 19, image: '/tracks/track_spa.png' },
-  'suzuka': { name: 'Suzuka', fullName: 'Suzuka International Racing Course', country: 'Giappone', countryCode: 'JP', length: '5.807 km', turns: 18, image: '/tracks/track_suzuka.png' },
-  'donington': { name: 'Donington Park', fullName: 'Donington Park Racing Circuit', country: 'Regno Unito', countryCode: 'GB', length: '4.020 km', turns: 12, image: '/tracks/track_donington.png' },
-  'donington_park': { name: 'Donington Park', fullName: 'Donington Park Racing Circuit', country: 'Regno Unito', countryCode: 'GB', length: '4.020 km', turns: 12, image: '/tracks/track_donington.png' },
-  'valencia': { name: 'Valencia', fullName: 'Circuit Ricardo Tormo', country: 'Spagna', countryCode: 'ES', length: '4.005 km', turns: 14, image: '/tracks/track_valencia.png' },
-  'nurburgring': { name: 'Nürburgring', fullName: 'Nürburgring Grand Prix Strecke', country: 'Germania', countryCode: 'DE', length: '5.148 km', turns: 16, image: '/tracks/track_nurburgring.png' },
-  'silverstone': { name: 'Silverstone', fullName: 'Silverstone Circuit', country: 'Regno Unito', countryCode: 'GB', length: '5.891 km', turns: 18, image: '/tracks/track_silverstone.png' },
-  'imola': { name: 'Imola', fullName: 'Autodromo Enzo e Dino Ferrari', country: 'Italia', countryCode: 'IT', length: '4.909 km', turns: 19, image: '/tracks/track_imola.png' },
-  'barcelona': { name: 'Barcelona', fullName: 'Circuit de Barcelona-Catalunya', country: 'Spagna', countryCode: 'ES', length: '4.655 km', turns: 16, image: '/tracks/track_barcelona.png' },
-}
-
-// Grip conditions for dropdown
 const gripConditions = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
 const selectedGrip = ref('Optimum')
-
-// Car categories for dropdown
 const selectedCategory = ref<CarCategory>('GT3')
+const trackProjection = ref<TrackDetailProjection | null>(null)
+const isProjectionLoading = ref(false)
 
-// Recalculated ALL best times from full session data (using centralized function)
-type GripBestTimes = {
-  bestQualy: number | null
-  bestQualyTemp: number | null
-  bestQualyFuel: number | null
-  bestQualySessionId: string | null
-  bestQualyDate: string | null
-  bestRace: number | null
-  bestRaceTemp: number | null
-  bestRaceFuel: number | null
-  bestRaceSessionId: string | null
-  bestRaceDate: string | null
-  bestAvgRace: number | null
-  bestAvgRaceTemp: number | null
-  bestAvgRaceFuel: number | null
-  bestAvgRaceSessionId: string | null
-  bestAvgRaceDate: string | null
-}
-const recalculatedBestByGrip = ref<Record<string, GripBestTimes>>({})
-const isRecalculating = ref(false)
-
-// Trigger recalculation when track sessions change or category changes
-watch([trackSessions, selectedCategory], async () => {
-  if (trackSessions.value.length > 0) {
-    isRecalculating.value = true
-    // Use getTrackBests for optimized loading (with lazy caching)
-    recalculatedBestByGrip.value = await getTrackBests(
+async function loadTrackProjection() {
+  isProjectionLoading.value = true
+  try {
+    trackProjection.value = await telemetryGateway.getTrackDetailProjection(
       props.trackId,
-      selectedCategory.value,
-      targetUserId.value || undefined
+      targetUserId.value || undefined,
+      {
+        category: selectedCategory.value,
+        grip: selectedGrip.value
+      }
     )
-    isRecalculating.value = false
-    
-    // DEV: Auto-run validation tests
-    if (import.meta.env.DEV) {
-      nextTick(() => {
-        runTrackValidation(
-          track.value,
-          trackSessions.value,
-          recalculatedBestByGrip.value,
-          selectedGrip.value
-        )
-      })
-    }
+  } finally {
+    isProjectionLoading.value = false
   }
-}, { immediate: true })
-
-// ========================================
-// LAZY FUEL FETCHING
-// Fetch fuel data for best laps from full session data
-// ========================================
-const bestFuelData = ref<{
-  qualyFuel: number | null
-  raceFuel: number | null
-}>({
-  qualyFuel: null,
-  raceFuel: null
-})
-
-// Helper: find fuel_remaining for the best lap in a session
-function findBestLapFuel(fullSession: any, bestTimeMs: number, isQualy: boolean): number | null {
-  const stints = fullSession?.stints || []
-  for (const stint of stints) {
-    const stintIsQualy = stint.type === 'Qualify'
-    if (stintIsQualy !== isQualy) continue
-    const laps = stint.laps || []
-    for (const lap of laps) {
-      if (lap.is_valid && !lap.has_pit_stop && lap.lap_time_ms === bestTimeMs) {
-        return lap.fuel_remaining ?? null
-      }
-    }
-  }
-  return null
 }
 
-// Watch for changes in best times and fetch fuel lazily
-watch([recalculatedBestByGrip, selectedGrip], async () => {
-  const grip = selectedGrip.value
-  const gripBests = recalculatedBestByGrip.value[grip]
-  if (!gripBests) {
-    bestFuelData.value = { qualyFuel: null, raceFuel: null }
-    return
+onMounted(loadTrackProjection)
+
+watch(
+  () => [props.trackId, targetUserId.value, selectedCategory.value, selectedGrip.value],
+  async () => {
+    await loadTrackProjection()
   }
+)
 
-  // Collect unique session IDs that need to be fetched
-  const sessionsToFetch = new Map<string, { type: 'qualy' | 'race' | 'avgRace'; bestTime: number }[]>()
-  
-  if (gripBests.bestQualySessionId && gripBests.bestQualy) {
-    const id = gripBests.bestQualySessionId
-    if (!sessionsToFetch.has(id)) sessionsToFetch.set(id, [])
-    sessionsToFetch.get(id)!.push({ type: 'qualy', bestTime: gripBests.bestQualy })
-  }
-  if (gripBests.bestRaceSessionId && gripBests.bestRace) {
-    const id = gripBests.bestRaceSessionId
-    if (!sessionsToFetch.has(id)) sessionsToFetch.set(id, [])
-    sessionsToFetch.get(id)!.push({ type: 'race', bestTime: gripBests.bestRace })
-  }
-
-
-  if (sessionsToFetch.size === 0) {
-    bestFuelData.value = { qualyFuel: null, raceFuel: null }
-    return
-  }
-
-  const result = { qualyFuel: null as number | null, raceFuel: null as number | null }
-
-  // Fetch sessions in parallel (max 1-3)
-  const fetchPromises = Array.from(sessionsToFetch.entries()).map(async ([sessionId, lookups]) => {
-    try {
-      const fullSession = await fetchSessionFull(sessionId, targetUserId.value || undefined)
-      if (!fullSession) return
-
-      for (const lookup of lookups) {
-        if (lookup.type === 'qualy') {
-          result.qualyFuel = findBestLapFuel(fullSession, lookup.bestTime, true)
-        } else if (lookup.type === 'race') {
-          result.raceFuel = findBestLapFuel(fullSession, lookup.bestTime, false)
-        }
-      }
-    } catch (e) {
-      console.warn(`[TRACK] Error fetching fuel for session ${sessionId}:`, e)
-    }
-  })
-
-  await Promise.all(fetchPromises)
-  bestFuelData.value = result
-}, { immediate: true })
-
-// Track computed data
-const track = computed(() => {
-  const trackIdNorm = props.trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
-  const meta = trackMetadata[trackIdNorm] || trackMetadata[props.trackId] || {
-    name: formatTrackName(props.trackId),
-    fullName: formatTrackName(props.trackId),
-    country: '-',
-    countryCode: '??',
-    length: '-',
-    turns: 0,
-    image: '/tracks/track_default.png'
-  }
-  
-  const stats = currentTrackStats.value
-  const grip = selectedGrip.value
-  
-  // IMPORTANT: Use recalculated values for ALL bests (from full session data)
-  // This bypasses Firebase summary caching which may have incorrect values
-  const recalcGrip = recalculatedBestByGrip.value[grip]
-  
-  // All values now come from recalculated data
-  const bestQualy = recalcGrip?.bestQualy || null
-  const bestRace = recalcGrip?.bestRace || null
-  const bestAvgRace = recalcGrip?.bestAvgRace || null
-  
-  // Build conditions for grip-specific bests
-  const bestQualyConditions = bestQualy ? {
-    airTemp: recalcGrip?.bestQualyTemp || 0,
-    roadTemp: 0,
-    grip
-  } : null
-  
-  const bestRaceConditions = bestRace ? {
-    airTemp: recalcGrip?.bestRaceTemp || 0,
-    roadTemp: 0,
-    grip
-  } : null
-  
-  const bestAvgRaceConditions = bestAvgRace ? {
-    airTemp: recalcGrip?.bestAvgRaceTemp || 0,
-    roadTemp: 0,
-    grip
-  } : null
-  
-  return {
-    id: props.trackId,
-    ...meta,
-    sessions: trackSessions.value.length,
-    lastSession: stats?.lastSession || '-',
-    bestQualy: bestQualy ? formatLapTime(bestQualy) : null,
-    bestRace: bestRace ? formatLapTime(bestRace) : null,
-    bestAvgRace: bestAvgRace ? formatLapTime(bestAvgRace) : null,
-    bestQualyConditions,
-    bestRaceConditions,
-    bestAvgRaceConditions,
-    // Session IDs for navigation
-    bestQualySessionId: recalcGrip?.bestQualySessionId || null,
-    bestRaceSessionId: recalcGrip?.bestRaceSessionId || null,
-    bestAvgRaceSessionId: recalcGrip?.bestAvgRaceSessionId || null,
-    // Session dates for display
-    bestQualyDate: recalcGrip?.bestQualyDate || null,
-    bestRaceDate: recalcGrip?.bestRaceDate || null,
-    bestAvgRaceDate: recalcGrip?.bestAvgRaceDate || null,
-    // Fuel at best lap (from lazy fetch)
-    bestQualyFuel: bestFuelData.value.qualyFuel,
-    bestRaceFuel: bestFuelData.value.raceFuel,
-    hasGripData: !!bestQualy || !!bestRace || !!bestAvgRace
-  }
-})
-
-// Types
-type SessionType = 'practice' | 'qualify' | 'race'
-
-interface Session {
-  id: string
-  date: string
-  time: string
-  type: SessionType
-  car: string
-  laps: number
-  stints: number
-  bestQualy?: string
-  bestRace?: string
+const emptyTrack = {
+  id: props.trackId,
+  name: props.trackId.toUpperCase(),
+  fullName: props.trackId,
+  country: '-',
+  countryCode: '??',
+  length: '-',
+  turns: 0,
+  image: '/tracks/track_default.png',
+  sessions: 0,
+  lastSession: '-',
+  bestQualy: null,
+  bestRace: null,
+  bestAvgRace: null,
+  bestQualyConditions: null,
+  bestRaceConditions: null,
+  bestAvgRaceConditions: null,
+  bestQualySessionId: null,
+  bestRaceSessionId: null,
+  bestAvgRaceSessionId: null,
+  bestQualyDate: null,
+  bestRaceDate: null,
+  bestAvgRaceDate: null,
+  bestQualyFuel: null,
+  bestRaceFuel: null,
+  hasGripData: false
 }
 
-// Transform Firebase sessions to display format
-const recentSessions = computed<Session[]>(() => {
-  return filteredTrackSessions.value.map(s => {
-    const sessionType = getSessionTypeLabel(s.meta.session_type) as SessionType
-    const dateObj = new Date(s.meta.date_start)
-    const summary = s.summary || {}
-    const raceRuleCompatible = Number((summary as any)?.best_rules_version || 0) >= BEST_RULES_VERSION
-    
-    // Determine Q/R times from explicit summary fields.
-    // Legacy fallback from bestLap is allowed only for qualy-only sessions.
-    let bestQualy: string | undefined
-    let bestRace: string | undefined
-    
-    if (summary.best_qualy_ms) {
-      bestQualy = formatLapTime(summary.best_qualy_ms)
-    }
-    if (raceRuleCompatible && summary.best_race_ms) {
-      bestRace = formatLapTime(summary.best_race_ms)
-    }
-    
-    // Fallback: use bestLap only for legacy qualy-only sessions.
-    if (!bestQualy && summary.bestLap && s.meta.session_type === 1) {
-      const lapTime = formatLapTime(summary.bestLap)
-      bestQualy = lapTime
-    }
-    
-    return {
-      id: s.sessionId,
-      date: s.meta.date_start?.split('T')[0] || '',
-      time: dateObj.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-      type: sessionType,
-      car: formatCarName(s.meta.car),
-      laps: summary.laps || 0,
-      stints: summary.stintCount || 0,
-      bestQualy,
-      bestRace
-    }
-  })
+const track = computed(() => trackProjection.value?.track || emptyTrack)
+const recentSessions = computed(() => trackProjection.value?.recentSessions || [])
+const filteredTrackSessions = computed(() => recentSessions.value)
+const activityStats = computed(() => trackProjection.value?.activity || {
+  totalLaps: 0,
+  validLaps: 0,
+  validPercent: 0,
+  totalTimeMs: 0,
+  totalTimeFormatted: '0m',
+  sessionCount: 0
 })
+const historicalTimes = computed(() => trackProjection.value?.historicalTimes || [])
 
-// === PAGINATION ===
 const currentPage = ref(1)
 const itemsPerPage = 20
-
 const totalPages = computed(() => Math.max(1, Math.ceil(recentSessions.value.length / itemsPerPage)))
-
 const paginatedSessions = computed(() => {
   const start = (currentPage.value - 1) * itemsPerPage
-  const end = start + itemsPerPage
-  return recentSessions.value.slice(start, end)
+  return recentSessions.value.slice(start, start + itemsPerPage)
+})
+
+watch(totalPages, (pages) => {
+  if (currentPage.value > pages) {
+    currentPage.value = 1
+  }
 })
 
 function goToPage(page: number) {
@@ -401,126 +157,48 @@ function nextPage() {
   if (currentPage.value < totalPages.value) currentPage.value++
 }
 
-// Smooth page change animation
 const sessionsRef = ref<HTMLElement | null>(null)
 const isChangingPage = ref(false)
-
-function onPageChange() {
+function onPageChange(page?: number) {
   isChangingPage.value = true
-}
-
-// Activity stats from Firebase (with fallback to calculated)
-const activityStats = ref({
-  totalLaps: 0,
-  validLaps: 0,
-  validPercent: 0,
-  totalTimeMs: 0,
-  totalTimeFormatted: '0h 0m',
-  sessionCount: 0
-})
-
-// Calculate activity from current trackSessions (always accurate)
-// Note: We use local calculation instead of Firebase aggregates to ensure
-// accurate counts after duplicate cleanup operations
-watch(filteredTrackSessions, () => {
-  if (filteredTrackSessions.value.length > 0) {
-    const totalLaps = filteredTrackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.laps || 0), 0)
-    const validLaps = filteredTrackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.lapsValid || 0), 0)
-    const totalTimeMs = filteredTrackSessions.value.reduce((sum, s) => sum + ((s.summary as any)?.totalTime || 0), 0)
-    const hours = Math.floor(totalTimeMs / 3600000)
-    const minutes = Math.floor((totalTimeMs % 3600000) / 60000)
-    activityStats.value = {
-      totalLaps,
-      validLaps,
-      validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
-      totalTimeMs,
-      totalTimeFormatted: hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`,
-      sessionCount: filteredTrackSessions.value.length
-    }
+  if (typeof page === 'number') {
+    goToPage(page)
   }
-}, { immediate: true })
-
-// Historical best times data from real sessions (one point per session, chronological)
-interface HistoricalTime {
-  date: string
-  sessionId: string
-  bestQualy?: string
-  bestRace?: string
 }
 
-const historicalTimes = computed<HistoricalTime[]>(() => {
-  // Sort chronologically
-  const sorted = [...filteredTrackSessions.value].sort((a, b) => a.meta.date_start.localeCompare(b.meta.date_start))
-  
-  return sorted.map(s => {
-    const summary = s.summary as any
-    const raceRuleCompatible = Number(summary?.best_rules_version || 0) >= BEST_RULES_VERSION
-    // Format date manually to avoid Invalid Date issues
-    const dateStr = s.meta.date_start?.split('T')[0] || ''
-    const [year, month, day] = dateStr.split('-')
-    const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
-    const dateLabel = day && month ? `${parseInt(day)} ${months[parseInt(month) - 1]}` : 'N/A'
-    
-    // Use same logic as recentSessions for consistency
-    let qualyTime: number | null = summary?.best_qualy_ms || null
-    let raceTime: number | null = raceRuleCompatible ? (summary?.best_race_ms || null) : null
-    
-    // Fallback: use bestLap only for legacy qualy-only sessions
-    if (!qualyTime && summary?.bestLap && s.meta.session_type === 1) {
-      qualyTime = summary.bestLap
-    }
-    
-    return {
-      date: dateLabel,
-      sessionId: s.sessionId,
-      bestQualy: qualyTime ? formatLapTime(qualyTime) : undefined,
-      bestRace: raceTime ? formatLapTime(raceTime) : undefined
-    }
-  })
-})
-
-// Convert time string to seconds for chart calculations
 function timeToSeconds(time: string): number {
   if (!time || !time.includes(':')) return 0
   const parts = time.split(':')
-  const mins = parseInt(parts[0] || '0')
+  const mins = parseInt(parts[0] || '0', 10)
   const rest = parts[1] || '0.000'
   const secParts = rest.split('.')
-  const secs = parseInt(secParts[0] || '0')
-  const ms = parseInt(secParts[1] || '0')
+  const secs = parseInt(secParts[0] || '0', 10)
+  const ms = parseInt(secParts[1] || '0', 10)
   return mins * 60 + secs + ms / 1000
 }
 
-// Convert seconds back to time string for display
 function secondsToTimeString(seconds: number): string {
   const mins = Math.floor(seconds / 60)
   const secs = (seconds % 60).toFixed(3)
   return `${mins}:${secs.padStart(6, '0')}`
 }
 
-// Chart.js data configuration - Using Scatter format for independent lines
 const chartJsData = computed(() => {
   const times = historicalTimes.value
-  
-  // Create separate point arrays - each with {x: index, y: value}
-  // Only include points where we have actual data
-  const qualyPoints: {x: number, y: number, label: string}[] = []
-  const racePoints: {x: number, y: number, label: string}[] = []
-  
-  times.forEach((t, index) => {
-    if (t.bestQualy) {
-      qualyPoints.push({ x: index, y: timeToSeconds(t.bestQualy), label: t.date })
+  const qualyPoints: { x: number; y: number; label: string }[] = []
+  const racePoints: { x: number; y: number; label: string }[] = []
+
+  times.forEach((point, index) => {
+    if (point.bestQualy) {
+      qualyPoints.push({ x: index, y: timeToSeconds(point.bestQualy), label: point.date })
     }
-    if (t.bestRace) {
-      racePoints.push({ x: index, y: timeToSeconds(t.bestRace), label: t.date })
+    if (point.bestRace) {
+      racePoints.push({ x: index, y: timeToSeconds(point.bestRace), label: point.date })
     }
   })
-  
-  // Labels for X axis - all dates
-  const labels = times.map(t => t.date)
-  
+
   return {
-    labels,
+    labels: times.map((point) => point.date),
     datasets: [
       {
         label: 'Best Qualifying',
@@ -554,18 +232,15 @@ const chartJsData = computed(() => {
   }
 })
 
-// Chart.js options configuration
 const chartOptions = computed(() => {
   const times = historicalTimes.value
-  const qualyTimes = times.filter(t => t.bestQualy).map(t => timeToSeconds(t.bestQualy!))
-  const raceTimes = times.filter(t => t.bestRace).map(t => timeToSeconds(t.bestRace!))
+  const qualyTimes = times.filter((t) => t.bestQualy).map((t) => timeToSeconds(t.bestQualy!))
+  const raceTimes = times.filter((t) => t.bestRace).map((t) => timeToSeconds(t.bestRace!))
   const allTimes = [...qualyTimes, ...raceTimes]
   const minTime = allTimes.length > 0 ? Math.min(...allTimes) - 0.5 : 0
   const maxTime = allTimes.length > 0 ? Math.max(...allTimes) + 0.5 : 120
-  
-  // Labels for X axis tick display
-  const labels = times.map(t => t.date)
-  
+  const labels = times.map((t) => t.date)
+
   return {
     responsive: true,
     maintainAspectRatio: false,
@@ -598,7 +273,6 @@ const chartOptions = computed(() => {
         padding: 12,
         callbacks: {
           title: function(context: any) {
-            // Get date label from the raw data point
             const point = context[0]?.raw
             return point?.label || labels[context[0]?.parsed?.x] || ''
           },
@@ -662,17 +336,16 @@ function formatDate(dateStr: string): string {
   return `${day} ${month} ${year}`
 }
 
+type SessionType = 'practice' | 'qualify' | 'race'
 function getTypeLabel(type: SessionType): string {
   const labels = { practice: 'PRACTICE', qualify: 'QUALIFY', race: 'RACE' }
   return labels[type]
 }
 
-// Navigate to session detail via emit (for pilot context)
 function goToSession(id: string) {
   emit('go-to-session', id)
 }
 </script>
-
 <template>
   <LayoutPageContainer>
     <!-- Back button -->

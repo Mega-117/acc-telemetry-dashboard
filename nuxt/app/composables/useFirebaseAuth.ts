@@ -2,213 +2,102 @@
 // useFirebaseAuth - Firebase Authentication Composable
 // ============================================
 
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
+import { onAuthStateChanged, type User } from 'firebase/auth'
+import { auth } from '~/config/firebase'
 import {
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut,
-    sendEmailVerification,
-    updateProfile,
-    onAuthStateChanged,
-    type User
-} from 'firebase/auth'
-import { doc } from 'firebase/firestore'
-import { trackedGetDoc, trackedSetDoc } from './useFirebaseTracker'
-import { auth, db } from '~/config/firebase'
+    loginWithEmail,
+    logoutCurrentUser,
+    refreshEmailVerificationState,
+    registerWithEmail,
+    resendCurrentVerificationEmail,
+    translateAuthError
+} from '~/services/auth/authService'
+import { clearLocalUserIdentity, saveLocalUserIdentity } from '~/services/auth/localIdentityBridge'
+import { ensureUserDocument, getUserProfile } from '~/services/auth/userProvisioningService'
 
-// Local wrappers auto-tagged with caller name
-const AUTH_CALLER = 'Auth'
-async function getDoc(ref: any) { return trackedGetDoc(ref, AUTH_CALLER) }
-async function setDoc(ref: any, data: any, options?: any) {
-    if (options) return trackedSetDoc(ref, data, options, AUTH_CALLER)
-    return trackedSetDoc(ref, data, AUTH_CALLER)
-}
-
-// Shared state (singleton across components)
 const currentUser = ref<User | null>(null)
-const userRole = ref<string>('pilot') // Default role
-const firestoreNickname = ref<string>('') // Nickname from Firestore (source of truth)
+const userRole = ref<string>('pilot')
+const firestoreNickname = ref<string>('')
 const isLoading = ref(true)
 const authError = ref<string | null>(null)
 
-// Initialize auth state listener once
 let authListenerInitialized = false
 
+async function syncAuthenticatedUser(user: User) {
+    const ensured = await ensureUserDocument(user)
+    userRole.value = ensured.role
+    firestoreNickname.value = ensured.nickname
+    await saveLocalUserIdentity(user)
+}
+
+async function syncLoggedOutUser() {
+    userRole.value = 'pilot'
+    firestoreNickname.value = ''
+    await clearLocalUserIdentity()
+}
+
+function initAuthListener() {
+    if (authListenerInitialized) return
+
+    authListenerInitialized = true
+    onAuthStateChanged(auth, async (user) => {
+        currentUser.value = user
+
+        if (user) {
+            await syncAuthenticatedUser(user)
+        } else {
+            await syncLoggedOutUser()
+        }
+
+        isLoading.value = false
+        console.log('[AUTH] State changed:', user?.email ?? 'logged out', '| Role:', userRole.value)
+    })
+}
+
 export function useFirebaseAuth() {
-    // === COMPUTED ===
     const isAuthenticated = computed(() => !!currentUser.value)
     const isEmailVerified = computed(() => currentUser.value?.emailVerified ?? false)
     const userEmail = computed(() => currentUser.value?.email ?? '')
-    // Priority: Firestore nickname > Firebase Auth displayName > empty
     const userDisplayName = computed(() => firestoreNickname.value || currentUser.value?.displayName || '')
     const isCoach = computed(() => userRole.value === 'coach')
     const isAdmin = computed(() => userRole.value === 'admin')
 
-    // === ENSURE USER DOC ===
-    // Checks/Creates user document in Firestore to ensure role availability
-    const ensureUserDocument = async (user: User) => {
-        try {
-            const userDocRef = doc(db, 'users', user.uid)
-            const docSnap = await getDoc(userDocRef)
-
-            const publicProfileRef = doc(db, 'publicProfiles', user.uid)
-            const publicProfilePayload = {
-                nickname: user.displayName || user.email?.split('@')[0] || 'Utente',
-                avatarUrl: null,
-                updatedAt: new Date().toISOString()
-            }
-
-            if (!docSnap.exists()) {
-                // Create default pilot profile if missing
-                await setDoc(userDocRef, {
-                    email: user.email,
-                    nickname: user.displayName || 'Utente',
-                    role: 'pilot',
-                    createdAt: new Date().toISOString(),
-                    emailVerified: user.emailVerified
-                })
-                await setDoc(publicProfileRef, {
-                    uid: user.uid,
-                    ...publicProfilePayload
-                }, { merge: true })
-                userRole.value = 'pilot'
-                console.log('[AUTH] Created missing user profile')
-            } else {
-                // Load existing role and nickname from Firestore
-                const data = docSnap.data()
-                userRole.value = data.role || 'pilot'
-                firestoreNickname.value = data.nickname || ''
-                await setDoc(publicProfileRef, {
-                    uid: user.uid,
-                    nickname: data.nickname || publicProfilePayload.nickname,
-                    avatarUrl: data.avatarUrl || null,
-                    updatedAt: new Date().toISOString()
-                }, { merge: true })
-            }
-        } catch (e) {
-            console.error('[AUTH] Failed to ensure user document:', e)
-            // Fallback safe default
-            userRole.value = 'pilot'
-        }
-    }
-
-    // === INIT AUTH LISTENER ===
-    const initAuthListener = () => {
-        if (authListenerInitialized) return
-
-        authListenerInitialized = true
-        onAuthStateChanged(auth, async (user) => {
-            currentUser.value = user
-
-            if (user) {
-                // Always ensure we have their role loaded
-                await ensureUserDocument(user)
-
-                // === ELECTRON: Save user identity to local file ===
-                // This creates .user_identity.json so the Logger can associate sessions
-                try {
-                    const electronAPI = (window as any).electronAPI
-                    console.log('[AUTH] electronAPI exists:', !!electronAPI)
-                    console.log('[AUTH] saveUserIdentity exists:', !!electronAPI?.saveUserIdentity)
-
-                    if (electronAPI?.saveUserIdentity) {
-                        console.log('[AUTH] Calling saveUserIdentity with:', {
-                            userId: user.uid,
-                            email: user.email,
-                            displayName: user.displayName
-                        })
-                        const result = await electronAPI.saveUserIdentity({
-                            userId: user.uid,
-                            email: user.email,
-                            displayName: user.displayName || user.email?.split('@')[0] || 'User'
-                        })
-                        console.log('[AUTH] Electron identity saved:', result ? '✅' : '❌')
-                    } else {
-                        console.log('[AUTH] Not in Electron environment (electronAPI not available)')
-                    }
-                } catch (e) {
-                    console.error('[AUTH] Identity save failed:', e)
-                }
-            } else {
-                userRole.value = 'pilot'
-
-                // === ELECTRON: Clear identity on logout ===
-                try {
-                    const electronAPI = (window as any).electronAPI
-                    if (electronAPI?.clearUserIdentity) {
-                        await electronAPI.clearUserIdentity()
-                        console.log('[AUTH] Electron identity cleared')
-                    }
-                } catch (e) {
-                    // Ignore - not in Electron
-                }
-            }
-
-            isLoading.value = false
-            console.log('[AUTH] State changed:', user?.email ?? 'logged out', '| Role:', userRole.value)
-        })
-    }
-
-    // === REGISTER ===
-    const register = async (email: string, password: string, nickname: string, firstName: string = '', lastName: string = '') => {
+    const register = async (
+        email: string,
+        password: string,
+        nickname: string,
+        firstName: string = '',
+        lastName: string = ''
+    ) => {
         authError.value = null
         try {
-            // 1. Create user in Firebase Auth
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-            const user = userCredential.user
-
-            // 2. Update display name (use nickname for display)
-            await updateProfile(user, { displayName: nickname })
-
-            // 3. Save additional data to Firestore
-            await setDoc(doc(db, 'users', user.uid), {
-                firstName,
-                lastName,
-                nickname,
-                email,
-                role: 'pilot',
-                coachId: null,
-                createdAt: new Date().toISOString(),
-                emailVerified: false
-            })
-            await setDoc(doc(db, 'publicProfiles', user.uid), {
-                uid: user.uid,
-                nickname,
-                avatarUrl: null,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            }, { merge: true })
-
-            // 4. Send verification email
-            await sendEmailVerification(user)
-
+            const { user } = await registerWithEmail({ email, password, nickname, firstName, lastName })
             console.log('[AUTH] Registered:', email, 'Verification email sent')
             return { success: true, user }
         } catch (error: any) {
             console.error('[AUTH] Register error:', error.code)
-            authError.value = getErrorMessage(error.code)
+            authError.value = translateAuthError(error.code)
             return { success: false, error: authError.value }
         }
     }
 
-    // === LOGIN ===
     const login = async (email: string, password: string) => {
         authError.value = null
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password)
+            const { user } = await loginWithEmail(email, password)
             console.log('[AUTH] Logged in:', email)
-            return { success: true, user: userCredential.user }
+            return { success: true, user }
         } catch (error: any) {
             console.error('[AUTH] Login error:', error.code)
-            authError.value = getErrorMessage(error.code)
+            authError.value = translateAuthError(error.code)
             return { success: false, error: authError.value }
         }
     }
 
-    // === LOGOUT ===
     const logout = async () => {
         try {
-            await signOut(auth)
+            await logoutCurrentUser()
             console.log('[AUTH] Logged out')
             return { success: true }
         } catch (error: any) {
@@ -217,84 +106,45 @@ export function useFirebaseAuth() {
         }
     }
 
-    // === RESEND VERIFICATION EMAIL ===
     const resendVerificationEmail = async () => {
         if (!currentUser.value) {
             return { success: false, error: 'Utente non autenticato' }
         }
         try {
-            await sendEmailVerification(currentUser.value)
+            await resendCurrentVerificationEmail(currentUser.value)
             console.log('[AUTH] Verification email resent')
             return { success: true }
         } catch (error: any) {
             console.error('[AUTH] Resend error:', error.code)
-            return { success: false, error: getErrorMessage(error.code) }
+            return { success: false, error: translateAuthError(error.code) }
         }
     }
 
-    // === CHECK EMAIL VERIFIED ===
     const checkEmailVerified = async () => {
         if (!currentUser.value) {
             return { verified: false, error: 'Utente non autenticato' }
         }
         try {
-            // Reload user to get fresh emailVerified status
-            await currentUser.value.reload()
-            // Update our ref with the reloaded user
-            currentUser.value = auth.currentUser
-
-            const verified = currentUser.value?.emailVerified ?? false
-            console.log('[AUTH] Email verified check:', verified)
-            return { verified, error: null }
+            const refreshed = await refreshEmailVerificationState(currentUser.value)
+            currentUser.value = refreshed.user
+            console.log('[AUTH] Email verified check:', refreshed.verified)
+            return { verified: refreshed.verified, error: null }
         } catch (error: any) {
             console.error('[AUTH] Check verification error:', error)
             return { verified: false, error: error.message }
         }
     }
 
-    // === GET USER PROFILE FROM FIRESTORE ===
-    const getUserProfile = async (uid: string) => {
-        try {
-            const docSnap = await getDoc(doc(db, 'users', uid))
-            if (docSnap.exists()) {
-                return docSnap.data()
-            }
-            return null
-        } catch (error) {
-            console.error('[AUTH] Get profile error:', error)
-            return null
-        }
-    }
-
-    // === ERROR TRANSLATION ===
-    const getErrorMessage = (code: string): string => {
-        const messages: Record<string, string> = {
-            'auth/email-already-in-use': 'Email già registrata',
-            'auth/weak-password': 'Password troppo debole (min. 6 caratteri)',
-            'auth/invalid-email': 'Email non valida',
-            'auth/user-not-found': 'Utente non trovato',
-            'auth/wrong-password': 'Password errata',
-            'auth/invalid-credential': 'Credenziali non valide',
-            'auth/too-many-requests': 'Troppi tentativi, riprova più tardi',
-            'auth/network-request-failed': 'Errore di rete, controlla la connessione'
-        }
-        return messages[code] || 'Errore di autenticazione'
-    }
-
-    // Initialize listener on first use
     initAuthListener()
 
     return {
-        // State
         currentUser,
         isLoading,
         authError,
-        // Computed
         isAuthenticated,
         isEmailVerified,
         userEmail,
         userDisplayName,
-        // Methods
         register,
         login,
         logout,

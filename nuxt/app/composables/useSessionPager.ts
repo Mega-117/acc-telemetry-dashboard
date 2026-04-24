@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import {
     collection,
     doc,
+    getCountFromServer,
     limit,
     orderBy,
     query,
@@ -14,8 +15,13 @@ import {
 import { trackedGetDoc, trackedGetDocs } from './useFirebaseTracker'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { db } from '~/config/firebase'
-import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
-import type { SessionDocument } from './useTelemetryData'
+import { formatCarName, formatTrackName, type SessionDocument } from './useTelemetryData'
+import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
+import {
+    dedupeCloudSessions,
+    mergePendingLocal,
+    mergeLocalFirst
+} from '~/services/telemetry/telemetryMergeService'
 
 const CALLER = 'SessionPager'
 const DEFAULT_PAGE_SIZE = 25
@@ -26,6 +32,9 @@ export type SessionPagerFilters = {
     sessionTypes?: number[]
     fromDateIso?: string | null
     toDateIso?: string | null
+    track?: string | null
+    car?: string | null
+    hideEmpty?: boolean
 }
 
 type PageLoadOptions = {
@@ -57,9 +66,10 @@ const globalError = ref<string | null>(null)
 const globalOnline = ref(true)
 const globalFilters = ref<SessionPagerFilters>({})
 const globalTargetUser = ref<string | null>(null)
-const globalStartCursorByPage = ref<Record<number, QueryDocumentSnapshot<DocumentData> | null>>({ 1: null })
+const globalCursorMap: Map<number, QueryDocumentSnapshot<DocumentData> | null> = new Map([[1, null]])
 const globalPageCache = ref<Record<number, SessionDocument[]>>({})
 const globalInitialized = ref(false)
+const globalCloudPresenceCache = new Map<string, true>()
 
 async function getDocTracked(ref: any) { return trackedGetDoc(ref, CALLER) }
 async function getDocsTracked(q: any) { return trackedGetDocs(q, CALLER) }
@@ -81,20 +91,59 @@ function sessionMs(session: SessionDocument): number {
     return Number.isFinite(parsed) ? parsed : 0
 }
 
-function applyClientFilters(list: SessionDocument[], filters: SessionPagerFilters): SessionDocument[] {
+function matchesClientFilters(session: SessionDocument, filters: SessionPagerFilters): boolean {
+    const types = (filters.sessionTypes || []).filter((t) => Number.isFinite(t))
+    const type = Number(session.meta?.session_type ?? -1)
+    if (types.length > 0 && !types.includes(type)) return false
+
     const fromMs = normalizeIso(filters.fromDateIso) ? Date.parse(normalizeIso(filters.fromDateIso) as string) : null
     const toMs = normalizeIso(filters.toDateIso) ? Date.parse(normalizeIso(filters.toDateIso) as string) : null
-    const types = (filters.sessionTypes || []).filter(t => Number.isFinite(t))
+    const ms = sessionMs(session)
+    if (fromMs !== null && ms < fromMs) return false
+    if (toMs !== null && ms > toMs) return false
 
-    return list.filter((session) => {
-        const type = Number(session.meta?.session_type ?? -1)
-        if (types.length > 0 && !types.includes(type)) return false
+    if (filters.hideEmpty && Number(session.summary?.laps || 0) === 0) return false
 
-        const ms = sessionMs(session)
-        if (fromMs !== null && ms < fromMs) return false
-        if (toMs !== null && ms > toMs) return false
-        return true
-    })
+    const filterTrack = (filters.track || '').trim().toLowerCase()
+    if (filterTrack) {
+        const sessionTrack = formatTrackName(session.meta?.track || '').trim().toLowerCase()
+        if (sessionTrack !== filterTrack) return false
+    }
+
+    const filterCar = (filters.car || '').trim().toLowerCase()
+    if (filterCar) {
+        const sessionCar = formatCarName(session.meta?.car || '').trim().toLowerCase()
+        if (sessionCar !== filterCar) return false
+    }
+
+    return true
+}
+
+function applyClientFilters(list: SessionDocument[], filters: SessionPagerFilters): SessionDocument[] {
+    return list.filter((session) => matchesClientFilters(session, filters))
+}
+
+export function buildMergedSessionPage(
+    localSessions: SessionDocument[],
+    cloudSessions: SessionDocument[],
+    requestedPage: number,
+    pageSize: number
+): {
+    mergedAll: SessionDocument[]
+    pageSlice: SessionDocument[]
+    safePage: number
+    total: number
+} {
+    const mergedAll = mergeLocalFirst(localSessions, dedupeCloudSessions(cloudSessions))
+    const total = mergedAll.length
+    const safePage = Math.min(Math.max(1, requestedPage), Math.max(1, Math.ceil(total / pageSize)))
+    const start = (safePage - 1) * pageSize
+    return {
+        mergedAll,
+        pageSlice: mergedAll.slice(start, start + pageSize),
+        safePage,
+        total
+    }
 }
 
 function normalizeCloudDoc(docSnap: QueryDocumentSnapshot<DocumentData>): SessionDocument {
@@ -115,46 +164,11 @@ function normalizeCloudDoc(docSnap: QueryDocumentSnapshot<DocumentData>): Sessio
 
 async function getLocalSessionsForUser(currentUid: string): Promise<SessionDocument[]> {
     const electronAPI = (window as any).electronAPI
-    if (!electronAPI?.getTelemetryFiles || !electronAPI?.readFile) return []
-
-    const files = await electronAPI.getTelemetryFiles()
-    if (!Array.isArray(files) || files.length === 0) return []
-    const registry = (await electronAPI.getRegistry?.()) || {}
-
-    const sessions: SessionDocument[] = []
-    for (const file of files) {
-        try {
-            const raw = await electronAPI.readFile(file.path)
-            if (!raw) continue
-            if (raw.ownerId && raw.ownerId !== currentUid) continue
-
-            const { meta, summary } = extractMetadata(raw)
-            const sessionId = generateSessionId(meta.date_start, meta.track)
-            const reg = registry[file.name]
-            const isSynced = !!(
-                reg
-                && reg.uploadedBy === currentUid
-                && reg.sessionId === sessionId
-            )
-            sessions.push({
-                sessionId,
-                fileHash: '',
-                fileName: file.name,
-                uploadedAt: null,
-                meta,
-                summary,
-                rawChunkCount: 0,
-                rawSizeBytes: 0,
-                source: 'local',
-                syncState: isSynced ? 'synced' : (globalOnline.value ? 'pending_sync' : 'local_only')
-            } as SessionDocument)
-        } catch {
-            // Keep pager resilient on malformed files.
-        }
-    }
-
-    sessions.sort((a, b) => (b.meta?.date_start || '').localeCompare(a.meta?.date_start || ''))
-    return sessions
+    return loadLocalTelemetrySessions({
+        electronAPI,
+        ownerId: currentUid,
+        isOnline: globalOnline.value
+    })
 }
 
 function ensureInit() {
@@ -175,12 +189,40 @@ function resetPager(pageSize: number, filters: SessionPagerFilters, targetUserId
     globalState.value.totalItems = null
     globalFilters.value = filters
     globalTargetUser.value = targetUserId
-    globalStartCursorByPage.value = { 1: null }
+    globalCursorMap.clear()
+    globalCursorMap.set(1, null)
     globalPageCache.value = {}
 }
 
 async function resolveTotals(targetUserId: string, filters: SessionPagerFilters): Promise<number | null> {
     try {
+        if (!filters.track && !filters.car) {
+            const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
+            const constraints: QueryConstraint[] = []
+            const types = (filters.sessionTypes || []).filter((t) => Number.isFinite(t))
+
+            if (types.length === 1) {
+                constraints.push(where('meta.session_type', '==', types[0]!))
+            } else if (types.length > 1 && types.length <= 10) {
+                constraints.push(where('meta.session_type', 'in', types))
+            }
+
+            const fromIso = normalizeIso(filters.fromDateIso)
+            const toIso = normalizeIso(filters.toDateIso)
+            if (fromIso) constraints.push(where('meta.date_start', '>=', fromIso))
+            if (toIso) constraints.push(where('meta.date_start', '<=', toIso))
+            if (filters.hideEmpty) constraints.push(where('summary.laps', '>', 0))
+
+            if (constraints.length > 0) {
+                try {
+                    const countSnap = await getCountFromServer(query(sessionsRef, ...constraints))
+                    return Number(countSnap.data().count || 0)
+                } catch {
+                    // Fall back to sessionIndex-derived count below when a composite index is missing.
+                }
+            }
+        }
+
         const userRef = doc(db, `users/${targetUserId}`)
         const snap = await getDocTracked(userRef)
         if (!snap.exists()) return null
@@ -188,7 +230,12 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
         const stats = data.stats || {}
         const sessionIndex = data.sessionIndex || {}
 
-        const hasServerFilters = (filters.sessionTypes?.length || 0) > 0 || !!filters.fromDateIso || !!filters.toDateIso
+        const hasServerFilters = (filters.sessionTypes?.length || 0) > 0
+            || !!filters.fromDateIso
+            || !!filters.toDateIso
+            || !!filters.track
+            || !!filters.car
+            || !!filters.hideEmpty
         if (!hasServerFilters) {
             return Number(stats.totalSessions ?? sessionIndex.totalSessions ?? null) || null
         }
@@ -229,6 +276,33 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
     }
 }
 
+async function resolveCloudTotalsOnly(targetUserId: string, filters: SessionPagerFilters): Promise<number | null> {
+    try {
+        if (filters.track || filters.car) return null
+
+        const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
+        const constraints: QueryConstraint[] = []
+        const types = (filters.sessionTypes || []).filter((t) => Number.isFinite(t))
+
+        if (types.length === 1) {
+            constraints.push(where('meta.session_type', '==', types[0]!))
+        } else if (types.length > 1 && types.length <= 10) {
+            constraints.push(where('meta.session_type', 'in', types))
+        }
+
+        const fromIso = normalizeIso(filters.fromDateIso)
+        const toIso = normalizeIso(filters.toDateIso)
+        if (fromIso) constraints.push(where('meta.date_start', '>=', fromIso))
+        if (toIso) constraints.push(where('meta.date_start', '<=', toIso))
+        if (filters.hideEmpty) constraints.push(where('summary.laps', '>', 0))
+
+        const countSnap = await getCountFromServer(query(sessionsRef, ...constraints))
+        return Number(countSnap.data().count || 0)
+    } catch {
+        return null
+    }
+}
+
 async function queryCloudPage(
     targetUserId: string,
     pageSize: number,
@@ -240,9 +314,9 @@ async function queryCloudPage(
     const baseConstraints: QueryConstraint[] = [orderBy('meta.date_start', 'desc')]
     const filteredConstraints: QueryConstraint[] = []
 
-    const types = (filters.sessionTypes || []).filter(t => Number.isFinite(t))
+    const types = (filters.sessionTypes || []).filter((t) => Number.isFinite(t))
     if (types.length === 1) {
-        filteredConstraints.push(where('meta.session_type', '==', types[0]))
+        filteredConstraints.push(where('meta.session_type', '==', types[0]!))
     } else if (types.length > 1 && types.length <= 10) {
         filteredConstraints.push(where('meta.session_type', 'in', types))
     }
@@ -251,31 +325,64 @@ async function queryCloudPage(
     const toIso = normalizeIso(filters.toDateIso)
     if (fromIso) filteredConstraints.push(where('meta.date_start', '>=', fromIso))
     if (toIso) filteredConstraints.push(where('meta.date_start', '<=', toIso))
-
-    const pageConstraints: QueryConstraint[] = [...baseConstraints, ...filteredConstraints]
-    if (startCursor) pageConstraints.push(startAfter(startCursor))
-    pageConstraints.push(limit(pageSize + 1))
-
-    let snapshot: any
-    try {
-        snapshot = await getDocsTracked(query(sessionsRef, ...pageConstraints))
-    } catch (e) {
-        // Fallback path: avoid hard failure if a composite index is missing.
-        const fallbackConstraints: QueryConstraint[] = [...baseConstraints]
-        if (startCursor) fallbackConstraints.push(startAfter(startCursor))
-        fallbackConstraints.push(limit(pageSize + 1))
-        snapshot = await getDocsTracked(query(sessionsRef, ...fallbackConstraints))
-        console.warn('[PAGER] Falling back to unfiltered query (missing index or unsupported filter combo).', e)
+    if (filters.hideEmpty) {
+        filteredConstraints.push(where('summary.laps', '>', 0))
     }
 
-    const docs = snapshot.docs || []
-    const hasNext = docs.length > pageSize
-    const pageDocs = hasNext ? docs.slice(0, pageSize) : docs
-    const lastDoc = pageDocs.length > 0 ? pageDocs[pageDocs.length - 1] : null
+    const visiblePairs: Array<{ docSnap: QueryDocumentSnapshot<DocumentData>; session: SessionDocument }> = []
+    let cursor = startCursor
+    let hasMoreRaw = true
+    let useFallback = false
+    let fallbackWarned = false
 
-    const sessions = pageDocs.map((docSnap: QueryDocumentSnapshot<DocumentData>) => normalizeCloudDoc(docSnap))
-    const finalSessions = applyClientFilters(sessions, filters).sort((a, b) => (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))
-    return { sessions: finalSessions, hasNext, lastDoc }
+    while (visiblePairs.length < pageSize + 1 && hasMoreRaw) {
+        const pageConstraints: QueryConstraint[] = [
+            ...baseConstraints,
+            ...(useFallback ? [] : filteredConstraints)
+        ]
+        if (cursor) pageConstraints.push(startAfter(cursor))
+        pageConstraints.push(limit(pageSize + 1))
+
+        let snapshot: any
+        try {
+            snapshot = await getDocsTracked(query(sessionsRef, ...pageConstraints))
+        } catch (e) {
+            const fallbackConstraints: QueryConstraint[] = [...baseConstraints]
+            if (cursor) fallbackConstraints.push(startAfter(cursor))
+            fallbackConstraints.push(limit(pageSize + 1))
+            snapshot = await getDocsTracked(query(sessionsRef, ...fallbackConstraints))
+            useFallback = true
+            if (!fallbackWarned) {
+                console.warn('[PAGER] Falling back to unfiltered query (missing index or unsupported filter combo).', e)
+                fallbackWarned = true
+            }
+        }
+
+        const docs = snapshot.docs || []
+        if (docs.length === 0) {
+            hasMoreRaw = false
+            break
+        }
+
+        for (const docSnap of docs) {
+            const session = normalizeCloudDoc(docSnap)
+            if (!matchesClientFilters(session, filters)) continue
+            visiblePairs.push({ docSnap, session })
+            if (visiblePairs.length >= pageSize + 1) break
+        }
+
+        hasMoreRaw = docs.length > pageSize
+        cursor = docs[docs.length - 1] || null
+    }
+
+    const hasNext = visiblePairs.length > pageSize
+    const pagePairs = hasNext ? visiblePairs.slice(0, pageSize) : visiblePairs
+    const lastDoc = pagePairs.length > 0 ? pagePairs[pagePairs.length - 1]!.docSnap : null
+    return {
+        sessions: pagePairs.map((pair) => pair.session),
+        hasNext,
+        lastDoc
+    }
 }
 
 async function ensureCursorForPage(
@@ -287,15 +394,18 @@ async function ensureCursorForPage(
     if (page <= 1) return 1
     let reachablePage = 1
     for (let p = 1; p < page; p++) {
-        if (!(p in globalStartCursorByPage.value)) break
+        if (!globalCursorMap.has(p)) break
         reachablePage = p
-        if (globalStartCursorByPage.value[p + 1] !== undefined) continue
+        if (globalCursorMap.has(p + 1)) {
+            reachablePage = p + 1
+            continue
+        }
 
-        const startCursor = globalStartCursorByPage.value[p] || null
+        const startCursor = globalCursorMap.get(p) || null
         const result = await queryCloudPage(targetUserId, pageSize, startCursor, filters)
         globalPageCache.value[p] = result.sessions
         if (result.hasNext && result.lastDoc) {
-            globalStartCursorByPage.value[p + 1] = result.lastDoc
+            globalCursorMap.set(p + 1, result.lastDoc)
             reachablePage = p + 1
         } else {
             return p
@@ -304,15 +414,91 @@ async function ensureCursorForPage(
     return Math.min(page, reachablePage)
 }
 
-function mergePendingLocal(cloudPage: SessionDocument[], localSessions: SessionDocument[], includeLocal: boolean): SessionDocument[] {
-    if (!includeLocal) return cloudPage
-    const cloudIds = new Set(cloudPage.map(s => s.sessionId))
-    const pending = localSessions.filter(local =>
-        local.syncState !== 'synced' && !cloudIds.has(local.sessionId)
-    )
-    const merged = [...pending, ...cloudPage]
-    merged.sort((a, b) => (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))
-    return merged
+async function sessionExistsInCloud(targetUserId: string, sessionId: string): Promise<boolean> {
+    const cacheKey = `${targetUserId}:${sessionId}`
+    if (globalCloudPresenceCache.has(cacheKey)) return true
+    try {
+        const sessionRef = doc(db, `users/${targetUserId}/sessions/${sessionId}`)
+        const snap = await getDocTracked(sessionRef)
+        if (snap.exists()) {
+            globalCloudPresenceCache.set(cacheKey, true)
+            return true
+        }
+    } catch {
+        return false
+    }
+    return false
+}
+
+async function resolveLocalOnlyCount(targetUserId: string, localSessions: SessionDocument[]): Promise<number> {
+    const checks = await Promise.all(localSessions.map(async (session) => {
+        if (session.syncState === 'synced') return false
+        if (!session.sessionId) return true
+        const existsInCloud = await sessionExistsInCloud(targetUserId, session.sessionId)
+        return !existsInCloud
+    }))
+    return checks.filter(Boolean).length
+}
+
+async function buildMergedOnlineOwnerPage(
+    targetUserId: string,
+    requestedPage: number,
+    pageSize: number,
+    filters: SessionPagerFilters,
+    localSessions: SessionDocument[]
+): Promise<{
+    pageSessions: SessionDocument[]
+    currentPage: number
+    hasPrev: boolean
+    hasNext: boolean
+    totalItems: number | null
+}> {
+    const localFiltered = applyClientFilters(localSessions, filters)
+
+    const [cloudTotal, localOnlyCount] = await Promise.all([
+        resolveCloudTotalsOnly(targetUserId, filters),
+        resolveLocalOnlyCount(targetUserId, localFiltered)
+    ])
+
+    const mergedTotal = cloudTotal !== null ? cloudTotal + localOnlyCount : null
+    const requestedSafePage = mergedTotal !== null
+        ? Math.min(requestedPage, Math.max(1, Math.ceil(mergedTotal / pageSize)))
+        : Math.max(1, requestedPage)
+    const endExclusive = requestedSafePage * pageSize
+
+    let accumulatedCloud: SessionDocument[] = []
+    let startCursor: QueryDocumentSnapshot<DocumentData> | null = null
+    let cloudHasNext = true
+
+    while (true) {
+        const mergedPreview = buildMergedSessionPage(localFiltered, accumulatedCloud, requestedSafePage, pageSize)
+        if (mergedPreview.total > endExclusive || !cloudHasNext) {
+            let finalPage = requestedSafePage
+            let finalTotal = mergedTotal
+            if (!cloudHasNext) {
+                finalTotal = mergedPreview.total
+                finalPage = Math.min(finalPage, Math.max(1, Math.ceil(finalTotal / pageSize)))
+            }
+            const finalMerged = buildMergedSessionPage(localFiltered, accumulatedCloud, finalPage, pageSize)
+            const start = (finalMerged.safePage - 1) * pageSize
+            const hasNext = finalTotal !== null
+                ? start + pageSize < finalTotal
+                : finalMerged.total > start + pageSize || cloudHasNext
+
+            return {
+                pageSessions: finalMerged.pageSlice,
+                currentPage: finalMerged.safePage,
+                hasPrev: finalMerged.safePage > 1,
+                hasNext,
+                totalItems: finalTotal
+            }
+        }
+
+        const cloudResult = await queryCloudPage(targetUserId, pageSize, startCursor, filters)
+        accumulatedCloud = dedupeCloudSessions([...accumulatedCloud, ...cloudResult.sessions])
+        startCursor = cloudResult.lastDoc
+        cloudHasNext = cloudResult.hasNext
+    }
 }
 
 export function useSessionPager() {
@@ -345,15 +531,32 @@ export function useSessionPager() {
 
         try {
             const isOwner = targetUserId === currentUser.value?.uid
+            const localSessions = (isElectron.value ? await getLocalSessionsForUser(targetUserId) : [])
 
-            // Offline owner flow: local cache only (still paginated).
+            if (isOwner && isElectron.value && globalOnline.value) {
+                const mergedResult = await buildMergedOnlineOwnerPage(
+                    targetUserId,
+                    requestedPage,
+                    pageSize,
+                    filters,
+                    localSessions
+                )
+
+                globalSessions.value = mergedResult.pageSessions
+                globalState.value.currentPage = mergedResult.currentPage
+                globalState.value.hasPrev = mergedResult.hasPrev
+                globalState.value.hasNext = mergedResult.hasNext
+                globalState.value.totalItems = mergedResult.totalItems
+                return globalSessions.value
+            }
+
             if (isOwner && isElectron.value && !globalOnline.value) {
-                const localAll = applyClientFilters(await getLocalSessionsForUser(targetUserId), filters)
+                const localAll = applyClientFilters(localSessions, filters)
                 const total = localAll.length
                 const safePage = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)))
                 const start = (safePage - 1) * pageSize
-                const pageSlice = localAll.slice(start, start + pageSize).map(s => ({
-                    ...s,
+                const pageSlice = localAll.slice(start, start + pageSize).map((session) => ({
+                    ...session,
                     syncState: 'local_only' as SessionSyncState
                 }))
 
@@ -366,19 +569,16 @@ export function useSessionPager() {
             }
 
             const reachablePage = await ensureCursorForPage(targetUserId, requestedPage, pageSize, filters)
-            const startCursor = globalStartCursorByPage.value[reachablePage] || null
+            const startCursor = globalCursorMap.get(reachablePage) || null
             const cloudResult = await queryCloudPage(targetUserId, pageSize, startCursor, filters)
 
             globalPageCache.value[reachablePage] = cloudResult.sessions
             if (cloudResult.hasNext && cloudResult.lastDoc) {
-                globalStartCursorByPage.value[reachablePage + 1] = cloudResult.lastDoc
-            } else if (globalStartCursorByPage.value[reachablePage + 1] === undefined) {
-                globalStartCursorByPage.value[reachablePage + 1] = null
+                globalCursorMap.set(reachablePage + 1, cloudResult.lastDoc)
             }
 
             let pageSessions = cloudResult.sessions
             if (isOwner && isElectron.value && reachablePage === 1) {
-                const localSessions = await getLocalSessionsForUser(targetUserId)
                 pageSessions = mergePendingLocal(pageSessions, localSessions, true)
             }
 

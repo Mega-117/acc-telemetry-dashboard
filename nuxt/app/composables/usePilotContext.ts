@@ -4,7 +4,8 @@
 // When coach views a pilot's dashboard, this provides the pilot's UID 
 // to all child components so they load the correct data.
 
-import { ref, provide, inject, type InjectionKey, type Ref } from 'vue'
+import { ref, provide, inject, computed, type InjectionKey, type Ref } from 'vue'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
 // Symbolic key for injection
 const PILOT_CONTEXT_KEY: InjectionKey<Ref<string | null>> = Symbol('pilotContext')
