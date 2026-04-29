@@ -118,7 +118,6 @@ const emptyTrack = {
 
 const track = computed(() => trackProjection.value?.track || emptyTrack)
 const recentSessions = computed(() => trackProjection.value?.recentSessions || [])
-const filteredTrackSessions = computed(() => recentSessions.value)
 const activityStats = computed(() => trackProjection.value?.activity || {
   totalLaps: 0,
   validLaps: 0,
@@ -362,8 +361,10 @@ function goToSession(id: string) {
         <img :src="getPublicPath(track.image)" :alt="track.name" />
       </div>
       <div class="track-header-info">
-        <span class="track-country-badge">{{ track.countryCode }}</span>
-        <h1 class="track-title">{{ track.name }}</h1>
+        <div class="track-title-row">
+          <h1 class="track-title">{{ track.name }}</h1>
+          <span class="track-country-badge" :title="track.country">{{ track.countryCode }}</span>
+        </div>
         <p class="track-fullname">{{ track.fullName }}</p>
         <div class="track-meta">
           <span class="meta-item">
@@ -388,21 +389,55 @@ function goToSession(id: string) {
               <line x1="8" y1="2" x2="8" y2="6"/>
               <line x1="3" y1="10" x2="21" y2="10"/>
             </svg>
-            {{ track.sessions }} sessioni ({{ filteredTrackSessions.length }} {{ selectedCategory }})
+            {{ track.sessions }} sessioni {{ selectedCategory }}
           </span>
+        </div>
+      </div>
+      <div class="track-header-activity" aria-label="Attivita pista">
+        <div class="activity-summary-item">
+          <span class="activity-summary-label">Sessioni</span>
+          <span class="activity-summary-value">{{ activityStats.sessionCount }}</span>
+        </div>
+        <div class="activity-summary-item">
+          <span class="activity-summary-label">Giri</span>
+          <span class="activity-summary-value">{{ activityStats.totalLaps }}</span>
+        </div>
+        <div class="activity-summary-item">
+          <span class="activity-summary-label">Validi {{ activityStats.validPercent }}%</span>
+          <span class="activity-summary-value">{{ activityStats.validLaps }}</span>
+        </div>
+        <div class="activity-summary-item">
+          <span class="activity-summary-label">Tempo in pista</span>
+          <span class="activity-summary-value">{{ activityStats.totalTimeFormatted }}</span>
         </div>
       </div>
     </div>
 
-    <!-- Control Bar: Global Category Filter -->
+    <!-- Control Bar: data filters -->
     <div class="control-bar">
-      <div class="control-bar__group">
-        <label class="control-bar__label">Categoria</label>
-        <select v-model="selectedCategory" class="control-bar__select">
-          <option v-for="cat in CAR_CATEGORIES" :key="cat" :value="cat">
-            {{ cat }}
-          </option>
-        </select>
+      <div class="control-bar__content">
+        <div class="control-bar__heading">
+          <span class="control-bar__eyebrow">Filtri dati pista</span>
+          <p class="control-bar__hint">La categoria filtra la pagina. Il grip filtra i migliori tempi.</p>
+        </div>
+        <div class="control-bar__controls">
+          <div class="control-bar__group">
+            <label class="control-bar__label">Categoria</label>
+            <select v-model="selectedCategory" class="control-bar__select">
+              <option v-for="cat in CAR_CATEGORIES" :key="cat" :value="cat">
+                {{ cat }}
+              </option>
+            </select>
+          </div>
+          <div class="control-bar__group">
+            <label class="control-bar__label">Grip migliori tempi</label>
+            <select v-model="selectedGrip" class="control-bar__select control-bar__select--grip">
+              <option v-for="grip in gripConditions" :key="grip" :value="grip">
+                {{ grip }}
+              </option>
+            </select>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -411,7 +446,11 @@ function goToSession(id: string) {
       <div class="main-content">
         <!-- Historical Times Chart -->
         <div class="section">
-          <h2 class="section-title">Storico Tempi</h2>
+          <div class="section-heading">
+            <div>
+              <h2 class="section-title">Andamento tempi</h2>
+            </div>
+          </div>
           <div class="chart-container">
             <div class="chart-wrapper">
               <Line :data="chartJsData" :options="chartOptions" />
@@ -422,7 +461,12 @@ function goToSession(id: string) {
 
         <!-- Recent Sessions (same layout as SessioniPage) -->
         <div ref="sessionsRef" class="section">
-          <h2 class="section-title">Sessioni Recenti</h2>
+          <div class="section-heading">
+            <div>
+              <h2 class="section-title">Sessioni recenti su {{ track.name }}</h2>
+              <p class="section-subtitle">Tutte le sessioni recenti.</p>
+            </div>
+          </div>
           <div :class="['sessions-list', { 'sessions-list--fading': isChangingPage }]" @transitionend="isChangingPage = false">
             <div 
               v-for="session in paginatedSessions" 
@@ -497,19 +541,13 @@ function goToSession(id: string) {
         <!-- Best Times Section -->
         <div class="sidebar-section">
           <div class="section-header-row">
-            <h2 class="section-title">Migliori Tempi</h2>
-            <div class="filters-row">
-              <select v-model="selectedGrip" class="grip-selector">
-                <option v-for="grip in gripConditions" :key="grip" :value="grip">
-                  {{ grip }}
-                </option>
-              </select>
-            </div>
+            <h2 class="section-title">Migliori tempi</h2>
+            <span class="grip-context">{{ selectedGrip }}</span>
           </div>
           <div class="best-times-stack">
             <div class="best-time-card best-time-card--qualy">
-              <span class="time-label">Best Stint Qualifying</span>
-              <span class="time-value">{{ track.bestQualy || '—:—.---' }}</span>
+              <span class="time-label">Best qualifica</span>
+              <span class="time-value">{{ track.bestQualy || '--:--.---' }}</span>
               <span v-if="track.bestQualyConditions" class="time-conditions">
                 <span>{{ formatShortDate(track.bestQualyDate) }}</span>
                 <span class="condition-sep">•</span>
@@ -534,8 +572,8 @@ function goToSession(id: string) {
               </button>
             </div>
             <div class="best-time-card best-time-card--race">
-              <span class="time-label">Best Stint Race</span>
-              <span class="time-value">{{ track.bestRace || '—:—.---' }}</span>
+              <span class="time-label">Best gara</span>
+              <span class="time-value">{{ track.bestRace || '--:--.---' }}</span>
               <span v-if="track.bestRaceConditions" class="time-conditions">
                 <span>{{ formatShortDate(track.bestRaceDate) }}</span>
                 <span class="condition-sep">•</span>
@@ -545,7 +583,7 @@ function goToSession(id: string) {
                   <span>{{ Math.round(track.bestRaceFuel) }}L</span>
                 </template>
               </span>
-              <span v-else-if="!track.bestRace" class="no-data-hint">Nessun dato per {{ selectedGrip }}</span>
+              <span v-else-if="!track.bestRace" class="no-data-hint">Nessun dato {{ selectedCategory }} / {{ selectedGrip }}</span>
               <button 
                 v-if="track.bestRaceSessionId" 
                 class="session-link-btn"
@@ -560,15 +598,15 @@ function goToSession(id: string) {
               </button>
             </div>
             <div class="best-time-card best-time-card--avg">
-              <span class="time-label">Best Stint Avg Race</span>
-              <span class="time-value">{{ track.bestAvgRace || '—:—.---' }}</span>
+              <span class="time-label">Best media gara</span>
+              <span class="time-value">{{ track.bestAvgRace || '--:--.---' }}</span>
               <span v-if="track.bestAvgRaceConditions" class="time-conditions">
                 <span>{{ formatShortDate(track.bestAvgRaceDate) }}</span>
                 <span class="condition-sep">•</span>
                 <span>{{ track.bestAvgRaceConditions.airTemp }}°C</span>
 
               </span>
-              <span v-else-if="!track.bestAvgRace" class="no-data-hint">Nessun dato per {{ selectedGrip }}</span>
+              <span v-else-if="!track.bestAvgRace" class="no-data-hint">Nessun dato {{ selectedCategory }} / {{ selectedGrip }}</span>
               <button 
                 v-if="track.bestAvgRaceSessionId" 
                 class="session-link-btn"
@@ -644,21 +682,60 @@ function goToSession(id: string) {
   }
 }
 
-// === CONTROL BAR (Global Category Filter) ===
+// === CONTROL BAR (Data Filters) ===
 .control-bar {
   display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 20px;
+  align-items: stretch;
+  padding: 18px 20px;
   margin-bottom: 24px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background:
+    linear-gradient(135deg, rgba($accent-info, 0.08), rgba($racing-orange, 0.035)),
+    rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 14px;
+
+  &__content {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  &__heading {
+    min-width: 0;
+  }
+
+  &__eyebrow {
+    display: block;
+    margin-bottom: 4px;
+    font-family: $font-primary;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  &__hint {
+    margin: 0;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.52);
+  }
+
+  &__controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
 
   &__group {
     display: flex;
-    align-items: center;
-    gap: 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
   }
 
   &__label {
@@ -667,14 +744,15 @@ function goToSession(id: string) {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.48);
   }
 
   &__select {
-    padding: 6px 28px 6px 12px;
+    min-width: 120px;
+    padding: 8px 34px 8px 12px;
     background-color: #1a1d2e;
     border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 6px;
+    border-radius: 8px;
     color: #fff;
     font-family: $font-primary;
     font-size: 13px;
@@ -700,6 +778,11 @@ function goToSession(id: string) {
       background-color: #1a1d2e;
       color: #fff;
     }
+
+    &--grip {
+      min-width: 150px;
+      border-color: rgba($racing-orange, 0.34);
+    }
   }
 }
 
@@ -719,7 +802,7 @@ function goToSession(id: string) {
   width: 340px;
   flex-shrink: 0;
   position: sticky;
-  top: 24px;
+  top: 138px;
 }
 
 .sidebar-section {
@@ -728,6 +811,10 @@ function goToSession(id: string) {
   &:last-child {
     margin-bottom: 0;
   }
+}
+
+.sidebar .sidebar-section:nth-of-type(2) {
+  display: none;
 }
 
 .skill-stack {
@@ -759,7 +846,9 @@ function goToSession(id: string) {
   gap: 32px;
   margin-bottom: 40px;
   padding: 24px;
-  background: linear-gradient(145deg, #1a2035, #151828);
+  background:
+    radial-gradient(circle at 10% 0%, rgba($accent-info, 0.18), transparent 32%),
+    linear-gradient(145deg, #1a2035, #151828);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 16px;
 }
@@ -784,20 +873,67 @@ function goToSession(id: string) {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  min-width: 0;
+}
+
+.track-header-activity {
+  width: 340px;
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  align-self: stretch;
+}
+
+.activity-summary-item {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  min-height: 82px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.activity-summary-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 24px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.activity-summary-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.48);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.track-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
 }
 
 .track-country-badge {
-  display: inline-block;
-  padding: 4px 10px;
-  background: rgba($racing-red, 0.15);
-  border: 1px solid rgba($racing-red, 0.3);
-  border-radius: 4px;
-  color: $racing-red;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 1px;
-  margin-bottom: 12px;
-  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 24px;
+  padding: 0 9px;
+  background: rgba($racing-red, 0.13);
+  border: 1px solid rgba($racing-red, 0.28);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
 }
 
 .track-title {
@@ -805,7 +941,7 @@ function goToSession(id: string) {
   font-size: 36px;
   font-weight: 700;
   color: #fff;
-  margin: 0 0 4px 0;
+  margin: 0;
 }
 
 .track-fullname {
@@ -844,6 +980,48 @@ function goToSession(id: string) {
   font-weight: 600;
   color: #fff;
   margin: 0 0 16px 0;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+
+  .section-title {
+    margin: 0;
+  }
+}
+
+.section-subtitle {
+  margin: 5px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.section-pill,
+.grip-context {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.72);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.grip-context {
+  color: rgba($racing-orange, 0.95);
+  border-color: rgba($racing-orange, 0.28);
+  background: rgba($racing-orange, 0.08);
 }
 
 .section-header-row {
@@ -1448,6 +1626,15 @@ function goToSession(id: string) {
     position: static;
   }
 
+  .track-header {
+    flex-wrap: wrap;
+  }
+
+  .track-header-activity {
+    width: 100%;
+    grid-template-columns: repeat(4, 1fr);
+  }
+
   .skill-stack {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
@@ -1489,6 +1676,25 @@ function goToSession(id: string) {
   .track-header-image {
     width: 100%;
     height: 180px;
+  }
+
+  .track-header-activity,
+  .activity-stack {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .control-bar__content {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .control-bar__controls {
+    justify-content: flex-start;
+  }
+
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .best-times-grid {
