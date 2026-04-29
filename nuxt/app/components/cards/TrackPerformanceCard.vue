@@ -4,14 +4,32 @@
 // MATCHES FeaturedCarCard structure exactly
 // ============================================
 
-defineProps<{
+const props = defineProps<{
   title: string
   trackName: string
   trackImage: string
   bestQualy?: string
+  bestQualyGrip?: string | null
   bestRace?: string
+  bestRaceGrip?: string | null
   avgTime?: string
+  avgTimeGrip?: string | null
 }>()
+
+const gripLabels: Record<string, string> = {
+  Optimum: 'OPT',
+  Fast: 'FST',
+  Green: 'GRN',
+  Greasy: 'GRS',
+  Damp: 'DMP',
+  Wet: 'WET',
+  Flood: 'FLD'
+}
+
+function formatGripBadge(grip?: string | null) {
+  if (!grip) return null
+  return gripLabels[grip] || grip.slice(0, 3).toUpperCase()
+}
 </script>
 
 <template>
@@ -33,9 +51,12 @@ defineProps<{
       <div class="track-right">
         <!-- Best Qualy -->
         <div class="stat-box">
-          <span class="stat-label">BEST QUALY</span>
-          <div class="stat-value-row">
-            <span class="stat-time">{{ bestQualy || '--:--.---' }}</span>
+          <div class="stat-copy">
+            <span class="stat-label-text">BEST QUALY</span>
+            <span class="stat-time">{{ props.bestQualy || '--:--.---' }}</span>
+          </div>
+          <div class="stat-side">
+            <span v-if="props.bestQualy && formatGripBadge(props.bestQualyGrip)" class="grip-badge">{{ formatGripBadge(props.bestQualyGrip) }}</span>
             <!-- Gold Medal SVG -->
             <svg class="medal-svg medal-gold" viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M18 0L24 16L30 0H36L28 20L24 28L20 20L12 0H18Z" fill="#E53935"/>
@@ -56,9 +77,12 @@ defineProps<{
         
         <!-- Best Race -->
         <div class="stat-box">
-          <span class="stat-label">BEST RACE</span>
-          <div class="stat-value-row">
-            <span class="stat-time">{{ bestRace || '--:--.---' }}</span>
+          <div class="stat-copy">
+            <span class="stat-label-text">BEST RACE</span>
+            <span class="stat-time">{{ props.bestRace || '--:--.---' }}</span>
+          </div>
+          <div class="stat-side">
+            <span v-if="props.bestRace && formatGripBadge(props.bestRaceGrip)" class="grip-badge">{{ formatGripBadge(props.bestRaceGrip) }}</span>
             <!-- Silver Medal SVG -->
             <svg class="medal-svg medal-silver" viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M18 0L24 16L30 0H36L28 20L24 28L20 20L12 0H18Z" fill="#1E88E5"/>
@@ -79,9 +103,12 @@ defineProps<{
         
         <!-- Avg Time -->
         <div class="stat-box stat-box--subtle">
-          <span class="stat-label">AVG TIME</span>
-          <div class="stat-value-row">
-            <span class="stat-time">{{ avgTime || '--:--.---' }}</span>
+          <div class="stat-copy">
+            <span class="stat-label-text">BEST AVG</span>
+            <span class="stat-time">{{ props.avgTime || '--:--.---' }}</span>
+          </div>
+          <div class="stat-side">
+            <span v-if="props.avgTime && formatGripBadge(props.avgTimeGrip)" class="grip-badge">{{ formatGripBadge(props.avgTimeGrip) }}</span>
             <!-- Bronze Medal SVG -->
             <svg class="medal-svg medal-bronze" viewBox="0 0 48 56" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M18 0L24 16L30 0H36L28 20L24 28L20 20L12 0H18Z" fill="#8D6E63"/>
@@ -230,16 +257,20 @@ defineProps<{
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 16px 20px;
+  padding: 16px 20px 16px 20px;
   justify-content: center;
-  max-width: 200px;
+  max-width: 188px;
 }
 
 .stat-box {
   width: 100%;
-  padding: 16px 0;
+  padding: 14px 0;
   background: transparent;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: grid;
+  grid-template-columns: minmax(86px, 1fr) 34px;
+  column-gap: 18px;
+  align-items: center;
   
   &:last-of-type {
     border-bottom: none;
@@ -250,22 +281,45 @@ defineProps<{
   }
 }
 
-.stat-label {
-  display: block;
+.stat-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stat-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+}
+
+.stat-label-text {
   font-family: $font-primary;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: rgba(255, 255, 255, 0.4);
-  margin-bottom: 4px;
+  white-space: nowrap;
 }
 
-.stat-value-row {
-  display: flex;
+.grip-badge {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: center;
+  width: 31px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  border: 1px solid rgba($racing-orange, 0.35);
+  background: rgba($racing-orange, 0.12);
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1;
 }
 
 .stat-time {
@@ -278,8 +332,8 @@ defineProps<{
 
 // SVG Medal
 .medal-svg {
-  height: 32px;
-  width: auto;
+  height: 30px;
+  width: 30px;
   flex-shrink: 0;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
 }
@@ -329,6 +383,12 @@ defineProps<{
   
   .track-right {
     padding: 12px;
+    max-width: none;
+  }
+
+  .stat-box {
+    grid-template-columns: minmax(82px, 1fr) 32px;
+    column-gap: 14px;
   }
   
   .stat-time {

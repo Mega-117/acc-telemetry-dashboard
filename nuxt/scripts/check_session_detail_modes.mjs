@@ -66,6 +66,12 @@ registerHooks({
 })
 
 const { loadSessionDetailViewModel } = await import('../app/services/session-detail/loadSessionDetailViewModel.ts')
+const sessionDetailSource = fs.readFileSync(path.join(nuxtRoot, 'app/services/session-detail/loadSessionDetailViewModel.ts'), 'utf8')
+assert.equal(
+  sessionDetailSource.includes('getOverviewSnapshot'),
+  false,
+  'Session detail view-model must not preload overview data'
+)
 
 const fullSessionStub = {
   session_info: {
@@ -96,12 +102,8 @@ async function runOwnerScenario() {
   const result = await loadSessionDetailViewModel({
     sessionId: 'session-owner',
     currentUser: { value: { uid: 'owner-a', displayName: 'Owner A' } },
-    getUserProfile: async () => ({ nickname: 'Owner Nick' }),
+    currentUserDisplayName: 'Owner Nick',
     telemetryGateway: {
-      getOverviewSnapshot: async (targetUserId) => {
-        calls.push(['overview', targetUserId ?? null])
-        return {}
-      },
       getSessionDetail: async (sessionId, targetUserId, options) => {
         calls.push(['detail', sessionId, targetUserId ?? null, options])
         return fullSessionStub
@@ -112,7 +114,6 @@ async function runOwnerScenario() {
   assert.equal(result.currentUserNickname, 'Owner Nick')
   assert.equal(result.loadError, null)
   assert.deepEqual(calls, [
-    ['overview', null],
     ['detail', 'session-owner', null, { isCoachAccess: false, warmupSessions: false }]
   ])
 }
@@ -123,12 +124,8 @@ async function runSharedScenario() {
     sessionId: 'session-shared',
     externalUserId: 'shared-user',
     currentUser: { value: { uid: 'viewer', displayName: 'Viewer' } },
-    getUserProfile: async () => ({ nickname: 'Viewer Nick' }),
+    currentUserDisplayName: 'Viewer Nick',
     telemetryGateway: {
-      getOverviewSnapshot: async (targetUserId) => {
-        calls.push(['overview', targetUserId ?? null])
-        return {}
-      },
       getSessionDetail: async (sessionId, targetUserId, options) => {
         calls.push(['detail', sessionId, targetUserId ?? null, options])
         return fullSessionStub
@@ -150,12 +147,8 @@ async function runCoachScenario() {
     sessionId: 'session-coach',
     targetUserId: 'pilot-123',
     currentUser: { value: { uid: 'coach-user', displayName: 'Coach User' } },
-    getUserProfile: async () => ({ nickname: 'Coach Nick' }),
+    currentUserDisplayName: 'Coach Nick',
     telemetryGateway: {
-      getOverviewSnapshot: async (targetUserId) => {
-        calls.push(['overview', targetUserId ?? null])
-        return {}
-      },
       getSessionDetail: async (sessionId, targetUserId, options) => {
         calls.push(['detail', sessionId, targetUserId ?? null, options])
         return fullSessionStub
@@ -167,7 +160,6 @@ async function runCoachScenario() {
   assert.equal(result.userIdToLoad, 'pilot-123')
   assert.equal(result.loadError, null)
   assert.deepEqual(calls, [
-    ['overview', 'pilot-123'],
     ['detail', 'session-coach', 'pilot-123', { isCoachAccess: true, warmupSessions: false }]
   ])
 }

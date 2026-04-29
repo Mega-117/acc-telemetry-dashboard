@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
-import { collection, query, orderBy, doc, writeBatch, where, limit, DocumentReference, Query } from 'firebase/firestore'
-import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedUpdateDoc } from './useFirebaseTracker'
+import { collection, query, orderBy, doc, where, limit, DocumentReference, Query } from 'firebase/firestore'
+import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedUpdateDoc, trackedWriteBatch } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
 import {
     loadLocalTelemetrySessions,
@@ -159,8 +159,8 @@ export type SessionType = 'race' | 'qualify' | 'practice'
 export const CAR_CATEGORIES = ['GT3', 'GT4', 'CUP', 'GT2', 'ST', 'TCX'] as const
 export type CarCategory = typeof CAR_CATEGORIES[number]
 
-// Current schema version for trackBests documents (v2: category-based, fuel fields added gracefully)
-export const TRACK_BESTS_SCHEMA_VERSION = 2
+// Current schema version for trackBests documents (v3: category-based + canonical fuel fields)
+export const TRACK_BESTS_SCHEMA_VERSION = 3
 
 /**
  * Get car category from car model name
@@ -328,6 +328,7 @@ const globalIsLoading = ref(false)
 const globalError = ref<string | null>(null)
 const globalLastUserId = ref<string | null>(null)  // Track which user's data is loaded
 const globalPrefetchComplete = ref(false)  // Track if batch prefetch has completed
+const trackBestsPrefetchInFlight = new Map<string, Promise<number>>()
 const FIREBASE_SESSIONS_FALLBACK_LIMIT = 200
 
 // === SESSIONSTORAGE PERSISTENCE ===
@@ -946,6 +947,19 @@ export function useTelemetryData() {
             return cached.bests[category] || {}
         }
 
+        const prefetchInFlight = targetUserId ? trackBestsPrefetchInFlight.get(targetUserId) : null
+        if (prefetchInFlight) {
+            console.log(`[TELEMETRY] trackBests waiting for batch prefetch (${trackIdNorm})`)
+            await prefetchInFlight.catch(() => 0)
+            const cachedAfterPrefetch = (
+                trackBestsCache.value as Record<string, { bests: CategoryBests; lastSessionDate: string | null } | undefined>
+            )[cacheKey]
+            if (cachedAfterPrefetch) {
+                console.log(`[TELEMETRY] trackBests cache HIT after prefetch for ${trackIdNorm} (category: ${category})`)
+                return cachedAfterPrefetch.bests[category] || {}
+            }
+        }
+
         // 2. Try Firebase /trackBests collection whenever we have an authenticated target user.
         // In Electron owner mode the compact sessionIndex may not contain the rich best_by_grip
         // data needed for recalculation, so Firebase remains the source of truth for overview cards.
@@ -1094,7 +1108,7 @@ export function useTelemetryData() {
             }
 
             // 2. Batch delete all documents
-            const batch = writeBatch(db)
+            const batch = trackedWriteBatch(db, CALLER)
             snapshot.docs.forEach(docSnap => {
                 batch.delete(docSnap.ref)
             })
@@ -1156,6 +1170,13 @@ export function useTelemetryData() {
             return Object.keys(storedBests).length
         }
 
+        const existingPrefetch = trackBestsPrefetchInFlight.get(targetUserId)
+        if (existingPrefetch) {
+            console.log(`[PREFETCH] Reusing in-flight trackBests prefetch for user ${targetUserId}`)
+            return existingPrefetch
+        }
+
+        const prefetchRequest = (async (): Promise<number> => {
         console.log(`[PREFETCH] 🚀 Starting batch prefetch for user ${targetUserId}`)
         const startTime = Date.now()
 
@@ -1293,6 +1314,14 @@ export function useTelemetryData() {
             console.error('[PREFETCH] Error during batch prefetch:', e)
             globalPrefetchComplete.value = true  // Mark complete even on error to prevent blocking
             return 0
+        }
+        })()
+
+        trackBestsPrefetchInFlight.set(targetUserId, prefetchRequest)
+        try {
+            return await prefetchRequest
+        } finally {
+            trackBestsPrefetchInFlight.delete(targetUserId)
         }
     }
 
@@ -1707,7 +1736,7 @@ export function useTelemetryData() {
         const chunksSnap = await getDocs(query(chunksRef))
 
         if (chunksSnap.docs.length > 0) {
-            const batch = writeBatch(db)
+            const batch = trackedWriteBatch(db, CALLER)
             chunksSnap.docs.forEach(chunkDoc => {
                 batch.update(chunkDoc.ref, { isPublic })
             })

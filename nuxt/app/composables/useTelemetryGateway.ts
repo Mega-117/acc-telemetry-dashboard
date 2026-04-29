@@ -1,5 +1,7 @@
 import { computed, ref } from 'vue'
 import {
+    CAR_CATEGORIES,
+    SESSION_TYPES,
     useTelemetryData,
     type LoadSessionsSourceMode,
     type CarCategory,
@@ -19,10 +21,27 @@ import { buildTrackOverviewProjection } from '~/services/projections/buildTrackO
 import { buildTrackDetailProjection } from '~/services/projections/buildTrackDetailProjection'
 import { buildOverviewProjection } from '~/services/projections/buildOverviewProjection'
 import { TRACK_METADATA, normalizeTrackId as normalizeTrackProjectionId, resolveTrackMetadata } from '~/services/projections/trackMetadata'
-import type { TrackDetailProjection, TrackOverviewProjectionItem } from '~/types/trackProjections'
+import {
+    TRACK_DETAIL_PROJECTION_SCHEMA_VERSION,
+    type TrackActivityProjection,
+    type TrackDetailProjection,
+    type TrackDetailProjectionDocument,
+    type TrackHistoricalPointProjection,
+    type TrackOverviewProjectionItem,
+    type TrackRecentSessionProjection
+} from '~/types/trackProjections'
 import type { OverviewProjection } from '~/types/overviewProjections'
 import { loadSessionDetailViewModel } from '~/services/session-detail/loadSessionDetailViewModel'
 import type { SessionDetailViewModel } from '~/types/sessionDetailViewModel'
+import { endFirebaseScenario, startFirebaseScenario } from './useFirebaseTracker'
+import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
+import {
+    loadTrackBest,
+    loadTrackBestsMap,
+    loadTrackDetailProjectionDoc,
+    loadUserProjection,
+    type UserProjectionDocument
+} from '~/repositories/telemetryProjectionRepository'
 
 export type PipelineSource =
     | 'cloud_fresh'
@@ -52,6 +71,11 @@ export interface OverviewSnapshot {
     activityTotals: ReturnType<typeof useTelemetryData>['activityTotals']['value']
 }
 
+const OVERVIEW_SNAPSHOT_CACHE_TTL_MS = 1000
+const PENDING_LOCAL_OVERLAY_CACHE_TTL_MS = 3000
+const overviewSnapshotInFlight = new Map<string, Promise<OverviewSnapshot | null>>()
+const overviewSnapshotCache = new Map<string, { cachedAt: number; snapshot: OverviewSnapshot | null }>()
+
 export interface SessionsPageSnapshot {
     sessions: SessionDocument[]
     state: ReturnType<typeof useSessionPager>['state']['value']
@@ -67,15 +91,50 @@ export interface TrackSnapshot {
 
 type TrackBestTimes = {
     bestQualy: number | null
+    bestQualyGrip?: string | null
     bestRace: number | null
+    bestRaceGrip?: string | null
     bestAvgRace: number | null
+    bestAvgRaceGrip?: string | null
+}
+
+type TrackStatProjection = {
+    track: string
+    sessions: number
+    lastSession?: string | null
+    bestQualy?: number | null
+    bestRace?: number | null
+    bestAvgRace?: number | null
+    bestByGrip?: Record<string, { bestQualy?: number | null; bestRace?: number | null }>
+}
+
+type GripBestProjection = {
+    bestQualy?: number | null
+    bestQualyTemp?: number | null
+    bestQualyFuel?: number | null
+    bestQualySessionId?: string | null
+    bestQualyDate?: string | null
+    bestRace?: number | null
+    bestRaceTemp?: number | null
+    bestRaceFuel?: number | null
+    bestRaceSessionId?: string | null
+    bestRaceDate?: string | null
+    bestAvgRace?: number | null
+    bestAvgRaceTemp?: number | null
+    bestAvgRaceFuel?: number | null
+    bestAvgRaceSessionId?: string | null
+    bestAvgRaceDate?: string | null
 }
 
 const MAX_DIAGNOSTICS = 300
+const OVERVIEW_GRIP_PRIORITY = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
+const OVERVIEW_GRIP_SCAN_ORDER = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
 const globalGatewayDiagnostics = ref<PipelineDiagnosticEvent[]>([])
+const trackDetailProjectionCache = new Map<string, { detail: TrackDetailProjectionDocument; trackBest: any | null }>()
+const pendingLocalOverlayCache = new Map<string, { cachedAt: number; sessions: SessionDocument[] }>()
 
-function normalizeTrackKey(track: string): string {
-    return normalizeTrackProjectionId(track)
+function normalizeTrackKey(track: string | null | undefined): string {
+    return normalizeTrackProjectionId(track || '')
 }
 
 function pushGatewayDiagnostic(event: Omit<PipelineDiagnosticEvent, 'at'>): void {
@@ -88,10 +147,496 @@ function pushGatewayDiagnostic(event: Omit<PipelineDiagnosticEvent, 'at'>): void
     console.log(`[PIPELINE] source=${withTimestamp.source} action=${withTimestamp.action} user=${withTimestamp.targetUserId || 'none'}${detailText}`)
 }
 
+function trackMatches(left: string | null | undefined, right: string | null | undefined): boolean {
+    const a = normalizeTrackKey(left)
+    const b = normalizeTrackKey(right)
+    return !!a && !!b && (a === b || a.includes(b) || b.includes(a))
+}
+
+function isProjectionIndexReady(userProjection: UserProjectionDocument | null): boolean {
+    return Number(userProjection?.sessionIndex?.schemaVersion || 0) >= 2
+}
+
+function buildTrackStatsFromSessionIndex(sessionIndex: any): TrackStatProjection[] {
+    const tracksSummary = Array.isArray(sessionIndex?.tracksSummary) ? sessionIndex.tracksSummary : []
+    return tracksSummary
+        .filter((track: any) => track?.track)
+        .map((track: any) => ({
+            track: track.track,
+            sessions: Number(track.sessions || 0),
+            lastSession: track.lastPlayed || track.lastSession || null
+        }))
+}
+
+function mergePendingTrackStats(baseStats: TrackStatProjection[], pendingSessions: SessionDocument[]): TrackStatProjection[] {
+    const byTrack = new Map<string, TrackStatProjection>()
+    for (const stat of baseStats) {
+        byTrack.set(normalizeTrackKey(stat.track), { ...stat })
+    }
+
+    for (const session of pendingSessions) {
+        const trackId = normalizeTrackKey(session.meta?.track)
+        if (!trackId) continue
+        const existing = byTrack.get(trackId)
+        if (!existing) {
+            byTrack.set(trackId, {
+                track: session.meta.track,
+                sessions: 1,
+                lastSession: session.meta.date_start || null
+            })
+            continue
+        }
+        existing.sessions += 1
+        if ((session.meta.date_start || '') > (existing.lastSession || '')) {
+            existing.lastSession = session.meta.date_start
+        }
+    }
+
+    return Array.from(byTrack.values()).sort((a, b) => (b.lastSession || '').localeCompare(a.lastSession || ''))
+}
+
+function buildBestTimesFromTrackBestDoc(
+    trackBestDoc: any | null,
+    category: CarCategory = 'GT3',
+    grip: string = 'Optimum'
+): TrackBestTimes {
+    const gripBests = trackBestDoc?.bests?.[category]?.[grip] || {}
+    return {
+        bestQualy: gripBests.bestQualy || null,
+        bestRace: gripBests.bestRace || null,
+        bestAvgRace: gripBests.bestAvgRace || null
+    }
+}
+
+function updateBestTimeWithGrip(
+    target: TrackBestTimes,
+    field: keyof Pick<TrackBestTimes, 'bestQualy' | 'bestRace' | 'bestAvgRace'>,
+    gripField: keyof Pick<TrackBestTimes, 'bestQualyGrip' | 'bestRaceGrip' | 'bestAvgRaceGrip'>,
+    candidate: number | null | undefined,
+    grip: string
+): void {
+    if (!candidate) return
+    const current = target[field]
+    const currentGrip = target[gripField]
+    const candidatePriority = OVERVIEW_GRIP_PRIORITY.indexOf(grip)
+    const currentPriority = currentGrip ? OVERVIEW_GRIP_PRIORITY.indexOf(currentGrip) : Number.MAX_SAFE_INTEGER
+    const candidateWinsTie = current === candidate
+        && candidatePriority >= 0
+        && (currentPriority < 0 || candidatePriority < currentPriority)
+
+    if (!current || candidate < Number(current) || candidateWinsTie) {
+        target[field] = candidate
+        target[gripField] = grip
+    }
+}
+
+function buildOverviewBestTimesFromTrackBestDoc(
+    trackBestDoc: any | null,
+    category: CarCategory = 'GT3'
+): TrackBestTimes {
+    const result: TrackBestTimes = {
+        bestQualy: null,
+        bestQualyGrip: null,
+        bestRace: null,
+        bestRaceGrip: null,
+        bestAvgRace: null,
+        bestAvgRaceGrip: null
+    }
+
+    const categoryBests = trackBestDoc?.bests?.[category] || {}
+    for (const grip of OVERVIEW_GRIP_SCAN_ORDER) {
+        const gripBests = categoryBests?.[grip] || {}
+        updateBestTimeWithGrip(result, 'bestQualy', 'bestQualyGrip', gripBests.bestQualy, grip)
+        updateBestTimeWithGrip(result, 'bestRace', 'bestRaceGrip', gripBests.bestRace, grip)
+        updateBestTimeWithGrip(result, 'bestAvgRace', 'bestAvgRaceGrip', gripBests.bestAvgRace, grip)
+    }
+
+    return result
+}
+
+function buildTrackBestsMapFromDocs(trackBestDocs: Record<string, any>): Record<string, TrackBestTimes> {
+    const result: Record<string, TrackBestTimes> = {}
+    for (const [rawTrackId, doc] of Object.entries(trackBestDocs || {})) {
+        const trackId = normalizeTrackKey((doc as any)?.trackId || rawTrackId)
+        if (!trackId) continue
+        result[trackId] = buildBestTimesFromTrackBestDoc(doc, 'GT3', 'Optimum')
+    }
+    return result
+}
+
+function updateBestTime(
+    target: TrackBestTimes,
+    field: keyof TrackBestTimes,
+    candidate: number | null | undefined
+): void {
+    if (!candidate) return
+    if (!target[field] || candidate < Number(target[field])) {
+        target[field] = candidate
+    }
+}
+
+function mergePendingBestsByTrack(
+    baseBests: Record<string, TrackBestTimes>,
+    pendingSessions: SessionDocument[]
+): Record<string, TrackBestTimes> {
+    const merged: Record<string, TrackBestTimes> = { ...baseBests }
+    for (const session of pendingSessions) {
+        if (getCarCategory(session.meta?.car || '') !== 'GT3') continue
+        const trackId = normalizeTrackKey(session.meta?.track)
+        if (!trackId) continue
+        const current = merged[trackId] || { bestQualy: null, bestRace: null, bestAvgRace: null }
+        const gripBest = (session.summary as any)?.best_by_grip?.Optimum || {}
+        updateBestTime(current, 'bestQualy', gripBest.bestQualy)
+        updateBestTime(current, 'bestRace', gripBest.bestRace)
+        updateBestTime(current, 'bestAvgRace', gripBest.bestAvgRace)
+        merged[trackId] = current
+    }
+    return merged
+}
+
+function mergePendingOverviewBestsByTrack(
+    baseBests: Record<string, TrackBestTimes>,
+    pendingSessions: SessionDocument[]
+): Record<string, TrackBestTimes> {
+    const merged: Record<string, TrackBestTimes> = { ...baseBests }
+    for (const session of pendingSessions) {
+        if (getCarCategory(session.meta?.car || '') !== 'GT3') continue
+        const trackId = normalizeTrackKey(session.meta?.track)
+        if (!trackId) continue
+        const current = merged[trackId] || {
+            bestQualy: null,
+            bestQualyGrip: null,
+            bestRace: null,
+            bestRaceGrip: null,
+            bestAvgRace: null,
+            bestAvgRaceGrip: null
+        }
+        const bestByGrip = (session.summary as any)?.best_by_grip || {}
+        for (const grip of OVERVIEW_GRIP_SCAN_ORDER) {
+            const gripBest = bestByGrip?.[grip] || {}
+            updateBestTimeWithGrip(current, 'bestQualy', 'bestQualyGrip', gripBest.bestQualy, grip)
+            updateBestTimeWithGrip(current, 'bestRace', 'bestRaceGrip', gripBest.bestRace, grip)
+            updateBestTimeWithGrip(current, 'bestAvgRace', 'bestAvgRaceGrip', gripBest.bestAvgRace, grip)
+        }
+        merged[trackId] = current
+    }
+    return merged
+}
+
+function buildActivity7dFromSessionIndex(sessionIndex: any): OverviewProjection['activity7d'] {
+    const sourceRows = Array.isArray(sessionIndex?.activity7d?.byDay) ? sessionIndex.activity7d.byDay : []
+    const byDate = new Map<string, any>()
+    for (const row of sourceRows) {
+        if (row?.date) byDate.set(row.date, row)
+    }
+
+    const dayLabels: [string, string, string, string, string, string, string] = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
+    const today = new Date()
+    const result: OverviewProjection['activity7d'] = []
+    for (let offset = 6; offset >= 0; offset--) {
+        const day = new Date(today)
+        day.setDate(today.getDate() - offset)
+        const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+        const row = byDate.get(key) || {}
+        result.push({
+            day: dayLabels[day.getDay()] || '',
+            practice: Number(row.P || row.practice || 0),
+            qualify: Number(row.Q || row.qualify || 0),
+            race: Number(row.R || row.race || 0)
+        })
+    }
+    return result
+}
+
+function buildActivityTotalsFromSessionIndex(sessionIndex: any): OverviewProjection['activityTotals'] {
+    const activity = sessionIndex?.activity7d || {}
+    return {
+        practice: {
+            minutes: Number(activity.practice?.minutes || 0),
+            sessions: Number(activity.practice?.sessions || 0)
+        },
+        qualify: {
+            minutes: Number(activity.qualify?.minutes || 0),
+            sessions: Number(activity.qualify?.sessions || 0)
+        },
+        race: {
+            minutes: Number(activity.race?.minutes || 0),
+            sessions: Number(activity.race?.sessions || 0)
+        }
+    }
+}
+
+function overlayPendingActivity(
+    activity7d: OverviewProjection['activity7d'],
+    activityTotals: OverviewProjection['activityTotals'],
+    pendingSessions: SessionDocument[]
+): { activity7d: OverviewProjection['activity7d']; activityTotals: OverviewProjection['activityTotals'] } {
+    const resultData = activity7d.map((row) => ({ ...row }))
+    const resultTotals = {
+        practice: { ...activityTotals.practice },
+        qualify: { ...activityTotals.qualify },
+        race: { ...activityTotals.race }
+    }
+
+    const today = new Date()
+    const dateKeys: string[] = []
+    for (let offset = 6; offset >= 0; offset--) {
+        const day = new Date(today)
+        day.setDate(today.getDate() - offset)
+        dateKeys.push(`${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`)
+    }
+
+    for (const session of pendingSessions) {
+        const minutes = Math.round(Number(session.summary?.totalTime || 0) / 60000)
+        const dateKey = (session.meta?.date_start || '').substring(0, 10)
+        const index = dateKeys.indexOf(dateKey)
+        const sessionType = session.meta?.session_type
+        const bucket = sessionType === SESSION_TYPES.QUALIFY ? 'qualify' : (sessionType === SESSION_TYPES.RACE ? 'race' : 'practice')
+        resultTotals[bucket].minutes += minutes
+        resultTotals[bucket].sessions += 1
+        const dayRow = index >= 0 ? resultData[index] : null
+        if (dayRow) {
+            dayRow[bucket] += minutes
+        }
+    }
+
+    return { activity7d: resultData, activityTotals: resultTotals }
+}
+
+function getNewestSessionEntry(sessionIndex: any, pendingSessions: SessionDocument[]): { car: string | null; date: string | null } {
+    const newestIndexEntry = Array.isArray(sessionIndex?.sessionsList) ? sessionIndex.sessionsList[0] : null
+    const newestPending = [...pendingSessions].sort((a, b) => (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))[0] || null
+    if (newestPending && (!newestIndexEntry?.date || newestPending.meta.date_start > newestIndexEntry.date)) {
+        return {
+            car: newestPending.meta.car || null,
+            date: newestPending.meta.date_start || null
+        }
+    }
+    return {
+        car: newestIndexEntry?.car || null,
+        date: newestIndexEntry?.date || null
+    }
+}
+
+function normalizeActivity(activity: TrackActivityProjection | null | undefined): TrackActivityProjection {
+    const totalLaps = Number(activity?.totalLaps || 0)
+    const validLaps = Number(activity?.validLaps || 0)
+    const totalTimeMs = Number(activity?.totalTimeMs || 0)
+    return {
+        totalLaps,
+        validLaps,
+        validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
+        totalTimeMs,
+        totalTimeFormatted: activity?.totalTimeFormatted || formatDriveTime(totalTimeMs),
+        sessionCount: Number(activity?.sessionCount || 0)
+    }
+}
+
+function buildRecentSessionProjection(session: SessionDocument): TrackRecentSessionProjection {
+    const summary = session.summary || {}
+    const dateObj = new Date(session.meta.date_start)
+    const sessionRaceTime = (summary as any)?.best_session_race_ms || summary.best_race_ms || null
+    return {
+        id: session.sessionId,
+        date: session.meta.date_start?.split('T')[0] || '',
+        time: Number.isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
+        type: getSessionTypeLabel(session.meta.session_type),
+        car: formatCarName(session.meta.car),
+        laps: summary.laps || 0,
+        stints: summary.stintCount || 0,
+        bestQualy: summary.best_qualy_ms ? formatLapTime(summary.best_qualy_ms) : undefined,
+        bestRace: sessionRaceTime ? formatLapTime(sessionRaceTime) : undefined
+    }
+}
+
+function buildHistoricalPointProjection(session: SessionDocument): TrackHistoricalPointProjection {
+    const summary = session.summary || {}
+    const dateStr = session.meta.date_start?.split('T')[0] || ''
+    const [, month, day] = dateStr.split('-')
+    const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
+    const dateLabel = day && month ? `${parseInt(day, 10)} ${months[parseInt(month, 10) - 1] || 'N/A'}` : 'N/A'
+    const qualyTime = summary.best_qualy_ms || null
+    return {
+        date: dateLabel,
+        sessionId: session.sessionId,
+        bestQualy: qualyTime ? formatLapTime(qualyTime) : undefined,
+        bestRace: summary.best_race_ms ? formatLapTime(summary.best_race_ms) : undefined
+    }
+}
+
+function buildActivityFromSessions(sessions: SessionDocument[]): TrackActivityProjection {
+    const totalLaps = sessions.reduce((sum, session) => sum + Number(session.summary?.laps || 0), 0)
+    const validLaps = sessions.reduce((sum, session) => sum + Number(session.summary?.lapsValid || 0), 0)
+    const totalTimeMs = sessions.reduce((sum, session) => sum + Number(session.summary?.totalTime || 0), 0)
+    return {
+        totalLaps,
+        validLaps,
+        validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
+        totalTimeMs,
+        totalTimeFormatted: formatDriveTime(totalTimeMs),
+        sessionCount: sessions.length
+    }
+}
+
+function buildPendingGripBest(sessions: SessionDocument[], selectedGrip: string): GripBestProjection {
+    const best: GripBestProjection = {}
+    for (const session of sessions) {
+        const sessionBest = (session.summary as any)?.best_by_grip?.[selectedGrip]
+        if (!sessionBest) continue
+        if (sessionBest.bestQualy && (!best.bestQualy || sessionBest.bestQualy < best.bestQualy)) {
+            best.bestQualy = sessionBest.bestQualy
+            best.bestQualyTemp = sessionBest.bestQualyTemp ?? null
+            best.bestQualyFuel = sessionBest.bestQualyFuel ?? null
+            best.bestQualySessionId = session.sessionId
+            best.bestQualyDate = session.meta.date_start
+        }
+        if (sessionBest.bestRace && (!best.bestRace || sessionBest.bestRace < best.bestRace)) {
+            best.bestRace = sessionBest.bestRace
+            best.bestRaceTemp = sessionBest.bestRaceTemp ?? null
+            best.bestRaceFuel = sessionBest.bestRaceFuel ?? null
+            best.bestRaceSessionId = session.sessionId
+            best.bestRaceDate = session.meta.date_start
+        }
+        if (sessionBest.bestAvgRace && (!best.bestAvgRace || sessionBest.bestAvgRace < best.bestAvgRace)) {
+            best.bestAvgRace = sessionBest.bestAvgRace
+            best.bestAvgRaceTemp = sessionBest.bestAvgRaceTemp ?? null
+            best.bestAvgRaceFuel = sessionBest.bestAvgRaceFuel ?? null
+            best.bestAvgRaceSessionId = session.sessionId
+            best.bestAvgRaceDate = session.meta.date_start
+        }
+    }
+    return best
+}
+
+function mergeGripBest(base: GripBestProjection, pending: GripBestProjection): GripBestProjection {
+    const merged = { ...base }
+    const pairs: Array<[
+        'bestQualy' | 'bestRace' | 'bestAvgRace',
+        'bestQualyTemp' | 'bestRaceTemp' | 'bestAvgRaceTemp',
+        'bestQualyFuel' | 'bestRaceFuel' | 'bestAvgRaceFuel',
+        'bestQualySessionId' | 'bestRaceSessionId' | 'bestAvgRaceSessionId',
+        'bestQualyDate' | 'bestRaceDate' | 'bestAvgRaceDate'
+    ]> = [
+        ['bestQualy', 'bestQualyTemp', 'bestQualyFuel', 'bestQualySessionId', 'bestQualyDate'],
+        ['bestRace', 'bestRaceTemp', 'bestRaceFuel', 'bestRaceSessionId', 'bestRaceDate'],
+        ['bestAvgRace', 'bestAvgRaceTemp', 'bestAvgRaceFuel', 'bestAvgRaceSessionId', 'bestAvgRaceDate']
+    ]
+    for (const [timeKey, tempKey, fuelKey, sessionKey, dateKey] of pairs) {
+        const pendingTime = pending[timeKey]
+        if (pendingTime && (!merged[timeKey] || pendingTime < Number(merged[timeKey]))) {
+            merged[timeKey] = pendingTime
+            merged[tempKey] = pending[tempKey] as any
+            merged[fuelKey] = pending[fuelKey] as any
+            merged[sessionKey] = pending[sessionKey] as any
+            merged[dateKey] = pending[dateKey] as any
+        }
+    }
+    return merged
+}
+
+function dedupeRecentSessions(items: TrackRecentSessionProjection[]): TrackRecentSessionProjection[] {
+    const byId = new Map<string, TrackRecentSessionProjection>()
+    for (const item of items) {
+        if (!byId.has(item.id)) byId.set(item.id, item)
+    }
+    return Array.from(byId.values())
+        .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))
+        .slice(0, 200)
+}
+
+function dedupeHistoricalPoints(items: TrackHistoricalPointProjection[]): TrackHistoricalPointProjection[] {
+    const byId = new Map<string, TrackHistoricalPointProjection>()
+    for (const item of items) {
+        if (!byId.has(item.sessionId)) byId.set(item.sessionId, item)
+    }
+    return Array.from(byId.values()).slice(-200)
+}
+
+function buildTrackDetailFromProjectionDocument(params: {
+    detailDoc: TrackDetailProjectionDocument
+    trackBestDoc: any | null
+    trackId: string
+    category: CarCategory
+    selectedGrip: string
+    pendingSessions: SessionDocument[]
+}): TrackDetailProjection {
+    const { detailDoc, trackBestDoc, trackId, category, selectedGrip, pendingSessions } = params
+    const normalizedTrackId = normalizeTrackKey(trackId || detailDoc.trackId)
+    const metadata = resolveTrackMetadata(normalizedTrackId)
+    const categoryDoc = detailDoc.categories?.[category]
+    const baseActivity = normalizeActivity(categoryDoc?.activity)
+    const pendingValidSessions = pendingSessions
+        .filter((session) => trackMatches(session.meta?.track, normalizedTrackId))
+        .filter((session) => getCarCategory(session.meta?.car || '') === category)
+        .filter((session) => Number(session.summary?.laps || 0) > 0)
+        .sort((a, b) => (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))
+    const pendingActivity = buildActivityFromSessions(pendingValidSessions)
+    const gripBests = mergeGripBest(
+        trackBestDoc?.bests?.[category]?.[selectedGrip] || {},
+        buildPendingGripBest(pendingValidSessions, selectedGrip)
+    )
+    const lastSession = [
+        categoryDoc?.lastSessionDate || null,
+        detailDoc.lastSessionDate || null,
+        pendingValidSessions[0]?.meta.date_start || null
+    ].filter(Boolean).sort((a, b) => String(b).localeCompare(String(a)))[0] || '-'
+
+    return {
+        track: {
+            id: normalizedTrackId,
+            name: metadata.name,
+            fullName: metadata.fullName,
+            country: metadata.country,
+            countryCode: metadata.countryCode,
+            length: metadata.length,
+            turns: metadata.turns,
+            image: metadata.image,
+            sessions: Number(categoryDoc?.sessionCount || 0) + pendingValidSessions.length,
+            lastSession,
+            bestQualy: gripBests.bestQualy ? formatLapTime(gripBests.bestQualy) : null,
+            bestRace: gripBests.bestRace ? formatLapTime(gripBests.bestRace) : null,
+            bestAvgRace: gripBests.bestAvgRace ? formatLapTime(gripBests.bestAvgRace) : null,
+            bestQualyConditions: gripBests.bestQualy ? { airTemp: Number(gripBests.bestQualyTemp || 0), roadTemp: 0, grip: selectedGrip } : null,
+            bestRaceConditions: gripBests.bestRace ? { airTemp: Number(gripBests.bestRaceTemp || 0), roadTemp: 0, grip: selectedGrip } : null,
+            bestAvgRaceConditions: gripBests.bestAvgRace ? { airTemp: Number(gripBests.bestAvgRaceTemp || 0), roadTemp: 0, grip: selectedGrip } : null,
+            bestQualySessionId: gripBests.bestQualySessionId || null,
+            bestRaceSessionId: gripBests.bestRaceSessionId || null,
+            bestAvgRaceSessionId: gripBests.bestAvgRaceSessionId || null,
+            bestQualyDate: gripBests.bestQualyDate || null,
+            bestRaceDate: gripBests.bestRaceDate || null,
+            bestAvgRaceDate: gripBests.bestAvgRaceDate || null,
+            bestQualyFuel: gripBests.bestQualyFuel ?? null,
+            bestRaceFuel: gripBests.bestRaceFuel ?? null,
+            bestAvgRaceFuel: gripBests.bestAvgRaceFuel ?? null,
+            hasGripData: !!gripBests.bestQualy || !!gripBests.bestRace || !!gripBests.bestAvgRace
+        },
+        recentSessions: dedupeRecentSessions([
+            ...pendingValidSessions.map(buildRecentSessionProjection),
+            ...(categoryDoc?.recentSessions || [])
+        ]),
+        historicalTimes: dedupeHistoricalPoints([
+            ...(categoryDoc?.historicalTimes || []),
+            ...pendingValidSessions.map(buildHistoricalPointProjection)
+        ]),
+        activity: {
+            totalLaps: baseActivity.totalLaps + pendingActivity.totalLaps,
+            validLaps: baseActivity.validLaps + pendingActivity.validLaps,
+            validPercent: baseActivity.totalLaps + pendingActivity.totalLaps > 0
+                ? Math.round(((baseActivity.validLaps + pendingActivity.validLaps) / (baseActivity.totalLaps + pendingActivity.totalLaps)) * 100)
+                : 0,
+            totalTimeMs: baseActivity.totalTimeMs + pendingActivity.totalTimeMs,
+            totalTimeFormatted: formatDriveTime(baseActivity.totalTimeMs + pendingActivity.totalTimeMs),
+            sessionCount: baseActivity.sessionCount + pendingActivity.sessionCount
+        },
+        category,
+        grip: selectedGrip
+    }
+}
+
 export function useTelemetryGateway() {
     const telemetry = useTelemetryData()
     const pager = useSessionPager()
-    const { currentUser, getUserProfile } = useFirebaseAuth()
+    const { currentUser, userDisplayName } = useFirebaseAuth()
 
     const isElectron = computed(() => {
         if (typeof window === 'undefined') return false
@@ -104,10 +649,41 @@ export function useTelemetryGateway() {
 
     function resolveOverviewSource(targetUserId: string): LoadSessionsSourceMode {
         void targetUserId
-        // Overview needs the freshest recent sessions, otherwise a stale sessionIndex can keep
-        // showing an old "ultima pista" even while Sessioni already sees newer cloud sessions.
-        // cloud_fresh still merges pending local sessions for the Electron owner inside loadSessions.
         return 'cloud_fresh'
+    }
+
+    async function loadPendingLocalOverlay(targetUserId: string): Promise<SessionDocument[]> {
+        if (!isElectron.value || typeof window === 'undefined' || !navigator.onLine) return []
+        const electronAPI = (window as any).electronAPI
+        if (!electronAPI) return []
+        const cacheKey = `${targetUserId}:pending`
+        const cached = pendingLocalOverlayCache.get(cacheKey)
+        if (cached && Date.now() - cached.cachedAt <= PENDING_LOCAL_OVERLAY_CACHE_TTL_MS) {
+            return cached.sessions
+        }
+        const localSessions = await loadLocalTelemetrySessions({
+            electronAPI,
+            ownerId: targetUserId,
+            isOnline: true
+        })
+        const pendingSessions = localSessions.filter((session) => session.syncState && session.syncState !== 'synced')
+        pendingLocalOverlayCache.set(cacheKey, {
+            cachedAt: Date.now(),
+            sessions: pendingSessions
+        })
+        return pendingSessions
+    }
+
+    function pushProjectionFallback(targetUserId: string | null, action: string, details: Record<string, unknown>): void {
+        pushGatewayDiagnostic({
+            source: 'cloud_fallback',
+            action: 'projectionFallback',
+            targetUserId,
+            details: {
+                action,
+                ...details
+            }
+        })
     }
 
     async function getOverviewSnapshot(targetUserId?: string): Promise<OverviewSnapshot | null> {
@@ -115,60 +691,91 @@ export function useTelemetryGateway() {
         if (!resolvedUserId) return null
 
         const sourceMode = resolveOverviewSource(resolvedUserId)
-        await telemetry.loadSessions(resolvedUserId, true, {
-            sourceMode,
-            context: 'gateway_overview'
-        })
-
         const isOnline = typeof window === 'undefined' ? true : navigator.onLine
-        let source: PipelineSource = 'cloud_fresh'
-        if (!isOnline && isElectron.value) {
-            source = 'local_offline'
-        } else if (sourceMode === 'cloud_fresh') {
-            source = 'cloud_fresh'
-        } else if (sourceMode === 'index_cache') {
-            source = 'index_cache'
+        const cacheKey = [
+            resolvedUserId,
+            sourceMode,
+            isElectron.value ? 'electron' : 'web',
+            isOnline ? 'online' : 'offline'
+        ].join(':')
+
+        const cached = overviewSnapshotCache.get(cacheKey)
+        if (cached && Date.now() - cached.cachedAt <= OVERVIEW_SNAPSHOT_CACHE_TTL_MS) {
+            pushGatewayDiagnostic({
+                source: isOnline ? 'cloud_fresh' : 'local_offline',
+                action: 'getOverviewSnapshot.cacheHit',
+                targetUserId: resolvedUserId,
+                details: {
+                    sessionCount: cached.snapshot?.sessions.length || 0,
+                    sourceMode,
+                    ttlMs: OVERVIEW_SNAPSHOT_CACHE_TTL_MS
+                }
+            })
+            return cached.snapshot
         }
 
-        pushGatewayDiagnostic({
-            source,
-            action: 'getOverviewSnapshot',
-            targetUserId: resolvedUserId,
-            details: {
-                sessionCount: telemetry.sessions.value.length,
-                isElectron: isElectron.value,
-                sourceMode
-            }
-        })
+        const existingRequest = overviewSnapshotInFlight.get(cacheKey)
+        if (existingRequest) {
+            pushGatewayDiagnostic({
+                source: isOnline ? 'cloud_fresh' : 'local_offline',
+                action: 'getOverviewSnapshot.inFlightReuse',
+                targetUserId: resolvedUserId,
+                details: { sourceMode }
+            })
+            return existingRequest
+        }
 
-        return {
-            sessions: telemetry.sessions.value,
-            lastSession: telemetry.lastSession.value,
-            lastUsedCar: telemetry.lastUsedCar.value,
-            lastUsedTrack: telemetry.lastUsedTrack.value,
-            trackStats: telemetry.trackStats.value,
-            activity7d: telemetry.getActivityData(7),
-            activityTotals: telemetry.activityTotals.value
+        const request = (async (): Promise<OverviewSnapshot | null> => {
+            await telemetry.loadSessions(resolvedUserId, true, {
+                sourceMode,
+                context: 'gateway_overview'
+            })
+
+            const source: PipelineSource = !isOnline && isElectron.value ? 'local_offline' : 'cloud_fresh'
+            pushGatewayDiagnostic({
+                source,
+                action: 'getOverviewSnapshot',
+                targetUserId: resolvedUserId,
+                details: {
+                    sessionCount: telemetry.sessions.value.length,
+                    isElectron: isElectron.value,
+                    sourceMode
+                }
+            })
+
+            return {
+                sessions: telemetry.sessions.value,
+                lastSession: telemetry.lastSession.value || null,
+                lastUsedCar: telemetry.lastUsedCar.value,
+                lastUsedTrack: telemetry.lastUsedTrack.value,
+                trackStats: telemetry.trackStats.value,
+                activity7d: telemetry.getActivityData(7),
+                activityTotals: telemetry.activityTotals.value
+            }
+        })()
+
+        overviewSnapshotInFlight.set(cacheKey, request)
+        try {
+            const snapshot = await request
+            overviewSnapshotCache.set(cacheKey, { cachedAt: Date.now(), snapshot })
+            return snapshot
+        } finally {
+            overviewSnapshotInFlight.delete(cacheKey)
         }
     }
 
-    async function collectTrackBestTimes(
-        trackIds: string[],
-        targetUserId?: string
-    ): Promise<Record<string, TrackBestTimes>> {
+    async function collectTrackBestTimes(trackIds: string[], targetUserId?: string): Promise<Record<string, TrackBestTimes>> {
         const uniqueTrackIds = Array.from(new Set(trackIds.map((trackId) => normalizeTrackKey(trackId)).filter(Boolean)))
         if (uniqueTrackIds.length === 0) return {}
+        const resolvedUserId = resolveTargetUserId(targetUserId)
+        if (!resolvedUserId) return {}
 
         const results = await Promise.all(
             uniqueTrackIds.map(async (trackId) => {
-                const bests = await telemetry.getBestTimesForGrip(trackId, 'Optimum', 'GT3', targetUserId)
+                const trackBestDoc = await loadTrackBest(resolvedUserId, trackId)
                 return [
                     trackId,
-                    {
-                        bestQualy: bests.bestQualy || null,
-                        bestRace: bests.bestRace || null,
-                        bestAvgRace: bests.bestAvgRace || null
-                    }
+                    buildOverviewBestTimesFromTrackBestDoc(trackBestDoc, 'GT3')
                 ] as const
             })
         )
@@ -176,7 +783,7 @@ export function useTelemetryGateway() {
         return Object.fromEntries(results)
     }
 
-    async function getOverviewProjection(targetUserId?: string): Promise<OverviewProjection | null> {
+    async function getOverviewProjectionFallback(targetUserId?: string): Promise<OverviewProjection | null> {
         const snapshot = await getOverviewSnapshot(targetUserId)
         if (!snapshot) return null
 
@@ -187,17 +794,6 @@ export function useTelemetryGateway() {
             .map((track) => track.track)
 
         const bestsByTrack = await collectTrackBestTimes(relevantTrackIds, targetUserId)
-
-        pushGatewayDiagnostic({
-            source: 'mixed',
-            action: 'getOverviewProjection',
-            targetUserId: resolveTargetUserId(targetUserId),
-            details: {
-                trackCount: snapshot.trackStats.length,
-                enrichedTrackCount: Object.keys(bestsByTrack).length
-            }
-        })
-
         return buildOverviewProjection({
             lastUsedCar: snapshot.lastUsedCar,
             lastSessionDate: snapshot.lastSession?.meta.date_start || null,
@@ -213,7 +809,66 @@ export function useTelemetryGateway() {
         })
     }
 
-    async function getTracksOverviewProjection(targetUserId?: string): Promise<TrackOverviewProjectionItem[]> {
+    async function getOverviewProjection(targetUserId?: string): Promise<OverviewProjection | null> {
+        const resolvedUserId = resolveTargetUserId(targetUserId)
+        const scenarioId = startFirebaseScenario('page.panoramica.projection', { targetUserId: resolvedUserId })
+        try {
+            if (!resolvedUserId) return null
+            const userProjection = await loadUserProjection(resolvedUserId)
+            if (!isProjectionIndexReady(userProjection)) {
+                pushProjectionFallback(resolvedUserId, 'getOverviewProjection', {
+                    reason: 'missing_or_old_sessionIndex',
+                    schemaVersion: userProjection?.sessionIndex?.schemaVersion || 0
+                })
+                return await getOverviewProjectionFallback(targetUserId)
+            }
+
+            const pendingSessions = await loadPendingLocalOverlay(resolvedUserId)
+            const sessionIndex = userProjection?.sessionIndex || {}
+            const trackStats = mergePendingTrackStats(buildTrackStatsFromSessionIndex(sessionIndex), pendingSessions)
+            const relevantTrackIds = trackStats.slice(0, 2).map((track) => track.track)
+            const bestDocs = await Promise.all(relevantTrackIds.map((trackId) => loadTrackBest(resolvedUserId, trackId)))
+            const bestsByTrack = mergePendingOverviewBestsByTrack(
+                Object.fromEntries(relevantTrackIds.map((trackId, index) => [normalizeTrackKey(trackId), buildOverviewBestTimesFromTrackBestDoc(bestDocs[index], 'GT3')])),
+                pendingSessions
+            )
+            const activity = overlayPendingActivity(
+                buildActivity7dFromSessionIndex(sessionIndex),
+                buildActivityTotalsFromSessionIndex(sessionIndex),
+                pendingSessions
+            )
+            const newest = getNewestSessionEntry(sessionIndex, pendingSessions)
+
+            pushGatewayDiagnostic({
+                source: pendingSessions.length > 0 ? 'mixed' : 'index_cache',
+                action: 'getOverviewProjection.projectionFirst',
+                targetUserId: resolvedUserId,
+                details: {
+                    trackCount: trackStats.length,
+                    enrichedTrackCount: Object.keys(bestsByTrack).length,
+                    pendingOverlayCount: pendingSessions.length
+                }
+            })
+
+            return buildOverviewProjection({
+                lastUsedCar: newest.car,
+                lastSessionDate: newest.date,
+                trackStats,
+                bestsByTrack,
+                activity7d: activity.activity7d,
+                activityTotals: activity.activityTotals,
+                normalizeTrackId: normalizeTrackKey,
+                formatLapTime,
+                formatCarName,
+                formatTrackName,
+                formatDate
+            })
+        } finally {
+            endFirebaseScenario(scenarioId)
+        }
+    }
+
+    async function getTracksOverviewProjectionFallback(targetUserId?: string): Promise<TrackOverviewProjectionItem[]> {
         const snapshot = await getOverviewSnapshot(targetUserId)
         if (!snapshot) return []
 
@@ -232,29 +887,67 @@ export function useTelemetryGateway() {
             })
         )
 
-        pushGatewayDiagnostic({
-            source: 'mixed',
-            action: 'getTracksOverviewProjection',
-            targetUserId: resolveTargetUserId(targetUserId),
-            details: {
-                trackCount: snapshot.trackStats.length
-            }
-        })
-
         return buildTrackOverviewProjection({
-            trackMetadata: Object.fromEntries(
-                Object.entries(TRACK_METADATA).map(([id, metadata]) => [id, {
-                    name: metadata.name,
-                    country: metadata.countryCode,
-                    length: metadata.length,
-                    image: metadata.image
-                }])
-            ),
+            trackMetadata: Object.fromEntries(Object.entries(TRACK_METADATA).map(([id, metadata]) => [id, {
+                name: metadata.name,
+                country: metadata.countryCode,
+                length: metadata.length,
+                image: metadata.image
+            }])),
             trackStats: snapshot.trackStats,
             trackBestsMap: Object.fromEntries(bestsByTrack),
             normalizeTrackId: normalizeTrackKey,
             formatLapTime
         })
+    }
+
+    async function getTracksOverviewProjection(targetUserId?: string): Promise<TrackOverviewProjectionItem[]> {
+        const resolvedUserId = resolveTargetUserId(targetUserId)
+        const scenarioId = startFirebaseScenario('page.piste.projection', { targetUserId: resolvedUserId })
+        try {
+            if (!resolvedUserId) return []
+            const userProjection = await loadUserProjection(resolvedUserId)
+            if (!isProjectionIndexReady(userProjection)) {
+                pushProjectionFallback(resolvedUserId, 'getTracksOverviewProjection', {
+                    reason: 'missing_or_old_sessionIndex',
+                    schemaVersion: userProjection?.sessionIndex?.schemaVersion || 0
+                })
+                return await getTracksOverviewProjectionFallback(targetUserId)
+            }
+
+            const [trackBestDocs, pendingSessions] = await Promise.all([
+                loadTrackBestsMap(resolvedUserId),
+                loadPendingLocalOverlay(resolvedUserId)
+            ])
+            const trackStats = mergePendingTrackStats(buildTrackStatsFromSessionIndex(userProjection?.sessionIndex), pendingSessions)
+            const trackBestsMap = mergePendingBestsByTrack(buildTrackBestsMapFromDocs(trackBestDocs), pendingSessions)
+
+            pushGatewayDiagnostic({
+                source: pendingSessions.length > 0 ? 'mixed' : 'index_cache',
+                action: 'getTracksOverviewProjection.projectionFirst',
+                targetUserId: resolvedUserId,
+                details: {
+                    trackCount: trackStats.length,
+                    trackBestsCount: Object.keys(trackBestsMap).length,
+                    pendingOverlayCount: pendingSessions.length
+                }
+            })
+
+            return buildTrackOverviewProjection({
+                trackMetadata: Object.fromEntries(Object.entries(TRACK_METADATA).map(([id, metadata]) => [id, {
+                    name: metadata.name,
+                    country: metadata.countryCode,
+                    length: metadata.length,
+                    image: metadata.image
+                }])),
+                trackStats,
+                trackBestsMap,
+                normalizeTrackId: normalizeTrackKey,
+                formatLapTime
+            })
+        } finally {
+            endFirebaseScenario(scenarioId)
+        }
     }
 
     async function getSessionsPage(
@@ -265,63 +958,55 @@ export function useTelemetryGateway() {
         reset: boolean = false
     ): Promise<SessionsPageSnapshot> {
         const resolvedUserId = resolveTargetUserId(targetUserId)
-        if (!resolvedUserId) {
-            return {
-                sessions: [],
-                state: pager.state.value
-            }
-        }
-
-        const sessions = await pager.loadPage(resolvedUserId, {
+        const scenarioId = startFirebaseScenario('page.sessioni.loadPage', {
+            targetUserId: resolvedUserId,
             page: cursor,
             pageSize,
-            reset,
-            filters
+            reset
         })
+        try {
+            if (!resolvedUserId) {
+                return { sessions: [], state: pager.state.value }
+            }
 
-        const isOnline = typeof window === 'undefined' ? true : navigator.onLine
-        const hasLocalSource = sessions.some((item) => item.source === 'local')
-        const source: PipelineSource = hasLocalSource ? 'mixed' : (isOnline ? 'cloud_page' : 'local_offline')
-        pushGatewayDiagnostic({
-            source,
-            action: 'getSessionsPage',
-            targetUserId: resolvedUserId,
-            details: {
+            const sessions = await pager.loadPage(resolvedUserId, {
                 page: cursor,
                 pageSize,
-                count: sessions.length,
-                hasNext: pager.state.value.hasNext,
-                hasPrev: pager.state.value.hasPrev
-            }
-        })
+                reset,
+                filters
+            })
 
-        return {
-            sessions,
-            state: pager.state.value
+            const isOnline = typeof window === 'undefined' ? true : navigator.onLine
+            const hasLocalSource = sessions.some((item) => item.source === 'local')
+            const source: PipelineSource = hasLocalSource ? 'mixed' : (isOnline ? 'cloud_page' : 'local_offline')
+            pushGatewayDiagnostic({
+                source,
+                action: 'getSessionsPage',
+                targetUserId: resolvedUserId,
+                details: {
+                    page: cursor,
+                    pageSize,
+                    count: sessions.length,
+                    hasNext: pager.state.value.hasNext,
+                    hasPrev: pager.state.value.hasPrev
+                }
+            })
+
+            return { sessions, state: pager.state.value }
+        } finally {
+            endFirebaseScenario(scenarioId)
         }
     }
 
-    async function getTrackSnapshot(
-        trackId: string,
-        targetUserId?: string,
-        category: CarCategory = 'GT3'
-    ): Promise<TrackSnapshot | null> {
+    async function getTrackSnapshot(trackId: string, targetUserId?: string, category: CarCategory = 'GT3'): Promise<TrackSnapshot | null> {
         const resolvedUserId = resolveTargetUserId(targetUserId)
         if (!resolvedUserId) return null
 
         await getOverviewSnapshot(resolvedUserId)
 
         const normalizedTrackId = normalizeTrackKey(trackId)
-        const sessions = telemetry.sessions.value.filter((session) => {
-            const sessionTrackId = normalizeTrackKey(session.meta.track || '')
-            return sessionTrackId.includes(normalizedTrackId) || normalizedTrackId.includes(sessionTrackId)
-        })
-
-        const trackStat = telemetry.trackStats.value.find((stat) => {
-            const statTrackId = normalizeTrackKey(stat.track || '')
-            return statTrackId.includes(normalizedTrackId) || normalizedTrackId.includes(statTrackId)
-        }) || null
-
+        const sessions = telemetry.sessions.value.filter((session) => trackMatches(session.meta.track, normalizedTrackId))
+        const trackStat = telemetry.trackStats.value.find((stat) => trackMatches(stat.track, normalizedTrackId)) || null
         const bestsByGrip = await telemetry.getTrackBests(trackId, category, resolvedUserId)
 
         pushGatewayDiagnostic({
@@ -360,16 +1045,12 @@ export function useTelemetryGateway() {
         return null
     }
 
-    async function getTrackDetailProjection(
+    async function getTrackDetailProjectionFallback(
         trackId: string,
-        targetUserId?: string,
-        options: {
-            category?: CarCategory
-            grip?: string
-        } = {}
+        targetUserId: string | undefined,
+        category: CarCategory,
+        selectedGrip: string
     ): Promise<TrackDetailProjection | null> {
-        const category = options.category || 'GT3'
-        const selectedGrip = options.grip || 'Optimum'
         const snapshot = await getTrackSnapshot(trackId, targetUserId, category)
         if (!snapshot) return null
 
@@ -381,8 +1062,8 @@ export function useTelemetryGateway() {
         const metadata = resolveTrackMetadata(snapshot.normalizedTrackId || trackId)
         const bestFuelData = { qualyFuel: null as number | null, raceFuel: null as number | null }
         const gripBests = snapshot.bestsByGrip?.[selectedGrip] || {}
-
         const sessionsToFetch = new Map<string, Array<{ type: 'qualy' | 'race'; bestTime: number }>>()
+
         if (gripBests.bestQualySessionId && gripBests.bestQualy) {
             sessionsToFetch.set(gripBests.bestQualySessionId, [{ type: 'qualy', bestTime: gripBests.bestQualy }])
         }
@@ -392,31 +1073,17 @@ export function useTelemetryGateway() {
             sessionsToFetch.set(gripBests.bestRaceSessionId, existing)
         }
 
-        await Promise.all(
-            Array.from(sessionsToFetch.entries()).map(async ([sessionId, lookups]) => {
-                const fullSession = await telemetry.fetchSessionFull(sessionId, targetUserId)
-                if (!fullSession) return
-                for (const lookup of lookups) {
-                    if (lookup.type === 'qualy') {
-                        bestFuelData.qualyFuel = findBestLapFuel(fullSession, lookup.bestTime, true)
-                    } else {
-                        bestFuelData.raceFuel = findBestLapFuel(fullSession, lookup.bestTime, false)
-                    }
+        await Promise.all(Array.from(sessionsToFetch.entries()).map(async ([sessionId, lookups]) => {
+            const fullSession = await telemetry.fetchSessionFull(sessionId, targetUserId)
+            if (!fullSession) return
+            for (const lookup of lookups) {
+                if (lookup.type === 'qualy') {
+                    bestFuelData.qualyFuel = findBestLapFuel(fullSession, lookup.bestTime, true)
+                } else {
+                    bestFuelData.raceFuel = findBestLapFuel(fullSession, lookup.bestTime, false)
                 }
-            })
-        )
-
-        pushGatewayDiagnostic({
-            source: 'mixed',
-            action: 'getTrackDetailProjection',
-            targetUserId: resolveTargetUserId(targetUserId),
-            details: {
-                trackId: snapshot.normalizedTrackId,
-                category,
-                grip: selectedGrip,
-                visibleSessions: visibleSessions.length
             }
-        })
+        }))
 
         return buildTrackDetailProjection({
             trackId: snapshot.normalizedTrackId,
@@ -432,6 +1099,81 @@ export function useTelemetryGateway() {
             getSessionTypeLabel,
             currentTrackStat: snapshot.trackStat
         })
+    }
+
+    async function getTrackDetailProjection(
+        trackId: string,
+        targetUserId?: string,
+        options: { category?: CarCategory; grip?: string } = {}
+    ): Promise<TrackDetailProjection | null> {
+        const resolvedUserId = resolveTargetUserId(targetUserId)
+        const category = options.category || 'GT3'
+        const selectedGrip = options.grip || 'Optimum'
+        const scenarioId = startFirebaseScenario('page.trackDetail.projection', {
+            targetUserId: resolvedUserId,
+            trackId,
+            category,
+            grip: selectedGrip
+        })
+        try {
+            if (!resolvedUserId) return null
+            const normalizedTrackId = normalizeTrackKey(trackId)
+            const cacheKey = `${resolvedUserId}:${normalizedTrackId}`
+            let cached = trackDetailProjectionCache.get(cacheKey)
+            if (!cached) {
+                const [detailResult, trackBestResult] = await Promise.allSettled([
+                    loadTrackDetailProjectionDoc(resolvedUserId, normalizedTrackId),
+                    loadTrackBest(resolvedUserId, normalizedTrackId)
+                ])
+                const detail = detailResult.status === 'fulfilled' ? detailResult.value : null
+                const trackBest = trackBestResult.status === 'fulfilled' ? trackBestResult.value : null
+                if (detailResult.status === 'rejected' || trackBestResult.status === 'rejected') {
+                    pushProjectionFallback(resolvedUserId, 'getTrackDetailProjection', {
+                        reason: 'projection_read_failed',
+                        trackId: normalizedTrackId,
+                        detailError: detailResult.status === 'rejected' ? String(detailResult.reason?.message || detailResult.reason) : null,
+                        trackBestError: trackBestResult.status === 'rejected' ? String(trackBestResult.reason?.message || trackBestResult.reason) : null
+                    })
+                    return await getTrackDetailProjectionFallback(trackId, targetUserId, category, selectedGrip)
+                }
+                if (!detail || Number(detail.schemaVersion || 0) !== TRACK_DETAIL_PROJECTION_SCHEMA_VERSION) {
+                    pushProjectionFallback(resolvedUserId, 'getTrackDetailProjection', {
+                        reason: 'missing_or_old_trackDetailProjection',
+                        trackId: normalizedTrackId,
+                        schemaVersion: detail?.schemaVersion || 0
+                    })
+                    return await getTrackDetailProjectionFallback(trackId, targetUserId, category, selectedGrip)
+                }
+                cached = { detail, trackBest }
+                trackDetailProjectionCache.set(cacheKey, cached)
+            }
+
+            const pendingSessions = await loadPendingLocalOverlay(resolvedUserId)
+            const projection = buildTrackDetailFromProjectionDocument({
+                detailDoc: cached.detail,
+                trackBestDoc: cached.trackBest,
+                trackId: normalizedTrackId,
+                category,
+                selectedGrip,
+                pendingSessions
+            })
+
+            pushGatewayDiagnostic({
+                source: pendingSessions.length > 0 ? 'mixed' : 'index_cache',
+                action: 'getTrackDetailProjection.projectionFirst',
+                targetUserId: resolvedUserId,
+                details: {
+                    trackId: normalizedTrackId,
+                    category,
+                    grip: selectedGrip,
+                    pendingOverlayCount: pendingSessions.filter((session) => trackMatches(session.meta?.track, normalizedTrackId)).length
+                }
+            })
+
+            return projection
+        } finally {
+            endFirebaseScenario(scenarioId)
+        }
     }
 
     async function getSessionDetail(
@@ -475,27 +1217,35 @@ export function useTelemetryGateway() {
         externalUserId?: string
         targetUserId?: string | null
     }): Promise<SessionDetailViewModel> {
-        const result = await loadSessionDetailViewModel({
+        const scenarioId = startFirebaseScenario('page.sessionDetail.viewModel', {
             sessionId: params.sessionId,
-            externalUserId: params.externalUserId,
-            targetUserId: params.targetUserId,
-            currentUser,
-            getUserProfile,
-            telemetryGateway: {
-                getOverviewSnapshot,
-                getSessionDetail
-            }
+            targetUserId: params.externalUserId || params.targetUserId || currentUser.value?.uid || null,
+            isCoachAccess: !!params.targetUserId && !params.externalUserId
         })
+        try {
+            const result = await loadSessionDetailViewModel({
+                sessionId: params.sessionId,
+                externalUserId: params.externalUserId,
+                targetUserId: params.targetUserId,
+                currentUser,
+                currentUserDisplayName: userDisplayName.value || currentUser.value?.displayName || 'Tu',
+                telemetryGateway: {
+                    getSessionDetail
+                }
+            })
 
-        return {
-            sessionId: params.sessionId,
-            userId: result.userIdToLoad,
-            isShared: !!params.externalUserId,
-            isCoachAccess: !!params.targetUserId && !params.externalUserId,
-            isLoading: false,
-            loadError: result.loadError,
-            currentUserNickname: result.currentUserNickname,
-            fullSession: result.fullSession
+            return {
+                sessionId: params.sessionId,
+                userId: result.userIdToLoad,
+                isShared: !!params.externalUserId,
+                isCoachAccess: !!params.targetUserId && !params.externalUserId,
+                isLoading: false,
+                loadError: result.loadError,
+                currentUserNickname: result.currentUserNickname,
+                fullSession: result.fullSession
+            }
+        } finally {
+            endFirebaseScenario(scenarioId)
         }
     }
 
@@ -504,7 +1254,6 @@ export function useTelemetryGateway() {
     }
 
     return {
-        // Unified data APIs
         getOverviewSnapshot,
         getOverviewProjection,
         getSessionsPage,
@@ -513,15 +1262,9 @@ export function useTelemetryGateway() {
         getTrackDetailProjection,
         getSessionDetail,
         getSessionDetailViewModel,
-
-        // Diagnostics
         gatewayDiagnostics: computed(() => globalGatewayDiagnostics.value),
         clearGatewayDiagnostics,
-
-        // Telemetry passthrough (shared source of truth)
         ...telemetry,
-
-        // Pager passthrough (single gateway access)
         pagerSessions: pager.sessions,
         pagerState: pager.state,
         pagerIsOnline: pager.isOnline,

@@ -6,14 +6,18 @@ import {
   query,
   orderBy,
   limit,
-  onSnapshot,
-  addDoc,
-  updateDoc,
   doc,
-  writeBatch,
-  getDocs,
   serverTimestamp
 } from 'firebase/firestore'
+import {
+  trackedAddDoc,
+  trackedGetDocs,
+  trackedOnSnapshot,
+  trackedUpdateDoc,
+  trackedWriteBatch
+} from './useFirebaseTracker'
+
+const CALLER = 'ActivityFeed'
 
 export type ActivityType = 
   | 'new_pb'           // Nuovo Personal Best in una pista
@@ -68,7 +72,7 @@ export function useActivityFeed() {
       const activitiesRef = collection(db, 'users', userId, 'activities')
       const q = query(activitiesRef, orderBy('timestamp', 'desc'), limit(50))
 
-      unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+      unsubscribeSnapshot = trackedOnSnapshot(q, CALLER, (snapshot) => {
         const items: ActivityItem[] = []
         snapshot.forEach((doc) => {
           const data = doc.data()
@@ -109,10 +113,10 @@ export function useActivityFeed() {
   const addActivity = async (userId: string, activity: Omit<ActivityItem, 'id' | 'timestamp' | 'userId'>) => {
     try {
       const activitiesRef = collection(db, 'users', userId, 'activities')
-      await addDoc(activitiesRef, {
+      await trackedAddDoc(activitiesRef, {
         ...activity,
         timestamp: serverTimestamp()
-      })
+      }, CALLER)
       return true
     } catch (err) {
       console.error('[ActivityFeed] Error adding activity:', err)
@@ -124,9 +128,9 @@ export function useActivityFeed() {
   const markAsRead = async (userId: string, activityId: string) => {
     try {
       const activityRef = doc(db, 'users', userId, 'activities', activityId)
-      await updateDoc(activityRef, {
+      await trackedUpdateDoc(activityRef, {
         isRead: true
-      })
+      }, CALLER)
       return true
     } catch (err) {
       console.error('[ActivityFeed] Error marking as read:', err)
@@ -140,9 +144,9 @@ export function useActivityFeed() {
       const activitiesRef = collection(db, 'users', userId, 'activities')
       // Only get unread ones to save writes
       const q = query(activitiesRef, limit(50))
-      const snapshot = await getDocs(q)
+      const snapshot = await trackedGetDocs(q, CALLER)
       
-      const batch = writeBatch(db)
+      const batch = trackedWriteBatch(db, CALLER)
       let count = 0
       
       snapshot.forEach((doc) => {

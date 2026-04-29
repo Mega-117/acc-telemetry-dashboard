@@ -73,6 +73,27 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+$firebaseTrackingScript = Join-Path $PSScriptRoot 'check_firebase_tracking.mjs'
+node $firebaseTrackingScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Firebase tracking coverage failed'
+    exit 1
+}
+
+$syncRuntimeScript = Join-Path $PSScriptRoot 'check_sync_runtime.mjs'
+node $syncRuntimeScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Sync runtime contract failed'
+    exit 1
+}
+
+$syncTrackBestsAggregateScript = Join-Path $PSScriptRoot 'check_sync_trackbests_aggregate.mjs'
+node $syncTrackBestsAggregateScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Sync trackBests aggregate contract failed'
+    exit 1
+}
+
 $sessionModesScript = Join-Path $PSScriptRoot 'check_session_detail_modes.mjs'
 node $sessionModesScript
 if ($LASTEXITCODE -ne 0) {
@@ -84,6 +105,55 @@ $sessionPagerMergeScript = Join-Path $PSScriptRoot 'check_session_pager_merge.mj
 node $sessionPagerMergeScript
 if ($LASTEXITCODE -ne 0) {
     Write-Error '[PIPELINE_CHECK] Session pager mixed-source contract failed'
+    exit 1
+}
+
+$projectionFirstScript = Join-Path $PSScriptRoot 'check_projection_first_sources.mjs'
+node $projectionFirstScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Projection-first source contract failed'
+    exit 1
+}
+
+$pilotsPaginationScript = Join-Path $PSScriptRoot 'check_pilots_pagination.mjs'
+node $pilotsPaginationScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Pilots pagination contract failed'
+    exit 1
+}
+
+$ownerRebuildScript = Join-Path $PSScriptRoot 'check_owner_rebuild_contract.mjs'
+node $ownerRebuildScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Owner rebuild contract failed'
+    exit 1
+}
+
+$ownerMaintenanceGateScript = Join-Path $PSScriptRoot 'check_owner_maintenance_gate.mjs'
+node $ownerMaintenanceGateScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Owner maintenance gate contract failed'
+    exit 1
+}
+
+$noStartupRawPrefetchScript = Join-Path $PSScriptRoot 'check_no_startup_raw_prefetch.mjs'
+node $noStartupRawPrefetchScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Startup raw prefetch regression failed'
+    exit 1
+}
+
+$firestoreIndexesScript = Join-Path $PSScriptRoot 'check_firestore_indexes.mjs'
+node $firestoreIndexesScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Firestore indexes contract failed'
+    exit 1
+}
+
+$overviewGripBadgesScript = Join-Path $PSScriptRoot 'check_overview_grip_badges.mjs'
+node $overviewGripBadgesScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Overview grip badges contract failed'
     exit 1
 }
 

@@ -4,9 +4,12 @@
 // ============================================
 
 import { ref } from 'vue'
-import { doc, setDoc, getDoc, getDocs, collection, serverTimestamp, deleteDoc } from 'firebase/firestore'
+import { doc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
+import { trackedDeleteDoc, trackedGetDoc, trackedGetDocs, trackedSetDoc } from '~/composables/useFirebaseTracker'
+
+const CALLER = 'DevUpload'
 
 definePageMeta({
   layout: false
@@ -42,8 +45,8 @@ function splitIntoChunks(str: string, size: number): string[] {
 async function deleteOldChunks(uid: string, sessionId: string) {
   try {
     const chunksRef = collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`)
-    const snapshot = await getDocs(chunksRef)
-    const deletePromises = snapshot.docs.map(d => deleteDoc(d.ref))
+    const snapshot = await trackedGetDocs(chunksRef as any, CALLER)
+    const deletePromises = snapshot.docs.map(d => trackedDeleteDoc(d.ref, CALLER))
     await Promise.all(deletePromises)
   } catch (e: any) {
     console.warn('[UPLOAD] Error deleting old chunks:', e.message)
@@ -52,7 +55,7 @@ async function deleteOldChunks(uid: string, sessionId: string) {
 
 async function getExistingSession(uid: string, sessionId: string) {
   const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
-  const snap = await getDoc(sessionRef)
+  const snap = await trackedGetDoc(sessionRef, CALLER)
   return snap.exists() ? { id: sessionId, ...snap.data() } : null
 }
 
@@ -70,7 +73,7 @@ async function updateTrackBests(
   
   try {
     // Get existing trackBests
-    const existingSnap = await getDoc(trackBestsRef)
+    const existingSnap = await trackedGetDoc(trackBestsRef, CALLER)
     const existing = existingSnap.exists() ? existingSnap.data() : null
     
     const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
@@ -122,11 +125,11 @@ async function updateTrackBests(
     
     // Save if there were any updates
     if (hasUpdates) {
-      await setDoc(trackBestsRef, {
+      await trackedSetDoc(trackBestsRef, {
         trackId: trackIdNorm,
         bests: newBests,
         lastUpdated: serverTimestamp()
-      })
+      }, CALLER)
       console.log(`[UPLOAD] ✅ Updated trackBests for ${trackIdNorm}`)
     } else {
       console.log(`[UPLOAD] ℹ️ No improvements for ${trackIdNorm}, skipping trackBests update`)
@@ -185,7 +188,7 @@ async function uploadSession(rawObj: any, rawText: string, fileName: string, uid
 
     // Save session document (always update to refresh summary)
     const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
-    await setDoc(sessionRef, {
+    await trackedSetDoc(sessionRef, {
       fileHash,
       fileName,
       uploadedAt: serverTimestamp(),
@@ -195,17 +198,17 @@ async function uploadSession(rawObj: any, rawText: string, fileName: string, uid
       rawSizeBytes: rawText.length,
       rawEncoding: 'json-string',
       version: ((existing as any)?.version || 0) + 1
-    })
+    }, CALLER)
 
     // Save upload reference
     const uploadRef = doc(db, `users/${uid}/uploads/${fileHash}`)
-    await setDoc(uploadRef, { fileName, uploadedAt: serverTimestamp(), sessionId })
+    await trackedSetDoc(uploadRef, { fileName, uploadedAt: serverTimestamp(), sessionId }, CALLER)
 
     // Save chunks only if needed
     if (chunksNeedUpdate) {
       for (let idx = 0; idx < chunks.length; idx++) {
         const chunkRef = doc(db, `users/${uid}/sessions/${sessionId}/rawChunks/${idx}`)
-        await setDoc(chunkRef, { idx, chunk: chunks[idx] })
+        await trackedSetDoc(chunkRef, { idx, chunk: chunks[idx] }, CALLER)
       }
     }
 

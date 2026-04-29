@@ -4,8 +4,9 @@
 // ============================================
 
 import { ref, onMounted, computed } from 'vue'
-import { doc, getDoc } from 'firebase/firestore'
+import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
+import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc } from '~/composables/useFirebaseTracker'
 
 definePageMeta({
   layout: 'coach',
@@ -23,7 +24,6 @@ interface PilotData {
   firstName?: string
   lastName?: string
   nickname: string
-  email: string
 }
 
 const pilot = ref<PilotData | null>(null)
@@ -44,8 +44,9 @@ const pilotTabs = [
 
 // Load pilot data
 onMounted(async () => {
+  const scenarioId = startFirebaseScenario('coach.pilot.detail.open', { pilotId })
   try {
-    const snap = await getDoc(doc(db, 'users', pilotId))
+    const snap = await trackedGetDoc(doc(db, 'pilotDirectory', pilotId), 'CoachPilotDetail')
     if (snap.exists()) {
       pilot.value = snap.data() as PilotData
     }
@@ -53,6 +54,7 @@ onMounted(async () => {
     console.error('Error loading pilot:', e)
   } finally {
     isLoading.value = false
+    endFirebaseScenario(scenarioId)
   }
 })
 

@@ -4,16 +4,13 @@
 // ============================================
 
 import { ref, computed, onMounted } from 'vue'
+import { doc, collection, query } from 'firebase/firestore'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useTelemetryData, formatLapTime } from '~/composables/useTelemetryData'
-import {
-    doc,
-    getDocs,
-    deleteDoc,
-    collection,
-    query
-} from 'firebase/firestore'
+import { trackedDeleteDoc, trackedGetDocs } from '~/composables/useFirebaseTracker'
 import { db } from '~/config/firebase'
+
+const CALLER = 'DevDataAudit'
 
 const { currentUser } = useFirebaseAuth()
 const { 
@@ -43,7 +40,7 @@ async function loadTrackBests() {
     try {
         const uid = currentUser.value.uid
         const trackBestsRef = collection(db, `users/${uid}/trackBests`)
-        const snapshot = await getDocs(query(trackBestsRef))
+        const snapshot = await trackedGetDocs(query(trackBestsRef), CALLER)
         
         snapshot.forEach(docSnap => {
             trackBestsData.value[docSnap.id] = {
@@ -77,7 +74,7 @@ async function deleteTrackBests(trackId: string) {
     try {
         const uid = currentUser.value.uid
         const docRef = doc(db, `users/${uid}/trackBests/${trackId}`)
-        await deleteDoc(docRef)
+        await trackedDeleteDoc(docRef, CALLER)
         delete trackBestsData.value[trackId]
         recalculateProgress.value.push(`Deleted: ${trackId}`)
         console.log(`[AUDIT] Deleted trackBests: ${trackId}`)

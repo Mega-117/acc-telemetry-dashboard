@@ -45,9 +45,6 @@ export function buildTrackDetailProjection(params: {
     if (sessionRaceTime) {
       bestRace = formatLapTime(sessionRaceTime)
     }
-    if (!bestQualy && summary.bestLap && session.meta.session_type === 1) {
-      bestQualy = formatLapTime(summary.bestLap)
-    }
 
     const dateObj = new Date(session.meta.date_start)
     return {
@@ -72,11 +69,8 @@ export function buildTrackDetailProjection(params: {
       const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
       const dateLabel = day && month ? `${parseInt(day, 10)} ${months[parseInt(month, 10) - 1] || 'N/A'}` : 'N/A'
 
-      let qualyTime: number | null = summary?.best_qualy_ms || null
-      let raceTime: number | null = summary?.best_race_ms || null
-      if (!qualyTime && summary?.bestLap && session.meta.session_type === 1) {
-        qualyTime = summary.bestLap
-      }
+      const qualyTime: number | null = summary?.best_qualy_ms || null
+      const raceTime: number | null = summary?.best_race_ms || null
 
       return {
         date: dateLabel,

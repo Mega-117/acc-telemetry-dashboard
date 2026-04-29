@@ -7,6 +7,8 @@ import { ref, computed, onMounted, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useActivityFeed } from '~/composables/useActivityFeed'
+import { endFirebaseScenario, startFirebaseScenario, withFirebaseScenario } from '~/composables/useFirebaseTracker'
+import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
 
 // === NUXT ROUTER ===
 const route = useRoute()
@@ -36,11 +38,24 @@ const {
 
 // === TELEMETRY DATA GATEWAY (single source of truth) ===
 const telemetryGateway = useTelemetryGateway()
-const { prefetchAllTrackBests } = telemetryGateway
 const hasPrefetched = ref(false)
+const ownerDataMaintenance = useOwnerDataMaintenance()
+const browserMaintenanceStatus = ownerDataMaintenance.status
+const browserMaintenanceProgress = ownerDataMaintenance.progress
+const browserMaintenanceMessage = ownerDataMaintenance.message
+const browserMaintenanceError = ownerDataMaintenance.error
 
 // === ACTIVITY FEED ===
 const { listenToActivities, stopListening } = useActivityFeed()
+
+function listenToActivitiesTracked(userId: string) {
+  const scenarioId = startFirebaseScenario('app.activityFeed.listen', { userId })
+  try {
+    listenToActivities(userId)
+  } finally {
+    endFirebaseScenario(scenarioId)
+  }
+}
 
 // === APP STATE ===
 type AppState = 'initializing' | 'auth' | 'loading' | 'dashboard' | 'profile'
@@ -51,23 +66,44 @@ const appState = ref<AppState>('initializing')
 const authState = ref<AuthState>('login')
 const userEmail = ref('')
 const hasInitialized = ref(false)
+const showBrowserMaintenanceNotification = ref(false)
+const isDevRuntime = import.meta.dev
 
 // === CONFIG ===
 const REQUIRE_EMAIL_VERIFICATION = ref(false) // Always require email verification
 const transitionName = 'dissolve-fade-zoom' // Fixed animation
 
-// === GLOBAL PREFETCH: Load all trackBests when entering dashboard ===
+const isBrowserOnlyRuntime = computed(() => {
+  if (typeof window === 'undefined') return false
+  return !(window as any).electronAPI
+})
+
+watch(ownerDataMaintenance.status, (status) => {
+  if (!isBrowserOnlyRuntime.value) return
+  if (status === 'checking' || status === 'running' || status === 'sync_pending' || status === 'completed' || status === 'failed') {
+    showBrowserMaintenanceNotification.value = true
+  }
+  if (status === 'skipped' || status === 'idle') {
+    showBrowserMaintenanceNotification.value = false
+  }
+})
+
+function closeBrowserMaintenanceNotification() {
+  showBrowserMaintenanceNotification.value = false
+}
+
+// === DASHBOARD ENTRY MAINTENANCE ===
 watch(appState, async (newState) => {
   if (newState === 'dashboard' && !hasPrefetched.value && currentUser.value) {
     hasPrefetched.value = true
-    console.log('[APP] 🚀 Starting global prefetch...')
     
-    // First load a fresh overview snapshot via gateway
-    await telemetryGateway.getOverviewSnapshot()
-    
-    // Then prefetch all trackBests in batch (1 query instead of N)
-    const count = await prefetchAllTrackBests()
-    console.log(`[APP] ✅ Prefetch complete: ${count} trackBests cached`)
+    await withFirebaseScenario('app.dashboard.maintenanceGate', {
+      userId: currentUser.value.uid
+    }, async () => {
+      if (typeof window !== 'undefined' && !(window as any).electronAPI) {
+        await ownerDataMaintenance.runGate(currentUser.value!.uid)
+      }
+    })
   }
 })
 
@@ -78,7 +114,7 @@ watch(authLoading, (loading) => {
     hasInitialized.value = true
     
     if (currentUser.value) {
-      // User is already logged in → go directly to dashboard (no loading screen)
+      // User already logged in -> go directly to dashboard (no loading screen)
       userEmail.value = currentUser.value.email || ''
       
       if (REQUIRE_EMAIL_VERIFICATION.value && !currentUser.value.emailVerified) {
@@ -86,10 +122,10 @@ watch(authLoading, (loading) => {
         authState.value = 'register-success'
       } else {
         appState.value = 'dashboard'
-        listenToActivities(currentUser.value.uid)
+        listenToActivitiesTracked(currentUser.value.uid)
       }
     } else {
-      // No user → show login
+      // No user -> show login
       appState.value = 'auth'
       stopListening()
     }
@@ -112,15 +148,15 @@ watch(currentUser, (user, oldUser) => {
         authState.value = 'register-success'
       }
     } else {
-      // User logged in after being on auth screen → show loading transition
+      // User logged in after auth screen -> show loading transition
       if (appState.value === 'auth' && authState.value !== 'register-success') {
         appState.value = 'loading'
         setTimeout(() => {
           appState.value = 'dashboard'
-          listenToActivities(user.uid)
+          listenToActivitiesTracked(user.uid)
         }, 1000)
       } else {
-        listenToActivities(user.uid)
+        listenToActivitiesTracked(user.uid)
       }
     }
   } else if (oldUser) {
@@ -201,6 +237,16 @@ provide('goToProfile', handleGoToProfile)
   <div id="app">
     <!-- Electron Titlebar (only visible in Electron) -->
     <ElectronTitlebar />
+
+    <ElectronDataMaintenanceNotification
+      v-if="isBrowserOnlyRuntime"
+      :visible="showBrowserMaintenanceNotification"
+      :status="browserMaintenanceStatus"
+      :progress="browserMaintenanceProgress"
+      :message="browserMaintenanceMessage"
+      :error="browserMaintenanceError"
+      @close="closeBrowserMaintenanceNotification"
+    />
     
     <NuxtRouteAnnouncer />
 
@@ -257,6 +303,8 @@ provide('goToProfile', handleGoToProfile)
         <ProfilePage @back="handleBackToDashboard" @logout="handleLogout" />
       </div>
     </Transition>
+
+    <DevFirebaseProbe v-if="isDevRuntime && appState === 'dashboard'" />
   </div>
 </template>
 

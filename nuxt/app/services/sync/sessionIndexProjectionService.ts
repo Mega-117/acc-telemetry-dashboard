@@ -1,7 +1,7 @@
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import type { SessionDocument } from '~/composables/useTelemetryData'
 
-export const SESSION_INDEX_SCHEMA_VERSION = 1
+export const SESSION_INDEX_SCHEMA_VERSION = 2
 export const SESSION_INDEX_MAX_ITEMS = 200
 
 export function buildSessionIndexProjection(allSessions: SessionDocument[], now: Date = new Date()) {
@@ -31,8 +31,8 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
     bestSessionRaceMs: number | null
     bestRaceMs: number | null
     bestRulesVersion: number
-    grip?: string
-    bestSessionRaceGrip?: string
+    grip: string | null
+    bestSessionRaceGrip: string | null
   }> = []
 
   for (const session of allSessions) {
@@ -48,9 +48,9 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
       if (!activityByDay[dayKey]) activityByDay[dayKey] = { P: 0, Q: 0, R: 0 }
 
       switch (session.meta?.session_type) {
-        case 0: practiceMinutes += minutes; practiceCount++; activityByDay[dayKey].P++; break
-        case 1: qualifyMinutes += minutes; qualifyCount++; activityByDay[dayKey].Q++; break
-        case 2: raceMinutes += minutes; raceCount++; activityByDay[dayKey].R++; break
+        case 0: practiceMinutes += minutes; practiceCount++; activityByDay[dayKey].P += minutes; break
+        case 1: qualifyMinutes += minutes; qualifyCount++; activityByDay[dayKey].Q += minutes; break
+        case 2: raceMinutes += minutes; raceCount++; activityByDay[dayKey].R += minutes; break
       }
     }
 
@@ -81,8 +81,8 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
       bestSessionRaceMs: session.summary?.best_session_race_ms || null,
       bestRaceMs: raceRuleCompatible ? (session.summary?.best_race_ms || null) : null,
       bestRulesVersion,
-      bestSessionRaceGrip: session.summary?.best_session_race_conditions?.grip || undefined,
-      grip: (raceRuleCompatible ? session.summary?.best_race_conditions?.grip : null) || session.summary?.best_qualy_conditions?.grip || undefined
+      bestSessionRaceGrip: session.summary?.best_session_race_conditions?.grip || null,
+      grip: (raceRuleCompatible ? session.summary?.best_race_conditions?.grip : null) || session.summary?.best_qualy_conditions?.grip || null
     })
   }
 

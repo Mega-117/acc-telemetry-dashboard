@@ -1,16 +1,17 @@
 <script setup lang="ts">
 // ============================================
-// PilotiPage - Pilots list for coaches and admins
+// PilotiPage - paginated pilot directory for coaches and admins
 // ============================================
 
-import { ref, computed, onMounted } from 'vue'
-import { collection, query, where } from 'firebase/firestore'
-import { trackedGetDocs } from '~/composables/useFirebaseTracker'
-import { printFirebaseSummary } from '~/composables/useFirebaseTracker'
-import { db } from '~/config/firebase'
-
-// Local wrapper auto-tagged
-async function getDocs(q: any) { return trackedGetDocs(q, 'AdminPiloti') }
+import { ref, computed, onMounted, watch } from 'vue'
+import { endFirebaseScenario, startFirebaseScenario } from '~/composables/useFirebaseTracker'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import {
+  PILOT_PAGE_SIZE,
+  countPilotDirectory,
+  loadPilotDirectoryPage,
+  type PilotDirectoryItem
+} from '~/repositories/pilotDirectoryRepository'
 
 definePageMeta({
   layout: 'coach',
@@ -19,87 +20,84 @@ definePageMeta({
 
 const { currentUser, isAdmin, userRole } = useFirebaseAuth()
 
-interface Pilot {
-  uid: string
-  firstName?: string
-  lastName?: string
-  nickname: string
-  email: string
-  role?: string  // Add role field for admin view
-  coachId?: string
-  createdAt?: string
-  lastSession?: string
-  totalSessions?: number
-  suiteVersion?: string
-  suiteVersionDetail?: { launcher?: string; logger?: string; webapp?: string }
-  suiteVersionUpdatedAt?: string
-}
+type Pilot = PilotDirectoryItem
 
 const pilots = ref<Pilot[]>([])
 const isLoading = ref(true)
 const searchQuery = ref('')
+const totalItems = ref<number | null>(null)
+const currentPage = ref(1)
+const nextCursor = ref<any | null>(null)
+const cursorStack = ref<any[]>([])
+let searchDebounce: ReturnType<typeof setTimeout> | null = null
 
-// Filtered pilots based on search
-const filteredPilots = computed(() => {
-  if (!searchQuery.value.trim()) return pilots.value
-  
-  const query = searchQuery.value.toLowerCase()
-  return pilots.value.filter(pilot => {
-    const fullName = `${pilot.firstName || ''} ${pilot.lastName || ''}`.toLowerCase()
-    const nickname = (pilot.nickname || '').toLowerCase()
-    const email = (pilot.email || '').toLowerCase()
-    
-    return fullName.includes(query) || nickname.includes(query) || email.includes(query)
+const pageRole = computed<'admin' | 'coach'>(() => isAdmin.value ? 'admin' : 'coach')
+const hasPreviousPage = computed(() => currentPage.value > 1)
+const hasNextPage = computed(() => !!nextCursor.value)
+const visibleTotalLabel = computed(() => totalItems.value === null ? pilots.value.length : totalItems.value)
+
+const fetchPilots = async (options: { reset?: boolean; direction?: 'next' | 'prev' } = {}) => {
+  if (!currentUser.value) {
+    isLoading.value = false
+    return
+  }
+  if (options.reset) {
+    currentPage.value = 1
+    cursorStack.value = []
+    nextCursor.value = null
+  }
+
+  const scenarioId = startFirebaseScenario(isAdmin.value ? 'admin.piloti.list' : 'coach.piloti.list', {
+    userId: currentUser.value.uid,
+    role: userRole.value,
+    page: currentPage.value,
+    pageSize: PILOT_PAGE_SIZE,
+    search: searchQuery.value || null,
+    reset: !!options.reset,
+    direction: options.direction || 'current'
   })
-})
 
-const fetchPilots = async () => {
-  if (!currentUser.value) return
-  
+  isLoading.value = true
+
   try {
-    let q
-    
-    if (isAdmin.value) {
-      // Admin vede TUTTI gli utenti (piloti e coach)
-      q = query(collection(db, 'users'))
-    } else {
-      // Coach vede solo i propri piloti assegnati
-      q = query(
-        collection(db, 'users'), 
-        where('role', '==', 'pilot'),
-        where('coachId', '==', currentUser.value.uid)
-      )
-    }
-    
-    const querySnapshot = await getDocs(q)
-    
-    // Get basic pilot data first (filter out self for admin)
-    const pilotsData = querySnapshot.docs
-      .filter(doc => doc.id !== currentUser.value?.uid)  // Exclude self
-      .map(doc => ({
-        uid: doc.id,
-        ...doc.data()
-      })) as Pilot[]
-    
-    // Use pre-calculated stats from user doc (written by sync — 0 extra reads!)
-    // Fallback: if stats not available yet, show '--'
-    for (const pilot of pilotsData) {
-      const stats = (pilot as any).stats
-      if (stats) {
-        pilot.lastSession = stats.lastSessionDate || undefined
-        pilot.totalSessions = stats.sessionsLast7Days ?? 0
-      } else {
-        pilot.lastSession = undefined
-        pilot.totalSessions = 0
-      }
-    }
-    
-    pilots.value = pilotsData
+    const cursor = cursorStack.value[currentPage.value - 2] || null
+    const [page, count] = await Promise.all([
+      loadPilotDirectoryPage({
+        role: pageRole.value,
+        currentUserId: currentUser.value.uid,
+        pageSize: PILOT_PAGE_SIZE,
+        cursor,
+        searchTerm: searchQuery.value
+      }),
+      countPilotDirectory({
+        role: pageRole.value,
+        currentUserId: currentUser.value.uid,
+        searchTerm: searchQuery.value
+      })
+    ])
+
+    pilots.value = page.pilots
+    nextCursor.value = page.hasNext ? page.nextCursor : null
+    totalItems.value = count
   } catch (e) {
     console.error('Error fetching pilots:', e)
   } finally {
     isLoading.value = false
+    endFirebaseScenario(scenarioId)
   }
+}
+
+function goNextPage() {
+  if (!nextCursor.value || isLoading.value) return
+  cursorStack.value[currentPage.value - 1] = nextCursor.value
+  currentPage.value += 1
+  fetchPilots({ direction: 'next' })
+}
+
+function goPreviousPage() {
+  if (!hasPreviousPage.value || isLoading.value) return
+  currentPage.value = Math.max(1, currentPage.value - 1)
+  fetchPilots({ direction: 'prev' })
 }
 
 // Get display name (firstName + lastName, fallback to nickname)
@@ -118,29 +116,9 @@ function getInitials(pilot: Pilot): string {
   return pilot.nickname.slice(0, 2).toUpperCase()
 }
 
-// Compare semver strings (e.g. "0.2.1" vs "0.2.2")
-function compareSemver(a: string, b: string): number {
-  const pa = a.split('.').map(Number)
-  const pb = b.split('.').map(Number)
-  for (let i = 0; i < 3; i++) {
-    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) - (pb[i] || 0)
-  }
-  return 0
-}
-
-// Dynamically find the latest version among all pilots (0 Firebase reads extra)
-const latestVersion = computed(() => {
-  const versions = pilots.value
-    .map(p => p.suiteVersion)
-    .filter((v): v is string => !!v)
-  if (versions.length === 0) return null
-  return versions.sort(compareSemver).pop()!
-})
-
 function getVersionClass(version: string): string {
-  if (!latestVersion.value) return 'version-badge--unknown'
-  if (version === latestVersion.value) return 'version-badge--current'
-  return 'version-badge--outdated'
+  void version
+  return 'version-badge--unknown'
 }
 
 function formatDate(dateStr?: string): string {
@@ -152,7 +130,14 @@ function formatDate(dateStr?: string): string {
 }
 
 onMounted(() => {
-  fetchPilots()
+  fetchPilots({ reset: true })
+})
+
+watch(searchQuery, () => {
+  if (searchDebounce) clearTimeout(searchDebounce)
+  searchDebounce = setTimeout(() => {
+    fetchPilots({ reset: true })
+  }, 300)
 })
 </script>
 
@@ -161,7 +146,10 @@ onMounted(() => {
     <h1 class="page-title">{{ isAdmin ? 'TUTTI GLI UTENTI' : 'I MIEI PILOTI' }}</h1>
     
     <div class="page-header">
-      <p class="page-subtitle">{{ pilots.length }} {{ isAdmin ? 'utenti' : 'piloti assegnati' }}</p>
+      <p class="page-subtitle">
+        {{ visibleTotalLabel }} {{ isAdmin ? 'utenti' : 'piloti assegnati' }}
+        <span v-if="visibleTotalLabel > PILOT_PAGE_SIZE" class="page-subtitle__page">pagina {{ currentPage }}</span>
+      </p>
       
       <!-- Search Bar -->
       <div class="search-box">
@@ -185,13 +173,8 @@ onMounted(() => {
 
     <!-- Empty State -->
     <div v-else-if="pilots.length === 0" class="state-box state-box--empty">
-      <p>Nessun pilota assegnato</p>
-      <small>Per assegnare un pilota, vai nella Firebase Console e aggiungi il campo <code>coachId</code> con il tuo UID al documento del pilota.</small>
-    </div>
-
-    <!-- No Results State -->
-    <div v-else-if="filteredPilots.length === 0" class="state-box">
-      Nessun pilota trovato per "{{ searchQuery }}"
+      <p>{{ searchQuery ? `Nessun risultato per "${searchQuery}"` : 'Nessun pilota assegnato' }}</p>
+      <small v-if="!searchQuery">Per assegnare un pilota, vai nella Firebase Console e aggiungi il campo <code>coachId</code> con il tuo UID al documento del pilota.</small>
     </div>
 
     <!-- Pilots List -->
@@ -206,7 +189,7 @@ onMounted(() => {
       </div>
       
       <NuxtLink 
-        v-for="pilot in filteredPilots" 
+        v-for="pilot in pilots" 
         :key="pilot.uid"
         :to="`/piloti/${pilot.uid}`"
         class="list-row"
@@ -233,6 +216,16 @@ onMounted(() => {
           </svg>
         </span>
       </NuxtLink>
+
+      <div class="pilot-pagination">
+        <button class="pilot-pagination__button" :disabled="!hasPreviousPage || isLoading" @click="goPreviousPage">
+          Precedente
+        </button>
+        <span class="pilot-pagination__status">Pagina {{ currentPage }}</span>
+        <button class="pilot-pagination__button" :disabled="!hasNextPage || isLoading" @click="goNextPage">
+          Successiva
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -262,6 +255,11 @@ onMounted(() => {
   font-family: $font-primary;
   font-size: 14px;
   color: rgba(255, 255, 255, 0.5);
+
+  &__page {
+    margin-left: 8px;
+    color: rgba(255, 255, 255, 0.35);
+  }
 }
 
 // === SEARCH BOX ===
@@ -308,6 +306,42 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.pilot-pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.pilot-pagination__status {
+  font-family: $font-primary;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.pilot-pagination__button {
+  padding: 9px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.75);
+  font-family: $font-primary;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover:not(:disabled) {
+    border-color: rgba($racing-orange, 0.4);
+    color: $racing-orange;
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
 }
 
 .list-header {

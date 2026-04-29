@@ -1,0 +1,51 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "meta.date_start",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "summary.laps",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "meta.session_type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "meta.date_start",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "meta.session_type",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "meta.date_start",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "summary.laps",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

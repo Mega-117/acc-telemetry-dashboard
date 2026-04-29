@@ -1,0 +1,184 @@
+const scenarios: Record<CoachBriefingScenario, PrepScenario> = {
+  no_recent_activity: {
+    id: 'no_recent_activity',
+    label: 'Baseline',
+    tone: 'baseline',
+    badge: 'Shakedown',
+    title: 'Costruisci una baseline pulita',
+    subtitle: 'Una run breve per creare dati leggibili prima di lavorare su passo, best o setup.',
+    objective: 'Practice breve, guida sotto il limite e stessi riferimenti. Non cercare il best.',
+    progressLabel: 'Giri validi',
+    progressValue: '0 / 5',
+    sessionType: 'Practice controllata',
+    suggestedDuration: '10-15 minuti',
+    focus: 'Pulizia',
+    target: 'Almeno 5 giri validi',
+    runRules: [
+      'Stessa auto e stesso setup',
+      'Fuel medio, niente stint aggressivi',
+      'Margine su cordoli e track limits'
+    ],
+    sections: [
+      {
+        title: 'Guida',
+        body: 'Guida sotto al limite e usa riferimenti semplici in frenata.'
+      },
+      {
+        title: 'Evita',
+        body: 'Cordoli rischiosi, setup aggressivi e tentativi di hotlap.'
+      }
+    ],
+    completionRules: [
+      'Giri puliti e confrontabili',
+      'Ritmo leggibile, anche senza record',
+      'Base utile per il prossimo obiettivo'
+    ],
+    ctaLabel: 'Apri pratica'
+  },
+  qualify_to_race: {
+    id: 'qualify_to_race',
+    label: 'Da qualifica a passo',
+    tone: 'pace',
+    badge: 'Ritmo',
+    title: 'Trasforma il giro secco in passo',
+    subtitle: 'Se hai tanta qualifica recente, il prossimo valore e capire quanto ritmo resta dopo il best.',
+    objective: 'Trasforma la velocita da qualifica in una sequenza stabile di giri.',
+    progressLabel: 'Giri ritmo',
+    progressValue: '0 / 8',
+    sessionType: 'Stint ritmo',
+    suggestedDuration: '15-20 minuti',
+    focus: 'Passo medio',
+    target: 'Scarto stabile sotto 0.8s',
+    runRules: [
+      'Stesso fuel per tutta la run',
+      'Nessun cambio setup nello stint',
+      'Ritmo costante prima del giro veloce'
+    ],
+    sections: [
+      {
+        title: 'Guida',
+        body: 'Parti con margine per 2 giri, poi stabilizza il passo.'
+      },
+      {
+        title: 'Evita',
+        body: 'Non trasformarla in una qualifica lunga: il best non e il target.'
+      }
+    ],
+    completionRules: [
+      'Media pulita vicina al best',
+      'Poche invalidazioni',
+      'Passo ripetibile, non solo hotlap'
+    ],
+    ctaLabel: 'Apri stint ritmo'
+  },
+  race_volume_low: {
+    id: 'race_volume_low',
+    label: 'Volume gara',
+    tone: 'race',
+    badge: 'Long run',
+    title: 'Aumenta il volume gara recente',
+    subtitle: 'Il punto non e fare il giro piu veloce, ma creare dati affidabili sul passo.',
+    objective: 'Fai un long run breve per capire se il passo resta stabile.',
+    progressLabel: 'Giri stint',
+    progressValue: '0 / 10',
+    sessionType: 'Long run breve',
+    suggestedDuration: '20-25 minuti',
+    focus: 'Consistenza',
+    target: '8-10 giri, scarto contenuto',
+    runRules: [
+      'Setup gara o setup stabile',
+      'Fuel coerente per tutta la run',
+      'Niente modifiche durante lo stint'
+    ],
+    sections: [
+      {
+        title: 'Guida',
+        body: 'Priorita a frenate e uscite curva ripetibili.'
+      },
+      {
+        title: 'Evita',
+        body: 'Non sacrificare il giro successivo per un singolo settore veloce.'
+      }
+    ],
+    completionRules: [
+      'Passo leggibile anche senza record',
+      'Calo o miglioramento interpretabile',
+      'Stint confrontabile con i prossimi long run'
+    ],
+    ctaLabel: 'Apri long run'
+  },
+  clean_laps_focus: {
+    id: 'clean_laps_focus',
+    label: 'Pulizia',
+    tone: 'clean',
+    badge: 'Validita',
+    title: 'Pulisci la sessione prima di spingere',
+    subtitle: 'Quando i giri sporchi dominano, il sistema deve aiutare a ricostruire controllo.',
+    objective: 'Costruisci una sequenza pulita prima di tornare a spingere.',
+    progressLabel: 'Validi consecutivi',
+    progressValue: '0 / 6',
+    sessionType: 'Run pulita',
+    suggestedDuration: '10-18 minuti',
+    focus: 'Validita',
+    target: '6 giri validi consecutivi',
+    runRules: [
+      'Margine sui punti dove invalidi spesso',
+      'Ritmo controllato prima del push',
+      'Nessuna compensazione dopo un errore'
+    ],
+    sections: [
+      {
+        title: 'Guida',
+        body: 'Scegli due punti critici e guida con margine solo li.'
+      },
+      {
+        title: 'Evita',
+        body: 'Se invalidi, non compensare spingendo. Riparti dal ritmo target.'
+      }
+    ],
+    completionRules: [
+      'Meno errori sui punti critici',
+      'Sequenza pulita e leggibile',
+      'Pronto per aumentare il ritmo'
+    ],
+    ctaLabel: 'Apri run pulita'
+  },
+  completed_next_step: {
+    id: 'completed_next_step',
+    label: 'Step successivo',
+    tone: 'success',
+    badge: 'Avanzamento',
+    title: 'Consolida l obiettivo completato',
+    subtitle: 'Quando il lavoro precedente e chiuso, il passo giusto e ripetere o aumentare leggermente il carico.',
+    objective: 'Ripeti il lavoro completato aggiungendo una sola difficolta.',
+    progressLabel: 'Conferma step',
+    progressValue: '0 / 1',
+    sessionType: 'Conferma progresso',
+    suggestedDuration: '15-25 minuti',
+    focus: 'Ripetibilita',
+    target: '+2 giri o pista simile',
+    runRules: [
+      'Mantieni auto, fuel e setup uguali',
+      'Aggiungi una sola difficolta',
+      'Evita cambi non misurabili'
+    ],
+    sections: [
+      {
+        title: 'Guida',
+        body: 'Aumenta solo durata o pista, non entrambe.'
+      },
+      {
+        title: 'Evita',
+        body: 'Non cambiare setup, auto e target nello stesso test.'
+      }
+    ],
+    completionRules: [
+      'Risultato confrontabile',
+      'Stabilita confermata',
+      'Prossimo step chiaro'
+    ],
+    ctaLabel: 'Apri conferma'
+  }
+}
+
+

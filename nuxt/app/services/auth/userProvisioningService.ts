@@ -2,6 +2,7 @@ import type { User } from 'firebase/auth'
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { trackedGetDoc, trackedSetDoc } from '~/composables/useFirebaseTracker'
+import { buildPilotDirectoryDocument, buildPilotDirectoryFields } from '~/utils/pilotDirectoryFields'
 
 const AUTH_PROVISION_CALLER = 'AuthProvisioning'
 
@@ -34,6 +35,29 @@ function buildPublicProfilePayload(user: Pick<User, 'uid' | 'displayName' | 'ema
     }
 }
 
+function sameStringArray(a: any, b: any): boolean {
+    if (!Array.isArray(a) || !Array.isArray(b)) return false
+    if (a.length !== b.length) return false
+    return a.every((value, index) => value === b[index])
+}
+
+async function writePilotDirectoryDocument(uid: string, data: any) {
+    const directoryRef = doc(db, 'pilotDirectory', uid)
+    await setDocTracked(directoryRef, buildPilotDirectoryDocument({
+        uid,
+        firstName: data.firstName || '',
+        lastName: data.lastName || '',
+        nickname: data.nickname || '',
+        email: data.email || '',
+        role: data.role || 'pilot',
+        coachId: data.coachId || null,
+        sessionsLast7Days: data.stats?.sessionsLast7Days ?? data.sessionsLast7Days ?? 0,
+        lastSessionDate: data.stats?.lastSessionDate ?? data.lastSessionDate ?? null,
+        suiteVersion: data.suiteVersion || null,
+        suiteVersionUpdatedAt: data.suiteVersionUpdatedAt || null
+    }), { merge: true })
+}
+
 export async function createInitialUserDocument(
     user: User,
     {
@@ -49,7 +73,8 @@ export async function createInitialUserDocument(
     const userDocRef = doc(db, 'users', user.uid)
     const publicProfileRef = doc(db, 'publicProfiles', user.uid)
 
-    await setDocTracked(userDocRef, {
+    const userPayload = {
+        uid: user.uid,
         firstName,
         lastName,
         nickname,
@@ -57,8 +82,17 @@ export async function createInitialUserDocument(
         role: 'pilot',
         coachId: null,
         createdAt: new Date().toISOString(),
-        emailVerified: user.emailVerified
-    })
+        emailVerified: user.emailVerified,
+        ...buildPilotDirectoryFields({
+            firstName,
+            lastName,
+            nickname,
+            email: user.email
+        })
+    }
+
+    await setDocTracked(userDocRef, userPayload)
+    await writePilotDirectoryDocument(user.uid, userPayload)
 
     await setDocTracked(publicProfileRef, {
         uid: user.uid,
@@ -85,13 +119,20 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
         const publicProfilePayload = buildPublicProfilePayload(user, defaultNickname)
 
         if (!docSnap.exists()) {
-            await setDocTracked(userDocRef, {
+            const userPayload = {
+                uid: user.uid,
                 email: user.email,
                 nickname: defaultNickname,
                 role: 'pilot',
                 createdAt: new Date().toISOString(),
-                emailVerified: user.emailVerified
-            })
+                emailVerified: user.emailVerified,
+                ...buildPilotDirectoryFields({
+                    nickname: defaultNickname,
+                    email: user.email
+                })
+            }
+            await setDocTracked(userDocRef, userPayload)
+            await writePilotDirectoryDocument(user.uid, userPayload)
             await setDocTracked(publicProfileRef, publicProfilePayload, { merge: true })
             return {
                 role: 'pilot',
@@ -102,6 +143,29 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
         const data = docSnap.data() || {}
         const role = data.role || 'pilot'
         const nickname = data.nickname || defaultNickname
+        const directoryFields = buildPilotDirectoryFields({
+            firstName: data.firstName || '',
+            lastName: data.lastName || '',
+            nickname,
+            email: data.email || user.email
+        })
+
+        if (
+            data.uid !== user.uid ||
+            data.directorySortName !== directoryFields.directorySortName ||
+            !sameStringArray(data.searchPrefixes, directoryFields.searchPrefixes)
+        ) {
+            await setDocTracked(userDocRef, {
+                uid: user.uid,
+                ...directoryFields
+            }, { merge: true })
+        }
+
+        await writePilotDirectoryDocument(user.uid, {
+            ...data,
+            uid: user.uid,
+            nickname
+        })
 
         await setDocTracked(publicProfileRef, {
             uid: user.uid,

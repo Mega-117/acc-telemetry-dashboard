@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 // ============================================
 // SessionDetailPage - Master / Detail Layout
 // Now connected to Firebase for real data
@@ -33,6 +33,7 @@ import {
   type LapData
 } from '~/composables/useTelemetryData'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
+import { useCoachInsights } from '~/composables/useCoachInsights'
 import { runSessionValidation } from '~/composables/useDebugValidator'
 import { shareSessionLink } from '~/services/session-detail/sessionShareService'
 import { autoSelectComparisonStints } from '~/services/session-detail/sessionCompareService'
@@ -143,8 +144,15 @@ function applyWarmupExclusion() {
 // FIREBASE DATA LOADING
 // ========================================
 const telemetryGateway = useTelemetryGateway()
+const { generateSessionInsight, generateComparisonInsight } = useCoachInsights()
+
 const { getTheoreticalTimes, generateShareLink, fetchSessionFull } = telemetryGateway
 const fullSession = ref<FullSession | null>(null)
+
+const sessionInsight = computed(() => {
+  return generateSessionInsight(fullSession.value)
+})
+
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
 
@@ -2413,7 +2421,18 @@ const gripZones = computed(() => {
       </div>
     </header>
 
-    <!-- KPI section removed - now dynamic in detail panel -->
+    <!-- LETTURA FINALE (COACH INSIGHT) -->
+    <div class="coach-insight-banner" :class="sessionInsight.type">
+      <div class="insight-icon">
+        <span v-if="sessionInsight.type === 'positive'">✅</span>
+        <span v-else-if="sessionInsight.type === 'negative'">⚠️</span>
+        <span v-else>ℹ️</span>
+      </div>
+      <div class="insight-content">
+        <h3 class="insight-title">{{ sessionInsight.message }}</h3>
+        <p class="insight-details" v-if="sessionInsight.details">{{ sessionInsight.details }}</p>
+      </div>
+    </div>
 
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->
@@ -6625,6 +6644,50 @@ const gripZones = computed(() => {
 }
 
 
+.coach-insight-banner {
+  display: flex;
+  gap: var(--spacing-md, 16px);
+  padding: var(--spacing-lg, 16px);
+  margin-bottom: var(--spacing-lg, 16px);
+  background: var(--bg-surface, #1e1e1e);
+  border-radius: var(--radius-md, 8px);
+  border-left: 4px solid var(--text-muted);
+}
+.coach-insight-banner.positive {
+  border-left-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+}
+.coach-insight-banner.negative {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
+}
+.coach-insight-banner.actionable {
+  border-left-color: var(--accent-primary);
+  background: rgba(var(--accent-primary-rgb, 255, 215, 0), 0.05);
+}
+
+.insight-icon {
+  font-size: 24px;
+}
+
+.insight-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.insight-title {
+  margin: 0;
+  font-size: var(--font-size-lg, 18px);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.insight-details {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-md, 14px);
+}
 </style>
 
 <!-- Global styles for Teleported notification banner -->
@@ -6748,5 +6811,49 @@ const gripZones = computed(() => {
   }
 }
 
+.coach-insight-banner {
+  display: flex;
+  gap: var(--spacing-md, 16px);
+  padding: var(--spacing-lg, 16px);
+  margin-bottom: var(--spacing-lg, 16px);
+  background: var(--bg-surface, #1e1e1e);
+  border-radius: var(--radius-md, 8px);
+  border-left: 4px solid var(--text-muted);
+}
+.coach-insight-banner.positive {
+  border-left-color: #10b981;
+  background: rgba(16, 185, 129, 0.05);
+}
+.coach-insight-banner.negative {
+  border-left-color: #ef4444;
+  background: rgba(239, 68, 68, 0.05);
+}
+.coach-insight-banner.actionable {
+  border-left-color: var(--accent-primary);
+  background: rgba(var(--accent-primary-rgb, 255, 215, 0), 0.05);
+}
+
+.insight-icon {
+  font-size: 24px;
+}
+
+.insight-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.insight-title {
+  margin: 0;
+  font-size: var(--font-size-lg, 18px);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.insight-details {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-md, 14px);
+}
 </style>
 

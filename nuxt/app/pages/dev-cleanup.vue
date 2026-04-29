@@ -5,15 +5,11 @@
 
 import { ref, computed, onMounted } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import {
-  doc,
-  getDocs,
-  deleteDoc,
-  collection,
-  query,
-  setDoc
-} from 'firebase/firestore'
+import { doc, collection, query } from 'firebase/firestore'
+import { trackedDeleteDoc, trackedGetDocs, trackedSetDoc } from '~/composables/useFirebaseTracker'
 import { db } from '~/config/firebase'
+
+const CALLER = 'DevCleanup'
 
 const SESSION_INDEX_MAX_ITEMS = 200
 const BEST_RULES_VERSION = 3
@@ -186,7 +182,7 @@ function buildUserIndexPayload(allSessions: any[]) {
 
 async function rebuildUserIndex(uid: string) {
   const sessionsRef = collection(db, `users/${uid}/sessions`)
-  const snapshot = await getDocs(query(sessionsRef))
+  const snapshot = await trackedGetDocs(query(sessionsRef), CALLER)
   const allSessions: any[] = []
 
   snapshot.forEach(docSnap => {
@@ -196,7 +192,7 @@ async function rebuildUserIndex(uid: string) {
     })
   })
 
-  await setDoc(doc(db, `users/${uid}`), buildUserIndexPayload(allSessions), { merge: true })
+  await trackedSetDoc(doc(db, `users/${uid}`), buildUserIndexPayload(allSessions), { merge: true }, CALLER)
   console.log(`[CLEANUP] Rebuilt user index with ${allSessions.length} sessions`)
 }
 
@@ -209,7 +205,7 @@ async function loadAndAnalyze() {
   try {
     const uid = currentUser.value.uid
     const sessionsRef = collection(db, `users/${uid}/sessions`)
-    const snapshot = await getDocs(query(sessionsRef))
+    const snapshot = await trackedGetDocs(query(sessionsRef), CALLER)
 
     const allSessions: any[] = []
     snapshot.forEach(docSnap => {
@@ -250,13 +246,13 @@ async function loadAndAnalyze() {
 
 async function deleteSessionEverywhere(uid: string, sessionId: string) {
   const chunksRef = collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`)
-  const chunksSnap = await getDocs(chunksRef)
+  const chunksSnap = await trackedGetDocs(chunksRef as any, CALLER)
   for (const chunk of chunksSnap.docs) {
-    await deleteDoc(chunk.ref)
+    await trackedDeleteDoc(chunk.ref, CALLER)
   }
 
   const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
-  await deleteDoc(sessionRef)
+  await trackedDeleteDoc(sessionRef, CALLER)
   deletedCount.value++
 }
 

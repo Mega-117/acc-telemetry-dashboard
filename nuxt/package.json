@@ -9,8 +9,18 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "check:parity": "node scripts/check_projection_parity.mjs",
+    "check:firebase-tracking": "node scripts/check_firebase_tracking.mjs",
+    "check:sync-runtime": "node scripts/check_sync_runtime.mjs",
+    "check:sync-trackbests-aggregate": "node scripts/check_sync_trackbests_aggregate.mjs",
+    "check:pilots-pagination": "node scripts/check_pilots_pagination.mjs",
     "check:session-detail-modes": "node scripts/check_session_detail_modes.mjs",
     "check:session-pager-merge": "node scripts/check_session_pager_merge.mjs",
+    "check:projection-first": "node scripts/check_projection_first_sources.mjs",
+    "check:owner-rebuild": "node scripts/check_owner_rebuild_contract.mjs",
+    "check:owner-maintenance-gate": "node scripts/check_owner_maintenance_gate.mjs",
+    "check:no-startup-raw-prefetch": "node scripts/check_no_startup_raw_prefetch.mjs",
+    "check:firestore-indexes": "node scripts/check_firestore_indexes.mjs",
+    "check:overview-grip-badges": "node scripts/check_overview_grip_badges.mjs",
     "check:pipeline": "powershell -ExecutionPolicy Bypass -File scripts/check_fe_pipeline.ps1"
   },
   "dependencies": {

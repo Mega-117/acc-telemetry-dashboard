@@ -1,4 +1,6 @@
-import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore'
+import { collection, doc, serverTimestamp } from 'firebase/firestore'
+import { trackedWriteBatch } from '~/composables/useFirebaseTracker'
+import type { TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { BEST_RULES_VERSION, extractMetadata, generateSessionId } from '~/utils/sessionParser'
 
 export interface RegistryCacheEntry {
@@ -31,12 +33,17 @@ export function createSessionUploadService(params: {
   loadRegistryCache: () => Promise<Record<string, RegistryCacheEntry>>
   canSkipViaRegistry: (registry: Record<string, RegistryCacheEntry>, fileName: string, fileHash: string, uid: string) => boolean
   deleteOldChunks: (uid: string, sessionId: string) => Promise<void>
-  updateTrackBests: (uid: string, trackId: string, sessionId: string, dateStart: string, summary: any, car?: string) => Promise<boolean>
 }) {
-  const { db, chunkSize, getExistingSession, loadRegistryCache, canSkipViaRegistry, deleteOldChunks, updateTrackBests } = params
+  const { db, chunkSize, getExistingSession, loadRegistryCache, canSkipViaRegistry, deleteOldChunks } = params
 
   return {
-    async uploadOrUpdateSession(rawObj: any, rawText: string, fileName: string, uid: string) {
+    async uploadOrUpdateSession(
+      rawObj: any,
+      rawText: string,
+      fileName: string,
+      uid: string,
+      options: { precomputedHash?: string } = {}
+    ) {
       try {
         const totalLaps = rawObj.session_info?.laps_total || 0
         if (totalLaps === 0) {
@@ -54,7 +61,7 @@ export function createSessionUploadService(params: {
           best_rules_version: Number(summary?.best_rules_version || BEST_RULES_VERSION)
         }
         const sessionId = generateSessionId(meta.date_start, meta.track)
-        const fileHash = await calculateContentHash(rawText)
+        const fileHash = options.precomputedHash || await calculateContentHash(rawText)
 
         const getExistingRulesVersion = (existingDoc: any): number =>
           Number(existingDoc?.summary?.best_rules_version || existingDoc?.summaryRulesVersion || 0)
@@ -94,7 +101,7 @@ export function createSessionUploadService(params: {
         }
 
         const chunks = chunksNeedUpdate ? splitTextIntoChunks(rawText, chunkSize) : []
-        const batch = writeBatch(db)
+        const batch = trackedWriteBatch(db, 'SessionUploadService')
 
         const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
         batch.set(sessionRef, {
@@ -121,12 +128,19 @@ export function createSessionUploadService(params: {
         }
 
         await batch.commit()
-        await updateTrackBests(uid, meta.track, sessionId, meta.date_start, summaryWithRules, meta.car)
+        const projectionDelta: TrackBestProjectionDelta = {
+          trackId: meta.track,
+          sessionId,
+          dateStart: meta.date_start,
+          summary: summaryWithRules,
+          car: meta.car
+        }
 
         return {
           status: (isUpdate ? 'updated' : 'created') as 'created' | 'updated',
           fileName,
           sessionId,
+          projectionDelta,
           reason: isRulesMigration ? 'summary_rules_migration' : undefined
         }
       } catch (error: any) {

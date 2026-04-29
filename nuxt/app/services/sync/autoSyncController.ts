@@ -1,21 +1,20 @@
+import type { TelemetryFileDescriptor } from './syncScanService'
+
 export function setupAutoSyncController(params: {
   isElectron: boolean
   electronAPI: any
   currentUser: { value: any }
-  syncTelemetryFiles: (specificFiles?: any[]) => Promise<any[]>
-  onNotify: (results: any[]) => void
-  onBeforeAuthReady?: (uid: string) => Promise<void>
-  onFilesDetected?: (data: { new: any[]; modified: any[] }) => void
+  handleTrigger: (trigger: 'filesChanged' | 'windowFocused' | 'initialFiles' | 'authReady', payload?: {
+    files?: TelemetryFileDescriptor[]
+    uid?: string
+  }) => Promise<void>
   onInitialRegistry?: (data: { files: any[]; registry: any }) => void
 }) {
   const {
     isElectron,
     electronAPI,
     currentUser,
-    syncTelemetryFiles,
-    onNotify,
-    onBeforeAuthReady,
-    onFilesDetected,
+    handleTrigger,
     onInitialRegistry
   } = params
 
@@ -24,20 +23,16 @@ export function setupAutoSyncController(params: {
   electronAPI.onFilesChanged?.(async (data: { new: any[]; modified: any[] }) => {
     const changedFiles = [...(data?.new || []), ...(data?.modified || [])]
     if (changedFiles.length === 0) return
-    onFilesDetected?.(data)
-    const results = await syncTelemetryFiles(changedFiles)
-    onNotify(results)
+    await handleTrigger('filesChanged', { files: changedFiles })
   })
 
   electronAPI.onWindowFocused?.(async () => {
-    const results = await syncTelemetryFiles()
-    onNotify(results)
+    await handleTrigger('windowFocused')
   })
 
   electronAPI.onInitialFiles?.(async (data: { files: any[]; registry: any }) => {
     onInitialRegistry?.(data)
-    const results = await syncTelemetryFiles()
-    onNotify(results)
+    await handleTrigger('initialFiles')
   })
 
   let authTriggered = false
@@ -46,10 +41,6 @@ export function setupAutoSyncController(params: {
     if (!user || authTriggered) return
     authTriggered = true
     window.clearInterval(stop)
-    if (onBeforeAuthReady) {
-      await onBeforeAuthReady(user.uid)
-    }
-    const results = await syncTelemetryFiles()
-    onNotify(results)
+    await handleTrigger('authReady', { uid: user.uid })
   }, 500)
 }

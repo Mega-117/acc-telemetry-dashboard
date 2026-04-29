@@ -1,5 +1,7 @@
 import type { CarCategory } from '~/composables/useTelemetryData'
 
+export const TRACK_DETAIL_PROJECTION_SCHEMA_VERSION = 1
+
 export interface TrackOverviewProjectionItem {
   id: string
   name: string
@@ -38,6 +40,7 @@ export interface TrackHeaderProjection {
   bestAvgRaceDate: string | null
   bestQualyFuel: number | null
   bestRaceFuel: number | null
+  bestAvgRaceFuel?: number | null
   hasGripData: boolean
 }
 
@@ -76,4 +79,20 @@ export interface TrackDetailProjection {
   activity: TrackActivityProjection
   category: CarCategory
   grip: string
+}
+
+export interface TrackDetailProjectionCategoryDocument {
+  recentSessions: TrackRecentSessionProjection[]
+  historicalTimes: TrackHistoricalPointProjection[]
+  activity: TrackActivityProjection
+  sessionCount: number
+  lastSessionDate: string | null
+}
+
+export interface TrackDetailProjectionDocument {
+  schemaVersion: number
+  trackId: string
+  updatedAt?: any
+  lastSessionDate: string | null
+  categories: Partial<Record<CarCategory, TrackDetailProjectionCategoryDocument>>
 }

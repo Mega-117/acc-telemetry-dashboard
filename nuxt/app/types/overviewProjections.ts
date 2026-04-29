@@ -4,8 +4,11 @@ export interface OverviewTrackProjection {
   image: string
   lastSession: string | null
   bestQualy: string
+  bestQualyGrip: string | null
   bestRace: string
+  bestRaceGrip: string | null
   bestAvgRace: string
+  bestAvgRaceGrip: string | null
 }
 
 export interface OverviewCarProjection {

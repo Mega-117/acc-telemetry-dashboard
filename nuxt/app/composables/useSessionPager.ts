@@ -2,7 +2,6 @@ import { computed, ref } from 'vue'
 import {
     collection,
     doc,
-    getCountFromServer,
     limit,
     orderBy,
     query,
@@ -12,7 +11,7 @@ import {
     type QueryConstraint,
     type QueryDocumentSnapshot
 } from 'firebase/firestore'
-import { trackedGetDoc, trackedGetDocs } from './useFirebaseTracker'
+import { trackedGetCountFromServer, trackedGetDoc, trackedGetDocs } from './useFirebaseTracker'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { db } from '~/config/firebase'
 import { formatCarName, formatTrackName, type SessionDocument } from './useTelemetryData'
@@ -73,6 +72,7 @@ const globalCloudPresenceCache = new Map<string, true>()
 
 async function getDocTracked(ref: any) { return trackedGetDoc(ref, CALLER) }
 async function getDocsTracked(q: any) { return trackedGetDocs(q, CALLER) }
+async function getCountTracked(q: any) { return trackedGetCountFromServer(q, CALLER) }
 
 function normalizeIso(input?: string | null): string | null {
     if (!input) return null
@@ -215,7 +215,7 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
 
             if (constraints.length > 0) {
                 try {
-                    const countSnap = await getCountFromServer(query(sessionsRef, ...constraints))
+                    const countSnap = await getCountTracked(query(sessionsRef, ...constraints))
                     return Number(countSnap.data().count || 0)
                 } catch {
                     // Fall back to sessionIndex-derived count below when a composite index is missing.
@@ -296,7 +296,7 @@ async function resolveCloudTotalsOnly(targetUserId: string, filters: SessionPage
         if (toIso) constraints.push(where('meta.date_start', '<=', toIso))
         if (filters.hideEmpty) constraints.push(where('summary.laps', '>', 0))
 
-        const countSnap = await getCountFromServer(query(sessionsRef, ...constraints))
+        const countSnap = await getCountTracked(query(sessionsRef, ...constraints))
         return Number(countSnap.data().count || 0)
     } catch {
         return null

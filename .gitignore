@@ -29,6 +29,5 @@ npm-debug.log*
 # Cache
 .cache/
 
-firestore.rules
 # Audit logs
 .audit/

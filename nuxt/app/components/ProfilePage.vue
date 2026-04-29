@@ -4,8 +4,11 @@
 // ============================================
 
 import { ref, computed, onMounted } from 'vue'
+import { doc } from 'firebase/firestore'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useTelemetryData } from '~/composables/useTelemetryData'
+import { trackedUpdateDoc } from '~/composables/useFirebaseTracker'
+import { db } from '~/config/firebase'
 
 const props = defineProps<{
   userEmail?: string
@@ -141,13 +144,9 @@ const handleSave = async () => {
   
   isSaving.value = true
   try {
-    // Import Firestore functions
-    const { doc, updateDoc } = await import('firebase/firestore')
-    const { db } = await import('~/config/firebase')
-    
-    await updateDoc(doc(db, 'users', currentUser.value.uid), {
+    await trackedUpdateDoc(doc(db, 'users', currentUser.value.uid), {
       equipment: equipment.value
-    })
+    }, 'ProfilePage')
     
     saveSuccess.value = true
     setTimeout(() => saveSuccess.value = false, 2000)

@@ -17,12 +17,17 @@ const isMaximized = ref(false)
 const isRefreshing = ref(false)
 
 // Sync composable
-const { isSyncing, syncTelemetryFiles, setupAutoSync, syncResults, pendingNotification } = useElectronSync()
+const { isSyncing, syncTelemetryFiles, setupAutoSync, syncResults, pendingNotification, dataMaintenance } = useElectronSync()
 const telemetryGateway = useTelemetryGateway()
+const maintenanceStatus = dataMaintenance.status
+const maintenanceProgress = dataMaintenance.progress
+const maintenanceMessage = dataMaintenance.message
+const maintenanceError = dataMaintenance.error
 
 // Notification state
 const showNotification = ref(false)
 const notificationResults = ref<any[]>([])
+const showMaintenanceNotification = ref(false)
 
 // Check if running in Electron
 onMounted(async () => {
@@ -48,6 +53,15 @@ watch(pendingNotification, (results) => {
     showNotification.value = true
     // Clear pending so it can trigger again
     pendingNotification.value = null
+  }
+})
+
+watch(dataMaintenance.status, (status) => {
+  if (status === 'checking' || status === 'running' || status === 'sync_pending' || status === 'completed' || status === 'failed') {
+    showMaintenanceNotification.value = true
+  }
+  if (status === 'skipped' || status === 'idle') {
+    showMaintenanceNotification.value = false
   }
 })
 
@@ -119,6 +133,10 @@ const handleClose = () => {
 const closeNotification = () => {
   showNotification.value = false
 }
+
+const closeMaintenanceNotification = () => {
+  showMaintenanceNotification.value = false
+}
 </script>
 
 <template>
@@ -180,6 +198,15 @@ const closeNotification = () => {
       :results="notificationResults" 
       :visible="showNotification"
       @close="closeNotification"
+    />
+
+    <ElectronDataMaintenanceNotification
+      :visible="showMaintenanceNotification"
+      :status="maintenanceStatus"
+      :progress="maintenanceProgress"
+      :message="maintenanceMessage"
+      :error="maintenanceError"
+      @close="closeMaintenanceNotification"
     />
   </div>
 </template>

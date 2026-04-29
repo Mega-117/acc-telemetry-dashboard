@@ -3,8 +3,11 @@ import { resolveTrackMetadata } from '~/services/projections/trackMetadata'
 
 type TrackBestTimes = {
   bestQualy: number | null
+  bestQualyGrip?: string | null
   bestRace: number | null
+  bestRaceGrip?: string | null
   bestAvgRace: number | null
+  bestAvgRaceGrip?: string | null
 }
 
 type TrackStat = {
@@ -30,8 +33,11 @@ function buildTrackCard(
     image: metadata.image,
     lastSession: trackStat.lastSession || null,
     bestQualy: formatLapTime(bests.bestQualy),
+    bestQualyGrip: bests.bestQualy ? bests.bestQualyGrip || null : null,
     bestRace: formatLapTime(bests.bestRace),
-    bestAvgRace: formatLapTime(bests.bestAvgRace)
+    bestRaceGrip: bests.bestRace ? bests.bestRaceGrip || null : null,
+    bestAvgRace: formatLapTime(bests.bestAvgRace),
+    bestAvgRaceGrip: bests.bestAvgRace ? bests.bestAvgRaceGrip || null : null
   }
 }
 
