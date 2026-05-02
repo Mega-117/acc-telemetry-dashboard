@@ -12,7 +12,8 @@ import { trackedDeleteDoc, trackedGetDoc, trackedGetDocs, trackedSetDoc } from '
 const CALLER = 'DevUpload'
 
 definePageMeta({
-  layout: false
+  layout: false,
+  middleware: 'dev-tools'
 })
 
 const { currentUser, isAuthenticated } = useFirebaseAuth()

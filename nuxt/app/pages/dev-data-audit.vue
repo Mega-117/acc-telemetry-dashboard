@@ -10,6 +10,10 @@ import { useTelemetryData, formatLapTime } from '~/composables/useTelemetryData'
 import { trackedDeleteDoc, trackedGetDocs } from '~/composables/useFirebaseTracker'
 import { db } from '~/config/firebase'
 
+definePageMeta({
+  middleware: 'dev-tools'
+})
+
 const CALLER = 'DevDataAudit'
 
 const { currentUser } = useFirebaseAuth()

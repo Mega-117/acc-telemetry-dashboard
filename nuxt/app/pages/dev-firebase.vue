@@ -2,6 +2,10 @@
 import { computed } from 'vue'
 import { useFirebaseMonitor } from '~/composables/useFirebaseTracker'
 
+definePageMeta({
+  middleware: 'dev-tools'
+})
+
 const {
   totals,
   callerBreakdown,

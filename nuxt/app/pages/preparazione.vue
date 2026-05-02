@@ -17,6 +17,7 @@ interface PrepScenario {
   subtitle: string
   objective: string
   sessionType: string
+  fuelHint: string
   warmupLabel: string
   workLabel: string
   focus: string
@@ -43,10 +44,11 @@ const scenarios: Record<CoachBriefingScenario, PrepScenario> = {
     tone: 'baseline',
     title: 'Sessione Pulizia',
     subtitle: 'Prima di parlare di passo o best devi tenere la macchina in pista.',
-    objective: 'Fai 10 minuti liberi, poi una run da 20 giri o 30 minuti. Il tempo non conta.',
-    sessionType: 'Practice controllata',
-    warmupLabel: '10 min warm-up libero',
-    workLabel: '30 min lavoro pulizia',
+    objective: 'Dopo il warm-up fai 30 minuti di lavoro pulizia. Guida sotto al limite: oggi conta solo chiudere giri validi.',
+    sessionType: 'Prova libera',
+    fuelHint: 'Medio e stabile',
+    warmupLabel: '10 min warm-up',
+    workLabel: '30 min pulizia',
     focus: 'Giri validi',
     target: '85% giri validi',
     doRules: [
@@ -71,9 +73,10 @@ const scenarios: Record<CoachBriefingScenario, PrepScenario> = {
     tone: 'pace',
     title: 'Sessione Costanza',
     subtitle: 'Il giro veloce serve poco se non riesci a ripeterlo.',
-    objective: 'Fai 10 minuti liberi, poi 2 blocchi da 15 minuti. Ogni blocco ha il suo best e il suo delta.',
-    sessionType: '2 blocchi ritmo',
-    warmupLabel: '10 min warm-up libero',
+    objective: 'Nel lavoro vero fai 2 blocchi da 15 minuti. Crea un riferimento valido e resta vicino a quel ritmo, senza trasformarlo in qualifica.',
+    sessionType: 'Prova libera',
+    fuelHint: 'Medio e stabile',
+    warmupLabel: '10 min warm-up',
     workLabel: '2 blocchi da 15 min',
     focus: 'Delta dal best blocco',
     target: '8 giri entro +0.8',
@@ -99,9 +102,10 @@ const scenarios: Record<CoachBriefingScenario, PrepScenario> = {
     tone: 'race',
     title: 'Sessione Long run',
     subtitle: 'Qui alleni gara vera: ritmo, validita, gestione e lucidita fino alla fine.',
-    objective: 'Fai 10 minuti liberi, poi 30 minuti continui con fuel medio/alto.',
-    sessionType: 'Stint gara',
-    warmupLabel: '10 min warm-up libero',
+    objective: 'Nel lavoro vero fai 30 minuti continui. Conta portare ritmo e validita fino alla fine, non il singolo giro.',
+    sessionType: 'Prova libera o gara',
+    fuelHint: 'Mezzo serbatoio o pieno',
+    warmupLabel: '10 min warm-up',
     workLabel: '30 min stint continuo',
     focus: 'Tenuta passo',
     target: '90% validi + passo entro +1.0',
@@ -127,9 +131,10 @@ const scenarios: Record<CoachBriefingScenario, PrepScenario> = {
     tone: 'clean',
     title: 'Sessione Qualifica',
     subtitle: 'Allena pressione e giro secco: pochi tentativi, niente mezzora per trovare il tempo.',
-    objective: 'Fai 10 minuti liberi, poi 3 run da 10 minuti: outlap e 2-3 giri push.',
-    sessionType: '3 run qualifica',
-    warmupLabel: '10 min warm-up libero',
+    objective: 'Nel lavoro vero fai 3 run brevi: outlap e 2-3 giri push. Devi tirare fuori un giro valido forte in pochi tentativi.',
+    sessionType: 'Qualifica',
+    fuelHint: 'Massimo 20 L',
+    warmupLabel: '10 min warm-up',
     workLabel: '3 run da 10 min',
     focus: 'Giro competitivo',
     target: '1 giro forte per run',
@@ -155,10 +160,11 @@ const scenarios: Record<CoachBriefingScenario, PrepScenario> = {
     tone: 'success',
     title: 'Sessione Traiettorie / traffico',
     subtitle: 'Se sai guidare solo sulla traiettoria ideale, sai fare hotlap ma non sai ancora correre.',
-    objective: 'Fai 10 minuti liberi, poi 3 blocchi da 10 minuti con linee alternative o traffico.',
-    sessionType: '3 blocchi racecraft',
-    warmupLabel: '10 min warm-up libero',
-    workLabel: '3 blocchi da 10 min',
+    objective: 'Nel lavoro vero fai tre gare brevi o tre blocchi trafficati. Parti in mezzo al gruppo e chiudi pulito, anche riducendo il ritmo.',
+    sessionType: 'Gara AI o multiplayer',
+    fuelHint: 'Medio / gara breve',
+    warmupLabel: '10 min warm-up',
+    workLabel: '3 gare brevi',
     focus: 'Adattamento',
     target: 'Pulito fuori linea',
     doRules: [
@@ -247,7 +253,7 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
 
           <div class="metric-row metric-row--compact">
             <div>
-              <span>Tipo</span>
+              <span>Modalita ACC</span>
               <strong>{{ selectedPlan.sessionType }}</strong>
             </div>
             <div>
@@ -257,6 +263,10 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
             <div>
               <span>Focus</span>
               <strong>{{ selectedPlan.focus }}</strong>
+            </div>
+            <div>
+              <span>Carburante</span>
+              <strong>{{ selectedPlan.fuelHint }}</strong>
             </div>
           </div>
         </article>
@@ -280,20 +290,6 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
             </ul>
           </article>
 
-          <article class="prep-card compact-card">
-            <span class="eyebrow">Cosa verra misurato</span>
-            <ul class="check-list">
-              <li v-for="rule in selectedPlan.completionRules" :key="rule">
-                {{ rule }}
-              </li>
-            </ul>
-            <div class="tracking-note">
-              <strong>Tracking obiettivo</strong>
-              <span>
-                Per ora questa pagina non salva obiettivi e non valuta la sessione. In futuro il risultato verra calcolato dopo la sincronizzazione.
-              </span>
-            </div>
-          </article>
         </aside>
       </section>
     </div>
@@ -519,7 +515,7 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
 
 .metric-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-top: 22px;
 }

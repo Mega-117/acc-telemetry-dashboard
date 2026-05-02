@@ -1,5 +1,6 @@
 import { rebuildTrackBestsProjection, writeUserProjectionDocuments } from './projectionRebuildService'
 import { applyTrackBestsProjectionDeltas, type TrackBestProjectionDelta } from './trackBestsProjectionService'
+import { applyUserProjectionDeltas, type UserProjectionDelta } from './syncUserProjectionDeltaService'
 import type { SessionDocument } from '~/composables/useTelemetryData'
 
 export async function refreshSyncProjections(params: {
@@ -15,6 +16,7 @@ export async function refreshSyncProjections(params: {
   reason: string
   rebuildTrackBests?: boolean
   trackBestDeltas?: TrackBestProjectionDelta[]
+  userProjectionDeltas?: UserProjectionDelta[]
 }): Promise<{ sessions: SessionDocument[]; projectionsWritten: boolean; rebuiltTrackBests: boolean }> {
   const {
     db,
@@ -28,10 +30,11 @@ export async function refreshSyncProjections(params: {
     bestRulesVersion,
     reason,
     rebuildTrackBests = false,
-    trackBestDeltas = []
+    trackBestDeltas = [],
+    userProjectionDeltas = []
   } = params
 
-  if (changedCount <= 0 && !rebuildTrackBests && trackBestDeltas.length === 0) {
+  if (changedCount <= 0 && !rebuildTrackBests && trackBestDeltas.length === 0 && userProjectionDeltas.length === 0) {
     return {
       sessions: [],
       projectionsWritten: false,
@@ -50,6 +53,22 @@ export async function refreshSyncProjections(params: {
       setDocFn,
       bestRulesVersion
     })
+  }
+
+  if (!rebuildTrackBests && userProjectionDeltas.length > 0) {
+    await applyUserProjectionDeltas({
+      db,
+      uid,
+      deltas: userProjectionDeltas,
+      getDocFn,
+      setDocFn
+    })
+
+    return {
+      sessions: [],
+      projectionsWritten: true,
+      rebuiltTrackBests: false
+    }
   }
 
   const freshSessions = await loadSessions(undefined, true, {

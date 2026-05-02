@@ -11,6 +11,10 @@ import {
   type OwnerProjectionRebuildReport
 } from '~/services/sync/ownerDataRepairService'
 
+definePageMeta({
+  middleware: 'dev-tools'
+})
+
 const { currentUser } = useFirebaseAuth()
 const { isElectron, syncTelemetryFiles } = useElectronSync()
 

@@ -9,6 +9,10 @@ import { doc, collection, query } from 'firebase/firestore'
 import { trackedDeleteDoc, trackedGetDocs, trackedSetDoc } from '~/composables/useFirebaseTracker'
 import { db } from '~/config/firebase'
 
+definePageMeta({
+  middleware: 'dev-tools'
+})
+
 const CALLER = 'DevCleanup'
 
 const SESSION_INDEX_MAX_ITEMS = 200

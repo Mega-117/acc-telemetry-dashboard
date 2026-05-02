@@ -70,6 +70,11 @@ const { createSyncScanService } = await import('../app/services/sync/syncScanSer
 const { createSyncQueueService } = await import('../app/services/sync/syncQueueService.ts')
 const { resolveSyncTriggerAction } = await import('../app/services/sync/syncTriggerPolicy.ts')
 
+const autoSyncSource = fs.readFileSync(path.join(nuxtRoot, 'app/services/sync/autoSyncController.ts'), 'utf8')
+const electronSyncSource = fs.readFileSync(path.join(nuxtRoot, 'app/composables/useElectronSync.ts'), 'utf8')
+assert.match(autoSyncSource, /WINDOW_FOCUS_SYNC_THROTTLE_MS/, 'window focus auto-sync must be throttled')
+assert.match(electronSyncSource, /FULL_AUTO_SCAN_DEDUPE_MS/, 'initial full auto scans must be deduplicated')
+
 function hashText(input) {
   return crypto.createHash('sha256').update(input).digest('hex')
 }
@@ -148,6 +153,7 @@ const rawByPath = {
 }
 
 const unchangedText = JSON.stringify(validUnchanged)
+const readFileCalls = []
 const scanService = createSyncScanService({
   electronAPI: {
     getTelemetryFiles: async () => ([
@@ -157,7 +163,10 @@ const scanService = createSyncScanService({
       { name: 'mismatch.json', path: 'mismatch.json', mtime: 4, size: 10 },
       { name: 'invalid.txt', path: 'invalid.txt', mtime: 5, size: 10 }
     ]),
-    readFile: async (filePath) => rawByPath[filePath]
+    readFile: async (filePath) => {
+      readFileCalls.push(filePath)
+      return rawByPath[filePath]
+    }
   },
   loadRegistryCache: async () => ({
     'unchanged.json': {
@@ -166,7 +175,8 @@ const scanService = createSyncScanService({
       sessionId: '2026_04_23T18_00_00_monza',
       uploadedAt: '2026-04-23T19:00:00Z',
       mtime: 2,
-      size: 10
+      size: 10,
+      bestRulesVersion: 999
     }
   }),
   calculateContentHash: async (input) => hashText(input)
@@ -177,6 +187,7 @@ assert.equal(scanResult.pendingFiles.length, 1)
 assert.equal(scanResult.pendingFiles[0]?.fileName, 'pending.json')
 assert.equal(scanResult.unchangedFiles.length, 1)
 assert.equal(scanResult.unchangedFiles[0]?.fileName, 'unchanged.json')
+assert.equal(readFileCalls.includes('unchanged.json'), false, 'unchanged registry hit must not read file content')
 assert.deepEqual(
   scanResult.skippedFiles.map((item) => [item.fileName, item.reason]),
   [

@@ -1,4 +1,4 @@
-import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
+import { BEST_RULES_VERSION, extractMetadata, generateSessionId } from '~/utils/sessionParser'
 import { isSessionFileCandidate } from '~/repositories/telemetryLocalRepository'
 import type { RegistryCacheEntry } from './sessionUploadService'
 
@@ -79,6 +79,25 @@ export function createSyncScanService(params: {
       const filePath = String(file?.path || '')
 
       try {
+        const registryEntry = registrySnapshot[fileName]
+        const registryMetadataHit = !!registryEntry
+          && registryEntry.uploadedBy === ownerId
+          && registryEntry.sessionId
+          && Number(registryEntry.mtime || 0) === Number(file.mtime || 0)
+          && Number(registryEntry.size || 0) === Number(file.size || 0)
+          && Number(registryEntry.bestRulesVersion || 0) >= BEST_RULES_VERSION
+
+        if (registryMetadataHit) {
+          unchangedFiles.push({
+            file,
+            fileName,
+            filePath,
+            fileHash: registryEntry.fileHash,
+            sessionId: registryEntry.sessionId
+          })
+          continue
+        }
+
         const rawObj = await electronAPI?.readFile?.(filePath)
         if (!rawObj || !isSessionFileCandidate(fileName, rawObj)) {
           skippedFiles.push({ file, fileName, filePath, reason: 'invalid_file' })
@@ -100,11 +119,11 @@ export function createSyncScanService(params: {
         const sessionId = generateSessionId(meta.date_start, meta.track)
         const rawText = JSON.stringify(rawObj)
         const fileHash = await calculateContentHash(rawText)
-        const registryEntry = registrySnapshot[fileName]
         const registryHit = !!registryEntry
           && registryEntry.fileHash === fileHash
           && registryEntry.uploadedBy === ownerId
           && registryEntry.sessionId === sessionId
+          && Number(registryEntry.bestRulesVersion || 0) >= BEST_RULES_VERSION
 
         if (registryHit) {
           unchangedFiles.push({

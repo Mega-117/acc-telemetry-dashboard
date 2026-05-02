@@ -28,6 +28,7 @@ import { createSyncScanService, type PendingSyncFile, type TelemetryFileDescript
 import { createSyncQueueService } from '~/services/sync/syncQueueService'
 import { createSyncMaintenanceService } from '~/services/sync/syncMaintenanceService'
 import { refreshSyncProjections } from '~/services/sync/syncProjectionRefreshService'
+import type { UserProjectionDelta } from '~/services/sync/syncUserProjectionDeltaService'
 import { resolveSyncTriggerAction, type SyncTrigger } from '~/services/sync/syncTriggerPolicy'
 import { PILOT_DIRECTORY_SCHEMA_VERSION } from '~/utils/pilotDirectoryFields'
 import { useOwnerDataMaintenance } from './useOwnerDataMaintenance'
@@ -47,6 +48,9 @@ const SYNCED_FILES_RETENTION_DAYS = 30
 let localRegistryCache: Record<string, RegistryCacheEntry> | null = null
 let autoSyncInitialized = false
 let deferredChangedFiles: TelemetryFileDescriptor[] = []
+let lastFullAutoScanCompletedAt = 0
+
+const FULL_AUTO_SCAN_DEDUPE_MS = 5000
 
 interface SyncResult {
     status: 'created' | 'updated' | 'unchanged' | 'skipped' | 'error'
@@ -174,7 +178,9 @@ export function useElectronSync() {
     ): boolean {
         const entry = registry[fileName]
         if (!entry) return false
-        return entry.fileHash === fileHash && entry.uploadedBy === uid
+        return entry.fileHash === fileHash
+            && entry.uploadedBy === uid
+            && Number(entry.bestRulesVersion || 0) >= BEST_RULES_VERSION
     }
 
     async function deleteOldChunks(uid: string, sessionId: string) {
@@ -241,7 +247,8 @@ export function useElectronSync() {
             sessionId: result.sessionId || item.sessionId,
             uploadedAt: new Date().toISOString(),
             mtime: item.file.mtime,
-            size: item.file.size
+            size: item.file.size,
+            bestRulesVersion: BEST_RULES_VERSION
         }
         await electronAPI.updateRegistry(item.fileName, entry)
         if (localRegistryCache) {
@@ -255,6 +262,7 @@ export function useElectronSync() {
         dirtySessionIds: string[]
         dirtyTracks: string[]
         trackBestDeltas: TrackBestProjectionDelta[]
+        userProjectionDeltas: UserProjectionDelta[]
     }> {
         if (pendingFiles.length === 0) {
             syncProgress.value = 100
@@ -263,7 +271,8 @@ export function useElectronSync() {
                 changedCount: 0,
                 dirtySessionIds: [],
                 dirtyTracks: [],
-                trackBestDeltas: []
+                trackBestDeltas: [],
+                userProjectionDeltas: []
             }
         }
 
@@ -311,6 +320,12 @@ export function useElectronSync() {
         const trackBestDeltas = drainResult.results
             .map((result) => result.projectionDelta)
             .filter((delta): delta is TrackBestProjectionDelta => !!delta)
+        const userProjectionDeltas: UserProjectionDelta[] = drainResult.results
+            .filter((result) => (result.status === 'created' || result.status === 'updated') && !!result.projectionDelta)
+            .map((result) => ({
+                ...result.projectionDelta!,
+                status: result.status as 'created' | 'updated'
+            }))
 
         syncProgress.value = 100
         return {
@@ -318,7 +333,8 @@ export function useElectronSync() {
             changedCount: drainResult.changedCount,
             dirtySessionIds: drainResult.dirtySessionIds,
             dirtyTracks: drainResult.dirtyTracks,
-            trackBestDeltas
+            trackBestDeltas,
+            userProjectionDeltas
         }
     }
 
@@ -337,6 +353,14 @@ export function useElectronSync() {
         const uid = payload?.uid || currentUser.value?.uid
         if (!uid) {
             console.log('[SYNC] No user logged in, skipping sync trigger:', trigger)
+            return []
+        }
+
+        if (
+            (trigger === 'windowFocused' || trigger === 'initialFiles')
+            && Date.now() - lastFullAutoScanCompletedAt < FULL_AUTO_SCAN_DEDUPE_MS
+        ) {
+            console.log('[SYNC] Full auto scan recently completed, skipping duplicate trigger:', trigger)
             return []
         }
 
@@ -373,6 +397,7 @@ export function useElectronSync() {
         let changedCount = 0
         let needsTrackBestsRebuild = false
         let trackBestDeltas: TrackBestProjectionDelta[] = []
+        let userProjectionDeltas: UserProjectionDelta[] = []
         let shouldCompleteMaintenanceAfterLocalSync = false
 
         try {
@@ -394,6 +419,10 @@ export function useElectronSync() {
                 files: action.scanMode === 'changed' ? payload?.files : undefined
             })
 
+            if (trigger === 'authReady' || trigger === 'initialFiles' || trigger === 'windowFocused') {
+                lastFullAutoScanCompletedAt = Date.now()
+            }
+
             allResults.push(
                 ...scanResult.unchangedFiles.map(mapUnchangedScanResult),
                 ...scanResult.skippedFiles.map(mapSkippedScanResult)
@@ -404,6 +433,7 @@ export function useElectronSync() {
                 allResults.push(...pendingOutcome.results)
                 changedCount += pendingOutcome.changedCount
                 trackBestDeltas = [...trackBestDeltas, ...pendingOutcome.trackBestDeltas]
+                userProjectionDeltas = [...userProjectionDeltas, ...pendingOutcome.userProjectionDeltas]
             }
 
             if (trigger === 'manualForceSync' && action.runMaintenance) {
@@ -433,7 +463,8 @@ export function useElectronSync() {
                 bestRulesVersion: BEST_RULES_VERSION,
                 reason: `${reasonPrefix}_projection_refresh`,
                 rebuildTrackBests: needsTrackBestsRebuild,
-                trackBestDeltas
+                trackBestDeltas,
+                userProjectionDeltas
             })
 
             if (shouldCompleteMaintenanceAfterLocalSync) {

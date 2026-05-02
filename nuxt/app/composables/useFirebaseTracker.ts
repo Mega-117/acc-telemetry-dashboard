@@ -24,6 +24,7 @@ import {
   type SetOptions
 } from 'firebase/firestore'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
+import { canUseDevTools } from '~/utils/devToolsAccess'
 
 type FirebaseOperationType =
   | 'READ'
@@ -742,7 +743,7 @@ export function useFirebaseMonitor() {
   }
 }
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && canUseDevTools()) {
   ;(window as any).__firebase = {
     summary: printFirebaseSummary,
     totals: getFirebaseTotals,

@@ -150,6 +150,13 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+$devToolsAccessScript = Join-Path $PSScriptRoot 'check_dev_tools_access.mjs'
+node $devToolsAccessScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Dev tools access contract failed'
+    exit 1
+}
+
 $overviewGripBadgesScript = Join-Path $PSScriptRoot 'check_overview_grip_badges.mjs'
 node $overviewGripBadgesScript
 if ($LASTEXITCODE -ne 0) {

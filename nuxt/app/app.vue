@@ -9,6 +9,7 @@ import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useActivityFeed } from '~/composables/useActivityFeed'
 import { endFirebaseScenario, startFirebaseScenario, withFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
+import { canUseDevTools } from '~/utils/devToolsAccess'
 
 // === NUXT ROUTER ===
 const route = useRoute()
@@ -67,7 +68,7 @@ const authState = ref<AuthState>('login')
 const userEmail = ref('')
 const hasInitialized = ref(false)
 const showBrowserMaintenanceNotification = ref(false)
-const isDevRuntime = import.meta.dev
+const showDevFirebaseProbe = computed(() => appState.value === 'dashboard' && canUseDevTools())
 
 // === CONFIG ===
 const REQUIRE_EMAIL_VERIFICATION = ref(false) // Always require email verification
@@ -304,7 +305,7 @@ provide('goToProfile', handleGoToProfile)
       </div>
     </Transition>
 
-    <DevFirebaseProbe v-if="isDevRuntime && appState === 'dashboard'" />
+    <DevFirebaseProbe v-if="showDevFirebaseProbe" />
   </div>
 </template>
 

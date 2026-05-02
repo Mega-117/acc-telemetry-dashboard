@@ -10,6 +10,7 @@ export interface RegistryCacheEntry {
   uploadedBy: string
   sessionId: string
   uploadedAt: string
+  bestRulesVersion?: number
 }
 
 export function splitTextIntoChunks(str: string, size: number): string[] {
@@ -132,6 +133,7 @@ export function createSessionUploadService(params: {
           trackId: meta.track,
           sessionId,
           dateStart: meta.date_start,
+          sessionType: meta.session_type,
           summary: summaryWithRules,
           car: meta.car
         }

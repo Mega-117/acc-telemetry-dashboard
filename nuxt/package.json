@@ -20,6 +20,7 @@
     "check:owner-maintenance-gate": "node scripts/check_owner_maintenance_gate.mjs",
     "check:no-startup-raw-prefetch": "node scripts/check_no_startup_raw_prefetch.mjs",
     "check:firestore-indexes": "node scripts/check_firestore_indexes.mjs",
+    "check:dev-tools-access": "node scripts/check_dev_tools_access.mjs",
     "check:overview-grip-badges": "node scripts/check_overview_grip_badges.mjs",
     "check:pipeline": "powershell -ExecutionPolicy Bypass -File scripts/check_fe_pipeline.ps1"
   },

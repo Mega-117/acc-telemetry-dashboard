@@ -27,6 +27,7 @@ export interface TrackBestProjectionDelta {
   trackId: string
   sessionId: string
   dateStart: string
+  sessionType?: number
   summary: any
   car?: string
 }

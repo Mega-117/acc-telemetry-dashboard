@@ -1,8 +1,39 @@
+import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
 // Determina baseURL: '/' per dev locale, path completo per produzione
 const isDev = process.env.NODE_ENV === 'development'
 const baseURL = isDev ? '/' : '/acc-telemetry-dashboard/docs/'
 // In dev usa _nuxt default, in production usa assets
 const buildAssetsDir = isDev ? '/_nuxt/' : '/assets/'
+
+async function patchWindowsNitroPrerenderImports(dir: string) {
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
+
+  for (const entry of entries) {
+    const path = join(dir, entry.name)
+
+    if (entry.isDirectory()) {
+      await patchWindowsNitroPrerenderImports(path)
+      continue
+    }
+
+    if (!entry.isFile() || !entry.name.endsWith('.mjs')) {
+      continue
+    }
+
+    const source = await readFile(path, 'utf8')
+    const patched = source
+      // Nitro can emit Windows absolute paths inside dynamic imports during
+      // prerender. Node ESM requires file URLs for those imports.
+      .replace(/import\((['"])([A-Za-z]:\/[^'"]+)\1\)/g, 'import($1file:///$2$1)')
+      .replace(/file:\/\/([A-Za-z]:\/)/g, 'file:///$1')
+
+    if (patched !== source) {
+      await writeFile(path, patched, 'utf8')
+    }
+  }
+}
 
 export default defineNuxtConfig({
   ssr: false,
@@ -59,7 +90,15 @@ export default defineNuxtConfig({
     output: {
       // cartella reale nel repo
       publicDir: '../docs'
+    },
+    hooks: {
+      async compiled(nitro) {
+        if (process.platform !== 'win32') {
+          return
+        }
+
+        await patchWindowsNitroPrerenderImports(join(nitro.options.buildDir, 'prerender'))
+      }
     }
   }
 })
-

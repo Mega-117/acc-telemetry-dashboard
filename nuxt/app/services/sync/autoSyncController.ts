@@ -1,5 +1,7 @@
 import type { TelemetryFileDescriptor } from './syncScanService'
 
+const WINDOW_FOCUS_SYNC_THROTTLE_MS = 5000
+
 export function setupAutoSyncController(params: {
   isElectron: boolean
   electronAPI: any
@@ -20,6 +22,8 @@ export function setupAutoSyncController(params: {
 
   if (!isElectron || !electronAPI) return
 
+  let lastWindowFocusSyncAt = 0
+
   electronAPI.onFilesChanged?.(async (data: { new: any[]; modified: any[] }) => {
     const changedFiles = [...(data?.new || []), ...(data?.modified || [])]
     if (changedFiles.length === 0) return
@@ -27,6 +31,9 @@ export function setupAutoSyncController(params: {
   })
 
   electronAPI.onWindowFocused?.(async () => {
+    const now = Date.now()
+    if (now - lastWindowFocusSyncAt < WINDOW_FOCUS_SYNC_THROTTLE_MS) return
+    lastWindowFocusSyncAt = now
     await handleTrigger('windowFocused')
   })
 
