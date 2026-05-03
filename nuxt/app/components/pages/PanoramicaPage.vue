@@ -146,16 +146,26 @@ const pilotContext = usePilotContext()
 const router = useRouter()
 
 const { getDailySuggestionScenarios, generateDailySuggestion, generateDriverState } = useCoachInsights()
-const isDev = import.meta.dev
-const briefingPreviewScenario = ref<'auto' | CoachBriefingScenario>('auto')
+const briefingSelection = ref<'auto' | CoachBriefingScenario>('auto')
 const briefingScenarioOptions = getDailySuggestionScenarios()
 
+const recommendedBriefingScenario = computed<CoachBriefingScenario>(() => {
+  return generateDailySuggestion(activityData.value, null).scenario || 'clean_laps'
+})
+
+const selectedBriefingScenario = computed<CoachBriefingScenario>(() => {
+  return briefingSelection.value === 'auto' ? recommendedBriefingScenario.value : briefingSelection.value
+})
+
 const dailySuggestion = computed(() => {
-  const forcedScenario = briefingPreviewScenario.value === 'auto' ? null : briefingPreviewScenario.value
-  return generateDailySuggestion(activityData.value, forcedScenario)
+  return generateDailySuggestion(activityData.value, selectedBriefingScenario.value)
 })
 
 const briefingToneClass = computed(() => `tone-${dailySuggestion.value.tone || 'race'}`)
+const selectedTrainingLabel = computed(() => {
+  return briefingScenarioOptions.find((scenario) => scenario.id === selectedBriefingScenario.value)?.label || 'Pulizia'
+})
+const briefingModeLabel = computed(() => briefingSelection.value === 'auto' ? 'Beta / 7 giorni' : 'Scelta manuale')
 
 const driverState = computed(() => {
   return generateDriverState(activityData.value)
@@ -204,7 +214,20 @@ const goToTrack = (track: { id: string } | null) => {
               <span class="eyebrow">Briefing operativo</span>
               <h2 class="coach-title">Oggi cosa fare</h2>
             </div>
-            <span class="coach-chip">Beta / 7 giorni</span>
+            <span class="coach-chip">{{ briefingModeLabel }}</span>
+          </div>
+
+          <div class="training-choice">
+            <div class="training-choice__summary">
+              <span>Allenamento</span>
+              <strong>{{ selectedTrainingLabel }}</strong>
+            </div>
+            <select v-model="briefingSelection" aria-label="Scegli allenamento">
+              <option value="auto">Consigliato dai dati</option>
+              <option v-for="scenario in briefingScenarioOptions" :key="scenario.id" :value="scenario.id">
+                {{ scenario.label }}
+              </option>
+            </select>
           </div>
 
           <div class="insight-box" :class="[dailySuggestion.type, briefingToneClass]">
@@ -212,22 +235,12 @@ const goToTrack = (track: { id: string } | null) => {
               <h3>{{ dailySuggestion.message }}</h3>
               <p v-if="dailySuggestion.details">{{ dailySuggestion.details }}</p>
             </div>
-            <NuxtLink :to="prepSessionTarget" class="action-btn">{{ dailySuggestion.ctaLabel || 'Apri preparatore gara' }}</NuxtLink>
+            <NuxtLink :to="prepSessionTarget" class="action-btn">{{ dailySuggestion.ctaLabel || 'Apri allenamento' }}</NuxtLink>
           </div>
 
           <p class="coach-note">
-            Formato, durata e regole operative sono nella scheda preparazione.
+            Il consiglio nasce dagli ultimi 7 giorni. Cambialo se oggi vuoi lavorare su un focus diverso.
           </p>
-
-          <div v-if="isDev" class="briefing-dev-switch">
-            <span>Preview dev</span>
-            <select v-model="briefingPreviewScenario">
-              <option value="auto">Auto dai dati</option>
-              <option v-for="scenario in briefingScenarioOptions" :key="scenario.id" :value="scenario.id">
-                {{ scenario.label }}
-              </option>
-            </select>
-          </div>
         </div>
         
         <div class="driver-state coach-card">
@@ -434,7 +447,8 @@ const goToTrack = (track: { id: string } | null) => {
 .insight-box {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 18px;
+  column-gap: clamp(32px, 4vw, 52px);
+  row-gap: 18px;
   align-items: center;
   padding: 18px 20px;
   border-radius: 14px;
@@ -450,14 +464,78 @@ const goToTrack = (track: { id: string } | null) => {
   border-left-color: var(--briefing-accent-strong);
   background: linear-gradient(90deg, rgba(var(--briefing-accent), 0.13), rgba(255, 255, 255, 0.035));
 }
+.insight-main {
+  max-width: 430px;
+  min-width: 0;
+}
 .insight-box h3 {
   margin: 0 0 8px 0;
   color: var(--text-primary);
   font-size: var(--font-size-lg, 18px);
 }
 .insight-box p {
+  display: -webkit-box;
+  overflow: hidden;
   margin: 0;
   color: var(--text-secondary);
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.training-choice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.42fr);
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.training-choice__summary {
+  min-width: 0;
+}
+
+.training-choice span {
+  display: block;
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.training-choice strong {
+  display: block;
+  margin-top: 5px;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.training-choice select {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(var(--briefing-accent), 0.32);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-weight: 800;
+  outline: none;
+}
+
+.training-choice select:focus {
+  border-color: rgba(var(--briefing-accent), 0.62);
+  box-shadow: 0 0 0 3px rgba(var(--briefing-accent), 0.16);
+}
+
+.training-choice option {
+  color: #111;
 }
 
 .action-btn {
@@ -472,6 +550,7 @@ const goToTrack = (track: { id: string } | null) => {
   text-decoration: none;
   font-weight: 800;
   white-space: nowrap;
+  justify-self: end;
   box-shadow: 0 10px 24px rgba(var(--briefing-accent), 0.2);
   transition: transform 0.2s, box-shadow 0.2s;
 }
@@ -491,39 +570,6 @@ const goToTrack = (track: { id: string } | null) => {
   color: rgba(255, 255, 255, 0.52);
   font-size: 13px;
   line-height: 1.55;
-}
-
-.briefing-dev-switch {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 14px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(0, 153, 255, 0.08);
-  border: 1px dashed rgba(0, 153, 255, 0.24);
-}
-
-.briefing-dev-switch span {
-  color: rgba(255, 255, 255, 0.52);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.briefing-dev-switch select {
-  min-width: 190px;
-  padding: 7px 10px;
-  border-radius: 9px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  font-weight: 700;
-}
-
-.briefing-dev-switch option {
-  color: #111;
 }
 
 .driver-summary {
@@ -585,16 +631,19 @@ const goToTrack = (track: { id: string } | null) => {
     grid-template-columns: 1fr;
   }
 
+  .insight-main {
+    max-width: none;
+  }
+
   .action-btn {
     width: 100%;
   }
 
-  .briefing-dev-switch {
-    align-items: stretch;
-    flex-direction: column;
+  .training-choice {
+    grid-template-columns: 1fr;
   }
 
-  .briefing-dev-switch select {
+  .training-choice select {
     width: 100%;
   }
 

@@ -25,40 +25,40 @@ const dailySuggestionScenarios: Record<CoachBriefingScenario, Insight> = {
     tone: 'success',
     scenario: 'tracktitan_input',
     message: 'Oggi fai TrackTitan',
-    details: 'Motivo: serve correggere input precisi. Target: 1-2 segmenti dove freno e gas sono diversi dal riferimento.',
-    ctaLabel: 'Apri preparazione'
+    details: 'Correggi freno e gas su 1-2 segmenti rispetto al riferimento.',
+    ctaLabel: 'Apri allenamento'
   },
   clean_laps: {
     type: 'actionable',
     tone: 'baseline',
     scenario: 'clean_laps',
     message: 'Oggi fai Pulizia',
-    details: 'Motivo: serve controllo anche mentre spingi. Target: giri validi consecutivi e almeno 85% validi.',
-    ctaLabel: 'Apri preparazione'
+    details: 'Chiudi giri validi consecutivi: target 85% validi.',
+    ctaLabel: 'Apri allenamento'
   },
   qualifying: {
     type: 'actionable',
     tone: 'clean',
     scenario: 'qualifying',
     message: 'Oggi fai Qualifica',
-    details: 'Motivo: serve prestazione in pochi tentativi. Target: 1 giro forte valido senza girare a oltranza.',
-    ctaLabel: 'Apri preparazione'
+    details: 'Trova 1 giro forte valido in pochi tentativi.',
+    ctaLabel: 'Apri allenamento'
   },
   consistency: {
     type: 'actionable',
     tone: 'pace',
     scenario: 'consistency',
     message: 'Oggi fai Costanza',
-    details: 'Motivo: il giro buono va reso ripetibile. Target: passo stabile con fuel coerente da gara.',
-    ctaLabel: 'Apri preparazione'
+    details: 'Tieni passo stabile con fuel coerente da gara.',
+    ctaLabel: 'Apri allenamento'
   },
   race_real: {
     type: 'actionable',
     tone: 'race',
     scenario: 'race_real',
     message: 'Oggi fai Gara vera',
-    details: 'Motivo: serve allenare partenza, traffico, pressione e pit. Target: completare senza caos.',
-    ctaLabel: 'Apri preparazione'
+    details: 'Allena partenza, traffico, pressione e pit senza caos.',
+    ctaLabel: 'Apri allenamento'
   }
 }
 
