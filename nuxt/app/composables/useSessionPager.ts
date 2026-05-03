@@ -52,6 +52,13 @@ type PagerState = {
     hasPrev: boolean
     totalItems: number | null
     loading: boolean
+    diagnostics: {
+        source: 'cloud_page' | 'mixed' | 'local_offline'
+        cloudCount: number
+        localCount: number
+        localOverlayCount: number
+        pendingLocalCount: number
+    }
 }
 
 const globalSessions = ref<SessionDocument[]>([])
@@ -61,7 +68,14 @@ const globalState = ref<PagerState>({
     hasNext: false,
     hasPrev: false,
     totalItems: null,
-    loading: false
+    loading: false,
+    diagnostics: {
+        source: 'cloud_page',
+        cloudCount: 0,
+        localCount: 0,
+        localOverlayCount: 0,
+        pendingLocalCount: 0
+    }
 })
 const globalError = ref<string | null>(null)
 const globalOnline = ref(true)
@@ -465,7 +479,14 @@ function countLocalOnlySessions(
     localSessions: SessionDocument[],
     cloudIdentities: { ids: Set<string>; logicalKeys: Set<string> }
 ): number {
-    const checks = localSessions.map((session) => {
+    return selectLocalOverlaySessions(localSessions, cloudIdentities).length
+}
+
+function selectLocalOverlaySessions(
+    localSessions: SessionDocument[],
+    cloudIdentities: { ids: Set<string>; logicalKeys: Set<string> }
+): SessionDocument[] {
+    return localSessions.filter((session) => {
         if (session.syncState === 'synced') return false
         if (!session.sessionId) return true
         if (cloudIdentities.ids.has(session.sessionId)) return false
@@ -473,7 +494,6 @@ function countLocalOnlySessions(
         if (logicalKey && cloudIdentities.logicalKeys.has(logicalKey)) return false
         return true
     })
-    return checks.filter(Boolean).length
 }
 
 async function buildMergedOnlineOwnerPage(
@@ -495,6 +515,7 @@ async function buildMergedOnlineOwnerPage(
         resolveCloudTotalsOnly(targetUserId, filters),
         loadCloudIdentitySet(targetUserId)
     ])
+    const localOverlay = selectLocalOverlaySessions(localFiltered, cloudIdentities)
     const localOnlyCount = countLocalOnlySessions(localFiltered, cloudIdentities)
 
     const mergedTotal = cloudTotal !== null ? cloudTotal + localOnlyCount : null
@@ -518,7 +539,7 @@ async function buildMergedOnlineOwnerPage(
             continue
         }
 
-        const mergedPreview = buildMergedSessionPage(localFiltered, accumulatedCloud, requestedSafePage, pageSize)
+        const mergedPreview = buildMergedSessionPage(localOverlay, accumulatedCloud, requestedSafePage, pageSize)
         if (mergedPreview.total > endExclusive || !cloudHasNext) {
             let finalPage = requestedSafePage
             let finalTotal = mergedTotal
@@ -526,7 +547,7 @@ async function buildMergedOnlineOwnerPage(
                 finalTotal = mergedPreview.total
                 finalPage = Math.min(finalPage, Math.max(1, Math.ceil(finalTotal / pageSize)))
             }
-            const finalMerged = buildMergedSessionPage(localFiltered, accumulatedCloud, finalPage, pageSize)
+            const finalMerged = buildMergedSessionPage(localOverlay, accumulatedCloud, finalPage, pageSize)
             const start = (finalMerged.safePage - 1) * pageSize
             const hasNext = finalTotal !== null
                 ? start + pageSize < finalTotal
@@ -594,6 +615,13 @@ export function useSessionPager() {
                 globalState.value.hasPrev = mergedResult.hasPrev
                 globalState.value.hasNext = mergedResult.hasNext
                 globalState.value.totalItems = mergedResult.totalItems
+                globalState.value.diagnostics = {
+                    source: mergedResult.pageSessions.some((session) => session.source === 'local') ? 'mixed' : 'cloud_page',
+                    cloudCount: mergedResult.pageSessions.filter((session) => session.source !== 'local').length,
+                    localCount: localSessions.length,
+                    localOverlayCount: mergedResult.pageSessions.filter((session) => session.source === 'local').length,
+                    pendingLocalCount: localSessions.filter((session) => session.syncState !== 'synced').length
+                }
                 return globalSessions.value
             }
 
@@ -612,6 +640,13 @@ export function useSessionPager() {
                 globalState.value.hasPrev = safePage > 1
                 globalState.value.hasNext = start + pageSize < total
                 globalState.value.totalItems = total
+                globalState.value.diagnostics = {
+                    source: 'local_offline',
+                    cloudCount: 0,
+                    localCount: localSessions.length,
+                    localOverlayCount: pageSlice.length,
+                    pendingLocalCount: pageSlice.length
+                }
                 return globalSessions.value
             }
 
@@ -634,6 +669,13 @@ export function useSessionPager() {
             globalState.value.hasPrev = reachablePage > 1
             globalState.value.hasNext = cloudResult.hasNext
             globalState.value.totalItems = await resolveTotals(targetUserId, filters)
+            globalState.value.diagnostics = {
+                source: pageSessions.some((session) => session.source === 'local') ? 'mixed' : 'cloud_page',
+                cloudCount: pageSessions.filter((session) => session.source !== 'local').length,
+                localCount: localSessions.length,
+                localOverlayCount: pageSessions.filter((session) => session.source === 'local').length,
+                pendingLocalCount: localSessions.filter((session) => session.syncState !== 'synced').length
+            }
             return globalSessions.value
         } catch (e: any) {
             globalError.value = e?.message || 'Errore caricamento sessioni paginato'

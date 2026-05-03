@@ -383,6 +383,12 @@ export function useElectronSync() {
         }
 
         const action = resolveSyncTriggerAction(trigger)
+
+        if (action.scanMode === 'none') {
+            console.log('[SYNC] Lightweight trigger acknowledged without scan:', trigger)
+            return []
+        }
+
         const reasonPrefix = `sync_${trigger}`
         const scenarioId = startFirebaseScenario(`sync.${trigger}`, {
             trigger,
@@ -418,7 +424,7 @@ export function useElectronSync() {
             queueService.setStatus('scanning')
             const scanResult = await getScanService().scanPendingFiles({
                 ownerId: uid,
-                files: action.scanMode === 'changed' ? payload?.files : undefined
+                files: action.scanMode === 'changed' ? (payload?.files || []) : undefined
             })
 
             if (trigger === 'authReady' || trigger === 'initialFiles' || trigger === 'windowFocused') {

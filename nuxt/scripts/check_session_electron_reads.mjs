@@ -24,6 +24,11 @@ assert.ok(
 )
 
 assert.ok(
+  source.includes('function selectLocalOverlaySessions'),
+  'Electron online merge must use local sessions only as pending/local-only overlay.'
+)
+
+assert.ok(
   source.includes('function loadCloudIdentitySet'),
   'useSessionPager should use the user sessionIndex identity set instead of per-session reads.'
 )
@@ -31,6 +36,11 @@ assert.ok(
 assert.ok(
   source.includes('fetchedAtLeastOneCloudPage'),
   'Electron online merge should fetch at least one cloud page before deciding the merged page from local files.'
+)
+
+assert.ok(
+  source.includes('diagnostics') && source.includes('localOverlayCount'),
+  'useSessionPager should expose lightweight merge diagnostics for Electron QA.'
 )
 
 console.log('[SESSION_ELECTRON_READS] OK')

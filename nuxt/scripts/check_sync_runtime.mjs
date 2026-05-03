@@ -81,8 +81,8 @@ function hashText(input) {
 
 const triggerExpectations = {
   filesChanged: { scanMode: 'changed', processPending: true, runMaintenance: false, interactive: false },
-  windowFocused: { scanMode: 'full', processPending: true, runMaintenance: false, interactive: false },
-  initialFiles: { scanMode: 'full', processPending: true, runMaintenance: false, interactive: false },
+  windowFocused: { scanMode: 'none', processPending: false, runMaintenance: false, interactive: false },
+  initialFiles: { scanMode: 'none', processPending: false, runMaintenance: false, interactive: false },
   authReady: { scanMode: 'full', processPending: true, runMaintenance: true, interactive: false },
   manualForceSync: { scanMode: 'full', processPending: true, runMaintenance: true, interactive: true }
 }

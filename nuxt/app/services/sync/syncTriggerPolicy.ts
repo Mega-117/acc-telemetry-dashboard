@@ -7,7 +7,7 @@ export type SyncTrigger =
 
 export interface SyncTriggerAction {
   trigger: SyncTrigger
-  scanMode: 'full' | 'changed'
+  scanMode: 'full' | 'changed' | 'none'
   processPending: boolean
   runMaintenance: boolean
   interactive: boolean
@@ -26,16 +26,16 @@ export function resolveSyncTriggerAction(trigger: SyncTrigger): SyncTriggerActio
     case 'windowFocused':
       return {
         trigger,
-        scanMode: 'full',
-        processPending: true,
+        scanMode: 'none',
+        processPending: false,
         runMaintenance: false,
         interactive: false
       }
     case 'initialFiles':
       return {
         trigger,
-        scanMode: 'full',
-        processPending: true,
+        scanMode: 'none',
+        processPending: false,
         runMaintenance: false,
         interactive: false
       }
