@@ -1,0 +1,1 @@
+import{e as a,g as n,h as o,c as s,o as t,a as r,_ as c}from"./5uCjDcH1.js";const d={class:"loading-redirect"},i=a({__name:"index",setup(_){return n(()=>{o("/panoramica")}),(p,e)=>(t(),s("div",d,[...e[0]||(e[0]=[r("div",{class:"loading-spinner"},null,-1)])]))}}),m=c(i,[["__scopeId","data-v-f6a9e3a5"]]);export{m as default};

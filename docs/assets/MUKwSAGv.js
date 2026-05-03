@@ -1,0 +1,1 @@
+import{_ as t}from"./BeEB6g9H.js";import{e as a,f as e,o as r}from"./5uCjDcH1.js";import"./Dyhujkto.js";import"./Bp0dLI4J.js";import"./CFFuvH4t.js";import"./B1JJ9Quq.js";import"./CeDJDBYB.js";const x=a({__name:"panoramica",setup(n){return(m,p)=>{const o=t;return r(),e(o)}}});export{x as default};
