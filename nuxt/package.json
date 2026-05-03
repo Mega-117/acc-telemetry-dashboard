@@ -24,7 +24,9 @@
     "check:firestore-indexes": "node scripts/check_firestore_indexes.mjs",
     "check:dev-tools-access": "node scripts/check_dev_tools_access.mjs",
     "check:overview-grip-badges": "node scripts/check_overview_grip_badges.mjs",
-    "check:pipeline": "powershell -ExecutionPolicy Bypass -File scripts/check_fe_pipeline.ps1"
+    "check:pipeline": "powershell -ExecutionPolicy Bypass -File scripts/check_fe_pipeline.ps1",
+    "typecheck": "nuxi typecheck",
+    "check:typecheck": "npm run typecheck"
   },
   "dependencies": {
     "chart.js": "^4.5.1",
@@ -36,6 +38,8 @@
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
-    "sass": "^1.97.2"
+    "sass": "^1.97.2",
+    "typescript": "^6.0.3",
+    "vue-tsc": "^3.2.7"
   }
 }

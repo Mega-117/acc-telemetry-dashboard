@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { collection, query, orderBy, doc, where, limit, DocumentReference, Query } from 'firebase/firestore'
 import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedUpdateDoc, trackedWriteBatch } from './useFirebaseTracker'
 import { db } from '~/config/firebase'

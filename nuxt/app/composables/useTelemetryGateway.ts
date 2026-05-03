@@ -98,6 +98,8 @@ type TrackBestTimes = {
     bestAvgRaceGrip?: string | null
 }
 
+type TrackBestTimeField = 'bestQualy' | 'bestRace' | 'bestAvgRace'
+
 type TrackStatProjection = {
     track: string
     sessions: number
@@ -266,7 +268,7 @@ function buildTrackBestsMapFromDocs(trackBestDocs: Record<string, any>): Record<
 
 function updateBestTime(
     target: TrackBestTimes,
-    field: keyof TrackBestTimes,
+    field: TrackBestTimeField,
     candidate: number | null | undefined
 ): void {
     if (!candidate) return

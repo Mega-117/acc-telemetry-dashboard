@@ -33,6 +33,8 @@ async function invokeReprocess(payload: { filePaths?: string[] } = {}): Promise<
     filePaths: normalizeFilePaths(payload.filePaths)
   })
 
+  if (!result) return null
+
   if (result?.ok === false) {
     console.warn('[CANONICAL] Local summary reprocess failed:', result.error || result.stderr || 'unknown error')
   } else if ((result?.updated || 0) > 0) {

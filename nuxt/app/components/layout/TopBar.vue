@@ -4,6 +4,7 @@
 // ============================================
 
 import { computed, ref, onMounted } from 'vue'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
 const props = defineProps<{
   userName?: string
@@ -49,8 +50,9 @@ async function loadVoices() {
     const data = await res.json()
     availableVoices.value = data.voices || []
     ttsServerAvailable.value = availableVoices.value.length > 0
-    if (availableVoices.value.length > 0 && !selectedVoice.value) {
-      selectedVoice.value = availableVoices.value[0].id
+    const firstVoice = availableVoices.value[0]
+    if (firstVoice && !selectedVoice.value) {
+      selectedVoice.value = firstVoice.id
     }
     console.log(`[VOICE] TTS Server: ${availableVoices.value.length} voci disponibili`)
   } catch {

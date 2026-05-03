@@ -5,6 +5,8 @@
 // ============================================
 
 import { ref, watch } from 'vue'
+import { usePilotContext } from '~/composables/usePilotContext'
+import { usePublicPath } from '~/composables/usePublicPath'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import type { TrackOverviewProjectionItem } from '~/types/trackProjections'
 

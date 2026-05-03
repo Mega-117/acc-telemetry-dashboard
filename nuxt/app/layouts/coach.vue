@@ -3,6 +3,8 @@
 // Coach/Admin Layout - Area for coach tools and admin management
 // ============================================
 
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+
 const { userDisplayName, logout: firebaseLogout, isCoach, isAdmin, userRole } = useFirebaseAuth()
 
 // Redirect non-coaches and non-admins

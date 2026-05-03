@@ -66,6 +66,12 @@ if ($missingGateway.Count -gt 0 -or $legacyHits.Count -gt 0) {
 
 Write-Output "[PIPELINE_CHECK] Structural checks OK - files checked: $($files.Count)"
 
+npm run typecheck
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Nuxt typecheck failed'
+    exit 1
+}
+
 $parityScript = Join-Path $PSScriptRoot 'check_projection_parity.mjs'
 node $parityScript
 if ($LASTEXITCODE -ne 0) {

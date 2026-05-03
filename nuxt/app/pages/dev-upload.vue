@@ -7,6 +7,7 @@ import { ref } from 'vue'
 import { doc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { trackedDeleteDoc, trackedGetDoc, trackedGetDocs, trackedSetDoc } from '~/composables/useFirebaseTracker'
 
 const CALLER = 'DevUpload'

@@ -6,6 +6,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
+import { providePilotContext } from '~/composables/usePilotContext'
 import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc } from '~/composables/useFirebaseTracker'
 
 definePageMeta({

@@ -35,6 +35,7 @@ import {
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useCoachInsights } from '~/composables/useCoachInsights'
 import { runSessionValidation } from '~/composables/useDebugValidator'
+import { usePilotContext } from '~/composables/usePilotContext'
 import { shareSessionLink } from '~/services/session-detail/sessionShareService'
 import { autoSelectComparisonStints } from '~/services/session-detail/sessionCompareService'
 import { buildBestSectorSummary, buildComparisonRows } from '~/services/session-detail/sessionComparisonTableService'
@@ -1121,7 +1122,7 @@ const currentCrossTabLaps = computed(() => activeTableTab.value === 'A' ? crossS
 const currentCrossTabStint = computed(() => activeTableTab.value === 'A' ? crossStintA.value : crossStintB.value)
 
 // Get laps for individual stint tabs (handles A-{num} and B-{num} format)
-function getLapsForTable() {
+function getLapsForTable(): any[] {
   const tab = activeTableTab.value
   
   // Parse tab format: 'A-1', 'A-2', 'B-1', 'B-2', etc.
@@ -1328,14 +1329,14 @@ watch([bestRaceStint, bestQualyStint], ([rBest, qBest]) => {
 })
 
 // Helper to check if stint is best in its category
-function isBestStint(stint: typeof session.value.stints[0]): boolean {
+function isBestStint(stint: { type: string; number: number }): boolean {
   if (stint.type === 'Q') return bestQualyStint.value?.number === stint.number
   if (stint.type === 'R') return bestRaceStint.value?.number === stint.number
   return false
 }
 
 // Helper to check stint reliability - returns warning info or null if OK
-function getStintWarning(stint: typeof session.value.stints[0]): { icon: string; message: string } | null {
+function getStintWarning(stint: { type: string; number: number }): { icon: string; message: string } | null {
   const laps = session.value.lapsData[stint.number as keyof typeof session.value.lapsData] || []
   const nonPitLaps = laps.filter(l => !l.pit)
   const validLaps = nonPitLaps.filter(l => l.valid)

@@ -20,6 +20,8 @@ import {
   CAR_CATEGORIES,
   type CarCategory
 } from '~/composables/useTelemetryData'
+import { usePilotContext } from '~/composables/usePilotContext'
+import { usePublicPath } from '~/composables/usePublicPath'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import type { TrackDetailProjection } from '~/types/trackProjections'
 

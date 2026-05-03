@@ -12,6 +12,7 @@ import {
   formatTime,
   getSessionTypeLabel
 } from '~/composables/useTelemetryData'
+import { usePilotContext } from '~/composables/usePilotContext'
 import { useTelemetryGateway, type SessionPagerFilters } from '~/composables/useTelemetryGateway'
 
 // Emit to parent for navigation
