@@ -164,7 +164,7 @@ const driverState = computed(() => {
 const prepSessionTarget = computed(() => ({
   path: '/preparazione',
   query: {
-    scenario: dailySuggestion.value.scenario || 'race_volume_low'
+    scenario: dailySuggestion.value.scenario || 'race_real'
   }
 }))
 

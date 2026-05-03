@@ -1,213 +1,373 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import type { CoachBriefingScenario } from '~/composables/useCoachInsights'
 
 definePageMeta({
   layout: 'dashboard'
 })
 
 type PrepTone = 'baseline' | 'pace' | 'race' | 'clean' | 'success'
+type TrainingId = 'tracktitan_input' | 'clean_laps' | 'qualifying' | 'consistency' | 'race_real'
+type DurationId = '20' | '30' | '40' | '60'
 
-interface PrepScenario {
-  id: CoachBriefingScenario
+interface TimelineStep {
+  label: string
+  duration: string
+  detail: string
+}
+
+interface DurationPlan {
+  id: DurationId
+  label: string
+  totalLabel: string
+  timeline: TimelineStep[]
+}
+
+interface TrainingPlan {
+  id: TrainingId
   label: string
   tone: PrepTone
   title: string
-  subtitle: string
-  objective: string
+  intro: string
   sessionType: string
   fuelHint: string
-  warmupLabel: string
-  workLabel: string
+  targetHint: string
+  referenceHint: string
   focus: string
   target: string
+  objective: string
+  durations: DurationPlan[]
+  goals: string[]
   doRules: string[]
   avoidRules: string[]
-  completionRules: string[]
 }
 
 const route = useRoute()
 
-const scenarioOrder: CoachBriefingScenario[] = [
-  'no_recent_activity',
-  'qualify_to_race',
-  'clean_laps_focus',
-  'race_volume_low',
-  'completed_next_step'
+const trainingOrder: TrainingId[] = [
+  'tracktitan_input',
+  'clean_laps',
+  'qualifying',
+  'consistency',
+  'race_real'
 ]
 
-const scenarios: Record<CoachBriefingScenario, PrepScenario> = {
-  no_recent_activity: {
-    id: 'no_recent_activity',
+const legacyScenarioMap: Record<string, TrainingId> = {
+  no_recent_activity: 'clean_laps',
+  qualify_to_race: 'consistency',
+  clean_laps_focus: 'qualifying',
+  race_volume_low: 'race_real',
+  completed_next_step: 'race_real'
+}
+
+const trainingPlans: Record<TrainingId, TrainingPlan> = {
+  tracktitan_input: {
+    id: 'tracktitan_input',
+    label: 'TrackTitan',
+    tone: 'success',
+    title: 'TrackTitan Input Match',
+    intro: 'Correggi freno e gas nei segmenti dove sei diverso dal riferimento. Non inseguire il delta: sistema gli input.',
+    sessionType: 'Prova libera',
+    fuelHint: 'Stabile, come il riferimento',
+    targetHint: '2 segmenti corretti',
+    referenceHint: 'Coach o giro confronto',
+    focus: 'Brake / throttle',
+    target: '2 segmenti corretti',
+    objective: 'Confronta pochi segmenti, correggi gli input e torna subito in pista per renderli ripetibili.',
+    durations: [
+      {
+        id: '30',
+        label: '30 min',
+        totalLabel: '30 min totali',
+        timeline: [
+          { label: 'Guida', duration: '10 min', detail: 'Gira pulito e salva un riferimento recente.' },
+          { label: 'TrackTitan', duration: '6 min', detail: 'Scegli 1-2 segmenti con input molto diversi.' },
+          { label: 'Run mirata', duration: '10 min', detail: 'Ripeti quei punti con brake e throttle corretti.' },
+          { label: 'Note', duration: '4 min', detail: 'Segna cosa cambia e cosa resta da correggere.' }
+        ]
+      },
+      {
+        id: '60',
+        label: '60 min',
+        totalLabel: '60 min totali',
+        timeline: [
+          { label: 'Guida', duration: '10 min', detail: 'Crea il riferimento della sessione.' },
+          { label: 'TrackTitan', duration: '8 min', detail: 'Scegli pochi segmenti, non tutto il giro.' },
+          { label: 'Run mirata', duration: '17 min', detail: 'Lavora sul primo blocco di correzioni.' },
+          { label: 'Run conferma', duration: '20 min', detail: 'Ripeti senza forzare il tempo.' },
+          { label: 'Note', duration: '5 min', detail: 'Scrivi i segmenti da tenere nel prossimo lavoro.' }
+        ]
+      }
+    ],
+    goals: [
+      'Scegli 1-2 segmenti con input molto diversi.',
+      'Rendi freno e gas piu simili al riferimento.',
+      'Verifica se il segmento diventa piu pulito.'
+    ],
+    doRules: [
+      'Guarda soprattutto freno e acceleratore.',
+      'Lavora su pochi segmenti.',
+      'Torna subito in pista dopo il confronto.'
+    ],
+    avoidRules: [
+      'Inseguire solo il delta.',
+      'Cambiare troppi punti insieme.',
+      'Trasformare il lavoro in hotlap.'
+    ]
+  },
+  clean_laps: {
+    id: 'clean_laps',
     label: 'Pulizia',
     tone: 'baseline',
-    title: 'Sessione Pulizia',
-    subtitle: 'Prima di parlare di passo o best devi tenere la macchina in pista.',
-    objective: 'Dopo il warm-up fai 30 minuti di lavoro pulizia. Guida sotto al limite: oggi conta solo chiudere giri validi.',
+    title: 'Allenamento Pulizia',
+    intro: 'Allena giri validi guidando con ritmo. Devi essere pulito anche quando spingi, non solo andando piano.',
     sessionType: 'Prova libera',
     fuelHint: 'Medio e stabile',
-    warmupLabel: '10 min warm-up',
-    workLabel: '30 min pulizia',
+    targetHint: '85% giri validi',
+    referenceHint: 'Validita e punti critici',
     focus: 'Giri validi',
-    target: '85% giri validi',
+    target: 'Giri validi consecutivi',
+    objective: 'Chiudi giri validi a ritmo vero, con margine nei punti dove di solito sporchi il giro.',
+    durations: [
+      {
+        id: '30',
+        label: '30 min',
+        totalLabel: '30 min totali',
+        timeline: [
+          { label: 'Warm-up', duration: '10 min', detail: 'Porta gomme e riferimenti in finestra.' },
+          { label: 'Lavoro pulito', duration: '15 min', detail: 'Spingi con margine e chiudi giri validi.' },
+          { label: 'Note', duration: '5 min', detail: 'Segna dove invalidi o perdi controllo.' }
+        ]
+      },
+      {
+        id: '60',
+        label: '60 min',
+        totalLabel: '60 min totali',
+        timeline: [
+          { label: 'Warm-up', duration: '10 min', detail: 'Stabilizza gomme, riferimenti e ritmo.' },
+          { label: 'Blocco 1', duration: '20 min', detail: 'Giri validi con margine sui punti critici.' },
+          { label: 'Review', duration: '5 min', detail: 'Guarda dove sporchi e cosa ripetere.' },
+          { label: 'Blocco 2', duration: '20 min', detail: 'Ripeti il lavoro senza alzare il rischio.' },
+          { label: 'Note', duration: '5 min', detail: 'Segna invalidi, errori e prossima priorita.' }
+        ]
+      }
+    ],
+    goals: [
+      'Chiudi almeno 85% giri validi.',
+      'Tieni piu giri consecutivi senza errori grossi.',
+      'Spingi con controllo, senza passeggiare.'
+    ],
     doRules: [
-      'Guida sotto al limite, con margine sui punti dove invalidi spesso.',
-      'Usa riferimenti semplici in frenata e uscita curva.',
-      'Tieni la macchina in pista: il tempo oggi non conta.'
+      'Tieni margine nei punti dove invalidi.',
+      'Usa riferimenti semplici.',
+      'Spingi solo dove hai controllo.'
     ],
     avoidRules: [
-      'Hotlap e cordoli rischiosi.',
-      'Cambiare setup o fuel durante la run.',
-      'Compensare un errore spingendo ancora di piu nel giro dopo.'
-    ],
-    completionRules: [
-      'Almeno 85% dei giri validi',
-      'Nessuna ricerca del limite negli ultimi giri',
-      'Dati puliti per passare a costanza o qualifica'
+      'Cordoli rischiosi.',
+      'Hotlap forzato.',
+      'Recuperare un errore spingendo di piu.'
     ]
   },
-  qualify_to_race: {
-    id: 'qualify_to_race',
-    label: 'Costanza',
-    tone: 'pace',
-    title: 'Sessione Costanza',
-    subtitle: 'Il giro veloce serve poco se non riesci a ripeterlo.',
-    objective: 'Nel lavoro vero fai 2 blocchi da 15 minuti. Crea un riferimento valido e resta vicino a quel ritmo, senza trasformarlo in qualifica.',
-    sessionType: 'Prova libera',
-    fuelHint: 'Medio e stabile',
-    warmupLabel: '10 min warm-up',
-    workLabel: '2 blocchi da 15 min',
-    focus: 'Delta dal best blocco',
-    target: '8 giri entro +0.8',
-    doRules: [
-      'Crea un best valido del blocco e usalo come riferimento.',
-      'Ripeti il giro buono senza cercare ogni volta il limite.',
-      'Mantieni fuel e setup identici tra i blocchi.'
-    ],
-    avoidRules: [
-      'Trasformare la run in una qualifica lunga.',
-      'Valutare solo il giro piu veloce.',
-      'Cambiare ritmo dopo ogni piccolo errore.'
-    ],
-    completionRules: [
-      'Almeno 8 giri validi nel delta',
-      'Niente cambio setup tra i blocchi',
-      'Best e media leggibili nello stesso lavoro'
-    ]
-  },
-  race_volume_low: {
-    id: 'race_volume_low',
-    label: 'Long run',
-    tone: 'race',
-    title: 'Sessione Long run',
-    subtitle: 'Qui alleni gara vera: ritmo, validita, gestione e lucidita fino alla fine.',
-    objective: 'Nel lavoro vero fai 30 minuti continui. Conta portare ritmo e validita fino alla fine, non il singolo giro.',
-    sessionType: 'Prova libera o gara',
-    fuelHint: 'Mezzo serbatoio o pieno',
-    warmupLabel: '10 min warm-up',
-    workLabel: '30 min stint continuo',
-    focus: 'Tenuta passo',
-    target: '90% validi + passo entro +1.0',
-    doRules: [
-      'Guida uno stint continuo senza fermarti.',
-      'Porta ritmo e validita fino agli ultimi giri.',
-      'Usa fuel medio/alto e setup stabile.'
-    ],
-    avoidRules: [
-      'Cercare un settore veloce sacrificando il giro dopo.',
-      'Fermarti per correggere setup durante il lavoro.',
-      'Ignorare il calo finale: e parte dell esercizio.'
-    ],
-    completionRules: [
-      'Almeno 90% giri validi',
-      'Passo medio entro +1.0 dal best stint',
-      'Ultimi giri senza crollo enorme'
-    ]
-  },
-  clean_laps_focus: {
-    id: 'clean_laps_focus',
+  qualifying: {
+    id: 'qualifying',
     label: 'Qualifica',
     tone: 'clean',
-    title: 'Sessione Qualifica',
-    subtitle: 'Allena pressione e giro secco: pochi tentativi, niente mezzora per trovare il tempo.',
-    objective: 'Nel lavoro vero fai 3 run brevi: outlap e 2-3 giri push. Devi tirare fuori un giro valido forte in pochi tentativi.',
+    title: 'Allenamento Qualifica',
+    intro: 'Allena il giro forte quando serve. Pochi tentativi, pressione alta, niente mezzora per trovare il giro buono.',
     sessionType: 'Qualifica',
-    fuelHint: 'Massimo 20 L',
-    warmupLabel: '10 min warm-up',
-    workLabel: '3 run da 10 min',
+    fuelHint: 'Basso, massimo 20 L',
+    targetHint: '1 giro forte valido',
+    referenceHint: 'Best pista o target manuale',
     focus: 'Giro competitivo',
-    target: '1 giro forte per run',
+    target: '1 giro forte valido',
+    objective: 'Tira fuori un giro valido forte in pochi tentativi, senza aspettare mezzora per il giro perfetto.',
+    durations: [
+      {
+        id: '30',
+        label: '30 min',
+        totalLabel: '30 min totali',
+        timeline: [
+          { label: 'Warm-up', duration: '10 min', detail: 'Prepara riferimenti e gomme.' },
+          { label: 'Run qualifica', duration: '15 min', detail: 'Outlap e pochi push lap per run.' },
+          { label: 'Note', duration: '5 min', detail: 'Segna dove perdi il giro valido.' }
+        ]
+      },
+      {
+        id: '60',
+        label: '60 min',
+        totalLabel: '60 min totali',
+        timeline: [
+          { label: 'Warm-up', duration: '10 min', detail: 'Riferimenti chiari prima dei push.' },
+          { label: 'Run qualifica', duration: '40 min', detail: 'Pochi tentativi per run, pressione alta.' },
+          { label: 'Review', duration: '5 min', detail: 'Controlla validita e best dei blocchi.' },
+          { label: 'Note', duration: '5 min', detail: 'Scrivi cosa portare alla prossima qualifica.' }
+        ]
+      }
+    ],
+    goals: [
+      'Tira fuori almeno 1 giro valido competitivo.',
+      'Butta via pochi tentativi.',
+      'Il primo push lap deve gia essere serio.'
+    ],
     doRules: [
-      'Ogni run: outlap e pochi giri push.',
-      'Crea un riferimento e prova a replicarlo subito.',
-      'Accetta pochi tentativi: qui conta performare su richiesta.'
+      'Usa fuel basso.',
+      'Fai outlap pulito.',
+      'Spingi deciso nei lap utili.'
     ],
     avoidRules: [
-      'Girare mezzora finche arriva il giro buono.',
-      'Invalidare run intere per cercare troppo cordolo.',
-      'Cambiare setup tra una run e l altra.'
-    ],
-    completionRules: [
-      'Almeno 1 giro valido competitivo per run',
-      'Pochi tentativi buttati via',
-      'Riferimento chiaro tra run 1, 2 e 3'
+      'Girare a oltranza.',
+      'Invalidare cercando troppo cordolo.',
+      'Cambiare setup tra le run.'
     ]
   },
-  completed_next_step: {
-    id: 'completed_next_step',
-    label: 'Traffico',
-    tone: 'success',
-    title: 'Sessione Traiettorie / traffico',
-    subtitle: 'Se sai guidare solo sulla traiettoria ideale, sai fare hotlap ma non sai ancora correre.',
-    objective: 'Nel lavoro vero fai tre gare brevi o tre blocchi trafficati. Parti in mezzo al gruppo e chiudi pulito, anche riducendo il ritmo.',
-    sessionType: 'Gara AI o multiplayer',
-    fuelHint: 'Medio / gara breve',
-    warmupLabel: '10 min warm-up',
-    workLabel: '3 gare brevi',
-    focus: 'Adattamento',
-    target: 'Pulito fuori linea',
+  consistency: {
+    id: 'consistency',
+    label: 'Costanza',
+    tone: 'pace',
+    title: 'Allenamento Costanza',
+    intro: 'Allena passo gara da solo. Il giro veloce conta poco se non riesci a ripeterlo.',
+    sessionType: 'Prova libera',
+    fuelHint: 'Medio/alto, coerente gara',
+    targetHint: 'Target manuale o stint',
+    referenceHint: 'Manuale o passo stint',
+    focus: 'Passo stabile',
+    target: 'Passo stabile',
+    objective: 'Ripeti lo stesso passo con fuel coerente da gara, controllando validita e calo finale.',
+    durations: [
+      {
+        id: '30',
+        label: '30 min',
+        totalLabel: '30 min totali',
+        timeline: [
+          { label: 'Warm-up', duration: '10 min', detail: 'Stabilizza gomme e ritmo.' },
+          { label: 'Stint', duration: '15 min', detail: 'Gira da solo con passo ripetibile.' },
+          { label: 'Review', duration: '5 min', detail: 'Controlla validi, media e calo finale.' }
+        ]
+      },
+      {
+        id: '60',
+        label: '60 min',
+        totalLabel: '60 min totali',
+        timeline: [
+          { label: 'Warm-up', duration: '10 min', detail: 'Prepara riferimenti e ritmo.' },
+          { label: 'Stint 1', duration: '20 min', detail: 'Primo blocco a passo gara.' },
+          { label: 'Review', duration: '5 min', detail: 'Guarda tempi e giri fuori target.' },
+          { label: 'Stint 2', duration: '20 min', detail: 'Ripeti correggendo il blocco precedente.' },
+          { label: 'Note', duration: '5 min', detail: 'Segna target e punti deboli.' }
+        ]
+      }
+    ],
+    goals: [
+      'Tieni la maggior parte dei giri nel target.',
+      'Resta pulito fino alla fine.',
+      'Non crollare quando cambia il fuel.'
+    ],
     doRules: [
-      'Prova linee diverse dalla traiettoria ideale.',
-      'Riduci il ritmo se serve per restare pulito.',
-      'Chiudi il blocco senza ritiro e senza caos.'
+      'Usa fuel coerente da gara.',
+      'Tieni lo stesso setup.',
+      'Guida ripetibile, non spettacolare.'
     ],
     avoidRules: [
-      'Guidare come se fossi sempre in hotlap.',
-      'Forzare sorpassi o difese senza margine.',
-      'Valutare solo il tempo: qui conta adattarsi.'
+      'Cercare il best a ogni giro.',
+      'Fermarti appena sbagli.',
+      'Giudicare solo il giro migliore.'
+    ]
+  },
+  race_real: {
+    id: 'race_real',
+    label: 'Gara vera',
+    tone: 'race',
+    title: 'Allenamento Gara vera',
+    intro: 'Allena quello che succede davvero: partenza, traffico, pressione, linee sporche, difesa, attacco e pit.',
+    sessionType: 'LFM, online o gara AI',
+    fuelHint: 'Regole gara',
+    targetHint: 'Gara pulita',
+    referenceHint: 'Risultato e note gara',
+    focus: 'Racecraft',
+    target: 'Gara pulita',
+    objective: 'Completa una gara con partenza, traffico e decisioni pulite. Se c\'e sosta, falla senza errori.',
+    durations: [
+      {
+        id: '20',
+        label: '20 min',
+        totalLabel: '20 min sprint',
+        timeline: [
+          { label: 'Griglia', duration: '3 min', detail: 'Parti in mezzo o dal fondo.' },
+          { label: 'Gara', duration: '15 min', detail: 'Traffico, linee alternative e pressione.' },
+          { label: 'Note', duration: '2 min', detail: 'Segna contatti, errori e decisioni.' }
+        ]
+      },
+      {
+        id: '40',
+        label: '40 min',
+        totalLabel: '40 min LFM',
+        timeline: [
+          { label: 'Preparazione', duration: '5 min', detail: 'Regole, fuel, pit e partenza.' },
+          { label: 'Gara', duration: '30 min', detail: 'Gestisci traffico, passo e difesa.' },
+          { label: 'Note', duration: '5 min', detail: 'Segna episodi chiave e pit.' }
+        ]
+      },
+      {
+        id: '60',
+        label: '60 min',
+        totalLabel: '60 min lunga',
+        timeline: [
+          { label: 'Preparazione', duration: '5 min', detail: 'Regole, fuel e piano pit.' },
+          { label: 'Gara', duration: '50 min', detail: 'Completa stint, traffico e pressione.' },
+          { label: 'Note', duration: '5 min', detail: 'Segna errori, sorpassi e gestione.' }
+        ]
+      }
     ],
-    completionRules: [
-      'Blocchi completati senza ritiro',
-      'Pochi invalidi',
-      'Ritmo non oltre +2.0/+3.0 dal normale'
+    goals: [
+      'Completa la gara senza caos.',
+      'Gestisci traffico e linee non ideali.',
+      'Se previsto, fai la sosta senza errori.'
+    ],
+    doRules: [
+      'Parti anche da meta gruppo o fondo.',
+      'Lascia margine nei primi giri.',
+      'Difendi e attacca senza forzare.'
+    ],
+    avoidRules: [
+      'Guidare come in hotlap.',
+      'Rischiare tutto in partenza.',
+      'Uscire appena la gara si mette male.'
     ]
   }
 }
 
-const isScenario = (value: unknown): value is CoachBriefingScenario => {
-  return typeof value === 'string' && scenarioOrder.includes(value as CoachBriefingScenario)
+const isTrainingId = (value: unknown): value is TrainingId => {
+  return typeof value === 'string' && trainingOrder.includes(value as TrainingId)
 }
 
-const initialScenario = computed<CoachBriefingScenario>(() => {
-  const raw = route.query.scenario
-  return isScenario(raw) ? raw : 'race_volume_low'
+const normalizeScenario = (value: unknown): TrainingId => {
+  if (isTrainingId(value)) return value
+  if (typeof value === 'string' && legacyScenarioMap[value]) return legacyScenarioMap[value]
+  return 'clean_laps'
+}
+
+const initialTraining = computed<TrainingId>(() => normalizeScenario(route.query.scenario))
+const selectedTraining = ref<TrainingId>(initialTraining.value)
+const selectedDuration = ref<DurationId>('30')
+
+watch(initialTraining, (scenario) => {
+  selectedTraining.value = scenario
 })
 
-const selectedScenario = ref<CoachBriefingScenario>(initialScenario.value)
-
-watch(initialScenario, (scenario) => {
-  selectedScenario.value = scenario
-})
-
-const selectedPlan = computed(() => scenarios[selectedScenario.value])
+const selectedPlan = computed(() => trainingPlans[selectedTraining.value])
 const toneClass = computed(() => `tone-${selectedPlan.value.tone}`)
-const showDevPreview = import.meta.dev
 
-const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
-  id,
-  label: scenarios[id].label
-})))
+watch(selectedPlan, (plan) => {
+  const hasDuration = plan.durations.some((duration) => duration.id === selectedDuration.value)
+  if (!hasDuration) {
+    selectedDuration.value = plan.durations[0]?.id || '30'
+  }
+}, { immediate: true })
+
+const selectedDurationPlan = computed(() => {
+  return selectedPlan.value.durations.find((duration) => duration.id === selectedDuration.value)
+    || selectedPlan.value.durations[0]!
+})
 </script>
 
 <template>
@@ -215,63 +375,82 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
     <div class="prep-page" :class="toneClass">
       <header class="prep-hero">
         <div class="prep-hero__copy">
-          <span class="eyebrow">Preparazione obiettivo</span>
+          <span class="eyebrow">Preparazione allenamento</span>
           <h1>{{ selectedPlan.title }}</h1>
-          <p>{{ selectedPlan.subtitle }}</p>
+          <p>{{ selectedPlan.intro }}</p>
         </div>
-
       </header>
-
-      <section v-if="showDevPreview" class="scenario-switch">
-        <span>Preview scenario</span>
-        <select v-model="selectedScenario">
-          <option v-for="scenario in scenarioOptions" :key="scenario.id" :value="scenario.id">
-            {{ scenario.label }}
-          </option>
-        </select>
-      </section>
 
       <section class="prep-layout">
         <article class="prep-card prep-card--primary objective-card">
           <div class="objective-topline">
-            <span class="eyebrow">Obiettivo pilota</span>
+            <div class="objective-label">
+              <span class="eyebrow">Obiettivo pilota</span>
+              <strong>{{ selectedDurationPlan.totalLabel }}</strong>
+            </div>
+
+            <div class="duration-picker" aria-label="Tempo disponibile">
+              <span class="duration-picker__label">Tempo disponibile</span>
+              <div class="duration-tabs">
+                <button
+                  v-for="duration in selectedPlan.durations"
+                  :key="duration.id"
+                  type="button"
+                  :class="['duration-tab', { 'duration-tab--active': selectedDuration === duration.id }]"
+                  @click="selectedDuration = duration.id"
+                >
+                  {{ duration.label }}
+                </button>
+              </div>
+            </div>
           </div>
+
           <h2>{{ selectedPlan.target }}</h2>
           <p>{{ selectedPlan.objective }}</p>
 
-          <div class="session-flow" aria-label="Struttura sessione">
-            <div class="flow-step flow-step--warmup">
-              <span>Warm-up</span>
-              <strong>{{ selectedPlan.warmupLabel }}</strong>
-            </div>
-            <div class="flow-arrow">-&gt;</div>
-            <div class="flow-step flow-step--work">
-              <span>Lavoro vero</span>
-              <strong>{{ selectedPlan.workLabel }}</strong>
+          <div class="session-flow" aria-label="Timeline allenamento">
+            <div
+              v-for="(step, index) in selectedDurationPlan.timeline"
+              :key="`${selectedPlan.id}-${selectedDurationPlan.id}-${step.label}`"
+              class="flow-step"
+              :class="{ 'flow-step--work': index === 1 || selectedDurationPlan.timeline.length === 1 }"
+            >
+              <span>{{ step.label }}</span>
+              <strong>{{ step.duration }}</strong>
+              <small>{{ step.detail }}</small>
             </div>
           </div>
 
-          <div class="metric-row metric-row--compact">
+          <div class="quick-facts">
             <div>
               <span>Modalita ACC</span>
               <strong>{{ selectedPlan.sessionType }}</strong>
             </div>
             <div>
-              <span>Obiettivo</span>
-              <strong>{{ selectedPlan.target }}</strong>
-            </div>
-            <div>
-              <span>Focus</span>
-              <strong>{{ selectedPlan.focus }}</strong>
-            </div>
-            <div>
               <span>Carburante</span>
               <strong>{{ selectedPlan.fuelHint }}</strong>
+            </div>
+            <div>
+              <span>Target</span>
+              <strong>{{ selectedPlan.targetHint }}</strong>
+            </div>
+            <div>
+              <span>Riferimento</span>
+              <strong>{{ selectedPlan.referenceHint }}</strong>
             </div>
           </div>
         </article>
 
         <aside class="side-column">
+          <article class="prep-card compact-card">
+            <span class="eyebrow">Obiettivi</span>
+            <ul class="plain-list plain-list--goals">
+              <li v-for="goal in selectedPlan.goals" :key="goal">
+                {{ goal }}
+              </li>
+            </ul>
+          </article>
+
           <article class="prep-card compact-card">
             <span class="eyebrow">Fai questo</span>
             <ul class="plain-list">
@@ -289,7 +468,6 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
               </li>
             </ul>
           </article>
-
         </aside>
       </section>
     </div>
@@ -303,7 +481,7 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
   --accent-end: #ff8a00;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 22px;
 }
 
 .prep-page.tone-baseline {
@@ -337,8 +515,7 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
 }
 
 .prep-hero,
-.prep-card,
-.scenario-switch {
+.prep-card {
   border: 1px solid rgba(255, 255, 255, 0.08);
   background:
     radial-gradient(circle at top left, rgba(var(--accent-rgb), 0.13), transparent 36%),
@@ -350,8 +527,8 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 22px;
-  padding: 30px;
-  border-radius: 22px;
+  padding: 28px 30px;
+  border-radius: 18px;
 }
 
 .prep-hero h1,
@@ -363,7 +540,7 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
 
 .prep-hero h1 {
   max-width: 780px;
-  font-size: clamp(32px, 4.5vw, 52px);
+  font-size: clamp(34px, 4.5vw, 54px);
   line-height: 1;
 }
 
@@ -374,17 +551,8 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
   line-height: 1.55;
 }
 
-.prep-hero__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: center;
-}
-
-.scenario-switch,
 .eyebrow,
-.scenario-switch span,
-.metric-row span {
+.quick-facts span {
   display: block;
   color: rgba(255, 255, 255, 0.46);
   font-size: 11px;
@@ -393,38 +561,41 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
   text-transform: uppercase;
 }
 
-.scenario-switch {
+.duration-tabs {
   display: flex;
-  align-items: center;
-  gap: 14px;
-  width: fit-content;
-  padding: 10px 12px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
-.scenario-switch select {
-  min-width: 220px;
-  padding: 8px 11px;
+.duration-tab {
+  min-height: 36px;
+  padding: 8px 12px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.055);
+  color: rgba(255, 255, 255, 0.72);
   font-weight: 800;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
 }
 
-.scenario-switch option {
-  color: #111;
+.duration-tab:hover,
+.duration-tab--active {
+  border-color: rgba(var(--accent-rgb), 0.48);
+  background: rgba(var(--accent-rgb), 0.14);
+  color: #fff;
 }
 
 .prep-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(330px, 0.8fr);
   gap: 24px;
   align-items: start;
 }
 
 .prep-card {
   padding: 24px;
-  border-radius: 18px;
+  border-radius: 16px;
 }
 
 .prep-card--primary {
@@ -432,7 +603,7 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
 }
 
 .objective-card {
-  min-height: 430px;
+  min-height: 520px;
 }
 
 .objective-topline {
@@ -443,22 +614,47 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
   margin-bottom: 18px;
 }
 
+.objective-label {
+  display: grid;
+  gap: 6px;
+}
+
+.objective-label strong {
+  color: #fff;
+  font-size: 13px;
+}
+
+.duration-picker {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.duration-picker__label {
+  display: block;
+  color: rgba(255, 255, 255, 0.46);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 .objective-card h2 {
-  max-width: 720px;
-  font-size: clamp(34px, 5vw, 64px);
+  max-width: 760px;
+  font-size: clamp(38px, 5vw, 68px);
   line-height: 0.95;
 }
 
 .objective-card p {
-  max-width: 620px;
+  max-width: 680px;
   font-size: 18px;
 }
 
 .session-flow {
-  display: flex;
-  align-items: center;
-  justify-content: stretch;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
   margin-top: 28px;
   padding: 14px;
   border-radius: 16px;
@@ -468,13 +664,12 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
 }
 
 .flow-step {
-  flex: 1;
   min-width: 0;
-  min-height: 96px;
-  padding: 18px 20px;
+  min-height: 130px;
+  padding: 16px;
   background: rgba(255, 255, 255, 0.055);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 18px;
+  border-radius: 14px;
 }
 
 .flow-step--work {
@@ -493,45 +688,36 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
 
 .flow-step strong {
   display: block;
-  margin-top: 10px;
+  margin-top: 9px;
   color: #fff;
-  font-size: clamp(17px, 1.7vw, 23px);
+  font-size: clamp(19px, 1.7vw, 26px);
   font-weight: 900;
   line-height: 1.15;
 }
 
-.flow-arrow {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  color: #111;
-  background: linear-gradient(135deg, var(--accent), var(--accent-end));
-  font-weight: 1000;
-  box-shadow: 0 12px 24px rgba(var(--accent-rgb), 0.18);
+.flow-step small {
+  display: block;
+  margin-top: 10px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
-.metric-row {
+.quick-facts {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   margin-top: 22px;
 }
 
-.metric-row--compact {
-  margin-top: 16px;
-}
-
-.metric-row > div {
+.quick-facts > div {
   padding: 14px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.metric-row strong {
+.quick-facts strong {
   display: block;
   margin-top: 7px;
   color: #fff;
@@ -547,8 +733,7 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
   padding: 22px;
 }
 
-.plain-list,
-.check-list {
+.plain-list {
   display: grid;
   gap: 12px;
   padding: 0;
@@ -556,16 +741,14 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
   list-style: none;
 }
 
-.plain-list li,
-.check-list li {
+.plain-list li {
   position: relative;
   padding-left: 26px;
   color: var(--text-secondary);
   line-height: 1.45;
 }
 
-.plain-list li::before,
-.check-list li::before {
+.plain-list li::before {
   content: '';
   position: absolute;
   left: 0;
@@ -582,27 +765,8 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
   box-shadow: 0 0 18px rgba(255, 90, 79, 0.38);
 }
 
-.plain-list strong {
-  color: #fff;
-}
-
-.tracking-note {
-  display: grid;
-  gap: 6px;
-  margin-top: 22px;
-  padding: 14px;
-  border-radius: 14px;
-  background: rgba(var(--accent-rgb), 0.09);
-  border: 1px dashed rgba(var(--accent-rgb), 0.32);
-}
-
-.tracking-note strong {
-  color: #fff;
-}
-
-.tracking-note span {
-  color: var(--text-secondary);
-  line-height: 1.45;
+.plain-list--goals li::before {
+  background: linear-gradient(135deg, var(--accent), var(--accent-end));
 }
 
 @media (max-width: 900px) {
@@ -611,31 +775,21 @@ const scenarioOptions = computed(() => scenarioOrder.map((id) => ({
     grid-template-columns: 1fr;
   }
 
-  .objective-topline,
-  .session-flow {
-    align-items: stretch;
+  .objective-topline {
+    align-items: flex-start;
     flex-direction: column;
   }
 
-  .flow-arrow {
-    transform: rotate(90deg);
-    align-self: center;
+  .duration-picker {
+    justify-items: start;
   }
 
-  .metric-row {
+  .quick-facts {
     grid-template-columns: 1fr;
   }
 
-  .scenario-switch {
-    width: 100%;
-    align-items: stretch;
-    flex-direction: column;
-    border-radius: 16px;
-  }
-
-  .scenario-switch select {
-    width: 100%;
+  .duration-tab {
+    flex: 1 1 120px;
   }
 }
 </style>
-

@@ -8,11 +8,11 @@ export interface Insight {
 }
 
 export type CoachBriefingScenario =
-  | 'no_recent_activity'
-  | 'qualify_to_race'
-  | 'race_volume_low'
-  | 'clean_laps_focus'
-  | 'completed_next_step'
+  | 'tracktitan_input'
+  | 'clean_laps'
+  | 'qualifying'
+  | 'consistency'
+  | 'race_real'
 
 export interface CoachBriefingScenarioOption {
   id: CoachBriefingScenario
@@ -20,54 +20,54 @@ export interface CoachBriefingScenarioOption {
 }
 
 const dailySuggestionScenarios: Record<CoachBriefingScenario, Insight> = {
-  no_recent_activity: {
-    type: 'actionable',
-    tone: 'baseline',
-    scenario: 'no_recent_activity',
-    message: 'Oggi fai Pulizia',
-    details: 'Motivo: serve una base pulita. Target: almeno 85% giri validi, senza cercare il tempo.',
-    ctaLabel: 'Apri preparazione'
-  },
-  qualify_to_race: {
-    type: 'actionable',
-    tone: 'pace',
-    scenario: 'qualify_to_race',
-    message: 'Oggi fai Costanza',
-    details: 'Motivo: il giro buono va reso ripetibile. Target: 8 giri validi entro +0.8 dal best del blocco.',
-    ctaLabel: 'Apri preparazione'
-  },
-  race_volume_low: {
-    type: 'actionable',
-    tone: 'race',
-    scenario: 'race_volume_low',
-    message: 'Oggi fai Long run',
-    details: 'Motivo: manca lavoro gara recente. Target: 30 min continui, ritmo stabile, 90% giri validi.',
-    ctaLabel: 'Apri preparazione'
-  },
-  clean_laps_focus: {
-    type: 'actionable',
-    tone: 'clean',
-    scenario: 'clean_laps_focus',
-    message: 'Oggi fai Qualifica',
-    details: 'Motivo: serve prestazione in pochi tentativi. Target: 1 giro valido competitivo per run.',
-    ctaLabel: 'Apri preparazione'
-  },
-  completed_next_step: {
+  tracktitan_input: {
     type: 'actionable',
     tone: 'success',
-    scenario: 'completed_next_step',
-    message: 'Oggi fai Traffico',
-    details: 'Motivo: serve adattamento fuori traiettoria ideale. Target: 3 blocchi puliti senza caos.',
+    scenario: 'tracktitan_input',
+    message: 'Oggi fai TrackTitan',
+    details: 'Motivo: serve correggere input precisi. Target: 1-2 segmenti dove freno e gas sono diversi dal riferimento.',
+    ctaLabel: 'Apri preparazione'
+  },
+  clean_laps: {
+    type: 'actionable',
+    tone: 'baseline',
+    scenario: 'clean_laps',
+    message: 'Oggi fai Pulizia',
+    details: 'Motivo: serve controllo anche mentre spingi. Target: giri validi consecutivi e almeno 85% validi.',
+    ctaLabel: 'Apri preparazione'
+  },
+  qualifying: {
+    type: 'actionable',
+    tone: 'clean',
+    scenario: 'qualifying',
+    message: 'Oggi fai Qualifica',
+    details: 'Motivo: serve prestazione in pochi tentativi. Target: 1 giro forte valido senza girare a oltranza.',
+    ctaLabel: 'Apri preparazione'
+  },
+  consistency: {
+    type: 'actionable',
+    tone: 'pace',
+    scenario: 'consistency',
+    message: 'Oggi fai Costanza',
+    details: 'Motivo: il giro buono va reso ripetibile. Target: passo stabile con fuel coerente da gara.',
+    ctaLabel: 'Apri preparazione'
+  },
+  race_real: {
+    type: 'actionable',
+    tone: 'race',
+    scenario: 'race_real',
+    message: 'Oggi fai Gara vera',
+    details: 'Motivo: serve allenare partenza, traffico, pressione e pit. Target: completare senza caos.',
     ctaLabel: 'Apri preparazione'
   }
 }
 
 const dailySuggestionScenarioOptions: CoachBriefingScenarioOption[] = [
-  { id: 'no_recent_activity', label: 'Pulizia' },
-  { id: 'qualify_to_race', label: 'Costanza' },
-  { id: 'clean_laps_focus', label: 'Qualifica' },
-  { id: 'race_volume_low', label: 'Long run' },
-  { id: 'completed_next_step', label: 'Traffico' }
+  { id: 'tracktitan_input', label: 'TrackTitan' },
+  { id: 'clean_laps', label: 'Pulizia' },
+  { id: 'qualifying', label: 'Qualifica' },
+  { id: 'consistency', label: 'Costanza' },
+  { id: 'race_real', label: 'Gara vera' }
 ]
 
 export function useCoachInsights() {
@@ -80,7 +80,7 @@ export function useCoachInsights() {
 
   const resolveDailySuggestionScenario = (recentSessions: any[]): CoachBriefingScenario => {
     if (!recentSessions || recentSessions.length === 0) {
-      return 'no_recent_activity'
+      return 'clean_laps'
     }
 
     const totals = recentSessions.reduce(
@@ -95,18 +95,22 @@ export function useCoachInsights() {
 
     const totalMinutes = totals.practice + totals.qualify + totals.race
     if (totalMinutes <= 0) {
-      return 'no_recent_activity'
+      return 'clean_laps'
     }
 
     if (totals.qualify > totalMinutes * 0.55) {
-      return 'qualify_to_race'
+      return 'consistency'
     }
 
     if (totals.race < totalMinutes * 0.25 && totalMinutes >= 45) {
-      return 'race_volume_low'
+      return 'race_real'
     }
 
-    return 'no_recent_activity'
+    if (totalMinutes >= 90) {
+      return 'tracktitan_input'
+    }
+
+    return 'clean_laps'
   }
 
   const generateDailySuggestion = (recentSessions: any[], forcedScenario?: CoachBriefingScenario | null): Insight => {
@@ -154,7 +158,7 @@ export function useCoachInsights() {
       return {
         type: 'neutral',
         message: 'Molto giro secco, poca verifica sul ritmo.',
-        details: 'Lettura ultimi 7 giorni: la velocita potenziale c e, ma va trasformata in passo ripetibile.'
+        details: 'Lettura ultimi 7 giorni: la velocita potenziale c\'e, ma va trasformata in passo ripetibile.'
       }
     }
 
