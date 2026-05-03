@@ -18,6 +18,8 @@ export interface OverviewCarProjection {
 }
 
 export interface OverviewActivityDataPoint {
+  date?: string
+  dateLabel?: string
   day: string
   practice: number
   qualify: number

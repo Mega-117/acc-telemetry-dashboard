@@ -1,20 +1,12 @@
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
+import { buildActivityProjectionFromEntries } from '~/services/telemetry/activityProjectionService'
 import type { SessionDocument } from '~/composables/useTelemetryData'
 
 export const SESSION_INDEX_SCHEMA_VERSION = 2
 export const SESSION_INDEX_MAX_ITEMS = 200
+const ACTIVITY_SESSION_TYPES = { PRACTICE: 0, QUALIFY: 1, RACE: 2 }
 
 export function buildSessionIndexProjection(allSessions: SessionDocument[], now: Date = new Date()) {
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const sevenDaysAgoStr = sevenDaysAgo.toISOString()
-
-  let practiceMinutes = 0
-  let practiceCount = 0
-  let qualifyMinutes = 0
-  let qualifyCount = 0
-  let raceMinutes = 0
-  let raceCount = 0
-  const activityByDay: Record<string, { P: number; Q: number; R: number }> = {}
   const tracksMap: Record<string, { track: string; sessions: number; lastPlayed: string }> = {}
   const sessionsList: Array<{
     id: string
@@ -39,20 +31,6 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
     const dateStart = session.meta?.date_start || ''
     const track = session.meta?.track || ''
     const trackKey = track.toLowerCase()
-
-    if (dateStart >= sevenDaysAgoStr) {
-      const totalMs = session.summary?.totalTime || 0
-      const minutes = Math.round(totalMs / 60000)
-      const dayKey = dateStart.substring(0, 10)
-
-      if (!activityByDay[dayKey]) activityByDay[dayKey] = { P: 0, Q: 0, R: 0 }
-
-      switch (session.meta?.session_type) {
-        case 0: practiceMinutes += minutes; practiceCount++; activityByDay[dayKey].P += minutes; break
-        case 1: qualifyMinutes += minutes; qualifyCount++; activityByDay[dayKey].Q += minutes; break
-        case 2: raceMinutes += minutes; raceCount++; activityByDay[dayKey].R += minutes; break
-      }
-    }
 
     if (trackKey) {
       if (!tracksMap[trackKey]) {
@@ -87,15 +65,25 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
   }
 
   sessionsList.sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+  const activityProjection = buildActivityProjectionFromEntries({
+    entries: allSessions.map((session) => ({
+      dateStart: session.meta?.date_start || '',
+      sessionType: session.meta?.session_type ?? null,
+      totalTimeMs: session.summary?.totalTime || 0
+    })),
+    now,
+    sessionTypes: ACTIVITY_SESSION_TYPES
+  })
+
   return {
     schemaVersion: SESSION_INDEX_SCHEMA_VERSION,
     sessionsList: sessionsList.slice(0, SESSION_INDEX_MAX_ITEMS),
     totalSessions: allSessions.length,
     activity7d: {
-      practice: { minutes: practiceMinutes, sessions: practiceCount },
-      qualify: { minutes: qualifyMinutes, sessions: qualifyCount },
-      race: { minutes: raceMinutes, sessions: raceCount },
-      byDay: Object.entries(activityByDay).map(([date, counts]) => ({ date, ...counts }))
+      practice: activityProjection.totals.practice,
+      qualify: activityProjection.totals.qualify,
+      race: activityProjection.totals.race,
+      byDay: activityProjection.byDay
     },
     tracksSummary: Object.values(tracksMap),
     updatedAt: new Date().toISOString()

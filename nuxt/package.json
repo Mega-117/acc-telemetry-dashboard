@@ -18,6 +18,7 @@
     "check:session-pager-merge": "node scripts/check_session_pager_merge.mjs",
     "check:session-electron-reads": "node scripts/check_session_electron_reads.mjs",
     "check:projection-first": "node scripts/check_projection_first_sources.mjs",
+    "check:activity-7d": "node scripts/check_activity_7d_window.mjs",
     "check:owner-rebuild": "node scripts/check_owner_rebuild_contract.mjs",
     "check:owner-maintenance-gate": "node scripts/check_owner_maintenance_gate.mjs",
     "check:no-startup-raw-prefetch": "node scripts/check_no_startup_raw_prefetch.mjs",

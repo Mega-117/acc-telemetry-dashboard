@@ -42,6 +42,12 @@ import {
     loadUserProjection,
     type UserProjectionDocument
 } from '~/repositories/telemetryProjectionRepository'
+import {
+    buildRecentActivityBuckets,
+    getActivityBucketForSessionType,
+    getRecentActivityDateKeys,
+    getTelemetryActivityDateKey
+} from '~/services/telemetry/activityProjectionService'
 
 export type PipelineSource =
     | 'cloud_fresh'
@@ -332,22 +338,17 @@ function buildActivity7dFromSessionIndex(sessionIndex: any): OverviewProjection[
         if (row?.date) byDate.set(row.date, row)
     }
 
-    const dayLabels: [string, string, string, string, string, string, string] = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
-    const today = new Date()
-    const result: OverviewProjection['activity7d'] = []
-    for (let offset = 6; offset >= 0; offset--) {
-        const day = new Date(today)
-        day.setDate(today.getDate() - offset)
-        const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
-        const row = byDate.get(key) || {}
-        result.push({
-            day: dayLabels[day.getDay()] || '',
+    return buildRecentActivityBuckets(7).map((bucket) => {
+        const row = byDate.get(bucket.date) || {}
+        return {
+            date: bucket.date,
+            dateLabel: bucket.dateLabel,
+            day: bucket.day,
             practice: Number(row.P || row.practice || 0),
             qualify: Number(row.Q || row.qualify || 0),
             race: Number(row.R || row.race || 0)
-        })
-    }
-    return result
+        }
+    })
 }
 
 function buildActivityTotalsFromSessionIndex(sessionIndex: any): OverviewProjection['activityTotals'] {
@@ -368,6 +369,23 @@ function buildActivityTotalsFromSessionIndex(sessionIndex: any): OverviewProject
     }
 }
 
+function sumActivityDataMinutes(activity7d: OverviewProjection['activity7d']): number {
+    return activity7d.reduce((sum, row) => sum + Number(row.practice || 0) + Number(row.qualify || 0) + Number(row.race || 0), 0)
+}
+
+function sumActivityTotalMinutes(activityTotals: OverviewProjection['activityTotals']): number {
+    return Number(activityTotals.practice.minutes || 0)
+        + Number(activityTotals.qualify.minutes || 0)
+        + Number(activityTotals.race.minutes || 0)
+}
+
+function isActivityProjectionInconsistent(
+    activity7d: OverviewProjection['activity7d'],
+    activityTotals: OverviewProjection['activityTotals']
+): boolean {
+    return sumActivityDataMinutes(activity7d) !== sumActivityTotalMinutes(activityTotals)
+}
+
 function overlayPendingActivity(
     activity7d: OverviewProjection['activity7d'],
     activityTotals: OverviewProjection['activityTotals'],
@@ -380,20 +398,16 @@ function overlayPendingActivity(
         race: { ...activityTotals.race }
     }
 
-    const today = new Date()
-    const dateKeys: string[] = []
-    for (let offset = 6; offset >= 0; offset--) {
-        const day = new Date(today)
-        day.setDate(today.getDate() - offset)
-        dateKeys.push(`${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`)
-    }
+    const dateKeys = getRecentActivityDateKeys(7)
 
     for (const session of pendingSessions) {
         const minutes = Math.round(Number(session.summary?.totalTime || 0) / 60000)
-        const dateKey = (session.meta?.date_start || '').substring(0, 10)
+        const dateKey = getTelemetryActivityDateKey(session.meta?.date_start)
+        if (!dateKey) continue
         const index = dateKeys.indexOf(dateKey)
         const sessionType = session.meta?.session_type
-        const bucket = sessionType === SESSION_TYPES.QUALIFY ? 'qualify' : (sessionType === SESSION_TYPES.RACE ? 'race' : 'practice')
+        const bucket = getActivityBucketForSessionType(sessionType, SESSION_TYPES)
+        if (!bucket) continue
         resultTotals[bucket].minutes += minutes
         resultTotals[bucket].sessions += 1
         const dayRow = index >= 0 ? resultData[index] : null
@@ -834,9 +848,19 @@ export function useTelemetryGateway() {
                 Object.fromEntries(relevantTrackIds.map((trackId, index) => [normalizeTrackKey(trackId), buildOverviewBestTimesFromTrackBestDoc(bestDocs[index], 'GT3')])),
                 pendingSessions
             )
+            const baseActivity7d = buildActivity7dFromSessionIndex(sessionIndex)
+            const baseActivityTotals = buildActivityTotalsFromSessionIndex(sessionIndex)
+            if (isActivityProjectionInconsistent(baseActivity7d, baseActivityTotals)) {
+                pushProjectionFallback(resolvedUserId, 'getOverviewProjection', {
+                    reason: 'stale_activity7d_totals_mismatch',
+                    activityMinutes: sumActivityDataMinutes(baseActivity7d),
+                    totalMinutes: sumActivityTotalMinutes(baseActivityTotals)
+                })
+                return await getOverviewProjectionFallback(targetUserId)
+            }
             const activity = overlayPendingActivity(
-                buildActivity7dFromSessionIndex(sessionIndex),
-                buildActivityTotalsFromSessionIndex(sessionIndex),
+                baseActivity7d,
+                baseActivityTotals,
                 pendingSessions
             )
             const newest = getNewestSessionEntry(sessionIndex, pendingSessions)

@@ -32,6 +32,7 @@ import type { UserProjectionDelta } from '~/services/sync/syncUserProjectionDelt
 import { resolveSyncTriggerAction, type SyncTrigger } from '~/services/sync/syncTriggerPolicy'
 import { useOwnerDataMaintenance } from './useOwnerDataMaintenance'
 import { updatePilotDirectoryActivity } from '~/services/pilotDirectoryProjectionService'
+import { getRecentActivityDateKeys, getTelemetryActivityDateKey } from '~/services/telemetry/activityProjectionService'
 
 const SYNC_CALLER = 'ElectronSync'
 async function getDoc(ref: any) { return trackedGetDoc(ref, SYNC_CALLER) }
@@ -94,6 +95,43 @@ function shouldPersistRegistry(result: SyncResult): boolean {
 
 function getTrackIdFromRaw(rawObj: any): string | null {
     return rawObj?.session_info?.track || rawObj?.track || null
+}
+
+function getSessionIdActivityDateKey(sessionId: string | null | undefined): string | null {
+    if (!sessionId) return null
+    const match = String(sessionId).match(/^(\d{4})_(\d{2})_(\d{2})T/)
+    if (!match) return null
+    return `${match[1]}-${match[2]}-${match[3]}`
+}
+
+function getSyncResultActivityDateKey(result: SyncResult): string | null {
+    return getSessionIdActivityDateKey(result.sessionId) || getTelemetryActivityDateKey(result.projectionDelta?.dateStart)
+}
+
+async function findMissingRecentSessionIndexIds(uid: string, results: SyncResult[]): Promise<string[]> {
+    const recentDateKeys = new Set(getRecentActivityDateKeys(7))
+    const candidateIds = Array.from(new Set(
+        results
+            .filter((result) => result.status === 'unchanged' && !!result.sessionId)
+            .filter((result) => {
+                const dateKey = getSyncResultActivityDateKey(result)
+                return !!dateKey && recentDateKeys.has(dateKey)
+            })
+            .map((result) => result.sessionId as string)
+    ))
+
+    if (candidateIds.length === 0) return []
+
+    const userSnap = await getDoc(doc(db, `users/${uid}`))
+    if (!userSnap.exists()) return candidateIds
+
+    const sessionIndexList = userSnap.data()?.sessionIndex?.sessionsList
+    const indexedIds = new Set(
+        (Array.isArray(sessionIndexList) ? sessionIndexList : [])
+            .map((entry: any) => String(entry?.id || ''))
+            .filter(Boolean)
+    )
+    return candidateIds.filter((sessionId) => !indexedIds.has(sessionId))
 }
 
 function getElectronApi(): any | null {
@@ -456,6 +494,13 @@ export function useElectronSync() {
                 })
                 needsTrackBestsRebuild = needsTrackBestsRebuild || maintenance.needsTrackBestsRebuild
                 changedCount += maintenance.needsProjectionRefresh ? 1 : 0
+            }
+
+            const missingRecentIndexedIds = await findMissingRecentSessionIndexIds(uid, allResults)
+            if (missingRecentIndexedIds.length > 0) {
+                changedCount += 1
+                userProjectionDeltas = []
+                console.warn(`[SYNC] SessionIndex stale: ${missingRecentIndexedIds.length} recent uploaded sessions missing, forcing user projection rebuild`)
             }
 
             queueService.setStatus('reconciling')

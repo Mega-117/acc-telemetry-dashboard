@@ -8,6 +8,8 @@ import { computed, onMounted, ref } from 'vue'
 
 // Types
 type DayData = {
+  date?: string
+  dateLabel?: string
   day: string
   practice: number
   qualify: number
@@ -36,13 +38,13 @@ const dayTotal = (day: { practice: number; qualify: number; race: number }) => d
 
 // Mock data - will be replaced with real API data
 const chartData = computed(() => props.data || [
-  { day: 'Lun', practice: 45, qualify: 0, race: 0 },
-  { day: 'Mar', practice: 0, qualify: 0, race: 0 },
-  { day: 'Mer', practice: 25, qualify: 15, race: 0 },
-  { day: 'Gio', practice: 12, qualify: 0, race: 95 },
-  { day: 'Ven', practice: 35, qualify: 8, race: 0 },
-  { day: 'Sab', practice: 0, qualify: 0, race: 38 },
-  { day: 'Dom', practice: 20, qualify: 0, race: 0 }
+  { day: 'Lun', dateLabel: '27/04', practice: 45, qualify: 0, race: 0 },
+  { day: 'Mar', dateLabel: '28/04', practice: 0, qualify: 0, race: 0 },
+  { day: 'Mer', dateLabel: '29/04', practice: 25, qualify: 15, race: 0 },
+  { day: 'Gio', dateLabel: '30/04', practice: 12, qualify: 0, race: 95 },
+  { day: 'Ven', dateLabel: '01/05', practice: 35, qualify: 8, race: 0 },
+  { day: 'Sab', dateLabel: '02/05', practice: 0, qualify: 0, race: 38 },
+  { day: 'Dom', dateLabel: '03/05', practice: 20, qualify: 0, race: 0 }
 ])
 
 // Max value for Y axis
@@ -150,7 +152,10 @@ const formatYLabel = (minutes: number): string => {
               ></div>
             </div>
             <!-- Day label -->
-            <span class="day-label">{{ day.day }}</span>
+            <span class="day-label">
+              <span>{{ day.day }}</span>
+              <small v-if="day.dateLabel">{{ day.dateLabel }}</small>
+            </span>
           </div>
         </div>
       </div>
@@ -268,7 +273,7 @@ $color-race: $racing-red;         // Red
   flex-direction: column;
   justify-content: space-between;
   align-items: flex-end;
-  padding-bottom: 24px;
+  padding-bottom: 34px;
   min-width: 28px;
 
   span {
@@ -284,7 +289,7 @@ $color-race: $racing-red;         // Red
   justify-content: space-between;
   align-items: flex-end;
   gap: 6px;
-  padding-bottom: 24px;
+  padding-bottom: 34px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   position: relative;
 }
@@ -337,6 +342,16 @@ $color-race: $racing-red;         // Red
   font-weight: 500;
   color: rgba(255, 255, 255, 0.5);
   font-family: $font-primary;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1;
+
+  small {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.35);
+  }
 }
 
 .bar-column {
@@ -344,7 +359,7 @@ $color-race: $racing-red;         // Red
   
   .day-label {
     position: absolute;
-    bottom: -20px;
+    bottom: -28px;
   }
 }
 

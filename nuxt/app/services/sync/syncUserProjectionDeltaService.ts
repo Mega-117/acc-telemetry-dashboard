@@ -4,6 +4,7 @@ import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import { updatePilotDirectoryActivity } from '~/services/pilotDirectoryProjectionService'
 import { SESSION_INDEX_MAX_ITEMS, SESSION_INDEX_SCHEMA_VERSION } from './sessionIndexProjectionService'
 import { USER_STATS_SCHEMA_VERSION } from './userStatsProjectionService'
+import { buildActivityProjectionFromEntries } from '~/services/telemetry/activityProjectionService'
 import type { TrackBestProjectionDelta } from './trackBestsProjectionService'
 
 export interface UserProjectionDelta extends TrackBestProjectionDelta {
@@ -28,6 +29,8 @@ type SessionIndexEntry = {
   grip: string | null
   bestSessionRaceGrip: string | null
 }
+
+const ACTIVITY_SESSION_TYPES = { PRACTICE: 0, QUALIFY: 1, RACE: 2 }
 
 function toSessionIndexEntry(delta: UserProjectionDelta): SessionIndexEntry {
   const summary = delta.summary || {}
@@ -55,33 +58,21 @@ function toSessionIndexEntry(delta: UserProjectionDelta): SessionIndexEntry {
 }
 
 function buildActivity7d(entries: SessionIndexEntry[], now = new Date()) {
-  const sevenDaysAgoStr = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  const activityByDay: Record<string, { P: number; Q: number; R: number }> = {}
-  let practiceMinutes = 0
-  let practiceCount = 0
-  let qualifyMinutes = 0
-  let qualifyCount = 0
-  let raceMinutes = 0
-  let raceCount = 0
-
-  for (const entry of entries) {
-    if (!entry.date || entry.date < sevenDaysAgoStr) continue
-    const minutes = Math.round(Number(entry.totalTime || 0) / 60000)
-    const dayKey = entry.date.substring(0, 10)
-    if (!activityByDay[dayKey]) activityByDay[dayKey] = { P: 0, Q: 0, R: 0 }
-
-    switch (entry.type) {
-      case 0: practiceMinutes += minutes; practiceCount++; activityByDay[dayKey].P += minutes; break
-      case 1: qualifyMinutes += minutes; qualifyCount++; activityByDay[dayKey].Q += minutes; break
-      case 2: raceMinutes += minutes; raceCount++; activityByDay[dayKey].R += minutes; break
-    }
-  }
+  const projection = buildActivityProjectionFromEntries({
+    entries: entries.map((entry) => ({
+      dateStart: entry.date,
+      sessionType: entry.type,
+      totalTimeMs: entry.totalTime
+    })),
+    now,
+    sessionTypes: ACTIVITY_SESSION_TYPES
+  })
 
   return {
-    practice: { minutes: practiceMinutes, sessions: practiceCount },
-    qualify: { minutes: qualifyMinutes, sessions: qualifyCount },
-    race: { minutes: raceMinutes, sessions: raceCount },
-    byDay: Object.entries(activityByDay).map(([date, counts]) => ({ date, ...counts }))
+    practice: projection.totals.practice,
+    qualify: projection.totals.qualify,
+    race: projection.totals.race,
+    byDay: projection.byDay
   }
 }
 

@@ -1,5 +1,132 @@
 import type { SessionDocument } from '~/composables/useTelemetryData'
 
+export type ActivitySessionTypes = { PRACTICE: number; QUALIFY: number; RACE: number }
+
+export interface ActivitySourceEntry {
+  dateStart?: string | null
+  sessionType?: number | null
+  totalTimeMs?: number | null
+}
+
+export interface ActivityWindowBucket {
+  date: string
+  day: string
+  dateLabel: string
+  practice: number
+  qualify: number
+  race: number
+}
+
+const DAY_LABELS: [string, string, string, string, string, string, string] = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
+
+export function formatActivityDateKey(date: Date): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export function formatActivityDateLabel(date: Date): string {
+  const day = `${date.getDate()}`.padStart(2, '0')
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  return `${day}/${month}`
+}
+
+export function getTelemetryActivityDateKey(value: string | null | undefined): string | null {
+  if (!value) return null
+  const text = String(value)
+  const keyMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (keyMatch) return `${keyMatch[1]}-${keyMatch[2]}-${keyMatch[3]}`
+
+  const parsed = new Date(text)
+  if (Number.isNaN(parsed.getTime())) return null
+  return formatActivityDateKey(parsed)
+}
+
+export function buildRecentActivityBuckets(days: number = 7, now: Date = new Date()): ActivityWindowBucket[] {
+  const today = new Date(now)
+  today.setHours(0, 0, 0, 0)
+
+  const buckets: ActivityWindowBucket[] = []
+  for (let offset = days - 1; offset >= 0; offset--) {
+    const date = new Date(today)
+    date.setDate(today.getDate() - offset)
+    buckets.push({
+      date: formatActivityDateKey(date),
+      day: DAY_LABELS[date.getDay()] || 'N/A',
+      dateLabel: formatActivityDateLabel(date),
+      practice: 0,
+      qualify: 0,
+      race: 0
+    })
+  }
+  return buckets
+}
+
+export function getRecentActivityDateKeys(days: number = 7, now: Date = new Date()): string[] {
+  return buildRecentActivityBuckets(days, now).map((bucket) => bucket.date)
+}
+
+export function getActivityBucketForSessionType(
+  sessionType: number | null | undefined,
+  sessionTypes: ActivitySessionTypes
+): 'practice' | 'qualify' | 'race' | null {
+  switch (sessionType) {
+    case sessionTypes.PRACTICE:
+      return 'practice'
+    case sessionTypes.QUALIFY:
+      return 'qualify'
+    case sessionTypes.RACE:
+      return 'race'
+    default:
+      return null
+  }
+}
+
+export function buildActivityProjectionFromEntries(params: {
+  entries: ActivitySourceEntry[]
+  days?: number
+  now?: Date
+  sessionTypes: ActivitySessionTypes
+}) {
+  const { entries, days = 7, now = new Date(), sessionTypes } = params
+  const buckets = buildRecentActivityBuckets(days, now)
+  const byDate = new Map(buckets.map((bucket) => [bucket.date, bucket]))
+  const totals = {
+    practice: { minutes: 0, sessions: 0 },
+    qualify: { minutes: 0, sessions: 0 },
+    race: { minutes: 0, sessions: 0 }
+  }
+
+  for (const entry of entries) {
+    const dateKey = getTelemetryActivityDateKey(entry.dateStart)
+    if (!dateKey) continue
+    const bucket = byDate.get(dateKey)
+    if (!bucket) continue
+
+    const activityBucket = getActivityBucketForSessionType(entry.sessionType, sessionTypes)
+    if (!activityBucket) continue
+
+    const minutes = Math.round(Number(entry.totalTimeMs || 0) / 60000)
+    bucket[activityBucket] += minutes
+    totals[activityBucket].minutes += minutes
+    totals[activityBucket].sessions += 1
+  }
+
+  return {
+    data: buckets,
+    totals,
+    byDay: buckets
+      .filter((bucket) => bucket.practice > 0 || bucket.qualify > 0 || bucket.race > 0)
+      .map((bucket) => ({
+        date: bucket.date,
+        P: bucket.practice,
+        Q: bucket.qualify,
+        R: bucket.race
+      }))
+  }
+}
+
 export function buildActivityWindowFromSessions(params: {
   sessions: SessionDocument[]
   days?: number
@@ -10,58 +137,22 @@ export function buildActivityWindowFromSessions(params: {
   const {
     sessions,
     days = 7,
-    sessionTypes,
-    parseTelemetryDate,
-    formatLocalDateKey
+    sessionTypes
   } = params
 
-  const now = new Date()
-  const dayLabels: string[] = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab']
-  const buckets: Array<{ key: string; day: string; practice: number; qualify: number; race: number }> = []
-  const byKey = new Map<string, { key: string; day: string; practice: number; qualify: number; race: number }>()
-
-  for (let i = days - 1; i >= 0; i--) {
-    const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
-    const key = formatLocalDateKey(date)
-    const bucket = { key, day: dayLabels[date.getDay()] || 'N/A', practice: 0, qualify: 0, race: 0 }
-    buckets.push(bucket)
-    byKey.set(key, bucket)
-  }
-
-  let practiceSessions = 0
-  let qualifySessions = 0
-  let raceSessions = 0
-
-  for (const session of sessions) {
-    const sessionDate = parseTelemetryDate(session.meta.date_start)
-    if (!sessionDate) continue
-    const bucket = byKey.get(formatLocalDateKey(sessionDate))
-    if (!bucket) continue
-
-    const minutes = Math.round((session.summary?.totalTime || 0) / 60000)
-    switch (session.meta.session_type) {
-      case sessionTypes.PRACTICE:
-        bucket.practice += minutes
-        practiceSessions++
-        break
-      case sessionTypes.QUALIFY:
-        bucket.qualify += minutes
-        qualifySessions++
-        break
-      case sessionTypes.RACE:
-        bucket.race += minutes
-        raceSessions++
-        break
-    }
-  }
+  const projection = buildActivityProjectionFromEntries({
+    entries: sessions.map((session) => ({
+      dateStart: session.meta.date_start,
+      sessionType: session.meta.session_type,
+      totalTimeMs: session.summary?.totalTime || 0
+    })),
+    days,
+    sessionTypes
+  })
 
   return {
-    data: buckets.map(({ day, practice, qualify, race }) => ({ day, practice, qualify, race })),
-    totals: {
-      practice: { minutes: buckets.reduce((sum, bucket) => sum + bucket.practice, 0), sessions: practiceSessions },
-      qualify: { minutes: buckets.reduce((sum, bucket) => sum + bucket.qualify, 0), sessions: qualifySessions },
-      race: { minutes: buckets.reduce((sum, bucket) => sum + bucket.race, 0), sessions: raceSessions }
-    }
+    data: projection.data,
+    totals: projection.totals
   }
 }
 
