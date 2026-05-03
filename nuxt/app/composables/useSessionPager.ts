@@ -17,6 +17,7 @@ import { db } from '~/config/firebase'
 import { formatCarName, formatTrackName, type SessionDocument } from './useTelemetryData'
 import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
 import {
+    buildLogicalSessionKey,
     dedupeCloudSessions,
     mergePendingLocal,
     mergeLocalFirst
@@ -24,6 +25,7 @@ import {
 
 const CALLER = 'SessionPager'
 const DEFAULT_PAGE_SIZE = 25
+const CLOUD_IDENTITY_CACHE_TTL_MS = 3000
 
 type SessionSyncState = 'synced' | 'pending_sync' | 'local_only' | 'sync_failed'
 
@@ -68,7 +70,11 @@ const globalTargetUser = ref<string | null>(null)
 const globalCursorMap: Map<number, QueryDocumentSnapshot<DocumentData> | null> = new Map([[1, null]])
 const globalPageCache = ref<Record<number, SessionDocument[]>>({})
 const globalInitialized = ref(false)
-const globalCloudPresenceCache = new Map<string, true>()
+const globalCloudIdentityCache = new Map<string, {
+    cachedAt: number
+    ids: Set<string>
+    logicalKeys: Set<string>
+}>()
 
 async function getDocTracked(ref: any) { return trackedGetDoc(ref, CALLER) }
 async function getDocsTracked(q: any) { return trackedGetDocs(q, CALLER) }
@@ -414,29 +420,59 @@ async function ensureCursorForPage(
     return Math.min(page, reachablePage)
 }
 
-async function sessionExistsInCloud(targetUserId: string, sessionId: string): Promise<boolean> {
-    const cacheKey = `${targetUserId}:${sessionId}`
-    if (globalCloudPresenceCache.has(cacheKey)) return true
+async function loadCloudIdentitySet(targetUserId: string): Promise<{ ids: Set<string>; logicalKeys: Set<string> }> {
+    const cached = globalCloudIdentityCache.get(targetUserId)
+    if (cached && Date.now() - cached.cachedAt <= CLOUD_IDENTITY_CACHE_TTL_MS) {
+        return {
+            ids: cached.ids,
+            logicalKeys: cached.logicalKeys
+        }
+    }
+
+    const ids = new Set<string>()
+    const logicalKeys = new Set<string>()
+
     try {
-        const sessionRef = doc(db, `users/${targetUserId}/sessions/${sessionId}`)
-        const snap = await getDocTracked(sessionRef)
+        const userRef = doc(db, `users/${targetUserId}`)
+        const snap = await getDocTracked(userRef)
         if (snap.exists()) {
-            globalCloudPresenceCache.set(cacheKey, true)
-            return true
+            const data = snap.data() || {}
+            const list = Array.isArray(data.sessionIndex?.sessionsList) ? data.sessionIndex.sessionsList : []
+            for (const entry of list) {
+                if (entry?.id) ids.add(String(entry.id))
+                const logicalKey = buildLogicalSessionKey({
+                    date_start: entry?.date,
+                    track: entry?.track
+                })
+                if (logicalKey) logicalKeys.add(logicalKey)
+            }
         }
     } catch {
-        return false
+        // If the lightweight index is unavailable, keep the page resilient and
+        // avoid falling back to one read per local session.
     }
-    return false
+
+    globalCloudIdentityCache.set(targetUserId, {
+        cachedAt: Date.now(),
+        ids,
+        logicalKeys
+    })
+
+    return { ids, logicalKeys }
 }
 
-async function resolveLocalOnlyCount(targetUserId: string, localSessions: SessionDocument[]): Promise<number> {
-    const checks = await Promise.all(localSessions.map(async (session) => {
+function countLocalOnlySessions(
+    localSessions: SessionDocument[],
+    cloudIdentities: { ids: Set<string>; logicalKeys: Set<string> }
+): number {
+    const checks = localSessions.map((session) => {
         if (session.syncState === 'synced') return false
         if (!session.sessionId) return true
-        const existsInCloud = await sessionExistsInCloud(targetUserId, session.sessionId)
-        return !existsInCloud
-    }))
+        if (cloudIdentities.ids.has(session.sessionId)) return false
+        const logicalKey = buildLogicalSessionKey(session.meta || {})
+        if (logicalKey && cloudIdentities.logicalKeys.has(logicalKey)) return false
+        return true
+    })
     return checks.filter(Boolean).length
 }
 
@@ -455,10 +491,11 @@ async function buildMergedOnlineOwnerPage(
 }> {
     const localFiltered = applyClientFilters(localSessions, filters)
 
-    const [cloudTotal, localOnlyCount] = await Promise.all([
+    const [cloudTotal, cloudIdentities] = await Promise.all([
         resolveCloudTotalsOnly(targetUserId, filters),
-        resolveLocalOnlyCount(targetUserId, localFiltered)
+        loadCloudIdentitySet(targetUserId)
     ])
+    const localOnlyCount = countLocalOnlySessions(localFiltered, cloudIdentities)
 
     const mergedTotal = cloudTotal !== null ? cloudTotal + localOnlyCount : null
     const requestedSafePage = mergedTotal !== null
@@ -469,8 +506,18 @@ async function buildMergedOnlineOwnerPage(
     let accumulatedCloud: SessionDocument[] = []
     let startCursor: QueryDocumentSnapshot<DocumentData> | null = null
     let cloudHasNext = true
+    let fetchedAtLeastOneCloudPage = false
 
     while (true) {
+        if (!fetchedAtLeastOneCloudPage) {
+            const cloudResult = await queryCloudPage(targetUserId, pageSize, startCursor, filters)
+            accumulatedCloud = dedupeCloudSessions([...accumulatedCloud, ...cloudResult.sessions])
+            startCursor = cloudResult.lastDoc
+            cloudHasNext = cloudResult.hasNext
+            fetchedAtLeastOneCloudPage = true
+            continue
+        }
+
         const mergedPreview = buildMergedSessionPage(localFiltered, accumulatedCloud, requestedSafePage, pageSize)
         if (mergedPreview.total > endExclusive || !cloudHasNext) {
             let finalPage = requestedSafePage

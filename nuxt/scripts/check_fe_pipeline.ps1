@@ -108,6 +108,13 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+$sessionElectronReadsScript = Join-Path $PSScriptRoot 'check_session_electron_reads.mjs'
+node $sessionElectronReadsScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Session Electron read contract failed'
+    exit 1
+}
+
 $projectionFirstScript = Join-Path $PSScriptRoot 'check_projection_first_sources.mjs'
 node $projectionFirstScript
 if ($LASTEXITCODE -ne 0) {
