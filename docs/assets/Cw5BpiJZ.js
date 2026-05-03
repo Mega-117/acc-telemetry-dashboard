@@ -1,0 +1,1 @@
+import{au as e,aw as a,h as n}from"./D9i1YfB4.js";function t(o){return new URL(globalThis.location.href)}const i=e(()=>{const o=typeof window<"u"?window.location.hostname:t().hostname;if(!a(o))return n("/panoramica")});export{i as default};
