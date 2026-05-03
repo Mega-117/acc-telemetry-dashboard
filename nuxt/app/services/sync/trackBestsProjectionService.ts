@@ -180,7 +180,6 @@ function mergeTrackBestsDocument(params: {
     sessionCount: 0
   }
   const countedSessionIds = new Set<string>(Array.isArray(existing?.syncedSessionIds) ? existing.syncedSessionIds : [])
-  const syncedSessionIds = Array.from(countedSessionIds)
   let lastSessionDate = existingActivity.lastSessionDate || existing?.lastSessionDate || null
   let hasBestUpdates = false
   let hasActivityUpdates = false
@@ -195,7 +194,6 @@ function mergeTrackBestsDocument(params: {
 
     if (!countedSessionIds.has(delta.sessionId)) {
       countedSessionIds.add(delta.sessionId)
-      syncedSessionIds.push(delta.sessionId)
       newActivity.totalLaps = Number(newActivity.totalLaps || 0) + Number(delta.summary?.laps || 0)
       newActivity.validLaps = Number(newActivity.validLaps || 0) + Number(delta.summary?.lapsValid || 0)
       newActivity.totalTimeMs = Number(newActivity.totalTimeMs || 0) + Number(delta.summary?.totalTime || 0)
@@ -219,7 +217,7 @@ function mergeTrackBestsDocument(params: {
     trackId: trackIdNorm,
     bests: newBests,
     activity: newActivity,
-    syncedSessionIds: Array.from(countedSessionIds).slice(-100),
+    syncedSessionIds: Array.from(countedSessionIds),
     lastSessionDate
   })
 

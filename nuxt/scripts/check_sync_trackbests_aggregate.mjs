@@ -68,12 +68,14 @@ registerHooks({
 const sessionUploadSource = fs.readFileSync(path.join(nuxtRoot, 'app/services/sync/sessionUploadService.ts'), 'utf8')
 const electronSyncSource = fs.readFileSync(path.join(nuxtRoot, 'app/composables/useElectronSync.ts'), 'utf8')
 const projectionRefreshSource = fs.readFileSync(path.join(nuxtRoot, 'app/services/sync/syncProjectionRefreshService.ts'), 'utf8')
+const trackBestsSource = fs.readFileSync(path.join(nuxtRoot, 'app/services/sync/trackBestsProjectionService.ts'), 'utf8')
 
 assert.equal(sessionUploadSource.includes('updateTrackBests:'), false, 'session upload service must not receive a per-file trackBests updater')
 assert.equal(sessionUploadSource.includes('await updateTrackBests'), false, 'session upload service must not write trackBests per file')
 assert.equal(electronSyncSource.includes('updateTrackBestsProjection'), false, 'normal sync must not call updateTrackBestsProjection per file')
 assert.equal(projectionRefreshSource.includes('applyTrackBestsProjectionDeltas'), true, 'projection refresh must apply aggregated trackBests deltas')
 assert.equal(projectionRefreshSource.includes('applyUserProjectionDeltas'), true, 'projection refresh must apply incremental user projection deltas')
+assert.equal(trackBestsSource.includes('syncedSessionIds: Array.from(countedSessionIds).slice(-100)'), false, 'trackBests activity idempotency must not be capped to the last 100 sessions')
 assert.ok(
   projectionRefreshSource.indexOf('applyUserProjectionDeltas') < projectionRefreshSource.indexOf("sourceMode: 'cloud_fresh'"),
   'normal incremental projection path must run before any cloud_fresh fallback'
@@ -134,6 +136,61 @@ assert.equal(setCalls, 1)
 assert.equal(writes[0].data.activity.sessionCount, 10)
 assert.equal(writes[0].data.activity.totalLaps, 50)
 assert.equal(writes[0].data.bests.GT3.Optimum.bestRace, 99991)
+
+getCalls = 0
+setCalls = 0
+writes.length = 0
+await applyTrackBestsProjectionDeltas({
+  db: {},
+  uid: 'user-1',
+  deltas: Array.from({ length: 120 }, (_, index) => makeDelta(index, 'nurburgring')),
+  getDocFn: async () => {
+    getCalls++
+    return {
+      exists: () => false,
+      data: () => null
+    }
+  },
+  setDocFn: async (ref, data) => {
+    setCalls++
+    writes.push({ ref, data })
+  },
+  bestRulesVersion: 2,
+  docFn: (_db, docPath) => ({ path: docPath })
+})
+
+assert.equal(getCalls, 1)
+assert.equal(setCalls, 1)
+assert.equal(writes[0].data.activity.sessionCount, 120)
+assert.equal(writes[0].data.activity.totalLaps, 600)
+assert.equal(writes[0].data.activity.validLaps, 480)
+assert.equal(writes[0].data.syncedSessionIds.length, 120, 'trackBests must retain all counted session ids for idempotent activity totals')
+
+const existingTrackBestsWithManySessions = writes[0].data
+getCalls = 0
+setCalls = 0
+writes.length = 0
+await applyTrackBestsProjectionDeltas({
+  db: {},
+  uid: 'user-1',
+  deltas: [makeDelta(0, 'nurburgring')],
+  getDocFn: async () => {
+    getCalls++
+    return {
+      exists: () => true,
+      data: () => existingTrackBestsWithManySessions
+    }
+  },
+  setDocFn: async (ref, data) => {
+    setCalls++
+    writes.push({ ref, data })
+  },
+  bestRulesVersion: 2,
+  docFn: (_db, docPath) => ({ path: docPath })
+})
+
+assert.equal(getCalls, 1)
+assert.equal(setCalls, 0, 'reprocessing an old session beyond the previous 100-id window must not rewrite or double count')
 
 getCalls = 0
 setCalls = 0
