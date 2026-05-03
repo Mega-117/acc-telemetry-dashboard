@@ -341,16 +341,26 @@ body:has(.electron-titlebar) {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  
-  // All direct children except titlebar should be in scrollable area
-  > *:not(.electron-titlebar) {
-    flex: 1;
+
+  // Keep the Electron scroll shell limited to page wrappers so fixed overlays
+  // such as the Firebase probe stay anchored to the viewport.
+  > .dashboard-wrapper,
+  > .profile-wrapper,
+  > .auth-wrapper,
+  > .loading-screen,
+  > .initializing-screen {
+    flex: 1 1 auto;
+    min-height: 0;
     // Force scrollbar to NOT take space - calc trick
     width: calc(100% + 8px);
     margin-right: -8px;
     overflow-y: scroll;
     overflow-x: hidden;
     padding-right: 8px;
+  }
+
+  > .dashboard-wrapper .page-container {
+    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
   }
 }
 
