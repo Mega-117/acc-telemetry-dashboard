@@ -30,8 +30,8 @@ import { createSyncMaintenanceService } from '~/services/sync/syncMaintenanceSer
 import { refreshSyncProjections } from '~/services/sync/syncProjectionRefreshService'
 import type { UserProjectionDelta } from '~/services/sync/syncUserProjectionDeltaService'
 import { resolveSyncTriggerAction, type SyncTrigger } from '~/services/sync/syncTriggerPolicy'
-import { PILOT_DIRECTORY_SCHEMA_VERSION } from '~/utils/pilotDirectoryFields'
 import { useOwnerDataMaintenance } from './useOwnerDataMaintenance'
+import { updatePilotDirectoryActivity } from '~/services/pilotDirectoryProjectionService'
 
 const SYNC_CALLER = 'ElectronSync'
 async function getDoc(ref: any) { return trackedGetDoc(ref, SYNC_CALLER) }
@@ -109,7 +109,6 @@ async function updateSuiteVersion(uid: string): Promise<boolean> {
         if (!version) return false
 
         const userRef = doc(db, `users/${uid}`)
-        const directoryRef = doc(db, `pilotDirectory/${uid}`)
         const suiteVersion = version.launcher || version.webapp || null
         const suiteVersionUpdatedAt = new Date().toISOString()
         await setDoc(userRef, {
@@ -117,12 +116,15 @@ async function updateSuiteVersion(uid: string): Promise<boolean> {
             suiteVersionDetail: version,
             suiteVersionUpdatedAt
         }, { merge: true })
-        await setDoc(directoryRef, {
-            schemaVersion: PILOT_DIRECTORY_SCHEMA_VERSION,
+        await updatePilotDirectoryActivity({
+            db,
             uid,
-            suiteVersion,
-            suiteVersionUpdatedAt
-        }, { merge: true })
+            fields: {
+                suiteVersion,
+                suiteVersionUpdatedAt
+            },
+            setDocFn: setDoc
+        })
         console.log(`[SYNC] Suite version updated: ${version.launcher}`)
         return true
     } catch (versionError: any) {

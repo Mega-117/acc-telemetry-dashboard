@@ -4,8 +4,8 @@ import { buildUserStatsProjection } from './userStatsProjectionService'
 import { applyTrackBestsProjectionDeltas, type TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { writeTrackDetailProjectionDocuments } from './trackDetailProjectionService'
 import type { SessionDocument } from '~/composables/useTelemetryData'
-import { PILOT_DIRECTORY_SCHEMA_VERSION } from '~/utils/pilotDirectoryFields'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
+import { updatePilotDirectoryActivity } from '~/services/pilotDirectoryProjectionService'
 
 export async function rebuildTrackBestsProjection(params: {
   db: any
@@ -46,7 +46,6 @@ export async function writeUserProjectionDocuments(params: {
 }): Promise<void> {
   const { db, uid, sessions, setDocFn } = params
   const userRef = doc(db, `users/${uid}`)
-  const directoryRef = doc(db, `pilotDirectory/${uid}`)
   const stats = buildUserStatsProjection(sessions)
   const sessionIndex = buildSessionIndexProjection(sessions)
 
@@ -54,12 +53,15 @@ export async function writeUserProjectionDocuments(params: {
     stats,
     sessionIndex
   }), { merge: true })
-  await setDocFn(directoryRef, sanitizeForFirestore({
-    schemaVersion: PILOT_DIRECTORY_SCHEMA_VERSION,
+  await updatePilotDirectoryActivity({
+    db,
     uid,
-    sessionsLast7Days: stats.sessionsLast7Days,
-    lastSessionDate: stats.lastSessionDate || null
-  }), { merge: true })
+    fields: {
+      sessionsLast7Days: stats.sessionsLast7Days,
+      lastSessionDate: stats.lastSessionDate || null
+    },
+    setDocFn
+  })
   await writeTrackDetailProjectionDocuments({
     db,
     uid,

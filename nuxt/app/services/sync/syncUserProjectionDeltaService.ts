@@ -1,7 +1,7 @@
 import { doc } from 'firebase/firestore'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
-import { PILOT_DIRECTORY_SCHEMA_VERSION } from '~/utils/pilotDirectoryFields'
+import { updatePilotDirectoryActivity } from '~/services/pilotDirectoryProjectionService'
 import { SESSION_INDEX_MAX_ITEMS, SESSION_INDEX_SCHEMA_VERSION } from './sessionIndexProjectionService'
 import { USER_STATS_SCHEMA_VERSION } from './userStatsProjectionService'
 import type { TrackBestProjectionDelta } from './trackBestsProjectionService'
@@ -127,7 +127,6 @@ export async function applyUserProjectionDeltas(params: {
   }
 
   const userRef = docFn(db, `users/${uid}`)
-  const directoryRef = docFn(db, `pilotDirectory/${uid}`)
   const userSnap = await getDocFn(userRef)
   const userData = userSnap.exists() ? userSnap.data() : {}
   const existingIndex = userData?.sessionIndex || {}
@@ -182,12 +181,16 @@ export async function applyUserProjectionDeltas(params: {
     }
   }), { merge: true })
 
-  await setDocFn(directoryRef, sanitizeForFirestore({
-    schemaVersion: PILOT_DIRECTORY_SCHEMA_VERSION,
+  await updatePilotDirectoryActivity({
+    db,
     uid,
-    sessionsLast7Days,
-    lastSessionDate
-  }), { merge: true })
+    fields: {
+      sessionsLast7Days,
+      lastSessionDate
+    },
+    setDocFn,
+    docFn
+  })
 
   return { wrote: true, totalSessions, sessionsLast7Days }
 }

@@ -9,7 +9,6 @@ import {
 } from '~/composables/useFirebaseTracker'
 import type { SessionDocument } from '~/composables/useTelemetryData'
 import { BEST_RULES_VERSION, extractMetadata } from '~/utils/sessionParser'
-import { buildPilotDirectoryDocument } from '~/utils/pilotDirectoryFields'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import { normalizeTrackId } from '~/services/projections/trackMetadata'
 import { canonicalizeTelemetryPayload } from './canonicalSummaryBridge'
@@ -23,6 +22,7 @@ import {
 } from './trackBestsProjectionService'
 import { TRACK_DETAIL_PROJECTION_SCHEMA_VERSION } from '~/types/trackProjections'
 import { writeUserProjectionDocuments } from './projectionRebuildService'
+import { writePilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
 
 const CALLER = 'OwnerDataRepair'
 const MAX_ISSUES = 200
@@ -454,19 +454,17 @@ export async function rebuildOwnerProjections(uid: string): Promise<OwnerProject
     try {
       const userSnap = await getDocTracked(doc(db, `users/${uid}`))
       const userData = userSnap.exists() ? (userSnap.data() || {}) : {}
-      await setDocTracked(doc(db, `pilotDirectory/${uid}`), sanitizeForFirestore(buildPilotDirectoryDocument({
+      await writePilotDirectoryFromUser({
+        db,
         uid,
-        firstName: userData.firstName || '',
-        lastName: userData.lastName || '',
-        nickname: userData.nickname || '',
-        email: userData.email || '',
-        role: userData.role || 'pilot',
-        coachId: userData.coachId || null,
-        sessionsLast7Days: stats.sessionsLast7Days,
-        lastSessionDate: stats.lastSessionDate,
-        suiteVersion: userData.suiteVersion || null,
-        suiteVersionUpdatedAt: userData.suiteVersionUpdatedAt || null
-      })), { merge: true })
+        userData: {
+          uid,
+          ...userData,
+          sessionsLast7Days: stats.sessionsLast7Days,
+          lastSessionDate: stats.lastSessionDate
+        },
+        setDocFn: setDocTracked
+      })
       wrotePilotDirectory = true
     } catch {
       wrotePilotDirectory = false

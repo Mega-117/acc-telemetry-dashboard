@@ -13,6 +13,7 @@
     "check:sync-runtime": "node scripts/check_sync_runtime.mjs",
     "check:sync-trackbests-aggregate": "node scripts/check_sync_trackbests_aggregate.mjs",
     "check:pilots-pagination": "node scripts/check_pilots_pagination.mjs",
+    "check:pilot-directory-sync": "node scripts/check_pilot_directory_sync.mjs",
     "check:session-detail-modes": "node scripts/check_session_detail_modes.mjs",
     "check:session-pager-merge": "node scripts/check_session_pager_merge.mjs",
     "check:projection-first": "node scripts/check_projection_first_sources.mjs",

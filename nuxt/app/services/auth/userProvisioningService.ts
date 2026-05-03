@@ -2,7 +2,8 @@ import type { User } from 'firebase/auth'
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { trackedGetDoc, trackedSetDoc } from '~/composables/useFirebaseTracker'
-import { buildPilotDirectoryDocument, buildPilotDirectoryFields } from '~/utils/pilotDirectoryFields'
+import { buildPilotDirectoryFields } from '~/utils/pilotDirectoryFields'
+import { writePilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
 
 const AUTH_PROVISION_CALLER = 'AuthProvisioning'
 
@@ -42,20 +43,12 @@ function sameStringArray(a: any, b: any): boolean {
 }
 
 async function writePilotDirectoryDocument(uid: string, data: any) {
-    const directoryRef = doc(db, 'pilotDirectory', uid)
-    await setDocTracked(directoryRef, buildPilotDirectoryDocument({
+    await writePilotDirectoryFromUser({
+        db,
         uid,
-        firstName: data.firstName || '',
-        lastName: data.lastName || '',
-        nickname: data.nickname || '',
-        email: data.email || '',
-        role: data.role || 'pilot',
-        coachId: data.coachId || null,
-        sessionsLast7Days: data.stats?.sessionsLast7Days ?? data.sessionsLast7Days ?? 0,
-        lastSessionDate: data.stats?.lastSessionDate ?? data.lastSessionDate ?? null,
-        suiteVersion: data.suiteVersion || null,
-        suiteVersionUpdatedAt: data.suiteVersionUpdatedAt || null
-    }), { merge: true })
+        userData: data,
+        setDocFn: setDocTracked
+    })
 }
 
 export async function createInitialUserDocument(

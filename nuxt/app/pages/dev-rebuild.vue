@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { db } from '~/config/firebase'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useElectronSync } from '~/composables/useElectronSync'
+import { trackedGetDoc, trackedSetDoc } from '~/composables/useFirebaseTracker'
+import { repairPilotDirectoryFromUser, type PilotDirectoryRepairResult } from '~/services/pilotDirectoryProjectionService'
 import {
   auditOwnerData,
   reprocessOwnerCloudRawSummaries,
@@ -24,6 +27,8 @@ const auditReport = ref<OwnerDataAuditReport | null>(null)
 const rebuildReport = ref<OwnerProjectionRebuildReport | null>(null)
 const cloudReprocessResult = ref<OwnerCloudSummaryReprocessReport | null>(null)
 const localReprocessResult = ref<any | null>(null)
+const directoryRepairUid = ref('')
+const directoryRepairResult = ref<PilotDirectoryRepairResult | null>(null)
 
 const isDevHost = computed(() => {
   if (import.meta.dev) return true
@@ -34,6 +39,7 @@ const isDevHost = computed(() => {
 const canUseTool = computed(() => !!currentUser.value?.uid && isDevHost.value)
 const canRebuild = computed(() => !!auditReport.value?.canRebuildProjections && !isLoading.value)
 const canReprocessCloud = computed(() => !!currentUser.value?.uid && canUseTool.value && !isLoading.value)
+const canRepairDirectory = computed(() => !!directoryRepairUid.value.trim() && canUseTool.value && !isLoading.value)
 const permissionIssues = computed(() => {
   const permissions = auditReport.value?.permissions
   if (!permissions) return []
@@ -112,6 +118,34 @@ async function reprocessLocalAndSync() {
     isLoading.value = false
   }
 }
+
+async function runPilotDirectoryRepair() {
+  const uid = directoryRepairUid.value.trim()
+  if (!uid || !canUseTool.value) return
+  const ok = confirm(`Riallineare pilotDirectory/${uid} leggendo users/${uid}? Serve essere owner o admin secondo le rules Firebase.`)
+  if (!ok) return
+
+  isLoading.value = true
+  error.value = null
+  directoryRepairResult.value = null
+  try {
+    directoryRepairResult.value = await repairPilotDirectoryFromUser({
+      db,
+      uid,
+      getDocFn: (ref) => trackedGetDoc(ref, 'DevPilotDirectoryRepair'),
+      setDocFn: (ref, data, options) => options
+        ? trackedSetDoc(ref, data, options, 'DevPilotDirectoryRepair')
+        : trackedSetDoc(ref, data, 'DevPilotDirectoryRepair')
+    })
+    if (directoryRepairResult.value.reason === 'missing_user') {
+      error.value = `users/${uid} non esiste. Directory non aggiornata.`
+    }
+  } catch (e: any) {
+    error.value = e?.message || 'Repair pilotDirectory fallito'
+  } finally {
+    isLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -145,6 +179,29 @@ async function reprocessLocalAndSync() {
           Reprocess local files + sync
         </button>
       </div>
+
+      <section class="card card--full repair-panel">
+        <div>
+          <h2>Repair pilotDirectory</h2>
+          <p>
+            Riallinea un documento <code>pilotDirectory</code> usando <code>users</code> come fonte completa.
+            Utile quando coachId/ruolo/profilo sono stati modificati fuori dall'app.
+          </p>
+        </div>
+        <div class="repair-form">
+          <input
+            v-model="directoryRepairUid"
+            class="repair-input"
+            type="text"
+            placeholder="UID pilota"
+            :disabled="isLoading || !canUseTool"
+          />
+          <button class="btn btn--primary" :disabled="!canRepairDirectory" @click="runPilotDirectoryRepair">
+            Repair directory
+          </button>
+        </div>
+        <pre v-if="directoryRepairResult">{{ JSON.stringify(directoryRepairResult, null, 2) }}</pre>
+      </section>
 
       <div v-if="isLoading" class="notice">Operazione in corso...</div>
       <div v-if="error" class="notice notice--danger">{{ error }}</div>
@@ -261,6 +318,32 @@ async function reprocessLocalAndSync() {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+}
+
+.repair-panel {
+  display: grid;
+  gap: 14px;
+
+  p {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.62);
+    line-height: 1.55;
+  }
+}
+
+.repair-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.repair-input {
+  min-width: min(360px, 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
 }
 
 .btn,

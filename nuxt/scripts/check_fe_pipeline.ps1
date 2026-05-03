@@ -122,6 +122,13 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+$pilotDirectorySyncScript = Join-Path $PSScriptRoot 'check_pilot_directory_sync.mjs'
+node $pilotDirectorySyncScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Pilot directory sync contract failed'
+    exit 1
+}
+
 $ownerRebuildScript = Join-Path $PSScriptRoot 'check_owner_rebuild_contract.mjs'
 node $ownerRebuildScript
 if ($LASTEXITCODE -ne 0) {

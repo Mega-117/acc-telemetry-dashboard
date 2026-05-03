@@ -174,7 +174,10 @@ watch(searchQuery, () => {
     <!-- Empty State -->
     <div v-else-if="pilots.length === 0" class="state-box state-box--empty">
       <p>{{ searchQuery ? `Nessun risultato per "${searchQuery}"` : 'Nessun pilota assegnato' }}</p>
-      <small v-if="!searchQuery">Per assegnare un pilota, vai nella Firebase Console e aggiungi il campo <code>coachId</code> con il tuo UID al documento del pilota.</small>
+      <small v-if="!searchQuery">
+        L'assegnazione coach deve aggiornare sia <code>users</code> sia <code>pilotDirectory</code>.
+        In sviluppo usa il repair directory da <code>/dev-rebuild</code> se i dati sono stati modificati manualmente.
+      </small>
     </div>
 
     <!-- Pilots List -->
