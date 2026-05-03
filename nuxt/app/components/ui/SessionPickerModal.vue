@@ -5,9 +5,11 @@ import {
   formatLapTime,
   formatTime,
   formatCarName,
-  getSessionTypeLabel
+  getSessionTypeLabel,
+  type SessionDocument
 } from '~/composables/useTelemetryData'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
 const props = defineProps<{
   isOpen: boolean
@@ -21,9 +23,9 @@ const emit = defineEmits<{
 }>()
 
 const telemetryGateway = useTelemetryGateway()
-const { sessions } = telemetryGateway
-import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 const { getUserProfile } = useFirebaseAuth()
+const modalSessions = ref<SessionDocument[]>([])
+const isLoadingSessions = ref(false)
 
 // === SHARED LINK INPUT ===
 const sharedLink = ref('')
@@ -96,26 +98,26 @@ async function loadSharedLink() {
 const filteredSessions = computed(() => {
   const trackNorm = props.currentTrack.toLowerCase().replace(/[^a-z0-9]/g, '_')
   
-  return sessions.value
+  return modalSessions.value
     .filter(s => {
       // Exclude current session
       if (s.sessionId === props.excludeSessionId) return false
       
       // Match track
-      const sessionTrack = s.meta.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
+      const sessionTrack = (s.meta?.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
       return sessionTrack.includes(trackNorm) || trackNorm.includes(sessionTrack)
     })
     .map(s => {
-      const sessionRaceTime = s.summary.best_session_race_ms || s.summary.best_race_ms || null
+      const sessionRaceTime = s.summary?.best_session_race_ms || s.summary?.best_race_ms || null
       return {
         id: s.sessionId,
-        date: formatDateShort(s.meta.date_start),
-        time: formatTime(s.meta.date_start),
-        type: getSessionTypeLabel(s.meta.session_type),
-        car: formatCarName(s.meta.car),
-        laps: s.summary.laps || 0,
-        stints: s.summary.stintCount ?? 0,
-        bestQualy: s.summary.best_qualy_ms ? formatLapTime(s.summary.best_qualy_ms) : null,
+        date: formatDateShort(s.meta?.date_start || ''),
+        time: formatTime(s.meta?.date_start || ''),
+        type: getSessionTypeLabel(Number(s.meta?.session_type ?? -1)),
+        car: formatCarName(s.meta?.car || ''),
+        laps: s.summary?.laps || 0,
+        stints: s.summary?.stintCount ?? 0,
+        bestQualy: s.summary?.best_qualy_ms ? formatLapTime(s.summary.best_qualy_ms) : null,
         bestRace: sessionRaceTime ? formatLapTime(sessionRaceTime) : null
       }
     })
@@ -148,7 +150,18 @@ watch(
   async (isOpen) => {
     if (typeof window === 'undefined') return
     if (isOpen) {
-      await telemetryGateway.getOverviewSnapshot()
+      isLoadingSessions.value = true
+      try {
+        const page = await telemetryGateway.getSessionsPage(undefined, {}, 1, 50, true)
+        modalSessions.value = page.sessions
+      } catch (e) {
+        console.error('[SESSION_PICKER] Failed to load sessions page:', e)
+        modalSessions.value = []
+      } finally {
+        isLoadingSessions.value = false
+      }
+    } else {
+      modalSessions.value = []
     }
   },
   { immediate: true }
@@ -162,7 +175,9 @@ watch(
         <!-- Header -->
         <div class="spm-header">
           <h2 class="spm-title">Aggiungi Sorgente Dati</h2>
-          <p class="spm-subtitle">{{ formatTrackName(currentTrack) }} · {{ filteredSessions.length }} sessioni disponibili</p>
+          <p class="spm-subtitle">
+            {{ formatTrackName(currentTrack) }} · {{ isLoadingSessions ? 'caricamento sessioni...' : `${filteredSessions.length} sessioni disponibili` }}
+          </p>
           <button class="spm-close" @click="closeModal">✕</button>
         </div>
         

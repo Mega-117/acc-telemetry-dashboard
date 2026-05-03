@@ -7,7 +7,6 @@
 
 import { ref, onMounted, nextTick, watch } from 'vue'
 import { useElectronSync } from '~/composables/useElectronSync'
-import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 
 const route = useRoute()
 const router = useRouter()
@@ -18,7 +17,6 @@ const isRefreshing = ref(false)
 
 // Sync composable
 const { isSyncing, syncTelemetryFiles, setupAutoSync, syncResults, pendingNotification, dataMaintenance } = useElectronSync()
-const telemetryGateway = useTelemetryGateway()
 const maintenanceStatus = dataMaintenance.status
 const maintenanceProgress = dataMaintenance.progress
 const maintenanceMessage = dataMaintenance.message
@@ -85,9 +83,6 @@ const handleRefresh = async () => {
       // Navigate to a safe base route momentarily
       await router.replace({ path: '/panoramica', query: { _refresh: Date.now() } })
       await nextTick()
-      
-      // Reload fresh data through the centralized gateway
-      await telemetryGateway.getOverviewSnapshot()
       
       // Navigate back to original route
       await router.replace(currentPath)
