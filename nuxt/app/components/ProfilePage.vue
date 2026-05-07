@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { doc } from 'firebase/firestore'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useTelemetryData } from '~/composables/useTelemetryData'
@@ -17,7 +17,7 @@ const emit = defineEmits<{
   back: []
 }>()
 
-type ProfileTab = 'account' | 'equipment' | 'calendar' | 'coach'
+type ProfileTab = 'account' | 'calendar' | 'coach'
 
 const { currentUser, getUserProfile } = useFirebaseAuth()
 const { countSharedSessions, revokeAllSharedSessions, resetAllTrackBests } = useTelemetryData()
@@ -106,12 +106,24 @@ const setupSummaryRows = computed(() => {
 
 const hasEquipmentSummary = computed(() => hardwareSummaryRows.value.length > 0 || setupSummaryRows.value.length > 0)
 
-const tabs = computed<Array<{ id: ProfileTab; label: string }>>(() => [
-  { id: 'account', label: 'Profilo' },
-  { id: 'equipment', label: 'Attrezzatura' },
-  { id: 'calendar', label: 'Calendario' },
-  { id: 'coach', label: props.userRole === 'coach' ? 'Coach' : 'Coach e lezioni' }
-])
+const tabs = computed<Array<{ id: ProfileTab; label: string }>>(() => {
+  const baseTabs: Array<{ id: ProfileTab; label: string }> = [
+    { id: 'account', label: 'Profilo' },
+    { id: 'calendar', label: 'Calendario' }
+  ]
+
+  if ((props.userRole || 'pilot') === 'pilot') {
+    baseTabs.push({ id: 'coach', label: 'Coach e lezioni' })
+  }
+
+  return baseTabs
+})
+
+watch(tabs, (availableTabs) => {
+  if (!availableTabs.some((tab) => tab.id === activeTab.value)) {
+    activeTab.value = availableTabs[0]?.id || 'account'
+  }
+}, { immediate: true })
 
 const displayName = computed((): string => {
   if (props.userNickname) return props.userNickname
@@ -332,45 +344,7 @@ onMounted(async () => {
         </nav>
 
         <section v-if="activeTab === 'account'" class="tab-panel account-grid">
-          <div class="profile-card">
-            <h3 class="card-title">Sessioni condivise</h3>
-            <p v-if="sharedSessionsCount > 0" class="muted-text">
-              Hai <strong>{{ sharedSessionsCount }}</strong> sessioni condivise pubblicamente.
-            </p>
-            <p v-else class="muted-text">Nessuna sessione condivisa.</p>
-            <button
-              v-if="sharedSessionsCount > 0"
-              class="danger-action"
-              :class="{ 'danger-action--success': revokeSuccess }"
-              :disabled="isRevoking"
-              @click="revokeAll"
-            >
-              <template v-if="isRevoking">Revocando...</template>
-              <template v-else-if="revokeSuccess">Revocate</template>
-              <template v-else>Revoca tutte</template>
-            </button>
-          </div>
-
-          <div class="profile-card">
-            <h3 class="card-title">Reset tempi storici</h3>
-            <p class="muted-text">
-              Elimina i best storici salvati. Alla prossima sincronizzazione verranno ricalcolati dalle sessioni.
-            </p>
-            <button
-              class="danger-action"
-              :class="{ 'danger-action--success': resetBestsSuccess }"
-              :disabled="isResettingBests"
-              @click="resetHistoricalBests"
-            >
-              <template v-if="isResettingBests">Eliminando...</template>
-              <template v-else-if="resetBestsSuccess">Eliminati {{ resetBestsCount }} tracciati</template>
-              <template v-else>Elimina tutti i best</template>
-            </button>
-          </div>
-        </section>
-
-        <section v-else-if="activeTab === 'equipment'" class="tab-panel">
-          <div class="profile-card equipment-card">
+          <div class="profile-card equipment-card account-equipment-card">
             <div class="card-head">
               <h3 class="card-title">Attrezzatura e impostazioni</h3>
               <div class="card-actions">
@@ -496,6 +470,42 @@ onMounted(async () => {
                 </div>
               </div>
             </div>
+          </div>
+
+          <div class="profile-card">
+            <h3 class="card-title">Sessioni condivise</h3>
+            <p v-if="sharedSessionsCount > 0" class="muted-text">
+              Hai <strong>{{ sharedSessionsCount }}</strong> sessioni condivise pubblicamente.
+            </p>
+            <p v-else class="muted-text">Nessuna sessione condivisa.</p>
+            <button
+              v-if="sharedSessionsCount > 0"
+              class="danger-action"
+              :class="{ 'danger-action--success': revokeSuccess }"
+              :disabled="isRevoking"
+              @click="revokeAll"
+            >
+              <template v-if="isRevoking">Revocando...</template>
+              <template v-else-if="revokeSuccess">Revocate</template>
+              <template v-else>Revoca tutte</template>
+            </button>
+          </div>
+
+          <div class="profile-card">
+            <h3 class="card-title">Reset tempi storici</h3>
+            <p class="muted-text">
+              Elimina i best storici salvati. Alla prossima sincronizzazione verranno ricalcolati dalle sessioni.
+            </p>
+            <button
+              class="danger-action"
+              :class="{ 'danger-action--success': resetBestsSuccess }"
+              :disabled="isResettingBests"
+              @click="resetHistoricalBests"
+            >
+              <template v-if="isResettingBests">Eliminando...</template>
+              <template v-else-if="resetBestsSuccess">Eliminati {{ resetBestsCount }} tracciati</template>
+              <template v-else>Elimina tutti i best</template>
+            </button>
           </div>
         </section>
 
@@ -712,6 +722,10 @@ $max-width: 1400px;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px;
+}
+
+.account-equipment-card {
+  grid-column: 1 / -1;
 }
 
 .profile-card {

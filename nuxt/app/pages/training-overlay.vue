@@ -479,6 +479,25 @@ onBeforeUnmount(() => {
                 </div>
               </div>
 
+              <div class="training-plan-preview" aria-label="Piano allenamento">
+                <div class="training-plan-head">
+                  <span>Piano allenamento</span>
+                  <strong>{{ selectedMode.title }}</strong>
+                </div>
+                <div class="training-plan-list">
+                  <div
+                    v-for="step in selectedMode.steps"
+                    :key="step.id"
+                    class="training-plan-row"
+                  >
+                    <div>
+                      <span>{{ step.title }}</span>
+                    </div>
+                    <strong>{{ step.durationMinutes }} min</strong>
+                  </div>
+                </div>
+              </div>
+
               <div class="settings-panel" aria-label="Impostazioni overlay">
                 <span class="settings-title">Impostazioni</span>
 
@@ -918,6 +937,81 @@ p {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
+}
+
+.training-plan-preview {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid rgba(var(--overlay-accent-rgb), 0.18);
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at top left, rgba(var(--overlay-accent-rgb), 0.12), transparent 52%),
+    rgba(255, 255, 255, 0.045);
+  box-sizing: border-box;
+}
+
+.training-plan-head,
+.training-plan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.training-plan-head span {
+  color: rgba(215, 232, 244, 0.58);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.training-plan-head strong {
+  color: rgba(248, 252, 255, 0.82);
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.training-plan-list {
+  display: grid;
+  gap: 3px;
+  max-height: 116px;
+  overflow: auto;
+  padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--overlay-accent-rgb), 0.48) rgba(255, 255, 255, 0.05);
+}
+
+.training-plan-row {
+  min-height: 22px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.training-plan-row div {
+  display: grid;
+  min-width: 0;
+}
+
+.training-plan-row span {
+  overflow: hidden;
+  color: rgba(248, 252, 255, 0.9);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.training-plan-row strong {
+  flex: 0 0 auto;
+  color: rgba(248, 252, 255, 0.78);
+  font-size: 10px;
+  font-weight: 950;
+  white-space: nowrap;
 }
 
 .settings-panel {

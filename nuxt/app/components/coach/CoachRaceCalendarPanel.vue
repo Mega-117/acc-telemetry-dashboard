@@ -127,45 +127,47 @@ onMounted(refreshEvents)
       </template>
     </div>
 
-    <form v-if="isAdding" class="event-form" @submit.prevent="addEvent">
-      <div class="form-row">
-        <label>
-          <span>Titolo gara</span>
-          <input v-model="form.title" type="text" placeholder="Es. Gara team" />
-        </label>
-        <label>
-          <span>Data e ora</span>
-          <input v-model="form.startsAt" type="datetime-local" />
-        </label>
-      </div>
+    <Transition name="event-form-expand">
+      <form v-if="isAdding" class="event-form" @submit.prevent="addEvent">
+        <div class="form-row">
+          <label>
+            <span>Titolo gara</span>
+            <input v-model="form.title" type="text" placeholder="Es. Gara team" />
+          </label>
+          <label>
+            <span>Data e ora</span>
+            <input v-model="form.startsAt" type="datetime-local" />
+          </label>
+        </div>
 
-      <div class="form-row">
-        <label>
-          <span>Pista</span>
-          <input v-model="form.trackName" type="text" placeholder="Es. Spa-Francorchamps" />
-        </label>
-        <label>
-          <span>Vettura</span>
-          <input v-model="form.carName" type="text" placeholder="Es. Ferrari 296 GT3" />
-        </label>
-      </div>
+        <div class="form-row">
+          <label>
+            <span>Pista</span>
+            <input v-model="form.trackName" type="text" placeholder="Es. Spa-Francorchamps" />
+          </label>
+          <label>
+            <span>Vettura</span>
+            <input v-model="form.carName" type="text" placeholder="Es. Ferrari 296 GT3" />
+          </label>
+        </div>
 
-      <div class="form-row">
-        <label>
-          <span>SimGrid</span>
-          <input v-model="form.simGridUrl" type="url" placeholder="https://..." />
-        </label>
-        <label>
-          <span>Link gara</span>
-          <input v-model="form.raceUrl" type="url" placeholder="Briefing, Discord, sito evento..." />
-        </label>
-      </div>
+        <div class="form-row">
+          <label>
+            <span>SimGrid</span>
+            <input v-model="form.simGridUrl" type="url" placeholder="https://..." />
+          </label>
+          <label>
+            <span>Link gara</span>
+            <input v-model="form.raceUrl" type="url" placeholder="Briefing, Discord, sito evento..." />
+          </label>
+        </div>
 
-      <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
-      <button class="primary-action" type="submit" :disabled="isSaving">
-        {{ isSaving ? 'Aggiungo...' : 'Aggiungi gara al pilota' }}
-      </button>
-    </form>
+        <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
+        <button class="primary-action" type="submit" :disabled="isSaving">
+          {{ isSaving ? 'Aggiungo...' : 'Aggiungi gara al pilota' }}
+        </button>
+      </form>
+    </Transition>
   </section>
 </template>
 
@@ -181,7 +183,7 @@ onMounted(refreshEvents)
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 
   h3 {
     margin: 0 0 5px;
@@ -207,7 +209,7 @@ onMounted(refreshEvents)
   grid-template-columns: 88px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  padding: 12px;
+  padding: 10px 12px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 10px;
@@ -300,9 +302,9 @@ input {
 
 .ghost-action,
 .primary-action {
-  min-height: 38px;
-  padding: 0 14px;
-  border-radius: 9px;
+  min-height: 36px;
+  padding: 0 13px;
+  border-radius: 8px;
   font-family: $font-primary;
   font-size: 12px;
   font-weight: 800;
@@ -334,17 +336,53 @@ input {
 }
 
 .empty-state {
-  padding: 18px;
+  padding: 14px 16px;
   border: 1px dashed rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  border-radius: 10px;
   color: rgba(255, 255, 255, 0.48);
   text-align: center;
+}
+
+.event-form-expand-enter-active,
+.event-form-expand-leave-active {
+  overflow: hidden;
+  transition: opacity 0.2s ease, transform 0.2s ease, max-height 0.26s ease, margin-top 0.26s ease;
+}
+
+.event-form-expand-enter-from,
+.event-form-expand-leave-to {
+  max-height: 0;
+  margin-top: 0;
+  opacity: 0;
+  transform: translateY(-5px);
+}
+
+.event-form-expand-enter-to,
+.event-form-expand-leave-from {
+  max-height: 360px;
+  margin-top: 14px;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 @media (max-width: 900px) {
   .event-row,
   .form-row {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .event-form-expand-enter-active,
+  .event-form-expand-leave-active {
+    transition: none;
+  }
+
+  .event-form-expand-enter-from,
+  .event-form-expand-leave-to,
+  .event-form-expand-enter-to,
+  .event-form-expand-leave-from {
+    transform: none;
   }
 }
 </style>

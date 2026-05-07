@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { loadCoachLessons, type CoachLesson } from '~/repositories/coachLessonsRepository'
+import { loadCoachLessons, type CoachFeedbackItem, type CoachFeedbackType, type CoachLesson } from '~/repositories/coachLessonsRepository'
 
 const { currentUser } = useFirebaseAuth()
 
@@ -18,6 +18,23 @@ const lessonLinks = computed(() => {
     { label: 'Registrazione', url: activeLesson.value.recordingUrl }
   ].filter((link) => Boolean(link.url))
 })
+
+const feedbackTypeLabels: Record<CoachFeedbackType, string> = {
+  issue: 'Errore',
+  action: 'Azione',
+  positive: 'Positivo'
+}
+
+function feedbackTypeLabel(type: CoachFeedbackType): string {
+  return feedbackTypeLabels[type] || 'Feedback'
+}
+
+function feedbackContext(item: CoachFeedbackItem): string {
+  const parts = []
+  if (item.turn) parts.push(/^curva/i.test(item.turn) ? item.turn : `Curva ${item.turn}`)
+  if (item.category) parts.push(item.category)
+  return parts.join(' - ')
+}
 
 function formatDate(value: string): string {
   if (!value) return 'Data non impostata'
@@ -121,7 +138,10 @@ onMounted(async () => {
 
         <div class="feedback-list">
           <div v-for="(item, index) in activeLesson.feedbackItems" :key="index" class="feedback-item" :class="`feedback-item--${item.type}`">
-            <strong>{{ item.turn || item.category }}</strong>
+            <div class="feedback-item__head">
+              <span class="feedback-badge">{{ feedbackTypeLabel(item.type) }}</span>
+              <strong>{{ feedbackContext(item) || 'Feedback generale' }}</strong>
+            </div>
             <span>{{ item.message }}</span>
           </div>
         </div>
@@ -273,6 +293,13 @@ onMounted(async () => {
     font-size: 12px;
     font-weight: 700;
     text-decoration: none;
+    transition: transform 0.16s ease, background 0.16s ease, border-color 0.16s ease;
+
+    &:hover {
+      transform: translateY(-1px);
+      background: rgba($racing-orange, 0.12);
+      border-color: rgba($racing-orange, 0.48);
+    }
   }
 }
 
@@ -299,6 +326,23 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.035);
   border-left: 3px solid rgba(255, 255, 255, 0.18);
 
+  &__head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .feedback-badge {
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.74);
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
   strong {
     font-size: 12px;
     color: #fff;
@@ -311,14 +355,29 @@ onMounted(async () => {
 
   &--positive {
     border-left-color: #22c55e;
+
+    .feedback-badge {
+      background: rgba(34, 197, 94, 0.16);
+      color: #4ade80;
+    }
   }
 
   &--issue {
     border-left-color: #ef4444;
+
+    .feedback-badge {
+      background: rgba(239, 68, 68, 0.16);
+      color: #f87171;
+    }
   }
 
   &--action {
     border-left-color: $racing-orange;
+
+    .feedback-badge {
+      background: rgba($racing-orange, 0.16);
+      color: $racing-orange;
+    }
   }
 }
 

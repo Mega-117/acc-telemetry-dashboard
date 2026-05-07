@@ -42,7 +42,7 @@ const pilotTabs = [
   { id: 'panoramica', label: 'PANORAMICA' },
   { id: 'sessioni', label: 'SESSIONI' },
   { id: 'piste', label: 'PISTE' },
-  { id: 'lezioni', label: 'LEZIONI' }
+  { id: 'lezioni', label: 'PILOTA' }
 ]
 
 // Load pilot data
@@ -130,7 +130,7 @@ function goBackToList() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 12H5M12 19l-7-7 7-7"/>
         </svg>
-        Torna a {{ activeTab === 'panoramica' ? 'Panoramica' : activeTab === 'sessioni' ? 'Sessioni' : activeTab === 'piste' ? 'Piste' : 'Lezioni' }}
+        Torna a {{ activeTab === 'panoramica' ? 'Panoramica' : activeTab === 'sessioni' ? 'Sessioni' : activeTab === 'piste' ? 'Piste' : 'Pilota' }}
       </button>
     </div>
 
@@ -173,7 +173,7 @@ function goBackToList() {
             <PagesPistePage @go-to-track="handleGoToTrack" />
           </div>
 
-          <!-- Lezioni -->
+          <!-- Pilota: contesto, calendario e lezioni -->
           <div v-if="activeTab === 'lezioni'" class="tab-content">
             <CoachLessonsPanel :pilot-id="pilotId" :pilot-name="pilotName" />
           </div>
