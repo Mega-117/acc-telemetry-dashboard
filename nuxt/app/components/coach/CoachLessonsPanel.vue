@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
+import CoachRaceCalendarPanel from '~/components/coach/CoachRaceCalendarPanel.vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { trackedGetDoc } from '~/composables/useFirebaseTracker'
 import {
@@ -18,7 +19,7 @@ const props = defineProps<{
 }>()
 
 interface PilotPrivateProfile {
-  equipment?: Record<string, string>
+  equipment?: Record<string, unknown>
 }
 
 const { currentUser, userDisplayName } = useFirebaseAuth()
@@ -30,6 +31,7 @@ const isLoading = ref(false)
 const isLoadingProfile = ref(false)
 const isSaving = ref(false)
 const errorMessage = ref('')
+const isSetupOpen = ref(false)
 
 const form = ref({
   lessonAt: '',
@@ -52,17 +54,31 @@ const feedbackDraft = ref<CoachFeedbackItem[]>([])
 const activeLesson = computed(() => selectedLesson.value || lessons.value[0] || null)
 const equipment = computed(() => pilotProfile.value?.equipment || {})
 
-const equipmentRows = computed(() => [
+const hardwareRows = computed(() => [
   { label: 'Volante / base', value: equipment.value.volante },
   { label: 'Corona', value: equipment.value.corona },
   { label: 'Pedaliera', value: equipment.value.pedaliera },
-  { label: 'Rig', value: equipment.value.struttura },
-  { label: 'FFB gain', value: equipment.value.ffbGain },
-  { label: 'Brake pressure', value: equipment.value.brakePressure },
-  { label: 'Steering lock', value: equipment.value.steeringLock },
+  { label: 'Rig', value: equipment.value.struttura }
+].filter((row) => hasDisplayValue(row.value)))
+
+const setupRows = computed(() => [
+  { label: 'SEN', value: equipment.value.sensitivity, suffix: 'deg' },
+  { label: 'FFB', value: equipment.value.forceFeedbackStrength, suffix: '%' },
+  { label: 'FFS', value: equipment.value.forceFeedbackScale },
+  { label: 'NDP', value: equipment.value.naturalDamper, suffix: '%' },
+  { label: 'NFR', value: equipment.value.naturalFriction, suffix: '%' },
+  { label: 'NIN', value: equipment.value.naturalInertia, suffix: '%' },
+  { label: 'INT', value: equipment.value.interpolationFilter },
+  { label: 'FEI', value: equipment.value.forceEffectIntensity },
+  { label: 'FOR', value: equipment.value.forceEffectStrength, suffix: '%' },
+  { label: 'SPR', value: equipment.value.springEffectStrength, suffix: '%' },
+  { label: 'DPR', value: equipment.value.damperEffectStrength, suffix: '%' },
+  { label: 'BRF', value: equipment.value.brakeForce, suffix: '%' },
   { label: 'TC default', value: equipment.value.tcDefault },
   { label: 'ABS default', value: equipment.value.absDefault }
-])
+].filter((row) => hasDisplayValue(row.value)))
+
+const hasEquipmentContext = computed(() => hardwareRows.value.length > 0 || setupRows.value.length > 0)
 
 const lessonLinks = computed(() => {
   if (!activeLesson.value) return []
@@ -105,8 +121,14 @@ function formatDate(value: string): string {
   }).format(date)
 }
 
-function displayValue(value?: string | null): string {
-  return value?.trim() || '-'
+function hasDisplayValue(value: unknown): boolean {
+  return value !== null && value !== undefined && String(value).trim() !== ''
+}
+
+function displayValue(value?: unknown, suffix = ''): string {
+  if (!hasDisplayValue(value)) return '-'
+  const normalized = String(value).trim()
+  return suffix ? `${normalized}${suffix}` : normalized
 }
 
 function addFeedback() {
@@ -230,17 +252,42 @@ onMounted(async () => {
     <section class="pilot-context-card">
       <div class="context-head">
         <div>
-          <h3>Contesto pilota</h3>
-          <p>Attrezzatura e impostazioni utili prima di creare la lezione.</p>
+          <h3>Scheda pilota</h3>
+          <p>Informazioni rapide sul pilota seguito e sulle prossime gare.</p>
         </div>
         <span v-if="isLoadingProfile">Caricamento...</span>
       </div>
 
-      <div class="equipment-grid">
-        <div v-for="row in equipmentRows" :key="row.label" class="equipment-cell">
-          <span>{{ row.label }}</span>
-          <strong>{{ displayValue(row.value) }}</strong>
+      <div class="pilot-context-grid">
+        <div class="pilot-equipment-column">
+          <div v-if="hasEquipmentContext" class="equipment-summary">
+            <div v-if="hardwareRows.length" class="context-group">
+              <span class="context-label">Hardware</span>
+              <div class="context-chips">
+                <div v-for="row in hardwareRows" :key="row.label" class="context-chip">
+                  <span>{{ row.label }}</span>
+                  <strong>{{ displayValue(row.value) }}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="setupRows.length" class="context-group">
+              <button class="accordion-trigger" type="button" @click="isSetupOpen = !isSetupOpen">
+                <span>Setup base</span>
+                <strong>{{ isSetupOpen ? 'Chiudi' : 'Apri' }}</strong>
+              </button>
+              <div v-if="isSetupOpen" class="context-chips context-chips--dense">
+                <div v-for="row in setupRows" :key="row.label" class="context-chip">
+                  <span>{{ row.label }}</span>
+                  <strong>{{ displayValue(row.value, row.suffix) }}</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-else class="compact-empty">Attrezzatura non configurata.</div>
         </div>
+
+        <CoachRaceCalendarPanel :pilot-id="pilotId" />
       </div>
     </section>
 
@@ -448,14 +495,6 @@ onMounted(async () => {
   border-radius: 12px;
 }
 
-.equipment-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 18px;
-}
-
-.equipment-cell,
 .meta-grid div,
 .lap-grid div {
   min-width: 0;
@@ -476,6 +515,105 @@ onMounted(async () => {
     overflow-wrap: anywhere;
     font-size: 13px;
   }
+}
+
+.equipment-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pilot-context-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(360px, 1.05fr);
+  gap: 24px;
+  margin-top: 18px;
+}
+
+.pilot-equipment-column {
+  min-width: 0;
+}
+
+.context-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.context-label {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.context-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  &--dense .context-chip {
+    min-width: 92px;
+  }
+}
+
+.context-chip {
+  min-width: 150px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 9px;
+
+  span {
+    display: block;
+    margin-bottom: 4px;
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  strong {
+    display: block;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+  }
+}
+
+.accordion-trigger {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: #fff;
+  font-family: $font-primary;
+  cursor: pointer;
+
+  span {
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  strong {
+    color: $racing-orange;
+    font-size: 12px;
+  }
+}
+
+.compact-empty {
+  margin-top: 14px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 13px;
 }
 
 .lessons-grid {
@@ -746,6 +884,7 @@ option {
 
 @media (max-width: 1100px) {
   .lessons-grid,
+  .pilot-context-grid,
   .form-row,
   .form-row--three,
   .form-row--links,
@@ -754,14 +893,5 @@ option {
     grid-template-columns: 1fr;
   }
 
-  .equipment-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 720px) {
-  .equipment-grid {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

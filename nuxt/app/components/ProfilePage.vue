@@ -31,18 +31,80 @@ const revokeSuccess = ref(false)
 const isResettingBests = ref(false)
 const resetBestsSuccess = ref(false)
 const resetBestsCount = ref(0)
+const isEditingEquipment = ref(false)
+const configuredEquipmentKeys = ref<string[]>([])
 
-const equipment = ref({
-  volante: '',
-  corona: '',
-  pedaliera: '',
-  struttura: '',
-  ffbGain: '',
-  brakePressure: '',
-  steeringLock: '',
-  tcDefault: '',
-  absDefault: ''
+function createDefaultEquipment() {
+  return {
+    volante: '',
+    corona: '',
+    pedaliera: '',
+    struttura: '',
+    tcDefault: '',
+    absDefault: '',
+    sensitivity: 900,
+    forceFeedbackStrength: 100,
+    forceFeedbackScale: 'peak',
+    naturalDamper: 35,
+    naturalFriction: 5,
+    naturalInertia: 13,
+    interpolationFilter: 4,
+    forceEffectIntensity: 0,
+    forceEffectStrength: 100,
+    springEffectStrength: 100,
+    damperEffectStrength: 50,
+    brakeForce: 75,
+    ffbGain: '',
+    brakePressure: '',
+    steeringLock: ''
+  }
+}
+
+const equipment = ref(createDefaultEquipment())
+const savedEquipment = ref(createDefaultEquipment())
+
+const wheelSettingDefinitions = [
+  { key: 'sensitivity', code: 'SEN', label: 'Sensitivity', min: 90, max: 1080, step: 10, suffix: 'deg' },
+  { key: 'forceFeedbackStrength', code: 'FFB', label: 'Force Feedback Strength', min: 0, max: 100, step: 1, suffix: '%' },
+  { key: 'naturalDamper', code: 'NDP', label: 'Natural Damper', min: 0, max: 100, step: 1, suffix: '%' },
+  { key: 'naturalFriction', code: 'NFR', label: 'Natural Friction', min: 0, max: 100, step: 1, suffix: '%' },
+  { key: 'naturalInertia', code: 'NIN', label: 'Natural Inertia', min: 0, max: 100, step: 1, suffix: '%' },
+  { key: 'interpolationFilter', code: 'INT', label: 'FFB Interpolation Filter', min: 0, max: 20, step: 1, suffix: '' },
+  { key: 'forceEffectIntensity', code: 'FEI', label: 'Force Effect Intensity', min: 0, max: 100, step: 1, suffix: '' },
+  { key: 'forceEffectStrength', code: 'FOR', label: 'Force Effect Strength', min: 0, max: 100, step: 1, suffix: '%' },
+  { key: 'springEffectStrength', code: 'SPR', label: 'Spring Effect Strength', min: 0, max: 100, step: 1, suffix: '%' },
+  { key: 'damperEffectStrength', code: 'DPR', label: 'Damper Effect Strength', min: 0, max: 100, step: 1, suffix: '%' },
+  { key: 'brakeForce', code: 'BRF', label: 'Brake Force', min: 0, max: 100, step: 1, suffix: '%' }
+] as const
+
+const hardwareSummaryRows = computed(() => [
+  { label: 'Volante / base', value: equipment.value.volante },
+  { label: 'Corona', value: equipment.value.corona },
+  { label: 'Pedaliera', value: equipment.value.pedaliera },
+  { label: 'Rig', value: equipment.value.struttura }
+].filter((row) => hasDisplayValue(row.value)))
+
+const setupSummaryRows = computed(() => {
+  const configured = new Set(configuredEquipmentKeys.value)
+  return [
+    { key: 'sensitivity', label: 'SEN', name: 'Sensitivity', value: equipment.value.sensitivity, suffix: 'deg' },
+    { key: 'forceFeedbackStrength', label: 'FFB', name: 'Force Feedback Strength', value: equipment.value.forceFeedbackStrength, suffix: '%' },
+    { key: 'forceFeedbackScale', label: 'FFS', name: 'Force Feedback Scale', value: equipment.value.forceFeedbackScale === 'peak' ? 'Peak' : 'Linear' },
+    { key: 'naturalDamper', label: 'NDP', name: 'Natural Damper', value: equipment.value.naturalDamper, suffix: '%' },
+    { key: 'naturalFriction', label: 'NFR', name: 'Natural Friction', value: equipment.value.naturalFriction, suffix: '%' },
+    { key: 'naturalInertia', label: 'NIN', name: 'Natural Inertia', value: equipment.value.naturalInertia, suffix: '%' },
+    { key: 'interpolationFilter', label: 'INT', name: 'Interpolation Filter', value: equipment.value.interpolationFilter },
+    { key: 'forceEffectIntensity', label: 'FEI', name: 'Force Effect Intensity', value: equipment.value.forceEffectIntensity },
+    { key: 'forceEffectStrength', label: 'FOR', name: 'Force Effect Strength', value: equipment.value.forceEffectStrength, suffix: '%' },
+    { key: 'springEffectStrength', label: 'SPR', name: 'Spring Effect Strength', value: equipment.value.springEffectStrength, suffix: '%' },
+    { key: 'damperEffectStrength', label: 'DPR', name: 'Damper Effect Strength', value: equipment.value.damperEffectStrength, suffix: '%' },
+    { key: 'brakeForce', label: 'BRF', name: 'Brake Force', value: equipment.value.brakeForce, suffix: '%' },
+    { key: 'tcDefault', label: 'TC', name: 'TC default', value: equipment.value.tcDefault },
+    { key: 'absDefault', label: 'ABS', name: 'ABS default', value: equipment.value.absDefault }
+  ].filter((row) => configured.has(row.key) && hasDisplayValue(row.value))
 })
+
+const hasEquipmentSummary = computed(() => hardwareSummaryRows.value.length > 0 || setupSummaryRows.value.length > 0)
 
 const tabs = computed<Array<{ id: ProfileTab; label: string }>>(() => [
   { id: 'account', label: 'Profilo' },
@@ -74,6 +136,57 @@ const roleLabel = computed((): string => {
   }
   return labels[props.userRole || 'pilot'] ?? 'PILOTA'
 })
+
+function cloneEquipment(source: ReturnType<typeof createDefaultEquipment>) {
+  return { ...source }
+}
+
+function normalizeEquipment(raw: any) {
+  const merged = { ...createDefaultEquipment(), ...(raw || {}) }
+
+  if (raw?.ffbGain && !raw?.forceFeedbackStrength) {
+    const parsed = Number(String(raw.ffbGain).replace('%', '').trim())
+    if (!Number.isNaN(parsed)) merged.forceFeedbackStrength = parsed
+  }
+
+  if (raw?.brakePressure && !raw?.brakeForce) {
+    const parsed = Number(String(raw.brakePressure).replace('%', '').trim())
+    if (!Number.isNaN(parsed)) merged.brakeForce = parsed
+  }
+
+  if (raw?.steeringLock && !raw?.sensitivity) {
+    const parsed = Number(String(raw.steeringLock).replace('deg', '').trim())
+    if (!Number.isNaN(parsed)) merged.sensitivity = parsed
+  }
+
+  return merged
+}
+
+function hasDisplayValue(value: unknown): boolean {
+  return value !== null && value !== undefined && String(value).trim() !== ''
+}
+
+function formatEquipmentValue(value: unknown, suffix = ''): string {
+  if (!hasDisplayValue(value)) return '-'
+  const normalized = String(value).trim()
+  return suffix ? `${normalized}${suffix}` : normalized
+}
+
+function startEquipmentEdit() {
+  equipment.value = cloneEquipment(savedEquipment.value)
+  saveSuccess.value = false
+  isEditingEquipment.value = true
+}
+
+function cancelEquipmentEdit() {
+  equipment.value = cloneEquipment(savedEquipment.value)
+  saveSuccess.value = false
+  isEditingEquipment.value = false
+}
+
+function setForceFeedbackScale(value: 'peak' | 'linear') {
+  equipment.value.forceFeedbackScale = value
+}
 
 async function loadSharedCount() {
   sharedSessionsCount.value = await countSharedSessions()
@@ -128,6 +241,9 @@ async function handleSaveEquipment() {
     await trackedUpdateDoc(doc(db, 'users', currentUser.value.uid), {
       equipment: equipment.value
     }, 'ProfilePage')
+    savedEquipment.value = cloneEquipment(equipment.value)
+    configuredEquipmentKeys.value = Object.keys(equipment.value)
+    isEditingEquipment.value = false
     saveSuccess.value = true
     setTimeout(() => saveSuccess.value = false, 2000)
   } catch (error) {
@@ -141,7 +257,9 @@ onMounted(async () => {
   if (currentUser.value) {
     const profile = await getUserProfile(currentUser.value.uid)
     if (profile?.equipment) {
-      equipment.value = { ...equipment.value, ...profile.equipment }
+      configuredEquipmentKeys.value = Object.keys(profile.equipment)
+      equipment.value = normalizeEquipment(profile.equipment)
+      savedEquipment.value = cloneEquipment(equipment.value)
     }
     await loadSharedCount()
   }
@@ -255,19 +373,51 @@ onMounted(async () => {
           <div class="profile-card equipment-card">
             <div class="card-head">
               <h3 class="card-title">Attrezzatura e impostazioni</h3>
-              <button
-                class="primary-action"
-                :class="{ 'primary-action--success': saveSuccess }"
-                :disabled="isSaving"
-                @click="handleSaveEquipment"
-              >
-                <template v-if="isSaving">Salvataggio...</template>
-                <template v-else-if="saveSuccess">Salvato</template>
-                <template v-else>Salva modifiche</template>
-              </button>
+              <div class="card-actions">
+                <template v-if="isEditingEquipment">
+                  <button class="ghost-action" type="button" :disabled="isSaving" @click="cancelEquipmentEdit">Annulla</button>
+                  <button
+                    class="primary-action"
+                    :class="{ 'primary-action--success': saveSuccess }"
+                    :disabled="isSaving"
+                    @click="handleSaveEquipment"
+                  >
+                    <template v-if="isSaving">Salvataggio...</template>
+                    <template v-else-if="saveSuccess">Salvato</template>
+                    <template v-else>Salva</template>
+                  </button>
+                </template>
+                <button v-else class="primary-action" type="button" @click="startEquipmentEdit">Modifica</button>
+              </div>
             </div>
 
-            <div class="equipment-sections">
+            <div v-if="!isEditingEquipment" class="equipment-summary">
+              <div v-if="hasEquipmentSummary" class="equipment-summary-sections">
+                <section v-if="hardwareSummaryRows.length" class="summary-section">
+                  <h4>Hardware</h4>
+                  <div class="summary-grid">
+                    <div v-for="row in hardwareSummaryRows" :key="row.label" class="summary-cell">
+                      <span>{{ row.label }}</span>
+                      <strong>{{ formatEquipmentValue(row.value) }}</strong>
+                    </div>
+                  </div>
+                </section>
+
+                <section v-if="setupSummaryRows.length" class="summary-section">
+                  <h4>Setup base</h4>
+                  <div class="settings-summary-grid">
+                    <div v-for="row in setupSummaryRows" :key="row.label" class="setting-pill">
+                      <span>{{ row.label }}</span>
+                      <strong>{{ formatEquipmentValue(row.value, row.suffix) }}</strong>
+                      <small>{{ row.name }}</small>
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <div v-else class="empty-equipment">Attrezzatura non configurata.</div>
+            </div>
+
+            <div v-else class="equipment-sections">
               <div class="equipment-section">
                 <h4>Hardware</h4>
                 <div class="form-grid">
@@ -291,20 +441,50 @@ onMounted(async () => {
               </div>
 
               <div class="equipment-section">
-                <h4>Impostazioni base</h4>
-                <div class="form-grid form-grid--settings">
-                  <label class="form-group">
-                    <span>FFB gain</span>
-                    <input v-model="equipment.ffbGain" type="text" placeholder="Es. 62%" />
+                <h4>Impostazioni base Fanatec</h4>
+                <div class="fanatec-settings">
+                  <div class="scale-row">
+                    <div>
+                      <span>[FFS]</span>
+                      <strong>Force Feedback Scale</strong>
+                    </div>
+                    <div class="segmented-control">
+                      <button
+                        type="button"
+                        :class="{ 'segmented-control__item--active': equipment.forceFeedbackScale === 'peak' }"
+                        class="segmented-control__item"
+                        @click="setForceFeedbackScale('peak')"
+                      >
+                        Peak
+                      </button>
+                      <button
+                        type="button"
+                        :class="{ 'segmented-control__item--active': equipment.forceFeedbackScale === 'linear' }"
+                        class="segmented-control__item"
+                        @click="setForceFeedbackScale('linear')"
+                      >
+                        Linear
+                      </button>
+                    </div>
+                  </div>
+
+                  <label v-for="setting in wheelSettingDefinitions" :key="setting.key" class="slider-row">
+                    <div class="slider-label">
+                      <span>[{{ setting.code }}]</span>
+                      <strong>{{ setting.label }}</strong>
+                    </div>
+                    <input
+                      v-model.number="equipment[setting.key]"
+                      type="range"
+                      :min="setting.min"
+                      :max="setting.max"
+                      :step="setting.step"
+                    />
+                    <output>{{ formatEquipmentValue(equipment[setting.key], setting.suffix) }}</output>
                   </label>
-                  <label class="form-group">
-                    <span>Brake pressure</span>
-                    <input v-model="equipment.brakePressure" type="text" placeholder="Es. 95%" />
-                  </label>
-                  <label class="form-group">
-                    <span>Steering lock</span>
-                    <input v-model="equipment.steeringLock" type="text" placeholder="Es. 900" />
-                  </label>
+                </div>
+
+                <div class="form-grid form-grid--assist">
                   <label class="form-group">
                     <span>TC default</span>
                     <input v-model="equipment.tcDefault" type="text" placeholder="Es. 3" />
@@ -549,6 +729,12 @@ $max-width: 1400px;
   margin-bottom: 24px;
 }
 
+.card-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .card-title {
   margin: 0 0 18px;
   color: rgba(255, 255, 255, 0.92);
@@ -572,6 +758,7 @@ $max-width: 1400px;
 }
 
 .danger-action,
+.ghost-action,
 .primary-action {
   min-height: 42px;
   padding: 0 18px;
@@ -585,6 +772,12 @@ $max-width: 1400px;
     opacity: 0.62;
     cursor: wait;
   }
+}
+
+.ghost-action {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .danger-action {
@@ -615,6 +808,82 @@ $max-width: 1400px;
   gap: 24px;
 }
 
+.equipment-summary,
+.equipment-summary-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.summary-section {
+  h4 {
+    margin: 0 0 12px;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+}
+
+.summary-grid,
+.settings-summary-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.settings-summary-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.summary-cell,
+.setting-pill {
+  min-width: 0;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+
+  span {
+    display: block;
+    margin-bottom: 5px;
+    color: rgba(255, 255, 255, 0.42);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+  }
+
+  strong {
+    display: block;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+  }
+}
+
+.setting-pill {
+  min-height: 74px;
+
+  small {
+    display: block;
+    margin-top: 5px;
+    color: rgba(255, 255, 255, 0.36);
+    font-size: 10px;
+    line-height: 1.25;
+  }
+}
+
+.empty-equipment {
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 14px;
+}
+
 .equipment-section {
   h4 {
     margin: 0 0 16px;
@@ -632,6 +901,11 @@ $max-width: 1400px;
 
   &--settings {
     grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  &--assist {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 18px;
   }
 }
 
@@ -664,6 +938,88 @@ $max-width: 1400px;
   }
 }
 
+.fanatec-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+}
+
+.scale-row,
+.slider-row {
+  display: grid;
+  grid-template-columns: 220px minmax(160px, 1fr) 70px;
+  gap: 14px;
+  align-items: center;
+}
+
+.scale-row {
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.slider-label,
+.scale-row > div:first-child {
+  min-width: 0;
+
+  span {
+    display: inline;
+    margin-right: 6px;
+    color: rgba(255, 255, 255, 0.5);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+
+  strong {
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 13px;
+  }
+}
+
+.slider-row {
+  input[type='range'] {
+    width: 100%;
+    accent-color: $racing-orange;
+  }
+
+  output {
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    text-align: right;
+  }
+}
+
+.segmented-control {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+}
+
+.segmented-control__item {
+  min-height: 32px;
+  padding: 0 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.58);
+  font-family: $font-primary;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+
+  &--active {
+    background: rgba($racing-orange, 0.18);
+    color: $racing-orange;
+  }
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -679,8 +1035,20 @@ $max-width: 1400px;
   .account-grid,
   .coach-grid,
   .form-grid,
-  .form-grid--settings {
+  .form-grid--settings,
+  .form-grid--assist,
+  .scale-row,
+  .slider-row {
     grid-template-columns: 1fr;
+  }
+
+  .summary-grid,
+  .settings-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .slider-row output {
+    text-align: left;
   }
 }
 
@@ -703,6 +1071,11 @@ $max-width: 1400px;
 
   .profile-tab {
     min-width: 130px;
+  }
+
+  .summary-grid,
+  .settings-summary-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

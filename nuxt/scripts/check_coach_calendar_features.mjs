@@ -20,6 +20,8 @@ assert.match(rules, /match \/raceCalendar\/\{eventId\}/, 'Missing raceCalendar r
 assert.match(rules, /match \/coachLessons\/\{lessonId\}/, 'Missing coachLessons rules')
 assert.match(rules, /request\.resource\.data\.coachId == request\.auth\.uid/, 'Coach lesson writes must pin coachId to auth uid')
 assert.match(rules, /request\.resource\.data\.pilotId == userId/, 'Coach lesson writes must pin pilotId to path userId')
+assert.match(rules, /request\.resource\.data\.createdBy == request\.auth\.uid/, 'Coach-created calendar events must pin createdBy to auth uid')
+assert.match(rules, /request\.resource\.data\.createdByRole == 'coach'/, 'Coach-created calendar events must mark createdByRole coach')
 assert.doesNotMatch(rules, /resource\.data\.role == 'coach'/, 'Pilot profile must not expose broad coach directory search in V1')
 assert.match(rules, /function preservesRoleAndCoach\(\)/, 'Rules must protect role and coachId from owner self-edit')
 assert.match(rules, /allow update: if isOwner\(userId\) && preservesRoleAndCoach\(\)/, 'Users owner update must preserve role and coachId')
@@ -41,10 +43,15 @@ for (const token of [
   'ProfileCoachLessonsCard',
   "activeTab === 'equipment'",
   'ffbGain',
-  'brakePressure'
+  'brakeForce',
+  'isEditingEquipment',
+  'wheelSettingDefinitions',
+  'forceFeedbackScale'
 ]) {
   assert.ok(profilePage.includes(token), `ProfilePage missing ${token}`)
 }
+assert.ok(profilePage.includes('startEquipmentEdit'), 'Equipment tab must expose read/edit mode')
+assert.ok(profilePage.includes('type="range"'), 'Equipment settings must use sliders')
 
 const coachAssociation = readNuxt('app/components/profile/CoachAssociationCard.vue')
 assert.ok(coachAssociation.includes('Nessun coach assegnato'), 'Coach association card must be read-only display copy')
@@ -56,6 +63,8 @@ assert.ok(calendarCard.includes('v-model="form.startsAt" type="datetime-local"')
 assert.ok(!calendarCard.includes('startsAtDraft'), 'Calendar must not stage date/time with an external confirmation control')
 assert.ok(!calendarCard.includes('Conferma'), 'Calendar must not render an external date/time confirmation button')
 assert.ok(calendarCard.includes('::-webkit-calendar-picker-indicator'), 'Calendar picker icon must be visible on dark UI')
+assert.ok(calendarCard.includes('isAdding'), 'Calendar form must be collapsed behind add action')
+assert.ok(calendarCard.includes('v-model="form.carName"'), 'Calendar events must support optional car name')
 
 const pilotDetail = readNuxt('app/pages/piloti/[id].vue')
 assert.ok(pilotDetail.includes("{ id: 'lezioni', label: 'LEZIONI' }"), 'Pilot detail missing LEZIONI tab')
@@ -64,7 +73,9 @@ assert.ok(pilotDetail.includes('<CoachLessonsPanel'), 'Pilot detail missing coac
 
 const coachLessonsPanel = readNuxt('app/components/coach/CoachLessonsPanel.vue')
 for (const token of [
-  'Contesto pilota',
+  'CoachRaceCalendarPanel',
+  'Scheda pilota',
+  'accordion-trigger',
   'trackTitanPilotUrl',
   'trackTitanReferenceUrl',
   'recordingUrl',
@@ -72,6 +83,17 @@ for (const token of [
   "trackedGetDoc(doc(db, 'users', props.pilotId)"
 ]) {
   assert.ok(coachLessonsPanel.includes(token), `CoachLessonsPanel missing ${token}`)
+}
+
+const coachRaceCalendar = readNuxt('app/components/coach/CoachRaceCalendarPanel.vue')
+for (const token of [
+  'Aggiungi gara al pilota',
+  "createdByRole: 'coach'",
+  'isAdding',
+  'carName',
+  'loadRaceCalendarEvents(props.pilotId'
+]) {
+  assert.ok(coachRaceCalendar.includes(token), `CoachRaceCalendarPanel missing ${token}`)
 }
 
 const profileCoachLessons = readNuxt('app/components/profile/CoachLessonsCard.vue')

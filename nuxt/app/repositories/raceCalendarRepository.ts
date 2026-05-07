@@ -9,8 +9,11 @@ export interface RaceCalendarEvent {
   title: string
   startsAt: string
   trackName: string
+  carName?: string
   simGridUrl?: string
   raceUrl?: string
+  createdBy?: string
+  createdByRole?: 'pilot' | 'coach' | 'admin'
   createdAt?: string
   updatedAt?: string
 }
@@ -19,8 +22,11 @@ export interface RaceCalendarEventInput {
   title: string
   startsAt: string
   trackName: string
+  carName?: string
   simGridUrl?: string
   raceUrl?: string
+  createdBy?: string
+  createdByRole?: 'pilot' | 'coach' | 'admin'
 }
 
 function eventCollection(userId: string) {
@@ -34,8 +40,11 @@ function mapEvent(docSnap: any): RaceCalendarEvent {
     title: data.title || '',
     startsAt: data.startsAt || '',
     trackName: data.trackName || '',
+    carName: data.carName || '',
     simGridUrl: data.simGridUrl || '',
     raceUrl: data.raceUrl || '',
+    createdBy: data.createdBy || '',
+    createdByRole: data.createdByRole || '',
     createdAt: data.createdAt || '',
     updatedAt: data.updatedAt || ''
   }
@@ -55,8 +64,11 @@ export async function createRaceCalendarEvent(userId: string, input: RaceCalenda
     title: input.title.trim(),
     startsAt: input.startsAt,
     trackName: input.trackName.trim(),
+    carName: input.carName?.trim() || null,
     simGridUrl: input.simGridUrl?.trim() || null,
     raceUrl: input.raceUrl?.trim() || null,
+    createdBy: input.createdBy || null,
+    createdByRole: input.createdByRole || null,
     createdAt: now,
     updatedAt: now
   }, CALLER)

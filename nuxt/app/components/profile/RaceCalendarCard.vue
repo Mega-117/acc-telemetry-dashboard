@@ -13,11 +13,13 @@ const { currentUser } = useFirebaseAuth()
 const events = ref<RaceCalendarEvent[]>([])
 const isLoading = ref(false)
 const isSaving = ref(false)
+const isAdding = ref(false)
 const errorMessage = ref('')
 const form = ref({
   title: '',
   startsAt: '',
   trackName: '',
+  carName: '',
   simGridUrl: '',
   raceUrl: ''
 })
@@ -34,6 +36,28 @@ function formatEventDate(value: string): string {
     hour: '2-digit',
     minute: '2-digit'
   }).format(date)
+}
+
+function resetForm() {
+  form.value = {
+    title: '',
+    startsAt: '',
+    trackName: '',
+    carName: '',
+    simGridUrl: '',
+    raceUrl: ''
+  }
+}
+
+function openForm() {
+  errorMessage.value = ''
+  isAdding.value = true
+}
+
+function closeForm() {
+  errorMessage.value = ''
+  resetForm()
+  isAdding.value = false
 }
 
 async function refreshEvents() {
@@ -57,14 +81,11 @@ async function addEvent() {
 
   isSaving.value = true
   try {
-    await createRaceCalendarEvent(currentUser.value.uid, form.value)
-    form.value = {
-      title: '',
-      startsAt: '',
-      trackName: '',
-      simGridUrl: '',
-      raceUrl: ''
-    }
+    await createRaceCalendarEvent(currentUser.value.uid, {
+      ...form.value,
+      createdBy: currentUser.value.uid
+    })
+    closeForm()
     await refreshEvents()
   } finally {
     isSaving.value = false
@@ -84,11 +105,38 @@ onMounted(refreshEvents)
   <section class="profile-card calendar-card">
     <div class="card-head">
       <h3 class="card-title">Calendario gare</h3>
-      <span class="card-count">{{ upcomingEvents.length }} eventi</span>
+      <div class="card-actions">
+        <span class="card-count">{{ upcomingEvents.length }} eventi</span>
+        <button v-if="!isAdding" class="secondary-action" type="button" @click="openForm">Aggiungi</button>
+        <button v-else class="secondary-action" type="button" @click="closeForm">Annulla</button>
+      </div>
     </div>
 
     <div class="calendar-layout">
-      <form class="event-form" @submit.prevent="addEvent">
+      <div class="event-list">
+        <div v-if="isLoading" class="empty-state">Caricamento calendario...</div>
+        <div v-else-if="upcomingEvents.length === 0" class="empty-state">Nessuna gara salvata.</div>
+        <template v-else>
+          <article v-for="event in upcomingEvents" :key="event.id" class="event-row">
+            <div class="event-date">{{ formatEventDate(event.startsAt) }}</div>
+            <div class="event-main">
+              <h4>{{ event.title }}</h4>
+              <p>{{ event.trackName }}<span v-if="event.carName"> - {{ event.carName }}</span></p>
+              <div class="event-links">
+                <a v-if="event.simGridUrl" :href="event.simGridUrl" target="_blank" rel="noopener">SimGrid</a>
+                <a v-if="event.raceUrl" :href="event.raceUrl" target="_blank" rel="noopener">Gara</a>
+              </div>
+            </div>
+            <button class="icon-action" type="button" title="Rimuovi evento" @click="removeEvent(event.id)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15" />
+              </svg>
+            </button>
+          </article>
+        </template>
+      </div>
+
+      <form v-if="isAdding" class="event-form" @submit.prevent="addEvent">
         <div class="form-row">
           <label class="form-group">
             <span>Titolo gara</span>
@@ -103,6 +151,11 @@ onMounted(refreshEvents)
         <label class="form-group">
           <span>Pista</span>
           <input v-model="form.trackName" type="text" placeholder="Es. Spa-Francorchamps" />
+        </label>
+
+        <label class="form-group">
+          <span>Vettura</span>
+          <input v-model="form.carName" type="text" placeholder="Es. Ferrari 296 GT3" />
         </label>
 
         <div class="form-row">
@@ -121,29 +174,6 @@ onMounted(refreshEvents)
           {{ isSaving ? 'Aggiungo...' : 'Aggiungi evento' }}
         </button>
       </form>
-
-      <div class="event-list">
-        <div v-if="isLoading" class="empty-state">Caricamento calendario...</div>
-        <div v-else-if="upcomingEvents.length === 0" class="empty-state">Nessuna gara salvata.</div>
-        <template v-else>
-          <article v-for="event in upcomingEvents" :key="event.id" class="event-row">
-            <div class="event-date">{{ formatEventDate(event.startsAt) }}</div>
-            <div class="event-main">
-              <h4>{{ event.title }}</h4>
-              <p>{{ event.trackName }}</p>
-              <div class="event-links">
-                <a v-if="event.simGridUrl" :href="event.simGridUrl" target="_blank" rel="noopener">SimGrid</a>
-                <a v-if="event.raceUrl" :href="event.raceUrl" target="_blank" rel="noopener">Gara</a>
-              </div>
-            </div>
-            <button class="icon-action" type="button" title="Rimuovi evento" @click="removeEvent(event.id)">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15" />
-              </svg>
-            </button>
-          </article>
-        </template>
-      </div>
     </div>
   </section>
 </template>
@@ -166,6 +196,12 @@ onMounted(refreshEvents)
   margin-bottom: 22px;
 }
 
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .card-title {
   font-size: 18px;
   font-weight: 700;
@@ -178,9 +214,9 @@ onMounted(refreshEvents)
 }
 
 .calendar-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 0.95fr) minmax(320px, 1fr);
-  gap: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
 .event-form,
@@ -251,6 +287,19 @@ onMounted(refreshEvents)
   }
 }
 
+.secondary-action {
+  min-height: 36px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  color: rgba(255, 255, 255, 0.74);
+  font-family: $font-primary;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .form-error {
   margin: 0;
   color: #f87171;
@@ -268,7 +317,7 @@ onMounted(refreshEvents)
 
 .event-row {
   display: grid;
-  grid-template-columns: 92px 1fr 36px;
+  grid-template-columns: 98px 1fr 36px;
   gap: 14px;
   align-items: center;
   padding: 14px;
@@ -290,7 +339,8 @@ onMounted(refreshEvents)
   h4 {
     margin: 0 0 4px;
     color: #fff;
-    font-size: 14px;
+    font-size: 16px;
+    line-height: 1.2;
   }
 
   p {
@@ -331,7 +381,7 @@ onMounted(refreshEvents)
 }
 
 @media (max-width: 900px) {
-  .calendar-layout,
+  .event-row,
   .form-row {
     grid-template-columns: 1fr;
   }
