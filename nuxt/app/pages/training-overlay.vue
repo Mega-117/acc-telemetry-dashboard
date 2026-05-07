@@ -662,14 +662,18 @@ onBeforeUnmount(() => {
     linear-gradient(145deg, rgba(17, 22, 25, 0.96), rgba(9, 10, 15, 0.95));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   box-sizing: border-box;
-  animation: overlayMaterialize 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: overlayMaterialize 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: top left;
+  will-change: opacity, transform, filter;
 }
 
 .overlay-surface-enter-active {
   transition:
-    opacity 150ms ease-out,
-    transform 190ms cubic-bezier(0.16, 1, 0.3, 1),
-    filter 190ms ease-out;
+    opacity 170ms ease-out,
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 240ms ease-out;
+  transform-origin: top left;
+  will-change: opacity, transform, filter;
 }
 
 .overlay-surface-leave-active {
@@ -677,20 +681,22 @@ onBeforeUnmount(() => {
   inset: var(--overlay-safe-frame);
   width: calc(100% - (var(--overlay-safe-frame) * 2));
   transition:
-    opacity 90ms ease-in,
-    transform 90ms ease-in;
+    opacity 120ms ease-in,
+    transform 120ms cubic-bezier(0.4, 0, 1, 1);
+  transform-origin: top left;
+  will-change: opacity, transform;
   pointer-events: none;
 }
 
 .overlay-surface-enter-from {
   opacity: 0;
-  filter: saturate(1.35) brightness(1.12);
-  transform: translateY(4px) scale(0.965);
+  filter: saturate(1.18) brightness(1.08);
+  transform: translateY(3px) scale(0.985);
 }
 
 .overlay-surface-leave-to {
   opacity: 0;
-  transform: translateY(-3px) scale(0.985);
+  transform: translateY(-2px) scale(0.992);
 }
 
 .overlay-surface-enter-to,
@@ -721,7 +727,9 @@ onBeforeUnmount(() => {
   font-size: 13px;
   font-weight: 950;
   letter-spacing: 0;
-  animation: overlayMaterialize 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  animation: overlayMaterialize 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: top left;
+  will-change: opacity, transform, filter;
 }
 
 .launcher-button:hover,
