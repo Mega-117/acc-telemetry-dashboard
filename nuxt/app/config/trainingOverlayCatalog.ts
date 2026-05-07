@@ -12,7 +12,7 @@ export type TrainingOverlayId =
   | 'race_real'
 
 export type TrainingOverlayDurationModeId = TrackTitanDurationModeId
-export type TrainingOverlayTone = 'tracktitan' | 'pace' | 'race'
+export type TrainingOverlayTone = 'tracktitan' | 'clean' | 'qualifying' | 'consistency' | 'race'
 export type TrainingOverlayStepType =
   | 'setup'
   | 'warmup'
@@ -48,6 +48,7 @@ export interface TrainingOverlayTraining {
   summary: string
   tone: TrainingOverlayTone
   accent: string
+  accentEnd: string
   accentRgb: string
   accentContrast: string
   modes: Record<TrainingOverlayDurationModeId, TrainingOverlayMode>
@@ -102,6 +103,7 @@ export const trainingOverlayCatalog: Record<TrainingOverlayId, TrainingOverlayTr
     summary: 'Scegli segmento, correggi freno e gas.',
     tone: 'tracktitan',
     accent: '#22c55e',
+    accentEnd: '#14b8a6',
     accentRgb: '34, 197, 94',
     accentContrast: '#04110a',
     modes: {
@@ -115,8 +117,9 @@ export const trainingOverlayCatalog: Record<TrainingOverlayId, TrainingOverlayTr
     label: 'Pulizia',
     title: 'Allenamento Pulizia',
     summary: 'Spingi con margine e chiudi giri validi.',
-    tone: 'pace',
+    tone: 'clean',
     accent: '#28b7ff',
+    accentEnd: '#4fd1c5',
     accentRgb: '40, 183, 255',
     accentContrast: '#03131f',
     modes: {
@@ -152,10 +155,11 @@ export const trainingOverlayCatalog: Record<TrainingOverlayId, TrainingOverlayTr
     label: 'Qualifica',
     title: 'Allenamento Qualifica',
     summary: 'Pochi tentativi, giro valido forte.',
-    tone: 'pace',
-    accent: '#28b7ff',
-    accentRgb: '40, 183, 255',
-    accentContrast: '#03131f',
+    tone: 'qualifying',
+    accent: '#ffcd40',
+    accentEnd: '#ff9f1c',
+    accentRgb: '255, 205, 64',
+    accentContrast: '#1f1302',
     modes: {
       short30: {
         id: 'short30',
@@ -196,10 +200,11 @@ export const trainingOverlayCatalog: Record<TrainingOverlayId, TrainingOverlayTr
     label: 'Costanza',
     title: 'Allenamento Costanza',
     summary: 'Passo gara ripetibile, non best lap.',
-    tone: 'pace',
-    accent: '#28b7ff',
-    accentRgb: '40, 183, 255',
-    accentContrast: '#03131f',
+    tone: 'consistency',
+    accent: '#ff8e29',
+    accentEnd: '#ffbf3f',
+    accentRgb: '255, 142, 41',
+    accentContrast: '#1b0b02',
     modes: {
       short30: {
         id: 'short30',
@@ -235,6 +240,7 @@ export const trainingOverlayCatalog: Record<TrainingOverlayId, TrainingOverlayTr
     summary: 'Traffico, linee sporche e pressione.',
     tone: 'race',
     accent: '#ff3b22',
+    accentEnd: '#ff8a00',
     accentRgb: '255, 59, 34',
     accentContrast: '#170703',
     modes: {

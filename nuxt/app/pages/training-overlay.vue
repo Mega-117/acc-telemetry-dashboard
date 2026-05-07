@@ -62,6 +62,7 @@ const selectedMode = computed(() => selectedTraining.value.modes[selectedModeId.
 const selectedModeList = computed(() => Object.values(selectedTraining.value.modes))
 const overlayThemeStyle = computed(() => ({
   '--overlay-accent': selectedTraining.value.accent,
+  '--overlay-accent-end': selectedTraining.value.accentEnd,
   '--overlay-accent-rgb': selectedTraining.value.accentRgb,
   '--overlay-accent-contrast': selectedTraining.value.accentContrast
 }))
@@ -115,6 +116,15 @@ const overlaySizePreset = computed<OverlaySizePreset>(() => {
 function getOverlayApi(): any | null {
   if (typeof window === 'undefined') return null
   return (window as any).electronAPI || null
+}
+
+function trainingOptionStyle(training: TrainingOverlayTraining) {
+  return {
+    '--training-accent': training.accent,
+    '--training-accent-end': training.accentEnd,
+    '--training-accent-rgb': training.accentRgb,
+    '--training-accent-contrast': training.accentContrast
+  }
 }
 
 function clearTimer() {
@@ -445,6 +455,7 @@ onBeforeUnmount(() => {
                       `training-option--${training.tone}`,
                       { 'is-active': selectedTrainingId === training.id }
                     ]"
+                    :style="trainingOptionStyle(training)"
                     @click="selectTraining(training.id)"
                   >
                     <strong>{{ training.label }}</strong>
@@ -595,6 +606,7 @@ onBeforeUnmount(() => {
 
 .training-overlay {
   --overlay-accent: #22c55e;
+  --overlay-accent-end: #14b8a6;
   --overlay-accent-rgb: 34, 197, 94;
   --overlay-accent-contrast: #04110a;
   --overlay-safe-frame: 6px;
@@ -740,11 +752,6 @@ onBeforeUnmount(() => {
     linear-gradient(145deg, rgba(23, 38, 30, 0.98), rgba(8, 10, 13, 0.97));
 }
 
-.training-overlay--expired {
-  --overlay-accent: #f59e0b;
-  --overlay-accent-rgb: 245, 158, 11;
-}
-
 .training-overlay--expired .overlay-card {
   animation: expiredPulse 1s ease-in-out infinite;
 }
@@ -840,6 +847,10 @@ p {
 }
 
 .training-option {
+  --training-accent: var(--overlay-accent);
+  --training-accent-end: var(--overlay-accent-end);
+  --training-accent-rgb: var(--overlay-accent-rgb);
+  --training-accent-contrast: var(--overlay-accent-contrast);
   display: grid;
   gap: 2px;
   min-height: 43px;
@@ -882,23 +893,10 @@ p {
 }
 
 .training-option.is-active {
-  border-color: rgba(var(--overlay-accent-rgb), 0.68);
-  background: rgba(var(--overlay-accent-rgb), 0.18);
-}
-
-.training-option--tracktitan.is-active {
-  border-color: rgba(34, 197, 94, 0.75);
-  background: rgba(34, 197, 94, 0.18);
-}
-
-.training-option--pace.is-active {
-  border-color: rgba(40, 183, 255, 0.78);
-  background: rgba(40, 183, 255, 0.18);
-}
-
-.training-option--race.is-active {
-  border-color: rgba(255, 59, 34, 0.78);
-  background: rgba(255, 59, 34, 0.18);
+  border-color: rgba(var(--training-accent-rgb), 0.72);
+  background:
+    radial-gradient(circle at top left, rgba(var(--training-accent-rgb), 0.24), transparent 58%),
+    linear-gradient(145deg, rgba(var(--training-accent-rgb), 0.18), rgba(255, 255, 255, 0.055));
 }
 
 .duration-row {
@@ -980,7 +978,7 @@ p {
 
 .setting-row strong.is-active {
   border-color: rgba(var(--overlay-accent-rgb), 0.7);
-  background: var(--overlay-accent);
+  background: linear-gradient(90deg, var(--overlay-accent), var(--overlay-accent-end));
   color: var(--overlay-accent-contrast);
 }
 
@@ -1024,7 +1022,7 @@ button:focus-visible {
 button.primary,
 button.is-active {
   border-color: rgba(var(--overlay-accent-rgb), 0.7);
-  background: var(--overlay-accent);
+  background: linear-gradient(90deg, var(--overlay-accent), var(--overlay-accent-end));
   color: var(--overlay-accent-contrast);
 }
 
@@ -1089,7 +1087,7 @@ button.is-active {
   width: 0;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--overlay-accent), #16d1a5);
+  background: linear-gradient(90deg, var(--overlay-accent), var(--overlay-accent-end));
   transition: width 0.2s linear;
 }
 
