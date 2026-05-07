@@ -1,7 +1,7 @@
 import { ref, computed } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { collection, query, orderBy, doc, where, limit, DocumentReference, Query } from 'firebase/firestore'
-import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedUpdateDoc, trackedWriteBatch } from './useFirebaseTracker'
+import { trackedGetCountFromServer, trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedUpdateDoc, trackedWriteBatch } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
 import {
     loadLocalTelemetrySessions,
@@ -26,6 +26,7 @@ import {
 const CALLER = 'TelemetryData'
 async function getDoc(ref: DocumentReference) { return trackedGetDoc(ref, CALLER) }
 async function getDocs(q: Query) { return trackedGetDocs(q, CALLER) }
+async function getCountFromServer(q: Query) { return trackedGetCountFromServer(q, CALLER) }
 async function setDoc(ref: DocumentReference, data: any) { return trackedSetDoc(ref, data, CALLER) }
 async function deleteDoc(ref: DocumentReference) { return trackedDeleteDoc(ref, CALLER) }
 async function updateDoc(ref: DocumentReference, data: any) { return trackedUpdateDoc(ref, data, CALLER) }
@@ -1755,8 +1756,8 @@ export function useTelemetryData() {
 
         const sessionsRef = collection(db, `users/${userId}/sessions`)
         const q = query(sessionsRef, where('isPublic', '==', true))
-        const snap = await getDocs(q)
-        return snap.docs.length
+        const snap = await getCountFromServer(q)
+        return Number(snap.data().count || 0)
     }
 
     /**

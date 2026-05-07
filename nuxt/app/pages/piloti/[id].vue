@@ -6,6 +6,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
+import CoachLessonsPanel from '~/components/coach/CoachLessonsPanel.vue'
 import { providePilotContext } from '~/composables/usePilotContext'
 import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc } from '~/composables/useFirebaseTracker'
 
@@ -29,7 +30,7 @@ interface PilotData {
 
 const pilot = ref<PilotData | null>(null)
 const isLoading = ref(true)
-const activeTab = ref<'panoramica' | 'sessioni' | 'piste'>('panoramica')
+const activeTab = ref<'panoramica' | 'sessioni' | 'piste' | 'lezioni'>('panoramica')
 
 // Detail view state (inline navigation within pilot context)
 const detailView = ref<'none' | 'track' | 'session'>('none')
@@ -40,7 +41,8 @@ const selectedSessionId = ref<string | null>(null)
 const pilotTabs = [
   { id: 'panoramica', label: 'PANORAMICA' },
   { id: 'sessioni', label: 'SESSIONI' },
-  { id: 'piste', label: 'PISTE' }
+  { id: 'piste', label: 'PISTE' },
+  { id: 'lezioni', label: 'LEZIONI' }
 ]
 
 // Load pilot data
@@ -128,7 +130,7 @@ function goBackToList() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M19 12H5M12 19l-7-7 7-7"/>
         </svg>
-        Torna a {{ activeTab === 'panoramica' ? 'Panoramica' : activeTab === 'sessioni' ? 'Sessioni' : 'Piste' }}
+        Torna a {{ activeTab === 'panoramica' ? 'Panoramica' : activeTab === 'sessioni' ? 'Sessioni' : activeTab === 'piste' ? 'Piste' : 'Lezioni' }}
       </button>
     </div>
 
@@ -169,6 +171,11 @@ function goBackToList() {
           <!-- Piste -->
           <div v-if="activeTab === 'piste'" class="tab-content">
             <PagesPistePage @go-to-track="handleGoToTrack" />
+          </div>
+
+          <!-- Lezioni -->
+          <div v-if="activeTab === 'lezioni'" class="tab-content">
+            <CoachLessonsPanel :pilot-id="pilotId" :pilot-name="pilotName" />
           </div>
         </template>
       </template>

@@ -25,6 +25,7 @@
     "check:firestore-indexes": "node scripts/check_firestore_indexes.mjs",
     "check:dev-tools-access": "node scripts/check_dev_tools_access.mjs",
     "check:overview-grip-badges": "node scripts/check_overview_grip_badges.mjs",
+    "check:coach-calendar": "node scripts/check_coach_calendar_features.mjs",
     "check:pipeline": "powershell -ExecutionPolicy Bypass -File scripts/check_fe_pipeline.ps1",
     "typecheck": "nuxi typecheck",
     "check:typecheck": "npm run typecheck"

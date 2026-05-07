@@ -22,6 +22,17 @@ service cloud.firestore {
              && get(/databases/$(database)/documents/users/$(userId)).data.coachId == request.auth.uid;
     }
 
+    function isCurrentUserCoach() {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach';
+    }
+
+    function preservesRoleAndCoach() {
+      return request.resource.data.role == resource.data.role
+             && request.resource.data.coachId == resource.data.coachId;
+    }
+
     // Public profile surface for cross-user features (nickname/avatar only).
     match /publicProfiles/{userId} {
       allow read: if isSignedIn();
@@ -34,19 +45,23 @@ service cloud.firestore {
       allow read: if isOwner(userId)
                   || isAdmin()
                   || (isSignedIn() && resource.data.coachId == request.auth.uid);
-      allow write: if isOwner(userId) || isAdmin();
+      allow create: if isOwner(userId) || isAdmin();
+      allow update: if isAdmin() || (isOwner(userId) && preservesRoleAndCoach());
+      allow delete: if isAdmin();
     }
 
     // Users collection (private profile + runtime state)
     match /users/{userId} {
-      // Owner can read/write own profile.
-      allow read, write: if isOwner(userId);
+      // Owner can read and update own profile/runtime state, but cannot self-change role or coach assignment.
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) && preservesRoleAndCoach();
 
       // Coach can read assigned pilots only.
       allow read: if isCoachOfUser(userId);
 
-      // Admin can read everything in users.
-      allow read: if isAdmin();
+      // Admin can read/write everything in users.
+      allow read, write: if isAdmin();
 
       // === Sessions subcollection ===
       match /sessions/{sessionId} {
@@ -96,6 +111,27 @@ service cloud.firestore {
         allow read: if isAdmin();
         allow read, write: if isOwner(userId);
         allow read: if isCoachOfUser(userId);
+      }
+
+      match /raceCalendar/{eventId} {
+        allow read: if isAdmin();
+        allow read, write: if isOwner(userId);
+        allow read: if isCoachOfUser(userId);
+      }
+
+      match /coachLessons/{lessonId} {
+        allow read: if isAdmin();
+        allow read: if isOwner(userId);
+        allow read: if isCoachOfUser(userId);
+        allow create: if isCoachOfUser(userId)
+                      && isCurrentUserCoach()
+                      && request.resource.data.coachId == request.auth.uid
+                      && request.resource.data.pilotId == userId;
+        allow update: if isCoachOfUser(userId)
+                      && isCurrentUserCoach()
+                      && resource.data.coachId == request.auth.uid
+                      && request.resource.data.coachId == request.auth.uid
+                      && request.resource.data.pilotId == userId;
       }
     }
   }
