@@ -3,7 +3,7 @@
 // App.vue - Main Application with Auth Flow
 // ============================================
 
-import { ref, computed, onMounted, watch, provide } from 'vue'
+import { ref, computed, onMounted, onBeforeMount, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useActivityFeed } from '~/composables/useActivityFeed'
@@ -14,9 +14,47 @@ import { canUseDevTools } from '~/utils/devToolsAccess'
 // === NUXT ROUTER ===
 const route = useRoute()
 const router = useRouter()
+const getRouteQueryString = (value: unknown): string => {
+  if (Array.isArray(value)) return String(value[0] || '')
+  return typeof value === 'string' ? value : ''
+}
+const browserOverlayPath = ref('')
+const browserOverlayIntent = ref(false)
+const refreshBrowserOverlayLocation = () => {
+  if (typeof window === 'undefined') return
+  browserOverlayPath.value = window.location.pathname.replace(/\/+$/, '') || '/'
+  browserOverlayIntent.value = new URLSearchParams(window.location.search).get('overlay') === 'training'
+}
+onBeforeMount(refreshBrowserOverlayLocation)
+const normalizedRoutePath = computed(() => route.path.replace(/\/+$/, '') || '/')
+const isTrainingOverlayRoute = computed(() => {
+  return normalizedRoutePath.value === '/training-overlay' || browserOverlayPath.value === '/training-overlay'
+})
+const isTrainingOverlayIntent = computed(() => {
+  return isTrainingOverlayRoute.value || browserOverlayIntent.value || getRouteQueryString(route.query.overlay) === 'training'
+})
+
+useHead(() => {
+  if (!isTrainingOverlayIntent.value) return {}
+  return {
+    htmlAttrs: {
+      class: 'training-overlay-document'
+    },
+    bodyAttrs: {
+      class: 'training-overlay-runtime'
+    }
+  }
+})
 
 // === SPA REDIRECT HANDLING (GitHub Pages 404 fix) ===
 onMounted(() => {
+  refreshBrowserOverlayLocation()
+  const queryRedirectPath = getRouteQueryString(route.query['spa-redirect-path'])
+  if (getRouteQueryString(route.query.overlay) === 'training' && queryRedirectPath) {
+    router.replace(queryRedirectPath)
+    return
+  }
+
   const savedPath = sessionStorage.getItem('spa-redirect-path')
   if (savedPath) {
     sessionStorage.removeItem('spa-redirect-path')
@@ -68,7 +106,9 @@ const authState = ref<AuthState>('login')
 const userEmail = ref('')
 const hasInitialized = ref(false)
 const showBrowserMaintenanceNotification = ref(false)
-const showDevFirebaseProbe = computed(() => appState.value === 'dashboard' && canUseDevTools())
+const showDevFirebaseProbe = computed(() => {
+  return !isTrainingOverlayIntent.value && appState.value === 'dashboard' && canUseDevTools()
+})
 
 // === CONFIG ===
 const REQUIRE_EMAIL_VERIFICATION = ref(false) // Always require email verification
@@ -95,6 +135,7 @@ function closeBrowserMaintenanceNotification() {
 
 // === DASHBOARD ENTRY MAINTENANCE ===
 watch(appState, async (newState) => {
+  if (isTrainingOverlayIntent.value) return
   if (newState === 'dashboard' && !hasPrefetched.value && currentUser.value) {
     hasPrefetched.value = true
     
@@ -111,6 +152,11 @@ watch(appState, async (newState) => {
 // === WATCH AUTH LOADING STATE ===
 // This watch handles the INITIAL auth check when the app loads
 watch(authLoading, (loading) => {
+  if (isTrainingOverlayIntent.value) {
+    hasInitialized.value = true
+    return
+  }
+
   if (!loading && !hasInitialized.value) {
     hasInitialized.value = true
     
@@ -136,6 +182,8 @@ watch(authLoading, (loading) => {
 // === WATCH USER CHANGES (after initialization) ===
 // This handles login/logout AFTER the initial load
 watch(currentUser, (user, oldUser) => {
+  if (isTrainingOverlayIntent.value) return
+
   // Skip if we haven't initialized yet (handled by authLoading watch)
   if (!hasInitialized.value) return
   
@@ -235,77 +283,84 @@ provide('goToProfile', handleGoToProfile)
 </script>
 
 <template>
-  <div id="app">
-    <!-- Electron Titlebar (only visible in Electron) -->
-    <ElectronTitlebar />
+  <div id="app" :class="{ 'app--training-overlay': isTrainingOverlayIntent }">
+    <template v-if="isTrainingOverlayIntent">
+      <NuxtPage v-if="isTrainingOverlayRoute" />
+      <div v-else class="overlay-boot" />
+    </template>
 
-    <ElectronDataMaintenanceNotification
-      v-if="isBrowserOnlyRuntime"
-      :visible="showBrowserMaintenanceNotification"
-      :status="browserMaintenanceStatus"
-      :progress="browserMaintenanceProgress"
-      :message="browserMaintenanceMessage"
-      :error="browserMaintenanceError"
-      @close="closeBrowserMaintenanceNotification"
-    />
-    
-    <NuxtRouteAnnouncer />
+    <template v-else>
+      <!-- Electron Titlebar (only visible in Electron) -->
+      <ElectronTitlebar />
 
-    <!-- Main Content with Transitions -->
-    <Transition :name="transitionName" mode="out-in">
-      <!-- Initializing - waiting for Firebase auth check -->
-      <div v-if="appState === 'initializing'" key="initializing" class="initializing-screen">
-        <div class="initializing-content">
-          <div class="initializing-spinner"></div>
-        </div>
-      </div>
-
-      <!-- Auth Overlay -->
-      <AuthOverlay 
-        v-else-if="appState === 'auth' && authState !== 'register-success'"
-        key="auth"
-        @login-success="handleLoginSuccess"
-        @register-success="handleRegisterSuccess"
+      <ElectronDataMaintenanceNotification
+        v-if="isBrowserOnlyRuntime"
+        :visible="showBrowserMaintenanceNotification"
+        :status="browserMaintenanceStatus"
+        :progress="browserMaintenanceProgress"
+        :message="browserMaintenanceMessage"
+        :error="browserMaintenanceError"
+        @close="closeBrowserMaintenanceNotification"
       />
+      
+      <NuxtRouteAnnouncer />
 
-      <!-- Registration Success -->
-      <div 
-        v-else-if="appState === 'auth' && authState === 'register-success'" 
-        key="register-success"
-        class="auth-wrapper"
-      >
-        <div class="auth-card-standalone">
-          <AuthRegistrationSuccess
-            :email="userEmail"
-            :require-email-verification="REQUIRE_EMAIL_VERIFICATION"
-            @go-to-dashboard="handleGoToDashboard"
-            @resend-email="handleResendEmail"
-          />
+      <!-- Main Content with Transitions -->
+      <Transition :name="transitionName" mode="out-in">
+        <!-- Initializing - waiting for Firebase auth check -->
+        <div v-if="appState === 'initializing'" key="initializing" class="initializing-screen">
+          <div class="initializing-content">
+            <div class="initializing-spinner"></div>
+          </div>
         </div>
-      </div>
 
-      <!-- Loading Screen -->
-      <div v-else-if="appState === 'loading'" key="loading" class="loading-screen">
-        <div class="loading-content">
-          <div class="loading-spinner"></div>
-          <p class="loading-text">Caricamento Dashboard...</p>
+        <!-- Auth Overlay -->
+        <AuthOverlay 
+          v-else-if="appState === 'auth' && authState !== 'register-success'"
+          key="auth"
+          @login-success="handleLoginSuccess"
+          @register-success="handleRegisterSuccess"
+        />
+
+        <!-- Registration Success -->
+        <div 
+          v-else-if="appState === 'auth' && authState === 'register-success'" 
+          key="register-success"
+          class="auth-wrapper"
+        >
+          <div class="auth-card-standalone">
+            <AuthRegistrationSuccess
+              :email="userEmail"
+              :require-email-verification="REQUIRE_EMAIL_VERIFICATION"
+              @go-to-dashboard="handleGoToDashboard"
+              @resend-email="handleResendEmail"
+            />
+          </div>
         </div>
-      </div>
 
-      <!-- Dashboard -->
-      <div v-else-if="appState === 'dashboard'" key="dashboard" class="dashboard-wrapper">
-        <NuxtLayout>
-          <NuxtPage />
-        </NuxtLayout>
-      </div>
+        <!-- Loading Screen -->
+        <div v-else-if="appState === 'loading'" key="loading" class="loading-screen">
+          <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <p class="loading-text">Caricamento Dashboard...</p>
+          </div>
+        </div>
 
-      <!-- Profile Page -->
-      <div v-else-if="appState === 'profile'" key="profile" class="profile-wrapper">
-        <ProfilePage @back="handleBackToDashboard" @logout="handleLogout" />
-      </div>
-    </Transition>
+        <!-- Dashboard -->
+        <div v-else-if="appState === 'dashboard'" key="dashboard" class="dashboard-wrapper">
+          <NuxtLayout>
+            <NuxtPage />
+          </NuxtLayout>
+        </div>
 
-    <DevFirebaseProbe v-if="showDevFirebaseProbe" />
+        <!-- Profile Page -->
+        <div v-else-if="appState === 'profile'" key="profile" class="profile-wrapper">
+          <ProfilePage @back="handleBackToDashboard" @logout="handleLogout" />
+        </div>
+      </Transition>
+
+      <DevFirebaseProbe v-if="showDevFirebaseProbe" />
+    </template>
   </div>
 </template>
 
@@ -329,6 +384,56 @@ html, body {
   background: $color-bg;
   display: flex;
   flex-direction: column;
+}
+
+html.training-overlay-document,
+html.training-overlay-document body,
+html:has(body.training-overlay-runtime),
+body.training-overlay-runtime,
+html.training-overlay-document #__nuxt,
+html.training-overlay-document #app,
+body.training-overlay-runtime #__nuxt,
+body.training-overlay-runtime #app {
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden !important;
+  background-color: transparent !important;
+  background: transparent !important;
+}
+
+#app.app--training-overlay {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  min-height: 0;
+  background-color: transparent !important;
+  background: transparent !important;
+  overflow: hidden;
+}
+
+body.training-overlay-runtime #__nuxt_devtools__,
+body.training-overlay-runtime #__nuxt-devtools__,
+body.training-overlay-runtime [id*='nuxt_devtools'],
+body.training-overlay-runtime [id*='nuxt-devtools'],
+body.training-overlay-runtime [class*='nuxt-devtools'],
+body.training-overlay-runtime [data-nuxt-devtools],
+body.training-overlay-runtime nuxt-devtools,
+body.training-overlay-runtime iframe[title*='Nuxt'],
+body.training-overlay-runtime button[aria-label*='Nuxt'],
+body.training-overlay-runtime iframe[src*='nuxt-devtools'],
+body.training-overlay-runtime iframe[src*='_nuxt/devtools'],
+body.training-overlay-runtime iframe[src*='__nuxt_devtools__'] {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+.overlay-boot {
+  width: 100vw;
+  height: 100vh;
+  background: transparent;
 }
 
 // When Electron titlebar is visible, make content scrollable below it

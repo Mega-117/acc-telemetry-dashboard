@@ -1,0 +1,270 @@
+export type TrackTitanDurationModeId = 'short30' | 'full60'
+export type TrackTitanStepType = 'setup' | 'run' | 'review' | 'focusRun' | 'recap'
+
+export interface TrackTitanTrainingStep {
+  id: string
+  title: string
+  durationMinutes: number
+  type: TrackTitanStepType
+  instructions: string[]
+  dont: string[]
+  outputs: string[]
+}
+
+export interface TrackTitanTrainingMode {
+  id: TrackTitanDurationModeId
+  title: string
+  duration: number
+  description: string
+  steps: TrackTitanTrainingStep[]
+}
+
+export const trackTitanRequirements = [
+  { id: 'tracktitan', label: 'TrackTitan pronto', meta: 'Confronto aperto.' },
+  { id: 'coach-session', label: 'Sessione coach', meta: 'Riferimento selezionato.' },
+  { id: 'coach-replay', label: 'Replay coach', meta: 'Extra se serve.' }
+]
+
+export const trackTitanRules = [
+  'Run: focus su 1 segmento',
+  'Review: focus su 1 correzione',
+  'Recap: capire il lavoro fatto',
+  'Analisi input freno e gas',
+  'Niente best lap',
+  'confronto: input utente vs input coach nel segmento scelto',
+
+]
+
+export const trackTitanStepTypeLabels: Record<TrackTitanStepType, string> = {
+  setup: 'Setup',
+  run: 'Run',
+  review: 'Review',
+  focusRun: 'Run focus',
+  recap: 'Recap'
+}
+
+export const trackTitanTrainingModes: Record<TrackTitanDurationModeId, TrackTitanTrainingMode> = {
+  short30: {
+    id: 'short30',
+    title: '30 min',
+    duration: 30,
+    description: 'Focus rapido: un solo segmento, una correzione.',
+    steps: [
+      {
+        id: 'initial-run',
+        title: 'Run iniziale',
+        durationMinutes: 10,
+        type: 'run',
+        instructions: [
+          'Guida per 10 minuti e crea dati freschi da confrontare.',
+          'Non correggere ancora nulla: serve solo un riferimento reale.'
+        ],
+        dont: [
+          'Non cercare il best lap.',
+          'Non fermarti sui singoli errori.'
+        ],
+        outputs: [
+          'Dati pronti per la review TrackTitan.'
+        ]
+      },
+      {
+        id: 'tracktitan-review',
+        title: 'Scegli segmento',
+        durationMinutes: 5,
+        type: 'review',
+        instructions: [
+          'Guarda solo il segmento dove perdi piu tempo dal coach.',
+          'Confronta freno e acceleratore con gli input del coach.',
+          'Scegli una sola correzione per il prossimo run.',
+          'Replay coach solo se serve: frenata, riapertura gas e traiettoria in visuale guida.'
+        ],
+        dont: [
+          'Non analizzare tutto il giro.',
+          'Non cambiare piu cose insieme.'
+        ],
+        outputs: [
+          'Segmento scelto e correzione da provare.'
+        ]
+      },
+      {
+        id: 'segment-focus-run',
+        title: 'Correggi input',
+        durationMinutes: 10,
+        type: 'focusRun',
+        instructions: [
+          'Guida 10 minuti pensando solo al segmento scelto.',
+          'Prova a rendere freno e acceleratore piu simili al coach.'
+        ],
+        dont: [
+          'Non cercare il best lap.',
+          'Non cambiare segmento durante il run.'
+        ],
+        outputs: [
+          'Nuovi dati sullo stesso segmento.'
+        ]
+      },
+      {
+        id: 'final-review',
+        title: 'Decidi prossimo',
+        durationMinutes: 5,
+        type: 'recap',
+        instructions: [
+          'Verifica solo se il segmento scelto e migliorato.',
+          'Se migliora, la prossima volta passa avanti. Se non migliora, ripeti.'
+        ],
+        dont: [
+          'Non giudicare la sessione dal best lap.'
+        ],
+        outputs: [
+          'Ripeti lo stesso segmento o passa al prossimo.'
+        ]
+      }
+    ]
+  },
+  full60: {
+    id: 'full60',
+    title: '60 min',
+    duration: 60,
+    description: 'Focus completo: 2 segmenti, massimo 3 se migliori in fretta.',
+    steps: [
+      {
+        id: 'initial-run',
+        title: 'Run iniziale',
+        durationMinutes: 10,
+        type: 'run',
+        instructions: [
+          'Guida per 10 minuti e crea dati freschi da confrontare.',
+          'Non correggere ancora nulla: serve solo un riferimento reale.'
+        ],
+        dont: [
+          'Non cercare il best lap.',
+          'Non fermarti sui singoli errori.'
+        ],
+        outputs: ['Dati pronti per la review TrackTitan.']
+      },
+      {
+        id: 'review-1',
+        title: 'Scegli segmento',
+        durationMinutes: 5,
+        type: 'review',
+        instructions: [
+          'Scegli il segmento dove perdi piu tempo rispetto al coach.',
+          'Confronta freno e acceleratore con gli input del coach.',
+          'Scegli una sola correzione per il prossimo run.',
+          'Replay coach solo se serve: frenata, riapertura gas e traiettoria in visuale guida.'
+        ],
+        dont: [
+          'Non analizzare tutto il giro.',
+          'Non scegliere piu segmenti.'
+        ],
+        outputs: [
+          'Segmento scelto e correzione da provare.'
+        ]
+      },
+      {
+        id: 'focus-run-1',
+        title: 'Run focus segmento',
+        durationMinutes: 10,
+        type: 'focusRun',
+        instructions: [
+          'Guida 10 minuti pensando solo al segmento scelto.',
+          'Prova a rendere freno e acceleratore piu simili al coach.'
+        ],
+        dont: [
+          'Non cercare il best lap.',
+          'Non cambiare segmento durante il run.'
+        ],
+        outputs: ['Nuovi dati sullo stesso segmento.']
+      },
+      {
+        id: 'review-2',
+        title: 'Verifica segmento',
+        durationMinutes: 5,
+        type: 'review',
+        instructions: [
+          'Controlla solo il segmento appena lavorato.',
+          'Confronta freno e acceleratore con gli input del coach.',
+          'Se migliora, passa al prossimo segmento peggiore. Se non migliora, ripeti.',
+          'Replay coach solo se serve: frenata, riapertura gas e traiettoria in visuale guida.'
+        ],
+        dont: [
+          'Non forzare il cambio segmento.',
+          'Non giudicare dal best lap.'
+        ],
+        outputs: [
+          'Ripeti o passa avanti.'
+        ]
+      },
+      {
+        id: 'focus-run-2',
+        title: 'Ripeti o cambia',
+        durationMinutes: 10,
+        type: 'focusRun',
+        instructions: [
+          'Guida 10 minuti sul segmento deciso nella review.',
+          'Mantieni una sola correzione su freno o acceleratore.'
+        ],
+        dont: [
+          'Non cambiare obiettivo durante il blocco.',
+          'Non cercare il giro perfetto.'
+        ],
+        outputs: ['Nuovi dati sul segmento scelto.']
+      },
+      {
+        id: 'review-3',
+        title: 'Decidi finale',
+        durationMinutes: 5,
+        type: 'review',
+        instructions: [
+          'Controlla solo il segmento appena lavorato.',
+          'Confronta freno e acceleratore con gli input del coach.',
+          'Decidi il run finale: ripeti o passa al prossimo segmento peggiore.',
+          'Replay coach solo se serve: frenata, riapertura gas e traiettoria in visuale guida.'
+        ],
+        dont: [
+          'Non trasformare la review in studio completo del giro.'
+        ],
+        outputs: [
+          'Decisione per il run finale.'
+        ]
+      },
+      {
+        id: 'final-focus-run',
+        title: 'Run focus finale',
+        durationMinutes: 10,
+        type: 'focusRun',
+        instructions: [
+          'Esegui l ultima correzione scelta.',
+          'Resta sul segmento deciso nella review.'
+        ],
+        dont: [
+          'Non cercare il best lap.',
+          'Non aggiungere nuovi segmenti.'
+        ],
+        outputs: ['Ultimo confronto utile su TrackTitan.']
+      },
+      {
+        id: 'final-recap',
+        title: 'Recap finale',
+        durationMinutes: 5,
+        type: 'recap',
+        instructions: [
+          'Guarda quali segmenti sono migliorati.',
+          'Decidi se nella prossima sessione ripetere o passare avanti.'
+        ],
+        dont: [
+          'Non valutare la sessione solo dal tempo giro.'
+        ],
+        outputs: [
+          'Segmento da ripetere o prossimo segmento.'
+        ]
+      }
+    ]
+  }
+}
+
+export const trackTitanModeList = Object.values(trackTitanTrainingModes)
+
+export function resolveTrackTitanModeId(value: unknown): TrackTitanDurationModeId {
+  return value === 'full60' ? 'full60' : 'short30'
+}
