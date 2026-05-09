@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { doc } from 'firebase/firestore'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useTelemetryData } from '~/composables/useTelemetryData'
 import { trackedUpdateDoc } from '~/composables/useFirebaseTracker'
 import { db } from '~/config/firebase'
+import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
 const props = defineProps<{
   userEmail?: string
@@ -17,9 +18,9 @@ const emit = defineEmits<{
   back: []
 }>()
 
-type ProfileTab = 'account' | 'calendar' | 'coach'
+type ProfileTab = 'account'
 
-const { currentUser, getUserProfile } = useFirebaseAuth()
+const { currentUser, getUserProfile, updateCachedUserProfile } = useFirebaseAuth()
 const { countSharedSessions, revokeAllSharedSessions, resetAllTrackBests } = useTelemetryData()
 
 const activeTab = ref<ProfileTab>('account')
@@ -32,6 +33,8 @@ const isResettingBests = ref(false)
 const resetBestsSuccess = ref(false)
 const resetBestsCount = ref(0)
 const isEditingEquipment = ref(false)
+const isWheelSettingsOpen = ref(false)
+const isSetupSummaryOpen = ref(false)
 const configuredEquipmentKeys = ref<string[]>([])
 
 function createDefaultEquipment() {
@@ -105,19 +108,12 @@ const setupSummaryRows = computed(() => {
 })
 
 const hasEquipmentSummary = computed(() => hardwareSummaryRows.value.length > 0 || setupSummaryRows.value.length > 0)
+const isCoachProfile = computed(() => (props.userRole || 'pilot') === 'coach')
+const sharedSessionsStatus = computed(() => sharedSessionsCount.value > 0 ? `${sharedSessionsCount.value} pubbliche` : 'Nessuna pubblica')
 
-const tabs = computed<Array<{ id: ProfileTab; label: string }>>(() => {
-  const baseTabs: Array<{ id: ProfileTab; label: string }> = [
-    { id: 'account', label: 'Profilo' },
-    { id: 'calendar', label: 'Calendario' }
-  ]
-
-  if ((props.userRole || 'pilot') === 'pilot') {
-    baseTabs.push({ id: 'coach', label: 'Coach e lezioni' })
-  }
-
-  return baseTabs
-})
+const tabs = computed<Array<{ id: ProfileTab; label: string }>>(() => [
+  { id: 'account', label: 'Profilo' }
+])
 
 watch(tabs, (availableTabs) => {
   if (!availableTabs.some((tab) => tab.id === activeTab.value)) {
@@ -187,6 +183,7 @@ function formatEquipmentValue(value: unknown, suffix = ''): string {
 function startEquipmentEdit() {
   equipment.value = cloneEquipment(savedEquipment.value)
   saveSuccess.value = false
+  isWheelSettingsOpen.value = !isCoachProfile.value
   isEditingEquipment.value = true
 }
 
@@ -202,6 +199,20 @@ function setForceFeedbackScale(value: 'peak' | 'linear') {
 
 async function loadSharedCount() {
   sharedSessionsCount.value = await countSharedSessions()
+}
+
+async function loadProfileData(uid: string) {
+  const profile = await getUserProfile(uid)
+  if (profile?.equipment) {
+    configuredEquipmentKeys.value = Object.keys(profile.equipment)
+    equipment.value = normalizeEquipment(profile.equipment)
+    savedEquipment.value = cloneEquipment(equipment.value)
+  } else {
+    configuredEquipmentKeys.value = []
+    equipment.value = createDefaultEquipment()
+    savedEquipment.value = createDefaultEquipment()
+  }
+  await loadSharedCount()
 }
 
 async function revokeAll() {
@@ -234,6 +245,7 @@ async function resetHistoricalBests() {
 
   try {
     const count = await resetAllTrackBests()
+    invalidateTelemetryCaches({ uid: currentUser.value?.uid, scope: 'sync' })
     resetBestsCount.value = count
     resetBestsSuccess.value = true
     console.log(`[PROFILE] Reset ${count} track bests`)
@@ -253,6 +265,10 @@ async function handleSaveEquipment() {
     await trackedUpdateDoc(doc(db, 'users', currentUser.value.uid), {
       equipment: equipment.value
     }, 'ProfilePage')
+    updateCachedUserProfile(currentUser.value.uid, {
+      equipment: equipment.value
+    })
+    invalidateTelemetryCaches({ uid: currentUser.value.uid, scope: 'profile' })
     savedEquipment.value = cloneEquipment(equipment.value)
     configuredEquipmentKeys.value = Object.keys(equipment.value)
     isEditingEquipment.value = false
@@ -265,17 +281,14 @@ async function handleSaveEquipment() {
   }
 }
 
-onMounted(async () => {
-  if (currentUser.value) {
-    const profile = await getUserProfile(currentUser.value.uid)
-    if (profile?.equipment) {
-      configuredEquipmentKeys.value = Object.keys(profile.equipment)
-      equipment.value = normalizeEquipment(profile.equipment)
-      savedEquipment.value = cloneEquipment(equipment.value)
-    }
-    await loadSharedCount()
-  }
-})
+watch(
+  () => currentUser.value?.uid,
+  async (uid) => {
+    if (!uid) return
+    await loadProfileData(uid)
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -331,7 +344,7 @@ onMounted(async () => {
           </div>
         </div>
 
-        <nav class="profile-tabs">
+        <nav v-if="tabs.length > 1" class="profile-tabs">
           <button
             v-for="tab in tabs"
             :key="tab.id"
@@ -343,10 +356,10 @@ onMounted(async () => {
           </button>
         </nav>
 
-        <section v-if="activeTab === 'account'" class="tab-panel account-grid">
-          <div class="profile-card equipment-card account-equipment-card">
+        <section class="tab-panel account-grid">
+          <div class="profile-card equipment-card account-equipment-card" :class="{ 'equipment-card--coach': isCoachProfile }">
             <div class="card-head">
-              <h3 class="card-title">Attrezzatura e impostazioni</h3>
+              <h3 class="card-title">{{ isCoachProfile ? 'Attrezzatura' : 'Attrezzatura e impostazioni' }}</h3>
               <div class="card-actions">
                 <template v-if="isEditingEquipment">
                   <button class="ghost-action" type="button" :disabled="isSaving" @click="cancelEquipmentEdit">Annulla</button>
@@ -361,7 +374,9 @@ onMounted(async () => {
                     <template v-else>Salva</template>
                   </button>
                 </template>
-                <button v-else class="primary-action" type="button" @click="startEquipmentEdit">Modifica</button>
+                <button v-else class="primary-action" type="button" @click="startEquipmentEdit">
+                  {{ hasEquipmentSummary ? 'Modifica' : 'Configura' }}
+                </button>
               </div>
             </div>
 
@@ -377,15 +392,34 @@ onMounted(async () => {
                   </div>
                 </section>
 
-                <section v-if="setupSummaryRows.length" class="summary-section">
-                  <h4>Setup base</h4>
-                  <div class="settings-summary-grid">
-                    <div v-for="row in setupSummaryRows" :key="row.label" class="setting-pill">
-                      <span>{{ row.label }}</span>
-                      <strong>{{ formatEquipmentValue(row.value, row.suffix) }}</strong>
-                      <small>{{ row.name }}</small>
+                <section v-if="setupSummaryRows.length" class="summary-section summary-section--setup">
+                  <button
+                    class="summary-toggle"
+                    type="button"
+                    :aria-expanded="isSetupSummaryOpen"
+                    aria-controls="equipment-setup-summary"
+                    @click="isSetupSummaryOpen = !isSetupSummaryOpen"
+                  >
+                    <span>Setup base</span>
+                    <span
+                      class="summary-toggle__chevron"
+                      :class="{ 'summary-toggle__chevron--open': isSetupSummaryOpen }"
+                      aria-hidden="true"
+                    >
+                      <svg viewBox="0 0 20 20" focusable="false">
+                        <path d="M6 8l4 4 4-4" />
+                      </svg>
+                    </span>
+                  </button>
+                  <Transition name="equipment-expand">
+                    <div v-if="isSetupSummaryOpen" id="equipment-setup-summary" class="settings-summary-grid">
+                      <div v-for="row in setupSummaryRows" :key="row.label" class="setting-pill">
+                        <span>{{ row.label }}</span>
+                        <strong>{{ formatEquipmentValue(row.value, row.suffix) }}</strong>
+                        <small>{{ row.name }}</small>
+                      </div>
                     </div>
-                  </div>
+                  </Transition>
                 </section>
               </div>
               <div v-else class="empty-equipment">Attrezzatura non configurata.</div>
@@ -415,49 +449,57 @@ onMounted(async () => {
               </div>
 
               <div class="equipment-section">
-                <h4>Impostazioni base Fanatec</h4>
-                <div class="fanatec-settings">
-                  <div class="scale-row">
-                    <div>
-                      <span>[FFS]</span>
-                      <strong>Force Feedback Scale</strong>
+                <button class="settings-toggle" type="button" @click="isWheelSettingsOpen = !isWheelSettingsOpen">
+                  <span>Impostazioni base Fanatec</span>
+                  <strong>{{ isWheelSettingsOpen ? 'Chiudi' : 'Apri' }}</strong>
+                </button>
+                <Transition name="equipment-expand">
+                  <div v-if="isWheelSettingsOpen" class="fanatec-settings">
+                    <div class="scale-row">
+                      <div>
+                        <span>[FFS]</span>
+                        <strong>Force Feedback Scale</strong>
+                      </div>
+                      <div class="segmented-control">
+                        <button
+                          type="button"
+                          :class="{ 'segmented-control__item--active': equipment.forceFeedbackScale === 'peak' }"
+                          class="segmented-control__item"
+                          @click="setForceFeedbackScale('peak')"
+                        >
+                          Peak
+                        </button>
+                        <button
+                          type="button"
+                          :class="{ 'segmented-control__item--active': equipment.forceFeedbackScale === 'linear' }"
+                          class="segmented-control__item"
+                          @click="setForceFeedbackScale('linear')"
+                        >
+                          Linear
+                        </button>
+                      </div>
                     </div>
-                    <div class="segmented-control">
-                      <button
-                        type="button"
-                        :class="{ 'segmented-control__item--active': equipment.forceFeedbackScale === 'peak' }"
-                        class="segmented-control__item"
-                        @click="setForceFeedbackScale('peak')"
-                      >
-                        Peak
-                      </button>
-                      <button
-                        type="button"
-                        :class="{ 'segmented-control__item--active': equipment.forceFeedbackScale === 'linear' }"
-                        class="segmented-control__item"
-                        @click="setForceFeedbackScale('linear')"
-                      >
-                        Linear
-                      </button>
-                    </div>
+
+                    <label v-for="setting in wheelSettingDefinitions" :key="setting.key" class="slider-row">
+                      <div class="slider-label">
+                        <span>[{{ setting.code }}]</span>
+                        <strong>{{ setting.label }}</strong>
+                      </div>
+                      <input
+                        v-model.number="equipment[setting.key]"
+                        type="range"
+                        :min="setting.min"
+                        :max="setting.max"
+                        :step="setting.step"
+                      />
+                      <output>{{ formatEquipmentValue(equipment[setting.key], setting.suffix) }}</output>
+                    </label>
                   </div>
+                </Transition>
+              </div>
 
-                  <label v-for="setting in wheelSettingDefinitions" :key="setting.key" class="slider-row">
-                    <div class="slider-label">
-                      <span>[{{ setting.code }}]</span>
-                      <strong>{{ setting.label }}</strong>
-                    </div>
-                    <input
-                      v-model.number="equipment[setting.key]"
-                      type="range"
-                      :min="setting.min"
-                      :max="setting.max"
-                      :step="setting.step"
-                    />
-                    <output>{{ formatEquipmentValue(equipment[setting.key], setting.suffix) }}</output>
-                  </label>
-                </div>
-
+              <div class="equipment-section equipment-section--compact">
+                <h4>Setup vettura</h4>
                 <div class="form-grid form-grid--assist">
                   <label class="form-group">
                     <span>TC default</span>
@@ -472,8 +514,14 @@ onMounted(async () => {
             </div>
           </div>
 
-          <div class="profile-card">
-            <h3 class="card-title">Sessioni condivise</h3>
+          <div class="profile-card profile-card--secondary privacy-card">
+            <div class="secondary-card-head">
+              <div>
+                <span class="section-kicker section-kicker--neutral">Privacy dati</span>
+                <h3 class="card-title">Sessioni condivise</h3>
+              </div>
+              <span class="status-pill">{{ sharedSessionsStatus }}</span>
+            </div>
             <p v-if="sharedSessionsCount > 0" class="muted-text">
               Hai <strong>{{ sharedSessionsCount }}</strong> sessioni condivise pubblicamente.
             </p>
@@ -491,10 +539,11 @@ onMounted(async () => {
             </button>
           </div>
 
-          <div class="profile-card">
-            <h3 class="card-title">Reset tempi storici</h3>
+          <div class="profile-card profile-card--secondary maintenance-card">
+            <span class="section-kicker">Manutenzione dati</span>
+            <h3 class="card-title">Best storici</h3>
             <p class="muted-text">
-              Elimina i best storici salvati. Alla prossima sincronizzazione verranno ricalcolati dalle sessioni.
+              Cancella i best storici salvati e li ricalcola alla prossima sincronizzazione.
             </p>
             <button
               class="danger-action"
@@ -509,14 +558,6 @@ onMounted(async () => {
           </div>
         </section>
 
-        <section v-else-if="activeTab === 'calendar'" class="tab-panel">
-          <ProfileRaceCalendarCard />
-        </section>
-
-        <section v-else-if="activeTab === 'coach'" class="tab-panel coach-grid">
-          <ProfileCoachAssociationCard v-if="userRole !== 'coach'" />
-          <ProfileCoachLessonsCard />
-        </section>
       </div>
     </main>
   </div>
@@ -607,7 +648,7 @@ $max-width: 1400px;
 }
 
 .profile-main {
-  padding: 40px 24px;
+  padding: 34px 24px 42px;
 }
 
 .profile-container {
@@ -618,13 +659,14 @@ $max-width: 1400px;
 .profile-hero {
   display: flex;
   align-items: center;
-  gap: 26px;
-  margin-bottom: 26px;
+  gap: 20px;
+  margin-bottom: 24px;
+  padding: 8px 4px 0;
 }
 
 .avatar-container {
-  width: 92px;
-  height: 92px;
+  width: 78px;
+  height: 78px;
   flex: 0 0 auto;
 }
 
@@ -637,8 +679,8 @@ $max-width: 1400px;
   min-width: 0;
 
   h1 {
-    margin: 0 0 12px;
-    font-size: 30px;
+    margin: 0 0 10px;
+    font-size: 29px;
     font-weight: 800;
   }
 }
@@ -683,14 +725,14 @@ $max-width: 1400px;
   display: flex;
   gap: 6px;
   padding: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 12px;
 }
 
 .profile-tab {
   flex: 1;
-  min-height: 42px;
+  min-height: 38px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 9px;
@@ -721,7 +763,7 @@ $max-width: 1400px;
 .coach-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 22px;
 }
 
 .account-equipment-card {
@@ -729,10 +771,21 @@ $max-width: 1400px;
 }
 
 .profile-card {
-  padding: 28px;
+  padding: 24px;
   background: $color-card;
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
+  border-radius: 14px;
+}
+
+.profile-card--secondary {
+  min-height: 154px;
+}
+
+.maintenance-card {
+  border-color: rgba(239, 68, 68, 0.13);
+  background:
+    linear-gradient(180deg, rgba(239, 68, 68, 0.035), rgba(255, 255, 255, 0.01)),
+    $color-card;
 }
 
 .card-head {
@@ -740,7 +793,7 @@ $max-width: 1400px;
   justify-content: space-between;
   align-items: center;
   gap: 18px;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
 }
 
 .card-actions {
@@ -756,8 +809,45 @@ $max-width: 1400px;
   font-weight: 700;
 }
 
+.section-kicker {
+  display: block;
+  margin-bottom: 8px;
+  color: rgba(239, 68, 68, 0.7);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.section-kicker--neutral {
+  color: rgba(255, 255, 255, 0.44);
+}
+
 .card-head .card-title {
   margin-bottom: 0;
+}
+
+.secondary-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+
+  .card-title {
+    margin-bottom: 0;
+  }
+}
+
+.status-pill {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .muted-text {
@@ -819,23 +909,99 @@ $max-width: 1400px;
 .equipment-sections {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 18px;
 }
 
 .equipment-summary,
 .equipment-summary-sections {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 20px;
+}
+
+.equipment-card--coach {
+  padding: 24px;
+
+  .card-head {
+    margin-bottom: 18px;
+  }
 }
 
 .summary-section {
+  padding-top: 2px;
+
+  + .summary-section {
+    padding-top: 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
   h4 {
     margin: 0 0 12px;
     color: rgba(255, 255, 255, 0.72);
     font-size: 13px;
     letter-spacing: 0.5px;
     text-transform: uppercase;
+  }
+}
+
+.summary-section--setup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 38px;
+  width: 100%;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: #fff;
+  font-family: $font-primary;
+  cursor: pointer;
+
+  span {
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  &:hover {
+    border-color: rgba($racing-orange, 0.25);
+  }
+}
+
+.summary-toggle__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: $racing-orange;
+  transition: transform 0.2s ease;
+
+  svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+  }
+
+  path {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  &--open {
+    transform: rotate(180deg);
   }
 }
 
@@ -850,13 +1016,13 @@ $max-width: 1400px;
 }
 
 .settings-summary-grid {
-  grid-template-columns: repeat(7, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
 .summary-cell,
 .setting-pill {
   min-width: 0;
-  padding: 12px;
+  padding: 12px 13px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
@@ -878,7 +1044,7 @@ $max-width: 1400px;
 }
 
 .setting-pill {
-  min-height: 74px;
+  min-height: 70px;
 
   small {
     display: block;
@@ -890,10 +1056,10 @@ $max-width: 1400px;
 }
 
 .empty-equipment {
-  padding: 18px;
+  padding: 14px 16px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px dashed rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  border-radius: 10px;
   color: rgba(255, 255, 255, 0.52);
   font-size: 14px;
 }
@@ -905,6 +1071,10 @@ $max-width: 1400px;
     font-size: 14px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+  }
+
+  &--compact {
+    padding-top: 2px;
   }
 }
 
@@ -919,7 +1089,6 @@ $max-width: 1400px;
 
   &--assist {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin-top: 18px;
   }
 }
 
@@ -956,10 +1125,43 @@ $max-width: 1400px;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-top: 12px;
   padding: 16px;
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 12px;
+}
+
+.settings-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: #fff;
+  font-family: $font-primary;
+  cursor: pointer;
+
+  span {
+    color: rgba(255, 255, 255, 0.66);
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  strong {
+    color: $racing-orange;
+    font-size: 12px;
+  }
+
+  &:hover {
+    border-color: rgba($racing-orange, 0.24);
+  }
 }
 
 .scale-row,
@@ -1034,6 +1236,26 @@ $max-width: 1400px;
   }
 }
 
+.equipment-expand-enter-active,
+.equipment-expand-leave-active {
+  overflow: hidden;
+  transition: opacity 0.18s ease, transform 0.18s ease, max-height 0.25s ease;
+}
+
+.equipment-expand-enter-from,
+.equipment-expand-leave-to {
+  max-height: 0;
+  opacity: 0;
+  transform: translateY(-5px);
+}
+
+.equipment-expand-enter-to,
+.equipment-expand-leave-from {
+  max-height: 820px;
+  opacity: 1;
+  transform: translateY(0);
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -1042,6 +1264,22 @@ $max-width: 1400px;
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-panel,
+  .equipment-expand-enter-active,
+  .equipment-expand-leave-active {
+    animation: none;
+    transition: none;
+  }
+
+  .equipment-expand-enter-from,
+  .equipment-expand-leave-to,
+  .equipment-expand-enter-to,
+  .equipment-expand-leave-from {
+    transform: none;
   }
 }
 
@@ -1077,6 +1315,16 @@ $max-width: 1400px;
 
   .profile-hero {
     align-items: flex-start;
+    gap: 16px;
+  }
+
+  .avatar-container {
+    width: 64px;
+    height: 64px;
+  }
+
+  .hero-copy h1 {
+    font-size: 25px;
   }
 
   .profile-tabs {

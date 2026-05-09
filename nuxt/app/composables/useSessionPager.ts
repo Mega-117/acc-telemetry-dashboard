@@ -26,6 +26,7 @@ import {
 const CALLER = 'SessionPager'
 const DEFAULT_PAGE_SIZE = 25
 const CLOUD_IDENTITY_CACHE_TTL_MS = 3000
+const SESSION_PAGE_CACHE_TTL_MS = 60_000
 
 type SessionSyncState = 'synced' | 'pending_sync' | 'local_only' | 'sync_failed'
 
@@ -43,6 +44,12 @@ type PageLoadOptions = {
     pageSize?: number
     reset?: boolean
     filters?: SessionPagerFilters
+}
+
+type PageCacheEntry = {
+    cachedAt: number
+    sessions: SessionDocument[]
+    state: Pick<PagerState, 'currentPage' | 'hasNext' | 'hasPrev' | 'totalItems' | 'diagnostics'>
 }
 
 type PagerState = {
@@ -82,7 +89,7 @@ const globalOnline = ref(true)
 const globalFilters = ref<SessionPagerFilters>({})
 const globalTargetUser = ref<string | null>(null)
 const globalCursorMap: Map<number, QueryDocumentSnapshot<DocumentData> | null> = new Map([[1, null]])
-const globalPageCache = ref<Record<number, SessionDocument[]>>({})
+const globalPageCache = ref<Record<number, PageCacheEntry>>({})
 const globalInitialized = ref(false)
 const globalCloudIdentityCache = new Map<string, {
     cachedAt: number
@@ -212,6 +219,45 @@ function resetPager(pageSize: number, filters: SessionPagerFilters, targetUserId
     globalCursorMap.clear()
     globalCursorMap.set(1, null)
     globalPageCache.value = {}
+}
+
+function writePageCache(page: number, sessions: SessionDocument[]) {
+    globalPageCache.value = {
+        ...globalPageCache.value,
+        [page]: {
+            cachedAt: Date.now(),
+            sessions,
+            state: {
+                currentPage: globalState.value.currentPage,
+                hasNext: globalState.value.hasNext,
+                hasPrev: globalState.value.hasPrev,
+                totalItems: globalState.value.totalItems,
+                diagnostics: { ...globalState.value.diagnostics }
+            }
+        }
+    }
+}
+
+function readFreshPageCache(page: number): PageCacheEntry | null {
+    const cached = globalPageCache.value[page]
+    if (!cached) return null
+    if (Date.now() - cached.cachedAt > SESSION_PAGE_CACHE_TTL_MS) return null
+    return cached
+}
+
+export function clearSessionPagerCache(uid?: string) {
+    if (!uid || globalTargetUser.value === uid) {
+        globalCursorMap.clear()
+        globalCursorMap.set(1, null)
+        globalPageCache.value = {}
+    }
+
+    if (uid) {
+        globalCloudIdentityCache.delete(uid)
+        return
+    }
+
+    globalCloudIdentityCache.clear()
 }
 
 async function resolveTotals(targetUserId: string, filters: SessionPagerFilters): Promise<number | null> {
@@ -423,7 +469,6 @@ async function ensureCursorForPage(
 
         const startCursor = globalCursorMap.get(p) || null
         const result = await queryCloudPage(targetUserId, pageSize, startCursor, filters)
-        globalPageCache.value[p] = result.sessions
         if (result.hasNext && result.lastDoc) {
             globalCursorMap.set(p + 1, result.lastDoc)
             reachablePage = p + 1
@@ -592,6 +637,17 @@ export function useSessionPager() {
 
         if (resetNeeded) {
             resetPager(pageSize, filters, targetUserId)
+        } else {
+            const cached = readFreshPageCache(requestedPage)
+            if (cached) {
+                globalSessions.value = cached.sessions
+                globalState.value.currentPage = cached.state.currentPage
+                globalState.value.hasNext = cached.state.hasNext
+                globalState.value.hasPrev = cached.state.hasPrev
+                globalState.value.totalItems = cached.state.totalItems
+                globalState.value.diagnostics = { ...cached.state.diagnostics }
+                return globalSessions.value
+            }
         }
 
         globalError.value = null
@@ -622,6 +678,7 @@ export function useSessionPager() {
                     localOverlayCount: mergedResult.pageSessions.filter((session) => session.source === 'local').length,
                     pendingLocalCount: localSessions.filter((session) => session.syncState !== 'synced').length
                 }
+                writePageCache(mergedResult.currentPage, globalSessions.value)
                 return globalSessions.value
             }
 
@@ -647,6 +704,7 @@ export function useSessionPager() {
                     localOverlayCount: pageSlice.length,
                     pendingLocalCount: pageSlice.length
                 }
+                writePageCache(safePage, globalSessions.value)
                 return globalSessions.value
             }
 
@@ -654,7 +712,6 @@ export function useSessionPager() {
             const startCursor = globalCursorMap.get(reachablePage) || null
             const cloudResult = await queryCloudPage(targetUserId, pageSize, startCursor, filters)
 
-            globalPageCache.value[reachablePage] = cloudResult.sessions
             if (cloudResult.hasNext && cloudResult.lastDoc) {
                 globalCursorMap.set(reachablePage + 1, cloudResult.lastDoc)
             }
@@ -676,6 +733,7 @@ export function useSessionPager() {
                 localOverlayCount: pageSessions.filter((session) => session.source === 'local').length,
                 pendingLocalCount: localSessions.filter((session) => session.syncState !== 'synced').length
             }
+            writePageCache(reachablePage, globalSessions.value)
             return globalSessions.value
         } catch (e: any) {
             globalError.value = e?.message || 'Errore caricamento sessioni paginato'

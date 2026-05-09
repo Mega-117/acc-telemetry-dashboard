@@ -4,7 +4,7 @@
 // Projection-first via telemetry gateway
 // ============================================
 
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { usePilotContext } from '~/composables/usePilotContext'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
@@ -26,13 +26,26 @@ const sortedTracks = ref<TrackDisplay[]>([])
 type ViewMode = 'card' | 'list'
 const viewMode = ref<ViewMode>('card')
 
-watch(
-  () => targetUserId.value,
-  async () => {
-    sortedTracks.value = await telemetryGateway.getTracksOverviewProjection(targetUserId.value || undefined)
-  },
-  { immediate: true }
-)
+async function loadTracks() {
+  sortedTracks.value = await telemetryGateway.getTracksOverviewProjection(targetUserId.value || undefined)
+}
+
+function handleCacheInvalidated(event: Event) {
+  const detail = (event as CustomEvent<{ uid?: string | null }>).detail || {}
+  if (!targetUserId.value || !detail.uid || detail.uid === targetUserId.value) {
+    void loadTracks()
+  }
+}
+
+watch(() => targetUserId.value, loadTracks, { immediate: true })
+
+onMounted(() => {
+  window.addEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
+})
 
 function formatDateDisplay(dateStr?: string): string {
   if (!dateStr) return 'Nessuna sessione'

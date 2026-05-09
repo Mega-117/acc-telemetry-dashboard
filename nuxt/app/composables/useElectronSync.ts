@@ -33,6 +33,7 @@ import { resolveSyncTriggerAction, type SyncTrigger } from '~/services/sync/sync
 import { useOwnerDataMaintenance } from './useOwnerDataMaintenance'
 import { updatePilotDirectoryActivity } from '~/services/pilotDirectoryProjectionService'
 import { getRecentActivityDateKeys, getTelemetryActivityDateKey } from '~/services/telemetry/activityProjectionService'
+import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
 const SYNC_CALLER = 'ElectronSync'
 async function getDoc(ref: any) { return trackedGetDoc(ref, SYNC_CALLER) }
@@ -172,7 +173,7 @@ async function updateSuiteVersion(uid: string): Promise<boolean> {
 }
 
 export function useElectronSync() {
-    const { currentUser } = useFirebaseAuth()
+    const { currentUser, canEnterApp } = useFirebaseAuth()
     const { loadSessions, resetAllTrackBests, clearTrackDerivedCaches } = useTelemetryData()
     const ownerDataMaintenance = useOwnerDataMaintenance()
 
@@ -395,6 +396,10 @@ export function useElectronSync() {
             console.log('[SYNC] No user logged in, skipping sync trigger:', trigger)
             return []
         }
+        if (!canEnterApp.value) {
+            console.log('[SYNC] Email not verified, skipping sync trigger:', trigger)
+            return []
+        }
 
         if (
             (trigger === 'windowFocused' || trigger === 'initialFiles')
@@ -523,10 +528,15 @@ export function useElectronSync() {
             if (shouldCompleteMaintenanceAfterLocalSync) {
                 queueService.setStatus('maintaining')
                 await ownerDataMaintenance.completeAfterLocalSync(uid)
+                invalidateTelemetryCaches({ uid, scope: 'sync' })
             }
 
             syncResults.value = allResults
             lastSyncTime.value = new Date()
+
+            if (changedCount > 0) {
+                invalidateTelemetryCaches({ uid, scope: 'sync' })
+            }
 
             const created = allResults.filter((r) => r.status === 'created').length
             const updated = allResults.filter((r) => r.status === 'updated').length

@@ -4,7 +4,7 @@
 // Uses server-side pagination + local offline fallback
 // ============================================
 
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted, watch, nextTick } from 'vue'
 import { 
   formatLapTime, 
   formatCarName, 
@@ -13,7 +13,8 @@ import {
   getSessionTypeLabel
 } from '~/composables/useTelemetryData'
 import { usePilotContext } from '~/composables/usePilotContext'
-import { useTelemetryGateway, type SessionPagerFilters } from '~/composables/useTelemetryGateway'
+import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
+import type { SessionPagerFilters } from '~/composables/useSessionPager'
 
 // Emit to parent for navigation
 const emit = defineEmits<{
@@ -105,19 +106,34 @@ function buildServerFilters(): SessionPagerFilters {
   }
 }
 
-async function reloadFirstPage() {
+async function reloadFirstPage(forceReset = false) {
   await telemetryGateway.getSessionsPage(
     targetUserId.value || undefined,
     buildServerFilters(),
     1,
     ITEMS_PER_PAGE,
-    true
+    forceReset
   )
   currentPage.value = pagerState.value.currentPage
 }
 
 onMounted(async () => {
   await reloadFirstPage()
+})
+
+function handleCacheInvalidated(event: Event) {
+  const detail = (event as CustomEvent<{ uid?: string | null }>).detail || {}
+  if (!targetUserId.value || !detail.uid || detail.uid === targetUserId.value) {
+    void reloadFirstPage(true)
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
 })
 
 watch(
@@ -167,7 +183,7 @@ const filterHideEmpty = ref(true) // Hide sessions with 0 total laps (on by defa
 watch(
   [filterType, filterTrack, filterCar, filterTimeRange, filterHideEmpty],
   async () => {
-    await reloadFirstPage()
+    await reloadFirstPage(true)
   }
 )
 
@@ -1217,3 +1233,4 @@ function goToSession(id: string) {
   justify-content: center;
 }
 </style>
+

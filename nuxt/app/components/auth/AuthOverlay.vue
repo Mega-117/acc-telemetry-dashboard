@@ -21,7 +21,7 @@ const isSubmitting = ref(false)
 
 // Emit events to parent
 const emit = defineEmits<{
-  'login-success': [email: string]
+  'login-success': [email: string, emailVerified: boolean]
   'register-success': [email: string]
 }>()
 
@@ -57,7 +57,7 @@ const handleLogin = async (credentials: { email: string; password: string }) => 
   isSubmitting.value = false
   
   if (result.success) {
-    emit('login-success', credentials.email)
+    emit('login-success', credentials.email, !!result.user?.emailVerified)
   } else {
     // Error is already set in authError by the composable
     loginFormRef.value?.setError(result.error)

@@ -7,6 +7,7 @@
 
 import { ref, onMounted, nextTick, watch } from 'vue'
 import { useElectronSync } from '~/composables/useElectronSync'
+import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
 const route = useRoute()
 const router = useRouter()
@@ -71,6 +72,8 @@ const isDynamicRoute = () => {
 
 // Window control handlers
 const handleRefresh = async () => {
+  invalidateTelemetryCaches({ scope: 'manual-refresh' })
+
   // For dynamic routes, use soft refresh to avoid 404 on GitHub Pages
   if (isDynamicRoute()) {
     console.log('[TITLEBAR] Soft refresh for dynamic route:', route.fullPath)

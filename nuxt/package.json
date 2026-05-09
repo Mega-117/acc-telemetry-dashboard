@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "build": "nuxt build",
-    "dev": "nuxt dev",
+    "build:docs": "powershell -ExecutionPolicy Bypass -Command \"$env:ACC_NUXT_PUBLIC_DIR='../docs'; npm run build\"",
+    "dev": "nuxt dev --host localhost",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",

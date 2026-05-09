@@ -3,7 +3,7 @@
 // PanoramicaPage - Overview with Virtual Coach
 // ============================================
 
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useCoachInsights } from '~/composables/useCoachInsights'
@@ -92,13 +92,26 @@ const emptyActivityTotals = {
   race: { minutes: 0, sessions: 0 }
 }
 
-watch(
-  () => targetUserId.value,
-  async () => {
-    overviewProjection.value = await telemetryGateway.getOverviewProjection(targetUserId.value || undefined)
-  },
-  { immediate: true }
-)
+async function loadOverview() {
+  overviewProjection.value = await telemetryGateway.getOverviewProjection(targetUserId.value || undefined)
+}
+
+function handleCacheInvalidated(event: Event) {
+  const detail = (event as CustomEvent<{ uid?: string | null }>).detail || {}
+  if (!targetUserId.value || !detail.uid || detail.uid === targetUserId.value) {
+    void loadOverview()
+  }
+}
+
+watch(() => targetUserId.value, loadOverview, { immediate: true })
+
+onMounted(() => {
+  window.addEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
+})
 
 const activityData = computed(() => overviewProjection.value?.activity7d || [])
 const activityTotals = computed(() => overviewProjection.value?.activityTotals || emptyActivityTotals)

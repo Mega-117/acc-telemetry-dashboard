@@ -3,10 +3,10 @@
 // RegistrationSuccess - Email Verification Screen
 // ============================================
 
-import { ref } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
-const props = defineProps<{
+defineProps<{
   email: string
   requireEmailVerification: boolean
 }>()
@@ -20,16 +20,56 @@ const emit = defineEmits<{
 const { checkEmailVerified, resendVerificationEmail } = useFirebaseAuth()
 
 // State
+const RESEND_COOLDOWN_SECONDS = 60
 const isResending = ref(false)
 const resendSuccess = ref(false)
 const resendError = ref<string | null>(null)
+const resendCooldown = ref(0)
 const isChecking = ref(false)
 const verificationError = ref(false)
+const verificationMessage = ref('')
+let resendCooldownTimer: ReturnType<typeof setInterval> | null = null
+
+const isResendDisabled = computed(() => (
+  isResending.value || resendSuccess.value || resendCooldown.value > 0
+))
+
+const resendButtonText = computed(() => {
+  if (isResending.value) return 'Invio in corso...'
+  if (resendSuccess.value) return '✓ Email inviata'
+  if (resendCooldown.value > 0) return `Rinvia tra ${resendCooldown.value}s`
+  return 'Rinvia email di verifica'
+})
+
+const stopResendCooldown = () => {
+  if (!resendCooldownTimer) return
+  clearInterval(resendCooldownTimer)
+  resendCooldownTimer = null
+}
+
+const startResendCooldown = () => {
+  stopResendCooldown()
+  resendCooldown.value = RESEND_COOLDOWN_SECONDS
+  resendCooldownTimer = setInterval(() => {
+    resendCooldown.value = Math.max(0, resendCooldown.value - 1)
+
+    if (resendCooldown.value <= 0) {
+      stopResendCooldown()
+    }
+  }, 1000)
+}
+
+onBeforeUnmount(() => {
+  stopResendCooldown()
+})
 
 const handleResendEmail = async () => {
+  if (isResendDisabled.value) return
+
   isResending.value = true
   resendError.value = null
   verificationError.value = false
+  verificationMessage.value = ''
   
   const result = await resendVerificationEmail()
   
@@ -38,6 +78,7 @@ const handleResendEmail = async () => {
   if (result.success) {
     resendSuccess.value = true
     setTimeout(() => resendSuccess.value = false, 3000)
+    startResendCooldown()
   } else {
     resendError.value = result.error || 'Errore invio email'
   }
@@ -48,6 +89,7 @@ const handleResendEmail = async () => {
 const handleCheckVerification = async () => {
   isChecking.value = true
   verificationError.value = false
+  verificationMessage.value = ''
   
   const result = await checkEmailVerified()
   
@@ -57,6 +99,7 @@ const handleCheckVerification = async () => {
     emit('goToDashboard')
   } else {
     verificationError.value = true
+    verificationMessage.value = result.error || 'Email non ancora verificata. Clicca il link ricevuto via email e riprova.'
   }
 }
 </script>
@@ -80,7 +123,7 @@ const handleCheckVerification = async () => {
 
     <!-- Error Message -->
     <div v-if="verificationError" class="error-message">
-      Email non verificata
+      {{ verificationMessage }}
     </div>
 
     <!-- Resend Error Message -->
@@ -106,12 +149,10 @@ const handleCheckVerification = async () => {
     <!-- Resend Link -->
     <button 
       class="resend-btn"
-      :disabled="isResending || resendSuccess"
+      :disabled="isResendDisabled"
       @click="handleResendEmail"
     >
-      <template v-if="isResending">Invio in corso...</template>
-      <template v-else-if="resendSuccess">✓ Email inviata</template>
-      <template v-else>Rinvia email di verifica</template>
+      {{ resendButtonText }}
     </button>
   </div>
 </template>

@@ -17,3 +17,47 @@
     opacity: 0;
     transform: translateY(-10px);
 }
+
+// Profile route transition: focused card-like entrance/exit.
+.profile-zoom-enter-active,
+.profile-zoom-leave-active {
+    transform-origin: center top;
+    transition:
+        opacity 0.24s ease,
+        transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1),
+        filter 0.24s ease;
+    will-change: opacity, transform;
+}
+
+.profile-zoom-enter-from,
+.profile-zoom-leave-to {
+    opacity: 0;
+    transform: scale(0.972);
+    filter: blur(3px);
+}
+
+.profile-zoom-enter-to,
+.profile-zoom-leave-from {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .page-fade-enter-active,
+    .page-fade-leave-active,
+    .profile-zoom-enter-active,
+    .profile-zoom-leave-active {
+        transition: none;
+    }
+
+    .page-fade-enter-from,
+    .page-fade-leave-to,
+    .profile-zoom-enter-from,
+    .profile-zoom-leave-to,
+    .profile-zoom-enter-to,
+    .profile-zoom-leave-from {
+        transform: none;
+        filter: none;
+    }
+}

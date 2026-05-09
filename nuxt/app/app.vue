@@ -68,10 +68,8 @@ onMounted(() => {
 const { 
   currentUser, 
   isLoading: authLoading, 
-  isAuthenticated, 
-  isEmailVerified,
-  userEmail: firebaseUserEmail,
-  userDisplayName,
+  canEnterApp,
+  needsEmailVerification,
   logout: firebaseLogout
 } = useFirebaseAuth()
 
@@ -97,7 +95,7 @@ function listenToActivitiesTracked(userId: string) {
 }
 
 // === APP STATE ===
-type AppState = 'initializing' | 'auth' | 'loading' | 'dashboard' | 'profile'
+type AppState = 'initializing' | 'auth' | 'loading' | 'dashboard'
 type AuthState = 'login' | 'register' | 'reset' | 'register-success'
 type DissolveAnimation = 'fade-zoom' | 'warp' | 'particles' | 'slide-up'
 
@@ -111,7 +109,7 @@ const showDevFirebaseProbe = computed(() => {
 })
 
 // === CONFIG ===
-const REQUIRE_EMAIL_VERIFICATION = ref(false) // Always require email verification
+const REQUIRE_EMAIL_VERIFICATION = true
 const transitionName = 'dissolve-fade-zoom' // Fixed animation
 
 const isBrowserOnlyRuntime = computed(() => {
@@ -136,7 +134,7 @@ function closeBrowserMaintenanceNotification() {
 // === DASHBOARD ENTRY MAINTENANCE ===
 watch(appState, async (newState) => {
   if (isTrainingOverlayIntent.value) return
-  if (newState === 'dashboard' && !hasPrefetched.value && currentUser.value) {
+  if (newState === 'dashboard' && !hasPrefetched.value && currentUser.value && canEnterApp.value) {
     hasPrefetched.value = true
     
     await withFirebaseScenario('app.dashboard.maintenanceGate', {
@@ -148,6 +146,33 @@ watch(appState, async (newState) => {
     })
   }
 })
+
+const showEmailVerificationGate = () => {
+  appState.value = 'auth'
+  authState.value = 'register-success'
+  stopListening()
+}
+
+const enterDashboard = (delayMs = 0) => {
+  const startDashboard = () => {
+    if (!canEnterApp.value || !currentUser.value) {
+      showEmailVerificationGate()
+      return
+    }
+
+    appState.value = 'dashboard'
+    listenToActivitiesTracked(currentUser.value.uid)
+    router.push('/panoramica')
+  }
+
+  if (delayMs > 0) {
+    appState.value = 'loading'
+    setTimeout(startDashboard, delayMs)
+    return
+  }
+
+  startDashboard()
+}
 
 // === WATCH AUTH LOADING STATE ===
 // This watch handles the INITIAL auth check when the app loads
@@ -161,15 +186,12 @@ watch(authLoading, (loading) => {
     hasInitialized.value = true
     
     if (currentUser.value) {
-      // User already logged in -> go directly to dashboard (no loading screen)
       userEmail.value = currentUser.value.email || ''
       
-      if (REQUIRE_EMAIL_VERIFICATION.value && !currentUser.value.emailVerified) {
-        appState.value = 'auth'
-        authState.value = 'register-success'
+      if (needsEmailVerification.value) {
+        showEmailVerificationGate()
       } else {
-        appState.value = 'dashboard'
-        listenToActivitiesTracked(currentUser.value.uid)
+        enterDashboard()
       }
     } else {
       // No user -> show login
@@ -190,20 +212,11 @@ watch(currentUser, (user, oldUser) => {
   if (user) {
     userEmail.value = user.email || ''
     
-    // Check if user needs email verification
-    if (REQUIRE_EMAIL_VERIFICATION.value && !user.emailVerified) {
-      if (appState.value !== 'auth' || authState.value !== 'register-success') {
-        appState.value = 'auth'
-        authState.value = 'register-success'
-      }
+    if (needsEmailVerification.value) {
+      showEmailVerificationGate()
     } else {
-      // User logged in after auth screen -> show loading transition
-      if (appState.value === 'auth' && authState.value !== 'register-success') {
-        appState.value = 'loading'
-        setTimeout(() => {
-          appState.value = 'dashboard'
-          listenToActivitiesTracked(user.uid)
-        }, 1000)
+      if (appState.value === 'auth') {
+        enterDashboard(1000)
       } else {
         listenToActivitiesTracked(user.uid)
       }
@@ -217,46 +230,25 @@ watch(currentUser, (user, oldUser) => {
 })
 
 // === HANDLERS ===
-const handleLoginSuccess = (email: string) => {
+const handleLoginSuccess = (email: string, emailVerified: boolean) => {
   userEmail.value = email
   
-  // Check if email verification is required
-  if (REQUIRE_EMAIL_VERIFICATION.value && currentUser.value && !currentUser.value.emailVerified) {
-    authState.value = 'register-success'
+  if (!emailVerified) {
+    showEmailVerificationGate()
     return
   }
   
-  appState.value = 'loading'
-  setTimeout(() => {
-    appState.value = 'dashboard'
-    // Navigate to panoramica as the starting page
-    router.push('/panoramica')
-  }, 1500)
+  enterDashboard(1500)
 }
 
 const handleRegisterSuccess = (email: string) => {
   userEmail.value = email
-  
-  if (REQUIRE_EMAIL_VERIFICATION.value) {
-    // Show verification screen
-    authState.value = 'register-success'
-  } else {
-    // Skip verification, go directly to dashboard
-    appState.value = 'loading'
-    setTimeout(() => {
-      appState.value = 'dashboard'
-      router.push('/panoramica')
-    }, 1500)
-  }
+  showEmailVerificationGate()
 }
 
 const handleGoToDashboard = () => {
   // Called when user clicks "Ho confermato l'email" and verification passed
-  appState.value = 'loading'
-  setTimeout(() => {
-    appState.value = 'dashboard'
-    router.push('/panoramica')
-  }, 1500)
+  enterDashboard(1500)
 }
 
 const handleResendEmail = () => {
@@ -271,11 +263,12 @@ const handleLogout = async () => {
 }
 
 const handleGoToProfile = () => {
-  appState.value = 'profile'
-}
-
-const handleBackToDashboard = () => {
+  if (!canEnterApp.value) {
+    showEmailVerificationGate()
+    return
+  }
   appState.value = 'dashboard'
+  router.push('/profilo')
 }
 
 // Provide navigation functions to child components (layouts)
@@ -353,10 +346,6 @@ provide('goToProfile', handleGoToProfile)
           </NuxtLayout>
         </div>
 
-        <!-- Profile Page -->
-        <div v-else-if="appState === 'profile'" key="profile" class="profile-wrapper">
-          <ProfilePage @back="handleBackToDashboard" @logout="handleLogout" />
-        </div>
       </Transition>
 
       <DevFirebaseProbe v-if="showDevFirebaseProbe" />

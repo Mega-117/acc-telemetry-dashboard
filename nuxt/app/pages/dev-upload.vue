@@ -9,6 +9,7 @@ import { db } from '~/config/firebase'
 import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { trackedDeleteDoc, trackedGetDoc, trackedGetDocs, trackedSetDoc } from '~/composables/useFirebaseTracker'
+import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
 const CALLER = 'DevUpload'
 
@@ -278,6 +279,10 @@ async function uploadSelectedFiles() {
     } catch (e: any) {
       uploadResults.value.push({ status: 'error', fileName: file.name, error: e.message })
     }
+  }
+
+  if (uploadResults.value.some((result) => ['created', 'updated', 'refreshed'].includes(result.status))) {
+    invalidateTelemetryCaches({ uid, scope: 'sync' })
   }
 
   isUploading.value = false

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import {
   createRaceCalendarEvent,
@@ -95,7 +95,21 @@ async function addEvent() {
   }
 }
 
-onMounted(refreshEvents)
+function handleCacheInvalidated(event: Event) {
+  const detail = (event as CustomEvent<{ uid?: string | null; scope?: string }>).detail || {}
+  if (detail.uid && detail.uid !== props.pilotId) return
+  if (detail.scope && !['all', 'calendar', 'manual-refresh'].includes(detail.scope)) return
+  void refreshEvents()
+}
+
+onMounted(() => {
+  void refreshEvents()
+  window.addEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
+})
 </script>
 
 <template>
@@ -121,7 +135,7 @@ onMounted(refreshEvents)
           </div>
           <div class="event-links">
             <a v-if="event.simGridUrl" :href="event.simGridUrl" target="_blank" rel="noopener noreferrer">SimGrid</a>
-            <a v-if="event.raceUrl" :href="event.raceUrl" target="_blank" rel="noopener noreferrer">Gara</a>
+            <a v-if="event.raceUrl" :href="event.raceUrl" target="_blank" rel="noopener noreferrer">Discord / link gara</a>
           </div>
         </article>
       </template>

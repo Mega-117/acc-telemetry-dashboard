@@ -77,7 +77,7 @@ export interface OverviewSnapshot {
     activityTotals: ReturnType<typeof useTelemetryData>['activityTotals']['value']
 }
 
-const OVERVIEW_SNAPSHOT_CACHE_TTL_MS = 1000
+const OVERVIEW_SNAPSHOT_CACHE_TTL_MS = 60_000
 const PENDING_LOCAL_OVERLAY_CACHE_TTL_MS = 3000
 const overviewSnapshotInFlight = new Map<string, Promise<OverviewSnapshot | null>>()
 const overviewSnapshotCache = new Map<string, { cachedAt: number; snapshot: OverviewSnapshot | null }>()
@@ -140,6 +140,24 @@ const OVERVIEW_GRIP_SCAN_ORDER = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fa
 const globalGatewayDiagnostics = ref<PipelineDiagnosticEvent[]>([])
 const trackDetailProjectionCache = new Map<string, { detail: TrackDetailProjectionDocument; trackBest: any | null }>()
 const pendingLocalOverlayCache = new Map<string, { cachedAt: number; sessions: SessionDocument[] }>()
+
+export function clearTelemetryGatewayCache(uid?: string) {
+    const clearByPrefix = <T>(cache: Map<string, T>) => {
+        if (!uid) {
+            cache.clear()
+            return
+        }
+
+        for (const key of Array.from(cache.keys())) {
+            if (key.startsWith(`${uid}:`)) cache.delete(key)
+        }
+    }
+
+    clearByPrefix(overviewSnapshotCache)
+    clearByPrefix(overviewSnapshotInFlight)
+    clearByPrefix(trackDetailProjectionCache)
+    clearByPrefix(pendingLocalOverlayCache)
+}
 
 function normalizeTrackKey(track: string | null | undefined): string {
     return normalizeTrackProjectionId(track || '')
@@ -665,7 +683,7 @@ export function useTelemetryGateway() {
 
     function resolveOverviewSource(targetUserId: string): LoadSessionsSourceMode {
         void targetUserId
-        return 'cloud_fresh'
+        return 'auto'
     }
 
     async function loadPendingLocalOverlay(targetUserId: string): Promise<SessionDocument[]> {
@@ -1301,4 +1319,4 @@ export function useTelemetryGateway() {
     }
 }
 
-export type { SessionPagerFilters }
+

@@ -42,6 +42,12 @@ function sameStringArray(a: any, b: any): boolean {
     return a.every((value, index) => value === b[index])
 }
 
+function needsUserDirectoryFieldRepair(data: any, uid: string, directoryFields: ReturnType<typeof buildPilotDirectoryFields>): boolean {
+    return data.uid !== uid
+        || data.directorySortName !== directoryFields.directorySortName
+        || !sameStringArray(data.searchPrefixes, directoryFields.searchPrefixes)
+}
+
 async function writePilotDirectoryDocument(uid: string, data: any) {
     await writePilotDirectoryFromUser({
         db,
@@ -142,30 +148,25 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
             nickname,
             email: data.email || user.email
         })
+        const shouldRepairUserDirectoryFields = needsUserDirectoryFieldRepair(data, user.uid, directoryFields)
+        const shouldRepairEmailVerification = data.emailVerified !== user.emailVerified
 
-        if (
-            data.uid !== user.uid ||
-            data.directorySortName !== directoryFields.directorySortName ||
-            !sameStringArray(data.searchPrefixes, directoryFields.searchPrefixes)
-        ) {
+        if (shouldRepairUserDirectoryFields || shouldRepairEmailVerification) {
             await setDocTracked(userDocRef, {
                 uid: user.uid,
-                ...directoryFields
+                ...(shouldRepairUserDirectoryFields ? directoryFields : {}),
+                ...(shouldRepairEmailVerification ? { emailVerified: user.emailVerified } : {})
             }, { merge: true })
         }
 
-        await writePilotDirectoryDocument(user.uid, {
-            ...data,
-            uid: user.uid,
-            nickname
-        })
-
-        await setDocTracked(publicProfileRef, {
-            uid: user.uid,
-            nickname,
-            avatarUrl: data.avatarUrl || null,
-            updatedAt: new Date().toISOString()
-        }, { merge: true })
+        if (shouldRepairUserDirectoryFields) {
+            await writePilotDirectoryDocument(user.uid, {
+                ...data,
+                uid: user.uid,
+                nickname,
+                ...directoryFields
+            })
+        }
 
         return {
             role,

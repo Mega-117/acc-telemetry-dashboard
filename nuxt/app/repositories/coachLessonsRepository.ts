@@ -1,8 +1,9 @@
-import { addDoc, collection, doc, limit, orderBy, query, startAfter, where, type DocumentData, type QueryDocumentSnapshot, type QueryConstraint } from 'firebase/firestore'
+import { collection, doc, limit, orderBy, query, startAfter, where, type DocumentData, type QueryDocumentSnapshot, type QueryConstraint } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { trackedAddDoc, trackedGetCountFromServer, trackedGetDoc, trackedGetDocs, trackedUpdateDoc } from '~/composables/useFirebaseTracker'
 
 const CALLER = 'CoachLessonsRepository'
+const COACH_LESSONS_CACHE_TTL_MS = 60_000
 
 export type CoachFeedbackType = 'positive' | 'issue' | 'action'
 
@@ -62,6 +63,57 @@ export interface CoachLessonsPage {
   hasMore: boolean
 }
 
+type LessonsPageCacheEntry = {
+  cachedAt: number
+  page: CoachLessonsPage
+}
+
+type LessonsListCacheEntry = {
+  cachedAt: number
+  lessons: CoachLesson[]
+}
+
+type LessonsCountCacheEntry = {
+  cachedAt: number
+  count: number
+}
+
+const firstPageCache = new Map<string, LessonsPageCacheEntry>()
+const listCache = new Map<string, LessonsListCacheEntry>()
+const countCache = new Map<string, LessonsCountCacheEntry>()
+const lessonDetailCache = new Map<string, { cachedAt: number; lesson: CoachLesson | null }>()
+
+function filtersKey(filters: CoachLessonFilters = {}) {
+  return JSON.stringify({
+    trackName: filters.trackName?.trim() || '',
+    carName: filters.carName?.trim() || ''
+  })
+}
+
+function isFresh(cachedAt: number) {
+  return Date.now() - cachedAt <= COACH_LESSONS_CACHE_TTL_MS
+}
+
+function firstPageKey(pilotId: string, filters: CoachLessonFilters, pageSize: number) {
+  return `${pilotId}:${pageSize}:${filtersKey(filters)}`
+}
+
+export function clearCoachLessonsCache(pilotId?: string) {
+  if (!pilotId) {
+    firstPageCache.clear()
+    listCache.clear()
+    countCache.clear()
+    lessonDetailCache.clear()
+    return
+  }
+
+  for (const cache of [firstPageCache, listCache, countCache, lessonDetailCache]) {
+    for (const key of Array.from(cache.keys())) {
+      if (key.startsWith(`${pilotId}:`)) cache.delete(key)
+    }
+  }
+}
+
 function lessonsCollection(pilotId: string) {
   return collection(db, 'users', pilotId, 'coachLessons')
 }
@@ -116,40 +168,62 @@ export async function loadCoachLessonsPage(
   pageSize = 10,
   cursor?: QueryDocumentSnapshot<DocumentData> | null
 ): Promise<CoachLessonsPage> {
+  const key = firstPageKey(pilotId, filters, pageSize)
+  const cached = cursor ? null : firstPageCache.get(key)
+  if (cached && isFresh(cached.cachedAt)) return cached.page
+
   const snap = await trackedGetDocs(
     query(lessonsCollection(pilotId), ...buildCoachLessonConstraints(filters, pageSize, cursor)),
     CALLER
   )
   const docs = snap.docs.slice(0, pageSize)
-  return {
+  const page = {
     lessons: docs.map((docSnap) => mapLesson(docSnap, pilotId)),
     cursor: docs[docs.length - 1] || null,
     hasMore: snap.docs.length > pageSize
   }
+  if (!cursor) firstPageCache.set(key, { cachedAt: Date.now(), page })
+  return page
 }
 
 export async function countCoachLessons(pilotId: string): Promise<number> {
+  const cached = countCache.get(pilotId)
+  if (cached && isFresh(cached.cachedAt)) return cached.count
+
   const snap = await trackedGetCountFromServer(query(lessonsCollection(pilotId)), CALLER)
-  return Number(snap.data().count || 0)
+  const count = Number(snap.data().count || 0)
+  countCache.set(pilotId, { cachedAt: Date.now(), count })
+  return count
 }
 
 export async function loadCoachLessons(pilotId: string, maxItems = 25): Promise<CoachLesson[]> {
+  const key = `${pilotId}:${maxItems}`
+  const cached = listCache.get(key)
+  if (cached && isFresh(cached.cachedAt)) return cached.lessons
+
   const snap = await trackedGetDocs(
     query(lessonsCollection(pilotId), orderBy('lessonAt', 'desc'), limit(maxItems)),
     CALLER
   )
-  return snap.docs.map((docSnap) => mapLesson(docSnap, pilotId))
+  const lessons = snap.docs.map((docSnap) => mapLesson(docSnap, pilotId))
+  listCache.set(key, { cachedAt: Date.now(), lessons })
+  return lessons
 }
 
 export async function loadCoachLesson(pilotId: string, lessonId: string): Promise<CoachLesson | null> {
+  const key = `${pilotId}:${lessonId}`
+  const cached = lessonDetailCache.get(key)
+  if (cached && isFresh(cached.cachedAt)) return cached.lesson
+
   const snap = await trackedGetDoc(doc(db, 'users', pilotId, 'coachLessons', lessonId), CALLER)
-  if (!snap.exists()) return null
-  return mapLesson(snap, pilotId)
+  const lesson = snap.exists() ? mapLesson(snap, pilotId) : null
+  lessonDetailCache.set(key, { cachedAt: Date.now(), lesson })
+  return lesson
 }
 
 export async function createCoachLesson(pilotId: string, input: CoachLessonInput) {
   const now = new Date().toISOString()
-  return trackedAddDoc(lessonsCollection(pilotId), {
+  const result = await trackedAddDoc(lessonsCollection(pilotId), {
     pilotId,
     coachId: input.coachId,
     coachName: input.coachName || '',
@@ -167,11 +241,13 @@ export async function createCoachLesson(pilotId: string, input: CoachLessonInput
     createdAt: now,
     updatedAt: now
   }, CALLER)
+  clearCoachLessonsCache(pilotId)
+  return result
 }
 
 export async function updateCoachLesson(pilotId: string, lessonId: string, input: CoachLessonUpdateInput) {
   const now = new Date().toISOString()
-  return trackedUpdateDoc(doc(db, 'users', pilotId, 'coachLessons', lessonId), {
+  await trackedUpdateDoc(doc(db, 'users', pilotId, 'coachLessons', lessonId), {
     lessonAt: input.lessonAt,
     trackName: input.trackName.trim(),
     carName: input.carName?.trim() || null,
@@ -185,4 +261,5 @@ export async function updateCoachLesson(pilotId: string, lessonId: string, input
     feedbackItems: input.feedbackItems,
     updatedAt: now
   }, CALLER)
+  clearCoachLessonsCache(pilotId)
 }

@@ -16,7 +16,7 @@ const emit = defineEmits<{
 }>()
 
 // Tab state
-type TabId = 'panoramica' | 'sessioni' | 'piste'
+type TabId = 'panoramica' | 'sessioni' | 'piste' | 'area-pilota'
 const activeTab = ref<TabId>('panoramica')
 
 // Session detail state
@@ -105,6 +105,9 @@ const displayName = computed(() => {
         key="piste" 
         @go-to-track="handleGoToTrack"
       />
+
+      <!-- Area pilota -->
+      <PagesPilotAreaPage v-else-if="activeTab === 'area-pilota'" key="area-pilota" />
     </Transition>
   </LayoutMainLayout>
 </template>

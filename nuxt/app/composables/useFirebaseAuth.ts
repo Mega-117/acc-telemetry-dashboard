@@ -21,20 +21,108 @@ const userRole = ref<string>('pilot')
 const firestoreNickname = ref<string>('')
 const isLoading = ref(true)
 const authError = ref<string | null>(null)
+const userProfileCache = new Map<string, any | null>()
+const userProfileRequests = new Map<string, Promise<any | null>>()
+const currentUserProfile = ref<any | null>(null)
 
 let authListenerInitialized = false
 
-async function syncAuthenticatedUser(user: User) {
+async function reloadPersistedUser(user: User): Promise<User | null> {
+    try {
+        await user.reload()
+        await user.getIdToken(true)
+        return auth.currentUser
+    } catch (error: any) {
+        console.warn('[AUTH] Persisted user is no longer valid, signing out locally:', error?.code || error)
+        await logoutCurrentUser().catch(() => {})
+        return null
+    }
+}
+
+async function syncAuthenticatedUser(user: User): Promise<User | null> {
+    const freshUser = await reloadPersistedUser(user)
+
+    if (!freshUser) {
+        await syncLoggedOutUser()
+        return null
+    }
+
+    user = freshUser
+
+    if (!user.emailVerified) {
+        currentUserProfile.value = null
+        userRole.value = 'pilot'
+        firestoreNickname.value = user.displayName || user.email?.split('@')[0] || ''
+        await clearLocalUserIdentity()
+        return user
+    }
+
+    currentUserProfile.value = userProfileCache.get(user.uid) ?? null
     const ensured = await ensureUserDocument(user)
     userRole.value = ensured.role
     firestoreNickname.value = ensured.nickname
     await saveLocalUserIdentity(user)
+    return user
 }
 
 async function syncLoggedOutUser() {
     userRole.value = 'pilot'
     firestoreNickname.value = ''
+    userProfileCache.clear()
+    userProfileRequests.clear()
+    currentUserProfile.value = null
     await clearLocalUserIdentity()
+}
+
+async function loadCachedUserProfile(uid: string, { force = false } = {}) {
+    if (!force && userProfileCache.has(uid)) {
+        const cached = userProfileCache.get(uid) ?? null
+        if (currentUser.value?.uid === uid) currentUserProfile.value = cached
+        return cached
+    }
+
+    if (!force && userProfileRequests.has(uid)) {
+        return userProfileRequests.get(uid)!
+    }
+
+    const request = getUserProfile(uid)
+        .then((profile) => {
+            userProfileCache.set(uid, profile)
+            if (currentUser.value?.uid === uid) currentUserProfile.value = profile
+            return profile
+        })
+        .finally(() => {
+            userProfileRequests.delete(uid)
+        })
+
+    userProfileRequests.set(uid, request)
+    return request
+}
+
+async function refreshUserProfile(uid: string) {
+    return loadCachedUserProfile(uid, { force: true })
+}
+
+function updateCachedUserProfile(uid: string, patch: Record<string, any>) {
+    const nextProfile = {
+        ...(userProfileCache.get(uid) || {}),
+        ...patch
+    }
+    userProfileCache.set(uid, nextProfile)
+    if (currentUser.value?.uid === uid) currentUserProfile.value = nextProfile
+}
+
+function clearCachedUserProfile(uid?: string) {
+    if (uid) {
+        userProfileCache.delete(uid)
+        userProfileRequests.delete(uid)
+        if (currentUser.value?.uid === uid) currentUserProfile.value = null
+        return
+    }
+
+    userProfileCache.clear()
+    userProfileRequests.clear()
+    currentUserProfile.value = null
 }
 
 function initAuthListener() {
@@ -42,11 +130,10 @@ function initAuthListener() {
 
     authListenerInitialized = true
     onAuthStateChanged(auth, async (user) => {
-        currentUser.value = user
-
         if (user) {
-            await syncAuthenticatedUser(user)
+            currentUser.value = await syncAuthenticatedUser(user)
         } else {
+            currentUser.value = null
             await syncLoggedOutUser()
         }
 
@@ -58,6 +145,8 @@ function initAuthListener() {
 export function useFirebaseAuth() {
     const isAuthenticated = computed(() => !!currentUser.value)
     const isEmailVerified = computed(() => currentUser.value?.emailVerified ?? false)
+    const needsEmailVerification = computed(() => !!currentUser.value && !isEmailVerified.value)
+    const canEnterApp = computed(() => !!currentUser.value && isEmailVerified.value)
     const userEmail = computed(() => currentUser.value?.email ?? '')
     const userDisplayName = computed(() => firestoreNickname.value || currentUser.value?.displayName || '')
     const isCoach = computed(() => userRole.value === 'coach')
@@ -127,6 +216,9 @@ export function useFirebaseAuth() {
         try {
             const refreshed = await refreshEmailVerificationState(currentUser.value)
             currentUser.value = refreshed.user
+            if (refreshed.user?.emailVerified) {
+                await syncAuthenticatedUser(refreshed.user)
+            }
             console.log('[AUTH] Email verified check:', refreshed.verified)
             return { verified: refreshed.verified, error: null }
         } catch (error: any) {
@@ -143,6 +235,8 @@ export function useFirebaseAuth() {
         authError,
         isAuthenticated,
         isEmailVerified,
+        needsEmailVerification,
+        canEnterApp,
         userEmail,
         userDisplayName,
         register,
@@ -150,7 +244,11 @@ export function useFirebaseAuth() {
         logout,
         resendVerificationEmail,
         checkEmailVerified,
-        getUserProfile,
+        getUserProfile: loadCachedUserProfile,
+        refreshUserProfile,
+        updateCachedUserProfile,
+        clearCachedUserProfile,
+        currentUserProfile,
         userRole,
         isCoach,
         isAdmin

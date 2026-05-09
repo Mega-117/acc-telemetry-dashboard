@@ -5,7 +5,7 @@
 
 const props = defineProps<{
   userName?: string
-  activeTab: 'panoramica' | 'sessioni' | 'piste'
+  activeTab: 'panoramica' | 'sessioni' | 'piste' | 'area-pilota'
 }>()
 
 const emit = defineEmits<{

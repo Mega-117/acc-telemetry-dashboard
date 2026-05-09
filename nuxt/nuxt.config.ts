@@ -6,6 +6,8 @@ const isDev = process.env.NODE_ENV === 'development'
 const baseURL = isDev ? '/' : '/acc-telemetry-dashboard/docs/'
 // In dev usa _nuxt default, in production usa assets
 const buildAssetsDir = isDev ? '/_nuxt/' : '/assets/'
+const ignoredRuntimePaths = ['**/.tmp_edge_profile/**', '**/.tmp_edge_profile', '**/dist/**', '**/dist']
+const staticPublicDir = process.env.ACC_NUXT_PUBLIC_DIR
 
 async function patchWindowsNitroPrerenderImports(dir: string) {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
@@ -37,6 +39,7 @@ async function patchWindowsNitroPrerenderImports(dir: string) {
 
 export default defineNuxtConfig({
   ssr: false,
+  ignore: ignoredRuntimePaths,
 
   // === COMPATIBILITÀ ===
   compatibilityDate: '2025-01-11',
@@ -78,19 +81,31 @@ export default defineNuxtConfig({
   ],
 
   vite: {
+    optimizeDeps: {
+      // Vite 7 dependency pre-bundling can fail on Windows with this Nuxt app
+      // while the server remains otherwise usable. Disable it only for dev.
+      noDiscovery: true,
+      include: []
+    },
     server: {
       watch: {
-        ignored: ['**/.tmp_edge_profile/**']
+        ignored: ignoredRuntimePaths
       }
     }
   },
 
   nitro: {
     preset: 'static',
-    output: {
-      // cartella reale nel repo
-      publicDir: '../docs'
+    watchOptions: {
+      ignored: ignoredRuntimePaths
     },
+    ...(!isDev && staticPublicDir ? {
+      output: {
+        // Optional release target. Keep normal builds in Nuxt/Nitro's default
+        // output folder so Windows does not try to clean the repo docs folder.
+        publicDir: staticPublicDir
+      }
+    } : {}),
     hooks: {
       async compiled(nitro) {
         if (process.platform !== 'win32') {
@@ -102,3 +117,5 @@ export default defineNuxtConfig({
     }
   }
 })
+
+

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { ACC_CAR_OPTIONS, ACC_TRACK_OPTIONS } from '~/constants/accCatalog'
@@ -423,8 +423,20 @@ async function saveLesson() {
   }
 }
 
+function handleCacheInvalidated(event: Event) {
+  const detail = (event as CustomEvent<{ uid?: string | null; scope?: string }>).detail || {}
+  if (detail.uid && detail.uid !== props.pilotId) return
+  if (detail.scope && !['all', 'profile', 'coach-lessons', 'manual-refresh'].includes(detail.scope)) return
+  void Promise.all([loadPilotProfile(), refreshLessons(), refreshLessonCount()])
+}
+
 onMounted(async () => {
+  window.addEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
   await Promise.all([loadPilotProfile(), refreshLessons(), refreshLessonCount()])
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
 })
 </script>
 
@@ -432,7 +444,8 @@ onMounted(async () => {
   <div class="coach-lessons-panel">
     <header class="panel-header">
       <div>
-        <h2>Lezioni coach</h2>
+        <h2>Area pilota</h2>
+        <p>Contesto, gare e lezioni condivise con il pilota.</p>
       </div>
     </header>
 

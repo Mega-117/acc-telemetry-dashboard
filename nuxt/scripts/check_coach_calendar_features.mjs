@@ -47,20 +47,44 @@ function hasIndex(collectionGroup, expectedFields) {
 
 const profilePage = readNuxt('app/components/ProfilePage.vue')
 for (const token of [
-  'ProfileRaceCalendarCard',
-  'ProfileCoachAssociationCard',
-  'ProfileCoachLessonsCard',
   'account-equipment-card',
   'ffbGain',
   'brakeForce',
   'isEditingEquipment',
   'wheelSettingDefinitions',
-  'forceFeedbackScale'
+  'forceFeedbackScale',
+  'isCoachProfile',
+  'settings-toggle',
+  'equipment-expand',
+  'Manutenzione dati',
+  'Best storici'
 ]) {
   assert.ok(profilePage.includes(token), `ProfilePage missing ${token}`)
 }
+assert.ok(!profilePage.includes('ProfileRaceCalendarCard'), 'ProfilePage must not mount operational calendar in profile')
+assert.ok(!profilePage.includes('ProfileCoachLessonsCard'), 'ProfilePage must not mount coaching history in profile')
+assert.ok(!profilePage.includes('ProfileCoachAssociationCard'), 'ProfilePage must not mount coach association in profile')
 assert.ok(profilePage.includes('startEquipmentEdit'), 'Equipment tab must expose read/edit mode')
 assert.ok(profilePage.includes('type="range"'), 'Equipment settings must use sliders')
+
+const pilotAreaPage = readNuxt('app/components/pages/PilotAreaPage.vue')
+for (const token of [
+  'Area pilota',
+  'ProfileRaceCalendarCard',
+  'ProfileCoachAssociationCard',
+  'ProfileCoachLessonsCard',
+  'showCoachAssociation',
+  'Programma e coaching'
+]) {
+  assert.ok(pilotAreaPage.includes(token), `PilotAreaPage missing ${token}`)
+}
+
+const pilotAreaRoute = readNuxt('app/pages/area-pilota.vue')
+assert.ok(pilotAreaRoute.includes('PagesPilotAreaPage'), 'Area pilota route must render PilotAreaPage')
+
+const dashboardTabs = readNuxt('app/components/layout/TabsBarRouter.vue')
+assert.ok(dashboardTabs.includes("to: '/area-pilota'"), 'Dashboard tabs must include Area pilota route')
+assert.ok(dashboardTabs.includes('AREA PILOTA'), 'Dashboard tabs must label Area pilota')
 
 const coachAssociation = readNuxt('app/components/profile/CoachAssociationCard.vue')
 assert.ok(coachAssociation.includes('Nessun coach assegnato'), 'Coach association card must be read-only display copy')
@@ -74,6 +98,8 @@ assert.ok(!calendarCard.includes('Conferma'), 'Calendar must not render an exter
 assert.ok(calendarCard.includes('::-webkit-calendar-picker-indicator'), 'Calendar picker icon must be visible on dark UI')
 assert.ok(calendarCard.includes('isAdding'), 'Calendar form must be collapsed behind add action')
 assert.ok(calendarCard.includes('v-model="form.carName"'), 'Calendar events must support optional car name')
+assert.ok(calendarCard.includes('event-form-expand'), 'Calendar form must animate open and close')
+assert.ok(calendarCard.includes('Nessuna gara pianificata'), 'Calendar empty state must use planned race copy')
 
 const pilotDetail = readNuxt('app/pages/piloti/[id].vue')
 assert.ok(pilotDetail.includes("{ id: 'lezioni', label: 'PILOTA' }"), 'Pilot detail missing PILOTA tab')
@@ -161,7 +187,7 @@ for (const token of [
 }
 
 const profileCoachLessons = readNuxt('app/components/profile/CoachLessonsCard.vue')
-for (const token of ['lessonLinks', 'activeLesson.carName', 'TrackTitan pilota', 'Registrazione', 'feedbackTypeLabel', 'feedbackContext']) {
+for (const token of ['lessonLinks', 'lesson.carName', 'lesson-accordion', 'lesson-expand', 'TrackTitan pilota', 'Registrazione', 'feedbackTypeLabel', 'feedbackContext']) {
   assert.ok(profileCoachLessons.includes(token), `Profile coach lessons card missing ${token}`)
 }
 

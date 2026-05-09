@@ -9,7 +9,8 @@ const route = useRoute()
 const tabs = [
   { id: 'panoramica', label: 'PANORAMICA', to: '/panoramica' },
   { id: 'sessioni', label: 'SESSIONI', to: '/sessioni' },
-  { id: 'piste', label: 'PISTE', to: '/piste' }
+  { id: 'piste', label: 'PISTE', to: '/piste' },
+  { id: 'area-pilota', label: 'AREA PILOTA', to: '/area-pilota' }
 ]
 
 // Check if tab is active based on current route
