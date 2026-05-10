@@ -28,13 +28,25 @@ type OverlayPhase = 'loading' | 'placement' | 'launcher' | 'select' | 'running' 
 type OverlayCommand = 'primary'
 type OverlaySizePreset = 'launcher' | 'placement' | 'select' | 'session' | 'expired' | 'completed'
 type OverlayOriginCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
+type OverlayOriginMode = 'auto' | 'manual'
 type OverlaySize = { width: number; height: number }
+
+interface PlanPreviewChip {
+  id: string
+  label: string
+  durationLabel: string
+  type: TrainingOverlayStep['type']
+  title: string
+  repeat?: string
+}
 
 interface TrainingOverlaySettings {
   hasConfiguredPosition?: boolean
   lastTrainingId?: string
   lastDurationId?: TrainingOverlayDurationModeId
   soundEnabled?: boolean
+  autoDimDuringRun?: boolean
+  originMode?: OverlayOriginMode
   originCorner?: OverlayOriginCorner
 }
 
@@ -45,6 +57,8 @@ const phase = ref<OverlayPhase>('loading')
 const remainingMs = ref(0)
 const isElectronRuntime = ref(false)
 const soundEnabled = ref(true)
+const autoDimDuringRun = ref(true)
+const originMode = ref<OverlayOriginMode>('manual')
 const originCorner = ref<OverlayOriginCorner>('top-left')
 const isTrainingPickerOpen = ref(false)
 const isSettingsOpen = ref(false)
@@ -60,14 +74,17 @@ const originCornerOptions: Array<{ id: OverlayOriginCorner; label: string }> = [
   { id: 'bottom-left', label: 'Basso sx' },
   { id: 'bottom-right', label: 'Basso dx' }
 ]
-const OVERLAY_WORK_AREA_SIZE: OverlaySize = { width: 432, height: 728 }
+const OVERLAY_WORK_AREA_SIZE: OverlaySize = { width: 472, height: 768 }
+const AUTO_DIM_DELAY_MS = 10_000
+const AUTO_DIM_RESTORE_MS = 10_000
+const AUTO_DIM_OPACITY = 0.6
 const OVERLAY_CARD_SIZES: Record<OverlaySizePreset, OverlaySize> = {
   launcher: { width: 232, height: 66 },
-  placement: { width: 392, height: 260 },
+  placement: OVERLAY_WORK_AREA_SIZE,
   select: { width: 424, height: 620 },
-  session: { width: 334, height: 150 },
-  expired: { width: 334, height: 178 },
-  completed: { width: 334, height: 150 }
+  session: { width: 334, height: 162 },
+  expired: { width: 334, height: 186 },
+  completed: { width: 334, height: 158 }
 }
 
 let deadlineAt = 0
@@ -85,12 +102,52 @@ const selectedTraining = computed<TrainingOverlayTraining>(() => {
 })
 const selectedMode = computed(() => selectedTraining.value.modes[selectedModeId.value])
 const selectedModeList = computed(() => Object.values(selectedTraining.value.modes))
+const selectedPlanChips = computed<PlanPreviewChip[]>(() => {
+  if (selectedTraining.value.id === 'qualifying' && selectedMode.value.id === 'full60') {
+    return [
+      { id: 'qualy-warmup', label: 'Warm-up', durationLabel: '10m', type: 'warmup', title: 'Warm-up - 10 min' },
+      {
+        id: 'qualy-repeat',
+        label: 'Qualifica + pausa',
+        durationLabel: '10m + 2m',
+        type: 'stint',
+        repeat: 'x4',
+        title: '4 blocchi: Qualifica 10 min + Pausa 2 min'
+      },
+      { id: 'qualy-recap', label: 'Recap', durationLabel: '2m', type: 'recap', title: 'Recap - 2 min' }
+    ] satisfies PlanPreviewChip[]
+  }
+
+  if (selectedTraining.value.id === 'tracktitan_input' && selectedMode.value.id === 'full60') {
+    return [
+      { id: 'track-run', label: 'Run iniziale', durationLabel: '10m', type: 'run', title: 'Run iniziale - 10 min' },
+      {
+        id: 'track-repeat',
+        label: 'Review + focus',
+        durationLabel: '5m + 10m',
+        type: 'focusRun',
+        repeat: 'x3',
+        title: '3 blocchi: Review 5 min + Run focus 10 min'
+      },
+      { id: 'track-recap', label: 'Recap', durationLabel: '5m', type: 'recap', title: 'Recap - 5 min' }
+    ] satisfies PlanPreviewChip[]
+  }
+
+  return selectedMode.value.steps.map((step) => ({
+    id: step.id,
+    label: step.title,
+    durationLabel: `${step.durationMinutes}m`,
+    type: step.type,
+    title: `${step.title} - ${step.durationMinutes} min`
+  }))
+})
 const activeStep = computed<TrainingOverlayStep>(() => {
   return selectedMode.value.steps[activeStepIndex.value] || selectedMode.value.steps[0]!
 })
 const totalSteps = computed(() => selectedMode.value.steps.length)
 const isActiveSession = computed(() => ['running', 'paused', 'expired'].includes(phase.value))
-const showDevStepButton = computed(() => showDevControls && ['running', 'paused'].includes(phase.value))
+const canManuallyAdvanceStep = computed(() => activeStep.value.durationMinutes <= 5)
+const showManualNextButton = computed(() => ['running', 'paused'].includes(phase.value) && canManuallyAdvanceStep.value)
 const showPlacementControl = computed(() => isElectronRuntime.value || showDevControls)
 const progressPercent = computed(() => {
   const totalMs = activeStep.value.durationMinutes * 60_000
@@ -103,19 +160,9 @@ const formattedTime = computed(() => {
   const seconds = (totalSeconds % 60).toString().padStart(2, '0')
   return `${minutes}:${seconds}`
 })
-const phaseLabel = computed(() => {
-  if (phase.value === 'placement') return 'Posiziona'
-  if (phase.value === 'launcher') return 'Pronto'
-  if (phase.value === 'select') return 'Pronto'
-  if (phase.value === 'paused') return 'Pausa'
-  if (phase.value === 'expired') return 'Tempo finito'
-  if (phase.value === 'completed') return 'Completato'
-  if (phase.value === 'running') return 'Step attivo'
-  return 'Caricamento'
-})
 const activeTask = computed(() => {
   if (phase.value === 'placement') return 'Trascina il box, poi conferma.'
-  if (phase.value === 'select') return 'Scegli durata, audio e avvia.'
+  if (phase.value === 'select') return ''
   if (phase.value === 'launcher') return 'Apri la scelta allenamento.'
   if (phase.value === 'paused') return 'Timer fermo.'
   if (phase.value === 'expired') return 'Step finito. Passa al prossimo.'
@@ -124,8 +171,24 @@ const activeTask = computed(() => {
   return activeStep.value.hud
 })
 
+const sessionOverlayOpacity = computed(() => {
+  if (!autoDimDuringRun.value) return 1
+  if (phase.value !== 'running') return 1
+
+  const totalMs = activeStep.value.durationMinutes * 60_000
+  if (!totalMs) return 1
+
+  const elapsedMs = Math.max(0, totalMs - remainingMs.value)
+  const shouldDim = elapsedMs >= AUTO_DIM_DELAY_MS && remainingMs.value > AUTO_DIM_RESTORE_MS
+  return shouldDim ? AUTO_DIM_OPACITY : 1
+})
+
 const selectedOriginLabel = computed(() => {
   return originCornerOptions.find((option) => option.id === originCorner.value)?.label || 'Alto sx'
+})
+
+const hudTransitionKey = computed(() => {
+  return `${phase.value}-${activeStepIndex.value}-${activeStep.value.id}`
 })
 
 const overlaySizePreset = computed<OverlaySizePreset>(() => {
@@ -148,7 +211,8 @@ const overlayThemeStyle = computed(() => {
     '--overlay-work-area-width': `${OVERLAY_WORK_AREA_SIZE.width}px`,
     '--overlay-work-area-height': `${OVERLAY_WORK_AREA_SIZE.height}px`,
     '--overlay-width': `${cardSize.width}px`,
-    '--overlay-height': `${cardSize.height}px`
+    '--overlay-height': `${cardSize.height}px`,
+    '--overlay-session-opacity': `${sessionOverlayOpacity.value}`
   }
 })
 
@@ -170,6 +234,10 @@ function resolveOverlayOriginCorner(value: unknown): OverlayOriginCorner {
   return originCornerOptions.some((option) => option.id === value)
     ? value as OverlayOriginCorner
     : 'top-left'
+}
+
+function resolveOverlayOriginMode(value: unknown): OverlayOriginMode {
+  return 'manual'
 }
 
 function clearTimer() {
@@ -199,6 +267,8 @@ async function savePreferences() {
     lastTrainingId: selectedTrainingId.value,
     lastDurationId: selectedModeId.value,
     soundEnabled: soundEnabled.value,
+    autoDimDuringRun: autoDimDuringRun.value,
+    originMode: originMode.value,
     originCorner: originCorner.value
   })
 }
@@ -250,7 +320,7 @@ async function applyOverlaySize(preset: OverlaySizePreset = overlaySizePreset.va
   await getOverlayApi()?.trainingOverlaySetSize?.(sizeRequest)
 }
 
-function scheduleOverlaySizeSync(retries = 2) {
+function scheduleOverlaySizeSync(retries = 4) {
   if (typeof window === 'undefined') return
 
   if (overlaySizeFrame !== null) {
@@ -338,7 +408,14 @@ function playStepDoneSound() {
 
   void context.resume().catch(() => undefined)
   const firstBeepAt = context.currentTime + 0.01
-  const beepOffsets = [0, 0.22, 0.44]
+  const burstOffsets = [0, 0.22, 0.44]
+  const secondBurstDelay = 0.95 // small pause after first 3 beeps
+  const thirdBurstDelay = 1.90 // same pause before third burst
+  const beepOffsets = [
+    ...burstOffsets,
+    ...burstOffsets.map(offset => offset + secondBurstDelay),
+    ...burstOffsets.map(offset => offset + thirdBurstDelay)
+  ]
 
   beepOffsets.forEach((offset) => {
     const startAt = firstBeepAt + offset
@@ -349,7 +426,7 @@ function playStepDoneSound() {
     oscillator.frequency.setValueAtTime(980, startAt)
     oscillator.frequency.exponentialRampToValueAtTime(760, startAt + 0.14)
     gain.gain.setValueAtTime(0.0001, startAt)
-    gain.gain.exponentialRampToValueAtTime(0.22, startAt + 0.015)
+    gain.gain.exponentialRampToValueAtTime(0.38, startAt + 0.015)
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.16)
 
     oscillator.connect(gain)
@@ -365,8 +442,14 @@ function toggleSound() {
   if (soundEnabled.value) void primeStepAudio()
 }
 
+function toggleAutoDimDuringRun() {
+  autoDimDuringRun.value = !autoDimDuringRun.value
+  void savePreferences()
+}
+
 function selectOriginCorner(nextOriginCorner: OverlayOriginCorner) {
   if (isActiveSession.value) return
+  originMode.value = 'manual'
   originCorner.value = nextOriginCorner
   void savePreferences()
   scheduleOverlaySizeSync()
@@ -418,6 +501,7 @@ function resumeSession() {
 
 function completeCurrentStep() {
   if (phase.value !== 'running') return
+  if (!canManuallyAdvanceStep.value) return
   remainingMs.value = 0
   clearTimer()
   phase.value = 'expired'
@@ -434,6 +518,7 @@ function goNextStep() {
 }
 
 function skipToNextStepForDev() {
+  if (!canManuallyAdvanceStep.value) return
   goNextStep()
 }
 
@@ -448,6 +533,8 @@ function stopSession() {
 function enterPlacementMode() {
   if (isActiveSession.value) return
   isSettingsOpen.value = false
+  isTrainingPickerOpen.value = false
+  originMode.value = 'manual'
   phase.value = 'placement'
 }
 
@@ -455,6 +542,7 @@ async function confirmPlacement() {
   const settings = await getOverlayApi()?.trainingOverlayConfirmPlacement?.()
   selectedTrainingId.value = resolveTrainingOverlayTrainingId(settings?.lastTrainingId || selectedTrainingId.value)
   selectedModeId.value = resolveTrainingOverlayModeId(settings?.lastDurationId || selectedModeId.value)
+  originMode.value = resolveOverlayOriginMode(settings?.originMode || originMode.value)
   originCorner.value = resolveOverlayOriginCorner(settings?.originCorner || originCorner.value)
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000
   phase.value = 'launcher'
@@ -515,6 +603,8 @@ onMounted(async () => {
   selectedTrainingId.value = resolveTrainingOverlayTrainingId(settings?.lastTrainingId)
   selectedModeId.value = resolveTrainingOverlayModeId(settings?.lastDurationId)
   soundEnabled.value = settings?.soundEnabled !== false
+  autoDimDuringRun.value = settings?.autoDimDuringRun !== false
+  originMode.value = resolveOverlayOriginMode(settings?.originMode)
   originCorner.value = resolveOverlayOriginCorner(settings?.originCorner)
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000
   phase.value = settings?.hasConfiguredPosition || !api ? 'launcher' : 'placement'
@@ -524,7 +614,7 @@ onMounted(async () => {
   scheduleOverlaySizeSync()
 })
 
-watch([phase, selectedTrainingId, selectedModeId, soundEnabled, originCorner, isTrainingPickerOpen, isSettingsOpen], () => {
+watch([phase, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner, isTrainingPickerOpen, isSettingsOpen], () => {
   scheduleOverlaySizeSync()
 }, { flush: 'post' })
 
@@ -555,7 +645,7 @@ onBeforeUnmount(() => {
     ]"
   >
     <div class="overlay-work-area">
-      <Transition name="overlay-surface">
+      <Transition name="overlay-surface" mode="out-in">
         <button
           v-if="phase === 'launcher'"
           key="launcher"
@@ -566,34 +656,58 @@ onBeforeUnmount(() => {
           Inizia allenamento
         </button>
 
+        <section
+          v-else-if="phase === 'placement'"
+          key="placement"
+          class="placement-work-area overlay-surface--placement"
+          aria-label="Posiziona area overlay"
+        >
+          <div class="placement-drag-layer">
+            <span>Allinea l'area dell'overlay</span>
+            <p>Questa sara l'area dedicata alle card durante l'allenamento.</p>
+          </div>
+
+          <div class="placement-panel">
+            <div class="corner-control" aria-label="Origine overlay">
+              <span>Angolo di apertura</span>
+              <div class="corner-options">
+                <button
+                  v-for="option in originCornerOptions"
+                  :key="option.id"
+                  type="button"
+                  :class="{ 'is-active': originCorner === option.id }"
+                  @click="selectOriginCorner(option.id)"
+                >
+                  {{ option.label }}
+                </button>
+              </div>
+            </div>
+
+            <button type="button" class="primary" @click="confirmPlacement">
+              Usa posizione
+            </button>
+          </div>
+        </section>
+
         <section v-else-if="phase !== 'loading'" :key="phase" :class="['overlay-card', `overlay-surface--${overlaySizePreset}`]">
         <div class="overlay-main">
-        <div class="overlay-topline">
-          <span>{{ phaseLabel }}</span>
-          <span v-if="isActiveSession || phase === 'completed'">
-            {{ activeStepIndex + 1 }}/{{ totalSteps }}
-          </span>
-          <span v-else>Ctrl+K</span>
+        <div v-if="!isActiveSession" class="overlay-topline">
+          <div class="overlay-topline-actions">
+            <span v-if="phase === 'completed'">Fine</span>
+            <button
+              type="button"
+              class="overlay-close-btn"
+              aria-label="Chiudi overlay"
+              title="Chiudi"
+              @click="closeOverlay"
+            >
+              X
+            </button>
+          </div>
         </div>
 
-        <template v-if="phase === 'select' || phase === 'placement'">
+        <template v-if="phase === 'select'">
           <h1>{{ selectedTraining.title }}</h1>
-          <p>{{ activeTask }}</p>
-
-          <div v-if="phase === 'placement'" class="corner-control" aria-label="Origine overlay">
-            <span>Origine</span>
-            <div class="corner-options">
-              <button
-                v-for="option in originCornerOptions"
-                :key="option.id"
-                type="button"
-                :class="{ 'is-active': originCorner === option.id }"
-                @click="selectOriginCorner(option.id)"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-          </div>
 
           <template v-if="phase === 'select'">
             <div class="setup-stack">
@@ -606,30 +720,36 @@ onBeforeUnmount(() => {
                 <button
                   type="button"
                   class="training-current"
+                  :aria-expanded="isTrainingPickerOpen"
                   @click="toggleTrainingPicker"
                 >
                   <span>
                     <strong>{{ selectedTraining.label }}</strong>
-                    <small>{{ selectedTraining.summary }}</small>
                   </span>
-                  <em>{{ isTrainingPickerOpen ? 'Chiudi' : 'Cambia' }}</em>
+                  <span class="accordion-chevron" aria-hidden="true" />
                 </button>
-                <div v-if="isTrainingPickerOpen" class="training-options">
-                  <button
-                    v-for="training in trainingOverlayTrainingList"
-                    :key="training.id"
-                    type="button"
-                    :class="[
-                      'training-option',
-                      `training-option--${training.tone}`,
-                      { 'is-active': selectedTrainingId === training.id }
-                    ]"
-                    :style="trainingOptionStyle(training)"
-                    @click="selectTraining(training.id)"
-                  >
-                    <strong>{{ training.label }}</strong>
-                    <small>{{ training.summary }}</small>
-                  </button>
+                <div
+                  class="accordion-panel training-options-panel"
+                  :class="{ 'is-open': isTrainingPickerOpen }"
+                  :aria-hidden="!isTrainingPickerOpen"
+                  :inert="!isTrainingPickerOpen"
+                >
+                  <div class="accordion-content training-options">
+                    <button
+                      v-for="training in trainingOverlayTrainingList"
+                      :key="training.id"
+                      type="button"
+                      :class="[
+                        'training-option',
+                        `training-option--${training.tone}`,
+                        { 'is-active': selectedTrainingId === training.id }
+                      ]"
+                      :style="trainingOptionStyle(training)"
+                      @click="selectTraining(training.id)"
+                    >
+                      <strong>{{ training.label }}</strong>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -653,18 +773,21 @@ onBeforeUnmount(() => {
                   <span>Piano allenamento</span>
                   <strong>{{ selectedMode.title }}</strong>
                 </div>
-                <div class="training-plan-list">
-                  <div
-                    v-for="(step, index) in selectedMode.steps"
-                    :key="step.id"
-                    class="training-plan-row"
+                <div class="training-plan-chips">
+                  <span
+                    v-for="segment in selectedPlanChips"
+                    :key="segment.id"
+                    class="plan-chip"
+                    :class="[
+                      `plan-chip--${segment.type}`,
+                      { 'has-repeat': segment.repeat }
+                    ]"
+                    :title="segment.title"
                   >
-                    <span class="plan-index">{{ index + 1 }}</span>
-                    <div class="plan-copy">
-                      <span>{{ step.title }}</span>
-                    </div>
-                    <strong>{{ step.durationMinutes }} min</strong>
-                  </div>
+                    <small v-if="segment.repeat">{{ segment.repeat }}</small>
+                    <em>{{ segment.label }}</em>
+                    <strong>{{ segment.durationLabel }}</strong>
+                  </span>
                 </div>
               </div>
 
@@ -672,48 +795,52 @@ onBeforeUnmount(() => {
                 <button
                   type="button"
                   class="settings-toggle"
+                  :aria-expanded="isSettingsOpen"
                   @click="toggleSettingsPanel"
                 >
                   <span>Impostazioni</span>
-                  <strong>{{ selectedOriginLabel }}</strong>
+                  <span class="accordion-chevron" aria-hidden="true" />
                 </button>
 
-                <div v-if="isSettingsOpen" class="settings-body">
-                  <div class="corner-control corner-control--settings" aria-label="Origine overlay">
-                    <span>Posizione</span>
-                    <div class="corner-options">
+                <div
+                  class="accordion-panel settings-body-panel"
+                  :class="{ 'is-open': isSettingsOpen }"
+                  :aria-hidden="!isSettingsOpen"
+                  :inert="!isSettingsOpen"
+                >
+                  <div class="accordion-content settings-body">
+                    <div class="settings-list">
                       <button
-                        v-for="option in originCornerOptions"
-                        :key="option.id"
                         type="button"
-                        :class="{ 'is-active': originCorner === option.id }"
-                        @click="selectOriginCorner(option.id)"
+                        class="setting-row setting-row--button"
+                        @click="toggleSound"
                       >
-                        {{ option.label }}
+                        <span>Audio</span>
+                        <strong :class="{ 'is-active': soundEnabled }">
+                          {{ soundEnabled ? 'On' : 'Off' }}
+                        </strong>
                       </button>
-                    </div>
-                  </div>
 
-                  <div class="settings-list">
-                    <button
-                      type="button"
-                      class="setting-row setting-row--button"
-                      @click="toggleSound"
-                    >
-                      <span>Audio</span>
-                      <strong :class="{ 'is-active': soundEnabled }">
-                        {{ soundEnabled ? 'On' : 'Off' }}
-                      </strong>
-                    </button>
-
-                    <div class="shortcut-list">
-                      <div
-                        v-for="shortcut in overlayShortcuts"
-                        :key="shortcut.label"
-                        class="shortcut-row"
+                      <button
+                        type="button"
+                        class="setting-row setting-row--button"
+                        @click="toggleAutoDimDuringRun"
                       >
-                        <span>{{ shortcut.label }}</span>
-                        <strong>{{ shortcut.value }}</strong>
+                        <span>Opacita auto</span>
+                        <strong :class="{ 'is-active': autoDimDuringRun }">
+                          {{ autoDimDuringRun ? 'On' : 'Off' }}
+                        </strong>
+                      </button>
+
+                      <div class="shortcut-list">
+                        <div
+                          v-for="shortcut in overlayShortcuts"
+                          :key="shortcut.label"
+                          class="shortcut-row"
+                        >
+                          <span>{{ shortcut.label }}</span>
+                          <strong>{{ shortcut.value }}</strong>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -724,41 +851,43 @@ onBeforeUnmount(() => {
         </template>
 
         <template v-else>
-          <div class="hud-status-row">
-            <span class="hud-step-type">{{ trainingOverlayStepTypeLabels[activeStep.type] }}</span>
-            <strong>{{ formattedTime }}</strong>
-          </div>
-          <p class="hud-task">{{ activeTask }}</p>
-          <div
-            v-if="phase === 'expired'"
-            class="expiry-alert"
-            role="status"
-            aria-live="assertive"
-          >
-            Pronto per lo step successivo
-          </div>
-          <div v-if="phase !== 'expired'" class="progress-track" aria-hidden="true">
-            <span :style="{ width: `${progressPercent}%` }" />
-          </div>
+          <Transition name="hud-swap" mode="out-in">
+            <div :key="hudTransitionKey" class="hud-swap-body">
+              <div class="hud-focus-row">
+                <div class="hud-copy">
+                  <strong>{{ activeStep.title }}</strong>
+                  <span>Step {{ activeStepIndex + 1 }}/{{ totalSteps }}</span>
+                  <p class="hud-task">{{ activeTask }}</p>
+                </div>
+                <time class="hud-timer" aria-label="Tempo rimanente">{{ formattedTime }}</time>
+              </div>
+              <div
+                v-if="phase === 'expired'"
+                class="expiry-alert"
+                role="status"
+                aria-live="assertive"
+              >
+                Pronto per lo step successivo
+              </div>
+              <div v-if="phase !== 'expired'" class="progress-track" aria-hidden="true">
+                <span :style="{ width: `${progressPercent}%` }" />
+              </div>
+            </div>
+          </Transition>
         </template>
       </div>
 
       <div class="overlay-actions">
-        <template v-if="phase === 'placement'">
-          <p class="placement-hint">Scegli un angolo libero: il pannello si aprira verso lo spazio interno.</p>
-          <button type="button" class="primary" @click="confirmPlacement">
-            Usa posizione
-          </button>
-          <button type="button" @click="closeOverlay">
-            Chiudi
-          </button>
-        </template>
-
-        <template v-else-if="phase === 'select'">
+        <template v-if="phase === 'select'">
           <button type="button" class="primary" @click="startSession">
             Avvia
           </button>
-          <button v-if="showPlacementControl" type="button" @click="enterPlacementMode">
+          <button
+            v-if="showPlacementControl"
+            type="button"
+            class="utility-action"
+            @click="enterPlacementMode"
+          >
             Sposta
           </button>
         </template>
@@ -767,10 +896,10 @@ onBeforeUnmount(() => {
           <button type="button" class="primary" @click="pauseSession">
             Pausa
           </button>
-          <button type="button" @click="stopSession">
+          <button type="button" class="secondary-action danger-action" @click="stopSession">
             Stop
           </button>
-          <button v-if="showDevStepButton" type="button" class="dev-button" @click="skipToNextStepForDev">
+          <button v-if="showManualNextButton" type="button" class="dev-button" @click="skipToNextStepForDev">
             Next
           </button>
         </template>
@@ -779,10 +908,10 @@ onBeforeUnmount(() => {
           <button type="button" class="primary" @click="resumeSession">
             Riprendi
           </button>
-          <button type="button" @click="stopSession">
+          <button type="button" class="secondary-action danger-action" @click="stopSession">
             Stop
           </button>
-          <button v-if="showDevStepButton" type="button" class="dev-button" @click="skipToNextStepForDev">
+          <button v-if="showManualNextButton" type="button" class="dev-button" @click="skipToNextStepForDev">
             Next
           </button>
         </template>
@@ -791,7 +920,7 @@ onBeforeUnmount(() => {
           <button type="button" class="primary" @click="goNextStep">
             Next
           </button>
-          <button type="button" @click="stopSession">
+          <button type="button" class="secondary-action danger-action" @click="stopSession">
             Stop
           </button>
         </template>
@@ -799,9 +928,6 @@ onBeforeUnmount(() => {
         <template v-else-if="phase === 'completed'">
           <button type="button" class="primary" @click="resetCompleted">
             Nuovo
-          </button>
-          <button v-if="isElectronRuntime" type="button" @click="closeOverlay">
-            Chiudi
           </button>
         </template>
       </div>
@@ -827,8 +953,9 @@ onBeforeUnmount(() => {
   --overlay-accent-rgb: 34, 197, 94;
   --overlay-accent-contrast: #04110a;
   --overlay-radius: 18px;
-  --overlay-work-area-width: 432px;
-  --overlay-work-area-height: 728px;
+  --overlay-work-area-width: 472px;
+  --overlay-work-area-height: 768px;
+  --overlay-work-area-padding: 10px;
   --overlay-width: 334px;
   --overlay-height: 150px;
   --overlay-transform-origin: top left;
@@ -839,16 +966,18 @@ onBeforeUnmount(() => {
   overflow: visible;
   color: #f7fbff;
   font-family: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
-  background: #000;
+  background: transparent;
   box-sizing: border-box;
   position: fixed;
 }
 
 .overlay-work-area {
   position: relative;
+  display: grid;
   width: 100%;
   height: 100%;
   overflow: visible;
+  padding: var(--overlay-work-area-padding);
   background: transparent;
   box-sizing: border-box;
 }
@@ -860,11 +989,19 @@ onBeforeUnmount(() => {
   left: 0;
 }
 
+.training-overlay--origin-top-left .overlay-work-area {
+  place-items: start start;
+}
+
 .training-overlay--origin-top-right {
   top: 0;
   right: 0;
   bottom: auto;
   left: auto;
+}
+
+.training-overlay--origin-top-right .overlay-work-area {
+  place-items: start end;
 }
 
 .training-overlay--origin-bottom-left {
@@ -874,6 +1011,10 @@ onBeforeUnmount(() => {
   left: 0;
 }
 
+.training-overlay--origin-bottom-left .overlay-work-area {
+  place-items: end start;
+}
+
 .training-overlay--origin-bottom-right {
   top: auto;
   right: 0;
@@ -881,36 +1022,8 @@ onBeforeUnmount(() => {
   left: auto;
 }
 
-.training-overlay--origin-top-left .overlay-card,
-.training-overlay--origin-top-left .launcher-button {
-  top: 0;
-  right: auto;
-  bottom: auto;
-  left: 0;
-}
-
-.training-overlay--origin-top-right .overlay-card,
-.training-overlay--origin-top-right .launcher-button {
-  top: 0;
-  right: 0;
-  bottom: auto;
-  left: auto;
-}
-
-.training-overlay--origin-bottom-left .overlay-card,
-.training-overlay--origin-bottom-left .launcher-button {
-  top: auto;
-  right: auto;
-  bottom: 0;
-  left: 0;
-}
-
-.training-overlay--origin-bottom-right .overlay-card,
-.training-overlay--origin-bottom-right .launcher-button {
-  top: auto;
-  right: 0;
-  bottom: 0;
-  left: auto;
+.training-overlay--origin-bottom-right .overlay-work-area {
+  place-items: end end;
 }
 
 .overlay-surface--launcher,
@@ -921,8 +1034,8 @@ onBeforeUnmount(() => {
 
 .overlay-surface--placement,
 .training-overlay--placement {
-  --overlay-width: 392px;
-  --overlay-height: 260px;
+  --overlay-width: 100%;
+  --overlay-height: 100%;
 }
 
 .overlay-surface--select,
@@ -935,29 +1048,31 @@ onBeforeUnmount(() => {
 .training-overlay--running,
 .training-overlay--paused {
   --overlay-width: 334px;
-  --overlay-height: 150px;
+  --overlay-height: 162px;
 }
 
 .overlay-surface--expired,
 .training-overlay--expired {
   --overlay-width: 334px;
-  --overlay-height: 178px;
+  --overlay-height: 186px;
 }
 
 .overlay-surface--completed,
 .training-overlay--completed {
   --overlay-width: 334px;
-  --overlay-height: 150px;
+  --overlay-height: 158px;
 }
 
 .overlay-card {
-  position: absolute;
+  position: relative;
+  grid-area: 1 / 1;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 8px;
   width: var(--overlay-width);
   max-width: 100%;
   height: min(var(--overlay-height), 100%);
+  min-height: min(var(--overlay-height), 100%);
   max-height: 100%;
   padding: 12px;
   border: 1px solid rgba(var(--overlay-accent-rgb), 0.34);
@@ -971,25 +1086,33 @@ onBeforeUnmount(() => {
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     inset 0 -28px 60px rgba(var(--overlay-accent-rgb), 0.08);
   box-sizing: border-box;
-  animation: overlayMaterialize 300ms cubic-bezier(0.16, 1, 0.3, 1);
   transform-origin: var(--overlay-transform-origin);
+  opacity: var(--overlay-session-opacity, 1);
+  transition:
+    opacity 460ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 260ms ease,
+    box-shadow 260ms ease,
+    background 320ms ease;
   will-change: opacity, transform, filter;
 }
 
 .overlay-surface-enter-active {
+  grid-area: 1 / 1;
   transition:
-    opacity 220ms ease-out,
-    transform 340ms cubic-bezier(0.16, 1, 0.3, 1),
-    filter 340ms ease-out;
+    opacity 280ms ease-out,
+    transform 320ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 280ms ease-out;
+  transition-delay: 70ms;
   transform-origin: var(--overlay-transform-origin);
   will-change: opacity, transform, filter;
 }
 
 .overlay-surface-leave-active {
-  position: absolute;
+  grid-area: 1 / 1;
   transition:
-    opacity 120ms ease-in,
-    transform 120ms cubic-bezier(0.4, 0, 1, 1);
+    opacity 260ms ease-in,
+    transform 260ms cubic-bezier(0.4, 0, 1, 1),
+    filter 240ms ease-in;
   transform-origin: var(--overlay-transform-origin);
   will-change: opacity, transform;
   pointer-events: none;
@@ -997,13 +1120,14 @@ onBeforeUnmount(() => {
 
 .overlay-surface-enter-from {
   opacity: 0;
-  filter: saturate(1.18) brightness(1.08);
-  transform: translateY(3px) scale(0.985);
+  filter: saturate(1.08) brightness(1.02) blur(0.8px);
+  transform: translateY(4px) scale(0.985);
 }
 
 .overlay-surface-leave-to {
   opacity: 0;
-  transform: translateY(-2px) scale(0.992);
+  filter: saturate(0.9) brightness(0.86) blur(0.8px);
+  transform: translateY(-2px) scale(0.97);
 }
 
 .overlay-surface-enter-to,
@@ -1014,27 +1138,35 @@ onBeforeUnmount(() => {
 }
 
 .training-overlay--select .overlay-card {
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
   gap: 8px;
   padding: 10px;
+  height: auto;
   min-height: 0;
+  max-height: 100%;
   overflow: hidden;
 }
 
 .training-overlay--running .overlay-card,
 .training-overlay--paused .overlay-card,
 .training-overlay--completed .overlay-card {
-  gap: 6px;
-  padding: 10px;
+  gap: 8px;
+  padding: 12px;
+}
+
+.training-overlay--running .overlay-card:hover,
+.training-overlay--running .overlay-card:focus-within {
+  opacity: 1;
 }
 
 .training-overlay--expired .overlay-card {
-  gap: 6px;
-  padding: 10px;
+  gap: 8px;
+  padding: 12px;
 }
 
 .launcher-button {
-  position: absolute;
+  position: relative;
+  grid-area: 1 / 1;
   width: var(--overlay-width);
   max-width: 100%;
   height: min(var(--overlay-height), 100%);
@@ -1067,7 +1199,7 @@ onBeforeUnmount(() => {
   animation: expiredPulse 1s ease-in-out infinite;
 }
 
-.training-overlay--drag .overlay-card {
+.training-overlay--drag .placement-work-area {
   -webkit-app-region: drag;
   cursor: move;
 }
@@ -1076,24 +1208,87 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.hud-swap-body {
+  display: grid;
+}
+
+.hud-swap-enter-active {
+  transition:
+    opacity 220ms ease,
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 220ms ease;
+  will-change: opacity, transform, filter;
+}
+
+.hud-swap-leave-active {
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease,
+    filter 140ms ease;
+  will-change: opacity, transform, filter;
+}
+
+.hud-swap-enter-from {
+  opacity: 0;
+  transform: translateY(4px) scale(0.99);
+  filter: blur(0.5px);
+}
+
+.hud-swap-leave-to {
+  opacity: 0;
+  transform: translateY(-3px) scale(0.99);
+  filter: blur(0.5px);
+}
+
 .training-overlay--select .overlay-main {
   display: flex;
-  min-height: 0;
+  min-height: auto;
   flex-direction: column;
-  overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(var(--overlay-accent-rgb), 0.48) rgba(255, 255, 255, 0.05);
+  overflow: visible;
 }
 
 .overlay-topline {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
+  align-items: center;
   gap: 10px;
   color: rgba(215, 232, 244, 0.62);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.overlay-topline-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overlay-close-btn {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  aspect-ratio: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(236, 245, 255, 0.92);
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.overlay-close-btn:hover,
+.overlay-close-btn:focus-visible {
+  border-color: rgba(var(--overlay-accent-rgb), 0.55);
+  background: rgba(var(--overlay-accent-rgb), 0.18);
+  color: #fff;
 }
 
 h1 {
@@ -1135,20 +1330,104 @@ p {
   padding-right: 2px;
 }
 
-.training-overlay--placement .overlay-card {
-  grid-template-rows: auto auto;
-  height: var(--overlay-height);
-  min-height: 0;
+.placement-work-area {
+  position: relative;
+  grid-area: 1 / 1;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+  border: 1px solid rgba(230, 238, 246, 0.34);
+  border-radius: 18px;
   overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(145, 158, 171, 0.24), rgba(70, 78, 88, 0.2)),
+    rgba(12, 16, 20, 0.62);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 0 80px rgba(var(--overlay-accent-rgb), 0.08);
+  box-sizing: border-box;
+  color: #f6fbff;
+  transform-origin: center;
+}
+
+.placement-work-area::before {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border: 1px dashed rgba(238, 245, 252, 0.22);
+  border-radius: 14px;
+  pointer-events: none;
+}
+
+.placement-drag-layer {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  min-height: 0;
+  text-align: center;
+  pointer-events: none;
+}
+
+.placement-drag-layer span {
+  color: rgba(248, 252, 255, 0.92);
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.placement-drag-layer p {
+  width: min(280px, 100%);
+  margin: 0;
+  color: rgba(226, 238, 247, 0.66);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.placement-panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(9, 12, 16, 0.78);
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.22);
+  -webkit-app-region: no-drag;
 }
 
 .training-overlay--placement .corner-control {
-  margin-top: 8px;
-  padding: 7px;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
-.training-overlay--placement .overlay-actions {
-  align-self: end;
+.accordion-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition:
+    grid-template-rows 280ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 180ms ease,
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.accordion-panel.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.accordion-content {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .training-picker {
@@ -1191,9 +1470,9 @@ p {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
-  min-height: 42px;
-  padding: 7px 8px;
+  gap: 12px;
+  min-height: 38px;
+  padding: 6px 16px 6px 10px;
   border-color: rgba(var(--overlay-accent-rgb), 0.32);
   background:
     linear-gradient(135deg, rgba(var(--overlay-accent-rgb), 0.16), rgba(255, 255, 255, 0.04)),
@@ -1203,12 +1482,12 @@ p {
 
 .training-current > span {
   display: grid;
+  align-content: center;
   gap: 1px;
   min-width: 0;
 }
 
-.training-current strong,
-.training-current small {
+.training-current strong {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1216,25 +1495,39 @@ p {
 
 .training-current strong {
   color: rgba(248, 252, 255, 0.96);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.18;
 }
 
-.training-current small {
-  color: rgba(226, 238, 247, 0.66);
-  font-size: 10px;
-  line-height: 1.28;
+.accordion-chevron {
+  display: grid;
+  place-items: center;
+  align-self: center;
+  justify-self: end;
+  width: 18px;
+  height: 18px;
 }
 
-.training-current em {
-  padding: 5px 8px;
-  border-radius: 999px;
-  background: rgba(var(--overlay-accent-rgb), 0.18);
-  color: rgba(248, 252, 255, 0.86);
-  font-size: 9px;
-  font-style: normal;
-  font-weight: 950;
-  text-transform: uppercase;
+.accordion-chevron::before {
+  content: '';
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid rgba(248, 252, 255, 0.78);
+  border-bottom: 2px solid rgba(248, 252, 255, 0.78);
+  transform: translateY(-2px) rotate(45deg);
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 180ms ease;
+}
+
+button[aria-expanded='true'] .accordion-chevron::before {
+  transform: translateY(2px) rotate(225deg);
+}
+
+button:hover .accordion-chevron::before,
+button:focus-visible .accordion-chevron::before {
+  border-color: rgba(248, 252, 255, 0.96);
 }
 
 .training-option {
@@ -1243,21 +1536,18 @@ p {
   --training-accent-rgb: var(--overlay-accent-rgb);
   --training-accent-contrast: var(--overlay-accent-contrast);
   display: grid;
-  gap: 2px;
-  align-content: center;
-  min-height: 43px;
-  padding: 7px 9px;
+  place-items: center start;
+  min-height: 34px;
+  padding: 0 10px;
   text-align: left;
 }
 
 .training-overlay--select .training-option {
-  gap: 2px;
-  min-height: 36px;
-  padding: 5px 8px 6px;
+  min-height: 31px;
+  padding: 0 9px;
 }
 
-.training-option strong,
-.training-option small {
+.training-option strong {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1270,20 +1560,7 @@ p {
 }
 
 .training-overlay--select .training-option strong {
-  font-size: 11px;
-}
-
-.training-option small {
-  display: block;
-  color: rgba(226, 238, 247, 0.62);
-  font-size: 10px;
-  font-weight: 750;
-  line-height: 1.28;
-}
-
-.training-overlay--select .training-option small {
-  font-size: 9px;
-  line-height: 1.28;
+  font-size: 12px;
 }
 
 .training-option.is-active {
@@ -1340,6 +1617,35 @@ p {
   background: transparent;
 }
 
+.corner-control.is-disabled {
+  opacity: 0.58;
+}
+
+.origin-mode-control {
+  display: grid;
+  gap: 6px;
+}
+
+.origin-mode-control > span {
+  color: rgba(215, 232, 244, 0.58);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.origin-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.origin-mode-options button {
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
 .corner-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1352,11 +1658,16 @@ p {
   font-size: 10px;
 }
 
+.corner-options button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .training-plan-preview {
   display: grid;
   gap: 6px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 7px 9px 8px;
   border: 1px solid rgba(var(--overlay-accent-rgb), 0.18);
   border-radius: 10px;
   background:
@@ -1386,63 +1697,86 @@ p {
   font-weight: 950;
 }
 
-.training-plan-list {
+.training-plan-chips {
   display: grid;
-  gap: 4px;
-  max-height: 124px;
-  overflow: auto;
-  padding-right: 2px;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(var(--overlay-accent-rgb), 0.48) rgba(255, 255, 255, 0.05);
-}
-
-.training-plan-row {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-  height: 24px;
-  min-height: 24px;
-  padding: 0 7px 0 5px;
-  border-radius: 7px;
-  background: #20262b;
-  border-left: 2px solid rgba(var(--overlay-accent-rgb), 0.58);
-}
-
-.plan-index {
-  display: grid;
-  place-items: center;
-  width: 17px;
-  height: 17px;
-  border-radius: 999px;
-  background: rgba(var(--overlay-accent-rgb), 0.18);
-  color: rgba(248, 252, 255, 0.72);
-  font-size: 9px;
-  font-weight: 950;
-}
-
-.training-plan-row .plan-copy {
-  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  width: 100%;
   min-width: 0;
+  gap: 4px;
 }
 
-.training-plan-row .plan-copy span {
+.plan-chip {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: center;
+  align-items: center;
+  min-height: 32px;
+  gap: 2px 6px;
+  padding: 5px 7px;
+  border: 1px solid rgba(var(--overlay-accent-rgb), 0.24);
+  border-radius: 7px;
+  background:
+    linear-gradient(135deg, rgba(var(--overlay-accent-rgb), 0.28), rgba(var(--overlay-accent-rgb), 0.12)),
+    #20262b;
+  box-sizing: border-box;
+}
+
+.plan-chip.has-repeat {
+  grid-column: span 2;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.plan-chip--pause,
+.plan-chip--review,
+.plan-chip--recap {
+  border-color: rgba(255, 255, 255, 0.14);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.07)),
+    #20252a;
+}
+
+.plan-chip--race,
+.plan-chip--stint,
+.plan-chip--work,
+.plan-chip--focusRun {
+  border-color: rgba(var(--overlay-accent-rgb), 0.42);
+}
+
+.plan-chip em,
+.plan-chip strong,
+.plan-chip small {
   overflow: hidden;
-  color: rgba(248, 252, 255, 0.9);
-  font-size: 10px;
-  font-weight: 850;
-  line-height: 1.1;
+  color: rgba(248, 252, 255, 0.88);
+  font-style: normal;
+  line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.training-plan-row strong {
-  flex: 0 0 auto;
-  justify-self: end;
-  color: rgba(248, 252, 255, 0.78);
+.plan-chip em {
   font-size: 10px;
   font-weight: 950;
-  white-space: nowrap;
+}
+
+.plan-chip strong {
+  color: rgba(226, 238, 247, 0.62);
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.plan-chip small {
+  grid-row: 1 / span 2;
+  grid-column: 1;
+  min-width: 19px;
+  padding: 3px 4px;
+  border-radius: 999px;
+  background: rgba(var(--overlay-accent-rgb), 0.2);
+  color: rgba(248, 252, 255, 0.88);
+  font-size: 9px;
+  font-weight: 950;
+  text-align: center;
 }
 
 .settings-panel {
@@ -1450,7 +1784,7 @@ p {
   min-width: 0;
   display: grid;
   grid-template-columns: 1fr;
-  gap: 5px;
+  gap: 0;
   justify-self: stretch;
   padding: 0;
   border: 1px solid rgba(var(--overlay-accent-rgb), 0.18);
@@ -1466,7 +1800,7 @@ p {
   gap: 12px;
   width: 100%;
   min-height: 30px;
-  padding: 0 10px;
+  padding: 0 16px 0 10px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -1478,19 +1812,23 @@ p {
   text-transform: uppercase;
 }
 
-.settings-toggle strong {
-  color: rgba(248, 252, 255, 0.86);
-  font-size: 10px;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
 .settings-body {
   display: grid;
   grid-template-columns: 1fr;
   align-items: start;
   gap: 8px;
-  padding: 0 10px 10px;
+  padding: 0 10px;
+  transition: padding-bottom 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.settings-body-panel.is-open .settings-body {
+  padding-bottom: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .accordion-panel {
+    transition-duration: 1ms;
+  }
 }
 
 .setting-row,
@@ -1594,40 +1932,65 @@ button.is-active {
   color: var(--overlay-accent-contrast);
 }
 
-.hud-status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 5px;
+.hud-focus-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 16px;
+  margin-top: 2px;
 }
 
-.hud-status-row strong {
-  flex: 0 0 100px;
+.hud-copy {
+  min-width: 0;
+}
+
+.hud-copy strong {
+  display: block;
+  overflow: hidden;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1.08;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-copy span {
+  display: block;
+  margin-top: 4px;
+  color: rgba(var(--overlay-accent-rgb), 0.88);
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.hud-timer {
+  flex: 0 0 116px;
+  align-self: start;
+  margin-top: -1px;
   color: #fff;
   font-family: 'Roboto Mono', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  font-size: 32px;
+  font-size: 36px;
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1, 'zero' 1;
-  line-height: 0.95;
+  line-height: 0.88;
   letter-spacing: 0;
   text-align: right;
   white-space: nowrap;
 }
 
-.hud-step-type {
-  flex: 0 0 auto;
-  color: rgba(236, 245, 255, 0.7);
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .hud-task {
-  min-height: 14px;
+  min-height: 34px;
+  margin-top: 6px;
   overflow: hidden;
-  white-space: nowrap;
+  color: rgba(236, 245, 255, 0.8);
+  display: -webkit-box;
+  font-size: 13px;
+  line-height: 1.3;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   text-overflow: ellipsis;
 }
 
@@ -1643,8 +2006,8 @@ button.is-active {
 }
 
 .progress-track {
-  height: 4px;
-  margin-top: 6px;
+  height: 5px;
+  margin-top: 8px;
   overflow: hidden;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.08);
@@ -1662,23 +2025,59 @@ button.is-active {
 .overlay-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  gap: 8px;
+}
+
+.training-overlay--select .overlay-actions {
+  grid-template-columns: minmax(0, 1fr) 96px;
+}
+
+.training-overlay--select .overlay-actions .primary {
+  min-height: 30px;
+}
+
+.utility-action {
+  min-height: 30px;
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(226, 238, 247, 0.7);
+}
+
+.utility-action:hover,
+.utility-action:focus-visible {
+  border-color: rgba(var(--overlay-accent-rgb), 0.42);
+  background: rgba(var(--overlay-accent-rgb), 0.1);
+  color: rgba(248, 252, 255, 0.9);
 }
 
 .training-overlay--running .overlay-actions,
 .training-overlay--paused .overlay-actions,
 .training-overlay--completed .overlay-actions {
-  gap: 5px;
+  gap: 7px;
 }
 
 .training-overlay--running .overlay-actions button,
 .training-overlay--paused .overlay-actions button,
 .training-overlay--completed .overlay-actions button {
-  min-height: 26px;
+  min-height: 30px;
+  font-size: 12px;
+}
+
+.secondary-action {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(226, 238, 247, 0.68);
+}
+
+.danger-action:hover,
+.danger-action:focus-visible {
+  border-color: rgba(248, 113, 113, 0.48);
+  background: rgba(127, 29, 29, 0.18);
+  color: rgba(254, 226, 226, 0.92);
 }
 
 .overlay-actions:has(.dev-button) {
-  grid-template-columns: 1fr 1fr 0.72fr;
+  grid-template-columns: 1fr 0.76fr 0.62fr;
 }
 
 .overlay-actions:has(> button:only-child) {

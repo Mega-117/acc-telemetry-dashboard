@@ -17,6 +17,8 @@ const emit = defineEmits<{
 
 const { isCoach, isAdmin } = useFirebaseAuth()
 const displayName = computed(() => props.userName ?? 'Utente')
+const showVoiceControls = false
+const showNotificationBell = false
 
 const goToCoachArea = () => {
   navigateTo('/piloti')
@@ -166,7 +168,7 @@ onMounted(() => {
       </button>
 
       <!-- Voice Assistant POC -->
-      <div class="voice-group">
+      <div v-if="showVoiceControls" class="voice-group">
         <select 
           v-model="selectedVoice" 
           class="voice-select"
@@ -204,7 +206,7 @@ onMounted(() => {
 
       <!-- User Dropdown -->
       <div class="topbar__user">
-        <UiNotificationBell />
+        <UiNotificationBell v-if="showNotificationBell" />
         <UiUserDropdown
           :user-name="displayName"
           @logout="emit('logout')"
