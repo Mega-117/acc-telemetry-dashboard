@@ -1,4 +1,5 @@
 import type { TelemetryFileDescriptor } from './syncScanService'
+import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
 
 const WINDOW_FOCUS_SYNC_THROTTLE_MS = 5000
 
@@ -46,7 +47,7 @@ export function setupAutoSyncController(params: {
   const stop = window.setInterval(async () => {
     const user = currentUser.value
     if (!user || authTriggered) return
-    if (!user.emailVerified) return
+    if (AUTH_EMAIL_VERIFICATION_REQUIRED && !user.emailVerified) return
     authTriggered = true
     window.clearInterval(stop)
     await handleTrigger('authReady', { uid: user.uid })

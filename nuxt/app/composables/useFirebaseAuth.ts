@@ -13,6 +13,7 @@ import {
     resendCurrentVerificationEmail,
     translateAuthError
 } from '~/services/auth/authService'
+import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
 import { clearLocalUserIdentity, saveLocalUserIdentity } from '~/services/auth/localIdentityBridge'
 import { ensureUserDocument, getUserProfile } from '~/services/auth/userProvisioningService'
 
@@ -49,7 +50,7 @@ async function syncAuthenticatedUser(user: User): Promise<User | null> {
 
     user = freshUser
 
-    if (!user.emailVerified) {
+    if (AUTH_EMAIL_VERIFICATION_REQUIRED && !user.emailVerified) {
         currentUserProfile.value = null
         userRole.value = 'pilot'
         firestoreNickname.value = user.displayName || user.email?.split('@')[0] || ''
@@ -145,8 +146,12 @@ function initAuthListener() {
 export function useFirebaseAuth() {
     const isAuthenticated = computed(() => !!currentUser.value)
     const isEmailVerified = computed(() => currentUser.value?.emailVerified ?? false)
-    const needsEmailVerification = computed(() => !!currentUser.value && !isEmailVerified.value)
-    const canEnterApp = computed(() => !!currentUser.value && isEmailVerified.value)
+    const needsEmailVerification = computed(() => (
+        AUTH_EMAIL_VERIFICATION_REQUIRED && !!currentUser.value && !isEmailVerified.value
+    ))
+    const canEnterApp = computed(() => (
+        !!currentUser.value && (!AUTH_EMAIL_VERIFICATION_REQUIRED || isEmailVerified.value)
+    ))
     const userEmail = computed(() => currentUser.value?.email ?? '')
     const userDisplayName = computed(() => firestoreNickname.value || currentUser.value?.displayName || '')
     const isCoach = computed(() => userRole.value === 'coach')
@@ -216,7 +221,7 @@ export function useFirebaseAuth() {
         try {
             const refreshed = await refreshEmailVerificationState(currentUser.value)
             currentUser.value = refreshed.user
-            if (refreshed.user?.emailVerified) {
+            if (refreshed.user && (!AUTH_EMAIL_VERIFICATION_REQUIRED || refreshed.user.emailVerified)) {
                 await syncAuthenticatedUser(refreshed.user)
             }
             console.log('[AUTH] Email verified check:', refreshed.verified)

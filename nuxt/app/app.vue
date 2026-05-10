@@ -9,6 +9,7 @@ import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useActivityFeed } from '~/composables/useActivityFeed'
 import { endFirebaseScenario, startFirebaseScenario, withFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
+import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
 import { canUseDevTools } from '~/utils/devToolsAccess'
 
 // === NUXT ROUTER ===
@@ -109,7 +110,6 @@ const showDevFirebaseProbe = computed(() => {
 })
 
 // === CONFIG ===
-const REQUIRE_EMAIL_VERIFICATION = true
 const transitionName = 'dissolve-fade-zoom' // Fixed animation
 
 const isBrowserOnlyRuntime = computed(() => {
@@ -233,7 +233,7 @@ watch(currentUser, (user, oldUser) => {
 const handleLoginSuccess = (email: string, emailVerified: boolean) => {
   userEmail.value = email
   
-  if (!emailVerified) {
+  if (AUTH_EMAIL_VERIFICATION_REQUIRED && !emailVerified) {
     showEmailVerificationGate()
     return
   }
@@ -243,7 +243,12 @@ const handleLoginSuccess = (email: string, emailVerified: boolean) => {
 
 const handleRegisterSuccess = (email: string) => {
   userEmail.value = email
-  showEmailVerificationGate()
+  if (AUTH_EMAIL_VERIFICATION_REQUIRED) {
+    showEmailVerificationGate()
+    return
+  }
+
+  enterDashboard(1500)
 }
 
 const handleGoToDashboard = () => {
@@ -324,7 +329,7 @@ provide('goToProfile', handleGoToProfile)
           <div class="auth-card-standalone">
             <AuthRegistrationSuccess
               :email="userEmail"
-              :require-email-verification="REQUIRE_EMAIL_VERIFICATION"
+              :require-email-verification="AUTH_EMAIL_VERIFICATION_REQUIRED"
               @go-to-dashboard="handleGoToDashboard"
               @resend-email="handleResendEmail"
             />

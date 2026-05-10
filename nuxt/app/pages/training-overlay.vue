@@ -849,7 +849,7 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   overflow: visible;
-  background: #000;
+  background: transparent;
   box-sizing: border-box;
 }
 
