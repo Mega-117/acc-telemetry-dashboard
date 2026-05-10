@@ -1,6 +1,6 @@
 # AI Handoff Master
 
-Ultimo aggiornamento: 2026-05-10 (Europe/Rome) - update panoramica reminder gara
+Ultimo aggiornamento: 2026-05-10 (Europe/Rome) - update panoramica reminder gara (scope gara-specifico)
 Repo: `acc-telemetry-dashboard` (scope corrente: Nuxt front-end)
 
 ## Scope Confermato
@@ -45,7 +45,7 @@ Interventi panoramica (desktop reminder gara, solo UI/manuale):
 - Vista "Prossima gara" include:
   - prossima gara reale dal calendario utente/pilota;
   - stato piano (`Ritardo`, `In linea`, `Avanti`);
-  - metriche `target`, `registrati (ultimi 7g)`, `restanti`;
+  - metriche `target`, `registrati per gara`, `restanti`;
   - progress bar visiva.
 - Persistenza locale lato browser (`localStorage`) per mantenere:
   - vista selezionata (`Lettura` / `Gara`).
@@ -63,8 +63,12 @@ Interventi panoramica (desktop reminder gara, solo UI/manuale):
   - sostituito il lessico "sessioni" con "allenamenti" nel piano gara.
 - Gestione obiettivi focus pre-gara:
   - due sezioni read-only `Gia lavorato` / `Da lavorare`;
-  - `Gia lavorato` derivato dall'attivita recente (practice/qualify/race);
+  - `Gia lavorato` derivato dalle sessioni registrate per la gara/pista target (practice/qualify/race);
   - `Da lavorare` derivato dallo scenario briefing consigliato (coach insights).
+- Nuova regola conteggio gara-specifico (senza backend nuovo):
+  - il box `Focus gara > Gara` filtra solo sessioni registrate sulla pista della prossima gara;
+  - finestra temporale: da `createdAt` evento calendario (se disponibile), altrimenti fallback `startsAt - 28 giorni` fino alla data gara;
+  - il contatore non usa piu il totale generico ultimi 7 giorni.
 
 ## TODO Logger/Altri Progetti (Solo Note, Nessuna Patch Qui)
 - Se serve coerenza cross-progetto:
@@ -105,7 +109,8 @@ Interventi panoramica (desktop reminder gara, solo UI/manuale):
 - Nessun controllo manuale di incremento/decremento presente nel box.
 - Stato (`Ritardo / In linea / Avanti`) e progress bar aggiornati coerentemente al target.
 - La prossima gara visualizzata coincide con il primo evento futuro del calendario.
-- Le sezioni `Gia lavorato` e `Da lavorare` risultano coerenti con attivita recente + scenario suggerito.
+- Il conteggio `registrati per gara` considera solo la pista della prossima gara nella finestra evento (non tutte le piste).
+- Le sezioni `Gia lavorato` e `Da lavorare` risultano coerenti con sessioni gara-specifiche + scenario suggerito.
 - Preferenza della vista reminder persiste dopo refresh (localStorage) e non impatta altri moduli.
 
 ## Note Operative

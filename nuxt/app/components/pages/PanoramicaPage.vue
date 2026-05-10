@@ -5,13 +5,14 @@
 
 import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
+import { useTelemetryGateway, type OverviewSnapshot } from '~/composables/useTelemetryGateway'
 import { useCoachInsights } from '~/composables/useCoachInsights'
 import { usePilotContext, useTargetUserId } from '~/composables/usePilotContext'
 import { usePublicPath } from '~/composables/usePublicPath'
 import type { OverviewProjection } from '~/types/overviewProjections'
 import type { CoachBriefingScenario } from '~/composables/useCoachInsights'
 import { loadRaceCalendarEvents, type RaceCalendarEvent } from '~/repositories/raceCalendarRepository'
+import { normalizeTrackId as normalizeProjectionTrackId } from '~/services/projections/trackMetadata'
 
 type DriverReminderSlide = 'recent' | 'race'
 
@@ -98,6 +99,7 @@ const telemetryGateway = useTelemetryGateway()
 const { isLoading } = telemetryGateway
 
 const overviewProjection = ref<OverviewProjection | null>(null)
+const overviewSnapshot = ref<OverviewSnapshot | null>(null)
 const raceCalendarEvents = ref<RaceCalendarEvent[]>([])
 const emptyActivityTotals = {
   practice: { minutes: 0, sessions: 0 },
@@ -105,8 +107,36 @@ const emptyActivityTotals = {
   race: { minutes: 0, sessions: 0 }
 }
 
+const SESSION_TYPE_PRACTICE = 0
+const SESSION_TYPE_QUALIFY = 1
+const SESSION_TYPE_RACE = 2
+const DEFAULT_RACE_PREP_LOOKBACK_DAYS = 28
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+function parseIsoTimestamp(value: string | null | undefined): number | null {
+  if (!value) return null
+  const ts = Date.parse(value)
+  return Number.isFinite(ts) ? ts : null
+}
+
+function normalizeTrackToken(value: string | null | undefined): string {
+  return normalizeProjectionTrackId(value).replace(/^_+|_+$/g, '')
+}
+
+function tracksMatch(left: string | null | undefined, right: string | null | undefined): boolean {
+  const a = normalizeTrackToken(left)
+  const b = normalizeTrackToken(right)
+  if (!a || !b) return false
+  return a === b || a.includes(b) || b.includes(a)
+}
+
 async function loadOverview() {
-  overviewProjection.value = await telemetryGateway.getOverviewProjection(targetUserId.value || undefined)
+  const [projection, snapshot] = await Promise.all([
+    telemetryGateway.getOverviewProjection(targetUserId.value || undefined),
+    telemetryGateway.getOverviewSnapshot(targetUserId.value || undefined)
+  ])
+  overviewProjection.value = projection
+  overviewSnapshot.value = snapshot
 }
 
 async function loadRaceCalendar() {
@@ -278,16 +308,91 @@ const nextRaceDateLabel = computed(() => {
 const nextRaceDaysLeft = computed(() => {
   const startsAt = nextRaceEvent.value?.startsAt || ''
   if (!startsAt) return null
-  const ts = Date.parse(startsAt)
-  if (!Number.isFinite(ts)) return null
-  const msPerDay = 24 * 60 * 60 * 1000
-  return Math.max(0, Math.ceil((ts - Date.now()) / msPerDay))
+  const ts = parseIsoTimestamp(startsAt)
+  if (ts === null) return null
+  return Math.max(0, Math.ceil((ts - Date.now()) / MS_PER_DAY))
 })
 const nextRaceDaysLeftLabel = computed(() => {
   if (nextRaceDaysLeft.value === null) return ''
   return `${nextRaceDaysLeft.value}g alla gara`
 })
 const hasNextRace = computed(() => Boolean(nextRaceEvent.value))
+
+const racePrepWindowStartTs = computed(() => {
+  const event = nextRaceEvent.value
+  if (!event) return null
+  const explicitStart = parseIsoTimestamp(event.createdAt)
+  if (explicitStart !== null) return explicitStart
+  const raceTs = parseIsoTimestamp(event.startsAt)
+  if (raceTs === null) return null
+  return raceTs - (DEFAULT_RACE_PREP_LOOKBACK_DAYS * MS_PER_DAY)
+})
+
+const racePrepWindowStartLabel = computed(() => {
+  const ts = racePrepWindowStartTs.value
+  if (ts === null) return ''
+  return new Intl.DateTimeFormat('it-IT', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric'
+  }).format(new Date(ts))
+})
+
+const raceSpecificSessions = computed(() => {
+  if (!hasNextRace.value) return []
+  const sessions = overviewSnapshot.value?.sessions || []
+  if (!sessions.length) return []
+
+  const event = nextRaceEvent.value
+  const raceTs = parseIsoTimestamp(event?.startsAt)
+  const startTs = racePrepWindowStartTs.value
+  const raceTrack = event?.trackName || nextRaceName.value
+
+  return sessions.filter((session) => {
+    if (!tracksMatch(session.meta?.track, raceTrack)) return false
+    const sessionTs = parseIsoTimestamp(session.meta?.date_start)
+    if (sessionTs === null) return false
+    if (startTs !== null && sessionTs < startTs) return false
+    if (raceTs !== null && sessionTs > raceTs) return false
+    return true
+  })
+})
+
+const raceSpecificTotals = computed(() => {
+  const totals = {
+    sessions: 0,
+    minutes: 0,
+    byType: {
+      practice: 0,
+      qualify: 0,
+      race: 0
+    }
+  }
+
+  for (const session of raceSpecificSessions.value) {
+    totals.sessions += 1
+    totals.minutes += Math.round(Number(session.summary?.totalTime || 0) / 60000)
+
+    if (session.meta?.session_type === SESSION_TYPE_PRACTICE) {
+      totals.byType.practice += 1
+    } else if (session.meta?.session_type === SESSION_TYPE_QUALIFY) {
+      totals.byType.qualify += 1
+    } else if (session.meta?.session_type === SESSION_TYPE_RACE) {
+      totals.byType.race += 1
+    }
+  }
+
+  return totals
+})
+
+const raceSpecificScopeLabel = computed(() => {
+  if (!hasNextRace.value) return ''
+  const track = nextRaceName.value
+  if (racePrepWindowStartLabel.value) {
+    return `Conteggio solo su ${track} dal ${racePrepWindowStartLabel.value} alla gara.`
+  }
+  return `Conteggio solo su ${track} fino alla data gara.`
+})
 
 const plannedTrainings = computed(() => {
   if (!hasNextRace.value) return 0
@@ -298,7 +403,7 @@ const plannedTrainings = computed(() => {
   return 10
 })
 
-const completedTrainings = computed(() => recentSessions.value)
+const completedTrainings = computed(() => raceSpecificTotals.value.sessions)
 
 const reminderStatus = computed(() => {
   if (!hasNextRace.value) {
@@ -360,9 +465,9 @@ const reminderDeltaText = computed(() => {
 
 const workedFocusItems = computed(() => {
   const items: string[] = []
-  if ((activityTotals.value.practice.sessions || 0) > 0) items.push('Pulizia base')
-  if ((activityTotals.value.qualify.sessions || 0) > 0) items.push('Giro secco')
-  if ((activityTotals.value.race.sessions || 0) > 0) items.push('Passo gara')
+  if (raceSpecificTotals.value.byType.practice > 0) items.push('Pulizia base')
+  if (raceSpecificTotals.value.byType.qualify > 0) items.push('Giro secco')
+  if (raceSpecificTotals.value.byType.race > 0) items.push('Passo gara')
   return items
 })
 
@@ -530,6 +635,7 @@ const goToTrack = (track: { id: string } | null) => {
                     <span class="race-title">{{ nextRaceName }}</span>
                     <span v-if="nextRaceSubtitle" class="race-subtitle">{{ nextRaceSubtitle }}</span>
                     <span class="race-date">{{ nextRaceDateLabel }}</span>
+                    <span v-if="nextRaceDaysLeftLabel" class="race-days-chip">{{ nextRaceDaysLeftLabel }}</span>
                   </div>
                   <span class="race-status-chip" :class="`tone-${reminderStatus.tone}`">{{ reminderStatus.label }}</span>
                 </div>
@@ -541,13 +647,18 @@ const goToTrack = (track: { id: string } | null) => {
                   </div>
                   <div class="race-metric">
                     <span class="metric-value">{{ completedTrainings }}</span>
-                    <span class="metric-label">allenamenti registrati (7g)</span>
+                    <span class="metric-label">registrati per gara</span>
                   </div>
                 </div>
 
-                <p class="race-remaining">{{ trainingsRemaining }} {{ trainingsRemaining === 1 ? 'allenamento restante' : 'allenamenti restanti' }}</p>
-                <p v-if="nextRaceDaysLeftLabel" class="race-days-left">{{ nextRaceDaysLeftLabel }}</p>
+                <div class="race-type-breakdown">
+                  <span class="race-type-chip">Pulizia {{ raceSpecificTotals.byType.practice }}</span>
+                  <span class="race-type-chip">Qualifica {{ raceSpecificTotals.byType.qualify }}</span>
+                  <span class="race-type-chip">Gara {{ raceSpecificTotals.byType.race }}</span>
+                </div>
 
+                <p class="race-remaining">{{ trainingsRemaining }} {{ trainingsRemaining === 1 ? 'allenamento restante' : 'allenamenti restanti' }}</p>
+                <p v-if="raceSpecificScopeLabel" class="race-scope">{{ raceSpecificScopeLabel }}</p>
                 <div class="progress-line" role="presentation">
                   <div class="progress-line__value" :style="{ width: `${reminderProgress}%` }" />
                 </div>
@@ -1074,6 +1185,21 @@ const goToTrack = (track: { id: string } | null) => {
   font-weight: 700;
 }
 
+.race-days-chip {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(64, 156, 255, 0.4);
+  background: rgba(64, 156, 255, 0.14);
+  color: rgba(214, 236, 255, 0.96);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
 .race-status-chip {
   padding: 6px 10px;
   border-radius: 999px;
@@ -1123,6 +1249,26 @@ const goToTrack = (track: { id: string } | null) => {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.race-type-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.race-type-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .race-remaining {
   margin: 0;
   color: rgba(255, 255, 255, 0.68);
@@ -1131,11 +1277,11 @@ const goToTrack = (track: { id: string } | null) => {
   line-height: 1.35;
 }
 
-.race-days-left {
+.race-scope {
   margin: 0;
-  color: rgba(255, 255, 255, 0.48);
-  font-size: 12px;
-  line-height: 1.3;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .progress-line {
