@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>ACC Telemetry Dashboard</title>
+    <script>
+        // Single Page App routing fix for GitHub Pages
+        // This script preserves the URL path and redirects to index,
+        // passing the path as a query parameter so the SPA can handle it
+
+        // IMPORTANT: Must match baseURL in nuxt.config.ts
+        const basePath = '/acc-telemetry-dashboard/docs';
+
+        // Get the current path after the base
+        const fullPath = window.location.pathname;
+        let appPath = fullPath.replace(basePath, '');
+
+        // Store the intended path in sessionStorage
+        if (appPath && appPath !== '/' && appPath !== '/index.html') {
+            sessionStorage.setItem('spa-redirect-path', appPath + window.location.search);
+            console.log('[404] Saving path for SPA redirect:', appPath);
+        }
+
+        // Redirect to the base URL
+        window.location.replace(basePath + '/');
+    </script>
+</head>
+
+<body>
+    <p>Loading ACC Telemetry Dashboard...</p>
+</body>
+
+</html>

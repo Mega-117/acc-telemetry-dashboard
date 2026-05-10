@@ -6,7 +6,7 @@
     "build": "nuxt build",
     "build:docs": "powershell -ExecutionPolicy Bypass -Command \"$env:ACC_NUXT_PUBLIC_DIR='../docs'; npm run build\"",
     "dev": "nuxt dev --host localhost",
-    "generate": "nuxt generate",
+    "generate": "powershell -ExecutionPolicy Bypass -Command \"$env:ACC_NUXT_PUBLIC_DIR='../docs'; nuxt generate\"",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "check:parity": "node scripts/check_projection_parity.mjs",

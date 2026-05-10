@@ -1,0 +1,1 @@
+import{aK as c,i as l,aL as m,h as o}from"./ezgtrm49.js";const p=c(async(d,f)=>{let e,a;const{isAuthenticated:s,userRole:r,isLoading:n}=l();let t=0;for(;n.value&&t<100;)[e,a]=m(()=>new Promise(u=>setTimeout(u,50))),await e,a(),t++;if(!s.value)return o("/");const i=r.value;if(i!=="coach"&&i!=="admin")return o("/panoramica")});export{p as default};
