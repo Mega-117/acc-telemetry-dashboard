@@ -1,7 +1,7 @@
 import type { SessionDocument } from '~/composables/useTelemetryData'
 
 export function normalizeTrackKey(track: string): string {
-  return (track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
+  return (track || '').toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
 }
 
 export function buildLogicalSessionKey(meta: { date_start?: string; track?: string }): string {

@@ -23,6 +23,11 @@ import {
 import { TRACK_DETAIL_PROJECTION_SCHEMA_VERSION } from '~/types/trackProjections'
 import { writeUserProjectionDocuments } from './projectionRebuildService'
 import { writePilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
+import {
+  SESSION_LIST_PROJECTION_PAGE_SIZE,
+  SESSION_LIST_PROJECTION_SCHEMA_VERSION,
+  writeSessionListProjectionDocuments
+} from './sessionListProjectionService'
 
 const CALLER = 'OwnerDataRepair'
 const MAX_ISSUES = 200
@@ -49,6 +54,11 @@ export interface OwnerDataAuditReport {
     statsSchemaVersion: number
     sessionIndexSchemaVersion: number
     expectedSessionIndexSchemaVersion: number
+    sessionListSchemaVersion: number
+    expectedSessionListSchemaVersion: number
+    sessionListTotalSessions: number
+    sessionListPageDocs: number
+    expectedSessionListPageDocs: number
     expectedStatsSchemaVersion: number
     trackBestsSchemaVersion: number
     trackDetailProjectionSchemaVersion: number
@@ -64,6 +74,7 @@ export interface OwnerDataAuditReport {
     sessions: 'ok' | 'denied'
     trackBests: 'ok' | 'denied'
     trackDetailProjections: 'ok' | 'denied'
+    sessionListProjection: 'ok' | 'denied'
     rawChunks: 'ok' | 'partial' | 'denied'
   }
   issues: Array<{
@@ -88,6 +99,36 @@ export interface OwnerProjectionRebuildReport {
   touchedTrackBests: string[]
   wroteUserProjection: boolean
   wrotePilotDirectory: boolean
+}
+
+export interface OwnerSessionListProjectionRebuildReport {
+  generatedAt: string
+  uid: string
+  sessionCount: number
+  pageCount: number
+  pageSize: number
+}
+
+export interface OwnerLightweightVerificationReport {
+  generatedAt: string
+  uid: string
+  ok: boolean
+  userSchemas: {
+    statsSchemaVersion: number
+    sessionIndexSchemaVersion: number
+    sessionListSchemaVersion: number
+    expectedStatsSchemaVersion: number
+    expectedSessionIndexSchemaVersion: number
+    expectedSessionListSchemaVersion: number
+  }
+  projections: {
+    trackBestsDocs: number
+    trackDetailProjectionDocs: number
+    sessionListPageDocs: number
+    oldTrackBests: string[]
+    oldTrackDetailProjections: string[]
+  }
+  issues: string[]
 }
 
 export interface OwnerCloudSummaryReprocessReport {
@@ -122,14 +163,17 @@ function issue(
   return { severity, code, message, ...extra }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function getDocTracked(ref: any) {
   return trackedGetDoc(ref, CALLER)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function getDocsTracked(q: any) {
   return trackedGetDocs(q, CALLER)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function setDocTracked(ref: any, data: any, options?: any) {
   if (options) {
     return trackedSetDoc(ref, data, options, CALLER)
@@ -137,10 +181,12 @@ async function setDocTracked(ref: any, data: any, options?: any) {
   return trackedSetDoc(ref, data, CALLER)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function deleteDocTracked(ref: any) {
   return trackedDeleteDoc(ref, CALLER)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function toSessionDocument(docSnap: any): SessionDocument {
   const data = docSnap.data() || {}
   return {
@@ -160,12 +206,16 @@ function toSessionDocument(docSnap: any): SessionDocument {
   } as SessionDocument
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function stableJson(value: any): string {
   return JSON.stringify(sanitizeForFirestore(value))
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function canonicalizeCloudRawPayload(rawObj: any): Promise<{
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   meta: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   summary: any
   mode: 'local_domain' | 'cloud_raw_fallback'
 } | null> {
@@ -252,6 +302,7 @@ function getTrackIdsFromSessions(sessions: SessionDocument[]): string[] {
   )).sort()
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function toDocMap(docs: any[]): Map<string, any> {
   const result = new Map<string, any>()
   for (const docSnap of docs) {
@@ -268,9 +319,11 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
       sessions: 'ok',
       trackBests: 'ok',
       trackDetailProjections: 'ok',
+      sessionListProjection: 'ok',
       rawChunks: 'ok'
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     let userData: any = {}
     try {
       const userSnap = await getDocTracked(doc(db, `users/${uid}`))
@@ -278,6 +331,7 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
       if (!userSnap.exists()) {
         issues.push(issue('error', 'missing_user_doc', 'Documento users/{uid} mancante.'))
       }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     } catch (error: any) {
       permissions.user = 'denied'
       issues.push(issue('error', 'user_doc_denied', error?.message || 'Permessi insufficienti su users/{uid}.'))
@@ -286,6 +340,7 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
     let sessions: SessionDocument[] = []
     try {
       sessions = await loadOwnerSessions(uid)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     } catch (error: any) {
       permissions.sessions = 'denied'
       issues.push(issue('error', 'sessions_denied', error?.message || 'Permessi insufficienti su users/{uid}/sessions.'))
@@ -323,25 +378,45 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
       permissions.rawChunks = 'denied'
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     let trackBestDocs: any[] = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     let trackDetailDocs: any[] = []
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+    let sessionListPageDocs: any[] = []
+    let sessionListSchemaVersion = 0
+    let sessionListTotalSessions = 0
     try {
       trackBestDocs = await loadCollectionDocs(`users/${uid}/trackBests`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     } catch (error: any) {
       permissions.trackBests = 'denied'
       issues.push(issue('error', 'track_bests_denied', error?.message || 'Permessi insufficienti su trackBests.'))
     }
     try {
       trackDetailDocs = await loadCollectionDocs(`users/${uid}/trackDetailProjections`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     } catch (error: any) {
       permissions.trackDetailProjections = 'denied'
       issues.push(issue('error', 'track_detail_projection_denied', error?.message || 'Permessi insufficienti su trackDetailProjections.'))
+    }
+    try {
+      const sessionListMetaSnap = await getDocTracked(doc(db, `users/${uid}/sessionListMeta/v1`))
+      const sessionListMeta = sessionListMetaSnap.exists() ? (sessionListMetaSnap.data() || {}) : {}
+      sessionListSchemaVersion = Number(sessionListMeta.schemaVersion || 0)
+      sessionListTotalSessions = Number(sessionListMeta.totalSessions || 0)
+      sessionListPageDocs = await loadCollectionDocs(`users/${uid}/sessionListPages`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+    } catch (error: any) {
+      permissions.sessionListProjection = 'denied'
+      issues.push(issue('error', 'session_list_projection_denied', error?.message || 'Permessi insufficienti su sessionList projection.'))
     }
 
     const trackBestMap = toDocMap(trackBestDocs)
     const trackDetailMap = toDocMap(trackDetailDocs)
     const missingTrackBests = trackIds.filter((trackId) => !trackBestMap.has(trackId))
     const missingTrackDetailProjections = trackIds.filter((trackId) => !trackDetailMap.has(trackId))
+    const expectedSessionListPageDocs = Math.ceil(sessions.length / SESSION_LIST_PROJECTION_PAGE_SIZE)
     const oldTrackBests = Array.from(trackBestMap.entries())
       .filter(([, data]) => Number(data?.version || 0) < TRACK_BESTS_SCHEMA_VERSION)
       .map(([trackId]) => trackId)
@@ -354,6 +429,12 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
     }
     for (const trackId of missingTrackDetailProjections.slice(0, MAX_ISSUES)) {
       issues.push(issue('warning', 'missing_track_detail_projection', 'Pista con sessioni ma senza trackDetailProjection.', { trackId }))
+    }
+    if (sessionListSchemaVersion !== SESSION_LIST_PROJECTION_SCHEMA_VERSION) {
+      issues.push(issue('warning', 'session_list_schema_mismatch', 'Session list projection mancante o con schema vecchio.'))
+    }
+    if (sessionListPageDocs.length < expectedSessionListPageDocs || sessionListTotalSessions !== sessions.length) {
+      issues.push(issue('warning', 'session_list_incomplete', 'Session list projection incompleta rispetto alle sessioni cloud.'))
     }
 
     let canonical = 0
@@ -398,6 +479,11 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
         statsSchemaVersion: Number(userData?.stats?.schemaVersion || 0),
         sessionIndexSchemaVersion: Number(userData?.sessionIndex?.schemaVersion || 0),
         expectedSessionIndexSchemaVersion: SESSION_INDEX_SCHEMA_VERSION,
+        sessionListSchemaVersion,
+        expectedSessionListSchemaVersion: SESSION_LIST_PROJECTION_SCHEMA_VERSION,
+        sessionListTotalSessions,
+        sessionListPageDocs: sessionListPageDocs.length,
+        expectedSessionListPageDocs,
         expectedStatsSchemaVersion: USER_STATS_SCHEMA_VERSION,
         trackBestsSchemaVersion: TRACK_BESTS_SCHEMA_VERSION,
         trackDetailProjectionSchemaVersion: TRACK_DETAIL_PROJECTION_SCHEMA_VERSION,
@@ -412,6 +498,63 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
       issues: issues.slice(0, MAX_ISSUES),
       canRebuildProjections: permissions.sessions === 'ok' && permissions.user === 'ok',
       canReprocessFromCloudRaw: rawStats.present > 0
+    }
+  })
+}
+
+export async function verifyOwnerMigrationLightweight(uid: string): Promise<OwnerLightweightVerificationReport> {
+  return withFirebaseScenario('maintenance.ownerData.lightweightVerify', { uid }, async () => {
+    const userSnap = await getDocTracked(doc(db, `users/${uid}`))
+    const userData = userSnap.exists() ? (userSnap.data() || {}) : {}
+    const trackBestDocs = await loadCollectionDocs(`users/${uid}/trackBests`)
+    const trackDetailDocs = await loadCollectionDocs(`users/${uid}/trackDetailProjections`)
+    const sessionListMetaSnap = await getDocTracked(doc(db, `users/${uid}/sessionListMeta/v1`))
+    const sessionListMeta = sessionListMetaSnap.exists() ? (sessionListMetaSnap.data() || {}) : {}
+    const sessionListPageDocs = await loadCollectionDocs(`users/${uid}/sessionListPages`)
+
+    const statsSchemaVersion = Number(userData?.stats?.schemaVersion || 0)
+    const sessionIndexSchemaVersion = Number(userData?.sessionIndex?.schemaVersion || 0)
+    const sessionListSchemaVersion = Number(sessionListMeta?.schemaVersion || 0)
+    const oldTrackBests = trackBestDocs
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+      .filter((docSnap: any) => Number(docSnap.data()?.version || 0) < TRACK_BESTS_SCHEMA_VERSION)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+      .map((docSnap: any) => docSnap.id)
+    const oldTrackDetailProjections = trackDetailDocs
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+      .filter((docSnap: any) => Number(docSnap.data()?.schemaVersion || 0) !== TRACK_DETAIL_PROJECTION_SCHEMA_VERSION)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+      .map((docSnap: any) => docSnap.id)
+
+    const issues: string[] = []
+    if (statsSchemaVersion !== USER_STATS_SCHEMA_VERSION) issues.push('stats_schema_version_mismatch')
+    if (sessionIndexSchemaVersion !== SESSION_INDEX_SCHEMA_VERSION) issues.push('session_index_schema_version_mismatch')
+    if (sessionListSchemaVersion !== SESSION_LIST_PROJECTION_SCHEMA_VERSION) issues.push('session_list_schema_version_mismatch')
+    if (Number(sessionListMeta?.pageCount || 0) !== sessionListPageDocs.length) issues.push('session_list_page_count_mismatch')
+    if (Number(sessionListMeta?.totalSessions || 0) !== Number(userData?.stats?.totalSessions || 0)) issues.push('session_list_total_sessions_mismatch')
+    if (oldTrackBests.length > 0) issues.push('old_track_bests_schema')
+    if (oldTrackDetailProjections.length > 0) issues.push('old_track_detail_projection_schema')
+
+    return {
+      generatedAt: new Date().toISOString(),
+      uid,
+      ok: issues.length === 0,
+      userSchemas: {
+        statsSchemaVersion,
+        sessionIndexSchemaVersion,
+        sessionListSchemaVersion,
+        expectedStatsSchemaVersion: USER_STATS_SCHEMA_VERSION,
+        expectedSessionIndexSchemaVersion: SESSION_INDEX_SCHEMA_VERSION,
+        expectedSessionListSchemaVersion: SESSION_LIST_PROJECTION_SCHEMA_VERSION
+      },
+      projections: {
+        trackBestsDocs: trackBestDocs.length,
+        trackDetailProjectionDocs: trackDetailDocs.length,
+        sessionListPageDocs: sessionListPageDocs.length,
+        oldTrackBests,
+        oldTrackDetailProjections
+      },
+      issues
     }
   })
 }
@@ -485,6 +628,26 @@ export async function rebuildOwnerProjections(uid: string): Promise<OwnerProject
   })
 }
 
+export async function rebuildOwnerSessionListProjection(uid: string): Promise<OwnerSessionListProjectionRebuildReport> {
+  return withFirebaseScenario('maintenance.ownerData.sessionListProjectionRebuild', { uid }, async () => {
+    const sessions = await loadOwnerSessions(uid)
+    const projection = await writeSessionListProjectionDocuments({
+      db,
+      uid,
+      sessions,
+      setDocFn: setDocTracked
+    })
+
+    return {
+      generatedAt: new Date().toISOString(),
+      uid,
+      sessionCount: sessions.length,
+      pageCount: projection.meta.pageCount,
+      pageSize: projection.meta.pageSize
+    }
+  })
+}
+
 export async function reprocessOwnerCloudRawSummaries(
   uid: string,
   options: OwnerCloudSummaryReprocessOptions = {}
@@ -493,6 +656,7 @@ export async function reprocessOwnerCloudRawSummaries(
 
   return withFirebaseScenario('dev.ownerRebuild.cloudRawSummaries', { uid, forceAll }, async () => {
     const sessionDocs = await loadCollectionDocs(`users/${uid}/sessions`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     const eligibleDocs = sessionDocs.filter((docSnap: any) => {
       if (forceAll) return true
       const data = docSnap.data() || {}
@@ -558,6 +722,7 @@ export async function reprocessOwnerCloudRawSummaries(
 
         await setDocTracked(docSnap.ref, nextPayload, { merge: true })
         report.updatedSessions += 1
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       } catch (error: any) {
         report.failedSessions += 1
         report.errors.push({

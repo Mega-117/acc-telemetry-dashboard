@@ -442,6 +442,111 @@ D:\...\acc-telemetry-dashboard\nuxt\           ← DASHBOARD
 
 ---
 
+---
+
+## 🎯 Training Overlay
+
+### Ruolo
+
+Il Training Overlay è una finestra Electron trasparente che si posiziona sopra
+il gioco durante l'allenamento in pista. Guida il pilota step-by-step, mostra
+un timer, traccia i giri in tempo reale e riproduce notifiche vocali.
+
+È accessibile dalla route `/training-overlay` con `layout: false` (nessun
+layout standard, solo l'overlay minimalista).
+
+### Architettura Composables
+
+Il sistema è completamente suddiviso in composables single-responsibility:
+
+```
+training-overlay.vue  (pagina-controller)
+├── useSessionOrchestrator   ← timer, transizioni fase, auto-advance
+├── useLiveStatePoller       ← polling IPC per giri live (ACC → Electron)
+├── useTrackingRecord        ← salvataggio sessione su Electron API
+├── useQualifyingVoice       ← coda audio (WAV pre-generati + Web Speech)
+├── useOverlaySettings       ← preferenze utente + savePreferences()
+├── useTrainingSelection     ← scelta allenamento/durata + computed chips
+├── useOverlaySize           ← sync dimensioni finestra Electron via IPC
+└── useStopHold              ← gesture press-and-hold per lo stop
+```
+
+### Ciclo di Vita (Fasi)
+
+```
+loading → placement → launcher → select → running ↔ paused → expired → completed
+                                                                ↓
+                                                           (next step)
+```
+
+| Fase | Descrizione |
+|------|-------------|
+| `loading` | Caricamento impostazioni dal Electron API |
+| `placement` | Modalità drag: il pilota posiziona l'overlay sullo schermo |
+| `launcher` | Bottone minimalista — un click apre la selezione |
+| `select` | Scelta allenamento, durata, impostazioni (OverlaySelectSetup) |
+| `running` | Sessione attiva — timer live, HUD step, polling giri |
+| `paused` | Timer fermo, polling giri sospeso |
+| `expired` | Step completato — attende "Avanti" o auto-advance (30 s) |
+| `completed` | Tutti gli step finiti — mostra riepilogo |
+
+### Catalogo Allenamenti (`trainingOverlayCatalog.ts`)
+
+Cinque allenamenti, ognuno con due durate (`short30` / `full60`):
+
+| ID | Label | Accent | Focus |
+|----|-------|--------|-------|
+| `tracktitan_input` | TrackTitan | Verde | Segmento focus + review |
+| `clean_laps` | Pulizia | Azzurro | Giri validi con margine |
+| `qualifying` | Qualifica | Giallo | Push lap con reset breve |
+| `consistency` | Costanza | Arancio | Passo gara ripetibile |
+| `race_real` | Gara vera | Rosso | Traffico, linee sporche |
+
+### Sistema Voce
+
+Due livelli:
+
+1. **WAV pre-generati** (Kokoro TTS) — file in `public/voice/qualifying/`
+   - Scenario: `sessionStart`, `manualPause`, `manualResume`, `sessionComplete`, `stepEnd`
+   - Voci: `if_sara`, `im_nicola`
+   - Generazione: `python nuxt/scripts/generate_step_voices.py`
+2. **Web Speech API** — per annunci giri live (`announceLap`)
+   - Formato: `"giro 5 non valido. 1 minuto 47 virgola 3"` (it-IT)
+   - Funziona sempre, nessun file richiesto
+
+### Shortcuts Tastiera
+
+| Shortcut | Azione |
+|----------|--------|
+| `Ctrl+K` | Toggle overlay (dall'Electron) |
+| `Ctrl+N` | Azione primaria (avanza step / start / pausa / riprendi) |
+| `Ctrl+Alt+L` | Stop (tieni premuto 1 s) |
+| `Esc` | Chiudi dialogo conferma stop |
+
+### Componenti UI
+
+```
+OverlayHud.vue          ← HUD durante la sessione (timer, step, lap counter)
+OverlaySelectSetup.vue  ← Pannello selezione + impostazioni
+```
+
+### IPC API Electron richiesta
+
+```typescript
+trainingOverlayGetSettings()         // Carica preferenze salvate
+trainingOverlaySavePreferences(...)  // Salva preferenze
+trainingOverlayConfirmPlacement()    // Conferma posizione overlay
+trainingOverlaySetSize(...)          // Resize finestra Electron
+trainingOverlayClose()               // Chiude la finestra overlay
+onTrainingOverlayCommand(cb)         // Ascolta comandi (Ctrl+K ecc.)
+getLiveState()                       // Stato giro live da ACC
+trainingStart(...)                   // Registra inizio sessione
+trainingComplete(...)                // Registra completamento
+trainingAbandon(...)                 // Registra abbandono
+```
+
+---
+
 ## ❓ FAQ
 
 **Q: Perché vedo dati diversi tra browser e Electron?**

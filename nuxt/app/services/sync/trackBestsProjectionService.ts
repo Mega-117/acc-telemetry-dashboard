@@ -3,7 +3,23 @@ import { CAR_CATEGORIES, getCarCategory, type CarCategory } from '~/composables/
 import { normalizeTrackId } from '~/services/projections/trackMetadata'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 
-export const TRACK_BESTS_SCHEMA_VERSION = 3
+export const TRACK_BESTS_SCHEMA_VERSION = 4
+
+const RACE_FUEL_BUCKETS = ['40-60', '60-80', '80-100', '100+'] as const
+
+type RaceFuelBucket = typeof RACE_FUEL_BUCKETS[number]
+type FuelBucketRecord = {
+  timeMs: number
+  fuel: number | null
+  airTemp: number | null
+  roadTemp: number | null
+  grip: string | null
+  sessionId: string | null
+  date: string | null
+  sampleLapCount: number | null
+  confidence: string | null
+  source: string | null
+}
 
 type GripBest = {
   bestQualy: number | null
@@ -21,6 +37,8 @@ type GripBest = {
   bestAvgRaceFuel: number | null
   bestAvgRaceSessionId: string | null
   bestAvgRaceDate: string | null
+  raceBestByFuelBucket: Record<RaceFuelBucket, FuelBucketRecord | Record<string, never>>
+  raceAvgByFuelBucket: Record<RaceFuelBucket, FuelBucketRecord | Record<string, never>>
 }
 
 export interface TrackBestProjectionDelta {
@@ -28,6 +46,7 @@ export interface TrackBestProjectionDelta {
   sessionId: string
   dateStart: string
   sessionType?: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   summary: any
   car?: string
 }
@@ -36,8 +55,41 @@ function emptyGripBests(): GripBest {
   return {
     bestQualy: null, bestQualyTemp: null, bestQualyFuel: null, bestQualySessionId: null, bestQualyDate: null,
     bestRace: null, bestRaceTemp: null, bestRaceFuel: null, bestRaceSessionId: null, bestRaceDate: null,
-    bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceFuel: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
+    bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceFuel: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null,
+    raceBestByFuelBucket: emptyBucketMap(),
+    raceAvgByFuelBucket: emptyBucketMap()
   }
+}
+
+function emptyBucketMap(): Record<RaceFuelBucket, Record<string, never>> {
+  return Object.fromEntries(RACE_FUEL_BUCKETS.map((bucket) => [bucket, {}])) as Record<RaceFuelBucket, Record<string, never>>
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+function normalizeBucketRecord(value: any, delta?: TrackBestProjectionDelta): FuelBucketRecord | Record<string, never> {
+  const timeMs = Number(value?.timeMs || 0)
+  if (!timeMs || !Number.isFinite(timeMs)) return {}
+  return {
+    timeMs,
+    fuel: value?.fuel ?? null,
+    airTemp: value?.airTemp ?? null,
+    roadTemp: value?.roadTemp ?? null,
+    grip: value?.grip ?? null,
+    sessionId: value?.sessionId || delta?.sessionId || null,
+    date: value?.date || delta?.dateStart || null,
+    sampleLapCount: value?.sampleLapCount ?? null,
+    confidence: value?.confidence || 'high',
+    source: value?.source || null
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+function normalizeBucketMap(value: any): Record<RaceFuelBucket, FuelBucketRecord | Record<string, never>> {
+  const normalized = emptyBucketMap() as Record<RaceFuelBucket, FuelBucketRecord | Record<string, never>>
+  for (const bucket of RACE_FUEL_BUCKETS) {
+    normalized[bucket] = normalizeBucketRecord(value?.[bucket])
+  }
+  return normalized
 }
 
 function normalizeGripBest(value: Partial<GripBest> | null | undefined): GripBest {
@@ -57,12 +109,18 @@ function normalizeGripBest(value: Partial<GripBest> | null | undefined): GripBes
     bestAvgRaceTemp: source.bestAvgRaceTemp ?? null,
     bestAvgRaceFuel: source.bestAvgRaceFuel ?? null,
     bestAvgRaceSessionId: source.bestAvgRaceSessionId ?? null,
-    bestAvgRaceDate: source.bestAvgRaceDate ?? null
+    bestAvgRaceDate: source.bestAvgRaceDate ?? null,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+    raceBestByFuelBucket: normalizeBucketMap((source as any).raceBestByFuelBucket),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+    raceAvgByFuelBucket: normalizeBucketMap((source as any).raceAvgByFuelBucket)
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function buildInitialBests(existing: any, gripConditions: string[]) {
   const existingVersion = Number(existing?.version || 1)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   const newBests: Record<CarCategory, Record<string, GripBest>> = {} as any
 
   if (existingVersion >= TRACK_BESTS_SCHEMA_VERSION && existing?.bests) {
@@ -75,7 +133,7 @@ function buildInitialBests(existing: any, gripConditions: string[]) {
     return newBests
   }
 
-  if (existing?.bests || existing) {
+  if (existingVersion >= TRACK_BESTS_SCHEMA_VERSION && (existing?.bests || existing)) {
     const legacyBests = existing.bests ||
       Object.fromEntries(gripConditions.filter((g) => existing[g]).map((g) => [g, existing[g]]))
 
@@ -97,6 +155,66 @@ function buildInitialBests(existing: any, gripConditions: string[]) {
     }
   }
   return newBests
+}
+
+function isBucketRecord(value: FuelBucketRecord | Record<string, never>): value is FuelBucketRecord {
+  return !!(value as FuelBucketRecord)?.timeMs
+}
+
+function raceBucketFromFuel(fuel: number | null | undefined): RaceFuelBucket | null {
+  const parsed = Number(fuel || 0)
+  if (!parsed || parsed <= 40) return null
+  if (parsed <= 60) return '40-60'
+  if (parsed <= 80) return '60-80'
+  if (parsed <= 100) return '80-100'
+  return '100+'
+}
+
+function updateBucketBest(
+  target: Record<RaceFuelBucket, FuelBucketRecord | Record<string, never>>,
+  bucket: RaceFuelBucket,
+  record: FuelBucketRecord
+) {
+  const current = target[bucket]
+  if (!isBucketRecord(current) || record.timeMs < current.timeMs) {
+    target[bucket] = record
+    return true
+  }
+  if (
+    record.timeMs === current.timeMs
+    && (current.source === 'legacy_fallback' || (current.sampleLapCount == null && record.sampleLapCount != null))
+  ) {
+    target[bucket] = {
+      ...current,
+      ...record
+    }
+    return true
+  }
+  return false
+}
+
+function updateLegacyRaceBest(catGrip: GripBest, record: FuelBucketRecord, delta: TrackBestProjectionDelta) {
+  if (!catGrip.bestRace || record.timeMs < catGrip.bestRace) {
+    catGrip.bestRace = record.timeMs
+    catGrip.bestRaceTemp = record.airTemp ?? null
+    catGrip.bestRaceFuel = record.fuel ?? null
+    catGrip.bestRaceSessionId = record.sessionId || delta.sessionId
+    catGrip.bestRaceDate = record.date || delta.dateStart
+    return true
+  }
+  return false
+}
+
+function updateLegacyAvgBest(catGrip: GripBest, record: FuelBucketRecord, delta: TrackBestProjectionDelta) {
+  if (!catGrip.bestAvgRace || record.timeMs < catGrip.bestAvgRace) {
+    catGrip.bestAvgRace = record.timeMs
+    catGrip.bestAvgRaceTemp = record.airTemp ?? null
+    catGrip.bestAvgRaceFuel = record.fuel ?? null
+    catGrip.bestAvgRaceSessionId = record.sessionId || delta.sessionId
+    catGrip.bestAvgRaceDate = record.date || delta.dateStart
+    return true
+  }
+  return false
 }
 
 function applyBestDelta(params: {
@@ -130,27 +248,60 @@ function applyBestDelta(params: {
     }
 
     if (sessionBest.bestRace && (!catGrip.bestRace || sessionBest.bestRace < catGrip.bestRace)) {
-      catGrip.bestRace = sessionBest.bestRace
-      catGrip.bestRaceTemp = sessionBest.bestRaceTemp ?? null
-      catGrip.bestRaceFuel = sessionBest.bestRaceFuel ?? null
-      catGrip.bestRaceSessionId = delta.sessionId
-      catGrip.bestRaceDate = delta.dateStart
-      hasUpdates = true
+      const bucket = raceBucketFromFuel(sessionBest.bestRaceFuel)
+      if (bucket) {
+        const record = normalizeBucketRecord({
+          timeMs: sessionBest.bestRace,
+          fuel: sessionBest.bestRaceFuel ?? null,
+          airTemp: sessionBest.bestRaceTemp ?? null,
+          roadTemp: null,
+          grip,
+          source: 'legacy_fallback'
+        }, delta)
+        if (isBucketRecord(record)) {
+          hasUpdates = updateBucketBest(catGrip.raceBestByFuelBucket, bucket, record) || hasUpdates
+          hasUpdates = updateLegacyRaceBest(catGrip, record, delta) || hasUpdates
+        }
+      }
     } else if (sessionBest.bestRace && catGrip.bestRace === sessionBest.bestRace && catGrip.bestRaceFuel == null && sessionBest.bestRaceFuel != null) {
       catGrip.bestRaceFuel = sessionBest.bestRaceFuel
       hasUpdates = true
     }
 
     if (sessionBest.bestAvgRace && (!catGrip.bestAvgRace || sessionBest.bestAvgRace < catGrip.bestAvgRace)) {
-      catGrip.bestAvgRace = sessionBest.bestAvgRace
-      catGrip.bestAvgRaceTemp = sessionBest.bestAvgRaceTemp ?? null
-      catGrip.bestAvgRaceFuel = sessionBest.bestAvgRaceFuel ?? null
-      catGrip.bestAvgRaceSessionId = delta.sessionId
-      catGrip.bestAvgRaceDate = delta.dateStart
-      hasUpdates = true
+      const bucket = raceBucketFromFuel(sessionBest.bestAvgRaceFuel)
+      if (bucket) {
+        const record = normalizeBucketRecord({
+          timeMs: sessionBest.bestAvgRace,
+          fuel: sessionBest.bestAvgRaceFuel ?? null,
+          airTemp: sessionBest.bestAvgRaceTemp ?? null,
+          roadTemp: null,
+          grip,
+          sampleLapCount: null,
+          source: 'legacy_fallback'
+        }, delta)
+        if (isBucketRecord(record)) {
+          hasUpdates = updateBucketBest(catGrip.raceAvgByFuelBucket, bucket, record) || hasUpdates
+          hasUpdates = updateLegacyAvgBest(catGrip, record, delta) || hasUpdates
+        }
+      }
     } else if (sessionBest.bestAvgRace && catGrip.bestAvgRace === sessionBest.bestAvgRace && catGrip.bestAvgRaceFuel == null && sessionBest.bestAvgRaceFuel != null) {
       catGrip.bestAvgRaceFuel = sessionBest.bestAvgRaceFuel
       hasUpdates = true
+    }
+
+    for (const bucket of RACE_FUEL_BUCKETS) {
+      const raceRecord = normalizeBucketRecord(sessionBest.raceBestByFuelBucket?.[bucket], delta)
+      if (isBucketRecord(raceRecord)) {
+        hasUpdates = updateBucketBest(catGrip.raceBestByFuelBucket, bucket, raceRecord) || hasUpdates
+        hasUpdates = updateLegacyRaceBest(catGrip, raceRecord, delta) || hasUpdates
+      }
+
+      const avgRecord = normalizeBucketRecord(sessionBest.raceAvgByFuelBucket?.[bucket], delta)
+      if (isBucketRecord(avgRecord)) {
+        hasUpdates = updateBucketBest(catGrip.raceAvgByFuelBucket, bucket, avgRecord) || hasUpdates
+        hasUpdates = updateLegacyAvgBest(catGrip, avgRecord, delta) || hasUpdates
+      }
     }
   }
 
@@ -165,6 +316,7 @@ function maxDateString(current: string | null, next?: string | null) {
 
 function mergeTrackBestsDocument(params: {
   trackIdNorm: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   existing: any | null
   deltas: TrackBestProjectionDelta[]
   bestRulesVersion: number
@@ -230,17 +382,22 @@ function mergeTrackBestsDocument(params: {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function defaultDocFn(db: any, path: string) {
   return doc(db, path)
 }
 
 export async function applyTrackBestsProjectionDeltas(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
   deltas: TrackBestProjectionDelta[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocFn: (ref: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
   bestRulesVersion: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   docFn?: (db: any, path: string) => any
 }): Promise<{ touchedTracks: string[]; updatedTracks: string[] }> {
   const {
@@ -281,6 +438,7 @@ export async function applyTrackBestsProjectionDeltas(params: {
       if (!merged.shouldWrite) continue
       await setDocFn(trackBestsRef, merged.data)
       updatedTracks.push(trackIdNorm)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     } catch (e: any) {
       console.warn(`[SYNC] Error updating trackBests for ${trackIdNorm}:`, e.message)
     }
@@ -293,16 +451,21 @@ export async function applyTrackBestsProjectionDeltas(params: {
 }
 
 export async function updateTrackBestsProjection(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
   trackId: string
   sessionId: string
   dateStart: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   summary: any
   car?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocFn: (ref: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
   bestRulesVersion: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   docFn?: (db: any, path: string) => any
 }): Promise<boolean> {
   const result = await applyTrackBestsProjectionDeltas({

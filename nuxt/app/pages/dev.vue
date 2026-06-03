@@ -39,6 +39,13 @@ const devTools = [
     description: 'Upload manuale di file JSON per debug e test controllati.',
     to: '/dev-upload',
     tone: 'green'
+  },
+  {
+    title: 'Voice Lab',
+    eyebrow: 'offline tts',
+    description: 'Confronto voci locali per overlay allenamento: Piper, Kokoro, SAPI e browser locale.',
+    to: '/dev-voice-lab',
+    tone: 'gold'
   }
 ]
 </script>
@@ -175,6 +182,7 @@ const devTools = [
 .dev-card--red { --card-accent: #ff4d4d; }
 .dev-card--blue { --card-accent: #60a5fa; }
 .dev-card--green { --card-accent: #22c55e; }
+.dev-card--gold { --card-accent: #fbbf24; }
 
 @media (max-width: 820px) {
   .dev-grid {

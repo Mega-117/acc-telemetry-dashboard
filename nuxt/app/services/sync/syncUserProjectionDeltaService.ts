@@ -6,6 +6,7 @@ import { SESSION_INDEX_MAX_ITEMS, SESSION_INDEX_SCHEMA_VERSION } from './session
 import { USER_STATS_SCHEMA_VERSION } from './userStatsProjectionService'
 import { buildActivityProjectionFromEntries } from '~/services/telemetry/activityProjectionService'
 import type { TrackBestProjectionDelta } from './trackBestsProjectionService'
+import { applySessionListProjectionDeltas } from './sessionListProjectionService'
 
 export interface UserProjectionDelta extends TrackBestProjectionDelta {
   status: 'created' | 'updated'
@@ -76,6 +77,7 @@ function buildActivity7d(entries: SessionIndexEntry[], now = new Date()) {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function mergeTracksSummary(existing: any[], deltas: UserProjectionDelta[]) {
   const tracks = new Map<string, { track: string; sessions: number; lastPlayed: string }>()
   for (const item of Array.isArray(existing) ? existing : []) {
@@ -105,11 +107,15 @@ function mergeTracksSummary(existing: any[], deltas: UserProjectionDelta[]) {
 }
 
 export async function applyUserProjectionDeltas(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
   deltas: UserProjectionDelta[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocFn: (ref: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   docFn?: (db: any, path: string) => any
 }): Promise<{ wrote: boolean; totalSessions: number; sessionsLast7Days: number }> {
   const { db, uid, deltas, getDocFn, setDocFn, docFn = doc } = params
@@ -139,6 +145,7 @@ export async function applyUserProjectionDeltas(params: {
   const createdIds = new Set(deltas.filter((delta) => delta.status === 'created').map((delta) => delta.sessionId))
   let createdNotPreviouslyIndexed = 0
   for (const id of createdIds) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     if (!existingList.some((item: any) => item?.id === id)) createdNotPreviouslyIndexed++
   }
 
@@ -171,6 +178,15 @@ export async function applyUserProjectionDeltas(params: {
       updatedAt: now
     }
   }), { merge: true })
+
+  await applySessionListProjectionDeltas({
+    db,
+    uid,
+    deltas,
+    getDocFn,
+    setDocFn,
+    docFn
+  })
 
   await updatePilotDirectoryActivity({
     db,

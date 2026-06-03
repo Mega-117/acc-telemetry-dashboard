@@ -34,6 +34,13 @@ const isTrainingOverlayRoute = computed(() => {
 const isTrainingOverlayIntent = computed(() => {
   return isTrainingOverlayRoute.value || browserOverlayIntent.value || getRouteQueryString(route.query.overlay) === 'training'
 })
+const standaloneDevRoutes = ['/dev-voice-lab']
+const isStandaloneDevRoute = computed(() => {
+  return (
+    standaloneDevRoutes.includes(normalizedRoutePath.value)
+    || standaloneDevRoutes.includes(browserOverlayPath.value)
+  ) && canUseDevTools()
+})
 
 useHead(() => {
   if (!isTrainingOverlayIntent.value) return {}
@@ -106,11 +113,24 @@ const userEmail = ref('')
 const hasInitialized = ref(false)
 const showBrowserMaintenanceNotification = ref(false)
 const showDevFirebaseProbe = computed(() => {
-  return !isTrainingOverlayIntent.value && appState.value === 'dashboard' && canUseDevTools()
+  return !isTrainingOverlayIntent.value && !isStandaloneDevRoute.value && appState.value === 'dashboard' && canUseDevTools()
 })
 
 // === CONFIG ===
 const transitionName = 'dissolve-fade-zoom' // Fixed animation
+const dashboardRoutePrefixes = [
+  '/panoramica',
+  '/sessioni',
+  '/piste',
+  '/area-pilota',
+  '/profilo',
+  '/preparazione',
+  '/piloti'
+]
+
+const isDashboardRoute = (path: string) => {
+  return dashboardRoutePrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))
+}
 
 const isBrowserOnlyRuntime = computed(() => {
   if (typeof window === 'undefined') return false
@@ -133,7 +153,7 @@ function closeBrowserMaintenanceNotification() {
 
 // === DASHBOARD ENTRY MAINTENANCE ===
 watch(appState, async (newState) => {
-  if (isTrainingOverlayIntent.value) return
+  if (isTrainingOverlayIntent.value || isStandaloneDevRoute.value) return
   if (newState === 'dashboard' && !hasPrefetched.value && currentUser.value && canEnterApp.value) {
     hasPrefetched.value = true
     
@@ -162,7 +182,9 @@ const enterDashboard = (delayMs = 0) => {
 
     appState.value = 'dashboard'
     listenToActivitiesTracked(currentUser.value.uid)
-    router.push('/panoramica')
+    if (!isDashboardRoute(normalizedRoutePath.value)) {
+      router.push('/panoramica')
+    }
   }
 
   if (delayMs > 0) {
@@ -177,7 +199,7 @@ const enterDashboard = (delayMs = 0) => {
 // === WATCH AUTH LOADING STATE ===
 // This watch handles the INITIAL auth check when the app loads
 watch(authLoading, (loading) => {
-  if (isTrainingOverlayIntent.value) {
+  if (isTrainingOverlayIntent.value || isStandaloneDevRoute.value) {
     hasInitialized.value = true
     return
   }
@@ -204,7 +226,7 @@ watch(authLoading, (loading) => {
 // === WATCH USER CHANGES (after initialization) ===
 // This handles login/logout AFTER the initial load
 watch(currentUser, (user, oldUser) => {
-  if (isTrainingOverlayIntent.value) return
+  if (isTrainingOverlayIntent.value || isStandaloneDevRoute.value) return
 
   // Skip if we haven't initialized yet (handled by authLoading watch)
   if (!hasInitialized.value) return
@@ -285,6 +307,16 @@ provide('goToProfile', handleGoToProfile)
     <template v-if="isTrainingOverlayIntent">
       <NuxtPage v-if="isTrainingOverlayRoute" />
       <div v-else class="overlay-boot" />
+    </template>
+
+    <template v-else-if="isStandaloneDevRoute">
+      <ElectronTitlebar />
+      <NuxtRouteAnnouncer />
+      <div class="dashboard-wrapper">
+        <NuxtLayout>
+          <NuxtPage />
+        </NuxtLayout>
+      </div>
     </template>
 
     <template v-else>

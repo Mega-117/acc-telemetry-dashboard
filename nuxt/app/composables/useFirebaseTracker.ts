@@ -130,6 +130,7 @@ function cloneTotals() {
   return { ...totalsState.value }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function safePathSegments(target: any): string[] | null {
   const candidates = [
     target?._query?.path?.segments,
@@ -146,6 +147,7 @@ function safePathSegments(target: any): string[] | null {
   return null
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function extractFirestorePath(target: any): string {
   if (target && typeof target.path === 'string' && target.path.length > 0) {
     return target.path
@@ -379,6 +381,7 @@ function recordOperation(input: Omit<FirebaseOperation, 'id' | 'pathBucket'>) {
 function createOperationLogger(
   type: FirebaseOperationType,
   caller: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   target: any,
   billedReads: number,
   billedWrites: number,
@@ -435,10 +438,13 @@ export async function trackedGetCountFromServer(q: Query, caller: string) {
   return result
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 export async function trackedSetDoc(ref: DocumentReference, data: any, caller: string): Promise<void>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 export async function trackedSetDoc(ref: DocumentReference, data: any, options: SetOptions, caller: string): Promise<void>
 export async function trackedSetDoc(
   ref: DocumentReference,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   data: any,
   callerOrOptions: string | SetOptions,
   maybeCaller?: string
@@ -464,6 +470,7 @@ export async function trackedSetDoc(
   createOperationLogger('WRITE', caller, ref, 0, 1, startedAt, 1)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 export async function trackedAddDoc(ref: any, data: any, caller: string) {
   const startedAt = Date.now()
   const created = await fbAddDoc(ref, sanitizeForFirestore(data))
@@ -477,6 +484,7 @@ export async function trackedDeleteDoc(ref: DocumentReference, caller: string) {
   createOperationLogger('DELETE', caller, ref, 0, 1, startedAt, 1)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 export async function trackedUpdateDoc(ref: DocumentReference, data: any, caller: string) {
   const startedAt = Date.now()
   await fbUpdateDoc(ref, sanitizeForFirestore(data))
@@ -487,6 +495,7 @@ export function trackedOnSnapshot(
   q: Query,
   caller: string,
   onNext: (snapshot: QuerySnapshot) => void,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   onError?: (error: any) => void
 ) {
   const activeScenario = getActiveScenario()
@@ -521,6 +530,7 @@ export function trackedWriteBatch(db: Firestore, caller: string) {
   const queuedOps: Array<{ type: 'set' | 'update' | 'delete'; path: string }> = []
 
   return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     set(ref: DocumentReference, data: any, options?: SetOptions) {
       queuedOps.push({ type: 'set', path: ref.path })
       const sanitizedData = sanitizeForFirestore(data)
@@ -530,6 +540,7 @@ export function trackedWriteBatch(db: Firestore, caller: string) {
         rawBatch.set(ref, sanitizedData)
       }
     },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     update(ref: DocumentReference, data: any) {
       queuedOps.push({ type: 'update', path: ref.path })
       rawBatch.update(ref, sanitizeForFirestore(data))
@@ -744,6 +755,7 @@ export function useFirebaseMonitor() {
 }
 
 if (typeof window !== 'undefined' && canUseDevTools()) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   ;(window as any).__firebase = {
     summary: printFirebaseSummary,
     totals: getFirebaseTotals,

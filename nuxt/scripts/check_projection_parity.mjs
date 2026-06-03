@@ -202,9 +202,10 @@ const { summary: legacySummary, summarySource: legacySummarySource } = extractMe
   { allowLegacyFallback: true }
 )
 assert.equal(legacySummarySource, 'legacy_fallback')
-assert.equal(legacySummary.best_session_race_ms, 118900)
+assert.equal(legacySummary.best_session_race_ms, null)
 assert.equal(legacySummary.best_race_ms, null)
 assert.equal(legacySummary.best_by_grip.Optimum.bestRace, null)
+assert.deepEqual(legacySummary.best_by_grip.Optimum.raceBestByFuelBucket['40-60'], {})
 
 const canonicalPayload = {
   ...legacyRaceNonHistoricalRaw,
@@ -217,8 +218,8 @@ const canonicalPayload = {
     stintCount: 1,
     best_qualy_ms: null,
     best_qualy_conditions: null,
-    best_session_race_ms: 118900,
-    best_session_race_conditions: { airTemp: 20, roadTemp: 28, grip: 'Optimum' },
+    best_session_race_ms: null,
+    best_session_race_conditions: null,
     best_race_ms: null,
     best_race_conditions: null,
     best_avg_race_ms: null,
@@ -242,11 +243,12 @@ const canonicalPayload = {
 
 const { summary: parsedCanonicalSummary, summarySource: canonicalSummarySource } = extractMetadata(canonicalPayload)
 assert.equal(canonicalSummarySource, 'canonical')
-assert.equal(parsedCanonicalSummary.best_session_race_ms, 118900)
+assert.equal(parsedCanonicalSummary.best_session_race_ms, null)
 assert.equal(parsedCanonicalSummary.best_race_ms, null)
+assert.deepEqual(parsedCanonicalSummary.best_by_grip.Optimum.raceBestByFuelBucket['40-60'], {})
 
 const silverstoneRaceNonHistorical = {
-  sessionId: 'silverstone-race-20-40',
+  sessionId: 'silverstone-race-under-40',
   meta: {
     ...canonicalMeta,
     date_start: '2026-04-21T19:57:00',
@@ -353,7 +355,19 @@ const trackDetailProjection = buildTrackDetailProjection({
       bestAvgRaceSessionId: 'silverstone-race-40plus',
       bestQualyDate: null,
       bestRaceDate: '2026-04-20T18:30:00',
-      bestAvgRaceDate: '2026-04-20T18:30:00'
+      bestAvgRaceDate: '2026-04-20T18:30:00',
+      raceBestByFuelBucket: {
+        '40-60': { timeMs: 119500, fuel: 52, airTemp: 21, roadTemp: 29, grip: 'Optimum', sampleLapCount: 1, confidence: 'high', source: 'best_lap' },
+        '60-80': {},
+        '80-100': {},
+        '100+': {}
+      },
+      raceAvgByFuelBucket: {
+        '40-60': { timeMs: 120000, fuel: 52, airTemp: 21, roadTemp: 29, grip: 'Optimum', sampleLapCount: 5, confidence: 'high', source: 'stint_avg' },
+        '60-80': {},
+        '80-100': {},
+        '100+': {}
+      }
     }
   },
   bestFuelData: { qualyFuel: null, raceFuel: 52 },
@@ -368,9 +382,11 @@ const trackDetailProjection = buildTrackDetailProjection({
 
 assert.equal(trackDetailProjection.track.bestRace, '1:59.500')
 assert.equal(trackDetailProjection.track.bestAvgRace, '2:00.000')
-assert.equal(trackDetailProjection.recentSessions[0]?.bestRace, '1:58.900')
+assert.equal(trackDetailProjection.track.bestRaceFuelBucket, '40-60')
+assert.equal(trackDetailProjection.track.bestAvgRaceSampleCount, 5)
+assert.equal(trackDetailProjection.recentSessions[0]?.bestRace, undefined)
 assert.equal(
-  trackDetailProjection.historicalTimes.find((point) => point.sessionId === 'silverstone-race-20-40')?.bestRace,
+  trackDetailProjection.historicalTimes.find((point) => point.sessionId === 'silverstone-race-under-40')?.bestRace,
   undefined
 )
 assert.equal(
@@ -506,7 +522,19 @@ assert.deepEqual(
         bestAvgRaceSessionId: 'silverstone-race-40plus',
         bestQualyDate: null,
         bestRaceDate: '2026-04-20T18:30:00',
-        bestAvgRaceDate: '2026-04-20T18:30:00'
+        bestAvgRaceDate: '2026-04-20T18:30:00',
+        raceBestByFuelBucket: {
+          '40-60': { timeMs: 119500, fuel: 52, airTemp: 21, roadTemp: 29, grip: 'Optimum', sampleLapCount: 1, confidence: 'high', source: 'best_lap' },
+          '60-80': {},
+          '80-100': {},
+          '100+': {}
+        },
+        raceAvgByFuelBucket: {
+          '40-60': { timeMs: 120000, fuel: 52, airTemp: 21, roadTemp: 29, grip: 'Optimum', sampleLapCount: 5, confidence: 'high', source: 'stint_avg' },
+          '60-80': {},
+          '80-100': {},
+          '100+': {}
+        }
       }
     },
     bestFuelData: { qualyFuel: null, raceFuel: 52 },

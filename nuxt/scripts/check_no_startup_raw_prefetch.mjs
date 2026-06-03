@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const nuxtRoot = path.resolve(scriptDir, '..')
 const appVue = fs.readFileSync(path.join(nuxtRoot, 'app/app.vue'), 'utf8')
+const overviewPage = fs.readFileSync(path.join(nuxtRoot, 'app/components/pages/PanoramicaPage.vue'), 'utf8')
 const forbiddenSecondarySnapshotFiles = [
   'app/components/ui/SessionPickerModal.vue',
   'app/components/electron/ElectronTitlebar.vue'
@@ -30,6 +31,18 @@ assert.match(
   appVue,
   /app\.dashboard\.maintenanceGate/,
   'app.vue should keep only the lightweight dashboard maintenance gate scenario'
+)
+
+assert.doesNotMatch(
+  overviewPage,
+  /Promise\.all\(\[\s*telemetryGateway\.getOverviewProjection[\s\S]*telemetryGateway\.getOverviewSnapshot/,
+  'Panoramica must not load projection and raw overview snapshot together on startup'
+)
+
+assert.match(
+  overviewPage,
+  /loadRacePreparationSnapshot/,
+  'Panoramica should load the full overview snapshot only for race-preparation context'
 )
 
 for (const relativePath of forbiddenSecondarySnapshotFiles) {

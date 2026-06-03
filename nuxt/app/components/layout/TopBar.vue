@@ -130,7 +130,9 @@ function toggleVoiceDropdown() {
 
 // Load voices on mount
 onMounted(() => {
-  loadVoices()
+  if (showVoiceControls) {
+    loadVoices()
+  }
   // Preload browser voices as fallback
   if ('speechSynthesis' in window) {
     window.speechSynthesis.getVoices()

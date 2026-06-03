@@ -1,4 +1,3 @@
-import { migrateLegacyCloudSummaries } from './legacySummaryMigrationService'
 import { cleanupZeroLapSessions } from './ghostCleanupService'
 
 const retentionCleanupRun = new Set<string>()
@@ -13,12 +12,18 @@ export interface SyncMaintenanceResult {
 }
 
 export function createSyncMaintenanceService(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   electronAPI: any
   updateSuiteVersion: (uid: string) => Promise<boolean>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   canonicalizeSummary: (rawObj: any) => Promise<any | null>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocsFn: (queryRef: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   deleteDocFn: (ref: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   bestRulesVersion: number
   syncedFilesRetentionDays: number
@@ -46,7 +51,7 @@ export function createSyncMaintenanceService(params: {
     const {
       uid,
       interactive = false,
-      runLegacyMigration = true,
+      runLegacyMigration = false,
       runZeroLapCleanup = true,
       runRetentionCleanup = interactive,
       updateVersion = true
@@ -67,13 +72,7 @@ export function createSyncMaintenanceService(params: {
     }
 
     if (runLegacyMigration) {
-      cloudMigrated = await migrateLegacyCloudSummaries({
-        uid,
-        bestRulesVersion,
-        getDocsFn,
-        setDocFn,
-        canonicalizeSummary
-      })
+      console.warn('[SYNC] Legacy cloud summary migration is disabled in the normal sync flow.')
     }
 
     if (runRetentionCleanup && electronAPI?.cleanupSyncedFiles) {

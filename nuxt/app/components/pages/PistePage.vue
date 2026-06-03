@@ -96,9 +96,10 @@ function goToTrack(id: string) {
 
     <!-- CARD VIEW (Standard) -->
     <div v-if="viewMode === 'card'" class="tracks-grid">
-      <div 
+      <a
         v-for="track in sortedTracks" 
         :key="track.id"
+        :href="`/piste/${track.id}`"
         :class="['track-card', { 'track-card--unplayed': track.sessions === 0 }]"
         @click="goToTrack(track.id)"
       >
@@ -134,14 +135,14 @@ function goToTrack(id: string) {
             </span>
           </div>
           
-          <button class="track-cta">
+          <span class="track-cta">
             Dettaglio pista
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M9 18l6-6-6-6"/>
             </svg>
-          </button>
+          </span>
         </div>
-      </div>
+      </a>
     </div>
 
 
@@ -158,9 +159,10 @@ function goToTrack(id: string) {
       </div>
       
       <!-- Rows -->
-      <div 
+      <a
         v-for="track in sortedTracks" 
         :key="track.id"
+        :href="`/piste/${track.id}`"
         :class="['list-row', { 'list-row--unplayed': track.sessions === 0 }]"
         @click="goToTrack(track.id)"
       >
@@ -182,7 +184,7 @@ function goToTrack(id: string) {
             <path d="M9 18l6-6-6-6"/>
           </svg>
         </span>
-      </div>
+      </a>
     </div>
   </LayoutPageContainer>
 </template>
@@ -268,6 +270,8 @@ function goToTrack(id: string) {
   border-radius: 12px;
   overflow: hidden;
   cursor: pointer;
+  color: inherit;
+  text-decoration: none;
   transition: all 0.25s ease;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 
@@ -484,6 +488,8 @@ function goToTrack(id: string) {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   cursor: pointer;
+  color: inherit;
+  text-decoration: none;
   transition: all 0.2s ease;
 
   // Glow hover effect ONLY for active rows (with sessions)

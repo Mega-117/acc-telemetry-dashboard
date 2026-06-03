@@ -5,6 +5,8 @@ import { BEST_RULES_VERSION, extractMetadata, generateSessionId } from '~/utils/
 
 export interface RegistryCacheEntry {
   fileHash: string
+  rawDataHash?: string
+  summaryHash?: string
   mtime: number
   size: number
   uploadedBy: string
@@ -27,18 +29,53 @@ export async function calculateContentHash(input: string): Promise<string> {
   return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+function stableStringify(value: any): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`
+  const keys = Object.keys(value).sort()
+  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+function cloneWithoutDerivedSummary(rawObj: any): any {
+  if (!rawObj || typeof rawObj !== 'object') return rawObj
+  const cloned = JSON.parse(JSON.stringify(rawObj))
+  delete cloned.summary
+  delete cloned.summaryRulesVersion
+  return cloned
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+export async function calculateRawDataHash(rawObj: any): Promise<string> {
+  return calculateContentHash(stableStringify(cloneWithoutDerivedSummary(rawObj)))
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+export async function calculateSummaryHash(summary: any): Promise<string> {
+  return calculateContentHash(stableStringify(summary || null))
+}
+
 export function createSessionUploadService(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   chunkSize: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getExistingSession: (uid: string, sessionId: string) => Promise<any>
   loadRegistryCache: () => Promise<Record<string, RegistryCacheEntry>>
-  canSkipViaRegistry: (registry: Record<string, RegistryCacheEntry>, fileName: string, fileHash: string, uid: string) => boolean
+  canSkipViaRegistry: (
+    registry: Record<string, RegistryCacheEntry>,
+    fileName: string,
+    hashes: { fileHash: string; rawDataHash: string; summaryHash: string },
+    uid: string
+  ) => boolean
   deleteOldChunks: (uid: string, sessionId: string) => Promise<void>
 }) {
   const { db, chunkSize, getExistingSession, loadRegistryCache, canSkipViaRegistry, deleteOldChunks } = params
 
   return {
     async uploadOrUpdateSession(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       rawObj: any,
       rawText: string,
       fileName: string,
@@ -63,14 +100,19 @@ export function createSessionUploadService(params: {
         }
         const sessionId = generateSessionId(meta.date_start, meta.track)
         const fileHash = options.precomputedHash || await calculateContentHash(rawText)
+        const rawDataHash = await calculateRawDataHash(rawObj)
+        const summaryHash = await calculateSummaryHash(summaryWithRules)
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         const getExistingRulesVersion = (existingDoc: any): number =>
           Number(existingDoc?.summary?.best_rules_version || existingDoc?.summaryRulesVersion || 0)
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         let existing: any = null
         let existingChecked = false
         const registry = await loadRegistryCache()
-        if (canSkipViaRegistry(registry, fileName, fileHash, uid)) {
+        const registryEntry = registry[fileName]
+        if (canSkipViaRegistry(registry, fileName, { fileHash, rawDataHash, summaryHash }, uid)) {
           existing = await getExistingSession(uid, sessionId)
           existingChecked = true
           const existingRulesVersion = getExistingRulesVersion(existing)
@@ -90,10 +132,22 @@ export function createSessionUploadService(params: {
           isUpdate = true
           const existingRulesVersion = getExistingRulesVersion(existing)
           const needsRulesMigration = existingRulesVersion < BEST_RULES_VERSION
+          const existingRawDataHash = String(existing.rawDataHash || '')
+          const registryMatchesExistingUpload = !!registryEntry
+            && registryEntry.uploadedBy === uid
+            && registryEntry.sessionId === sessionId
+            && !!registryEntry.fileHash
+            && registryEntry.fileHash === existing.fileHash
+          const rawDataUnchanged = (!!existingRawDataHash && existingRawDataHash === rawDataHash)
+            || (!existingRawDataHash && registryMatchesExistingUpload && needsRulesMigration)
+
           if (existing.fileHash === fileHash) {
             if (!needsRulesMigration) {
               return { status: 'unchanged' as const, fileName, sessionId, reason: 'firebase_hash_match' }
             }
+            chunksNeedUpdate = false
+            isRulesMigration = true
+          } else if (rawDataUnchanged && needsRulesMigration) {
             chunksNeedUpdate = false
             isRulesMigration = true
           } else {
@@ -107,6 +161,8 @@ export function createSessionUploadService(params: {
         const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
         batch.set(sessionRef, {
           fileHash,
+          rawDataHash,
+          summaryHash,
           fileName,
           uploadedAt: serverTimestamp(),
           meta,
@@ -145,6 +201,7 @@ export function createSessionUploadService(params: {
           projectionDelta,
           reason: isRulesMigration ? 'summary_rules_migration' : undefined
         }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       } catch (error: any) {
         return { status: 'error' as const, fileName, error: error.message }
       }

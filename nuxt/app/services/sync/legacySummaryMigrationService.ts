@@ -3,10 +3,12 @@ import { collection, orderBy, query } from 'firebase/firestore'
 export async function reconstructRawPayloadFromChunks(
   uid: string,
   sessionId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocsFn: (queryRef: any) => Promise<any>
 ): Promise<any | null> {
   try {
     const chunksRef = collection((await import('~/config/firebase')).db, `users/${uid}/sessions/${sessionId}/rawChunks`)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     let snapshot: any
     try {
       snapshot = await getDocsFn(query(chunksRef, orderBy('idx')))
@@ -15,12 +17,16 @@ export async function reconstructRawPayloadFromChunks(
     }
 
     const rawText = (snapshot.docs || [])
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       .map((docSnap: any) => docSnap.data())
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       .sort((a: any, b: any) => Number(a?.idx || 0) - Number(b?.idx || 0))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       .map((chunk: any) => String(chunk?.chunk || ''))
       .join('')
 
     return rawText ? JSON.parse(rawText) : null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   } catch (e: any) {
     console.warn(`[SYNC] Could not reconstruct raw payload for ${sessionId}:`, e.message)
     return null
@@ -30,8 +36,11 @@ export async function reconstructRawPayloadFromChunks(
 export async function migrateLegacyCloudSummaries(params: {
   uid: string
   bestRulesVersion: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocsFn: (queryRef: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   canonicalizeSummary: (rawObj: any) => Promise<any | null>
 }): Promise<number> {
   const { uid, bestRulesVersion, getDocsFn, setDocFn, canonicalizeSummary } = params
@@ -45,6 +54,7 @@ export async function migrateLegacyCloudSummaries(params: {
     const { db } = await import('~/config/firebase')
     const sessionsRef = collection(db, `users/${uid}/sessions`)
     const snapshot = await getDocsFn(sessionsRef)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     const legacyDocs = snapshot.docs.filter((docSnap: any) => {
       const data = docSnap.data()
       const existingVersion = Number(data?.summary?.best_rules_version || data?.summaryRulesVersion || 0)
@@ -78,6 +88,7 @@ export async function migrateLegacyCloudSummaries(params: {
     }
 
     return migrated
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   } catch (e: any) {
     console.warn('[SYNC] Cloud legacy summary migration failed:', e.message)
     return 0

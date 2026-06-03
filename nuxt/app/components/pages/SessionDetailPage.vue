@@ -989,6 +989,7 @@ type TheoreticalTimesData = {
   historicRaceTemp: number | null
   historicAvgRace: number | null
   historicAvgRaceTemp: number | null
+  fuelBucket: string | null
 }
 
 const theoreticalTimes = ref<TheoreticalTimesData>({
@@ -996,7 +997,8 @@ const theoreticalTimes = ref<TheoreticalTimesData>({
   dominantGrip: 'Optimum', stintTemp: 23,
   historicQualy: null, historicQualyTemp: null,
   historicRace: null, historicRaceTemp: null,
-  historicAvgRace: null, historicAvgRaceTemp: null
+  historicAvgRace: null, historicAvgRaceTemp: null,
+  fuelBucket: null
 })
 // NOTE: Watch for theo recalculation is defined AFTER stintConditions (around line 550)
 
@@ -1009,6 +1011,22 @@ const hasPreselected = ref(false)
 
 const selectedStint = computed(() => session.value.stints.find(s => s.number === selectedStintNumber.value))
 const selectedStintLaps = computed(() => session.value.lapsData[selectedStintNumber.value] || [])
+
+function getStintRaceFuelBucket(fuel: number | null | undefined): string | null {
+  const parsed = Number(fuel || 0)
+  if (!parsed || parsed <= 40) return null
+  if (parsed <= 60) return '40-60'
+  if (parsed <= 80) return '60-80'
+  if (parsed <= 100) return '80-100'
+  return '100+'
+}
+
+const stintReferenceLabel = computed(() => {
+  if (selectedStint.value?.type !== 'R') return ''
+  const bucket = getStintRaceFuelBucket(selectedStint.value.fuelStart)
+  if (!bucket) return 'Riferimento: fuel partenza non storico'
+  return `Riferimento: fuel partenza ${bucket}L`
+})
 
 // DISPLAYED STINT: the stint shown in the right panel (single stint mode)
 // Rule: if builder has content → use builder's stint, else use viewedStint
@@ -1653,7 +1671,7 @@ const stintConditions = computed(() => {
 // THEORETICAL TIMES WATCHER - Recalculate when stint/session changes
 // ========================================
 watch(
-  [() => fullSession.value, () => stintConditions.value],
+  [() => fullSession.value, () => stintConditions.value, () => selectedStint.value?.fuelStart],
   async ([fs, conditions]) => {
     if (!fs) return
     
@@ -1671,7 +1689,8 @@ watch(
       dominantGrip,
       stintTemp,
       carCategory,
-      targetUserId.value || undefined
+      targetUserId.value || undefined,
+      selectedStint.value?.type === 'R' ? selectedStint.value?.fuelStart ?? null : null
     )
     
     theoreticalTimes.value = {
@@ -1685,7 +1704,8 @@ watch(
       historicRace: theo.historicRace,
       historicRaceTemp: theo.historicRaceTemp,
       historicAvgRace: theo.historicAvgRace,
-      historicAvgRaceTemp: theo.historicAvgRaceTemp
+      historicAvgRaceTemp: theo.historicAvgRaceTemp,
+      fuelBucket: theo.fuelBucket
     }
   },
   { immediate: true }
@@ -2836,6 +2856,7 @@ const gripZones = computed(() => {
                 </span>
               </div>
               <div class="ssc-header-right">
+                <span v-if="stintReferenceLabel" class="ssc-reference-label" data-testid="stint-reference-fuel">{{ stintReferenceLabel }}</span>
                 <span class="ssc-duration-label">Durata: {{ stintDuration.formatted }}</span>
               </div>
             </div>
@@ -4840,6 +4861,17 @@ const gripZones = computed(() => {
   font-size: 13px;
   font-weight: 500;
   color: rgba(255,255,255,0.6);
+}
+.ssc-reference-label {
+  padding: 4px 8px;
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  border-radius: 4px;
+  background: rgba(59, 130, 246, 0.09);
+  color: rgba(191, 219, 254, 0.9);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 .ssc-header-right {
   display: flex;

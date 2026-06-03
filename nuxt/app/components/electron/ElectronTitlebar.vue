@@ -30,11 +30,13 @@ const showMaintenanceNotification = ref(false)
 
 // Check if running in Electron
 onMounted(async () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   isElectronVisible.value = !!(window as any).electronAPI
   
   if (isElectronVisible.value) {
     // Check initial maximized state
     try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       isMaximized.value = await (window as any).electronAPI.windowIsMaximized()
     } catch (e) {
       console.log('[TITLEBAR] Could not get maximized state')
@@ -94,6 +96,7 @@ const handleRefresh = async () => {
     } catch (e) {
       console.error('[TITLEBAR] Soft refresh failed:', e)
       // Fallback to hard refresh
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       ;(window as any).electronAPI?.pageRefresh()
     } finally {
       isRefreshing.value = false
@@ -101,6 +104,7 @@ const handleRefresh = async () => {
   } else {
     // For static routes, hard refresh is safe
     console.log('[TITLEBAR] Hard refresh for static route:', route.fullPath)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     ;(window as any).electronAPI?.pageRefresh()
   }
 }
@@ -116,15 +120,18 @@ const handleSync = async () => {
 }
 
 const handleMinimize = () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   (window as any).electronAPI?.windowMinimize()
 }
 
 const handleMaximize = async () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   const result = await (window as any).electronAPI?.windowMaximize()
   isMaximized.value = result
 }
 
 const handleClose = () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   (window as any).electronAPI?.windowClose()
 }
 

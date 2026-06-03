@@ -3,16 +3,20 @@ import { buildSessionIndexProjection } from './sessionIndexProjectionService'
 import { buildUserStatsProjection } from './userStatsProjectionService'
 import { applyTrackBestsProjectionDeltas, type TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { writeTrackDetailProjectionDocuments } from './trackDetailProjectionService'
+import { writeSessionListProjectionDocuments } from './sessionListProjectionService'
 import type { SessionDocument } from '~/composables/useTelemetryData'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import { updatePilotDirectoryActivity } from '~/services/pilotDirectoryProjectionService'
 
 export async function rebuildTrackBestsProjection(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
   sessions: SessionDocument[]
   resetAllTrackBests: (uid: string) => Promise<number>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocFn: (ref: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
   bestRulesVersion: number
 }): Promise<void> {
@@ -39,9 +43,11 @@ export async function rebuildTrackBestsProjection(params: {
 }
 
 export async function writeUserProjectionDocuments(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
   sessions: SessionDocument[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
 }): Promise<void> {
   const { db, uid, sessions, setDocFn } = params
@@ -53,6 +59,12 @@ export async function writeUserProjectionDocuments(params: {
     stats,
     sessionIndex
   }), { merge: true })
+  await writeSessionListProjectionDocuments({
+    db,
+    uid,
+    sessions,
+    setDocFn
+  })
   await updatePilotDirectoryActivity({
     db,
     uid,

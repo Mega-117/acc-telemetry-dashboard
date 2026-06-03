@@ -7,10 +7,12 @@ import { writePilotDirectoryFromUser } from '~/services/pilotDirectoryProjection
 
 const AUTH_PROVISION_CALLER = 'AuthProvisioning'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function getDocTracked(ref: any) {
     return trackedGetDoc(ref, AUTH_PROVISION_CALLER)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function setDocTracked(ref: any, data: any, options?: any) {
     if (options) {
         return trackedSetDoc(ref, data, options, AUTH_PROVISION_CALLER)
@@ -36,18 +38,21 @@ function buildPublicProfilePayload(user: Pick<User, 'uid' | 'displayName' | 'ema
     }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function sameStringArray(a: any, b: any): boolean {
     if (!Array.isArray(a) || !Array.isArray(b)) return false
     if (a.length !== b.length) return false
     return a.every((value, index) => value === b[index])
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function needsUserDirectoryFieldRepair(data: any, uid: string, directoryFields: ReturnType<typeof buildPilotDirectoryFields>): boolean {
     return data.uid !== uid
         || data.directorySortName !== directoryFields.directorySortName
         || !sameStringArray(data.searchPrefixes, directoryFields.searchPrefixes)
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function writePilotDirectoryDocument(uid: string, data: any) {
     await writePilotDirectoryFromUser({
         db,

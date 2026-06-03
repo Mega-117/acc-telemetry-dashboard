@@ -136,6 +136,91 @@ assert.equal(setCalls, 1)
 assert.equal(writes[0].data.activity.sessionCount, 10)
 assert.equal(writes[0].data.activity.totalLaps, 50)
 assert.equal(writes[0].data.bests.GT3.Optimum.bestRace, 99991)
+assert.equal(writes[0].data.bests.GT3.Optimum.raceBestByFuelBucket['40-60'].timeMs, 99991)
+assert.equal(writes[0].data.bests.GT3.Optimum.raceBestByFuelBucket['20-40'], undefined)
+
+getCalls = 0
+setCalls = 0
+writes.length = 0
+await applyTrackBestsProjectionDeltas({
+  db: {},
+  uid: 'user-1',
+  deltas: [{
+    trackId: 'monza',
+    sessionId: 'monza-vnext',
+    dateStart: '2026-05-17T15:00:00',
+    car: 'ferrari_296_gt3',
+    summary: {
+      best_rules_version: 5,
+      laps: 5,
+      lapsValid: 5,
+      totalTime: 500000,
+      best_by_grip: {
+        Optimum: {
+          bestRace: 98000,
+          bestRaceTemp: 22,
+          bestRaceFuel: 72,
+          bestAvgRace: 99000,
+          bestAvgRaceTemp: 22,
+          bestAvgRaceFuel: 80,
+          raceBestByFuelBucket: {
+            '40-60': {},
+            '60-80': {
+              timeMs: 98000,
+              fuel: 72,
+              airTemp: 22,
+              roadTemp: 30,
+              grip: 'Optimum',
+              sampleLapCount: 1,
+              confidence: 'high',
+              source: 'best_lap'
+            },
+            '80-100': {},
+            '100+': {}
+          },
+          raceAvgByFuelBucket: {
+            '40-60': {},
+            '60-80': {
+              timeMs: 99000,
+              fuel: 80,
+              airTemp: 22,
+              roadTemp: 30,
+              grip: 'Optimum',
+              sampleLapCount: 5,
+              confidence: 'high',
+              source: 'stint_avg'
+            },
+            '80-100': {},
+            '100+': {}
+          }
+        }
+      }
+    }
+  }],
+  getDocFn: async () => {
+    getCalls++
+    return {
+      exists: () => false,
+      data: () => null
+    }
+  },
+  setDocFn: async (ref, data) => {
+    setCalls++
+    writes.push({ ref, data })
+  },
+  bestRulesVersion: 5,
+  docFn: (_db, docPath) => ({ path: docPath })
+})
+
+assert.equal(getCalls, 1)
+assert.equal(setCalls, 1)
+assert.equal(writes[0].data.version, 4)
+assert.equal(writes[0].data.bestRulesVersion, 5)
+assert.equal(writes[0].data.bests.GT3.Optimum.bestRace, 98000)
+assert.equal(writes[0].data.bests.GT3.Optimum.bestRaceSessionId, 'monza-vnext')
+assert.equal(writes[0].data.bests.GT3.Optimum.raceBestByFuelBucket['60-80'].timeMs, 98000)
+assert.equal(writes[0].data.bests.GT3.Optimum.raceAvgByFuelBucket['60-80'].sampleLapCount, 5)
+assert.equal(writes[0].data.bests.GT3.Optimum.raceBestByFuelBucket['20-40'], undefined)
 
 getCalls = 0
 setCalls = 0

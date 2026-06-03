@@ -23,7 +23,7 @@ import {
 import { usePilotContext } from '~/composables/usePilotContext'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
-import type { TrackDetailProjection } from '~/types/trackProjections'
+import type { TrackDetailProjection, TrackFuelBucketReference } from '~/types/trackProjections'
 
 const { getPublicPath } = usePublicPath()
 
@@ -60,8 +60,10 @@ function formatShortDate(isoDate: string | null): string {
 }
 
 const gripConditions = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
+const RACE_FUEL_BUCKET_FILTERS = ['40-60', '60-80', '80-100', '100+'] as const
 const selectedGrip = ref('Optimum')
 const selectedCategory = ref<CarCategory>('GT3')
+const selectedRaceReferenceBucket = ref('100+')
 const trackProjection = ref<TrackDetailProjection | null>(null)
 const isProjectionLoading = ref(false)
 
@@ -115,6 +117,14 @@ const emptyTrack = {
   bestAvgRaceDate: null,
   bestQualyFuel: null,
   bestRaceFuel: null,
+  bestAvgRaceFuel: null,
+  bestRaceFuelBucket: null,
+  bestAvgRaceFuelBucket: null,
+  bestRaceSampleCount: null,
+  bestAvgRaceSampleCount: null,
+  bestRaceConfidence: null,
+  bestAvgRaceConfidence: null,
+  raceFuelBuckets: [],
   hasGripData: false
 }
 
@@ -129,6 +139,24 @@ const activityStats = computed(() => trackProjection.value?.activity || {
   sessionCount: 0
 })
 const historicalTimes = computed(() => trackProjection.value?.historicalTimes || [])
+const raceFuelBuckets = computed<TrackFuelBucketReference[]>(() => {
+  const buckets = track.value.raceFuelBuckets || []
+  return RACE_FUEL_BUCKET_FILTERS.map((bucket) => (
+    buckets.find((item) => item.bucket === bucket) || createEmptyRaceFuelBucket(bucket)
+  ))
+})
+const hasRaceFuelBucketData = computed(() => raceFuelBuckets.value.some((bucket) => bucket.hasData))
+const preferredRaceBucket = computed(() => {
+  const buckets = [...raceFuelBuckets.value].reverse()
+  return buckets.find((bucket) => bucket.bucket === '100+' && bucket.hasData)
+    || buckets.find((bucket) => bucket.hasData)
+    || raceFuelBuckets.value[raceFuelBuckets.value.length - 1]
+    || createEmptyRaceFuelBucket('100+')
+})
+const selectedRaceReference = computed(() => {
+  return raceFuelBuckets.value.find((bucket) => bucket.bucket === selectedRaceReferenceBucket.value)
+    || preferredRaceBucket.value
+})
 
 const currentPage = ref(1)
 const itemsPerPage = 20
@@ -144,9 +172,34 @@ watch(totalPages, (pages) => {
   }
 })
 
+watch(preferredRaceBucket, (bucket) => {
+  selectedRaceReferenceBucket.value = bucket.bucket
+}, { immediate: true })
+
 function goToPage(page: number) {
   if (page >= 1 && page <= totalPages.value) {
     currentPage.value = page
+  }
+}
+
+function createEmptyRaceFuelBucket(bucket: string): TrackFuelBucketReference {
+  return {
+    bucket,
+    bestRace: null,
+    bestRaceFuel: null,
+    bestRaceAirTemp: null,
+    bestRaceDate: null,
+    bestRaceSessionId: null,
+    bestRaceSampleCount: null,
+    bestRaceConfidence: null,
+    avgRace: null,
+    avgRaceFuel: null,
+    avgRaceAirTemp: null,
+    avgRaceDate: null,
+    avgRaceSessionId: null,
+    avgRaceSampleCount: null,
+    avgRaceConfidence: null,
+    hasData: false
   }
 }
 
@@ -343,8 +396,18 @@ function getTypeLabel(type: SessionType): string {
   return labels[type]
 }
 
+function sessionRoute(id: string) {
+  return targetUserId.value
+    ? `/sessioni/${id}?userId=${encodeURIComponent(targetUserId.value)}`
+    : `/sessioni/${id}`
+}
+
 function goToSession(id: string) {
   emit('go-to-session', id)
+
+  if (!targetUserId.value) {
+    void navigateTo(`/sessioni/${id}`)
+  }
 }
 </script>
 <template>
@@ -420,7 +483,7 @@ function goToSession(id: string) {
       <div class="control-bar__content">
         <div class="control-bar__heading">
           <span class="control-bar__eyebrow">Filtri dati pista</span>
-          <p class="control-bar__hint">La categoria filtra la pagina. Il grip filtra i migliori tempi.</p>
+          <p class="control-bar__hint">La categoria filtra la pagina. Il grip filtra migliori tempi e riferimenti gara.</p>
         </div>
         <div class="control-bar__controls">
           <div class="control-bar__group">
@@ -470,9 +533,10 @@ function goToSession(id: string) {
             </div>
           </div>
           <div :class="['sessions-list', { 'sessions-list--fading': isChangingPage }]" @transitionend="isChangingPage = false">
-            <div 
+            <a
               v-for="session in paginatedSessions" 
               :key="session.id"
+              :href="sessionRoute(session.id)"
               class="session-row"
               @click="goToSession(session.id)"
             >
@@ -515,13 +579,13 @@ function goToSession(id: string) {
                 </div>
                 
                 <!-- CTA Arrow -->
-                <span class="session-cta">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M9 18l6-6-6-6"/>
-                  </svg>
-                </span>
-              </div>
+              <span class="session-cta">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M9 18l6-6-6-6"/>
+                </svg>
+              </span>
             </div>
+            </a>
           </div>
         </div>
 
@@ -542,91 +606,81 @@ function goToSession(id: string) {
       <aside class="sidebar">
         <!-- Best Times Section -->
         <div class="sidebar-section">
-          <div class="section-header-row">
-            <h2 class="section-title">Migliori tempi</h2>
-            <span class="grip-context">{{ selectedGrip }}</span>
+          <div class="section-header-row section-header-row--stacked">
+            <div>
+              <h2 class="section-title">Migliori tempi</h2>
+            </div>
           </div>
-          <div class="best-times-stack">
-            <div class="best-time-card best-time-card--qualy">
-              <span class="time-label">Best qualifica</span>
-              <span class="time-value">{{ track.bestQualy || '--:--.---' }}</span>
-              <span v-if="track.bestQualyConditions" class="time-conditions">
-                <span>{{ formatShortDate(track.bestQualyDate) }}</span>
-                <span class="condition-sep">•</span>
-                <span>{{ track.bestQualyConditions.airTemp }}°C</span>
-                <template v-if="track.bestQualyFuel != null">
-                  <span class="condition-sep">•</span>
-                  <span>{{ Math.round(track.bestQualyFuel) }}L</span>
-                </template>
-              </span>
-              <span v-else-if="!track.bestQualy" class="no-data-hint">Nessun dato {{ selectedCategory }} / {{ selectedGrip }}</span>
-              <button 
-                v-if="track.bestQualySessionId" 
-                class="session-link-btn"
-                title="Vai alla sessione"
-                @click.stop="emit('go-to-session', track.bestQualySessionId!)"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                  <polyline points="15 3 21 3 21 9"></polyline>
-                  <line x1="10" y1="14" x2="21" y2="3"></line>
-                </svg>
-              </button>
-            </div>
-            <div class="best-time-card best-time-card--race">
-              <span class="time-label">Best gara</span>
-              <span class="time-value">{{ track.bestRace || '--:--.---' }}</span>
-              <span v-if="track.bestRaceConditions" class="time-conditions">
-                <span>{{ formatShortDate(track.bestRaceDate) }}</span>
-                <span class="condition-sep">•</span>
-                <span>{{ track.bestRaceConditions.airTemp }}°C</span>
-                <template v-if="track.bestRaceFuel != null">
-                  <span class="condition-sep">•</span>
-                  <span>{{ Math.round(track.bestRaceFuel) }}L</span>
-                </template>
-              </span>
-              <span v-else-if="!track.bestRace" class="no-data-hint">Nessun dato {{ selectedCategory }} / {{ selectedGrip }}</span>
-              <button 
-                v-if="track.bestRaceSessionId" 
-                class="session-link-btn"
-                title="Vai alla sessione"
-                @click.stop="emit('go-to-session', track.bestRaceSessionId!)"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                  <polyline points="15 3 21 3 21 9"></polyline>
-                  <line x1="10" y1="14" x2="21" y2="3"></line>
-                </svg>
-              </button>
-            </div>
-            <div class="best-time-card best-time-card--avg">
-              <span class="time-label">Best media gara</span>
-              <span class="time-value">{{ track.bestAvgRace || '--:--.---' }}</span>
-              <span v-if="track.bestAvgRaceConditions" class="time-conditions">
-                <span>{{ formatShortDate(track.bestAvgRaceDate) }}</span>
-                <span class="condition-sep">•</span>
-                <span>{{ track.bestAvgRaceConditions.airTemp }}°C</span>
 
+          <div class="best-reference-stack">
+            <button
+              :class="['best-reference-card best-reference-card--qualy', { 'best-reference-card--clickable': track.bestQualySessionId }]"
+              :disabled="!track.bestQualySessionId"
+              title="Vai alla sessione qualifica"
+              @click.stop="track.bestQualySessionId && goToSession(track.bestQualySessionId)"
+            >
+              <span class="reference-card-title">Best qualifica</span>
+              <span class="reference-card-time">{{ track.bestQualy || '--:--.---' }}</span>
+              <span class="reference-card-meta">
+                <template v-if="track.bestQualyDate">{{ formatShortDate(track.bestQualyDate) }}</template>
+                <template v-if="track.bestQualyFuel != null"> • {{ Math.round(track.bestQualyFuel) }}L</template>
+                <template v-if="track.bestQualyConditions"> • {{ track.bestQualyConditions.airTemp }}°C</template>
               </span>
-              <span v-else-if="!track.bestAvgRace" class="no-data-hint">Nessun dato {{ selectedCategory }} / {{ selectedGrip }}</span>
-              <button 
-                v-if="track.bestAvgRaceSessionId" 
-                class="session-link-btn"
-                title="Vai alla sessione"
-                @click.stop="emit('go-to-session', track.bestAvgRaceSessionId!)"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                  <polyline points="15 3 21 3 21 9"></polyline>
-                  <line x1="10" y1="14" x2="21" y2="3"></line>
-                </svg>
-              </button>
+              <span v-if="track.bestQualySessionId" class="fuel-cell-action" aria-hidden="true">↗</span>
+            </button>
+
+            <div :class="['race-reference-card', { 'race-reference-card--empty': !selectedRaceReference.hasData }]">
+              <div class="race-reference-card__head">
+                <div>
+                  <span class="reference-card-kicker">Fuel partenza</span>
+                </div>
+                <select v-model="selectedRaceReferenceBucket" class="race-reference-card__select" aria-label="Scegli bucket fuel gara">
+                  <option v-for="bucket in raceFuelBuckets" :key="bucket.bucket" :value="bucket.bucket">
+                    {{ bucket.bucket }}L
+                  </option>
+                </select>
+              </div>
+              <div class="race-reference-card__metrics">
+                <button
+                  :class="['race-reference-metric race-reference-metric--best', { 'race-reference-metric--clickable': selectedRaceReference.bestRaceSessionId }]"
+                  :disabled="!selectedRaceReference.bestRaceSessionId"
+                  title="Vai alla sessione best gara"
+                  @click.stop="selectedRaceReference.bestRaceSessionId && goToSession(selectedRaceReference.bestRaceSessionId)"
+                >
+                  <span class="reference-card-title">Best gara</span>
+                  <span class="reference-card-time">{{ selectedRaceReference.bestRace || '--:--.---' }}</span>
+                  <span class="reference-card-meta">
+                    <template v-if="selectedRaceReference.bestRaceDate">{{ formatShortDate(selectedRaceReference.bestRaceDate) }}</template>
+                    <template v-if="selectedRaceReference.bestRaceFuel != null"> • {{ Math.round(selectedRaceReference.bestRaceFuel) }}L</template>
+                    <template v-if="selectedRaceReference.bestRaceAirTemp != null"> • {{ selectedRaceReference.bestRaceAirTemp }}°C</template>
+                  </span>
+                  <span v-if="selectedRaceReference.bestRaceSessionId" class="fuel-cell-action" aria-hidden="true">↗</span>
+                </button>
+                <button
+                  :class="['race-reference-metric race-reference-metric--avg', { 'race-reference-metric--clickable': selectedRaceReference.avgRaceSessionId }]"
+                  :disabled="!selectedRaceReference.avgRaceSessionId"
+                  title="Vai alla sessione media gara"
+                  @click.stop="selectedRaceReference.avgRaceSessionId && goToSession(selectedRaceReference.avgRaceSessionId)"
+                >
+                  <span class="reference-card-title">Media gara</span>
+                  <span class="reference-card-time">{{ selectedRaceReference.avgRace || '--:--.---' }}</span>
+                  <span class="reference-card-meta">
+                    <template v-if="selectedRaceReference.avgRaceDate">{{ formatShortDate(selectedRaceReference.avgRaceDate) }}</template>
+                    <template v-if="selectedRaceReference.avgRaceFuel != null"> • {{ Math.round(selectedRaceReference.avgRaceFuel) }}L</template>
+                    <template v-if="selectedRaceReference.avgRaceAirTemp != null"> • {{ selectedRaceReference.avgRaceAirTemp }}°C</template>
+                  </span>
+                  <span v-if="selectedRaceReference.avgRaceSessionId" class="fuel-cell-action" aria-hidden="true">↗</span>
+                </button>
+              </div>
             </div>
           </div>
+          <p v-if="!hasRaceFuelBucketData" class="no-data-hint no-data-hint--block">
+            Nessun riferimento gara bucketizzato per {{ selectedCategory }} / {{ selectedGrip }}.
+          </p>
         </div>
 
         <!-- Activity Stats Section -->
-        <div class="sidebar-section">
+        <div class="sidebar-section sidebar-section--activity">
           <h2 class="section-title">Attività Totale</h2>
           <div class="activity-stack">
             <div class="activity-item">
@@ -815,7 +869,7 @@ function goToSession(id: string) {
   }
 }
 
-.sidebar .sidebar-section:nth-of-type(2) {
+.sidebar-section--activity {
   display: none;
 }
 
@@ -1093,6 +1147,201 @@ function goToSession(id: string) {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.section-header-row--stacked {
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.best-reference-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.best-reference-card,
+.race-reference-metric {
+  position: relative;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.best-reference-card {
+  height: 112px;
+  padding: 16px 38px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.best-reference-card--qualy {
+  background: rgba($accent-warning, 0.12);
+  border-color: rgba($accent-warning, 0.36);
+}
+
+.best-reference-card--clickable,
+.race-reference-metric--clickable {
+  cursor: pointer;
+}
+
+.reference-card-kicker {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.48);
+}
+
+.reference-card-title {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.35px;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.reference-card-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 22px;
+  line-height: 28px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.reference-card-meta {
+  width: 100%;
+  min-height: 16px;
+  line-height: 16px;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.48);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.race-reference-card {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.race-reference-card--empty {
+  opacity: 0.78;
+}
+
+.race-reference-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 34px;
+  margin-bottom: 10px;
+}
+
+.race-reference-card__bucket {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 900;
+  color: #fff;
+}
+
+.race-reference-card__hint {
+  margin: 0 0 10px;
+  font-size: 10px;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.race-reference-card__select {
+  flex-shrink: 0;
+  width: 156px;
+  padding: 7px 28px 7px 10px;
+  background-color: #1a1d2e;
+  border: 1px solid rgba($accent-info, 0.28);
+  border-radius: 8px;
+  color: #fff;
+  font-family: $font-primary;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='rgba(255,255,255,0.55)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+
+  &:focus {
+    outline: none;
+    border-color: rgba($accent-info, 0.7);
+  }
+}
+
+.race-reference-card__metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.race-reference-metric {
+  height: 112px;
+  padding: 16px 38px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-align: center;
+}
+
+.race-reference-metric--best {
+  background: rgba(255, 100, 100, 0.12);
+  border-color: rgba(255, 100, 100, 0.36);
+}
+
+.race-reference-metric--avg {
+  background: rgba($accent-info, 0.12);
+  border-color: rgba($accent-info, 0.36);
+}
+
+.race-reference-metric .reference-card-time {
+  font-size: 22px;
+}
+
+.race-reference-metric .reference-card-meta {
+  line-height: 1.35;
+}
+
+.fuel-cell-action {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.62);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.no-data-hint--block {
+  display: block;
+  margin-top: 10px;
+  text-align: left;
 }
 
 .best-time-card {
@@ -1448,6 +1697,8 @@ function goToSession(id: string) {
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   cursor: pointer;
+  color: inherit;
+  text-decoration: none;
   transition: all 0.2s ease;
 
   &:hover {

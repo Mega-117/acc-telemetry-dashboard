@@ -44,6 +44,11 @@ export default defineNuxtConfig({
   // === COMPATIBILITÀ ===
   compatibilityDate: '2025-01-11',
 
+  // Necessario con ssr:false per configurare correttamente il socket IPC vite-node
+  experimental: {
+    viteEnvironmentApi: true
+  },
+
   app: {
     // URL dinamico: locale vs produzione
     baseURL,
@@ -61,7 +66,20 @@ export default defineNuxtConfig({
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        { name: 'description', content: 'Dashboard telemetria per Assetto Corsa Competizione' }
+        { name: 'description', content: 'Dashboard telemetria per Assetto Corsa Competizione' },
+        // Content-Security-Policy: blocca inline scripts non autorizzati e risorse esterne non previste
+        {
+          'http-equiv': 'Content-Security-Policy',
+          content: [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline'",   // unsafe-inline necessario per Nuxt SSR hydration
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "font-src 'self' https://fonts.gstatic.com",
+            "img-src 'self' data: https:",
+            "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com",
+            "frame-ancestors 'none'",
+          ].join('; ')
+        }
       ],
       link: [
         // Google Fonts: Inter + Outfit
@@ -85,7 +103,7 @@ export default defineNuxtConfig({
       // Vite 7 dependency pre-bundling can fail on Windows with this Nuxt app
       // while the server remains otherwise usable. Disable it only for dev.
       noDiscovery: true,
-      include: []
+      include: ['chartjs-plugin-zoom', 'hammerjs']
     },
     server: {
       watch: {
@@ -117,5 +135,3 @@ export default defineNuxtConfig({
     }
   }
 })
-
-

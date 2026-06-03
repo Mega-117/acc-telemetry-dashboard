@@ -22,6 +22,19 @@ export function createEmptySessionDisplayModel(sessionId: string): SessionDispla
   }
 }
 
+function getRaceFuelBucket(fuel: number | null | undefined): string | null {
+  const parsed = Number(fuel || 0)
+  if (!parsed || parsed <= 40) return null
+  if (parsed <= 60) return '40-60'
+  if (parsed <= 80) return '60-80'
+  if (parsed <= 100) return '80-100'
+  return '100+'
+}
+
+function isCleanLap(lap: { lap_time_ms: number; is_valid: boolean; has_pit_stop: boolean; pit_out_lap?: boolean }): boolean {
+  return !!lap.lap_time_ms && lap.is_valid && !lap.has_pit_stop && !lap.pit_out_lap
+}
+
 export function buildSessionDisplayModel(params: {
   sessionId: string
   fullSession: FullSession | null
@@ -57,10 +70,18 @@ export function buildSessionDisplayModel(params: {
   ) ? info.session_best_lap : 0
 
   const stints: SessionDisplayStint[] = fs.stints.map((stint) => {
-    const validLaps = stint.laps.filter((lap) => lap.is_valid && !lap.has_pit_stop)
+    const validLaps = stint.laps.filter(isCleanLap)
+    const raceReferenceLaps = stint.type === 'Race'
+      ? validLaps.filter((lap) => !!getRaceFuelBucket(lap.fuel_start ?? lap.fuel_remaining))
+      : validLaps
     const validLapsCount = validLaps.length
-    const bestLapMs = validLapsCount > 0 ? Math.min(...validLaps.map((lap) => lap.lap_time_ms)) : null
-    const avgLapMs = validLapsCount >= minValidLapsForAvg && stint.avg_clean_lap ? stint.avg_clean_lap : null
+    const bestLapMs = raceReferenceLaps.length > 0 ? Math.min(...raceReferenceLaps.map((lap) => lap.lap_time_ms)) : null
+    const avgLapMs = (
+      stint.type === 'Race'
+      && !getRaceFuelBucket(stint.fuel_start)
+    )
+      ? null
+      : (validLapsCount >= minValidLapsForAvg && stint.avg_clean_lap ? stint.avg_clean_lap : null)
     const avgWarning = validLapsCount > 0 && validLapsCount < minValidLapsForAvg
 
     return {
@@ -111,17 +132,22 @@ export function buildSessionDisplayModel(params: {
   let bestRaceStintNum = 0
 
   fs.stints.forEach((stint) => {
-    const validLaps = stint.laps.filter((lap) => lap.is_valid && !lap.has_pit_stop)
+    const validLaps = stint.laps.filter(isCleanLap)
     if (validLaps.length === 0) return
 
-    const bestMs = Math.min(...validLaps.map((lap) => lap.lap_time_ms))
     if (stint.type === 'Qualify') {
+      const bestMs = Math.min(...validLaps.map((lap) => lap.lap_time_ms))
       if (!bestQualyMs || bestMs < bestQualyMs) {
         bestQualyMs = bestMs
         bestQualyStintNum = stint.stint_number
       }
       return
     }
+
+    const raceReferenceLaps = validLaps.filter((lap) => !!getRaceFuelBucket(lap.fuel_start ?? lap.fuel_remaining))
+    if (raceReferenceLaps.length === 0) return
+
+    const bestMs = Math.min(...raceReferenceLaps.map((lap) => lap.lap_time_ms))
 
     if (!bestRaceMs || bestMs < bestRaceMs) {
       bestRaceMs = bestMs

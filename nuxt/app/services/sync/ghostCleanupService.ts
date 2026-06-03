@@ -1,9 +1,12 @@
 import { collection, doc } from 'firebase/firestore'
 
 export async function cleanupZeroLapSessions(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocsFn: (queryRef: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   deleteDocFn: (ref: any) => Promise<any>
 }): Promise<number> {
   const { db, uid, getDocsFn, deleteDocFn } = params
@@ -16,6 +19,7 @@ export async function cleanupZeroLapSessions(params: {
   try {
     const sessionsRef = collection(db, `users/${uid}/sessions`)
     const snapshot = await getDocsFn(sessionsRef)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     const toDelete = (snapshot.docs || []).filter((docSnap: any) => {
       const data = docSnap.data()
       return Number(data.summary?.laps || 0) === 0
@@ -35,6 +39,7 @@ export async function cleanupZeroLapSessions(params: {
     }
 
     return toDelete.length
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   } catch (e: any) {
     console.error('[CLEANUP] Error during cleanup:', e.message)
     return 0

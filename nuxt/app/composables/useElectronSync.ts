@@ -36,12 +36,16 @@ import { getRecentActivityDateKeys, getTelemetryActivityDateKey } from '~/servic
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
 const SYNC_CALLER = 'ElectronSync'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function getDoc(ref: any) { return trackedGetDoc(ref, SYNC_CALLER) }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function getDocs(q: any) { return trackedGetDocs(q, SYNC_CALLER) }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function setDoc(ref: any, data: any, options?: any) {
     if (options) return trackedSetDoc(ref, data, options, SYNC_CALLER)
     return trackedSetDoc(ref, data, SYNC_CALLER)
 }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function deleteDoc(ref: any) { return trackedDeleteDoc(ref, SYNC_CALLER) }
 
 const CHUNK_SIZE = 400000
@@ -94,6 +98,7 @@ function shouldPersistRegistry(result: SyncResult): boolean {
         || (result.status === 'unchanged' && result.reason !== 'registry_cache_hit')
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function getTrackIdFromRaw(rawObj: any): string | null {
     return rawObj?.session_info?.track || rawObj?.track || null
 }
@@ -129,14 +134,17 @@ async function findMissingRecentSessionIndexIds(uid: string, results: SyncResult
     const sessionIndexList = userSnap.data()?.sessionIndex?.sessionsList
     const indexedIds = new Set(
         (Array.isArray(sessionIndexList) ? sessionIndexList : [])
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
             .map((entry: any) => String(entry?.id || ''))
             .filter(Boolean)
     )
     return candidateIds.filter((sessionId) => !indexedIds.has(sessionId))
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function getElectronApi(): any | null {
     if (typeof window === 'undefined') return null
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     return (window as any).electronAPI || null
 }
 
@@ -166,6 +174,7 @@ async function updateSuiteVersion(uid: string): Promise<boolean> {
         })
         console.log(`[SYNC] Suite version updated: ${version.launcher}`)
         return true
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     } catch (versionError: any) {
         console.warn('[SYNC] Could not update suite version:', versionError.message)
         return false
@@ -185,6 +194,7 @@ export function useElectronSync() {
 
     const isElectron = computed(() => {
         if (typeof window === 'undefined') return false
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         return !!(window as any).electronAPI
     })
 
@@ -214,26 +224,31 @@ export function useElectronSync() {
     function canSkipViaRegistry(
         registry: Record<string, RegistryCacheEntry>,
         fileName: string,
-        fileHash: string,
+        hashes: { fileHash: string; rawDataHash: string; summaryHash: string },
         uid: string
     ): boolean {
         const entry = registry[fileName]
         if (!entry) return false
-        return entry.fileHash === fileHash
+        return entry.fileHash === hashes.fileHash
             && entry.uploadedBy === uid
             && Number(entry.bestRulesVersion || 0) >= BEST_RULES_VERSION
+            && (!entry.rawDataHash || entry.rawDataHash === hashes.rawDataHash)
+            && (!entry.summaryHash || entry.summaryHash === hashes.summaryHash)
     }
 
     async function deleteOldChunks(uid: string, sessionId: string) {
         try {
             const chunksRef = collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`)
             const snapshot = await getDocs(chunksRef)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
             await Promise.all(snapshot.docs.map((chunkDoc: any) => deleteDoc(chunkDoc.ref)))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (e: any) {
             console.warn('[SYNC] Error deleting old chunks:', e.message)
         }
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     async function canonicalizeSummaryFromLocalDomain(rawObj: any): Promise<any | null> {
         try {
             const result = await canonicalizeTelemetryPayload(rawObj)
@@ -242,6 +257,7 @@ export function useElectronSync() {
                 return null
             }
             return result.summary
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (e: any) {
             console.warn('[SYNC] Local-domain canonicalization threw:', e.message)
             return null
@@ -285,6 +301,8 @@ export function useElectronSync() {
         const entry: RegistryCacheEntry = {
             uploadedBy: uid,
             fileHash: item.fileHash,
+            rawDataHash: item.rawDataHash,
+            summaryHash: item.summaryHash,
             sessionId: result.sessionId || item.sessionId,
             uploadedAt: new Date().toISOString(),
             mtime: item.file.mtime,
@@ -492,7 +510,7 @@ export function useElectronSync() {
                 const maintenance = await getMaintenanceService().runMaintenance({
                     uid,
                     interactive: true,
-                    runLegacyMigration: true,
+                    runLegacyMigration: false,
                     runZeroLapCleanup: true,
                     runRetentionCleanup: true,
                     updateVersion: true
@@ -546,6 +564,7 @@ export function useElectronSync() {
             console.log(`[SYNC] Trigger ${trigger} complete: ${created} created, ${updated} updated, ${unchanged} unchanged, ${skipped} skipped, ${errors} errors`)
 
             return allResults
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (error: any) {
             queueService.setStatus('error')
             console.error(`[SYNC] Trigger ${trigger} failed:`, error)

@@ -26,6 +26,7 @@ import {
     type TrackActivityProjection,
     type TrackDetailProjection,
     type TrackDetailProjectionDocument,
+    type TrackFuelBucketReference,
     type TrackHistoricalPointProjection,
     type TrackOverviewProjectionItem,
     type TrackRecentSessionProjection
@@ -48,6 +49,49 @@ import {
     getRecentActivityDateKeys,
     getTelemetryActivityDateKey
 } from '~/services/telemetry/activityProjectionService'
+import {
+    normalizeTrackKey,
+    trackMatches,
+    isProjectionIndexReady,
+    buildTrackStatsFromSessionIndex,
+    mergePendingTrackStats
+} from '~/services/gateway/gatewayHelpers'
+import {
+    OVERVIEW_GRIP_PRIORITY,
+    OVERVIEW_GRIP_SCAN_ORDER,
+    type TrackBestTimes,
+    type TrackBestTimeField,
+    buildBestTimesFromTrackBestDoc,
+    updateBestTimeWithGrip,
+    buildOverviewBestTimesFromTrackBestDoc,
+    buildTrackBestsMapFromDocs,
+    updateBestTime,
+    mergePendingBestsByTrack,
+    mergePendingOverviewBestsByTrack
+} from '~/services/gateway/bestTimesBuilders'
+import {
+    buildActivity7dFromSessionIndex,
+    buildActivityTotalsFromSessionIndex,
+    sumActivityDataMinutes,
+    sumActivityTotalMinutes,
+    isActivityProjectionInconsistent,
+    overlayPendingActivity
+} from '~/services/gateway/activityProjectionBuilders'
+import {
+    getNewestSessionEntry,
+    normalizeActivity,
+    buildRecentSessionProjection,
+    buildHistoricalPointProjection,
+    buildActivityFromSessions,
+    buildPendingGripBest,
+    mergeGripBest,
+    getRaceFuelBucket,
+    normalizeTrackFuelBucketRecord,
+    buildRaceFuelBucketReferences,
+    dedupeRecentSessions,
+    dedupeHistoricalPoints,
+    buildTrackDetailFromProjectionDocument
+} from '~/services/gateway/trackDetailProjectionBuilder'
 
 export type PipelineSource =
     | 'cloud_fresh'
@@ -73,6 +117,7 @@ export interface OverviewSnapshot {
     lastUsedCar: string | null
     lastUsedTrack: string | null
     trackStats: ReturnType<typeof useTelemetryData>['trackStats']['value']
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     activity7d: ReturnType<typeof useTelemetryData>['getActivityData'] extends (...args: any[]) => infer R ? R : never
     activityTotals: ReturnType<typeof useTelemetryData>['activityTotals']['value']
 }
@@ -95,17 +140,6 @@ export interface TrackSnapshot {
     bestsByGrip: Record<string, any>
 }
 
-type TrackBestTimes = {
-    bestQualy: number | null
-    bestQualyGrip?: string | null
-    bestRace: number | null
-    bestRaceGrip?: string | null
-    bestAvgRace: number | null
-    bestAvgRaceGrip?: string | null
-}
-
-type TrackBestTimeField = 'bestQualy' | 'bestRace' | 'bestAvgRace'
-
 type TrackStatProjection = {
     track: string
     sessions: number
@@ -116,28 +150,9 @@ type TrackStatProjection = {
     bestByGrip?: Record<string, { bestQualy?: number | null; bestRace?: number | null }>
 }
 
-type GripBestProjection = {
-    bestQualy?: number | null
-    bestQualyTemp?: number | null
-    bestQualyFuel?: number | null
-    bestQualySessionId?: string | null
-    bestQualyDate?: string | null
-    bestRace?: number | null
-    bestRaceTemp?: number | null
-    bestRaceFuel?: number | null
-    bestRaceSessionId?: string | null
-    bestRaceDate?: string | null
-    bestAvgRace?: number | null
-    bestAvgRaceTemp?: number | null
-    bestAvgRaceFuel?: number | null
-    bestAvgRaceSessionId?: string | null
-    bestAvgRaceDate?: string | null
-}
-
 const MAX_DIAGNOSTICS = 300
-const OVERVIEW_GRIP_PRIORITY = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
-const OVERVIEW_GRIP_SCAN_ORDER = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
 const globalGatewayDiagnostics = ref<PipelineDiagnosticEvent[]>([])
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 const trackDetailProjectionCache = new Map<string, { detail: TrackDetailProjectionDocument; trackBest: any | null }>()
 const pendingLocalOverlayCache = new Map<string, { cachedAt: number; sessions: SessionDocument[] }>()
 
@@ -159,10 +174,6 @@ export function clearTelemetryGatewayCache(uid?: string) {
     clearByPrefix(pendingLocalOverlayCache)
 }
 
-function normalizeTrackKey(track: string | null | undefined): string {
-    return normalizeTrackProjectionId(track || '')
-}
-
 function pushGatewayDiagnostic(event: Omit<PipelineDiagnosticEvent, 'at'>): void {
     const withTimestamp: PipelineDiagnosticEvent = {
         ...event,
@@ -173,500 +184,6 @@ function pushGatewayDiagnostic(event: Omit<PipelineDiagnosticEvent, 'at'>): void
     console.log(`[PIPELINE] source=${withTimestamp.source} action=${withTimestamp.action} user=${withTimestamp.targetUserId || 'none'}${detailText}`)
 }
 
-function trackMatches(left: string | null | undefined, right: string | null | undefined): boolean {
-    const a = normalizeTrackKey(left)
-    const b = normalizeTrackKey(right)
-    return !!a && !!b && (a === b || a.includes(b) || b.includes(a))
-}
-
-function isProjectionIndexReady(userProjection: UserProjectionDocument | null): boolean {
-    return Number(userProjection?.sessionIndex?.schemaVersion || 0) >= 2
-}
-
-function buildTrackStatsFromSessionIndex(sessionIndex: any): TrackStatProjection[] {
-    const tracksSummary = Array.isArray(sessionIndex?.tracksSummary) ? sessionIndex.tracksSummary : []
-    return tracksSummary
-        .filter((track: any) => track?.track)
-        .map((track: any) => ({
-            track: track.track,
-            sessions: Number(track.sessions || 0),
-            lastSession: track.lastPlayed || track.lastSession || null
-        }))
-}
-
-function mergePendingTrackStats(baseStats: TrackStatProjection[], pendingSessions: SessionDocument[]): TrackStatProjection[] {
-    const byTrack = new Map<string, TrackStatProjection>()
-    for (const stat of baseStats) {
-        byTrack.set(normalizeTrackKey(stat.track), { ...stat })
-    }
-
-    for (const session of pendingSessions) {
-        const trackId = normalizeTrackKey(session.meta?.track)
-        if (!trackId) continue
-        const existing = byTrack.get(trackId)
-        if (!existing) {
-            byTrack.set(trackId, {
-                track: session.meta.track,
-                sessions: 1,
-                lastSession: session.meta.date_start || null
-            })
-            continue
-        }
-        existing.sessions += 1
-        if ((session.meta.date_start || '') > (existing.lastSession || '')) {
-            existing.lastSession = session.meta.date_start
-        }
-    }
-
-    return Array.from(byTrack.values()).sort((a, b) => (b.lastSession || '').localeCompare(a.lastSession || ''))
-}
-
-function buildBestTimesFromTrackBestDoc(
-    trackBestDoc: any | null,
-    category: CarCategory = 'GT3',
-    grip: string = 'Optimum'
-): TrackBestTimes {
-    const gripBests = trackBestDoc?.bests?.[category]?.[grip] || {}
-    return {
-        bestQualy: gripBests.bestQualy || null,
-        bestRace: gripBests.bestRace || null,
-        bestAvgRace: gripBests.bestAvgRace || null
-    }
-}
-
-function updateBestTimeWithGrip(
-    target: TrackBestTimes,
-    field: keyof Pick<TrackBestTimes, 'bestQualy' | 'bestRace' | 'bestAvgRace'>,
-    gripField: keyof Pick<TrackBestTimes, 'bestQualyGrip' | 'bestRaceGrip' | 'bestAvgRaceGrip'>,
-    candidate: number | null | undefined,
-    grip: string
-): void {
-    if (!candidate) return
-    const current = target[field]
-    const currentGrip = target[gripField]
-    const candidatePriority = OVERVIEW_GRIP_PRIORITY.indexOf(grip)
-    const currentPriority = currentGrip ? OVERVIEW_GRIP_PRIORITY.indexOf(currentGrip) : Number.MAX_SAFE_INTEGER
-    const candidateWinsTie = current === candidate
-        && candidatePriority >= 0
-        && (currentPriority < 0 || candidatePriority < currentPriority)
-
-    if (!current || candidate < Number(current) || candidateWinsTie) {
-        target[field] = candidate
-        target[gripField] = grip
-    }
-}
-
-function buildOverviewBestTimesFromTrackBestDoc(
-    trackBestDoc: any | null,
-    category: CarCategory = 'GT3'
-): TrackBestTimes {
-    const result: TrackBestTimes = {
-        bestQualy: null,
-        bestQualyGrip: null,
-        bestRace: null,
-        bestRaceGrip: null,
-        bestAvgRace: null,
-        bestAvgRaceGrip: null
-    }
-
-    const categoryBests = trackBestDoc?.bests?.[category] || {}
-    for (const grip of OVERVIEW_GRIP_SCAN_ORDER) {
-        const gripBests = categoryBests?.[grip] || {}
-        updateBestTimeWithGrip(result, 'bestQualy', 'bestQualyGrip', gripBests.bestQualy, grip)
-        updateBestTimeWithGrip(result, 'bestRace', 'bestRaceGrip', gripBests.bestRace, grip)
-        updateBestTimeWithGrip(result, 'bestAvgRace', 'bestAvgRaceGrip', gripBests.bestAvgRace, grip)
-    }
-
-    return result
-}
-
-function buildTrackBestsMapFromDocs(trackBestDocs: Record<string, any>): Record<string, TrackBestTimes> {
-    const result: Record<string, TrackBestTimes> = {}
-    for (const [rawTrackId, doc] of Object.entries(trackBestDocs || {})) {
-        const trackId = normalizeTrackKey((doc as any)?.trackId || rawTrackId)
-        if (!trackId) continue
-        result[trackId] = buildBestTimesFromTrackBestDoc(doc, 'GT3', 'Optimum')
-    }
-    return result
-}
-
-function updateBestTime(
-    target: TrackBestTimes,
-    field: TrackBestTimeField,
-    candidate: number | null | undefined
-): void {
-    if (!candidate) return
-    if (!target[field] || candidate < Number(target[field])) {
-        target[field] = candidate
-    }
-}
-
-function mergePendingBestsByTrack(
-    baseBests: Record<string, TrackBestTimes>,
-    pendingSessions: SessionDocument[]
-): Record<string, TrackBestTimes> {
-    const merged: Record<string, TrackBestTimes> = { ...baseBests }
-    for (const session of pendingSessions) {
-        if (getCarCategory(session.meta?.car || '') !== 'GT3') continue
-        const trackId = normalizeTrackKey(session.meta?.track)
-        if (!trackId) continue
-        const current = merged[trackId] || { bestQualy: null, bestRace: null, bestAvgRace: null }
-        const gripBest = (session.summary as any)?.best_by_grip?.Optimum || {}
-        updateBestTime(current, 'bestQualy', gripBest.bestQualy)
-        updateBestTime(current, 'bestRace', gripBest.bestRace)
-        updateBestTime(current, 'bestAvgRace', gripBest.bestAvgRace)
-        merged[trackId] = current
-    }
-    return merged
-}
-
-function mergePendingOverviewBestsByTrack(
-    baseBests: Record<string, TrackBestTimes>,
-    pendingSessions: SessionDocument[]
-): Record<string, TrackBestTimes> {
-    const merged: Record<string, TrackBestTimes> = { ...baseBests }
-    for (const session of pendingSessions) {
-        if (getCarCategory(session.meta?.car || '') !== 'GT3') continue
-        const trackId = normalizeTrackKey(session.meta?.track)
-        if (!trackId) continue
-        const current = merged[trackId] || {
-            bestQualy: null,
-            bestQualyGrip: null,
-            bestRace: null,
-            bestRaceGrip: null,
-            bestAvgRace: null,
-            bestAvgRaceGrip: null
-        }
-        const bestByGrip = (session.summary as any)?.best_by_grip || {}
-        for (const grip of OVERVIEW_GRIP_SCAN_ORDER) {
-            const gripBest = bestByGrip?.[grip] || {}
-            updateBestTimeWithGrip(current, 'bestQualy', 'bestQualyGrip', gripBest.bestQualy, grip)
-            updateBestTimeWithGrip(current, 'bestRace', 'bestRaceGrip', gripBest.bestRace, grip)
-            updateBestTimeWithGrip(current, 'bestAvgRace', 'bestAvgRaceGrip', gripBest.bestAvgRace, grip)
-        }
-        merged[trackId] = current
-    }
-    return merged
-}
-
-function buildActivity7dFromSessionIndex(sessionIndex: any): OverviewProjection['activity7d'] {
-    const sourceRows = Array.isArray(sessionIndex?.activity7d?.byDay) ? sessionIndex.activity7d.byDay : []
-    const byDate = new Map<string, any>()
-    for (const row of sourceRows) {
-        if (row?.date) byDate.set(row.date, row)
-    }
-
-    return buildRecentActivityBuckets(7).map((bucket) => {
-        const row = byDate.get(bucket.date) || {}
-        return {
-            date: bucket.date,
-            dateLabel: bucket.dateLabel,
-            day: bucket.day,
-            practice: Number(row.P || row.practice || 0),
-            qualify: Number(row.Q || row.qualify || 0),
-            race: Number(row.R || row.race || 0)
-        }
-    })
-}
-
-function buildActivityTotalsFromSessionIndex(sessionIndex: any): OverviewProjection['activityTotals'] {
-    const activity = sessionIndex?.activity7d || {}
-    return {
-        practice: {
-            minutes: Number(activity.practice?.minutes || 0),
-            sessions: Number(activity.practice?.sessions || 0)
-        },
-        qualify: {
-            minutes: Number(activity.qualify?.minutes || 0),
-            sessions: Number(activity.qualify?.sessions || 0)
-        },
-        race: {
-            minutes: Number(activity.race?.minutes || 0),
-            sessions: Number(activity.race?.sessions || 0)
-        }
-    }
-}
-
-function sumActivityDataMinutes(activity7d: OverviewProjection['activity7d']): number {
-    return activity7d.reduce((sum, row) => sum + Number(row.practice || 0) + Number(row.qualify || 0) + Number(row.race || 0), 0)
-}
-
-function sumActivityTotalMinutes(activityTotals: OverviewProjection['activityTotals']): number {
-    return Number(activityTotals.practice.minutes || 0)
-        + Number(activityTotals.qualify.minutes || 0)
-        + Number(activityTotals.race.minutes || 0)
-}
-
-function isActivityProjectionInconsistent(
-    activity7d: OverviewProjection['activity7d'],
-    activityTotals: OverviewProjection['activityTotals']
-): boolean {
-    return sumActivityDataMinutes(activity7d) !== sumActivityTotalMinutes(activityTotals)
-}
-
-function overlayPendingActivity(
-    activity7d: OverviewProjection['activity7d'],
-    activityTotals: OverviewProjection['activityTotals'],
-    pendingSessions: SessionDocument[]
-): { activity7d: OverviewProjection['activity7d']; activityTotals: OverviewProjection['activityTotals'] } {
-    const resultData = activity7d.map((row) => ({ ...row }))
-    const resultTotals = {
-        practice: { ...activityTotals.practice },
-        qualify: { ...activityTotals.qualify },
-        race: { ...activityTotals.race }
-    }
-
-    const dateKeys = getRecentActivityDateKeys(7)
-
-    for (const session of pendingSessions) {
-        const minutes = Math.round(Number(session.summary?.totalTime || 0) / 60000)
-        const dateKey = getTelemetryActivityDateKey(session.meta?.date_start)
-        if (!dateKey) continue
-        const index = dateKeys.indexOf(dateKey)
-        const sessionType = session.meta?.session_type
-        const bucket = getActivityBucketForSessionType(sessionType, SESSION_TYPES)
-        if (!bucket) continue
-        resultTotals[bucket].minutes += minutes
-        resultTotals[bucket].sessions += 1
-        const dayRow = index >= 0 ? resultData[index] : null
-        if (dayRow) {
-            dayRow[bucket] += minutes
-        }
-    }
-
-    return { activity7d: resultData, activityTotals: resultTotals }
-}
-
-function getNewestSessionEntry(sessionIndex: any, pendingSessions: SessionDocument[]): { car: string | null; date: string | null } {
-    const newestIndexEntry = Array.isArray(sessionIndex?.sessionsList) ? sessionIndex.sessionsList[0] : null
-    const newestPending = [...pendingSessions].sort((a, b) => (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))[0] || null
-    if (newestPending && (!newestIndexEntry?.date || newestPending.meta.date_start > newestIndexEntry.date)) {
-        return {
-            car: newestPending.meta.car || null,
-            date: newestPending.meta.date_start || null
-        }
-    }
-    return {
-        car: newestIndexEntry?.car || null,
-        date: newestIndexEntry?.date || null
-    }
-}
-
-function normalizeActivity(activity: TrackActivityProjection | null | undefined): TrackActivityProjection {
-    const totalLaps = Number(activity?.totalLaps || 0)
-    const validLaps = Number(activity?.validLaps || 0)
-    const totalTimeMs = Number(activity?.totalTimeMs || 0)
-    return {
-        totalLaps,
-        validLaps,
-        validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
-        totalTimeMs,
-        totalTimeFormatted: activity?.totalTimeFormatted || formatDriveTime(totalTimeMs),
-        sessionCount: Number(activity?.sessionCount || 0)
-    }
-}
-
-function buildRecentSessionProjection(session: SessionDocument): TrackRecentSessionProjection {
-    const summary = session.summary || {}
-    const dateObj = new Date(session.meta.date_start)
-    const sessionRaceTime = (summary as any)?.best_session_race_ms || summary.best_race_ms || null
-    return {
-        id: session.sessionId,
-        date: session.meta.date_start?.split('T')[0] || '',
-        time: Number.isNaN(dateObj.getTime()) ? '' : dateObj.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }),
-        type: getSessionTypeLabel(session.meta.session_type),
-        car: formatCarName(session.meta.car),
-        laps: summary.laps || 0,
-        stints: summary.stintCount || 0,
-        bestQualy: summary.best_qualy_ms ? formatLapTime(summary.best_qualy_ms) : undefined,
-        bestRace: sessionRaceTime ? formatLapTime(sessionRaceTime) : undefined
-    }
-}
-
-function buildHistoricalPointProjection(session: SessionDocument): TrackHistoricalPointProjection {
-    const summary = session.summary || {}
-    const dateStr = session.meta.date_start?.split('T')[0] || ''
-    const [, month, day] = dateStr.split('-')
-    const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
-    const dateLabel = day && month ? `${parseInt(day, 10)} ${months[parseInt(month, 10) - 1] || 'N/A'}` : 'N/A'
-    const qualyTime = summary.best_qualy_ms || null
-    return {
-        date: dateLabel,
-        sessionId: session.sessionId,
-        bestQualy: qualyTime ? formatLapTime(qualyTime) : undefined,
-        bestRace: summary.best_race_ms ? formatLapTime(summary.best_race_ms) : undefined
-    }
-}
-
-function buildActivityFromSessions(sessions: SessionDocument[]): TrackActivityProjection {
-    const totalLaps = sessions.reduce((sum, session) => sum + Number(session.summary?.laps || 0), 0)
-    const validLaps = sessions.reduce((sum, session) => sum + Number(session.summary?.lapsValid || 0), 0)
-    const totalTimeMs = sessions.reduce((sum, session) => sum + Number(session.summary?.totalTime || 0), 0)
-    return {
-        totalLaps,
-        validLaps,
-        validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
-        totalTimeMs,
-        totalTimeFormatted: formatDriveTime(totalTimeMs),
-        sessionCount: sessions.length
-    }
-}
-
-function buildPendingGripBest(sessions: SessionDocument[], selectedGrip: string): GripBestProjection {
-    const best: GripBestProjection = {}
-    for (const session of sessions) {
-        const sessionBest = (session.summary as any)?.best_by_grip?.[selectedGrip]
-        if (!sessionBest) continue
-        if (sessionBest.bestQualy && (!best.bestQualy || sessionBest.bestQualy < best.bestQualy)) {
-            best.bestQualy = sessionBest.bestQualy
-            best.bestQualyTemp = sessionBest.bestQualyTemp ?? null
-            best.bestQualyFuel = sessionBest.bestQualyFuel ?? null
-            best.bestQualySessionId = session.sessionId
-            best.bestQualyDate = session.meta.date_start
-        }
-        if (sessionBest.bestRace && (!best.bestRace || sessionBest.bestRace < best.bestRace)) {
-            best.bestRace = sessionBest.bestRace
-            best.bestRaceTemp = sessionBest.bestRaceTemp ?? null
-            best.bestRaceFuel = sessionBest.bestRaceFuel ?? null
-            best.bestRaceSessionId = session.sessionId
-            best.bestRaceDate = session.meta.date_start
-        }
-        if (sessionBest.bestAvgRace && (!best.bestAvgRace || sessionBest.bestAvgRace < best.bestAvgRace)) {
-            best.bestAvgRace = sessionBest.bestAvgRace
-            best.bestAvgRaceTemp = sessionBest.bestAvgRaceTemp ?? null
-            best.bestAvgRaceFuel = sessionBest.bestAvgRaceFuel ?? null
-            best.bestAvgRaceSessionId = session.sessionId
-            best.bestAvgRaceDate = session.meta.date_start
-        }
-    }
-    return best
-}
-
-function mergeGripBest(base: GripBestProjection, pending: GripBestProjection): GripBestProjection {
-    const merged = { ...base }
-    const pairs: Array<[
-        'bestQualy' | 'bestRace' | 'bestAvgRace',
-        'bestQualyTemp' | 'bestRaceTemp' | 'bestAvgRaceTemp',
-        'bestQualyFuel' | 'bestRaceFuel' | 'bestAvgRaceFuel',
-        'bestQualySessionId' | 'bestRaceSessionId' | 'bestAvgRaceSessionId',
-        'bestQualyDate' | 'bestRaceDate' | 'bestAvgRaceDate'
-    ]> = [
-        ['bestQualy', 'bestQualyTemp', 'bestQualyFuel', 'bestQualySessionId', 'bestQualyDate'],
-        ['bestRace', 'bestRaceTemp', 'bestRaceFuel', 'bestRaceSessionId', 'bestRaceDate'],
-        ['bestAvgRace', 'bestAvgRaceTemp', 'bestAvgRaceFuel', 'bestAvgRaceSessionId', 'bestAvgRaceDate']
-    ]
-    for (const [timeKey, tempKey, fuelKey, sessionKey, dateKey] of pairs) {
-        const pendingTime = pending[timeKey]
-        if (pendingTime && (!merged[timeKey] || pendingTime < Number(merged[timeKey]))) {
-            merged[timeKey] = pendingTime
-            merged[tempKey] = pending[tempKey] as any
-            merged[fuelKey] = pending[fuelKey] as any
-            merged[sessionKey] = pending[sessionKey] as any
-            merged[dateKey] = pending[dateKey] as any
-        }
-    }
-    return merged
-}
-
-function dedupeRecentSessions(items: TrackRecentSessionProjection[]): TrackRecentSessionProjection[] {
-    const byId = new Map<string, TrackRecentSessionProjection>()
-    for (const item of items) {
-        if (!byId.has(item.id)) byId.set(item.id, item)
-    }
-    return Array.from(byId.values())
-        .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))
-        .slice(0, 200)
-}
-
-function dedupeHistoricalPoints(items: TrackHistoricalPointProjection[]): TrackHistoricalPointProjection[] {
-    const byId = new Map<string, TrackHistoricalPointProjection>()
-    for (const item of items) {
-        if (!byId.has(item.sessionId)) byId.set(item.sessionId, item)
-    }
-    return Array.from(byId.values()).slice(-200)
-}
-
-function buildTrackDetailFromProjectionDocument(params: {
-    detailDoc: TrackDetailProjectionDocument
-    trackBestDoc: any | null
-    trackId: string
-    category: CarCategory
-    selectedGrip: string
-    pendingSessions: SessionDocument[]
-}): TrackDetailProjection {
-    const { detailDoc, trackBestDoc, trackId, category, selectedGrip, pendingSessions } = params
-    const normalizedTrackId = normalizeTrackKey(trackId || detailDoc.trackId)
-    const metadata = resolveTrackMetadata(normalizedTrackId)
-    const categoryDoc = detailDoc.categories?.[category]
-    const baseActivity = normalizeActivity(categoryDoc?.activity)
-    const pendingValidSessions = pendingSessions
-        .filter((session) => trackMatches(session.meta?.track, normalizedTrackId))
-        .filter((session) => getCarCategory(session.meta?.car || '') === category)
-        .filter((session) => Number(session.summary?.laps || 0) > 0)
-        .sort((a, b) => (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))
-    const pendingActivity = buildActivityFromSessions(pendingValidSessions)
-    const gripBests = mergeGripBest(
-        trackBestDoc?.bests?.[category]?.[selectedGrip] || {},
-        buildPendingGripBest(pendingValidSessions, selectedGrip)
-    )
-    const lastSession = [
-        categoryDoc?.lastSessionDate || null,
-        detailDoc.lastSessionDate || null,
-        pendingValidSessions[0]?.meta.date_start || null
-    ].filter(Boolean).sort((a, b) => String(b).localeCompare(String(a)))[0] || '-'
-
-    return {
-        track: {
-            id: normalizedTrackId,
-            name: metadata.name,
-            fullName: metadata.fullName,
-            country: metadata.country,
-            countryCode: metadata.countryCode,
-            length: metadata.length,
-            turns: metadata.turns,
-            image: metadata.image,
-            sessions: Number(categoryDoc?.sessionCount || 0) + pendingValidSessions.length,
-            lastSession,
-            bestQualy: gripBests.bestQualy ? formatLapTime(gripBests.bestQualy) : null,
-            bestRace: gripBests.bestRace ? formatLapTime(gripBests.bestRace) : null,
-            bestAvgRace: gripBests.bestAvgRace ? formatLapTime(gripBests.bestAvgRace) : null,
-            bestQualyConditions: gripBests.bestQualy ? { airTemp: Number(gripBests.bestQualyTemp || 0), roadTemp: 0, grip: selectedGrip } : null,
-            bestRaceConditions: gripBests.bestRace ? { airTemp: Number(gripBests.bestRaceTemp || 0), roadTemp: 0, grip: selectedGrip } : null,
-            bestAvgRaceConditions: gripBests.bestAvgRace ? { airTemp: Number(gripBests.bestAvgRaceTemp || 0), roadTemp: 0, grip: selectedGrip } : null,
-            bestQualySessionId: gripBests.bestQualySessionId || null,
-            bestRaceSessionId: gripBests.bestRaceSessionId || null,
-            bestAvgRaceSessionId: gripBests.bestAvgRaceSessionId || null,
-            bestQualyDate: gripBests.bestQualyDate || null,
-            bestRaceDate: gripBests.bestRaceDate || null,
-            bestAvgRaceDate: gripBests.bestAvgRaceDate || null,
-            bestQualyFuel: gripBests.bestQualyFuel ?? null,
-            bestRaceFuel: gripBests.bestRaceFuel ?? null,
-            bestAvgRaceFuel: gripBests.bestAvgRaceFuel ?? null,
-            hasGripData: !!gripBests.bestQualy || !!gripBests.bestRace || !!gripBests.bestAvgRace
-        },
-        recentSessions: dedupeRecentSessions([
-            ...pendingValidSessions.map(buildRecentSessionProjection),
-            ...(categoryDoc?.recentSessions || [])
-        ]),
-        historicalTimes: dedupeHistoricalPoints([
-            ...(categoryDoc?.historicalTimes || []),
-            ...pendingValidSessions.map(buildHistoricalPointProjection)
-        ]),
-        activity: {
-            totalLaps: baseActivity.totalLaps + pendingActivity.totalLaps,
-            validLaps: baseActivity.validLaps + pendingActivity.validLaps,
-            validPercent: baseActivity.totalLaps + pendingActivity.totalLaps > 0
-                ? Math.round(((baseActivity.validLaps + pendingActivity.validLaps) / (baseActivity.totalLaps + pendingActivity.totalLaps)) * 100)
-                : 0,
-            totalTimeMs: baseActivity.totalTimeMs + pendingActivity.totalTimeMs,
-            totalTimeFormatted: formatDriveTime(baseActivity.totalTimeMs + pendingActivity.totalTimeMs),
-            sessionCount: baseActivity.sessionCount + pendingActivity.sessionCount
-        },
-        category,
-        grip: selectedGrip
-    }
-}
-
 export function useTelemetryGateway() {
     const telemetry = useTelemetryData()
     const pager = useSessionPager()
@@ -674,6 +191,7 @@ export function useTelemetryGateway() {
 
     const isElectron = computed(() => {
         if (typeof window === 'undefined') return false
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         return !!(window as any).electronAPI
     })
 
@@ -688,6 +206,7 @@ export function useTelemetryGateway() {
 
     async function loadPendingLocalOverlay(targetUserId: string): Promise<SessionDocument[]> {
         if (!isElectron.value || typeof window === 'undefined' || !navigator.onLine) return []
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         const electronAPI = (window as any).electronAPI
         if (!electronAPI) return []
         const cacheKey = `${targetUserId}:pending`
@@ -1099,6 +618,7 @@ export function useTelemetryGateway() {
         if (!snapshot) return null
 
         const visibleSessions = snapshot.sessions
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
             .filter((session) => Number((session.summary as any)?.laps || 0) > 0)
             .filter((session) => getCarCategory(session.meta.car) === category)
             .sort((a, b) => (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))

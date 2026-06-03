@@ -3,14 +3,17 @@ import type { FullSession, SessionDocument } from '~/composables/useTelemetryDat
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 
 export async function loadCloudSessionsBounded(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   targetUserId: string
   maxItems: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocsFn: (queryRef: any) => Promise<any>
 }): Promise<SessionDocument[]> {
   const { db, targetUserId, maxItems, getDocsFn } = params
   const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   let querySnapshot: any
   try {
     querySnapshot = await getDocsFn(query(sessionsRef, orderBy('meta.date_start', 'desc'), limit(maxItems)))
@@ -22,6 +25,7 @@ export async function loadCloudSessionsBounded(params: {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   return (querySnapshot.docs || []).map((docSnap: any) => {
     const data = docSnap.data()
     const bestRulesVersion = Number(data?.summary?.best_rules_version || data?.summaryRulesVersion || 0)
@@ -42,8 +46,10 @@ export async function loadCloudSessionsBounded(params: {
 }
 
 export async function loadCloudSessionIndexList(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   targetUserId: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocFn: (ref: any) => Promise<any>
 }): Promise<SessionDocument[]> {
   const { db, targetUserId, getDocFn } = params
@@ -53,6 +59,7 @@ export async function loadCloudSessionIndexList(params: {
   const data = snap.data() || {}
   const list = Array.isArray(data.sessionIndex?.sessionsList) ? data.sessionIndex.sessionsList : []
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   return list.map((entry: any) => ({
     sessionId: entry.id,
     fileHash: '',
@@ -91,11 +98,14 @@ export async function loadCloudSessionIndexList(params: {
 }
 
 export async function fetchCloudFullSession(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   targetUserId: string
   sessionId: string
   isExternalSession: boolean
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocFn: (ref: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocsFn: (queryRef: any) => Promise<any>
 }): Promise<FullSession | null> {
   const { db, targetUserId, sessionId, isExternalSession, getDocFn, getDocsFn } = params
@@ -114,10 +124,21 @@ export async function fetchCloudFullSession(params: {
   const chunksSnap = await getDocsFn(chunksQuery)
 
   const rawText = (chunksSnap.docs || [])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     .map((docSnap: any) => docSnap.data())
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     .sort((a: any, b: any) => Number(a?.idx || 0) - Number(b?.idx || 0))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     .map((chunk: any) => String(chunk?.chunk || ''))
     .join('')
 
-  return rawText ? (JSON.parse(rawText) as FullSession) : null
+  if (!rawText) return null
+
+  const payload = JSON.parse(rawText) as FullSession
+  const summaryVersion = Number(sessionData?.summary?.best_rules_version || sessionData?.summaryRulesVersion || 0)
+  if (sessionData?.summary && summaryVersion >= BEST_RULES_VERSION) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+    ;(payload as any).summary = sessionData.summary
+  }
+  return payload
 }

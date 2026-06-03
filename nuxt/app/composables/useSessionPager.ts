@@ -14,7 +14,7 @@ import {
 import { trackedGetCountFromServer, trackedGetDoc, trackedGetDocs } from './useFirebaseTracker'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { db } from '~/config/firebase'
-import { formatCarName, formatTrackName, type SessionDocument } from './useTelemetryData'
+import { formatCarName, formatTrackName, getCarCategory, type CarCategory, type SessionDocument } from './useTelemetryData'
 import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
 import {
     buildLogicalSessionKey,
@@ -22,6 +22,10 @@ import {
     mergePendingLocal,
     mergeLocalFirst
 } from '~/services/telemetry/telemetryMergeService'
+import {
+    clearSessionListProjectionCache,
+    loadSessionListProjection
+} from '~/services/sync/sessionListProjectionService'
 
 const CALLER = 'SessionPager'
 const DEFAULT_PAGE_SIZE = 25
@@ -36,6 +40,7 @@ export type SessionPagerFilters = {
     toDateIso?: string | null
     track?: string | null
     car?: string | null
+    carCategory?: CarCategory | null
     hideEmpty?: boolean
 }
 
@@ -60,7 +65,7 @@ type PagerState = {
     totalItems: number | null
     loading: boolean
     diagnostics: {
-        source: 'cloud_page' | 'mixed' | 'local_offline'
+        source: 'cloud_page' | 'mixed' | 'local_offline' | 'session_list_projection' | 'session_index'
         cloudCount: number
         localCount: number
         localOverlayCount: number
@@ -97,8 +102,11 @@ const globalCloudIdentityCache = new Map<string, {
     logicalKeys: Set<string>
 }>()
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function getDocTracked(ref: any) { return trackedGetDoc(ref, CALLER) }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function getDocsTracked(q: any) { return trackedGetDocs(q, CALLER) }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 async function getCountTracked(q: any) { return trackedGetCountFromServer(q, CALLER) }
 
 function normalizeIso(input?: string | null): string | null {
@@ -118,6 +126,21 @@ function sessionMs(session: SessionDocument): number {
     return Number.isFinite(parsed) ? parsed : 0
 }
 
+function normalizeFilterToken(input?: string | null): string {
+    return String(input || '')
+        .trim()
+        .toLowerCase()
+        .replace(/&/g, 'and')
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '')
+}
+
+function matchesToken(filterValue: string | null | undefined, candidates: Array<string | null | undefined>): boolean {
+    const normalizedFilter = normalizeFilterToken(filterValue)
+    if (!normalizedFilter) return true
+    return candidates.some((candidate) => normalizeFilterToken(candidate) === normalizedFilter)
+}
+
 function matchesClientFilters(session: SessionDocument, filters: SessionPagerFilters): boolean {
     const types = (filters.sessionTypes || []).filter((t) => Number.isFinite(t))
     const type = Number(session.meta?.session_type ?? -1)
@@ -131,16 +154,22 @@ function matchesClientFilters(session: SessionDocument, filters: SessionPagerFil
 
     if (filters.hideEmpty && Number(session.summary?.laps || 0) === 0) return false
 
-    const filterTrack = (filters.track || '').trim().toLowerCase()
-    if (filterTrack) {
-        const sessionTrack = formatTrackName(session.meta?.track || '').trim().toLowerCase()
-        if (sessionTrack !== filterTrack) return false
+    if (filters.carCategory && getCarCategory(session.meta?.car || '') !== filters.carCategory) {
+        return false
     }
 
-    const filterCar = (filters.car || '').trim().toLowerCase()
-    if (filterCar) {
-        const sessionCar = formatCarName(session.meta?.car || '').trim().toLowerCase()
-        if (sessionCar !== filterCar) return false
+    if (!matchesToken(filters.track, [
+        session.meta?.track,
+        formatTrackName(session.meta?.track || '')
+    ])) {
+        return false
+    }
+
+    if (!matchesToken(filters.car, [
+        session.meta?.car,
+        formatCarName(session.meta?.car || '')
+    ])) {
+        return false
     }
 
     return true
@@ -190,6 +219,7 @@ function normalizeCloudDoc(docSnap: QueryDocumentSnapshot<DocumentData>): Sessio
 }
 
 async function getLocalSessionsForUser(currentUid: string): Promise<SessionDocument[]> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     const electronAPI = (window as any).electronAPI
     return loadLocalTelemetrySessions({
         electronAPI,
@@ -254,15 +284,109 @@ export function clearSessionPagerCache(uid?: string) {
 
     if (uid) {
         globalCloudIdentityCache.delete(uid)
+        clearSessionListProjectionCache(uid)
         return
     }
 
     globalCloudIdentityCache.clear()
+    clearSessionListProjectionCache()
+}
+
+function pageFromAllSessions(
+    allSessions: SessionDocument[],
+    requestedPage: number,
+    pageSize: number
+): { pageSessions: SessionDocument[]; currentPage: number; hasPrev: boolean; hasNext: boolean; totalItems: number } {
+    const totalItems = allSessions.length
+    const currentPage = Math.min(Math.max(1, requestedPage), Math.max(1, Math.ceil(totalItems / pageSize)))
+    const start = (currentPage - 1) * pageSize
+    return {
+        pageSessions: allSessions.slice(start, start + pageSize),
+        currentPage,
+        hasPrev: currentPage > 1,
+        hasNext: start + pageSize < totalItems,
+        totalItems
+    }
+}
+
+function identitiesFromSessions(sessions: SessionDocument[]): { ids: Set<string>; logicalKeys: Set<string> } {
+    return {
+        ids: new Set(sessions.map((session) => session.sessionId).filter(Boolean)),
+        logicalKeys: new Set(sessions.map((session) => buildLogicalSessionKey(session.meta || {})).filter(Boolean))
+    }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+function sessionFromIndexEntry(entry: any): SessionDocument {
+    return {
+        sessionId: entry.id,
+        fileHash: '',
+        fileName: '',
+        uploadedAt: null,
+        meta: {
+            track: entry.track,
+            car: entry.car,
+            date_start: entry.date,
+            date_end: null,
+            session_type: entry.type,
+            driver: null
+        },
+        summary: {
+            laps: entry.laps || 0,
+            lapsValid: entry.lapsValid || 0,
+            bestLap: entry.bestLap || null,
+            avgCleanLap: null,
+            totalTime: entry.totalTime || 0,
+            stintCount: entry.stintCount || 0,
+            best_qualy_ms: entry.bestQualyMs || null,
+            best_session_race_ms: entry.bestSessionRaceMs || null,
+            best_race_ms: entry.bestRaceMs || null,
+            best_rules_version: entry.bestRulesVersion || 0
+        },
+        rawChunkCount: 0,
+        rawSizeBytes: 0,
+        source: 'cloud',
+        syncState: 'synced'
+    } as SessionDocument
+}
+
+async function loadCompleteSessionIndex(targetUserId: string): Promise<SessionDocument[] | null> {
+    const userRef = doc(db, `users/${targetUserId}`)
+    const snap = await getDocTracked(userRef)
+    if (!snap.exists()) return null
+    const data = snap.data() || {}
+    const sessionIndex = data.sessionIndex || {}
+    const list = Array.isArray(sessionIndex.sessionsList) ? sessionIndex.sessionsList : []
+    const totalSessions = Number(sessionIndex.totalSessions ?? list.length)
+    if (totalSessions > list.length) return null
+    return list.map(sessionFromIndexEntry)
+}
+
+async function loadLightweightSessionSource(targetUserId: string): Promise<{
+    sessions: SessionDocument[]
+    source: 'session_list_projection' | 'session_index'
+} | null> {
+    const projectionSessions = await loadSessionListProjection({
+        db,
+        uid: targetUserId,
+        getDocFn: getDocTracked,
+        docFn: doc
+    })
+    if (projectionSessions) {
+        return { sessions: projectionSessions, source: 'session_list_projection' }
+    }
+
+    const indexSessions = await loadCompleteSessionIndex(targetUserId)
+    if (indexSessions) {
+        return { sessions: indexSessions, source: 'session_index' }
+    }
+
+    return null
 }
 
 async function resolveTotals(targetUserId: string, filters: SessionPagerFilters): Promise<number | null> {
     try {
-        if (!filters.track && !filters.car) {
+        if (!filters.track && !filters.car && !filters.carCategory) {
             const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
             const constraints: QueryConstraint[] = []
             const types = (filters.sessionTypes || []).filter((t) => Number.isFinite(t))
@@ -301,6 +425,7 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
             || !!filters.toDateIso
             || !!filters.track
             || !!filters.car
+            || !!filters.carCategory
             || !!filters.hideEmpty
         if (!hasServerFilters) {
             return Number(stats.totalSessions ?? sessionIndex.totalSessions ?? null) || null
@@ -311,6 +436,7 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
         const listIsComplete = totalSessions <= list.length
         if (!listIsComplete) return null
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         const pseudoSessions: SessionDocument[] = list.map((entry: any) => ({
             sessionId: entry.id,
             fileHash: '',
@@ -344,7 +470,7 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
 
 async function resolveCloudTotalsOnly(targetUserId: string, filters: SessionPagerFilters): Promise<number | null> {
     try {
-        if (filters.track || filters.car) return null
+        if (filters.track || filters.car || filters.carCategory) return null
 
         const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
         const constraints: QueryConstraint[] = []
@@ -409,6 +535,7 @@ async function queryCloudPage(
         if (cursor) pageConstraints.push(startAfter(cursor))
         pageConstraints.push(limit(pageSize + 1))
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         let snapshot: any
         try {
             snapshot = await getDocsTracked(query(sessionsRef, ...pageConstraints))
@@ -620,6 +747,7 @@ export function useSessionPager() {
 
     const isElectron = computed(() => {
         if (typeof window === 'undefined') return false
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         return !!(window as any).electronAPI
     })
 
@@ -656,6 +784,31 @@ export function useSessionPager() {
         try {
             const isOwner = targetUserId === currentUser.value?.uid
             const localSessions = (isElectron.value ? await getLocalSessionsForUser(targetUserId) : [])
+            const lightweightSource = await loadLightweightSessionSource(targetUserId)
+
+            if (lightweightSource) {
+                const filteredCloudSessions = applyClientFilters(lightweightSource.sessions, filters)
+                const localOverlay = (isOwner && isElectron.value)
+                    ? selectLocalOverlaySessions(applyClientFilters(localSessions, filters), identitiesFromSessions(lightweightSource.sessions))
+                    : []
+                const mergedAll = mergeLocalFirst(localOverlay, filteredCloudSessions)
+                const pageResult = pageFromAllSessions(mergedAll, requestedPage, pageSize)
+
+                globalSessions.value = pageResult.pageSessions
+                globalState.value.currentPage = pageResult.currentPage
+                globalState.value.hasPrev = pageResult.hasPrev
+                globalState.value.hasNext = pageResult.hasNext
+                globalState.value.totalItems = pageResult.totalItems
+                globalState.value.diagnostics = {
+                    source: localOverlay.length > 0 ? 'mixed' : lightweightSource.source,
+                    cloudCount: filteredCloudSessions.length,
+                    localCount: localSessions.length,
+                    localOverlayCount: localOverlay.length,
+                    pendingLocalCount: localSessions.filter((session) => session.syncState !== 'synced').length
+                }
+                writePageCache(pageResult.currentPage, globalSessions.value)
+                return globalSessions.value
+            }
 
             if (isOwner && isElectron.value && globalOnline.value) {
                 const mergedResult = await buildMergedOnlineOwnerPage(
@@ -735,6 +888,7 @@ export function useSessionPager() {
             }
             writePageCache(reachablePage, globalSessions.value)
             return globalSessions.value
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (e: any) {
             globalError.value = e?.message || 'Errore caricamento sessioni paginato'
             console.error('[PAGER] loadPage error:', e)

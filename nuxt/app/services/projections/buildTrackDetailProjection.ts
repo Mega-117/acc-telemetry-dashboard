@@ -1,6 +1,8 @@
 import type { SessionDocument } from '~/composables/useTelemetryData'
 import type { CarCategory } from '~/composables/useTelemetryData'
-import type { TrackDetailProjection, TrackHistoricalPointProjection, TrackRecentSessionProjection } from '~/types/trackProjections'
+import type { TrackDetailProjection, TrackFuelBucketReference, TrackHistoricalPointProjection, TrackRecentSessionProjection } from '~/types/trackProjections'
+
+const RACE_FUEL_BUCKETS = ['40-60', '60-80', '80-100', '100+'] as const
 
 export function buildTrackDetailProjection(params: {
   trackId: string
@@ -32,6 +34,32 @@ export function buildTrackDetailProjection(params: {
   } = params
 
   const gripBests = recalculatedBestByGrip[selectedGrip] || {}
+  const raceFuelBucket = getRaceFuelBucket(gripBests.bestRaceFuel)
+  const avgRaceFuelBucket = getRaceFuelBucket(gripBests.bestAvgRaceFuel)
+  const raceBucketRecord = raceFuelBucket ? gripBests.raceBestByFuelBucket?.[raceFuelBucket] : null
+  const avgRaceBucketRecord = avgRaceFuelBucket ? gripBests.raceAvgByFuelBucket?.[avgRaceFuelBucket] : null
+  const raceFuelBuckets: TrackFuelBucketReference[] = RACE_FUEL_BUCKETS.map((bucket) => {
+    const bestRecord = normalizeFuelBucketRecord(gripBests.raceBestByFuelBucket?.[bucket])
+    const avgRecord = normalizeFuelBucketRecord(gripBests.raceAvgByFuelBucket?.[bucket])
+    return {
+      bucket,
+      bestRace: bestRecord?.timeMs ? formatLapTime(bestRecord.timeMs) : null,
+      bestRaceFuel: bestRecord?.fuel ?? null,
+      bestRaceAirTemp: bestRecord?.airTemp ?? null,
+      bestRaceDate: bestRecord?.date ?? null,
+      bestRaceSessionId: bestRecord?.sessionId ?? null,
+      bestRaceSampleCount: bestRecord?.sampleLapCount ?? null,
+      bestRaceConfidence: bestRecord?.confidence ?? null,
+      avgRace: avgRecord?.timeMs ? formatLapTime(avgRecord.timeMs) : null,
+      avgRaceFuel: avgRecord?.fuel ?? null,
+      avgRaceAirTemp: avgRecord?.airTemp ?? null,
+      avgRaceDate: avgRecord?.date ?? null,
+      avgRaceSessionId: avgRecord?.sessionId ?? null,
+      avgRaceSampleCount: avgRecord?.sampleLapCount ?? null,
+      avgRaceConfidence: avgRecord?.confidence ?? null,
+      hasData: !!bestRecord?.timeMs || !!avgRecord?.timeMs
+    }
+  })
 
   const recentSessions: TrackRecentSessionProjection[] = visibleSessions.map((session) => {
     const summary = session.summary || {}
@@ -110,6 +138,14 @@ export function buildTrackDetailProjection(params: {
       bestAvgRaceDate: gripBests.bestAvgRaceDate || null,
       bestQualyFuel: bestFuelData.qualyFuel,
       bestRaceFuel: bestFuelData.raceFuel,
+      bestAvgRaceFuel: gripBests.bestAvgRaceFuel ?? null,
+      bestRaceFuelBucket: raceFuelBucket,
+      bestAvgRaceFuelBucket: avgRaceFuelBucket,
+      bestRaceSampleCount: raceBucketRecord?.sampleLapCount ?? null,
+      bestAvgRaceSampleCount: avgRaceBucketRecord?.sampleLapCount ?? null,
+      bestRaceConfidence: raceBucketRecord?.confidence ?? null,
+      bestAvgRaceConfidence: avgRaceBucketRecord?.confidence ?? null,
+      raceFuelBuckets,
       hasGripData: !!gripBests.bestQualy || !!gripBests.bestRace || !!gripBests.bestAvgRace
     },
     recentSessions,
@@ -124,5 +160,36 @@ export function buildTrackDetailProjection(params: {
     },
     category: selectedCategory,
     grip: selectedGrip
+  }
+}
+
+function getRaceFuelBucket(fuel: number | null | undefined): string | null {
+  const parsed = Number(fuel || 0)
+  if (!parsed || parsed <= 40) return null
+  if (parsed <= 60) return '40-60'
+  if (parsed <= 80) return '60-80'
+  if (parsed <= 100) return '80-100'
+  return '100+'
+}
+
+function normalizeFuelBucketRecord(record: any): {
+  timeMs: number
+  fuel: number | null
+  airTemp: number | null
+  date: string | null
+  sessionId: string | null
+  sampleLapCount: number | null
+  confidence: string | null
+} | null {
+  const timeMs = Number(record?.timeMs || 0)
+  if (!timeMs) return null
+  return {
+    timeMs,
+    fuel: record?.fuel ?? null,
+    airTemp: record?.airTemp ?? null,
+    date: record?.date ?? null,
+    sessionId: record?.sessionId ?? null,
+    sampleLapCount: record?.sampleLapCount ?? null,
+    confidence: record?.confidence ?? null
   }
 }

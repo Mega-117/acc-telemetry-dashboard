@@ -9,13 +9,25 @@ import type { SessionMeta, SessionSummary } from '~/composables/useTelemetryData
 
 type BestConditions = { airTemp: number; roadTemp: number; grip: string }
 type HistoricalEligibility = 'qualy_historical' | 'race_non_historical' | 'race_historical'
+type GripEntry = {
+  bestQualy: number | null; bestQualyTemp: number | null; bestQualyFuel: number | null
+  bestRace: number | null; bestRaceTemp: number | null; bestRaceFuel: number | null
+  bestAvgRace: number | null; bestAvgRaceTemp: number | null; bestAvgRaceFuel: number | null
+  raceBestByFuelBucket: Record<string, unknown>; raceAvgByFuelBucket: Record<string, unknown>
+}
 export type SessionSummarySource = 'canonical' | 'legacy_fallback' | 'missing_canonical'
 
 const VALID_GRIPS = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum'] as const
 const STINT_RACE_FUEL_THRESHOLD_L = 20
 const HISTORICAL_RACE_FUEL_THRESHOLD_L = 40
+const RACE_FUEL_BUCKETS = [
+  { key: '40-60', lower: 40, upper: 60 },
+  { key: '60-80', lower: 60, upper: 80 },
+  { key: '80-100', lower: 80, upper: 100 },
+  { key: '100+', lower: 100, upper: null }
+] as const
 
-export const BEST_RULES_VERSION = 3
+export const BEST_RULES_VERSION = 5
 
 function normalizeGrip(grip: string): string {
   if (grip === 'Opt') return 'Optimum'
@@ -35,15 +47,19 @@ function toNonNegativeInt(value: unknown): number {
   return Math.round(parsed)
 }
 
-function buildConditions(lap: any): BestConditions {
+function buildConditions(lap: Record<string, unknown>): BestConditions {
   return {
-    airTemp: toNonNegativeInt(lap?.air_temp),
-    roadTemp: toNonNegativeInt(lap?.road_temp),
-    grip: normalizeGrip(String(lap?.track_grip_status || 'Unknown'))
+    airTemp: toNonNegativeInt(lap?.['air_temp']),
+    roadTemp: toNonNegativeInt(lap?.['road_temp']),
+    grip: normalizeGrip(String(lap?.['track_grip_status'] || 'Unknown'))
   }
 }
 
-function emptyBestByGrip(): Record<string, any> {
+function emptyBucketMap(): Record<string, unknown> {
+  return Object.fromEntries(RACE_FUEL_BUCKETS.map((bucket) => [bucket.key, {}]))
+}
+
+function emptyBestByGrip(): Record<string, unknown> {
   return Object.fromEntries(
     VALID_GRIPS.map((grip) => [
       grip,
@@ -56,13 +72,24 @@ function emptyBestByGrip(): Record<string, any> {
         bestRaceFuel: null,
         bestAvgRace: null,
         bestAvgRaceTemp: null,
-        bestAvgRaceFuel: null
+        bestAvgRaceFuel: null,
+        raceBestByFuelBucket: emptyBucketMap(),
+        raceAvgByFuelBucket: emptyBucketMap()
       }
     ])
   )
 }
 
-function normalizeBestByGrip(bestByGrip: Record<string, any> | null | undefined): Record<string, any> {
+function normalizeBucketMap(bucketMap: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  const normalized = emptyBucketMap()
+  if (!bucketMap || typeof bucketMap !== 'object') return normalized
+  for (const bucket of RACE_FUEL_BUCKETS) {
+    normalized[bucket.key] = bucketMap[bucket.key] || {}
+  }
+  return normalized
+}
+
+function normalizeBestByGrip(bestByGrip: Record<string, unknown> | null | undefined): Record<string, unknown> {
   const normalized = emptyBestByGrip()
   if (!bestByGrip || typeof bestByGrip !== 'object') return normalized
 
@@ -71,7 +98,9 @@ function normalizeBestByGrip(bestByGrip: Record<string, any> | null | undefined)
     if (!normalized[grip]) continue
     normalized[grip] = {
       ...normalized[grip],
-      ...(values || {})
+      ...(values || {}),
+      raceBestByFuelBucket: normalizeBucketMap((values as Record<string, unknown>)?.raceBestByFuelBucket as Record<string, unknown> | null),
+      raceAvgByFuelBucket: normalizeBucketMap((values as Record<string, unknown>)?.raceAvgByFuelBucket as Record<string, unknown> | null)
     }
   }
 
@@ -91,14 +120,11 @@ function updateBest<TConditions extends BestConditions | null>(
   return [currentValue, currentConditions]
 }
 
-function classifyLegacyStintType(
+function classifyStintTypeFromFuel(
   fuelStart: number | null,
-  sessionType: number | null | undefined,
-  stintType?: string
+  sessionType: number | null | undefined
 ): 'Qualify' | 'Race' {
   if (sessionType === 1) return 'Qualify'
-  if (stintType === 'Qualify') return 'Qualify'
-  if (stintType === 'Race') return 'Race'
   return (fuelStart ?? 0) > STINT_RACE_FUEL_THRESHOLD_L ? 'Race' : 'Qualify'
 }
 
@@ -107,46 +133,123 @@ function classifyHistoricalEligibility(
   sessionType: number | null | undefined,
   stintType?: string
 ): HistoricalEligibility {
-  const effectiveStintType = classifyLegacyStintType(fuelStart, sessionType, stintType)
+  const effectiveStintType = stintType || classifyStintTypeFromFuel(fuelStart, sessionType)
   if (sessionType === 1 || effectiveStintType === 'Qualify') return 'qualy_historical'
   if ((fuelStart ?? 0) <= HISTORICAL_RACE_FUEL_THRESHOLD_L) return 'race_non_historical'
   return 'race_historical'
 }
 
-function normalizeCanonicalSummary(rawObj: any, sessionInfo: any, stints: any[]): SessionSummary | null {
-  const existing = rawObj?.summary
-  const version = Number(existing?.best_rules_version || 0)
+function raceFuelBucket(fuel: number | null): string | null {
+  if (!fuel || fuel <= HISTORICAL_RACE_FUEL_THRESHOLD_L) return null
+  const bucket = RACE_FUEL_BUCKETS.find((candidate) => {
+    return fuel > candidate.lower && (candidate.upper === null || fuel <= candidate.upper)
+  })
+  return bucket?.key ?? null
+}
+
+function lapBucketFuel(lap: Record<string, unknown>): number | null {
+  return toPositiveNumber(lap?.['fuel_start']) ?? toPositiveNumber(lap?.['fuel_remaining'])
+}
+
+function buildBucketRecord({
+  timeMs,
+  fuel,
+  conditions,
+  sampleLapCount,
+  source
+}: {
+  timeMs: number
+  fuel: number | null
+  conditions: BestConditions
+  sampleLapCount: number
+  source: 'best_lap' | 'stint_avg' | 'legacy_fallback'
+}): Record<string, unknown> {
+  return {
+    timeMs: toNonNegativeInt(timeMs),
+    fuel,
+    airTemp: conditions.airTemp,
+    roadTemp: conditions.roadTemp,
+    grip: conditions.grip,
+    sessionId: null,
+    date: null,
+    sampleLapCount,
+    confidence: 'high',
+    source
+  }
+}
+
+function updateBucketBest(bucketMap: Record<string, unknown>, bucket: string, record: Record<string, unknown>): void {
+  const current = (bucketMap[bucket] || {}) as Record<string, unknown>
+  if (!current['timeMs'] || (record['timeMs'] as number) < (current['timeMs'] as number)) {
+    bucketMap[bucket] = record
+  }
+}
+
+function average(values: Array<unknown>): number | null {
+  const parsed = values.map(toPositiveNumber).filter((value): value is number => value !== null)
+  if (!parsed.length) return null
+  return Math.round(parsed.reduce((sum, value) => sum + value, 0) / parsed.length)
+}
+
+function dominantGrip(laps: Record<string, unknown>[]): string {
+  const counts = new Map<string, number>()
+  laps.forEach((lap) => {
+    const grip = normalizeGrip(String(lap?.['track_grip_status'] || 'Unknown'))
+    counts.set(grip, (counts.get(grip) || 0) + 1)
+  })
+  let selected = 'Unknown'
+  let bestCount = -1
+  counts.forEach((count, grip) => {
+    if (count > bestCount) {
+      selected = grip
+      bestCount = count
+    }
+  })
+  return selected
+}
+
+function buildAvgConditions(laps: Record<string, unknown>[]): BestConditions {
+  return {
+    airTemp: average(laps.map((lap) => lap?.['air_temp'])) ?? 0,
+    roadTemp: average(laps.map((lap) => lap?.['road_temp'])) ?? 0,
+    grip: dominantGrip(laps)
+  }
+}
+
+function normalizeCanonicalSummary(rawObj: Record<string, unknown>, sessionInfo: Record<string, unknown>, stints: Record<string, unknown>[]): SessionSummary | null {
+  const existing = rawObj?.['summary'] as Record<string, unknown> | null | undefined
+  const version = Number(existing?.['best_rules_version'] || 0)
   if (!existing || version < BEST_RULES_VERSION) {
     return null
   }
 
   return {
-    laps: toNonNegativeInt(existing.laps ?? sessionInfo.laps_total ?? rawObj?.laps?.length),
-    lapsValid: toNonNegativeInt(existing.lapsValid ?? sessionInfo.laps_valid),
-    bestLap: toPositiveNumber(existing.bestLap ?? sessionInfo.session_best_lap),
-    avgCleanLap: toPositiveNumber(existing.avgCleanLap ?? sessionInfo.avg_clean_lap),
-    totalTime: toNonNegativeInt(existing.totalTime ?? sessionInfo.total_drive_time_ms),
-    stintCount: toNonNegativeInt(existing.stintCount ?? stints.length),
-    best_qualy_ms: toPositiveNumber(existing.best_qualy_ms),
-    best_qualy_conditions: existing.best_qualy_conditions || null,
-    best_session_race_ms: toPositiveNumber(existing.best_session_race_ms),
-    best_session_race_conditions: existing.best_session_race_conditions || null,
-    best_race_ms: toPositiveNumber(existing.best_race_ms),
-    best_race_conditions: existing.best_race_conditions || null,
-    best_avg_race_ms: toPositiveNumber(existing.best_avg_race_ms),
-    best_avg_race_conditions: existing.best_avg_race_conditions || null,
+    laps: toNonNegativeInt(existing['laps'] ?? sessionInfo['laps_total'] ?? (rawObj?.['laps'] as unknown[] | undefined)?.length),
+    lapsValid: toNonNegativeInt(existing['lapsValid'] ?? sessionInfo['laps_valid']),
+    bestLap: toPositiveNumber(existing['bestLap'] ?? sessionInfo['session_best_lap']),
+    avgCleanLap: toPositiveNumber(existing['avgCleanLap'] ?? sessionInfo['avg_clean_lap']),
+    totalTime: toNonNegativeInt(existing['totalTime'] ?? sessionInfo['total_drive_time_ms']),
+    stintCount: toNonNegativeInt(existing['stintCount'] ?? stints.length),
+    best_qualy_ms: toPositiveNumber(existing['best_qualy_ms']),
+    best_qualy_conditions: (existing['best_qualy_conditions'] as BestConditions | null) || null,
+    best_session_race_ms: toPositiveNumber(existing['best_session_race_ms']),
+    best_session_race_conditions: (existing['best_session_race_conditions'] as BestConditions | null) || null,
+    best_race_ms: toPositiveNumber(existing['best_race_ms']),
+    best_race_conditions: (existing['best_race_conditions'] as BestConditions | null) || null,
+    best_avg_race_ms: toPositiveNumber(existing['best_avg_race_ms']),
+    best_avg_race_conditions: (existing['best_avg_race_conditions'] as BestConditions | null) || null,
     best_rules_version: BEST_RULES_VERSION,
-    best_by_grip: normalizeBestByGrip(existing.best_by_grip)
+    best_by_grip: normalizeBestByGrip(existing['best_by_grip'] as Record<string, unknown> | null)
   }
 }
 
-function buildMissingCanonicalSummary(rawObj: any, sessionInfo: any, stints: any[]): SessionSummary {
+function buildMissingCanonicalSummary(rawObj: Record<string, unknown>, sessionInfo: Record<string, unknown>, stints: Record<string, unknown>[]): SessionSummary {
   return {
-    laps: toNonNegativeInt(sessionInfo.laps_total ?? rawObj?.laps?.length),
-    lapsValid: toNonNegativeInt(sessionInfo.laps_valid),
-    bestLap: toPositiveNumber(sessionInfo.session_best_lap ?? rawObj?.bestLap),
-    avgCleanLap: toPositiveNumber(sessionInfo.avg_clean_lap),
-    totalTime: toNonNegativeInt(sessionInfo.total_drive_time_ms),
+    laps: toNonNegativeInt(sessionInfo['laps_total'] ?? (rawObj?.['laps'] as unknown[] | undefined)?.length),
+    lapsValid: toNonNegativeInt(sessionInfo['laps_valid']),
+    bestLap: toPositiveNumber(sessionInfo['session_best_lap'] ?? rawObj?.['bestLap']),
+    avgCleanLap: toPositiveNumber(sessionInfo['avg_clean_lap']),
+    totalTime: toNonNegativeInt(sessionInfo['total_drive_time_ms']),
     stintCount: toNonNegativeInt(stints.length),
     best_qualy_ms: null,
     best_qualy_conditions: null,
@@ -161,7 +264,7 @@ function buildMissingCanonicalSummary(rawObj: any, sessionInfo: any, stints: any
   }
 }
 
-function buildLegacyCompatibilitySummary(rawObj: any, sessionInfo: any, stints: any[]): SessionSummary {
+function buildLegacyCompatibilitySummary(rawObj: Record<string, unknown>, sessionInfo: Record<string, unknown>, stints: Record<string, unknown>[]): SessionSummary {
   const bestByGrip = emptyBestByGrip()
   let bestQualyMs: number | null = null
   let bestQualyConditions: BestConditions | null = null
@@ -172,22 +275,25 @@ function buildLegacyCompatibilitySummary(rawObj: any, sessionInfo: any, stints: 
   let bestAvgRaceMs: number | null = null
   let bestAvgRaceConditions: BestConditions | null = null
 
-  const sessionType = sessionInfo.session_type ?? 0
+  const sessionType = (sessionInfo['session_type'] as number | null) ?? 0
 
-  stints.forEach((stint: any) => {
-    const laps = Array.isArray(stint?.laps) ? stint.laps : []
-    const stintFuelStart = toPositiveNumber(stint?.fuel_start)
-    const stintType = classifyLegacyStintType(stintFuelStart, sessionType, stint?.type)
+  stints.forEach((stint) => {
+    const laps: Record<string, unknown>[] = Array.isArray(stint?.['laps']) ? (stint['laps'] as Record<string, unknown>[]) : []
+    const stintFuelStart = toPositiveNumber(stint?.['fuel_start'])
+    const stintType = classifyStintTypeFromFuel(stintFuelStart, sessionType)
 
-    laps.forEach((lap: any) => {
-      const lapTime = toPositiveNumber(lap?.lap_time_ms)
-      if (!lapTime || !lap?.is_valid || lap?.has_pit_stop) return
+    laps.forEach((lap) => {
+      const lapTime = toPositiveNumber(lap?.['lap_time_ms'])
+      if (!lapTime || !lap?.['is_valid'] || lap?.['has_pit_stop'] || lap?.['pit_out_lap']) return
 
-      const lapFuelStart = toPositiveNumber(lap?.fuel_start) ?? stintFuelStart
-      const historicalEligibility = classifyHistoricalEligibility(lapFuelStart, sessionType, stintType)
+      const lapFuelReference = lapBucketFuel(lap)
+      const historicalEligibility = classifyHistoricalEligibility(
+        lapFuelReference ?? stintFuelStart,
+        sessionType,
+        stintType
+      )
       const conditions = buildConditions(lap)
       const grip = conditions.grip
-      const fuelRemaining = toPositiveNumber(lap?.fuel_remaining)
 
       if (historicalEligibility === 'qualy_historical') {
         ;[bestQualyMs, bestQualyConditions] = updateBest(
@@ -196,14 +302,17 @@ function buildLegacyCompatibilitySummary(rawObj: any, sessionInfo: any, stints: 
           lapTime,
           conditions
         )
-        const gripBest = bestByGrip[grip]
+        const gripBest = bestByGrip[grip] as GripEntry | undefined
         if (gripBest && (!gripBest.bestQualy || lapTime < gripBest.bestQualy)) {
           gripBest.bestQualy = lapTime
           gripBest.bestQualyTemp = conditions.airTemp
-          gripBest.bestQualyFuel = fuelRemaining
+          gripBest.bestQualyFuel = lapFuelReference
         }
         return
       }
+
+      const bucket = raceFuelBucket(lapFuelReference)
+      if (historicalEligibility !== 'race_historical' || !bucket) return
 
       ;[bestSessionRaceMs, bestSessionRaceConditions] = updateBest(
         bestSessionRaceMs,
@@ -219,28 +328,39 @@ function buildLegacyCompatibilitySummary(rawObj: any, sessionInfo: any, stints: 
           lapTime,
           conditions
         )
-        const gripBest = bestByGrip[grip]
+        const gripBest = bestByGrip[grip] as GripEntry | undefined
         if (gripBest && (!gripBest.bestRace || lapTime < gripBest.bestRace)) {
           gripBest.bestRace = lapTime
           gripBest.bestRaceTemp = conditions.airTemp
-          gripBest.bestRaceFuel = fuelRemaining
+          gripBest.bestRaceFuel = lapFuelReference
+        }
+        if (gripBest) {
+          updateBucketBest(
+            gripBest.raceBestByFuelBucket,
+            bucket,
+            buildBucketRecord({
+              timeMs: lapTime,
+              fuel: lapFuelReference,
+              conditions,
+              sampleLapCount: 1,
+              source: 'best_lap'
+            })
+          )
         }
       }
     })
 
-    const validStintLaps = laps.filter((lap: any) => {
-      return !!toPositiveNumber(lap?.lap_time_ms) && lap?.is_valid && !lap?.has_pit_stop
+    const validStintLaps = laps.filter((lap) => {
+      return !!toPositiveNumber(lap?.['lap_time_ms']) && lap?.['is_valid'] && !lap?.['has_pit_stop'] && !lap?.['pit_out_lap']
     })
-    const avgCleanLap = toPositiveNumber(stint?.avg_clean_lap)
+    const avgCleanLap = toPositiveNumber(stint?.['avg_clean_lap'])
     const historicalEligibility = classifyHistoricalEligibility(stintFuelStart, sessionType, stintType)
     if (!avgCleanLap || validStintLaps.length < 5 || historicalEligibility !== 'race_historical') {
       return
     }
 
-    const firstLap = validStintLaps[0]
-    const conditions = buildConditions(firstLap)
+    const conditions = buildAvgConditions(validStintLaps)
     const grip = conditions.grip
-    const fuelRemaining = toPositiveNumber(firstLap?.fuel_remaining)
 
     ;[bestAvgRaceMs, bestAvgRaceConditions] = updateBest(
       bestAvgRaceMs,
@@ -249,20 +369,35 @@ function buildLegacyCompatibilitySummary(rawObj: any, sessionInfo: any, stints: 
       conditions
     )
 
-    const gripBest = bestByGrip[grip]
+    const gripBest = bestByGrip[grip] as GripEntry | undefined
     if (gripBest && (!gripBest.bestAvgRace || avgCleanLap < gripBest.bestAvgRace)) {
       gripBest.bestAvgRace = avgCleanLap
       gripBest.bestAvgRaceTemp = conditions.airTemp
-      gripBest.bestAvgRaceFuel = fuelRemaining
+      gripBest.bestAvgRaceFuel = stintFuelStart
+    }
+
+    const avgBucket = raceFuelBucket(stintFuelStart)
+    if (gripBest && avgBucket) {
+      updateBucketBest(
+        gripBest.raceAvgByFuelBucket,
+        avgBucket,
+        buildBucketRecord({
+          timeMs: avgCleanLap,
+          fuel: stintFuelStart,
+          conditions,
+          sampleLapCount: validStintLaps.length,
+          source: 'stint_avg'
+        })
+      )
     }
   })
 
   return {
-    laps: toNonNegativeInt(sessionInfo.laps_total ?? rawObj?.laps?.length),
-    lapsValid: toNonNegativeInt(sessionInfo.laps_valid),
-    bestLap: toPositiveNumber(sessionInfo.session_best_lap ?? rawObj?.bestLap),
-    avgCleanLap: toPositiveNumber(sessionInfo.avg_clean_lap),
-    totalTime: toNonNegativeInt(sessionInfo.total_drive_time_ms),
+    laps: toNonNegativeInt(sessionInfo['laps_total'] ?? (rawObj?.['laps'] as unknown[] | undefined)?.length),
+    lapsValid: toNonNegativeInt(sessionInfo['laps_valid']),
+    bestLap: toPositiveNumber(sessionInfo['session_best_lap'] ?? rawObj?.['bestLap']),
+    avgCleanLap: toPositiveNumber(sessionInfo['avg_clean_lap']),
+    totalTime: toNonNegativeInt(sessionInfo['total_drive_time_ms']),
     stintCount: toNonNegativeInt(stints.length),
     best_qualy_ms: bestQualyMs,
     best_qualy_conditions: bestQualyConditions,
@@ -284,19 +419,19 @@ export function generateSessionId(dateStart: string, track: string): string {
 }
 
 export function extractMetadata(
-  rawObj: any,
+  rawObj: Record<string, unknown>,
   options: { allowLegacyFallback?: boolean } = {}
 ): { meta: SessionMeta; summary: SessionSummary; summarySource: SessionSummarySource } {
-  const sessionInfo = rawObj?.session_info || {}
-  const stints = Array.isArray(rawObj?.stints) ? rawObj.stints : []
+  const sessionInfo = (rawObj?.['session_info'] || {}) as Record<string, unknown>
+  const stints: Record<string, unknown>[] = Array.isArray(rawObj?.['stints']) ? (rawObj['stints'] as Record<string, unknown>[]) : []
 
   const meta: SessionMeta = {
-    track: sessionInfo.track || rawObj?.track || 'Unknown',
-    date_start: sessionInfo.date_start || rawObj?.date || new Date().toISOString(),
-    date_end: sessionInfo.date_end || null,
-    car: sessionInfo.car_model || sessionInfo.car || rawObj?.car || '',
-    session_type: sessionInfo.session_type ?? 0,
-    driver: sessionInfo.driver || null
+    track: String(sessionInfo['track'] || rawObj?.['track'] || 'Unknown'),
+    date_start: String(sessionInfo['date_start'] || rawObj?.['date'] || new Date().toISOString()),
+    date_end: (sessionInfo['date_end'] as string | null) || null,
+    car: String(sessionInfo['car_model'] || sessionInfo['car'] || rawObj?.['car'] || ''),
+    session_type: (sessionInfo['session_type'] as number) ?? 0,
+    driver: (sessionInfo['driver'] as string | null) || null
   }
 
   const canonicalSummary = normalizeCanonicalSummary(rawObj, sessionInfo, stints)

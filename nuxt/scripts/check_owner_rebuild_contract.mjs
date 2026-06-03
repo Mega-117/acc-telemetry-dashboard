@@ -67,6 +67,21 @@ assert.ok(
   'Projection rebuild writes must sanitize undefined values before Firestore setDoc'
 )
 
+assert.ok(
+  projectionRebuild.indexOf('await resetAllTrackBests(uid)') < projectionRebuild.indexOf('await applyTrackBestsProjectionDeltas'),
+  'trackBests rebuild must reset old projections before applying VNext deltas'
+)
+
+assert.ok(
+  service.indexOf('deleteCollectionDocs(`users/${uid}/trackBests`)') < service.indexOf('await applyTrackBestsProjectionDeltas'),
+  'owner rebuild must delete trackBests before rebuilding VNext projections'
+)
+
+assert.ok(
+  trackBestsProjection.includes('TRACK_BESTS_SCHEMA_VERSION = 4'),
+  'trackBests projection must use schema v4 for fuel-bucket VNext'
+)
+
 assert.equal(
   /\|\|\s*undefined/.test(sessionIndexProjection),
   false,

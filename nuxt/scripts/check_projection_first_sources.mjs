@@ -7,8 +7,11 @@ const gatewayPath = path.resolve(scriptDir, '../app/composables/useTelemetryGate
 const source = fs.readFileSync(gatewayPath, 'utf8')
 
 function extractFunctionBody(functionName) {
-  const signature = `async function ${functionName}(`
-  const start = source.indexOf(signature)
+  const asyncSignature = `async function ${functionName}(`
+  const syncSignature = `function ${functionName}(`
+  const asyncStart = source.indexOf(asyncSignature)
+  const syncStart = source.indexOf(syncSignature)
+  const start = asyncStart !== -1 ? asyncStart : syncStart
   if (start === -1) {
     throw new Error(`Missing function ${functionName}`)
   }
@@ -53,6 +56,17 @@ for (const check of checks) {
     if (body.includes(forbidden)) {
       failures.push(`${check.functionName} contains forbidden standard-flow call: ${forbidden}`)
     }
+  }
+}
+
+const trackDetailBuilder = extractFunctionBody('buildTrackDetailFromProjectionDocument')
+const trackDetailBuilderStart = source.indexOf('function buildTrackDetailFromProjectionDocument(')
+const trackDetailBuilderEnd = source.indexOf('export function useTelemetryGateway()', trackDetailBuilderStart)
+const trackDetailBuilderSource = source.slice(trackDetailBuilderStart, trackDetailBuilderEnd)
+void trackDetailBuilder
+for (const required of ['raceFuelBuckets', 'raceBestByFuelBucket', 'raceAvgByFuelBucket', 'bestRaceFuelBucket', 'bestAvgRaceFuelBucket']) {
+  if (!trackDetailBuilderSource.includes(required)) {
+    failures.push(`buildTrackDetailFromProjectionDocument does not forward ${required}`)
   }
 }
 

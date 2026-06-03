@@ -4,13 +4,17 @@ import { applyUserProjectionDeltas, type UserProjectionDelta } from './syncUserP
 import type { SessionDocument } from '~/composables/useTelemetryData'
 
 export async function refreshSyncProjections(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
   changedCount: number
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   loadSessions: (targetUserId?: string, forceRefresh?: boolean, options?: any) => Promise<SessionDocument[] | null>
   clearTrackDerivedCaches: () => void
   resetAllTrackBests: (uid: string) => Promise<number>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   getDocFn: (ref: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
   bestRulesVersion: number
   reason: string

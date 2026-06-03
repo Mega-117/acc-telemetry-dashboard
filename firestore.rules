@@ -107,6 +107,18 @@ service cloud.firestore {
         allow read: if isCoachOfUser(userId);
       }
 
+      match /sessionListMeta/{docId} {
+        allow read: if isAdmin();
+        allow read, write: if isOwner(userId);
+        allow read: if isCoachOfUser(userId);
+      }
+
+      match /sessionListPages/{pageId} {
+        allow read: if isAdmin();
+        allow read, write: if isOwner(userId);
+        allow read: if isCoachOfUser(userId);
+      }
+
       match /activities/{activityId} {
         allow read: if isAdmin();
         allow read, write: if isOwner(userId);

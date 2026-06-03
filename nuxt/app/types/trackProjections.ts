@@ -2,6 +2,25 @@ import type { CarCategory } from '~/composables/useTelemetryData'
 
 export const TRACK_DETAIL_PROJECTION_SCHEMA_VERSION = 1
 
+export interface TrackFuelBucketReference {
+  bucket: string
+  bestRace: string | null
+  bestRaceFuel: number | null
+  bestRaceAirTemp: number | null
+  bestRaceDate: string | null
+  bestRaceSessionId: string | null
+  bestRaceSampleCount: number | null
+  bestRaceConfidence: string | null
+  avgRace: string | null
+  avgRaceFuel: number | null
+  avgRaceAirTemp: number | null
+  avgRaceDate: string | null
+  avgRaceSessionId: string | null
+  avgRaceSampleCount: number | null
+  avgRaceConfidence: string | null
+  hasData: boolean
+}
+
 export interface TrackOverviewProjectionItem {
   id: string
   name: string
@@ -41,6 +60,13 @@ export interface TrackHeaderProjection {
   bestQualyFuel: number | null
   bestRaceFuel: number | null
   bestAvgRaceFuel?: number | null
+  bestRaceFuelBucket?: string | null
+  bestAvgRaceFuelBucket?: string | null
+  bestRaceSampleCount?: number | null
+  bestAvgRaceSampleCount?: number | null
+  bestRaceConfidence?: string | null
+  bestAvgRaceConfidence?: string | null
+  raceFuelBuckets?: TrackFuelBucketReference[]
   hasGripData: boolean
 }
 

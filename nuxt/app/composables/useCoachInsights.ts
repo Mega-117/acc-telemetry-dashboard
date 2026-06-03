@@ -78,6 +78,7 @@ export function useCoachInsights() {
   
   const getDailySuggestionScenarios = () => dailySuggestionScenarioOptions
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   const resolveDailySuggestionScenario = (recentSessions: any[]): CoachBriefingScenario => {
     if (!recentSessions || recentSessions.length === 0) {
       return 'clean_laps'
@@ -113,11 +114,13 @@ export function useCoachInsights() {
     return 'clean_laps'
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   const generateDailySuggestion = (recentSessions: any[], forcedScenario?: CoachBriefingScenario | null): Insight => {
     const scenario = forcedScenario || resolveDailySuggestionScenario(recentSessions)
     return dailySuggestionScenarios[scenario]
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   const generateDriverState = (recentSessions: any[]): Insight => {
     if (!recentSessions || recentSessions.length === 0) {
       return {
@@ -173,6 +176,7 @@ export function useCoachInsights() {
   // SESSION INSIGHTS (Final Read of a Session)
   // -------------------------------------------------------------
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   const generateSessionInsight = (session: any): Insight => {
     if (!session || !session.stints || session.stints.length === 0) {
       return {
@@ -187,9 +191,11 @@ export function useCoachInsights() {
     let avgLapMsSum = 0
     let stintsCount = session.stints.length
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     session.stints.forEach((stint: any) => {
       const laps = stint.laps || []
       totalLaps += laps.length
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       laps.forEach((lap: any) => {
         if (lap.is_valid && !lap.has_pit_stop) {
           validLaps++
@@ -217,7 +223,9 @@ export function useCoachInsights() {
     }
 
     // Heuristic 2: Good long run
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     const longestStint = session.stints.reduce((prev: any, current: any) => (prev.laps?.length > current.laps?.length) ? prev : current, {})
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     if (longestStint.laps && longestStint.laps.length > 8 && (longestStint.laps.filter((l:any)=>l.is_valid).length / longestStint.laps.length > 0.8)) {
       return {
         type: 'positive',
@@ -250,6 +258,7 @@ export function useCoachInsights() {
   // STINT COMPARISON INSIGHTS
   // -------------------------------------------------------------
   
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   const generateComparisonInsight = (stintA: any, stintB: any): Insight => {
     if (!stintA || !stintB) return { type: 'neutral', message: 'Seleziona due stint.' }
     

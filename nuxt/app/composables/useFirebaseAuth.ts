@@ -33,6 +33,7 @@ async function reloadPersistedUser(user: User): Promise<User | null> {
         await user.reload()
         await user.getIdToken(true)
         return auth.currentUser
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     } catch (error: any) {
         console.warn('[AUTH] Persisted user is no longer valid, signing out locally:', error?.code || error)
         await logoutCurrentUser().catch(() => {})
@@ -169,6 +170,7 @@ export function useFirebaseAuth() {
             const { user } = await registerWithEmail({ email, password, nickname, firstName, lastName })
             console.log('[AUTH] Registered:', email, 'Verification email sent')
             return { success: true, user }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (error: any) {
             console.error('[AUTH] Register error:', error.code)
             authError.value = translateAuthError(error.code)
@@ -182,6 +184,7 @@ export function useFirebaseAuth() {
             const { user } = await loginWithEmail(email, password)
             console.log('[AUTH] Logged in:', email)
             return { success: true, user }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (error: any) {
             console.error('[AUTH] Login error:', error.code)
             authError.value = translateAuthError(error.code)
@@ -194,6 +197,7 @@ export function useFirebaseAuth() {
             await logoutCurrentUser()
             console.log('[AUTH] Logged out')
             return { success: true }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (error: any) {
             console.error('[AUTH] Logout error:', error)
             return { success: false, error: error.message }
@@ -208,6 +212,7 @@ export function useFirebaseAuth() {
             await resendCurrentVerificationEmail(currentUser.value)
             console.log('[AUTH] Verification email resent')
             return { success: true }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (error: any) {
             console.error('[AUTH] Resend error:', error.code)
             return { success: false, error: translateAuthError(error.code) }
@@ -226,6 +231,7 @@ export function useFirebaseAuth() {
             }
             console.log('[AUTH] Email verified check:', refreshed.verified)
             return { verified: refreshed.verified, error: null }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (error: any) {
             console.error('[AUTH] Check verification error:', error)
             return { verified: false, error: error.message }

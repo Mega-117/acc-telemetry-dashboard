@@ -5,12 +5,15 @@ const WINDOW_FOCUS_SYNC_THROTTLE_MS = 5000
 
 export function setupAutoSyncController(params: {
   isElectron: boolean
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   electronAPI: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   currentUser: { value: any }
   handleTrigger: (trigger: 'filesChanged' | 'windowFocused' | 'initialFiles' | 'authReady', payload?: {
     files?: TelemetryFileDescriptor[]
     uid?: string
   }) => Promise<void>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   onInitialRegistry?: (data: { files: any[]; registry: any }) => void
 }) {
   const {
@@ -25,6 +28,7 @@ export function setupAutoSyncController(params: {
 
   let lastWindowFocusSyncAt = 0
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   electronAPI.onFilesChanged?.(async (data: { new: any[]; modified: any[] }) => {
     const changedFiles = [...(data?.new || []), ...(data?.modified || [])]
     if (changedFiles.length === 0) return
@@ -38,6 +42,7 @@ export function setupAutoSyncController(params: {
     await handleTrigger('windowFocused')
   })
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   electronAPI.onInitialFiles?.(async (data: { files: any[]; registry: any }) => {
     onInitialRegistry?.(data)
     await handleTrigger('initialFiles')

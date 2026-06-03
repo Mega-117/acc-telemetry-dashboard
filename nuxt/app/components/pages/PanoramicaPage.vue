@@ -131,23 +131,30 @@ function tracksMatch(left: string | null | undefined, right: string | null | und
 }
 
 async function loadOverview() {
-  const [projection, snapshot] = await Promise.all([
-    telemetryGateway.getOverviewProjection(targetUserId.value || undefined),
-    telemetryGateway.getOverviewSnapshot(targetUserId.value || undefined)
-  ])
+  const projection = await telemetryGateway.getOverviewProjection(targetUserId.value || undefined)
   overviewProjection.value = projection
-  overviewSnapshot.value = snapshot
+}
+
+async function loadRacePreparationSnapshot() {
+  if (!targetUserId.value || !hasNextRace.value) {
+    overviewSnapshot.value = null
+    return
+  }
+  overviewSnapshot.value = await telemetryGateway.getOverviewSnapshot(targetUserId.value || undefined)
 }
 
 async function loadRaceCalendar() {
   if (!targetUserId.value) {
     raceCalendarEvents.value = []
+    overviewSnapshot.value = null
     return
   }
   try {
     raceCalendarEvents.value = await loadRaceCalendarEvents(targetUserId.value, 12)
+    await loadRacePreparationSnapshot()
   } catch {
     raceCalendarEvents.value = []
+    overviewSnapshot.value = null
   }
 }
 

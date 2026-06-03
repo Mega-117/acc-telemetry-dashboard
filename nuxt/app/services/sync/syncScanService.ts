@@ -1,6 +1,6 @@
 import { BEST_RULES_VERSION, extractMetadata, generateSessionId } from '~/utils/sessionParser'
 import { isSessionFileCandidate } from '~/repositories/telemetryLocalRepository'
-import type { RegistryCacheEntry } from './sessionUploadService'
+import { calculateRawDataHash, calculateSummaryHash, type RegistryCacheEntry } from './sessionUploadService'
 
 export interface TelemetryFileDescriptor {
   name: string
@@ -22,6 +22,8 @@ export interface PendingSyncFile {
   rawObj: any
   rawText: string
   fileHash: string
+  rawDataHash: string
+  summaryHash: string
   sessionId: string
 }
 
@@ -31,6 +33,8 @@ export interface ScannedSyncFile {
   filePath: string
   sessionId: string
   fileHash: string
+  rawDataHash?: string
+  summaryHash?: string
 }
 
 export interface SkippedSyncFile {
@@ -93,6 +97,8 @@ export function createSyncScanService(params: {
             fileName,
             filePath,
             fileHash: registryEntry.fileHash,
+            rawDataHash: registryEntry.rawDataHash,
+            summaryHash: registryEntry.summaryHash,
             sessionId: registryEntry.sessionId
           })
           continue
@@ -119,6 +125,8 @@ export function createSyncScanService(params: {
         const sessionId = generateSessionId(meta.date_start, meta.track)
         const rawText = JSON.stringify(rawObj)
         const fileHash = await calculateContentHash(rawText)
+        const rawDataHash = await calculateRawDataHash(rawObj)
+        const summaryHash = await calculateSummaryHash(rawObj.summary || null)
         const registryHit = !!registryEntry
           && registryEntry.fileHash === fileHash
           && registryEntry.uploadedBy === ownerId
@@ -131,6 +139,8 @@ export function createSyncScanService(params: {
             fileName,
             filePath,
             fileHash,
+            rawDataHash,
+            summaryHash,
             sessionId
           })
           continue
@@ -143,6 +153,8 @@ export function createSyncScanService(params: {
           rawObj,
           rawText,
           fileHash,
+          rawDataHash,
+          summaryHash,
           sessionId
         })
       } catch (error: any) {

@@ -10,11 +10,15 @@ import {
   formatCarName, 
   formatTrackName,
   formatTime,
-  getSessionTypeLabel
+  getSessionTypeLabel,
+  getCarCategory,
+  CAR_CATEGORIES,
+  type CarCategory
 } from '~/composables/useTelemetryData'
 import { usePilotContext } from '~/composables/usePilotContext'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import type { SessionPagerFilters } from '~/composables/useSessionPager'
+import { ACC_CAR_OPTIONS, ACC_TRACK_OPTIONS } from '~/constants/accCatalog'
 
 // Emit to parent for navigation
 const emit = defineEmits<{
@@ -30,7 +34,10 @@ interface DisplaySession {
   time: string
   type: SessionType
   track: string
+  trackRaw: string
   car: string
+  carRaw: string
+  carCategory: CarCategory
   laps: number
   lapsValid: number
   stints: number
@@ -95,6 +102,26 @@ function getRangeStartIso(range: 'today' | '7d' | '30d' | 'all'): string | null 
   return start.toISOString()
 }
 
+function normalizeFilterToken(input?: string | null): string {
+  return String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function matchesFilterToken(filterValue: string, candidates: string[]): boolean {
+  if (filterValue === 'all') return true
+  const normalizedFilter = normalizeFilterToken(filterValue)
+  return candidates.some(candidate => normalizeFilterToken(candidate) === normalizedFilter)
+}
+
+function normalizeCatalogCategory(category: string): CarCategory {
+  const upper = category.toUpperCase()
+  return upper === 'CUP' ? 'CUP' : upper as CarCategory
+}
+
 function buildServerFilters(): SessionPagerFilters {
   return {
     sessionTypes: filterType.value === 'all' ? [] : [filterTypeToNumeric[filterType.value]],
@@ -102,6 +129,7 @@ function buildServerFilters(): SessionPagerFilters {
     toDateIso: filterTimeRange.value === 'all' ? null : new Date().toISOString(),
     track: filterTrack.value === 'all' ? null : filterTrack.value,
     car: filterCar.value === 'all' ? null : filterCar.value,
+    carCategory: filterCarCategory.value === 'all' ? null : filterCarCategory.value,
     hideEmpty: filterHideEmpty.value
   }
 }
@@ -134,6 +162,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
+  if (filterReloadTimer) clearTimeout(filterReloadTimer)
 })
 
 watch(
@@ -156,7 +185,10 @@ const sessions = computed<DisplaySession[]>(() => {
       time: formatTime(s.meta.date_start),
       type: sessionType,
       track: formatTrackName(s.meta.track),
+      trackRaw: s.meta.track || '',
       car: formatCarName(s.meta.car),
+      carRaw: s.meta.car || '',
+      carCategory: getCarCategory(s.meta.car || ''),
       laps: s.summary.laps || 0,
       lapsValid: s.summary.lapsValid || 0,
       stints: s.summary.stintCount ?? 0,
@@ -176,24 +208,42 @@ const sessions = computed<DisplaySession[]>(() => {
 // === FILTER STATE ===
 const filterType = ref<'all' | SessionType>('all')
 const filterTrack = ref('all')
+const filterCarCategory = ref<'all' | CarCategory>('all')
 const filterCar = ref('all')
 const filterTimeRange = ref<'today' | '7d' | '30d' | 'all'>('all')
 const filterHideEmpty = ref(true) // Hide sessions with 0 total laps (on by default)
+let filterReloadTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(
-  [filterType, filterTrack, filterCar, filterTimeRange, filterHideEmpty],
-  async () => {
-    await reloadFirstPage(true)
+  [filterType, filterTrack, filterCarCategory, filterCar, filterTimeRange, filterHideEmpty],
+  () => {
+    if (filterReloadTimer) clearTimeout(filterReloadTimer)
+    filterReloadTimer = setTimeout(() => {
+      void reloadFirstPage(true)
+    }, 300)
   }
 )
+
+watch(filterCarCategory, () => {
+  if (filterCar.value !== 'all' && !carOptions.value.some(car => car.id === filterCar.value)) {
+    filterCar.value = 'all'
+  }
+})
 
 // === VIEW MODE ===
 type ViewMode = 'list' | 'card'
 const viewMode = ref<ViewMode>('card')
 
-// Extract unique values for filters
-const tracks = computed(() => [...new Set(sessions.value.map(s => s.track))].sort())
-const cars = computed(() => [...new Set(sessions.value.map(s => s.car))].sort())
+const trackOptions = computed(() => ACC_TRACK_OPTIONS)
+const carOptions = computed(() => {
+  return ACC_CAR_OPTIONS
+    .filter(car => filterCarCategory.value === 'all' || normalizeCatalogCategory(car.category) === filterCarCategory.value)
+    .sort((a, b) => a.name.localeCompare(b.name))
+})
+const carAllLabel = computed(() => filterCarCategory.value === 'all'
+  ? 'Tutte le auto'
+  : `Tutte le auto ${filterCarCategory.value}`
+)
 
 // Filtered sessions
 const filteredSessions = computed(() => {
@@ -205,10 +255,13 @@ const filteredSessions = computed(() => {
     if (filterType.value !== 'all' && session.type !== filterType.value) return false
     
     // Track filter
-    if (filterTrack.value !== 'all' && session.track !== filterTrack.value) return false
+    if (!matchesFilterToken(filterTrack.value, [session.trackRaw, session.track])) return false
+
+    // Car category filter
+    if (filterCarCategory.value !== 'all' && session.carCategory !== filterCarCategory.value) return false
     
     // Car filter
-    if (filterCar.value !== 'all' && session.car !== filterCar.value) return false
+    if (!matchesFilterToken(filterCar.value, [session.carRaw, session.car])) return false
     
     // Time range filter
     if (filterTimeRange.value !== 'all') {
@@ -335,17 +388,25 @@ function goToSession(id: string) {
         
         <!-- Track select -->
         <div class="filter-group">
-          <select v-model="filterTrack" class="filter-select">
+          <select v-model="filterTrack" class="filter-select" aria-label="Filtra pista">
             <option value="all">Tutte le piste</option>
-            <option v-for="track in tracks" :key="track" :value="track">{{ track }}</option>
+            <option v-for="track in trackOptions" :key="track.id" :value="track.id">{{ track.name }}</option>
+          </select>
+        </div>
+
+        <!-- Car category select -->
+        <div class="filter-group">
+          <select v-model="filterCarCategory" class="filter-select" aria-label="Filtra categoria auto">
+            <option value="all">Tutte le categorie</option>
+            <option v-for="category in CAR_CATEGORIES" :key="category" :value="category">{{ category }}</option>
           </select>
         </div>
         
         <!-- Car select -->
         <div class="filter-group">
-          <select v-model="filterCar" class="filter-select">
-            <option value="all">Tutte le auto</option>
-            <option v-for="car in cars" :key="car" :value="car">{{ car }}</option>
+          <select v-model="filterCar" class="filter-select filter-select--car" aria-label="Filtra auto">
+            <option value="all">{{ carAllLabel }}</option>
+            <option v-for="car in carOptions" :key="car.id" :value="car.id">{{ car.name }}</option>
           </select>
         </div>
         
@@ -800,6 +861,10 @@ function goToSession(id: string) {
   option {
     background: #1a1a24;
     color: #fff;
+  }
+
+  &--car {
+    min-width: 210px;
   }
 }
 

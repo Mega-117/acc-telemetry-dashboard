@@ -1,0 +1,78 @@
+import { nextTick } from 'vue'
+import type { Ref } from 'vue'
+
+export type OverlaySizePreset = 'launcher' | 'placement' | 'select' | 'session' | 'expired' | 'completed'
+export type OverlaySize = { width: number; height: number }
+
+const OVERLAY_WORK_AREA_SIZE: OverlaySize = { width: 472, height: 768 }
+
+/**
+ * @description Synchronises the Electron overlay window dimensions with the current
+ * OverlaySizePreset. Uses a ResizeObserver on the root element to detect DOM changes and
+ * debounces resize requests via requestAnimationFrame to avoid redundant IPC calls.
+ * @param getApi - Factory that returns the current Electron API instance, or null.
+ * @param getCurrentPreset - Returns the active size preset name.
+ * @param overlayRoot - Ref to the root HTMLElement whose measured size is sent to Electron.
+ * @returns Object with scheduleOverlaySizeSync and destroyOverlaySizeObserver functions.
+ */
+export function useOverlaySize(
+  getApi: () => any | null,
+  getCurrentPreset: () => OverlaySizePreset,
+  overlayRoot: Ref<HTMLElement | null>,
+) {
+  let overlaySizeFrame: number | null = null
+  let overlaySizeRetry: ReturnType<typeof setTimeout> | null = null
+  let lastRequest: { preset: OverlaySizePreset; width?: number; height?: number } | null = null
+  let resizeObserver: ResizeObserver | null = null
+
+  function shouldSkip(req: { preset: OverlaySizePreset; width?: number; height?: number }) {
+    if (lastRequest
+      && lastRequest.preset === req.preset
+      && lastRequest.width === req.width
+      && lastRequest.height === req.height) return true
+    lastRequest = req
+    return false
+  }
+
+  async function applyOverlaySize(preset: OverlaySizePreset = getCurrentPreset()) {
+    await nextTick()
+    const req = { preset, width: OVERLAY_WORK_AREA_SIZE.width, height: OVERLAY_WORK_AREA_SIZE.height }
+    if (shouldSkip(req)) return
+    await getApi()?.trainingOverlaySetSize?.(req)
+  }
+
+  function scheduleOverlaySizeSync(retries = 4) {
+    if (typeof window === 'undefined') return
+    if (overlaySizeFrame !== null) window.cancelAnimationFrame(overlaySizeFrame)
+    if (overlaySizeRetry) { clearTimeout(overlaySizeRetry); overlaySizeRetry = null }
+    overlaySizeFrame = window.requestAnimationFrame(() => {
+      overlaySizeFrame = null
+      void applyOverlaySize()
+      if (retries > 0) {
+        overlaySizeRetry = setTimeout(() => { overlaySizeRetry = null; scheduleOverlaySizeSync(retries - 1) }, 90)
+      }
+    })
+  }
+
+  function disconnectResizeObserver() {
+    resizeObserver?.disconnect()
+    resizeObserver = null
+  }
+
+  function connectResizeObserver() {
+    if (typeof window === 'undefined' || typeof ResizeObserver === 'undefined') return
+    const el = overlayRoot.value
+    if (!el) return
+    disconnectResizeObserver()
+    resizeObserver = new ResizeObserver(() => scheduleOverlaySizeSync(1))
+    resizeObserver.observe(el)
+  }
+
+  function cleanup() {
+    if (typeof window !== 'undefined' && overlaySizeFrame !== null) window.cancelAnimationFrame(overlaySizeFrame)
+    if (overlaySizeRetry) clearTimeout(overlaySizeRetry)
+    disconnectResizeObserver()
+  }
+
+  return { applyOverlaySize, scheduleOverlaySizeSync, connectResizeObserver, disconnectResizeObserver, cleanup }
+}

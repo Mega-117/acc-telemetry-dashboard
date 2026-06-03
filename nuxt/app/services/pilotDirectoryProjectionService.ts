@@ -33,8 +33,11 @@ export interface PilotDirectoryRepairResult {
   reason?: 'missing_user'
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 type FirestoreDocFn = (db: any, path: string) => any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 type FirestoreGetDocFn = (ref: any) => Promise<any>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 type FirestoreSetDocFn = (ref: any, data: any, options?: any) => Promise<any>
 
 export function buildPilotDirectoryProjection(uid: string, userData: PilotDirectoryUserData) {
@@ -54,6 +57,7 @@ export function buildPilotDirectoryProjection(uid: string, userData: PilotDirect
 }
 
 export async function writePilotDirectoryFromUser(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
   userData: PilotDirectoryUserData
@@ -69,6 +73,7 @@ export async function writePilotDirectoryFromUser(params: {
 }
 
 export async function repairPilotDirectoryFromUser(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
   getDocFn: FirestoreGetDocFn
@@ -93,6 +98,7 @@ export async function repairPilotDirectoryFromUser(params: {
 }
 
 export async function updatePilotDirectoryActivity(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
   fields: PilotDirectoryActivityFields

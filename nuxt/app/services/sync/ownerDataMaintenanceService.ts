@@ -6,14 +6,17 @@ import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import {
   auditOwnerData,
   rebuildOwnerProjections,
+  rebuildOwnerSessionListProjection,
   reprocessOwnerCloudRawSummaries,
+  verifyOwnerMigrationLightweight,
   type OwnerCloudSummaryReprocessReport,
   type OwnerDataAuditReport,
-  type OwnerProjectionRebuildReport
+  type OwnerProjectionRebuildReport,
+  type OwnerSessionListProjectionRebuildReport
 } from './ownerDataRepairService'
 
 const CALLER = 'OwnerDataMaintenance'
-export const OWNER_DATA_MIGRATION_VERSION = 1
+export const OWNER_DATA_MIGRATION_VERSION = 2
 
 export type OwnerDataMaintenanceStatus =
   | 'idle'
@@ -58,6 +61,7 @@ export interface OwnerDataMaintenanceReport {
   finalAudit?: OwnerDataAuditReport | null
   cloudReprocess?: OwnerCloudSummaryReprocessReport | null
   rebuild?: OwnerProjectionRebuildReport | null
+  sessionListRebuild?: OwnerSessionListProjectionRebuildReport | null
   localReprocess?: unknown
   localReprocessStarted: boolean
   needsSyncBeforeCompletion: boolean
@@ -97,6 +101,10 @@ function summarizeAudit(audit: OwnerDataAuditReport | null | undefined) {
       sessionIndexSchemaVersion: audit.projections.sessionIndexSchemaVersion,
       expectedStatsSchemaVersion: audit.projections.expectedStatsSchemaVersion,
       expectedSessionIndexSchemaVersion: audit.projections.expectedSessionIndexSchemaVersion,
+      sessionListSchemaVersion: audit.projections.sessionListSchemaVersion,
+      expectedSessionListSchemaVersion: audit.projections.expectedSessionListSchemaVersion,
+      sessionListPageDocs: audit.projections.sessionListPageDocs,
+      expectedSessionListPageDocs: audit.projections.expectedSessionListPageDocs,
       trackBestsDocs: audit.projections.trackBestsDocs,
       trackDetailProjectionDocs: audit.projections.trackDetailProjectionDocs,
       missingTrackBests: audit.projections.missingTrackBests.length,
@@ -120,6 +128,9 @@ function needsSummaryMigration(audit: OwnerDataAuditReport): boolean {
 function needsProjectionRebuild(audit: OwnerDataAuditReport): boolean {
   return audit.projections.statsSchemaVersion !== audit.projections.expectedStatsSchemaVersion
     || audit.projections.sessionIndexSchemaVersion !== audit.projections.expectedSessionIndexSchemaVersion
+    || audit.projections.sessionListSchemaVersion !== audit.projections.expectedSessionListSchemaVersion
+    || audit.projections.sessionListPageDocs < audit.projections.expectedSessionListPageDocs
+    || audit.projections.sessionListTotalSessions !== audit.sessions.total
     || audit.projections.missingTrackBests.length > 0
     || audit.projections.oldTrackBests.length > 0
     || audit.projections.missingTrackDetailProjections.length > 0
@@ -133,6 +144,13 @@ function needsMaintenance(audit: OwnerDataAuditReport): boolean {
 function isStoredStateCurrent(state: OwnerDataMaintenanceStoredState | null | undefined): boolean {
   return state?.status === 'completed'
     && Number(state?.version || 0) >= OWNER_DATA_MIGRATION_VERSION
+    && Number(state?.bestRulesVersion || 0) >= BEST_RULES_VERSION
+}
+
+function isStoredStateReadyForSessionListUpgrade(state: OwnerDataMaintenanceStoredState | null | undefined): boolean {
+  return state?.status === 'completed'
+    && Number(state?.version || 0) >= 1
+    && Number(state?.version || 0) < OWNER_DATA_MIGRATION_VERSION
     && Number(state?.bestRulesVersion || 0) >= BEST_RULES_VERSION
 }
 
@@ -185,6 +203,7 @@ function buildReport(params: Partial<OwnerDataMaintenanceReport> & {
     finalAudit: null,
     cloudReprocess: null,
     rebuild: null,
+    sessionListRebuild: null,
     localReprocessStarted: false,
     needsSyncBeforeCompletion: false,
     completedAt: null,
@@ -215,6 +234,11 @@ async function markCompleted(uid: string, report: OwnerDataMaintenanceReport) {
         sessionCount: report.rebuild.sessionCount,
         trackCount: report.rebuild.trackCount,
         updatedTrackBests: report.rebuild.updatedTrackBests.length
+      } : null,
+      sessionListRebuild: report.sessionListRebuild ? {
+        sessionCount: report.sessionListRebuild.sessionCount,
+        pageCount: report.sessionListRebuild.pageCount,
+        pageSize: report.sessionListRebuild.pageSize
       } : null
     }
   })
@@ -231,7 +255,7 @@ export async function runOwnerDataMaintenanceGate(
       status: 'checking',
       phase: 'checking_status',
       progress: 5,
-      message: 'Controllo stato migrazione dati...'
+      message: 'Controllo dati pilota...'
     })
 
     const storedState = await readStoredState(uid)
@@ -240,13 +264,61 @@ export async function runOwnerDataMaintenanceGate(
         uid,
         status: 'skipped',
         phase: 'skipped',
-        message: 'Migrazione dati gia completata.',
+        message: 'Dati pilota gia aggiornati.',
         startedAt,
         completedAt: nowIso()
       })
       emit(onProgress, {
         status: 'skipped',
         phase: 'skipped',
+        progress: 100,
+        message: report.message,
+        report
+      })
+      return report
+    }
+
+    if (!force && isStoredStateReadyForSessionListUpgrade(storedState)) {
+      await writeStoredState(uid, {
+        status: 'running',
+        startedAt,
+        completedAt: null,
+        lastError: null,
+        report: null
+      })
+
+      emit(onProgress, {
+        status: 'running',
+        phase: 'rebuild',
+        progress: 70,
+        message: 'Preparo lista sessioni ottimizzata...'
+      })
+      const sessionListRebuild = await rebuildOwnerSessionListProjection(uid)
+
+      emit(onProgress, {
+        status: 'running',
+        phase: 'final_audit',
+        progress: 90,
+        message: 'Verifico lista sessioni...'
+      })
+      const finalVerification = await verifyOwnerMigrationLightweight(uid)
+      if (!finalVerification.ok) {
+        throw new Error(`Verifica lista sessioni non pulita: ${finalVerification.issues.join(', ')}`)
+      }
+
+      const report = buildReport({
+        uid,
+        status: 'completed',
+        phase: 'completed',
+        message: 'Lista sessioni ottimizzata completata.',
+        sessionListRebuild,
+        startedAt,
+        completedAt: nowIso()
+      })
+      await markCompleted(uid, report)
+      emit(onProgress, {
+        status: 'completed',
+        phase: 'completed',
         progress: 100,
         message: report.message,
         report
@@ -266,7 +338,7 @@ export async function runOwnerDataMaintenanceGate(
       status: 'checking',
       phase: 'audit',
       progress: 15,
-      message: 'Audit dati cloud in corso...'
+      message: 'Controllo coerenza dati cloud...'
     })
 
     const audit = await auditOwnerData(uid)
@@ -279,7 +351,7 @@ export async function runOwnerDataMaintenanceGate(
         uid,
         status: 'completed',
         phase: 'completed',
-        message: 'Dati owner gia coerenti. Stato migrazione salvato.',
+        message: 'Dati pilota gia coerenti. Stato aggiornamento salvato.',
         audit,
         finalAudit: audit,
         startedAt,
@@ -305,14 +377,14 @@ export async function runOwnerDataMaintenanceGate(
         status: 'running',
         phase: 'local_reprocess',
         progress: 35,
-        message: 'Reprocess locale dei file telemetria in corso...'
+        message: 'Aggiorno Best/AVG dai file locali...'
       })
       const localReprocess = await electronAPI.reprocessTelemetrySummaries({})
       const report = buildReport({
         uid,
         status: 'sync_pending',
         phase: 'sync_pending',
-        message: 'Reprocess locale completato. Sync file locali richiesto prima della chiusura migrazione.',
+        message: 'Best/AVG aggiornati localmente. Sincronizzo sessioni aggiornate...',
         audit,
         localReprocess,
         localReprocessStarted: true,
@@ -345,7 +417,7 @@ export async function runOwnerDataMaintenanceGate(
         status: 'running',
         phase: 'cloud_reprocess',
         progress: 40,
-        message: 'Reprocess dei rawChunks cloud in corso...'
+        message: 'Aggiorno Best/AVG dai dati cloud...'
       })
       cloudReprocess = await reprocessOwnerCloudRawSummaries(uid, { forceAll: false })
       if (cloudReprocess.failedSessions > 0) {
@@ -357,7 +429,7 @@ export async function runOwnerDataMaintenanceGate(
       status: 'running',
       phase: 'rebuild',
       progress: 70,
-      message: 'Ricostruzione projection owner in corso...'
+      message: 'Ricostruisco riferimenti storici...'
     })
     const rebuild = await rebuildOwnerProjections(uid)
 
@@ -365,20 +437,19 @@ export async function runOwnerDataMaintenanceGate(
       status: 'running',
       phase: 'final_audit',
       progress: 90,
-      message: 'Audit finale migrazione dati...'
+      message: 'Verifico aggiornamento dati...'
     })
-    const finalAudit = await auditOwnerData(uid)
-    if (hasPermissionBlocker(finalAudit) || needsMaintenance(finalAudit)) {
-      throw new Error('Audit finale non pulito: migrazione dati non completata.')
+    const finalVerification = await verifyOwnerMigrationLightweight(uid)
+    if (!finalVerification.ok) {
+      throw new Error(`Verifica finale non pulita: ${finalVerification.issues.join(', ')}`)
     }
 
     const report = buildReport({
       uid,
       status: 'completed',
       phase: 'completed',
-      message: 'Migrazione dati owner completata.',
+      message: 'Aggiornamento dati completato.',
       audit,
-      finalAudit,
       cloudReprocess,
       rebuild,
       startedAt,
@@ -424,7 +495,7 @@ export async function completeOwnerDataMaintenanceAfterLocalSync(
       status: 'running',
       phase: 'rebuild',
       progress: 70,
-      message: 'Chiusura migrazione dopo sync locale: rebuild projection...'
+      message: 'Ricostruisco riferimenti storici...'
     })
     const rebuild = await rebuildOwnerProjections(uid)
 
@@ -432,19 +503,18 @@ export async function completeOwnerDataMaintenanceAfterLocalSync(
       status: 'running',
       phase: 'final_audit',
       progress: 90,
-      message: 'Audit finale dopo sync locale...'
+      message: 'Verifico aggiornamento dati...'
     })
-    const finalAudit = await auditOwnerData(uid)
-    if (hasPermissionBlocker(finalAudit) || needsMaintenance(finalAudit)) {
-      throw new Error('Audit finale dopo sync locale non pulito.')
+    const finalVerification = await verifyOwnerMigrationLightweight(uid)
+    if (!finalVerification.ok) {
+      throw new Error(`Verifica finale dopo sync locale non pulita: ${finalVerification.issues.join(', ')}`)
     }
 
     const report = buildReport({
       uid,
       status: 'completed',
       phase: 'completed',
-      message: 'Migrazione dati owner completata dopo sync locale.',
-      finalAudit,
+      message: 'Aggiornamento dati completato.',
       rebuild,
       startedAt,
       completedAt: nowIso()

@@ -33,7 +33,9 @@ const handleNavigate = (tab: string) => {
 
 // Navigate to session detail
 const handleGoToSession = (sessionId: string) => {
+  activeTab.value = 'sessioni'
   selectedSessionId.value = sessionId
+  selectedTrackId.value = null
 }
 
 // Back from session detail
@@ -87,6 +89,7 @@ const displayName = computed(() => {
         key="track-detail"
         :track-id="selectedTrackId"
         @back="handleBackFromTrack"
+        @go-to-session="handleGoToSession"
       />
       
       <!-- Panoramica -->
