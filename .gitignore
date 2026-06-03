@@ -28,6 +28,29 @@ npm-debug.log*
 
 # Cache
 .cache/
+.codex-tmp/
+.codex_tmp/
+.codex_pycache/
+__pycache__/
+*.py[cod]
+
+# Local smoke-test artifacts
+kokoro_*_test.wav
+qualifying_voice_smoke.wav
+nuxt/fix_and_run.ps1
+nuxt/public/voice/**/*.wav
+vendor/kokoro/
 
 # Audit logs
 .audit/
+
+# Local private admin tools and service-account files
+.local-admin-tools/
+
+# Temp test/runtime directories
+.tmp-chrome-profile*
+.tmp_*/
+test_output/
+
+# Training data locale (generata a runtime, non in repo)
+training_data/
