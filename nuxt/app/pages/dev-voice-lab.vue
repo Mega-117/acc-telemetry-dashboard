@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { renderSpotterPhrase } from '~/services/spotter/spotterPhraseRenderer'
+import type { SpotterPhraseKey } from '~/config/spotterPhrases'
 
 definePageMeta({
   layout: 'dashboard',
@@ -84,10 +86,32 @@ const serverMessage = ref('Controllo server locale...')
 const isSpeaking = ref(false)
 const statusMessage = ref('')
 const activeServerAudio = ref<HTMLAudioElement | null>(null)
+const spotterTarget = ref<'ahead' | 'behind'>('ahead')
+const spotterTrend = ref<'gaining' | 'losing' | 'stable'>('gaining')
+const spotterDeltaMs = ref(250)
+const spotterSector = ref<1 | 2 | 3>(2)
 
 const selectedVoice = computed(() => {
   return serverVoices.value.find((voice) => voice.id === selectedVoiceId.value) || null
 })
+
+const spotterPhraseKey = computed<SpotterPhraseKey>(() => {
+  if (spotterTarget.value === 'ahead' && spotterTrend.value === 'gaining') return 'aheadGaining'
+  if (spotterTarget.value === 'ahead' && spotterTrend.value === 'losing') return 'aheadLosing'
+  if (spotterTarget.value === 'ahead') return 'aheadStable'
+  if (spotterTrend.value === 'gaining') return 'behindClosing'
+  if (spotterTrend.value === 'losing') return 'behindDropping'
+  return 'behindStable'
+})
+
+const spotterPreviewText = computed(() =>
+  renderSpotterPhrase({
+    key: spotterPhraseKey.value,
+    deltaMs: spotterDeltaMs.value,
+    sector: spotterSector.value,
+    random: () => 0,
+  })
+)
 
 const voiceCounters = computed(() => {
   return {
@@ -201,6 +225,16 @@ function applyEnergyPreset(level: 'clean' | 'dynamic' | 'urgent') {
 
   speechSpeed.value = 1.16
   customText.value = 'Attenzione, ultimi due minuti! Resta concentrato. Niente giro della vita: pulizia, ritmo, chiudi forte questo blocco!'
+}
+
+function loadSpotterPreview() {
+  customText.value = spotterPreviewText.value
+  speechSpeed.value = 1.08
+}
+
+async function playSpotterPreview() {
+  loadSpotterPreview()
+  await playVoice()
 }
 
 async function playVoice() {
@@ -348,6 +382,53 @@ onBeforeUnmount(() => {
               <button type="button" @click="applyEnergyPreset('urgent')">Ultimi minuti</button>
             </div>
           </div>
+
+          <section class="spotter-simulator">
+            <div class="panel-head">
+              <div>
+                <span class="voice-kicker">Spotter demo</span>
+                <h2>Evento gara simulato</h2>
+              </div>
+              <div class="play-actions">
+                <button type="button" class="secondary" @click="loadSpotterPreview">Carica testo</button>
+                <button type="button" class="primary" :disabled="!selectedVoice || isSpeaking" @click="playSpotterPreview">
+                  Play spotter
+                </button>
+              </div>
+            </div>
+
+            <div class="spotter-controls">
+              <label>
+                Target
+                <select v-model="spotterTarget">
+                  <option value="ahead">Pilota davanti</option>
+                  <option value="behind">Pilota dietro</option>
+                </select>
+              </label>
+              <label>
+                Trend
+                <select v-model="spotterTrend">
+                  <option value="gaining">Guadagni / recupera</option>
+                  <option value="losing">Perdi / perde</option>
+                  <option value="stable">Stabile</option>
+                </select>
+              </label>
+              <label>
+                Delta ms
+                <input v-model.number="spotterDeltaMs" type="number" min="0" max="2200" step="50">
+              </label>
+              <label>
+                Settore
+                <select v-model.number="spotterSector">
+                  <option :value="1">Settore 1</option>
+                  <option :value="2">Settore 2</option>
+                  <option :value="3">Settore 3</option>
+                </select>
+              </label>
+            </div>
+
+            <p class="spotter-preview">{{ spotterPreviewText }}</p>
+          </section>
 
           <div class="phrase-grid">
             <section v-for="group in phraseGroups" :key="group.situation" class="phrase-section">
@@ -707,6 +788,53 @@ textarea {
   gap: 8px;
 }
 
+.spotter-simulator {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba($accent-success, 0.22);
+  border-radius: $radius-md;
+  background: rgba($accent-success, 0.055);
+}
+
+.spotter-controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+
+  label {
+    display: grid;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  select,
+  input {
+    min-height: 36px;
+    min-width: 0;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: $radius-sm;
+    background: #15151d;
+    color: #fff;
+  }
+
+  input {
+    padding: 0 10px;
+  }
+}
+
+.spotter-preview {
+  margin: 0;
+  padding: 12px;
+  border-radius: $radius-sm;
+  background: rgba(0, 0, 0, 0.24);
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.5;
+}
+
 .phrase-grid {
   display: grid;
   gap: 16px;
@@ -787,7 +915,8 @@ button {
   }
 
   .engine-grid,
-  .phrase-section {
+  .phrase-section,
+  .spotter-controls {
     grid-template-columns: 1fr;
   }
 }

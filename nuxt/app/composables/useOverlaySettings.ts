@@ -40,6 +40,7 @@ export function resolveOverlayOriginMode(_value: unknown): OverlayOriginMode { r
 export function useOverlaySettings(
   getApi: () => any | null,
   soundEnabled: Ref<boolean>,
+  spotterEnabled: Ref<boolean>,
   stopVoice: () => void,
   primeStepAudio: () => Promise<void>,
   scheduleOverlaySizeSync: () => void,
@@ -59,7 +60,8 @@ export function useOverlaySettings(
   async function savePreferences() {
     await getApi()?.trainingOverlaySavePreferences?.({
       lastTrainingId: selectedTrainingId.value, lastDurationId: selectedModeId.value,
-      soundEnabled: soundEnabled.value, autoDimDuringRun: autoDimDuringRun.value,
+      soundEnabled: soundEnabled.value, spotterEnabled: spotterEnabled.value,
+      autoDimDuringRun: autoDimDuringRun.value,
       autoAdvanceStep: autoAdvanceStep.value,
       originMode: originMode.value, originCorner: originCorner.value,
       qualifyingVoiceId: selectedQualifyingVoiceId.value,
