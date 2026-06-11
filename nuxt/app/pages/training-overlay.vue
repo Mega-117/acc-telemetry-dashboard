@@ -164,11 +164,10 @@ const primaryAction = computed<PrimaryOverlayAction>(() => {
 })
 const primaryActionLabel = computed(() => ({
   'confirm-placement': 'Usa posizione', 'open-selection': 'Inizia allenamento',
-  start: 'Avvia', pause: 'Pausa', resume: 'Riprendi', 'complete-step': 'Completa',
-  next: 'Avanti', reset: 'Nuovo', none: 'Azione',
+  start: 'Avvia', pause: 'Pausa', resume: 'Riprendi', 'complete-step': 'Skippa',
+  next: 'Avanti', reset: 'Scegli allenamento', none: 'Azione',
 }[primaryAction.value]))
 const stopHoldProgressPercent = computed(() => `${Math.round(stopHoldProgress.value * 100)}%`)
-const stopActionLabel = computed(() => stopHoldProgress.value > 0 ? 'Tieni premuto' : 'Stop')
 const progressPercent = computed(() => {
   const totalMs = activeStep.value.durationMinutes * 60_000
   if (!totalMs) return 0
@@ -206,6 +205,11 @@ const selectedOriginLabel = computed(() =>
   originCornerOptions.find(o => o.id === originCorner.value)?.label || 'Alto sx'
 )
 const hudTransitionKey = computed(() => `${phase.value}-${activeStepIndex.value}-${activeStep.value.id}`)
+// Le fasi di sessione condividono il contenuto: il cross-fade del contenitore
+// scatta solo tra macro-schermate; dentro la sessione anima OverlayHud.
+const contentKey = computed(() =>
+  ['running', 'paused', 'expired'].includes(phase.value) ? 'session' : phase.value
+)
 const overlaySizePreset = computed<OverlaySizePreset>(() => {
   if (phase.value === 'launcher') return 'launcher'
   if (phase.value === 'placement') return 'placement'
@@ -502,54 +506,16 @@ onBeforeUnmount(() => {
       `training-overlay--${phase}`,
       `training-overlay--tone-${selectedTraining.tone}`,
       `training-overlay--origin-${originCorner}`,
-      { 'training-overlay--drag': phase === 'placement' }
+      {
+        'training-overlay--drag': phase === 'placement',
+        'training-overlay--web': !isElectronRuntime,
+      }
     ]"
   >
     <div class="overlay-work-area">
       <Transition name="overlay-surface" mode="out-in">
         <section
-          v-if="phase === 'launcher'"
-          key="launcher"
-          :class="['launcher-tools', `overlay-surface--${overlaySizePreset}`]"
-          aria-label="Strumenti live overlay"
-        >
-          <header class="launcher-tools__header">
-            <span>
-              Strumenti live
-              <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
-            </span>
-            <strong>{{ launcherSpotterStatus }}</strong>
-          </header>
-          <div class="launcher-tools__actions">
-            <button
-              type="button"
-              class="launcher-tool-button launcher-tool-button--training"
-              :class="{ 'is-selected': launcherToolIndex === 0 }"
-              :aria-label="primaryActionLabel"
-              :aria-current="launcherToolIndex === 0 ? 'true' : undefined"
-              @focus="launcherToolIndex = 0"
-              @click="executePrimaryAction"
-            >
-              Avvia allenamento
-            </button>
-            <button
-              type="button"
-              class="launcher-tool-button launcher-tool-button--spotter"
-              :class="{ 'is-active': spotterEnabled, 'is-selected': launcherToolIndex === 1 }"
-              :aria-pressed="spotterEnabled"
-              :aria-current="launcherToolIndex === 1 ? 'true' : undefined"
-              :aria-label="spotterToggleLabel"
-              @focus="launcherToolIndex = 1"
-              @click="toggleSpotter"
-            >
-              {{ spotterToggleLabel }}
-            </button>
-          </div>
-          <p class="launcher-hint" aria-hidden="true">Ctrl+&#8593;/&#8595; scegli &middot; Ctrl+N conferma &middot; Ctrl+K nascondi</p>
-        </section>
-
-        <section
-          v-else-if="phase === 'placement'"
+          v-if="phase === 'placement'"
           key="placement"
           class="placement-work-area overlay-surface--placement"
           aria-label="Posiziona area overlay"
@@ -583,26 +549,94 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section v-else-if="phase !== 'loading'" :key="phase" :class="['overlay-card', `overlay-surface--${overlaySizePreset}`]">
-        <div class="overlay-main">
-        <div v-if="!isActiveSession" class="overlay-topline">
-          <div class="overlay-topline-actions">
-            <span v-if="phase === 'completed'">Fine</span>
-            <button
-              type="button"
-              class="overlay-close-btn"
-              aria-label="Nascondi overlay (Ctrl+K per riaprire)"
-              title="Nascondi (Ctrl+K)"
-              @click="closeOverlay"
-            >
-              X
-            </button>
-          </div>
-        </div>
+        <!-- Contenitore unico persistente (PIP-93): il morphing e' l'animazione
+             di resize della finestra; dentro, il contenuto si avvicenda in cross-fade. -->
+        <section v-else-if="phase !== 'loading'" key="card" class="overlay-card">
+          <Transition name="content-swap" mode="out-in">
+            <div :key="contentKey" :class="['overlay-content', `overlay-content--${overlaySizePreset}`]">
 
-        <template v-if="phase === 'select'">
-          <h1>{{ selectedTraining.title }}</h1>
-          <OverlaySelectSetup
+              <template v-if="phase === 'launcher'">
+                <div class="launcher-tools" aria-label="Strumenti live overlay">
+                  <header class="launcher-tools__header">
+                    <span>
+                      Strumenti live
+                      <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
+                    </span>
+                    <strong>{{ launcherSpotterStatus }}</strong>
+                  </header>
+                  <div class="launcher-tools__actions">
+                    <button
+                      type="button"
+                      class="launcher-tool-button launcher-tool-button--training"
+                      :class="{ 'is-selected': launcherToolIndex === 0 }"
+                      :aria-label="primaryActionLabel"
+                      :aria-current="launcherToolIndex === 0 ? 'true' : undefined"
+                      @focus="launcherToolIndex = 0"
+                      @click="executePrimaryAction"
+                    >
+                      Avvia allenamento
+                    </button>
+                    <button
+                      type="button"
+                      class="launcher-tool-button launcher-tool-button--spotter"
+                      :class="{ 'is-active': spotterEnabled, 'is-selected': launcherToolIndex === 1 }"
+                      :aria-pressed="spotterEnabled"
+                      :aria-current="launcherToolIndex === 1 ? 'true' : undefined"
+                      :aria-label="spotterToggleLabel"
+                      @focus="launcherToolIndex = 1"
+                      @click="toggleSpotter"
+                    >
+                      {{ spotterToggleLabel }}
+                    </button>
+                  </div>
+                  <p class="launcher-hint" aria-hidden="true">Ctrl+&#8593;/&#8595; scegli &middot; Ctrl+N conferma &middot; Ctrl+K nascondi</p>
+                </div>
+              </template>
+
+              <template v-else-if="phase === 'completed'">
+                <div class="overlay-topline">
+                  <div class="overlay-topline-actions">
+                    <span>Fine</span>
+                    <button
+                      type="button"
+                      class="overlay-close-btn"
+                      aria-label="Nascondi overlay (Ctrl+K per riaprire)"
+                      title="Nascondi (Ctrl+K)"
+                      @click="closeOverlay"
+                    >
+                      X
+                    </button>
+                  </div>
+                </div>
+                <div class="completed-banner" role="status">
+                  <span class="completed-check" aria-hidden="true">&#10003;</span>
+                  <strong>Allenamento completato</strong>
+                </div>
+                <div class="overlay-actions">
+                  <button type="button" class="primary" :aria-label="primaryActionLabel" @click="executePrimaryAction">
+                    {{ primaryActionLabel }}
+                    <span class="key-hint" aria-hidden="true">Ctrl+N</span>
+                  </button>
+                </div>
+              </template>
+
+              <template v-else-if="phase === 'select'">
+                <div class="overlay-main">
+                  <div class="overlay-topline">
+                    <div class="overlay-topline-actions">
+                      <button
+                        type="button"
+                        class="overlay-close-btn"
+                        aria-label="Nascondi overlay (Ctrl+K per riaprire)"
+                        title="Nascondi (Ctrl+K)"
+                        @click="closeOverlay"
+                      >
+                        X
+                      </button>
+                    </div>
+                  </div>
+                  <h1>{{ selectedTraining.title }}</h1>
+                  <OverlaySelectSetup
             :selected-training="selectedTraining"
             :selected-training-id="selectedTrainingId"
             :training-overlay-training-list="trainingOverlayTrainingList"
@@ -624,97 +658,92 @@ onBeforeUnmount(() => {
             :auto-advance-step="autoAdvanceStep"
             :auto-advance-seconds="autoAdvanceSeconds"
             @toggle-sound="toggleSound"
-            @toggle-auto-dim="toggleAutoDimDuringRun"
-            @toggle-auto-advance="toggleAutoAdvanceStep"
-            @select-auto-advance-seconds="selectAutoAdvanceSeconds"
-            @select-voice="selectQualifyingVoice"
-          />
-        </template>
+                    @toggle-auto-dim="toggleAutoDimDuringRun"
+                    @toggle-auto-advance="toggleAutoAdvanceStep"
+                    @select-auto-advance-seconds="selectAutoAdvanceSeconds"
+                    @select-voice="selectQualifyingVoice"
+                  />
+                </div>
+                <div class="overlay-actions">
+                  <button type="button" class="primary" :aria-label="primaryActionLabel" @click="executePrimaryAction">
+                    {{ primaryActionLabel }}
+                    <span class="key-hint" aria-hidden="true">Ctrl+N</span>
+                  </button>
+                  <button
+                    v-if="showPlacementControl"
+                    type="button"
+                    class="utility-action"
+                    aria-label="Sposta l'overlay sullo schermo"
+                    @click="enterPlacementMode"
+                  >
+                    Sposta
+                  </button>
+                </div>
+                <p class="launcher-hint" aria-hidden="true">
+                  Ctrl+K nasconde &middot; Ctrl+&#8593;/&#8595; cambia allenamento &middot; Ctrl+N avvia
+                </p>
+              </template>
 
-        <template v-else>
-          <OverlayHud
-            :active-step="activeStep"
-            :active-step-index="activeStepIndex"
-            :total-steps="totalSteps"
-            :active-task="activeTask"
-            :formatted-time="formattedTime"
-            :live-lap="liveLap"
-            :phase="phase"
-            :progress-percent="progressPercent"
-            :hud-transition-key="hudTransitionKey"
-            :is-shortcut-stop-confirm-open="isShortcutStopConfirmOpen"
-            :is-saving="isSaving"
-            :muted="!soundEnabled"
-            :auto-advance-remaining-sec="autoAdvanceRemainingSec"
-            :auto-advance-total-sec="autoAdvanceSeconds"
-            @cancel-auto-advance="cancelAutoAdvance"
-          />
-        </template>
-      </div>
+              <template v-else>
+                <div class="overlay-main">
+                  <OverlayHud
+                    :active-step="activeStep"
+                    :active-step-index="activeStepIndex"
+                    :total-steps="totalSteps"
+                    :active-task="activeTask"
+                    :formatted-time="formattedTime"
+                    :live-lap="liveLap"
+                    :phase="phase"
+                    :progress-percent="progressPercent"
+                    :hud-transition-key="hudTransitionKey"
+                    :is-shortcut-stop-confirm-open="isShortcutStopConfirmOpen"
+                    :is-saving="isSaving"
+                    :muted="!soundEnabled"
+                    :auto-advance-remaining-sec="autoAdvanceRemainingSec"
+                    :auto-advance-total-sec="autoAdvanceSeconds"
+                    @cancel-auto-advance="cancelAutoAdvance"
+                  />
+                </div>
+                <div class="overlay-actions">
+                  <button
+                    type="button"
+                    class="primary"
+                    :aria-label="isShortcutStopConfirmOpen ? 'Conferma stop sessione' : primaryActionLabel"
+                    @click="executePrimaryAction"
+                  >
+                    {{ isShortcutStopConfirmOpen ? 'Conferma' : primaryActionLabel }}
+                    <span v-if="!isShortcutStopConfirmOpen" class="key-hint" aria-hidden="true">Ctrl+N</span>
+                  </button>
+                  <button
+                    v-if="phase === 'paused' && !isShortcutStopConfirmOpen"
+                    type="button"
+                    class="utility-action skip-step-action"
+                    aria-label="Skippa lo step corrente (solo mouse)"
+                    title="Skippa step (solo mouse)"
+                    @click="skipPausedStep"
+                  >
+                    Skippa step
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary-action danger-action stop-hold-action"
+                    :class="{ 'is-holding': stopHoldProgress > 0 }"
+                    :style="{ '--stop-progress': stopHoldProgressPercent }"
+                    aria-label="Stop: tieni premuto col mouse per interrompere la sessione"
+                    @pointerdown.prevent="startStopHold('pointer')"
+                    @pointerup.prevent="cancelStopHold"
+                    @pointerleave="cancelStopHold"
+                    @pointercancel="cancelStopHold"
+                    @keydown.space.prevent="startStopHold('keyboard')"
+                    @keyup.space.prevent="cancelStopHold"
+                  >
+                    Stop
+                  </button>
+                </div>
+              </template>
 
-      <div class="overlay-actions">
-        <template v-if="phase === 'select'">
-          <button type="button" class="primary" :aria-label="primaryActionLabel" @click="executePrimaryAction">
-            {{ primaryActionLabel }}
-          </button>
-          <button
-            v-if="showPlacementControl"
-            type="button"
-            class="utility-action"
-            aria-label="Sposta overlay"
-            @click="enterPlacementMode"
-          >
-            Sposta
-          </button>
-        </template>
-
-        <template v-else-if="canUseStopControl">
-          <button
-            type="button"
-            class="primary"
-            :aria-label="isShortcutStopConfirmOpen ? 'Conferma stop sessione' : primaryActionLabel"
-            @click="executePrimaryAction"
-          >
-            {{ isShortcutStopConfirmOpen ? 'Conferma' : primaryActionLabel }}
-            <span v-if="!isShortcutStopConfirmOpen" class="key-hint" aria-hidden="true">Ctrl+N</span>
-          </button>
-          <button
-            v-if="phase === 'paused' && !isShortcutStopConfirmOpen"
-            type="button"
-            class="utility-action skip-step-action"
-            aria-label="Salta lo step corrente (solo mouse)"
-            title="Salta step (solo mouse)"
-            @click="skipPausedStep"
-          >
-            Salta step
-          </button>
-          <button
-            type="button"
-            class="secondary-action danger-action stop-hold-action"
-            :class="{ 'is-holding': stopHoldProgress > 0 }"
-            :style="{ '--stop-progress': stopHoldProgressPercent }"
-            aria-label="Tieni premuto per interrompere la sessione"
-            @pointerdown.prevent="startStopHold('pointer')"
-            @pointerup.prevent="cancelStopHold"
-            @pointerleave="cancelStopHold"
-            @pointercancel="cancelStopHold"
-            @keydown.space.prevent="startStopHold('keyboard')"
-            @keyup.space.prevent="cancelStopHold"
-          >
-            {{ stopActionLabel }}
-          </button>
-        </template>
-
-        <template v-else-if="phase === 'completed'">
-          <button type="button" class="primary" :aria-label="primaryActionLabel" @click="executePrimaryAction">
-            {{ primaryActionLabel }}
-          </button>
-        </template>
-      </div>
-
-      <p v-if="phase === 'select'" class="launcher-hint" aria-hidden="true">
-        Ctrl+K nasconde &middot; Ctrl+&#8593;/&#8595; cambia allenamento &middot; Ctrl+N avvia
-      </p>
+            </div>
+          </Transition>
         </section>
       </Transition>
     </div>

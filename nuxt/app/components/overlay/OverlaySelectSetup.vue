@@ -206,11 +206,11 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                             <button
                                 type="button"
                                 class="setting-row setting-row--button"
-                                :aria-label="`Opacita automatica ${autoDimDuringRun ? 'attiva' : 'disattiva'} — clicca per cambiare`"
+                                :aria-label="`Opacita ridotta in guida ${autoDimDuringRun ? 'attiva' : 'disattiva'} — clicca per cambiare`"
                                 :aria-pressed="autoDimDuringRun"
                                 @click="emit('toggle-auto-dim')"
                             >
-                                <span>Opacita auto</span>
+                                <span>Opacit&agrave; ridotta in guida</span>
                                 <strong :class="{ 'is-active': autoDimDuringRun }">
                                     {{ autoDimDuringRun ? 'On' : 'Off' }}
                                 </strong>
@@ -219,11 +219,11 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                             <button
                                 type="button"
                                 class="setting-row setting-row--button"
-                                :aria-label="`Avanzamento automatico step ${autoAdvanceStep ? 'attivo' : 'disattivo'} — clicca per cambiare`"
+                                :aria-label="`Avanzamento automatico a fine step ${autoAdvanceStep ? 'attivo' : 'disattivo'} — clicca per cambiare`"
                                 :aria-pressed="autoAdvanceStep"
                                 @click="emit('toggle-auto-advance')"
                             >
-                                <span>Avanzamento auto</span>
+                                <span>Avanza da solo a fine step</span>
                                 <strong :class="{ 'is-active': autoAdvanceStep }">
                                     {{ autoAdvanceStep ? 'On' : 'Off' }}
                                 </strong>
@@ -234,7 +234,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                                 class="setting-row auto-advance-seconds"
                                 aria-label="Durata countdown avanzamento automatico"
                             >
-                                <span>Countdown</span>
+                                <span>Countdown avanzamento</span>
                                 <span class="seconds-options" role="group">
                                     <button
                                         v-for="s in autoAdvanceSecondsOptions"

@@ -184,8 +184,9 @@ export function useSessionOrchestrator(
   }
 
   function resetCompleted() {
+    // Dalla schermata completata si torna alla selezione allenamento (PIP-93).
     closeShortcutStopConfirm(); clearAutoAdvance(); activeStepIndex.value = 0
-    remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000; phase.value = 'launcher'
+    remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000; phase.value = 'select'
   }
 
   return {

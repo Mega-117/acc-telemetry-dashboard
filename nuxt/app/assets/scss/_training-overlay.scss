@@ -88,6 +88,20 @@
   place-items: end end;
 }
 
+/* Il contenuto dentro la card persistente segue lo stesso ancoraggio. */
+.training-overlay--origin-top-right .overlay-card {
+  justify-items: end;
+}
+
+.training-overlay--origin-bottom-left .overlay-card {
+  align-items: end;
+}
+
+.training-overlay--origin-bottom-right .overlay-card {
+  align-items: end;
+  justify-items: end;
+}
+
 @keyframes overlayMaterialize {
   from {
     opacity: 0;
@@ -117,56 +131,33 @@
   }
 }
 
-.overlay-surface--launcher,
-.training-overlay--launcher {
-  --overlay-width: 306px;
-  --overlay-height: 174px;
-}
-
 .overlay-surface--placement,
 .training-overlay--placement {
   --overlay-width: 100%;
   --overlay-height: 100%;
 }
 
-.overlay-surface--select,
-.training-overlay--select {
-  --overlay-width: 452px;
-  --overlay-height: 700px;
-}
-
-.overlay-surface--session,
-.training-overlay--running,
-.training-overlay--paused {
-  --overlay-width: 348px;
-  --overlay-height: 168px;
-}
-
-.overlay-surface--expired,
-.training-overlay--expired {
-  --overlay-width: 334px;
-  --overlay-height: 214px;
-}
-
-.overlay-surface--completed,
-.training-overlay--completed {
-  --overlay-width: 334px;
-  --overlay-height: 158px;
-}
-
+/* Contenitore unico persistente (PIP-93): riempie la finestra, che e' l'unico
+   motore di animazione del morphing. Le larghezze vivono nelle varianti
+   .overlay-content--* (fonte unica). */
 .overlay-card {
   position: relative;
   grid-area: 1 / 1;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 8px;
-  width: var(--overlay-width);
-  max-width: 100%;
-  height: auto;
-  min-height: min(var(--overlay-height), 100%);
-  max-height: 100%;
-  padding: 12px;
+  /* Niente stretch: il contenuto tiene la sua altezza naturale (e' la misura
+     che guida la finestra), ancorato all'angolo configurato. */
+  align-items: start;
+  justify-items: start;
+  width: 100%;
+  height: 100%;
+  padding: 14px;
   border: 1px solid rgba(var(--overlay-accent-rgb), 0.34);
+  /* In browser (niente finestra che si adatta) la card abbraccia il contenuto. */
+  .training-overlay--web & {
+    width: auto;
+    height: auto;
+    max-height: 100%;
+  }
   border-radius: var(--overlay-radius);
   overflow: hidden;
   background:
@@ -228,70 +219,128 @@
   transform: translateY(0) scale(1);
 }
 
-.training-overlay--select .overlay-card {
-  grid-template-rows: auto auto auto;
+/* Il contenuto interno e' la superficie misurata: larghezza per macro-schermata,
+   altezza naturale del contenuto. */
+.overlay-content {
+  display: grid;
+  align-content: start;
   gap: 10px;
-  padding: 14px;
-  height: auto;
-  min-height: 0;
+  max-width: 100%;
   max-height: 100%;
+  min-width: 0;
+}
+
+.overlay-content--launcher {
+  width: 282px;
+}
+
+.overlay-content--select {
+  width: 420px;
   /* Paracadute: se lo schermo non basta (DPI/scaling), si scorre invece di tagliare. */
   overflow: hidden auto;
 }
 
-.training-overlay--running .overlay-card,
-.training-overlay--paused .overlay-card,
-.training-overlay--completed .overlay-card {
-  gap: 8px;
-  padding: 12px;
-}
-
-.training-overlay--running .overlay-card,
-.training-overlay--paused .overlay-card {
+.overlay-content--session,
+.overlay-content--expired {
+  width: 322px;
+  min-height: 156px;
   grid-template-rows: minmax(0, 1fr) auto;
 }
 
-.training-overlay--running .overlay-card:hover,
-.training-overlay--running .overlay-card:focus-within {
-  opacity: 1;
+.overlay-content--completed {
+  width: 310px;
 }
 
-.training-overlay--expired .overlay-card {
+/* Cross-fade del contenuto dentro il contenitore persistente: parte appena dopo
+   l'avvio del morphing della finestra (effetto "liquid"). */
+.content-swap-enter-active {
+  transition:
+    opacity 220ms ease-out,
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition-delay: 110ms;
+}
+
+.content-swap-leave-active {
+  transition:
+    opacity 130ms ease-in,
+    transform 130ms ease-in;
+  pointer-events: none;
+}
+
+.content-swap-enter-from {
+  opacity: 0;
+  transform: translateY(4px) scale(0.99);
+}
+
+.content-swap-leave-to {
+  opacity: 0;
+  transform: translateY(-3px) scale(0.99);
+}
+
+.completed-banner {
+  display: grid;
+  justify-items: center;
   gap: 8px;
-  padding: 12px;
+  padding: 14px 10px 10px;
+  text-align: center;
+}
+
+.completed-check {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(var(--overlay-accent-rgb), 0.7);
+  border-radius: 999px;
+  background: rgba(var(--overlay-accent-rgb), 0.18);
+  color: var(--overlay-accent);
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.completed-banner strong {
+  color: #fff;
+  font-size: 16px;
+  font-weight: 950;
+  letter-spacing: 0.01em;
+}
+
+/* In pausa: il timer pulsa e il bordo respira piano, per dire "sto aspettando te". */
+@keyframes pausedBlink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@keyframes pausedBreath {
+  0%,
+  100% {
+    border-color: rgba(var(--overlay-accent-rgb), 0.34);
+  }
+
+  50% {
+    border-color: rgba(var(--overlay-accent-rgb), 0.72);
+  }
+}
+
+.training-overlay--paused .hud-timer {
+  animation: pausedBlink 1.2s ease-in-out infinite;
+}
+
+.training-overlay--paused .overlay-card {
+  animation: pausedBreath 2.4s ease-in-out infinite;
 }
 
 .launcher-tools {
-  position: relative;
-  grid-area: 1 / 1;
   display: grid;
   align-content: start;
   gap: 10px;
-  width: var(--overlay-width);
-  max-width: 100%;
-  height: auto;
-  min-height: min(var(--overlay-height), 100%);
-  max-height: 100%;
-  padding: 12px;
-  border: 1px solid rgba(var(--overlay-accent-rgb), 0.6);
-  border-radius: var(--overlay-radius);
-  background:
-    radial-gradient(circle at top left, rgba(var(--overlay-accent-rgb), 0.26), transparent 42%),
-    linear-gradient(145deg, #14201a, #070a0d);
-  color: #f6fff9;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  animation: overlayMaterialize 300ms cubic-bezier(0.16, 1, 0.3, 1);
-  transform-origin: var(--overlay-transform-origin);
-  will-change: opacity, transform, filter;
-  box-sizing: border-box;
-}
-
-.launcher-tools:hover,
-.launcher-tools:focus-within {
-  border-color: rgba(var(--overlay-accent-rgb), 0.9);
-  background:
-    radial-gradient(circle at top left, rgba(var(--overlay-accent-rgb), 0.36), transparent 44%),
-    linear-gradient(145deg, rgba(23, 38, 30, 0.98), rgba(8, 10, 13, 0.97));
+  min-width: 0;
 }
 
 .launcher-tools__header {
@@ -463,14 +512,14 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+/* Colonne bloccate: nessun bottone cambia mai larghezza (fix glitch Stop). */
 .training-overlay--running .overlay-actions,
-.training-overlay--paused .overlay-actions,
 .training-overlay--expired .overlay-actions {
-  grid-template-columns: minmax(0, 1fr) minmax(94px, auto);
+  grid-template-columns: minmax(0, 1fr) 96px;
 }
 
 .training-overlay--paused .overlay-actions {
-  grid-template-columns: minmax(0, 1fr) auto minmax(86px, auto);
+  grid-template-columns: minmax(0, 1fr) auto 96px;
 }
 
 .overlay-topline {
@@ -1161,8 +1210,8 @@ button:focus-visible .accordion-chevron::before {
 
 .shortcut-list {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 5px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px 14px;
 }
 
 .shortcut-row {
@@ -1178,6 +1227,7 @@ button:focus-visible .accordion-chevron::before {
 }
 
 .shortcut-note {
+  grid-column: 1 / -1;
   margin: 1px 0 0;
   color: rgba(226, 238, 247, 0.54);
   font-size: 10px;
@@ -1281,6 +1331,11 @@ button.is-active {
   font-weight: 900;
   letter-spacing: 0.04em;
   opacity: 0.82;
+}
+
+/* In pausa le 3 colonne lasciano poco spazio: l'hint si tronca, meglio nasconderlo. */
+.training-overlay--paused .overlay-actions .key-hint {
+  display: none;
 }
 
 .skip-step-action {

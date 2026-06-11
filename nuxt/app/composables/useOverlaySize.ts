@@ -6,7 +6,10 @@ export type OverlaySize = { width: number; height: number }
 
 const OVERLAY_WORK_AREA_SIZE: OverlaySize = { width: 472, height: 768 }
 const OVERLAY_SURFACE_PADDING = 10
-const OVERLAY_SURFACE_SELECTOR = '.overlay-card, .launcher-tools, .placement-work-area'
+// La card persistente riempie la finestra: si misura il contenuto interno e si
+// aggiunge il "telaio" (padding card 14x2 + bordo 1x2) + padding work area 10x2.
+const OVERLAY_CARD_CHROME = 30
+const OVERLAY_SURFACE_SELECTOR = '.overlay-content, .placement-work-area'
 
 /**
  * @description Synchronises the Electron overlay window dimensions with the current
@@ -46,11 +49,11 @@ export function useOverlaySize(
     if (!rect.width || !rect.height) return OVERLAY_WORK_AREA_SIZE
     // scrollHeight = altezza desiderata dal contenuto anche quando max-height la
     // clampa alla finestra corrente (altrimenti la misura insegue se stessa e la
-    // finestra non cresce mai). +2 compensa i bordi esclusi da scrollHeight.
-    const desiredHeight = Math.max(rect.height, surface.scrollHeight + 2)
+    // finestra non cresce mai).
+    const desiredHeight = Math.max(rect.height, surface.scrollHeight)
     return {
-      width: Math.min(Math.ceil(rect.width) + OVERLAY_SURFACE_PADDING * 2, OVERLAY_WORK_AREA_SIZE.width),
-      height: Math.ceil(desiredHeight) + OVERLAY_SURFACE_PADDING * 2,
+      width: Math.min(Math.ceil(rect.width) + OVERLAY_CARD_CHROME + OVERLAY_SURFACE_PADDING * 2, OVERLAY_WORK_AREA_SIZE.width),
+      height: Math.ceil(desiredHeight) + OVERLAY_CARD_CHROME + OVERLAY_SURFACE_PADDING * 2,
     }
   }
 
