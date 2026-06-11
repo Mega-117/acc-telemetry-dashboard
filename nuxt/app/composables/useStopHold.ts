@@ -62,7 +62,6 @@ export function useStopHold(
     if (!canStop()) return
     if (stopHoldStartedAt) return
     onDebugEvent(`stop hold start (${source})`)
-    isKeyboardStopHolding = source === 'keyboard'
     closeShortcutStopConfirm()
     cancelStopHold()
     isKeyboardStopHolding = source === 'keyboard'

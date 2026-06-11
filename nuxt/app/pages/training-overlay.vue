@@ -66,11 +66,8 @@ const AUTO_DIM_DELAY_MS = 10_000
 const AUTO_DIM_RESTORE_MS = 10_000
 const AUTO_DIM_OPACITY = 0.6
 const PRIMARY_ACTION_DEBOUNCE_MS = 450
-const OVERLAY_CARD_SIZES: Record<OverlaySizePreset, OverlaySize> = {
-  launcher: { width: 306, height: 174 }, placement: OVERLAY_WORK_AREA_SIZE,
-  select: { width: 424, height: 620 }, session: { width: 334, height: 196 },
-  expired: { width: 334, height: 214 }, completed: { width: 334, height: 158 }
-}
+// Le dimensioni delle card vivono solo nello SCSS (fonte unica, PIP-92);
+// la finestra Electron si adatta alla superficie misurata via useOverlaySize.
 const overlayShortcuts = [
   { label: 'Overlay', value: 'Ctrl+K' },
   { label: 'Bottone azione', value: 'Ctrl+N' },
@@ -225,8 +222,6 @@ const overlayThemeStyle = computed(() => ({
   '--overlay-transform-origin': originCorner.value.replace('-', ' '),
   '--overlay-work-area-width': `${OVERLAY_WORK_AREA_SIZE.width}px`,
   '--overlay-work-area-height': `${OVERLAY_WORK_AREA_SIZE.height}px`,
-  '--overlay-width': `${OVERLAY_CARD_SIZES[overlaySizePreset.value].width}px`,
-  '--overlay-height': `${OVERLAY_CARD_SIZES[overlaySizePreset.value].height}px`,
   '--overlay-session-opacity': `${sessionOverlayOpacity.value}`,
 }))
 
@@ -392,6 +387,23 @@ function executePrimaryAction() {
   actions[primaryAction.value]?.()
 }
 
+// ─── Click-through (solo Electron) ─────────────────────────────────────────────
+// La finestra ignora il mouse (i click passano alle app sotto) tranne quando il
+// puntatore e' sulla superficie reale dell'overlay. Con forward attivo arrivano
+// solo mousemove: da li' decidiamo quando riattivare la cattura.
+const OVERLAY_SURFACE_SELECTOR = '.overlay-card, .launcher-tools, .placement-work-area'
+let lastPointerOnSurface: boolean | null = null
+
+function updateMousePassthrough(event: MouseEvent) {
+  const api = getOverlayApi()
+  if (!api?.trainingOverlaySetMousePassthrough) return
+  const target = event.target as Element | null
+  const onSurface = !!(target && typeof target.closest === 'function' && target.closest(OVERLAY_SURFACE_SELECTOR))
+  if (onSurface === lastPointerOnSurface) return
+  lastPointerOnSurface = onSurface
+  void api.trainingOverlaySetMousePassthrough(!onSurface)
+}
+
 // ─── Input handling ───────────────────────────────────────────────────────────
 function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayCommand }) {
   const command = typeof payload === 'string' ? payload : payload?.command
@@ -456,6 +468,9 @@ onMounted(async () => {
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
   window.addEventListener('keydown', handleLocalShortcut, true)
   window.addEventListener('keyup', handleLocalShortcutRelease, true)
+  if (api?.trainingOverlaySetMousePassthrough) {
+    window.addEventListener('mousemove', updateMousePassthrough, true)
+  }
   connectResizeObserver(); scheduleOverlaySizeSync()
 })
 
@@ -472,6 +487,7 @@ onBeforeUnmount(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleLocalShortcut, true)
     window.removeEventListener('keyup', handleLocalShortcutRelease, true)
+    window.removeEventListener('mousemove', updateMousePassthrough, true)
   }
   document.body.classList.remove('training-overlay-runtime')
 })
@@ -575,8 +591,8 @@ onBeforeUnmount(() => {
             <button
               type="button"
               class="overlay-close-btn"
-              aria-label="Chiudi overlay"
-              title="Chiudi"
+              aria-label="Nascondi overlay (Ctrl+K per riaprire)"
+              title="Nascondi (Ctrl+K)"
               @click="closeOverlay"
             >
               X
@@ -695,6 +711,10 @@ onBeforeUnmount(() => {
           </button>
         </template>
       </div>
+
+      <p v-if="phase === 'select'" class="launcher-hint" aria-hidden="true">
+        Ctrl+K nasconde &middot; Ctrl+&#8593;/&#8595; cambia allenamento &middot; Ctrl+N avvia
+      </p>
         </section>
       </Transition>
     </div>

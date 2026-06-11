@@ -5,6 +5,8 @@ export type OverlaySizePreset = 'launcher' | 'placement' | 'select' | 'session' 
 export type OverlaySize = { width: number; height: number }
 
 const OVERLAY_WORK_AREA_SIZE: OverlaySize = { width: 472, height: 768 }
+const OVERLAY_SURFACE_PADDING = 10
+const OVERLAY_SURFACE_SELECTOR = '.overlay-card, .launcher-tools, .placement-work-area'
 
 /**
  * @description Synchronises the Electron overlay window dimensions with the current
@@ -34,9 +36,28 @@ export function useOverlaySize(
     return false
   }
 
+  // Geometria dinamica: la finestra Electron si stringe attorno alla superficie
+  // misurata (comportamento "da browser"); il placement resta a work area piena.
+  function measureOverlaySize(preset: OverlaySizePreset): OverlaySize {
+    if (preset === 'placement') return OVERLAY_WORK_AREA_SIZE
+    const surface = overlayRoot.value?.querySelector(OVERLAY_SURFACE_SELECTOR) as HTMLElement | null
+    if (!surface) return OVERLAY_WORK_AREA_SIZE
+    const rect = surface.getBoundingClientRect()
+    if (!rect.width || !rect.height) return OVERLAY_WORK_AREA_SIZE
+    // scrollHeight = altezza desiderata dal contenuto anche quando max-height la
+    // clampa alla finestra corrente (altrimenti la misura insegue se stessa e la
+    // finestra non cresce mai). +2 compensa i bordi esclusi da scrollHeight.
+    const desiredHeight = Math.max(rect.height, surface.scrollHeight + 2)
+    return {
+      width: Math.min(Math.ceil(rect.width) + OVERLAY_SURFACE_PADDING * 2, OVERLAY_WORK_AREA_SIZE.width),
+      height: Math.ceil(desiredHeight) + OVERLAY_SURFACE_PADDING * 2,
+    }
+  }
+
   async function applyOverlaySize(preset: OverlaySizePreset = getCurrentPreset()) {
     await nextTick()
-    const req = { preset, width: OVERLAY_WORK_AREA_SIZE.width, height: OVERLAY_WORK_AREA_SIZE.height }
+    const size = measureOverlaySize(preset)
+    const req = { preset, width: size.width, height: size.height }
     if (shouldSkip(req)) return
     await getApi()?.trainingOverlaySetSize?.(req)
   }
