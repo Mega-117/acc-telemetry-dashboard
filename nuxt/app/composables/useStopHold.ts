@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 
 const STOP_HOLD_CONFIRM_MS = 2_000
+const STOP_CONFIRM_AUTO_CANCEL_MS = 5_000
 
 /**
  * @description Implements the press-and-hold gesture for stopping an active training session.
@@ -21,6 +22,11 @@ export function useStopHold(
   let stopHoldFrame: number | null = null
   let stopHoldStartedAt = 0
   let isKeyboardStopHolding = false
+  let confirmAutoCancelHandle: ReturnType<typeof setTimeout> | null = null
+
+  function clearConfirmAutoCancel() {
+    if (confirmAutoCancelHandle) { clearTimeout(confirmAutoCancelHandle); confirmAutoCancelHandle = null }
+  }
 
   function cancelStopHold() {
     if (typeof window !== 'undefined' && stopHoldFrame !== null) {
@@ -33,6 +39,7 @@ export function useStopHold(
   }
 
   function closeShortcutStopConfirm() {
+    clearConfirmAutoCancel()
     isShortcutStopConfirmOpen.value = false
   }
 
@@ -68,12 +75,19 @@ export function useStopHold(
     onDebugEvent('stop conferma shortcut aperta')
     cancelStopHold()
     isShortcutStopConfirmOpen.value = true
+    clearConfirmAutoCancel()
+    confirmAutoCancelHandle = setTimeout(() => {
+      onDebugEvent('stop conferma annullata per timeout')
+      closeShortcutStopConfirm()
+    }, STOP_CONFIRM_AUTO_CANCEL_MS)
   }
 
+  // Two-step da volante/tastiera: prima pressione apre la conferma,
+  // seconda pressione dello stesso comando esegue lo stop, timeout annulla.
   function handleGlobalStop() {
     if (!canStop()) return
     onDebugEvent('comando stop globale')
-    if (isShortcutStopConfirmOpen.value) { closeShortcutStopConfirm(); return }
+    if (isShortcutStopConfirmOpen.value) { executeStop(); return }
     openShortcutStopConfirm()
   }
 

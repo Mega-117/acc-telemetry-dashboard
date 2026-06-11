@@ -18,6 +18,13 @@ describe('overlayInputModel', () => {
     expect(resolveOverlayKeyboardCommand({ key: 'Backspace', ctrlKey: true })).toBe('stop-hold')
   })
 
+  it('mappa lo stop two-step V2 su Ctrl+Alt+S', () => {
+    expect(resolveOverlayKeyboardCommand({ key: 's', ctrlKey: true, altKey: true })).toBe('stop')
+    expect(resolveOverlayKeyboardCommand({ key: 'S', ctrlKey: true, altKey: true })).toBe('stop')
+    expect(resolveOverlayKeyboardCommand({ key: 's', ctrlKey: true })).toBeNull()
+    expect(resolveOverlayKeyboardCommand({ key: 's', altKey: true })).toBeNull()
+  })
+
   it('ignora combinazioni non ufficiali o modificate', () => {
     expect(resolveOverlayKeyboardCommand({ key: 'n' })).toBeNull()
     expect(resolveOverlayKeyboardCommand({ key: 'n', ctrlKey: true, shiftKey: true })).toBeNull()

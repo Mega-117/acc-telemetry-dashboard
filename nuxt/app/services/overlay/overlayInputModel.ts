@@ -5,6 +5,7 @@ export type OverlayInputCommand =
   | 'previous'
   | 'next'
   | 'mute'
+  | 'stop'
   | 'stop-hold'
 
 export interface OverlayKeyboardLike {
@@ -25,6 +26,7 @@ export function resolveOverlayKeyboardCommand(event: OverlayKeyboardLike): Overl
   if (!event.altKey && key === 'm') return 'mute'
   if (!event.altKey && (key === 'arrowup' || key === ',')) return 'previous'
   if (!event.altKey && (key === 'arrowdown' || key === '.')) return 'next'
+  if (event.altKey && key === 's') return 'stop'
   if ((event.altKey && key === 'l') || (!event.altKey && key === 'backspace')) return 'stop-hold'
 
   return null

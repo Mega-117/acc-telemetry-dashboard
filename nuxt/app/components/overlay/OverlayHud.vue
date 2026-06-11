@@ -103,7 +103,7 @@ defineEmits<{
                 aria-live="assertive"
             >
                 <span>Conferma stop</span>
-                <strong>Ctrl+N conferma - Ctrl+Alt+L/Esc annulla</strong>
+                <strong>Ctrl+Alt+S o Ctrl+N conferma &middot; Ctrl+B/Esc annulla</strong>
             </div>
 
             <div v-if="phase !== 'expired'" class="progress-track" aria-hidden="true">

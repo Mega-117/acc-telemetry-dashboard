@@ -422,6 +422,7 @@ function handleLocalShortcut(event: KeyboardEvent) {
   if (command === 'previous') { runPreviousAction(); return }
   if (command === 'next') { runNextAction(); return }
   if (command === 'mute') { runMuteAction(); return }
+  if (command === 'stop') { handleGlobalStop(); return }
   if (command === 'stop-hold') { handleKeyboardStopHold(event.altKey ? 'Ctrl+Alt+L' : 'Ctrl+Backspace') }
 }
 
