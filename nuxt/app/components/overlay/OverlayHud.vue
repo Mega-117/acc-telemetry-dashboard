@@ -24,6 +24,13 @@ defineProps<{
     hudTransitionKey: string
     isShortcutStopConfirmOpen: boolean
     isSaving: Boolean
+    muted: boolean
+    autoAdvanceRemainingSec: number | null
+    autoAdvanceTotalSec: number
+}>()
+
+defineEmits<{
+    'cancel-auto-advance': []
 }>()
 </script>
 
@@ -36,7 +43,10 @@ defineProps<{
                     <span>Step {{ activeStepIndex + 1 }}/{{ totalSteps }}</span>
                     <p class="hud-task">{{ activeTask }}</p>
                 </div>
-                <time class="hud-timer" aria-label="Tempo rimanente">{{ formattedTime }}</time>
+                <div class="hud-side">
+                    <time class="hud-timer" aria-label="Tempo rimanente">{{ formattedTime }}</time>
+                    <span v-if="muted" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</span>
+                </div>
             </div>
 
             <div
@@ -67,7 +77,23 @@ defineProps<{
                 role="status"
                 aria-live="assertive"
             >
-                Pronto per lo step successivo
+                <span>Pronto per lo step successivo</span>
+                <button
+                    v-if="autoAdvanceRemainingSec !== null"
+                    type="button"
+                    class="auto-advance-chip"
+                    aria-label="Annulla avanzamento automatico"
+                    @click="$emit('cancel-auto-advance')"
+                >
+                    Avanti tra {{ autoAdvanceRemainingSec }}s — clicca per restare
+                </button>
+                <span
+                    v-if="autoAdvanceRemainingSec !== null"
+                    class="auto-advance-track"
+                    aria-hidden="true"
+                >
+                    <span :style="{ width: `${Math.max(0, Math.min(100, (autoAdvanceRemainingSec / Math.max(1, autoAdvanceTotalSec)) * 100))}%` }" />
+                </span>
             </div>
 
             <div

@@ -14,6 +14,7 @@ import type {
     TrainingOverlayTraining,
 } from '~/config/trainingOverlayCatalog'
 import type { QualifyingVoiceId } from '~/config/qualifyingVoiceNotifications'
+import { autoAdvanceSecondsOptions } from '~/composables/useOverlaySettings'
 
 interface PlanChip {
     id: string
@@ -50,6 +51,7 @@ const props = defineProps<{
     isTrainingPickerOpen: boolean
     isSettingsOpen: boolean
     autoAdvanceStep: boolean
+    autoAdvanceSeconds: number
 }>()
 
 const emit = defineEmits<{
@@ -61,6 +63,7 @@ const emit = defineEmits<{
     'toggle-auto-dim': []
     'select-voice': [id: QualifyingVoiceId]
     'toggle-auto-advance': []
+    'select-auto-advance-seconds': [seconds: number]
 }>()
 
 function trainingOptionStyle(training: TrainingOverlayTraining) {
@@ -226,6 +229,27 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                                 </strong>
                             </button>
 
+                            <div
+                                v-if="autoAdvanceStep"
+                                class="setting-row auto-advance-seconds"
+                                aria-label="Durata countdown avanzamento automatico"
+                            >
+                                <span>Countdown</span>
+                                <span class="seconds-options" role="group">
+                                    <button
+                                        v-for="s in autoAdvanceSecondsOptions"
+                                        :key="s"
+                                        type="button"
+                                        :class="{ 'is-active': autoAdvanceSeconds === s }"
+                                        :aria-label="`Countdown ${s} secondi`"
+                                        :aria-pressed="autoAdvanceSeconds === s"
+                                        @click="emit('select-auto-advance-seconds', s)"
+                                    >
+                                        {{ s }}s
+                                    </button>
+                                </span>
+                            </div>
+
                             <div class="shortcut-list">
                                 <div
                                     v-for="shortcut in overlayShortcuts"
@@ -236,7 +260,8 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                                     <strong>{{ shortcut.value }}</strong>
                                 </div>
                                 <p class="shortcut-note">
-                                    Per volante o button box, mappa questi tasti dal software esterno.
+                                    Per volante o button box (es. Fanatec via SimHub), mappa i bottoni
+                                    su questi tasti: bastano pressioni singole, niente hold.
                                 </p>
                             </div>
                         </div>

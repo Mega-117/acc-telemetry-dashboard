@@ -21,6 +21,13 @@ export function resolveOverlayOriginCorner(value: unknown): OverlayOriginCorner 
 // Currently always returns 'manual' — kept as a hook for future modes
 export function resolveOverlayOriginMode(_value: unknown): OverlayOriginMode { return 'manual' }
 
+export const autoAdvanceSecondsOptions = [5, 10, 15, 30]
+
+export function resolveAutoAdvanceSeconds(value: unknown): number {
+  const n = Number(value)
+  return autoAdvanceSecondsOptions.includes(n) ? n : 10
+}
+
 // ─── Composable ───────────────────────────────────────────────────────────────
 /**
  * @description Manages all user-configurable overlay preferences (position, corner, sound, voice,
@@ -51,6 +58,7 @@ export function useOverlaySettings(
 ) {
   const autoDimDuringRun = ref(true)
   const autoAdvanceStep = ref(true)
+  const autoAdvanceSeconds = ref(10)
   const originMode = ref<OverlayOriginMode>('manual')
   const originCorner = ref<OverlayOriginCorner>('top-left')
   const selectedQualifyingVoiceId = ref<QualifyingVoiceId>('if_sara')
@@ -63,6 +71,7 @@ export function useOverlaySettings(
       soundEnabled: soundEnabled.value, spotterEnabled: spotterEnabled.value,
       autoDimDuringRun: autoDimDuringRun.value,
       autoAdvanceStep: autoAdvanceStep.value,
+      autoAdvanceSeconds: autoAdvanceSeconds.value,
       originMode: originMode.value, originCorner: originCorner.value,
       qualifyingVoiceId: selectedQualifyingVoiceId.value,
     })
@@ -95,6 +104,10 @@ export function useOverlaySettings(
 
   function toggleAutoAdvanceStep() { autoAdvanceStep.value = !autoAdvanceStep.value; void savePreferences() }
 
+  function selectAutoAdvanceSeconds(seconds: number) {
+    autoAdvanceSeconds.value = resolveAutoAdvanceSeconds(seconds); void savePreferences()
+  }
+
   function toggleSound() {
     soundEnabled.value = !soundEnabled.value
     if (!soundEnabled.value) stopVoice()
@@ -103,9 +116,9 @@ export function useOverlaySettings(
   }
 
   return {
-    autoDimDuringRun, autoAdvanceStep, originMode, originCorner, selectedQualifyingVoiceId,
+    autoDimDuringRun, autoAdvanceStep, autoAdvanceSeconds, originMode, originCorner, selectedQualifyingVoiceId,
     isTrainingPickerOpen, isSettingsOpen,
     savePreferences, toggleTrainingPicker, toggleSettingsPanel,
-    toggleAutoDimDuringRun, toggleAutoAdvanceStep, selectOriginCorner, selectQualifyingVoice, toggleSound,
+    toggleAutoDimDuringRun, toggleAutoAdvanceStep, selectAutoAdvanceSeconds, selectOriginCorner, selectQualifyingVoice, toggleSound,
   }
 }

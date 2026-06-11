@@ -1,4 +1,4 @@
-import { watch, type ComputedRef, type Ref } from 'vue'
+import { ref, watch, type ComputedRef, type Ref } from 'vue'
 import { type QualifyingVoiceScenario } from '~/config/qualifyingVoiceNotifications'
 import { type TrainingOverlayDurationModeId, type TrainingOverlayId, type TrainingOverlayMode } from '~/config/trainingOverlayCatalog'
 import { type LiveLapState } from '~/composables/useLiveStatePoller'
@@ -17,7 +17,8 @@ type OverlayPhase = 'loading' | 'placement' | 'launcher' | 'select' | 'running' 
  * @param isSettingsOpen - Ref controlling the settings panel visibility.
  * @param selectedMode - Computed for the resolved duration mode object.
  * @param canManuallyAdvanceStep - Computed flag controlling whether the user may skip ahead.
- * @param autoAdvanceStep - Ref controlling whether the overlay auto-advances after 30 s of 'expired'.
+ * @param autoAdvanceStep - Ref controlling whether the overlay auto-advances after the visible countdown in 'expired'.
+ * @param autoAdvanceSeconds - Ref with the countdown duration in seconds before auto-advancing.
  * @param closeShortcutStopConfirm - Dismisses the stop-confirm modal.
  * @param cancelStopHold - Cancels any in-progress stop-hold gesture.
  * @param enqueueVoice - Schedules a voice notification scenario.
@@ -44,6 +45,7 @@ export function useSessionOrchestrator(
   selectedMode: ComputedRef<TrainingOverlayMode>,
   canManuallyAdvanceStep: ComputedRef<boolean>,
   autoAdvanceStep: Ref<boolean>,
+  autoAdvanceSeconds: Ref<number>,
   closeShortcutStopConfirm: () => void,
   cancelStopHold: () => void,
   enqueueVoice: (scenario: QualifyingVoiceScenario, opts?: { replace?: boolean }) => void,
@@ -64,14 +66,16 @@ export function useSessionOrchestrator(
   // ── Timer ──────────────────────────────────────────────────────────────────
   let deadlineAt = 0
   let timerHandle: ReturnType<typeof setInterval> | null = null
-  let autoAdvanceHandle: ReturnType<typeof setTimeout> | null = null
+  let autoAdvanceHandle: ReturnType<typeof setInterval> | null = null
+  const autoAdvanceRemainingSec = ref<number | null>(null)
 
   function clearTimer() {
     if (timerHandle) { clearInterval(timerHandle); timerHandle = null }
   }
 
   function clearAutoAdvance() {
-    if (autoAdvanceHandle) { clearTimeout(autoAdvanceHandle); autoAdvanceHandle = null }
+    if (autoAdvanceHandle) { clearInterval(autoAdvanceHandle); autoAdvanceHandle = null }
+    autoAdvanceRemainingSec.value = null
   }
 
   function tickTimer() {
@@ -91,10 +95,12 @@ export function useSessionOrchestrator(
       enqueueVoice('stepEnd')
       if (autoAdvanceStep.value) {
         clearAutoAdvance()
-        autoAdvanceHandle = setTimeout(() => {
-          clearAutoAdvance()
-          goNextStep()
-        }, 30_000) as unknown as ReturnType<typeof setTimeout>
+        autoAdvanceRemainingSec.value = Math.max(3, Math.round(autoAdvanceSeconds.value) || 10)
+        autoAdvanceHandle = setInterval(() => {
+          if (autoAdvanceRemainingSec.value === null) return
+          autoAdvanceRemainingSec.value -= 1
+          if (autoAdvanceRemainingSec.value <= 0) goNextStep()
+        }, 1_000) as unknown as ReturnType<typeof setInterval>
       }
     } else if (oldPhase === 'expired') {
       clearAutoAdvance()
@@ -150,7 +156,14 @@ export function useSessionOrchestrator(
 
   function completeCurrentStep() {
     if (phase.value !== 'running' || !canManuallyAdvanceStep.value) return
-    closeShortcutStopConfirm(); clearAutoAdvance(); remainingMs.value = 0; clearTimer(); phase.value = 'expired'
+    // Completamento manuale: avanza diretto, la conferma resta solo per la scadenza naturale.
+    clearTimer()
+    goNextStep()
+  }
+
+  function skipPausedStep() {
+    if (phase.value !== 'paused') return
+    goNextStep()
   }
 
   function goNextStep() {
@@ -178,7 +191,8 @@ export function useSessionOrchestrator(
   return {
     clearTimer,
     startStep, startSession, openTrainingSelection,
-    pauseSession, resumeSession, completeCurrentStep,
+    pauseSession, resumeSession, completeCurrentStep, skipPausedStep,
     goNextStep, stopSession, resetCompleted,
+    autoAdvanceRemainingSec, cancelAutoAdvance: clearAutoAdvance,
   }
 }

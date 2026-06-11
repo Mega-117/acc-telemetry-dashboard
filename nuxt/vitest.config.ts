@@ -40,6 +40,7 @@ export default defineConfig({
         'app/utils/sessionParser.ts',
         // ── Phase 3: composables ─────────────────────────────────────────
         'app/composables/useLiveStatePoller.ts',
+        'app/composables/useSessionOrchestrator.ts',
         // ── Phase 4: composables estratti da useTelemetryData ────────────
         'app/composables/useSessionLoader.ts',
         'app/composables/useSessionSharing.ts',

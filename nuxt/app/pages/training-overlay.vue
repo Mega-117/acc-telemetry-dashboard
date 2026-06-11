@@ -27,7 +27,7 @@ import { useTrainingSelection, type PlanPreviewChip } from '~/composables/useTra
 import { useSessionOrchestrator } from '~/composables/useSessionOrchestrator'
 import {
   useOverlaySettings, resolveOverlayOriginCorner, resolveOverlayOriginMode,
-  originCornerOptions,
+  resolveAutoAdvanceSeconds, originCornerOptions,
   type OverlayOriginCorner, type OverlayOriginMode,
 } from '~/composables/useOverlaySettings'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
@@ -55,7 +55,8 @@ interface TrainingOverlaySettings {
   hasConfiguredPosition?: boolean; lastTrainingId?: string
   lastDurationId?: TrainingOverlayDurationModeId; soundEnabled?: boolean
   spotterEnabled?: boolean
-  autoDimDuringRun?: boolean; autoAdvanceStep?: boolean; originMode?: OverlayOriginMode
+  autoDimDuringRun?: boolean; autoAdvanceStep?: boolean; autoAdvanceSeconds?: number
+  originMode?: OverlayOriginMode
   originCorner?: OverlayOriginCorner; qualifyingVoiceId?: QualifyingVoiceId
 }
 
@@ -66,18 +67,17 @@ const AUTO_DIM_RESTORE_MS = 10_000
 const AUTO_DIM_OPACITY = 0.6
 const PRIMARY_ACTION_DEBOUNCE_MS = 450
 const OVERLAY_CARD_SIZES: Record<OverlaySizePreset, OverlaySize> = {
-  launcher: { width: 306, height: 152 }, placement: OVERLAY_WORK_AREA_SIZE,
+  launcher: { width: 306, height: 174 }, placement: OVERLAY_WORK_AREA_SIZE,
   select: { width: 424, height: 620 }, session: { width: 334, height: 196 },
-  expired: { width: 334, height: 186 }, completed: { width: 334, height: 158 }
+  expired: { width: 334, height: 214 }, completed: { width: 334, height: 158 }
 }
 const overlayShortcuts = [
   { label: 'Overlay', value: 'Ctrl+K' },
   { label: 'Bottone azione', value: 'Ctrl+N' },
-  { label: 'Indietro', value: 'Ctrl+B' },
-  { label: 'Precedente', value: 'Ctrl+↑ / Ctrl+,' },
-  { label: 'Successivo', value: 'Ctrl+↓ / Ctrl+.' },
   { label: 'Mute', value: 'Ctrl+M' },
-  { label: 'Bottone stop', value: 'Ctrl+Alt+L' },
+  { label: 'Stop (2 pressioni)', value: 'Ctrl+Alt+S' },
+  { label: 'Indietro (solo focus)', value: 'Ctrl+B' },
+  { label: 'Selezione (solo focus)', value: 'Ctrl+↑/↓' },
 ]
 
 // ─── Core State ──────────────────────────────────────────────────────────────
@@ -160,7 +160,7 @@ const primaryAction = computed<PrimaryOverlayAction>(() => {
   if (phase.value === 'launcher') return 'open-selection'
   if (phase.value === 'select') return 'start'
   if (phase.value === 'running') return canManuallyAdvanceStep.value ? 'complete-step' : 'pause'
-  if (phase.value === 'paused') return canManuallyAdvanceStep.value ? 'next' : 'resume'
+  if (phase.value === 'paused') return 'resume'
   if (phase.value === 'expired') return 'next'
   if (phase.value === 'completed') return 'reset'
   return 'none'
@@ -185,7 +185,7 @@ const activeTask = computed(() => {
   if (phase.value === 'placement') return 'Trascina il box, poi conferma.'
   if (phase.value === 'select') return ''
   if (phase.value === 'launcher') return 'Apri la scelta allenamento.'
-  if (phase.value === 'paused') return 'Timer fermo.'
+  if (phase.value === 'paused') return `Timer fermo. ${activeStep.value.hud}`
   if (phase.value === 'expired') return 'Step finito. Passa al prossimo.'
   if (phase.value === 'completed') return 'Allenamento completato.'
   return activeStep.value.hud
@@ -240,10 +240,10 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
 
 // ─── Settings composable ─────────────────────────────────────────────────────
 const {
-  autoDimDuringRun, autoAdvanceStep, originMode, originCorner, selectedQualifyingVoiceId,
+  autoDimDuringRun, autoAdvanceStep, autoAdvanceSeconds, originMode, originCorner, selectedQualifyingVoiceId,
   isTrainingPickerOpen, isSettingsOpen, savePreferences,
   toggleTrainingPicker, toggleSettingsPanel, toggleAutoDimDuringRun, toggleAutoAdvanceStep,
-  selectOriginCorner, selectQualifyingVoice, toggleSound,
+  selectAutoAdvanceSeconds, selectOriginCorner, selectQualifyingVoice, toggleSound,
 } = useOverlaySettings(
   getOverlayApi, soundEnabled, spotterEnabled, stopVoice, primeStepAudio,
   scheduleOverlaySizeSync, isActiveSession, closeShortcutStopConfirm,
@@ -283,11 +283,12 @@ let lastPrimaryActionAt = 0
 const {
   clearTimer,
   startStep, startSession, openTrainingSelection,
-  pauseSession, resumeSession, completeCurrentStep,
+  pauseSession, resumeSession, completeCurrentStep, skipPausedStep,
   goNextStep, stopSession, resetCompleted,
+  autoAdvanceRemainingSec, cancelAutoAdvance,
 } = useSessionOrchestrator(
   phase, activeStepIndex, remainingMs, selectedTrainingId, selectedModeId, isSettingsOpen,
-  selectedMode, canManuallyAdvanceStep, autoAdvanceStep, closeShortcutStopConfirm, cancelStopHold,
+  selectedMode, canManuallyAdvanceStep, autoAdvanceStep, autoAdvanceSeconds, closeShortcutStopConfirm, cancelStopHold,
   enqueueVoice, enqueueStepStart, announceLap, primeStepAudio, stopVoice, playStepDoneSound,
   liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap,
   trackingStart, trackingComplete, trackingAbandon, savePreferences,
@@ -444,6 +445,7 @@ onMounted(async () => {
   spotterEnabled.value = settings?.spotterEnabled === true
   autoDimDuringRun.value = settings?.autoDimDuringRun !== false
   autoAdvanceStep.value = settings?.autoAdvanceStep !== false
+  autoAdvanceSeconds.value = resolveAutoAdvanceSeconds(settings?.autoAdvanceSeconds)
   originMode.value = resolveOverlayOriginMode(settings?.originMode)
   originCorner.value = resolveOverlayOriginCorner(settings?.originCorner)
   selectedQualifyingVoiceId.value = resolveQualifyingVoiceId(settings?.qualifyingVoiceId)
@@ -495,7 +497,10 @@ onBeforeUnmount(() => {
           aria-label="Strumenti live overlay"
         >
           <header class="launcher-tools__header">
-            <span>Strumenti live</span>
+            <span>
+              Strumenti live
+              <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
+            </span>
             <strong>{{ launcherSpotterStatus }}</strong>
           </header>
           <div class="launcher-tools__actions">
@@ -523,6 +528,7 @@ onBeforeUnmount(() => {
               {{ spotterToggleLabel }}
             </button>
           </div>
+          <p class="launcher-hint" aria-hidden="true">Ctrl+&#8593;/&#8595; scegli &middot; Ctrl+N conferma &middot; Ctrl+K nascondi</p>
         </section>
 
         <section
@@ -599,9 +605,11 @@ onBeforeUnmount(() => {
             @toggle-training-picker="toggleTrainingPicker"
             @toggle-settings="toggleSettingsPanel"
             :auto-advance-step="autoAdvanceStep"
+            :auto-advance-seconds="autoAdvanceSeconds"
             @toggle-sound="toggleSound"
             @toggle-auto-dim="toggleAutoDimDuringRun"
             @toggle-auto-advance="toggleAutoAdvanceStep"
+            @select-auto-advance-seconds="selectAutoAdvanceSeconds"
             @select-voice="selectQualifyingVoice"
           />
         </template>
@@ -619,6 +627,10 @@ onBeforeUnmount(() => {
             :hud-transition-key="hudTransitionKey"
             :is-shortcut-stop-confirm-open="isShortcutStopConfirmOpen"
             :is-saving="isSaving"
+            :muted="!soundEnabled"
+            :auto-advance-remaining-sec="autoAdvanceRemainingSec"
+            :auto-advance-total-sec="autoAdvanceSeconds"
+            @cancel-auto-advance="cancelAutoAdvance"
           />
         </template>
       </div>
@@ -647,6 +659,17 @@ onBeforeUnmount(() => {
             @click="executePrimaryAction"
           >
             {{ isShortcutStopConfirmOpen ? 'Conferma' : primaryActionLabel }}
+            <span v-if="!isShortcutStopConfirmOpen" class="key-hint" aria-hidden="true">Ctrl+N</span>
+          </button>
+          <button
+            v-if="phase === 'paused' && !isShortcutStopConfirmOpen"
+            type="button"
+            class="utility-action skip-step-action"
+            aria-label="Salta lo step corrente (solo mouse)"
+            title="Salta step (solo mouse)"
+            @click="skipPausedStep"
+          >
+            Salta step
           </button>
           <button
             type="button"

@@ -1,6 +1,6 @@
 import { ref } from 'vue'
 
-const STOP_HOLD_CONFIRM_MS = 1_000
+const STOP_HOLD_CONFIRM_MS = 2_000
 
 /**
  * @description Implements the press-and-hold gesture for stopping an active training session.
