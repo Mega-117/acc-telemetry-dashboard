@@ -20,6 +20,8 @@ import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { useTrackingRecord } from '~/composables/useTrackingRecord'
 import { useStopHold } from '~/composables/useStopHold'
 import { useQualifyingVoice } from '~/composables/useQualifyingVoice'
+import { useSpotterController } from '~/composables/useSpotterController'
+import { useSpotterVoice } from '~/composables/useSpotterVoice'
 import { useOverlaySize } from '~/composables/useOverlaySize'
 import { useTrainingSelection, type PlanPreviewChip } from '~/composables/useTrainingSelection'
 import { useSessionOrchestrator } from '~/composables/useSessionOrchestrator'
@@ -30,6 +32,8 @@ import {
 } from '~/composables/useOverlaySettings'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
+import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
+import { usePublicPath } from '~/composables/usePublicPath'
 
 definePageMeta({ layout: false })
 
@@ -42,7 +46,7 @@ useHead({
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type OverlayPhase = 'loading' | 'placement' | 'launcher' | 'select' | 'running' | 'paused' | 'expired' | 'completed'
-type OverlayCommand = 'primary' | 'stop'
+type OverlayCommand = Exclude<OverlayInputCommand, 'toggle' | 'stop-hold'> | 'stop'
 type OverlaySizePreset = 'launcher' | 'placement' | 'select' | 'session' | 'expired' | 'completed'
 type OverlaySize = { width: number; height: number }
 type PrimaryOverlayAction = 'confirm-placement' | 'open-selection' | 'start' | 'pause' | 'resume' | 'complete-step' | 'next' | 'reset' | 'none'
@@ -50,6 +54,7 @@ type PrimaryOverlayAction = 'confirm-placement' | 'open-selection' | 'start' | '
 interface TrainingOverlaySettings {
   hasConfiguredPosition?: boolean; lastTrainingId?: string
   lastDurationId?: TrainingOverlayDurationModeId; soundEnabled?: boolean
+  spotterEnabled?: boolean
   autoDimDuringRun?: boolean; autoAdvanceStep?: boolean; originMode?: OverlayOriginMode
   originCorner?: OverlayOriginCorner; qualifyingVoiceId?: QualifyingVoiceId
 }
@@ -61,13 +66,17 @@ const AUTO_DIM_RESTORE_MS = 10_000
 const AUTO_DIM_OPACITY = 0.6
 const PRIMARY_ACTION_DEBOUNCE_MS = 450
 const OVERLAY_CARD_SIZES: Record<OverlaySizePreset, OverlaySize> = {
-  launcher: { width: 232, height: 66 }, placement: OVERLAY_WORK_AREA_SIZE,
+  launcher: { width: 306, height: 152 }, placement: OVERLAY_WORK_AREA_SIZE,
   select: { width: 424, height: 620 }, session: { width: 334, height: 196 },
   expired: { width: 334, height: 186 }, completed: { width: 334, height: 158 }
 }
 const overlayShortcuts = [
   { label: 'Overlay', value: 'Ctrl+K' },
   { label: 'Bottone azione', value: 'Ctrl+N' },
+  { label: 'Indietro', value: 'Ctrl+B' },
+  { label: 'Precedente', value: 'Ctrl+↑ / Ctrl+,' },
+  { label: 'Successivo', value: 'Ctrl+↓ / Ctrl+.' },
+  { label: 'Mute', value: 'Ctrl+M' },
   { label: 'Bottone stop', value: 'Ctrl+Alt+L' },
 ]
 
@@ -78,6 +87,8 @@ const activeStepIndex = ref(0)
 const phase = ref<OverlayPhase>('loading')
 const remainingMs = ref(0)
 const isElectronRuntime = ref(false)
+const spotterEnabled = ref(false)
+const launcherToolIndex = ref(0)
 const lastDebugEvent = ref('nessun input')
 const debugEvents = ref<string[]>([])
 const overlayRoot = ref<HTMLElement | null>(null)
@@ -179,6 +190,14 @@ const activeTask = computed(() => {
   if (phase.value === 'completed') return 'Allenamento completato.'
   return activeStep.value.hud
 })
+const spotterToggleLabel = computed(() => spotterEnabled.value ? 'Disattiva spotter' : 'Attiva spotter')
+const launcherToolLabels = ['allenamento', 'spotter'] as const
+const launcherActiveToolLabel = computed(() => launcherToolLabels[launcherToolIndex.value] || launcherToolLabels[0])
+const launcherSpotterStatus = computed(() => {
+  if (!spotterEnabled.value) return 'Spotter spento'
+  if (isSpotterPolling.value) return lastSpotterEvent.value?.messageText || 'Spotter attivo'
+  return spotterStatusLabel.value
+})
 const sessionOverlayOpacity = computed(() => {
   if (!autoDimDuringRun.value || phase.value !== 'running') return 1
   const totalMs = activeStep.value.durationMinutes * 60_000
@@ -226,9 +245,25 @@ const {
   toggleTrainingPicker, toggleSettingsPanel, toggleAutoDimDuringRun, toggleAutoAdvanceStep,
   selectOriginCorner, selectQualifyingVoice, toggleSound,
 } = useOverlaySettings(
-  getOverlayApi, soundEnabled, stopVoice, primeStepAudio,
+  getOverlayApi, soundEnabled, spotterEnabled, stopVoice, primeStepAudio,
   scheduleOverlaySizeSync, isActiveSession, closeShortcutStopConfirm,
   selectedTrainingId, selectedModeId,
+)
+
+const spotterVoice = useSpotterVoice(
+  () => selectedQualifyingVoiceId.value,
+  () => spotterEnabled.value && soundEnabled.value,
+)
+const {
+  lastSpotterEvent,
+  isSpotterPolling,
+  spotterStatusLabel,
+  startSpotter,
+  stopSpotter,
+} = useSpotterController(
+  getOverlayApi,
+  () => spotterEnabled.value,
+  spotterVoice.enqueueSpotterText,
 )
 
 // ─── Training selection composable ───────────────────────────────────────────
@@ -277,11 +312,67 @@ async function confirmPlacement() {
 
 async function closeOverlay() { await getOverlayApi()?.trainingOverlayClose?.() }
 
+function toggleSpotter() {
+  spotterEnabled.value = !spotterEnabled.value
+  if (spotterEnabled.value) {
+    startSpotter()
+  } else {
+    stopSpotter()
+    spotterVoice.stopSpotterVoice()
+  }
+  void savePreferences()
+  setDebugEvent(spotterEnabled.value ? 'spotter attivato' : 'spotter disattivato')
+}
+
+function runBackAction() {
+  if (isShortcutStopConfirmOpen.value) { closeShortcutStopConfirm(); return }
+  if (phase.value === 'launcher') { closeOverlay(); return }
+  if (phase.value === 'placement') { phase.value = 'launcher'; return }
+  if (phase.value === 'select') {
+    if (isTrainingPickerOpen.value || isSettingsOpen.value) {
+      isTrainingPickerOpen.value = false; isSettingsOpen.value = false; scheduleOverlaySizeSync(); return
+    }
+    phase.value = 'launcher'; scheduleOverlaySizeSync(); return
+  }
+  if (phase.value === 'completed') { resetCompleted(); return }
+}
+
+function selectRelativeTraining(direction: -1 | 1) {
+  const currentIndex = trainingOverlayTrainingList.findIndex(t => t.id === selectedTrainingId.value)
+  const nextIndex = (Math.max(0, currentIndex) + direction + trainingOverlayTrainingList.length) % trainingOverlayTrainingList.length
+  selectTraining(trainingOverlayTrainingList[nextIndex]!.id)
+}
+
+function runPreviousAction() {
+  if (phase.value === 'launcher') {
+    launcherToolIndex.value = (launcherToolIndex.value + launcherToolLabels.length - 1) % launcherToolLabels.length
+    setDebugEvent(`strumento launcher: ${launcherActiveToolLabel.value}`)
+    return
+  }
+  if (phase.value === 'select' && !isActiveSession.value) selectRelativeTraining(-1)
+}
+
+function runNextAction() {
+  if (phase.value === 'launcher') {
+    launcherToolIndex.value = (launcherToolIndex.value + 1) % launcherToolLabels.length
+    setDebugEvent(`strumento launcher: ${launcherActiveToolLabel.value}`)
+    return
+  }
+  if (phase.value === 'select' && !isActiveSession.value) selectRelativeTraining(1)
+}
+
+function runMuteAction() {
+  toggleSound()
+  if (!soundEnabled.value) spotterVoice.stopSpotterVoice()
+  setDebugEvent(soundEnabled.value ? 'audio attivo' : 'audio muto')
+}
+
 function executePrimaryAction() {
   const now = Date.now()
   if (now - lastPrimaryActionAt < PRIMARY_ACTION_DEBOUNCE_MS) { setDebugEvent(`debounce ${primaryAction.value}`); return }
   lastPrimaryActionAt = now; setDebugEvent(`azione: ${primaryAction.value}`)
   if (isShortcutStopConfirmOpen.value) { executeStop(); return }
+  if (phase.value === 'launcher' && launcherToolIndex.value === 1) { toggleSpotter(); return }
   const actions: Record<PrimaryOverlayAction, () => void> = {
     'confirm-placement': () => void confirmPlacement(),
     'open-selection': openTrainingSelection,
@@ -305,6 +396,10 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   const command = typeof payload === 'string' ? payload : payload?.command
   setDebugEvent(`comando overlay: ${command || 'vuoto'}`)
   if (command === 'primary') executePrimaryAction()
+  if (command === 'back') runBackAction()
+  if (command === 'previous') runPreviousAction()
+  if (command === 'next') runNextAction()
+  if (command === 'mute') runMuteAction()
   if (command === 'stop') handleGlobalStop()
 }
 
@@ -316,20 +411,23 @@ function handleLocalShortcut(event: KeyboardEvent) {
   if (event.key === 'Escape' && isShortcutStopConfirmOpen.value) {
     event.preventDefault(); closeShortcutStopConfirm(); return
   }
-  if (!event.ctrlKey || event.metaKey || event.shiftKey) return
-  if (!event.altKey && key === 'n') {
-    event.preventDefault(); if (event.repeat) return; executePrimaryAction(); return
-  }
-  const isStop = (event.altKey && key === 'l') || (!event.altKey && key === 'backspace')
-  if (isStop) { event.preventDefault(); handleKeyboardStopHold(event.altKey ? 'Ctrl+Alt+L' : 'Ctrl+Backspace') }
+  const command = resolveOverlayKeyboardCommand(event)
+  if (!command) return
+  event.preventDefault()
+  if (event.repeat && command !== 'stop-hold') return
+  if (command === 'toggle') return
+  if (command === 'primary') { executePrimaryAction(); return }
+  if (command === 'back') { runBackAction(); return }
+  if (command === 'previous') { runPreviousAction(); return }
+  if (command === 'next') { runNextAction(); return }
+  if (command === 'mute') { runMuteAction(); return }
+  if (command === 'stop-hold') { handleKeyboardStopHold(event.altKey ? 'Ctrl+Alt+L' : 'Ctrl+Backspace') }
 }
 
 function handleLocalShortcutRelease(event: KeyboardEvent) {
   const key = event.key.toLowerCase()
   if (isKeyboardStopHolding() && ['control', 'alt'].includes(key)) { cancelStopHold(); return }
-  if (!event.ctrlKey || event.metaKey || event.shiftKey) return
-  const isStop = (event.altKey && key === 'l') || (!event.altKey && key === 'backspace')
-  if (isStop) { event.preventDefault(); handleKeyboardStopRelease() }
+  if (resolveOverlayKeyboardCommand(event) === 'stop-hold') { event.preventDefault(); handleKeyboardStopRelease() }
 }
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
@@ -343,6 +441,7 @@ onMounted(async () => {
   selectedTrainingId.value = resolveTrainingOverlayTrainingId(settings?.lastTrainingId)
   selectedModeId.value = resolveTrainingOverlayModeId(settings?.lastDurationId)
   soundEnabled.value = settings?.soundEnabled !== false
+  spotterEnabled.value = settings?.spotterEnabled === true
   autoDimDuringRun.value = settings?.autoDimDuringRun !== false
   autoAdvanceStep.value = settings?.autoAdvanceStep !== false
   originMode.value = resolveOverlayOriginMode(settings?.originMode)
@@ -350,6 +449,7 @@ onMounted(async () => {
   selectedQualifyingVoiceId.value = resolveQualifyingVoiceId(settings?.qualifyingVoiceId)
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000
   phase.value = settings?.hasConfiguredPosition || !api ? 'launcher' : 'placement'
+  if (spotterEnabled.value) startSpotter()
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
   window.addEventListener('keydown', handleLocalShortcut, true)
   window.addEventListener('keyup', handleLocalShortcutRelease, true)
@@ -358,13 +458,13 @@ onMounted(async () => {
 
 watch(
   [phase, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
-    selectedQualifyingVoiceId, isTrainingPickerOpen, isSettingsOpen],
+    selectedQualifyingVoiceId, spotterEnabled, isTrainingPickerOpen, isSettingsOpen],
   () => scheduleOverlaySizeSync(),
   { flush: 'post' }
 )
 
 onBeforeUnmount(() => {
-  clearTimer(); cancelStopHold(); stopLiveStatePolling(); cleanupSize()
+  clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopSpotter(); spotterVoice.stopSpotterVoice(); cleanupSize()
   removeCommandListener?.()
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleLocalShortcut, true)
@@ -388,16 +488,42 @@ onBeforeUnmount(() => {
   >
     <div class="overlay-work-area">
       <Transition name="overlay-surface" mode="out-in">
-        <button
+        <section
           v-if="phase === 'launcher'"
           key="launcher"
-          type="button"
-          :class="['launcher-button', `overlay-surface--${overlaySizePreset}`]"
-          :aria-label="primaryActionLabel"
-          @click="executePrimaryAction"
+          :class="['launcher-tools', `overlay-surface--${overlaySizePreset}`]"
+          aria-label="Strumenti live overlay"
         >
-          {{ primaryActionLabel }}
-        </button>
+          <header class="launcher-tools__header">
+            <span>Strumenti live</span>
+            <strong>{{ launcherSpotterStatus }}</strong>
+          </header>
+          <div class="launcher-tools__actions">
+            <button
+              type="button"
+              class="launcher-tool-button launcher-tool-button--training"
+              :class="{ 'is-selected': launcherToolIndex === 0 }"
+              :aria-label="primaryActionLabel"
+              :aria-current="launcherToolIndex === 0 ? 'true' : undefined"
+              @focus="launcherToolIndex = 0"
+              @click="executePrimaryAction"
+            >
+              Avvia allenamento
+            </button>
+            <button
+              type="button"
+              class="launcher-tool-button launcher-tool-button--spotter"
+              :class="{ 'is-active': spotterEnabled, 'is-selected': launcherToolIndex === 1 }"
+              :aria-pressed="spotterEnabled"
+              :aria-current="launcherToolIndex === 1 ? 'true' : undefined"
+              :aria-label="spotterToggleLabel"
+              @focus="launcherToolIndex = 1"
+              @click="toggleSpotter"
+            >
+              {{ spotterToggleLabel }}
+            </button>
+          </div>
+        </section>
 
         <section
           v-else-if="phase === 'placement'"
