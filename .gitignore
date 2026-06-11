@@ -54,3 +54,6 @@ test_output/
 
 # Training data locale (generata a runtime, non in repo)
 training_data/
+
+# Artefatti esterni di riferimento (non parte del progetto)
+kb-starter-kit.zip
