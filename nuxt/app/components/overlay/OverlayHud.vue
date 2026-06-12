@@ -102,7 +102,7 @@ defineEmits<{
                         aria-live="assertive"
                     >
                         <span>Conferma stop</span>
-                        <strong>Ctrl+Alt+S o Ctrl+N conferma &middot; Ctrl+B/Esc annulla</strong>
+                        <strong>Ctrl+Alt+S o Ctrl+N conferma &middot; si annulla da solo dopo 5s</strong>
                     </div>
                 </div>
             </Transition>

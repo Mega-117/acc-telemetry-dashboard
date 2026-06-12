@@ -1,12 +1,13 @@
+// Input model V2.1 (PIP-96): 4 comandi globali (toggle/primary/mute/stop)
+// + back come scorciatoia locale da desk. Previous/next e stop-hold da
+// tastiera rimossi: in guida non erano raggiungibili (solo-focus) e in
+// selezione confondevano; la selezione al desk si fa col mouse.
 export type OverlayInputCommand =
   | 'toggle'
   | 'primary'
   | 'back'
-  | 'previous'
-  | 'next'
   | 'mute'
   | 'stop'
-  | 'stop-hold'
 
 export interface OverlayKeyboardLike {
   key: string
@@ -24,10 +25,7 @@ export function resolveOverlayKeyboardCommand(event: OverlayKeyboardLike): Overl
   if (!event.altKey && key === 'n') return 'primary'
   if (!event.altKey && key === 'b') return 'back'
   if (!event.altKey && key === 'm') return 'mute'
-  if (!event.altKey && (key === 'arrowup' || key === ',')) return 'previous'
-  if (!event.altKey && (key === 'arrowdown' || key === '.')) return 'next'
   if (event.altKey && key === 's') return 'stop'
-  if ((event.altKey && key === 'l') || (!event.altKey && key === 'backspace')) return 'stop-hold'
 
   return null
 }

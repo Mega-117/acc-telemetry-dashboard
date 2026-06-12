@@ -46,7 +46,7 @@ useHead({
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type OverlayPhase = 'loading' | 'placement' | 'launcher' | 'select' | 'running' | 'paused' | 'expired' | 'completed'
-type OverlayCommand = Exclude<OverlayInputCommand, 'toggle' | 'stop-hold'> | 'stop'
+type OverlayCommand = Exclude<OverlayInputCommand, 'toggle'>
 type OverlaySizePreset = 'launcher' | 'placement' | 'select' | 'session' | 'expired' | 'completed'
 type OverlaySize = { width: number; height: number }
 type PrimaryOverlayAction = 'confirm-placement' | 'open-selection' | 'start' | 'pause' | 'resume' | 'complete-step' | 'next' | 'reset' | 'none'
@@ -74,7 +74,6 @@ const overlayShortcuts = [
   { label: 'Mute', value: 'Ctrl+M' },
   { label: 'Stop (2 pressioni)', value: 'Ctrl+Alt+S' },
   { label: 'Indietro (solo focus)', value: 'Ctrl+B' },
-  { label: 'Selezione (solo focus)', value: 'Ctrl+↑/↓' },
 ]
 
 // ─── Core State ──────────────────────────────────────────────────────────────
@@ -85,9 +84,9 @@ const phase = ref<OverlayPhase>('loading')
 const remainingMs = ref(0)
 const isElectronRuntime = ref(false)
 const spotterEnabled = ref(false)
+// Solo evidenziazione visiva del focus mouse/tab: nessun effetto sui comandi
+// globali (PIP-96), Ctrl+N nel launcher avvia sempre l'allenamento.
 const launcherToolIndex = ref(0)
-const lastDebugEvent = ref('nessun input')
-const debugEvents = ref<string[]>([])
 const overlayRoot = ref<HTMLElement | null>(null)
 const showDevControls = import.meta.dev
 const isSaving = ref(false)
@@ -111,16 +110,14 @@ const { trackingStart, trackingComplete, trackingAbandon } = useTrackingRecord(
 )
 
 function setDebugEvent(msg: string) {
-  const e = `${new Date().toLocaleTimeString()} - ${msg}`
-  lastDebugEvent.value = e
-  debugEvents.value = [e, ...debugEvents.value].slice(0, 5)
+  if (import.meta.dev) console.debug('[overlay]', msg)
 }
 
 const {
   stopHoldProgress, isShortcutStopConfirmOpen,
-  isKeyboardStopHolding, startStopHold, cancelStopHold,
-  closeShortcutStopConfirm, openShortcutStopConfirm,
-  handleGlobalStop, handleKeyboardStopHold, handleKeyboardStopRelease, executeStop,
+  startStopHold, cancelStopHold,
+  closeShortcutStopConfirm,
+  handleGlobalStop, executeStop,
 } = useStopHold(
   () => canUseStopControl.value,
   () => {
@@ -187,8 +184,6 @@ const activeTask = computed(() => {
   return activeStep.value.hud
 })
 const spotterToggleLabel = computed(() => spotterEnabled.value ? 'Disattiva spotter' : 'Attiva spotter')
-const launcherToolLabels = ['allenamento', 'spotter'] as const
-const launcherActiveToolLabel = computed(() => launcherToolLabels[launcherToolIndex.value] || launcherToolLabels[0])
 const launcherSpotterStatus = computed(() => {
   if (!spotterEnabled.value) return 'Spotter spento'
   if (isSpotterPolling.value) return lastSpotterEvent.value?.messageText || 'Spotter attivo'
@@ -345,30 +340,6 @@ function runBackAction() {
   if (phase.value === 'completed') { resetCompleted(); return }
 }
 
-function selectRelativeTraining(direction: -1 | 1) {
-  const currentIndex = trainingOverlayTrainingList.findIndex(t => t.id === selectedTrainingId.value)
-  const nextIndex = (Math.max(0, currentIndex) + direction + trainingOverlayTrainingList.length) % trainingOverlayTrainingList.length
-  selectTraining(trainingOverlayTrainingList[nextIndex]!.id)
-}
-
-function runPreviousAction() {
-  if (phase.value === 'launcher') {
-    launcherToolIndex.value = (launcherToolIndex.value + launcherToolLabels.length - 1) % launcherToolLabels.length
-    setDebugEvent(`strumento launcher: ${launcherActiveToolLabel.value}`)
-    return
-  }
-  if (phase.value === 'select' && !isActiveSession.value) selectRelativeTraining(-1)
-}
-
-function runNextAction() {
-  if (phase.value === 'launcher') {
-    launcherToolIndex.value = (launcherToolIndex.value + 1) % launcherToolLabels.length
-    setDebugEvent(`strumento launcher: ${launcherActiveToolLabel.value}`)
-    return
-  }
-  if (phase.value === 'select' && !isActiveSession.value) selectRelativeTraining(1)
-}
-
 function runMuteAction() {
   toggleSound()
   if (!soundEnabled.value) spotterVoice.stopSpotterVoice()
@@ -380,7 +351,6 @@ function executePrimaryAction() {
   if (now - lastPrimaryActionAt < PRIMARY_ACTION_DEBOUNCE_MS) { setDebugEvent(`debounce ${primaryAction.value}`); return }
   lastPrimaryActionAt = now; setDebugEvent(`azione: ${primaryAction.value}`)
   if (isShortcutStopConfirmOpen.value) { executeStop(); return }
-  if (phase.value === 'launcher' && launcherToolIndex.value === 1) { toggleSpotter(); return }
   const actions: Record<PrimaryOverlayAction, () => void> = {
     'confirm-placement': () => void confirmPlacement(),
     'open-selection': openTrainingSelection,
@@ -422,38 +392,23 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   setDebugEvent(`comando overlay: ${command || 'vuoto'}`)
   if (command === 'primary') executePrimaryAction()
   if (command === 'back') runBackAction()
-  if (command === 'previous') runPreviousAction()
-  if (command === 'next') runNextAction()
   if (command === 'mute') runMuteAction()
   if (command === 'stop') handleGlobalStop()
 }
 
 function handleLocalShortcut(event: KeyboardEvent) {
-  const key = event.key.toLowerCase()
-  if (event.ctrlKey || event.altKey || event.metaKey || event.shiftKey || key === 'escape') {
-    setDebugEvent(`keydown ${event.ctrlKey ? 'Ctrl+' : ''}${event.altKey ? 'Alt+' : ''}${event.key}`)
-  }
   if (event.key === 'Escape' && isShortcutStopConfirmOpen.value) {
     event.preventDefault(); closeShortcutStopConfirm(); return
   }
   const command = resolveOverlayKeyboardCommand(event)
   if (!command) return
   event.preventDefault()
-  if (event.repeat && command !== 'stop-hold') return
+  if (event.repeat) return
   if (command === 'toggle') return
   if (command === 'primary') { executePrimaryAction(); return }
   if (command === 'back') { runBackAction(); return }
-  if (command === 'previous') { runPreviousAction(); return }
-  if (command === 'next') { runNextAction(); return }
   if (command === 'mute') { runMuteAction(); return }
-  if (command === 'stop') { handleGlobalStop(); return }
-  if (command === 'stop-hold') { handleKeyboardStopHold(event.altKey ? 'Ctrl+Alt+L' : 'Ctrl+Backspace') }
-}
-
-function handleLocalShortcutRelease(event: KeyboardEvent) {
-  const key = event.key.toLowerCase()
-  if (isKeyboardStopHolding() && ['control', 'alt'].includes(key)) { cancelStopHold(); return }
-  if (resolveOverlayKeyboardCommand(event) === 'stop-hold') { event.preventDefault(); handleKeyboardStopRelease() }
+  if (command === 'stop') { handleGlobalStop() }
 }
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
@@ -479,7 +434,6 @@ onMounted(async () => {
   if (spotterEnabled.value) startSpotter()
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
   window.addEventListener('keydown', handleLocalShortcut, true)
-  window.addEventListener('keyup', handleLocalShortcutRelease, true)
   if (api?.trainingOverlaySetMousePassthrough) {
     window.addEventListener('mousemove', updateMousePassthrough, true)
   }
@@ -498,7 +452,6 @@ onBeforeUnmount(() => {
   removeCommandListener?.()
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleLocalShortcut, true)
-    window.removeEventListener('keyup', handleLocalShortcutRelease, true)
     window.removeEventListener('mousemove', updateMousePassthrough, true)
   }
   document.body.classList.remove('training-overlay-runtime')
@@ -599,7 +552,7 @@ onBeforeUnmount(() => {
                       {{ spotterToggleLabel }}
                     </button>
                   </div>
-                  <p class="launcher-hint" aria-hidden="true">Ctrl+&#8593;/&#8595; scegli &middot; Ctrl+N conferma &middot; Ctrl+K nascondi</p>
+                  <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K nascondi</p>
                 </div>
               </template>
 
@@ -689,7 +642,7 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
                 <p class="launcher-hint" aria-hidden="true">
-                  Ctrl+K nasconde &middot; Ctrl+&#8593;/&#8595; cambia allenamento &middot; Ctrl+N avvia
+                  Ctrl+K nasconde &middot; Ctrl+N avvia
                 </p>
               </template>
 

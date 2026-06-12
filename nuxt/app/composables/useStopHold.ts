@@ -21,7 +21,6 @@ export function useStopHold(
   const isShortcutStopConfirmOpen = ref(false)
   let stopHoldFrame: number | null = null
   let stopHoldStartedAt = 0
-  let isKeyboardStopHolding = false
   let confirmAutoCancelHandle: ReturnType<typeof setTimeout> | null = null
 
   function clearConfirmAutoCancel() {
@@ -34,7 +33,6 @@ export function useStopHold(
     }
     stopHoldFrame = null
     stopHoldStartedAt = 0
-    isKeyboardStopHolding = false
     stopHoldProgress.value = 0
   }
 
@@ -58,13 +56,14 @@ export function useStopHold(
     stopHoldFrame = window.requestAnimationFrame(tick)
   }
 
+  // 'keyboard' = barra spazio sul bottone Stop focusato (accessibilita' da
+  // desk); lo stop-hold via shortcut globale e' stato rimosso (PIP-96).
   function startStopHold(source: 'pointer' | 'keyboard' = 'pointer') {
     if (!canStop()) return
     if (stopHoldStartedAt) return
     onDebugEvent(`stop hold start (${source})`)
     closeShortcutStopConfirm()
     cancelStopHold()
-    isKeyboardStopHolding = source === 'keyboard'
     stopHoldStartedAt = Date.now()
     stopHoldFrame = window.requestAnimationFrame(tick)
   }
@@ -90,28 +89,14 @@ export function useStopHold(
     openShortcutStopConfirm()
   }
 
-  function handleKeyboardStopHold(label = 'stop shortcut') {
-    if (!canStop()) return
-    onDebugEvent(`${label} down`)
-    startStopHold('keyboard')
-  }
-
-  function handleKeyboardStopRelease() {
-    if (!isKeyboardStopHolding) return
-    cancelStopHold()
-  }
-
   return {
     stopHoldProgress,
     isShortcutStopConfirmOpen,
-    isKeyboardStopHolding: () => isKeyboardStopHolding,
     startStopHold,
     cancelStopHold,
     closeShortcutStopConfirm,
     openShortcutStopConfirm,
     handleGlobalStop,
-    handleKeyboardStopHold,
-    handleKeyboardStopRelease,
     executeStop,
   }
 }
