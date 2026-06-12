@@ -8,22 +8,24 @@ function makeStep(id: string, durationMinutes: number) {
   return { id, title: id, durationMinutes, type: 'work' as const, hud: id }
 }
 
-function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boolean } = {}) {
+function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boolean, stepMinutes?: number[] } = {}) {
   const phase = ref<Phase>('select')
   const activeStepIndex = ref(0)
   const remainingMs = ref(0)
+  const minutes = opts.stepMinutes ?? [1, 1, 1]
   const mode = {
     id: 'short30' as const,
     title: '30 min',
     duration: 30,
     description: '',
-    steps: [makeStep('step-a', 1), makeStep('step-b', 1), makeStep('step-c', 1)],
+    steps: minutes.map((m, i) => makeStep(`step-${i}`, m)),
   }
   const noop = () => {}
   const asyncNoop = async () => {}
   const stopLiveStatePolling = vi.fn()
   const trackingComplete = vi.fn(asyncNoop)
   const playCountdownBeep = vi.fn()
+  const enqueueVoice = vi.fn()
   const isSettingsOpen = ref(false)
 
   const orchestrator = useSessionOrchestrator(
@@ -37,14 +39,14 @@ function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boo
     computed(() => opts.canAdvance ?? true),
     ref(opts.autoAdvance ?? true),
     ref(opts.seconds ?? 10),
-    noop, noop, noop, noop, noop,
+    noop, noop, enqueueVoice as never, noop, noop,
     asyncNoop, noop, noop, playCountdownBeep,
     ref({ currentLap: null, lapValid: null, lapsCompleted: null, lapsValid: null }),
     noop, stopLiveStatePolling, noop,
     asyncNoop, trackingComplete as never, asyncNoop, asyncNoop,
   )
 
-  return { phase, activeStepIndex, remainingMs, orchestrator, stopLiveStatePolling, trackingComplete, playCountdownBeep, isSettingsOpen }
+  return { phase, activeStepIndex, remainingMs, orchestrator, stopLiveStatePolling, trackingComplete, playCountdownBeep, enqueueVoice, isSettingsOpen }
 }
 
 describe('useSessionOrchestrator - countdown auto-advance', () => {
@@ -176,6 +178,71 @@ describe('useSessionOrchestrator - completamento manuale e skip', () => {
     orchestrator.pauseSession()
     orchestrator.skipPausedStep()
     expect(phase.value).toBe('completed')
+  })
+})
+
+describe('useSessionOrchestrator - cue ultimo minuto (PIP-99)', () => {
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('annuncia "ultimo minuto" una sola volta a T-60s sugli step >= 5 minuti', () => {
+    const { orchestrator, enqueueVoice } = setup({ stepMinutes: [5] })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(3 * 60_000)
+    expect(enqueueVoice).not.toHaveBeenCalledWith('lastMinute')
+
+    vi.advanceTimersByTime(60_000) // T-60s
+    expect(enqueueVoice).toHaveBeenCalledWith('lastMinute')
+    expect(enqueueVoice.mock.calls.filter(c => c[0] === 'lastMinute')).toHaveLength(1)
+
+    vi.advanceTimersByTime(30_000) // resta una sola
+    expect(enqueueVoice.mock.calls.filter(c => c[0] === 'lastMinute')).toHaveLength(1)
+  })
+
+  it('non annuncia sugli step brevi (< 5 minuti)', () => {
+    const { orchestrator, enqueueVoice } = setup({ stepMinutes: [2] })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(90_000)
+    expect(enqueueVoice).not.toHaveBeenCalledWith('lastMinute')
+  })
+
+  it('niente doppio annuncio dopo pausa e ripresa a cavallo del minuto', () => {
+    const { orchestrator, enqueueVoice } = setup({ stepMinutes: [5] })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(4 * 60_000) // annunciato a T-60
+    expect(enqueueVoice.mock.calls.filter(c => c[0] === 'lastMinute')).toHaveLength(1)
+
+    orchestrator.pauseSession()
+    vi.advanceTimersByTime(5 * 60_000) // pausa lunga: nessun tick
+    orchestrator.resumeSession()
+    vi.advanceTimersByTime(10_000)
+    expect(enqueueVoice.mock.calls.filter(c => c[0] === 'lastMinute')).toHaveLength(1)
+  })
+
+  it('in pausa prima della soglia: annuncio al T-60 reale dopo la ripresa, una volta', () => {
+    const { orchestrator, enqueueVoice } = setup({ stepMinutes: [5] })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(3 * 60_000) // restano 2 minuti
+    orchestrator.pauseSession()
+    vi.advanceTimersByTime(10 * 60_000) // pausa lunga
+    expect(enqueueVoice).not.toHaveBeenCalledWith('lastMinute')
+
+    orchestrator.resumeSession()
+    vi.advanceTimersByTime(59_000)
+    expect(enqueueVoice).not.toHaveBeenCalledWith('lastMinute')
+    vi.advanceTimersByTime(2_000) // attraversa T-60 reale
+    expect(enqueueVoice.mock.calls.filter(c => c[0] === 'lastMinute')).toHaveLength(1)
+  })
+
+  it('lo skip prima della soglia non annuncia; lo step successivo ha il suo trigger', () => {
+    const { orchestrator, enqueueVoice } = setup({ stepMinutes: [5, 5], canAdvance: true })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(60_000)
+    orchestrator.completeCurrentStep() // skip a meta' step 0
+    expect(enqueueVoice).not.toHaveBeenCalledWith('lastMinute')
+
+    vi.advanceTimersByTime(4 * 60_000) // step 1 a T-60
+    expect(enqueueVoice.mock.calls.filter(c => c[0] === 'lastMinute')).toHaveLength(1)
   })
 })
 

@@ -1,7 +1,8 @@
 // Scenari ridotti (PIP-98): pausa/ripresa/fine-step rimossi (ridondanti coi
 // feedback visivi e col bip), avvio fuso nell'intro del primo step.
-// Resta solo il completamento; 'stepStart' identifica i WAV per-step.
-export type QualifyingVoiceScenario = 'sessionComplete' | 'stepStart'
+// 'lastMinute' (PIP-99): avviso a T-60s sugli step lunghi.
+// 'stepStart' identifica i WAV per-step.
+export type QualifyingVoiceScenario = 'sessionComplete' | 'lastMinute' | 'stepStart'
 
 export type QualifyingVoiceId = 'if_sara' | 'im_nicola'
 
@@ -40,6 +41,13 @@ export const qualifyingVoicePhrases: QualifyingVoicePhrase[] = [
     voice: 'if_sara',
     speed: 1.12,
     text: 'allenamento completato ottimo lavoro. ora fai un recap di quello che hai fatto e i punti su cui lavorare la prossima volta'
+  },
+  {
+    id: 'last_minute_1',
+    scenario: 'lastMinute',
+    voice: 'if_sara',
+    speed: 1.15,
+    text: 'ultimo minuto.'
   }
 ]
 

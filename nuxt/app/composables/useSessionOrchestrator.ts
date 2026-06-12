@@ -69,6 +69,10 @@ export function useSessionOrchestrator(
   let timerHandle: ReturnType<typeof setInterval> | null = null
   let autoAdvanceHandle: ReturnType<typeof setInterval> | null = null
   const autoAdvanceRemainingSec = ref<number | null>(null)
+  // Cue "ultimo minuto" (PIP-99): una sola volta per step, solo step >= 5'.
+  const LAST_MINUTE_MS = 60_000
+  const LAST_MINUTE_MIN_STEP_MINUTES = 5
+  let lastMinuteAnnounced = false
 
   function clearTimer() {
     if (timerHandle) { clearInterval(timerHandle); timerHandle = null }
@@ -81,6 +85,18 @@ export function useSessionOrchestrator(
 
   function tickTimer() {
     remainingMs.value = Math.max(0, deadlineAt - Date.now())
+    const step = selectedMode.value.steps[activeStepIndex.value]
+    if (
+      !lastMinuteAnnounced
+      && remainingMs.value > 0
+      && remainingMs.value <= LAST_MINUTE_MS
+      && (step?.durationMinutes ?? 0) >= LAST_MINUTE_MIN_STEP_MINUTES
+    ) {
+      // In pausa il timer non ticchetta, quindi l'avviso arriva sempre sul
+      // tempo residuo reale; il flag evita il doppio dopo pausa/ripresa.
+      lastMinuteAnnounced = true
+      enqueueVoice('lastMinute')
+    }
     if (remainingMs.value <= 0) {
       clearTimer(); playStepDoneSound(); phase.value = 'expired'
     }
@@ -138,6 +154,7 @@ export function useSessionOrchestrator(
       completeSession(index); return
     }
     activeStepIndex.value = index; remainingMs.value = step.durationMinutes * 60_000
+    lastMinuteAnnounced = false
     deadlineAt = Date.now() + remainingMs.value; phase.value = 'running'; startTicking()
     enqueueStepStart(`${selectedTrainingId.value}-${selectedModeId.value}`, step.id)
   }
