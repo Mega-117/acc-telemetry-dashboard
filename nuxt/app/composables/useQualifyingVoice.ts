@@ -70,6 +70,27 @@ export function useQualifyingVoice(
     })
   }
 
+  // Bip countdown "da palestra" (PIP-97): corto e piano a -3/-2, lungo su 1.
+  function playCountdownBeep(final = false) {
+    if (!soundEnabled.value) return
+    const ctx = getStepAudioContext()
+    if (!ctx) return
+    void ctx.resume().catch(() => undefined)
+    const t = ctx.currentTime + 0.01
+    const duration = final ? 0.45 : 0.1
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(final ? 1180 : 880, t)
+    gain.gain.setValueAtTime(0.0001, t)
+    gain.gain.exponentialRampToValueAtTime(final ? 0.32 : 0.16, t + 0.015)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + duration)
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.start(t)
+    osc.stop(t + duration + 0.02)
+  }
+
   function isEnabled() {
     return soundEnabled.value && typeof window !== 'undefined'
   }
@@ -145,5 +166,5 @@ export function useQualifyingVoice(
     window.speechSynthesis.speak(utterance)
   }
 
-  return { soundEnabled, primeStepAudio, playStepDoneSound, enqueue, enqueueStepStart, announceLap, stopVoice, getStepAudioContext }
+  return { soundEnabled, primeStepAudio, playStepDoneSound, playCountdownBeep, enqueue, enqueueStepStart, announceLap, stopVoice, getStepAudioContext }
 }

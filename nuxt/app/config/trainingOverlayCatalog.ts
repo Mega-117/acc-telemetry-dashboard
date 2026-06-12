@@ -140,7 +140,7 @@ export const trainingOverlayCatalog: Record<TrainingOverlayId, TrainingOverlayTr
         steps: [
           { id: 'warmup', title: 'Warm-up', durationMinutes: 10, type: 'warmup', hud: 'Stabilizza gomme, riferimenti e ritmo.', voiceIntro: 'warm-up. stabilizza gomme, riferimenti e ritmo.' },
           { id: 'clean-work', title: 'Giri validi', durationMinutes: 15, type: 'work', hud: 'Spingi con margine. Chiudi giri validi.', voiceIntro: 'blocco giri validi. spingi con margine. chiudi giri puliti.' },
-          { id: 'recap', title: 'Recap', durationMinutes: 5, type: 'recap', hud: 'Segna invalidi, difficolta e cose buone.', voiceIntro: 'recap. segna invalidi, difficolta e cose buone.' }
+          { id: 'recap', title: 'Recap', durationMinutes: 5, type: 'recap', hud: 'Segna invalidi, difficoltà e cose buone.', voiceIntro: 'recap. segna invalidi, difficolta e cose buone.' }
         ]
       },
       full60: {
@@ -153,7 +153,7 @@ export const trainingOverlayCatalog: Record<TrainingOverlayId, TrainingOverlayTr
           { id: 'clean-work-1', title: 'Blocco validi', durationMinutes: 20, type: 'work', hud: 'Spingi con margine. Proteggi i giri validi.', voiceIntro: 'primo blocco validi. spingi con margine. proteggi i giri validi.' },
           { id: 'review', title: 'Review', durationMinutes: 5, type: 'review', hud: 'Guarda invalidi e scegli un solo punto.', voiceIntro: 'review breve. guarda gli invalidi. scegli un solo punto da correggere.' },
           { id: 'clean-work-2', title: 'Ripeti pulito', durationMinutes: 20, type: 'work', hud: 'Correggi quel punto. Non alzare il rischio.', voiceIntro: 'secondo blocco. correggi quel punto. non alzare il rischio.' },
-          { id: 'recap', title: 'Recap', durationMinutes: 5, type: 'recap', hud: 'Segna lavoro fatto e prossima priorita.', voiceIntro: 'recap. segna lavoro fatto e prossima priorita.' }
+          { id: 'recap', title: 'Recap', durationMinutes: 5, type: 'recap', hud: 'Segna lavoro fatto e prossima priorità.', voiceIntro: 'recap. segna lavoro fatto e prossima priorita.' }
         ]
       }
     }
@@ -190,11 +190,11 @@ export const trainingOverlayCatalog: Record<TrainingOverlayId, TrainingOverlayTr
         description: 'Quattro stint qualifica con reset breve.',
         steps: [
           { id: 'warmup', title: 'Warm-up', durationMinutes: 10, type: 'warmup', hud: 'Scalda e fissa i riferimenti.', voiceIntro: 'warm-up. scalda e fissa i riferimenti.' },
-          { id: 'pause-1', title: 'Pausa', durationMinutes: 2, type: 'pause', hud: 'Reset. Una priorita tecnica.', voiceIntro: 'pausa. reset. scegli una priorita tecnica.' },
+          { id: 'pause-1', title: 'Pausa', durationMinutes: 2, type: 'pause', hud: 'Reset. Una priorità tecnica.', voiceIntro: 'pausa. reset. scegli una priorita tecnica.' },
           { id: 'qualy-1', title: 'Qualifica 1', durationMinutes: 10, type: 'stint', hud: 'Push lap validi. Primo riferimento.', voiceIntro: 'qualifica uno. push lap validi. primo riferimento.' },
           { id: 'pause-2', title: 'Pausa', durationMinutes: 2, type: 'pause', hud: 'Scegli una correzione.', voiceIntro: 'pausa. scegli una correzione.' },
           { id: 'qualy-2', title: 'Qualifica 2', durationMinutes: 10, type: 'stint', hud: 'Spingi sul giro utile. Tienilo valido.', voiceIntro: 'qualifica due. spingi sul giro utile. tienilo valido.' },
-          { id: 'pause-3', title: 'Pausa', durationMinutes: 2, type: 'pause', hud: 'Resta sul punto piu costoso.', voiceIntro: 'pausa. resta sul punto piu costoso.' },
+          { id: 'pause-3', title: 'Pausa', durationMinutes: 2, type: 'pause', hud: 'Resta sul punto più costoso.', voiceIntro: 'pausa. resta sul punto piu costoso.' },
           { id: 'qualy-3', title: 'Qualifica 3', durationMinutes: 10, type: 'stint', hud: 'Giro forte valido, niente miracoli.', voiceIntro: 'qualifica tre. giro forte valido, niente miracoli.' },
           { id: 'pause-4', title: 'Pausa', durationMinutes: 2, type: 'pause', hud: 'Ultimo reset. Obiettivo semplice.', voiceIntro: 'pausa. ultimo reset. obiettivo semplice.' },
           { id: 'qualy-4', title: 'Qualifica 4', durationMinutes: 10, type: 'stint', hud: 'Esegui. Porta a casa il giro.', voiceIntro: 'qualifica quattro. esegui. porta a casa il giro.' },
@@ -236,7 +236,7 @@ export const trainingOverlayCatalog: Record<TrainingOverlayId, TrainingOverlayTr
           { id: 'stint-1', title: 'Stint 1', durationMinutes: 20, type: 'work', hud: 'Passo gara. Stesso margine ogni giro.', voiceIntro: 'stint uno. passo gara. stesso margine ogni giro.' },
           { id: 'review', title: 'Review', durationMinutes: 5, type: 'review', hud: 'Controlla media, calo e invalidi.', voiceIntro: 'review. controlla media, calo e invalidi.' },
           { id: 'stint-2', title: 'Stint 2', durationMinutes: 20, type: 'work', hud: 'Ripeti il passo con una correzione.', voiceIntro: 'stint due. ripeti il passo con una correzione.' },
-          { id: 'recap', title: 'Recap', durationMinutes: 5, type: 'recap', hud: 'Segna stabilita e punto fragile.', voiceIntro: 'recap. segna stabilita e punto fragile.' }
+          { id: 'recap', title: 'Recap', durationMinutes: 5, type: 'recap', hud: 'Segna stabilità e punto fragile.', voiceIntro: 'recap. segna stabilita e punto fragile.' }
         ]
       }
     }
@@ -268,7 +268,7 @@ export const trainingOverlayCatalog: Record<TrainingOverlayId, TrainingOverlayTr
         duration: 60,
         description: 'Gara lunga, gruppo o LFM con gestione.',
         steps: [
-          { id: 'race-60', title: 'Gara lunga', durationMinutes: 60, type: 'race', hud: 'Gara o gruppo lungo. Se c e pit, provalo.', voiceIntro: 'gara lunga. gruppo o lfm con gestione. concentrati.' }
+          { id: 'race-60', title: 'Gara lunga', durationMinutes: 60, type: 'race', hud: "Gara o gruppo lungo. Se c'è pit, provalo.", voiceIntro: 'gara lunga. gruppo o lfm con gestione. concentrati.' }
         ]
       }
     }

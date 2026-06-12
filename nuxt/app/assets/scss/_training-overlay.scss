@@ -251,15 +251,33 @@
 
 .overlay-content--select {
   width: 420px;
-  /* Paracadute: se lo schermo non basta (DPI/scaling), si scorre invece di tagliare. */
+  /* Paracadute: se lo schermo non basta (DPI/scaling), si scorre invece di
+     tagliare. Scrollbar invisibile (PIP-97): quando appariva rubava spazio
+     e schiacciava il contenuto per qualche istante. */
   overflow: hidden auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Il contenuto della sessione non deve mai dipingere sopra la riga azioni:
+   durante il morphing la card e' temporaneamente piu' piccola del contenuto
+   e la riga 1fr lo lascerebbe debordare sui bottoni (PIP-97). */
+.overlay-content--session .overlay-main,
+.overlay-content--expired .overlay-main {
+  overflow: hidden;
 }
 
 .overlay-content--session,
 .overlay-content--expired {
   width: 322px;
   min-height: 156px;
-  grid-template-rows: minmax(0, 1fr) auto;
+  /* min-content e non 0: il contenuto (avviso scadenza + countdown) deve
+     poter allargare la riga, cosi' la misura -> finestra cresce con lui.
+     Con 0 il countdown debordava sotto i bottoni azione (PIP-97). */
+  grid-template-rows: minmax(min-content, 1fr) auto;
 }
 
 .overlay-content--completed {

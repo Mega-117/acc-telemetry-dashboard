@@ -54,6 +54,7 @@ export function useSessionOrchestrator(
   primeStepAudio: () => Promise<void>,
   stopVoice: () => void,
   playStepDoneSound: () => void,
+  playCountdownBeep: (final?: boolean) => void,
   liveLap: Ref<LiveLapState>,
   startLiveStatePolling: () => void,
   stopLiveStatePolling: () => void,
@@ -99,6 +100,9 @@ export function useSessionOrchestrator(
         autoAdvanceHandle = setInterval(() => {
           if (autoAdvanceRemainingSec.value === null) return
           autoAdvanceRemainingSec.value -= 1
+          // Bip "da palestra" (PIP-97): corti a -3/-2, lungo sull'1, poi avanza.
+          if (autoAdvanceRemainingSec.value === 3 || autoAdvanceRemainingSec.value === 2) playCountdownBeep(false)
+          else if (autoAdvanceRemainingSec.value === 1) playCountdownBeep(true)
           if (autoAdvanceRemainingSec.value <= 0) goNextStep()
         }, 1_000) as unknown as ReturnType<typeof setInterval>
       }
@@ -138,6 +142,8 @@ export function useSessionOrchestrator(
   }
 
   function startSession() {
+    // Pannello impostazioni mai aperto al rientro in select (PIP-97).
+    isSettingsOpen.value = false
     void savePreferences(); void primeStepAudio()
     enqueueVoice('sessionStart', { replace: true })
     startLiveStatePolling(); void trackingStart(); startStep(0)
@@ -192,7 +198,8 @@ export function useSessionOrchestrator(
 
   function resetCompleted() {
     // Dalla schermata completata si torna alla selezione allenamento (PIP-93).
-    closeShortcutStopConfirm(); clearAutoAdvance(); activeStepIndex.value = 0
+    closeShortcutStopConfirm(); clearAutoAdvance(); isSettingsOpen.value = false
+    activeStepIndex.value = 0
     remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000; phase.value = 'select'
   }
 

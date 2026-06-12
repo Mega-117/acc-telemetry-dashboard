@@ -23,6 +23,8 @@ function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boo
   const asyncNoop = async () => {}
   const stopLiveStatePolling = vi.fn()
   const trackingComplete = vi.fn(asyncNoop)
+  const playCountdownBeep = vi.fn()
+  const isSettingsOpen = ref(false)
 
   const orchestrator = useSessionOrchestrator(
     phase as never,
@@ -30,19 +32,19 @@ function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boo
     remainingMs,
     ref('tracktitan_input') as never,
     ref('short30') as never,
-    ref(false),
+    isSettingsOpen,
     computed(() => mode) as never,
     computed(() => opts.canAdvance ?? true),
     ref(opts.autoAdvance ?? true),
     ref(opts.seconds ?? 10),
     noop, noop, noop, noop, noop,
-    asyncNoop, noop, noop,
+    asyncNoop, noop, noop, playCountdownBeep,
     ref({ currentLap: null, lapValid: null, lapsCompleted: null, lapsValid: null }),
     noop, stopLiveStatePolling, noop,
     asyncNoop, trackingComplete as never, asyncNoop, asyncNoop,
   )
 
-  return { phase, activeStepIndex, remainingMs, orchestrator, stopLiveStatePolling, trackingComplete }
+  return { phase, activeStepIndex, remainingMs, orchestrator, stopLiveStatePolling, trackingComplete, playCountdownBeep, isSettingsOpen }
 }
 
 describe('useSessionOrchestrator - countdown auto-advance', () => {
@@ -80,6 +82,45 @@ describe('useSessionOrchestrator - countdown auto-advance', () => {
 
     vi.advanceTimersByTime(30_000)
     expect(phase.value).toBe('expired')
+  })
+
+  it('bip da palestra sul countdown: corti a 3 e 2, lungo a 1 (PIP-97)', async () => {
+    const { orchestrator, playCountdownBeep } = setup({ seconds: 5 })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(60_000)
+    await nextTick()
+    expect(orchestrator.autoAdvanceRemainingSec.value).toBe(5)
+
+    vi.advanceTimersByTime(1_000) // 4
+    expect(playCountdownBeep).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(1_000) // 3
+    expect(playCountdownBeep).toHaveBeenNthCalledWith(1, false)
+    vi.advanceTimersByTime(1_000) // 2
+    expect(playCountdownBeep).toHaveBeenNthCalledWith(2, false)
+    vi.advanceTimersByTime(1_000) // 1
+    expect(playCountdownBeep).toHaveBeenNthCalledWith(3, true)
+    expect(playCountdownBeep).toHaveBeenCalledTimes(3)
+  })
+
+  it('annullando il countdown i bip si fermano', async () => {
+    const { orchestrator, playCountdownBeep } = setup({ seconds: 10 })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(60_000)
+    await nextTick()
+    orchestrator.cancelAutoAdvance()
+    vi.advanceTimersByTime(10_000)
+    expect(playCountdownBeep).not.toHaveBeenCalled()
+  })
+
+  it('startSession e resetCompleted chiudono il pannello impostazioni (PIP-97)', () => {
+    const { orchestrator, isSettingsOpen } = setup()
+    isSettingsOpen.value = true
+    orchestrator.startSession()
+    expect(isSettingsOpen.value).toBe(false)
+
+    isSettingsOpen.value = true
+    orchestrator.resetCompleted()
+    expect(isSettingsOpen.value).toBe(false)
   })
 
   it('con avanzamento auto disattivato non parte alcun countdown', async () => {

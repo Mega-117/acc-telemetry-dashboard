@@ -133,7 +133,7 @@ const voice = useQualifyingVoice(
   () => true,
   () => selectedTrainingId.value,
 )
-const { soundEnabled, primeStepAudio, playStepDoneSound, enqueue: enqueueVoice, enqueueStepStart, announceLap, stopVoice } = voice
+const { soundEnabled, primeStepAudio, playStepDoneSound, playCountdownBeep, enqueue: enqueueVoice, enqueueStepStart, announceLap, stopVoice } = voice
 
 const overlaySizeComp = useOverlaySize(getOverlayApi, () => overlaySizePreset.value, overlayRoot)
 const { cardSize, scheduleOverlaySizeSync, connectResizeObserver, disconnectResizeObserver, cleanup: cleanupSize } = overlaySizeComp
@@ -291,7 +291,7 @@ const {
 } = useSessionOrchestrator(
   phase, activeStepIndex, remainingMs, selectedTrainingId, selectedModeId, isSettingsOpen,
   selectedMode, canManuallyAdvanceStep, autoAdvanceStep, autoAdvanceSeconds, closeShortcutStopConfirm, cancelStopHold,
-  enqueueVoice, enqueueStepStart, announceLap, primeStepAudio, stopVoice, playStepDoneSound,
+  enqueueVoice, enqueueStepStart, announceLap, primeStepAudio, stopVoice, playStepDoneSound, playCountdownBeep,
   liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap,
   trackingStart, trackingComplete, trackingAbandon, savePreferences,
 )
@@ -559,6 +559,9 @@ onBeforeUnmount(() => {
               <template v-else-if="phase === 'completed'">
                 <div class="overlay-topline">
                   <div class="overlay-topline-actions">
+                    <Transition name="chip-pop">
+                      <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
+                    </Transition>
                     <button
                       type="button"
                       class="overlay-close-btn"
@@ -586,6 +589,9 @@ onBeforeUnmount(() => {
                 <div class="overlay-main">
                   <div class="overlay-topline">
                     <div class="overlay-topline-actions">
+                      <Transition name="chip-pop">
+                        <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
+                      </Transition>
                       <button
                         type="button"
                         class="overlay-close-btn"
