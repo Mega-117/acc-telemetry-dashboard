@@ -27,8 +27,8 @@ export function useTrackingRecord(
     if (!api?.trainingStart) return
 
     const lap = getLiveLap()
-    const track = (lap as any)?.track ?? ''
-    const car = (lap as any)?.car ?? ''
+    const track = lap.track ?? ''
+    const car = lap.car ?? ''
 
     try {
       const result = await api.trainingStart({

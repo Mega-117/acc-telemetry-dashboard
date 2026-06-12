@@ -116,13 +116,21 @@ export function useSessionOrchestrator(
   })
 
   // ── Session transitions ────────────────────────────────────────────────────
+  // Percorso di chiusura unico (PIP-95): qualunque via porti a 'completed'
+  // (Avanti, auto-advance, skip, completamento manuale) deve registrare la
+  // sessione nel Training Tracker e fermare il polling live.
+  function completeSession(stepsCompleted: number) {
+    phase.value = 'completed'; remainingMs.value = 0; clearTimer()
+    enqueueVoice('sessionComplete', { replace: true })
+    void trackingComplete(stepsCompleted)
+    stopLiveStatePolling(); resetLiveLap()
+  }
+
   function startStep(index: number) {
     closeShortcutStopConfirm(); clearAutoAdvance()
     const step = selectedMode.value.steps[index]
     if (!step) {
-      phase.value = 'completed'; remainingMs.value = 0; clearTimer()
-      enqueueVoice('sessionComplete', { replace: true })
-      void trackingComplete(index); stopLiveStatePolling(); return
+      completeSession(index); return
     }
     activeStepIndex.value = index; remainingMs.value = step.durationMinutes * 60_000
     deadlineAt = Date.now() + remainingMs.value; phase.value = 'running'; startTicking()
@@ -169,8 +177,7 @@ export function useSessionOrchestrator(
   function goNextStep() {
     closeShortcutStopConfirm(); clearAutoAdvance()
     if (activeStepIndex.value >= selectedMode.value.steps.length - 1) {
-      phase.value = 'completed'; remainingMs.value = 0; clearTimer()
-      enqueueVoice('sessionComplete', { replace: true })
+      completeSession(activeStepIndex.value + 1)
       return
     }
     startStep(activeStepIndex.value + 1)

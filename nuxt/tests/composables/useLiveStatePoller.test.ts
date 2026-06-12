@@ -232,6 +232,33 @@ describe('useLiveStatePoller', () => {
       expect(liveLap.value.currentLap).toBeNull()
     })
 
+    it('espone track e car dal live_state per il Training Tracker (PIP-95)', async () => {
+      const getLiveState = vi.fn(async () => ({
+        ts: freshTs(), current_lap: 3, laps_completed: 2, laps_valid: 2, lap_valid: true,
+        track: 'monza', car: 'ferrari_296_gt3',
+      }))
+      const { liveLap, startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
+
+      startLiveStatePolling()
+      await flushPromises()
+
+      expect(liveLap.value.track).toBe('monza')
+      expect(liveLap.value.car).toBe('ferrari_296_gt3')
+    })
+
+    it('track/car assenti o vuoti diventano null', async () => {
+      const getLiveState = vi.fn(async () => ({
+        ts: freshTs(), current_lap: 1, laps_completed: 0, laps_valid: 0, lap_valid: true, track: '',
+      }))
+      const { liveLap, startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
+
+      startLiveStatePolling()
+      await flushPromises()
+
+      expect(liveLap.value.track).toBeNull()
+      expect(liveLap.value.car).toBeNull()
+    })
+
     it('getLiveState() che ritorna valore non-oggetto imposta EMPTY_LAP_STATE', async () => {
       const getLiveState = vi.fn(async () => null)
       const { liveLap, startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))

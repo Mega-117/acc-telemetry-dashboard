@@ -6,6 +6,9 @@ export interface LiveLapState {
   lapsValid: number | null
   lapValid: boolean | null
   lastLapTimeMs: number | null
+  // Contesto sessione dal logger: servono al Training Tracker (PIP-95).
+  track: string | null
+  car: string | null
 }
 
 const EMPTY_LAP_STATE: LiveLapState = {
@@ -14,6 +17,8 @@ const EMPTY_LAP_STATE: LiveLapState = {
   lapsValid: null,
   lapValid: null,
   lastLapTimeMs: null,
+  track: null,
+  car: null,
 }
 
 const MAX_CONSECUTIVE_ERRORS = 3
@@ -63,6 +68,8 @@ export function useLiveStatePoller(getApi: () => any | null) {
             lapsValid: typeof state.laps_valid === 'number' ? state.laps_valid : null,
             lapValid: typeof state.lap_valid === 'boolean' ? state.lap_valid : null,
             lastLapTimeMs: typeof state.last_lap_time_ms === 'number' ? state.last_lap_time_ms : null,
+            track: typeof state.track === 'string' && state.track ? state.track : null,
+            car: typeof state.car === 'string' && state.car ? state.car : null,
           }
         } else {
           liveLap.value = { ...EMPTY_LAP_STATE }
