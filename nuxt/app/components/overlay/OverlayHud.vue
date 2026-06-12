@@ -40,31 +40,28 @@ defineEmits<{
             <div class="hud-focus-row">
                 <div class="hud-copy">
                     <strong>{{ activeStep.title }}</strong>
-                    <span>Step {{ activeStepIndex + 1 }}/{{ totalSteps }}</span>
+                    <div class="hud-step-row">
+                        <span class="hud-step-label">Step {{ activeStepIndex + 1 }}/{{ totalSteps }}</span>
+                        <Transition name="chip-pop">
+                            <span
+                                v-if="liveLap.currentLap !== null"
+                                class="lap-chip"
+                                :class="{ 'lap-chip--invalid': liveLap.lapValid === false }"
+                                aria-label="Contatore giri"
+                            >
+                                LAP {{ liveLap.currentLap }}
+                                <em aria-hidden="true">{{ liveLap.lapValid === false ? '✗' : '✓' }}</em>
+                            </span>
+                        </Transition>
+                    </div>
                     <p class="hud-task">{{ activeTask }}</p>
                 </div>
                 <div class="hud-side">
                     <time class="hud-timer" aria-label="Tempo rimanente">{{ formattedTime }}</time>
-                    <span v-if="muted" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</span>
+                    <Transition name="chip-pop">
+                        <span v-if="muted" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</span>
+                    </Transition>
                 </div>
-            </div>
-
-            <div
-                v-if="liveLap.currentLap !== null"
-                class="lap-counter"
-                :class="{ 'lap-counter--invalid': liveLap.lapValid === false }"
-                aria-label="Contatore giri"
-            >
-                <span class="lap-counter-lap">LAP {{ liveLap.currentLap }}</span>
-                <span
-                    class="lap-counter-validity"
-                    :class="liveLap.lapValid === false ? 'is-invalid' : 'is-valid'"
-                >
-                    {{ liveLap.lapValid === false ? '✗' : '✓' }}
-                </span>
-                <span v-if="liveLap.lapsCompleted !== null" class="lap-counter-stats">
-                    {{ liveLap.lapsValid }}/{{ liveLap.lapsCompleted }} validi
-                </span>
             </div>
 
             <Transition name="fade">
@@ -78,33 +75,37 @@ defineEmits<{
                 aria-live="assertive"
             >
                 <span>Pronto per lo step successivo</span>
-                <button
-                    v-if="autoAdvanceRemainingSec !== null"
-                    type="button"
-                    class="auto-advance-chip"
-                    aria-label="Annulla avanzamento automatico"
-                    @click="$emit('cancel-auto-advance')"
-                >
-                    Avanti tra {{ autoAdvanceRemainingSec }}s — clicca per restare
-                </button>
-                <span
-                    v-if="autoAdvanceRemainingSec !== null"
-                    class="auto-advance-track"
-                    aria-hidden="true"
-                >
-                    <span :style="{ width: `${Math.max(0, Math.min(100, (autoAdvanceRemainingSec / Math.max(1, autoAdvanceTotalSec)) * 100))}%` }" />
-                </span>
+                <Transition name="block-reveal">
+                    <div v-if="autoAdvanceRemainingSec !== null" class="block-reveal">
+                        <div class="expiry-auto-advance">
+                            <button
+                                type="button"
+                                class="auto-advance-chip"
+                                aria-label="Annulla avanzamento automatico"
+                                @click="$emit('cancel-auto-advance')"
+                            >
+                                Avanti tra {{ autoAdvanceRemainingSec }}s — clicca per restare
+                            </button>
+                            <span class="auto-advance-track" aria-hidden="true">
+                                <span :style="{ width: `${Math.max(0, Math.min(100, (autoAdvanceRemainingSec / Math.max(1, autoAdvanceTotalSec)) * 100))}%` }" />
+                            </span>
+                        </div>
+                    </div>
+                </Transition>
             </div>
 
-            <div
-                v-if="isShortcutStopConfirmOpen"
-                class="shortcut-stop-confirm"
-                role="status"
-                aria-live="assertive"
-            >
-                <span>Conferma stop</span>
-                <strong>Ctrl+Alt+S o Ctrl+N conferma &middot; Ctrl+B/Esc annulla</strong>
-            </div>
+            <Transition name="block-reveal">
+                <div v-if="isShortcutStopConfirmOpen" class="block-reveal">
+                    <div
+                        class="shortcut-stop-confirm"
+                        role="status"
+                        aria-live="assertive"
+                    >
+                        <span>Conferma stop</span>
+                        <strong>Ctrl+Alt+S o Ctrl+N conferma &middot; Ctrl+B/Esc annulla</strong>
+                    </div>
+                </div>
+            </Transition>
 
             <div v-if="phase !== 'expired'" class="progress-track" aria-hidden="true">
                 <span :style="{ width: `${progressPercent}%` }" />

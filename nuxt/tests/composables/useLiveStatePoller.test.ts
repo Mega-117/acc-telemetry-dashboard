@@ -9,6 +9,11 @@ function makeApi(getLiveState: () => Promise<any>) {
   return { getLiveState }
 }
 
+// Con i fake timers anche Date è mockata: ts coerente con il "now" del test.
+function freshTs() {
+  return new Date(Date.now()).toISOString()
+}
+
 // NOTA: con vi.useFakeTimers(), setTimeout viene mockato.
 // Usiamo Promise.resolve() per drenare la microtask queue senza dipendere da setTimeout.
 async function flushPromises() {
@@ -67,7 +72,7 @@ describe('useLiveStatePoller', () => {
       const getLiveState = vi.fn(async () => {
         calls++
         if (calls === 1) throw new Error('IPC timeout')
-        return { current_lap: 3, laps_completed: 2, laps_valid: 2, lap_valid: true }
+        return { ts: freshTs(), current_lap: 3, laps_completed: 2, laps_valid: 2, lap_valid: true }
       })
       const { isPollingActive, startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
 
@@ -128,7 +133,7 @@ describe('useLiveStatePoller', () => {
       const getLiveState = vi.fn(async () => {
         calls++
         if (calls <= 2) throw new Error('IPC flap')
-        return { current_lap: 5, laps_completed: 4, laps_valid: 4, lap_valid: true }
+        return { ts: freshTs(), current_lap: 5, laps_completed: 4, laps_valid: 4, lap_valid: true }
       })
       const { isPollingActive, liveLap, startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
 
@@ -165,6 +170,7 @@ describe('useLiveStatePoller', () => {
   describe('polling normale', () => {
     it('quando API disponibile e getLiveState() ha successo, liveLap viene aggiornato', async () => {
       const getLiveState = vi.fn(async () => ({
+        ts: freshTs(),
         current_lap: 7,
         laps_completed: 6,
         laps_valid: 5,
@@ -182,6 +188,50 @@ describe('useLiveStatePoller', () => {
       expect(isPollingActive.value).toBe(true)
     })
 
+    it('live_state stantio su disco (ts vecchio) imposta EMPTY_LAP_STATE — niente lap fantasma (PIP-94)', async () => {
+      const staleTs = new Date(Date.now() - 60_000).toISOString()
+      const getLiveState = vi.fn(async () => ({
+        ts: staleTs, current_lap: 2, laps_completed: 1, laps_valid: 1, lap_valid: false,
+      }))
+      const { liveLap, startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
+
+      startLiveStatePolling()
+      await flushPromises()
+
+      expect(liveLap.value.currentLap).toBeNull()
+      expect(liveLap.value.lapValid).toBeNull()
+    })
+
+    it('live_state senza ts imposta EMPTY_LAP_STATE (PIP-94)', async () => {
+      const getLiveState = vi.fn(async () => ({
+        current_lap: 2, laps_completed: 1, laps_valid: 1, lap_valid: true,
+      }))
+      const { liveLap, startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
+
+      startLiveStatePolling()
+      await flushPromises()
+
+      expect(liveLap.value.currentLap).toBeNull()
+    })
+
+    it('logger che smette di scrivere: i dati diventano stantii al tick successivo (PIP-94)', async () => {
+      const fixedTs = freshTs()
+      const getLiveState = vi.fn(async () => ({
+        ts: fixedTs, current_lap: 4, laps_completed: 3, laps_valid: 3, lap_valid: true,
+      }))
+      const { liveLap, startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
+
+      startLiveStatePolling()
+      await flushPromises()
+      expect(liveLap.value.currentLap).toBe(4)
+
+      // Il file resta su disco con lo stesso ts mentre il tempo avanza oltre la soglia.
+      await vi.advanceTimersByTimeAsync(12_000)
+      await flushPromises()
+
+      expect(liveLap.value.currentLap).toBeNull()
+    })
+
     it('getLiveState() che ritorna valore non-oggetto imposta EMPTY_LAP_STATE', async () => {
       const getLiveState = vi.fn(async () => null)
       const { liveLap, startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
@@ -195,7 +245,7 @@ describe('useLiveStatePoller', () => {
 
     it('startLiveStatePolling avvia il polling, stopLiveStatePolling lo ferma', async () => {
       const getLiveState = vi.fn(async () => ({
-        current_lap: 1, laps_completed: 0, laps_valid: 0, lap_valid: true,
+        ts: freshTs(), current_lap: 1, laps_completed: 0, laps_valid: 0, lap_valid: true,
       }))
       const { startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
 
@@ -217,7 +267,7 @@ describe('useLiveStatePoller', () => {
 
     it('chiamare startLiveStatePolling due volte non duplica il polling', async () => {
       const getLiveState = vi.fn(async () => ({
-        current_lap: 2, laps_completed: 1, laps_valid: 1, lap_valid: true,
+        ts: freshTs(), current_lap: 2, laps_completed: 1, laps_valid: 1, lap_valid: true,
       }))
       const { startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
 

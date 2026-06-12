@@ -137,8 +137,10 @@
   --overlay-height: 100%;
 }
 
-/* Contenitore unico persistente (PIP-93): riempie la finestra, che e' l'unico
-   motore di animazione del morphing. Le larghezze vivono nelle varianti
+/* Contenitore unico persistente (PIP-93/94): il morphing e' la transizione CSS
+   di width/height della card verso la dimensione target (CSS var dal renderer),
+   mentre la finestra OS scatta istantanea (resize a due fasi, niente setBounds
+   intermedi). Le larghezze del contenuto vivono nelle varianti
    .overlay-content--* (fonte unica). */
 .overlay-card {
   position: relative;
@@ -148,8 +150,10 @@
      che guida la finestra), ancorato all'angolo configurato. */
   align-items: start;
   justify-items: start;
-  width: 100%;
-  height: 100%;
+  width: var(--overlay-card-width, 100%);
+  height: var(--overlay-card-height, 100%);
+  max-width: 100%;
+  max-height: 100%;
   padding: 14px;
   border: 1px solid rgba(var(--overlay-accent-rgb), 0.34);
   /* In browser (niente finestra che si adatta) la card abbraccia il contenuto. */
@@ -170,12 +174,23 @@
   box-sizing: border-box;
   transform-origin: var(--overlay-transform-origin);
   opacity: var(--overlay-session-opacity, 1);
+  /* Easing liquid con overshoot leggero (~6%): la finestra contenitiva include
+     il margine (main.js TRAINING_OVERLAY_RESIZE_OVERSHOOT_RATIO), il picco non
+     viene tosato. Durata accoppiata a OVERLAY_MORPH_COMMIT_MS in useOverlaySize. */
   transition:
+    width 460ms cubic-bezier(0.3, 1.36, 0.56, 1),
+    height 460ms cubic-bezier(0.3, 1.36, 0.56, 1),
     opacity 460ms cubic-bezier(0.16, 1, 0.3, 1),
     border-color 260ms ease,
     box-shadow 260ms ease,
     background 320ms ease;
   will-change: opacity, transform, filter;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overlay-card {
+    transition-duration: 1ms;
+  }
 }
 
 .overlay-surface-enter-active {
@@ -277,6 +292,59 @@
   transform: translateY(-3px) scale(0.99);
 }
 
+/* Transizioni granulari (PIP-94): chip e bottoni che appaiono/scompaiono con
+   dissolvenza + scala, mai a scatto. */
+.chip-pop-enter-active {
+  transition:
+    opacity 200ms ease-out,
+    transform 240ms cubic-bezier(0.3, 1.36, 0.56, 1);
+}
+
+.chip-pop-leave-active {
+  transition:
+    opacity 140ms ease-in,
+    transform 140ms ease-in;
+}
+
+.chip-pop-enter-from,
+.chip-pop-leave-to {
+  opacity: 0;
+  transform: scale(0.82);
+}
+
+/* Blocchi verticali (conferma stop, avvisi): l'altezza si apre via grid rows,
+   cosi' i vicini si adattano morbidi invece di saltare. */
+.block-reveal {
+  display: grid;
+  grid-template-rows: 1fr;
+}
+
+.block-reveal > * {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.block-reveal-enter-active {
+  transition:
+    grid-template-rows 280ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 220ms ease-out,
+    transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.block-reveal-leave-active {
+  transition:
+    grid-template-rows 200ms cubic-bezier(0.4, 0, 1, 1),
+    opacity 150ms ease-in,
+    transform 200ms ease-in;
+}
+
+.block-reveal-enter-from,
+.block-reveal-leave-to {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-2px) scale(0.98);
+}
+
 .completed-banner {
   display: grid;
   justify-items: center;
@@ -305,7 +373,10 @@
   letter-spacing: 0.01em;
 }
 
-/* In pausa: il timer pulsa e il bordo respira piano, per dire "sto aspettando te". */
+/* In pausa: il timer pulsa e la card respira con un glow esterno che cresce e
+   cala (box-shadow: niente salti di layout) + anello che ispessisce il bordo.
+   Il glow resta entro il padding del work area (10px) per non farsi tosare
+   dal bordo finestra (PIP-94). */
 @keyframes pausedBlink {
   0%,
   100% {
@@ -317,14 +388,24 @@
   }
 }
 
-@keyframes pausedBreath {
+@keyframes pausedGlow {
   0%,
   100% {
-    border-color: rgba(var(--overlay-accent-rgb), 0.34);
+    border-color: rgba(var(--overlay-accent-rgb), 0.5);
+    box-shadow:
+      0 0 0 1px rgba(var(--overlay-accent-rgb), 0.42),
+      0 0 4px 1px rgba(var(--overlay-accent-rgb), 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 -28px 60px rgba(var(--overlay-accent-rgb), 0.08);
   }
 
   50% {
-    border-color: rgba(var(--overlay-accent-rgb), 0.72);
+    border-color: rgba(var(--overlay-accent-rgb), 0.95);
+    box-shadow:
+      0 0 0 1px rgba(var(--overlay-accent-rgb), 0.9),
+      0 0 9px 3px rgba(var(--overlay-accent-rgb), 0.45),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      inset 0 -28px 60px rgba(var(--overlay-accent-rgb), 0.08);
   }
 }
 
@@ -333,7 +414,7 @@
 }
 
 .training-overlay--paused .overlay-card {
-  animation: pausedBreath 2.4s ease-in-out infinite;
+  animation: pausedGlow 2.4s ease-in-out infinite;
 }
 
 .launcher-tools {
@@ -1288,9 +1369,8 @@ button.is-active {
   white-space: nowrap;
 }
 
-.hud-copy span {
+.hud-copy .hud-step-label {
   display: block;
-  margin-top: 4px;
   color: rgba(var(--overlay-accent-rgb), 0.88);
   font-size: 11px;
   font-weight: 950;
@@ -1313,11 +1393,16 @@ button.is-active {
   gap: 5px;
 }
 
+/* Timer protagonista (PIP-94): alto quanto titolo + riga STEP (~2x), allineato
+   a destra, chip MUTO sotto. */
 .hud-timer {
   min-width: 60px;
   color: rgba(248, 252, 255, 0.96);
-  font-size: 18px;
+  font-size: 34px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   font-weight: 950;
+  letter-spacing: -0.01em;
   line-height: 1;
   text-align: right;
 }
@@ -1370,47 +1455,48 @@ button.is-active {
   color: #fff;
 }
 
-.lap-counter {
+/* Lap counter ridisegnato (PIP-94): chip discreto accanto a STEP x/y, visibile
+   solo con dati freschi dal logger (gating in useLiveStatePoller). */
+.hud-step-row {
   display: flex;
   align-items: center;
   gap: 7px;
-  min-height: 30px;
-  padding: 5px 8px;
-  border: 1px solid rgba(var(--overlay-accent-rgb), 0.24);
-  border-radius: 9px;
-  background: rgba(var(--overlay-accent-rgb), 0.1);
-  color: rgba(248, 252, 255, 0.9);
-  font-size: 11px;
-  font-weight: 900;
+  margin-top: 4px;
 }
 
-.lap-counter--invalid {
+.hud-step-row > span {
+  margin-top: 0;
+}
+
+.lap-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border: 1px solid rgba(var(--overlay-accent-rgb), 0.3);
+  border-radius: 999px;
+  background: rgba(var(--overlay-accent-rgb), 0.12);
+  color: rgba(248, 252, 255, 0.85);
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.lap-chip em {
+  color: #86efac;
+  font-style: normal;
+}
+
+.lap-chip--invalid {
   border-color: rgba(248, 113, 113, 0.42);
   background: rgba(248, 113, 113, 0.12);
 }
 
-.lap-counter-lap {
-  letter-spacing: 0.08em;
-}
-
-.lap-counter-validity {
-  display: grid;
-  place-items: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 999px;
-  background: rgba(34, 197, 94, 0.18);
-  color: #86efac;
-}
-
-.lap-counter-validity.is-invalid {
-  background: rgba(248, 113, 113, 0.18);
+.lap-chip--invalid em {
   color: #fca5a5;
-}
-
-.lap-counter-stats {
-  margin-left: auto;
-  color: rgba(226, 238, 247, 0.68);
 }
 
 .progress-track {
@@ -1452,6 +1538,11 @@ button.is-active {
 }
 
 .expiry-alert {
+  display: grid;
+  gap: 6px;
+}
+
+.expiry-auto-advance {
   display: grid;
   gap: 6px;
 }

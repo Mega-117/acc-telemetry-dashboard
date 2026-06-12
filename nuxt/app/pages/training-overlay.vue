@@ -139,7 +139,7 @@ const voice = useQualifyingVoice(
 const { soundEnabled, primeStepAudio, playStepDoneSound, enqueue: enqueueVoice, enqueueStepStart, announceLap, stopVoice } = voice
 
 const overlaySizeComp = useOverlaySize(getOverlayApi, () => overlaySizePreset.value, overlayRoot)
-const { scheduleOverlaySizeSync, connectResizeObserver, disconnectResizeObserver, cleanup: cleanupSize } = overlaySizeComp
+const { cardSize, scheduleOverlaySizeSync, connectResizeObserver, disconnectResizeObserver, cleanup: cleanupSize } = overlaySizeComp
 
 
 // ─── Computed ────────────────────────────────────────────────────────────────
@@ -227,6 +227,14 @@ const overlayThemeStyle = computed(() => ({
   '--overlay-work-area-width': `${OVERLAY_WORK_AREA_SIZE.width}px`,
   '--overlay-work-area-height': `${OVERLAY_WORK_AREA_SIZE.height}px`,
   '--overlay-session-opacity': `${sessionOverlayOpacity.value}`,
+  // Resize a due fasi (PIP-94): la card transiziona verso la dimensione target
+  // via CSS mentre la finestra (gia' espansa) aspetta il commit.
+  ...(cardSize.value && isElectronRuntime.value
+    ? {
+        '--overlay-card-width': `${cardSize.value.width}px`,
+        '--overlay-card-height': `${cardSize.value.height}px`,
+      }
+    : {}),
 }))
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -560,7 +568,9 @@ onBeforeUnmount(() => {
                   <header class="launcher-tools__header">
                     <span>
                       Strumenti live
-                      <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
+                      <Transition name="chip-pop">
+                        <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
+                      </Transition>
                     </span>
                     <strong>{{ launcherSpotterStatus }}</strong>
                   </header>
@@ -596,7 +606,6 @@ onBeforeUnmount(() => {
               <template v-else-if="phase === 'completed'">
                 <div class="overlay-topline">
                   <div class="overlay-topline-actions">
-                    <span>Fine</span>
                     <button
                       type="button"
                       class="overlay-close-btn"
@@ -714,16 +723,18 @@ onBeforeUnmount(() => {
                     {{ isShortcutStopConfirmOpen ? 'Conferma' : primaryActionLabel }}
                     <span v-if="!isShortcutStopConfirmOpen" class="key-hint" aria-hidden="true">Ctrl+N</span>
                   </button>
-                  <button
-                    v-if="phase === 'paused' && !isShortcutStopConfirmOpen"
-                    type="button"
-                    class="utility-action skip-step-action"
-                    aria-label="Skippa lo step corrente (solo mouse)"
-                    title="Skippa step (solo mouse)"
-                    @click="skipPausedStep"
-                  >
-                    Skippa step
-                  </button>
+                  <Transition name="chip-pop">
+                    <button
+                      v-if="phase === 'paused' && !isShortcutStopConfirmOpen"
+                      type="button"
+                      class="utility-action skip-step-action"
+                      aria-label="Skippa lo step corrente (solo mouse)"
+                      title="Skippa step (solo mouse)"
+                      @click="skipPausedStep"
+                    >
+                      Skippa step
+                    </button>
+                  </Transition>
                   <button
                     type="button"
                     class="secondary-action danger-action stop-hold-action"

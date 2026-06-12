@@ -1,4 +1,4 @@
-import { nextTick } from 'vue'
+import { nextTick, ref } from 'vue'
 import type { Ref } from 'vue'
 
 export type OverlaySizePreset = 'launcher' | 'placement' | 'select' | 'session' | 'expired' | 'completed'
@@ -10,6 +10,10 @@ const OVERLAY_SURFACE_PADDING = 10
 // aggiunge il "telaio" (padding card 14x2 + bordo 1x2) + padding work area 10x2.
 const OVERLAY_CARD_CHROME = 30
 const OVERLAY_SURFACE_SELECTOR = '.overlay-content, .placement-work-area'
+// Resize a due fasi (PIP-94): deve coprire la transizione CSS della card
+// (460ms in _training-overlay.scss) prima che la finestra scatti alla
+// dimensione finale. Sotto il fallback main (900ms).
+const OVERLAY_MORPH_COMMIT_MS = 540
 
 /**
  * @description Synchronises the Electron overlay window dimensions with the current
@@ -29,6 +33,10 @@ export function useOverlaySize(
   let overlaySizeRetry: ReturnType<typeof setTimeout> | null = null
   let lastRequest: { preset: OverlaySizePreset; width?: number; height?: number } | null = null
   let resizeObserver: ResizeObserver | null = null
+  let morphCommitTimer: ReturnType<typeof setTimeout> | null = null
+  // Dimensione target della card in px: il renderer la transiziona via CSS
+  // mentre la finestra (gia' espansa alla dimensione contenitiva) aspetta il commit.
+  const cardSize = ref<OverlaySize | null>(null)
 
   function shouldSkip(req: { preset: OverlaySizePreset; width?: number; height?: number }) {
     if (lastRequest
@@ -57,12 +65,29 @@ export function useOverlaySize(
     }
   }
 
+  function scheduleMorphCommit() {
+    if (morphCommitTimer) clearTimeout(morphCommitTimer)
+    morphCommitTimer = setTimeout(() => {
+      morphCommitTimer = null
+      void getApi()?.trainingOverlayCommitSize?.()
+    }, OVERLAY_MORPH_COMMIT_MS)
+  }
+
   async function applyOverlaySize(preset: OverlaySizePreset = getCurrentPreset()) {
     await nextTick()
     const size = measureOverlaySize(preset)
     const req = { preset, width: size.width, height: size.height }
     if (shouldSkip(req)) return
+    // La card riceve la dimensione target (finestra meno padding work area) e
+    // la transiziona; in placement resta il riempimento pieno via CSS.
+    cardSize.value = preset === 'placement'
+      ? null
+      : {
+          width: size.width - OVERLAY_SURFACE_PADDING * 2,
+          height: size.height - OVERLAY_SURFACE_PADDING * 2,
+        }
     await getApi()?.trainingOverlaySetSize?.(req)
+    scheduleMorphCommit()
   }
 
   function scheduleOverlaySizeSync(retries = 4) {
@@ -95,8 +120,9 @@ export function useOverlaySize(
   function cleanup() {
     if (typeof window !== 'undefined' && overlaySizeFrame !== null) window.cancelAnimationFrame(overlaySizeFrame)
     if (overlaySizeRetry) clearTimeout(overlaySizeRetry)
+    if (morphCommitTimer) clearTimeout(morphCommitTimer)
     disconnectResizeObserver()
   }
 
-  return { applyOverlaySize, scheduleOverlaySizeSync, connectResizeObserver, disconnectResizeObserver, cleanup }
+  return { cardSize, applyOverlaySize, scheduleOverlaySizeSync, connectResizeObserver, disconnectResizeObserver, cleanup }
 }

@@ -17,6 +17,16 @@ const EMPTY_LAP_STATE: LiveLapState = {
 }
 
 const MAX_CONSECUTIVE_ERRORS = 3
+// Gating freschezza (PIP-94): live_state.json resta su disco dopo la chiusura
+// del logger; senza un ts recente il lap counter mostrerebbe dati fantasma.
+// Il logger scrive "ts" piu' volte al secondo: 10s di tolleranza bastano.
+const LIVE_STATE_FRESH_MS = 10_000
+
+function isLiveStateFresh(ts: unknown): boolean {
+  if (typeof ts !== 'string') return false
+  const parsed = Date.parse(ts)
+  return Number.isFinite(parsed) && Date.now() - parsed <= LIVE_STATE_FRESH_MS
+}
 
 /**
  * @description Polls the Electron IPC API at a fixed interval to keep live lap state
@@ -46,7 +56,7 @@ export function useLiveStatePoller(getApi: () => any | null) {
         const state = await api.getLiveState()
         errorCount = 0
         isPollingActive.value = true
-        if (state && typeof state === 'object') {
+        if (state && typeof state === 'object' && isLiveStateFresh(state.ts)) {
           liveLap.value = {
             currentLap: typeof state.current_lap === 'number' ? state.current_lap : null,
             lapsCompleted: typeof state.laps_completed === 'number' ? state.laps_completed : null,
