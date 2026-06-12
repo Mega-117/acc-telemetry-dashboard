@@ -5,7 +5,7 @@ import { useSessionOrchestrator } from '~/composables/useSessionOrchestrator'
 type Phase = 'loading' | 'placement' | 'launcher' | 'select' | 'running' | 'paused' | 'expired' | 'completed'
 
 function makeStep(id: string, durationMinutes: number) {
-  return { id, title: id, durationMinutes, type: 'work' as const, hud: id, voiceIntro: id }
+  return { id, title: id, durationMinutes, type: 'work' as const, hud: id }
 }
 
 function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boolean } = {}) {

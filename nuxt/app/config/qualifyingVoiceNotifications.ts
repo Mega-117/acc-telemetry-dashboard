@@ -1,4 +1,7 @@
-export type QualifyingVoiceScenario = 'sessionStart' | 'manualPause' | 'manualResume' | 'sessionComplete' | 'stepStart' | 'stepEnd'
+// Scenari ridotti (PIP-98): pausa/ripresa/fine-step rimossi (ridondanti coi
+// feedback visivi e col bip), avvio fuso nell'intro del primo step.
+// Resta solo il completamento; 'stepStart' identifica i WAV per-step.
+export type QualifyingVoiceScenario = 'sessionComplete' | 'stepStart'
 
 export type QualifyingVoiceId = 'if_sara' | 'im_nicola'
 
@@ -31,34 +34,6 @@ export function getStepStartAudioPath(trainingId: string, stepId: string, voice:
 }
 
 export const qualifyingVoicePhrases: QualifyingVoicePhrase[] = [
-  {
-    id: 'qual_start_1',
-    scenario: 'sessionStart',
-    voice: 'if_sara',
-    speed: 1.2,
-    text: 'ok pilota. allenamento qualifica avviato. preparati a spingere'
-  },
-  {
-    id: 'manual_pause_1',
-    scenario: 'manualPause',
-    voice: 'if_sara',
-    speed: 1.15,
-    text: 'allenamento in pausa'
-  },
-  {
-    id: 'manual_resume_1',
-    scenario: 'manualResume',
-    voice: 'if_sara',
-    speed: 1.15,
-    text: 'allenamento ripreso'
-  },
-  {
-    id: 'step_end_1',
-    scenario: 'stepEnd',
-    voice: 'if_sara',
-    speed: 1.15,
-    text: 'blocco terminato. avanza quando sei pronto'
-  },
   {
     id: 'session_complete_1',
     scenario: 'sessionComplete',

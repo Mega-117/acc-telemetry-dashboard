@@ -91,9 +91,10 @@ export function useSessionOrchestrator(
   }
 
   // ── Auto-advance on expired ────────────────────────────────────────────────
+  // Niente voce a fine step (PIP-98): il tri-bip di scadenza basta, la voce
+  // "blocco terminato" era ridondante.
   watch(phase, (newPhase, oldPhase) => {
     if (newPhase === 'expired') {
-      enqueueVoice('stepEnd')
       if (autoAdvanceStep.value) {
         clearAutoAdvance()
         autoAdvanceRemainingSec.value = Math.max(3, Math.round(autoAdvanceSeconds.value) || 10)
@@ -145,7 +146,8 @@ export function useSessionOrchestrator(
     // Pannello impostazioni mai aperto al rientro in select (PIP-97).
     isSettingsOpen.value = false
     void savePreferences(); void primeStepAudio()
-    enqueueVoice('sessionStart', { replace: true })
+    // L'avvio e' annunciato dall'intro del primo step ("allenamento X. ..."),
+    // niente voce di scenario separata (PIP-98).
     startLiveStatePolling(); void trackingStart(); startStep(0)
   }
 
@@ -155,17 +157,18 @@ export function useSessionOrchestrator(
     phase.value = 'select'
   }
 
+  // Pausa/ripresa senza voce (PIP-98): il glow della card e il timer che
+  // pulsa bastano, la voce annunciava un'azione appena fatta dall'utente.
   function pauseSession() {
     if (phase.value !== 'running') return
     closeShortcutStopConfirm(); tickTimer(); clearTimer(); phase.value = 'paused'
-    enqueueVoice('manualPause', { replace: true })
+    stopVoice()
   }
 
   function resumeSession() {
     if (phase.value !== 'paused') return
     closeShortcutStopConfirm(); deadlineAt = Date.now() + remainingMs.value
     phase.value = 'running'; startTicking()
-    enqueueVoice('manualResume', { replace: true })
   }
 
   function completeCurrentStep() {
