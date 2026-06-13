@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { renderSpotterPhrase } from '~/services/spotter/spotterPhraseRenderer'
 import type { SpotterPhraseKey } from '~/config/spotterPhrases'
+import { trainingOverlayCatalog, trainingOverlayOrder, type TrainingOverlayId } from '~/config/trainingOverlayCatalog'
+import type { VoiceScript, VoiceScriptScenario, VoiceScriptStep } from '~/config/voiceScript'
 
 definePageMeta({
   layout: 'dashboard',
@@ -19,81 +21,39 @@ interface ServerVoice {
   language?: string
 }
 
-interface VoiceOption {
-  id: string
-  name: string
-  engine: string
-  lang: string
-  localOnly: boolean
-  description: string
-  raw: ServerVoice
-}
-
 const TTS_SERVER = 'http://localhost:5111'
 const SERVER_TIMEOUT_MS = 2500
 const KOKORO_ITALIAN_VOICE_IDS = ['if_sara', 'im_nicola']
+const KOKORO_BOOT_POLL_MS = 3000
+const KOKORO_BOOT_MAX_MS = 120_000
 
-const qualificationPhrases = [
-  { id: 'qual_start_1', situation: 'V1 - Avvio allenamento', label: 'Box radio', voice: 'if_sara', speed: 1.12, text: 'Qualifica avviata. Pochi giri, massima pulizia.' },
-  { id: 'qual_start_2', situation: 'V1 - Avvio allenamento', label: 'Obiettivo', voice: 'im_nicola', speed: 1.14, text: 'Obiettivo semplice: un valido forte.' },
-  { id: 'qual_start_3', situation: 'V1 - Avvio allenamento', label: 'Metodo', voice: 'if_sara', speed: 1.08, text: 'Prima stabilita, poi attacco.' },
-  { id: 'qual_start_4', situation: 'V1 - Avvio allenamento', label: 'Pressione', voice: 'im_nicola', speed: 1.16, text: 'Pressione alta, margine sotto controllo.' },
-  { id: 'qual_start_5', situation: 'V1 - Avvio allenamento', label: 'Focus', voice: 'if_sara', speed: 1.1, text: 'Niente caos. Giro valido, poi si spinge.' },
-
-  { id: 'warmup_1', situation: 'V1 - Warm-up', label: 'Scalda', voice: 'if_sara', speed: 1.04, text: 'Warm-up. Scalda gomme e freni.' },
-  { id: 'warmup_2', situation: 'V1 - Warm-up', label: 'Riferimenti', voice: 'im_nicola', speed: 1.08, text: 'Fissa i riferimenti. Non cercare il tempo.' },
-  { id: 'warmup_3', situation: 'V1 - Warm-up', label: 'Rotondo', voice: 'if_sara', speed: 1.02, text: 'Guida rotonda. Niente cordoli inutili.' },
-  { id: 'warmup_4', situation: 'V1 - Warm-up', label: 'Spazio', voice: 'im_nicola', speed: 1.08, text: 'Costruisci spazio. Prepara il giro.' },
-  { id: 'warmup_5', situation: 'V1 - Warm-up', label: 'Stabile', voice: 'if_sara', speed: 1.04, text: 'Macchina stabile. Frenata pulita.' },
-
-  { id: 'stint_start_1', situation: 'V1 - Inizio stint qualifica', label: 'Out lap', voice: 'if_sara', speed: 1.12, text: 'Stint aperto. Out lap ordinato.' },
-  { id: 'stint_start_2', situation: 'V1 - Inizio stint qualifica', label: 'Primo valido', voice: 'im_nicola', speed: 1.16, text: 'Primo target: chiudi un valido.' },
-  { id: 'stint_start_3', situation: 'V1 - Inizio stint qualifica', label: 'Curva uno', voice: 'if_sara', speed: 1.14, text: 'Curva uno pulita. Non buttare il giro.' },
-  { id: 'stint_start_4', situation: 'V1 - Inizio stint qualifica', label: 'Deciso', voice: 'im_nicola', speed: 1.18, text: 'Freno deciso, corda pulita, gas progressivo.' },
-  { id: 'stint_start_5', situation: 'V1 - Inizio stint qualifica', label: 'Esegui', voice: 'if_sara', speed: 1.12, text: 'Esegui il piano. Un giro alla volta.' },
-
-  { id: 'time_1', situation: 'V1 - Avvisi tempo', label: 'Dieci passati', voice: 'if_sara', speed: 1.08, text: 'Dieci minuti passati. Controlla il ritmo.' },
-  { id: 'time_2', situation: 'V1 - Avvisi tempo', label: 'Meta blocco', voice: 'im_nicola', speed: 1.1, text: 'Meta blocco. Serve un valido pulito.' },
-  { id: 'time_3', situation: 'V1 - Avvisi tempo', label: 'Cinque rimasti', voice: 'if_sara', speed: 1.14, text: 'Cinque minuti. Scegli il tentativo buono.' },
-  { id: 'time_4', situation: 'V1 - Avvisi tempo', label: 'Due rimasti', voice: 'im_nicola', speed: 1.18, text: 'Due minuti. Giro valido, niente tagli.' },
-  { id: 'time_5', situation: 'V1 - Avvisi tempo', label: 'Ultima chance', voice: 'if_sara', speed: 1.2, text: 'Ultima chance. Composto fino alla linea.' },
-
-  { id: 'pause_1', situation: 'V1 - Pausa reset', label: 'Una cosa', voice: 'if_sara', speed: 1.02, text: 'Pausa. Scegli una sola correzione.' },
-  { id: 'pause_2', situation: 'V1 - Pausa reset', label: 'Respira', voice: 'im_nicola', speed: 1, text: 'Respira. Rientra ordinato.' },
-  { id: 'pause_3', situation: 'V1 - Pausa reset', label: 'Priorita', voice: 'if_sara', speed: 1.04, text: 'Priorita chiara. Non cambiare tutto.' },
-  { id: 'pause_4', situation: 'V1 - Pausa reset', label: 'Reset', voice: 'im_nicola', speed: 1.08, text: 'Reset rapido. Prossimo blocco piu pulito.' },
-  { id: 'pause_5', situation: 'V1 - Pausa reset', label: 'Rientro', voice: 'if_sara', speed: 1.04, text: 'Rientra semplice. Frena, gira, esci.' },
-
-  { id: 'step_done_1', situation: 'V1 - Fine stint', label: 'Chiuso', voice: 'if_sara', speed: 1.04, text: 'Stint chiuso. Segna il miglior valido.' },
-  { id: 'step_done_2', situation: 'V1 - Fine stint', label: 'Review', voice: 'im_nicola', speed: 1.08, text: 'Blocco finito. Trova il punto perso.' },
-  { id: 'step_done_3', situation: 'V1 - Fine stint', label: 'Non forzare', voice: 'if_sara', speed: 1.04, text: 'Stop al blocco. Non forzare oltre.' },
-  { id: 'step_done_4', situation: 'V1 - Fine stint', label: 'Dati', voice: 'im_nicola', speed: 1.08, text: 'Controlla il dato. Poi riparti pulito.' },
-  { id: 'step_done_5', situation: 'V1 - Fine stint', label: 'Conferma', voice: 'if_sara', speed: 1.02, text: 'Buono. Conferma il metodo nel prossimo stint.' },
-
-  { id: 'session_done_1', situation: 'V1 - Fine allenamento', label: 'Fine', voice: 'if_sara', speed: 1, text: 'Allenamento completato. Salva il best valido.' },
-  { id: 'session_done_2', situation: 'V1 - Fine allenamento', label: 'Recap', voice: 'im_nicola', speed: 1.06, text: 'Sessione finita. Guarda best e invalidi.' },
-  { id: 'session_done_3', situation: 'V1 - Fine allenamento', label: 'Metodo', voice: 'if_sara', speed: 1.02, text: 'Chiudi qui. Tieni il metodo che ha funzionato.' },
-  { id: 'session_done_4', situation: 'V1 - Fine allenamento', label: 'Prossimo', voice: 'im_nicola', speed: 1.08, text: 'Prossima sessione: una correzione sola.' },
-  { id: 'session_done_5', situation: 'V1 - Fine allenamento', label: 'Archivio', voice: 'if_sara', speed: 1.02, text: 'Archivia il lavoro. Il prossimo step e chiaro.' }
-]
-
-const serverVoices = ref<VoiceOption[]>([])
-const selectedVoiceId = ref('')
-const customText = ref(qualificationPhrases[0]!.text)
-const speechSpeed = ref(qualificationPhrases[0]!.speed)
-const serverState = ref<'checking' | 'online' | 'offline'>('checking')
+// ─── Stato server/voci ────────────────────────────────────────────────────────
+const serverVoices = ref<ServerVoice[]>([])
+const serverState = ref<'checking' | 'online' | 'starting' | 'offline'>('checking')
 const serverMessage = ref('Controllo server locale...')
+const previewVoiceId = ref('if_sara')
+let bootPollHandle: ReturnType<typeof setTimeout> | null = null
+
+// ─── Copione (fonte unica, PIP-98) ────────────────────────────────────────────
+const script = ref<VoiceScript | null>(null)
+const scriptDirty = ref(false)
+const scriptStatus = ref('')
+const selectedTrainingId = ref<TrainingOverlayId>('qualifying')
+const selectedModeId = ref<'short30' | 'full60'>('short30')
+const rowStatus = ref<Record<string, string>>({})
+
+// ─── Player ───────────────────────────────────────────────────────────────────
+const customText = ref('')
+const speechSpeed = ref(1.15)
 const isSpeaking = ref(false)
 const statusMessage = ref('')
 const activeServerAudio = ref<HTMLAudioElement | null>(null)
+
+// ─── Spotter demo ─────────────────────────────────────────────────────────────
 const spotterTarget = ref<'ahead' | 'behind'>('ahead')
 const spotterTrend = ref<'gaining' | 'losing' | 'stable'>('gaining')
 const spotterDeltaMs = ref(250)
 const spotterSector = ref<1 | 2 | 3>(2)
-
-const selectedVoice = computed(() => {
-  return serverVoices.value.find((voice) => voice.id === selectedVoiceId.value) || null
-})
 
 const spotterPhraseKey = computed<SpotterPhraseKey>(() => {
   if (spotterTarget.value === 'ahead' && spotterTrend.value === 'gaining') return 'aheadGaining'
@@ -113,167 +73,163 @@ const spotterPreviewText = computed(() =>
   })
 )
 
-const voiceCounters = computed(() => {
-  return {
-    total: serverVoices.value.length,
-    italian: serverVoices.value.length
-  }
+// ─── Derivati copione ─────────────────────────────────────────────────────────
+const trainingTabs = computed(() => trainingOverlayOrder.map(id => ({
+  id,
+  label: trainingOverlayCatalog[id].label,
+})))
+
+const selectedTraining = computed(() => trainingOverlayCatalog[selectedTrainingId.value])
+
+/** Step in ordine di esecuzione, uniti alle frasi del copione. */
+const stepRows = computed(() => {
+  if (!script.value) return []
+  const mode = selectedTraining.value.modes[selectedModeId.value]
+  return mode.steps.map((step, index) => {
+    const entry = script.value!.steps.find(s =>
+      s.trainingId === selectedTrainingId.value && s.modeId === selectedModeId.value && s.stepId === step.id)
+    return { step, index, entry }
+  })
 })
 
-const phraseGroups = computed(() => {
-  const groups = new Map<string, typeof qualificationPhrases>()
-  for (const phrase of qualificationPhrases) {
-    const group = groups.get(phrase.situation) || []
-    group.push(phrase)
-    groups.set(phrase.situation, group)
-  }
-  return Array.from(groups.entries()).map(([situation, phrases]) => ({ situation, phrases }))
-})
+const scenarioRows = computed(() => script.value?.scenarios ?? [])
 
-function normalizeLanguage(lang: string) {
-  return (lang || 'unknown').split('-')[0]!.toLowerCase()
+function stepWavName(entry: VoiceScriptStep, voice: string) {
+  return `step-${entry.trainingId}-${entry.modeId}-${entry.stepId}-${voice}.wav`
 }
 
-function getServerVoiceLanguage(voice: ServerVoice) {
-  return voice.lang || voice.language || inferLanguageFromVoiceId(voice.id) || 'unknown'
+function scenarioWavName(entry: VoiceScriptScenario, voice: string) {
+  return `${entry.id}-${voice}.wav`
 }
 
-function inferLanguageFromVoiceId(id: string) {
-  const normalized = id.toLowerCase()
-  if (normalized.startsWith('it') || normalized.includes('italian') || normalized.includes('italiano')) return 'it-IT'
-  if (normalized.startsWith('en') || normalized.includes('english')) return 'en-US'
-  if (normalized.startsWith('es') || normalized.includes('spanish')) return 'es-ES'
-  if (normalized.startsWith('fr') || normalized.includes('french')) return 'fr-FR'
-  if (normalized.startsWith('de') || normalized.includes('german')) return 'de-DE'
-  if (normalized.startsWith('pt') || normalized.includes('portuguese')) return 'pt-PT'
-  if (normalized.startsWith('ja') || normalized.includes('japanese')) return 'ja-JP'
-  if (normalized.startsWith('zh') || normalized.includes('chinese')) return 'zh-CN'
-  return ''
+function rowKey(entry: VoiceScriptStep | VoiceScriptScenario) {
+  return 'stepId' in entry ? `${entry.trainingId}/${entry.modeId}/${entry.stepId}` : `scenario/${entry.id}`
 }
 
-function mapServerVoice(voice: ServerVoice): VoiceOption {
-  const lang = getServerVoiceLanguage(voice)
-  const engine = voice.engine || 'Local TTS'
-  return {
-    id: `server:${voice.id}`,
-    name: voice.name || voice.id,
-    engine,
-    lang,
-    localOnly: true,
-    description: [voice.quality, voice.gender, voice.description].filter(Boolean).join(' - ') || 'Voce esposta dal server locale.',
-    raw: voice
-  }
-}
-
-async function loadServerVoices() {
-  serverState.value = 'checking'
-  serverMessage.value = 'Controllo server locale...'
-
+// ─── Server Kokoro: stato + autostart ────────────────────────────────────────
+async function probeServer(): Promise<boolean> {
   try {
-    const response = await fetch(`${TTS_SERVER}/voices`, {
-      signal: AbortSignal.timeout(SERVER_TIMEOUT_MS)
-    })
+    const response = await fetch(`${TTS_SERVER}/voices`, { signal: AbortSignal.timeout(SERVER_TIMEOUT_MS) })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
     const data = await response.json()
     const voices = Array.isArray(data?.voices) ? data.voices : []
-    serverVoices.value = voices
-      .filter((voice: ServerVoice) => KOKORO_ITALIAN_VOICE_IDS.includes(voice.id))
-      .map(mapServerVoice)
-    serverState.value = serverVoices.value.length > 0 ? 'online' : 'offline'
-    serverMessage.value = serverVoices.value.length > 0
-      ? `${serverVoices.value.length} voci Kokoro italiane pronte su ${TTS_SERVER}.`
-      : `Server raggiunto, ma Sara e Nicola non sono disponibili.`
-  } catch (error: any) {
+    serverVoices.value = voices.filter((v: ServerVoice) => KOKORO_ITALIAN_VOICE_IDS.includes(v.id))
+    return serverVoices.value.length > 0
+  } catch {
     serverVoices.value = []
+    return false
+  }
+}
+
+async function ensureKokoro() {
+  serverState.value = 'checking'
+  serverMessage.value = 'Controllo motore vocale...'
+  if (await probeServer()) {
+    serverState.value = 'online'
+    serverMessage.value = `Sara e Nicola pronte su ${TTS_SERVER}.`
+    return
+  }
+
+  // Autostart (PIP-100): il dev server lancia Kokoro come processo figlio.
+  serverState.value = 'starting'
+  serverMessage.value = 'Avvio motore vocale... il primo avvio carica il modello (puo richiedere fino a un minuto).'
+  try {
+    await $fetch('/api/dev/kokoro-start', { method: 'POST' })
+  } catch (error: any) {
     serverState.value = 'offline'
-    serverMessage.value = `Server locale non disponibile: ${error?.message || 'nessuna risposta'}.`
-  }
-
-  chooseDefaultVoice()
-}
-
-function chooseDefaultVoice() {
-  if (selectedVoice.value) return
-
-  const nextVoice = serverVoices.value.find((voice) => (voice.raw as ServerVoice).id === qualificationPhrases[0]!.voice) || serverVoices.value[0]
-
-  if (nextVoice) {
-    selectedVoiceId.value = nextVoice.id
-  }
-}
-
-function selectPhrase(phrase: typeof qualificationPhrases[number]) {
-  customText.value = phrase.text
-  speechSpeed.value = phrase.speed
-  const voice = serverVoices.value.find((option) => option.raw.id === phrase.voice)
-  if (voice) selectedVoiceId.value = voice.id
-}
-
-function applyEnergyPreset(level: 'clean' | 'dynamic' | 'urgent') {
-  if (level === 'clean') {
-    speechSpeed.value = 1
-    customText.value = 'Ciao pilota. Overlay pronto. Respira, scegli il punto di lavoro e partiamo.'
+    serverMessage.value = `Avvio automatico fallito: ${error?.data?.statusMessage || error?.message || 'errore'}. Avvio manuale: npm run voice:kokoro`
     return
   }
 
-  if (level === 'dynamic') {
-    speechSpeed.value = 1.1
-    customText.value = 'Ok pilota, ci siamo! Run focus iniziato. Freno pulito, gas progressivo, sguardo avanti. Uno step alla volta!'
-    return
+  const deadline = Date.now() + KOKORO_BOOT_MAX_MS
+  const poll = async () => {
+    if (await probeServer()) {
+      serverState.value = 'online'
+      serverMessage.value = `Sara e Nicola pronte su ${TTS_SERVER}.`
+      return
+    }
+    if (Date.now() > deadline) {
+      serverState.value = 'offline'
+      serverMessage.value = 'Il motore vocale non ha risposto in tempo. Avvio manuale: npm run voice:kokoro'
+      return
+    }
+    bootPollHandle = setTimeout(poll, KOKORO_BOOT_POLL_MS)
   }
-
-  speechSpeed.value = 1.16
-  customText.value = 'Attenzione, ultimi due minuti! Resta concentrato. Niente giro della vita: pulizia, ritmo, chiudi forte questo blocco!'
+  bootPollHandle = setTimeout(poll, KOKORO_BOOT_POLL_MS)
 }
 
-function loadSpotterPreview() {
-  customText.value = spotterPreviewText.value
-  speechSpeed.value = 1.08
+// ─── Copione: carica / salva ──────────────────────────────────────────────────
+async function loadScript() {
+  try {
+    script.value = await $fetch<VoiceScript>('/api/dev/voice-script')
+    scriptDirty.value = false
+    scriptStatus.value = ''
+  } catch (error: any) {
+    scriptStatus.value = `Caricamento copione fallito: ${error?.message || 'errore'}`
+  }
+}
+
+function markDirty() {
+  scriptDirty.value = true
+}
+
+async function saveScript() {
+  if (!script.value) return
+  scriptStatus.value = 'Salvataggio...'
+  try {
+    await $fetch('/api/dev/voice-script', { method: 'POST', body: script.value })
+    scriptDirty.value = false
+    scriptStatus.value = 'Copione salvato. Ricorda di rigenerare i WAV delle frasi modificate.'
+  } catch (error: any) {
+    scriptStatus.value = `Salvataggio fallito: ${error?.data?.statusMessage || error?.message || 'errore'}`
+  }
+}
+
+// ─── Sintesi: ascolto e rigenerazione ────────────────────────────────────────
+async function synthesize(text: string, voice: string, speed: number): Promise<Blob> {
+  const url = `${TTS_SERVER}/speak?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&speed=${encodeURIComponent(String(speed))}`
+  const response = await fetch(url, { signal: AbortSignal.timeout(60_000) })
+  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response.blob()
+}
+
+async function playBlob(blob: Blob) {
+  const audioUrl = URL.createObjectURL(blob)
+  const audio = new Audio(audioUrl)
+  activeServerAudio.value = audio
+  await new Promise<void>((resolve) => {
+    audio.onended = () => { URL.revokeObjectURL(audioUrl); resolve() }
+    audio.onerror = () => { URL.revokeObjectURL(audioUrl); resolve() }
+    void audio.play().catch(() => resolve())
+  })
+  if (activeServerAudio.value === audio) activeServerAudio.value = null
+}
+
+async function playText(text: string, speed: number) {
+  if (serverState.value !== 'online' || isSpeaking.value || !text.trim()) return
+  isSpeaking.value = true
+  statusMessage.value = ''
+  try {
+    await playBlob(await synthesize(text.trim(), previewVoiceId.value, speed))
+  } catch (error: any) {
+    statusMessage.value = `Sintesi non riuscita: ${error?.message || 'errore'}`
+  } finally {
+    isSpeaking.value = false
+  }
+}
+
+async function playEntry(entry: VoiceScriptStep | VoiceScriptScenario) {
+  await playText(entry.text, entry.speed ?? script.value?.defaultSpeed ?? 1.15)
+}
+
+async function playCustom() {
+  await playText(customText.value, speechSpeed.value)
 }
 
 async function playSpotterPreview() {
-  loadSpotterPreview()
-  await playVoice()
-}
-
-async function playVoice() {
-  const voice = selectedVoice.value
-  const text = customText.value.trim()
-  if (!voice || !text || isSpeaking.value) return
-
-  statusMessage.value = ''
-  await speakWithServer(voice, text)
-}
-
-async function speakWithServer(voice: VoiceOption, text: string) {
-  isSpeaking.value = true
-  try {
-    const raw = voice.raw as ServerVoice
-    const url = `${TTS_SERVER}/speak?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(raw.id)}&speed=${encodeURIComponent(String(speechSpeed.value))}`
-    const response = await fetch(url, { signal: AbortSignal.timeout(60_000) })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
-    const blob = await response.blob()
-    const audioUrl = URL.createObjectURL(blob)
-    const audio = new Audio(audioUrl)
-    activeServerAudio.value = audio
-    audio.onended = () => {
-      URL.revokeObjectURL(audioUrl)
-      activeServerAudio.value = null
-      isSpeaking.value = false
-    }
-    audio.onerror = () => {
-      URL.revokeObjectURL(audioUrl)
-      activeServerAudio.value = null
-      isSpeaking.value = false
-      statusMessage.value = 'Errore durante la riproduzione audio.'
-    }
-    await audio.play()
-  } catch (error: any) {
-    isSpeaking.value = false
-    statusMessage.value = `Sintesi locale non riuscita: ${error?.message || 'errore sconosciuto'}.`
-  }
+  customText.value = spotterPreviewText.value
+  speechSpeed.value = 1.08
+  await playCustom()
 }
 
 function stopVoice() {
@@ -285,13 +241,51 @@ function stopVoice() {
   isSpeaking.value = false
 }
 
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer()
+  let binary = ''
+  const bytes = new Uint8Array(buf)
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+  return btoa(binary)
+}
+
+/** Rigenera i WAV (entrambe le voci) per una frase e li salva su disco. */
+async function regenerateEntry(entry: VoiceScriptStep | VoiceScriptScenario) {
+  if (serverState.value !== 'online') return
+  const key = rowKey(entry)
+  if (scriptDirty.value) {
+    rowStatus.value[key] = 'Salva prima il copione, poi rigenera.'
+    return
+  }
+  const speed = entry.speed ?? script.value?.defaultSpeed ?? 1.15
+  const voices = script.value?.voices ?? KOKORO_ITALIAN_VOICE_IDS
+  rowStatus.value[key] = 'Rigenero...'
+  try {
+    for (const voice of voices) {
+      const filename = 'stepId' in entry ? stepWavName(entry, voice) : scenarioWavName(entry, voice)
+      rowStatus.value[key] = `Rigenero ${voice}...`
+      const blob = await synthesize(entry.text.trim(), voice, speed)
+      await $fetch('/api/dev/voice-wav', {
+        method: 'POST',
+        body: { filename, dataBase64: await blobToBase64(blob) },
+      })
+    }
+    rowStatus.value[key] = 'WAV aggiornati ✓'
+  } catch (error: any) {
+    rowStatus.value[key] = `Errore: ${error?.data?.statusMessage || error?.message || 'sintesi fallita'}`
+  }
+}
+
 onMounted(async () => {
   await nextTick()
-  await loadServerVoices()
+  await Promise.all([ensureKokoro(), loadScript()])
 })
 
 onBeforeUnmount(() => {
   stopVoice()
+  if (bootPollHandle) clearTimeout(bootPollHandle)
 })
 </script>
 
@@ -303,150 +297,166 @@ onBeforeUnmount(() => {
           <span class="voice-kicker">Offline voice lab</span>
           <h1>Kokoro Voice Lab</h1>
           <p>
-            Pannello essenziale per testare solo le due voci italiane scelte: Kokoro Sara e Kokoro Nicola.
-            Nessuna API cloud: il server locale gira su <code>{{ TTS_SERVER }}</code>.
+            Editor del copione vocale dell'overlay: modifica una frase, ascoltala e rigenera i WAV
+            senza toccare codice. Fonte unica: <code>app/config/voiceScript.json</code>.
+            Server locale su <code>{{ TTS_SERVER }}</code> (avvio automatico).
           </p>
         </div>
-        <div class="server-card" :class="`server-card--${serverState}`">
-          <span>Local TTS server</span>
-          <strong>{{ serverState === 'online' ? 'Online' : serverState === 'checking' ? 'Check' : 'Offline' }}</strong>
+        <div class="server-card" :class="`server-card--${serverState === 'starting' ? 'checking' : serverState}`">
+          <span>Motore vocale</span>
+          <strong>{{ serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : 'Avvio...' }}</strong>
           <p>{{ serverMessage }}</p>
-          <button type="button" @click="loadServerVoices">Ricarica</button>
+          <button type="button" @click="ensureKokoro">Riprova</button>
         </div>
       </header>
 
-      <section class="lab-grid">
-        <aside class="voice-panel">
+      <section class="script-editor">
+        <div class="editor-toolbar">
+          <div class="training-tabs">
+            <button
+              v-for="tab in trainingTabs"
+              :key="tab.id"
+              type="button"
+              :class="{ 'is-active': selectedTrainingId === tab.id }"
+              @click="selectedTrainingId = tab.id"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+          <div class="mode-tabs">
+            <button type="button" :class="{ 'is-active': selectedModeId === 'short30' }" @click="selectedModeId = 'short30'">30 min</button>
+            <button type="button" :class="{ 'is-active': selectedModeId === 'full60' }" @click="selectedModeId = 'full60'">60 min</button>
+          </div>
+          <div class="voice-toggle">
+            <span>Anteprima</span>
+            <button type="button" :class="{ 'is-active': previewVoiceId === 'if_sara' }" @click="previewVoiceId = 'if_sara'">Sara</button>
+            <button type="button" :class="{ 'is-active': previewVoiceId === 'im_nicola' }" @click="previewVoiceId = 'im_nicola'">Nicola</button>
+          </div>
+          <button type="button" class="primary save-btn" :disabled="!scriptDirty" @click="saveScript">
+            {{ scriptDirty ? 'Salva copione' : 'Copione salvato' }}
+          </button>
+        </div>
+        <p v-if="scriptStatus" class="status-message">{{ scriptStatus }}</p>
+
+        <div v-if="!script" class="empty-state">Carico il copione...</div>
+
+        <div v-else class="phrase-rows">
+          <article v-for="row in stepRows" :key="row.step.id" class="phrase-row">
+            <header>
+              <span class="step-order">{{ row.index + 1 }}</span>
+              <strong>{{ row.step.title }}</strong>
+              <small>{{ row.step.durationMinutes }} min</small>
+            </header>
+            <template v-if="row.entry">
+              <textarea v-model="row.entry.text" rows="2" maxlength="280" @input="markDirty" />
+              <footer>
+                <label>
+                  Velocità
+                  <input v-model.number="row.entry.speed" type="number" min="0.8" max="1.5" step="0.02" :placeholder="String(script.defaultSpeed)" @input="markDirty">
+                </label>
+                <span class="row-status">{{ rowStatus[rowKey(row.entry)] || '' }}</span>
+                <button type="button" :disabled="serverState !== 'online' || isSpeaking" @click="playEntry(row.entry)">Ascolta</button>
+                <button type="button" class="primary" :disabled="serverState !== 'online'" @click="regenerateEntry(row.entry)">Rigenera WAV</button>
+              </footer>
+            </template>
+            <p v-else class="missing-entry">Frase mancante nel copione per questo step (aggiungerla in voiceScript.json).</p>
+          </article>
+
+          <h3 class="scenario-title">Frasi di scenario (tutti gli allenamenti)</h3>
+          <article v-for="entry in scenarioRows" :key="entry.id" class="phrase-row phrase-row--scenario">
+            <header>
+              <strong>{{ entry.id }}</strong>
+            </header>
+            <textarea v-model="entry.text" rows="2" maxlength="280" @input="markDirty" />
+            <footer>
+              <label>
+                Velocità
+                <input v-model.number="entry.speed" type="number" min="0.8" max="1.5" step="0.02" @input="markDirty">
+              </label>
+              <span class="row-status">{{ rowStatus[rowKey(entry)] || '' }}</span>
+              <button type="button" :disabled="serverState !== 'online' || isSpeaking" @click="playEntry(entry)">Ascolta</button>
+              <button type="button" class="primary" :disabled="serverState !== 'online'" @click="regenerateEntry(entry)">Rigenera WAV</button>
+            </footer>
+          </article>
+        </div>
+      </section>
+
+      <section class="playground">
+        <div class="playground-head">
+          <div>
+            <span class="voice-kicker">Prova libera</span>
+            <h2>Testo libero con {{ previewVoiceId === 'if_sara' ? 'Sara' : 'Nicola' }}</h2>
+          </div>
+          <div class="play-actions">
+            <button type="button" class="secondary" :disabled="!isSpeaking" @click="stopVoice">Stop</button>
+            <button type="button" class="primary" :disabled="serverState !== 'online' || !customText.trim() || isSpeaking" @click="playCustom">
+              {{ isSpeaking ? 'In lettura...' : 'Play' }}
+            </button>
+          </div>
+        </div>
+
+        <textarea
+          v-model="customText"
+          rows="4"
+          maxlength="420"
+          placeholder="Scrivi una frase da provare..."
+        />
+
+        <div class="voice-controls">
+          <label>
+            Velocità
+            <input v-model.number="speechSpeed" type="range" min="0.8" max="1.5" step="0.02">
+            <strong>{{ speechSpeed.toFixed(2) }}x</strong>
+          </label>
+        </div>
+
+        <section class="spotter-simulator">
           <div class="panel-head">
             <div>
-              <span class="voice-kicker">Voci finali</span>
-              <h2>{{ voiceCounters.total }} Kokoro IT</h2>
-            </div>
-            <div class="counter-row">
-              <span>{{ voiceCounters.italian }} italiane</span>
-            </div>
-          </div>
-
-          <div class="voice-list">
-            <button
-              v-for="voice in serverVoices"
-              :key="voice.id"
-              type="button"
-              class="voice-item"
-              :class="{ 'is-selected': selectedVoiceId === voice.id }"
-              @click="selectedVoiceId = voice.id"
-            >
-              <span>{{ voice.engine }}</span>
-              <strong>{{ voice.name }}</strong>
-              <small>{{ voice.lang }} - {{ voice.description }}</small>
-            </button>
-            <div v-if="serverVoices.length === 0" class="empty-state">
-              Avvia il server Kokoro locale per caricare Sara e Nicola.
-            </div>
-          </div>
-        </aside>
-
-        <section class="playground">
-          <div class="playground-head">
-            <div>
-              <span class="voice-kicker">Player</span>
-              <h2>{{ selectedVoice?.name || 'Nessuna voce selezionata' }}</h2>
-              <p v-if="selectedVoice">
-                {{ selectedVoice.engine }} - {{ selectedVoice.lang }} - {{ selectedVoice.localOnly ? 'offline' : 'non locale' }}
-              </p>
+              <span class="voice-kicker">Spotter demo</span>
+              <h2>Evento gara simulato</h2>
             </div>
             <div class="play-actions">
-              <button type="button" class="secondary" :disabled="!isSpeaking" @click="stopVoice">Stop</button>
-              <button type="button" class="primary" :disabled="!selectedVoice || !customText.trim() || isSpeaking" @click="playVoice">
-                {{ isSpeaking ? 'In lettura...' : 'Play' }}
+              <button type="button" class="primary" :disabled="serverState !== 'online' || isSpeaking" @click="playSpotterPreview">
+                Play spotter
               </button>
             </div>
           </div>
 
-          <textarea
-            v-model="customText"
-            rows="5"
-            maxlength="420"
-            placeholder="Scrivi una frase da leggere..."
-          />
-
-          <div class="voice-controls">
+          <div class="spotter-controls">
             <label>
-              Energia / velocita
-              <input v-model.number="speechSpeed" type="range" min="0.8" max="1.5" step="0.02">
-              <strong>{{ speechSpeed.toFixed(2) }}x</strong>
+              Target
+              <select v-model="spotterTarget">
+                <option value="ahead">Pilota davanti</option>
+                <option value="behind">Pilota dietro</option>
+              </select>
             </label>
-            <div class="energy-actions">
-              <button type="button" @click="applyEnergyPreset('clean')">Pulito</button>
-              <button type="button" @click="applyEnergyPreset('dynamic')">Dinamico</button>
-              <button type="button" @click="applyEnergyPreset('urgent')">Ultimi minuti</button>
-            </div>
+            <label>
+              Trend
+              <select v-model="spotterTrend">
+                <option value="gaining">Guadagni / recupera</option>
+                <option value="losing">Perdi / perde</option>
+                <option value="stable">Stabile</option>
+              </select>
+            </label>
+            <label>
+              Delta ms
+              <input v-model.number="spotterDeltaMs" type="number" min="0" max="2200" step="50">
+            </label>
+            <label>
+              Settore
+              <select v-model.number="spotterSector">
+                <option :value="1">Settore 1</option>
+                <option :value="2">Settore 2</option>
+                <option :value="3">Settore 3</option>
+              </select>
+            </label>
           </div>
 
-          <section class="spotter-simulator">
-            <div class="panel-head">
-              <div>
-                <span class="voice-kicker">Spotter demo</span>
-                <h2>Evento gara simulato</h2>
-              </div>
-              <div class="play-actions">
-                <button type="button" class="secondary" @click="loadSpotterPreview">Carica testo</button>
-                <button type="button" class="primary" :disabled="!selectedVoice || isSpeaking" @click="playSpotterPreview">
-                  Play spotter
-                </button>
-              </div>
-            </div>
-
-            <div class="spotter-controls">
-              <label>
-                Target
-                <select v-model="spotterTarget">
-                  <option value="ahead">Pilota davanti</option>
-                  <option value="behind">Pilota dietro</option>
-                </select>
-              </label>
-              <label>
-                Trend
-                <select v-model="spotterTrend">
-                  <option value="gaining">Guadagni / recupera</option>
-                  <option value="losing">Perdi / perde</option>
-                  <option value="stable">Stabile</option>
-                </select>
-              </label>
-              <label>
-                Delta ms
-                <input v-model.number="spotterDeltaMs" type="number" min="0" max="2200" step="50">
-              </label>
-              <label>
-                Settore
-                <select v-model.number="spotterSector">
-                  <option :value="1">Settore 1</option>
-                  <option :value="2">Settore 2</option>
-                  <option :value="3">Settore 3</option>
-                </select>
-              </label>
-            </div>
-
-            <p class="spotter-preview">{{ spotterPreviewText }}</p>
-          </section>
-
-          <div class="phrase-grid">
-            <section v-for="group in phraseGroups" :key="group.situation" class="phrase-section">
-              <h3>{{ group.situation }}</h3>
-              <button
-                v-for="phrase in group.phrases"
-                :key="phrase.id"
-                type="button"
-                @click="selectPhrase(phrase)"
-              >
-                <span>{{ phrase.label }}</span>
-                <small>{{ phrase.text }}</small>
-              </button>
-            </section>
-          </div>
-
-          <p v-if="statusMessage" class="status-message">{{ statusMessage }}</p>
+          <p class="spotter-preview">{{ spotterPreviewText }}</p>
         </section>
+
+        <p v-if="statusMessage" class="status-message">{{ statusMessage }}</p>
       </section>
     </section>
   </LayoutPageContainer>
@@ -461,9 +471,7 @@ onBeforeUnmount(() => {
 }
 
 .voice-hero,
-.lab-grid,
-.engine-card,
-.voice-panel,
+.script-editor,
 .playground,
 .server-card {
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -544,71 +552,147 @@ onBeforeUnmount(() => {
   border-color: rgba($accent-warning, 0.38);
 }
 
-.engine-grid {
+.script-editor {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
+  padding: 22px;
+  border-radius: $radius-lg;
 }
 
-.engine-card {
-  display: grid;
-  gap: 8px;
-  min-height: 172px;
-  padding: 16px;
-  border-radius: $radius-md;
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.training-tabs,
+.mode-tabs,
+.voice-toggle {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
 
   span {
-    justify-self: start;
-    padding: 4px 8px;
-    border-radius: $radius-sm;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.72);
-    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 11px;
     font-weight: 900;
     text-transform: uppercase;
   }
 
-  strong {
+  button.is-active {
+    border-color: rgba($racing-orange, 0.72);
+    background: rgba($racing-orange, 0.16);
     color: #fff;
-    font-size: 18px;
-  }
-
-  p,
-  small {
-    margin: 0;
-    color: rgba(255, 255, 255, 0.62);
-    line-height: 1.45;
   }
 }
 
-.engine-card--recommended {
-  border-color: rgba($accent-success, 0.34);
+.save-btn {
+  margin-left: auto;
 }
 
-.engine-card--avoid {
-  opacity: 0.68;
-}
-
-.lab-grid {
+.phrase-rows {
   display: grid;
-  grid-template-columns: 420px minmax(0, 1fr);
-  gap: 0;
-  overflow: hidden;
-  border-radius: $radius-lg;
+  gap: 12px;
 }
 
-.voice-panel,
+.scenario-title {
+  margin: 14px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.phrase-row {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: $radius-md;
+  background: rgba(0, 0, 0, 0.18);
+
+  header {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+
+    strong {
+      color: #fff;
+    }
+
+    small {
+      color: rgba(255, 255, 255, 0.5);
+    }
+  }
+
+  textarea {
+    min-height: 56px;
+  }
+
+  footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+
+    label {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      color: rgba(255, 255, 255, 0.58);
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    input {
+      width: 72px;
+      min-height: 32px;
+      padding: 0 8px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: $radius-sm;
+      background: #15151d;
+      color: #fff;
+    }
+  }
+}
+
+.phrase-row--scenario {
+  border-color: rgba($accent-success, 0.22);
+}
+
+.step-order {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.row-status {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+
+.missing-entry {
+  margin: 0;
+  color: #fde68a;
+  font-size: 13px;
+}
+
 .playground {
-  border: 0;
-  border-radius: 0;
-}
-
-.voice-panel {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 14px;
-  padding: 18px;
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  align-content: start;
+  gap: 18px;
+  padding: 22px;
+  border-radius: $radius-lg;
 }
 
 .panel-head,
@@ -631,93 +715,6 @@ onBeforeUnmount(() => {
   }
 }
 
-.counter-row {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 6px;
-
-  span {
-    padding: 5px 7px;
-    border-radius: $radius-sm;
-    background: rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.66);
-    font-size: 11px;
-    font-weight: 800;
-  }
-}
-
-.filters {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: end;
-
-  label {
-    display: grid;
-    gap: 6px;
-    color: rgba(255, 255, 255, 0.58);
-    font-size: 11px;
-    font-weight: 900;
-    text-transform: uppercase;
-  }
-
-  select {
-    min-height: 34px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: $radius-sm;
-    background: #15151d;
-    color: #fff;
-  }
-}
-
-.check-row {
-  grid-template-columns: auto auto;
-  align-items: center;
-  min-height: 34px;
-}
-
-.voice-list {
-  display: grid;
-  gap: 8px;
-  max-height: 540px;
-  overflow: auto;
-  padding-right: 4px;
-}
-
-.voice-item {
-  display: grid;
-  gap: 4px;
-  width: 100%;
-  padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: $radius-sm;
-  background: rgba(255, 255, 255, 0.035);
-  color: #fff;
-  text-align: left;
-
-  span,
-  small {
-    overflow: hidden;
-    color: rgba(255, 255, 255, 0.58);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  strong {
-    overflow: hidden;
-    font-size: 15px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  &.is-selected,
-  &:hover {
-    border-color: rgba($racing-orange, 0.58);
-    background: rgba($racing-orange, 0.1);
-  }
-}
-
 .empty-state,
 .status-message {
   padding: 14px;
@@ -727,13 +724,6 @@ onBeforeUnmount(() => {
   line-height: 1.45;
 }
 
-.playground {
-  display: grid;
-  align-content: start;
-  gap: 18px;
-  padding: 22px;
-}
-
 .play-actions {
   display: flex;
   gap: 8px;
@@ -741,8 +731,7 @@ onBeforeUnmount(() => {
 
 textarea {
   width: 100%;
-  min-height: 136px;
-  padding: 14px;
+  padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: $radius-md;
   background: rgba(0, 0, 0, 0.28);
@@ -780,12 +769,6 @@ textarea {
     font-size: 13px;
     text-align: right;
   }
-}
-
-.energy-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 .spotter-simulator {
@@ -835,49 +818,6 @@ textarea {
   line-height: 1.5;
 }
 
-.phrase-grid {
-  display: grid;
-  gap: 16px;
-
-  .phrase-section {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  h3 {
-    grid-column: 1 / -1;
-    margin: 0;
-    color: rgba(255, 255, 255, 0.78);
-    font-size: 12px;
-    font-weight: 900;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  button {
-    display: grid;
-    gap: 6px;
-    min-height: 92px;
-    padding: 13px;
-    text-align: left;
-
-    span {
-      color: #fff;
-      font-weight: 900;
-    }
-
-    small {
-      overflow: hidden;
-      color: rgba(255, 255, 255, 0.6);
-      line-height: 1.38;
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-    }
-  }
-}
-
 button {
   min-height: 34px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -904,18 +844,10 @@ button {
 }
 
 @media (max-width: 1040px) {
-  .voice-hero,
-  .lab-grid {
+  .voice-hero {
     grid-template-columns: 1fr;
   }
 
-  .voice-panel {
-    border-right: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .engine-grid,
-  .phrase-section,
   .spotter-controls {
     grid-template-columns: 1fr;
   }
