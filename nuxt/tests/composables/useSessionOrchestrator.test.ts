@@ -187,7 +187,8 @@ describe('useSessionOrchestrator - test-mode budget compresso (PIP-106)', () => 
   afterEach(() => { vi.useRealTimers() })
 
   it('con budget iniettato 90s uno step reale da 10 min scade a 90s (non 10 min)', () => {
-    const { phase, orchestrator } = setup({ stepMinutes: [10], testBudgetMs: 90_000 })
+    // Due step: il primo non è l'ultimo, quindi alla scadenza va in expired (PIP-113).
+    const { phase, orchestrator } = setup({ stepMinutes: [10, 10], testBudgetMs: 90_000 })
     orchestrator.startStep(0)
     expect(phase.value).toBe('running')
 
@@ -214,11 +215,32 @@ describe('useSessionOrchestrator - test-mode budget compresso (PIP-106)', () => 
   })
 
   it('senza budget iniettato (default) lo step usa la durata reale', () => {
-    const { phase, orchestrator } = setup({ stepMinutes: [10] })
+    const { phase, orchestrator } = setup({ stepMinutes: [10, 10] })
     orchestrator.startStep(0)
     vi.advanceTimersByTime(90_000)
     expect(phase.value).toBe('running') // a 90s un 10-min reale non è scaduto
     vi.advanceTimersByTime(10 * 60_000)
+    expect(phase.value).toBe('expired')
+  })
+})
+
+describe('useSessionOrchestrator - ultimo step diretto a completed (PIP-113)', () => {
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('alla scadenza naturale l ultimo step va diretto a completed (no expired)', () => {
+    const { phase, orchestrator, trackingComplete, stopLiveStatePolling } = setup({ stepMinutes: [1] })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(60_000)
+    expect(phase.value).toBe('completed')
+    expect(trackingComplete).toHaveBeenCalledWith(1)
+    expect(stopLiveStatePolling).toHaveBeenCalled()
+  })
+
+  it('uno step non-ultimo alla scadenza resta in expired (invariato)', () => {
+    const { phase, orchestrator } = setup({ stepMinutes: [1, 1] })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(60_000)
     expect(phase.value).toBe('expired')
   })
 })
@@ -301,13 +323,10 @@ describe('useSessionOrchestrator - registrazione completamento (PIP-95)', () => 
     expect(stopLiveStatePolling).toHaveBeenCalled()
   })
 
-  it('auto-advance sull ultimo step registra la sessione', async () => {
-    const { phase, orchestrator, trackingComplete, stopLiveStatePolling } = setup({ seconds: 5 })
-    orchestrator.startStep(2)
-    vi.advanceTimersByTime(60_000)
-    expect(phase.value).toBe('expired')
-    await nextTick()
-    vi.advanceTimersByTime(5_000)
+  it('la scadenza dell ultimo step registra la sessione (diretto a completed, PIP-113)', () => {
+    const { phase, orchestrator, trackingComplete, stopLiveStatePolling } = setup()
+    orchestrator.startStep(2) // ultimo step di [1,1,1]
+    vi.advanceTimersByTime(60_000) // scade -> diretto a completed, niente expired
     expect(phase.value).toBe('completed')
     expect(trackingComplete).toHaveBeenCalledWith(3)
     expect(stopLiveStatePolling).toHaveBeenCalled()

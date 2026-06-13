@@ -102,7 +102,14 @@ export function useSessionOrchestrator(
       enqueueVoice('lastMinute')
     }
     if (remainingMs.value <= 0) {
-      clearTimer(); playStepDoneSound(); phase.value = 'expired'
+      clearTimer(); playStepDoneSound()
+      // Ultimo step (PIP-113): niente limbo "prossimo step", vai diretto a
+      // completed -> la voce di completamento parte subito dopo il tri-bip.
+      if (activeStepIndex.value >= selectedMode.value.steps.length - 1) {
+        completeSession(activeStepIndex.value + 1)
+        return
+      }
+      phase.value = 'expired'
     }
   }
 
