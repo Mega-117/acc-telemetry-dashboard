@@ -292,6 +292,32 @@ describe('useLiveStatePoller', () => {
       expect(getLiveState).toHaveBeenCalledTimes(2)
     })
 
+    it('push dal main (PIP-102): aggiornamento immediato senza aspettare il tick', async () => {
+      let pushCallback: ((state: any) => void) | null = null
+      const unsubscribe = vi.fn()
+      const api = {
+        getLiveState: vi.fn(async () => null),
+        onLiveStateUpdate: vi.fn((cb: (state: any) => void) => { pushCallback = cb; return unsubscribe }),
+      }
+      const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(() => api)
+
+      startLiveStatePolling()
+      await flushPromises()
+      expect(api.onLiveStateUpdate).toHaveBeenCalled()
+      expect(liveLap.value.currentLap).toBeNull()
+
+      pushCallback!({ ts: freshTs(), current_lap: 9, laps_completed: 8, laps_valid: 7, lap_valid: true, last_lap_time_ms: 109_320 })
+      expect(liveLap.value.currentLap).toBe(9)
+      expect(liveLap.value.lastLapTimeMs).toBe(109_320)
+
+      // stale via push: torna vuoto (stesso gating del polling)
+      pushCallback!({ ts: new Date(Date.now() - 60_000).toISOString(), current_lap: 10 })
+      expect(liveLap.value.currentLap).toBeNull()
+
+      stopLiveStatePolling()
+      expect(unsubscribe).toHaveBeenCalled()
+    })
+
     it('chiamare startLiveStatePolling due volte non duplica il polling', async () => {
       const getLiveState = vi.fn(async () => ({
         ts: freshTs(), current_lap: 2, laps_completed: 1, laps_valid: 1, lap_valid: true,
