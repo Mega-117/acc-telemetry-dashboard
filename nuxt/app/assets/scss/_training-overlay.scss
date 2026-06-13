@@ -44,6 +44,32 @@
   box-sizing: border-box;
 }
 
+/* Controlli dev test-mode (PIP-106): chrome solo-sviluppo, angoli del work area. */
+.overlay-dev-toggle {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 60;
+  min-height: 0;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 196, 0, 0.5);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #ffd84d;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  -webkit-app-region: no-drag;
+}
+
+.overlay-test-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 60;
+}
+
 .training-overlay--origin-top-left {
   top: 0;
   right: auto;

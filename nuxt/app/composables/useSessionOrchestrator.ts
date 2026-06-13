@@ -63,6 +63,10 @@ export function useSessionOrchestrator(
   trackingComplete: (index: number) => Promise<void>,
   trackingAbandon: (index: number) => Promise<void>,
   savePreferences: () => Promise<void>,
+  // Budget del cronometro per lo step (PIP-106). Default = durata reale; la
+  // test-mode dev lo comprime. Le decisioni (saltabile, avviso ultimo minuto)
+  // restano sulla durata reale, non su questo budget.
+  getStepBudgetMs: (step: { durationMinutes: number }) => number = (s) => s.durationMinutes * 60_000,
 ) {
   // ── Timer ──────────────────────────────────────────────────────────────────
   let deadlineAt = 0
@@ -153,7 +157,7 @@ export function useSessionOrchestrator(
     if (!step) {
       completeSession(index); return
     }
-    activeStepIndex.value = index; remainingMs.value = step.durationMinutes * 60_000
+    activeStepIndex.value = index; remainingMs.value = getStepBudgetMs(step)
     lastMinuteAnnounced = false
     deadlineAt = Date.now() + remainingMs.value; phase.value = 'running'; startTicking()
     enqueueStepStart(`${selectedTrainingId.value}-${selectedModeId.value}`, step.id)

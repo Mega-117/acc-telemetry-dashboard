@@ -8,7 +8,7 @@ function makeStep(id: string, durationMinutes: number) {
   return { id, title: id, durationMinutes, type: 'work' as const, hud: id }
 }
 
-function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boolean, stepMinutes?: number[] } = {}) {
+function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boolean, stepMinutes?: number[], testBudgetMs?: number } = {}) {
   const phase = ref<Phase>('select')
   const activeStepIndex = ref(0)
   const remainingMs = ref(0)
@@ -44,6 +44,7 @@ function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boo
     ref({ currentLap: null, lapValid: null, lapsCompleted: null, lapsValid: null }),
     noop, stopLiveStatePolling, noop,
     asyncNoop, trackingComplete as never, asyncNoop, asyncNoop,
+    opts.testBudgetMs != null ? () => opts.testBudgetMs! : undefined,
   )
 
   return { phase, activeStepIndex, remainingMs, orchestrator, stopLiveStatePolling, trackingComplete, playCountdownBeep, enqueueVoice, isSettingsOpen }
@@ -178,6 +179,47 @@ describe('useSessionOrchestrator - completamento manuale e skip', () => {
     orchestrator.pauseSession()
     orchestrator.skipPausedStep()
     expect(phase.value).toBe('completed')
+  })
+})
+
+describe('useSessionOrchestrator - test-mode budget compresso (PIP-106)', () => {
+  beforeEach(() => { vi.useFakeTimers() })
+  afterEach(() => { vi.useRealTimers() })
+
+  it('con budget iniettato 90s uno step reale da 10 min scade a 90s (non 10 min)', () => {
+    const { phase, orchestrator } = setup({ stepMinutes: [10], testBudgetMs: 90_000 })
+    orchestrator.startStep(0)
+    expect(phase.value).toBe('running')
+
+    vi.advanceTimersByTime(89_000)
+    expect(phase.value).toBe('running')
+    vi.advanceTimersByTime(2_000) // supera 90s
+    expect(phase.value).toBe('expired')
+  })
+
+  it('identità preservata: su step reale >=5 min il cue "ultimo minuto" scatta comunque (a T-60s del budget)', () => {
+    const { orchestrator, enqueueVoice } = setup({ stepMinutes: [10], testBudgetMs: 90_000 })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(29_000) // budget 90s, mancano 61s
+    expect(enqueueVoice).not.toHaveBeenCalledWith('lastMinute')
+    vi.advanceTimersByTime(2_000) // attraversa T-60s reale
+    expect(enqueueVoice.mock.calls.filter(c => c[0] === 'lastMinute')).toHaveLength(1)
+  })
+
+  it('identità preservata: su step reale <5 min NESSUN cue, anche se il budget compresso attraversa i 60s', () => {
+    const { orchestrator, enqueueVoice } = setup({ stepMinutes: [2], testBudgetMs: 90_000 })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(90_000)
+    expect(enqueueVoice).not.toHaveBeenCalledWith('lastMinute')
+  })
+
+  it('senza budget iniettato (default) lo step usa la durata reale', () => {
+    const { phase, orchestrator } = setup({ stepMinutes: [10] })
+    orchestrator.startStep(0)
+    vi.advanceTimersByTime(90_000)
+    expect(phase.value).toBe('running') // a 90s un 10-min reale non è scaduto
+    vi.advanceTimersByTime(10 * 60_000)
+    expect(phase.value).toBe('expired')
   })
 })
 

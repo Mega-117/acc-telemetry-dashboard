@@ -32,8 +32,10 @@ import {
 } from '~/composables/useOverlaySettings'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
+import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
 import { usePublicPath } from '~/composables/usePublicPath'
+import { useDevTestMode } from '~/composables/useDevTestMode'
 
 definePageMeta({ layout: false })
 
@@ -90,6 +92,10 @@ const launcherToolIndex = ref(0)
 const overlayRoot = ref<HTMLElement | null>(null)
 const showDevControls = import.meta.dev
 const isSaving = ref(false)
+
+// Test-mode dev (PIP-106): comprime il budget del cronometro senza falsare
+// l'identità degli step. Sorgente unica usata da timer, barra e auto-dim.
+const { isTestMode, toggle: toggleTestMode, stepBudgetMs, init: initTestMode } = useDevTestMode()
 
 // ─── API bridge ──────────────────────────────────────────────────────────────
 function getOverlayApi(): any | null {
@@ -166,7 +172,8 @@ const primaryActionLabel = computed(() => ({
 }[primaryAction.value]))
 const stopHoldProgressPercent = computed(() => `${Math.round(stopHoldProgress.value * 100)}%`)
 const progressPercent = computed(() => {
-  const totalMs = activeStep.value.durationMinutes * 60_000
+  // Stesso budget del cronometro (PIP-106): in test-mode la barra resta coerente.
+  const totalMs = stepBudgetMs(activeStep.value)
   if (!totalMs) return 0
   return Math.max(0, Math.min(100, 100 - (remainingMs.value / totalMs) * 100))
 })
@@ -191,7 +198,7 @@ const launcherSpotterStatus = computed(() => {
 })
 const sessionOverlayOpacity = computed(() => {
   if (!autoDimDuringRun.value || phase.value !== 'running') return 1
-  const totalMs = activeStep.value.durationMinutes * 60_000
+  const totalMs = stepBudgetMs(activeStep.value)
   if (!totalMs) return 1
   const elapsedMs = Math.max(0, totalMs - remainingMs.value)
   return elapsedMs >= AUTO_DIM_DELAY_MS && remainingMs.value > AUTO_DIM_RESTORE_MS ? AUTO_DIM_OPACITY : 1
@@ -294,6 +301,7 @@ const {
   enqueueVoice, enqueueStepStart, announceLap, primeStepAudio, stopVoice, playStepDoneSound, playCountdownBeep,
   liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap,
   trackingStart, trackingComplete, trackingAbandon, savePreferences,
+  stepBudgetMs,
 )
 
 function enterPlacementMode() {
@@ -416,6 +424,7 @@ let removeCommandListener: (() => void) | undefined
 
 onMounted(async () => {
   document.body.classList.add('training-overlay-runtime')
+  initTestMode()
   const api = getOverlayApi()
   isElectronRuntime.value = !!api
   const settings = await api?.trainingOverlayGetSettings?.() as TrainingOverlaySettings | undefined
@@ -473,6 +482,19 @@ onBeforeUnmount(() => {
       }
     ]"
   >
+    <!-- Controlli dev (PIP-106): solo in sviluppo. Il badge appare quando ON. -->
+    <button
+      v-if="showDevControls"
+      type="button"
+      class="overlay-dev-toggle"
+      :aria-pressed="isTestMode"
+      title="Test-mode: comprime il cronometro degli step (solo sviluppo)"
+      @click="toggleTestMode"
+    >
+      {{ isTestMode ? 'TEST ON' : 'TEST OFF' }}
+    </button>
+    <TestModeBadge class="overlay-test-badge" />
+
     <div class="overlay-work-area">
       <Transition name="overlay-surface" mode="out-in">
         <section

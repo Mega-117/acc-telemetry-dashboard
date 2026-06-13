@@ -5,6 +5,12 @@
 
 import { computed, ref, onMounted } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
+import { useDevTestMode } from '~/composables/useDevTestMode'
+
+// Badge test-mode dev (PIP-106): indicatore di sola lettura sulla dashboard.
+const { init: initTestMode } = useDevTestMode()
+onMounted(() => initTestMode())
 
 const props = defineProps<{
   userName?: string
@@ -149,6 +155,8 @@ onMounted(() => {
         <span class="brand-badge">ACC</span>
         <span class="brand-name">TELEMETRY</span>
       </div>
+
+      <TestModeBadge />
 
       <!-- Spacer -->
       <div class="topbar__spacer"></div>
