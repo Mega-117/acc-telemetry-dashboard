@@ -38,7 +38,8 @@ __pycache__/
 kokoro_*_test.wav
 qualifying_voice_smoke.wav
 nuxt/fix_and_run.ps1
-nuxt/public/voice/**/*.wav
+# I WAV della voce overlay sono versionati (PIP-98 opzione B): sorgente di
+# verita' insieme al copione, cosi' ogni checkout/build li ha senza rigenerarli.
 vendor/kokoro/
 
 # Audit logs
