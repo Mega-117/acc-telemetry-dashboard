@@ -260,6 +260,7 @@ const {
 )
 
 const spotterVoice = useSpotterVoice(
+  getPublicPath,
   () => selectedQualifyingVoiceId.value,
   () => spotterEnabled.value && soundEnabled.value,
 )
@@ -272,7 +273,7 @@ const {
 } = useSpotterController(
   getOverlayApi,
   () => spotterEnabled.value,
-  spotterVoice.enqueueSpotterText,
+  spotterVoice.enqueueSpotterEvent,
 )
 
 // ─── Training selection composable ───────────────────────────────────────────

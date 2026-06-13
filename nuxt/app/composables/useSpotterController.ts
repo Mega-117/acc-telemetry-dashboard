@@ -4,7 +4,7 @@ import { createSpotterAnalyzer, type SpotterEvent } from '~/services/spotter/spo
 export function useSpotterController(
   getApi: () => any | null,
   isEnabled: () => boolean,
-  speak: (text: string) => void,
+  speak: (event: SpotterEvent) => void,
 ) {
   const lastSpotterEvent = ref<SpotterEvent | null>(null)
   const isSpotterPolling = ref(false)
@@ -32,7 +32,7 @@ export function useSpotterController(
         const event = events[0]
         if (event) {
           lastSpotterEvent.value = event
-          speak(event.messageText)
+          speak(event)
         }
       } catch {
         isSpotterPolling.value = false

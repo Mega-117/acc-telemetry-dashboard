@@ -1,3 +1,9 @@
+import spotterPhrasesJson from './spotterPhrases.json'
+
+// I template spotter (chiavi x varianti, slot {delta}/{sector}) vivono in
+// spotterPhrases.json: un'unica fonte letta sia dal runtime TS sia dal
+// generatore di frammenti Python (scripts/generate_spotter_bricks.py), così
+// testo a schermo e mattoncini audio non possono divergere (PIP-103).
 export type SpotterPhraseKey =
   | 'aheadGaining'
   | 'aheadLosing'
@@ -7,30 +13,5 @@ export type SpotterPhraseKey =
   | 'behindStable'
   | 'attackWindow'
 
-export const spotterPhrases: Record<SpotterPhraseKey, string[]> = {
-  aheadGaining: [
-    'Davanti, guadagni {delta}. Punto buono: settore {sector}.',
-    'Stai recuperando sul pilota davanti. Forte nel settore {sector}.'
-  ],
-  aheadLosing: [
-    'Il pilota davanti guadagna {delta}. Perdi soprattutto nel settore {sector}.',
-    'Davanti si allontana. Il punto critico e settore {sector}.'
-  ],
-  aheadStable: [
-    'Gap stabile davanti. Continua pulito.'
-  ],
-  behindClosing: [
-    'Il pilota dietro recupera {delta}. Difendi settore {sector}.',
-    'Dietro si avvicina. Attenzione al settore {sector}.'
-  ],
-  behindDropping: [
-    'Il pilota dietro perde {delta}. Continua pulito.',
-    'Dietro perde terreno. Mantieni ritmo.'
-  ],
-  behindStable: [
-    'Gap stabile dietro. Nessuna pressione immediata.'
-  ],
-  attackWindow: [
-    'Sotto il secondo. Se vuoi attaccare, prepara settore {sector}.'
-  ]
-}
+export const spotterPhrases: Record<SpotterPhraseKey, string[]> =
+  spotterPhrasesJson as Record<SpotterPhraseKey, string[]>

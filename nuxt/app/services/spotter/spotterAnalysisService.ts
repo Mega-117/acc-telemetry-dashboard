@@ -1,6 +1,6 @@
 import type { SpotterPhraseKey } from '~/config/spotterPhrases'
 import { resolveDemoKeySector, type SpotterSector } from './spotterFormatters'
-import { renderSpotterPhrase } from './spotterPhraseRenderer'
+import { fillSpotterTemplate, pickSpotterVariant } from './spotterPhraseRenderer'
 
 export interface SpotterLiveSnapshot {
   ts?: string
@@ -23,6 +23,7 @@ export interface SpotterEvent {
   sector: SpotterSector | null
   urgency: SpotterUrgency
   messageKey: SpotterPhraseKey
+  messageVariant: number
   messageText: string
 }
 
@@ -122,6 +123,8 @@ function buildGapEvent(
   )
   const messageKey = resolveMessageKey(target, trend, next, config.attackGapMs)
   const urgency = resolveUrgency(target, trend, next, config.attackGapMs)
+  // Variante scelta una sola volta: testo HUD e mattoncini audio coincidono.
+  const { index: messageVariant, template } = pickSpotterVariant(messageKey)
 
   return {
     id: `${target}-${now}-${messageKey}`,
@@ -132,7 +135,8 @@ function buildGapEvent(
     sector,
     urgency,
     messageKey,
-    messageText: renderSpotterPhrase({ key: messageKey, deltaMs, sector }),
+    messageVariant,
+    messageText: fillSpotterTemplate(template, deltaMs, sector),
   }
 }
 
