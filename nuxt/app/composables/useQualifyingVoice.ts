@@ -7,6 +7,7 @@ import {
   type QualifyingVoiceScenario,
   type QualifyingVoiceId,
 } from '~/config/qualifyingVoiceNotifications'
+import { lapTimeToBricks, timeBrickPath } from '~/services/overlay/lapTimeAnnouncer'
 
 /**
  * @description Manages the qualifying voice notification system: queues audio phrases for
@@ -139,31 +140,29 @@ export function useQualifyingVoice(
   }
 
   /**
-   * Announces a lap crossing via Web Speech API in the format
-   * "(giro non valido.) X minuto/i YY virgola Z"
+   * Announces a lap crossing by concatenating pre-generated Kokoro bricks
+   * (PIP-101): "(giro non valido.) uno quarantanove e tre". Same voice as
+   * the step intros, zero runtime synthesis, works offline.
    */
-  function announceLap(lapNum: number, timeMs: number | null, valid: boolean) {
+  function announceLap(_lapNum: number, timeMs: number | null, valid: boolean) {
     if (!isEnabled()) return
-    if (!window.speechSynthesis) return
-
-    let text: string
-    if (!timeMs || timeMs <= 0) {
-      text = valid ? `giro ${lapNum}` : `giro ${lapNum} non valido`
-    } else {
-      const totalSecs = timeMs / 1000
-      const minutes = Math.floor(totalSecs / 60)
-      const secs = Math.floor(totalSecs % 60)
-      const tenths = Math.round((totalSecs - Math.floor(totalSecs)) * 10)
-      const minuteWord = minutes === 1 ? 'minuto' : 'minuti'
-      const validPrefix = valid ? '' : 'giro non valido. '
-      text = `${validPrefix}${minutes} ${minuteWord} ${secs} virgola ${tenths}`
+    const bricks = lapTimeToBricks(timeMs, valid)
+    if (!bricks.length) return
+    const voice = selectedVoiceId()
+    // Sostituisce eventuali annunci precedenti: sul traguardo conta l'ultimo.
+    stopVoice()
+    const gen = generation
+    for (const brick of bricks) {
+      const path = getPublicPath(timeBrickPath(brick, voice))
+      queue = queue.then(() => new Promise<void>((resolve) => {
+        if (!soundEnabled.value || gen !== generation) { resolve(); return }
+        const el = new Audio(path)
+        audio = el
+        el.onended = () => { if (audio === el) audio = null; resolve() }
+        el.onerror = () => { if (audio === el) audio = null; resolve() }
+        void el.play().catch(() => { if (audio === el) audio = null; resolve() })
+      }))
     }
-
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.lang = 'it-IT'
-    utterance.rate = 1.1
-    window.speechSynthesis.speak(utterance)
   }
 
   return { soundEnabled, primeStepAudio, playStepDoneSound, playCountdownBeep, enqueue, enqueueStepStart, announceLap, stopVoice, getStepAudioContext }
