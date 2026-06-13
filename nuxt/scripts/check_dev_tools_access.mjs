@@ -16,7 +16,8 @@ const requiredFiles = [
   'app/pages/dev-rebuild.vue',
   'app/pages/dev-cleanup.vue',
   'app/pages/dev-data-audit.vue',
-  'app/pages/dev-upload.vue'
+  'app/pages/dev-upload.vue',
+  'app/pages/dev-voice-lab.vue'
 ]
 
 for (const relativePath of requiredFiles) {
@@ -28,6 +29,13 @@ for (const relativePath of requiredFiles) {
 const middleware = read('app/middleware/dev-tools.ts')
 assert.match(middleware, /canUseDevTools/, 'dev-tools middleware must use shared access helper')
 assert.match(middleware, /navigateTo\(['"]\/panoramica['"]\)/, 'dev-tools middleware must redirect to panoramica')
+// Gate admin combinato (PIP-109): localhost da solo non basta, serve il ruolo.
+assert.match(middleware, /useFirebaseAuth/, 'dev-tools middleware must check auth role')
+assert.match(middleware, /isAdmin/, 'dev-tools middleware must gate on admin role')
+
+const devAccess = read('app/composables/useDevToolsAccess.ts')
+assert.match(devAccess, /canUseDevTools/, 'useDevToolsAccess must combine host access helper')
+assert.match(devAccess, /isAdmin/, 'useDevToolsAccess must combine admin role')
 
 const appVue = read('app/app.vue')
 assert.match(appVue, /canUseDevTools/, 'app.vue must use shared dev tools access helper')

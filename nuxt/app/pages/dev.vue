@@ -4,48 +4,72 @@ definePageMeta({
   middleware: 'dev-tools'
 })
 
-const devTools = [
+// Classificazione strumenti (PIP-109): informativo (sola lettura), distruttivo
+// (scrive/cancella dati, usare con cautela), per-natura-locale (dipende da
+// motore/file sul PC, vive solo in localhost).
+type DevToolCategory = 'info' | 'destructive' | 'local'
+
+const categoryMeta: Record<DevToolCategory, { label: string }> = {
+  info: { label: 'Informativo' },
+  destructive: { label: 'Distruttivo' },
+  local: { label: 'Solo locale' }
+}
+
+const devTools: Array<{
+  title: string
+  eyebrow: string
+  description: string
+  to: string
+  tone: string
+  category: DevToolCategory
+}> = [
   {
     title: 'Firebase Monitor',
     eyebrow: 'reads / writes',
     description: 'Scenario, caller, path e operazioni Firestore della sessione corrente.',
     to: '/dev-firebase',
-    tone: 'cyan'
+    tone: 'cyan',
+    category: 'info'
   },
   {
     title: 'Owner Rebuild',
     eyebrow: 'audit / migration',
     description: 'Audit owner, rebuild projection e reprocess controllato dei dati dell utente loggato.',
     to: '/dev-rebuild',
-    tone: 'orange'
+    tone: 'orange',
+    category: 'destructive'
   },
   {
     title: 'Cleanup',
     eyebrow: 'ghost / duplicates',
     description: 'Controlli manuali per zero-lap, duplicati e pulizia dati legacy.',
     to: '/dev-cleanup',
-    tone: 'red'
+    tone: 'red',
+    category: 'destructive'
   },
   {
     title: 'Data Audit',
     eyebrow: 'trackBests / legacy',
     description: 'Analisi tecnica di trackBests, grip legacy e dati storici.',
     to: '/dev-data-audit',
-    tone: 'blue'
+    tone: 'blue',
+    category: 'info'
   },
   {
     title: 'Upload',
     eyebrow: 'manual json',
     description: 'Upload manuale di file JSON per debug e test controllati.',
     to: '/dev-upload',
-    tone: 'green'
+    tone: 'green',
+    category: 'local'
   },
   {
     title: 'Voice Lab',
     eyebrow: 'offline tts',
     description: 'Confronto voci locali per overlay allenamento: Piper, Kokoro, SAPI e browser locale.',
     to: '/dev-voice-lab',
-    tone: 'gold'
+    tone: 'gold',
+    category: 'local'
   }
 ]
 </script>
@@ -57,7 +81,8 @@ const devTools = [
         <span class="dev-kicker">Area sviluppo locale</span>
         <h1>Strumenti Dev</h1>
         <p>
-          Pannelli diagnostici disponibili solo in sviluppo o localhost. Le route originali restano invariate.
+          Pannelli diagnostici disponibili solo da <strong>localhost</strong> e con ruolo <strong>admin</strong>.
+          Invisibili e irraggiungibili in produzione e per gli altri utenti. Le route originali restano invariate.
         </p>
       </header>
 
@@ -67,9 +92,14 @@ const devTools = [
           :key="tool.to"
           :to="tool.to"
           class="dev-card"
-          :class="`dev-card--${tool.tone}`"
+          :class="[`dev-card--${tool.tone}`, `dev-card--cat-${tool.category}`]"
         >
-          <span class="dev-card__eyebrow">{{ tool.eyebrow }}</span>
+          <div class="dev-card__top">
+            <span class="dev-card__eyebrow">{{ tool.eyebrow }}</span>
+            <span class="dev-card__badge" :class="`dev-card__badge--${tool.category}`">
+              {{ categoryMeta[tool.category].label }}
+            </span>
+          </div>
           <strong>{{ tool.title }}</strong>
           <p>{{ tool.description }}</p>
           <span class="dev-card__cta">Apri pannello</span>
@@ -170,6 +200,29 @@ const devTools = [
     line-height: 1.55;
   }
 }
+
+.dev-card__top {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dev-card__badge {
+  flex: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.dev-card__badge--info { color: #5eead4; }
+.dev-card__badge--destructive { color: #ff6b6b; }
+.dev-card__badge--local { color: #fbbf24; }
 
 .dev-card__cta {
   position: relative;
