@@ -5,6 +5,7 @@
 
 import { computed, ref, onMounted } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import { useDevTestMode } from '~/composables/useDevTestMode'
 
@@ -22,6 +23,8 @@ const emit = defineEmits<{
 }>()
 
 const { isCoach, isAdmin } = useFirebaseAuth()
+// Accesso DEV (PIP-114): visibile solo admin + localhost/dev, mai in produzione.
+const { canAccessDevTools } = useDevToolsAccess()
 const displayName = computed(() => props.userName ?? 'Utente')
 const showVoiceControls = false
 const showNotificationBell = false
@@ -161,6 +164,20 @@ onMounted(() => {
       <!-- Spacer -->
       <div class="topbar__spacer"></div>
 
+      <!-- Accesso strumenti DEV (solo admin + localhost/dev) -->
+      <NuxtLink
+        v-if="canAccessDevTools"
+        to="/dev"
+        class="dev-button"
+        title="Strumenti sviluppo (solo admin, in locale)"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z" />
+        </svg>
+        <span>DEV</span>
+      </NuxtLink>
+
       <!-- Coach/Admin Button (for coaches and admins) -->
       <button 
         v-if="isCoach || isAdmin" 
@@ -269,6 +286,32 @@ onMounted(() => {
 
 .topbar__spacer {
   flex: 1;
+}
+
+.dev-button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 42px;
+  padding: 0 14px;
+  margin-right: $spacing-sm;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: $radius-md;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: $font-display;
+  font-size: $font-size-xs;
+  font-weight: $font-weight-bold;
+  letter-spacing: 1.5px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all $transition-fast;
+
+  &:hover {
+    background: rgba(#5eead4, 0.15);
+    border-color: rgba(#5eead4, 0.4);
+    color: #5eead4;
+  }
 }
 
 .coach-button {
