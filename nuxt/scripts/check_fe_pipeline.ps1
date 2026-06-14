@@ -33,6 +33,13 @@ $legacyPatterns = @(
     'useSessionPager\('
 )
 
+# Pagine esentate dal requisito useTelemetryGateway: NON consumano telemetria,
+# quindi forzare il gateway sarebbe una chiamata a vuoto solo per zittire il check.
+# Aggiungere qui SOLO con motivo scritto.
+$gatewayExempt = @(
+    'PilotAreaPage.vue'   # solo useFirebaseAuth per copy/visibilita per ruolo; nessuna telemetria (PIP-131)
+)
+
 $missingGateway = @()
 $legacyHits = @()
 
@@ -41,7 +48,10 @@ foreach ($file in $files) {
     $normalized = Get-NormalizedPath $file.FullName
 
     if ($normalized -like '*/components/pages/*' -and ($content -notmatch 'useTelemetryGateway\(')) {
-        $missingGateway += $normalized
+        $fileName = Split-Path $normalized -Leaf
+        if ($gatewayExempt -notcontains $fileName) {
+            $missingGateway += $normalized
+        }
     }
 
     foreach ($pattern in $legacyPatterns) {
@@ -52,14 +62,17 @@ foreach ($file in $files) {
 }
 
 if ($missingGateway.Count -gt 0 -or $legacyHits.Count -gt 0) {
-    Write-Error "[PIPELINE_CHECK] FAILED"
+    # NB: stampare i dettagli PRIMA di uscire. Con $ErrorActionPreference='Stop'
+    # un Write-Error qui terminerebbe lo script prima di elencare i colpevoli
+    # (reporting cieco). Usiamo Write-Host per l'elenco e poi exit 1.
+    Write-Host '[PIPELINE_CHECK] FAILED'
     if ($missingGateway.Count -gt 0) {
-        Write-Output '[PIPELINE_CHECK] Missing useTelemetryGateway in pages:'
-        $missingGateway | ForEach-Object { Write-Output " - $_" }
+        Write-Host '[PIPELINE_CHECK] Missing useTelemetryGateway in pages:'
+        $missingGateway | ForEach-Object { Write-Host " - $_" }
     }
     if ($legacyHits.Count -gt 0) {
-        Write-Output '[PIPELINE_CHECK] Legacy pipeline references found:'
-        $legacyHits | ForEach-Object { Write-Output " - $_" }
+        Write-Host '[PIPELINE_CHECK] Legacy pipeline references found:'
+        $legacyHits | ForEach-Object { Write-Host " - $_" }
     }
     exit 1
 }
