@@ -1,0 +1,15 @@
+# Dipendenze Python del server Kokoro del Voice Lab (dev) — PIP-138
+#
+# Oltre a kokoro / torch / numpy / misaki (già richiesti da kokoro), la pipeline
+# di misaki importa i backend G2P di più lingue all'AVVIO, anche per l'italiano.
+# Senza queste, il server parte ma CRASHA alla prima sintesi (/speak).
+#
+# Installazione:
+#   pip install -r scripts/requirements-kokoro.txt
+#   python -m spacy download en_core_web_sm      # modello G2P inglese (misaki.en)
+#
+# NB: pyopenjtalk (G2P giapponese) NON serve per le voci italiane (if_sara, im_nicola):
+# la pipeline italiana si costruisce senza.
+
+ordered-set        # misaki.zh (G2P cinese) — import eager all'avvio pipeline
+spacy              # richiesto da misaki.en; serve anche il modello en_core_web_sm (vedi sopra)

@@ -40,7 +40,27 @@ const scriptDirty = ref(false)
 const scriptStatus = ref('')
 const selectedTrainingId = ref<TrainingOverlayId>('qualifying')
 const selectedModeId = ref<'short30' | 'full60'>('short30')
-const rowStatus = ref<Record<string, string>>({})
+const showScenarios = ref(false)
+
+// Stato per riga (PIP-138): una sola fonte tipizzata invece di stringhe sparse.
+type RowState = 'idle' | 'saving' | 'generating' | 'done' | 'error'
+const rowTasks = ref<Record<string, { state: RowState; message: string }>>({})
+
+// Toast grafici: feedback visibile anche scrollando (PIP-138).
+const toasts = ref<Array<{ id: number; text: string; type: 'success' | 'error' }>>([])
+let toastSeq = 0
+function pushToast(text: string, type: 'success' | 'error') {
+  const id = ++toastSeq
+  toasts.value.push({ id, text, type })
+  setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id) }, 3500)
+}
+function rowState(entry: VoiceScriptStep | VoiceScriptScenario): RowState {
+  return rowTasks.value[rowKey(entry)]?.state ?? 'idle'
+}
+function rowBusy(entry: VoiceScriptStep | VoiceScriptScenario): boolean {
+  const s = rowState(entry)
+  return s === 'saving' || s === 'generating'
+}
 
 // ─── Player ───────────────────────────────────────────────────────────────────
 const customText = ref('')
@@ -251,30 +271,38 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary)
 }
 
-/** Rigenera i WAV (entrambe le voci) per una frase e li salva su disco. */
-async function regenerateEntry(entry: VoiceScriptStep | VoiceScriptScenario) {
+/**
+ * Azione unica (PIP-138): salva il copione se serve, poi rigenera i WAV
+ * (entrambe le voci) della frase. Niente più ordine "salva → rigenera" a mano.
+ */
+async function saveAndRegenerate(entry: VoiceScriptStep | VoiceScriptScenario) {
   if (serverState.value !== 'online') return
   const key = rowKey(entry)
-  if (scriptDirty.value) {
-    rowStatus.value[key] = 'Salva prima il copione, poi rigenera.'
-    return
-  }
-  const speed = entry.speed ?? script.value?.defaultSpeed ?? 1.15
-  const voices = script.value?.voices ?? KOKORO_ITALIAN_VOICE_IDS
-  rowStatus.value[key] = 'Rigenero...'
+  const label = 'stepId' in entry ? entry.stepId : entry.id
   try {
+    if (scriptDirty.value) {
+      rowTasks.value[key] = { state: 'saving', message: 'Salvo copione...' }
+      await $fetch('/api/dev/voice-script', { method: 'POST', body: script.value })
+      scriptDirty.value = false
+      scriptStatus.value = ''
+    }
+    const speed = entry.speed ?? script.value?.defaultSpeed ?? 1.15
+    const voices = script.value?.voices ?? KOKORO_ITALIAN_VOICE_IDS
     for (const voice of voices) {
+      rowTasks.value[key] = { state: 'generating', message: `Rigenero ${voice}...` }
       const filename = 'stepId' in entry ? stepWavName(entry, voice) : scenarioWavName(entry, voice)
-      rowStatus.value[key] = `Rigenero ${voice}...`
       const blob = await synthesize(entry.text.trim(), voice, speed)
       await $fetch('/api/dev/voice-wav', {
         method: 'POST',
         body: { filename, dataBase64: await blobToBase64(blob) },
       })
     }
-    rowStatus.value[key] = 'WAV aggiornati ✓'
+    rowTasks.value[key] = { state: 'done', message: 'WAV aggiornato ✓' }
+    pushToast(`${label}: WAV rigenerato ✓`, 'success')
   } catch (error: any) {
-    rowStatus.value[key] = `Errore: ${error?.data?.statusMessage || error?.message || 'sintesi fallita'}`
+    const msg = error?.data?.statusMessage || error?.message || 'sintesi fallita'
+    rowTasks.value[key] = { state: 'error', message: `Errore: ${msg}` }
+    pushToast(`${label}: rigenerazione fallita`, 'error')
   }
 }
 
@@ -354,30 +382,38 @@ onBeforeUnmount(() => {
                   Velocità
                   <input v-model.number="row.entry.speed" type="number" min="0.8" max="1.5" step="0.02" :placeholder="String(script.defaultSpeed)" @input="markDirty">
                 </label>
-                <span class="row-status">{{ rowStatus[rowKey(row.entry)] || '' }}</span>
+                <span class="row-status" :class="`row-status--${rowState(row.entry)}`">{{ rowTasks[rowKey(row.entry)]?.message || '' }}</span>
                 <button type="button" :disabled="serverState !== 'online' || isSpeaking" @click="playEntry(row.entry)">Ascolta</button>
-                <button type="button" class="primary" :disabled="serverState !== 'online'" @click="regenerateEntry(row.entry)">Rigenera WAV</button>
+                <button type="button" class="primary" :disabled="serverState !== 'online' || rowBusy(row.entry)" @click="saveAndRegenerate(row.entry)">
+                  {{ rowBusy(row.entry) ? '…' : 'Salva e rigenera' }}
+                </button>
               </footer>
             </template>
             <p v-else class="missing-entry">Frase mancante nel copione per questo step (aggiungerla in voiceScript.json).</p>
           </article>
 
-          <h3 class="scenario-title">Frasi di scenario (tutti gli allenamenti)</h3>
-          <article v-for="entry in scenarioRows" :key="entry.id" class="phrase-row phrase-row--scenario">
-            <header>
-              <strong>{{ entry.id }}</strong>
-            </header>
-            <textarea v-model="entry.text" rows="2" maxlength="280" @input="markDirty" />
-            <footer>
-              <label>
-                Velocità
-                <input v-model.number="entry.speed" type="number" min="0.8" max="1.5" step="0.02" @input="markDirty">
-              </label>
-              <span class="row-status">{{ rowStatus[rowKey(entry)] || '' }}</span>
-              <button type="button" :disabled="serverState !== 'online' || isSpeaking" @click="playEntry(entry)">Ascolta</button>
-              <button type="button" class="primary" :disabled="serverState !== 'online'" @click="regenerateEntry(entry)">Rigenera WAV</button>
-            </footer>
-          </article>
+          <button type="button" class="scenario-title" @click="showScenarios = !showScenarios">
+            {{ showScenarios ? '▾' : '▸' }} Frasi di scenario (tutti gli allenamenti) · {{ scenarioRows.length }}
+          </button>
+          <template v-if="showScenarios">
+            <article v-for="entry in scenarioRows" :key="entry.id" class="phrase-row phrase-row--scenario">
+              <header>
+                <strong>{{ entry.id }}</strong>
+              </header>
+              <textarea v-model="entry.text" rows="2" maxlength="280" @input="markDirty" />
+              <footer>
+                <label>
+                  Velocità
+                  <input v-model.number="entry.speed" type="number" min="0.8" max="1.5" step="0.02" @input="markDirty">
+                </label>
+                <span class="row-status" :class="`row-status--${rowState(entry)}`">{{ rowTasks[rowKey(entry)]?.message || '' }}</span>
+                <button type="button" :disabled="serverState !== 'online' || isSpeaking" @click="playEntry(entry)">Ascolta</button>
+                <button type="button" class="primary" :disabled="serverState !== 'online' || rowBusy(entry)" @click="saveAndRegenerate(entry)">
+                  {{ rowBusy(entry) ? '…' : 'Salva e rigenera' }}
+                </button>
+              </footer>
+            </article>
+          </template>
         </div>
       </section>
 
@@ -458,6 +494,10 @@ onBeforeUnmount(() => {
 
         <p v-if="statusMessage" class="status-message">{{ statusMessage }}</p>
       </section>
+
+      <transition-group name="toast" tag="div" class="toast-container">
+        <div v-for="t in toasts" :key="t.id" class="toast" :class="`toast--${t.type}`">{{ t.text }}</div>
+      </transition-group>
     </section>
   </LayoutPageContainer>
 </template>
@@ -597,11 +637,16 @@ onBeforeUnmount(() => {
 }
 
 .scenario-title {
+  justify-self: start;
   margin: 14px 0 0;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
   color: rgba(255, 255, 255, 0.78);
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.08em;
+  text-align: left;
   text-transform: uppercase;
 }
 
@@ -677,8 +722,69 @@ onBeforeUnmount(() => {
 
 .row-status {
   margin-left: auto;
+  overflow: hidden;
   color: rgba(255, 255, 255, 0.6);
   font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-status--saving,
+.row-status--generating {
+  color: #fde68a;
+  animation: row-pulse 1s ease-in-out infinite;
+}
+
+.row-status--done {
+  color: $accent-success;
+}
+
+.row-status--error {
+  color: $accent-warning;
+}
+
+@keyframes row-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.toast-container {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 50;
+  display: grid;
+  gap: 8px;
+}
+
+.toast {
+  padding: 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: $radius-md;
+  background: #1b1b24;
+  color: #fff;
+  font-weight: 900;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.toast--success {
+  border-color: rgba($accent-success, 0.55);
+}
+
+.toast--error {
+  border-color: rgba($accent-warning, 0.55);
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(16px);
 }
 
 .missing-entry {
