@@ -106,9 +106,23 @@ export default [
     },
   },
 
-  // ── Test files — regole rilassate ─────────────────────────────────────────────
+  // ── Test files — parser TS + regole rilassate ─────────────────────────────────
+  // NB: senza questo languageOptions, i test .ts venivano parsati col parser JS
+  // di default → "Parsing error: Unexpected token" su type annotations/as/generics.
+  // Niente `project:` qui: i test non sono nell'include del tsconfig, quindi si
+  // evita il parsing type-aware (che richiederebbe il progetto) e si fa solo
+  // l'analisi sintattica — sufficiente a lintarli davvero.
   {
     files: ['tests/**/*.ts', 'tests/**/*.spec.ts', 'tests/**/*.test.ts'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        sourceType: 'module',
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+    },
     rules: {
       'max-lines': 'off',
       '@typescript-eslint/no-explicit-any': 'off',
