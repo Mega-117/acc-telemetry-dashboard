@@ -311,7 +311,18 @@ def main() -> None:
     if not VOICE_DIR.exists():
         raise RuntimeError(f"Kokoro voice directory not found: {VOICE_DIR}")
 
-    server = ThreadingHTTPServer((args.host, args.port), KokoroHandler)
+    # Niente istanze duplicate sulla stessa porta (PIP-138): su Windows
+    # SO_REUSEADDR lascerebbe convivere più server su :5111 e le richieste
+    # verrebbero instradate a caso -> il voice lab flappa online/offline. Con
+    # reuse disattivato, una seconda istanza fallisce il bind ed esce subito:
+    # resta un solo server sano.
+    ThreadingHTTPServer.allow_reuse_address = False
+    try:
+        server = ThreadingHTTPServer((args.host, args.port), KokoroHandler)
+    except OSError as exc:
+        print(f"Kokoro: porta {args.port} già in uso (un'altra istanza è attiva). Esco. [{exc}]")
+        return
+
     print(f"Kokoro TTS server listening on http://{args.host}:{args.port}")
     print(f"Voices: {len(list_voices())}")
     server.serve_forever()

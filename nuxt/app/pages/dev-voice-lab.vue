@@ -34,6 +34,19 @@ const serverMessage = ref('Controllo server locale...')
 const previewVoiceId = ref('if_sara')
 let bootPollHandle: ReturnType<typeof setTimeout> | null = null
 
+// Cronometro avvio motore (PIP-138): dà la sensazione che "sta succedendo
+// qualcosa" mentre Kokoro carica, invece di un "Avvio..." muto.
+const bootElapsed = ref(0)
+let bootTickHandle: ReturnType<typeof setInterval> | null = null
+function startBootTimer() {
+  bootElapsed.value = 0
+  if (bootTickHandle) clearInterval(bootTickHandle)
+  bootTickHandle = setInterval(() => { bootElapsed.value += 1 }, 1000)
+}
+function stopBootTimer() {
+  if (bootTickHandle) { clearInterval(bootTickHandle); bootTickHandle = null }
+}
+
 // ─── Copione (fonte unica, PIP-98) ────────────────────────────────────────────
 const script = ref<VoiceScript | null>(null)
 const scriptDirty = ref(false)
@@ -152,10 +165,12 @@ async function ensureKokoro() {
 
   // Autostart (PIP-100): il dev server lancia Kokoro come processo figlio.
   serverState.value = 'starting'
-  serverMessage.value = 'Avvio motore vocale... il primo avvio carica il modello (puo richiedere fino a un minuto).'
+  serverMessage.value = 'Carico il modello neurale (primo avvio fino a ~1 min)...'
+  startBootTimer()
   try {
     await $fetch('/api/dev/kokoro-start', { method: 'POST' })
   } catch (error: any) {
+    stopBootTimer()
     serverState.value = 'offline'
     serverMessage.value = `Avvio automatico fallito: ${error?.data?.statusMessage || error?.message || 'errore'}. Avvio manuale: npm run voice:kokoro`
     return
@@ -164,11 +179,13 @@ async function ensureKokoro() {
   const deadline = Date.now() + KOKORO_BOOT_MAX_MS
   const poll = async () => {
     if (await probeServer()) {
+      stopBootTimer()
       serverState.value = 'online'
       serverMessage.value = `Sara e Nicola pronte su ${TTS_SERVER}.`
       return
     }
     if (Date.now() > deadline) {
+      stopBootTimer()
       serverState.value = 'offline'
       serverMessage.value = 'Il motore vocale non ha risposto in tempo. Avvio manuale: npm run voice:kokoro'
       return
@@ -313,6 +330,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopVoice()
+  stopBootTimer()
   if (bootPollHandle) clearTimeout(bootPollHandle)
 })
 </script>
@@ -331,10 +349,13 @@ onBeforeUnmount(() => {
           </p>
         </div>
         <div class="server-card" :class="`server-card--${serverState === 'starting' ? 'checking' : serverState}`">
-          <span>Motore vocale</span>
-          <strong>{{ serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : 'Avvio...' }}</strong>
+          <span class="server-card__label"><i class="server-dot" :class="`server-dot--${serverState}`" />Motore vocale</span>
+          <strong>{{ serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : `Avvio… ${bootElapsed}s` }}</strong>
           <p>{{ serverMessage }}</p>
-          <button type="button" @click="ensureKokoro">Riprova</button>
+          <p v-if="serverState !== 'online'" class="server-hint">«Ascolta» e «Salva e rigenera» sono attivi solo a motore <strong>Online</strong>.</p>
+          <button type="button" :disabled="serverState === 'checking' || serverState === 'starting'" @click="ensureKokoro">
+            {{ serverState === 'starting' || serverState === 'checking' ? 'Avvio in corso…' : 'Riprova' }}
+          </button>
         </div>
       </header>
 
@@ -592,6 +613,44 @@ onBeforeUnmount(() => {
   border-color: rgba($accent-warning, 0.38);
 }
 
+.server-card--checking {
+  border-color: rgba(253, 230, 138, 0.4);
+}
+
+.server-card__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.server-card .server-hint {
+  min-height: 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+
+  strong {
+    font-size: inherit;
+    color: rgba(255, 255, 255, 0.85);
+  }
+}
+
+.server-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.server-dot--online { background: $accent-success; }
+.server-dot--offline { background: $accent-warning; }
+
+.server-dot--checking,
+.server-dot--starting {
+  background: #fde68a;
+  animation: row-pulse 1s ease-in-out infinite;
+}
+
 .script-editor {
   display: grid;
   gap: 16px;
@@ -652,8 +711,8 @@ onBeforeUnmount(() => {
 
 .phrase-row {
   display: grid;
-  gap: 8px;
-  padding: 14px;
+  gap: 6px;
+  padding: 10px 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: $radius-md;
   background: rgba(0, 0, 0, 0.18);
@@ -661,10 +720,11 @@ onBeforeUnmount(() => {
   header {
     display: flex;
     gap: 10px;
-    align-items: baseline;
+    align-items: center;
 
     strong {
       color: #fff;
+      font-size: 14px;
     }
 
     small {
@@ -673,13 +733,13 @@ onBeforeUnmount(() => {
   }
 
   textarea {
-    min-height: 56px;
+    min-height: 44px;
   }
 
   footer {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px 14px;
     align-items: center;
 
     label {
@@ -692,14 +752,18 @@ onBeforeUnmount(() => {
       text-transform: uppercase;
     }
 
-    input {
-      width: 72px;
+    input,
+    select {
       min-height: 32px;
       padding: 0 8px;
       border: 1px solid rgba(255, 255, 255, 0.12);
       border-radius: $radius-sm;
       background: #15151d;
       color: #fff;
+    }
+
+    input {
+      width: 72px;
     }
   }
 }
