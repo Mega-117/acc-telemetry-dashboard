@@ -5,6 +5,8 @@ import io
 import json
 import os
 import tempfile
+import threading
+import time
 import traceback
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -18,6 +20,7 @@ VOICE_DIR = ROOT / "node_modules" / "kokoro-js" / "voices"
 LOCAL_MODEL_DIR = WORKSPACE_ROOT / "vendor" / "kokoro" / "Kokoro-82M"
 DEFAULT_REPO_ID = "hexgrad/Kokoro-82M"
 SAMPLE_RATE = 24_000
+WARMUP_TEXT = "prova."
 
 LANGUAGE_BY_PREFIX = {
     "a": ("en-US", "American English"),
@@ -86,6 +89,15 @@ VOICE_LABELS = {
     "zm_yunxi": "Yunxi",
     "zm_yunxia": "Yunxia",
     "zm_yunyang": "Yunyang",
+}
+
+READINESS_LOCK = threading.Lock()
+READINESS = {
+    "state": "warming",
+    "message": "Kokoro warmup in corso.",
+    "error": "",
+    "startedAt": None,
+    "readyAt": None,
 }
 
 
@@ -240,6 +252,36 @@ def list_voices() -> list[dict[str, str]]:
 RUNTIME = KokoroRuntime()
 
 
+def set_readiness(state: str, message: str, error: str = "") -> None:
+    with READINESS_LOCK:
+        READINESS["state"] = state
+        READINESS["message"] = message
+        READINESS["error"] = error
+        if READINESS["startedAt"] is None:
+            READINESS["startedAt"] = time.time()
+        if state == "ready":
+            READINESS["readyAt"] = time.time()
+
+
+def readiness_payload() -> dict:
+    with READINESS_LOCK:
+        payload = dict(READINESS)
+    if payload.get("startedAt"):
+        payload["elapsedSeconds"] = round(time.time() - float(payload["startedAt"]), 1)
+    return payload
+
+
+def warmup_runtime() -> None:
+    set_readiness("warming", "Carico modello Kokoro e verifico una sintesi reale.")
+    try:
+        RUNTIME.synthesize(WARMUP_TEXT, "if_sara", 1.0)
+    except Exception as exc:
+        traceback.print_exc()
+        set_readiness("error", "Warmup Kokoro fallito.", str(exc))
+        return
+    set_readiness("ready", "Kokoro pronto: sintesi verificata.")
+
+
 class KokoroHandler(BaseHTTPRequestHandler):
     def end_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -255,7 +297,17 @@ class KokoroHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/health":
-                self.write_json({"ok": True, "engine": "kokoro"})
+                self.write_json({"ok": True, "engine": "kokoro", "readiness": readiness_payload()})
+            elif parsed.path == "/ready":
+                readiness = readiness_payload()
+                state = readiness.get("state")
+                status = 200 if state == "ready" else 500 if state == "error" else 503
+                self.write_json({
+                    "ok": state == "ready",
+                    "engine": "kokoro",
+                    "readiness": readiness,
+                    "voices": list_voices() if state == "ready" else [],
+                }, status=status)
             elif parsed.path == "/voices":
                 self.write_json({"engine": "kokoro", "voices": list_voices()})
             elif parsed.path == "/speak":
@@ -325,6 +377,7 @@ def main() -> None:
 
     print(f"Kokoro TTS server listening on http://{args.host}:{args.port}")
     print(f"Voices: {len(list_voices())}")
+    threading.Thread(target=warmup_runtime, daemon=True).start()
     server.serve_forever()
 
 

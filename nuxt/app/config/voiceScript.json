@@ -165,7 +165,8 @@
       "modeId": "short30",
       "stepId": "warmup",
       "origin": "system",
-      "text": "allenamento qualifica. warm-up. cinque minuti. scalda e prepara i riferimenti."
+      "text": "allenamento qualifica. warm-up. cinque minuti. scalda e prepara i riferimenti. vai puscia",
+      "speed": 1.5
     },
     {
       "trainingId": "qualifying",

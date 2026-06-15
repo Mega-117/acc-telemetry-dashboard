@@ -1,5 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { normalizeVoiceScript } from '../../utils/voiceScriptNormalize'
 
 // Scrive il copione (PIP-100). Validazione minima di forma: il contenuto
 // resta versionato in git, ogni modifica e' visibile nel diff e reversibile.
@@ -21,6 +22,9 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: `Scenario non valido: ${JSON.stringify(s).slice(0, 80)}` })
     }
   }
+  // PIP-138: blinda il contratto "testi TTS minuscoli" al salvataggio (punto
+  // unico: copre UI, API e edit manuali). Logica pura in server/utils, testata.
+  normalizeVoiceScript(body)
   const path = join(process.cwd(), 'app', 'config', 'voiceScript.json')
   await writeFile(path, JSON.stringify(body, null, 2) + '\n', 'utf8')
   return { ok: true }

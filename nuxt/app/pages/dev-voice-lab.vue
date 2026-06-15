@@ -22,14 +22,13 @@ interface ServerVoice {
 }
 
 const TTS_SERVER = 'http://localhost:5111'
-const SERVER_TIMEOUT_MS = 2500
 const KOKORO_ITALIAN_VOICE_IDS = ['if_sara', 'im_nicola']
 const KOKORO_BOOT_POLL_MS = 3000
 const KOKORO_BOOT_MAX_MS = 120_000
 
 // ─── Stato server/voci ────────────────────────────────────────────────────────
 const serverVoices = ref<ServerVoice[]>([])
-const serverState = ref<'checking' | 'online' | 'starting' | 'offline'>('checking')
+const serverState = ref<'checking' | 'online' | 'starting' | 'offline' | 'error'>('checking')
 const serverMessage = ref('Controllo server locale...')
 const previewVoiceId = ref('if_sara')
 let bootPollHandle: ReturnType<typeof setTimeout> | null = null
@@ -54,10 +53,16 @@ const scriptStatus = ref('')
 const selectedTrainingId = ref<TrainingOverlayId>('qualifying')
 const selectedModeId = ref<'short30' | 'full60'>('short30')
 const showScenarios = ref(false)
+const pendingRegenKeys = ref<string[]>([])
+const batchBusy = ref(false)
+const batchStatus = ref('')
 
 // Stato per riga (PIP-138): una sola fonte tipizzata invece di stringhe sparse.
 type RowState = 'idle' | 'saving' | 'generating' | 'done' | 'error'
 const rowTasks = ref<Record<string, { state: RowState; message: string }>>({})
+
+type ToastTimer = ReturnType<typeof setTimeout>
+const toastTimers: ToastTimer[] = []
 
 // Toast grafici: feedback visibile anche scrollando (PIP-138).
 const toasts = ref<Array<{ id: number; text: string; type: 'success' | 'error' }>>([])
@@ -65,7 +70,8 @@ let toastSeq = 0
 function pushToast(text: string, type: 'success' | 'error') {
   const id = ++toastSeq
   toasts.value.push({ id, text, type })
-  setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id) }, 3500)
+  const timer = setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id) }, 3500)
+  toastTimers.push(timer)
 }
 function rowState(entry: VoiceScriptStep | VoiceScriptScenario): RowState {
   return rowTasks.value[rowKey(entry)]?.state ?? 'idle'
@@ -81,6 +87,13 @@ const speechSpeed = ref(1.15)
 const isSpeaking = ref(false)
 const statusMessage = ref('')
 const activeServerAudio = ref<HTMLAudioElement | null>(null)
+const previewAudioEl = ref<HTMLAudioElement | null>(null)
+const previewAudioUrl = ref('')
+const previewAudioLabel = ref('')
+const previewAudioStatus = ref('')
+const previewAudioError = ref('')
+let voiceAudioContext: AudioContext | null = null
+let activeBufferSource: AudioBufferSourceNode | null = null
 
 // ─── Spotter demo ─────────────────────────────────────────────────────────────
 const spotterTarget = ref<'ahead' | 'behind'>('ahead')
@@ -127,6 +140,27 @@ const stepRows = computed(() => {
 
 const scenarioRows = computed(() => script.value?.scenarios ?? [])
 
+const visibleEntries = computed(() => stepRows.value
+  .map(row => row.entry)
+  .filter((entry): entry is VoiceScriptStep => Boolean(entry)))
+
+const pendingVisibleEntries = computed(() =>
+  visibleEntries.value.filter(entry => pendingRegenKeys.value.includes(rowKey(entry)))
+)
+
+const mainSaveLabel = computed(() => {
+  if (batchBusy.value) return 'Rigenero modifiche...'
+  if (pendingVisibleEntries.value.length > 0) return `Salva e rigenera modifiche (${pendingVisibleEntries.value.length})`
+  if (scriptDirty.value) return 'Salva copione'
+  return 'Tutto salvato'
+})
+
+const mainSaveDisabled = computed(() => {
+  if (batchBusy.value) return true
+  if (pendingVisibleEntries.value.length > 0) return serverState.value !== 'online'
+  return !scriptDirty.value
+})
+
 function stepWavName(entry: VoiceScriptStep, voice: string) {
   return `step-${entry.trainingId}-${entry.modeId}-${entry.stepId}-${voice}.wav`
 }
@@ -139,55 +173,91 @@ function rowKey(entry: VoiceScriptStep | VoiceScriptScenario) {
   return 'stepId' in entry ? `${entry.trainingId}/${entry.modeId}/${entry.stepId}` : `scenario/${entry.id}`
 }
 
+function markPendingRegen(entry: VoiceScriptStep | VoiceScriptScenario) {
+  const key = rowKey(entry)
+  if (!pendingRegenKeys.value.includes(key)) pendingRegenKeys.value = [...pendingRegenKeys.value, key]
+  if (rowTasks.value[key]?.state === 'done') rowTasks.value[key] = { state: 'idle', message: 'Da rigenerare' }
+}
+
+function clearPendingRegen(entry: VoiceScriptStep | VoiceScriptScenario) {
+  const key = rowKey(entry)
+  pendingRegenKeys.value = pendingRegenKeys.value.filter(k => k !== key)
+}
+
+function markDirty(entry?: VoiceScriptStep | VoiceScriptScenario) {
+  scriptDirty.value = true
+  batchStatus.value = ''
+  if (entry) markPendingRegen(entry)
+}
+
 // ─── Server Kokoro: stato + autostart ────────────────────────────────────────
-async function probeServer(): Promise<boolean> {
+async function probeServer(): Promise<'ready' | 'warming' | 'error' | 'offline'> {
   try {
-    const response = await fetch(`${TTS_SERVER}/voices`, { signal: AbortSignal.timeout(SERVER_TIMEOUT_MS) })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = await response.json()
-    const voices = Array.isArray(data?.voices) ? data.voices : []
-    serverVoices.value = voices.filter((v: ServerVoice) => KOKORO_ITALIAN_VOICE_IDS.includes(v.id))
-    return serverVoices.value.length > 0
+    const data = await $fetch<{ state: 'online' | 'starting' | 'offline' | 'error'; message?: string; voices?: ServerVoice[] }>('/api/dev/kokoro-ready', {
+      signal: AbortSignal.timeout(65_000),
+    })
+    serverMessage.value = data.message || serverMessage.value
+    if (data.state === 'online') {
+      const voices = Array.isArray(data.voices) ? data.voices : []
+      serverVoices.value = voices.filter((v: ServerVoice) => KOKORO_ITALIAN_VOICE_IDS.includes(v.id))
+      return serverVoices.value.length > 0 ? 'ready' : 'error'
+    }
+    serverVoices.value = []
+    if (data.state === 'starting') return 'warming'
+    return data.state
   } catch {
     serverVoices.value = []
-    return false
+    return 'offline'
   }
 }
 
 async function ensureKokoro() {
   serverState.value = 'checking'
   serverMessage.value = 'Controllo motore vocale...'
-  if (await probeServer()) {
+  const initialProbe = await probeServer()
+  if (initialProbe === 'ready') {
     serverState.value = 'online'
-    serverMessage.value = `Sara e Nicola pronte su ${TTS_SERVER}.`
+    serverMessage.value = `Sara e Nicola pronte su ${TTS_SERVER}: sintesi verificata.`
     return
+  }
+  if (initialProbe === 'warming') {
+    serverState.value = 'starting'
+    startBootTimer()
   }
 
   // Autostart (PIP-100): il dev server lancia Kokoro come processo figlio.
-  serverState.value = 'starting'
-  serverMessage.value = 'Carico il modello neurale (primo avvio fino a ~1 min)...'
-  startBootTimer()
-  try {
-    await $fetch('/api/dev/kokoro-start', { method: 'POST' })
-  } catch (error: any) {
-    stopBootTimer()
-    serverState.value = 'offline'
-    serverMessage.value = `Avvio automatico fallito: ${error?.data?.statusMessage || error?.message || 'errore'}. Avvio manuale: npm run voice:kokoro`
-    return
+  if (initialProbe !== 'warming') {
+    serverState.value = 'starting'
+    serverMessage.value = 'Avvio Kokoro e scaldo il modello con una sintesi reale...'
+    startBootTimer()
+    try {
+      await $fetch('/api/dev/kokoro-start', { method: 'POST' })
+    } catch (error: any) {
+      stopBootTimer()
+      serverState.value = 'error'
+      serverMessage.value = `Avvio automatico fallito: ${error?.data?.statusMessage || error?.message || 'errore'}. Dettagli in kokoro_tts_err.log.`
+      return
+    }
   }
 
   const deadline = Date.now() + KOKORO_BOOT_MAX_MS
   const poll = async () => {
-    if (await probeServer()) {
+    const probe = await probeServer()
+    if (probe === 'ready') {
       stopBootTimer()
       serverState.value = 'online'
-      serverMessage.value = `Sara e Nicola pronte su ${TTS_SERVER}.`
+      serverMessage.value = `Sara e Nicola pronte su ${TTS_SERVER}: sintesi verificata.`
+      return
+    }
+    if (probe === 'error') {
+      stopBootTimer()
+      serverState.value = 'error'
       return
     }
     if (Date.now() > deadline) {
       stopBootTimer()
       serverState.value = 'offline'
-      serverMessage.value = 'Il motore vocale non ha risposto in tempo. Avvio manuale: npm run voice:kokoro'
+      serverMessage.value = 'Il motore vocale non ha completato il warmup in tempo. Dettagli in kokoro_tts_err.log.'
       return
     }
     bootPollHandle = setTimeout(poll, KOKORO_BOOT_POLL_MS)
@@ -206,17 +276,13 @@ async function loadScript() {
   }
 }
 
-function markDirty() {
-  scriptDirty.value = true
-}
-
 async function saveScript() {
   if (!script.value) return
   scriptStatus.value = 'Salvataggio...'
   try {
     await $fetch('/api/dev/voice-script', { method: 'POST', body: script.value })
     scriptDirty.value = false
-    scriptStatus.value = 'Copione salvato. Ricorda di rigenerare i WAV delle frasi modificate.'
+    scriptStatus.value = 'Copione salvato.'
   } catch (error: any) {
     scriptStatus.value = `Salvataggio fallito: ${error?.data?.statusMessage || error?.message || 'errore'}`
   }
@@ -224,43 +290,121 @@ async function saveScript() {
 
 // ─── Sintesi: ascolto e rigenerazione ────────────────────────────────────────
 async function synthesize(text: string, voice: string, speed: number): Promise<Blob> {
-  const url = `${TTS_SERVER}/speak?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&speed=${encodeURIComponent(String(speed))}`
+  const url = `/api/dev/kokoro-speak?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&speed=${encodeURIComponent(String(speed))}`
   const response = await fetch(url, { signal: AbortSignal.timeout(60_000) })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return response.blob()
+  return new Blob([await response.arrayBuffer()], { type: 'audio/wav' })
 }
 
-async function playBlob(blob: Blob) {
-  const audioUrl = URL.createObjectURL(blob)
-  const audio = new Audio(audioUrl)
+function revokePreviewAudio() {
+  if (previewAudioUrl.value) {
+    URL.revokeObjectURL(previewAudioUrl.value)
+    previewAudioUrl.value = ''
+  }
+}
+
+function stopBufferSource() {
+  if (!activeBufferSource) return
+  try {
+    activeBufferSource.onended = null
+    activeBufferSource.stop()
+    activeBufferSource.disconnect()
+  } catch {
+    // Source nodes cannot be stopped twice; ignore teardown races.
+  } finally {
+    activeBufferSource = null
+  }
+}
+
+async function getVoiceAudioContext(): Promise<AudioContext> {
+  const ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!ctor) throw new Error('Web Audio non disponibile nel browser')
+  voiceAudioContext ||= new ctor()
+  if (voiceAudioContext.state === 'suspended') {
+    await Promise.race([
+      voiceAudioContext.resume(),
+      new Promise(resolve => setTimeout(resolve, 1200)),
+    ])
+  }
+  if (voiceAudioContext.state === 'suspended') {
+    throw new Error('audio bloccato dal browser')
+  }
+  return voiceAudioContext
+}
+
+async function playBlob(blob: Blob, label: string) {
+  stopBufferSource()
+  if (activeServerAudio.value) {
+    activeServerAudio.value.pause()
+    activeServerAudio.value.currentTime = 0
+  }
+
+  revokePreviewAudio()
+  previewAudioError.value = ''
+  previewAudioLabel.value = label
+  previewAudioStatus.value = 'Audio generato. Provo a riprodurlo...'
+  previewAudioUrl.value = URL.createObjectURL(blob)
+  await nextTick()
+
+  const audio = previewAudioEl.value
+  if (!audio) {
+    previewAudioStatus.value = 'Audio pronto nel player.'
+    previewAudioError.value = 'Player non inizializzato: usa il controllo audio appena compare.'
+    return
+  }
+
   activeServerAudio.value = audio
-  await new Promise<void>((resolve) => {
-    audio.onended = () => { URL.revokeObjectURL(audioUrl); resolve() }
-    audio.onerror = () => { URL.revokeObjectURL(audioUrl); resolve() }
-    void audio.play().catch(() => resolve())
-  })
-  if (activeServerAudio.value === audio) activeServerAudio.value = null
+  audio.src = previewAudioUrl.value
+  audio.currentTime = 0
+  audio.load()
+
+  try {
+    const context = await getVoiceAudioContext()
+    const buffer = await blob.arrayBuffer()
+    const decoded = await context.decodeAudioData(buffer.slice(0))
+    const source = context.createBufferSource()
+    source.buffer = decoded
+    source.connect(context.destination)
+    activeBufferSource = source
+    source.onended = () => {
+      if (activeBufferSource === source) activeBufferSource = null
+      previewAudioStatus.value = 'Audio completato.'
+    }
+    source.start(0)
+    previewAudioStatus.value = `Riproduzione in corso (${decoded.duration.toFixed(1)}s).`
+  } catch (error: any) {
+    previewAudioStatus.value = 'Audio pronto nel player.'
+    previewAudioError.value = `Riproduzione Web Audio non riuscita: ${error?.message || 'errore'}. Kokoro ha generato il WAV; prova il player manuale.`
+  }
 }
 
-async function playText(text: string, speed: number) {
+async function playText(text: string, speed: number, label = 'Anteprima') {
   if (serverState.value !== 'online' || isSpeaking.value || !text.trim()) return
   isSpeaking.value = true
   statusMessage.value = ''
+  previewAudioError.value = ''
+  previewAudioLabel.value = label
+  previewAudioStatus.value = 'Genero anteprima...'
   try {
-    await playBlob(await synthesize(text.trim(), previewVoiceId.value, speed))
+    await playBlob(await synthesize(text.trim(), previewVoiceId.value, speed), label)
   } catch (error: any) {
-    statusMessage.value = `Sintesi non riuscita: ${error?.message || 'errore'}`
+    previewAudioStatus.value = ''
+    previewAudioError.value = `Sintesi non riuscita: ${error?.message || 'errore'}`
+    statusMessage.value = previewAudioError.value
   } finally {
     isSpeaking.value = false
   }
 }
 
 async function playEntry(entry: VoiceScriptStep | VoiceScriptScenario) {
-  await playText(entry.text, entry.speed ?? script.value?.defaultSpeed ?? 1.15)
+  const label = 'stepId' in entry
+    ? `${entry.trainingId} / ${entry.modeId} / ${entry.stepId} - ${previewVoiceId.value === 'if_sara' ? 'Sara' : 'Nicola'}`
+    : `${entry.id} - ${previewVoiceId.value === 'if_sara' ? 'Sara' : 'Nicola'}`
+  await playText(entry.text, entry.speed ?? script.value?.defaultSpeed ?? 1.15, label)
 }
 
 async function playCustom() {
-  await playText(customText.value, speechSpeed.value)
+  await playText(customText.value, speechSpeed.value, `Prova libera - ${previewVoiceId.value === 'if_sara' ? 'Sara' : 'Nicola'}`)
 }
 
 async function playSpotterPreview() {
@@ -270,11 +414,17 @@ async function playSpotterPreview() {
 }
 
 function stopVoice() {
+  stopBufferSource()
   if (activeServerAudio.value) {
     activeServerAudio.value.pause()
     activeServerAudio.value.currentTime = 0
     activeServerAudio.value = null
   }
+  if (previewAudioEl.value) {
+    previewAudioEl.value.pause()
+    previewAudioEl.value.currentTime = 0
+  }
+  previewAudioStatus.value = previewAudioUrl.value ? 'Audio fermato. Puoi riascoltarlo dal player.' : ''
   isSpeaking.value = false
 }
 
@@ -292,8 +442,12 @@ async function blobToBase64(blob: Blob): Promise<string> {
  * Azione unica (PIP-138): salva il copione se serve, poi rigenera i WAV
  * (entrambe le voci) della frase. Niente più ordine "salva → rigenera" a mano.
  */
-async function saveAndRegenerate(entry: VoiceScriptStep | VoiceScriptScenario) {
-  if (serverState.value !== 'online') return
+async function saveAndRegenerate(
+  entry: VoiceScriptStep | VoiceScriptScenario,
+  options: { toast?: boolean } = {}
+): Promise<boolean> {
+  if (serverState.value !== 'online') return false
+  const shouldToast = options.toast ?? true
   const key = rowKey(entry)
   const label = 'stepId' in entry ? entry.stepId : entry.id
   try {
@@ -315,12 +469,44 @@ async function saveAndRegenerate(entry: VoiceScriptStep | VoiceScriptScenario) {
       })
     }
     rowTasks.value[key] = { state: 'done', message: 'WAV aggiornato ✓' }
-    pushToast(`${label}: WAV rigenerato ✓`, 'success')
+    clearPendingRegen(entry)
+    if (shouldToast) pushToast(`${label}: WAV rigenerato ✓`, 'success')
+    return true
   } catch (error: any) {
     const msg = error?.data?.statusMessage || error?.message || 'sintesi fallita'
     rowTasks.value[key] = { state: 'error', message: `Errore: ${msg}` }
-    pushToast(`${label}: rigenerazione fallita`, 'error')
+    if (shouldToast) pushToast(`${label}: rigenerazione fallita`, 'error')
+    return false
   }
+}
+
+async function saveAndRegeneratePendingVisible() {
+  if (serverState.value !== 'online' || batchBusy.value) return
+  const entries = pendingVisibleEntries.value
+  if (!entries.length) return
+
+  batchBusy.value = true
+  batchStatus.value = `Rigenerazione modifiche: 0/${entries.length}`
+  let ok = 0
+  try {
+    for (let i = 0; i < entries.length; i++) {
+      batchStatus.value = `Rigenerazione modifiche: ${i + 1}/${entries.length}`
+      if (await saveAndRegenerate(entries[i]!, { toast: false })) ok += 1
+    }
+    batchStatus.value = `${ok}/${entries.length} rigenerate`
+    if (ok === entries.length) pushToast(`Modifiche sezione rigenerate ✓ (${ok})`, 'success')
+    else pushToast(`Rigenerate ${ok}/${entries.length}: controlla le righe in errore`, 'error')
+  } finally {
+    batchBusy.value = false
+  }
+}
+
+async function saveMainChanges() {
+  if (pendingVisibleEntries.value.length > 0) {
+    await saveAndRegeneratePendingVisible()
+    return
+  }
+  await saveScript()
 }
 
 onMounted(async () => {
@@ -330,8 +516,10 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopVoice()
+  revokePreviewAudio()
   stopBootTimer()
   if (bootPollHandle) clearTimeout(bootPollHandle)
+  for (const timer of toastTimers) clearTimeout(timer)
 })
 </script>
 
@@ -348,13 +536,13 @@ onBeforeUnmount(() => {
             Server locale su <code>{{ TTS_SERVER }}</code> (avvio automatico).
           </p>
         </div>
-        <div class="server-card" :class="`server-card--${serverState === 'starting' ? 'checking' : serverState}`">
+        <div class="server-card" :class="`server-card--${serverState === 'starting' ? 'checking' : serverState}`" data-testid="voice-lab-server-card">
           <span class="server-card__label"><i class="server-dot" :class="`server-dot--${serverState}`" />Motore vocale</span>
-          <strong>{{ serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : `Avvio… ${bootElapsed}s` }}</strong>
+          <strong>{{ serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : serverState === 'error' ? 'Errore' : `Avvio… ${bootElapsed}s` }}</strong>
           <p>{{ serverMessage }}</p>
           <p v-if="serverState !== 'online'" class="server-hint">«Ascolta» e «Salva e rigenera» sono attivi solo a motore <strong>Online</strong>.</p>
-          <button type="button" :disabled="serverState === 'checking' || serverState === 'starting'" @click="ensureKokoro">
-            {{ serverState === 'starting' || serverState === 'checking' ? 'Avvio in corso…' : 'Riprova' }}
+          <button v-if="serverState !== 'online'" type="button" :disabled="serverState === 'checking' || serverState === 'starting'" @click="ensureKokoro">
+            {{ serverState === 'starting' || serverState === 'checking' ? 'Avvio in corso…' : 'Riprova avvio' }}
           </button>
         </div>
       </header>
@@ -381,11 +569,29 @@ onBeforeUnmount(() => {
             <button type="button" :class="{ 'is-active': previewVoiceId === 'if_sara' }" @click="previewVoiceId = 'if_sara'">Sara</button>
             <button type="button" :class="{ 'is-active': previewVoiceId === 'im_nicola' }" @click="previewVoiceId = 'im_nicola'">Nicola</button>
           </div>
-          <button type="button" class="primary save-btn" :disabled="!scriptDirty" @click="saveScript">
-            {{ scriptDirty ? 'Salva copione' : 'Copione salvato' }}
+          <button type="button" class="primary save-btn" :disabled="mainSaveDisabled" @click="saveMainChanges">
+            {{ mainSaveLabel }}
           </button>
         </div>
         <p v-if="scriptStatus" class="status-message">{{ scriptStatus }}</p>
+        <p v-if="batchStatus" class="status-message status-message--compact">{{ batchStatus }}</p>
+
+        <section v-if="previewAudioStatus || previewAudioError || previewAudioUrl" class="audio-preview">
+          <div>
+            <span class="voice-kicker">Ultima anteprima</span>
+            <strong>{{ previewAudioLabel || 'Nessuna anteprima' }}</strong>
+            <p v-if="previewAudioStatus">{{ previewAudioStatus }}</p>
+            <p v-if="previewAudioError" class="audio-preview__error">{{ previewAudioError }}</p>
+          </div>
+          <audio
+            v-if="previewAudioUrl"
+            ref="previewAudioEl"
+            controls
+            :src="previewAudioUrl"
+            @play="previewAudioStatus = 'Riproduzione in corso.'"
+            @ended="previewAudioStatus = 'Audio completato.'"
+          />
+        </section>
 
         <div v-if="!script" class="empty-state">Carico il copione...</div>
 
@@ -397,11 +603,11 @@ onBeforeUnmount(() => {
               <small>{{ row.step.durationMinutes }} min</small>
             </header>
             <template v-if="row.entry">
-              <textarea v-model="row.entry.text" rows="2" maxlength="280" @input="markDirty" />
+              <textarea v-model="row.entry.text" rows="2" maxlength="280" @input="markDirty(row.entry)" />
               <footer>
                 <label>
                   Velocità
-                  <input v-model.number="row.entry.speed" type="number" min="0.8" max="1.5" step="0.02" :placeholder="String(script.defaultSpeed)" @input="markDirty">
+                  <input v-model.number="row.entry.speed" type="number" min="0.8" max="1.5" step="0.02" :placeholder="String(script.defaultSpeed)" @input="markDirty(row.entry)">
                 </label>
                 <span class="row-status" :class="`row-status--${rowState(row.entry)}`">{{ rowTasks[rowKey(row.entry)]?.message || '' }}</span>
                 <button type="button" :disabled="serverState !== 'online' || isSpeaking" @click="playEntry(row.entry)">Ascolta</button>
@@ -421,11 +627,11 @@ onBeforeUnmount(() => {
               <header>
                 <strong>{{ entry.id }}</strong>
               </header>
-              <textarea v-model="entry.text" rows="2" maxlength="280" @input="markDirty" />
+              <textarea v-model="entry.text" rows="2" maxlength="280" @input="markDirty(entry)" />
               <footer>
                 <label>
                   Velocità
-                  <input v-model.number="entry.speed" type="number" min="0.8" max="1.5" step="0.02" @input="markDirty">
+                  <input v-model.number="entry.speed" type="number" min="0.8" max="1.5" step="0.02" @input="markDirty(entry)">
                 </label>
                 <span class="row-status" :class="`row-status--${rowState(entry)}`">{{ rowTasks[rowKey(entry)]?.message || '' }}</span>
                 <button type="button" :disabled="serverState !== 'online' || isSpeaking" @click="playEntry(entry)">Ascolta</button>
@@ -541,16 +747,16 @@ onBeforeUnmount(() => {
 
 .voice-hero {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 22px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  gap: 18px;
   align-items: stretch;
-  padding: 28px;
+  padding: 24px;
   border-radius: $radius-lg;
 
   h1 {
     margin: 8px 0 10px;
     color: #fff;
-    font-size: 42px;
+    font-size: 34px;
     line-height: 1;
     letter-spacing: 0;
   }
@@ -559,7 +765,7 @@ onBeforeUnmount(() => {
     max-width: 820px;
     margin: 0;
     color: rgba(255, 255, 255, 0.68);
-    line-height: 1.6;
+    line-height: 1.5;
   }
 
   code {
@@ -571,15 +777,15 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.52);
   font-size: 11px;
   font-weight: 900;
-  letter-spacing: 0.12em;
+  letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .server-card {
   display: grid;
   align-content: start;
-  gap: 8px;
-  padding: 18px;
+  gap: 10px;
+  padding: 16px;
   border-radius: $radius-md;
 
   span {
@@ -591,13 +797,15 @@ onBeforeUnmount(() => {
 
   strong {
     color: #fff;
-    font-size: 28px;
+    font-size: 24px;
   }
 
   p {
-    min-height: 44px;
+    min-height: 0;
+    margin: 0;
     color: rgba(255, 255, 255, 0.64);
     font-size: 13px;
+    line-height: 1.45;
   }
 
   button {
@@ -654,14 +862,14 @@ onBeforeUnmount(() => {
 .script-editor {
   display: grid;
   gap: 16px;
-  padding: 22px;
+  padding: 20px;
   border-radius: $radius-lg;
 }
 
 .editor-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 
@@ -669,6 +877,7 @@ onBeforeUnmount(() => {
 .mode-tabs,
 .voice-toggle {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 6px;
   align-items: center;
 
@@ -688,6 +897,43 @@ onBeforeUnmount(() => {
 
 .save-btn {
   margin-left: auto;
+  min-width: 188px;
+}
+
+.audio-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
+  gap: 14px;
+  align-items: center;
+  padding: 14px;
+  border: 1px solid rgba($accent-success, 0.22);
+  border-radius: $radius-md;
+  background: rgba($accent-success, 0.055);
+
+  strong {
+    display: block;
+    margin-top: 4px;
+    overflow: hidden;
+    color: #fff;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  p {
+    margin: 6px 0 0;
+    color: rgba(255, 255, 255, 0.68);
+    font-size: 13px;
+  }
+
+  audio {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+.audio-preview__error {
+  color: #fde68a !important;
 }
 
 .phrase-rows {
@@ -704,7 +950,7 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.78);
   font-size: 12px;
   font-weight: 900;
-  letter-spacing: 0.08em;
+  letter-spacing: 0;
   text-align: left;
   text-transform: uppercase;
 }
@@ -739,7 +985,7 @@ onBeforeUnmount(() => {
   footer {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px 14px;
+    gap: 8px;
     align-items: center;
 
     label {
@@ -786,6 +1032,7 @@ onBeforeUnmount(() => {
 
 .row-status {
   margin-left: auto;
+  min-width: 128px;
   overflow: hidden;
   color: rgba(255, 255, 255, 0.6);
   font-size: 12px;
@@ -861,7 +1108,7 @@ onBeforeUnmount(() => {
   display: grid;
   align-content: start;
   gap: 18px;
-  padding: 22px;
+  padding: 20px;
   border-radius: $radius-lg;
 }
 
@@ -989,12 +1236,21 @@ textarea {
 }
 
 button {
-  min-height: 34px;
+  display: inline-flex;
+  min-height: 36px;
+  padding: 0 13px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: $radius-sm;
   background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.84);
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
   font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  white-space: nowrap;
   cursor: pointer;
 
   &:disabled {
@@ -1007,6 +1263,13 @@ button {
   border-color: rgba($racing-orange, 0.72);
   background: linear-gradient(90deg, $racing-red, $racing-orange);
   color: #fff;
+
+  &:disabled {
+    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.54);
+    opacity: 1;
+  }
 }
 
 .secondary {
@@ -1016,6 +1279,15 @@ button {
 @media (max-width: 1040px) {
   .voice-hero {
     grid-template-columns: 1fr;
+  }
+
+  .audio-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .save-btn {
+    width: 100%;
+    margin-left: 0;
   }
 
   .spotter-controls {

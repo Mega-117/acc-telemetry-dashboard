@@ -38,6 +38,8 @@ export default defineConfig({
         'app/services/telemetry/theoreticalTimesCalculator.ts',
         'app/utils/firestoreSanitize.ts',
         'app/utils/sessionParser.ts',
+        'server/utils/kokoroRuntimeStatus.ts',
+        'server/utils/voiceScriptNormalize.ts',
         // ── Phase 3: composables ─────────────────────────────────────────
         'app/composables/useLiveStatePoller.ts',
         'app/composables/useSessionOrchestrator.ts',
