@@ -1,1 +1,0 @@
-import{aK as e,aM as a,h as n}from"./JgiyvXcd.js";function t(o){return new URL(globalThis.location.href)}const i=e(()=>{const o=typeof window<"u"?window.location.hostname:t().hostname;if(!a(o))return n("/panoramica")});export{i as default};
