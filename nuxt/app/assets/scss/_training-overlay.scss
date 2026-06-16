@@ -576,6 +576,14 @@
   white-space: nowrap;
 }
 
+.tyre-slip__state {
+  max-width: 74px;
+  padding: 2px 4px;
+  border-radius: 999px;
+  background: rgba(226, 238, 247, 0.08);
+  text-align: right;
+}
+
 .tyre-slip__bar {
   height: 5px;
   overflow: hidden;
@@ -607,6 +615,31 @@
 .tyre-slip--red {
   border-color: rgba(239, 68, 68, 0.4);
   background: rgba(239, 68, 68, 0.12);
+}
+
+.tyre-slip--state-lockup {
+  border-color: rgba(239, 68, 68, 0.48);
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.tyre-slip--state-lockup .tyre-slip__state {
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.24);
+}
+
+.tyre-slip--state-wheelspin .tyre-slip__state {
+  color: #fde68a;
+  background: rgba(250, 204, 21, 0.2);
+}
+
+.tyre-slip--state-sliding .tyre-slip__state {
+  color: #fed7aa;
+  background: rgba(251, 146, 60, 0.2);
+}
+
+.tyre-slip--state-limit .tyre-slip__state {
+  color: #fef08a;
+  background: rgba(250, 204, 21, 0.15);
 }
 
 .tyre-slip-hud--compact {

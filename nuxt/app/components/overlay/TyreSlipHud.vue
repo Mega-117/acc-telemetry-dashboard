@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import type { FastOverlayState, FastStateSlipBand, FastStateTyre } from '~/composables/useFastStatePoller'
+import type { FastOverlayState, FastStateSlipState, FastStateTyre } from '~/composables/useFastStatePoller'
 
 const props = defineProps<{
   fastState: FastOverlayState
   compact?: boolean
 }>()
 
-const bandLabels: Record<FastStateSlipBand, string> = {
-  white: 'ok',
-  green: 'grip',
-  yellow: 'limite',
-  orange: 'scivola',
-  red: 'troppo',
+const stateLabels: Record<FastStateSlipState, string> = {
+  ok: 'OK',
+  limit: 'LIMITE',
+  sliding: 'SCIVOLA',
+  wheelspin: 'PATTINA',
+  lockup: 'BLOCCAGGIO',
 }
 
 function tyreFillStyle(tyre: FastStateTyre) {
@@ -40,11 +40,11 @@ function formatSlip(tyre: FastStateTyre) {
         v-for="tyre in props.fastState.tyres"
         :key="tyre.id"
         class="tyre-slip"
-        :class="`tyre-slip--${tyre.slipBand}`"
+        :class="[`tyre-slip--${tyre.slipBand}`, `tyre-slip--state-${tyre.slipState}`]"
       >
         <div class="tyre-slip__topline">
           <strong>{{ tyre.id }}</strong>
-          <span>{{ bandLabels[tyre.slipBand] }}</span>
+          <span class="tyre-slip__state">{{ stateLabels[tyre.slipState] }}</span>
         </div>
         <div class="tyre-slip__bar" aria-hidden="true">
           <span :style="tyreFillStyle(tyre)" />

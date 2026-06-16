@@ -20,9 +20,9 @@ function makeState(overrides: Record<string, any> = {}) {
     brake: 0.1,
     tyres: [
       { id: 'FL', wheel_slip: 0.4, wheel_slip_scaled: 4, slip_band: 'white', pressure_psi: 27.1, core_temp_c: 78.2 },
-      { id: 'FR', wheel_slip: 1.2, wheel_slip_scaled: 12, slip_band: 'green', pressure_psi: 27.3, core_temp_c: 78.4 },
-      { id: 'RL', wheel_slip: 1.45, wheel_slip_scaled: 14.5, slip_band: 'yellow', pressure_psi: 27.8, core_temp_c: 79.1 },
-      { id: 'RR', wheel_slip: 1.8, wheel_slip_scaled: 18, slip_band: 'red', pressure_psi: 28.0, core_temp_c: 79.4 },
+      { id: 'FR', wheel_slip: 1.2, wheel_slip_scaled: 12, slip_band: 'green', slip_state: 'ok', pressure_psi: 27.3, core_temp_c: 78.4 },
+      { id: 'RL', wheel_slip: 1.45, wheel_slip_scaled: 14.5, slip_band: 'yellow', slip_state: 'limit', slip_ratio: 0.02, pressure_psi: 27.8, core_temp_c: 79.1 },
+      { id: 'RR', wheel_slip: 1.8, wheel_slip_scaled: 18, slip_band: 'red', slip_state: 'lockup', slip_ratio: -0.08, pressure_psi: 28.0, core_temp_c: 79.4 },
     ],
     ...overrides,
   }
@@ -51,6 +51,8 @@ describe('useFastStatePoller', () => {
     expect(fastState.value.gas).toBe(0.7)
     expect(fastState.value.tyres.map(t => t.id)).toEqual(['FL', 'FR', 'RL', 'RR'])
     expect(fastState.value.tyres.map(t => t.slipBand)).toEqual(['white', 'green', 'yellow', 'red'])
+    expect(fastState.value.tyres.map(t => t.slipState)).toEqual(['ok', 'ok', 'limit', 'lockup'])
+    expect(fastState.value.tyres[2]?.slipRatio).toBe(0.02)
     expect(fastState.value.tyres[2]?.wheelSlipScaled).toBe(14.5)
   })
 

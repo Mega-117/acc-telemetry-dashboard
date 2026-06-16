@@ -92,6 +92,7 @@ const spotterEnabled = ref(false)
 // globali (PIP-96), Ctrl+N nel launcher avvia sempre l'allenamento.
 const launcherToolIndex = ref(0)
 const overlayRoot = ref<HTMLElement | null>(null)
+const isPointerOnOverlaySurface = ref(false)
 const showDevControls = import.meta.dev
 const isSaving = ref(false)
 
@@ -202,6 +203,7 @@ const launcherSpotterStatus = computed(() => {
 })
 const sessionOverlayOpacity = computed(() => {
   if (!autoDimDuringRun.value || phase.value !== 'running') return 1
+  if (isPointerOnOverlaySurface.value) return 1
   const totalMs = stepBudgetMs(activeStep.value)
   if (!totalMs) return 1
   const elapsedMs = Math.max(0, totalMs - remainingMs.value)
@@ -394,6 +396,7 @@ function updateMousePassthrough(event: MouseEvent) {
   if (!api?.trainingOverlaySetMousePassthrough) return
   const target = event.target as Element | null
   const onSurface = !!(target && typeof target.closest === 'function' && target.closest(OVERLAY_SURFACE_SELECTOR))
+  isPointerOnOverlaySurface.value = onSurface
   if (onSurface === lastPointerOnSurface) return
   lastPointerOnSurface = onSurface
   void api.trainingOverlaySetMousePassthrough(!onSurface)

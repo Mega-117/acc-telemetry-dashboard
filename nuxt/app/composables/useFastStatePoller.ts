@@ -1,12 +1,15 @@
 import { computed, ref } from 'vue'
 
 export type FastStateSlipBand = 'white' | 'green' | 'yellow' | 'orange' | 'red'
+export type FastStateSlipState = 'ok' | 'limit' | 'sliding' | 'wheelspin' | 'lockup'
 
 export interface FastStateTyre {
   id: 'FL' | 'FR' | 'RL' | 'RR'
   wheelSlip: number | null
   wheelSlipScaled: number | null
   slipBand: FastStateSlipBand
+  slipState: FastStateSlipState
+  slipRatio: number | null
   pressurePsi: number | null
   coreTempC: number | null
 }
@@ -31,6 +34,7 @@ const FAST_STATE_FRESH_MS = 2_000
 const FAST_STATE_POLL_MS = 250
 const MAX_CONSECUTIVE_ERRORS = 3
 const VALID_BANDS = new Set<FastStateSlipBand>(['white', 'green', 'yellow', 'orange', 'red'])
+const VALID_SLIP_STATES = new Set<FastStateSlipState>(['ok', 'limit', 'sliding', 'wheelspin', 'lockup'])
 
 function toNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
@@ -40,6 +44,12 @@ function normalizeBand(value: unknown): FastStateSlipBand {
   return typeof value === 'string' && VALID_BANDS.has(value as FastStateSlipBand)
     ? value as FastStateSlipBand
     : 'white'
+}
+
+function normalizeSlipState(value: unknown): FastStateSlipState {
+  return typeof value === 'string' && VALID_SLIP_STATES.has(value as FastStateSlipState)
+    ? value as FastStateSlipState
+    : 'ok'
 }
 
 function isFastStateFresh(ts: unknown): boolean {
@@ -55,6 +65,8 @@ function normalizeTyre(raw: any): FastStateTyre | null {
     wheelSlip: toNumber(raw.wheel_slip),
     wheelSlipScaled: toNumber(raw.wheel_slip_scaled),
     slipBand: normalizeBand(raw.slip_band),
+    slipState: normalizeSlipState(raw.slip_state),
+    slipRatio: toNumber(raw.slip_ratio),
     pressurePsi: toNumber(raw.pressure_psi),
     coreTempC: toNumber(raw.core_temp_c),
   }
