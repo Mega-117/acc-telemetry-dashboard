@@ -584,25 +584,14 @@ onBeforeUnmount(() => {
                     </button>
                   </div>
                   <TyreSlipHud :fast-state="fastState" compact />
-                  <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K nascondi</p>
+                  <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K chiude</p>
                 </div>
               </template>
 
               <template v-else-if="phase === 'completed'">
-                <div class="overlay-topline">
+                <div v-if="!soundEnabled" class="overlay-topline">
                   <div class="overlay-topline-actions">
-                    <Transition name="chip-pop">
-                      <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
-                    </Transition>
-                    <button
-                      type="button"
-                      class="overlay-close-btn"
-                      aria-label="Nascondi overlay (Ctrl+K per riaprire)"
-                      title="Nascondi (Ctrl+K)"
-                      @click="closeOverlay"
-                    >
-                      X
-                    </button>
+                    <em class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
                   </div>
                 </div>
                 <div class="completed-banner" role="status">
@@ -619,20 +608,9 @@ onBeforeUnmount(() => {
 
               <template v-else-if="phase === 'select'">
                 <div class="overlay-main">
-                  <div class="overlay-topline">
+                  <div v-if="!soundEnabled" class="overlay-topline">
                     <div class="overlay-topline-actions">
-                      <Transition name="chip-pop">
-                        <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
-                      </Transition>
-                      <button
-                        type="button"
-                        class="overlay-close-btn"
-                        aria-label="Nascondi overlay (Ctrl+K per riaprire)"
-                        title="Nascondi (Ctrl+K)"
-                        @click="closeOverlay"
-                      >
-                        X
-                      </button>
+                      <em class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
                     </div>
                   </div>
                   <h1>{{ selectedTraining.title }}</h1>
@@ -680,7 +658,7 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
                 <p class="launcher-hint" aria-hidden="true">
-                  Ctrl+K nasconde &middot; Ctrl+N avvia
+                  Ctrl+K chiude &middot; Ctrl+N avvia
                 </p>
               </template>
 
