@@ -646,6 +646,19 @@
   padding: 7px;
 }
 
+.tyre-slip-hud--idle {
+  opacity: 0.72;
+
+  .tyre-slip {
+    border-color: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .tyre-slip__bar span {
+    background: rgba(226, 238, 247, 0.28);
+  }
+}
+
 .sector-delta-hud {
   display: grid;
   gap: 5px;
@@ -659,6 +672,15 @@
 .sector-delta-hud--last-lap {
   border-color: rgba(var(--overlay-accent-rgb), 0.28);
   background: rgba(var(--overlay-accent-rgb), 0.09);
+}
+
+.sector-delta-hud--idle {
+  opacity: 0.72;
+
+  .sector-delta {
+    border-color: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+  }
 }
 
 .sector-delta-hud__header {

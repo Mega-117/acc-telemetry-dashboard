@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   resolveTrainingOverlayModeId,
   resolveTrainingOverlayTrainingId,
@@ -33,7 +33,6 @@ import {
 } from '~/composables/useOverlaySettings'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
-import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
 import { usePublicPath } from '~/composables/usePublicPath'
@@ -226,6 +225,15 @@ const overlaySizePreset = computed<OverlaySizePreset>(() => {
   if (phase.value === 'completed') return 'completed'
   return 'session'
 })
+const liveHudResizeKey = computed(() => [
+  fastState.value.isLive ? 'fast-live' : 'fast-idle',
+  fastState.value.tyres.length,
+  liveLap.value.sectorHud?.mode ?? 'sector-idle',
+  liveLap.value.sectorHud?.referenceLap ?? 'ref-none',
+  liveLap.value.sectorHud?.sectors
+    .map((sector) => `${sector.index}:${sector.state}:${sector.currentMs ?? 'x'}:${sector.deltaMs ?? 'x'}:${sector.color}`)
+    .join('|') ?? 'no-sectors',
+].join(';'))
 const overlayThemeStyle = computed(() => ({
   '--overlay-accent': selectedTraining.value.accent,
   '--overlay-accent-end': selectedTraining.value.accentEnd,
@@ -326,6 +334,8 @@ async function confirmPlacement() {
   originCorner.value = resolveOverlayOriginCorner(settings?.originCorner || originCorner.value)
   selectedQualifyingVoiceId.value = resolveQualifyingVoiceId(settings?.qualifyingVoiceId || selectedQualifyingVoiceId.value)
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000; phase.value = 'launcher'
+  await nextTick()
+  scheduleOverlaySizeSync()
 }
 
 async function closeOverlay() { await getOverlayApi()?.trainingOverlayClose?.() }
@@ -394,6 +404,14 @@ let lastPointerOnSurface: boolean | null = null
 function updateMousePassthrough(event: MouseEvent) {
   const api = getOverlayApi()
   if (!api?.trainingOverlaySetMousePassthrough) return
+  if (phase.value === 'placement') {
+    isPointerOnOverlaySurface.value = true
+    if (lastPointerOnSurface !== true) {
+      lastPointerOnSurface = true
+      void api.trainingOverlaySetMousePassthrough(false)
+    }
+    return
+  }
   const target = event.target as Element | null
   const onSurface = !!(target && typeof target.closest === 'function' && target.closest(OVERLAY_SURFACE_SELECTOR))
   isPointerOnOverlaySurface.value = onSurface
@@ -460,8 +478,25 @@ onMounted(async () => {
 
 watch(
   [phase, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
-    selectedQualifyingVoiceId, spotterEnabled, isTrainingPickerOpen, isSettingsOpen],
+    selectedQualifyingVoiceId, spotterEnabled, isTrainingPickerOpen, isSettingsOpen, liveHudResizeKey],
   () => scheduleOverlaySizeSync(),
+  { flush: 'post' }
+)
+
+watch(
+  phase,
+  (nextPhase) => {
+    const api = getOverlayApi()
+    if (!api?.trainingOverlaySetMousePassthrough) return
+    if (nextPhase === 'placement') {
+      isPointerOnOverlaySurface.value = true
+      lastPointerOnSurface = true
+      void api.trainingOverlaySetMousePassthrough(false)
+      scheduleOverlaySizeSync()
+      return
+    }
+    lastPointerOnSurface = null
+  },
   { flush: 'post' }
 )
 
@@ -583,7 +618,6 @@ onBeforeUnmount(() => {
                       {{ spotterToggleLabel }}
                     </button>
                   </div>
-                  <TyreSlipHud :fast-state="fastState" compact />
                   <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K chiude</p>
                 </div>
               </template>

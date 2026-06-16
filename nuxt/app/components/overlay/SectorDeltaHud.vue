@@ -6,8 +6,18 @@ const props = defineProps<{
   sectorHud: SectorHudState | null
 }>()
 
-const visibleSectors = computed(() => props.sectorHud?.sectors ?? [])
-const isVisible = computed(() => visibleSectors.value.length === 3)
+const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
+  index,
+  state: 'pending',
+  currentMs: null,
+  referenceMs: null,
+  bestMs: null,
+  deltaMs: null,
+  color: 'grey',
+}))
+
+const hasSectorData = computed(() => (props.sectorHud?.sectors?.length ?? 0) === 3)
+const visibleSectors = computed(() => hasSectorData.value ? props.sectorHud!.sectors : idleSectors)
 const modeLabel = computed(() => props.sectorHud?.mode === 'last_lap' ? 'Ultimo giro' : 'Settori')
 
 function formatTime(ms: number | null): string {
@@ -24,6 +34,7 @@ function formatDelta(ms: number | null): string {
 
 function ariaLabel(sector: SectorHudEntry): string {
   const base = `Settore ${sector.index}`
+  if (!hasSectorData.value) return `${base} in attesa dati`
   if (sector.state === 'pending') return `${base} non ancora iniziato`
   if (sector.state === 'running') return `${base} in corso`
   return `${base} ${formatTime(sector.currentMs)} secondi, delta ${formatDelta(sector.deltaMs)}`
@@ -32,9 +43,8 @@ function ariaLabel(sector: SectorHudEntry): string {
 
 <template>
   <section
-    v-if="isVisible"
     class="sector-delta-hud"
-    :class="{ 'sector-delta-hud--last-lap': sectorHud?.mode === 'last_lap' }"
+    :class="{ 'sector-delta-hud--last-lap': sectorHud?.mode === 'last_lap', 'sector-delta-hud--idle': !hasSectorData }"
     aria-label="Delta settori"
   >
     <div class="sector-delta-hud__header">

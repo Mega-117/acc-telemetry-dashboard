@@ -9,7 +9,8 @@ const OVERLAY_SURFACE_PADDING = 10
 // La card persistente riempie la finestra: si misura il contenuto interno e si
 // aggiunge il "telaio" (padding card 14x2 + bordo 1x2) + padding work area 10x2.
 const OVERLAY_CARD_CHROME = 30
-const OVERLAY_SURFACE_SELECTOR = '.overlay-content, .placement-work-area'
+const OVERLAY_CONTENT_SELECTOR = '.overlay-card .overlay-content'
+const PLACEMENT_SURFACE_SELECTOR = '.placement-work-area'
 // Resize a due fasi (PIP-94): deve coprire la transizione CSS della card
 // (460ms in _training-overlay.scss) prima che la finestra scatti alla
 // dimensione finale. Sotto il fallback main (900ms).
@@ -49,18 +50,24 @@ export function useOverlaySize(
 
   // Geometria dinamica: la finestra Electron si stringe attorno alla superficie
   // misurata (comportamento "da browser"); il placement resta a work area piena.
-  function measureOverlaySize(preset: OverlaySizePreset): OverlaySize {
-    if (preset === 'placement') return OVERLAY_WORK_AREA_SIZE
-    const surface = overlayRoot.value?.querySelector(OVERLAY_SURFACE_SELECTOR) as HTMLElement | null
-    if (!surface) return OVERLAY_WORK_AREA_SIZE
+  function measureOverlaySize(preset: OverlaySizePreset): OverlaySize | null {
+    if (preset === 'placement') {
+      const placementSurface = overlayRoot.value?.querySelector(PLACEMENT_SURFACE_SELECTOR) as HTMLElement | null
+      if (!placementSurface) return null
+      return OVERLAY_WORK_AREA_SIZE
+    }
+
+    const surface = overlayRoot.value?.querySelector(OVERLAY_CONTENT_SELECTOR) as HTMLElement | null
+    if (!surface) return null
     const rect = surface.getBoundingClientRect()
-    if (!rect.width || !rect.height) return OVERLAY_WORK_AREA_SIZE
+    if (!rect.width || !rect.height) return null
     // scrollHeight = altezza desiderata dal contenuto anche quando max-height la
     // clampa alla finestra corrente (altrimenti la misura insegue se stessa e la
     // finestra non cresce mai).
     const desiredHeight = Math.max(rect.height, surface.scrollHeight)
+    const desiredWidth = Math.max(rect.width, surface.scrollWidth)
     return {
-      width: Math.min(Math.ceil(rect.width) + OVERLAY_CARD_CHROME + OVERLAY_SURFACE_PADDING * 2, OVERLAY_WORK_AREA_SIZE.width),
+      width: Math.min(Math.ceil(desiredWidth) + OVERLAY_CARD_CHROME + OVERLAY_SURFACE_PADDING * 2, OVERLAY_WORK_AREA_SIZE.width),
       height: Math.ceil(desiredHeight) + OVERLAY_CARD_CHROME + OVERLAY_SURFACE_PADDING * 2,
     }
   }
@@ -76,6 +83,7 @@ export function useOverlaySize(
   async function applyOverlaySize(preset: OverlaySizePreset = getCurrentPreset()) {
     await nextTick()
     const size = measureOverlaySize(preset)
+    if (!size) return
     const req = { preset, width: size.width, height: size.height }
     if (shouldSkip(req)) return
     // La card riceve la dimensione target (finestra meno padding work area) e
