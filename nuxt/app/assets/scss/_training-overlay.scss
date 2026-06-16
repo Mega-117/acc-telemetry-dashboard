@@ -288,10 +288,9 @@
   }
 }
 
-/* Il contenuto della sessione non deve mai dipingere sopra la riga azioni:
-   durante il morphing la card e' temporaneamente piu' piccola del contenuto
-   e la riga 1fr lo lascerebbe debordare sui bottoni (PIP-97). */
-.overlay-content--session .overlay-main,
+/* Il contenuto expired non deve mai dipingere sopra la riga azioni durante il
+   morphing. La sessione resta auto-height per includere HUD live aggiuntivi
+   come settori e gomme senza tagliarli (PIP-140). */
 .overlay-content--expired .overlay-main {
   overflow: hidden;
 }
@@ -303,7 +302,7 @@
   /* min-content e non 0: il contenuto (avviso scadenza + countdown) deve
      poter allargare la riga, cosi' la misura -> finestra cresce con lui.
      Con 0 il countdown debordava sotto i bottoni azione (PIP-97). */
-  grid-template-rows: minmax(min-content, 1fr) auto;
+  grid-template-rows: auto auto;
 }
 
 .overlay-content--completed {
@@ -496,6 +495,240 @@
 .launcher-tools__actions {
   display: grid;
   gap: 8px;
+}
+
+.tyre-slip-hud {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(2, 6, 12, 0.28);
+}
+
+.tyre-slip-hud__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+
+  span,
+  strong {
+    color: rgba(246, 255, 249, 0.72);
+    font-size: 9px;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  strong {
+    color: rgba(248, 252, 255, 0.9);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+}
+
+.tyre-slip-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tyre-slip {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.tyre-slip__topline,
+.tyre-slip__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tyre-slip__topline strong {
+  color: #fff;
+  font-size: 10px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.tyre-slip__topline span,
+.tyre-slip__meta span {
+  overflow: hidden;
+  color: rgba(226, 238, 247, 0.65);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tyre-slip__bar {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.11);
+}
+
+.tyre-slip__bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: rgba(226, 238, 247, 0.72);
+  transition:
+    width 90ms linear,
+    background-color 120ms ease;
+}
+
+.tyre-slip--green .tyre-slip__bar span { background: #22c55e; }
+.tyre-slip--yellow .tyre-slip__bar span { background: #facc15; }
+.tyre-slip--orange .tyre-slip__bar span { background: #fb923c; }
+.tyre-slip--red .tyre-slip__bar span { background: #ef4444; }
+
+.tyre-slip--yellow,
+.tyre-slip--orange,
+.tyre-slip--red {
+  border-color: rgba(250, 204, 21, 0.24);
+}
+
+.tyre-slip--red {
+  border-color: rgba(239, 68, 68, 0.4);
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.tyre-slip-hud--compact {
+  padding: 7px;
+}
+
+.sector-delta-hud {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(2, 6, 12, 0.28);
+}
+
+.sector-delta-hud--last-lap {
+  border-color: rgba(var(--overlay-accent-rgb), 0.28);
+  background: rgba(var(--overlay-accent-rgb), 0.09);
+}
+
+.sector-delta-hud__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+
+  span,
+  em {
+    overflow: hidden;
+    color: rgba(246, 255, 249, 0.72);
+    font-size: 8px;
+    font-style: normal;
+    font-weight: 950;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  em {
+    color: rgba(248, 252, 255, 0.62);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+}
+
+.sector-delta-hud__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.sector-delta {
+  display: grid;
+  grid-template-rows: 10px 15px 10px;
+  gap: 2px;
+  min-width: 0;
+  min-height: 43px;
+  padding: 5px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.sector-delta__label,
+.sector-delta small {
+  overflow: hidden;
+  color: rgba(226, 238, 247, 0.62);
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sector-delta strong {
+  overflow: hidden;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 950;
+  letter-spacing: 0;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sector-delta small {
+  align-self: end;
+  color: rgba(248, 252, 255, 0.72);
+}
+
+.sector-delta--purple {
+  border-color: rgba(217, 70, 239, 0.55);
+  background: rgba(126, 34, 206, 0.24);
+}
+
+.sector-delta--green {
+  border-color: rgba(34, 197, 94, 0.42);
+  background: rgba(34, 197, 94, 0.14);
+}
+
+.sector-delta--yellow {
+  border-color: rgba(250, 204, 21, 0.36);
+  background: rgba(250, 204, 21, 0.11);
+}
+
+.sector-delta--red {
+  border-color: rgba(239, 68, 68, 0.42);
+  background: rgba(239, 68, 68, 0.13);
+}
+
+.sector-delta--pending {
+  opacity: 0.66;
+}
+
+.sector-delta--running {
+  border-color: rgba(248, 252, 255, 0.18);
 }
 
 .launcher-tool-button {

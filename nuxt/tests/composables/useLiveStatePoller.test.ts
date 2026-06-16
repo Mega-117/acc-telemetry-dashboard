@@ -188,8 +188,22 @@ describe('useLiveStatePoller', () => {
       expect(isPollingActive.value).toBe(true)
     })
 
+    it('live_state event-driven resta visibile tra due settori reali (PIP-140)', async () => {
+      const sectorIntervalTs = new Date(Date.now() - 70_000).toISOString()
+      const getLiveState = vi.fn(async () => ({
+        ts: sectorIntervalTs, current_lap: 2, laps_completed: 1, laps_valid: 1, lap_valid: true,
+      }))
+      const { liveLap, startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
+
+      startLiveStatePolling()
+      await flushPromises()
+
+      expect(liveLap.value.currentLap).toBe(2)
+      expect(liveLap.value.lapValid).toBe(true)
+    })
+
     it('live_state stantio su disco (ts vecchio) imposta EMPTY_LAP_STATE — niente lap fantasma (PIP-94)', async () => {
-      const staleTs = new Date(Date.now() - 60_000).toISOString()
+      const staleTs = new Date(Date.now() - 130_000).toISOString()
       const getLiveState = vi.fn(async () => ({
         ts: staleTs, current_lap: 2, laps_completed: 1, laps_valid: 1, lap_valid: false,
       }))
@@ -226,7 +240,7 @@ describe('useLiveStatePoller', () => {
       expect(liveLap.value.currentLap).toBe(4)
 
       // Il file resta su disco con lo stesso ts mentre il tempo avanza oltre la soglia.
-      await vi.advanceTimersByTimeAsync(12_000)
+      await vi.advanceTimersByTimeAsync(130_000)
       await flushPromises()
 
       expect(liveLap.value.currentLap).toBeNull()
@@ -257,6 +271,43 @@ describe('useLiveStatePoller', () => {
 
       expect(liveLap.value.track).toBeNull()
       expect(liveLap.value.car).toBeNull()
+    })
+
+    it('normalizza sector_hud per il confronto settori PIP-140', async () => {
+      const getLiveState = vi.fn(async () => ({
+        ts: freshTs(),
+        current_lap: 12,
+        laps_completed: 11,
+        laps_valid: 9,
+        lap_valid: true,
+        sector_hud: {
+          version: 1,
+          mode: 'last_lap',
+          lap: 11,
+          reference_lap: 10,
+          current_sector_index: 0,
+          current_lap_time_ms: null,
+          last_lap_time_ms: 98_627,
+          best_lap_time_ms: 97_332,
+          lap_valid: true,
+          sectors: [
+            { index: 1, state: 'complete', current_ms: 32_247, reference_ms: 32_410, best_ms: 32_247, delta_ms: -163, color: 'purple' },
+            { index: 2, state: 'complete', current_ms: 33_101, reference_ms: 32_950, best_ms: 32_900, delta_ms: 151, color: 'red' },
+            { index: 3, state: 'complete', current_ms: 33_279, reference_ms: 33_300, best_ms: 33_120, delta_ms: -21, color: 'yellow' },
+          ],
+        },
+      }))
+      const { liveLap, startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
+
+      startLiveStatePolling()
+      await flushPromises()
+
+      expect(liveLap.value.sectorHud?.mode).toBe('last_lap')
+      expect(liveLap.value.sectorHud?.referenceLap).toBe(10)
+      expect(liveLap.value.sectorHud?.sectors.map(s => s.index)).toEqual([1, 2, 3])
+      expect(liveLap.value.sectorHud?.sectors[0]?.currentMs).toBe(32_247)
+      expect(liveLap.value.sectorHud?.sectors[0]?.color).toBe('purple')
+      expect(liveLap.value.sectorHud?.sectors[1]?.deltaMs).toBe(151)
     })
 
     it('getLiveState() che ritorna valore non-oggetto imposta EMPTY_LAP_STATE', async () => {
@@ -311,7 +362,7 @@ describe('useLiveStatePoller', () => {
       expect(liveLap.value.lastLapTimeMs).toBe(109_320)
 
       // stale via push: torna vuoto (stesso gating del polling)
-      pushCallback!({ ts: new Date(Date.now() - 60_000).toISOString(), current_lap: 10 })
+      pushCallback!({ ts: new Date(Date.now() - 130_000).toISOString(), current_lap: 10 })
       expect(liveLap.value.currentLap).toBeNull()
 
       stopLiveStatePolling()

@@ -42,6 +42,7 @@ export default defineConfig({
         'server/utils/voiceScriptNormalize.ts',
         // ── Phase 3: composables ─────────────────────────────────────────
         'app/composables/useLiveStatePoller.ts',
+        'app/composables/useFastStatePoller.ts',
         'app/composables/useSessionOrchestrator.ts',
         // ── Phase 4: composables estratti da useTelemetryData ────────────
         'app/composables/useSessionLoader.ts',

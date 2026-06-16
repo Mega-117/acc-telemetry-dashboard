@@ -17,6 +17,7 @@ import {
   type QualifyingVoiceScenario
 } from '~/config/qualifyingVoiceNotifications'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
+import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useTrackingRecord } from '~/composables/useTrackingRecord'
 import { useStopHold } from '~/composables/useStopHold'
 import { useQualifyingVoice } from '~/composables/useQualifyingVoice'
@@ -32,6 +33,7 @@ import {
 } from '~/composables/useOverlaySettings'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
+import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
 import { usePublicPath } from '~/composables/usePublicPath'
@@ -106,6 +108,8 @@ function getOverlayApi(): any | null {
 // ─── Composables ─────────────────────────────────────────────────────────────
 const { liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap } =
   useLiveStatePoller(getOverlayApi)
+const { fastState, startFastStatePolling, stopFastStatePolling } =
+  useFastStatePoller(getOverlayApi)
 
 const { trackingStart, trackingComplete, trackingAbandon } = useTrackingRecord(
   getOverlayApi,
@@ -442,6 +446,7 @@ onMounted(async () => {
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000
   phase.value = settings?.hasConfiguredPosition || !api ? 'launcher' : 'placement'
   if (spotterEnabled.value) startSpotter()
+  startFastStatePolling()
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
   window.addEventListener('keydown', handleLocalShortcut, true)
   if (api?.trainingOverlaySetMousePassthrough) {
@@ -458,7 +463,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopSpotter(); spotterVoice.stopSpotterVoice(); cleanupSize()
+  clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopFastStatePolling(); stopSpotter(); spotterVoice.stopSpotterVoice(); cleanupSize()
   removeCommandListener?.()
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleLocalShortcut, true)
@@ -575,6 +580,7 @@ onBeforeUnmount(() => {
                       {{ spotterToggleLabel }}
                     </button>
                   </div>
+                  <TyreSlipHud :fast-state="fastState" compact />
                   <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K nascondi</p>
                 </div>
               </template>
@@ -684,6 +690,8 @@ onBeforeUnmount(() => {
                     :active-task="activeTask"
                     :formatted-time="formattedTime"
                     :live-lap="liveLap"
+                    :fast-state="fastState"
+                    :sector-hud="liveLap.sectorHud"
                     :phase="phase"
                     :progress-percent="progressPercent"
                     :hud-transition-key="hudTransitionKey"

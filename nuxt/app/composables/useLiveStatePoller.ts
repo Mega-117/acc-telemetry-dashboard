@@ -6,9 +6,37 @@ export interface LiveLapState {
   lapsValid: number | null
   lapValid: boolean | null
   lastLapTimeMs: number | null
+  sectorHud: SectorHudState | null
   // Contesto sessione dal logger: servono al Training Tracker (PIP-95).
   track: string | null
   car: string | null
+}
+
+export type SectorHudColor = 'purple' | 'green' | 'yellow' | 'red' | 'white' | 'grey'
+export type SectorHudMode = 'running' | 'last_lap'
+export type SectorHudEntryState = 'pending' | 'running' | 'complete'
+
+export interface SectorHudEntry {
+  index: 1 | 2 | 3
+  state: SectorHudEntryState
+  currentMs: number | null
+  referenceMs: number | null
+  bestMs: number | null
+  deltaMs: number | null
+  color: SectorHudColor
+}
+
+export interface SectorHudState {
+  version: number
+  mode: SectorHudMode
+  lap: number | null
+  referenceLap: number | null
+  currentSectorIndex: number | null
+  currentLapTimeMs: number | null
+  lastLapTimeMs: number | null
+  bestLapTimeMs: number | null
+  lapValid: boolean | null
+  sectors: SectorHudEntry[]
 }
 
 const EMPTY_LAP_STATE: LiveLapState = {
@@ -17,20 +45,74 @@ const EMPTY_LAP_STATE: LiveLapState = {
   lapsValid: null,
   lapValid: null,
   lastLapTimeMs: null,
+  sectorHud: null,
   track: null,
   car: null,
 }
 
 const MAX_CONSECUTIVE_ERRORS = 3
-// Gating freschezza (PIP-94): live_state.json resta su disco dopo la chiusura
-// del logger; senza un ts recente il lap counter mostrerebbe dati fantasma.
-// Il logger scrive "ts" piu' volte al secondo: 10s di tolleranza bastano.
-const LIVE_STATE_FRESH_MS = 10_000
+// Gating freschezza (PIP-94/PIP-140): live_state.json resta su disco dopo la
+// chiusura del logger; senza un ts recente il lap counter mostrerebbe dati
+// fantasma. In pista pero' live_state e' event-driven sui settori/giri: teniamo
+// il dato abbastanza a lungo da non far sparire il confronto tra due settori.
+const LIVE_STATE_FRESH_MS = 120_000
 
 function isLiveStateFresh(ts: unknown): boolean {
   if (typeof ts !== 'string') return false
   const parsed = Date.parse(ts)
   return Number.isFinite(parsed) && Date.now() - parsed <= LIVE_STATE_FRESH_MS
+}
+
+function toNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function normalizeSectorColor(value: unknown): SectorHudColor {
+  return ['purple', 'green', 'yellow', 'red', 'white', 'grey'].includes(String(value))
+    ? value as SectorHudColor
+    : 'grey'
+}
+
+function normalizeSectorState(value: unknown): SectorHudEntryState {
+  return ['pending', 'running', 'complete'].includes(String(value))
+    ? value as SectorHudEntryState
+    : 'pending'
+}
+
+function normalizeSectorHud(raw: any): SectorHudState | null {
+  if (!raw || typeof raw !== 'object') return null
+  if (!Array.isArray(raw.sectors)) return null
+
+  const sectors = raw.sectors
+    .map((sector: any) => {
+      const index = toNumber(sector?.index)
+      if (![1, 2, 3].includes(index ?? 0)) return null
+      return {
+        index: index as 1 | 2 | 3,
+        state: normalizeSectorState(sector.state),
+        currentMs: toNumber(sector.current_ms),
+        referenceMs: toNumber(sector.reference_ms),
+        bestMs: toNumber(sector.best_ms),
+        deltaMs: toNumber(sector.delta_ms),
+        color: normalizeSectorColor(sector.color),
+      } satisfies SectorHudEntry
+    })
+    .filter(Boolean) as SectorHudEntry[]
+
+  if (sectors.length === 0) return null
+
+  return {
+    version: toNumber(raw.version) ?? 1,
+    mode: raw.mode === 'last_lap' ? 'last_lap' : 'running',
+    lap: toNumber(raw.lap),
+    referenceLap: toNumber(raw.reference_lap),
+    currentSectorIndex: toNumber(raw.current_sector_index),
+    currentLapTimeMs: toNumber(raw.current_lap_time_ms),
+    lastLapTimeMs: toNumber(raw.last_lap_time_ms),
+    bestLapTimeMs: toNumber(raw.best_lap_time_ms),
+    lapValid: typeof raw.lap_valid === 'boolean' ? raw.lap_valid : null,
+    sectors,
+  }
 }
 
 /**
@@ -54,6 +136,7 @@ export function useLiveStatePoller(getApi: () => any | null) {
         lapsValid: typeof state.laps_valid === 'number' ? state.laps_valid : null,
         lapValid: typeof state.lap_valid === 'boolean' ? state.lap_valid : null,
         lastLapTimeMs: typeof state.last_lap_time_ms === 'number' ? state.last_lap_time_ms : null,
+        sectorHud: normalizeSectorHud(state.sector_hud),
         track: typeof state.track === 'string' && state.track ? state.track : null,
         car: typeof state.car === 'string' && state.car ? state.car : null,
       }
