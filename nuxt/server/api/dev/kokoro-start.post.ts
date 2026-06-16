@@ -1,4 +1,4 @@
-import { createWriteStream } from 'node:fs'
+import { closeSync, openSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { readKokoroRuntimeStatus } from '../../utils/kokoroRuntimeStatus'
@@ -25,20 +25,24 @@ export default defineEventHandler(async () => {
   const script = join(process.cwd(), 'scripts', 'kokoro_tts_server.py')
   const outLog = join(process.cwd(), 'kokoro_tts_out.log')
   const errLog = join(process.cwd(), 'kokoro_tts_err.log')
+  let stdoutFd: number | undefined
+  let stderrFd: number | undefined
   try {
-    const stdout = createWriteStream(outLog, { flags: 'a' })
-    const stderr = createWriteStream(errLog, { flags: 'a' })
+    stdoutFd = openSync(outLog, 'a')
+    stderrFd = openSync(errLog, 'a')
     const child = spawn('python', [script], {
       cwd: process.cwd(),
       detached: true,
-      stdio: ['ignore', stdout, stderr],
+      stdio: ['ignore', stdoutFd, stderrFd],
       windowsHide: true,
     })
     child.unref()
+    closeSync(stdoutFd)
+    closeSync(stderrFd)
+    stdoutFd = undefined
+    stderrFd = undefined
     child.on('error', () => {
       starting = false
-      stdout.end()
-      stderr.end()
     })
     // Dopo un tempo ragionevole permetti un nuovo tentativo se non e' mai
     // andato online (es. python mancante).
@@ -46,6 +50,8 @@ export default defineEventHandler(async () => {
     return { status: 'starting', logs: { stdout: outLog, stderr: errLog } }
   } catch (error: any) {
     starting = false
+    if (stdoutFd !== undefined) closeSync(stdoutFd)
+    if (stderrFd !== undefined) closeSync(stderrFd)
     throw createError({ statusCode: 500, statusMessage: `Avvio Kokoro fallito: ${error?.message || 'errore'}` })
   }
 })
