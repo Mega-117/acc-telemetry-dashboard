@@ -142,11 +142,12 @@ export function useSessionOrchestrator(
     }
   })
 
-  // ── Lap announcement watcher ───────────────────────────────────────────────
+  // ── Live lap announcement watcher ──────────────────────────────────────────
+  // PIP-160: lo spotter live deve poter dire il tempo giro anche fuori da un
+  // allenamento. Il gate resta canAnnounceLiveLap(), non la phase del training.
   watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
     if (newVal === null || oldVal === null) return
     if (newVal <= oldVal) return
-    if (phase.value !== 'running') return
     if (!canAnnounceLiveLap()) return
     announceLap(liveLap.value.currentLap ?? newVal, liveLap.value.lastLapTimeMs, liveLap.value.lapValid ?? true)
   })

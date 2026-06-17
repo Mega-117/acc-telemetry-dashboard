@@ -221,6 +221,25 @@ describe('useSessionOrchestrator - annunci live giro controllati dallo spotter (
 
     expect(announceLap).toHaveBeenCalledWith(2, 90_900, true)
   })
+
+  it('annuncia il tempo giro anche fuori allenamento quando lo spotter live e acceso (PIP-160)', async () => {
+    const { phase, liveLap, announceLap } = setup({ canAnnounceLiveLap: true })
+    phase.value = 'launcher'
+    liveLap.value = { ...liveLap.value, currentLap: 1, lapsCompleted: 0 }
+    await nextTick()
+
+    liveLap.value = {
+      ...liveLap.value,
+      currentLap: 2,
+      lapsCompleted: 1,
+      lastLapTimeMs: 91_200,
+      lapValid: true,
+    }
+    await nextTick()
+
+    expect(phase.value).toBe('launcher')
+    expect(announceLap).toHaveBeenCalledWith(2, 91_200, true)
+  })
 })
 
 describe('useSessionOrchestrator - voce allenamento separata dallo spotter live (PIP-159)', () => {
