@@ -726,7 +726,7 @@
 }
 
 .sector-delta-hud--idle {
-  opacity: 0.72;
+  opacity: 1;
 
   .sector-delta {
     border-color: rgba(255, 255, 255, 0.06);
@@ -784,7 +784,7 @@
 .sector-delta__label,
 .sector-delta small {
   overflow: hidden;
-  color: rgba(255, 255, 255, 0.92);
+  color: #fff;
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0;
@@ -852,16 +852,16 @@
 .sector-delta--grey small,
 .sector-delta--pending strong,
 .sector-delta--pending small {
-  color: rgba(255, 255, 255, 0.92);
+  color: #fff;
 }
 
 .sector-delta .sector-delta__value--placeholder,
 .sector-delta .sector-delta__delta--placeholder {
-  color: rgba(255, 255, 255, 0.92);
+  color: #fff;
 }
 
 .sector-delta--pending {
-  opacity: 0.66;
+  opacity: 1;
 }
 
 .sector-delta--running {
