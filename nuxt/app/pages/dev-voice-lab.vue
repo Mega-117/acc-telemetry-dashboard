@@ -46,6 +46,9 @@ const serverState = ref<'checking' | 'online' | 'starting' | 'offline' | 'error'
 const serverMessage = ref('Controllo server locale...')
 const previewVoiceId = ref('if_sara')
 let bootPollHandle: ReturnType<typeof setTimeout> | null = null
+let voiceLabMounted = false
+const appNotifications = useAppNotifications()
+const kokoroLifecycle = useKokoroVoiceLabLifecycle()
 
 // Cronometro avvio motore (PIP-138): dà la sensazione che "sta succedendo
 // qualcosa" mentre Kokoro carica, invece di un "Avvio..." muto.
@@ -183,6 +186,7 @@ async function loadLapTimeCatalog() {
     lapTimeRows.value = []
   } finally {
     lapTimeCatalogBusy.value = false
+    handleKokoroWorkSettled()
   }
 }
 
@@ -194,6 +198,7 @@ async function playLapTimeEntry(entry: LapTimeCatalogRow | LapTimeVoiceEntry) {
     return
   }
   isSpeaking.value = true
+  kokoroLifecycle.beginWork()
   lapTimeCatalogError.value = ''
   const label = `${lapTimeClockLabel(entry.tenths)} - ${lapTimeVoiceId.value === 'if_sara' ? 'Sara' : 'Nicola'}`
   try {
@@ -206,6 +211,8 @@ async function playLapTimeEntry(entry: LapTimeCatalogRow | LapTimeVoiceEntry) {
     lapTimeCatalogError.value = `Ascolto tempo non riuscito: ${error?.message || 'errore'}`
   } finally {
     isSpeaking.value = false
+    kokoroLifecycle.endWork()
+    handleKokoroWorkSettled()
   }
 }
 
@@ -217,6 +224,7 @@ async function generateLapTimeRange(fromTenths: number, toTenths: number, force 
     return
   }
   lapTimeCatalogBusy.value = true
+  kokoroLifecycle.beginWork()
   lapTimeCatalogError.value = ''
   lapTimeCatalogStatus.value = `Genero ${count} tracce tempo...`
   try {
@@ -238,6 +246,8 @@ async function generateLapTimeRange(fromTenths: number, toTenths: number, force 
     pushToast('Generazione tempi giro fallita', 'error')
   } finally {
     lapTimeCatalogBusy.value = false
+    kokoroLifecycle.endWork()
+    handleKokoroWorkSettled()
   }
 }
 
@@ -354,6 +364,7 @@ async function ensureKokoro() {
   if (initialProbe === 'ready') {
     serverState.value = 'online'
     serverMessage.value = `Sara e Nicola pronte su ${TTS_SERVER}: sintesi verificata.`
+    appNotifications.push('Motore vocale Kokoro online.', 'success')
     return
   }
   if (initialProbe === 'warming') {
@@ -383,6 +394,7 @@ async function ensureKokoro() {
       stopBootTimer()
       serverState.value = 'online'
       serverMessage.value = `Sara e Nicola pronte su ${TTS_SERVER}: sintesi verificata.`
+      appNotifications.push('Motore vocale Kokoro online.', 'success')
       return
     }
     if (probe === 'error') {
@@ -399,6 +411,12 @@ async function ensureKokoro() {
     bootPollHandle = setTimeout(poll, KOKORO_BOOT_POLL_MS)
   }
   bootPollHandle = setTimeout(poll, KOKORO_BOOT_POLL_MS)
+}
+
+function handleKokoroWorkSettled() {
+  if (!voiceLabMounted) {
+    kokoroLifecycle.scheduleShutdown('work-complete')
+  }
 }
 
 // ─── Copione: carica / salva ──────────────────────────────────────────────────
@@ -500,6 +518,7 @@ async function playAudioSource(sourceUrl: string, label: string, isObjectUrl = f
 async function playText(text: string, speed: number, label = 'Anteprima') {
   if (serverState.value !== 'online' || isSpeaking.value || !text.trim()) return
   isSpeaking.value = true
+  kokoroLifecycle.beginWork()
   statusMessage.value = ''
   previewAudioError.value = ''
   previewAudioLabel.value = label
@@ -512,6 +531,8 @@ async function playText(text: string, speed: number, label = 'Anteprima') {
     statusMessage.value = previewAudioError.value
   } finally {
     isSpeaking.value = false
+    kokoroLifecycle.endWork()
+    handleKokoroWorkSettled()
   }
 }
 
@@ -569,6 +590,7 @@ async function saveAndRegenerate(
   const shouldToast = options.toast ?? true
   const key = rowKey(entry)
   const label = 'stepId' in entry ? entry.stepId : entry.id
+  kokoroLifecycle.beginWork()
   try {
     if (scriptDirty.value) {
       rowTasks.value[key] = { state: 'saving', message: 'Salvo copione...' }
@@ -590,11 +612,15 @@ async function saveAndRegenerate(
     rowTasks.value[key] = { state: 'done', message: 'WAV aggiornato ✓' }
     clearPendingRegen(entry)
     if (shouldToast) pushToast(`${label}: WAV rigenerato ✓`, 'success')
+    handleKokoroWorkSettled()
+    kokoroLifecycle.endWork()
     return true
   } catch (error: any) {
     const msg = error?.data?.statusMessage || error?.message || 'sintesi fallita'
     rowTasks.value[key] = { state: 'error', message: `Errore: ${msg}` }
     if (shouldToast) pushToast(`${label}: rigenerazione fallita`, 'error')
+    handleKokoroWorkSettled()
+    kokoroLifecycle.endWork()
     return false
   }
 }
@@ -617,6 +643,7 @@ async function saveAndRegeneratePendingVisible() {
     else pushToast(`Rigenerate ${ok}/${entries.length}: controlla le righe in errore`, 'error')
   } finally {
     batchBusy.value = false
+    handleKokoroWorkSettled()
   }
 }
 
@@ -629,12 +656,16 @@ async function saveMainChanges() {
 }
 
 onMounted(async () => {
+  voiceLabMounted = true
+  kokoroLifecycle.enterVoiceLab()
   await nextTick()
   await Promise.all([ensureKokoro(), loadScript()])
   await loadLapTimeCatalog()
 })
 
 onBeforeUnmount(() => {
+  voiceLabMounted = false
+  kokoroLifecycle.leaveVoiceLab()
   stopVoice()
   revokePreviewAudio()
   stopBootTimer()

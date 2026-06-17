@@ -31,6 +31,8 @@ describe('kokoroRuntimeStatus', () => {
       state: 'online',
       message: 'ready',
       voices: [{ id: 'if_sara' }],
+      managed: false,
+      managedPid: null,
     })
   })
 
@@ -57,6 +59,8 @@ describe('kokoroRuntimeStatus', () => {
       state: 'online',
       message: 'Server Kokoro legacy online: sintesi verificata.',
       voices: [{ id: 'if_sara' }, { id: 'im_nicola' }],
+      managed: false,
+      managedPid: null,
     })
   })
 

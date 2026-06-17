@@ -1,3 +1,5 @@
+import { getManagedKokoroPid } from './kokoroProcessRegistry'
+
 const KOKORO_URL = 'http://localhost:5111'
 
 export type KokoroState = 'online' | 'starting' | 'offline' | 'error'
@@ -6,6 +8,8 @@ export interface KokoroRuntimeStatus {
   state: KokoroState
   message?: string
   voices?: unknown[]
+  managed?: boolean
+  managedPid?: number | null
 }
 
 async function loadKokoroVoices(): Promise<unknown[]> {
@@ -27,6 +31,8 @@ async function warmupLegacyServer(): Promise<KokoroRuntimeStatus> {
       state: 'online',
       message: 'Server Kokoro legacy online: sintesi verificata.',
       voices: await loadKokoroVoices(),
+      managed: Boolean(getManagedKokoroPid()),
+      managedPid: getManagedKokoroPid(),
     }
   } catch (error: any) {
     return { state: 'error', message: `Server Kokoro legacy non pronto: ${error?.message || 'errore sintesi'}` }
@@ -43,6 +49,8 @@ export async function readKokoroRuntimeStatus(): Promise<KokoroRuntimeStatus> {
         state: 'online',
         message,
         voices: Array.isArray(data?.voices) ? data.voices : await loadKokoroVoices(),
+        managed: Boolean(getManagedKokoroPid()),
+        managedPid: getManagedKokoroPid(),
       }
     }
     if (res.status === 503) return { state: 'starting', message }

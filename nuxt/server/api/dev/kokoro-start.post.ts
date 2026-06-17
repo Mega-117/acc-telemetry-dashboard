@@ -2,6 +2,7 @@ import { closeSync, openSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
 import { readKokoroRuntimeStatus } from '../../utils/kokoroRuntimeStatus'
+import { markManagedKokoroProcess } from '../../utils/kokoroProcessRegistry'
 
 // Autostart Kokoro (PIP-100): quando il voice lab trova il server offline,
 // lo avvia come processo figlio del dev server — niente terminale manuale.
@@ -14,7 +15,7 @@ export default defineEventHandler(async () => {
     throw createError({ statusCode: 404, statusMessage: 'Not found' })
   }
   const current = await readKokoroRuntimeStatus()
-  if (current.state === 'online') return { status: 'online' }
+  if (current.state === 'online') return { status: 'online', managed: current.managed ?? false }
   if (current.state === 'starting') return { status: 'starting', message: current.message }
   if (current.state === 'error') {
     throw createError({ statusCode: 500, statusMessage: `Kokoro avviato ma non pronto: ${current.message || 'errore warmup'}` })
@@ -37,6 +38,7 @@ export default defineEventHandler(async () => {
       windowsHide: true,
     })
     child.unref()
+    markManagedKokoroProcess(child)
     closeSync(stdoutFd)
     closeSync(stderrFd)
     stdoutFd = undefined
@@ -44,10 +46,13 @@ export default defineEventHandler(async () => {
     child.on('error', () => {
       starting = false
     })
+    child.on('exit', () => {
+      starting = false
+    })
     // Dopo un tempo ragionevole permetti un nuovo tentativo se non e' mai
     // andato online (es. python mancante).
     setTimeout(() => { starting = false }, 120_000)
-    return { status: 'starting', logs: { stdout: outLog, stderr: errLog } }
+    return { status: 'starting', managed: true, pid: child.pid, logs: { stdout: outLog, stderr: errLog } }
   } catch (error: any) {
     starting = false
     if (stdoutFd !== undefined) closeSync(stdoutFd)

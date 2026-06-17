@@ -10,6 +10,8 @@ describe('kokoro autostart endpoint', () => {
     expect(source).toContain("stdoutFd = openSync(outLog, 'a')")
     expect(source).toContain("stderrFd = openSync(errLog, 'a')")
     expect(source).toContain("stdio: ['ignore', stdoutFd, stderrFd]")
+    expect(source).toContain('markManagedKokoroProcess(child)')
+    expect(source).toContain("child.on('exit'")
     expect(source).not.toContain('createWriteStream')
     expect(source).not.toContain("stdio: ['ignore', stdout, stderr]")
   })

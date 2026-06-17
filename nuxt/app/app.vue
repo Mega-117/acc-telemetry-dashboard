@@ -35,11 +35,22 @@ const isTrainingOverlayIntent = computed(() => {
   return isTrainingOverlayRoute.value || browserOverlayIntent.value || getRouteQueryString(route.query.overlay) === 'training'
 })
 const standaloneDevRoutes = ['/dev-voice-lab']
+const kokoroVoiceLabLifecycle = useKokoroVoiceLabLifecycle()
 const isStandaloneDevRoute = computed(() => {
   return (
     standaloneDevRoutes.includes(normalizedRoutePath.value)
     || standaloneDevRoutes.includes(browserOverlayPath.value)
   ) && canUseDevTools()
+})
+
+watch(normalizedRoutePath, (path, previousPath) => {
+  if (path === '/dev-voice-lab') {
+    kokoroVoiceLabLifecycle.enterVoiceLab()
+    return
+  }
+  if (previousPath === '/dev-voice-lab') {
+    kokoroVoiceLabLifecycle.leaveVoiceLab()
+  }
 })
 
 useHead(() => {
@@ -57,6 +68,7 @@ useHead(() => {
 // === SPA REDIRECT HANDLING (GitHub Pages 404 fix) ===
 onMounted(() => {
   refreshBrowserOverlayLocation()
+  kokoroVoiceLabLifecycle.resumePendingLeaveIfNeeded()
   const queryRedirectPath = getRouteQueryString(route.query['spa-redirect-path'])
   if (getRouteQueryString(route.query.overlay) === 'training' && queryRedirectPath) {
     router.replace(queryRedirectPath)
@@ -304,6 +316,8 @@ provide('goToProfile', handleGoToProfile)
 
 <template>
   <div id="app" :class="{ 'app--training-overlay': isTrainingOverlayIntent }">
+    <UiAppNotifications v-if="!isTrainingOverlayIntent" />
+
     <template v-if="isTrainingOverlayIntent">
       <NuxtPage v-if="isTrainingOverlayRoute" />
       <div v-else class="overlay-boot" />
