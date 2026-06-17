@@ -8,7 +8,7 @@ function makeStep(id: string, durationMinutes: number) {
   return { id, title: id, durationMinutes, type: 'work' as const, hud: id }
 }
 
-function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boolean, stepMinutes?: number[], testBudgetMs?: number } = {}) {
+function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boolean, stepMinutes?: number[], testBudgetMs?: number, canAnnounceLiveLap?: boolean } = {}) {
   const phase = ref<Phase>('select')
   const activeStepIndex = ref(0)
   const remainingMs = ref(0)
@@ -26,7 +26,9 @@ function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boo
   const trackingComplete = vi.fn(asyncNoop)
   const playCountdownBeep = vi.fn()
   const enqueueVoice = vi.fn()
+  const announceLap = vi.fn()
   const isSettingsOpen = ref(false)
+  const liveLap = ref<any>({ currentLap: null, lapValid: null, lapsCompleted: null, lapsValid: null, lastLapTimeMs: null, sectorHud: null, track: null, car: null })
 
   const orchestrator = useSessionOrchestrator(
     phase as never,
@@ -39,15 +41,16 @@ function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boo
     computed(() => opts.canAdvance ?? true),
     ref(opts.autoAdvance ?? true),
     ref(opts.seconds ?? 10),
-    noop, noop, enqueueVoice as never, noop, noop,
+    noop, noop, enqueueVoice as never, noop, announceLap,
     asyncNoop, noop, noop, playCountdownBeep,
-    ref({ currentLap: null, lapValid: null, lapsCompleted: null, lapsValid: null }),
+    liveLap,
     noop, stopLiveStatePolling, noop,
     asyncNoop, trackingComplete as never, asyncNoop, asyncNoop,
     opts.testBudgetMs != null ? () => opts.testBudgetMs! : undefined,
+    () => opts.canAnnounceLiveLap ?? true,
   )
 
-  return { phase, activeStepIndex, remainingMs, orchestrator, stopLiveStatePolling, trackingComplete, playCountdownBeep, enqueueVoice, isSettingsOpen }
+  return { phase, activeStepIndex, remainingMs, liveLap, orchestrator, stopLiveStatePolling, trackingComplete, playCountdownBeep, enqueueVoice, announceLap, isSettingsOpen }
 }
 
 describe('useSessionOrchestrator - countdown auto-advance', () => {
@@ -182,6 +185,85 @@ describe('useSessionOrchestrator - completamento manuale e skip', () => {
   })
 })
 
+describe('useSessionOrchestrator - annunci live giro controllati dallo spotter (PIP-159)', () => {
+  it('non annuncia il tempo giro quando lo spotter live e spento', async () => {
+    const { orchestrator, liveLap, announceLap } = setup({ canAnnounceLiveLap: false })
+    orchestrator.startStep(0)
+    liveLap.value = { ...liveLap.value, currentLap: 1, lapsCompleted: 0 }
+    await nextTick()
+
+    liveLap.value = {
+      ...liveLap.value,
+      currentLap: 2,
+      lapsCompleted: 1,
+      lastLapTimeMs: 90_900,
+      lapValid: true,
+    }
+    await nextTick()
+
+    expect(announceLap).not.toHaveBeenCalled()
+  })
+
+  it('annuncia il tempo giro quando lo spotter live e acceso', async () => {
+    const { orchestrator, liveLap, announceLap } = setup({ canAnnounceLiveLap: true })
+    orchestrator.startStep(0)
+    liveLap.value = { ...liveLap.value, currentLap: 1, lapsCompleted: 0 }
+    await nextTick()
+
+    liveLap.value = {
+      ...liveLap.value,
+      currentLap: 2,
+      lapsCompleted: 1,
+      lastLapTimeMs: 90_900,
+      lapValid: true,
+    }
+    await nextTick()
+
+    expect(announceLap).toHaveBeenCalledWith(2, 90_900, true)
+  })
+})
+
+describe('useSessionOrchestrator - voce allenamento separata dallo spotter live (PIP-159)', () => {
+  it('avvia comunque la voce dello step quando gli annunci live giro sono spenti', () => {
+    const enqueueStepStart = vi.fn()
+    const phase = ref<Phase>('select')
+    const activeStepIndex = ref(0)
+    const remainingMs = ref(0)
+    const selectedMode = computed(() => ({
+      id: 'short30' as const,
+      title: '30 min',
+      duration: 30,
+      description: '',
+      steps: [makeStep('warmup', 1)],
+    }))
+
+    const orchestrator = useSessionOrchestrator(
+      phase as never,
+      activeStepIndex,
+      remainingMs,
+      ref('tracktitan_input') as never,
+      ref('short30') as never,
+      ref(false),
+      selectedMode as never,
+      computed(() => true),
+      ref(true),
+      ref(10),
+      () => {}, () => {}, vi.fn() as never, enqueueStepStart, vi.fn(),
+      async () => {}, () => {}, () => {}, () => {},
+      ref({ currentLap: null, lapValid: null, lapsCompleted: null, lapsValid: null, lastLapTimeMs: null, sectorHud: null, track: null, car: null }),
+      () => {}, () => {}, () => {},
+      async () => {}, async () => {}, async () => {}, async () => {},
+      undefined,
+      () => false,
+    )
+
+    orchestrator.startSession()
+
+    expect(phase.value).toBe('running')
+    expect(enqueueStepStart).toHaveBeenCalledWith('tracktitan_input-short30', 'warmup')
+  })
+})
+
 describe('useSessionOrchestrator - test-mode budget compresso (PIP-106)', () => {
   beforeEach(() => { vi.useFakeTimers() })
   afterEach(() => { vi.useRealTimers() })
@@ -234,7 +316,7 @@ describe('useSessionOrchestrator - ultimo step diretto a completed (PIP-113)', (
     vi.advanceTimersByTime(60_000)
     expect(phase.value).toBe('completed')
     expect(trackingComplete).toHaveBeenCalledWith(1)
-    expect(stopLiveStatePolling).toHaveBeenCalled()
+    expect(stopLiveStatePolling).not.toHaveBeenCalled()
   })
 
   it('uno step non-ultimo alla scadenza resta in expired (invariato)', () => {
@@ -320,7 +402,7 @@ describe('useSessionOrchestrator - registrazione completamento (PIP-95)', () => 
     orchestrator.goNextStep()
     expect(phase.value).toBe('completed')
     expect(trackingComplete).toHaveBeenCalledWith(3)
-    expect(stopLiveStatePolling).toHaveBeenCalled()
+    expect(stopLiveStatePolling).not.toHaveBeenCalled()
   })
 
   it('la scadenza dell ultimo step registra la sessione (diretto a completed, PIP-113)', () => {
@@ -329,7 +411,7 @@ describe('useSessionOrchestrator - registrazione completamento (PIP-95)', () => 
     vi.advanceTimersByTime(60_000) // scade -> diretto a completed, niente expired
     expect(phase.value).toBe('completed')
     expect(trackingComplete).toHaveBeenCalledWith(3)
-    expect(stopLiveStatePolling).toHaveBeenCalled()
+    expect(stopLiveStatePolling).not.toHaveBeenCalled()
   })
 
   it('completeCurrentStep sull ultimo step registra la sessione', () => {
@@ -346,7 +428,7 @@ describe('useSessionOrchestrator - registrazione completamento (PIP-95)', () => 
     orchestrator.pauseSession()
     orchestrator.skipPausedStep()
     expect(trackingComplete).toHaveBeenCalledWith(3)
-    expect(stopLiveStatePolling).toHaveBeenCalled()
+    expect(stopLiveStatePolling).not.toHaveBeenCalled()
   })
 
   it('lo stop manuale NON registra come completata (resta trackingAbandon)', () => {

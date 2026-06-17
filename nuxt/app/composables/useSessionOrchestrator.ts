@@ -23,7 +23,7 @@ type OverlayPhase = 'loading' | 'placement' | 'launcher' | 'select' | 'running' 
  * @param cancelStopHold - Cancels any in-progress stop-hold gesture.
  * @param enqueueVoice - Schedules a voice notification scenario.
  * @param enqueueStepStart - Plays the pre-generated WAV intro for the given training+mode+step combo.
- * @param announceLap - Announces a lap crossing via Web Speech API.
+ * @param announceLap - Announces a lap crossing through the live spotter voice channel.
  * @param primeStepAudio - Primes the AudioContext before a new step starts.
  * @param stopVoice - Stops any currently playing voice audio.
  * @param playStepDoneSound - Plays the step-completion sound effect.
@@ -67,6 +67,9 @@ export function useSessionOrchestrator(
   // test-mode dev lo comprime. Le decisioni (saltabile, avviso ultimo minuto)
   // restano sulla durata reale, non su questo budget.
   getStepBudgetMs: (step: { durationMinutes: number }) => number = (s) => s.durationMinutes * 60_000,
+  // PIP-159: gli annunci live del tempo giro sono controllati dallo spotter,
+  // mentre le voci step restano sempre legate all'allenamento.
+  canAnnounceLiveLap: () => boolean = () => true,
 ) {
   // ── Timer ──────────────────────────────────────────────────────────────────
   let deadlineAt = 0
@@ -144,6 +147,7 @@ export function useSessionOrchestrator(
     if (newVal === null || oldVal === null) return
     if (newVal <= oldVal) return
     if (phase.value !== 'running') return
+    if (!canAnnounceLiveLap()) return
     announceLap(liveLap.value.currentLap ?? newVal, liveLap.value.lastLapTimeMs, liveLap.value.lapValid ?? true)
   })
 

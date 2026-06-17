@@ -319,6 +319,7 @@ const {
   liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap,
   trackingStart, trackingComplete, trackingAbandon, savePreferences,
   stepBudgetMs,
+  () => spotterEnabled.value,
 )
 
 function enterPlacementMode() {
