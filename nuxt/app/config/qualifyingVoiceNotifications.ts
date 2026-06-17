@@ -39,15 +39,15 @@ export const qualifyingVoicePhrases: QualifyingVoicePhrase[] = [
     id: 'session_complete_1',
     scenario: 'sessionComplete',
     voice: 'if_sara',
-    speed: 1.12,
-    text: 'allenamento completato ottimo lavoro. ora fai un recap di quello che hai fatto e i punti su cui lavorare la prossima volta'
+    speed: 1.2,
+    text: "allenamento completato, ottimo lavoro. ora fatti un recap a mente: cosa e' andato bene e su cosa lavorare la prossima volta."
   },
   {
     id: 'last_minute_1',
     scenario: 'lastMinute',
     voice: 'if_sara',
-    speed: 1.15,
-    text: 'ultimo minuto.'
+    speed: 1.2,
+    text: 'ultimo minuto. chiudilo bene.'
   }
 ]
 
