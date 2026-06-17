@@ -271,6 +271,14 @@
   min-width: 0;
 }
 
+.overlay-content > * {
+  transition:
+    opacity 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 190ms cubic-bezier(0.3, 1.36, 0.56, 1),
+    filter 160ms ease-out;
+  will-change: opacity, transform, filter;
+}
+
 .overlay-content--launcher {
   width: 282px;
 }
@@ -312,10 +320,15 @@
 /* Cross-fade del contenuto dentro il contenitore persistente: parte appena dopo
    l'avvio del morphing della finestra (effetto "liquid"). */
 .content-swap-enter-active {
+  pointer-events: none;
   transition:
     opacity 220ms ease-out,
     transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
   transition-delay: 110ms;
+}
+
+.content-swap-enter-active > * {
+  transition-delay: 250ms;
 }
 
 .content-swap-leave-active {
@@ -328,6 +341,18 @@
 .content-swap-enter-from {
   opacity: 0;
   transform: translateY(4px) scale(0.99);
+}
+
+.content-swap-enter-from > * {
+  opacity: 0;
+  filter: saturate(1.12) brightness(1.04) blur(0.8px);
+  transform: scale(0.985);
+}
+
+.content-swap-enter-to > * {
+  opacity: 1;
+  filter: none;
+  transform: none;
 }
 
 .content-swap-leave-to {
@@ -1525,6 +1550,17 @@ button:focus-visible .accordion-chevron::before {
 
 @media (prefers-reduced-motion: reduce) {
   .accordion-panel {
+    transition-duration: 1ms;
+  }
+
+  .overlay-content > *,
+  .content-swap-enter-active > *,
+  .content-swap-enter-from > *,
+  .content-swap-enter-to > * {
+    opacity: 1;
+    filter: none;
+    transform: none;
+    transition-delay: 0ms;
     transition-duration: 1ms;
   }
 }

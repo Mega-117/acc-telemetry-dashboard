@@ -580,7 +580,13 @@ onBeforeUnmount(() => {
              di resize della finestra; dentro, il contenuto si avvicenda in cross-fade. -->
         <section v-else-if="phase !== 'loading'" key="card" class="overlay-card">
           <Transition name="content-swap" mode="out-in">
-            <div :key="contentKey" :class="['overlay-content', `overlay-content--${overlaySizePreset}`]">
+            <div
+              :key="contentKey"
+              :class="[
+                'overlay-content',
+                `overlay-content--${overlaySizePreset}`,
+              ]"
+            >
 
               <template v-if="phase === 'launcher'">
                 <div class="launcher-tools" aria-label="Strumenti live overlay">
