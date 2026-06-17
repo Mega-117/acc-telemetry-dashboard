@@ -33,7 +33,9 @@ import {
 } from '~/composables/useOverlaySettings'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
+import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
+import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useDevTestMode } from '~/composables/useDevTestMode'
@@ -467,6 +469,7 @@ onMounted(async () => {
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000
   phase.value = settings?.hasConfiguredPosition || !api ? 'launcher' : 'placement'
   if (spotterEnabled.value) startSpotter()
+  startLiveStatePolling()
   startFastStatePolling()
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
   window.addEventListener('keydown', handleLocalShortcut, true)
@@ -623,6 +626,10 @@ onBeforeUnmount(() => {
                     >
                       {{ spotterToggleLabel }}
                     </button>
+                  </div>
+                  <div class="launcher-live-widgets" aria-label="Dati live pilota">
+                    <TyreSlipHud :fast-state="fastState" compact />
+                    <SectorDeltaHud :sector-hud="liveLap.sectorHud" />
                   </div>
                   <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K chiude</p>
                 </div>

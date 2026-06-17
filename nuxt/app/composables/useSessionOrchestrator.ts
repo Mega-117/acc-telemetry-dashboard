@@ -9,7 +9,7 @@ type OverlayPhase = 'loading' | 'placement' | 'launcher' | 'select' | 'running' 
 /**
  * @description Owns the session timer and all core session-state transitions (start, pause, resume,
  * advance step, complete, stop). Keeps timer internals (deadlineAt, timerHandle) fully encapsulated
- * and coordinates voice cues, live-lap polling, and tracking record calls at the right lifecycle points.
+ * and coordinates voice cues and tracking record calls at the right lifecycle points.
  * @param phase - Ref for the current overlay phase ('loading' | 'placement' | 'running' | …).
  * @param activeStepIndex - Ref tracking which step of the training plan is currently running.
  * @param remainingMs - Ref tracking milliseconds remaining in the current step.
@@ -28,9 +28,9 @@ type OverlayPhase = 'loading' | 'placement' | 'launcher' | 'select' | 'running' 
  * @param stopVoice - Stops any currently playing voice audio.
  * @param playStepDoneSound - Plays the step-completion sound effect.
  * @param liveLap - Ref with current live lap state (watched for lap announcements).
- * @param startLiveStatePolling - Begins polling for live lap data from the IPC API.
- * @param stopLiveStatePolling - Halts live lap polling.
- * @param resetLiveLap - Clears live lap state back to defaults.
+ * @param startLiveStatePolling - Live-lap polling is owned by the overlay lifecycle; kept for API compatibility.
+ * @param stopLiveStatePolling - Live-lap polling is owned by the overlay lifecycle; kept for API compatibility.
+ * @param resetLiveLap - Live-lap state is owned by the overlay lifecycle; kept for API compatibility.
  * @param trackingStart - Records the start of a training session in the Electron API.
  * @param trackingComplete - Records completion of a training step in the Electron API.
  * @returns Object with startSession, pauseSession, resumeSession, advanceStep, completeSession, stopSession functions.
@@ -150,12 +150,12 @@ export function useSessionOrchestrator(
   // ── Session transitions ────────────────────────────────────────────────────
   // Percorso di chiusura unico (PIP-95): qualunque via porti a 'completed'
   // (Avanti, auto-advance, skip, completamento manuale) deve registrare la
-  // sessione nel Training Tracker e fermare il polling live.
+  // sessione nel Training Tracker. Il polling live resta acceso finche'
+  // l'overlay e' aperto, cosi' i widget launcher/select restano aggiornati.
   function completeSession(stepsCompleted: number) {
     phase.value = 'completed'; remainingMs.value = 0; clearTimer()
     enqueueVoice('sessionComplete', { replace: true })
     void trackingComplete(stepsCompleted)
-    stopLiveStatePolling(); resetLiveLap()
   }
 
   function startStep(index: number) {
@@ -176,7 +176,7 @@ export function useSessionOrchestrator(
     void savePreferences(); void primeStepAudio()
     // L'avvio e' annunciato dall'intro del primo step ("allenamento X. ..."),
     // niente voce di scenario separata (PIP-98).
-    startLiveStatePolling(); void trackingStart(); startStep(0)
+    void trackingStart(); startStep(0)
   }
 
   function openTrainingSelection() {
@@ -222,7 +222,7 @@ export function useSessionOrchestrator(
 
   function stopSession() {
     cancelStopHold(); closeShortcutStopConfirm(); clearTimer(); clearAutoAdvance(); stopVoice()
-    void trackingAbandon(activeStepIndex.value); stopLiveStatePolling(); resetLiveLap()
+    void trackingAbandon(activeStepIndex.value)
     isSettingsOpen.value = false; activeStepIndex.value = 0
     remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000; phase.value = 'select'
   }
