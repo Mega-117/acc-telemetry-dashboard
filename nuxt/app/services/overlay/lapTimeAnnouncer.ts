@@ -1,14 +1,145 @@
-// Annuncio tempi giro a spezzoni pre-registrati (PIP-101, stile Crew Chief):
-// la scomposizione tempo -> mattoncini e' pura e testabile; la riproduzione
-// concatena WAV Kokoro pregenerati (zero latenza, zero dipendenze runtime).
-//
-// Formato parlato approvato: "uno quarantanove e tre" (minuti, secondi,
-// "e", decimi — arrotondato ai decimi; i millesimi restano sul HUD).
+// Annuncio tempi giro (PIP-155):
+// - primario: frase intera pre-generata, zero TTS live mentre si guida;
+// - fallback: vecchi mattoncini PIP-101, se il WAV intero manca o il tempo
+//   e' fuori dal range pre-generato.
 
 export const TIME_BRICK_DIR = '/voice/qualifying'
+export const LAP_TIME_AUDIO_DIR = '/voice/qualifying'
+export const LAP_TIME_AUDIO_MIN_TENTHS = 800 // 1:20.0
+export const LAP_TIME_AUDIO_MAX_TENTHS = 1509 // 2:30.9
+export const LAP_TIME_AUDIO_DEFAULT_SPEED = 1.2
+export const LAP_TIME_AUDIO_VOICES = ['if_sara', 'im_nicola'] as const
+
+export type LapTimeAudioVoice = typeof LAP_TIME_AUDIO_VOICES[number]
+
+export interface LapTimeVoiceEntry {
+  key: string
+  tenths: number
+  text: string
+  path: string
+  filename: string
+  voice: LapTimeAudioVoice
+  speed: number
+}
+
+const UNITS = ['zero', 'uno', 'due', 'tre', 'quattro', 'cinque', 'sei', 'sette', 'otto', 'nove']
+const TEENS = [
+  'dieci',
+  'undici',
+  'dodici',
+  'tredici',
+  'quattordici',
+  'quindici',
+  'sedici',
+  'diciassette',
+  'diciotto',
+  'diciannove',
+]
+const TENS: Record<number, string> = {
+  2: 'venti',
+  3: 'trenta',
+  4: 'quaranta',
+  5: 'cinquanta',
+}
+
+export function isLapTimeAudioVoice(voice: string): voice is LapTimeAudioVoice {
+  return (LAP_TIME_AUDIO_VOICES as readonly string[]).includes(voice)
+}
 
 export function timeBrickPath(brickId: string, voice: string): string {
   return `${TIME_BRICK_DIR}/time-${brickId}-${voice}.wav`
+}
+
+export function lapTimeTenthsFromMs(timeMs: number | null): number | null {
+  if (!timeMs || timeMs <= 0 || !Number.isFinite(timeMs)) return null
+  return Math.floor(timeMs / 100)
+}
+
+export function isLapTimeVoiceTenthsInRange(tenths: number): boolean {
+  return Number.isInteger(tenths)
+    && tenths >= LAP_TIME_AUDIO_MIN_TENTHS
+    && tenths <= LAP_TIME_AUDIO_MAX_TENTHS
+}
+
+export function lapTimeVoiceKey(tenths: number): string {
+  return `lap-time-${tenths.toString().padStart(4, '0')}`
+}
+
+export function lapTimeVoiceFilename(tenths: number, voice: LapTimeAudioVoice): string {
+  return `${lapTimeVoiceKey(tenths)}-${voice}.wav`
+}
+
+export function lapTimeVoicePath(tenths: number, voice: LapTimeAudioVoice): string {
+  return `${LAP_TIME_AUDIO_DIR}/${lapTimeVoiceFilename(tenths, voice)}`
+}
+
+export function italianNumber0To59(n: number): string {
+  if (!Number.isInteger(n) || n < 0 || n > 59) throw new Error(`Numero fuori range: ${n}`)
+  if (n < 10) return UNITS[n]!
+  if (n < 20) return TEENS[n - 10]!
+  const tensWord = TENS[Math.floor(n / 10)]
+  if (!tensWord) throw new Error(`Decina non supportata: ${n}`)
+  const unit = n % 10
+  if (unit === 0) return tensWord
+  if (unit === 1 || unit === 8) return `${tensWord.slice(0, -1)}${UNITS[unit]}`
+  return `${tensWord}${UNITS[unit]}`
+}
+
+export function lapTimeVoiceText(tenths: number): string {
+  if (!isLapTimeVoiceTenthsInRange(tenths)) {
+    throw new Error(`Tempo fuori range audio: ${tenths}`)
+  }
+  const totalSeconds = Math.floor(tenths / 10)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  const tenth = tenths % 10
+  const minuteText = italianNumber0To59(minutes)
+  const secondText = seconds < 10
+    ? `zero ${italianNumber0To59(seconds)}`
+    : italianNumber0To59(seconds)
+  return `${minuteText}, ${secondText}, punto ${italianNumber0To59(tenth)}.`
+}
+
+export function buildLapTimeVoiceEntry(
+  tenths: number,
+  voice: LapTimeAudioVoice,
+  speed = LAP_TIME_AUDIO_DEFAULT_SPEED,
+): LapTimeVoiceEntry {
+  return {
+    key: lapTimeVoiceKey(tenths),
+    tenths,
+    text: lapTimeVoiceText(tenths),
+    path: lapTimeVoicePath(tenths, voice),
+    filename: lapTimeVoiceFilename(tenths, voice),
+    voice,
+    speed,
+  }
+}
+
+export function buildLapTimeVoiceCatalog(
+  voice: LapTimeAudioVoice,
+  fromTenths = LAP_TIME_AUDIO_MIN_TENTHS,
+  toTenths = LAP_TIME_AUDIO_MAX_TENTHS,
+): LapTimeVoiceEntry[] {
+  const start = Math.max(LAP_TIME_AUDIO_MIN_TENTHS, Math.floor(fromTenths))
+  const end = Math.min(LAP_TIME_AUDIO_MAX_TENTHS, Math.floor(toTenths))
+  if (start > end) return []
+  const entries: LapTimeVoiceEntry[] = []
+  for (let tenths = start; tenths <= end; tenths += 1) {
+    entries.push(buildLapTimeVoiceEntry(tenths, voice))
+  }
+  return entries
+}
+
+export function resolveLapTimeVoiceEntry(
+  timeMs: number | null,
+  valid: boolean,
+  voice: LapTimeAudioVoice,
+): LapTimeVoiceEntry | null {
+  if (!valid) return null
+  const tenths = lapTimeTenthsFromMs(timeMs)
+  if (tenths === null || !isLapTimeVoiceTenthsInRange(tenths)) return null
+  return buildLapTimeVoiceEntry(tenths, voice)
 }
 
 /**

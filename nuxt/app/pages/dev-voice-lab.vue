@@ -4,6 +4,14 @@ import { renderSpotterPhrase } from '~/services/spotter/spotterPhraseRenderer'
 import type { SpotterPhraseKey } from '~/config/spotterPhrases'
 import { trainingOverlayCatalog, trainingOverlayOrder, type TrainingOverlayId } from '~/config/trainingOverlayCatalog'
 import type { VoiceScript, VoiceScriptScenario, VoiceScriptStep } from '~/config/voiceScript'
+import {
+  LAP_TIME_AUDIO_DEFAULT_SPEED,
+  LAP_TIME_AUDIO_MAX_TENTHS,
+  LAP_TIME_AUDIO_MIN_TENTHS,
+  buildLapTimeVoiceEntry,
+  type LapTimeAudioVoice,
+  type LapTimeVoiceEntry,
+} from '~/services/overlay/lapTimeAnnouncer'
 
 definePageMeta({
   layout: 'dashboard',
@@ -19,6 +27,12 @@ interface ServerVoice {
   description?: string
   lang?: string
   language?: string
+}
+
+interface LapTimeCatalogRow extends LapTimeVoiceEntry {
+  exists: boolean
+  bytes: number
+  updatedAt: string | null
 }
 
 const TTS_SERVER = 'http://localhost:5111'
@@ -89,11 +103,22 @@ const statusMessage = ref('')
 const activeServerAudio = ref<HTMLAudioElement | null>(null)
 const previewAudioEl = ref<HTMLAudioElement | null>(null)
 const previewAudioUrl = ref('')
+const previewAudioObjectUrl = ref('')
 const previewAudioLabel = ref('')
 const previewAudioStatus = ref('')
 const previewAudioError = ref('')
-let voiceAudioContext: AudioContext | null = null
-let activeBufferSource: AudioBufferSourceNode | null = null
+
+// ─── Libreria tempi giro (PIP-155) ───────────────────────────────────────────
+const lapTimeVoiceId = ref<LapTimeAudioVoice>('if_sara')
+const lapTimeSpeed = ref(LAP_TIME_AUDIO_DEFAULT_SPEED)
+const lapTimeFromTenths = ref(900) // 1:30.0, punto comodo per QA rapido.
+const lapTimeToTenths = ref(909) // 1:30.9
+const lapTimeRows = ref<LapTimeCatalogRow[]>([])
+const lapTimeCatalogBusy = ref(false)
+const lapTimeCatalogStatus = ref('')
+const lapTimeCatalogError = ref('')
+const lapTimeGeneratingKey = ref('')
+const LAP_TIME_BATCH_LIMIT = 20
 
 // ─── Spotter demo ─────────────────────────────────────────────────────────────
 const spotterTarget = ref<'ahead' | 'behind'>('ahead')
@@ -118,6 +143,117 @@ const spotterPreviewText = computed(() =>
     random: () => 0,
   })
 )
+
+function clampLapTimeRange() {
+  lapTimeFromTenths.value = Math.max(LAP_TIME_AUDIO_MIN_TENTHS, Math.min(LAP_TIME_AUDIO_MAX_TENTHS, Math.floor(Number(lapTimeFromTenths.value) || LAP_TIME_AUDIO_MIN_TENTHS)))
+  lapTimeToTenths.value = Math.max(LAP_TIME_AUDIO_MIN_TENTHS, Math.min(LAP_TIME_AUDIO_MAX_TENTHS, Math.floor(Number(lapTimeToTenths.value) || LAP_TIME_AUDIO_MIN_TENTHS)))
+  if (lapTimeFromTenths.value > lapTimeToTenths.value) {
+    lapTimeToTenths.value = lapTimeFromTenths.value
+  }
+}
+
+function lapTimeClockLabel(tenths: number) {
+  const totalSeconds = Math.floor(tenths / 10)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = String(totalSeconds % 60).padStart(2, '0')
+  return `${minutes}:${seconds}.${tenths % 10}`
+}
+
+const lapTimeRangeCount = computed(() => Math.max(0, lapTimeToTenths.value - lapTimeFromTenths.value + 1))
+const lapTimeGeneratedCount = computed(() => lapTimeRows.value.filter(row => row.exists).length)
+const lapTimeBatchTooLarge = computed(() => lapTimeRangeCount.value > LAP_TIME_BATCH_LIMIT)
+const lapTimePreviewEntry = computed(() => buildLapTimeVoiceEntry(lapTimeFromTenths.value, lapTimeVoiceId.value, lapTimeSpeed.value))
+
+async function loadLapTimeCatalog() {
+  clampLapTimeRange()
+  lapTimeCatalogBusy.value = true
+  lapTimeCatalogError.value = ''
+  lapTimeCatalogStatus.value = 'Carico libreria tempi...'
+  try {
+    const query = new URLSearchParams({
+      voice: lapTimeVoiceId.value,
+      fromTenths: String(lapTimeFromTenths.value),
+      toTenths: String(lapTimeToTenths.value),
+    })
+    const data = await $fetch<{ entries: LapTimeCatalogRow[] }>(`/api/dev/lap-time-voice-catalog?${query.toString()}`)
+    lapTimeRows.value = data.entries
+    lapTimeCatalogStatus.value = `${lapTimeGeneratedCount.value}/${lapTimeRows.value.length} WAV pronti nella vista.`
+  } catch (error: any) {
+    lapTimeCatalogError.value = `Libreria tempi non caricata: ${error?.data?.statusMessage || error?.message || 'errore'}`
+    lapTimeRows.value = []
+  } finally {
+    lapTimeCatalogBusy.value = false
+  }
+}
+
+async function playLapTimeEntry(entry: LapTimeCatalogRow | LapTimeVoiceEntry) {
+  if (isSpeaking.value) return
+  const needsSynthesis = !('exists' in entry) || !entry.exists
+  if (needsSynthesis && serverState.value !== 'online') {
+    lapTimeCatalogError.value = 'Per ascoltare una traccia mancante serve Kokoro online.'
+    return
+  }
+  isSpeaking.value = true
+  lapTimeCatalogError.value = ''
+  const label = `${lapTimeClockLabel(entry.tenths)} - ${lapTimeVoiceId.value === 'if_sara' ? 'Sara' : 'Nicola'}`
+  try {
+    if ('exists' in entry && entry.exists) {
+      await playAudioSource(`${entry.path}?t=${Date.now()}`, label)
+    } else {
+      await playAudioSource(kokoroSpeakUrl(entry.text, lapTimeVoiceId.value, lapTimeSpeed.value), label)
+    }
+  } catch (error: any) {
+    lapTimeCatalogError.value = `Ascolto tempo non riuscito: ${error?.message || 'errore'}`
+  } finally {
+    isSpeaking.value = false
+  }
+}
+
+async function generateLapTimeRange(fromTenths: number, toTenths: number, force = true) {
+  if (serverState.value !== 'online' || lapTimeCatalogBusy.value) return
+  const count = toTenths - fromTenths + 1
+  if (count > LAP_TIME_BATCH_LIMIT) {
+    lapTimeCatalogError.value = `Batch troppo grande: massimo ${LAP_TIME_BATCH_LIMIT} tracce per richiesta.`
+    return
+  }
+  lapTimeCatalogBusy.value = true
+  lapTimeCatalogError.value = ''
+  lapTimeCatalogStatus.value = `Genero ${count} tracce tempo...`
+  try {
+    await $fetch('/api/dev/lap-time-voice-generate', {
+      method: 'POST',
+      body: {
+        voice: lapTimeVoiceId.value,
+        fromTenths,
+        toTenths,
+        speed: lapTimeSpeed.value,
+        force,
+      },
+    })
+    lapTimeCatalogStatus.value = `Generate ${count} tracce tempo.`
+    pushToast(`Tempi giro rigenerati (${count})`, 'success')
+    await loadLapTimeCatalog()
+  } catch (error: any) {
+    lapTimeCatalogError.value = `Generazione tempi fallita: ${error?.data?.statusMessage || error?.message || 'errore'}`
+    pushToast('Generazione tempi giro fallita', 'error')
+  } finally {
+    lapTimeCatalogBusy.value = false
+  }
+}
+
+async function generateLapTimeEntry(entry: LapTimeCatalogRow) {
+  lapTimeGeneratingKey.value = entry.key
+  try {
+    await generateLapTimeRange(entry.tenths, entry.tenths, true)
+  } finally {
+    lapTimeGeneratingKey.value = ''
+  }
+}
+
+async function generateVisibleLapTimes() {
+  clampLapTimeRange()
+  await generateLapTimeRange(lapTimeFromTenths.value, lapTimeToTenths.value, true)
+}
 
 // ─── Derivati copione ─────────────────────────────────────────────────────────
 const trainingTabs = computed(() => trainingOverlayOrder.map(id => ({
@@ -289,61 +425,42 @@ async function saveScript() {
 }
 
 // ─── Sintesi: ascolto e rigenerazione ────────────────────────────────────────
+function kokoroSpeakUrl(text: string, voice: string, speed: number) {
+  return `/api/dev/kokoro-speak?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&speed=${encodeURIComponent(String(speed))}`
+}
+
 async function synthesize(text: string, voice: string, speed: number): Promise<Blob> {
-  const url = `/api/dev/kokoro-speak?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&speed=${encodeURIComponent(String(speed))}`
+  const url = kokoroSpeakUrl(text, voice, speed)
   const response = await fetch(url, { signal: AbortSignal.timeout(60_000) })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   return new Blob([await response.arrayBuffer()], { type: 'audio/wav' })
 }
 
 function revokePreviewAudio() {
-  if (previewAudioUrl.value) {
-    URL.revokeObjectURL(previewAudioUrl.value)
-    previewAudioUrl.value = ''
+  if (previewAudioObjectUrl.value) {
+    URL.revokeObjectURL(previewAudioObjectUrl.value)
+    previewAudioObjectUrl.value = ''
   }
-}
-
-function stopBufferSource() {
-  if (!activeBufferSource) return
-  try {
-    activeBufferSource.onended = null
-    activeBufferSource.stop()
-    activeBufferSource.disconnect()
-  } catch {
-    // Source nodes cannot be stopped twice; ignore teardown races.
-  } finally {
-    activeBufferSource = null
-  }
-}
-
-async function getVoiceAudioContext(): Promise<AudioContext> {
-  const ctor = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-  if (!ctor) throw new Error('Web Audio non disponibile nel browser')
-  voiceAudioContext ||= new ctor()
-  if (voiceAudioContext.state === 'suspended') {
-    await Promise.race([
-      voiceAudioContext.resume(),
-      new Promise(resolve => setTimeout(resolve, 1200)),
-    ])
-  }
-  if (voiceAudioContext.state === 'suspended') {
-    throw new Error('audio bloccato dal browser')
-  }
-  return voiceAudioContext
+  previewAudioUrl.value = ''
 }
 
 async function playBlob(blob: Blob, label: string) {
-  stopBufferSource()
+  const audioUrl = URL.createObjectURL(blob)
+  await playAudioSource(audioUrl, label, true)
+}
+
+async function playAudioSource(sourceUrl: string, label: string, isObjectUrl = false) {
   if (activeServerAudio.value) {
     activeServerAudio.value.pause()
     activeServerAudio.value.currentTime = 0
   }
 
   revokePreviewAudio()
+  if (isObjectUrl) previewAudioObjectUrl.value = sourceUrl
   previewAudioError.value = ''
   previewAudioLabel.value = label
-  previewAudioStatus.value = 'Audio generato. Provo a riprodurlo...'
-  previewAudioUrl.value = URL.createObjectURL(blob)
+  previewAudioStatus.value = 'Audio pronto. Provo a riprodurlo...'
+  previewAudioUrl.value = sourceUrl
   await nextTick()
 
   const audio = previewAudioEl.value
@@ -354,27 +471,29 @@ async function playBlob(blob: Blob, label: string) {
   }
 
   activeServerAudio.value = audio
-  audio.src = previewAudioUrl.value
-  audio.currentTime = 0
-  audio.load()
 
   try {
-    const context = await getVoiceAudioContext()
-    const buffer = await blob.arrayBuffer()
-    const decoded = await context.decodeAudioData(buffer.slice(0))
-    const source = context.createBufferSource()
-    source.buffer = decoded
-    source.connect(context.destination)
-    activeBufferSource = source
-    source.onended = () => {
-      if (activeBufferSource === source) activeBufferSource = null
+    audio.currentTime = 0
+    audio.load()
+    audio.onended = () => {
       previewAudioStatus.value = 'Audio completato.'
     }
-    source.start(0)
-    previewAudioStatus.value = `Riproduzione in corso (${decoded.duration.toFixed(1)}s).`
+    audio.onerror = () => {
+      const code = audio.error?.code ? ` codice ${audio.error.code}` : ''
+      previewAudioStatus.value = 'Audio non riproducibile.'
+      previewAudioError.value = `Il player non riesce a leggere questa sorgente audio${code}.`
+    }
+    await audio.play()
+    const duration = Number.isFinite(audio.duration) ? ` (${audio.duration.toFixed(1)}s)` : ''
+    previewAudioStatus.value = `Riproduzione in corso${duration}.`
   } catch (error: any) {
+    if (error?.name === 'NotAllowedError') {
+      previewAudioStatus.value = 'Audio pronto nel player. Premi Play se il browser non lo avvia automaticamente.'
+      previewAudioError.value = ''
+      return
+    }
     previewAudioStatus.value = 'Audio pronto nel player.'
-    previewAudioError.value = `Riproduzione Web Audio non riuscita: ${error?.message || 'errore'}. Kokoro ha generato il WAV; prova il player manuale.`
+    previewAudioError.value = `Riproduzione automatica non riuscita: ${error?.message || 'errore'}. Kokoro ha generato il WAV; prova il player manuale.`
   }
 }
 
@@ -386,7 +505,7 @@ async function playText(text: string, speed: number, label = 'Anteprima') {
   previewAudioLabel.value = label
   previewAudioStatus.value = 'Genero anteprima...'
   try {
-    await playBlob(await synthesize(text.trim(), previewVoiceId.value, speed), label)
+    await playAudioSource(kokoroSpeakUrl(text.trim(), previewVoiceId.value, speed), label)
   } catch (error: any) {
     previewAudioStatus.value = ''
     previewAudioError.value = `Sintesi non riuscita: ${error?.message || 'errore'}`
@@ -414,8 +533,8 @@ async function playSpotterPreview() {
 }
 
 function stopVoice() {
-  stopBufferSource()
   if (activeServerAudio.value) {
+    activeServerAudio.value.onended = null
     activeServerAudio.value.pause()
     activeServerAudio.value.currentTime = 0
     activeServerAudio.value = null
@@ -512,6 +631,7 @@ async function saveMainChanges() {
 onMounted(async () => {
   await nextTick()
   await Promise.all([ensureKokoro(), loadScript()])
+  await loadLapTimeCatalog()
 })
 
 onBeforeUnmount(() => {
@@ -644,6 +764,94 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
+      <section class="lap-time-library" data-testid="lap-time-library">
+        <div class="panel-head">
+          <div>
+            <span class="voice-kicker">Tempi giro</span>
+            <h2>Libreria audio pre-generata</h2>
+            <p>
+              Range runtime: {{ lapTimeClockLabel(LAP_TIME_AUDIO_MIN_TENTHS) }} - {{ lapTimeClockLabel(LAP_TIME_AUDIO_MAX_TENTHS) }}.
+              Il testo e' read-only: per cambiarne la formula serve una modifica codice.
+            </p>
+          </div>
+          <div class="play-actions">
+            <button type="button" class="secondary" :disabled="lapTimeCatalogBusy" @click="loadLapTimeCatalog">Aggiorna</button>
+            <button
+              type="button"
+              class="primary"
+              :disabled="serverState !== 'online' || lapTimeCatalogBusy || lapTimeBatchTooLarge"
+              @click="generateVisibleLapTimes"
+            >
+              {{ lapTimeCatalogBusy ? 'Genero...' : 'Rigenera vista' }}
+            </button>
+          </div>
+        </div>
+
+        <div class="lap-time-controls">
+          <div class="voice-toggle">
+            <span>Voce</span>
+            <button type="button" :class="{ 'is-active': lapTimeVoiceId === 'if_sara' }" @click="lapTimeVoiceId = 'if_sara'; loadLapTimeCatalog()">Sara</button>
+            <button type="button" :class="{ 'is-active': lapTimeVoiceId === 'im_nicola' }" @click="lapTimeVoiceId = 'im_nicola'; loadLapTimeCatalog()">Nicola</button>
+          </div>
+          <label>
+            Da
+            <input v-model.number="lapTimeFromTenths" type="number" :min="LAP_TIME_AUDIO_MIN_TENTHS" :max="LAP_TIME_AUDIO_MAX_TENTHS" step="1" @change="loadLapTimeCatalog">
+            <strong>{{ lapTimeClockLabel(lapTimeFromTenths) }}</strong>
+          </label>
+          <label>
+            A
+            <input v-model.number="lapTimeToTenths" type="number" :min="LAP_TIME_AUDIO_MIN_TENTHS" :max="LAP_TIME_AUDIO_MAX_TENTHS" step="1" @change="loadLapTimeCatalog">
+            <strong>{{ lapTimeClockLabel(lapTimeToTenths) }}</strong>
+          </label>
+          <label>
+            Velocita
+            <input v-model.number="lapTimeSpeed" type="range" min="0.8" max="1.5" step="0.02">
+            <strong>{{ lapTimeSpeed.toFixed(2) }}x</strong>
+          </label>
+        </div>
+
+        <div class="lap-time-summary">
+          <span>{{ lapTimeGeneratedCount }}/{{ lapTimeRows.length }} WAV pronti</span>
+          <span>{{ lapTimeRangeCount }} tracce nella vista</span>
+          <span v-if="lapTimeBatchTooLarge" class="lap-time-warning">Batch UI massimo: {{ LAP_TIME_BATCH_LIMIT }}</span>
+          <span v-else>Batch UI pronto</span>
+        </div>
+        <p v-if="lapTimeCatalogStatus" class="status-message status-message--compact">{{ lapTimeCatalogStatus }}</p>
+        <p v-if="lapTimeCatalogError" class="status-message status-message--compact">{{ lapTimeCatalogError }}</p>
+
+        <article class="lap-time-preview">
+          <div>
+            <span class="voice-kicker">Esempio formula</span>
+            <strong>{{ lapTimeClockLabel(lapTimePreviewEntry.tenths) }}</strong>
+            <p>{{ lapTimePreviewEntry.text }}</p>
+          </div>
+          <button type="button" :disabled="serverState !== 'online' || isSpeaking" @click="playLapTimeEntry(lapTimePreviewEntry)">Ascolta esempio</button>
+        </article>
+
+        <div class="lap-time-rows">
+          <article v-for="entry in lapTimeRows" :key="`${entry.key}-${entry.voice}`" class="lap-time-row" :class="{ 'is-missing': !entry.exists }">
+            <div>
+              <strong>{{ lapTimeClockLabel(entry.tenths) }}</strong>
+              <p>{{ entry.text }}</p>
+            </div>
+            <span class="lap-time-state" :class="{ 'is-ready': entry.exists }">
+              {{ entry.exists ? 'WAV pronto' : 'Manca WAV' }}
+            </span>
+            <div class="play-actions">
+              <button type="button" :disabled="isSpeaking || (!entry.exists && serverState !== 'online')" @click="playLapTimeEntry(entry)">Ascolta</button>
+              <button
+                type="button"
+                class="primary"
+                :disabled="serverState !== 'online' || lapTimeCatalogBusy"
+                @click="generateLapTimeEntry(entry)"
+              >
+                {{ lapTimeGeneratingKey === entry.key ? '...' : 'Rigenera' }}
+              </button>
+            </div>
+          </article>
+        </div>
+      </section>
+
       <section class="playground">
         <div class="playground-head">
           <div>
@@ -739,6 +947,7 @@ onBeforeUnmount(() => {
 
 .voice-hero,
 .script-editor,
+.lap-time-library,
 .playground,
 .server-card {
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -862,6 +1071,13 @@ onBeforeUnmount(() => {
 .script-editor {
   display: grid;
   gap: 16px;
+  padding: 20px;
+  border-radius: $radius-lg;
+}
+
+.lap-time-library {
+  display: grid;
+  gap: 14px;
   padding: 20px;
   border-radius: $radius-lg;
 }
@@ -1188,6 +1404,117 @@ textarea {
   }
 }
 
+.lap-time-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, auto) repeat(2, minmax(140px, 180px)) minmax(240px, 1fr);
+  gap: 10px;
+  align-items: center;
+
+  label {
+    display: grid;
+    grid-template-columns: auto minmax(72px, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  input {
+    min-height: 34px;
+    min-width: 0;
+    padding: 0 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: $radius-sm;
+    background: #15151d;
+    color: #fff;
+  }
+
+  input[type='range'] {
+    padding: 0;
+  }
+
+  strong {
+    color: #fff;
+    font-size: 12px;
+    text-align: right;
+    white-space: nowrap;
+  }
+}
+
+.lap-time-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  span {
+    display: inline-flex;
+    min-height: 28px;
+    padding: 0 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: $radius-sm;
+    align-items: center;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 12px;
+    font-weight: 800;
+  }
+}
+
+.lap-time-warning {
+  border-color: rgba($accent-warning, 0.42) !important;
+  color: #fde68a !important;
+}
+
+.lap-time-preview,
+.lap-time-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: $radius-md;
+  background: rgba(0, 0, 0, 0.18);
+
+  strong {
+    color: #fff;
+  }
+
+  p {
+    margin: 4px 0 0;
+    color: rgba(255, 255, 255, 0.68);
+    line-height: 1.45;
+  }
+}
+
+.lap-time-rows {
+  display: grid;
+  gap: 8px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.lap-time-row {
+  grid-template-columns: minmax(0, 1fr) minmax(96px, auto) auto;
+
+  &.is-missing {
+    border-color: rgba($accent-warning, 0.24);
+  }
+}
+
+.lap-time-state {
+  color: #fde68a;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+
+  &.is-ready {
+    color: $accent-success;
+  }
+}
+
 .spotter-simulator {
   display: grid;
   gap: 14px;
@@ -1291,6 +1618,12 @@ button {
   }
 
   .spotter-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .lap-time-controls,
+  .lap-time-preview,
+  .lap-time-row {
     grid-template-columns: 1fr;
   }
 }

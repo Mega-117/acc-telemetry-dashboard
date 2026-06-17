@@ -7,7 +7,7 @@ import {
   type QualifyingVoiceScenario,
   type QualifyingVoiceId,
 } from '~/config/qualifyingVoiceNotifications'
-import { lapTimeToBricks, timeBrickPath } from '~/services/overlay/lapTimeAnnouncer'
+import { resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
 
 /**
  * @description Manages the qualifying voice notification system: queues audio phrases for
@@ -139,30 +139,36 @@ export function useQualifyingVoice(
     }))
   }
 
+  function playAudioPath(path: string, gen: number): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      if (!soundEnabled.value || gen !== generation) { resolve(false); return }
+      const el = new Audio(path)
+      audio = el
+      el.onended = () => { if (audio === el) audio = null; resolve(true) }
+      el.onerror = () => { if (audio === el) audio = null; resolve(false) }
+      void el.play().catch(() => { if (audio === el) audio = null; resolve(false) })
+    })
+  }
+
   /**
-   * Announces a lap crossing by concatenating pre-generated Kokoro bricks
-   * (PIP-101): "(giro non valido.) uno quarantanove e tre". Same voice as
-   * the step intros, zero runtime synthesis, works offline.
+   * Announces a lap crossing. PIP-155 prefers one full pre-generated WAV
+   * ("uno, quarantanove, punto tre") so Kokoro never has to pronounce short
+   * isolated bricks while driving. If the full WAV is missing/out of range,
+   * it stays silent instead of falling back to lower-quality audio bricks.
    */
   function announceLap(_lapNum: number, timeMs: number | null, valid: boolean) {
     if (!isEnabled()) return
-    const bricks = lapTimeToBricks(timeMs, valid)
-    if (!bricks.length) return
     const voice = selectedVoiceId()
+    const fullLapAudio = resolveLapTimeVoiceEntry(timeMs, valid, voice)
+    if (!fullLapAudio) return
     // Sostituisce eventuali annunci precedenti: sul traguardo conta l'ultimo.
     stopVoice()
     const gen = generation
-    for (const brick of bricks) {
-      const path = getPublicPath(timeBrickPath(brick, voice))
-      queue = queue.then(() => new Promise<void>((resolve) => {
-        if (!soundEnabled.value || gen !== generation) { resolve(); return }
-        const el = new Audio(path)
-        audio = el
-        el.onended = () => { if (audio === el) audio = null; resolve() }
-        el.onerror = () => { if (audio === el) audio = null; resolve() }
-        void el.play().catch(() => { if (audio === el) audio = null; resolve() })
-      }))
-    }
+    queue = queue.then(async () => {
+      if (fullLapAudio) {
+        await playAudioPath(getPublicPath(fullLapAudio.path), gen)
+      }
+    })
   }
 
   return { soundEnabled, primeStepAudio, playStepDoneSound, playCountdownBeep, enqueue, enqueueStepStart, announceLap, stopVoice, getStepAudioContext }
