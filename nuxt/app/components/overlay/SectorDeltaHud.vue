@@ -64,8 +64,14 @@ function ariaLabel(sector: SectorHudEntry): string {
         :aria-label="ariaLabel(sector)"
       >
         <span class="sector-delta__label">S{{ sector.index }}</span>
-        <strong>{{ sector.state === 'pending' ? '--' : formatTime(sector.currentMs) }}</strong>
-        <small>{{ sector.state === 'complete' ? formatDelta(sector.deltaMs) : sector.state === 'running' ? 'live' : 'wait' }}</small>
+        <strong
+          class="sector-delta__value"
+          :class="{ 'sector-delta__value--placeholder': sector.state === 'pending' || sector.currentMs === null }"
+        >{{ sector.state === 'pending' ? '--' : formatTime(sector.currentMs) }}</strong>
+        <small
+          class="sector-delta__delta"
+          :class="{ 'sector-delta__delta--placeholder': sector.state !== 'complete' || sector.deltaMs === null }"
+        >{{ sector.state === 'complete' ? formatDelta(sector.deltaMs) : sector.state === 'running' ? 'live' : 'wait' }}</small>
       </div>
     </div>
   </section>
