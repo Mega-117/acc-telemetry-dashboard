@@ -110,10 +110,20 @@ def configure_temp_dir() -> None:
 
 
 def find_cached_model_dir() -> Path | None:
-    if (LOCAL_MODEL_DIR / "config.json").exists() and (LOCAL_MODEL_DIR / "kokoro-v1_0.pth").exists():
+    if (
+        (LOCAL_MODEL_DIR / "config.json").exists()
+        and (LOCAL_MODEL_DIR / "kokoro-v1_0.pth").exists()
+    ):
         return LOCAL_MODEL_DIR
 
-    cache_root = Path.home() / ".cache" / "huggingface" / "hub" / "models--hexgrad--Kokoro-82M" / "snapshots"
+    cache_root = (
+        Path.home()
+        / ".cache"
+        / "huggingface"
+        / "hub"
+        / "models--hexgrad--Kokoro-82M"
+        / "snapshots"
+    )
     if not cache_root.exists():
         return None
 

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useAppNotifications } from '~/composables/useAppNotifications'
+import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
 import { renderSpotterPhrase } from '~/services/spotter/spotterPhraseRenderer'
 import type { SpotterPhraseKey } from '~/config/spotterPhrases'
 import { trainingOverlayCatalog, trainingOverlayOrder, type TrainingOverlayId } from '~/config/trainingOverlayCatalog'

@@ -34,11 +34,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
+      - name: FE pipeline
+        shell: pwsh
+        run: ./scripts/check_fe_pipeline.ps1
 
       - name: Unit tests
         run: npm run test

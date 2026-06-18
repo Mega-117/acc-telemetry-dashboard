@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useAppNotifications } from '~/composables/useAppNotifications'
+
 const { notifications, dismiss } = useAppNotifications()
 </script>
 

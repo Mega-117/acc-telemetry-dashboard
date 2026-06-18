@@ -52,11 +52,10 @@
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
-    "@esbuild/linux-x64": "^0.28.0",
-    "@rollup/rollup-linux-x64-gnu": "^4.60.4",
     "@typescript-eslint/eslint-plugin": "^8.32.0",
     "@typescript-eslint/parser": "^8.32.0",
     "@vitejs/plugin-vue": "^6.0.7",
+    "@vitest/coverage-v8": "^4.1.7",
     "@vue/test-utils": "^2.4.10",
     "eslint-plugin-vue": "^10.9.1",
     "sass": "^1.97.2",
@@ -65,5 +64,10 @@
     "vitest": "^4.1.7",
     "vue-eslint-parser": "^10.4.0",
     "vue-tsc": "^3.2.7"
+  },
+  "optionalDependencies": {
+    "@esbuild/linux-x64": "^0.28.0",
+    "@oxc-parser/binding-linux-x64-gnu": "0.128.0",
+    "@rollup/rollup-linux-x64-gnu": "^4.60.4"
   }
 }

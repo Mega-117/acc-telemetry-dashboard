@@ -1,3 +1,5 @@
+import { useAppNotifications } from './useAppNotifications'
+
 const VOICE_LAB_PATH = '/dev-voice-lab'
 const VOICE_LAB_MARKER = 'kokoro-voice-lab-active'
 const KOKORO_IDLE_SHUTDOWN_MS = 10_000

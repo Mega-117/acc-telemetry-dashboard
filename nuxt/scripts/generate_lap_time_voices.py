@@ -11,7 +11,8 @@ Naming consumato da app/services/overlay/lapTimeAnnouncer.ts:
     lap-time-1509-im_nicola.wav
 
 Usage:
-    python scripts/generate_lap_time_voices.py --voice if_sara --from-tenths 900 --to-tenths 902 --force
+    python scripts/generate_lap_time_voices.py --voice if_sara \
+      --from-tenths 900 --to-tenths 902 --force
     python scripts/generate_lap_time_voices.py --voice all --force
 """
 
@@ -69,23 +70,46 @@ def lap_time_filename(tenths: int, voice: str) -> str:
     return f"lap-time-{tenths:04d}-{voice}.wav"
 
 
-def main() -> None:
+def main() -> None:  # noqa: C901
     parser = argparse.ArgumentParser(description="Generate full lap-time WAV files via Kokoro TTS.")
-    parser.add_argument("--voice", default="all", choices=["all", *VOICES], help="Voice to generate.")
-    parser.add_argument("--from-tenths", type=int, default=MIN_TENTHS, help="First time in total tenths.")
-    parser.add_argument("--to-tenths", type=int, default=MAX_TENTHS, help="Last time in total tenths.")
+    parser.add_argument(
+        "--voice",
+        default="all",
+        choices=["all", *VOICES],
+        help="Voice to generate.",
+    )
+    parser.add_argument(
+        "--from-tenths",
+        type=int,
+        default=MIN_TENTHS,
+        help="First time in total tenths.",
+    )
+    parser.add_argument(
+        "--to-tenths",
+        type=int,
+        default=MAX_TENTHS,
+        help="Last time in total tenths.",
+    )
     parser.add_argument("--speed", type=float, default=DEFAULT_SPEED, help="Kokoro speed.")
     parser.add_argument("--force", action="store_true", help="Re-generate existing WAV files.")
     parser.add_argument("--dry-run", action="store_true", help="Print what would be generated.")
     args = parser.parse_args()
 
-    if args.from_tenths < MIN_TENTHS or args.to_tenths > MAX_TENTHS or args.from_tenths > args.to_tenths:
+    if (
+        args.from_tenths < MIN_TENTHS
+        or args.to_tenths > MAX_TENTHS
+        or args.from_tenths > args.to_tenths
+    ):
         parser.error(f"Range must stay inside {MIN_TENTHS}..{MAX_TENTHS}.")
     if args.speed < 0.5 or args.speed > 2:
         parser.error("Speed must stay inside 0.5..2.")
 
     voices = VOICES if args.voice == "all" else [args.voice]
-    items = [(tenths, voice) for voice in voices for tenths in range(args.from_tenths, args.to_tenths + 1)]
+    items = [
+        (tenths, voice)
+        for voice in voices
+        for tenths in range(args.from_tenths, args.to_tenths + 1)
+    ]
     print(f"Output : {OUTPUT_DIR}")
     print(f"Total  : {len(items)} files")
     print(f"Speed  : {args.speed}\n")
