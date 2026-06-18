@@ -69,6 +69,9 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   display: flex;
+  // Piccolo margine uniforme: il pannello "galleggia" e non tocca i bordi della
+  // finestra (evita che bordo/ombra/angolo destro siano schiacciati/tagliati).
+  padding: 6px;
   background: transparent;
   box-sizing: border-box;
 }
