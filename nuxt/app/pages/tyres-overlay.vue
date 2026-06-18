@@ -21,11 +21,11 @@ function getApi(): any | null {
 
 const route = useRoute()
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getApi)
-const { isElectron, isPlacing, format, loadSettings, start, stop } = useHudOverlay('tyres', getApi)
+const { isElectron, isPlacing, scale, loadSettings, start, stop } = useHudOverlay('tyres', getApi)
 
 onMounted(() => {
   startFastStatePolling()
-  start(route.query.format)
+  start(route.query.scale)
   loadSettings()
 })
 
@@ -38,7 +38,8 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="hud-overlay"
-    :class="[`hud-overlay--size-${format}`, { 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }]"
+    :style="{ '--hud-scale': scale }"
+    :class="{ 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }"
   >
     <div class="hud-overlay__panel">
       <TyreSlipHud :fast-state="fastState" />
@@ -53,7 +54,7 @@ onBeforeUnmount(() => {
 // Tutte le regole sono scopate sotto .hud-overlay per NON toccare l'overlay
 // allenamento (le classi .tyre-slip-hud ecc. sono globali e condivise).
 .hud-overlay {
-  --hud-scale: 1.06;
+  --hud-scale: 1;
   --overlay-accent-rgb: 34, 197, 94;
   position: fixed;
   inset: 0;
@@ -63,11 +64,6 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   color: #f4f8ff;
 }
-
-// 3 formati fissi: la finestra cambia dimensione lato Electron, qui si scala il testo.
-.hud-overlay--size-small { --hud-scale: 1; }
-.hud-overlay--size-medium { --hud-scale: 1.18; }
-.hud-overlay--size-large { --hud-scale: 1.36; }
 
 // Fuori da Electron (browser/Playwright): sfondo scuro per poter testare.
 .hud-overlay--web { background: #0d0d12; }
@@ -79,7 +75,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: calc(12px * var(--hud-scale));
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
   // Sfondo OPACO: ben visibile sopra il gioco.

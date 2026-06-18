@@ -20,11 +20,11 @@ function getApi(): any | null {
 
 const route = useRoute()
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getApi)
-const { isElectron, isPlacing, format, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
+const { isElectron, isPlacing, scale, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
 
 onMounted(() => {
   startLiveStatePolling()
-  start(route.query.format)
+  start(route.query.scale)
   loadSettings()
 })
 
@@ -37,7 +37,8 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="hud-overlay"
-    :class="[`hud-overlay--size-${format}`, { 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }]"
+    :style="{ '--hud-scale': scale }"
+    :class="{ 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }"
   >
     <div class="hud-overlay__panel">
       <SectorDeltaHud :sector-hud="liveLap.sectorHud" />
@@ -51,7 +52,7 @@ onBeforeUnmount(() => {
 
 // Regole scopate sotto .hud-overlay per non toccare l'overlay allenamento.
 .hud-overlay {
-  --hud-scale: 1.06;
+  --hud-scale: 1;
   --overlay-accent-rgb: 34, 197, 94;
   position: fixed;
   inset: 0;
@@ -62,10 +63,6 @@ onBeforeUnmount(() => {
   color: #f4f8ff;
 }
 
-.hud-overlay--size-small { --hud-scale: 1; }
-.hud-overlay--size-medium { --hud-scale: 1.18; }
-.hud-overlay--size-large { --hud-scale: 1.36; }
-
 .hud-overlay--web { background: #0d0d12; }
 
 .hud-overlay__panel {
@@ -75,7 +72,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: calc(12px * var(--hud-scale));
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
   background: rgba(10, 13, 20, 0.97);

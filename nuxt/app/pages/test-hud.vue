@@ -11,18 +11,14 @@ definePageMeta({
 })
 
 type HudOverlayId = 'tyres' | 'sectors'
-type HudFormat = 'small' | 'medium' | 'large'
 
 const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string }> = [
   { id: 'tyres', title: 'Gomme', description: 'Temperature, pressioni e scivolamento per pneumatico (fast_state).' },
   { id: 'sectors', title: 'Settori', description: 'Tempi e delta per settore con codifica colore (live_state).' },
 ]
 
-const FORMAT_OPTIONS: Array<{ value: HudFormat; label: string }> = [
-  { value: 'small', label: 'Piccolo' },
-  { value: 'medium', label: 'Medio' },
-  { value: 'large', label: 'Grande' },
-]
+const SCALE_MIN = 0.6
+const SCALE_MAX = 1.6
 
 function getApi(): any | null {
   if (typeof window === 'undefined') return null
@@ -32,7 +28,7 @@ function getApi(): any | null {
 const isElectron = ref(false)
 const apiReady = ref(false)
 const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false })
-const format = reactive<Record<HudOverlayId, HudFormat>>({ tyres: 'medium', sectors: 'medium' })
+const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1 })
 const positioning = ref(false)
 const trainingOpen = ref(false)
 
@@ -45,7 +41,7 @@ async function refreshState() {
     try {
       open[overlay.id] = await api.hudOverlayIsOpen(overlay.id)
       const settings = await api.hudOverlayGetSettings(overlay.id)
-      if (settings?.format) format[overlay.id] = settings.format
+      if (settings?.scale !== undefined) scale[overlay.id] = settings.scale
     } catch {
       open[overlay.id] = false
     }
@@ -64,15 +60,16 @@ async function toggleHud(id: HudOverlayId) {
   const api = getApi()
   if (!apiReady.value || !api) return
   if (open[id]) await api.hudOverlayClose(id)
-  else await api.hudOverlayOpen(id, { format: format[id] })
+  else await api.hudOverlayOpen(id, { scale: scale[id] })
   open[id] = await api.hudOverlayIsOpen(id)
 }
 
-async function setFormat(id: HudOverlayId, value: HudFormat) {
+function onScaleInput(id: HudOverlayId, raw: string) {
+  const value = Math.min(Math.max(parseFloat(raw), SCALE_MIN), SCALE_MAX)
+  scale[id] = value
   const api = getApi()
-  format[id] = value
   if (!apiReady.value || !api) return
-  await api.hudOverlaySetFormat(id, value)
+  api.hudOverlaySetScale(id, value)
 }
 
 async function togglePositioning() {
@@ -151,21 +148,21 @@ async function toggleTraining() {
             </button>
           </div>
 
-          <div class="hud-card__formats">
-            <span class="hud-card__formats-label">Formato</span>
-            <div class="seg">
-              <button
-                v-for="opt in FORMAT_OPTIONS"
-                :key="opt.value"
-                type="button"
-                class="seg__btn"
-                :class="{ 'is-active': format[overlay.id] === opt.value }"
-                :disabled="!apiReady"
-                @click="setFormat(overlay.id, opt.value)"
-              >
-                {{ opt.label }}
-              </button>
+          <div class="hud-card__size">
+            <div class="hud-card__size-row">
+              <span class="hud-card__formats-label">Dimensione</span>
+              <span class="hud-card__size-val">{{ Math.round(scale[overlay.id] * 100) }}%</span>
             </div>
+            <input
+              type="range"
+              class="hud-slider"
+              :min="SCALE_MIN"
+              :max="SCALE_MAX"
+              step="0.05"
+              :value="scale[overlay.id]"
+              :disabled="!apiReady"
+              @input="onScaleInput(overlay.id, ($event.target as HTMLInputElement).value)"
+            >
           </div>
         </article>
       </div>
@@ -251,29 +248,41 @@ async function toggleTraining() {
 
 .hud-card__actions { display: flex; gap: 10px; }
 
-.hud-card__formats { display: flex; flex-direction: column; gap: 6px; }
+.hud-card__size { display: flex; flex-direction: column; gap: 8px; }
+.hud-card__size-row { display: flex; align-items: center; justify-content: space-between; }
 .hud-card__formats-label { color: rgba(255, 255, 255, 0.5); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+.hud-card__size-val { color: #fb923c; font-size: 13px; font-weight: 900; }
 
-.seg {
-  display: inline-flex;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.seg__btn {
-  padding: 7px 14px;
-  border: none;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.7);
-  font-weight: 800;
+.hud-slider {
+  width: 100%;
+  height: 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  outline: none;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
 
-  & + & { border-left: 1px solid rgba(255, 255, 255, 0.12); }
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: linear-gradient(90deg, #f97316, #fb923c);
+    border: 2px solid #1a0d04;
+    cursor: pointer;
+  }
 
-  &:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); color: #fff; }
-  &.is-active { background: linear-gradient(90deg, #f97316, #fb923c); color: #1a0d04; }
+  &::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #1a0d04;
+    border-radius: 50%;
+    background: #fb923c;
+    cursor: pointer;
+  }
+
   &:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 
