@@ -62,15 +62,15 @@ onBeforeUnmount(() => {
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
 
+// Tutte le regole scopate sotto .hud-overlay per NON toccare l'overlay
+// allenamento (le classi .sector-delta-hud ecc. sono globali e condivise).
 .hud-overlay {
   --overlay-accent-rgb: 34, 197, 94;
   position: fixed;
   inset: 0;
   display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-  padding: 8px;
   background: transparent;
+  box-sizing: border-box;
 }
 
 .hud-overlay--web {
@@ -79,31 +79,65 @@ onBeforeUnmount(() => {
 
 .hud-overlay__panel {
   position: relative;
-  width: max-content;
+  box-sizing: border-box;
+  // Riempie l'intera finestra: lo sfondo opaco copre tutto, niente striscia
+  // trasparente quando la finestra e' clampata al minimo.
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  // Sfondo OPACO: l'overlay deve essere ben visibile sopra il gioco.
+  background: rgba(8, 10, 16, 0.97);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
 }
 
+// In riposizionamento: bordo evidenziato + spazio sotto per la barra conferma.
 .hud-overlay--placing .hud-overlay__panel {
   -webkit-app-region: drag;
   cursor: move;
+  padding-bottom: 48px;
+  border-color: rgba(34, 197, 94, 0.6);
 }
 
+// L'HUD figlio riempie il pannello opaco: niente doppio bordo/sfondo.
+.hud-overlay .sector-delta-hud {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+.hud-overlay .sector-delta-hud__grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+// Barra conferma posizione: sovrapposta in basso, sempre visibile.
 .hud-overlay__place {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 8px;
   -webkit-app-region: no-drag;
-  margin-top: 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 6px 8px;
+  padding: 7px 10px;
   border-radius: 8px;
-  background: rgba(2, 6, 12, 0.72);
+  background: rgba(0, 0, 0, 0.92);
+  border: 1px solid rgba(34, 197, 94, 0.45);
   color: #f7fbff;
   font-size: 12px;
+  font-weight: 700;
 }
 
 .hud-overlay__confirm {
   -webkit-app-region: no-drag;
-  padding: 4px 12px;
+  padding: 5px 14px;
   border: none;
   border-radius: 6px;
   background: linear-gradient(90deg, #22c55e, #14b8a6);
