@@ -61,6 +61,15 @@ function makeSession(overrides: Partial<{
     }
 }
 
+function makeTrackBestDoc(bests: any, overrides: Record<string, any> = {}) {
+    return {
+        version: 4,
+        bestRulesVersion: 5,
+        bests,
+        ...overrides
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -89,17 +98,15 @@ describe('OVERVIEW_GRIP_SCAN_ORDER', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('buildBestTimesFromTrackBestDoc', () => {
     it('estrae i best times da un documento valido', () => {
-        const doc = {
-            bests: {
-                GT3: {
-                    Optimum: {
-                        bestQualy: 83456,
-                        bestRace: 84000,
-                        bestAvgRace: 84500
-                    }
+        const doc = makeTrackBestDoc({
+            GT3: {
+                Optimum: {
+                    bestQualy: 83456,
+                    bestRace: 84000,
+                    bestAvgRace: 84500
                 }
             }
-        }
+        })
         const result = buildBestTimesFromTrackBestDoc(doc, 'GT3', 'Optimum')
         expect(result.bestQualy).toBe(83456)
         expect(result.bestRace).toBe(84000)
@@ -107,9 +114,7 @@ describe('buildBestTimesFromTrackBestDoc', () => {
     })
 
     it('usa GT3/Optimum come default', () => {
-        const doc = {
-            bests: { GT3: { Optimum: { bestQualy: 90000 } } }
-        }
+        const doc = makeTrackBestDoc({ GT3: { Optimum: { bestQualy: 90000 } } })
         const result = buildBestTimesFromTrackBestDoc(doc)
         expect(result.bestQualy).toBe(90000)
     })
@@ -122,21 +127,19 @@ describe('buildBestTimesFromTrackBestDoc', () => {
     })
 
     it('restituisce null se la categoria non esiste', () => {
-        const doc = { bests: {} }
+        const doc = makeTrackBestDoc({})
         const result = buildBestTimesFromTrackBestDoc(doc, 'GT4', 'Optimum')
         expect(result.bestQualy).toBeNull()
     })
 
     it('restituisce null se il grip non esiste', () => {
-        const doc = { bests: { GT3: {} } }
+        const doc = makeTrackBestDoc({ GT3: {} })
         const result = buildBestTimesFromTrackBestDoc(doc, 'GT3', 'Wet')
         expect(result.bestRace).toBeNull()
     })
 
     it('gestisce campi mancanti (parziale)', () => {
-        const doc = {
-            bests: { GT3: { Optimum: { bestQualy: 83456 } } }
-        }
+        const doc = makeTrackBestDoc({ GT3: { Optimum: { bestQualy: 83456 } } })
         const result = buildBestTimesFromTrackBestDoc(doc, 'GT3', 'Optimum')
         expect(result.bestQualy).toBe(83456)
         expect(result.bestRace).toBeNull()
@@ -144,12 +147,21 @@ describe('buildBestTimesFromTrackBestDoc', () => {
     })
 
     it('gestisce valori 0 come null (falsy)', () => {
-        const doc = {
-            bests: { GT3: { Optimum: { bestQualy: 0, bestRace: 84000 } } }
-        }
+        const doc = makeTrackBestDoc({ GT3: { Optimum: { bestQualy: 0, bestRace: 84000 } } })
         const result = buildBestTimesFromTrackBestDoc(doc, 'GT3', 'Optimum')
         expect(result.bestQualy).toBeNull()
         expect(result.bestRace).toBe(84000)
+    })
+
+    it('non usa documenti trackBests legacy senza schema/regole VNext', () => {
+        const doc = makeTrackBestDoc(
+            { GT3: { Optimum: { bestQualy: 83456, bestRace: 84000, bestAvgRace: 84500 } } },
+            { version: 3, bestRulesVersion: 3 }
+        )
+        const result = buildBestTimesFromTrackBestDoc(doc, 'GT3', 'Optimum')
+        expect(result.bestQualy).toBeNull()
+        expect(result.bestRace).toBeNull()
+        expect(result.bestAvgRace).toBeNull()
     })
 })
 
@@ -213,14 +225,12 @@ describe('buildOverviewBestTimesFromTrackBestDoc', () => {
     })
 
     it('seleziona il miglior tempo da tutti i grip disponibili', () => {
-        const doc = {
-            bests: {
-                GT3: {
-                    Wet: { bestQualy: 90000, bestRace: 91000, bestAvgRace: 92000 },
-                    Optimum: { bestQualy: 83456, bestRace: 84000, bestAvgRace: 84500 }
-                }
+        const doc = makeTrackBestDoc({
+            GT3: {
+                Wet: { bestQualy: 90000, bestRace: 91000, bestAvgRace: 92000 },
+                Optimum: { bestQualy: 83456, bestRace: 84000, bestAvgRace: 84500 }
             }
-        }
+        })
         const result = buildOverviewBestTimesFromTrackBestDoc(doc, 'GT3')
         expect(result.bestQualy).toBe(83456)
         expect(result.bestQualyGrip).toBe('Optimum')
@@ -229,20 +239,18 @@ describe('buildOverviewBestTimesFromTrackBestDoc', () => {
     it('in parità seleziona il grip con priorità più alta', () => {
         // Flood ha indice 0 in SCAN_ORDER, scansionato primo; Optimum ultimo
         // Se stesso tempo, Optimum (priorità più alta in PRIORITY) deve vincere
-        const doc = {
-            bests: {
-                GT3: {
-                    Flood: { bestQualy: 83456 },
-                    Optimum: { bestQualy: 83456 }
-                }
+        const doc = makeTrackBestDoc({
+            GT3: {
+                Flood: { bestQualy: 83456 },
+                Optimum: { bestQualy: 83456 }
             }
-        }
+        })
         const result = buildOverviewBestTimesFromTrackBestDoc(doc, 'GT3')
         expect(result.bestQualyGrip).toBe('Optimum')
     })
 
     it('gestisce categoria mancante (doc senza bests)', () => {
-        const doc = { bests: {} }
+        const doc = makeTrackBestDoc({})
         const result = buildOverviewBestTimesFromTrackBestDoc(doc, 'GT3')
         expect(result.bestQualy).toBeNull()
     })
@@ -254,29 +262,36 @@ describe('buildOverviewBestTimesFromTrackBestDoc', () => {
     })
 
     it('usa GT3 come default', () => {
-        const doc = {
-            bests: { GT3: { Optimum: { bestQualy: 83456 } } }
-        }
+        const doc = makeTrackBestDoc({ GT3: { Optimum: { bestQualy: 83456 } } })
         const result = buildOverviewBestTimesFromTrackBestDoc(doc)
         expect(result.bestQualy).toBe(83456)
     })
 
     it('scansiona più condizioni e ottiene best per ogni campo separatamente', () => {
-        const doc = {
-            bests: {
-                GT3: {
-                    Wet: { bestQualy: 90000, bestRace: 91000 },
-                    Green: { bestQualy: 85000, bestRace: 93000 },
-                    Optimum: { bestQualy: 83000, bestRace: 94000 }
-                }
+        const doc = makeTrackBestDoc({
+            GT3: {
+                Wet: { bestQualy: 90000, bestRace: 91000 },
+                Green: { bestQualy: 85000, bestRace: 93000 },
+                Optimum: { bestQualy: 83000, bestRace: 94000 }
             }
-        }
+        })
         const result = buildOverviewBestTimesFromTrackBestDoc(doc, 'GT3')
         // bestQualy: Optimum 83000, bestRace: Wet 91000
         expect(result.bestQualy).toBe(83000)
         expect(result.bestQualyGrip).toBe('Optimum')
         expect(result.bestRace).toBe(91000)
         expect(result.bestRaceGrip).toBe('Wet')
+    })
+
+    it('non usa documenti legacy per i best overview', () => {
+        const doc = makeTrackBestDoc(
+            { GT3: { Optimum: { bestQualy: 83456, bestRace: 84000, bestAvgRace: 84500 } } },
+            { version: 3, bestRulesVersion: 3 }
+        )
+        const result = buildOverviewBestTimesFromTrackBestDoc(doc, 'GT3')
+        expect(result.bestQualy).toBeNull()
+        expect(result.bestRace).toBeNull()
+        expect(result.bestAvgRace).toBeNull()
     })
 })
 
@@ -286,10 +301,7 @@ describe('buildOverviewBestTimesFromTrackBestDoc', () => {
 describe('buildTrackBestsMapFromDocs', () => {
     it('crea una mappa trackId → TrackBestTimes', () => {
         const docs = {
-            monza: {
-                trackId: 'monza',
-                bests: { GT3: { Optimum: { bestQualy: 83456 } } }
-            }
+            monza: makeTrackBestDoc({ GT3: { Optimum: { bestQualy: 83456 } } }, { trackId: 'monza' })
         }
         const result = buildTrackBestsMapFromDocs(docs)
         expect(result['monza']).toBeDefined()
@@ -298,10 +310,7 @@ describe('buildTrackBestsMapFromDocs', () => {
 
     it('normalizza il trackId (usa doc.trackId se disponibile)', () => {
         const docs = {
-            'Monza Circuit': {
-                trackId: 'monza',
-                bests: { GT3: { Optimum: { bestQualy: 83456 } } }
-            }
+            'Monza Circuit': makeTrackBestDoc({ GT3: { Optimum: { bestQualy: 83456 } } }, { trackId: 'monza' })
         }
         const result = buildTrackBestsMapFromDocs(docs)
         expect(result['monza']).toBeDefined()
@@ -319,9 +328,7 @@ describe('buildTrackBestsMapFromDocs', () => {
 
     it('salta entry senza trackId valido', () => {
         const docs = {
-            '': {
-                bests: { GT3: { Optimum: { bestQualy: 83456 } } }
-            }
+            '': makeTrackBestDoc({ GT3: { Optimum: { bestQualy: 83456 } } })
         }
         const result = buildTrackBestsMapFromDocs(docs)
         expect(Object.keys(result)).toHaveLength(0)
@@ -329,12 +336,23 @@ describe('buildTrackBestsMapFromDocs', () => {
 
     it('gestisce più tracciati', () => {
         const docs = {
-            monza: { trackId: 'monza', bests: { GT3: { Optimum: { bestQualy: 83000 } } } },
-            spa: { trackId: 'spa', bests: { GT3: { Optimum: { bestRace: 136000 } } } }
+            monza: makeTrackBestDoc({ GT3: { Optimum: { bestQualy: 83000 } } }, { trackId: 'monza' }),
+            spa: makeTrackBestDoc({ GT3: { Optimum: { bestRace: 136000 } } }, { trackId: 'spa' })
         }
         const result = buildTrackBestsMapFromDocs(docs)
         expect(Object.keys(result)).toHaveLength(2)
         expect(result['spa'].bestRace).toBe(136000)
+    })
+
+    it('salta documenti trackBests legacy nella mappa', () => {
+        const docs = {
+            monza: makeTrackBestDoc(
+                { GT3: { Optimum: { bestRace: 107637, bestAvgRace: 108079 } } },
+                { trackId: 'monza', version: 3, bestRulesVersion: 3 }
+            )
+        }
+        const result = buildTrackBestsMapFromDocs(docs)
+        expect(result['monza']).toBeUndefined()
     })
 })
 

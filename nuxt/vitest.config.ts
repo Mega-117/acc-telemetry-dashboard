@@ -32,6 +32,7 @@ export default defineConfig({
         'app/services/gateway/activityProjectionBuilders.ts',
         'app/services/gateway/bestTimesBuilders.ts',
         'app/services/gateway/trackDetailProjectionBuilder.ts',
+        'app/services/projections/trackBestProjectionGuard.ts',
         'app/services/session-detail/sessionMath.ts',
         'app/services/sync/syncTriggerPolicy.ts',
         'app/services/telemetry/sessionMergeLogic.ts',

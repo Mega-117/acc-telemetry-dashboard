@@ -77,6 +77,15 @@ function makeEmptyDetailDoc(trackId = 'monza'): TrackDetailProjectionDocument {
     }
 }
 
+function makeTrackBestDoc(bests: any, overrides: Record<string, any> = {}) {
+    return {
+        version: 4,
+        bestRulesVersion: 5,
+        bests,
+        ...overrides
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // RACE_FUEL_BUCKETS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -698,9 +707,7 @@ describe('buildTrackDetailFromProjectionDocument', () => {
     })
 
     it('hasGripData è true se i best times vengono dal trackBestDoc', () => {
-        const trackBestDoc = {
-            bests: { GT3: { Optimum: { bestQualy: 83456 } } }
-        }
+        const trackBestDoc = makeTrackBestDoc({ GT3: { Optimum: { bestQualy: 83456 } } })
         const result = buildTrackDetailFromProjectionDocument({
             detailDoc: makeEmptyDetailDoc('monza'),
             trackBestDoc,
@@ -711,6 +718,34 @@ describe('buildTrackDetailFromProjectionDocument', () => {
         })
         expect(result.track.hasGripData).toBe(true)
         expect(result.track.bestQualy).toBe('1:23.456')
+    })
+
+    it('ignora trackBestDoc legacy anche se contiene best race/AVG', () => {
+        const trackBestDoc = makeTrackBestDoc(
+            {
+                GT3: {
+                    Optimum: {
+                        bestRace: 107637,
+                        bestAvgRace: 108079,
+                        bestRaceFuel: null,
+                        raceBestByFuelBucket: {}
+                    }
+                }
+            },
+            { version: 3, bestRulesVersion: 3 }
+        )
+        const result = buildTrackDetailFromProjectionDocument({
+            detailDoc: makeEmptyDetailDoc('monza'),
+            trackBestDoc,
+            trackId: 'monza',
+            category: 'GT3',
+            selectedGrip: 'Optimum',
+            pendingSessions: []
+        })
+        expect(result.track.hasGripData).toBe(false)
+        expect(result.track.bestRace).toBeNull()
+        expect(result.track.bestAvgRace).toBeNull()
+        expect(result.track.raceFuelBuckets?.some(bucket => bucket.hasData)).toBe(false)
     })
 
     it('raceFuelBuckets ha 4 elementi', () => {

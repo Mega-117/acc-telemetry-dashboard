@@ -1,5 +1,6 @@
 import { type CarCategory, getCarCategory } from '~/utils/telemetryFormat'
 import { normalizeTrackId as normalizeTrackProjectionId } from '~/services/projections/trackMetadata'
+import { isSupportedTrackBestProjection } from '~/services/projections/trackBestProjectionGuard'
 import type { SessionDocument } from '~/composables/useTelemetryData'
 
 export const OVERVIEW_GRIP_PRIORITY = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
@@ -26,6 +27,13 @@ export function buildBestTimesFromTrackBestDoc(
     category: CarCategory = 'GT3',
     grip: string = 'Optimum'
 ): TrackBestTimes {
+    if (!isSupportedTrackBestProjection(trackBestDoc)) {
+        return {
+            bestQualy: null,
+            bestRace: null,
+            bestAvgRace: null
+        }
+    }
     const gripBests = trackBestDoc?.bests?.[category]?.[grip] || {}
     return {
         bestQualy: gripBests.bestQualy || null,
@@ -70,6 +78,10 @@ export function buildOverviewBestTimesFromTrackBestDoc(
         bestAvgRaceGrip: null
     }
 
+    if (!isSupportedTrackBestProjection(trackBestDoc)) {
+        return result
+    }
+
     const categoryBests = trackBestDoc?.bests?.[category] || {}
     for (const grip of OVERVIEW_GRIP_SCAN_ORDER) {
         const gripBests = categoryBests?.[grip] || {}
@@ -84,6 +96,8 @@ export function buildOverviewBestTimesFromTrackBestDoc(
 export function buildTrackBestsMapFromDocs(trackBestDocs: Record<string, any>): Record<string, TrackBestTimes> {
     const result: Record<string, TrackBestTimes> = {}
     for (const [rawTrackId, doc] of Object.entries(trackBestDocs || {})) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+        if (!isSupportedTrackBestProjection(doc as any)) continue
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         const trackId = normalizeTrackKey((doc as any)?.trackId || rawTrackId)
         if (!trackId) continue

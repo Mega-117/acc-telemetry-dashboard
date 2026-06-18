@@ -7,6 +7,7 @@ import {
     getSessionTypeLabel
 } from '~/utils/telemetryFormat'
 import { normalizeTrackId as normalizeTrackProjectionId, resolveTrackMetadata } from '~/services/projections/trackMetadata'
+import { isSupportedTrackBestProjection } from '~/services/projections/trackBestProjectionGuard'
 import type { SessionDocument } from '~/composables/useTelemetryData'
 import {
     type TrackActivityProjection,
@@ -275,6 +276,7 @@ export function buildTrackDetailFromProjectionDocument(params: {
     const normalizedTrackId = normalizeTrackKey(trackId || detailDoc.trackId)
     const metadata = resolveTrackMetadata(normalizedTrackId)
     const categoryDoc = detailDoc.categories?.[category]
+    const supportedTrackBestDoc = isSupportedTrackBestProjection(trackBestDoc) ? trackBestDoc : null
     const baseActivity = normalizeActivity(categoryDoc?.activity)
     const pendingValidSessions = pendingSessions
         .filter((session) => trackMatches(session.meta?.track, normalizedTrackId))
@@ -283,7 +285,7 @@ export function buildTrackDetailFromProjectionDocument(params: {
         .sort((a, b) => (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))
     const pendingActivity = buildActivityFromSessions(pendingValidSessions)
     const gripBests = mergeGripBest(
-        trackBestDoc?.bests?.[category]?.[selectedGrip] || {},
+        supportedTrackBestDoc?.bests?.[category]?.[selectedGrip] || {},
         buildPendingGripBest(pendingValidSessions, selectedGrip)
     )
     const bestRaceFuelBucket = getRaceFuelBucket(gripBests.bestRaceFuel)

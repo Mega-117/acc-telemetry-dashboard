@@ -6,6 +6,7 @@ import {
   TRACK_DETAIL_PROJECTION_SCHEMA_VERSION,
   type TrackDetailProjectionDocument
 } from '~/types/trackProjections'
+import { isSupportedTrackBestProjection } from '~/services/projections/trackBestProjectionGuard'
 
 const CALLER = 'TelemetryProjectionRepository'
 const PROJECTION_CACHE_TTL_MS = 60_000
@@ -74,7 +75,9 @@ export async function loadTrackBest(uid: string, trackId: string): Promise<any |
   if (isFresh(cached)) return cached.value
 
   const snap = await trackedGetDoc(doc(db, `users/${uid}/trackBests/${normalizedTrackId}`), CALLER)
-  return setCache(trackBestCache, cacheKey, snap.exists() ? (snap.data() || null) : null)
+  if (!snap.exists()) return setCache(trackBestCache, cacheKey, null)
+  const data = snap.data() || null
+  return setCache(trackBestCache, cacheKey, isSupportedTrackBestProjection(data) ? data : null)
 }
 
 export async function loadTrackBestsMap(uid: string): Promise<Record<string, any>> {
@@ -85,6 +88,7 @@ export async function loadTrackBestsMap(uid: string): Promise<Record<string, any
   const result: Record<string, any> = {}
   for (const docSnap of snap.docs || []) {
     const data = docSnap.data() || {}
+    if (!isSupportedTrackBestProjection(data)) continue
     const normalizedTrackId = normalizeTrackId(data.trackId || docSnap.id)
     result[normalizedTrackId] = data
     trackBestCache.set(`${uid}:${normalizedTrackId}`, { cachedAt: Date.now(), value: data })
