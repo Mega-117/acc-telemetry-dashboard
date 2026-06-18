@@ -1,4 +1,7 @@
 import type { CarCategory } from '~/utils/telemetryFormat'
+import { getRaceFuelBucket, type RaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
+
+export { getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 
 // ---- Types ----
 
@@ -59,19 +62,10 @@ export type TheoreticalTimes = {
     // Context
     grip: string
     stintTemp: number
-    fuelBucket: string | null
+    fuelBucket: RaceFuelBucket | null
 }
 
 // ---- Pure helpers ----
-
-export function getRaceFuelBucket(fuel: number | null | undefined): '40-60' | '60-80' | '80-100' | '100+' | null {
-    const parsed = Number(fuel || 0)
-    if (!parsed || parsed <= 40) return null
-    if (parsed <= 60) return '40-60'
-    if (parsed <= 80) return '60-80'
-    if (parsed <= 100) return '80-100'
-    return '100+'
-}
 
 export function getBucketRecord(bucketMap: Record<string, unknown> | null | undefined, bucket: string | null) {
     if (!bucket || !bucketMap || typeof bucketMap !== 'object') return null

@@ -13,9 +13,9 @@ import {
 } from '~/utils/telemetryFormat'
 import {
     type GripBestTimes,
-    getRaceFuelBucket,
     createGetTheoreticalTimes,
 } from '~/services/telemetry/theoreticalTimesCalculator'
+import { RACE_FUEL_BUCKETS, getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 import { TRACK_BESTS_SCHEMA_VERSION } from '~/services/sync/trackBestsProjectionService'
 import { getTrackActivityTotalsFromSessions } from '~/services/telemetry/activityProjectionService'
 import { globalSessions } from '~/composables/useSessionLoader'
@@ -92,8 +92,8 @@ const emptyGripBests = (): GripBestTimes => ({
     bestAvgEndurance: null, bestAvgEnduranceTemp: null, bestAvgEnduranceFuel: null, bestAvgEnduranceSessionId: null, bestAvgEnduranceDate: null,
     bestRace: null, bestRaceTemp: null, bestRaceFuel: null, bestRaceSessionId: null, bestRaceDate: null,
     bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceFuel: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null,
-    raceBestByFuelBucket: { '40-60': {}, '60-80': {}, '80-100': {}, '100+': {} },
-    raceAvgByFuelBucket: { '40-60': {}, '60-80': {}, '80-100': {}, '100+': {} }
+    raceBestByFuelBucket: Object.fromEntries(RACE_FUEL_BUCKETS.map((bucket) => [bucket, {}])),
+    raceAvgByFuelBucket: Object.fromEntries(RACE_FUEL_BUCKETS.map((bucket) => [bucket, {}]))
 })
 
 export function useTrackBests() {
@@ -159,7 +159,7 @@ export function useTrackBests() {
                     currentBest.bestQualyDate = sessionDate
                 }
 
-                for (const bucket of ['40-60', '60-80', '80-100', '100+']) {
+                for (const bucket of RACE_FUEL_BUCKETS) {
                     const raceRecord = sessionBest.raceBestByFuelBucket?.[bucket]
                     if (raceRecord?.timeMs && (!currentBest.bestRace || raceRecord.timeMs < currentBest.bestRace)) {
                         currentBest.bestRace = raceRecord.timeMs

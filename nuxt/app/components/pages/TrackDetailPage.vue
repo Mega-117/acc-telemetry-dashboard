@@ -23,6 +23,7 @@ import {
 import { usePilotContext } from '~/composables/usePilotContext'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
+import { RACE_FUEL_BUCKETS } from '~/services/telemetry/raceFuelClassification'
 import type { TrackDetailProjection, TrackFuelBucketReference } from '~/types/trackProjections'
 
 const { getPublicPath } = usePublicPath()
@@ -60,7 +61,7 @@ function formatShortDate(isoDate: string | null): string {
 }
 
 const gripConditions = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
-const RACE_FUEL_BUCKET_FILTERS = ['40-60', '60-80', '80-100', '100+'] as const
+const RACE_FUEL_BUCKET_FILTERS = RACE_FUEL_BUCKETS
 const selectedGrip = ref('Optimum')
 const selectedCategory = ref<CarCategory>('GT3')
 const selectedRaceReferenceBucket = ref('100+')

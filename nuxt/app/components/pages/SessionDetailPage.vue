@@ -41,6 +41,7 @@ import { autoSelectComparisonStints } from '~/services/session-detail/sessionCom
 import { buildBestSectorSummary, buildComparisonRows } from '~/services/session-detail/sessionComparisonTableService'
 import { timeToSeconds, secondsToTime } from '~/services/session-detail/sessionMath'
 import { buildSessionDisplayModel } from '~/services/session-detail/buildSessionDisplayModel'
+import { getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
@@ -1012,18 +1013,9 @@ const hasPreselected = ref(false)
 const selectedStint = computed(() => session.value.stints.find(s => s.number === selectedStintNumber.value))
 const selectedStintLaps = computed(() => session.value.lapsData[selectedStintNumber.value] || [])
 
-function getStintRaceFuelBucket(fuel: number | null | undefined): string | null {
-  const parsed = Number(fuel || 0)
-  if (!parsed || parsed <= 40) return null
-  if (parsed <= 60) return '40-60'
-  if (parsed <= 80) return '60-80'
-  if (parsed <= 100) return '80-100'
-  return '100+'
-}
-
 const stintReferenceLabel = computed(() => {
   if (selectedStint.value?.type !== 'R') return ''
-  const bucket = getStintRaceFuelBucket(selectedStint.value.fuelStart)
+  const bucket = getRaceFuelBucket(selectedStint.value.fuelStart)
   if (!bucket) return 'Riferimento: fuel partenza non storico'
   return `Riferimento: fuel partenza ${bucket}L`
 })

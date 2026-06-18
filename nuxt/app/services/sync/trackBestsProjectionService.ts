@@ -1,13 +1,11 @@
 import { doc, serverTimestamp } from 'firebase/firestore'
 import { CAR_CATEGORIES, getCarCategory, type CarCategory } from '~/composables/useTelemetryData'
 import { normalizeTrackId } from '~/services/projections/trackMetadata'
+import { RACE_FUEL_BUCKETS, getRaceFuelBucket, type RaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 
 export const TRACK_BESTS_SCHEMA_VERSION = 4
 
-const RACE_FUEL_BUCKETS = ['40-60', '60-80', '80-100', '100+'] as const
-
-type RaceFuelBucket = typeof RACE_FUEL_BUCKETS[number]
 type FuelBucketRecord = {
   timeMs: number
   fuel: number | null
@@ -161,15 +159,6 @@ function isBucketRecord(value: FuelBucketRecord | Record<string, never>): value 
   return !!(value as FuelBucketRecord)?.timeMs
 }
 
-function raceBucketFromFuel(fuel: number | null | undefined): RaceFuelBucket | null {
-  const parsed = Number(fuel || 0)
-  if (!parsed || parsed <= 40) return null
-  if (parsed <= 60) return '40-60'
-  if (parsed <= 80) return '60-80'
-  if (parsed <= 100) return '80-100'
-  return '100+'
-}
-
 function updateBucketBest(
   target: Record<RaceFuelBucket, FuelBucketRecord | Record<string, never>>,
   bucket: RaceFuelBucket,
@@ -248,7 +237,7 @@ function applyBestDelta(params: {
     }
 
     if (sessionBest.bestRace && (!catGrip.bestRace || sessionBest.bestRace < catGrip.bestRace)) {
-      const bucket = raceBucketFromFuel(sessionBest.bestRaceFuel)
+      const bucket = getRaceFuelBucket(sessionBest.bestRaceFuel)
       if (bucket) {
         const record = normalizeBucketRecord({
           timeMs: sessionBest.bestRace,
@@ -269,7 +258,7 @@ function applyBestDelta(params: {
     }
 
     if (sessionBest.bestAvgRace && (!catGrip.bestAvgRace || sessionBest.bestAvgRace < catGrip.bestAvgRace)) {
-      const bucket = raceBucketFromFuel(sessionBest.bestAvgRaceFuel)
+      const bucket = getRaceFuelBucket(sessionBest.bestAvgRaceFuel)
       if (bucket) {
         const record = normalizeBucketRecord({
           timeMs: sessionBest.bestAvgRace,

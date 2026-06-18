@@ -17,8 +17,9 @@ import {
     type TrackHistoricalPointProjection,
     type TrackRecentSessionProjection
 } from '~/types/trackProjections'
+import { RACE_FUEL_BUCKETS, getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 
-export const RACE_FUEL_BUCKETS = ['40-60', '60-80', '80-100', '100+'] as const
+export { RACE_FUEL_BUCKETS, getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 
 type GripBestProjection = {
     bestQualy?: number | null
@@ -184,15 +185,6 @@ export function mergeGripBest(base: GripBestProjection, pending: GripBestProject
         }
     }
     return merged
-}
-
-export function getRaceFuelBucket(fuel: number | null | undefined): string | null {
-    const parsed = Number(fuel || 0)
-    if (!parsed || parsed <= 40) return null
-    if (parsed <= 60) return '40-60'
-    if (parsed <= 80) return '60-80'
-    if (parsed <= 100) return '80-100'
-    return '100+'
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type

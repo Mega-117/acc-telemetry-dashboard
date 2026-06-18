@@ -35,6 +35,7 @@ export default defineConfig({
         'app/services/projections/trackBestProjectionGuard.ts',
         'app/services/session-detail/sessionMath.ts',
         'app/services/sync/syncTriggerPolicy.ts',
+        'app/services/telemetry/raceFuelClassification.ts',
         'app/services/telemetry/sessionMergeLogic.ts',
         'app/services/telemetry/theoreticalTimesCalculator.ts',
         'app/utils/firestoreSanitize.ts',

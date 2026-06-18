@@ -6,9 +6,15 @@
 // compatibility fallback for legacy payloads that have not been reprocessed yet.
 
 import type { SessionMeta, SessionSummary } from '~/composables/useTelemetryData'
+import {
+  RACE_FUEL_BUCKETS,
+  classifyHistoricalEligibility,
+  classifyStintTypeFromFuel,
+  getRaceFuelBucket,
+  type HistoricalEligibility
+} from '~/services/telemetry/raceFuelClassification'
 
 type BestConditions = { airTemp: number; roadTemp: number; grip: string }
-type HistoricalEligibility = 'qualy_historical' | 'race_non_historical' | 'race_historical'
 type GripEntry = {
   bestQualy: number | null; bestQualyTemp: number | null; bestQualyFuel: number | null
   bestRace: number | null; bestRaceTemp: number | null; bestRaceFuel: number | null
@@ -18,14 +24,6 @@ type GripEntry = {
 export type SessionSummarySource = 'canonical' | 'legacy_fallback' | 'missing_canonical'
 
 const VALID_GRIPS = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum'] as const
-const STINT_RACE_FUEL_THRESHOLD_L = 20
-const HISTORICAL_RACE_FUEL_THRESHOLD_L = 40
-const RACE_FUEL_BUCKETS = [
-  { key: '40-60', lower: 40, upper: 60 },
-  { key: '60-80', lower: 60, upper: 80 },
-  { key: '80-100', lower: 80, upper: 100 },
-  { key: '100+', lower: 100, upper: null }
-] as const
 
 export const BEST_RULES_VERSION = 5
 
@@ -56,7 +54,7 @@ function buildConditions(lap: Record<string, unknown>): BestConditions {
 }
 
 function emptyBucketMap(): Record<string, unknown> {
-  return Object.fromEntries(RACE_FUEL_BUCKETS.map((bucket) => [bucket.key, {}]))
+  return Object.fromEntries(RACE_FUEL_BUCKETS.map((bucket) => [bucket, {}]))
 }
 
 function emptyBestByGrip(): Record<string, unknown> {
@@ -84,7 +82,7 @@ function normalizeBucketMap(bucketMap: Record<string, unknown> | null | undefine
   const normalized = emptyBucketMap()
   if (!bucketMap || typeof bucketMap !== 'object') return normalized
   for (const bucket of RACE_FUEL_BUCKETS) {
-    normalized[bucket.key] = bucketMap[bucket.key] || {}
+    normalized[bucket] = bucketMap[bucket] || {}
   }
   return normalized
 }
@@ -118,33 +116,6 @@ function updateBest<TConditions extends BestConditions | null>(
     return [candidateValue, candidateConditions]
   }
   return [currentValue, currentConditions]
-}
-
-function classifyStintTypeFromFuel(
-  fuelStart: number | null,
-  sessionType: number | null | undefined
-): 'Qualify' | 'Race' {
-  if (sessionType === 1) return 'Qualify'
-  return (fuelStart ?? 0) > STINT_RACE_FUEL_THRESHOLD_L ? 'Race' : 'Qualify'
-}
-
-function classifyHistoricalEligibility(
-  fuelStart: number | null,
-  sessionType: number | null | undefined,
-  stintType?: string
-): HistoricalEligibility {
-  const effectiveStintType = stintType || classifyStintTypeFromFuel(fuelStart, sessionType)
-  if (sessionType === 1 || effectiveStintType === 'Qualify') return 'qualy_historical'
-  if ((fuelStart ?? 0) <= HISTORICAL_RACE_FUEL_THRESHOLD_L) return 'race_non_historical'
-  return 'race_historical'
-}
-
-function raceFuelBucket(fuel: number | null): string | null {
-  if (!fuel || fuel <= HISTORICAL_RACE_FUEL_THRESHOLD_L) return null
-  const bucket = RACE_FUEL_BUCKETS.find((candidate) => {
-    return fuel > candidate.lower && (candidate.upper === null || fuel <= candidate.upper)
-  })
-  return bucket?.key ?? null
 }
 
 function lapBucketFuel(lap: Record<string, unknown>): number | null {
@@ -311,7 +282,7 @@ function buildLegacyCompatibilitySummary(rawObj: Record<string, unknown>, sessio
         return
       }
 
-      const bucket = raceFuelBucket(lapFuelReference)
+      const bucket = getRaceFuelBucket(lapFuelReference)
       if (historicalEligibility !== 'race_historical' || !bucket) return
 
       ;[bestSessionRaceMs, bestSessionRaceConditions] = updateBest(
@@ -376,7 +347,7 @@ function buildLegacyCompatibilitySummary(rawObj: Record<string, unknown>, sessio
       gripBest.bestAvgRaceFuel = stintFuelStart
     }
 
-    const avgBucket = raceFuelBucket(stintFuelStart)
+    const avgBucket = getRaceFuelBucket(stintFuelStart)
     if (gripBest && avgBucket) {
       updateBucketBest(
         gripBest.raceAvgByFuelBucket,

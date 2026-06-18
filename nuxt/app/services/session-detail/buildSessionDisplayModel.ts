@@ -1,4 +1,5 @@
 import type { FullSession } from '~/composables/useTelemetryData'
+import { getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 import type { SessionDisplayModel, SessionDisplayLap, SessionDisplayStint } from '~/types/sessionDisplayModel'
 
 export function createEmptySessionDisplayModel(sessionId: string): SessionDisplayModel {
@@ -20,15 +21,6 @@ export function createEmptySessionDisplayModel(sessionId: string): SessionDispla
     stints: [],
     lapsData: {}
   }
-}
-
-function getRaceFuelBucket(fuel: number | null | undefined): string | null {
-  const parsed = Number(fuel || 0)
-  if (!parsed || parsed <= 40) return null
-  if (parsed <= 60) return '40-60'
-  if (parsed <= 80) return '60-80'
-  if (parsed <= 100) return '80-100'
-  return '100+'
 }
 
 function isCleanLap(lap: { lap_time_ms: number; is_valid: boolean; has_pit_stop: boolean; pit_out_lap?: boolean }): boolean {

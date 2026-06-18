@@ -1,8 +1,7 @@
 import type { SessionDocument } from '~/composables/useTelemetryData'
 import type { CarCategory } from '~/composables/useTelemetryData'
+import { RACE_FUEL_BUCKETS, getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 import type { TrackDetailProjection, TrackFuelBucketReference, TrackHistoricalPointProjection, TrackRecentSessionProjection } from '~/types/trackProjections'
-
-const RACE_FUEL_BUCKETS = ['40-60', '60-80', '80-100', '100+'] as const
 
 export function buildTrackDetailProjection(params: {
   trackId: string
@@ -161,15 +160,6 @@ export function buildTrackDetailProjection(params: {
     category: selectedCategory,
     grip: selectedGrip
   }
-}
-
-function getRaceFuelBucket(fuel: number | null | undefined): string | null {
-  const parsed = Number(fuel || 0)
-  if (!parsed || parsed <= 40) return null
-  if (parsed <= 60) return '40-60'
-  if (parsed <= 80) return '60-80'
-  if (parsed <= 100) return '80-100'
-  return '100+'
 }
 
 function normalizeFuelBucketRecord(record: any): {
