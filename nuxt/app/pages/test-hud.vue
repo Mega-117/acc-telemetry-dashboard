@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Test HUD (PIP-175): banco di prova dev-gated per gli overlay. Da qui si
-// accende/spegne ogni overlay singolarmente e si entra in modalita'
-// riposiziona. Self-contained (come dev.vue): nessun componente in
+// accende/spegne ogni overlay, si blocca la posizione e si entra in
+// riposizionamento. Self-contained (come dev.vue): niente componente in
 // components/pages, quindi fuori dal contratto useTelemetryGateway.
 import { onMounted, reactive, ref } from 'vue'
 
@@ -23,50 +23,73 @@ function getApi(): any | null {
 }
 
 const isElectron = ref(false)
+// L'app desktop puo' essere in esecuzione con un preload vecchio (avviata prima
+// dell'aggiornamento): gli overlay funzionano solo se l'API e' davvero presente.
+const apiReady = ref(false)
 const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false })
+const locked = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false })
 const trainingOpen = ref(false)
 
-onMounted(async () => {
+async function refreshState() {
   const api = getApi()
   isElectron.value = !!api
-  if (!api?.hudOverlayIsOpen) return
+  apiReady.value = !!(api && typeof api.hudOverlayOpen === 'function')
+  if (!apiReady.value) return
   for (const overlay of hudOverlays) {
     try {
       open[overlay.id] = await api.hudOverlayIsOpen(overlay.id)
+      const settings = await api.hudOverlayGetSettings(overlay.id)
+      locked[overlay.id] = !!settings?.locked
     } catch {
       open[overlay.id] = false
     }
   }
-})
+  if (typeof api.trainingOverlayIsOpen === 'function') {
+    try {
+      trainingOpen.value = await api.trainingOverlayIsOpen()
+    } catch {
+      trainingOpen.value = false
+    }
+  }
+}
+
+onMounted(refreshState)
 
 async function toggleHud(id: HudOverlayId) {
   const api = getApi()
-  if (!api) return
+  if (!apiReady.value || !api) return
   if (open[id]) {
-    await api.hudOverlayClose?.(id)
-    open[id] = false
+    await api.hudOverlayClose(id)
   } else {
-    await api.hudOverlayOpen?.(id)
-    open[id] = true
+    await api.hudOverlayOpen(id)
   }
+  // Stato dal risultato reale, non ottimistico.
+  open[id] = await api.hudOverlayIsOpen(id)
 }
 
 async function repositionHud(id: HudOverlayId) {
   const api = getApi()
-  if (!api?.hudOverlayOpen) return
+  if (!apiReady.value || !api || locked[id]) return
   await api.hudOverlayOpen(id, { place: true })
-  open[id] = true
+  open[id] = await api.hudOverlayIsOpen(id)
+}
+
+async function toggleLock(id: HudOverlayId) {
+  const api = getApi()
+  if (!apiReady.value || !api) return
+  const next = !locked[id]
+  await api.hudOverlaySetLocked(id, next)
+  locked[id] = next
 }
 
 async function toggleTraining() {
   const api = getApi()
-  if (!api) return
-  if (trainingOpen.value) {
-    await api.trainingOverlayClose?.()
-    trainingOpen.value = false
+  if (!api || typeof api.trainingOverlayToggle !== 'function') return
+  await api.trainingOverlayToggle()
+  if (typeof api.trainingOverlayIsOpen === 'function') {
+    trainingOpen.value = await api.trainingOverlayIsOpen()
   } else {
-    await api.trainingOverlayOpen?.()
-    trainingOpen.value = true
+    trainingOpen.value = !trainingOpen.value
   }
 }
 </script>
@@ -78,16 +101,20 @@ async function toggleTraining() {
         <span class="test-hud__kicker">Strumenti dev · overlay</span>
         <h1>Test HUD</h1>
         <p>
-          Accendi, spegni e riposiziona gli overlay singolarmente. Disponibile solo da
+          Accendi, spegni, blocca e riposiziona gli overlay singolarmente. Disponibile solo da
           <strong>localhost</strong> con ruolo <strong>admin</strong>.
         </p>
         <p v-if="!isElectron" class="test-hud__warning">
           Sei nel browser: i comandi overlay funzionano solo nell'app desktop (Electron).
         </p>
+        <p v-else-if="!apiReady" class="test-hud__warning">
+          App desktop avviata con una versione precedente: <strong>riavvia l'app</strong> per
+          caricare gli overlay aggiornati.
+        </p>
       </header>
 
       <div class="test-hud__grid">
-        <!-- Overlay allenamento: gestito col suo open/close esistente -->
+        <!-- Overlay allenamento: solo mostra/nascondi (come Ctrl+K) -->
         <article class="hud-card hud-card--training">
           <div class="hud-card__head">
             <strong>Allenamento</strong>
@@ -95,15 +122,15 @@ async function toggleTraining() {
               {{ trainingOpen ? 'ON' : 'OFF' }}
             </span>
           </div>
-          <p>Overlay coaching completo (fasi, voce, step). Gestito dal suo sistema.</p>
+          <p>Overlay coaching completo (fasi, voce, step). Qui solo mostra/nascondi.</p>
           <div class="hud-card__actions">
             <button type="button" class="btn btn--primary" :disabled="!isElectron" @click="toggleTraining">
-              {{ trainingOpen ? 'Chiudi' : 'Apri' }}
+              {{ trainingOpen ? 'Nascondi' : 'Mostra' }}
             </button>
           </div>
         </article>
 
-        <!-- Overlay HUD semplici: toggle individuale + riposiziona -->
+        <!-- Overlay HUD semplici: toggle + blocco + riposiziona + impostazioni segnaposto -->
         <article
           v-for="overlay in hudOverlays"
           :key="overlay.id"
@@ -116,14 +143,48 @@ async function toggleTraining() {
             </span>
           </div>
           <p>{{ overlay.description }}</p>
+
           <div class="hud-card__actions">
-            <button type="button" class="btn btn--primary" :disabled="!isElectron" @click="toggleHud(overlay.id)">
+            <button type="button" class="btn btn--primary" :disabled="!apiReady" @click="toggleHud(overlay.id)">
               {{ open[overlay.id] ? 'Spegni' : 'Accendi' }}
             </button>
-            <button type="button" class="btn" :disabled="!isElectron" @click="repositionHud(overlay.id)">
+            <button
+              type="button"
+              class="btn"
+              :disabled="!apiReady || locked[overlay.id]"
+              :title="locked[overlay.id] ? 'Sblocca per riposizionare' : 'Trascina per posizionare'"
+              @click="repositionHud(overlay.id)"
+            >
               Riposiziona
             </button>
+            <button
+              type="button"
+              class="btn btn--lock"
+              :class="{ 'is-locked': locked[overlay.id] }"
+              :disabled="!apiReady"
+              @click="toggleLock(overlay.id)"
+            >
+              {{ locked[overlay.id] ? '🔒 Bloccata' : '🔓 Blocca' }}
+            </button>
           </div>
+
+          <!-- Impostazioni previste ma non ancora attive (segnaposto inerti) -->
+          <details class="hud-card__more">
+            <summary>Impostazioni <span class="soon">presto</span></summary>
+            <div class="hud-card__settings" aria-disabled="true">
+              <label class="setting setting--disabled">
+                <span>Opacità</span>
+                <input type="range" min="20" max="100" value="100" disabled>
+              </label>
+              <label class="setting setting--disabled">
+                <span>Dimensione</span>
+                <select disabled>
+                  <option>Normale</option>
+                </select>
+              </label>
+              <p class="setting__note">Queste opzioni non sono ancora attive.</p>
+            </div>
+          </details>
         </article>
       </div>
     </section>
@@ -175,7 +236,7 @@ async function toggleTraining() {
 
 .test-hud__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 18px;
 }
 
@@ -189,11 +250,10 @@ async function toggleTraining() {
   background: rgba(255, 255, 255, 0.035);
   color: #fff;
 
-  p {
+  > p {
     margin: 0;
     color: rgba(255, 255, 255, 0.66);
     line-height: 1.5;
-    flex: 1;
   }
 }
 
@@ -229,11 +289,12 @@ async function toggleTraining() {
 
 .hud-card__actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
 .btn {
-  padding: 8px 16px;
+  padding: 8px 14px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(255, 255, 255, 0.04);
@@ -257,5 +318,58 @@ async function toggleTraining() {
   border-color: transparent;
   background: linear-gradient(90deg, #f97316, #fb923c);
   color: #1a0d04;
+}
+
+.btn--lock.is-locked {
+  border-color: rgba(251, 191, 36, 0.5);
+  color: #fbbf24;
+}
+
+.hud-card__more {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 10px;
+
+  summary {
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 700;
+    font-size: 13px;
+  }
+
+  .soon {
+    margin-left: 6px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: rgba(251, 191, 36, 0.16);
+    color: #fbbf24;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+}
+
+.hud-card__settings {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+
+  &--disabled {
+    opacity: 0.5;
+  }
+}
+
+.setting__note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
 }
 </style>
