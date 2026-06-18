@@ -41,6 +41,15 @@ import { autoSelectComparisonStints } from '~/services/session-detail/sessionCom
 import { buildBestSectorSummary, buildComparisonRows } from '~/services/session-detail/sessionComparisonTableService'
 import { timeToSeconds, secondsToTime } from '~/services/session-detail/sessionMath'
 import { buildSessionDisplayModel } from '~/services/session-detail/buildSessionDisplayModel'
+import {
+  buildLapExclusionKey,
+  buildLapTooltipLines,
+  buildLapTooltipTitle,
+  filterIncludedLapPoints,
+  normalizeLapSeries,
+  type LapSeriesSource,
+  type NormalizedLapPoint
+} from '~/services/session-detail/sessionLapSeries'
 import { getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 import type {
   TheoreticalReferenceDetails,
@@ -62,9 +71,9 @@ const showDetailedLaps = ref(false)
 // ========================================
 // LAP EXCLUSION SYSTEM
 // ========================================
-const excludedLaps = ref<Set<number>>(new Set())
-const excludedLapsB = ref<Set<number>>(new Set()) // For Stint B in compare mode
-const excludedLapsCrossB = ref<Set<number>>(new Set()) // For Session B in cross-session mode
+const excludedLaps = ref<Set<string>>(new Set())
+const excludedLapsB = ref<Set<string>>(new Set()) // For Stint B in compare mode
+const excludedLapsCrossB = ref<Set<string>>(new Set()) // For Session B in cross-session mode
 const showLapManager = ref(false)
 const chartRef = ref<any>(null)
 
@@ -75,33 +84,33 @@ const racingStyle = ref<'gold'>('gold')
 // Compare table style mode: A=Gold, B=DualColor, C=Neutral, D=Gold+Badge
 const compareStyleMode = ref<'A' | 'B' | 'C' | 'D'>('A')
 
-function toggleLapExclusion(lapNum: number) {
+function toggleLapExclusion(lapKey: string) {
   const newSet = new Set(excludedLaps.value)
-  if (newSet.has(lapNum)) {
-    newSet.delete(lapNum)
+  if (newSet.has(lapKey)) {
+    newSet.delete(lapKey)
   } else {
-    newSet.add(lapNum)
+    newSet.add(lapKey)
   }
   excludedLaps.value = newSet
 }
 
-function toggleLapExclusionB(lapNum: number) {
+function toggleLapExclusionB(lapKey: string) {
   const newSet = new Set(excludedLapsB.value)
-  if (newSet.has(lapNum)) {
-    newSet.delete(lapNum)
+  if (newSet.has(lapKey)) {
+    newSet.delete(lapKey)
   } else {
-    newSet.add(lapNum)
+    newSet.add(lapKey)
   }
   excludedLapsB.value = newSet
 }
 
 // Cross-session exclusion toggle (uses lapNumber field)
-function toggleLapExclusionCrossB(lapNum: number) {
+function toggleLapExclusionCrossB(lapKey: string) {
   const newSet = new Set(excludedLapsCrossB.value)
-  if (newSet.has(lapNum)) {
-    newSet.delete(lapNum)
+  if (newSet.has(lapKey)) {
+    newSet.delete(lapKey)
   } else {
-    newSet.add(lapNum)
+    newSet.add(lapKey)
   }
   excludedLapsCrossB.value = newSet
 }
@@ -141,7 +150,11 @@ function applyWarmupExclusion() {
   const laps = selectedStintLaps.value
   if (laps.length > 0) {
     const firstLap = laps[0]?.lap
-    excludedLaps.value = new Set(firstLap != null ? [firstLap] : [])
+    excludedLaps.value = new Set(firstLap != null ? [buildLapExclusionKey({
+      source: 'a',
+      stintNumber: selectedStintNumber.value,
+      lapNumber: firstLap
+    })] : [])
   } else {
     excludedLaps.value = new Set()
   }
@@ -1125,7 +1138,11 @@ const isSingleStint = computed(() => session.value.stints.length === 1)
 watch(selectedStintLaps, (laps) => {
   if (laps.length > 0) {
     const firstLap = laps[0]?.lap
-    excludedLaps.value = new Set(firstLap != null ? [firstLap] : [])
+    excludedLaps.value = new Set(firstLap != null ? [buildLapExclusionKey({
+      source: 'a',
+      stintNumber: selectedStintNumber.value,
+      lapNumber: firstLap
+    })] : [])
   } else {
     excludedLaps.value = new Set()
   }
@@ -1787,42 +1804,119 @@ watch(
 // Centralized target threshold constant (0.6s = 6 decimi)
 const TARGET_THRESHOLD_S = 0.6
 
-const chartData = computed(() => {
-  // Use compare stint data when in compare mode, cross-session data, or selected stint
-  let allLapsA: any[] = []
-  
-  if (isBuilderSameSessionCompare.value) {
-    // Same-session builder compare - use concatenated laps from strategyAAllLaps
-    allLapsA = strategyAAllLaps.value.map((lap, idx) => ({
-      ...lap,
-      lap: idx + 1  // Continuous numbering for chart X-axis
-    }))
-  } else if (isCrossSessionCompare.value) {
-    allLapsA = crossStintALaps.value
-    // If in strategy mode, concatenate second stint laps
-    if (isStrategyMode.value && strategyASecond.value) {
-      const a2Laps = crossStintA2Laps.value
-      const a1Length = allLapsA.length
-      const concatenatedA2 = a2Laps.map((lap, idx) => ({
-        ...lap,
-        lap: a1Length + idx + 1,
-        _originalLap: lap.lap,
-        _isSecondStint: true
-      }))
-      allLapsA = [...allLapsA, ...concatenatedA2]
-    }
-  } else if (isCompareMode.value) {
-    allLapsA = compareStintALaps.value
-  } else {
-    allLapsA = selectedStintLaps.value
+function lapExclusionKey(lap: any, source: LapSeriesSource, stintNumber: number | null | undefined): string {
+  return buildLapExclusionKey({
+    source,
+    stintNumber,
+    lapNumber: lap?.lap ?? lap?.lapNumber ?? lap?.lap_number
+  })
+}
+
+function buildStrategyPoints(params: {
+  stints: Array<{ number: number }>
+  sources: LapSeriesSource[]
+  strategy: 'A' | 'B'
+}): NormalizedLapPoint[] {
+  const points: NormalizedLapPoint[] = []
+  params.stints.forEach((stint, index) => {
+    const source = params.sources[index] || params.sources[0] || 'a'
+    const stintPoints = normalizeLapSeries({
+      laps: getLapsForSource(source, stint.number),
+      source,
+      strategy: params.strategy,
+      stintNumber: stint.number,
+      stintIndex: index,
+      displayStart: points.length
+    })
+    points.push(...stintPoints)
+  })
+  return points
+}
+
+function isLapExcludedInCurrentTable(lap: any): boolean {
+  const activeTab = activeTableTab.value
+  if (activeTab.startsWith('B-')) {
+    const stintNumber = Number(activeTab.replace('B-', ''))
+    const source: LapSeriesSource = isCrossSessionCompare.value ? 'b' : 'a'
+    const set = isCrossSessionCompare.value ? excludedLapsCrossB.value : excludedLapsB.value
+    return set.has(lapExclusionKey(lap, source, stintNumber))
   }
-  
-  // Filter out excluded laps
-  const lapsA = allLapsA.filter(l => !excludedLaps.value.has(l.lap))
-  const stintData = isCrossSessionCompare.value 
-    ? crossStintA.value 
-    : isCompareMode.value 
-      ? compareStintA.value 
+  if (activeTab.startsWith('A-')) {
+    const stintNumber = Number(activeTab.replace('A-', ''))
+    return excludedLaps.value.has(lapExclusionKey(lap, 'a', stintNumber))
+  }
+  return excludedLaps.value.has(lapExclusionKey(lap, 'a', selectedStintNumber.value))
+}
+
+const chartLapPointsA = computed(() => {
+  if (isBuilderSameSessionCompare.value) {
+    return buildStrategyPoints({
+      stints: strategyAStints.value,
+      sources: [stintASource.value, stintASecondSource.value],
+      strategy: 'A'
+    })
+  }
+
+  if (isCrossSessionCompare.value) {
+    const stints = selectedCrossStintA.value
+      ? [{ number: selectedCrossStintA.value }, ...(isStrategyMode.value && strategyASecond.value ? [{ number: strategyASecond.value }] : [])]
+      : []
+    return buildStrategyPoints({ stints, sources: ['a', 'a'], strategy: 'A' })
+  }
+
+  if (isCompareMode.value && stintA.value) {
+    return normalizeLapSeries({
+      laps: compareStintALaps.value,
+      source: 'a',
+      strategy: 'A',
+      stintNumber: stintA.value
+    })
+  }
+
+  return normalizeLapSeries({
+    laps: selectedStintLaps.value,
+    source: 'a',
+    strategy: 'A',
+    stintNumber: selectedStintNumber.value
+  })
+})
+
+const chartLapPointsB = computed(() => {
+  if (isBuilderSameSessionCompare.value) {
+    return buildStrategyPoints({
+      stints: strategyBStints.value,
+      sources: [stintBSource.value, stintBSecondSource.value],
+      strategy: 'B'
+    })
+  }
+
+  if (isCompareMode.value && stintB.value) {
+    return normalizeLapSeries({
+      laps: compareStintBLaps.value,
+      source: 'a',
+      strategy: 'B',
+      stintNumber: stintB.value
+    })
+  }
+
+  if (isCrossSessionCompare.value && selectedCrossStintB.value) {
+    const stints = [{ number: selectedCrossStintB.value }, ...(isStrategyMode.value && strategyBSecond.value ? [{ number: strategyBSecond.value }] : [])]
+    return buildStrategyPoints({ stints, sources: ['b', 'b'], strategy: 'B' })
+  }
+
+  return []
+})
+
+const chartData = computed(() => {
+  const lapsA = filterIncludedLapPoints(chartLapPointsA.value, excludedLaps.value)
+  const lapsB = isCrossSessionCompare.value
+    ? filterIncludedLapPoints(chartLapPointsB.value, excludedLapsCrossB.value)
+    : filterIncludedLapPoints(chartLapPointsB.value, excludedLapsB.value)
+
+  const stintData = isCrossSessionCompare.value
+    ? crossStintA.value
+    : isCompareMode.value
+      ? compareStintA.value
       : selectedStint.value
   const isQualy = stintData?.type === 'Q'
   
@@ -1838,20 +1932,19 @@ const chartData = computed(() => {
   const bestLapSec = timeToSeconds(bestLapTime)
   
   // Helper to check if lap TIME is on-target (under the target line) - ignores validity
-  const isTimeOnTarget = (lap: typeof lapsA[0]) => {
+  const isTimeOnTarget = (lap: NormalizedLapPoint) => {
     if (lap.pit) return false
-    const lapSec = timeToSeconds(lap.time)
-    return lapSec <= targetLine
+    return lap.timeSeconds <= targetLine
   }
   
   // Helper to check if lap is valid and on-target
-  const isOnTarget = (lap: typeof lapsA[0]) => {
+  const isOnTarget = (lap: NormalizedLapPoint) => {
     if (lap.pit || !lap.valid) return false
     return isTimeOnTarget(lap)
   }
   
   // Helper to check if lap is the best lap
-  const isBestLap = (lap: typeof lapsA[0]) => {
+  const isBestLap = (lap: NormalizedLapPoint) => {
     if (lap.pit || !lap.valid) return false
     return lap.time === bestLapTime
   }
@@ -1890,8 +1983,10 @@ const chartData = computed(() => {
         ? `Strategia A (${strategyAStints.value.map(s => `#${s.number}`).join('+')})` 
         : isCompareMode.value 
           ? `A: Stint #${stintA.value}` 
+          : isCrossSessionCompare.value
+            ? `Strategia A · Stint #${selectedCrossStintA.value}${strategyASecond.value ? '+#' + strategyASecond.value : ''}`
           : 'Tempo',
-      data: lapsA.map(l => timeToSeconds(l.time)),
+      data: lapsA.map(l => l.timeSeconds),
       borderColor: '#3b82f6',
       backgroundColor: 'rgba(59,130,246,0.1)',
       pointBackgroundColor: pointBackgroundColors,
@@ -1900,12 +1995,13 @@ const chartData = computed(() => {
       pointRadius: 5,
       tension: 0,
       order: 1,
+      _points: lapsA,
       // Segment coloring for multi-stint strategies
-      segment: isBuilderSameSessionCompare.value ? {
+      segment: (isBuilderSameSessionCompare.value || isCrossSessionCompare.value) ? {
         borderColor: (ctx: any) => {
           const lap = lapsA[ctx.p1DataIndex]
           // Use lighter blue for 2nd stint
-          return lap?._stintIndex > 0 ? '#60a5fa' : '#3b82f6'
+          return (lap?.stintIndex ?? 0) > 0 ? '#60a5fa' : '#3b82f6'
         }
       } : undefined
     },
@@ -1938,7 +2034,7 @@ const chartData = computed(() => {
   // Add grip zone backgrounds (when toggle is on and there's variation)
   if (showGripZones.value && hasGripVariation.value && lapsA.length > 0) {
     // Find max Y value in the data for zone height
-    const maxY = Math.max(...lapsA.map(l => timeToSeconds(l.time))) + 5
+    const maxY = Math.max(...lapsA.map(l => l.timeSeconds)) + 5
     
     gripZones.value.forEach((zone, zoneIdx) => {
       const color = gripColors[zone.gripLevel] || gripColors['Opt']
@@ -1964,95 +2060,37 @@ const chartData = computed(() => {
     })
   }
   
-  // Add Strategy B line if in BUILDER SAME-SESSION compare mode
-  // Calculate lapsB FIRST so we can determine max lap count for labels
-  let lapsBForChart: any[] = []
-  if (isBuilderSameSessionCompare.value && strategyBAllLaps.value.length > 0) {
-    const allLapsB = strategyBAllLaps.value.map((lap, idx) => ({
-      ...lap,
-      lap: idx + 1  // Continuous numbering
-    }))
-    // Filter out excluded laps for Strategy B
-    lapsBForChart = allLapsB.filter(l => !excludedLapsB.value.has(l.lap))
-    const stintLabels = strategyBStints.value.map(s => `#${s.number}`).join('+')
+  if (lapsB.length > 0) {
+    const stintLabels = isBuilderSameSessionCompare.value
+      ? strategyBStints.value.map(s => `#${s.number}`).join('+')
+      : isCompareMode.value
+        ? `#${stintB.value}`
+        : `#${selectedCrossStintB.value}${strategyBSecond.value ? '+#' + strategyBSecond.value : ''}`
     
     // Generate segment colors for multi-stint (different shade for each stint)
-    const segmentColors = lapsBForChart.map(l => {
+    const segmentColors = lapsB.map(l => {
       if (l.pit) return '#6b7280'
       if (!l.valid) return '#ef4444'
       // Use lighter purple for 2nd stint
-      return l._stintIndex > 0 ? '#a78bfa' : '#8b5cf6'
+      return l.stintIndex > 0 ? '#a78bfa' : '#8b5cf6'
     })
     
     datasets.splice(1, 0, {
-      label: `Strategia B (${stintLabels})`,
-      data: lapsBForChart.map(l => timeToSeconds(l.time)),
+      label: isCompareMode.value ? `B: Stint ${stintLabels}` : `Strategia B (${stintLabels})`,
+      data: lapsB.map(l => l.timeSeconds),
       borderColor: '#8b5cf6',
       backgroundColor: 'rgba(139,92,246,0.1)',
       pointBackgroundColor: segmentColors,
       pointRadius: 5,
       tension: 0,
+      _points: lapsB,
       segment: {
         borderColor: (ctx: any) => {
           // Change line color at stint boundaries
-          const lap = lapsBForChart[ctx.p1DataIndex]
-          return lap?._stintIndex > 0 ? '#a78bfa' : '#8b5cf6'
+          const lap = lapsB[ctx.p1DataIndex]
+          return (lap?.stintIndex ?? 0) > 0 ? '#a78bfa' : '#8b5cf6'
         }
       }
-    })
-  }
-  
-  // Add stint B line if in compare mode
-  if (isCompareMode.value && compareStintBLaps.value.length > 0) {
-    const allLapsB = compareStintBLaps.value
-    // Filter out excluded laps for Stint B
-    const lapsB = allLapsB.filter(l => !excludedLapsB.value.has(l.lap))
-    datasets.splice(1, 0, {
-      label: `B: Stint #${stintB.value}`,
-      data: lapsB.map(l => timeToSeconds(l.time)),
-      borderColor: '#8b5cf6',
-      backgroundColor: 'rgba(139,92,246,0.1)',
-      pointBackgroundColor: lapsB.map(l => l.pit ? '#6b7280' : !l.valid ? '#ef4444' : '#8b5cf6'),
-      pointRadius: 5,
-      tension: 0
-    })
-  }
-  
-  // Add Session B line if in CROSS-SESSION compare mode
-  if (isCrossSessionCompare.value && crossStintBLaps.value.length > 0) {
-    let allLapsB: any[] = crossStintBLaps.value.map((lap, idx) => ({
-      ...lap,
-      _chartIdx: idx + 1  // For alignment
-    }))
-    
-    // If in strategy mode, concatenate second stint laps for B
-    if (isStrategyMode.value && strategyBSecond.value) {
-      const b2Laps = crossStintB2Laps.value
-      const b1Length = allLapsB.length
-      const concatenatedB2 = b2Laps.map((lap, idx) => ({
-        ...lap,
-        _chartIdx: b1Length + idx + 1,
-        _isSecondStint: true
-      }))
-      allLapsB = [...allLapsB, ...concatenatedB2]
-    }
-    
-    // Use null for excluded laps to maintain alignment (instead of filtering)
-    // This creates "gaps" in the chart where laps are excluded
-    datasets.splice(1, 0, {
-      label: isStrategyMode.value 
-        ? `Strategia B (${strategyBSecond.value ? 'Stint #' + selectedCrossStintB.value + '+#' + strategyBSecond.value : 'Stint #' + selectedCrossStintB.value})` 
-        : `Strategia B · Stint #${selectedCrossStintB.value}`,
-      data: allLapsB.map(l => excludedLapsCrossB.value.has(l.lapNumber) ? null : timeToSeconds(l.lapTime)),
-      borderColor: '#8b5cf6',
-      backgroundColor: 'rgba(139,92,246,0.1)',
-      pointBackgroundColor: allLapsB.map(l => {
-        if (excludedLapsCrossB.value.has(l.lapNumber)) return 'transparent'
-        return l.pit ? '#6b7280' : !l.valid ? '#ef4444' : '#8b5cf6'
-      }),
-      pointRadius: allLapsB.map(l => excludedLapsCrossB.value.has(l.lapNumber) ? 0 : 5),
-      tension: 0,
-      spanGaps: false  // Don't connect across null values
     })
   }
   
@@ -2063,22 +2101,11 @@ const chartData = computed(() => {
   
   if (isBuilderSameSessionCompare.value || isCrossSessionCompare.value || isCompareMode.value) {
     // Compare mode: use continuous numbering for alignment
-    let maxLapCount = lapsA.length
-    if (isBuilderSameSessionCompare.value) {
-      maxLapCount = Math.max(lapsA.length, lapsBForChart.length)
-    } else if (isCrossSessionCompare.value) {
-      let crossBLength = crossStintBLaps.value.length
-      if (isStrategyMode.value && strategyBSecond.value) {
-        crossBLength += crossStintB2Laps.value.length
-      }
-      maxLapCount = Math.max(lapsA.length, crossBLength)
-    } else if (isCompareMode.value) {
-      maxLapCount = Math.max(lapsA.length, compareStintBLaps.value.length)
-    }
+    const maxLapCount = Math.max(lapsA.length, lapsB.length)
     labels = Array.from({ length: maxLapCount }, (_, i) => `G${i + 1}`)
   } else {
     // Normal mode: labels from actual lap numbers, skipping excluded
-    labels = lapsA.map(l => `G${l.lap}`)
+    labels = lapsA.map(l => `G${l.sessionLapNumber}`)
   }
   const maxLapCount = labels.length
   
@@ -2138,11 +2165,17 @@ const chartOptions = {
       callbacks: {
         title: (items: any[]) => {
           if (!items.length) return ''
+          const pointItem = items.find((item) => item.dataset?._points?.[item.dataIndex])
+          const point = pointItem?.dataset?._points?.[pointItem.dataIndex]
+          if (point) return buildLapTooltipTitle(point)
           // Show the lap label (e.g. "G5") from the X-axis labels
           return `Giro ${items[0].label?.replace('G', '') || ''}`
         },
         label: (ctx: any) => {
           if (ctx.dataset.label?.startsWith('_')) return '' // Hide internal tooltip
+          const point = ctx.dataset?._points?.[ctx.dataIndex]
+          if (point) return [`${ctx.dataset.label}: ${secondsToTime(ctx.raw)}`, ...buildLapTooltipLines(point)]
+          if (ctx.raw == null) return ''
           return `${ctx.dataset.label}: ${secondsToTime(ctx.raw)}`
         }
       }
@@ -3065,11 +3098,11 @@ const gripZones = computed(() => {
                       :key="'a-' + stint.number + '-' + lap.lap"
                       :class="[
                         'lap-toggle-btn',
-                        { 'lap-toggle-btn--excluded': excludedLaps.has(lap.lap) },
+                        { 'lap-toggle-btn--excluded': excludedLaps.has(lapExclusionKey(lap, 'a', stint.number)) },
                         { 'lap-toggle-btn--invalid': !lap.valid && !lap.pit },
                         { 'lap-toggle-btn--pit': lap.pit }
                       ]"
-                      @click="toggleLapExclusion(lap.lap)"
+                      @click="toggleLapExclusion(lapExclusionKey(lap, 'a', stint.number))"
                       :title="`Giro ${lap.lap} - ${lap.time}${!lap.valid ? ' (Invalido)' : ''}${lap.pit ? ' (Pit)' : ''}`"
                     >
                       {{ lap.lap }}
@@ -3086,11 +3119,11 @@ const gripZones = computed(() => {
                     :key="'a-' + lap.lap"
                     :class="[
                       'lap-toggle-btn',
-                      { 'lap-toggle-btn--excluded': excludedLaps.has(lap.lap) },
+                      { 'lap-toggle-btn--excluded': excludedLaps.has(lapExclusionKey(lap, 'a', isCrossSessionCompare ? selectedCrossStintA : isCompareMode ? stintA : selectedStintNumber)) },
                       { 'lap-toggle-btn--invalid': !lap.valid && !lap.pit },
                       { 'lap-toggle-btn--pit': lap.pit }
                     ]"
-                    @click="toggleLapExclusion(lap.lap)"
+                    @click="toggleLapExclusion(lapExclusionKey(lap, 'a', isCrossSessionCompare ? selectedCrossStintA : isCompareMode ? stintA : selectedStintNumber))"
                     :title="`Giro ${lap.lap} - ${lap.time}${!lap.valid ? ' (Invalido)' : ''}${lap.pit ? ' (Pit)' : ''}`"
                   >
                     {{ lap.lap }}
@@ -3125,11 +3158,11 @@ const gripZones = computed(() => {
                       :key="'b-' + stint.number + '-' + lap.lap"
                       :class="[
                         'lap-toggle-btn lap-toggle-btn--b',
-                        { 'lap-toggle-btn--excluded': excludedLapsB.has(lap.lap) },
+                        { 'lap-toggle-btn--excluded': excludedLapsB.has(lapExclusionKey(lap, 'a', stint.number)) },
                         { 'lap-toggle-btn--invalid': !lap.valid && !lap.pit },
                         { 'lap-toggle-btn--pit': lap.pit }
                       ]"
-                      @click="toggleLapExclusionB(lap.lap)"
+                      @click="toggleLapExclusionB(lapExclusionKey(lap, 'a', stint.number))"
                       :title="`Giro ${lap.lap} - ${lap.time}${!lap.valid ? ' (Invalido)' : ''}${lap.pit ? ' (Pit)' : ''}`"
                     >
                       {{ lap.lap }}
@@ -3146,11 +3179,11 @@ const gripZones = computed(() => {
                     :key="'b-' + lap.lap"
                     :class="[
                       'lap-toggle-btn lap-toggle-btn--b',
-                      { 'lap-toggle-btn--excluded': excludedLapsB.has(lap.lap) },
+                      { 'lap-toggle-btn--excluded': excludedLapsB.has(lapExclusionKey(lap, 'a', stintB)) },
                       { 'lap-toggle-btn--invalid': !lap.valid && !lap.pit },
                       { 'lap-toggle-btn--pit': lap.pit }
                     ]"
-                    @click="toggleLapExclusionB(lap.lap)"
+                    @click="toggleLapExclusionB(lapExclusionKey(lap, 'a', stintB))"
                     :title="`Giro ${lap.lap} - ${lap.time}${!lap.valid ? ' (Invalido)' : ''}${lap.pit ? ' (Pit)' : ''}`"
                   >
                     {{ lap.lap }}
@@ -3177,11 +3210,11 @@ const gripZones = computed(() => {
                   :key="'crossb-' + lap.lapNumber"
                   :class="[
                     'lap-toggle-btn lap-toggle-btn--b',
-                    { 'lap-toggle-btn--excluded': excludedLapsCrossB.has(lap.lapNumber) },
+                    { 'lap-toggle-btn--excluded': excludedLapsCrossB.has(lapExclusionKey(lap, 'b', selectedCrossStintB)) },
                     { 'lap-toggle-btn--invalid': !lap.valid && !lap.pit },
                     { 'lap-toggle-btn--pit': lap.pit }
                   ]"
-                  @click="toggleLapExclusionCrossB(lap.lapNumber)"
+                  @click="toggleLapExclusionCrossB(lapExclusionKey(lap, 'b', selectedCrossStintB))"
                   :title="`Giro ${lap.lapNumber} - ${lap.lapTime}${!lap.valid ? ' (Invalido)' : ''}${lap.pit ? ' (Pit)' : ''}`"
                 >
                   {{ lap.lapNumber }}
@@ -3317,7 +3350,7 @@ const gripZones = computed(() => {
                   :key="lap.lap || lap.lapNumber" 
                   :class="{ 
                     'lap-pit': lap.pit, 
-                    'lap-excluded': excludedLaps.has(lap.lap || lap.lapNumber),
+                    'lap-excluded': isLapExcludedInCurrentTable(lap),
                     'lap-best': isBestLap(lap)
                   }"
                 >

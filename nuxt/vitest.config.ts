@@ -34,6 +34,7 @@ export default defineConfig({
         'app/services/gateway/trackDetailProjectionBuilder.ts',
         'app/services/projections/trackBestProjectionGuard.ts',
         'app/services/session-detail/sessionMath.ts',
+        'app/services/session-detail/sessionLapSeries.ts',
         'app/services/sync/syncTriggerPolicy.ts',
         'app/services/telemetry/raceFuelClassification.ts',
         'app/services/telemetry/sessionMergeLogic.ts',
