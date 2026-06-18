@@ -335,15 +335,33 @@ describe('buildPendingGripBest', () => {
         expect(result).toEqual({})
     })
 
-    it('registra il sessionId e la data della sessione migliore', () => {
+    it('registra sessionId e data dai bucket pending migliori', () => {
         const session = makeSession({
             sessionId: 'test-id',
             date_start: '2024-06-01T10:00:00',
-            best_by_grip: { Optimum: { bestRace: 84000 } }
+            best_by_grip: {
+                Optimum: {
+                    raceBestByFuelBucket: {
+                        '60-80': { timeMs: 84000, fuel: 65, airTemp: 22 }
+                    }
+                }
+            }
         })
         const result = buildPendingGripBest([session], 'Optimum')
+        expect(result.bestRace).toBe(84000)
         expect(result.bestRaceSessionId).toBe('test-id')
         expect(result.bestRaceDate).toBe('2024-06-01T10:00:00')
+        expect((result as any).raceBestByFuelBucket['60-80'].sessionId).toBe('test-id')
+    })
+
+    it('ignora bestRace pending legacy senza bucket storico', () => {
+        const session = makeSession({
+            sessionId: 'legacy-race',
+            best_by_grip: { Optimum: { bestRace: 84000, bestRaceFuel: null } }
+        })
+        const result = buildPendingGripBest([session], 'Optimum')
+        expect(result.bestRace).toBeUndefined()
+        expect((result as any).raceBestByFuelBucket).toBeUndefined()
     })
 })
 
@@ -392,6 +410,23 @@ describe('mergeGripBest', () => {
         expect(result.bestQualy).toBe(82000)
         expect(result.bestRace).toBe(84000)
         expect(result.bestAvgRace).toBe(83500)
+    })
+
+    it('mergea raceFuelBuckets scegliendo il record migliore per bucket', () => {
+        const base = {
+            raceBestByFuelBucket: {
+                '60-80': { timeMs: 85000, fuel: 70, sessionId: 'base' }
+            }
+        }
+        const pending = {
+            raceBestByFuelBucket: {
+                '60-80': { timeMs: 84000, fuel: 65, sessionId: 'pending' }
+            }
+        }
+        const result = mergeGripBest(base as any, pending as any)
+        expect((result as any).raceBestByFuelBucket['60-80'].timeMs).toBe(84000)
+        expect(result.bestRace).toBe(84000)
+        expect(result.bestRaceSessionId).toBe('pending')
     })
 })
 
@@ -512,6 +547,24 @@ describe('buildRaceFuelBucketReferences', () => {
         const bucket = result.find(b => b.bucket === '60-80')
         expect(bucket?.hasData).toBe(true)
         expect(bucket?.bestRace).toBeTruthy()
+    })
+
+    it('mappa best e avg con metadati separati nello stesso bucket', () => {
+        const gripBests: any = {
+            raceBestByFuelBucket: {
+                '60-80': { timeMs: 84000, fuel: 65, airTemp: 21, sessionId: 'best-session', date: '2024-06-01' }
+            },
+            raceAvgByFuelBucket: {
+                '60-80': { timeMs: 85000, fuel: 66, airTemp: 22, sessionId: 'avg-session', date: '2024-06-02', sampleLapCount: 6 }
+            }
+        }
+        const result = buildRaceFuelBucketReferences(gripBests)
+        const bucket = result.find(b => b.bucket === '60-80')
+        expect(bucket?.bestRace).toBe('1:24.000')
+        expect(bucket?.bestRaceSessionId).toBe('best-session')
+        expect(bucket?.avgRace).toBe('1:25.000')
+        expect(bucket?.avgRaceSessionId).toBe('avg-session')
+        expect(bucket?.avgRaceSampleCount).toBe(6)
     })
 
     it('i bucket corrispondono a RACE_FUEL_BUCKETS', () => {
@@ -758,6 +811,129 @@ describe('buildTrackDetailFromProjectionDocument', () => {
             pendingSessions: []
         })
         expect(result.track.raceFuelBuckets).toHaveLength(4)
+    })
+
+    it('espone best gara e media gara dai raceFuelBuckets del trackBestDoc supportato', () => {
+        const trackBestDoc = makeTrackBestDoc({
+            GT3: {
+                Optimum: {
+                    raceBestByFuelBucket: {
+                        '60-80': { timeMs: 84000, fuel: 65, airTemp: 21, sessionId: 'best-60', date: '2024-06-01' }
+                    },
+                    raceAvgByFuelBucket: {
+                        '60-80': { timeMs: 85000, fuel: 66, airTemp: 22, sessionId: 'avg-60', date: '2024-06-02', sampleLapCount: 8 }
+                    }
+                }
+            }
+        })
+        const result = buildTrackDetailFromProjectionDocument({
+            detailDoc: makeEmptyDetailDoc('monza'),
+            trackBestDoc,
+            trackId: 'monza',
+            category: 'GT3',
+            selectedGrip: 'Optimum',
+            pendingSessions: []
+        })
+        const bucket = result.track.raceFuelBuckets?.find(item => item.bucket === '60-80')
+        expect(bucket?.bestRace).toBe('1:24.000')
+        expect(bucket?.bestRaceSessionId).toBe('best-60')
+        expect(bucket?.avgRace).toBe('1:25.000')
+        expect(bucket?.avgRaceSessionId).toBe('avg-60')
+        expect(bucket?.avgRaceSampleCount).toBe(8)
+    })
+
+    it('integra i bucket gara dalle sessioni pending compatibili', () => {
+        const pending = [makeSession({
+            sessionId: 'pending-60',
+            track: 'monza',
+            date_start: '2024-06-03T10:00:00',
+            best_by_grip: {
+                Optimum: {
+                    raceBestByFuelBucket: {
+                        '60-80': { timeMs: 83900, fuel: 65, airTemp: 20 }
+                    },
+                    raceAvgByFuelBucket: {
+                        '60-80': { timeMs: 84900, fuel: 65, airTemp: 20, sampleLapCount: 5 }
+                    }
+                }
+            }
+        })]
+        const result = buildTrackDetailFromProjectionDocument({
+            detailDoc: makeEmptyDetailDoc('monza'),
+            trackBestDoc: null,
+            trackId: 'monza',
+            category: 'GT3',
+            selectedGrip: 'Optimum',
+            pendingSessions: pending
+        })
+        const bucket = result.track.raceFuelBuckets?.find(item => item.bucket === '60-80')
+        expect(bucket?.hasData).toBe(true)
+        expect(bucket?.bestRace).toBe('1:23.900')
+        expect(bucket?.bestRaceSessionId).toBe('pending-60')
+        expect(bucket?.bestRaceDate).toBe('2024-06-03T10:00:00')
+        expect(bucket?.avgRace).toBe('1:24.900')
+        expect(bucket?.avgRaceSampleCount).toBe(5)
+    })
+
+    it('non crea riferimenti gara da pending legacy senza bucket', () => {
+        const pending = [makeSession({
+            sessionId: 'pending-legacy',
+            track: 'monza',
+            best_by_grip: {
+                Optimum: {
+                    bestRace: 83000,
+                    bestRaceFuel: 35,
+                    bestAvgRace: 84000,
+                    bestAvgRaceFuel: 35
+                }
+            }
+        })]
+        const result = buildTrackDetailFromProjectionDocument({
+            detailDoc: makeEmptyDetailDoc('monza'),
+            trackBestDoc: null,
+            trackId: 'monza',
+            category: 'GT3',
+            selectedGrip: 'Optimum',
+            pendingSessions: pending
+        })
+        expect(result.track.bestRace).toBeNull()
+        expect(result.track.bestAvgRace).toBeNull()
+        expect(result.track.raceFuelBuckets?.some(item => item.hasData)).toBe(false)
+    })
+
+    it('non riusa bucket di categoria o grip diversi', () => {
+        const trackBestDoc = makeTrackBestDoc({
+            GT3: {
+                Optimum: {
+                    raceBestByFuelBucket: {
+                        '60-80': { timeMs: 84000, fuel: 65, sessionId: 'gt3-optimum' }
+                    }
+                },
+                Wet: {
+                    raceBestByFuelBucket: {
+                        '60-80': { timeMs: 92000, fuel: 65, sessionId: 'gt3-wet' }
+                    }
+                }
+            },
+            GT4: {
+                Optimum: {
+                    raceBestByFuelBucket: {
+                        '60-80': { timeMs: 99000, fuel: 65, sessionId: 'gt4-optimum' }
+                    }
+                }
+            }
+        })
+        const result = buildTrackDetailFromProjectionDocument({
+            detailDoc: makeEmptyDetailDoc('monza'),
+            trackBestDoc,
+            trackId: 'monza',
+            category: 'GT3',
+            selectedGrip: 'Wet',
+            pendingSessions: []
+        })
+        const bucket = result.track.raceFuelBuckets?.find(item => item.bucket === '60-80')
+        expect(bucket?.bestRace).toBe('1:32.000')
+        expect(bucket?.bestRaceSessionId).toBe('gt3-wet')
     })
 
     it('lastSession riflette la pending più recente', () => {

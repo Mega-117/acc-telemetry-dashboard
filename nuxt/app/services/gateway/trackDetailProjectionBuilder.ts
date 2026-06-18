@@ -17,7 +17,7 @@ import {
     type TrackHistoricalPointProjection,
     type TrackRecentSessionProjection
 } from '~/types/trackProjections'
-import { RACE_FUEL_BUCKETS, getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
+import { RACE_FUEL_BUCKETS, type RaceFuelBucket, getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 
 export { RACE_FUEL_BUCKETS, getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 
@@ -37,6 +37,18 @@ type GripBestProjection = {
     bestAvgRaceFuel?: number | null
     bestAvgRaceSessionId?: string | null
     bestAvgRaceDate?: string | null
+    raceBestByFuelBucket?: Partial<Record<RaceFuelBucket, unknown>>
+    raceAvgByFuelBucket?: Partial<Record<RaceFuelBucket, unknown>>
+}
+
+type NormalizedFuelBucketRecord = {
+    timeMs: number
+    fuel: number | null
+    airTemp: number | null
+    date: string | null
+    sessionId: string | null
+    sampleLapCount: number | null
+    confidence: string | null
 }
 
 function normalizeTrackKey(track: string | null | undefined): string {
@@ -139,21 +151,11 @@ export function buildPendingGripBest(sessions: SessionDocument[], selectedGrip: 
             best.bestQualySessionId = session.sessionId
             best.bestQualyDate = session.meta.date_start
         }
-        if (sessionBest.bestRace && (!best.bestRace || sessionBest.bestRace < best.bestRace)) {
-            best.bestRace = sessionBest.bestRace
-            best.bestRaceTemp = sessionBest.bestRaceTemp ?? null
-            best.bestRaceFuel = sessionBest.bestRaceFuel ?? null
-            best.bestRaceSessionId = session.sessionId
-            best.bestRaceDate = session.meta.date_start
-        }
-        if (sessionBest.bestAvgRace && (!best.bestAvgRace || sessionBest.bestAvgRace < best.bestAvgRace)) {
-            best.bestAvgRace = sessionBest.bestAvgRace
-            best.bestAvgRaceTemp = sessionBest.bestAvgRaceTemp ?? null
-            best.bestAvgRaceFuel = sessionBest.bestAvgRaceFuel ?? null
-            best.bestAvgRaceSessionId = session.sessionId
-            best.bestAvgRaceDate = session.meta.date_start
-        }
+        mergePendingBucketRecords(best, sessionBest, 'raceBestByFuelBucket', session)
+        mergePendingBucketRecords(best, sessionBest, 'raceAvgByFuelBucket', session)
     }
+    syncTopLevelRaceBestFromBucketMap(best, 'raceBestByFuelBucket', 'bestRace')
+    syncTopLevelRaceBestFromBucketMap(best, 'raceAvgByFuelBucket', 'bestAvgRace')
     return best
 }
 
@@ -184,19 +186,15 @@ export function mergeGripBest(base: GripBestProjection, pending: GripBestProject
             merged[dateKey] = pending[dateKey] as any
         }
     }
+    merged.raceBestByFuelBucket = mergeFuelBucketMaps(base.raceBestByFuelBucket, pending.raceBestByFuelBucket)
+    merged.raceAvgByFuelBucket = mergeFuelBucketMaps(base.raceAvgByFuelBucket, pending.raceAvgByFuelBucket)
+    syncTopLevelRaceBestFromBucketMap(merged, 'raceBestByFuelBucket', 'bestRace')
+    syncTopLevelRaceBestFromBucketMap(merged, 'raceAvgByFuelBucket', 'bestAvgRace')
     return merged
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-export function normalizeTrackFuelBucketRecord(record: any): {
-    timeMs: number
-    fuel: number | null
-    airTemp: number | null
-    date: string | null
-    sessionId: string | null
-    sampleLapCount: number | null
-    confidence: string | null
-} | null {
+export function normalizeTrackFuelBucketRecord(record: any): NormalizedFuelBucketRecord | null {
     const timeMs = Number(record?.timeMs || 0)
     if (!timeMs || !Number.isFinite(timeMs)) return null
     return {
@@ -207,6 +205,74 @@ export function normalizeTrackFuelBucketRecord(record: any): {
         sessionId: record?.sessionId ?? null,
         sampleLapCount: record?.sampleLapCount ?? null,
         confidence: record?.confidence ?? null
+    }
+}
+
+function mergePendingBucketRecords(
+    target: GripBestProjection,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+    sessionBest: any,
+    mapKey: 'raceBestByFuelBucket' | 'raceAvgByFuelBucket',
+    session: SessionDocument
+): void {
+    for (const bucket of RACE_FUEL_BUCKETS) {
+        const record = normalizeTrackFuelBucketRecord(sessionBest?.[mapKey]?.[bucket])
+        if (!record) continue
+        const targetMap = target[mapKey] || {}
+        target[mapKey] = targetMap
+        const normalized: NormalizedFuelBucketRecord = {
+            ...record,
+            date: record.date || session.meta.date_start || null,
+            sessionId: record.sessionId || session.sessionId
+        }
+        const current = normalizeTrackFuelBucketRecord(targetMap[bucket])
+        if (!current || normalized.timeMs < current.timeMs) {
+            targetMap[bucket] = normalized
+        }
+    }
+}
+
+function mergeFuelBucketMaps(
+    base: Partial<Record<RaceFuelBucket, unknown>> | undefined,
+    pending: Partial<Record<RaceFuelBucket, unknown>> | undefined
+): Partial<Record<RaceFuelBucket, unknown>> {
+    const merged: Partial<Record<RaceFuelBucket, unknown>> = { ...(base || {}) }
+    for (const bucket of RACE_FUEL_BUCKETS) {
+        const pendingRecord = normalizeTrackFuelBucketRecord(pending?.[bucket])
+        if (!pendingRecord) continue
+        const currentRecord = normalizeTrackFuelBucketRecord(merged[bucket])
+        if (!currentRecord || pendingRecord.timeMs < currentRecord.timeMs) {
+            merged[bucket] = pendingRecord
+        }
+    }
+    return merged
+}
+
+function syncTopLevelRaceBestFromBucketMap(
+    target: GripBestProjection,
+    mapKey: 'raceBestByFuelBucket' | 'raceAvgByFuelBucket',
+    targetKey: 'bestRace' | 'bestAvgRace'
+): void {
+    const candidate = RACE_FUEL_BUCKETS
+        .map((bucket) => normalizeTrackFuelBucketRecord(target[mapKey]?.[bucket]))
+        .filter((record): record is NormalizedFuelBucketRecord => !!record)
+        .sort((a, b) => a.timeMs - b.timeMs)[0]
+
+    if (!candidate || (target[targetKey] && Number(target[targetKey]) <= candidate.timeMs)) {
+        return
+    }
+
+    target[targetKey] = candidate.timeMs
+    if (targetKey === 'bestRace') {
+        target.bestRaceTemp = candidate.airTemp
+        target.bestRaceFuel = candidate.fuel
+        target.bestRaceSessionId = candidate.sessionId
+        target.bestRaceDate = candidate.date
+    } else {
+        target.bestAvgRaceTemp = candidate.airTemp
+        target.bestAvgRaceFuel = candidate.fuel
+        target.bestAvgRaceSessionId = candidate.sessionId
+        target.bestAvgRaceDate = candidate.date
     }
 }
 
