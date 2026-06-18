@@ -4,6 +4,8 @@ import type { SectorHudState, SectorHudEntry } from '~/composables/useLiveStateP
 
 const props = defineProps<{
   sectorHud: SectorHudState | null
+  // Mostra anche i tempi dei settori del giro di riferimento/precedente (PIP-175).
+  showReference?: boolean
 }>()
 
 const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
@@ -68,6 +70,10 @@ function ariaLabel(sector: SectorHudEntry): string {
           class="sector-delta__value"
           :class="{ 'sector-delta__value--placeholder': sector.state === 'pending' || sector.currentMs === null }"
         >{{ sector.state === 'pending' ? '--' : formatTime(sector.currentMs) }}</strong>
+        <small
+          v-if="showReference"
+          class="sector-delta__ref"
+        >prec {{ sector.referenceMs !== null ? formatTime(sector.referenceMs) : '--' }}</small>
         <small
           class="sector-delta__delta"
           :class="{ 'sector-delta__delta--placeholder': sector.state !== 'complete' || sector.deltaMs === null }"

@@ -78,9 +78,8 @@ onBeforeUnmount(() => {
   padding: calc(12px * var(--hud-scale));
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
-  // Sfondo OPACO: ben visibile sopra il gioco.
-  background: rgba(10, 13, 20, 0.97);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  // Sfondo completamente OPACO (nessuna trasparenza) e nessuna ombra.
+  background: #0b0e15;
 }
 
 .hud-overlay--placing .hud-overlay__panel {
@@ -123,16 +122,19 @@ onBeforeUnmount(() => {
 }
 
 .hud-overlay .tyre-slip {
-  gap: calc(6px * var(--hud-scale));
-  padding: calc(9px * var(--hud-scale));
-  justify-content: center;
+  // Il contenuto riempie la larghezza della card (barra a tutta larghezza),
+  // niente spazio laterale; verticalmente centrato nella card.
+  grid-template-columns: 1fr;
+  align-content: center;
+  gap: calc(7px * var(--hud-scale));
+  padding: calc(10px * var(--hud-scale));
 }
 
-// ── Testi più grandi e più leggibili (contrasto alto) ───────────────────────
+// ── Testi tutti BIANCHI per massima leggibilità ──────────────────────────────
 .hud-overlay .tyre-slip-hud__header span,
 .hud-overlay .tyre-slip-hud__header strong {
   font-size: calc(14px * var(--hud-scale));
-  color: rgba(255, 255, 255, 0.96);
+  color: #ffffff;
 }
 
 .hud-overlay .tyre-slip__topline strong {
@@ -143,7 +145,7 @@ onBeforeUnmount(() => {
 .hud-overlay .tyre-slip__topline span,
 .hud-overlay .tyre-slip__meta span {
   font-size: calc(13px * var(--hud-scale));
-  color: rgba(235, 243, 251, 0.92);
+  color: #ffffff;
 }
 
 .hud-overlay .tyre-slip__state {

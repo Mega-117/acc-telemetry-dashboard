@@ -41,7 +41,7 @@ onBeforeUnmount(() => {
     :class="{ 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }"
   >
     <div class="hud-overlay__panel">
-      <SectorDeltaHud :sector-hud="liveLap.sectorHud" />
+      <SectorDeltaHud :sector-hud="liveLap.sectorHud" show-reference />
       <div v-if="isPlacing" class="hud-overlay__hint">Trascina per posizionare</div>
     </div>
   </div>
@@ -75,8 +75,8 @@ onBeforeUnmount(() => {
   padding: calc(12px * var(--hud-scale));
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
-  background: rgba(10, 13, 20, 0.97);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
+  // Sfondo completamente OPACO (nessuna trasparenza) e nessuna ombra.
+  background: #0b0e15;
 }
 
 .hud-overlay--placing .hud-overlay__panel {
@@ -119,26 +119,41 @@ onBeforeUnmount(() => {
 
 .hud-overlay .sector-delta {
   min-height: 0;
-  grid-template-rows: auto 1fr auto;
-  gap: calc(4px * var(--hud-scale));
+  // Colonna: etichetta, tempo attuale, tempo giro precedente, delta.
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: calc(3px * var(--hud-scale));
   padding: calc(8px * var(--hud-scale));
 }
 
-// ── Testi più grandi e leggibili ─────────────────────────────────────────────
+// ── Testi tutti BIANCHI per massima leggibilità ──────────────────────────────
 .hud-overlay .sector-delta-hud__header span,
 .hud-overlay .sector-delta-hud__header em {
   font-size: calc(13px * var(--hud-scale));
-  color: rgba(255, 255, 255, 0.92);
+  color: #ffffff;
 }
 
 .hud-overlay .sector-delta__label,
 .hud-overlay .sector-delta small {
   font-size: calc(13px * var(--hud-scale));
-  color: rgba(235, 243, 251, 0.95);
+  color: #ffffff;
 }
 
 .hud-overlay .sector-delta strong {
   font-size: calc(22px * var(--hud-scale));
   color: #ffffff;
+}
+
+// Tempo del giro precedente per settore.
+.hud-overlay .sector-delta__ref {
+  font-size: calc(11px * var(--hud-scale));
+  color: #ffffff;
+  opacity: 0.85;
+}
+
+// Allinea a sinistra i testi piccoli (prec/delta) sotto l'etichetta.
+.hud-overlay .sector-delta small {
+  align-self: flex-start;
 }
 </style>
