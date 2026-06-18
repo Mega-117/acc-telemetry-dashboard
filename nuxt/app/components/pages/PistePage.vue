@@ -99,9 +99,9 @@ function goToTrack(id: string) {
       <a
         v-for="track in sortedTracks" 
         :key="track.id"
-        :href="`/piste/${track.id}`"
+        :href="getPublicPath(`/piste/${track.id}`)"
         :class="['track-card', { 'track-card--unplayed': track.sessions === 0 }]"
-        @click="goToTrack(track.id)"
+        @click.prevent="goToTrack(track.id)"
       >
         <!-- Track image section -->
         <div class="card-image-section">
@@ -162,9 +162,9 @@ function goToTrack(id: string) {
       <a
         v-for="track in sortedTracks" 
         :key="track.id"
-        :href="`/piste/${track.id}`"
+        :href="getPublicPath(`/piste/${track.id}`)"
         :class="['list-row', { 'list-row--unplayed': track.sessions === 0 }]"
-        @click="goToTrack(track.id)"
+        @click.prevent="goToTrack(track.id)"
       >
         <span class="lr-name">
           <span class="lr-country">{{ track.country }}</span>
