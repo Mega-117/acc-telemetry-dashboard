@@ -5,6 +5,7 @@ export interface Insight {
   details?: string
   scenario?: CoachBriefingScenario
   ctaLabel?: string
+  isDataDriven?: boolean
 }
 
 export type CoachBriefingScenario =
@@ -70,6 +71,14 @@ const dailySuggestionScenarioOptions: CoachBriefingScenarioOption[] = [
   { id: 'race_real', label: 'Gara vera' }
 ]
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- activity buckets have a stable shape but come from projections/fallbacks
+function sumRecentActivityMinutes(recentSessions: any[] | null | undefined): number {
+  if (!recentSessions || recentSessions.length === 0) return 0
+  return recentSessions.reduce((total, day) => {
+    return total + Number(day.practice || 0) + Number(day.qualify || 0) + Number(day.race || 0)
+  }, 0)
+}
+
 export function useCoachInsights() {
   
   // -------------------------------------------------------------
@@ -116,8 +125,23 @@ export function useCoachInsights() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   const generateDailySuggestion = (recentSessions: any[], forcedScenario?: CoachBriefingScenario | null): Insight => {
+    if (!forcedScenario && sumRecentActivityMinutes(recentSessions) <= 0) {
+      return {
+        type: 'neutral',
+        tone: 'baseline',
+        scenario: 'clean_laps',
+        message: 'Prima registra una sessione utile',
+        details: 'Non ci sono dati recenti sufficienti per scegliere un focus affidabile. Parti da giri puliti e registrabili.',
+        ctaLabel: 'Apri allenamento',
+        isDataDriven: false
+      }
+    }
+
     const scenario = forcedScenario || resolveDailySuggestionScenario(recentSessions)
-    return dailySuggestionScenarios[scenario]
+    return {
+      ...dailySuggestionScenarios[scenario],
+      isDataDriven: !forcedScenario
+    }
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type

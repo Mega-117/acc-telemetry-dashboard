@@ -257,14 +257,29 @@ const selectedBriefingScenario = computed<CoachBriefingScenario>(() => {
 })
 
 const dailySuggestion = computed(() => {
-  return generateDailySuggestion(activityData.value, selectedBriefingScenario.value)
+  return generateDailySuggestion(
+    activityData.value,
+    briefingSelection.value === 'auto' ? null : selectedBriefingScenario.value
+  )
 })
 
 const briefingToneClass = computed(() => `tone-${dailySuggestion.value.tone || 'race'}`)
 const selectedTrainingLabel = computed(() => {
   return briefingScenarioOptions.find((scenario) => scenario.id === selectedBriefingScenario.value)?.label || 'Pulizia'
 })
-const briefingModeLabel = computed(() => briefingSelection.value === 'auto' ? 'Beta / 7 giorni' : 'Scelta manuale')
+const briefingModeLabel = computed(() => {
+  if (briefingSelection.value !== 'auto') return 'Scelta manuale'
+  return dailySuggestion.value.isDataDriven === false ? 'Dati insufficienti' : '7 giorni'
+})
+const dailySuggestionReliabilityNote = computed(() => {
+  if (briefingSelection.value !== 'auto') {
+    return 'Scenario scelto manualmente. La lettura recente resta visibile nel box Focus gara.'
+  }
+  if (dailySuggestion.value.isDataDriven === false) {
+    return 'Il consiglio resta prudente finche non ci sono minuti recenti misurabili.'
+  }
+  return 'Il consiglio nasce dagli ultimi 7 giorni. Cambialo se oggi vuoi lavorare su un focus diverso.'
+})
 
 const driverState = computed(() => {
   return generateDriverState(activityData.value)
@@ -276,6 +291,7 @@ const prepSessionTarget = computed(() => ({
     scenario: dailySuggestion.value.scenario || 'race_real'
   }
 }))
+const pilotAreaTarget = computed(() => ({ path: '/area-pilota' }))
 
 const recentMinutes = computed(() => {
   return activityTotals.value.practice.minutes + activityTotals.value.qualify.minutes + activityTotals.value.race.minutes
@@ -570,7 +586,7 @@ const goToTrack = (track: { id: string } | null) => {
           </div>
 
           <p class="coach-note">
-            Il consiglio nasce dagli ultimi 7 giorni. Cambialo se oggi vuoi lavorare su un focus diverso.
+            {{ dailySuggestionReliabilityNote }}
           </p>
         </div>
         
@@ -647,59 +663,69 @@ const goToTrack = (track: { id: string } | null) => {
                   <span class="race-status-chip" :class="`tone-${reminderStatus.tone}`">{{ reminderStatus.label }}</span>
                 </div>
 
-                <div class="race-metrics">
-                  <div class="race-metric">
-                    <span class="metric-value">{{ plannedTrainings }}</span>
-                    <span class="metric-label">allenamenti target</span>
-                  </div>
-                  <div class="race-metric">
-                    <span class="metric-value">{{ completedTrainings }}</span>
-                    <span class="metric-label">registrati per gara</span>
-                  </div>
-                </div>
-
-                <div class="race-type-breakdown">
-                  <span class="race-type-chip">Pulizia {{ raceSpecificTotals.byType.practice }}</span>
-                  <span class="race-type-chip">Qualifica {{ raceSpecificTotals.byType.qualify }}</span>
-                  <span class="race-type-chip">Gara {{ raceSpecificTotals.byType.race }}</span>
-                </div>
-
-                <p class="race-remaining">{{ trainingsRemaining }} {{ trainingsRemaining === 1 ? 'allenamento restante' : 'allenamenti restanti' }}</p>
-                <p v-if="raceSpecificScopeLabel" class="race-scope">{{ raceSpecificScopeLabel }}</p>
-                <div class="progress-line" role="presentation">
-                  <div class="progress-line__value" :style="{ width: `${reminderProgress}%` }" />
-                </div>
-
-                <div class="focus-grid">
-                  <div class="focus-column">
-                    <span class="focus-title">Gia lavorato</span>
-                    <div class="focus-tags">
-                      <span
-                        v-for="item in workedFocusItems"
-                        :key="item"
-                        class="focus-tag focus-tag--done"
-                      >
-                        {{ item }}
-                      </span>
-                      <span v-if="workedFocusItems.length === 0" class="focus-empty">Nessun blocco allenato</span>
+                <template v-if="hasNextRace">
+                  <div class="race-metrics">
+                    <div class="race-metric">
+                      <span class="metric-value">{{ plannedTrainings }}</span>
+                      <span class="metric-label">allenamenti target</span>
+                    </div>
+                    <div class="race-metric">
+                      <span class="metric-value">{{ completedTrainings }}</span>
+                      <span class="metric-label">registrati per gara</span>
                     </div>
                   </div>
 
-                  <div class="focus-column">
-                    <span class="focus-title">Da lavorare</span>
-                    <div class="focus-tags">
-                      <span
-                        v-for="item in todoFocusItems"
-                        :key="item"
-                        class="focus-tag"
-                      >
-                        {{ item }}
-                      </span>
+                  <div class="race-type-breakdown">
+                    <span class="race-type-chip">Pulizia {{ raceSpecificTotals.byType.practice }}</span>
+                    <span class="race-type-chip">Qualifica {{ raceSpecificTotals.byType.qualify }}</span>
+                    <span class="race-type-chip">Gara {{ raceSpecificTotals.byType.race }}</span>
+                  </div>
+
+                  <p class="race-remaining">{{ trainingsRemaining }} {{ trainingsRemaining === 1 ? 'allenamento restante' : 'allenamenti restanti' }}</p>
+                  <p v-if="raceSpecificScopeLabel" class="race-scope">{{ raceSpecificScopeLabel }}</p>
+                  <div class="progress-line" role="presentation">
+                    <div class="progress-line__value" :style="{ width: `${reminderProgress}%` }" />
+                  </div>
+
+                  <div class="focus-grid">
+                    <div class="focus-column">
+                      <span class="focus-title">Gia lavorato</span>
+                      <div class="focus-tags">
+                        <span
+                          v-for="item in workedFocusItems"
+                          :key="item"
+                          class="focus-tag focus-tag--done"
+                        >
+                          {{ item }}
+                        </span>
+                        <span v-if="workedFocusItems.length === 0" class="focus-empty">Nessun blocco allenato</span>
+                      </div>
+                    </div>
+
+                    <div class="focus-column">
+                      <span class="focus-title">Da lavorare</span>
+                      <div class="focus-tags">
+                        <span
+                          v-for="item in todoFocusItems"
+                          :key="item"
+                          class="focus-tag"
+                        >
+                          {{ item }}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <p class="reminder-note">{{ reminderDeltaText }}</p>
+                  <p class="reminder-note">{{ reminderDeltaText }}</p>
+                </template>
+
+                <div v-else class="race-empty-state">
+                  <p class="race-empty-state__title">Nessuna gara da preparare</p>
+                  <p class="race-empty-state__body">
+                    Imposta una prossima gara per calcolare target, progressi e focus per pista.
+                  </p>
+                  <NuxtLink :to="pilotAreaTarget" class="action-btn action-btn--secondary">Apri Area Pilota</NuxtLink>
+                </div>
               </div>
             </Transition>
           </div>
@@ -1018,6 +1044,13 @@ const goToTrack = (track: { id: string } | null) => {
   box-shadow: 0 14px 28px rgba(var(--briefing-accent), 0.28);
 }
 
+.action-btn--secondary {
+  justify-self: start;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: none;
+}
+
 .insight-text {
   color: var(--text-secondary);
   font-size: var(--font-size-md, 16px);
@@ -1254,6 +1287,30 @@ const goToTrack = (track: { id: string } | null) => {
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.race-empty-state {
+  display: grid;
+  gap: 10px;
+  margin-top: 4px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.race-empty-state__title {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.race-empty-state__body {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .race-type-breakdown {
