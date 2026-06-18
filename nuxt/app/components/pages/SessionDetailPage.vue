@@ -42,6 +42,10 @@ import { buildBestSectorSummary, buildComparisonRows } from '~/services/session-
 import { timeToSeconds, secondsToTime } from '~/services/session-detail/sessionMath'
 import { buildSessionDisplayModel } from '~/services/session-detail/buildSessionDisplayModel'
 import { getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
+import type {
+  TheoreticalReferenceDetails,
+  TheoreticalReferenceSource
+} from '~/services/telemetry/theoreticalTimesCalculator'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
@@ -991,6 +995,28 @@ type TheoreticalTimesData = {
   historicAvgRace: number | null
   historicAvgRaceTemp: number | null
   fuelBucket: string | null
+  qualyReference: TheoreticalReferenceDetails
+  raceReference: TheoreticalReferenceDetails
+  avgRaceReference: TheoreticalReferenceDetails
+}
+
+function emptyTheoreticalReference(
+  source: TheoreticalReferenceSource,
+  fuelBucket: TheoreticalReferenceDetails['fuelBucket'] = null,
+  stintTemp = 23
+): TheoreticalReferenceDetails {
+  return {
+    source,
+    fuelBucket,
+    historicMs: null,
+    historicTemp: null,
+    historicTempRounded: null,
+    stintTemp,
+    tempDiff: null,
+    adjustmentMs: null,
+    adjustedMs: null,
+    hasHistoricTemp: false
+  }
 }
 
 const theoreticalTimes = ref<TheoreticalTimesData>({
@@ -999,7 +1025,10 @@ const theoreticalTimes = ref<TheoreticalTimesData>({
   historicQualy: null, historicQualyTemp: null,
   historicRace: null, historicRaceTemp: null,
   historicAvgRace: null, historicAvgRaceTemp: null,
-  fuelBucket: null
+  fuelBucket: null,
+  qualyReference: emptyTheoreticalReference('qualy'),
+  raceReference: emptyTheoreticalReference('raceBest'),
+  avgRaceReference: emptyTheoreticalReference('raceAvg')
 })
 // NOTE: Watch for theo recalculation is defined AFTER stintConditions (around line 550)
 
@@ -1018,6 +1047,52 @@ const stintReferenceLabel = computed(() => {
   const bucket = getRaceFuelBucket(selectedStint.value.fuelStart)
   if (!bucket) return 'Riferimento: fuel partenza non storico'
   return `Riferimento: fuel partenza ${bucket}L`
+})
+
+function formatReferenceTemp(temp: number | null): string {
+  return typeof temp === 'number' && Number.isFinite(temp) ? `${Math.round(temp)}°C` : 'n/d'
+}
+
+function formatReferenceCorrection(ms: number | null): string {
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return 'n/d'
+  const seconds = ms / 1000
+  if (seconds === 0) return '0.000s'
+  return `${seconds > 0 ? '+' : ''}${seconds.toFixed(3)}s`
+}
+
+function formatTheoreticalReferenceLabel(reference: TheoreticalReferenceDetails | null, label: string): string {
+  if (!reference) return ''
+  const bucket = reference.fuelBucket ? ` | bucket ${reference.fuelBucket}L` : ''
+  if (!reference.historicMs) {
+    return `${label}: nessuno storico compatibile${bucket}`
+  }
+
+  const historicTemp = reference.hasHistoricTemp
+    ? formatReferenceTemp(reference.historicTempRounded)
+    : 'n/d'
+  return `${label}: storico ${formatLapTime(reference.historicMs)}${bucket} | temp storico ${historicTemp} | temp stint ${formatReferenceTemp(reference.stintTemp)} | corr. ${formatReferenceCorrection(reference.adjustmentMs)}`
+}
+
+const selectedBestTheoreticalReference = computed(() => {
+  if (!selectedStint.value) return null
+  return selectedStint.value.type === 'Q'
+    ? theoreticalTimes.value.qualyReference
+    : theoreticalTimes.value.raceReference
+})
+
+const selectedAvgTheoreticalReference = computed(() => {
+  if (selectedStint.value?.type !== 'R') return null
+  return theoreticalTimes.value.avgRaceReference
+})
+
+const selectedBestTheoreticalReferenceLabel = computed(() => {
+  if (!selectedStint.value) return ''
+  const label = selectedStint.value.type === 'Q' ? 'BEST storico qualifica' : 'BEST storico gara'
+  return formatTheoreticalReferenceLabel(selectedBestTheoreticalReference.value, label)
+})
+
+const selectedAvgTheoreticalReferenceLabel = computed(() => {
+  return formatTheoreticalReferenceLabel(selectedAvgTheoreticalReference.value, 'AVG teorica gara')
 })
 
 // DISPLAYED STINT: the stint shown in the right panel (single stint mode)
@@ -1697,7 +1772,10 @@ watch(
       historicRaceTemp: theo.historicRaceTemp,
       historicAvgRace: theo.historicAvgRace,
       historicAvgRaceTemp: theo.historicAvgRaceTemp,
-      fuelBucket: theo.fuelBucket
+      fuelBucket: theo.fuelBucket,
+      qualyReference: theo.qualyReference,
+      raceReference: theo.raceReference,
+      avgRaceReference: theo.avgRaceReference
     }
   },
   { immediate: true }
@@ -2851,6 +2929,26 @@ const gripZones = computed(() => {
                 <span v-if="stintReferenceLabel" class="ssc-reference-label" data-testid="stint-reference-fuel">{{ stintReferenceLabel }}</span>
                 <span class="ssc-duration-label">Durata: {{ stintDuration.formatted }}</span>
               </div>
+            </div>
+            <div
+              v-if="selectedBestTheoreticalReferenceLabel || selectedAvgTheoreticalReferenceLabel"
+              class="ssc-theory-meta"
+              data-testid="theoretical-reference-meta"
+            >
+              <span
+                v-if="selectedBestTheoreticalReferenceLabel"
+                class="ssc-theory-pill"
+                data-testid="theoretical-best-reference"
+              >
+                {{ selectedBestTheoreticalReferenceLabel }}
+              </span>
+              <span
+                v-if="selectedAvgTheoreticalReferenceLabel"
+                class="ssc-theory-pill"
+                data-testid="theoretical-avg-reference"
+              >
+                {{ selectedAvgTheoreticalReferenceLabel }}
+              </span>
             </div>
             <div class="ssc-table">
               <div class="ssc-table-header">
@@ -4864,6 +4962,26 @@ const gripZones = computed(() => {
   font-weight: 700;
   letter-spacing: 0.2px;
   white-space: nowrap;
+}
+.ssc-theory-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+.ssc-theory-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid rgba(250, 204, 21, 0.24);
+  border-radius: 4px;
+  background: rgba(250, 204, 21, 0.08);
+  color: rgba(254, 240, 138, 0.92);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
 }
 .ssc-header-right {
   display: flex;

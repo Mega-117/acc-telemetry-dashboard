@@ -5,6 +5,7 @@ import {
     resolveRaceReference,
     resolveAvgRaceReference,
     applyTempAdjustment,
+    calculateTempAdjustmentDetails,
     createGetTheoreticalTimes,
 } from '~/services/telemetry/theoreticalTimesCalculator'
 import type { GripBestTimes } from '~/services/telemetry/theoreticalTimesCalculator'
@@ -252,6 +253,69 @@ describe('applyTempAdjustment', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
+// calculateTempAdjustmentDetails
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('calculateTempAdjustmentDetails', () => {
+    it('espone metadata senza correzione se temp storica e temp stint coincidono', () => {
+        expect(calculateTempAdjustmentDetails(92000, 22, 22)).toMatchObject({
+            historicMs: 92000,
+            historicTemp: 22,
+            historicTempRounded: 22,
+            stintTemp: 22,
+            tempDiff: 0,
+            adjustmentMs: 0,
+            adjustedMs: 92000,
+            hasHistoricTemp: true,
+        })
+    })
+
+    it('espone correzione positiva quando lo stint è più caldo', () => {
+        expect(calculateTempAdjustmentDetails(92000, 20, 25)).toMatchObject({
+            tempDiff: 5,
+            adjustmentMs: 500,
+            adjustedMs: 92500,
+            hasHistoricTemp: true,
+        })
+    })
+
+    it('espone correzione negativa quando lo stint è più freddo', () => {
+        expect(calculateTempAdjustmentDetails(92000, 25, 20)).toMatchObject({
+            tempDiff: -5,
+            adjustmentMs: -500,
+            adjustedMs: 91500,
+            hasHistoricTemp: true,
+        })
+    })
+
+    it('mantiene il tempo storico e segnala temp storica mancante', () => {
+        expect(calculateTempAdjustmentDetails(92000, null, 22)).toMatchObject({
+            historicMs: 92000,
+            historicTemp: null,
+            historicTempRounded: null,
+            stintTemp: 22,
+            tempDiff: 0,
+            adjustmentMs: 0,
+            adjustedMs: 92000,
+            hasHistoricTemp: false,
+        })
+    })
+
+    it('ritorna metadata vuoti se manca il tempo storico', () => {
+        expect(calculateTempAdjustmentDetails(null, 22, 25)).toMatchObject({
+            historicMs: null,
+            historicTemp: 22,
+            historicTempRounded: 22,
+            stintTemp: 25,
+            tempDiff: null,
+            adjustmentMs: null,
+            adjustedMs: null,
+            hasHistoricTemp: true,
+        })
+    })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 // createGetTheoreticalTimes (factory + integrazione)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -283,6 +347,9 @@ describe('createGetTheoreticalTimes', () => {
         expect(result.theoQualy).toBeDefined()
         expect(result.theoRace).toBeDefined()
         expect(result.theoAvgRace).toBeDefined()
+        expect(result.qualyReference).toMatchObject({ source: 'qualy', adjustedMs: 91000 })
+        expect(result.raceReference).toMatchObject({ source: 'raceBest', fuelBucket: '40-60', adjustedMs: 92000 })
+        expect(result.avgRaceReference).toMatchObject({ source: 'raceAvg', fuelBucket: '40-60', adjustedMs: 93000 })
     })
 
     it('nessuna correzione temp se stintTemp uguale a storico', async () => {
@@ -315,6 +382,12 @@ describe('createGetTheoreticalTimes', () => {
         const result = await getTheo('spa', 'dry', 20, 'GT3', undefined, 70)
         expect(result.theoRace).toBeNull()
         expect(result.fuelBucket).toBe('60-80')
+        expect(result.raceReference).toMatchObject({
+            source: 'raceBest',
+            fuelBucket: '60-80',
+            historicMs: null,
+            adjustedMs: null,
+        })
     })
 
     it('theoRace null se stintFuelStart è null', async () => {
@@ -354,6 +427,52 @@ describe('createGetTheoreticalTimes', () => {
         const result = await getTheo('spa', 'dry', 20, 'GT3', undefined, 55)
         expect(result.theoRace).toBe(91800)
         expect(result.theoAvgRace).toBe(92800)
+        expect(result.raceReference).toMatchObject({
+            source: 'raceBest',
+            fuelBucket: '40-60',
+            historicMs: 91800,
+            historicTemp: 20,
+            adjustmentMs: 0,
+        })
+        expect(result.avgRaceReference).toMatchObject({
+            source: 'raceAvg',
+            fuelBucket: '40-60',
+            historicMs: 92800,
+            historicTemp: 20,
+            adjustmentMs: 0,
+        })
+    })
+
+    it('espone metadata di correzione temperatura sui riferimenti teorici', async () => {
+        const bestsWithBucket: GripBestTimes = makeEmptyBests({
+            bestQualy: 91000,
+            bestQualyTemp: 18,
+            raceBestByFuelBucket: { '60-80': { timeMs: 91800, airTemp: 20 } },
+            raceAvgByFuelBucket: { '60-80': { timeMs: 92800, airTemp: 21 } },
+        } as any)
+        const getTheo = createGetTheoreticalTimes(makeMockProvider(bestsWithBucket))
+        const result = await getTheo('spa', 'dry', 24, 'GT3', undefined, 70)
+        expect(result.qualyReference).toMatchObject({
+            historicMs: 91000,
+            historicTempRounded: 18,
+            stintTemp: 24,
+            adjustmentMs: 600,
+            adjustedMs: 91600,
+        })
+        expect(result.raceReference).toMatchObject({
+            fuelBucket: '60-80',
+            historicMs: 91800,
+            historicTempRounded: 20,
+            adjustmentMs: 400,
+            adjustedMs: 92200,
+        })
+        expect(result.avgRaceReference).toMatchObject({
+            fuelBucket: '60-80',
+            historicMs: 92800,
+            historicTempRounded: 21,
+            adjustmentMs: 300,
+            adjustedMs: 93100,
+        })
     })
 
     it('theoQualy null se bestQualy null', async () => {

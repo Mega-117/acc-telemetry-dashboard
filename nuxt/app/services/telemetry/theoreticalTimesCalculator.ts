@@ -63,6 +63,27 @@ export type TheoreticalTimes = {
     grip: string
     stintTemp: number
     fuelBucket: RaceFuelBucket | null
+    qualyReference: TheoreticalReferenceDetails
+    raceReference: TheoreticalReferenceDetails
+    avgRaceReference: TheoreticalReferenceDetails
+}
+
+export type TheoreticalReferenceSource = 'qualy' | 'raceBest' | 'raceAvg'
+
+export type TempAdjustmentDetails = {
+    historicMs: number | null
+    historicTemp: number | null
+    historicTempRounded: number | null
+    stintTemp: number
+    tempDiff: number | null
+    adjustmentMs: number | null
+    adjustedMs: number | null
+    hasHistoricTemp: boolean
+}
+
+export type TheoreticalReferenceDetails = TempAdjustmentDetails & {
+    source: TheoreticalReferenceSource
+    fuelBucket: RaceFuelBucket | null
 }
 
 // ---- Pure helpers ----
@@ -106,11 +127,72 @@ export function applyTempAdjustment(
     historicTemp: number | null,
     stintTemp: number
 ): number | null {
-    if (!historicMs) return null
-    const historicTempRounded = Math.round(historicTemp || stintTemp)
-    const tempDiff = stintTemp - historicTempRounded
+    return calculateTempAdjustmentDetails(historicMs, historicTemp, stintTemp).adjustedMs
+}
+
+export function calculateTempAdjustmentDetails(
+    historicMs: number | null,
+    historicTemp: number | null,
+    stintTemp: number
+): TempAdjustmentDetails {
+    const safeStintTemp = Number.isFinite(stintTemp) ? stintTemp : 23
+    const hasHistoricMs = typeof historicMs === 'number' && Number.isFinite(historicMs) && historicMs > 0
+    const hasHistoricTemp = typeof historicTemp === 'number' && Number.isFinite(historicTemp)
+
+    if (!hasHistoricMs) {
+        return {
+            historicMs: null,
+            historicTemp: hasHistoricTemp ? historicTemp : null,
+            historicTempRounded: hasHistoricTemp ? Math.round(historicTemp) : null,
+            stintTemp: safeStintTemp,
+            tempDiff: null,
+            adjustmentMs: null,
+            adjustedMs: null,
+            hasHistoricTemp
+        }
+    }
+
+    if (!hasHistoricTemp) {
+        return {
+            historicMs,
+            historicTemp: null,
+            historicTempRounded: null,
+            stintTemp: safeStintTemp,
+            tempDiff: 0,
+            adjustmentMs: 0,
+            adjustedMs: Math.round(historicMs),
+            hasHistoricTemp: false
+        }
+    }
+
+    const historicTempRounded = Math.round(historicTemp)
+    const tempDiff = safeStintTemp - historicTempRounded
     const adjustmentMs = tempDiff * 100 // 100ms per degree
-    return Math.round(historicMs + adjustmentMs)
+
+    return {
+        historicMs,
+        historicTemp,
+        historicTempRounded,
+        stintTemp: safeStintTemp,
+        tempDiff,
+        adjustmentMs,
+        adjustedMs: Math.round(historicMs + adjustmentMs),
+        hasHistoricTemp: true
+    }
+}
+
+function buildTheoreticalReference(
+    source: TheoreticalReferenceSource,
+    fuelBucket: RaceFuelBucket | null,
+    historicMs: number | null,
+    historicTemp: number | null,
+    stintTemp: number
+): TheoreticalReferenceDetails {
+    return {
+        source,
+        fuelBucket,
+        ...calculateTempAdjustmentDetails(historicMs, historicTemp, stintTemp)
+    }
 }
 
 // ---- Factory ----
@@ -143,11 +225,14 @@ export function createGetTheoreticalTimes(
         const stintReferenceFuelBucket = getRaceFuelBucket(stintFuelStart)
         const raceReference = resolveRaceReference(bests, stintReferenceFuelBucket)
         const avgRaceReference = resolveAvgRaceReference(bests, stintReferenceFuelBucket)
+        const qualyTheoreticalReference = buildTheoreticalReference('qualy', null, bests.bestQualy, bests.bestQualyTemp, stintTemp)
+        const raceTheoreticalReference = buildTheoreticalReference('raceBest', stintReferenceFuelBucket, raceReference.time, raceReference.temp, stintTemp)
+        const avgRaceTheoreticalReference = buildTheoreticalReference('raceAvg', stintReferenceFuelBucket, avgRaceReference.time, avgRaceReference.temp, stintTemp)
 
         return {
-            theoQualy: applyTempAdjustment(bests.bestQualy, bests.bestQualyTemp, stintTemp),
-            theoRace: applyTempAdjustment(raceReference.time, raceReference.temp, stintTemp),
-            theoAvgRace: applyTempAdjustment(avgRaceReference.time, avgRaceReference.temp, stintTemp),
+            theoQualy: qualyTheoreticalReference.adjustedMs,
+            theoRace: raceTheoreticalReference.adjustedMs,
+            theoAvgRace: avgRaceTheoreticalReference.adjustedMs,
             historicQualy: bests.bestQualy,
             historicQualyTemp: bests.bestQualyTemp,
             historicRace: raceReference.time,
@@ -156,7 +241,10 @@ export function createGetTheoreticalTimes(
             historicAvgRaceTemp: avgRaceReference.temp,
             grip,
             stintTemp,
-            fuelBucket: stintReferenceFuelBucket
+            fuelBucket: stintReferenceFuelBucket,
+            qualyReference: qualyTheoreticalReference,
+            raceReference: raceTheoreticalReference,
+            avgRaceReference: avgRaceTheoreticalReference
         }
     }
 }
