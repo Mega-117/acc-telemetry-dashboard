@@ -4,30 +4,52 @@ import { fileURLToPath } from 'node:url'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const gatewayPath = path.resolve(scriptDir, '../app/composables/useTelemetryGateway.ts')
+const trackDetailBuilderPath = path.resolve(scriptDir, '../app/services/gateway/trackDetailProjectionBuilder.ts')
 const source = fs.readFileSync(gatewayPath, 'utf8')
+const trackDetailBuilderFileSource = fs.readFileSync(trackDetailBuilderPath, 'utf8')
 
-function extractFunctionBody(functionName) {
+function extractFunctionBody(functionName, functionSource = source) {
   const asyncSignature = `async function ${functionName}(`
   const syncSignature = `function ${functionName}(`
-  const asyncStart = source.indexOf(asyncSignature)
-  const syncStart = source.indexOf(syncSignature)
+  const asyncStart = functionSource.indexOf(asyncSignature)
+  const syncStart = functionSource.indexOf(syncSignature)
   const start = asyncStart !== -1 ? asyncStart : syncStart
   if (start === -1) {
     throw new Error(`Missing function ${functionName}`)
   }
 
-  const braceStart = source.indexOf('{', start)
+  const paramsStart = functionSource.indexOf('(', start)
+  if (paramsStart === -1) {
+    throw new Error(`Missing parameter list for ${functionName}`)
+  }
+
+  let paramsDepth = 0
+  let paramsEnd = -1
+  for (let index = paramsStart; index < functionSource.length; index++) {
+    const char = functionSource[index]
+    if (char === '(') paramsDepth += 1
+    if (char === ')') paramsDepth -= 1
+    if (paramsDepth === 0) {
+      paramsEnd = index
+      break
+    }
+  }
+  if (paramsEnd === -1) {
+    throw new Error(`Unclosed parameter list for ${functionName}`)
+  }
+
+  const braceStart = functionSource.indexOf('{', paramsEnd)
   if (braceStart === -1) {
     throw new Error(`Missing body for ${functionName}`)
   }
 
   let depth = 0
-  for (let index = braceStart; index < source.length; index++) {
-    const char = source[index]
+  for (let index = braceStart; index < functionSource.length; index++) {
+    const char = functionSource[index]
     if (char === '{') depth += 1
     if (char === '}') depth -= 1
     if (depth === 0) {
-      return source.slice(braceStart, index + 1)
+      return functionSource.slice(braceStart, index + 1)
     }
   }
 
@@ -59,11 +81,10 @@ for (const check of checks) {
   }
 }
 
-const trackDetailBuilder = extractFunctionBody('buildTrackDetailFromProjectionDocument')
-const trackDetailBuilderStart = source.indexOf('function buildTrackDetailFromProjectionDocument(')
-const trackDetailBuilderEnd = source.indexOf('export function useTelemetryGateway()', trackDetailBuilderStart)
-const trackDetailBuilderSource = source.slice(trackDetailBuilderStart, trackDetailBuilderEnd)
-void trackDetailBuilder
+const trackDetailBuilderSource = extractFunctionBody(
+  'buildTrackDetailFromProjectionDocument',
+  trackDetailBuilderFileSource
+)
 for (const required of ['raceFuelBuckets', 'raceBestByFuelBucket', 'raceAvgByFuelBucket', 'bestRaceFuelBucket', 'bestAvgRaceFuelBucket']) {
   if (!trackDetailBuilderSource.includes(required)) {
     failures.push(`buildTrackDetailFromProjectionDocument does not forward ${required}`)
