@@ -307,6 +307,7 @@ assert.equal(setCalls, 3)
 
 getCalls = 0
 setCalls = 0
+const userReads = []
 const userWrites = []
 const userProjectionResult = await applyUserProjectionDeltas({
   db: {},
@@ -316,8 +317,15 @@ const userProjectionResult = await applyUserProjectionDeltas({
     status: 'created',
     sessionType: index % 3
   })),
-  getDocFn: async () => {
+  getDocFn: async (ref) => {
     getCalls++
+    userReads.push(ref.path)
+    if (ref.path === 'users/user-1/sessionListMeta/v1') {
+      return {
+        exists: () => false,
+        data: () => null
+      }
+    }
     return {
       exists: () => true,
       data: () => ({
@@ -357,8 +365,16 @@ const userProjectionResult = await applyUserProjectionDeltas({
 })
 
 assert.equal(userProjectionResult.wrote, true)
-assert.equal(getCalls, 1, 'incremental user projection must read only the user projection document')
-assert.equal(setCalls, 2, 'incremental user projection must write user projection and pilotDirectory once')
+assert.deepEqual(
+  userReads,
+  ['users/user-1', 'users/user-1/sessionListMeta/v1'],
+  'incremental user projection must read only the user projection document and session list metadata'
+)
+assert.equal(
+  setCalls,
+  2,
+  'incremental user projection must write user projection and pilotDirectory once when session list projection is missing'
+)
 assert.equal(userWrites[0].ref.path, 'users/user-1')
 assert.equal(userWrites[1].ref.path, 'pilotDirectory/user-1')
 assert.equal(userWrites[0].data.sessionIndex.totalSessions, 12)
