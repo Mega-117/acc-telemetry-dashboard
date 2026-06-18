@@ -119,11 +119,12 @@ onBeforeUnmount(() => {
 
 .hud-overlay .sector-delta {
   min-height: 0;
-  // Colonna: etichetta, tempo attuale, tempo giro precedente, delta.
+  // Colonna: etichetta, tempo attuale, delta, tempo giro precedente.
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: calc(3px * var(--hud-scale));
+  // Più spazio verticale tra le linee.
+  gap: calc(8px * var(--hud-scale));
   padding: calc(8px * var(--hud-scale));
 }
 
