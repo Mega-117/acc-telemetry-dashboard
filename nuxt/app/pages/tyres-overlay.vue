@@ -65,9 +65,9 @@ onBeforeUnmount(() => {
 }
 
 // 3 formati fissi: la finestra cambia dimensione lato Electron, qui si scala il testo.
-.hud-overlay--size-small { --hud-scale: 0.92; }
-.hud-overlay--size-medium { --hud-scale: 1.06; }
-.hud-overlay--size-large { --hud-scale: 1.22; }
+.hud-overlay--size-small { --hud-scale: 1; }
+.hud-overlay--size-medium { --hud-scale: 1.18; }
+.hud-overlay--size-large { --hud-scale: 1.36; }
 
 // Fuori da Electron (browser/Playwright): sfondo scuro per poter testare.
 .hud-overlay--web { background: #0d0d12; }

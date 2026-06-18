@@ -62,9 +62,9 @@ onBeforeUnmount(() => {
   color: #f4f8ff;
 }
 
-.hud-overlay--size-small { --hud-scale: 0.92; }
-.hud-overlay--size-medium { --hud-scale: 1.06; }
-.hud-overlay--size-large { --hud-scale: 1.22; }
+.hud-overlay--size-small { --hud-scale: 1; }
+.hud-overlay--size-medium { --hud-scale: 1.18; }
+.hud-overlay--size-large { --hud-scale: 1.36; }
 
 .hud-overlay--web { background: #0d0d12; }
 
