@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildIncludedLapSummary,
   buildLapExclusionKey,
   buildLapTooltipLines,
   buildLapTooltipTitle,
@@ -41,6 +42,21 @@ describe('sessionLapSeries', () => {
     })
   })
 
+  it('usa number come numero giro canonico per dati cross-session normalizzati', () => {
+    const points = normalizeLapSeries({
+      laps: [
+        { number: 5, time: '1:37.395', valid: true },
+        { number: 6, time: '1:37.480', valid: true }
+      ],
+      source: 'b',
+      strategy: 'B',
+      stintNumber: 2
+    })
+
+    expect(points.map((point) => point.stintLapNumber)).toEqual([5, 6])
+    expect(points.map((point) => point.exclusionKey)).toEqual(['b:2:5', 'b:2:6'])
+  })
+
   it('concatena strategie multi-stint senza perdere il numero giro reale', () => {
     const lapsByStint: Record<number, any[]> = {
       1: [
@@ -78,6 +94,58 @@ describe('sessionLapSeries', () => {
 
     expect(included).toHaveLength(1)
     expect(included[0]?.exclusionKey).toBe('a:2:1')
+  })
+
+  it('calcola il riepilogo solo dai giri inclusi validi non pit', () => {
+    const points = normalizeLapSeries({
+      laps: [
+        { lap: 1, time: '1:40.000', valid: true },
+        { lap: 2, time: '1:39.000', valid: true },
+        { lap: 3, time: '1:38.000', valid: true },
+        { lap: 4, time: '1:37.000', valid: true },
+        { lap: 5, time: '1:36.000', valid: true },
+        { lap: 6, time: '1:35.000', valid: false },
+        { lap: 7, time: '1:34.000', valid: true, pit: true }
+      ],
+      source: 'a',
+      strategy: 'A',
+      stintNumber: 1
+    })
+
+    expect(buildIncludedLapSummary(points)).toMatchObject({
+      laps: 7,
+      validLapsCount: 5,
+      bestMs: 96000,
+      avgMs: 98000,
+      avgWarning: false,
+      durationMs: 679000
+    })
+  })
+
+  it('ricalcola best, media e durata quando un giro viene escluso', () => {
+    const points = normalizeLapSeries({
+      laps: [
+        { lap: 1, time: '1:40.000', valid: true },
+        { lap: 2, time: '1:39.000', valid: true },
+        { lap: 3, time: '1:38.000', valid: true },
+        { lap: 4, time: '1:37.000', valid: true },
+        { lap: 5, time: '1:36.000', valid: true }
+      ],
+      source: 'b',
+      strategy: 'B',
+      stintNumber: 2
+    })
+
+    const included = filterIncludedLapPoints(points, new Set([
+      buildLapExclusionKey({ source: 'b', stintNumber: 2, lapNumber: 5 })
+    ]))
+    const summary = buildIncludedLapSummary(included)
+
+    expect(summary.bestMs).toBe(97000)
+    expect(summary.avgMs).toBeNull()
+    expect(summary.avgWarning).toBe(true)
+    expect(summary.validLapsCount).toBe(4)
+    expect(summary.durationMs).toBe(394000)
   })
 
   it('costruisce tooltip espliciti per strategia, stint, giro e stato', () => {

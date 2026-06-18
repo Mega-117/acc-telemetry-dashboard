@@ -23,8 +23,17 @@ export type NormalizedLapPoint = {
   stintIndex: number
 }
 
+export type LapSeriesSummary = {
+  laps: number
+  validLapsCount: number
+  bestMs: number | null
+  avgMs: number | null
+  avgWarning: boolean
+  durationMs: number
+}
+
 export function getLapNumber(lap: Record<string, any>, fallbackIndex: number): number {
-  const value = Number(lap.lap ?? lap.lapNumber ?? lap.lap_number)
+  const value = Number(lap.lap ?? lap.lapNumber ?? lap.lap_number ?? lap.number)
   return Number.isFinite(value) && value > 0 ? value : fallbackIndex + 1
 }
 
@@ -116,6 +125,29 @@ export function filterIncludedLapPoints(
   excludedKeys: Set<string>
 ): NormalizedLapPoint[] {
   return points.filter((point) => !excludedKeys.has(point.exclusionKey))
+}
+
+export function buildIncludedLapSummary(
+  points: NormalizedLapPoint[],
+  minAverageLaps = 5
+): LapSeriesSummary {
+  const included = points.filter((point) => point.timeSeconds > 0)
+  const valid = included.filter((point) => point.valid && !point.pit)
+  const bestSeconds = valid.reduce<number | null>((best, point) => {
+    return best == null ? point.timeSeconds : Math.min(best, point.timeSeconds)
+  }, null)
+  const avgMs = valid.length >= minAverageLaps
+    ? Math.round(valid.reduce((sum, point) => sum + point.timeSeconds * 1000, 0) / valid.length)
+    : null
+
+  return {
+    laps: included.length,
+    validLapsCount: valid.length,
+    bestMs: bestSeconds == null ? null : Math.round(bestSeconds * 1000),
+    avgMs,
+    avgWarning: valid.length < minAverageLaps,
+    durationMs: Math.round(included.reduce((sum, point) => sum + point.timeSeconds * 1000, 0))
+  }
 }
 
 export function buildLapTooltipTitle(point: NormalizedLapPoint | null | undefined): string {

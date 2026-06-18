@@ -42,6 +42,7 @@ import { buildBestSectorSummary, buildComparisonRows } from '~/services/session-
 import { timeToSeconds, secondsToTime } from '~/services/session-detail/sessionMath'
 import { buildSessionDisplayModel } from '~/services/session-detail/buildSessionDisplayModel'
 import {
+  buildIncludedLapSummary,
   buildLapExclusionKey,
   buildLapTooltipLines,
   buildLapTooltipTitle,
@@ -494,7 +495,8 @@ function getLapsForSource(source: 'a' | 'b', stintNum: number): any[] {
   const crossStint = (crossSessionData.value.stints || []).find((s: any) => s.stint_number === stintNum)
   if (!crossStint?.laps) return []
   return crossStint.laps.map((lap: any, idx: number) => ({
-    number: idx + 1,
+    number: lap.lap_number || idx + 1,
+    lapNumber: lap.lap_number || idx + 1,
     time: formatLapTime(lap.lap_time_ms),
     timeMs: lap.lap_time_ms,
     valid: lap.is_valid,
@@ -656,11 +658,11 @@ const maxStrategyStints = computed(() => {
 
 // Total duration for each strategy (in ms)
 const strategyATotalDurationMs = computed(() => {
-  return strategyAStints.value.reduce((sum, s) => sum + (s.durationMs || 0), 0)
+  return strategyASummaryRows.value.reduce((sum, s) => sum + (s.durationMs || 0), 0)
 })
 
 const strategyBTotalDurationMs = computed(() => {
-  return strategyBStints.value.reduce((sum, s) => sum + (s.durationMs || 0), 0)
+  return strategyBSummaryRows.value.reduce((sum, s) => sum + (s.durationMs || 0), 0)
 })
 
 // Concatenated laps for all stints in Strategy A (with stint markers)
@@ -1298,14 +1300,14 @@ const comparisonLapsData = computed(() => {
   let lapsB: any[] = []
 
   if (isBuilderSameSessionCompare.value) {
-    lapsA = strategyAAllLaps.value || []
-    lapsB = strategyBAllLaps.value || []
+    lapsA = includedLapPointsA.value.map(comparisonLapFromPoint)
+    lapsB = includedLapPointsB.value.map(comparisonLapFromPoint)
   } else if (isCrossSessionCompare.value) {
-    lapsA = crossStintALaps.value || []
-    lapsB = crossStintBLaps.value || []
+    lapsA = includedLapPointsA.value.map(comparisonLapFromPoint)
+    lapsB = includedLapPointsB.value.map(comparisonLapFromPoint)
   } else if (isCompareMode.value) {
-    lapsA = compareStintALaps.value || []
-    lapsB = compareStintBLaps.value || []
+    lapsA = includedLapPointsA.value.map(comparisonLapFromPoint)
+    lapsB = includedLapPointsB.value.map(comparisonLapFromPoint)
   }
 
   return buildComparisonRows({ lapsA, lapsB })
@@ -1808,7 +1810,7 @@ function lapExclusionKey(lap: any, source: LapSeriesSource, stintNumber: number 
   return buildLapExclusionKey({
     source,
     stintNumber,
-    lapNumber: lap?.lap ?? lap?.lapNumber ?? lap?.lap_number
+    lapNumber: lap?.lap ?? lap?.lapNumber ?? lap?.lap_number ?? lap?.number
   })
 }
 
@@ -1907,11 +1909,57 @@ const chartLapPointsB = computed(() => {
   return []
 })
 
-const chartData = computed(() => {
-  const lapsA = filterIncludedLapPoints(chartLapPointsA.value, excludedLaps.value)
-  const lapsB = isCrossSessionCompare.value
+const includedLapPointsA = computed(() => filterIncludedLapPoints(chartLapPointsA.value, excludedLaps.value))
+
+const includedLapPointsB = computed(() => {
+  return isCrossSessionCompare.value
     ? filterIncludedLapPoints(chartLapPointsB.value, excludedLapsCrossB.value)
     : filterIncludedLapPoints(chartLapPointsB.value, excludedLapsB.value)
+})
+
+function formatSummaryTime(ms: number | null): string | null {
+  return ms == null ? null : formatLapTime(ms)
+}
+
+function buildStrategySummaryRows(stints: any[], points: NormalizedLapPoint[]) {
+  return stints.map((stint, stintIndex) => {
+    const summary = buildIncludedLapSummary(points.filter((point) => point.stintIndex === stintIndex))
+    return {
+      ...stint,
+      laps: summary.laps,
+      validLapsCount: summary.validLapsCount,
+      bestMs: summary.bestMs,
+      best: formatSummaryTime(summary.bestMs),
+      avgMs: summary.avgMs,
+      avg: summary.avgWarning ? 'min 5 giri' : formatSummaryTime(summary.avgMs),
+      avgWarning: summary.avgWarning,
+      durationMs: summary.durationMs
+    }
+  })
+}
+
+const strategyASummaryRows = computed(() => buildStrategySummaryRows(strategyAStints.value, includedLapPointsA.value))
+const strategyBSummaryRows = computed(() => buildStrategySummaryRows(strategyBStints.value, includedLapPointsB.value))
+
+function comparisonLapFromPoint(point: NormalizedLapPoint) {
+  return {
+    ...point.raw,
+    time: point.time,
+    lapTime: point.time,
+    lap: point.sessionLapNumber,
+    lapNumber: point.sessionLapNumber,
+    valid: point.valid,
+    pit: point.pit,
+    _stintIndex: point.stintIndex,
+    _stintNumber: point.stintNumber,
+    _isStintStart: point.isStintStart,
+    _globalIndex: point.displayIndex
+  }
+}
+
+const chartData = computed(() => {
+  const lapsA = includedLapPointsA.value
+  const lapsB = includedLapPointsB.value
 
   const stintData = isCrossSessionCompare.value
     ? crossStintA.value
@@ -2867,12 +2915,12 @@ const gripZones = computed(() => {
                 <!-- BEST row -->
                 <div class="ssc-table-row">
                   <div class="ssc-td ssc-td--label">BEST</div>
-                  <div class="ssc-td ssc-td--value">{{ strategyAStints[stintIndex]?.best ?? '—' }}</div>
-                  <div class="ssc-td ssc-td--value">{{ strategyBStints[stintIndex]?.best ?? '—' }}</div>
+                  <div class="ssc-td ssc-td--value">{{ strategyASummaryRows[stintIndex]?.best ?? '—' }}</div>
+                  <div class="ssc-td ssc-td--value">{{ strategyBSummaryRows[stintIndex]?.best ?? '—' }}</div>
                   <div class="ssc-td">
-                    <span v-if="strategyAStints[stintIndex] && strategyBStints[stintIndex]" 
-                          :class="['ssc-delta', getCompareDeltaClass(strategyAStints[stintIndex]?.bestMs, strategyBStints[stintIndex]?.bestMs)]">
-                      {{ formatCompareDelta(strategyAStints[stintIndex]?.bestMs, strategyBStints[stintIndex]?.bestMs) }}
+                    <span v-if="strategyASummaryRows[stintIndex] && strategyBSummaryRows[stintIndex]" 
+                          :class="['ssc-delta', getCompareDeltaClass(strategyASummaryRows[stintIndex]?.bestMs, strategyBSummaryRows[stintIndex]?.bestMs)]">
+                      {{ formatCompareDelta(strategyASummaryRows[stintIndex]?.bestMs, strategyBSummaryRows[stintIndex]?.bestMs) }}
                     </span>
                     <span v-else class="ssc-delta ssc-delta--empty">—</span>
                   </div>
@@ -2881,18 +2929,18 @@ const gripZones = computed(() => {
                 <!-- AVG row -->
                 <div class="ssc-table-row">
                   <div class="ssc-td ssc-td--label">AVG</div>
-                  <div :class="['ssc-td', 'ssc-td--value', { 'ssc-td--warning': strategyAStints[stintIndex]?.avgWarning }]">
-                    <template v-if="strategyAStints[stintIndex]?.avgWarning">⚠️ {{ strategyAStints[stintIndex]?.avg }}</template>
-                    <template v-else>{{ strategyAStints[stintIndex]?.avg ?? '—' }}</template>
+                  <div :class="['ssc-td', 'ssc-td--value', { 'ssc-td--warning': strategyASummaryRows[stintIndex]?.avgWarning }]">
+                    <template v-if="strategyASummaryRows[stintIndex]?.avgWarning">⚠️ {{ strategyASummaryRows[stintIndex]?.avg }}</template>
+                    <template v-else>{{ strategyASummaryRows[stintIndex]?.avg ?? '—' }}</template>
                   </div>
-                  <div :class="['ssc-td', 'ssc-td--value', { 'ssc-td--warning': strategyBStints[stintIndex]?.avgWarning }]">
-                    <template v-if="strategyBStints[stintIndex]?.avgWarning">⚠️ {{ strategyBStints[stintIndex]?.avg }}</template>
-                    <template v-else>{{ strategyBStints[stintIndex]?.avg ?? '—' }}</template>
+                  <div :class="['ssc-td', 'ssc-td--value', { 'ssc-td--warning': strategyBSummaryRows[stintIndex]?.avgWarning }]">
+                    <template v-if="strategyBSummaryRows[stintIndex]?.avgWarning">⚠️ {{ strategyBSummaryRows[stintIndex]?.avg }}</template>
+                    <template v-else>{{ strategyBSummaryRows[stintIndex]?.avg ?? '—' }}</template>
                   </div>
                   <div class="ssc-td">
-                    <span v-if="strategyAStints[stintIndex] && strategyBStints[stintIndex]"
-                          :class="['ssc-delta', getCompareDeltaClass(strategyAStints[stintIndex]?.avgMs, strategyBStints[stintIndex]?.avgMs)]">
-                      {{ formatCompareDelta(strategyAStints[stintIndex]?.avgMs, strategyBStints[stintIndex]?.avgMs) }}
+                    <span v-if="strategyASummaryRows[stintIndex] && strategyBSummaryRows[stintIndex]"
+                          :class="['ssc-delta', getCompareDeltaClass(strategyASummaryRows[stintIndex]?.avgMs, strategyBSummaryRows[stintIndex]?.avgMs)]">
+                      {{ formatCompareDelta(strategyASummaryRows[stintIndex]?.avgMs, strategyBSummaryRows[stintIndex]?.avgMs) }}
                     </span>
                     <span v-else class="ssc-delta ssc-delta--empty">—</span>
                   </div>
@@ -2902,18 +2950,18 @@ const gripZones = computed(() => {
                 <div class="ssc-table-row ssc-table-row--compact">
                   <div class="ssc-td ssc-td--label">GIRI VALIDI</div>
                   <div class="ssc-td ssc-td--compact">
-                    <template v-if="strategyAStints[stintIndex]">
-                      {{ strategyAStints[stintIndex].validLapsCount ?? 0 }} su {{ strategyAStints[stintIndex].laps ?? 0 }}
+                    <template v-if="strategyASummaryRows[stintIndex]">
+                      {{ strategyASummaryRows[stintIndex].validLapsCount ?? 0 }} su {{ strategyASummaryRows[stintIndex].laps ?? 0 }}
                       <span class="compact-sep">·</span>
-                      {{ formatDuration(strategyAStints[stintIndex]?.durationMs) }}
+                      {{ formatDuration(strategyASummaryRows[stintIndex]?.durationMs) }}
                     </template>
                     <template v-else>—</template>
                   </div>
                   <div class="ssc-td ssc-td--compact">
-                    <template v-if="strategyBStints[stintIndex]">
-                      {{ strategyBStints[stintIndex].validLapsCount ?? 0 }} su {{ strategyBStints[stintIndex].laps ?? 0 }}
+                    <template v-if="strategyBSummaryRows[stintIndex]">
+                      {{ strategyBSummaryRows[stintIndex].validLapsCount ?? 0 }} su {{ strategyBSummaryRows[stintIndex].laps ?? 0 }}
                       <span class="compact-sep">·</span>
-                      {{ formatDuration(strategyBStints[stintIndex]?.durationMs) }}
+                      {{ formatDuration(strategyBSummaryRows[stintIndex]?.durationMs) }}
                     </template>
                     <template v-else>—</template>
                   </div>
