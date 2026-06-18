@@ -118,7 +118,8 @@ onBeforeUnmount(() => {
   flex: 1;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-template-rows: 1fr 1fr;
-  gap: calc(9px * var(--hud-scale));
+  // Riga (front/rear) più distanziata della colonna: raggruppa anteriore/posteriore.
+  gap: calc(18px * var(--hud-scale)) calc(9px * var(--hud-scale));
 }
 
 .hud-overlay .tyre-slip {
@@ -147,6 +148,29 @@ onBeforeUnmount(() => {
   font-size: calc(13px * var(--hud-scale));
   color: #ffffff;
 }
+
+// Gerarchia gomma: lo SLIP è primario (numero più grande + micro-label),
+// la PRESSIONE è secondaria (più piccola e attenuata).
+.hud-overlay .tyre-slip__meta span:first-child {
+  font-size: calc(15px * var(--hud-scale));
+  font-weight: 900;
+}
+
+.hud-overlay .tyre-slip__meta span:first-child::after {
+  content: ' slip';
+  font-size: 0.62em;
+  font-weight: 700;
+  opacity: 0.55;
+}
+
+.hud-overlay .tyre-slip__meta span:last-child {
+  font-size: calc(11px * var(--hud-scale));
+  opacity: 0.6;
+}
+
+// Tinta di sfondo più marcata anche per giallo/arancio (visibilità periferica).
+.hud-overlay .tyre-slip--yellow { background: rgba(250, 204, 21, 0.13); }
+.hud-overlay .tyre-slip--orange { background: rgba(251, 146, 60, 0.16); }
 
 .hud-overlay .tyre-slip__state {
   max-width: none;

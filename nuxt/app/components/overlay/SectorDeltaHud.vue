@@ -6,6 +6,8 @@ const props = defineProps<{
   sectorHud: SectorHudState | null
   // Mostra anche i tempi dei settori del giro di riferimento/precedente (PIP-175).
   showReference?: boolean
+  // Per il settore in corso mostra il tempo parziale "live" invece di "--" (PIP-175).
+  liveRunning?: boolean
 }>()
 
 const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
@@ -32,6 +34,31 @@ function formatDelta(ms: number | null): string {
   if (Math.abs(ms) <= 0) return '+0.000'
   const sign = ms < 0 ? '-' : '+'
   return `${sign}${(Math.abs(ms) / 1000).toFixed(3)}`
+}
+
+// Tempo parziale "live" del settore in corso = tempo giro corrente meno i
+// settori gia' completati (aggiornato al ritmo del poller).
+function liveElapsedMs(): number | null {
+  const hud = props.sectorHud
+  if (!hud || hud.currentLapTimeMs === null || hud.currentLapTimeMs === undefined) return null
+  const completed = hud.sectors
+    .filter((s) => s.state === 'complete')
+    .reduce((acc, s) => acc + (s.currentMs ?? 0), 0)
+  const elapsed = hud.currentLapTimeMs - completed
+  return elapsed > 0 ? elapsed : null
+}
+
+function valueText(sector: SectorHudEntry): string {
+  if (sector.state === 'pending') return '--'
+  if (sector.state === 'running') {
+    if (sector.currentMs !== null) return formatTime(sector.currentMs)
+    if (props.liveRunning) {
+      const live = liveElapsedMs()
+      if (live !== null) return formatTime(live)
+    }
+    return '--'
+  }
+  return sector.currentMs !== null ? formatTime(sector.currentMs) : '--'
 }
 
 function ariaLabel(sector: SectorHudEntry): string {
@@ -68,8 +95,8 @@ function ariaLabel(sector: SectorHudEntry): string {
         <span class="sector-delta__label">S{{ sector.index }}</span>
         <strong
           class="sector-delta__value"
-          :class="{ 'sector-delta__value--placeholder': sector.state === 'pending' || sector.currentMs === null }"
-        >{{ sector.state === 'pending' ? '--' : formatTime(sector.currentMs) }}</strong>
+          :class="{ 'sector-delta__value--placeholder': valueText(sector) === '--' }"
+        >{{ valueText(sector) }}</strong>
         <small
           v-if="showReference"
           class="sector-delta__ref"

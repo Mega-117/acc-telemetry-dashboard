@@ -41,7 +41,7 @@ onBeforeUnmount(() => {
     :class="{ 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }"
   >
     <div class="hud-overlay__panel">
-      <SectorDeltaHud :sector-hud="liveLap.sectorHud" show-reference />
+      <SectorDeltaHud :sector-hud="liveLap.sectorHud" show-reference live-running />
       <div v-if="isPlacing" class="hud-overlay__hint">Trascina per posizionare</div>
     </div>
   </div>
@@ -140,19 +140,31 @@ onBeforeUnmount(() => {
   color: #ffffff;
 }
 
+// Gerarchia: etichetta, tempo attuale (hero), delta EVIDENTE, "prec" piccolo/attenuato.
+.hud-overlay .sector-delta__label { order: 0; }
+
 .hud-overlay .sector-delta strong {
+  order: 1;
   font-size: calc(22px * var(--hud-scale));
   color: #ffffff;
 }
 
-// Tempo del giro precedente per settore.
-.hud-overlay .sector-delta__ref {
-  font-size: calc(11px * var(--hud-scale));
+.hud-overlay .sector-delta__delta {
+  order: 2;
+  font-size: calc(17px * var(--hud-scale));
+  font-weight: 900;
   color: #ffffff;
-  opacity: 0.85;
 }
 
-// Allinea a sinistra i testi piccoli (prec/delta) sotto l'etichetta.
+// Tempo del giro precedente per settore: secondario, attenuato.
+.hud-overlay .sector-delta__ref {
+  order: 3;
+  font-size: calc(11px * var(--hud-scale));
+  color: #ffffff;
+  opacity: 0.6;
+}
+
+// Allinea a sinistra i testi piccoli sotto l'etichetta.
 .hud-overlay .sector-delta small {
   align-self: flex-start;
 }
