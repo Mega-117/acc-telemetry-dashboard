@@ -52,6 +52,8 @@ export default defineConfig({
         'app/composables/useSessionLoader.ts',
         'app/composables/useSessionSharing.ts',
         'app/composables/useTrackBests.ts',
+        // ── PIP-175: overlay HUD multipli ────────────────────────────────
+        'app/composables/useHudOverlay.ts',
       ],
     },
   },

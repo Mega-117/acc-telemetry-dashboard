@@ -18,6 +18,7 @@ const activeTab = computed(() => {
   if (path.startsWith('/sessioni')) return 'sessioni'
   if (path.startsWith('/piste')) return 'piste'
   if (path.startsWith('/area-pilota')) return 'area-pilota'
+  if (path.startsWith('/test-hud')) return 'test-hud'
   return 'panoramica'
 })
 

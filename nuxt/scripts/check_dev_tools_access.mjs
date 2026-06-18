@@ -17,7 +17,8 @@ const requiredFiles = [
   'app/pages/dev-cleanup.vue',
   'app/pages/dev-data-audit.vue',
   'app/pages/dev-upload.vue',
-  'app/pages/dev-voice-lab.vue'
+  'app/pages/dev-voice-lab.vue',
+  'app/pages/test-hud.vue'
 ]
 
 for (const relativePath of requiredFiles) {

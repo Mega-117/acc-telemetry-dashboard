@@ -35,6 +35,14 @@ const isTrainingOverlayRoute = computed(() => {
 const isTrainingOverlayIntent = computed(() => {
   return isTrainingOverlayRoute.value || browserOverlayIntent.value || getRouteQueryString(route.query.overlay) === 'training'
 })
+// Overlay HUD semplici (PIP-175): come il training overlay, vivono in una
+// finestra Electron dedicata e vanno renderizzati standalone, fuori dalla shell
+// auth/dashboard (che altrimenti li redirige a /panoramica).
+const hudOverlayRoutes = ['/tyres-overlay', '/sectors-overlay']
+const isHudOverlayRoute = computed(() => {
+  return hudOverlayRoutes.includes(normalizedRoutePath.value)
+    || hudOverlayRoutes.includes(browserOverlayPath.value)
+})
 const standaloneDevRoutes = ['/dev-voice-lab']
 const kokoroVoiceLabLifecycle = useKokoroVoiceLabLifecycle()
 const isStandaloneDevRoute = computed(() => {
@@ -55,7 +63,7 @@ watch(normalizedRoutePath, (path, previousPath) => {
 })
 
 useHead(() => {
-  if (!isTrainingOverlayIntent.value) return {}
+  if (!isTrainingOverlayIntent.value && !isHudOverlayRoute.value) return {}
   return {
     htmlAttrs: {
       class: 'training-overlay-document'
@@ -166,7 +174,7 @@ function closeBrowserMaintenanceNotification() {
 
 // === DASHBOARD ENTRY MAINTENANCE ===
 watch(appState, async (newState) => {
-  if (isTrainingOverlayIntent.value || isStandaloneDevRoute.value) return
+  if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneDevRoute.value) return
   if (newState === 'dashboard' && !hasPrefetched.value && currentUser.value && canEnterApp.value) {
     hasPrefetched.value = true
     
@@ -212,7 +220,7 @@ const enterDashboard = (delayMs = 0) => {
 // === WATCH AUTH LOADING STATE ===
 // This watch handles the INITIAL auth check when the app loads
 watch(authLoading, (loading) => {
-  if (isTrainingOverlayIntent.value || isStandaloneDevRoute.value) {
+  if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneDevRoute.value) {
     hasInitialized.value = true
     return
   }
@@ -239,7 +247,7 @@ watch(authLoading, (loading) => {
 // === WATCH USER CHANGES (after initialization) ===
 // This handles login/logout AFTER the initial load
 watch(currentUser, (user, oldUser) => {
-  if (isTrainingOverlayIntent.value || isStandaloneDevRoute.value) return
+  if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneDevRoute.value) return
 
   // Skip if we haven't initialized yet (handled by authLoading watch)
   if (!hasInitialized.value) return
@@ -316,12 +324,17 @@ provide('goToProfile', handleGoToProfile)
 </script>
 
 <template>
-  <div id="app" :class="{ 'app--training-overlay': isTrainingOverlayIntent }">
-    <UiAppNotifications v-if="!isTrainingOverlayIntent" />
+  <div id="app" :class="{ 'app--training-overlay': isTrainingOverlayIntent || isHudOverlayRoute }">
+    <UiAppNotifications v-if="!isTrainingOverlayIntent && !isHudOverlayRoute" />
 
     <template v-if="isTrainingOverlayIntent">
       <NuxtPage v-if="isTrainingOverlayRoute" />
       <div v-else class="overlay-boot" />
+    </template>
+
+    <!-- Overlay HUD semplici (PIP-175): render standalone come il training -->
+    <template v-else-if="isHudOverlayRoute">
+      <NuxtPage />
     </template>
 
     <template v-else-if="isStandaloneDevRoute">
