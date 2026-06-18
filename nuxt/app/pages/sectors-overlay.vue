@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Overlay HUD Settori (PIP-175): gemello di tyres-overlay ma con i dati settori
-// da live_state.json. Stessa chrome drag/placement via useHudOverlay.
+// Overlay HUD Settori (PIP-175): gemello di tyres-overlay con i dati settori da
+// live_state.json. Dimensione dal FORMATO; riusa SectorDeltaHud + poller.
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
@@ -19,18 +19,13 @@ function getApi(): any | null {
 }
 
 const route = useRoute()
-const panelEl = ref<HTMLElement | null>(null)
-
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getApi)
-const {
-  isElectron, isPlacing, enterPlacement, confirmPlacement,
-  onSurfaceEnter, onSurfaceLeave, start, stop,
-} = useHudOverlay('sectors', getApi)
+const { isElectron, isPlacing, format, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
 
 onMounted(() => {
   startLiveStatePolling()
-  start(panelEl.value)
-  if (route.query.place === '1') enterPlacement()
+  start(route.query.format)
+  loadSettings()
 })
 
 onBeforeUnmount(() => {
@@ -42,19 +37,11 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="hud-overlay"
-    :class="{ 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }"
+    :class="[`hud-overlay--size-${format}`, { 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }]"
   >
-    <div
-      ref="panelEl"
-      class="hud-overlay__panel"
-      @pointerenter="onSurfaceEnter"
-      @pointerleave="onSurfaceLeave"
-    >
+    <div class="hud-overlay__panel">
       <SectorDeltaHud :sector-hud="liveLap.sectorHud" />
-      <div v-if="isPlacing" class="hud-overlay__place">
-        <span>Trascina per posizionare</span>
-        <button type="button" class="hud-overlay__confirm" @click="confirmPlacement">Conferma</button>
-      </div>
+      <div v-if="isPlacing" class="hud-overlay__hint">Trascina per posizionare</div>
     </div>
   </div>
 </template>
@@ -62,90 +49,99 @@ onBeforeUnmount(() => {
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
 
-// Tutte le regole scopate sotto .hud-overlay per NON toccare l'overlay
-// allenamento (le classi .sector-delta-hud ecc. sono globali e condivise).
+// Regole scopate sotto .hud-overlay per non toccare l'overlay allenamento.
 .hud-overlay {
+  --hud-scale: 1.06;
   --overlay-accent-rgb: 34, 197, 94;
   position: fixed;
   inset: 0;
   display: flex;
-  // Piccolo margine uniforme: il pannello "galleggia" e non tocca i bordi della
-  // finestra (evita che bordo/ombra/angolo destro siano schiacciati/tagliati).
   padding: 6px;
   background: transparent;
   box-sizing: border-box;
+  color: #f4f8ff;
 }
 
-.hud-overlay--web {
-  background: #0d0d12;
-}
+.hud-overlay--size-small { --hud-scale: 0.92; }
+.hud-overlay--size-medium { --hud-scale: 1.06; }
+.hud-overlay--size-large { --hud-scale: 1.22; }
+
+.hud-overlay--web { background: #0d0d12; }
 
 .hud-overlay__panel {
   position: relative;
   box-sizing: border-box;
-  // Riempie l'intera finestra: lo sfondo opaco copre tutto, niente striscia
-  // trasparente quando la finestra e' clampata al minimo.
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
-  // Sfondo OPACO: l'overlay deve essere ben visibile sopra il gioco.
-  background: rgba(8, 10, 16, 0.97);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  background: rgba(10, 13, 20, 0.97);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
 }
 
-// In riposizionamento: bordo evidenziato + spazio sotto per la barra conferma.
 .hud-overlay--placing .hud-overlay__panel {
   -webkit-app-region: drag;
   cursor: move;
-  padding-bottom: 48px;
-  border-color: rgba(34, 197, 94, 0.6);
+  border-color: rgba(34, 197, 94, 0.7);
 }
 
-// L'HUD figlio riempie il pannello opaco: niente doppio bordo/sfondo.
+.hud-overlay__hint {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.92);
+  color: #04110a;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+// ── L'HUD riempie il pannello ────────────────────────────────────────────────
 .hud-overlay .sector-delta-hud {
+  flex: 1;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: calc(8px * var(--hud-scale));
   background: transparent;
   border: none;
   padding: 0;
 }
 
 .hud-overlay .sector-delta-hud__grid {
+  flex: 1;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(8px * var(--hud-scale));
 }
 
-// Barra conferma posizione: sovrapposta in basso, sempre visibile.
-.hud-overlay__place {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
-  -webkit-app-region: no-drag;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.92);
-  border: 1px solid rgba(34, 197, 94, 0.45);
-  color: #f7fbff;
-  font-size: 12px;
-  font-weight: 700;
+.hud-overlay .sector-delta {
+  min-height: 0;
+  grid-template-rows: auto 1fr auto;
+  gap: calc(4px * var(--hud-scale));
+  padding: calc(8px * var(--hud-scale));
 }
 
-.hud-overlay__confirm {
-  -webkit-app-region: no-drag;
-  padding: 5px 14px;
-  border: none;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #22c55e, #14b8a6);
-  color: #04110a;
-  font-weight: 800;
-  cursor: pointer;
+// ── Testi più grandi e leggibili ─────────────────────────────────────────────
+.hud-overlay .sector-delta-hud__header span,
+.hud-overlay .sector-delta-hud__header em {
+  font-size: calc(13px * var(--hud-scale));
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.hud-overlay .sector-delta__label,
+.hud-overlay .sector-delta small {
+  font-size: calc(13px * var(--hud-scale));
+  color: rgba(235, 243, 251, 0.95);
+}
+
+.hud-overlay .sector-delta strong {
+  font-size: calc(22px * var(--hud-scale));
+  color: #ffffff;
 }
 </style>

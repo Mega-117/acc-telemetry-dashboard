@@ -1,16 +1,23 @@
 import { ref } from 'vue'
 
+export type HudOverlayFormat = 'small' | 'medium' | 'large'
+
+const FORMATS: HudOverlayFormat[] = ['small', 'medium', 'large']
+
+function normalizeFormat(value: unknown): HudOverlayFormat {
+  return FORMATS.includes(value as HudOverlayFormat) ? (value as HudOverlayFormat) : 'medium'
+}
+
 /**
- * @description Logica generica per un overlay HUD semplice (gomme, settori)
- * renderizzato in una finestra Electron dedicata e pilotato dalla pagina dev
- * "Test HUD" (PIP-175). Volutamente NON riusa gli `useOverlay*` del training,
- * che portano parametri specifici di quel sistema (fasi, preset, resize a due
- * fasi). Qui serve solo: drag/placement, sync dimensione single-phase,
- * click-through per-finestra, lettura settings.
+ * @description Stato di un overlay HUD semplice (gomme, settori) renderizzato in
+ * una finestra Electron dedicata (PIP-175). La dimensione è decisa dal FORMATO
+ * (small/medium/large) lato Electron; qui il composable espone solo lo stato
+ * reattivo guidato dagli eventi push del main:
+ *  - `format`: formato corrente (per scalare i font).
+ *  - `isPlacing`: modalità posizionamento globale attiva (drag finestra).
  *
- * Nessun hook di lifecycle interno: la pagina chiama `start(el)` in onMounted e
- * `stop()` in onBeforeUnmount. Cosi' il composable resta testabile sotto vitest
- * (node) senza un'istanza di componente montata.
+ * Niente hook di lifecycle interni (la pagina chiama `start()`/`stop()`), così è
+ * testabile sotto vitest senza un componente montato.
  *
  * @param overlayId - id dell'overlay ('tyres' | 'sectors').
  * @param getApi - factory che ritorna l'API Electron, o null fuori da Electron.
@@ -18,94 +25,49 @@ import { ref } from 'vue'
 export function useHudOverlay(overlayId: string, getApi: () => any | null) {
   const isElectron = ref(false)
   const isPlacing = ref(false)
-  let resizeObserver: ResizeObserver | null = null
-  let surfaceEl: HTMLElement | null = null
+  const format = ref<HudOverlayFormat>('medium')
+  let unsubscribers: Array<() => void> = []
 
   function api(): any | null {
     return getApi()
   }
 
-  async function loadSettings(): Promise<{ enabled: boolean; bounds: unknown } | null> {
+  async function loadSettings(): Promise<{ enabled: boolean; locked: boolean; format: HudOverlayFormat; bounds: unknown } | null> {
     const bridge = api()
     if (!bridge?.hudOverlayGetSettings) return null
-    return bridge.hudOverlayGetSettings(overlayId)
-  }
-
-  // Click-through: ignore=true => i click passano al gioco; false => la finestra
-  // li cattura (necessario per trascinare durante il placement).
-  function setPassthrough(ignore: boolean): void {
-    api()?.hudOverlaySetMousePassthrough?.(overlayId, ignore)
-  }
-
-  function requestSize(size: { width: number; height: number }): void {
-    if (!size || size.width <= 0 || size.height <= 0) return
-    api()?.hudOverlaySetSize?.(overlayId, { width: Math.ceil(size.width), height: Math.ceil(size.height) })
-  }
-
-  function enterPlacement(): void {
-    isPlacing.value = true
-    // Durante il drag la finestra deve ricevere il mouse.
-    setPassthrough(false)
-  }
-
-  async function confirmPlacement(): Promise<void> {
-    await api()?.hudOverlayConfirmPlacement?.(overlayId)
-    isPlacing.value = false
-    // Tornato in visualizzazione: di nuovo click-through verso il gioco.
-    setPassthrough(true)
-  }
-
-  // Hover sulla card fuori dal placement: cattura il mouse per eventuali
-  // interazioni, poi torna click-through all'uscita.
-  function onSurfaceEnter(): void {
-    if (!isPlacing.value) setPassthrough(false)
-  }
-
-  function onSurfaceLeave(): void {
-    if (!isPlacing.value) setPassthrough(true)
-  }
-
-  function measureAndSync(): void {
-    if (!surfaceEl) return
-    const rect = surfaceEl.getBoundingClientRect()
-    requestSize({ width: rect.width, height: rect.height })
+    const settings = await bridge.hudOverlayGetSettings(overlayId)
+    if (settings?.format) format.value = normalizeFormat(settings.format)
+    return settings ?? null
   }
 
   /**
-   * @description Da chiamare in onMounted con l'elemento della card. Avvia il
-   * sync dimensione (ResizeObserver) e imposta il click-through iniziale.
+   * @description Da chiamare in onMounted. Imposta il formato iniziale (dalla
+   * query `?format=`) e si iscrive agli eventi push del main per formato e
+   * modalità posizionamento.
    */
-  function start(el: HTMLElement | null): void {
+  function start(initialFormat?: unknown): void {
     isElectron.value = !!api()
-    surfaceEl = el
-    if (!isElectron.value || !el) return
-    setPassthrough(true)
-    measureAndSync()
-    if (typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(() => measureAndSync())
-      resizeObserver.observe(el)
+    if (initialFormat) format.value = normalizeFormat(initialFormat)
+    const bridge = api()
+    if (!bridge) return
+    if (typeof bridge.onHudOverlayPlacement === 'function') {
+      unsubscribers.push(bridge.onHudOverlayPlacement((active: boolean) => {
+        isPlacing.value = !!active
+      }))
+    }
+    if (typeof bridge.onHudOverlayFormat === 'function') {
+      unsubscribers.push(bridge.onHudOverlayFormat((value: unknown) => {
+        format.value = normalizeFormat(value)
+      }))
     }
   }
 
   function stop(): void {
-    if (resizeObserver) {
-      resizeObserver.disconnect()
-      resizeObserver = null
+    for (const off of unsubscribers) {
+      try { off() } catch { /* listener già rimosso */ }
     }
-    surfaceEl = null
+    unsubscribers = []
   }
 
-  return {
-    isElectron,
-    isPlacing,
-    loadSettings,
-    setPassthrough,
-    requestSize,
-    enterPlacement,
-    confirmPlacement,
-    onSurfaceEnter,
-    onSurfaceLeave,
-    start,
-    stop,
-  }
+  return { isElectron, isPlacing, format, loadSettings, start, stop }
 }

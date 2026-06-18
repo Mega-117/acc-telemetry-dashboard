@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// Overlay HUD Gomme (PIP-175): finestra Electron indipendente, accesa/spenta e
-// riposizionata dalla pagina Test HUD. Riusa il componente di rendering e il
-// poller gia' esistenti; aggiunge solo drag/placement via useHudOverlay.
+// Overlay HUD Gomme (PIP-175): finestra Electron indipendente. Dimensione decisa
+// dal FORMATO (small/medium/large) lato Electron; qui si applica la scala dei
+// font e lo stato di posizionamento. Riusa TyreSlipHud + il poller esistente.
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
@@ -20,19 +20,13 @@ function getApi(): any | null {
 }
 
 const route = useRoute()
-const panelEl = ref<HTMLElement | null>(null)
-
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getApi)
-const {
-  isElectron, isPlacing, enterPlacement, confirmPlacement,
-  onSurfaceEnter, onSurfaceLeave, start, stop,
-} = useHudOverlay('tyres', getApi)
+const { isElectron, isPlacing, format, loadSettings, start, stop } = useHudOverlay('tyres', getApi)
 
 onMounted(() => {
   startFastStatePolling()
-  start(panelEl.value)
-  // Apertura in modalita' riposiziona dalla pagina Test HUD (?place=1).
-  if (route.query.place === '1') enterPlacement()
+  start(route.query.format)
+  loadSettings()
 })
 
 onBeforeUnmount(() => {
@@ -44,19 +38,11 @@ onBeforeUnmount(() => {
 <template>
   <div
     class="hud-overlay"
-    :class="{ 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }"
+    :class="[`hud-overlay--size-${format}`, { 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }]"
   >
-    <div
-      ref="panelEl"
-      class="hud-overlay__panel"
-      @pointerenter="onSurfaceEnter"
-      @pointerleave="onSurfaceLeave"
-    >
+    <div class="hud-overlay__panel">
       <TyreSlipHud :fast-state="fastState" />
-      <div v-if="isPlacing" class="hud-overlay__place">
-        <span>Trascina per posizionare</span>
-        <button type="button" class="hud-overlay__confirm" @click="confirmPlacement">Conferma</button>
-      </div>
+      <div v-if="isPlacing" class="hud-overlay__hint">Trascina per posizionare</div>
     </div>
   </div>
 </template>
@@ -64,91 +50,111 @@ onBeforeUnmount(() => {
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
 
-// Tutte le regole scopate sotto .hud-overlay per NON toccare l'overlay
+// Tutte le regole sono scopate sotto .hud-overlay per NON toccare l'overlay
 // allenamento (le classi .tyre-slip-hud ecc. sono globali e condivise).
 .hud-overlay {
+  --hud-scale: 1.06;
   --overlay-accent-rgb: 34, 197, 94;
   position: fixed;
   inset: 0;
   display: flex;
-  // Piccolo margine uniforme: il pannello "galleggia" e non tocca i bordi della
-  // finestra (evita che bordo/ombra/angolo destro siano schiacciati/tagliati).
-  padding: 6px;
+  padding: 6px; // margine flottante: il pannello non tocca i bordi finestra
   background: transparent;
   box-sizing: border-box;
+  color: #f4f8ff;
 }
 
+// 3 formati fissi: la finestra cambia dimensione lato Electron, qui si scala il testo.
+.hud-overlay--size-small { --hud-scale: 0.92; }
+.hud-overlay--size-medium { --hud-scale: 1.06; }
+.hud-overlay--size-large { --hud-scale: 1.22; }
+
 // Fuori da Electron (browser/Playwright): sfondo scuro per poter testare.
-.hud-overlay--web {
-  background: #0d0d12;
-}
+.hud-overlay--web { background: #0d0d12; }
 
 .hud-overlay__panel {
   position: relative;
   box-sizing: border-box;
-  // Riempie l'intera finestra: lo sfondo opaco copre tutto, niente striscia
-  // trasparente quando la finestra e' clampata al minimo.
   flex: 1;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
-  // Sfondo OPACO: l'overlay deve essere ben visibile sopra il gioco.
-  background: rgba(8, 10, 16, 0.97);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
+  // Sfondo OPACO: ben visibile sopra il gioco.
+  background: rgba(10, 13, 20, 0.97);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);
 }
 
-// In riposizionamento: bordo evidenziato + spazio sotto per la barra conferma.
 .hud-overlay--placing .hud-overlay__panel {
   -webkit-app-region: drag;
   cursor: move;
-  padding-bottom: 48px;
-  border-color: rgba(34, 197, 94, 0.6);
+  border-color: rgba(34, 197, 94, 0.7);
 }
 
-// L'HUD figlio riempie il pannello opaco: niente doppio bordo/sfondo.
+.hud-overlay__hint {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(34, 197, 94, 0.92);
+  color: #04110a;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+// ── L'HUD riempie il pannello (niente spazio vuoto sopra/sotto) ──────────────
 .hud-overlay .tyre-slip-hud {
+  flex: 1;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: calc(9px * var(--hud-scale));
   background: transparent;
   border: none;
   padding: 0;
 }
 
 .hud-overlay .tyre-slip-grid {
+  flex: 1;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: 1fr 1fr;
+  gap: calc(9px * var(--hud-scale));
 }
 
-// Barra conferma posizione: sovrapposta in basso, sempre visibile.
-.hud-overlay__place {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
-  -webkit-app-region: no-drag;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.92);
-  border: 1px solid rgba(34, 197, 94, 0.45);
-  color: #f7fbff;
-  font-size: 12px;
-  font-weight: 700;
+.hud-overlay .tyre-slip {
+  gap: calc(6px * var(--hud-scale));
+  padding: calc(9px * var(--hud-scale));
+  justify-content: center;
 }
 
-.hud-overlay__confirm {
-  -webkit-app-region: no-drag;
-  padding: 5px 14px;
-  border: none;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #22c55e, #14b8a6);
-  color: #04110a;
-  font-weight: 800;
-  cursor: pointer;
+// ── Testi più grandi e più leggibili (contrasto alto) ───────────────────────
+.hud-overlay .tyre-slip-hud__header span,
+.hud-overlay .tyre-slip-hud__header strong {
+  font-size: calc(14px * var(--hud-scale));
+  color: rgba(255, 255, 255, 0.96);
+}
+
+.hud-overlay .tyre-slip__topline strong {
+  font-size: calc(18px * var(--hud-scale));
+  color: #ffffff;
+}
+
+.hud-overlay .tyre-slip__topline span,
+.hud-overlay .tyre-slip__meta span {
+  font-size: calc(13px * var(--hud-scale));
+  color: rgba(235, 243, 251, 0.92);
+}
+
+.hud-overlay .tyre-slip__state {
+  max-width: none;
+}
+
+.hud-overlay .tyre-slip__bar {
+  height: calc(7px * var(--hud-scale));
 }
 </style>
