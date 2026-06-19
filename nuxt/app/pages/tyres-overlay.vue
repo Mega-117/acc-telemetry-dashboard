@@ -143,10 +143,13 @@ onBeforeUnmount(() => {
   color: #ffffff;
 }
 
-.hud-overlay .tyre-slip__topline span,
 .hud-overlay .tyre-slip__meta span {
   font-size: calc(13px * var(--hud-scale));
   color: #ffffff;
+}
+
+.hud-overlay .tyre-slip__state {
+  font-size: calc(13px * var(--hud-scale));
 }
 
 // Gerarchia gomma: lo SLIP è primario (numero più grande + micro-label),
@@ -168,9 +171,6 @@ onBeforeUnmount(() => {
   opacity: 0.6;
 }
 
-// Tinta di sfondo più marcata anche per giallo/arancio (visibilità periferica).
-.hud-overlay .tyre-slip--yellow { background: rgba(250, 204, 21, 0.13); }
-.hud-overlay .tyre-slip--orange { background: rgba(251, 146, 60, 0.16); }
 
 .hud-overlay .tyre-slip__state {
   max-width: none;
