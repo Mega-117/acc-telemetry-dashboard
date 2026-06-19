@@ -23,6 +23,7 @@ const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
 const hasSectorData = computed(() => (props.sectorHud?.sectors?.length ?? 0) === 3)
 const visibleSectors = computed(() => hasSectorData.value ? props.sectorHud!.sectors : idleSectors)
 const modeLabel = computed(() => props.sectorHud?.mode === 'last_lap' ? 'Ultimo giro' : 'Settori')
+const statusLabel = computed(() => props.sectorHud?.awaitingFlyingLap ? 'attesa giro lanciato' : null)
 
 function formatTime(ms: number | null): string {
   if (ms === null) return '--'
@@ -49,6 +50,7 @@ function liveElapsedMs(): number | null {
 }
 
 function valueText(sector: SectorHudEntry): string {
+  if (props.sectorHud?.awaitingFlyingLap) return '--'
   if (sector.state === 'pending') return '--'
   if (sector.state === 'running') {
     if (sector.currentMs !== null) return formatTime(sector.currentMs)
@@ -78,7 +80,8 @@ function ariaLabel(sector: SectorHudEntry): string {
   >
     <div class="sector-delta-hud__header">
       <span>{{ modeLabel }}</span>
-      <em v-if="sectorHud?.referenceLap">ref lap {{ sectorHud.referenceLap }}</em>
+      <em v-if="statusLabel">{{ statusLabel }}</em>
+      <em v-else-if="sectorHud?.referenceLap">ref lap {{ sectorHud.referenceLap }}</em>
       <em v-else>ref --</em>
     </div>
     <div class="sector-delta-hud__grid">
@@ -104,7 +107,7 @@ function ariaLabel(sector: SectorHudEntry): string {
         <small
           class="sector-delta__delta"
           :class="{ 'sector-delta__delta--placeholder': sector.state !== 'complete' || sector.deltaMs === null }"
-        >{{ sector.state === 'complete' ? formatDelta(sector.deltaMs) : sector.state === 'running' ? 'live' : 'wait' }}</small>
+        >{{ sectorHud?.awaitingFlyingLap ? 'wait' : sector.state === 'complete' ? formatDelta(sector.deltaMs) : sector.state === 'running' ? 'live' : 'wait' }}</small>
       </div>
     </div>
   </section>

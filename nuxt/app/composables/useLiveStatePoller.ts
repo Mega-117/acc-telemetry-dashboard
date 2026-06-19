@@ -36,6 +36,7 @@ export interface SectorHudState {
   lastLapTimeMs: number | null
   bestLapTimeMs: number | null
   lapValid: boolean | null
+  awaitingFlyingLap: boolean
   sectors: SectorHudEntry[]
 }
 
@@ -111,6 +112,7 @@ function normalizeSectorHud(raw: any): SectorHudState | null {
     lastLapTimeMs: toNumber(raw.last_lap_time_ms),
     bestLapTimeMs: toNumber(raw.best_lap_time_ms),
     lapValid: typeof raw.lap_valid === 'boolean' ? raw.lap_valid : null,
+    awaitingFlyingLap: raw.awaiting_flying_lap === true,
     sectors,
   }
 }

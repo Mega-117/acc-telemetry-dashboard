@@ -42,7 +42,7 @@ onBeforeUnmount(() => {
     :class="{ 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }"
   >
     <div class="hud-overlay__panel">
-      <SectorDeltaHud :sector-hud="liveLap.sectorHud" :show-reference="showReference" live-running />
+      <SectorDeltaHud :sector-hud="liveLap.sectorHud" :show-reference="showReference" />
       <div v-if="isPlacing" class="hud-overlay__hint">Trascina per posizionare</div>
     </div>
   </div>
