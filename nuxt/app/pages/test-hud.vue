@@ -3,7 +3,7 @@
 // - Interruttore GLOBALE di posizionamento: sblocca/blocca TUTTI gli overlay.
 // - Per ogni overlay: on/off + formato fisso (Piccolo/Medio/Grande).
 // Self-contained (come dev.vue): fuori dal contratto useTelemetryGateway.
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, onUnmounted, reactive, ref } from 'vue'
 
 definePageMeta({
   layout: 'dashboard',
@@ -32,6 +32,11 @@ const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1 })
 const showSectorReference = ref(true)
 const positioning = ref(false)
 const trainingOpen = ref(false)
+// Stato "in guida" (PIP-177): quando attivo, gli overlay abilitati appaiono da
+// soli nella posizione salvata; tornando ai menu spariscono.
+const driving = ref(false)
+const positionSaved = ref(false)
+let unsubscribeDriving: (() => void) | null = null
 
 async function refreshState() {
   const api = getApi()
@@ -54,9 +59,30 @@ async function refreshState() {
   if (typeof api.trainingOverlayIsOpen === 'function') {
     try { trainingOpen.value = await api.trainingOverlayIsOpen() } catch { trainingOpen.value = false }
   }
+  if (typeof api.hudOverlayGetDrivingState === 'function') {
+    try { driving.value = await api.hudOverlayGetDrivingState() } catch { driving.value = false }
+  }
 }
 
-onMounted(refreshState)
+onMounted(() => {
+  refreshState()
+  const api = getApi()
+  if (api && typeof api.onHudOverlayDrivingState === 'function') {
+    unsubscribeDriving = api.onHudOverlayDrivingState((value: boolean) => { driving.value = !!value })
+  }
+})
+
+onUnmounted(() => {
+  if (unsubscribeDriving) { unsubscribeDriving(); unsubscribeDriving = null }
+})
+
+async function savePosition() {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySavePosition) return
+  await api.hudOverlaySavePosition()
+  positionSaved.value = true
+  setTimeout(() => { positionSaved.value = false }, 1600)
+}
 
 async function toggleHud(id: HudOverlayId) {
   const api = getApi()
@@ -117,17 +143,27 @@ async function toggleTraining() {
           App desktop avviata con una versione precedente: <strong>riavvia l'app</strong> per
           caricare gli overlay aggiornati.
         </p>
+        <p v-if="apiReady" class="test-hud__driving" :class="{ 'is-on': driving }">
+          <span class="test-hud__driving-dot"></span>
+          In guida: <strong>{{ driving ? 'sì' : 'no' }}</strong>
+          <em>{{ driving ? 'gli overlay abilitati sono visibili' : 'gli overlay abilitati appariranno quando inizi a guidare' }}</em>
+        </p>
       </header>
 
       <!-- Interruttore globale di posizionamento -->
       <div class="test-hud__placement" :class="{ 'is-on': positioning }">
         <div class="test-hud__placement-text">
           <strong>Posizionamento overlay</strong>
-          <span>{{ positioning ? 'Sbloccato: trascina gli overlay dove vuoi, poi blocca per fissarli.' : 'Bloccato: le posizioni sono fisse.' }}</span>
+          <span>{{ positioning ? 'Sbloccato: trascina gli overlay dove vuoi, salva la posizione, poi blocca.' : 'Bloccato: le posizioni sono fisse.' }}</span>
         </div>
-        <button type="button" class="btn btn--primary" :disabled="!apiReady" @click="togglePositioning">
-          {{ positioning ? 'Blocca tutti' : 'Sblocca tutti' }}
-        </button>
+        <div class="test-hud__placement-actions">
+          <button type="button" class="btn" :disabled="!apiReady" @click="savePosition">
+            {{ positionSaved ? 'Salvato ✓' : 'Salva posizione' }}
+          </button>
+          <button type="button" class="btn btn--primary" :disabled="!apiReady" @click="togglePositioning">
+            {{ positioning ? 'Blocca tutti' : 'Sblocca tutti' }}
+          </button>
+        </div>
       </div>
 
       <div class="test-hud__grid">
@@ -220,6 +256,25 @@ async function toggleTraining() {
 
 .test-hud__warning { color: #fbbf24; font-weight: 700; }
 
+.test-hud__driving {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+
+  strong { color: rgba(255, 255, 255, 0.85); }
+  em { color: rgba(255, 255, 255, 0.45); font-style: normal; font-size: 13px; }
+  &.is-on strong { color: #22c55e; }
+}
+
+.test-hud__driving-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.28);
+  .test-hud__driving.is-on & { background: #22c55e; box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.16); }
+}
+
 .test-hud__placement {
   display: flex;
   align-items: center;
@@ -238,6 +293,8 @@ async function toggleTraining() {
   strong { display: block; color: #fff; font-size: 18px; }
   span { color: rgba(255, 255, 255, 0.62); font-size: 14px; }
 }
+
+.test-hud__placement-actions { display: flex; gap: 10px; flex-shrink: 0; }
 
 .test-hud__grid {
   display: grid;
