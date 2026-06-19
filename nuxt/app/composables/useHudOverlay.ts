@@ -1,5 +1,13 @@
 import { ref } from 'vue'
 
+export interface HudOverlaySettings {
+  enabled: boolean
+  locked: boolean
+  scale: number
+  bounds: unknown
+  showReference?: boolean
+}
+
 export const HUD_SCALE_MIN = 0.6
 export const HUD_SCALE_MAX = 1.6
 export const HUD_SCALE_DEFAULT = 1
@@ -28,18 +36,20 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
   const isElectron = ref(false)
   const isPlacing = ref(false)
   const scale = ref<number>(HUD_SCALE_DEFAULT)
+  const settings = ref<HudOverlaySettings | null>(null)
   let unsubscribers: Array<() => void> = []
 
   function api(): any | null {
     return getApi()
   }
 
-  async function loadSettings(): Promise<{ enabled: boolean; locked: boolean; scale: number; bounds: unknown } | null> {
+  async function loadSettings(): Promise<HudOverlaySettings | null> {
     const bridge = api()
     if (!bridge?.hudOverlayGetSettings) return null
-    const settings = await bridge.hudOverlayGetSettings(overlayId)
-    if (settings?.scale !== undefined) scale.value = clampScale(settings.scale)
-    return settings ?? null
+    const loaded = await bridge.hudOverlayGetSettings(overlayId)
+    settings.value = loaded ?? null
+    if (loaded?.scale !== undefined) scale.value = clampScale(loaded.scale)
+    return settings.value
   }
 
   /**
@@ -63,6 +73,12 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
         scale.value = clampScale(value)
       }))
     }
+    if (typeof bridge.onHudOverlaySettings === 'function') {
+      unsubscribers.push(bridge.onHudOverlaySettings((value: HudOverlaySettings) => {
+        settings.value = value ?? null
+        if (value?.scale !== undefined) scale.value = clampScale(value.scale)
+      }))
+    }
   }
 
   function stop(): void {
@@ -72,5 +88,5 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
     unsubscribers = []
   }
 
-  return { isElectron, isPlacing, scale, loadSettings, start, stop }
+  return { isElectron, isPlacing, scale, settings, loadSettings, start, stop }
 }

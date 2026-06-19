@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Overlay HUD Settori (PIP-175): gemello di tyres-overlay con i dati settori da
 // live_state.json. Dimensione dal FORMATO; riusa SectorDeltaHud + poller.
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
@@ -20,7 +20,8 @@ function getApi(): any | null {
 
 const route = useRoute()
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getApi)
-const { isElectron, isPlacing, scale, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
+const { isElectron, isPlacing, scale, settings, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
+const showReference = computed(() => settings.value?.showReference !== false)
 
 onMounted(() => {
   startLiveStatePolling()
@@ -41,7 +42,7 @@ onBeforeUnmount(() => {
     :class="{ 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }"
   >
     <div class="hud-overlay__panel">
-      <SectorDeltaHud :sector-hud="liveLap.sectorHud" show-reference live-running />
+      <SectorDeltaHud :sector-hud="liveLap.sectorHud" :show-reference="showReference" live-running />
       <div v-if="isPlacing" class="hud-overlay__hint">Trascina per posizionare</div>
     </div>
   </div>

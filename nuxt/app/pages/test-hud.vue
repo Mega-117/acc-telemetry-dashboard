@@ -29,6 +29,7 @@ const isElectron = ref(false)
 const apiReady = ref(false)
 const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false })
 const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1 })
+const showSectorReference = ref(true)
 const positioning = ref(false)
 const trainingOpen = ref(false)
 
@@ -42,6 +43,7 @@ async function refreshState() {
       open[overlay.id] = await api.hudOverlayIsOpen(overlay.id)
       const settings = await api.hudOverlayGetSettings(overlay.id)
       if (settings?.scale !== undefined) scale[overlay.id] = settings.scale
+      if (overlay.id === 'sectors' && typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
     } catch {
       open[overlay.id] = false
     }
@@ -70,6 +72,15 @@ function onScaleInput(id: HudOverlayId, raw: string) {
   const api = getApi()
   if (!apiReady.value || !api) return
   api.hudOverlaySetScale(id, value)
+}
+
+async function toggleSectorReference() {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySaveSettings) return
+  const next = !showSectorReference.value
+  showSectorReference.value = next
+  const settings = await api.hudOverlaySaveSettings('sectors', { showReference: next })
+  if (typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
 }
 
 async function togglePositioning() {
@@ -164,6 +175,20 @@ async function toggleTraining() {
               @input="onScaleInput(overlay.id, ($event.target as HTMLInputElement).value)"
             >
           </div>
+
+          <label v-if="overlay.id === 'sectors'" class="hud-card__option">
+            <span>
+              <strong>Tempo settore precedente</strong>
+              <em>Mostra/nasconde la riga “prec” nel HUD settori.</em>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              :checked="showSectorReference"
+              :disabled="!apiReady"
+              @change="toggleSectorReference"
+            >
+          </label>
         </article>
       </div>
     </section>
@@ -252,6 +277,22 @@ async function toggleTraining() {
 .hud-card__size-row { display: flex; align-items: center; justify-content: space-between; }
 .hud-card__formats-label { color: rgba(255, 255, 255, 0.5); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
 .hud-card__size-val { color: #fb923c; font-size: 13px; font-weight: 900; }
+
+.hud-card__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+
+  span { display: grid; gap: 3px; }
+  strong { color: #fff; font-size: 14px; }
+  em { color: rgba(255, 255, 255, 0.55); font-size: 12px; font-style: normal; line-height: 1.35; }
+  input { width: 18px; height: 18px; accent-color: #22c55e; }
+}
 
 .hud-slider {
   width: 100%;
