@@ -36,6 +36,8 @@ const trainingOpen = ref(false)
 // soli nella posizione salvata; tornando ai menu spariscono.
 const driving = ref(false)
 const positionSaved = ref(false)
+// Override "Sempre visibili" (PIP-177): forza la comparsa ignorando il rilevamento.
+const alwaysVisible = ref(false)
 let unsubscribeDriving: (() => void) | null = null
 
 async function refreshState() {
@@ -62,6 +64,18 @@ async function refreshState() {
   if (typeof api.hudOverlayGetDrivingState === 'function') {
     try { driving.value = await api.hudOverlayGetDrivingState() } catch { driving.value = false }
   }
+  if (typeof api.hudOverlayGetAlwaysVisible === 'function') {
+    try { alwaysVisible.value = await api.hudOverlayGetAlwaysVisible() } catch { alwaysVisible.value = false }
+  }
+}
+
+async function toggleAlwaysVisible() {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySetAlwaysVisible) return
+  const next = !alwaysVisible.value
+  alwaysVisible.value = next
+  const saved = await api.hudOverlaySetAlwaysVisible(next)
+  if (typeof saved === 'boolean') alwaysVisible.value = saved
 }
 
 onMounted(() => {
@@ -146,7 +160,7 @@ async function toggleTraining() {
         <p v-if="apiReady" class="test-hud__driving" :class="{ 'is-on': driving }">
           <span class="test-hud__driving-dot"></span>
           In guida: <strong>{{ driving ? 'sì' : 'no' }}</strong>
-          <em>{{ driving ? 'gli overlay abilitati sono visibili' : 'gli overlay abilitati appariranno quando inizi a guidare' }}</em>
+          <em>{{ alwaysVisible ? 'override “Sempre visibili” attivo' : (driving ? 'gli overlay abilitati sono visibili' : 'gli overlay abilitati appariranno quando inizi a guidare') }}</em>
         </p>
       </header>
 
@@ -165,6 +179,21 @@ async function toggleTraining() {
           </button>
         </div>
       </div>
+
+      <!-- Override globale: forza la visualizzazione costante (come ACC Drive) -->
+      <label class="test-hud__always" :class="{ 'is-on': alwaysVisible }">
+        <span class="test-hud__always-text">
+          <strong>Sempre visibili</strong>
+          <em>Forza gli overlay abilitati a restare visibili sempre, anche nei menu / ai box (ignora il rilevamento guida).</em>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          :checked="alwaysVisible"
+          :disabled="!apiReady"
+          @change="toggleAlwaysVisible"
+        >
+      </label>
 
       <div class="test-hud__grid">
         <!-- Overlay allenamento: solo mostra/nascondi (come Ctrl+K) -->
@@ -295,6 +324,29 @@ async function toggleTraining() {
 }
 
 .test-hud__placement-actions { display: flex; gap: 10px; flex-shrink: 0; }
+
+.test-hud__always {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 22px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.035);
+  cursor: pointer;
+
+  &.is-on { border-color: rgba(251, 146, 60, 0.5); background: rgba(251, 146, 60, 0.08); }
+
+  input { width: 18px; height: 18px; accent-color: #fb923c; flex-shrink: 0; }
+}
+
+.test-hud__always-text {
+  display: grid;
+  gap: 3px;
+  strong { color: #fff; font-size: 18px; }
+  em { color: rgba(255, 255, 255, 0.62); font-size: 14px; font-style: normal; line-height: 1.4; }
+}
 
 .test-hud__grid {
   display: grid;
