@@ -6,6 +6,8 @@ const props = defineProps<{
   sectorHud: SectorHudState | null
   // Mostra anche i tempi dei settori del giro di riferimento/precedente (PIP-175).
   showReference?: boolean
+  // Mostra anche il best settore persistente del contesto corrente (PIP-181).
+  showBest?: boolean
   // Per il settore in corso mostra il tempo parziale "live" invece di "--" (PIP-175).
   liveRunning?: boolean
 }>()
@@ -68,7 +70,8 @@ function ariaLabel(sector: SectorHudEntry): string {
   if (!hasSectorData.value) return `${base} in attesa dati`
   if (sector.state === 'pending') return `${base} non ancora iniziato`
   if (sector.state === 'running') return `${base} in corso`
-  return `${base} ${formatTime(sector.currentMs)} secondi, delta ${formatDelta(sector.deltaMs)}`
+  const best = props.showBest && sector.bestMs !== null ? `, best ${formatTime(sector.bestMs)} secondi` : ''
+  return `${base} ${formatTime(sector.currentMs)} secondi, delta ${formatDelta(sector.deltaMs)}${best}`
 }
 </script>
 
@@ -104,6 +107,10 @@ function ariaLabel(sector: SectorHudEntry): string {
           v-if="showReference"
           class="sector-delta__ref"
         >prec {{ sector.referenceMs !== null ? formatTime(sector.referenceMs) : '--' }}</small>
+        <small
+          v-if="showBest"
+          class="sector-delta__best"
+        >best {{ sector.bestMs !== null ? formatTime(sector.bestMs) : '--' }}</small>
         <small
           class="sector-delta__delta"
           :class="{ 'sector-delta__delta--placeholder': sector.state !== 'complete' || sector.deltaMs === null }"

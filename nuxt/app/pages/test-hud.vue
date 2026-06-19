@@ -30,6 +30,7 @@ const apiReady = ref(false)
 const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false })
 const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1 })
 const showSectorReference = ref(true)
+const showSectorBest = ref(true)
 const positioning = ref(false)
 const trainingOpen = ref(false)
 // Stato "in guida" (PIP-177): quando attivo, gli overlay abilitati appaiono da
@@ -51,6 +52,7 @@ async function refreshState() {
       const settings = await api.hudOverlayGetSettings(overlay.id)
       if (settings?.scale !== undefined) scale[overlay.id] = settings.scale
       if (overlay.id === 'sectors' && typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
+      if (overlay.id === 'sectors' && typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
     } catch {
       open[overlay.id] = false
     }
@@ -121,6 +123,15 @@ async function toggleSectorReference() {
   showSectorReference.value = next
   const settings = await api.hudOverlaySaveSettings('sectors', { showReference: next })
   if (typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
+}
+
+async function toggleSectorBest() {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySaveSettings) return
+  const next = !showSectorBest.value
+  showSectorBest.value = next
+  const settings = await api.hudOverlaySaveSettings('sectors', { showBest: next })
+  if (typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
 }
 
 async function togglePositioning() {
@@ -241,19 +252,34 @@ async function toggleTraining() {
             >
           </div>
 
-          <label v-if="overlay.id === 'sectors'" class="hud-card__option">
-            <span>
-              <strong>Tempo settore precedente</strong>
-              <em>Mostra/nasconde la riga “prec” nel HUD settori.</em>
-            </span>
-            <input
-              type="checkbox"
-              role="switch"
-              :checked="showSectorReference"
-              :disabled="!apiReady"
-              @change="toggleSectorReference"
-            >
-          </label>
+          <template v-if="overlay.id === 'sectors'">
+            <label class="hud-card__option">
+              <span>
+                <strong>Tempo settore precedente</strong>
+                <em>Mostra/nasconde la riga “prec” nel HUD settori.</em>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                :checked="showSectorReference"
+                :disabled="!apiReady"
+                @change="toggleSectorReference"
+              >
+            </label>
+            <label class="hud-card__option">
+              <span>
+                <strong>Best settore</strong>
+                <em>Mostra/nasconde il riferimento best usato per il fucsia.</em>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                :checked="showSectorBest"
+                :disabled="!apiReady"
+                @change="toggleSectorBest"
+              >
+            </label>
+          </template>
         </article>
       </div>
     </section>

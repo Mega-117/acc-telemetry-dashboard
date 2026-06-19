@@ -6,6 +6,7 @@ export interface HudOverlaySettings {
   scale: number
   bounds: unknown
   showReference?: boolean
+  showBest?: boolean
 }
 
 export const HUD_SCALE_MIN = 0.6

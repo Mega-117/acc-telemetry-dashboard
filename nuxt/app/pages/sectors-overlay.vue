@@ -22,6 +22,7 @@ const route = useRoute()
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getApi)
 const { isElectron, isPlacing, scale, settings, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
 const showReference = computed(() => settings.value?.showReference !== false)
+const showBest = computed(() => settings.value?.showBest !== false)
 
 onMounted(() => {
   startLiveStatePolling()
@@ -42,7 +43,7 @@ onBeforeUnmount(() => {
     :class="{ 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }"
   >
     <div class="hud-overlay__panel">
-      <SectorDeltaHud :sector-hud="liveLap.sectorHud" :show-reference="showReference" />
+      <SectorDeltaHud :sector-hud="liveLap.sectorHud" :show-reference="showReference" :show-best="showBest" />
       <div v-if="isPlacing" class="hud-overlay__hint">Trascina per posizionare</div>
     </div>
   </div>
@@ -164,6 +165,13 @@ onBeforeUnmount(() => {
   font-size: calc(11px * var(--hud-scale));
   color: #ffffff;
   opacity: 0.6;
+}
+
+.hud-overlay .sector-delta__best {
+  order: 4;
+  font-size: calc(11px * var(--hud-scale));
+  color: #ffffff;
+  opacity: 0.72;
 }
 
 // Allinea a sinistra i testi piccoli sotto l'etichetta.
