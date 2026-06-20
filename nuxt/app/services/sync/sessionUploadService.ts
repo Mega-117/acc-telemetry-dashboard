@@ -66,6 +66,20 @@ export function prepareSummaryForUpload(rawObj: any):
   | { ok: true; meta: any; summary: any; summarySource: 'canonical' | 'legacy_fallback' }
   | { ok: false; meta: any; reason: 'legacy_local_requires_reprocess' } {
   const canonical = extractMetadata(rawObj)
+
+  if (canRebuildSummaryFromLocalRaw(rawObj)) {
+    const rebuilt = extractMetadata(rawObj, { allowLegacyFallback: true, forceRawRebuild: true })
+    return {
+      ok: true,
+      meta: rebuilt.meta,
+      summary: {
+        ...rebuilt.summary,
+        best_rules_version: BEST_RULES_VERSION
+      },
+      summarySource: canonical.summarySource === 'canonical' ? 'canonical' : 'legacy_fallback'
+    }
+  }
+
   if (canonical.summarySource === 'canonical') {
     return {
       ok: true,
@@ -78,23 +92,10 @@ export function prepareSummaryForUpload(rawObj: any):
     }
   }
 
-  if (!canRebuildSummaryFromLocalRaw(rawObj)) {
-    return {
-      ok: false,
-      meta: canonical.meta,
-      reason: 'legacy_local_requires_reprocess'
-    }
-  }
-
-  const rebuilt = extractMetadata(rawObj, { allowLegacyFallback: true })
   return {
-    ok: true,
-    meta: rebuilt.meta,
-    summary: {
-      ...rebuilt.summary,
-      best_rules_version: BEST_RULES_VERSION
-    },
-    summarySource: 'legacy_fallback'
+    ok: false,
+    meta: canonical.meta,
+    reason: 'legacy_local_requires_reprocess'
   }
 }
 

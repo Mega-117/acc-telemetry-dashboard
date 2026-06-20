@@ -138,3 +138,72 @@ describe('extractMetadata — fallback valori mancanti', () => {
     expect(() => extractMetadata(undefined)).not.toThrow()
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// extractMetadata — forced raw rebuild
+// ─────────────────────────────────────────────────────────────────────────────
+describe('extractMetadata — forced raw rebuild', () => {
+  function makeCurrentButStaleRaceRaw() {
+    return {
+      session_info: {
+        track: 'watkins_glen',
+        date_start: '2026-06-02T20:28:42',
+        car_model: 'ferrari_296_gt3',
+        session_type: 2,
+        laps_total: 3,
+        laps_valid: 3,
+        session_best_lap: 105072,
+        avg_clean_lap: 105523,
+        total_drive_time_ms: 320000
+      },
+      stints: [
+        {
+          fuel_start: 44.8,
+          avg_clean_lap: 105523,
+          laps: [
+            { lap_time_ms: 105862, is_valid: true, fuel_start: 41.99, air_temp: 29.8, road_temp: 32.5, track_grip_status: 'Optimum' },
+            { lap_time_ms: 105637, is_valid: true, fuel_start: 39.25, air_temp: 29.8, road_temp: 32.5, track_grip_status: 'Optimum' },
+            { lap_time_ms: 105072, is_valid: true, fuel_start: 25.13, air_temp: 29.8, road_temp: 32.5, track_grip_status: 'Optimum' }
+          ]
+        }
+      ],
+      summary: {
+        best_rules_version: BEST_RULES_VERSION,
+        laps: 3,
+        lapsValid: 3,
+        bestLap: 105072,
+        avgCleanLap: 105523,
+        totalTime: 320000,
+        stintCount: 1,
+        best_qualy_ms: null,
+        best_qualy_conditions: null,
+        best_session_race_ms: null,
+        best_session_race_conditions: null,
+        best_race_ms: null,
+        best_race_conditions: null,
+        best_avg_race_ms: null,
+        best_avg_race_conditions: null,
+        best_by_grip: null
+      }
+    }
+  }
+
+  it('per default conserva un summary V5 esistente', () => {
+    const { summarySource, summary } = extractMetadata(makeCurrentButStaleRaceRaw())
+
+    expect(summarySource).toBe('canonical')
+    expect(summary.best_race_ms).toBeNull()
+  })
+
+  it('con forceRawRebuild ricostruisce il best race dai giri fuel > 40L', () => {
+    const { summarySource, summary } = extractMetadata(makeCurrentButStaleRaceRaw(), {
+      allowLegacyFallback: true,
+      forceRawRebuild: true
+    })
+
+    expect(summarySource).toBe('legacy_fallback')
+    expect(summary.best_race_ms).toBe(105862)
+    expect((summary.best_by_grip as any).Optimum.raceBestByFuelBucket['40-60'].timeMs).toBe(105862)
+    expect(summary.best_qualy_ms).toBeNull()
+  })
+})

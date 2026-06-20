@@ -52,6 +52,25 @@ describe('prepareSummaryForUpload', () => {
     expect(prepared.summary.best_by_grip.Optimum.raceAvgByFuelBucket['60-80'].timeMs).toBe(138000)
   })
 
+
+  it('ricostruisce dai raw anche se il summary locale dichiara gia V5 ma e incompleto', () => {
+    const raw = makeLegacyRaceRaw({
+      summary: {
+        best_rules_version: BEST_RULES_VERSION,
+        best_race_ms: null,
+        best_by_grip: null
+      }
+    })
+    const prepared = prepareSummaryForUpload(raw)
+
+    expect(prepared.ok).toBe(true)
+    if (!prepared.ok) throw new Error('expected uploadable summary')
+
+    expect(prepared.summarySource).toBe('canonical')
+    expect(prepared.summary.best_rules_version).toBe(BEST_RULES_VERSION)
+    expect(prepared.summary.best_race_ms).toBe(137000)
+    expect(prepared.summary.best_by_grip.Optimum.raceBestByFuelBucket['60-80'].timeMs).toBe(137000)
+  })
   it('salta un JSON locale legacy senza stints invece di promuovere solo il numero versione', () => {
     const prepared = prepareSummaryForUpload(makeLegacyRaceRaw({ stints: [] }))
 

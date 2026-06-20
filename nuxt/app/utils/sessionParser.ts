@@ -258,10 +258,11 @@ function buildLegacyCompatibilitySummary(rawObj: Record<string, unknown>, sessio
       if (!lapTime || !lap?.['is_valid'] || lap?.['has_pit_stop'] || lap?.['pit_out_lap']) return
 
       const lapFuelReference = lapBucketFuel(lap)
+      const effectiveStintType = classifyStintTypeFromFuel(lapFuelReference ?? stintFuelStart, sessionType)
       const historicalEligibility = classifyHistoricalEligibility(
         lapFuelReference ?? stintFuelStart,
         sessionType,
-        stintType
+        effectiveStintType
       )
       const conditions = buildConditions(lap)
       const grip = conditions.grip
@@ -391,7 +392,7 @@ export function generateSessionId(dateStart: string, track: string): string {
 
 export function extractMetadata(
   rawObj: Record<string, unknown>,
-  options: { allowLegacyFallback?: boolean } = {}
+  options: { allowLegacyFallback?: boolean; forceRawRebuild?: boolean } = {}
 ): { meta: SessionMeta; summary: SessionSummary; summarySource: SessionSummarySource } {
   const sessionInfo = (rawObj?.['session_info'] || {}) as Record<string, unknown>
   const stints: Record<string, unknown>[] = Array.isArray(rawObj?.['stints']) ? (rawObj['stints'] as Record<string, unknown>[]) : []
@@ -405,7 +406,7 @@ export function extractMetadata(
     driver: (sessionInfo['driver'] as string | null) || null
   }
 
-  const canonicalSummary = normalizeCanonicalSummary(rawObj, sessionInfo, stints)
+  const canonicalSummary = options.forceRawRebuild ? null : normalizeCanonicalSummary(rawObj, sessionInfo, stints)
   if (canonicalSummary) {
     return {
       meta,

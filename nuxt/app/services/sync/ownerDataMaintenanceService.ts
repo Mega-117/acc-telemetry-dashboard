@@ -16,7 +16,7 @@ import {
 } from './ownerDataRepairService'
 
 const CALLER = 'OwnerDataMaintenance'
-export const OWNER_DATA_MIGRATION_VERSION = 3
+export const OWNER_DATA_MIGRATION_VERSION = 4
 const SESSION_LIST_ONLY_MIGRATION_VERSION = 2
 
 export type OwnerDataMaintenanceStatus =

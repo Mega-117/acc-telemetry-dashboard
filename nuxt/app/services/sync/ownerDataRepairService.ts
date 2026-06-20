@@ -219,7 +219,7 @@ async function canonicalizeCloudRawPayload(rawObj: any): Promise<{
   summary: any
   mode: 'local_domain' | 'cloud_raw_fallback'
 } | null> {
-  const parsed = extractMetadata(rawObj, { allowLegacyFallback: true })
+  const parsed = extractMetadata(rawObj, { allowLegacyFallback: true, forceRawRebuild: true })
 
   try {
     const localDomainResult = await canonicalizeTelemetryPayload(rawObj)
