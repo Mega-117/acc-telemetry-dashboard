@@ -16,7 +16,7 @@ import {
 } from './ownerDataRepairService'
 
 const CALLER = 'OwnerDataMaintenance'
-export const OWNER_DATA_MIGRATION_VERSION = 4
+export const OWNER_DATA_MIGRATION_VERSION = 5
 const SESSION_LIST_ONLY_MIGRATION_VERSION = 2
 
 export type OwnerDataMaintenanceStatus =
@@ -139,6 +139,10 @@ function needsProjectionRebuild(audit: OwnerDataAuditReport): boolean {
 
 function needsMaintenance(audit: OwnerDataAuditReport): boolean {
   return needsSummaryMigration(audit) || needsProjectionRebuild(audit)
+}
+
+function needsVersionedRawReprocess(state: OwnerDataMaintenanceStoredState | null | undefined): boolean {
+  return Number(state?.version || 0) < OWNER_DATA_MIGRATION_VERSION
 }
 
 function isStoredStateCurrent(state: OwnerDataMaintenanceStoredState | null | undefined): boolean {
@@ -336,7 +340,8 @@ export async function runOwnerDataMaintenanceGate(
       throw new Error('Permessi insufficienti per completare la migrazione dati owner.')
     }
 
-    if (!force && !needsMaintenance(audit)) {
+    const versionedRawReprocess = needsVersionedRawReprocess(storedState)
+    if (!force && !versionedRawReprocess && !needsMaintenance(audit)) {
       const report = buildReport({
         uid,
         status: 'completed',
@@ -358,15 +363,16 @@ export async function runOwnerDataMaintenanceGate(
       return report
     }
 
+    const shouldReprocessCloudRaw = force || versionedRawReprocess || needsSummaryMigration(audit)
     let cloudReprocess: OwnerCloudSummaryReprocessReport | null = null
-    if (needsSummaryMigration(audit)) {
+    if (shouldReprocessCloudRaw) {
       emit(onProgress, {
         status: 'running',
         phase: 'cloud_reprocess',
         progress: 40,
         message: 'Aggiorno Best/AVG dai dati cloud...'
       })
-      cloudReprocess = await reprocessOwnerCloudRawSummaries(uid, { forceAll: false })
+      cloudReprocess = await reprocessOwnerCloudRawSummaries(uid, { forceAll: force || versionedRawReprocess })
       if (cloudReprocess.failedSessions > 0) {
         throw new Error(`Reprocess cloud incompleto: ${cloudReprocess.failedSessions} sessioni fallite.`)
       }
@@ -494,3 +500,4 @@ export async function completeOwnerDataMaintenanceAfterLocalSync(
     throw error
   })
 }
+
