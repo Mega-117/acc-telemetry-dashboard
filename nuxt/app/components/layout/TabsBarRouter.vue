@@ -4,13 +4,9 @@
 // Auto-detects active tab from current route
 // ============================================
 
-import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
-
 const route = useRoute()
 
-// La voce "Test HUD" e' uno strumento dev: appare solo in locale/dev con ruolo
-// admin (PIP-175). Il blocco vero della route resta sul middleware dev-tools.
-const { canAccessDevTools } = useDevToolsAccess()
+// PIP-187: Test HUD e' temporaneamente pubblica per QA overlay develop/prod.
 
 const baseTabs = [
   { id: 'panoramica', label: 'PANORAMICA', to: '/panoramica' },
@@ -19,9 +15,7 @@ const baseTabs = [
   { id: 'area-pilota', label: 'AREA PILOTA', to: '/area-pilota' }
 ]
 
-const tabs = computed(() => canAccessDevTools.value
-  ? [...baseTabs, { id: 'test-hud', label: 'TEST HUD', to: '/test-hud' }]
-  : baseTabs)
+const tabs = computed(() => [...baseTabs, { id: 'test-hud', label: 'TEST HUD', to: '/test-hud' }])
 
 // Check if tab is active based on current route
 const isActive = (tabTo: string) => {

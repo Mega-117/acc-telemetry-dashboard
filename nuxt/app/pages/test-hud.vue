@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Test HUD (PIP-175): banco di prova dev-gated per gli overlay.
+// Test HUD (PIP-187): pagina temporaneamente pubblica per QA overlay.
 // - Interruttore GLOBALE di posizionamento: sblocca/blocca TUTTI gli overlay.
 // - Per ogni overlay: on/off + formato fisso (Piccolo/Medio/Grande).
 // Self-contained (come dev.vue): fuori dal contratto useTelemetryGateway.
@@ -7,7 +7,6 @@ import { onMounted, onUnmounted, reactive, ref } from 'vue'
 
 definePageMeta({
   layout: 'dashboard',
-  middleware: 'dev-tools',
 })
 
 type HudOverlayId = 'tyres' | 'sectors'
