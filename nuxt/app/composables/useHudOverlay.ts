@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 export interface HudOverlaySettings {
   enabled: boolean
@@ -7,6 +7,19 @@ export interface HudOverlaySettings {
   bounds: unknown
   showReference?: boolean
   showBest?: boolean
+}
+
+export interface HudOverlayDiagnostics {
+  overlayId: string
+  mainNowMs: number
+  lastFastPushMs: number | null
+  fastPushCount: number
+  drivingActive: boolean
+  positioningActive: boolean
+  visible: boolean
+  focused: boolean
+  enabled: boolean
+  locked: boolean
 }
 
 export const HUD_SCALE_MIN = 0.6
@@ -38,6 +51,12 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
   const isPlacing = ref(false)
   const scale = ref<number>(HUD_SCALE_DEFAULT)
   const settings = ref<HudOverlaySettings | null>(null)
+  const diagnostics = ref<(HudOverlayDiagnostics & { rendererNowMs: number }) | null>(null)
+  const diagnosticAgeMs = computed(() => {
+    const value = diagnostics.value
+    if (!value?.lastFastPushMs) return null
+    return Math.max(0, value.rendererNowMs - value.lastFastPushMs)
+  })
   let unsubscribers: Array<() => void> = []
 
   function api(): any | null {
@@ -80,6 +99,24 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
         if (value?.scale !== undefined) scale.value = clampScale(value.scale)
       }))
     }
+    if (typeof bridge.onHudOverlayDiagnostics === 'function') {
+      unsubscribers.push(bridge.onHudOverlayDiagnostics((value: HudOverlayDiagnostics) => {
+        diagnostics.value = value ? { ...value, rendererNowMs: Date.now() } : null
+      }))
+    }
+  }
+
+  async function confirmAndLock(): Promise<void> {
+    const bridge = api()
+    if (!bridge) return
+    if (typeof bridge.hudOverlayConfirmPlacement === 'function') {
+      await bridge.hudOverlayConfirmPlacement(overlayId)
+    }
+    if (typeof bridge.hudOverlaySetAllPlacement === 'function') {
+      await bridge.hudOverlaySetAllPlacement(false)
+    }
+    isPlacing.value = false
+    await loadSettings()
   }
 
   function stop(): void {
@@ -89,5 +126,5 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
     unsubscribers = []
   }
 
-  return { isElectron, isPlacing, scale, settings, loadSettings, start, stop }
+  return { isElectron, isPlacing, scale, settings, diagnostics, diagnosticAgeMs, confirmAndLock, loadSettings, start, stop }
 }

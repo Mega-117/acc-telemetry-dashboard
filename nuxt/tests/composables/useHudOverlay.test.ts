@@ -2,11 +2,14 @@ import { describe, it, expect, vi } from 'vitest'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 
 function makeApi() {
-  const cbs: { placement?: (a: boolean) => void; scale?: (s: unknown) => void } = {}
+  const cbs: { placement?: (a: boolean) => void; scale?: (s: unknown) => void; diagnostics?: (d: any) => void } = {}
   const api = {
     hudOverlayGetSettings: vi.fn().mockResolvedValue({ enabled: true, locked: true, scale: 1.4, bounds: null }),
+    hudOverlayConfirmPlacement: vi.fn().mockResolvedValue({}),
+    hudOverlaySetAllPlacement: vi.fn().mockResolvedValue(false),
     onHudOverlayPlacement: vi.fn((cb: (a: boolean) => void) => { cbs.placement = cb; return () => { cbs.placement = undefined } }),
     onHudOverlayScale: vi.fn((cb: (s: unknown) => void) => { cbs.scale = cb; return () => { cbs.scale = undefined } }),
+    onHudOverlayDiagnostics: vi.fn((cb: (d: any) => void) => { cbs.diagnostics = cb; return () => { cbs.diagnostics = undefined } }),
   }
   return { api, cbs }
 }
@@ -49,6 +52,30 @@ describe('useHudOverlay', () => {
     expect(hud.scale.value).toBe(0.6)
   })
 
+  it('diagnostics aggiorna contatore e age renderer', () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-06-21T10:00:10.000Z'))
+      const { api, cbs } = makeApi()
+      const hud = useHudOverlay('tyres', () => api)
+      hud.start(1)
+      cbs.diagnostics!({ overlayId: 'tyres', mainNowMs: Date.now(), lastFastPushMs: Date.now() - 1200, fastPushCount: 7 })
+      expect(hud.diagnostics.value?.fastPushCount).toBe(7)
+      expect(hud.diagnosticAgeMs.value).toBe(1200)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('confirmAndLock salva la posizione e disattiva il posizionamento globale', async () => {
+    const { api } = makeApi()
+    const hud = useHudOverlay('sectors', () => api)
+    await hud.confirmAndLock()
+    expect(api.hudOverlayConfirmPlacement).toHaveBeenCalledWith('sectors')
+    expect(api.hudOverlaySetAllPlacement).toHaveBeenCalledWith(false)
+    expect(api.hudOverlayGetSettings).toHaveBeenCalledWith('sectors')
+  })
+
   it('loadSettings legge la scala persistita', async () => {
     const { api } = makeApi()
     const hud = useHudOverlay('tyres', () => api)
@@ -63,11 +90,12 @@ describe('useHudOverlay', () => {
     const api = {
       onHudOverlayPlacement: vi.fn(() => off),
       onHudOverlayScale: vi.fn(() => off),
+      onHudOverlayDiagnostics: vi.fn(() => off),
     }
     const hud = useHudOverlay('tyres', () => api)
     hud.start(1)
     hud.stop()
-    expect(off).toHaveBeenCalledTimes(2)
+    expect(off).toHaveBeenCalledTimes(3)
   })
 
   it('in web mode (nessuna API) non lancia e resta inerte', async () => {
