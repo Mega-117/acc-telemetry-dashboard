@@ -5,24 +5,13 @@
 
 import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useTelemetryGateway, type OverviewSnapshot } from '~/composables/useTelemetryGateway'
+import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useCoachInsights } from '~/composables/useCoachInsights'
 import { usePilotContext, useTargetUserId } from '~/composables/usePilotContext'
 import { usePublicPath } from '~/composables/usePublicPath'
 import type { OverviewProjection } from '~/types/overviewProjections'
 import type { CoachBriefingScenario } from '~/composables/useCoachInsights'
-import { loadRaceCalendarEvents, type RaceCalendarEvent } from '~/repositories/raceCalendarRepository'
-import { normalizeTrackId as normalizeProjectionTrackId } from '~/services/projections/trackMetadata'
 
-type DriverReminderSlide = 'recent' | 'race'
-
-const SCENARIO_FOCUS_MAP: Record<CoachBriefingScenario, string[]> = {
-  tracktitan_input: ['Input precisione', 'Correzione errori'],
-  clean_laps: ['Validita giro', 'Ripetibilita ritmo'],
-  qualifying: ['Giro secco', 'Preparazione push lap'],
-  consistency: ['Costanza passo', 'Fuel gara stabile'],
-  race_real: ['Partenza', 'Traffico e sorpassi']
-}
 
 // Car images
 import mustangImg from '@/assets/images/cars/mustang_gt3.png'
@@ -99,64 +88,18 @@ const telemetryGateway = useTelemetryGateway()
 const { isLoading } = telemetryGateway
 
 const overviewProjection = ref<OverviewProjection | null>(null)
-const overviewSnapshot = ref<OverviewSnapshot | null>(null)
-const raceCalendarEvents = ref<RaceCalendarEvent[]>([])
 const emptyActivityTotals = {
   practice: { minutes: 0, sessions: 0 },
   qualify: { minutes: 0, sessions: 0 },
   race: { minutes: 0, sessions: 0 }
 }
 
-const SESSION_TYPE_PRACTICE = 0
-const SESSION_TYPE_QUALIFY = 1
-const SESSION_TYPE_RACE = 2
-const DEFAULT_RACE_PREP_LOOKBACK_DAYS = 28
-const MS_PER_DAY = 24 * 60 * 60 * 1000
-
-function parseIsoTimestamp(value: string | null | undefined): number | null {
-  if (!value) return null
-  const ts = Date.parse(value)
-  return Number.isFinite(ts) ? ts : null
-}
-
-function normalizeTrackToken(value: string | null | undefined): string {
-  return normalizeProjectionTrackId(value).replace(/^_+|_+$/g, '')
-}
-
-function tracksMatch(left: string | null | undefined, right: string | null | undefined): boolean {
-  const a = normalizeTrackToken(left)
-  const b = normalizeTrackToken(right)
-  if (!a || !b) return false
-  return a === b || a.includes(b) || b.includes(a)
-}
 
 async function loadOverview() {
   const projection = await telemetryGateway.getOverviewProjection(targetUserId.value || undefined)
   overviewProjection.value = projection
 }
 
-async function loadRacePreparationSnapshot() {
-  if (!targetUserId.value || !hasNextRace.value) {
-    overviewSnapshot.value = null
-    return
-  }
-  overviewSnapshot.value = await telemetryGateway.getOverviewSnapshot(targetUserId.value || undefined)
-}
-
-async function loadRaceCalendar() {
-  if (!targetUserId.value) {
-    raceCalendarEvents.value = []
-    overviewSnapshot.value = null
-    return
-  }
-  try {
-    raceCalendarEvents.value = await loadRaceCalendarEvents(targetUserId.value, 12)
-    await loadRacePreparationSnapshot()
-  } catch {
-    raceCalendarEvents.value = []
-    overviewSnapshot.value = null
-  }
-}
 
 function handleCacheInvalidated(event: Event) {
   const detail = (event as CustomEvent<{ uid?: string | null; scope?: string }>).detail || {}
@@ -165,21 +108,17 @@ function handleCacheInvalidated(event: Event) {
 
   void loadOverview()
 
-  if (!detail.scope || ['all', 'calendar', 'manual-refresh'].includes(detail.scope)) {
-    void loadRaceCalendar()
-  }
 }
 
 watch(
   () => targetUserId.value,
   async () => {
-    await Promise.all([loadOverview(), loadRaceCalendar()])
+    await loadOverview()
   },
   { immediate: true }
 )
 
 onMounted(() => {
-  loadDriverReminderState()
   window.addEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
 })
 
@@ -225,26 +164,13 @@ const prevTrackAvgTimeGrip = computed(() => prevTrack.value?.bestAvgRaceGrip || 
 const lastTrackImage = computed(() => getPublicPath(lastTrack.value?.image || '/tracks/track_default.png'))
 const prevTrackImage = computed(() => getPublicPath(prevTrack.value?.image || '/tracks/track_default.png'))
 
-const nextRaceEvent = computed(() => {
-  if (!raceCalendarEvents.value.length) return null
-  const nowTs = Date.now()
-  const parsed = raceCalendarEvents.value
-    .map((event) => ({ event, ts: Date.parse(event.startsAt || '') }))
-    .filter((entry) => Number.isFinite(entry.ts))
-
-  if (!parsed.length) return null
-
-  const upcoming = parsed.find((entry) => entry.ts >= nowTs)
-  return (upcoming || parsed[0] || null)?.event || null
-})
-
 const emit = defineEmits<{
   'go-to-track': [trackId: string]
 }>()
 
 const router = useRouter()
 
-const { getDailySuggestionScenarios, generateDailySuggestion, generateDriverState } = useCoachInsights()
+const { getDailySuggestionScenarios, generateDailySuggestion } = useCoachInsights()
 const briefingSelection = ref<'auto' | CoachBriefingScenario>('auto')
 const briefingScenarioOptions = getDailySuggestionScenarios()
 
@@ -273,7 +199,7 @@ const briefingModeLabel = computed(() => {
 })
 const dailySuggestionReliabilityNote = computed(() => {
   if (briefingSelection.value !== 'auto') {
-    return 'Scenario scelto manualmente. La lettura recente resta visibile nel box Focus gara.'
+    return 'Scenario scelto manualmente. Il riepilogo delle sessioni recenti resta visibile nel box Attivita recenti.'
   }
   if (dailySuggestion.value.isDataDriven === false) {
     return 'Il consiglio resta prudente finche non ci sono minuti recenti misurabili.'
@@ -281,9 +207,6 @@ const dailySuggestionReliabilityNote = computed(() => {
   return 'Il consiglio nasce dagli ultimi 7 giorni. Cambialo se oggi vuoi lavorare su un focus diverso.'
 })
 
-const driverState = computed(() => {
-  return generateDriverState(activityData.value)
-})
 
 const prepSessionTarget = computed(() => ({
   path: '/preparazione',
@@ -301,237 +224,18 @@ const recentSessions = computed(() => {
   return activityTotals.value.practice.sessions + activityTotals.value.qualify.sessions + activityTotals.value.race.sessions
 })
 
-const DRIVER_REMINDER_STORAGE_KEY = 'acc:overview:driver-reminder:v2'
-const reminderSlide = ref<DriverReminderSlide>('recent')
-const nextRaceName = computed(() => {
-  if (!nextRaceEvent.value) return 'Nessuna gara pianificata'
-  const track = nextRaceEvent.value.trackName?.trim() || ''
-  if (track) return track
-  return nextRaceEvent.value.title?.trim() || 'Gara pianificata'
-})
-const nextRaceSubtitle = computed(() => {
-  if (!nextRaceEvent.value) return ''
-  const title = nextRaceEvent.value.title?.trim() || ''
-  if (!title) return ''
-  const track = nextRaceEvent.value.trackName?.trim() || ''
-  if (track && title.toLowerCase() === track.toLowerCase()) return ''
-  return title.length > 44 ? `${title.slice(0, 44)}...` : title
-})
-const nextRaceDateLabel = computed(() => {
-  const value = nextRaceEvent.value?.startsAt || ''
-  if (!value) return 'Definisci la prossima gara in Area Pilota'
-  const parsed = Date.parse(value)
-  if (!Number.isFinite(parsed)) return value
-  return new Intl.DateTimeFormat('it-IT', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  }).format(new Date(parsed))
-})
-const nextRaceDaysLeft = computed(() => {
-  const startsAt = nextRaceEvent.value?.startsAt || ''
-  if (!startsAt) return null
-  const ts = parseIsoTimestamp(startsAt)
-  if (ts === null) return null
-  return Math.max(0, Math.ceil((ts - Date.now()) / MS_PER_DAY))
-})
-const nextRaceDaysLeftLabel = computed(() => {
-  if (nextRaceDaysLeft.value === null) return ''
-  return `${nextRaceDaysLeft.value}g alla gara`
-})
-const hasNextRace = computed(() => Boolean(nextRaceEvent.value))
-
-const racePrepWindowStartTs = computed(() => {
-  const event = nextRaceEvent.value
-  if (!event) return null
-  const explicitStart = parseIsoTimestamp(event.createdAt)
-  if (explicitStart !== null) return explicitStart
-  const raceTs = parseIsoTimestamp(event.startsAt)
-  if (raceTs === null) return null
-  return raceTs - (DEFAULT_RACE_PREP_LOOKBACK_DAYS * MS_PER_DAY)
+const recentActivityTitle = computed(() => {
+  if (recentSessions.value <= 0) return 'Nessuna sessione negli ultimi 7 giorni'
+  const sessionLabel = recentSessions.value === 1 ? 'sessione registrata' : 'sessioni registrate'
+  return `Ultimi 7 giorni: ${recentSessions.value} ${sessionLabel}`
 })
 
-const racePrepWindowStartLabel = computed(() => {
-  const ts = racePrepWindowStartTs.value
-  if (ts === null) return ''
-  return new Intl.DateTimeFormat('it-IT', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  }).format(new Date(ts))
-})
-
-const raceSpecificSessions = computed(() => {
-  if (!hasNextRace.value) return []
-  const sessions = overviewSnapshot.value?.sessions || []
-  if (!sessions.length) return []
-
-  const event = nextRaceEvent.value
-  const raceTs = parseIsoTimestamp(event?.startsAt)
-  const startTs = racePrepWindowStartTs.value
-  const raceTrack = event?.trackName || nextRaceName.value
-
-  return sessions.filter((session) => {
-    if (!tracksMatch(session.meta?.track, raceTrack)) return false
-    const sessionTs = parseIsoTimestamp(session.meta?.date_start)
-    if (sessionTs === null) return false
-    if (startTs !== null && sessionTs < startTs) return false
-    if (raceTs !== null && sessionTs > raceTs) return false
-    return true
-  })
-})
-
-const raceSpecificTotals = computed(() => {
-  const totals = {
-    sessions: 0,
-    minutes: 0,
-    byType: {
-      practice: 0,
-      qualify: 0,
-      race: 0
-    }
+const recentActivityDescription = computed(() => {
+  if (recentSessions.value <= 0) {
+    return 'Appena registri nuove sessioni, qui vedrai volume, minuti totali e distribuzione tra pratica, qualifica e gara.'
   }
-
-  for (const session of raceSpecificSessions.value) {
-    totals.sessions += 1
-    totals.minutes += Math.round(Number(session.summary?.totalTime || 0) / 60000)
-
-    if (session.meta?.session_type === SESSION_TYPE_PRACTICE) {
-      totals.byType.practice += 1
-    } else if (session.meta?.session_type === SESSION_TYPE_QUALIFY) {
-      totals.byType.qualify += 1
-    } else if (session.meta?.session_type === SESSION_TYPE_RACE) {
-      totals.byType.race += 1
-    }
-  }
-
-  return totals
+  return 'Riepilogo delle sessioni effettive salvate: volume totale, minuti guidati e distribuzione per tipo sessione.'
 })
-
-const raceSpecificScopeLabel = computed(() => {
-  if (!hasNextRace.value) return ''
-  const track = nextRaceName.value
-  if (racePrepWindowStartLabel.value) {
-    return `Conteggio solo su ${track} dal ${racePrepWindowStartLabel.value} alla gara.`
-  }
-  return `Conteggio solo su ${track} fino alla data gara.`
-})
-
-const plannedTrainings = computed(() => {
-  if (!hasNextRace.value) return 0
-  const daysLeft = nextRaceDaysLeft.value ?? 21
-  if (daysLeft <= 7) return 4
-  if (daysLeft <= 14) return 6
-  if (daysLeft <= 28) return 8
-  return 10
-})
-
-const completedTrainings = computed(() => raceSpecificTotals.value.sessions)
-
-const reminderStatus = computed(() => {
-  if (!hasNextRace.value) {
-    return {
-      label: 'No gara',
-      tone: 'idle'
-    } as const
-  }
-
-  if (plannedTrainings.value <= 0) {
-    return {
-      label: 'Da impostare',
-      tone: 'idle'
-    } as const
-  }
-
-  const ratio = completedTrainings.value / plannedTrainings.value
-  if (ratio < 0.6) {
-    return {
-      label: 'Ritardo',
-      tone: 'behind'
-    } as const
-  }
-
-  if (ratio > 1) {
-    return {
-      label: 'Avanti',
-      tone: 'ahead'
-    } as const
-  }
-
-  return {
-    label: 'In linea',
-    tone: 'on-track'
-  } as const
-})
-
-const reminderProgress = computed(() => {
-  if (plannedTrainings.value <= 0) return 0
-  const ratio = completedTrainings.value / plannedTrainings.value
-  return Math.max(0, Math.min(100, Math.round(ratio * 100)))
-})
-
-const trainingsRemaining = computed(() => {
-  return Math.max(plannedTrainings.value - completedTrainings.value, 0)
-})
-
-const reminderDeltaText = computed(() => {
-  if (!hasNextRace.value) return 'Aggiungi la prossima gara in Area Pilota per attivare il piano.'
-  if (plannedTrainings.value <= 0) return 'Target non disponibile.'
-  const delta = plannedTrainings.value - completedTrainings.value
-  if (delta > 0) {
-    return `${delta} ${delta === 1 ? 'allenamento da completare' : 'allenamenti da completare'} prima della gara.`
-  }
-  if (delta === 0) return 'Target centrato.'
-  const overTarget = Math.abs(delta)
-  return `${overTarget} ${overTarget === 1 ? 'allenamento oltre target' : 'allenamenti oltre target'}.`
-})
-
-const workedFocusItems = computed(() => {
-  const items: string[] = []
-  if (raceSpecificTotals.value.byType.practice > 0) items.push('Pulizia base')
-  if (raceSpecificTotals.value.byType.qualify > 0) items.push('Giro secco')
-  if (raceSpecificTotals.value.byType.race > 0) items.push('Passo gara')
-  return items
-})
-
-const todoFocusItems = computed(() => {
-  const suggested = SCENARIO_FOCUS_MAP[selectedBriefingScenario.value] || []
-  if (!workedFocusItems.value.length) return suggested
-  const workedSet = new Set(workedFocusItems.value.map((value) => value.toLowerCase()))
-  return suggested.filter((item) => !workedSet.has(item.toLowerCase()))
-})
-
-function setReminderSlide(nextSlide: DriverReminderSlide) {
-  reminderSlide.value = nextSlide
-}
-
-function loadDriverReminderState() {
-  if (typeof window === 'undefined') return
-  const storedValue = window.localStorage.getItem(DRIVER_REMINDER_STORAGE_KEY)
-  if (!storedValue) return
-
-  try {
-    const parsed = JSON.parse(storedValue) as Partial<{
-      reminderSlide: DriverReminderSlide
-    }>
-
-    if (parsed.reminderSlide === 'recent' || parsed.reminderSlide === 'race') {
-      reminderSlide.value = parsed.reminderSlide
-    }
-  } catch {
-    // Ignore invalid local persistence and keep defaults.
-  }
-}
-
-function saveDriverReminderState() {
-  if (typeof window === 'undefined') return
-  const payload = JSON.stringify({
-    reminderSlide: reminderSlide.value
-  })
-  window.localStorage.setItem(DRIVER_REMINDER_STORAGE_KEY, payload)
-}
-
-watch(reminderSlide, saveDriverReminderState)
 
 const goToTrack = (track: { id: string } | null) => {
   if (!track?.id) return
@@ -592,142 +296,45 @@ const goToTrack = (track: { id: string } | null) => {
         
         <div class="driver-state coach-card">
           <div class="coach-card__header driver-header">
-            <h2 class="coach-title">Focus gara</h2>
-            <div class="driver-header-actions">
-              <div class="driver-segmented" role="tablist" aria-label="Vista reminder">
-              <button
-                type="button"
-                role="tab"
-                :aria-selected="reminderSlide === 'recent'"
-                :class="{ 'is-active': reminderSlide === 'recent' }"
-                @click="setReminderSlide('recent')"
-              >
-                Lettura
-              </button>
-              <button
-                type="button"
-                role="tab"
-                :aria-selected="reminderSlide === 'race'"
-                :class="{ 'is-active': reminderSlide === 'race' }"
-                @click="setReminderSlide('race')"
-              >
-                Gara
-              </button>
-              </div>
+            <div>
+              <span class="eyebrow">Ultimi 7 giorni</span>
+              <h2 class="coach-title">Attivita recenti</h2>
             </div>
           </div>
 
           <div class="driver-slide-container">
-            <Transition name="driver-slide" mode="out-in">
-              <div v-if="reminderSlide === 'recent'" key="recent" class="driver-slide-panel driver-slide-panel--recent">
-                <div class="driver-summary">
-                  <p class="insight-text">{{ driverState.message }}</p>
-                  <p v-if="driverState.details" class="coach-note">{{ driverState.details }}</p>
-                </div>
+            <div class="driver-slide-panel driver-slide-panel--recent">
+              <div class="driver-summary">
+                <p class="insight-text">{{ recentActivityTitle }}</p>
+                <p class="coach-note">{{ recentActivityDescription }}</p>
+              </div>
 
-                <div class="driver-metrics">
-                  <div>
-                    <span class="metric-value">{{ recentSessions }}</span>
-                    <span class="metric-label">allenamenti</span>
-                  </div>
-                  <div>
-                    <span class="metric-value">{{ Math.round(recentMinutes) }}</span>
-                    <span class="metric-label">min totali</span>
-                  </div>
+              <div class="driver-metrics">
+                <div>
+                  <span class="metric-value">{{ recentSessions }}</span>
+                  <span class="metric-label">sessioni</span>
                 </div>
-
-                <div class="recent-breakdown">
-                  <div class="recent-breakdown__row">
-                    <span>Pulizia</span>
-                    <strong>{{ activityTotals.practice.sessions }}</strong>
-                  </div>
-                  <div class="recent-breakdown__row">
-                    <span>Qualifica</span>
-                    <strong>{{ activityTotals.qualify.sessions }}</strong>
-                  </div>
-                  <div class="recent-breakdown__row">
-                    <span>Gara</span>
-                    <strong>{{ activityTotals.race.sessions }}</strong>
-                  </div>
+                <div>
+                  <span class="metric-value">{{ Math.round(recentMinutes) }}</span>
+                  <span class="metric-label">min totali</span>
                 </div>
               </div>
 
-              <div v-else key="race" class="driver-slide-panel driver-slide-panel--race">
-                <div class="race-header-row">
-                  <div>
-                    <span class="race-title">{{ nextRaceName }}</span>
-                    <span v-if="nextRaceSubtitle" class="race-subtitle">{{ nextRaceSubtitle }}</span>
-                    <span class="race-date">{{ nextRaceDateLabel }}</span>
-                    <span v-if="nextRaceDaysLeftLabel" class="race-days-chip">{{ nextRaceDaysLeftLabel }}</span>
-                  </div>
-                  <span class="race-status-chip" :class="`tone-${reminderStatus.tone}`">{{ reminderStatus.label }}</span>
+              <div class="recent-breakdown" aria-label="Sessioni per tipo negli ultimi 7 giorni">
+                <div class="recent-breakdown__row">
+                  <span>Pratica</span>
+                  <strong>{{ activityTotals.practice.sessions }}</strong>
                 </div>
-
-                <template v-if="hasNextRace">
-                  <div class="race-metrics">
-                    <div class="race-metric">
-                      <span class="metric-value">{{ plannedTrainings }}</span>
-                      <span class="metric-label">allenamenti target</span>
-                    </div>
-                    <div class="race-metric">
-                      <span class="metric-value">{{ completedTrainings }}</span>
-                      <span class="metric-label">registrati per gara</span>
-                    </div>
-                  </div>
-
-                  <div class="race-type-breakdown">
-                    <span class="race-type-chip">Pulizia {{ raceSpecificTotals.byType.practice }}</span>
-                    <span class="race-type-chip">Qualifica {{ raceSpecificTotals.byType.qualify }}</span>
-                    <span class="race-type-chip">Gara {{ raceSpecificTotals.byType.race }}</span>
-                  </div>
-
-                  <p class="race-remaining">{{ trainingsRemaining }} {{ trainingsRemaining === 1 ? 'allenamento restante' : 'allenamenti restanti' }}</p>
-                  <p v-if="raceSpecificScopeLabel" class="race-scope">{{ raceSpecificScopeLabel }}</p>
-                  <div class="progress-line" role="presentation">
-                    <div class="progress-line__value" :style="{ width: `${reminderProgress}%` }" />
-                  </div>
-
-                  <div class="focus-grid">
-                    <div class="focus-column">
-                      <span class="focus-title">Gia lavorato</span>
-                      <div class="focus-tags">
-                        <span
-                          v-for="item in workedFocusItems"
-                          :key="item"
-                          class="focus-tag focus-tag--done"
-                        >
-                          {{ item }}
-                        </span>
-                        <span v-if="workedFocusItems.length === 0" class="focus-empty">Nessun blocco allenato</span>
-                      </div>
-                    </div>
-
-                    <div class="focus-column">
-                      <span class="focus-title">Da lavorare</span>
-                      <div class="focus-tags">
-                        <span
-                          v-for="item in todoFocusItems"
-                          :key="item"
-                          class="focus-tag"
-                        >
-                          {{ item }}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <p class="reminder-note">{{ reminderDeltaText }}</p>
-                </template>
-
-                <div v-else class="race-empty-state">
-                  <p class="race-empty-state__title">Nessuna gara da preparare</p>
-                  <p class="race-empty-state__body">
-                    Imposta una prossima gara per calcolare target, progressi e focus per pista.
-                  </p>
-                  <NuxtLink :to="pilotAreaTarget" class="action-btn action-btn--secondary">Apri Area Pilota</NuxtLink>
+                <div class="recent-breakdown__row">
+                  <span>Qualifica</span>
+                  <strong>{{ activityTotals.qualify.sessions }}</strong>
+                </div>
+                <div class="recent-breakdown__row">
+                  <span>Gara</span>
+                  <strong>{{ activityTotals.race.sessions }}</strong>
                 </div>
               </div>
-            </Transition>
+            </div>
           </div>
         </div>
       </div>
@@ -1073,39 +680,6 @@ const goToTrack = (track: { id: string } | null) => {
   margin-bottom: 16px;
 }
 
-.driver-header-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.driver-segmented {
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  padding: 3px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.driver-segmented button {
-  min-height: 30px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.64);
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.01em;
-  cursor: pointer;
-  transition: color 160ms ease, background 180ms ease;
-}
-
-.driver-segmented button.is-active {
-  background: rgba(255, 255, 255, 0.13);
-  color: #fff;
-}
-
 .driver-slide-container {
   display: flex;
   flex: 1;
@@ -1188,250 +762,6 @@ const goToTrack = (track: { id: string } | null) => {
   text-transform: uppercase;
 }
 
-.driver-slide-panel--race {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.race-header-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-}
-
-.race-title {
-  display: block;
-  color: #fff;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.1;
-}
-
-.race-subtitle {
-  display: block;
-  margin-top: 3px;
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.race-date {
-  display: block;
-  margin-top: 2px;
-  color: rgba(255, 255, 255, 0.54);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.race-days-chip {
-  display: inline-flex;
-  align-items: center;
-  margin-top: 8px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(64, 156, 255, 0.4);
-  background: rgba(64, 156, 255, 0.14);
-  color: rgba(214, 236, 255, 0.96);
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-  letter-spacing: 0.02em;
-}
-
-.race-status-chip {
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.race-status-chip.tone-behind {
-  border-color: rgba(255, 149, 0, 0.45);
-  background: rgba(255, 149, 0, 0.14);
-  color: rgba(255, 210, 143, 0.96);
-}
-
-.race-status-chip.tone-on-track {
-  border-color: rgba(52, 199, 89, 0.45);
-  background: rgba(52, 199, 89, 0.14);
-  color: rgba(183, 255, 205, 0.96);
-}
-
-.race-status-chip.tone-ahead {
-  border-color: rgba(64, 156, 255, 0.45);
-  background: rgba(64, 156, 255, 0.14);
-  color: rgba(191, 226, 255, 0.96);
-}
-
-.race-status-chip.tone-idle {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.78);
-}
-
-.race-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.race-metric {
-  padding: 11px;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.race-empty-state {
-  display: grid;
-  gap: 10px;
-  margin-top: 4px;
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  background: rgba(255, 255, 255, 0.045);
-}
-
-.race-empty-state__title {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 14px;
-  font-weight: 850;
-}
-
-.race-empty-state__body {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.race-type-breakdown {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.race-type-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  padding: 0 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(255, 255, 255, 0.8);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.race-remaining {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.68);
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1.35;
-}
-
-.race-scope {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.progress-line {
-  height: 7px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  overflow: hidden;
-}
-
-.progress-line__value {
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #4fd1c5, #28b7ff);
-  transition: width 220ms ease;
-}
-
-.focus-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.focus-column {
-  display: grid;
-  gap: 6px;
-}
-
-.focus-title {
-  color: rgba(255, 255, 255, 0.54);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.focus-tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.focus-tag {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 25px;
-  padding: 1px 10px 0;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.focus-tag--done {
-  border-color: rgba(52, 199, 89, 0.44);
-  background: rgba(52, 199, 89, 0.14);
-  color: rgba(193, 255, 214, 0.95);
-}
-
-.focus-empty {
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 11px;
-}
-
-.reminder-note {
-  margin: auto 0 0;
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.driver-slide-enter-active,
-.driver-slide-leave-active {
-  transition: opacity 190ms ease, transform 190ms ease;
-}
-
-.driver-slide-enter-from,
-.driver-slide-leave-to {
-  opacity: 0;
-  transform: translateY(6px);
-}
 
 .mini-grid {
   display: grid;
