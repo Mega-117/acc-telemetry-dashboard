@@ -311,6 +311,12 @@ function toDocMap(docs: any[]): Map<string, any> {
   return result
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+export function isLegacyTrackBestProjectionDoc(data: any): boolean {
+  return Number(data?.version || 0) < TRACK_BESTS_SCHEMA_VERSION
+    || Number(data?.bestRulesVersion || 0) < BEST_RULES_VERSION
+}
+
 export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport> {
   return withFirebaseScenario('dev.ownerRebuild.audit', { uid }, async () => {
     const issues: OwnerDataAuditReport['issues'] = []
@@ -418,7 +424,7 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
     const missingTrackDetailProjections = trackIds.filter((trackId) => !trackDetailMap.has(trackId))
     const expectedSessionListPageDocs = Math.ceil(sessions.length / SESSION_LIST_PROJECTION_PAGE_SIZE)
     const oldTrackBests = Array.from(trackBestMap.entries())
-      .filter(([, data]) => Number(data?.version || 0) < TRACK_BESTS_SCHEMA_VERSION)
+      .filter(([, data]) => isLegacyTrackBestProjectionDoc(data))
       .map(([trackId]) => trackId)
     const oldTrackDetailProjections = Array.from(trackDetailMap.entries())
       .filter(([, data]) => Number(data?.schemaVersion || 0) !== TRACK_DETAIL_PROJECTION_SCHEMA_VERSION)
@@ -429,6 +435,9 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
     }
     for (const trackId of missingTrackDetailProjections.slice(0, MAX_ISSUES)) {
       issues.push(issue('warning', 'missing_track_detail_projection', 'Pista con sessioni ma senza trackDetailProjection.', { trackId }))
+    }
+    for (const trackId of oldTrackBests.slice(0, MAX_ISSUES)) {
+      issues.push(issue('warning', 'old_track_bests', 'Pista con trackBests schema/regole legacy.', { trackId }))
     }
     if (sessionListSchemaVersion !== SESSION_LIST_PROJECTION_SCHEMA_VERSION) {
       issues.push(issue('warning', 'session_list_schema_mismatch', 'Session list projection mancante o con schema vecchio.'))
@@ -517,7 +526,7 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
     const sessionListSchemaVersion = Number(sessionListMeta?.schemaVersion || 0)
     const oldTrackBests = trackBestDocs
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-      .filter((docSnap: any) => Number(docSnap.data()?.version || 0) < TRACK_BESTS_SCHEMA_VERSION)
+      .filter((docSnap: any) => isLegacyTrackBestProjectionDoc(docSnap.data() || {}))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       .map((docSnap: any) => docSnap.id)
     const oldTrackDetailProjections = trackDetailDocs
@@ -532,7 +541,7 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
     if (sessionListSchemaVersion !== SESSION_LIST_PROJECTION_SCHEMA_VERSION) issues.push('session_list_schema_version_mismatch')
     if (Number(sessionListMeta?.pageCount || 0) !== sessionListPageDocs.length) issues.push('session_list_page_count_mismatch')
     if (Number(sessionListMeta?.totalSessions || 0) !== Number(userData?.stats?.totalSessions || 0)) issues.push('session_list_total_sessions_mismatch')
-    if (oldTrackBests.length > 0) issues.push('old_track_bests_schema')
+    if (oldTrackBests.length > 0) issues.push('old_track_bests_schema_or_rules')
     if (oldTrackDetailProjections.length > 0) issues.push('old_track_detail_projection_schema')
 
     return {

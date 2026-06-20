@@ -56,6 +56,48 @@ export async function calculateSummaryHash(summary: any): Promise<string> {
   return calculateContentHash(stableStringify(summary || null))
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+function canRebuildSummaryFromLocalRaw(rawObj: any): boolean {
+  return Array.isArray(rawObj?.stints) && rawObj.stints.length > 0
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+export function prepareSummaryForUpload(rawObj: any):
+  | { ok: true; meta: any; summary: any; summarySource: 'canonical' | 'legacy_fallback' }
+  | { ok: false; meta: any; reason: 'legacy_local_requires_reprocess' } {
+  const canonical = extractMetadata(rawObj)
+  if (canonical.summarySource === 'canonical') {
+    return {
+      ok: true,
+      meta: canonical.meta,
+      summary: {
+        ...canonical.summary,
+        best_rules_version: BEST_RULES_VERSION
+      },
+      summarySource: 'canonical'
+    }
+  }
+
+  if (!canRebuildSummaryFromLocalRaw(rawObj)) {
+    return {
+      ok: false,
+      meta: canonical.meta,
+      reason: 'legacy_local_requires_reprocess'
+    }
+  }
+
+  const rebuilt = extractMetadata(rawObj, { allowLegacyFallback: true })
+  return {
+    ok: true,
+    meta: rebuilt.meta,
+    summary: {
+      ...rebuilt.summary,
+      best_rules_version: BEST_RULES_VERSION
+    },
+    summarySource: 'legacy_fallback'
+  }
+}
+
 export function createSessionUploadService(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
@@ -92,12 +134,11 @@ export function createSessionUploadService(params: {
         if (fileOwnerId && fileOwnerId !== uid) {
           return { status: 'skipped' as const, fileName, reason: 'owner_mismatch' }
         }
-
-        const { meta, summary } = extractMetadata(rawObj)
-        const summaryWithRules = {
-          ...summary,
-          best_rules_version: Number(summary?.best_rules_version || BEST_RULES_VERSION)
+        const preparedSummary = prepareSummaryForUpload(rawObj)
+        if (!preparedSummary.ok) {
+          return { status: 'skipped' as const, fileName, reason: preparedSummary.reason }
         }
+        const { meta, summary: summaryWithRules } = preparedSummary
         const sessionId = generateSessionId(meta.date_start, meta.track)
         const fileHash = options.precomputedHash || await calculateContentHash(rawText)
         const rawDataHash = await calculateRawDataHash(rawObj)

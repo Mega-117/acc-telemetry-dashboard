@@ -16,7 +16,8 @@ import {
 } from './ownerDataRepairService'
 
 const CALLER = 'OwnerDataMaintenance'
-export const OWNER_DATA_MIGRATION_VERSION = 2
+export const OWNER_DATA_MIGRATION_VERSION = 3
+const SESSION_LIST_ONLY_MIGRATION_VERSION = 2
 
 export type OwnerDataMaintenanceStatus =
   | 'idle'
@@ -31,7 +32,6 @@ export type OwnerDataMaintenancePhase =
   | 'idle'
   | 'checking_status'
   | 'audit'
-  | 'local_reprocess'
   | 'cloud_reprocess'
   | 'sync_pending'
   | 'rebuild'
@@ -150,7 +150,7 @@ function isStoredStateCurrent(state: OwnerDataMaintenanceStoredState | null | un
 function isStoredStateReadyForSessionListUpgrade(state: OwnerDataMaintenanceStoredState | null | undefined): boolean {
   return state?.status === 'completed'
     && Number(state?.version || 0) >= 1
-    && Number(state?.version || 0) < OWNER_DATA_MIGRATION_VERSION
+    && Number(state?.version || 0) < SESSION_LIST_ONLY_MIGRATION_VERSION
     && Number(state?.bestRulesVersion || 0) >= BEST_RULES_VERSION
 }
 
@@ -171,16 +171,6 @@ async function writeStoredState(uid: string, state: OwnerDataMaintenanceStoredSt
       }
     }
   }), { merge: true }, CALLER)
-}
-
-async function hasLocalTelemetryFiles(electronAPI: any): Promise<boolean> {
-  if (!electronAPI?.getTelemetryFiles) return false
-  try {
-    const files = await electronAPI.getTelemetryFiles()
-    return Array.isArray(files) && files.length > 0
-  } catch {
-    return false
-  }
 }
 
 function emit(
@@ -247,7 +237,7 @@ async function markCompleted(uid: string, report: OwnerDataMaintenanceReport) {
 export async function runOwnerDataMaintenanceGate(
   options: OwnerDataMaintenanceRunOptions
 ): Promise<OwnerDataMaintenanceReport> {
-  const { uid, electronAPI, force = false, onProgress } = options
+  const { uid, force = false, onProgress } = options
   const startedAt = nowIso()
 
   return withFirebaseScenario('maintenance.ownerData.gate', { uid, force }, async () => {
@@ -362,49 +352,6 @@ export async function runOwnerDataMaintenanceGate(
         status: 'completed',
         phase: 'completed',
         progress: 100,
-        message: report.message,
-        report
-      })
-      return report
-    }
-
-    const canUseLocalReprocess = needsSummaryMigration(audit)
-      && !!electronAPI?.reprocessTelemetrySummaries
-      && await hasLocalTelemetryFiles(electronAPI)
-
-    if (canUseLocalReprocess) {
-      emit(onProgress, {
-        status: 'running',
-        phase: 'local_reprocess',
-        progress: 35,
-        message: 'Aggiorno Best/AVG dai file locali...'
-      })
-      const localReprocess = await electronAPI.reprocessTelemetrySummaries({})
-      const report = buildReport({
-        uid,
-        status: 'sync_pending',
-        phase: 'sync_pending',
-        message: 'Best/AVG aggiornati localmente. Sincronizzo sessioni aggiornate...',
-        audit,
-        localReprocess,
-        localReprocessStarted: true,
-        needsSyncBeforeCompletion: true,
-        startedAt
-      })
-      await writeStoredState(uid, {
-        status: 'sync_pending',
-        startedAt,
-        completedAt: null,
-        lastError: null,
-        report: {
-          audit: summarizeAudit(audit),
-          localReprocessStarted: true
-        }
-      })
-      emit(onProgress, {
-        status: 'sync_pending',
-        phase: 'sync_pending',
-        progress: 55,
         message: report.message,
         report
       })
