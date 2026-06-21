@@ -3,7 +3,7 @@
 // - Interruttore GLOBALE di posizionamento: sblocca/blocca TUTTI gli overlay.
 // - Per ogni overlay: on/off + formato fisso (Piccolo/Medio/Grande).
 // Self-contained (come dev.vue): fuori dal contratto useTelemetryGateway.
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 
 definePageMeta({
   layout: 'dashboard',
@@ -36,9 +36,33 @@ const trainingOpen = ref(false)
 // soli nella posizione salvata; tornando ai menu spariscono.
 const driving = ref(false)
 const positionSaved = ref(false)
+const placementDeadlineMs = ref<number | null>(null)
+const placementAutoSaveMs = ref(60000)
+const nowMs = ref(Date.now())
 // Override "Sempre visibili" (PIP-177): forza la comparsa ignorando il rilevamento.
 const alwaysVisible = ref(false)
 let unsubscribeDriving: (() => void) | null = null
+let placementPollTimer: ReturnType<typeof setInterval> | null = null
+
+
+const placementRemainingSeconds = computed(() => {
+  if (!positioning.value || placementDeadlineMs.value === null) return null
+  return Math.max(0, Math.ceil((placementDeadlineMs.value - nowMs.value) / 1000))
+})
+
+function applyPlacementStatus(status: any) {
+  if (!status || typeof status !== 'object') return
+  nowMs.value = Date.now()
+  positioning.value = status.active === true
+  placementDeadlineMs.value = Number.isFinite(Number(status.deadlineMs)) ? Number(status.deadlineMs) : null
+  placementAutoSaveMs.value = Number.isFinite(Number(status.autoSaveMs)) ? Number(status.autoSaveMs) : 60000
+}
+
+async function refreshPlacementStatus() {
+  const api = getApi()
+  if (!apiReady.value || typeof api?.hudOverlayGetPlacementStatus !== 'function') return
+  try { applyPlacementStatus(await api.hudOverlayGetPlacementStatus()) } catch { /* bridge non aggiornato */ }
+}
 
 async function refreshState() {
   const api = getApi()
@@ -56,7 +80,9 @@ async function refreshState() {
       open[overlay.id] = false
     }
   }
-  if (typeof api.hudOverlayIsPositioning === 'function') {
+  if (typeof api.hudOverlayGetPlacementStatus === 'function') {
+    await refreshPlacementStatus()
+  } else if (typeof api.hudOverlayIsPositioning === 'function') {
     try { positioning.value = await api.hudOverlayIsPositioning() } catch { positioning.value = false }
   }
   if (typeof api.trainingOverlayIsOpen === 'function') {
@@ -81,6 +107,10 @@ async function toggleAlwaysVisible() {
 
 onMounted(() => {
   refreshState()
+  placementPollTimer = setInterval(() => {
+    nowMs.value = Date.now()
+    if (positioning.value) refreshPlacementStatus()
+  }, 1000)
   const api = getApi()
   if (api && typeof api.onHudOverlayDrivingState === 'function') {
     unsubscribeDriving = api.onHudOverlayDrivingState((value: boolean) => { driving.value = !!value })
@@ -89,14 +119,24 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (unsubscribeDriving) { unsubscribeDriving(); unsubscribeDriving = null }
+  if (placementPollTimer) { clearInterval(placementPollTimer); placementPollTimer = null }
 })
 
-async function savePosition() {
+async function saveAndLock() {
   const api = getApi()
-  if (!apiReady.value || !api?.hudOverlaySavePosition) return
-  await api.hudOverlaySavePosition()
+  if (!apiReady.value || !api?.hudOverlaySetAllPlacement) return
+  await api.hudOverlaySetAllPlacement(false)
+  await refreshPlacementStatus()
   positionSaved.value = true
   setTimeout(() => { positionSaved.value = false }, 1600)
+}
+
+async function startPositioning() {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySetAllPlacement) return
+  await api.hudOverlaySetAllPlacement(true)
+  await refreshPlacementStatus()
+  positionSaved.value = false
 }
 
 async function toggleHud(id: HudOverlayId) {
@@ -105,6 +145,7 @@ async function toggleHud(id: HudOverlayId) {
   if (open[id]) await api.hudOverlayClose(id)
   else await api.hudOverlayOpen(id, { scale: scale[id] })
   open[id] = await api.hudOverlayIsOpen(id)
+  await refreshPlacementStatus()
 }
 
 function onScaleInput(id: HudOverlayId, raw: string) {
@@ -112,7 +153,7 @@ function onScaleInput(id: HudOverlayId, raw: string) {
   scale[id] = value
   const api = getApi()
   if (!apiReady.value || !api) return
-  api.hudOverlaySetScale(id, value)
+  api.hudOverlaySetScale(id, value).then(() => refreshPlacementStatus()).catch(() => {})
 }
 
 async function toggleSectorReference() {
@@ -133,13 +174,6 @@ async function toggleSectorBest() {
   if (typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
 }
 
-async function togglePositioning() {
-  const api = getApi()
-  if (!apiReady.value || !api) return
-  const next = !positioning.value
-  await api.hudOverlaySetAllPlacement(next)
-  positioning.value = next
-}
 
 async function toggleTraining() {
   const api = getApi()
@@ -178,14 +212,18 @@ async function toggleTraining() {
       <div class="test-hud__placement" :class="{ 'is-on': positioning }">
         <div class="test-hud__placement-text">
           <strong>Posizionamento overlay</strong>
-          <span>{{ positioning ? 'Sbloccato: trascina gli overlay dove vuoi, salva la posizione, poi blocca.' : 'Bloccato: le posizioni sono fisse.' }}</span>
+          <span v-if="positioning">
+            Modifica attiva: sposta o ridimensiona gli overlay. Salvataggio automatico tra
+            <b>{{ placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }}s</b> di inattivita'.
+          </span>
+          <span v-else>Bloccato: le posizioni sono fisse.</span>
         </div>
         <div class="test-hud__placement-actions">
-          <button type="button" class="btn" :disabled="!apiReady" @click="savePosition">
-            {{ positionSaved ? 'Salvato ✓' : 'Salva posizione' }}
+          <button type="button" class="btn btn--primary" :disabled="!apiReady || positioning" @click="startPositioning">
+            {{ positioning ? 'Modifica attiva' : 'Modifica posizione overlay' }}
           </button>
-          <button type="button" class="btn btn--primary" :disabled="!apiReady" @click="togglePositioning">
-            {{ positioning ? 'Blocca tutti' : 'Sblocca tutti' }}
+          <button type="button" class="btn" :disabled="!apiReady || !positioning" @click="saveAndLock">
+            {{ positionSaved ? 'Salvato' : 'Salva e blocca' }}
           </button>
         </div>
       </div>
@@ -346,6 +384,7 @@ async function toggleTraining() {
 
   strong { display: block; color: #fff; font-size: 18px; }
   span { color: rgba(255, 255, 255, 0.62); font-size: 14px; }
+  b { color: #fff; font-weight: 900; }
 }
 
 .test-hud__placement-actions { display: flex; gap: 10px; flex-shrink: 0; }

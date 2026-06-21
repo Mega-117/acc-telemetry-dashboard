@@ -20,13 +20,7 @@ function getApi(): any | null {
 
 const route = useRoute()
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getApi)
-const { isElectron, isPlacing, scale, settings, diagnostics, diagnosticAgeMs, confirmAndLock, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
-const lockLabel = computed(() => (settings.value?.locked === false || isPlacing.value ? 'Sbloccato' : 'Bloccato'))
-const diagnosticLabel = computed(() => {
-  if (!diagnostics.value) return '--'
-  const age = diagnosticAgeMs.value === null ? '--' : `${Math.round(diagnosticAgeMs.value / 1000)}s`
-  return `${diagnostics.value.fastPushCount} / ${age}`
-})
+const { isElectron, scale, settings, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
 const showReference = computed(() => settings.value?.showReference !== false)
 const showBest = computed(() => settings.value?.showBest !== false)
 
@@ -46,16 +40,10 @@ onBeforeUnmount(() => {
   <div
     class="hud-overlay"
     :style="{ '--hud-scale': scale }"
-    :class="{ 'hud-overlay--web': !isElectron, 'hud-overlay--placing': isPlacing }"
+    :class="{ 'hud-overlay--web': !isElectron }"
   >
     <div class="hud-overlay__panel">
       <SectorDeltaHud :sector-hud="liveLap.sectorHud" :show-reference="showReference" :show-best="showBest" />
-      <div class="hud-overlay__lock-pill" :class="{ 'hud-overlay__lock-pill--open': isPlacing }">{{ lockLabel }}</div>
-      <div class="hud-overlay__diag" :class="{ 'hud-overlay__diag--live': diagnostics?.lastFastPushMs }">{{ diagnosticLabel }}</div>
-      <div v-if="isPlacing" class="hud-overlay__hint">
-        <span>Trascina per posizionare</span>
-        <button type="button" @click.stop="confirmAndLock">Blocca posizione</button>
-      </div>
     </div>
   </div>
 </template>
@@ -85,84 +73,12 @@ onBeforeUnmount(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  -webkit-app-region: drag;
   padding: calc(12px * var(--hud-scale));
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
   // Sfondo completamente OPACO (nessuna trasparenza) e nessuna ombra.
   background: #0b0e15;
-}
-
-.hud-overlay--placing .hud-overlay__panel {
-  -webkit-app-region: drag;
-  cursor: move;
-  border-color: rgba(34, 197, 94, 0.7);
-}
-
-.hud-overlay__hint {
-  position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 6px 4px 12px;
-  border-radius: 999px;
-  background: rgba(34, 197, 94, 0.94);
-  color: #04110a;
-  font-size: 12px;
-  font-weight: 800;
-  white-space: nowrap;
-  -webkit-app-region: no-drag;
-}
-
-.hud-overlay__hint button {
-  border: 0;
-  border-radius: 999px;
-  padding: 4px 9px;
-  background: #04110a;
-  color: #ffffff;
-  font-size: 11px;
-  font-weight: 900;
-  cursor: pointer;
-}
-
-.hud-overlay__lock-pill,
-.hud-overlay__diag {
-  position: absolute;
-  z-index: 3;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: 0;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-.hud-overlay__lock-pill {
-  top: 8px;
-  right: 8px;
-  padding: 5px 8px;
-  background: rgba(148, 163, 184, 0.94);
-  color: #08111f;
-}
-
-.hud-overlay__lock-pill--open {
-  background: rgba(34, 197, 94, 0.94);
-  color: #04110a;
-}
-
-.hud-overlay__diag {
-  right: 8px;
-  bottom: 8px;
-  padding: 4px 7px;
-  background: rgba(15, 23, 42, 0.92);
-  color: #cbd5e1;
-}
-
-.hud-overlay__diag--live {
-  color: #86efac;
 }
 
 // ── L'HUD riempie il pannello ────────────────────────────────────────────────
