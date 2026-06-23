@@ -191,7 +191,7 @@ const referenceRows = computed(() => referenceCatalog.value.points
     return {
       ...point,
       label: point.label?.trim() || `Riferimento ${index + 1}`,
-      text: point.text?.trim() || `Riferimento ${index + 1}`,
+      text: point.text ?? `Riferimento ${index + 1}`,
       speed: point.speed ?? 1.15,
       audio_voice: referenceVoiceId.value,
       audio_path: storedVoice === referenceVoiceId.value ? point.audio_path : '',
