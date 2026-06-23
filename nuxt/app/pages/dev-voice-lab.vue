@@ -35,6 +35,25 @@ interface LapTimeCatalogRow extends LapTimeVoiceEntry {
   updatedAt: string | null
 }
 
+interface TrackVoicePoint {
+  id: string
+  track: string
+  car?: string
+  type?: string
+  normalized_car_position: number
+  label?: string
+  text?: string
+  audio_path?: string
+  audio_voice?: string
+  speed?: number
+  created_at?: string
+}
+
+interface TrackVoicePointCatalog {
+  tracks: string[]
+  points: TrackVoicePoint[]
+}
+
 const TTS_SERVER = 'http://localhost:5111'
 const KOKORO_ITALIAN_VOICE_IDS = ['if_sara', 'im_nicola']
 const KOKORO_BOOT_POLL_MS = 3000
@@ -73,6 +92,7 @@ const showScenarios = ref(false)
 const pendingRegenKeys = ref<string[]>([])
 const batchBusy = ref(false)
 const batchStatus = ref('')
+const voiceLabSection = ref<'script' | 'references'>('script')
 
 // Stato per riga (PIP-138): una sola fonte tipizzata invece di stringhe sparse.
 type RowState = 'idle' | 'saving' | 'generating' | 'done' | 'error'
@@ -143,6 +163,139 @@ const lapTimeRangeCount = computed(() => Math.max(0, lapTimeToTenths.value - lap
 const lapTimeGeneratedCount = computed(() => lapTimeRows.value.filter(row => row.exists).length)
 const lapTimeBatchTooLarge = computed(() => lapTimeRangeCount.value > LAP_TIME_BATCH_LIMIT)
 const lapTimePreviewEntry = computed(() => buildLapTimeVoiceEntry(lapTimeFromTenths.value, lapTimeVoiceId.value, lapTimeSpeed.value))
+
+// ─── Riferimenti frenata per pista (PIP-204) ─────────────────────────────────
+const selectedReferenceTrack = ref('Spa')
+const referenceCatalog = ref<TrackVoicePointCatalog>({ tracks: ['Spa'], points: [] })
+const referencesBusy = ref(false)
+const referencesStatus = ref('')
+const referencesError = ref('')
+const referenceTasks = ref<Record<string, { state: RowState; message: string }>>({})
+
+const availableReferenceTracks = computed(() => {
+  const tracks = referenceCatalog.value.tracks.length ? referenceCatalog.value.tracks : ['Spa']
+  return tracks.includes('Spa') ? tracks : ['Spa', ...tracks]
+})
+
+const referenceRows = computed(() => referenceCatalog.value.points
+  .filter(point => point.track === selectedReferenceTrack.value && point.type === 'braking_reference')
+  .map((point, index) => ({
+    ...point,
+    label: point.label?.trim() || `Riferimento ${index + 1}`,
+    text: point.text?.trim() || `Riferimento ${index + 1}`,
+    speed: point.speed ?? 1.15,
+    audio_voice: point.audio_voice || previewVoiceId.value,
+  }))
+)
+
+function referenceRowState(entry: TrackVoicePoint): RowState {
+  return referenceTasks.value[entry.id]?.state ?? 'idle'
+}
+
+function referenceRowBusy(entry: TrackVoicePoint): boolean {
+  const s = referenceRowState(entry)
+  return s === 'saving' || s === 'generating'
+}
+
+function patchReferenceRow(entry: TrackVoicePoint, patch: Partial<TrackVoicePoint>) {
+  referenceCatalog.value = {
+    ...referenceCatalog.value,
+    points: referenceCatalog.value.points.map(point =>
+      point.id === entry.id ? { ...point, ...patch } : point
+    ),
+  }
+  if (referenceTasks.value[entry.id]?.state === 'done') {
+    referenceTasks.value[entry.id] = { state: 'idle', message: 'Da salvare' }
+  }
+}
+
+function referenceWavName(entry: TrackVoicePoint, voice: string) {
+  return `${entry.id}-${voice}.wav`
+}
+
+function updateReferenceText(entry: TrackVoicePoint, event: Event) {
+  patchReferenceRow(entry, { text: (event.target as HTMLTextAreaElement).value })
+}
+
+function updateReferenceSpeed(entry: TrackVoicePoint, event: Event) {
+  const speed = Number((event.target as HTMLInputElement).value)
+  patchReferenceRow(entry, { speed: Number.isFinite(speed) ? speed : 1.15 })
+}
+
+function updateReferenceVoice(entry: TrackVoicePoint, event: Event) {
+  patchReferenceRow(entry, { audio_voice: (event.target as HTMLSelectElement).value })
+}
+
+async function loadReferences() {
+  referencesBusy.value = true
+  referencesError.value = ''
+  referencesStatus.value = 'Carico riferimenti...'
+  try {
+    referenceCatalog.value = await $fetch<TrackVoicePointCatalog>('/api/dev/track-voice-points')
+    if (!availableReferenceTracks.value.includes(selectedReferenceTrack.value)) {
+      selectedReferenceTrack.value = availableReferenceTracks.value[0] || 'Spa'
+    }
+    referencesStatus.value = `${referenceRows.value.length} riferimenti caricati per ${selectedReferenceTrack.value}.`
+  } catch (error: any) {
+    referencesError.value = `Riferimenti non caricati: ${error?.data?.statusMessage || error?.message || 'errore'}`
+  } finally {
+    referencesBusy.value = false
+  }
+}
+
+async function saveReference(entry: TrackVoicePoint): Promise<boolean> {
+  referenceTasks.value[entry.id] = { state: 'saving', message: 'Salvo...' }
+  try {
+    await $fetch('/api/dev/track-voice-points', {
+      method: 'POST',
+      body: { points: [entry] },
+    })
+    patchReferenceRow(entry, entry)
+    referenceTasks.value[entry.id] = { state: 'done', message: 'Salvato' }
+    return true
+  } catch (error: any) {
+    referenceTasks.value[entry.id] = { state: 'error', message: error?.data?.statusMessage || error?.message || 'errore' }
+    return false
+  }
+}
+
+async function playReference(entry: TrackVoicePoint) {
+  const label = `${entry.label || entry.text} - ${entry.audio_voice === 'im_nicola' ? 'Nicola' : 'Sara'}`
+  if (entry.audio_path) {
+    await playAudioSource(`${entry.audio_path}?t=${Date.now()}`, label)
+    return
+  }
+  await playText(entry.text || entry.label || '', entry.speed ?? 1.15, label)
+}
+
+async function generateReference(entry: TrackVoicePoint) {
+  if (serverState.value !== 'online') return
+  const voice = entry.audio_voice || previewVoiceId.value
+  referenceTasks.value[entry.id] = { state: 'generating', message: `Genero ${voice}...` }
+  kokoroLifecycle.beginWork()
+  try {
+    const blob = await synthesize((entry.text || entry.label || '').trim(), voice, entry.speed ?? 1.15)
+    const response = await $fetch<{ path: string }>('/api/dev/voice-reference-wav', {
+      method: 'POST',
+      body: {
+        track: entry.track,
+        filename: referenceWavName(entry, voice),
+        dataBase64: await blobToBase64(blob),
+      },
+    })
+    const savedEntry = { ...entry, audio_path: response.path, audio_voice: voice }
+    patchReferenceRow(entry, savedEntry)
+    await saveReference(savedEntry)
+    referenceTasks.value[entry.id] = { state: 'done', message: 'WAV aggiornato' }
+    pushToast(`${entry.label || entry.text}: WAV generato`, 'success')
+  } catch (error: any) {
+    referenceTasks.value[entry.id] = { state: 'error', message: error?.data?.statusMessage || error?.message || 'errore' }
+    pushToast('Generazione riferimento fallita', 'error')
+  } finally {
+    kokoroLifecycle.endWork()
+    handleKokoroWorkSettled()
+  }
+}
 
 async function loadLapTimeCatalog() {
   clampLapTimeRange()
@@ -631,7 +784,7 @@ onMounted(async () => {
   voiceLabMounted = true
   kokoroLifecycle.enterVoiceLab()
   await nextTick()
-  await Promise.all([ensureKokoro(), loadScript()])
+  await Promise.all([ensureKokoro(), loadScript(), loadReferences()])
   await loadLapTimeCatalog()
 })
 
@@ -670,7 +823,12 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <section class="script-editor">
+      <nav class="lab-section-tabs" aria-label="Voice Lab sezioni">
+        <button type="button" :class="{ 'is-active': voiceLabSection === 'script' }" @click="voiceLabSection = 'script'">Copione</button>
+        <button type="button" :class="{ 'is-active': voiceLabSection === 'references' }" @click="voiceLabSection = 'references'">Riferimenti</button>
+      </nav>
+
+      <section v-if="voiceLabSection === 'script'" class="script-editor">
         <div class="editor-toolbar">
           <div class="training-tabs">
             <button
@@ -764,6 +922,79 @@ onBeforeUnmount(() => {
               </footer>
             </article>
           </template>
+        </div>
+      </section>
+
+      <section v-else class="reference-editor" data-testid="voice-reference-editor">
+        <div class="panel-head">
+          <div>
+            <span class="voice-kicker">Riferimenti frenata</span>
+            <h2>Riferimenti</h2>
+            <p>Seleziona la pista e genera le tracce audio dai punti registrati in allenamento.</p>
+          </div>
+          <div class="reference-track-select">
+            <label>
+              Pista
+              <select v-model="selectedReferenceTrack" @change="referencesStatus = `${referenceRows.length} riferimenti caricati per ${selectedReferenceTrack}.`">
+                <option v-for="track in availableReferenceTracks" :key="track" :value="track">{{ track }}</option>
+              </select>
+            </label>
+            <button type="button" class="secondary" :disabled="referencesBusy" @click="loadReferences">Aggiorna</button>
+          </div>
+        </div>
+
+        <section v-if="previewAudioStatus || previewAudioError || previewAudioUrl" class="audio-preview">
+          <div>
+            <span class="voice-kicker">Ultima anteprima</span>
+            <strong>{{ previewAudioLabel || 'Nessuna anteprima' }}</strong>
+            <p v-if="previewAudioStatus">{{ previewAudioStatus }}</p>
+            <p v-if="previewAudioError" class="audio-preview__error">{{ previewAudioError }}</p>
+          </div>
+          <audio
+            v-if="previewAudioUrl"
+            ref="previewAudioEl"
+            controls
+            :src="previewAudioUrl"
+            @play="previewAudioStatus = 'Riproduzione in corso.'"
+            @ended="previewAudioStatus = 'Audio completato.'"
+          />
+        </section>
+
+        <p v-if="referencesStatus" class="status-message status-message--compact">{{ referencesStatus }}</p>
+        <p v-if="referencesError" class="status-message status-message--compact">{{ referencesError }}</p>
+
+        <div v-if="!referenceRows.length" class="empty-state">Nessun riferimento registrato per {{ selectedReferenceTrack }}.</div>
+        <div v-else class="reference-rows">
+          <article v-for="(entry, index) in referenceRows" :key="entry.id" class="reference-row">
+            <header>
+              <span class="step-order">{{ index + 1 }}</span>
+              <div>
+                <strong>{{ entry.label }}</strong>
+                <small>posizione {{ entry.normalized_car_position.toFixed(5) }} · {{ entry.car || 'auto n/d' }}</small>
+              </div>
+              <span class="lap-time-state" :class="{ 'is-ready': Boolean(entry.audio_path) }">{{ entry.audio_path ? 'WAV pronto' : 'Manca WAV' }}</span>
+            </header>
+            <textarea :value="entry.text" rows="2" maxlength="280" @input="updateReferenceText(entry, $event)" />
+            <footer>
+              <label>
+                Velocita
+                <input :value="entry.speed" type="number" min="0.8" max="1.5" step="0.02" @input="updateReferenceSpeed(entry, $event)">
+              </label>
+              <label>
+                Voce
+                <select :value="entry.audio_voice" @change="updateReferenceVoice(entry, $event)">
+                  <option value="if_sara">Sara</option>
+                  <option value="im_nicola">Nicola</option>
+                </select>
+              </label>
+              <span class="row-status" :class="`row-status--${referenceRowState(entry)}`">{{ referenceTasks[entry.id]?.message || '' }}</span>
+              <button type="button" :disabled="isSpeaking || (!entry.audio_path && serverState !== 'online')" @click="playReference(entry)">Ascolta</button>
+              <button type="button" :disabled="referenceRowBusy(entry)" @click="saveReference(entry)">Salva</button>
+              <button type="button" class="primary" :disabled="serverState !== 'online' || referenceRowBusy(entry)" @click="generateReference(entry)">
+                {{ referenceRowBusy(entry) ? '...' : 'Genera traccia' }}
+              </button>
+            </footer>
+          </article>
         </div>
       </section>
 
@@ -905,6 +1136,7 @@ onBeforeUnmount(() => {
 
 .voice-hero,
 .script-editor,
+.reference-editor,
 .lap-time-library,
 .playground,
 .server-card {
@@ -1049,6 +1281,7 @@ onBeforeUnmount(() => {
 
 .training-tabs,
 .mode-tabs,
+.lab-section-tabs,
 .voice-toggle {
   display: inline-flex;
   flex-wrap: wrap;
@@ -1110,7 +1343,8 @@ onBeforeUnmount(() => {
   color: #fde68a !important;
 }
 
-.phrase-rows {
+.phrase-rows,
+.reference-rows {
   display: grid;
   gap: 12px;
 }
@@ -1129,7 +1363,8 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
 }
 
-.phrase-row {
+.phrase-row,
+.reference-row {
   display: grid;
   gap: 6px;
   padding: 10px 12px;
@@ -1185,6 +1420,48 @@ onBeforeUnmount(() => {
     input {
       width: 72px;
     }
+  }
+}
+
+.reference-row {
+  header {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+  }
+
+  small {
+    display: block;
+    margin-top: 3px;
+    color: rgba(255, 255, 255, 0.52);
+    font-size: 12px;
+  }
+}
+
+.reference-track-select {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  align-items: end;
+
+  label {
+    display: grid;
+    gap: 5px;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  select {
+    min-height: 36px;
+    padding: 0 10px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: $radius-sm;
+    background: #15151d;
+    color: #fff;
   }
 }
 
