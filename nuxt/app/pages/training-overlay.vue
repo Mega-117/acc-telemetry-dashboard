@@ -63,6 +63,7 @@ interface TrackVoiceReference {
   text?: string
   audio_path?: string
   audio_voice?: string
+  enabled?: boolean
 }
 
 interface TrainingOverlaySettings {
@@ -469,7 +470,7 @@ async function loadTrackVoiceReferences() {
   try {
     const data = await $fetch<{ points: TrackVoiceReference[] }>('/api/dev/track-voice-points')
     trackVoiceReferences.value = (Array.isArray(data.points) ? data.points : [])
-      .filter(point => point.type === 'braking_reference' && point.audio_path && (point.audio_voice || 'if_sara') === 'if_sara')
+      .filter(point => point.enabled !== false && point.type === 'braking_reference' && point.audio_path && (point.audio_voice || 'if_sara') === 'if_sara')
       .sort((a, b) => a.normalized_car_position - b.normalized_car_position)
   } catch (error) {
     trackVoiceReferences.value = []

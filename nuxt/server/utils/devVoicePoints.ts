@@ -12,6 +12,7 @@ export interface TrackVoicePoint {
   audio_path?: string
   audio_voice?: string
   speed?: number
+  enabled?: boolean
   lead_time_sec?: number | null
   created_at?: string
   source?: string

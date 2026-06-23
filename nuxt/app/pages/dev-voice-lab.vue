@@ -46,6 +46,7 @@ interface TrackVoicePoint {
   audio_path?: string
   audio_voice?: string
   speed?: number
+  enabled?: boolean
   created_at?: string
 }
 
@@ -232,6 +233,10 @@ function updateReferenceSpeed(entry: TrackVoicePoint, event: Event) {
   patchReferenceRow(entry, { speed: Number.isFinite(speed) ? speed : 1.15 })
 }
 
+function toggleReferenceEnabled(entry: TrackVoicePoint) {
+  patchReferenceRow(entry, { enabled: entry.enabled === false })
+}
+
 function setReferenceVoice(voice: string) {
   if (!KOKORO_ITALIAN_VOICE_IDS.includes(voice)) return
   referenceVoiceId.value = voice
@@ -271,7 +276,7 @@ async function loadReferences() {
 }
 
 async function saveReference(entry: TrackVoicePoint): Promise<boolean> {
-  const normalizedEntry = { ...entry, audio_voice: referenceVoiceId.value }
+  const normalizedEntry = { ...entry, audio_voice: referenceVoiceId.value, enabled: entry.enabled !== false }
   referenceTasks.value[entry.id] = { state: 'saving', message: 'Salvo...' }
   try {
     await $fetch('/api/dev/track-voice-points', {
@@ -288,21 +293,32 @@ async function saveReference(entry: TrackVoicePoint): Promise<boolean> {
 }
 
 async function playReference(entry: TrackVoicePoint) {
-  const label = `${entry.label || entry.text} - ${referenceVoiceId.value === 'im_nicola' ? 'Nicola' : 'Sara'}`
+  if (entry.enabled === false) return
+  const text = entry.text ?? ''
+  if (!text.trim() && !entry.audio_path) return
+  const label = `${entry.label || text || 'Riferimento'} - ${referenceVoiceId.value === 'im_nicola' ? 'Nicola' : 'Sara'}`
   if (entry.audio_path) {
     await playAudioSource(`${entry.audio_path}?t=${Date.now()}`, label)
     return
   }
-  await playAudioSource(kokoroSpeakUrl(entry.text || entry.label || '', referenceVoiceId.value, entry.speed ?? 1.15), label)
+  await playAudioSource(kokoroSpeakUrl(text, referenceVoiceId.value, entry.speed ?? 1.15), label)
 }
 
 async function generateReference(entry: TrackVoicePoint) {
   if (serverState.value !== 'online') return false
+  const text = (entry.text ?? '').trim()
+  if (entry.enabled === false || !text) {
+    const skippedEntry = { ...entry, text: entry.text ?? '', audio_path: '', audio_voice: referenceVoiceId.value, enabled: entry.enabled !== false }
+    patchReferenceRow(entry, skippedEntry)
+    await saveReference(skippedEntry)
+    referenceTasks.value[entry.id] = { state: 'done', message: entry.enabled === false ? 'Disattivato' : 'Vuoto' }
+    return true
+  }
   const voice = referenceVoiceId.value
   referenceTasks.value[entry.id] = { state: 'generating', message: `Genero ${voice}...` }
   kokoroLifecycle.beginWork()
   try {
-    const blob = await synthesize((entry.text || entry.label || '').trim(), voice, entry.speed ?? 1.15)
+    const blob = await synthesize(text, voice, entry.speed ?? 1.15)
     const response = await $fetch<{ path: string }>('/api/dev/voice-reference-wav', {
       method: 'POST',
       body: {
@@ -311,7 +327,7 @@ async function generateReference(entry: TrackVoicePoint) {
         dataBase64: await blobToBase64(blob),
       },
     })
-    const savedEntry = { ...entry, audio_path: response.path, audio_voice: voice }
+    const savedEntry = { ...entry, audio_path: response.path, audio_voice: voice, enabled: true }
     patchReferenceRow(entry, savedEntry)
     await saveReference(savedEntry)
     referenceTasks.value[entry.id] = { state: 'done', message: 'WAV aggiornato' }
@@ -1034,7 +1050,9 @@ onBeforeUnmount(() => {
                 <strong>{{ entry.label }}</strong>
                 <small>posizione {{ entry.normalized_car_position.toFixed(5) }} · {{ entry.car || 'auto n/d' }}</small>
               </div>
-              <span class="lap-time-state" :class="{ 'is-ready': Boolean(entry.audio_path) }">{{ entry.audio_path ? 'WAV pronto' : 'Manca WAV' }}</span>
+              <span class="lap-time-state" :class="{ 'is-ready': Boolean(entry.audio_path) && entry.enabled !== false }">
+                {{ entry.enabled === false ? 'Disattivo' : entry.audio_path ? 'WAV pronto' : 'Manca WAV' }}
+              </span>
             </header>
             <textarea :value="entry.text" rows="2" maxlength="280" @input="updateReferenceText(entry, $event)" />
             <footer>
@@ -1042,9 +1060,12 @@ onBeforeUnmount(() => {
                 Velocita
                 <input :value="entry.speed" type="number" min="0.8" max="1.5" step="0.02" @input="updateReferenceSpeed(entry, $event)">
               </label>
+              <button type="button" :class="{ 'is-active': entry.enabled !== false }" :disabled="referenceRowBusy(entry)" @click="toggleReferenceEnabled(entry)">
+                {{ entry.enabled === false ? 'Disattivo' : 'Attivo' }}
+              </button>
 
               <span class="row-status" :class="`row-status--${referenceRowState(entry)}`">{{ referenceTasks[entry.id]?.message || '' }}</span>
-              <button type="button" :disabled="isSpeaking || (!entry.audio_path && serverState !== 'online')" @click="playReference(entry)">Ascolta</button>
+              <button type="button" :disabled="entry.enabled === false || isSpeaking || (!entry.audio_path && (!entry.text?.trim() || serverState !== 'online'))" @click="playReference(entry)">Ascolta</button>
               <button type="button" :disabled="referenceRowBusy(entry)" @click="saveReference(entry)">Salva</button>
               <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || referenceRowBusy(entry)" @click="generateReference(entry)">
                 {{ referenceRowBusy(entry) ? '...' : 'Genera traccia' }}

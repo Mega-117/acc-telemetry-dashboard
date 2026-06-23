@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
     if (SAFE_VOICE_IDS.has(voice)) next.audio_voice = voice
     const speed = cleanSpeed(update.speed)
     if (speed !== undefined) next.speed = speed
+    if (typeof update.enabled === 'boolean') next.enabled = update.enabled
     return next
   })
 
