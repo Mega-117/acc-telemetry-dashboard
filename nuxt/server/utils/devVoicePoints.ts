@@ -24,6 +24,7 @@ export interface TrackVoicePointStore {
 }
 
 const VOICE_POINTS_SCHEMA = 'acc.track_voice_points.v1'
+const LOCAL_WORKSPACE_ROOT = 'D:\\Archivio\\Desktop\\Nuova cartella (9)'
 
 async function exists(path: string) {
   try {
@@ -38,6 +39,8 @@ async function resolveSuiteRoot() {
   const candidates = [
     process.env.ACC_SUITE_ROOT,
     process.env.ACC_LOCAL_SUITE_ROOT,
+    process.env.ACC_WORKSPACE_ROOT,
+    LOCAL_WORKSPACE_ROOT,
     resolve(process.cwd(), '..', '..'),
     resolve(process.cwd(), '..', '..', '..'),
     process.cwd(),
