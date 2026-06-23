@@ -63,6 +63,39 @@
   -webkit-app-region: no-drag;
 }
 
+.overlay-dev-toggle--voice-points {
+  left: 76px;
+  border-color: rgba(20, 184, 166, 0.62);
+  color: #7ddbd0;
+}
+
+.training-overlay--voice-points .overlay-dev-toggle--voice-points {
+  background: rgba(20, 184, 166, 0.22);
+  color: #dffefa;
+}
+
+.voice-point-notice {
+  position: absolute;
+  top: 28px;
+  left: 4px;
+  z-index: 65;
+  max-width: 260px;
+  padding: 5px 8px;
+  border: 1px solid rgba(125, 219, 208, 0.62);
+  border-radius: 8px;
+  background: rgba(2, 6, 12, 0.86);
+  color: #eafffb;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1.25;
+  -webkit-app-region: no-drag;
+}
+
+.voice-point-notice--error {
+  border-color: rgba(255, 120, 120, 0.65);
+  color: #ffe7e7;
+}
 .overlay-test-badge {
   position: absolute;
   top: 6px;
@@ -2029,3 +2062,5 @@ button.is-active {
   background: linear-gradient(90deg, var(--overlay-accent), var(--overlay-accent-end));
   color: var(--overlay-accent-contrast);
 }
+
+

@@ -94,6 +94,9 @@ const overlayRoot = ref<HTMLElement | null>(null)
 const isPointerOnOverlaySurface = ref(false)
 const showDevControls = import.meta.dev
 const isSaving = ref(false)
+const voicePointRecorderEnabled = ref(false)
+const voicePointNotice = ref<{ text: string; tone: 'ok' | 'error' } | null>(null)
+let voicePointNoticeTimer: ReturnType<typeof setTimeout> | null = null
 
 // Test-mode dev (PIP-106): comprime il budget del cronometro senza falsare
 // l'identità degli step. Sorgente unica usata da timer, barra e auto-dim.
@@ -158,6 +161,10 @@ const isActiveSession = computed(() => ['running', 'paused', 'expired'].includes
 const canManuallyAdvanceStep = computed(() => activeStep.value.durationMinutes <= 5)
 const canUseStopControl = computed(() => ['running', 'paused', 'expired'].includes(phase.value))
 const showPlacementControl = computed(() => isElectronRuntime.value || showDevControls)
+const canUseVoicePointRecorder = computed(() => {
+  if (!showDevControls || typeof window === 'undefined') return false
+  return ['localhost', '127.0.0.1', ''].includes(window.location.hostname)
+})
 const primaryAction = computed<PrimaryOverlayAction>(() => {
   if (isShortcutStopConfirmOpen.value) return 'none'
   if (phase.value === 'placement') return 'confirm-placement'
@@ -400,6 +407,54 @@ function updateMousePassthrough(event: MouseEvent) {
 }
 
 // ─── Input handling ───────────────────────────────────────────────────────────
+function showVoicePointNotice(text: string, tone: 'ok' | 'error' = 'ok') {
+  voicePointNotice.value = { text, tone }
+  if (voicePointNoticeTimer) clearTimeout(voicePointNoticeTimer)
+  voicePointNoticeTimer = setTimeout(() => {
+    voicePointNotice.value = null
+    voicePointNoticeTimer = null
+    scheduleOverlaySizeSync()
+  }, 2800)
+  scheduleOverlaySizeSync()
+}
+
+function toggleVoicePointRecorder() {
+  if (!canUseVoicePointRecorder.value) return
+  voicePointRecorderEnabled.value = !voicePointRecorderEnabled.value
+  showVoicePointNotice(
+    voicePointRecorderEnabled.value ? 'Modalita riferimenti attiva. Premi Spazio per salvare.' : 'Modalita riferimenti disattiva.',
+    'ok',
+  )
+}
+
+async function recordVoicePointFromCurrentPosition() {
+  if (!voicePointRecorderEnabled.value || !canUseVoicePointRecorder.value) return
+  const position = fastState.value.normalizedCarPosition
+  if (position === null) {
+    showVoicePointNotice('Posizione non disponibile: avvia il logger e torna in pista.', 'error')
+    return
+  }
+  const api = getOverlayApi()
+  if (!api?.recordVoicePoint) {
+    showVoicePointNotice('Recorder non disponibile in questo runtime.', 'error')
+    return
+  }
+  const track = liveLap.value.track || 'unknown'
+  try {
+    const result = await api.recordVoicePoint({
+      track,
+      type: 'braking_reference',
+      normalizedCarPosition: position,
+    })
+    if (!result?.ok) {
+      showVoicePointNotice(result?.error || 'Riferimento non salvato.', 'error')
+      return
+    }
+    showVoicePointNotice(`Riferimento salvato: ${track} ${position.toFixed(3)}`, 'ok')
+  } catch (error: any) {
+    showVoicePointNotice(error?.message || 'Riferimento non salvato.', 'error')
+  }
+}
 function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayCommand }) {
   const command = typeof payload === 'string' ? payload : payload?.command
   setDebugEvent(`comando overlay: ${command || 'vuoto'}`)
@@ -410,6 +465,11 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
 }
 
 function handleLocalShortcut(event: KeyboardEvent) {
+  if (voicePointRecorderEnabled.value && event.code === 'Space' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
+    event.preventDefault()
+    if (!event.repeat) void recordVoicePointFromCurrentPosition()
+    return
+  }
   if (event.key === 'Escape' && isShortcutStopConfirmOpen.value) {
     event.preventDefault(); closeShortcutStopConfirm(); return
   }
@@ -481,6 +541,7 @@ watch(
 
 onBeforeUnmount(() => {
   clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopFastStatePolling(); stopVoice(); cleanupSize()
+  if (voicePointNoticeTimer) clearTimeout(voicePointNoticeTimer)
   removeCommandListener?.()
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleLocalShortcut, true)
@@ -502,6 +563,7 @@ onBeforeUnmount(() => {
       {
         'training-overlay--drag': phase === 'placement',
         'training-overlay--web': !isElectronRuntime,
+        'training-overlay--voice-points': voicePointRecorderEnabled,
       }
     ]"
   >
@@ -516,7 +578,27 @@ onBeforeUnmount(() => {
     >
       {{ isTestMode ? 'TEST ON' : 'TEST OFF' }}
     </button>
+    <button
+      v-if="canUseVoicePointRecorder"
+      type="button"
+      class="overlay-dev-toggle overlay-dev-toggle--voice-points"
+      :aria-pressed="voicePointRecorderEnabled"
+      title="Voice Points: salva un riferimento con Spazio (solo localhost/dev)"
+      @click="toggleVoicePointRecorder"
+    >
+      {{ voicePointRecorderEnabled ? 'REF ON' : 'REF OFF' }}
+    </button>
     <TestModeBadge class="overlay-test-badge" />
+    <Transition name="chip-pop">
+      <div
+        v-if="voicePointNotice"
+        class="voice-point-notice"
+        :class="`voice-point-notice--${voicePointNotice.tone}`"
+        role="status"
+      >
+        {{ voicePointNotice.text }}
+      </div>
+    </Transition>
 
     <div class="overlay-work-area">
       <Transition name="overlay-surface" mode="out-in">
@@ -759,3 +841,4 @@ onBeforeUnmount(() => {
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
 </style>
+
