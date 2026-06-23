@@ -21,8 +21,6 @@ import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useTrackingRecord } from '~/composables/useTrackingRecord'
 import { useStopHold } from '~/composables/useStopHold'
 import { useQualifyingVoice } from '~/composables/useQualifyingVoice'
-import { useSpotterController } from '~/composables/useSpotterController'
-import { useSpotterVoice } from '~/composables/useSpotterVoice'
 import { useOverlaySize } from '~/composables/useOverlaySize'
 import { useTrainingSelection, type PlanPreviewChip } from '~/composables/useTrainingSelection'
 import { useSessionOrchestrator } from '~/composables/useSessionOrchestrator'
@@ -196,11 +194,10 @@ const activeTask = computed(() => {
   if (phase.value === 'completed') return 'Allenamento completato.'
   return activeStep.value.hud
 })
-const spotterToggleLabel = computed(() => spotterEnabled.value ? 'Disattiva spotter' : 'Attiva spotter')
-const launcherSpotterStatus = computed(() => {
-  if (!spotterEnabled.value) return 'Spotter spento'
-  if (isSpotterPolling.value) return lastSpotterEvent.value?.messageText || 'Spotter attivo'
-  return spotterStatusLabel.value
+const coachAudioToggleLabel = computed(() => spotterEnabled.value ? 'Disattiva voce coach' : 'Attiva voce coach')
+const launcherCoachAudioStatus = computed(() => {
+  if (!spotterEnabled.value) return 'Voce coach spenta'
+  return 'Tempo giro e allenamento attivi'
 })
 const sessionOverlayOpacity = computed(() => {
   if (!autoDimDuringRun.value || phase.value !== 'running') return 1
@@ -275,22 +272,6 @@ const {
   selectedTrainingId, selectedModeId,
 )
 
-const spotterVoice = useSpotterVoice(
-  getPublicPath,
-  () => selectedQualifyingVoiceId.value,
-  () => spotterEnabled.value && soundEnabled.value,
-)
-const {
-  lastSpotterEvent,
-  isSpotterPolling,
-  spotterStatusLabel,
-  startSpotter,
-  stopSpotter,
-} = useSpotterController(
-  getOverlayApi,
-  () => spotterEnabled.value,
-  spotterVoice.enqueueSpotterEvent,
-)
 
 // ─── Training selection composable ───────────────────────────────────────────
 const {
@@ -343,16 +324,11 @@ async function confirmPlacement() {
 
 async function closeOverlay() { await getOverlayApi()?.trainingOverlayClose?.() }
 
-function toggleSpotter() {
+function toggleCoachAudio() {
   spotterEnabled.value = !spotterEnabled.value
-  if (spotterEnabled.value) {
-    startSpotter()
-  } else {
-    stopSpotter()
-    spotterVoice.stopSpotterVoice()
-  }
+  if (!spotterEnabled.value) stopVoice()
   void savePreferences()
-  setDebugEvent(spotterEnabled.value ? 'spotter attivato' : 'spotter disattivato')
+  setDebugEvent(spotterEnabled.value ? 'voce coach attivata' : 'voce coach disattivata')
 }
 
 function runBackAction() {
@@ -370,7 +346,7 @@ function runBackAction() {
 
 function runMuteAction() {
   toggleSound()
-  if (!soundEnabled.value) spotterVoice.stopSpotterVoice()
+  if (!soundEnabled.value) stopVoice()
   setDebugEvent(soundEnabled.value ? 'audio attivo' : 'audio muto')
 }
 
@@ -469,7 +445,6 @@ onMounted(async () => {
   selectedQualifyingVoiceId.value = resolveQualifyingVoiceId(settings?.qualifyingVoiceId)
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000
   phase.value = settings?.hasConfiguredPosition || !api ? 'launcher' : 'placement'
-  if (spotterEnabled.value) startSpotter()
   startLiveStatePolling()
   startFastStatePolling()
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
@@ -505,7 +480,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
-  clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopFastStatePolling(); stopSpotter(); spotterVoice.stopSpotterVoice(); cleanupSize()
+  clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopFastStatePolling(); stopVoice(); cleanupSize()
   removeCommandListener?.()
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleLocalShortcut, true)
@@ -601,7 +576,7 @@ onBeforeUnmount(() => {
                         <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
                       </Transition>
                     </span>
-                    <strong>{{ launcherSpotterStatus }}</strong>
+                    <strong>{{ launcherCoachAudioStatus }}</strong>
                   </header>
                   <div class="launcher-tools__actions">
                     <button
@@ -621,11 +596,11 @@ onBeforeUnmount(() => {
                       :class="{ 'is-active': spotterEnabled, 'is-selected': launcherToolIndex === 1 }"
                       :aria-pressed="spotterEnabled"
                       :aria-current="launcherToolIndex === 1 ? 'true' : undefined"
-                      :aria-label="spotterToggleLabel"
+                      :aria-label="coachAudioToggleLabel"
                       @focus="launcherToolIndex = 1"
-                      @click="toggleSpotter"
+                      @click="toggleCoachAudio"
                     >
-                      {{ spotterToggleLabel }}
+                      {{ coachAudioToggleLabel }}
                     </button>
                   </div>
                   <div class="launcher-live-widgets" aria-label="Dati live pilota">

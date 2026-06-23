@@ -2,8 +2,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useAppNotifications } from '~/composables/useAppNotifications'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
-import { renderSpotterPhrase } from '~/services/spotter/spotterPhraseRenderer'
-import type { SpotterPhraseKey } from '~/config/spotterPhrases'
 import { trainingOverlayCatalog, trainingOverlayOrder, type TrainingOverlayId } from '~/config/trainingOverlayCatalog'
 import type { VoiceScript, VoiceScriptScenario, VoiceScriptStep } from '~/config/voiceScript'
 import {
@@ -125,29 +123,6 @@ const lapTimeCatalogError = ref('')
 const lapTimeGeneratingKey = ref('')
 const LAP_TIME_BATCH_LIMIT = 20
 
-// ─── Spotter demo ─────────────────────────────────────────────────────────────
-const spotterTarget = ref<'ahead' | 'behind'>('ahead')
-const spotterTrend = ref<'gaining' | 'losing' | 'stable'>('gaining')
-const spotterDeltaMs = ref(250)
-const spotterSector = ref<1 | 2 | 3>(2)
-
-const spotterPhraseKey = computed<SpotterPhraseKey>(() => {
-  if (spotterTarget.value === 'ahead' && spotterTrend.value === 'gaining') return 'aheadGaining'
-  if (spotterTarget.value === 'ahead' && spotterTrend.value === 'losing') return 'aheadLosing'
-  if (spotterTarget.value === 'ahead') return 'aheadStable'
-  if (spotterTrend.value === 'gaining') return 'behindClosing'
-  if (spotterTrend.value === 'losing') return 'behindDropping'
-  return 'behindStable'
-})
-
-const spotterPreviewText = computed(() =>
-  renderSpotterPhrase({
-    key: spotterPhraseKey.value,
-    deltaMs: spotterDeltaMs.value,
-    sector: spotterSector.value,
-    random: () => 0,
-  })
-)
 
 function clampLapTimeRange() {
   lapTimeFromTenths.value = Math.max(LAP_TIME_AUDIO_MIN_TENTHS, Math.min(LAP_TIME_AUDIO_MAX_TENTHS, Math.floor(Number(lapTimeFromTenths.value) || LAP_TIME_AUDIO_MIN_TENTHS)))
@@ -549,11 +524,6 @@ async function playCustom() {
   await playText(customText.value, speechSpeed.value, `Prova libera - ${previewVoiceId.value === 'if_sara' ? 'Sara' : 'Nicola'}`)
 }
 
-async function playSpotterPreview() {
-  customText.value = spotterPreviewText.value
-  speechSpeed.value = 1.08
-  await playCustom()
-}
 
 function stopVoice() {
   if (activeServerAudio.value) {
@@ -914,51 +884,6 @@ onBeforeUnmount(() => {
           </label>
         </div>
 
-        <section class="spotter-simulator">
-          <div class="panel-head">
-            <div>
-              <span class="voice-kicker">Spotter demo</span>
-              <h2>Evento gara simulato</h2>
-            </div>
-            <div class="play-actions">
-              <button type="button" class="primary" :disabled="serverState !== 'online' || isSpeaking" @click="playSpotterPreview">
-                Play spotter
-              </button>
-            </div>
-          </div>
-
-          <div class="spotter-controls">
-            <label>
-              Target
-              <select v-model="spotterTarget">
-                <option value="ahead">Pilota davanti</option>
-                <option value="behind">Pilota dietro</option>
-              </select>
-            </label>
-            <label>
-              Trend
-              <select v-model="spotterTrend">
-                <option value="gaining">Guadagni / recupera</option>
-                <option value="losing">Perdi / perde</option>
-                <option value="stable">Stabile</option>
-              </select>
-            </label>
-            <label>
-              Delta ms
-              <input v-model.number="spotterDeltaMs" type="number" min="0" max="2200" step="50">
-            </label>
-            <label>
-              Settore
-              <select v-model.number="spotterSector">
-                <option :value="1">Settore 1</option>
-                <option :value="2">Settore 2</option>
-                <option :value="3">Settore 3</option>
-              </select>
-            </label>
-          </div>
-
-          <p class="spotter-preview">{{ spotterPreviewText }}</p>
-        </section>
 
         <p v-if="statusMessage" class="status-message">{{ statusMessage }}</p>
       </section>
@@ -1548,53 +1473,6 @@ textarea {
   }
 }
 
-.spotter-simulator {
-  display: grid;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid rgba($accent-success, 0.22);
-  border-radius: $radius-md;
-  background: rgba($accent-success, 0.055);
-}
-
-.spotter-controls {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-
-  label {
-    display: grid;
-    gap: 6px;
-    color: rgba(255, 255, 255, 0.62);
-    font-size: 11px;
-    font-weight: 900;
-    text-transform: uppercase;
-  }
-
-  select,
-  input {
-    min-height: 36px;
-    min-width: 0;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: $radius-sm;
-    background: #15151d;
-    color: #fff;
-  }
-
-  input {
-    padding: 0 10px;
-  }
-}
-
-.spotter-preview {
-  margin: 0;
-  padding: 12px;
-  border-radius: $radius-sm;
-  background: rgba(0, 0, 0, 0.24);
-  color: rgba(255, 255, 255, 0.82);
-  line-height: 1.5;
-}
-
 button {
   display: inline-flex;
   min-height: 36px;
@@ -1650,9 +1528,6 @@ button {
     margin-left: 0;
   }
 
-  .spotter-controls {
-    grid-template-columns: 1fr;
-  }
 
   .lap-time-controls,
   .lap-time-preview,

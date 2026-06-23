@@ -11,6 +11,7 @@ function read(relativePath) {
 }
 
 const service = read('app/services/sync/ownerDataMaintenanceService.ts')
+const canonicalSummaryBridge = read('app/services/sync/canonicalSummaryBridge.ts')
 const composable = read('app/composables/useOwnerDataMaintenance.ts')
 const sync = read('app/composables/useElectronSync.ts')
 const app = read('app/app.vue')
@@ -24,8 +25,9 @@ assert.match(service, /completeOwnerDataMaintenanceAfterLocalSync/)
 assert.match(service, /auditOwnerData/)
 assert.match(service, /reprocessOwnerCloudRawSummaries/)
 assert.match(service, /rebuildOwnerProjections/)
-assert.match(service, /reprocessTelemetrySummaries/)
-assert.match(service, /status:\s*'sync_pending'/)
+assert.match(canonicalSummaryBridge, /reprocessTelemetrySummaries/)
+assert.match(canonicalSummaryBridge, /electronAPI\.reprocessTelemetrySummaries/)
+assert.match(service, /\|\s*'sync_pending'/)
 
 assert.match(composable, /useOwnerDataMaintenance/)
 assert.match(composable, /blocksSync/)

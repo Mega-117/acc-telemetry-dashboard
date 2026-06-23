@@ -185,8 +185,8 @@ describe('useSessionOrchestrator - completamento manuale e skip', () => {
   })
 })
 
-describe('useSessionOrchestrator - annunci live giro controllati dallo spotter (PIP-159)', () => {
-  it('non annuncia il tempo giro quando lo spotter live e spento', async () => {
+describe('useSessionOrchestrator - annunci live giro controllati dalla voce coach (PIP-203)', () => {
+  it('non annuncia il tempo giro quando la voce coach e spenta', async () => {
     const { orchestrator, liveLap, announceLap } = setup({ canAnnounceLiveLap: false })
     orchestrator.startStep(0)
     liveLap.value = { ...liveLap.value, currentLap: 1, lapsCompleted: 0 }
@@ -204,7 +204,7 @@ describe('useSessionOrchestrator - annunci live giro controllati dallo spotter (
     expect(announceLap).not.toHaveBeenCalled()
   })
 
-  it('annuncia il tempo giro quando lo spotter live e acceso', async () => {
+  it('annuncia il tempo giro quando la voce coach e accesa', async () => {
     const { orchestrator, liveLap, announceLap } = setup({ canAnnounceLiveLap: true })
     orchestrator.startStep(0)
     liveLap.value = { ...liveLap.value, currentLap: 1, lapsCompleted: 0 }
@@ -222,7 +222,7 @@ describe('useSessionOrchestrator - annunci live giro controllati dallo spotter (
     expect(announceLap).toHaveBeenCalledWith(2, 90_900, true)
   })
 
-  it('annuncia il tempo giro anche fuori allenamento quando lo spotter live e acceso (PIP-160)', async () => {
+  it('annuncia il tempo giro anche fuori allenamento quando la voce coach e accesa', async () => {
     const { phase, liveLap, announceLap } = setup({ canAnnounceLiveLap: true })
     phase.value = 'launcher'
     liveLap.value = { ...liveLap.value, currentLap: 1, lapsCompleted: 0 }
@@ -242,7 +242,7 @@ describe('useSessionOrchestrator - annunci live giro controllati dallo spotter (
   })
 })
 
-describe('useSessionOrchestrator - voce allenamento separata dallo spotter live (PIP-159)', () => {
+describe('useSessionOrchestrator - voce allenamento separata dal gate tempo giro (PIP-203)', () => {
   it('avvia comunque la voce dello step quando gli annunci live giro sono spenti', () => {
     const enqueueStepStart = vi.fn()
     const phase = ref<Phase>('select')

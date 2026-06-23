@@ -23,7 +23,7 @@ type OverlayPhase = 'loading' | 'placement' | 'launcher' | 'select' | 'running' 
  * @param cancelStopHold - Cancels any in-progress stop-hold gesture.
  * @param enqueueVoice - Schedules a voice notification scenario.
  * @param enqueueStepStart - Plays the pre-generated WAV intro for the given training+mode+step combo.
- * @param announceLap - Announces a lap crossing through the live spotter voice channel.
+ * @param announceLap - Announces a lap crossing through the coach audio channel.
  * @param primeStepAudio - Primes the AudioContext before a new step starts.
  * @param stopVoice - Stops any currently playing voice audio.
  * @param playStepDoneSound - Plays the step-completion sound effect.
@@ -67,7 +67,7 @@ export function useSessionOrchestrator(
   // test-mode dev lo comprime. Le decisioni (saltabile, avviso ultimo minuto)
   // restano sulla durata reale, non su questo budget.
   getStepBudgetMs: (step: { durationMinutes: number }) => number = (s) => s.durationMinutes * 60_000,
-  // PIP-159: gli annunci live del tempo giro sono controllati dallo spotter,
+  // PIP-203: gli annunci live del tempo giro sono controllati dalla voce coach,
   // mentre le voci step restano sempre legate all'allenamento.
   canAnnounceLiveLap: () => boolean = () => true,
 ) {
@@ -143,8 +143,8 @@ export function useSessionOrchestrator(
   })
 
   // ── Live lap announcement watcher ──────────────────────────────────────────
-  // PIP-160: lo spotter live deve poter dire il tempo giro anche fuori da un
-  // allenamento. Il gate resta canAnnounceLiveLap(), non la phase del training.
+  // La voce coach deve poter dire il tempo giro anche fuori da un allenamento.
+  // Il gate resta canAnnounceLiveLap(), non la phase del training.
   watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
     if (newVal === null || oldVal === null) return
     if (newVal <= oldVal) return

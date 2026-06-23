@@ -41,8 +41,20 @@ assert.doesNotMatch(
 
 assert.match(
   overviewPage,
-  /loadRacePreparationSnapshot/,
-  'Panoramica should load the full overview snapshot only for race-preparation context'
+  /activityTotals/,
+  'Panoramica should render recent activity from overview projection activityTotals'
+)
+
+assert.match(
+  overviewPage,
+  /recentActivityTitle/,
+  'Panoramica should keep the recent activity summary derived from projection data'
+)
+
+assert.doesNotMatch(
+  overviewPage,
+  /getOverviewSnapshot\(/,
+  'Panoramica must not call the raw overview snapshot in the startup path'
 )
 
 for (const relativePath of forbiddenSecondarySnapshotFiles) {
