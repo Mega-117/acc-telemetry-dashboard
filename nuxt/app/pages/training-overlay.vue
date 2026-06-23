@@ -439,10 +439,16 @@ async function recordVoicePointFromCurrentPosition() {
     showVoicePointNotice('Recorder non disponibile in questo runtime.', 'error')
     return
   }
-  const track = liveLap.value.track || 'unknown'
+  const track = liveLap.value.track
+  const car = liveLap.value.car
+  if (!track) {
+    showVoicePointNotice('Pista non disponibile: aspetta live_state prima di salvare.', 'error')
+    return
+  }
   try {
     const result = await api.recordVoicePoint({
       track,
+      car,
       type: 'braking_reference',
       normalizedCarPosition: position,
     })
@@ -450,7 +456,7 @@ async function recordVoicePointFromCurrentPosition() {
       showVoicePointNotice(result?.error || 'Riferimento non salvato.', 'error')
       return
     }
-    showVoicePointNotice(`Riferimento salvato: ${track} ${position.toFixed(3)}`, 'ok')
+    showVoicePointNotice(`Riferimento salvato: ${track}${car ? ` - ${car}` : ''} - ${position.toFixed(3)}`, 'ok')
   } catch (error: any) {
     showVoicePointNotice(error?.message || 'Riferimento non salvato.', 'error')
   }
@@ -841,5 +847,6 @@ onBeforeUnmount(() => {
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
 </style>
+
 
 
