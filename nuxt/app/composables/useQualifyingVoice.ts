@@ -156,6 +156,13 @@ export function useQualifyingVoice(
    * isolated bricks while driving. If the full WAV is missing/out of range,
    * it stays silent instead of falling back to lower-quality audio bricks.
    */
+  function enqueueAudioPath(path: string, opts: { replace?: boolean } = {}) {
+    if (!isEnabled() || !path) return
+    if (opts.replace) stopVoice()
+    const gen = generation
+    queue = queue.then(() => playAudioPath(getPublicPath(path), gen).then(() => undefined))
+  }
+
   function announceLap(_lapNum: number, timeMs: number | null, valid: boolean) {
     if (!isEnabled()) return
     const voice = selectedVoiceId()
@@ -171,5 +178,5 @@ export function useQualifyingVoice(
     })
   }
 
-  return { soundEnabled, primeStepAudio, playStepDoneSound, playCountdownBeep, enqueue, enqueueStepStart, announceLap, stopVoice, getStepAudioContext }
+  return { soundEnabled, primeStepAudio, playStepDoneSound, playCountdownBeep, enqueue, enqueueStepStart, enqueueAudioPath, announceLap, stopVoice, getStepAudioContext }
 }
