@@ -3,7 +3,6 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAppNotifications } from '~/composables/useAppNotifications'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { canUseDevTools } from '~/utils/devToolsAccess'
 import { trainingOverlayCatalog, trainingOverlayOrder, type TrainingOverlayId } from '~/config/trainingOverlayCatalog'
 import type { VoiceScript, VoiceScriptScenario, VoiceScriptStep } from '~/config/voiceScript'
 import {
@@ -71,7 +70,7 @@ const appNotifications = useAppNotifications()
 const kokoroLifecycle = useKokoroVoiceLabLifecycle()
 const route = useRoute()
 const { isAdmin } = useFirebaseAuth()
-const hasFullVoiceLabAccess = computed(() => canUseDevTools() || isAdmin.value)
+const hasFullVoiceLabAccess = computed(() => isAdmin.value)
 const isReferenceOnlyMode = computed(() => !hasFullVoiceLabAccess.value)
 
 // Cronometro avvio motore (PIP-138): dà la sensazione che "sta succedendo
