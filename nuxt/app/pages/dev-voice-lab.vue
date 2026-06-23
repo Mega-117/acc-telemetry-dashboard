@@ -170,6 +170,7 @@ const referenceCatalog = ref<TrackVoicePointCatalog>({ tracks: ['Spa'], points: 
 const referencesBusy = ref(false)
 const referencesStatus = ref('')
 const referencesError = ref('')
+const referencesBatchBusy = ref(false)
 const referenceTasks = ref<Record<string, { state: RowState; message: string }>>({})
 
 const availableReferenceTracks = computed(() => {
@@ -269,7 +270,7 @@ async function playReference(entry: TrackVoicePoint) {
 }
 
 async function generateReference(entry: TrackVoicePoint) {
-  if (serverState.value !== 'online') return
+  if (serverState.value !== 'online') return false
   const voice = entry.audio_voice || previewVoiceId.value
   referenceTasks.value[entry.id] = { state: 'generating', message: `Genero ${voice}...` }
   kokoroLifecycle.beginWork()
@@ -291,9 +292,28 @@ async function generateReference(entry: TrackVoicePoint) {
   } catch (error: any) {
     referenceTasks.value[entry.id] = { state: 'error', message: error?.data?.statusMessage || error?.message || 'errore' }
     pushToast('Generazione riferimento fallita', 'error')
+    return false
   } finally {
     kokoroLifecycle.endWork()
     handleKokoroWorkSettled()
+  }
+}
+
+async function generateAllReferences() {
+  if (serverState.value !== 'online' || referencesBatchBusy.value || !referenceRows.value.length) return
+  referencesBatchBusy.value = true
+  referencesError.value = ''
+  let ok = 0
+  try {
+    for (let i = 0; i < referenceRows.value.length; i += 1) {
+      referencesStatus.value = `Genero riferimenti ${i + 1}/${referenceRows.value.length}...`
+      if (await generateReference(referenceRows.value[i]!)) ok += 1
+    }
+    referencesStatus.value = `Generate ${ok}/${referenceRows.value.length} tracce per ${selectedReferenceTrack.value}.`
+    if (ok === referenceRows.value.length) pushToast(`Riferimenti ${selectedReferenceTrack.value}: WAV generati`, 'success')
+    else pushToast(`Generate ${ok}/${referenceRows.value.length}: controlla le righe in errore`, 'error')
+  } finally {
+    referencesBatchBusy.value = false
   }
 }
 
@@ -939,7 +959,10 @@ onBeforeUnmount(() => {
                 <option v-for="track in availableReferenceTracks" :key="track" :value="track">{{ track }}</option>
               </select>
             </label>
-            <button type="button" class="secondary" :disabled="referencesBusy" @click="loadReferences">Aggiorna</button>
+            <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy" @click="loadReferences">Aggiorna</button>
+            <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || !referenceRows.length" @click="generateAllReferences">
+              {{ referencesBatchBusy ? 'Genero...' : 'Genera tutte' }}
+            </button>
           </div>
         </div>
 
@@ -990,7 +1013,7 @@ onBeforeUnmount(() => {
               <span class="row-status" :class="`row-status--${referenceRowState(entry)}`">{{ referenceTasks[entry.id]?.message || '' }}</span>
               <button type="button" :disabled="isSpeaking || (!entry.audio_path && serverState !== 'online')" @click="playReference(entry)">Ascolta</button>
               <button type="button" :disabled="referenceRowBusy(entry)" @click="saveReference(entry)">Salva</button>
-              <button type="button" class="primary" :disabled="serverState !== 'online' || referenceRowBusy(entry)" @click="generateReference(entry)">
+              <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || referenceRowBusy(entry)" @click="generateReference(entry)">
                 {{ referenceRowBusy(entry) ? '...' : 'Genera traccia' }}
               </button>
             </footer>
