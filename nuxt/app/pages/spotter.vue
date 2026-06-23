@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { spotterVoiceOptions, useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 
 definePageMeta({ layout: 'dashboard' })
 
@@ -25,21 +26,16 @@ interface TrackVoicePointCatalog {
   points: TrackVoicePoint[]
 }
 
-const VOICE_OPTIONS: Array<{ id: VoiceId; label: string }> = [
-  { id: 'if_sara', label: 'Sara' },
-  { id: 'im_nicola', label: 'Nicola' },
-]
-
-const STORAGE = {
-  voice: 'acc.spotter.voice',
-  referencesEnabled: 'acc.trackVoiceReferences.enabled',
-  coachEnabled: 'acc.spotter.trainingCoach.enabled',
-}
-
 const { isAdmin } = useFirebaseAuth()
-const selectedVoice = ref<VoiceId>('if_sara')
-const referencesEnabled = ref(false)
-const coachEnabled = ref(false)
+const {
+  selectedVoice,
+  voiceLabel,
+  referencesEnabled,
+  coachEnabled,
+  selectVoice,
+  toggleReferences,
+  toggleCoach,
+} = useSpotterVoiceSettings()
 const selectedTrack = ref('Spa')
 const catalog = ref<TrackVoicePointCatalog>({ tracks: ['Spa'], points: [] })
 const catalogBusy = ref(false)
@@ -47,7 +43,7 @@ const catalogError = ref('')
 const runtimeState = ref<RuntimeState>('checking')
 const runtimeMessage = ref('Controllo motore vocale...')
 
-const voiceLabel = computed(() => VOICE_OPTIONS.find(voice => voice.id === selectedVoice.value)?.label || 'Sara')
+
 const availableTracks = computed(() => {
   const tracks = catalog.value.tracks.length ? catalog.value.tracks : ['Spa']
   return tracks.includes('Spa') ? tracks : ['Spa', ...tracks]
@@ -67,35 +63,6 @@ const referenceStatusLabel = computed(() => {
 })
 const referenceVoiceLabLink = computed(() => `/dev-voice-lab?section=references&track=${encodeURIComponent(selectedTrack.value)}`)
 
-function loadSettings() {
-  if (typeof window === 'undefined') return
-  const storedVoice = window.localStorage.getItem(STORAGE.voice)
-  if (storedVoice === 'if_sara' || storedVoice === 'im_nicola') selectedVoice.value = storedVoice
-  referencesEnabled.value = window.localStorage.getItem(STORAGE.referencesEnabled) === '1'
-  coachEnabled.value = window.localStorage.getItem(STORAGE.coachEnabled) === '1'
-}
-
-function persistSettings() {
-  if (typeof window === 'undefined') return
-  window.localStorage.setItem(STORAGE.voice, selectedVoice.value)
-  window.localStorage.setItem(STORAGE.referencesEnabled, referencesEnabled.value ? '1' : '0')
-  window.localStorage.setItem(STORAGE.coachEnabled, coachEnabled.value ? '1' : '0')
-}
-
-function selectVoice(voice: VoiceId) {
-  selectedVoice.value = voice
-  persistSettings()
-}
-
-function toggleReferences() {
-  referencesEnabled.value = !referencesEnabled.value
-  persistSettings()
-}
-
-function toggleCoach() {
-  coachEnabled.value = !coachEnabled.value
-  persistSettings()
-}
 
 async function loadCatalog() {
   catalogBusy.value = true
@@ -123,7 +90,6 @@ async function checkRuntime() {
 }
 
 onMounted(() => {
-  loadSettings()
   void Promise.all([loadCatalog(), checkRuntime()])
 })
 </script>
@@ -155,7 +121,7 @@ onMounted(() => {
               <strong>{{ voiceLabel }}</strong>
               <div class="segmented-control" aria-label="Voce predefinita">
                 <button
-                  v-for="voice in VOICE_OPTIONS"
+                  v-for="voice in spotterVoiceOptions"
                   :key="voice.id"
                   type="button"
                   :class="{ 'is-active': selectedVoice === voice.id }"

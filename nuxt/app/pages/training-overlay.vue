@@ -31,12 +31,11 @@ import {
 } from '~/composables/useOverlaySettings'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
-import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
-import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useDevTestMode } from '~/composables/useDevTestMode'
+import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 
 definePageMeta({ layout: false })
 
@@ -99,7 +98,14 @@ const activeStepIndex = ref(0)
 const phase = ref<OverlayPhase>('loading')
 const remainingMs = ref(0)
 const isElectronRuntime = ref(false)
-const spotterEnabled = ref(false)
+const {
+  selectedVoice: spotterVoice,
+  referencesEnabled: trackVoiceReferencesEnabled,
+  coachEnabled: spotterEnabled,
+  load: loadSpotterVoiceSettings,
+  setReferencesEnabled,
+  setCoachEnabled,
+} = useSpotterVoiceSettings()
 // Solo evidenziazione visiva del focus mouse/tab: nessun effetto sui comandi
 // globali (PIP-96), Ctrl+N nel launcher avvia sempre l'allenamento.
 const launcherToolIndex = ref(0)
@@ -113,9 +119,7 @@ const showDevControls = computed(() => {
 })
 const isSaving = ref(false)
 const voicePointRecorderEnabled = ref(false)
-const trackVoiceReferencesEnabled = ref(false)
 const trackVoiceReferences = ref<TrackVoiceReference[]>([])
-const trackVoiceReferenceVoice = ref<'if_sara' | 'im_nicola'>('if_sara')
 const trackVoiceReferencesArmed = ref(false)
 const playedTrackVoiceReferenceIds = ref<Set<string>>(new Set())
 let previousVoiceReferencePosition: number | null = null
@@ -226,11 +230,11 @@ const activeTask = computed(() => {
   if (phase.value === 'completed') return 'Allenamento completato.'
   return activeStep.value.hud
 })
-const coachAudioToggleLabel = computed(() => spotterEnabled.value ? 'Disattiva voce coach' : 'Attiva voce coach')
+const coachAudioToggleLabel = computed(() => spotterEnabled.value ? 'Disattiva avvisi giro' : 'Attiva avvisi giro')
 const referenceAudioToggleLabel = computed(() => trackVoiceReferencesEnabled.value ? 'Disattiva riferimenti' : 'Attiva riferimenti')
 const launcherVoiceStatus = computed(() => {
   if (!soundEnabled.value) return 'Audio disattivato'
-  const coach = spotterEnabled.value ? 'Coach ON' : 'Coach OFF'
+  const coach = spotterEnabled.value ? 'Avvisi giro ON' : 'Avvisi giro OFF'
   const references = trackVoiceReferencesEnabled.value ? 'Riferimenti ON' : 'Riferimenti OFF'
   return `${coach} · ${references}`
 })
@@ -360,10 +364,11 @@ async function confirmPlacement() {
 async function closeOverlay() { await getOverlayApi()?.trainingOverlayClose?.() }
 
 function toggleCoachAudio() {
-  spotterEnabled.value = !spotterEnabled.value
-  if (!spotterEnabled.value) stopVoice()
+  const enabled = !spotterEnabled.value
+  setCoachEnabled(enabled)
+  if (!enabled) stopVoice()
   void savePreferences()
-  setDebugEvent(spotterEnabled.value ? 'voce coach attivata' : 'voce coach disattivata')
+  setDebugEvent(enabled ? 'avvisi giro attivati' : 'avvisi giro disattivati')
 }
 
 function runBackAction() {
@@ -456,14 +461,7 @@ function canUseTrackVoiceReferences() {
 
 function loadTrackVoiceReferencePreference() {
   if (!canUseTrackVoiceReferences()) return
-  const voice = window.localStorage.getItem('acc.spotter.voice')
-  trackVoiceReferenceVoice.value = voice === 'im_nicola' ? 'im_nicola' : 'if_sara'
-  trackVoiceReferencesEnabled.value = window.localStorage.getItem('acc.trackVoiceReferences.enabled') === '1'
-}
-
-function saveTrackVoiceReferencePreference() {
-  if (!canUseTrackVoiceReferences()) return
-  window.localStorage.setItem('acc.trackVoiceReferences.enabled', trackVoiceReferencesEnabled.value ? '1' : '0')
+  loadSpotterVoiceSettings()
 }
 
 async function loadTrackVoiceReferences() {
@@ -471,7 +469,7 @@ async function loadTrackVoiceReferences() {
   try {
     const data = await $fetch<{ points: TrackVoiceReference[] }>('/api/dev/track-voice-points')
     trackVoiceReferences.value = (Array.isArray(data.points) ? data.points : [])
-      .filter(point => point.enabled !== false && point.type === 'braking_reference' && point.audio_path && (point.audio_voice || 'if_sara') === trackVoiceReferenceVoice.value)
+      .filter(point => point.enabled !== false && point.type === 'braking_reference' && point.audio_path && (point.audio_voice || 'if_sara') === spotterVoice.value)
       .sort((a, b) => a.normalized_car_position - b.normalized_car_position)
   } catch (error) {
     trackVoiceReferences.value = []
@@ -481,13 +479,13 @@ async function loadTrackVoiceReferences() {
 
 function toggleTrackVoiceReferences() {
   if (!canUseTrackVoiceReferences()) return
-  trackVoiceReferencesEnabled.value = !trackVoiceReferencesEnabled.value
-  saveTrackVoiceReferencePreference()
-  if (!trackVoiceReferencesEnabled.value) {
+  const enabled = !trackVoiceReferencesEnabled.value
+  setReferencesEnabled(enabled)
+  if (!enabled) {
     trackVoiceReferencesArmed.value = false
     playedTrackVoiceReferenceIds.value = new Set()
   }
-  showVoicePointNotice(trackVoiceReferencesEnabled.value ? 'Riferimenti vocali attivi.' : 'Riferimenti vocali disattivi.', 'ok')
+  showVoicePointNotice(enabled ? 'Riferimenti vocali attivi.' : 'Riferimenti vocali disattivi.', 'ok')
 }
 
 function resetTrackVoiceReferenceLapState() {
@@ -634,11 +632,28 @@ watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
   }
 })
 
+watch(() => spotterVoice.value, async () => {
+  await loadTrackVoiceReferences()
+  resetTrackVoiceReferenceLapState()
+})
+
+watch(() => trackVoiceReferencesEnabled.value, (enabled) => {
+  if (!enabled) {
+    trackVoiceReferencesArmed.value = false
+    playedTrackVoiceReferenceIds.value = new Set()
+  }
+  scheduleOverlaySizeSync()
+})
+
+watch(() => spotterEnabled.value, () => {
+  void savePreferences()
+})
+
 watch(() => [fastState.value.normalizedCarPosition, liveLap.value.track], () => tickTrackVoiceReferences())
 
 watch(
   [phase, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
-    selectedQualifyingVoiceId, spotterEnabled, isTrainingPickerOpen, isSettingsOpen, liveHudResizeKey],
+    selectedQualifyingVoiceId, spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, liveHudResizeKey],
   () => scheduleOverlaySizeSync(),
   { flush: 'post' }
 )
