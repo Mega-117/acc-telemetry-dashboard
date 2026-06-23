@@ -4,7 +4,7 @@
 // ============================================
 
 const props = defineProps<{
-  activeTab: 'panoramica' | 'sessioni' | 'piste' | 'area-pilota'
+  activeTab: 'panoramica' | 'sessioni' | 'piste' | 'spotter' | 'area-pilota'
 }>()
 
 const emit = defineEmits<{
@@ -15,6 +15,7 @@ const tabs = [
   { id: 'panoramica', label: 'PANORAMICA' },
   { id: 'sessioni', label: 'SESSIONI' },
   { id: 'piste', label: 'PISTE' },
+  { id: 'spotter', label: 'SPOTTER' },
   { id: 'area-pilota', label: 'AREA PILOTA' }
 ]
 </script>

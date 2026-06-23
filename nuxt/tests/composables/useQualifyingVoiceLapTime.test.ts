@@ -66,14 +66,14 @@ describe('useQualifyingVoice lap time announcements (PIP-155)', () => {
     expect(played).toEqual(['/voice/qualifying/lap-time-0909-im_nicola.wav'])
   })
 
-  it('resta silenzioso se il giro non e valido', async () => {
+  it('annuncia il giro invalidato senza dire un tempo non valido', async () => {
     const played = installAudioMock()
     const voice = useQualifyingVoice(path => path, () => 'if_sara', () => true, () => 'qualifying')
 
     voice.announceLap(1, 90_320, false)
     await flushAudioQueue()
 
-    expect(played).toEqual([])
+    expect(played).toEqual(['/voice/qualifying/time-invalid-if_sara.wav'])
   })
 
   it('resta silenzioso se il tempo e fuori range pre-generato', async () => {

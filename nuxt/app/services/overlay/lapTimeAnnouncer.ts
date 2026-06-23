@@ -136,7 +136,17 @@ export function resolveLapTimeVoiceEntry(
   valid: boolean,
   voice: LapTimeAudioVoice,
 ): LapTimeVoiceEntry | null {
-  if (!valid) return null
+  if (!valid) {
+    return {
+      key: 'lap-invalid',
+      tenths: 0,
+      text: 'Giro invalidato.',
+      path: timeBrickPath('invalid', voice),
+      filename: `time-invalid-${voice}.wav`,
+      voice,
+      speed: LAP_TIME_AUDIO_DEFAULT_SPEED,
+    }
+  }
   const tenths = lapTimeTenthsFromMs(timeMs)
   if (tenths === null || !isLapTimeVoiceTenthsInRange(tenths)) return null
   return buildLapTimeVoiceEntry(tenths, voice)

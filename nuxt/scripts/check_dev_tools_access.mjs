@@ -17,7 +17,6 @@ const requiredFiles = [
   'app/pages/dev-cleanup.vue',
   'app/pages/dev-data-audit.vue',
   'app/pages/dev-upload.vue',
-  'app/pages/dev-voice-lab.vue',
   'app/pages/test-hud.vue'
 ]
 
@@ -27,6 +26,12 @@ for (const relativePath of requiredFiles) {
   assert.match(source, /middleware:\s*['"]dev-tools['"]/, `${relativePath} must use dev-tools middleware`)
 }
 
+const voiceLab = read('app/pages/dev-voice-lab.vue')
+assert.match(voiceLab, /definePageMeta\s*\(/, 'dev-voice-lab.vue must define page meta')
+assert.doesNotMatch(voiceLab, /middleware:\s*['"]dev-tools['"]/, 'Voice Lab must stay reachable for filtered reference management')
+assert.match(voiceLab, /hasFullVoiceLabAccess/, 'Voice Lab must expose a full-access gate')
+assert.match(voiceLab, /isReferenceOnlyMode/, 'Voice Lab must expose the normal-user reference-only mode')
+assert.match(voiceLab, /v-if="hasFullVoiceLabAccess"/, 'Voice Lab full tools must be conditionally hidden')
 const middleware = read('app/middleware/dev-tools.ts')
 assert.match(middleware, /canUseDevTools/, 'dev-tools middleware must use shared access helper')
 assert.match(middleware, /navigateTo\(['"]\/panoramica['"]\)/, 'dev-tools middleware must redirect to panoramica')

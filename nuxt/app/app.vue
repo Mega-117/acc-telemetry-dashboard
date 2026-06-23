@@ -143,6 +143,8 @@ const dashboardRoutePrefixes = [
   '/panoramica',
   '/sessioni',
   '/piste',
+  '/spotter',
+  '/dev-voice-lab',
   '/area-pilota',
   '/profilo',
   '/preparazione',

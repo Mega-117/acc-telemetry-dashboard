@@ -168,8 +168,6 @@ export function useQualifyingVoice(
     const voice = selectedVoiceId()
     const fullLapAudio = resolveLapTimeVoiceEntry(timeMs, valid, voice)
     if (!fullLapAudio) return
-    // Sostituisce eventuali annunci precedenti: sul traguardo conta l'ultimo.
-    stopVoice()
     const gen = generation
     queue = queue.then(async () => {
       if (fullLapAudio) {

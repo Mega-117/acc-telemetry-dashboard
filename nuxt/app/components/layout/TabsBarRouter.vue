@@ -4,6 +4,10 @@
 // Auto-detects active tab from current route
 // ============================================
 
+defineProps<{
+  activeTab?: 'panoramica' | 'sessioni' | 'piste' | 'spotter' | 'area-pilota' | 'test-hud'
+}>()
+
 const route = useRoute()
 
 // PIP-187: Test HUD e' temporaneamente pubblica per QA overlay develop/prod.
@@ -12,6 +16,7 @@ const baseTabs = [
   { id: 'panoramica', label: 'PANORAMICA', to: '/panoramica' },
   { id: 'sessioni', label: 'SESSIONI', to: '/sessioni' },
   { id: 'piste', label: 'PISTE', to: '/piste' },
+  { id: 'spotter', label: 'SPOTTER', to: '/spotter' },
   { id: 'area-pilota', label: 'AREA PILOTA', to: '/area-pilota' }
 ]
 

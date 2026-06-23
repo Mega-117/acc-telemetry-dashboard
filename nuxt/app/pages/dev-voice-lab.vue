@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAppNotifications } from '~/composables/useAppNotifications'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { canUseDevTools } from '~/utils/devToolsAccess'
 import { trainingOverlayCatalog, trainingOverlayOrder, type TrainingOverlayId } from '~/config/trainingOverlayCatalog'
 import type { VoiceScript, VoiceScriptScenario, VoiceScriptStep } from '~/config/voiceScript'
 import {
@@ -14,8 +16,7 @@ import {
 } from '~/services/overlay/lapTimeAnnouncer'
 
 definePageMeta({
-  layout: 'dashboard',
-  middleware: 'dev-tools'
+  layout: 'dashboard'
 })
 
 interface ServerVoice {
@@ -68,6 +69,10 @@ let bootPollHandle: ReturnType<typeof setTimeout> | null = null
 let voiceLabMounted = false
 const appNotifications = useAppNotifications()
 const kokoroLifecycle = useKokoroVoiceLabLifecycle()
+const route = useRoute()
+const { isAdmin } = useFirebaseAuth()
+const hasFullVoiceLabAccess = computed(() => canUseDevTools() || isAdmin.value)
+const isReferenceOnlyMode = computed(() => !hasFullVoiceLabAccess.value)
 
 // Cronometro avvio motore (PIP-138): dà la sensazione che "sta succedendo
 // qualcosa" mentre Kokoro carica, invece di un "Avvio..." muto.
@@ -92,7 +97,7 @@ const showScenarios = ref(false)
 const pendingRegenKeys = ref<string[]>([])
 const batchBusy = ref(false)
 const batchStatus = ref('')
-const voiceLabSection = ref<'script' | 'references'>('script')
+const voiceLabSection = ref<'script' | 'references'>(route.query.section === 'references' ? 'references' : 'script')
 
 // Stato per riga (PIP-138): una sola fonte tipizzata invece di stringhe sparse.
 type RowState = 'idle' | 'saving' | 'generating' | 'done' | 'error'
@@ -800,6 +805,10 @@ async function saveMainChanges() {
   await saveScript()
 }
 
+watch(isReferenceOnlyMode, (referenceOnly) => {
+  if (referenceOnly) voiceLabSection.value = 'references'
+}, { immediate: true })
+
 onMounted(async () => {
   voiceLabMounted = true
   kokoroLifecycle.enterVoiceLab()
@@ -824,12 +833,15 @@ onBeforeUnmount(() => {
     <section class="voice-lab">
       <header class="voice-hero">
         <div>
-          <span class="voice-kicker">Offline voice lab</span>
+          <span class="voice-kicker">Motore vocale</span>
           <h1>Kokoro Voice Lab</h1>
-          <p>
+          <p v-if="hasFullVoiceLabAccess">
             Editor del copione vocale dell'overlay: modifica una frase, ascoltala e rigenera i WAV
             senza toccare codice. Fonte unica: <code>app/config/voiceScript.json</code>.
             Server locale su <code>{{ TTS_SERVER }}</code> (avvio automatico).
+          </p>
+          <p v-else>
+            Gestisci le tracce audio dei riferimenti pista. Il motore vocale Kokoro viene avviato localmente quando serve generare o ascoltare un riferimento.
           </p>
         </div>
         <div class="server-card" :class="`server-card--${serverState === 'starting' ? 'checking' : serverState}`" data-testid="voice-lab-server-card">
@@ -843,12 +855,12 @@ onBeforeUnmount(() => {
         </div>
       </header>
 
-      <nav class="lab-section-tabs" aria-label="Voice Lab sezioni">
+      <nav v-if="hasFullVoiceLabAccess" class="lab-section-tabs" aria-label="Voice Lab sezioni">
         <button type="button" :class="{ 'is-active': voiceLabSection === 'script' }" @click="voiceLabSection = 'script'">Copione</button>
         <button type="button" :class="{ 'is-active': voiceLabSection === 'references' }" @click="voiceLabSection = 'references'">Riferimenti</button>
       </nav>
 
-      <section v-if="voiceLabSection === 'script'" class="script-editor">
+      <section v-if="hasFullVoiceLabAccess && voiceLabSection === 'script'" class="script-editor">
         <div class="editor-toolbar">
           <div class="training-tabs">
             <button
@@ -1021,7 +1033,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="lap-time-library" data-testid="lap-time-library">
+      <section v-if="hasFullVoiceLabAccess" class="lap-time-library" data-testid="lap-time-library">
         <div class="panel-head">
           <div>
             <span class="voice-kicker">Tempi giro</span>

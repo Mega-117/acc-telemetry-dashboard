@@ -88,9 +88,14 @@ describe('lapTimeAnnouncer (PIP-155 full lap-time WAV)', () => {
     ])
   })
 
-  it('risolve solo tempi validi nel range pre-generato', () => {
+  it('risolve tempi validi e annuncio dedicato per giro invalidato', () => {
     expect(resolveLapTimeVoiceEntry(90_999, true, 'if_sara')?.filename).toBe('lap-time-0909-if_sara.wav')
-    expect(resolveLapTimeVoiceEntry(90_999, false, 'if_sara')).toBeNull()
+    expect(resolveLapTimeVoiceEntry(90_999, false, 'if_sara')).toMatchObject({
+      key: 'lap-invalid',
+      filename: 'time-invalid-if_sara.wav',
+      path: '/voice/qualifying/time-invalid-if_sara.wav',
+      text: 'Giro invalidato.',
+    })
     expect(resolveLapTimeVoiceEntry((LAP_TIME_AUDIO_MIN_TENTHS - 1) * 100, true, 'if_sara')).toBeNull()
     expect(resolveLapTimeVoiceEntry((LAP_TIME_AUDIO_MAX_TENTHS + 1) * 100, true, 'if_sara')).toBeNull()
   })
