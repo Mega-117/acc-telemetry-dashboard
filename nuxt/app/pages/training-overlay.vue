@@ -72,6 +72,7 @@ interface TrainingOverlaySettings {
   autoDimDuringRun?: boolean; autoAdvanceStep?: boolean; autoAdvanceSeconds?: number
   originMode?: OverlayOriginMode
   originCorner?: OverlayOriginCorner; qualifyingVoiceId?: QualifyingVoiceId
+  enableVoicePointRecorder?: boolean
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -103,7 +104,12 @@ const spotterEnabled = ref(false)
 const launcherToolIndex = ref(0)
 const overlayRoot = ref<HTMLElement | null>(null)
 const isPointerOnOverlaySurface = ref(false)
-const showDevControls = import.meta.dev
+const runtimeVoicePointRecorderAllowed = ref(false)
+const showDevControls = computed(() => {
+  if (import.meta.dev || runtimeVoicePointRecorderAllowed.value) return true
+  if (typeof window === 'undefined') return false
+  return ['localhost', '127.0.0.1', '::1', ''].includes(window.location.hostname)
+})
 const isSaving = ref(false)
 const voicePointRecorderEnabled = ref(false)
 const trackVoiceReferencesEnabled = ref(true)
@@ -176,9 +182,10 @@ const totalSteps = computed(() => selectedMode.value.steps.length)
 const isActiveSession = computed(() => ['running', 'paused', 'expired'].includes(phase.value))
 const canManuallyAdvanceStep = computed(() => activeStep.value.durationMinutes <= 5)
 const canUseStopControl = computed(() => ['running', 'paused', 'expired'].includes(phase.value))
-const showPlacementControl = computed(() => isElectronRuntime.value || showDevControls)
+const showPlacementControl = computed(() => isElectronRuntime.value || showDevControls.value)
 const canUseVoicePointRecorder = computed(() => {
-  if (!showDevControls || typeof window === 'undefined') return false
+  if (!showDevControls.value || typeof window === 'undefined') return false
+  if (runtimeVoicePointRecorderAllowed.value) return true
   return ['localhost', '127.0.0.1', ''].includes(window.location.hostname)
 })
 const primaryAction = computed<PrimaryOverlayAction>(() => {
@@ -439,7 +446,8 @@ function normalizeTrackName(value: string | null | undefined) {
 }
 
 function canUseTrackVoiceReferences() {
-  if (!showDevControls || typeof window === 'undefined') return false
+  if (!showDevControls.value || typeof window === 'undefined') return false
+  if (runtimeVoicePointRecorderAllowed.value) return true
   return ['localhost', '127.0.0.1', ''].includes(window.location.hostname)
 }
 
@@ -592,6 +600,7 @@ onMounted(async () => {
   selectedTrainingId.value = resolveTrainingOverlayTrainingId(settings?.lastTrainingId)
   selectedModeId.value = resolveTrainingOverlayModeId(settings?.lastDurationId)
   soundEnabled.value = settings?.soundEnabled !== false
+  runtimeVoicePointRecorderAllowed.value = settings?.enableVoicePointRecorder === true
   spotterEnabled.value = settings?.spotterEnabled === true
   autoDimDuringRun.value = settings?.autoDimDuringRun !== false
   autoAdvanceStep.value = settings?.autoAdvanceStep !== false
