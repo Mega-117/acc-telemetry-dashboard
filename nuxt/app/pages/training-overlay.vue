@@ -697,7 +697,7 @@ onBeforeUnmount(() => {
     <button
       v-if="canUseVoicePointRecorder"
       type="button"
-      class="overlay-dev-toggle overlay-dev-toggle--voice-points"
+      class="overlay-dev-toggle overlay-dev-toggle--voice-points overlay-dev-toggle--track-cues"
       :aria-pressed="trackVoiceReferencesEnabled"
       title="Riferimenti vocali pista: riproduce i WAV dopo il primo giro (solo localhost/dev)"
       @click="toggleTrackVoiceReferences"
