@@ -384,7 +384,7 @@ function executePrimaryAction() {
 // La finestra ignora il mouse (i click passano alle app sotto) tranne quando il
 // puntatore e' sulla superficie reale dell'overlay. Con forward attivo arrivano
 // solo mousemove: da li' decidiamo quando riattivare la cattura.
-const OVERLAY_SURFACE_SELECTOR = '.overlay-card, .launcher-tools, .placement-work-area'
+const OVERLAY_SURFACE_SELECTOR = '.overlay-card, .launcher-tools, .placement-work-area, .overlay-dev-toggle, .voice-point-notice'
 let lastPointerOnSurface: boolean | null = null
 
 function updateMousePassthrough(event: MouseEvent) {
@@ -841,4 +841,5 @@ onBeforeUnmount(() => {
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
 </style>
+
 
