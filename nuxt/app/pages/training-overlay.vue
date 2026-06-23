@@ -112,7 +112,7 @@ const showDevControls = computed(() => {
 })
 const isSaving = ref(false)
 const voicePointRecorderEnabled = ref(false)
-const trackVoiceReferencesEnabled = ref(true)
+const trackVoiceReferencesEnabled = ref(false)
 const trackVoiceReferences = ref<TrackVoiceReference[]>([])
 const trackVoiceReferencesArmed = ref(false)
 const playedTrackVoiceReferenceIds = ref<Set<string>>(new Set())
@@ -225,9 +225,12 @@ const activeTask = computed(() => {
   return activeStep.value.hud
 })
 const coachAudioToggleLabel = computed(() => spotterEnabled.value ? 'Disattiva voce coach' : 'Attiva voce coach')
-const launcherCoachAudioStatus = computed(() => {
-  if (!spotterEnabled.value) return 'Voce coach spenta'
-  return 'Tempo giro e allenamento attivi'
+const referenceAudioToggleLabel = computed(() => trackVoiceReferencesEnabled.value ? 'Disattiva riferimenti' : 'Attiva riferimenti')
+const launcherVoiceStatus = computed(() => {
+  if (!soundEnabled.value) return 'Audio disattivato'
+  const coach = spotterEnabled.value ? 'Coach ON' : 'Coach OFF'
+  const references = trackVoiceReferencesEnabled.value ? 'Riferimenti ON' : 'Riferimenti OFF'
+  return `${coach} · ${references}`
 })
 const sessionOverlayOpacity = computed(() => {
   if (!autoDimDuringRun.value || phase.value !== 'running') return 1
@@ -453,7 +456,7 @@ function canUseTrackVoiceReferences() {
 
 function loadTrackVoiceReferencePreference() {
   if (!canUseTrackVoiceReferences()) return
-  trackVoiceReferencesEnabled.value = window.localStorage.getItem('acc.trackVoiceReferences.enabled') !== '0'
+  trackVoiceReferencesEnabled.value = window.localStorage.getItem('acc.trackVoiceReferences.enabled') === '1'
 }
 
 function saveTrackVoiceReferencePreference() {
@@ -784,7 +787,7 @@ onBeforeUnmount(() => {
                         <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
                       </Transition>
                     </span>
-                    <strong>{{ launcherCoachAudioStatus }}</strong>
+                    <strong>{{ launcherVoiceStatus }}</strong>
                   </header>
                   <div class="launcher-tools__actions">
                     <button
@@ -809,6 +812,18 @@ onBeforeUnmount(() => {
                       @click="toggleCoachAudio"
                     >
                       {{ coachAudioToggleLabel }}
+                    </button>
+                    <button
+                      type="button"
+                      class="launcher-tool-button launcher-tool-button--references"
+                      :class="{ 'is-active': trackVoiceReferencesEnabled, 'is-selected': launcherToolIndex === 2 }"
+                      :aria-pressed="trackVoiceReferencesEnabled"
+                      :aria-current="launcherToolIndex === 2 ? 'true' : undefined"
+                      :aria-label="referenceAudioToggleLabel"
+                      @focus="launcherToolIndex = 2"
+                      @click="toggleTrackVoiceReferences"
+                    >
+                      {{ referenceAudioToggleLabel }}
                     </button>
                   </div>
                   <div class="launcher-live-widgets" aria-label="Dati live pilota">
