@@ -828,10 +828,7 @@ onBeforeUnmount(() => {
                       {{ referenceAudioToggleLabel }}
                     </button>
                   </div>
-                  <div class="launcher-live-widgets" aria-label="Dati live pilota">
-                    <TyreSlipHud :fast-state="fastState" compact />
-                    <SectorDeltaHud :sector-hud="liveLap.sectorHud" />
-                  </div>
+
                   <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K chiude</p>
                 </div>
               </template>
