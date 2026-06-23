@@ -115,6 +115,7 @@ const isSaving = ref(false)
 const voicePointRecorderEnabled = ref(false)
 const trackVoiceReferencesEnabled = ref(false)
 const trackVoiceReferences = ref<TrackVoiceReference[]>([])
+const trackVoiceReferenceVoice = ref<'if_sara' | 'im_nicola'>('if_sara')
 const trackVoiceReferencesArmed = ref(false)
 const playedTrackVoiceReferenceIds = ref<Set<string>>(new Set())
 let previousVoiceReferencePosition: number | null = null
@@ -450,13 +451,13 @@ function normalizeTrackName(value: string | null | undefined) {
 }
 
 function canUseTrackVoiceReferences() {
-  if (!showDevControls.value || typeof window === 'undefined') return false
-  if (runtimeVoicePointRecorderAllowed.value) return true
-  return ['localhost', '127.0.0.1', ''].includes(window.location.hostname)
+  return typeof window !== 'undefined'
 }
 
 function loadTrackVoiceReferencePreference() {
   if (!canUseTrackVoiceReferences()) return
+  const voice = window.localStorage.getItem('acc.spotter.voice')
+  trackVoiceReferenceVoice.value = voice === 'im_nicola' ? 'im_nicola' : 'if_sara'
   trackVoiceReferencesEnabled.value = window.localStorage.getItem('acc.trackVoiceReferences.enabled') === '1'
 }
 
@@ -470,7 +471,7 @@ async function loadTrackVoiceReferences() {
   try {
     const data = await $fetch<{ points: TrackVoiceReference[] }>('/api/dev/track-voice-points')
     trackVoiceReferences.value = (Array.isArray(data.points) ? data.points : [])
-      .filter(point => point.enabled !== false && point.type === 'braking_reference' && point.audio_path && (point.audio_voice || 'if_sara') === 'if_sara')
+      .filter(point => point.enabled !== false && point.type === 'braking_reference' && point.audio_path && (point.audio_voice || 'if_sara') === trackVoiceReferenceVoice.value)
       .sort((a, b) => a.normalized_car_position - b.normalized_car_position)
   } catch (error) {
     trackVoiceReferences.value = []
