@@ -32,6 +32,7 @@ import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useDevTestMode } from '~/composables/useDevTestMode'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 
 definePageMeta({ layout: false })
@@ -91,6 +92,8 @@ const {
   setReferencesEnabled,
   setCoachEnabled,
 } = useSpotterVoiceSettings()
+const { canEnterApp } = useFirebaseAuth()
+const canUseSpotterControls = computed(() => canEnterApp.value)
 // Solo evidenziazione visiva del focus mouse/tab: nessun effetto sui comandi
 // globali (PIP-96), Ctrl+N nel launcher avvia sempre l'allenamento.
 const launcherToolIndex = ref(0)
@@ -172,7 +175,7 @@ const canManuallyAdvanceStep = computed(() => activeStep.value.durationMinutes <
 const canUseStopControl = computed(() => ['running', 'paused', 'expired'].includes(phase.value))
 const showPlacementControl = computed(() => isElectronRuntime.value || showDevControls.value)
 const canUseVoicePointRecorder = computed(() => {
-  if (!showDevControls.value || typeof window === 'undefined') return false
+  if (!canUseSpotterControls.value || !showDevControls.value || typeof window === 'undefined') return false
   if (runtimeVoicePointRecorderAllowed.value) return true
   return ['localhost', '127.0.0.1', ''].includes(window.location.hostname)
 })
@@ -215,6 +218,7 @@ const activeTask = computed(() => {
 const coachAudioToggleLabel = computed(() => spotterEnabled.value ? 'Disattiva avvisi giro' : 'Attiva avvisi giro')
 const referenceAudioToggleLabel = computed(() => trackVoiceReferencesEnabled.value ? 'Disattiva riferimenti' : 'Attiva riferimenti')
 const launcherVoiceStatus = computed(() => {
+  if (!canUseSpotterControls.value) return 'Login richiesto'
   if (!soundEnabled.value) return 'Audio disattivato'
   const coach = spotterEnabled.value ? 'Avvisi giro ON' : 'Avvisi giro OFF'
   const references = trackVoiceReferencesEnabled.value ? 'Riferimenti ON' : 'Riferimenti OFF'
@@ -340,6 +344,11 @@ async function confirmPlacement() {
 async function closeOverlay() { await getOverlayApi()?.trainingOverlayClose?.() }
 
 function toggleCoachAudio() {
+  if (!canUseSpotterControls.value) {
+    stopVoice()
+    showVoicePointNotice('Login richiesto per gli avvisi vocali.', 'error')
+    return
+  }
   const enabled = !spotterEnabled.value
   setCoachEnabled(enabled)
   if (!enabled) stopVoice()
@@ -428,12 +437,20 @@ function showVoicePointNotice(text: string, tone: 'ok' | 'error' = 'ok') {
 }
 
 function toggleTrackVoiceReferences() {
+  if (!canUseSpotterControls.value) {
+    showVoicePointNotice('Login richiesto per i riferimenti vocali.', 'error')
+    return
+  }
   const enabled = !trackVoiceReferencesEnabled.value
   setReferencesEnabled(enabled)
   showVoicePointNotice(enabled ? 'Riferimenti vocali attivi.' : 'Riferimenti vocali disattivi.', 'ok')
 }
 
 function toggleVoicePointRecorder() {
+  if (!canUseSpotterControls.value) {
+    showVoicePointNotice('Login richiesto per registrare riferimenti.', 'error')
+    return
+  }
   if (!canUseVoicePointRecorder.value) return
   voicePointRecorderEnabled.value = !voicePointRecorderEnabled.value
   showVoicePointNotice(
@@ -537,6 +554,12 @@ onMounted(async () => {
 })
 watch(() => spotterEnabled.value, () => {
   void savePreferences()
+})
+
+watch(canUseSpotterControls, (canUse) => {
+  if (canUse) return
+  voicePointRecorderEnabled.value = false
+  stopVoice()
 })
 
 
@@ -705,6 +728,7 @@ onBeforeUnmount(() => {
                       :aria-pressed="spotterEnabled"
                       :aria-current="launcherToolIndex === 1 ? 'true' : undefined"
                       :aria-label="coachAudioToggleLabel"
+                      :disabled="!canUseSpotterControls"
                       @focus="launcherToolIndex = 1"
                       @click="toggleCoachAudio"
                     >
@@ -717,6 +741,7 @@ onBeforeUnmount(() => {
                       :aria-pressed="trackVoiceReferencesEnabled"
                       :aria-current="launcherToolIndex === 2 ? 'true' : undefined"
                       :aria-label="referenceAudioToggleLabel"
+                      :disabled="!canUseSpotterControls"
                       @focus="launcherToolIndex = 2"
                       @click="toggleTrackVoiceReferences"
                     >

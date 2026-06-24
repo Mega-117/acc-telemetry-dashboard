@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
@@ -28,6 +29,8 @@ const {
   coachEnabled: lapTimeAnnouncementsEnabled,
   load: loadSpotterVoiceSettings,
 } = useSpotterVoiceSettings()
+const { canEnterApp } = useFirebaseAuth()
+const canRunSpotterAudio = computed(() => canEnterApp.value)
 
 const trackVoiceReferences = ref<TrackVoiceReference[]>([])
 const trackVoiceReferencesArmed = ref(false)
@@ -48,7 +51,7 @@ const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStateP
 
 function playAudioPath(path: string, gen: number): Promise<void> {
   return new Promise<void>((resolve) => {
-    if (!path || gen !== generation) { resolve(); return }
+    if (!path || gen !== generation || !canRunSpotterAudio.value) { resolve(); return }
     const el = new Audio(getPublicPath(path))
     audio = el
     el.onended = () => { if (audio === el) audio = null; resolve() }
@@ -58,7 +61,7 @@ function playAudioPath(path: string, gen: number): Promise<void> {
 }
 
 function enqueueAudioPath(path: string) {
-  if (!path) return
+  if (!path || !canRunSpotterAudio.value) return
   const gen = generation
   queue = queue.then(() => playAudioPath(path, gen))
 }
@@ -92,8 +95,20 @@ function resetTrackVoiceReferenceLapState() {
   previousVoiceReferenceTs = Date.now()
 }
 
+function disarmTrackVoiceReferences() {
+  trackVoiceReferencesArmed.value = false
+  playedTrackVoiceReferenceIds.value = new Set()
+  previousVoiceReferencePosition = null
+  previousVoiceReferenceTs = null
+}
+
+function stopRuntimeAudioForLogout() {
+  disarmTrackVoiceReferences()
+  stopSpotterAudio()
+}
+
 function tickTrackVoiceReferences() {
-  if (!referencesEnabled.value || !trackVoiceReferencesArmed.value) return
+  if (!canRunSpotterAudio.value || !referencesEnabled.value || !trackVoiceReferencesArmed.value) return
   const currentPosition = fastState.value.normalizedCarPosition
   const track = normalizeTrackName(liveLap.value.track)
   if (currentPosition === null || !track) return
@@ -121,7 +136,7 @@ function tickTrackVoiceReferences() {
 }
 
 function announceLapTime() {
-  if (!lapTimeAnnouncementsEnabled.value) return
+  if (!canRunSpotterAudio.value || !lapTimeAnnouncementsEnabled.value) return
   const audioEntry = resolveLapTimeVoiceEntry(
     liveLap.value.lastLapTimeMs,
     liveLap.value.lapValid ?? true,
@@ -139,6 +154,7 @@ onMounted(async () => {
 })
 
 watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
+  if (!canRunSpotterAudio.value) return
   if (newVal === null || oldVal === null) return
   if (newVal <= oldVal) return
   trackVoiceReferencesArmed.value = newVal >= 1
@@ -153,9 +169,16 @@ watch(() => selectedVoice.value, async () => {
 
 watch(() => referencesEnabled.value, (enabled) => {
   if (!enabled) {
-    trackVoiceReferencesArmed.value = false
-    playedTrackVoiceReferenceIds.value = new Set()
+    disarmTrackVoiceReferences()
   }
+})
+
+watch(canRunSpotterAudio, (canRun) => {
+  if (!canRun) {
+    stopRuntimeAudioForLogout()
+    return
+  }
+  resetTrackVoiceReferenceLapState()
 })
 
 watch(() => [fastState.value.normalizedCarPosition, liveLap.value.track], () => tickTrackVoiceReferences())
@@ -179,4 +202,3 @@ onBeforeUnmount(() => {
   background: transparent;
 }
 </style>
-

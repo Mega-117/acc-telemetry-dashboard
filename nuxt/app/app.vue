@@ -43,6 +43,11 @@ const isHudOverlayRoute = computed(() => {
   return hudOverlayRoutes.includes(normalizedRoutePath.value)
     || hudOverlayRoutes.includes(browserOverlayPath.value)
 })
+const standaloneRuntimeRoutes = ['/spotter-audio-runtime']
+const isStandaloneRuntimeRoute = computed(() => {
+  return standaloneRuntimeRoutes.includes(normalizedRoutePath.value)
+    || standaloneRuntimeRoutes.includes(browserOverlayPath.value)
+})
 const standaloneDevRoutes = ['/dev-voice-lab']
 const kokoroVoiceLabLifecycle = useKokoroVoiceLabLifecycle()
 const isStandaloneDevRoute = computed(() => {
@@ -63,7 +68,7 @@ watch(normalizedRoutePath, (path, previousPath) => {
 })
 
 useHead(() => {
-  if (!isTrainingOverlayIntent.value && !isHudOverlayRoute.value) return {}
+  if (!isTrainingOverlayIntent.value && !isHudOverlayRoute.value && !isStandaloneRuntimeRoute.value) return {}
   return {
     htmlAttrs: {
       class: 'training-overlay-document'
@@ -134,7 +139,7 @@ const userEmail = ref('')
 const hasInitialized = ref(false)
 const showBrowserMaintenanceNotification = ref(false)
 const showDevFirebaseProbe = computed(() => {
-  return !isTrainingOverlayIntent.value && !isStandaloneDevRoute.value && appState.value === 'dashboard' && canUseDevTools()
+  return !isTrainingOverlayIntent.value && !isHudOverlayRoute.value && !isStandaloneRuntimeRoute.value && !isStandaloneDevRoute.value && appState.value === 'dashboard' && canUseDevTools()
 })
 
 // === CONFIG ===
@@ -178,7 +183,7 @@ function closeBrowserMaintenanceNotification() {
 
 // === DASHBOARD ENTRY MAINTENANCE ===
 watch(appState, async (newState) => {
-  if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneDevRoute.value) return
+  if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneRuntimeRoute.value || isStandaloneDevRoute.value) return
   if (newState === 'dashboard' && !hasPrefetched.value && currentUser.value && canEnterApp.value) {
     hasPrefetched.value = true
     
@@ -224,7 +229,7 @@ const enterDashboard = (delayMs = 0) => {
 // === WATCH AUTH LOADING STATE ===
 // This watch handles the INITIAL auth check when the app loads
 watch(authLoading, (loading) => {
-  if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneDevRoute.value) {
+  if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneRuntimeRoute.value || isStandaloneDevRoute.value) {
     hasInitialized.value = true
     return
   }
@@ -251,7 +256,7 @@ watch(authLoading, (loading) => {
 // === WATCH USER CHANGES (after initialization) ===
 // This handles login/logout AFTER the initial load
 watch(currentUser, (user, oldUser) => {
-  if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneDevRoute.value) return
+  if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneRuntimeRoute.value || isStandaloneDevRoute.value) return
 
   // Skip if we haven't initialized yet (handled by authLoading watch)
   if (!hasInitialized.value) return
@@ -328,10 +333,14 @@ provide('goToProfile', handleGoToProfile)
 </script>
 
 <template>
-  <div id="app" :class="{ 'app--training-overlay': isTrainingOverlayIntent || isHudOverlayRoute }">
-    <UiAppNotifications v-if="!isTrainingOverlayIntent && !isHudOverlayRoute" />
+  <div id="app" :class="{ 'app--training-overlay': isTrainingOverlayIntent || isHudOverlayRoute || isStandaloneRuntimeRoute }">
+    <UiAppNotifications v-if="!isTrainingOverlayIntent && !isHudOverlayRoute && !isStandaloneRuntimeRoute" />
 
-    <template v-if="isTrainingOverlayIntent">
+    <template v-if="isStandaloneRuntimeRoute">
+      <NuxtPage />
+    </template>
+
+    <template v-else-if="isTrainingOverlayIntent">
       <NuxtPage v-if="isTrainingOverlayRoute" />
       <div v-else class="overlay-boot" />
     </template>

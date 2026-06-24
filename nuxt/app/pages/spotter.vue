@@ -194,7 +194,7 @@ onMounted(() => {
           <p v-if="catalogError" class="panel-error">{{ catalogError }}</p>
         </section>
 
-        <section class="spotter-panel">
+        <section v-if="isAdmin" class="spotter-panel">
           <span class="spotter-kicker">Allenamenti</span>
           <h2>Audio coach</h2>
           <p>Gli step degli allenamenti usano WAV pre-generati. La scelta voce richiede rigenerazione audio nel Voice Lab.</p>
@@ -202,7 +202,7 @@ onMounted(() => {
           <span v-else class="locked-note">Copione allenamenti disponibile solo admin.</span>
         </section>
 
-        <section class="spotter-panel">
+        <section v-if="isAdmin" class="spotter-panel">
           <span class="spotter-kicker">Voice Lab</span>
           <h2>Laboratorio audio</h2>
           <p>Modifica testi, ascolta anteprime, abilita/disabilita singole righe e genera le tracce WAV.</p>

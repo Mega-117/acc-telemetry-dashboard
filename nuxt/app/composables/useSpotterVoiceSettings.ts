@@ -31,8 +31,10 @@ function canUseStorage() {
 function readSettings() {
   if (!canUseStorage()) return
   selectedVoice.value = resolveVoiceId(window.localStorage.getItem(STORAGE_KEYS.voice))
-  referencesEnabled.value = window.localStorage.getItem(STORAGE_KEYS.referencesEnabled) === '1'
-  coachEnabled.value = window.localStorage.getItem(STORAGE_KEYS.coachEnabled) === '1'
+  const referencesRaw = window.localStorage.getItem(STORAGE_KEYS.referencesEnabled)
+  const coachRaw = window.localStorage.getItem(STORAGE_KEYS.coachEnabled)
+  referencesEnabled.value = referencesRaw === null ? true : referencesRaw === '1'
+  coachEnabled.value = coachRaw === null ? true : coachRaw === '1'
   loaded.value = true
 }
 

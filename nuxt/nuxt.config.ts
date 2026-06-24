@@ -102,6 +102,7 @@ export default defineNuxtConfig({
     optimizeDeps: {
       // Vite 7 dependency pre-bundling can fail on Windows with this Nuxt app
       // while the server remains otherwise usable. Disable it only for dev.
+      disabled: 'dev',
       noDiscovery: true,
       include: ['chartjs-plugin-zoom', 'hammerjs']
     },
