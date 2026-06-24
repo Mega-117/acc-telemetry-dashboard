@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { spotterVoiceOptions, useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
+import { resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
 
 definePageMeta({ layout: 'dashboard' })
 
@@ -17,6 +18,7 @@ interface TrackVoicePoint {
   text?: string
   audio_path?: string
   audio_voice?: string
+  audio_paths?: Partial<Record<VoiceId | string, string>>
   speed?: number
   enabled?: boolean
 }
@@ -52,7 +54,7 @@ const selectedTrackPoints = computed(() => catalog.value.points
   .filter(point => point.track === selectedTrack.value && point.type === 'braking_reference')
 )
 const activeReferences = computed(() => selectedTrackPoints.value.filter(point => point.enabled !== false))
-const readyReferences = computed(() => activeReferences.value.filter(point => point.audio_path && (point.audio_voice || 'if_sara') === selectedVoice.value))
+const readyReferences = computed(() => activeReferences.value.filter(point => resolveTrackVoiceReferenceAudioPath(point, selectedVoice.value)))
 const missingReferences = computed(() => Math.max(0, activeReferences.value.length - readyReferences.value.length))
 const disabledReferences = computed(() => selectedTrackPoints.value.filter(point => point.enabled === false).length)
 const referenceStatusLabel = computed(() => {

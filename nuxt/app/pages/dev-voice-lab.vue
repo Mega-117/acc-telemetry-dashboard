@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAppNotifications } from '~/composables/useAppNotifications'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import type { SpotterVoiceId } from '~/composables/useSpotterVoiceSettings'
 import { trainingOverlayCatalog, trainingOverlayOrder, type TrainingOverlayId } from '~/config/trainingOverlayCatalog'
 import type { VoiceScript, VoiceScriptScenario, VoiceScriptStep } from '~/config/voiceScript'
 import {
@@ -13,6 +14,7 @@ import {
   type LapTimeAudioVoice,
   type LapTimeVoiceEntry,
 } from '~/services/overlay/lapTimeAnnouncer'
+import { resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
 
 definePageMeta({
   layout: 'dashboard'
@@ -45,6 +47,7 @@ interface TrackVoicePoint {
   text?: string
   audio_path?: string
   audio_voice?: string
+  audio_paths?: Record<string, string>
   speed?: number
   enabled?: boolean
   created_at?: string
@@ -56,7 +59,7 @@ interface TrackVoicePointCatalog {
 }
 
 const TTS_SERVER = 'http://localhost:5111'
-const KOKORO_ITALIAN_VOICE_IDS = ['if_sara', 'im_nicola']
+const KOKORO_ITALIAN_VOICE_IDS: SpotterVoiceId[] = ['if_sara', 'im_nicola']
 const KOKORO_BOOT_POLL_MS = 3000
 const KOKORO_BOOT_MAX_MS = 120_000
 
@@ -171,7 +174,7 @@ const lapTimePreviewEntry = computed(() => buildLapTimeVoiceEntry(lapTimeFromTen
 
 // ─── Riferimenti frenata per pista (PIP-204) ─────────────────────────────────
 const selectedReferenceTrack = ref('Spa')
-const referenceVoiceId = ref('if_sara')
+const referenceVoiceId = ref<SpotterVoiceId>('if_sara')
 const referenceCatalog = ref<TrackVoicePointCatalog>({ tracks: ['Spa'], points: [] })
 const referencesBusy = ref(false)
 const referencesStatus = ref('')
@@ -186,18 +189,19 @@ const availableReferenceTracks = computed(() => {
 
 const referenceRows = computed(() => referenceCatalog.value.points
   .filter(point => point.track === selectedReferenceTrack.value && point.type === 'braking_reference')
-  .map((point, index) => {
-    const storedVoice = point.audio_voice || referenceVoiceId.value
-    return {
-      ...point,
-      label: point.label?.trim() || `Riferimento ${index + 1}`,
-      text: point.text ?? `Riferimento ${index + 1}`,
-      speed: point.speed ?? 1.15,
-      audio_voice: referenceVoiceId.value,
-      audio_path: storedVoice === referenceVoiceId.value ? point.audio_path : '',
-    }
-  })
+  .map((point, index) => ({
+    ...point,
+    label: point.label?.trim() || `Riferimento ${index + 1}`,
+    text: point.text ?? `Riferimento ${index + 1}`,
+    speed: point.speed ?? 1.15,
+    audio_voice: referenceVoiceId.value,
+    audio_path: referenceAudioPath(point, referenceVoiceId.value),
+  }))
 )
+
+function referenceAudioPath(entry: TrackVoicePoint, voice: SpotterVoiceId = referenceVoiceId.value) {
+  return resolveTrackVoiceReferenceAudioPath(entry, voice)
+}
 
 function referenceRowState(entry: TrackVoicePoint): RowState {
   return referenceTasks.value[entry.id]?.state ?? 'idle'
@@ -220,7 +224,7 @@ function patchReferenceRow(entry: TrackVoicePoint, patch: Partial<TrackVoicePoin
   }
 }
 
-function referenceWavName(entry: TrackVoicePoint, voice: string) {
+function referenceWavName(entry: TrackVoicePoint, voice: SpotterVoiceId) {
   return `${entry.id}-${voice}.wav`
 }
 
@@ -237,17 +241,17 @@ function toggleReferenceEnabled(entry: TrackVoicePoint) {
   patchReferenceRow(entry, { enabled: entry.enabled === false })
 }
 
-function setReferenceVoice(voice: string) {
+function setReferenceVoice(voice: SpotterVoiceId) {
   if (!KOKORO_ITALIAN_VOICE_IDS.includes(voice)) return
   referenceVoiceId.value = voice
-  referencesStatus.value = `Voce riferimenti: ${voice === 'im_nicola' ? 'Nicola' : 'Sara'}. Rigenera le tracce mancanti per usare solo questa voce.`
+  referencesStatus.value = `Voce riferimenti: ${voice === 'im_nicola' ? 'Nicola' : 'Sara'}. Genera tutte crea comunque Sara e Nicola.`
 }
 
 function syncReferenceVoiceFromTrack() {
   const voices = referenceCatalog.value.points
     .filter(point => point.track === selectedReferenceTrack.value && point.type === 'braking_reference')
     .map(point => point.audio_voice)
-    .filter((voice): voice is string => Boolean(voice && KOKORO_ITALIAN_VOICE_IDS.includes(voice)))
+    .filter((voice): voice is SpotterVoiceId => Boolean(voice && KOKORO_ITALIAN_VOICE_IDS.includes(voice as SpotterVoiceId)))
   const uniqueVoices = Array.from(new Set(voices))
   if (uniqueVoices.length === 1) referenceVoiceId.value = uniqueVoices[0]!
 }
@@ -275,8 +279,24 @@ async function loadReferences() {
   }
 }
 
-async function saveReference(entry: TrackVoicePoint): Promise<boolean> {
-  const normalizedEntry = { ...entry, audio_voice: referenceVoiceId.value, enabled: entry.enabled !== false }
+function referenceAudioPaths(entry: TrackVoicePoint) {
+  const audioPaths = { ...(entry.audio_paths || {}) }
+  if (entry.audio_path && KOKORO_ITALIAN_VOICE_IDS.includes(entry.audio_voice as SpotterVoiceId)) {
+    audioPaths[entry.audio_voice as SpotterVoiceId] = entry.audio_path
+  }
+  return audioPaths
+}
+
+function withReferenceAudioPath(entry: TrackVoicePoint, voice: SpotterVoiceId, path: string): TrackVoicePoint {
+  const audioPaths = referenceAudioPaths(entry)
+  if (path) audioPaths[voice] = path
+  else delete audioPaths[voice]
+  return { ...entry, audio_paths: audioPaths, audio_path: path, audio_voice: voice }
+}
+
+async function saveReference(entry: TrackVoicePoint, voice: SpotterVoiceId = referenceVoiceId.value): Promise<boolean> {
+  const audioPath = referenceAudioPath(entry, voice)
+  const normalizedEntry = { ...entry, audio_paths: referenceAudioPaths(entry), audio_path: audioPath, audio_voice: voice, enabled: entry.enabled !== false }
   referenceTasks.value[entry.id] = { state: 'saving', message: 'Salvo...' }
   try {
     await $fetch('/api/dev/track-voice-points', {
@@ -295,26 +315,26 @@ async function saveReference(entry: TrackVoicePoint): Promise<boolean> {
 async function playReference(entry: TrackVoicePoint) {
   if (entry.enabled === false) return
   const text = entry.text ?? ''
-  if (!text.trim() && !entry.audio_path) return
+  const audioPath = referenceAudioPath(entry)
+  if (!text.trim() && !audioPath) return
   const label = `${entry.label || text || 'Riferimento'} - ${referenceVoiceId.value === 'im_nicola' ? 'Nicola' : 'Sara'}`
-  if (entry.audio_path) {
-    await playAudioSource(`${entry.audio_path}?t=${Date.now()}`, label)
+  if (audioPath) {
+    await playAudioSource(`${audioPath}?t=${Date.now()}`, label)
     return
   }
   await playAudioSource(kokoroSpeakUrl(text, referenceVoiceId.value, entry.speed ?? 1.15), label)
 }
 
-async function generateReference(entry: TrackVoicePoint) {
+async function generateReference(entry: TrackVoicePoint, voice: SpotterVoiceId = referenceVoiceId.value) {
   if (serverState.value !== 'online') return false
   const text = (entry.text ?? '').trim()
   if (entry.enabled === false || !text) {
-    const skippedEntry = { ...entry, text: entry.text ?? '', audio_path: '', audio_voice: referenceVoiceId.value, enabled: entry.enabled !== false }
+    const skippedEntry = withReferenceAudioPath({ ...entry, text: entry.text ?? '', enabled: entry.enabled !== false }, voice, '')
     patchReferenceRow(entry, skippedEntry)
-    await saveReference(skippedEntry)
+    await saveReference(skippedEntry, voice)
     referenceTasks.value[entry.id] = { state: 'done', message: entry.enabled === false ? 'Disattivato' : 'Vuoto' }
     return true
   }
-  const voice = referenceVoiceId.value
   referenceTasks.value[entry.id] = { state: 'generating', message: `Genero ${voice}...` }
   kokoroLifecycle.beginWork()
   try {
@@ -327,11 +347,12 @@ async function generateReference(entry: TrackVoicePoint) {
         dataBase64: await blobToBase64(blob),
       },
     })
-    const savedEntry = { ...entry, audio_path: response.path, audio_voice: voice, enabled: true }
+    const savedEntry = withReferenceAudioPath({ ...entry, enabled: true }, voice, response.path)
     patchReferenceRow(entry, savedEntry)
-    await saveReference(savedEntry)
-    referenceTasks.value[entry.id] = { state: 'done', message: 'WAV aggiornato' }
-    pushToast(`${entry.label || entry.text}: WAV generato`, 'success')
+    await saveReference(savedEntry, voice)
+    referenceTasks.value[entry.id] = { state: 'done', message: `WAV ${voice === 'im_nicola' ? 'Nicola' : 'Sara'} aggiornato` }
+    pushToast(`${entry.label || entry.text}: WAV ${voice === 'im_nicola' ? 'Nicola' : 'Sara'} generato`, 'success')
+    return true
   } catch (error: any) {
     referenceTasks.value[entry.id] = { state: 'error', message: error?.data?.statusMessage || error?.message || 'errore' }
     pushToast('Generazione riferimento fallita', 'error')
@@ -342,24 +363,32 @@ async function generateReference(entry: TrackVoicePoint) {
   }
 }
 
+function latestReferenceRow(id: string) {
+  return referenceRows.value.find(point => point.id === id)
+}
+
 async function generateAllReferences() {
   if (serverState.value !== 'online' || referencesBatchBusy.value || !referenceRows.value.length) return
   referencesBatchBusy.value = true
   referencesError.value = ''
   let ok = 0
+  const total = referenceRows.value.length * KOKORO_ITALIAN_VOICE_IDS.length
   try {
     for (let i = 0; i < referenceRows.value.length; i += 1) {
-      referencesStatus.value = `Genero riferimenti ${i + 1}/${referenceRows.value.length}...`
-      if (await generateReference(referenceRows.value[i]!)) ok += 1
+      const rowId = referenceRows.value[i]!.id
+      for (const voice of KOKORO_ITALIAN_VOICE_IDS) {
+        const current = latestReferenceRow(rowId) || referenceRows.value[i]!
+        referencesStatus.value = `Genero riferimenti ${ok + 1}/${total}...`
+        if (await generateReference(current, voice)) ok += 1
+      }
     }
-    referencesStatus.value = `Generate ${ok}/${referenceRows.value.length} tracce per ${selectedReferenceTrack.value}.`
-    if (ok === referenceRows.value.length) pushToast(`Riferimenti ${selectedReferenceTrack.value}: WAV generati`, 'success')
-    else pushToast(`Generate ${ok}/${referenceRows.value.length}: controlla le righe in errore`, 'error')
+    referencesStatus.value = `Generate ${ok}/${total} tracce Sara e Nicola per ${selectedReferenceTrack.value}.`
+    if (ok === total) pushToast(`Riferimenti ${selectedReferenceTrack.value}: WAV Sara e Nicola generati`, 'success')
+    else pushToast(`Generate ${ok}/${total}: controlla le righe in errore`, 'error')
   } finally {
     referencesBatchBusy.value = false
   }
 }
-
 async function loadLapTimeCatalog() {
   clampLapTimeRange()
   lapTimeCatalogBusy.value = true
@@ -538,7 +567,7 @@ async function probeServer(): Promise<'ready' | 'warming' | 'error' | 'offline'>
     serverMessage.value = data.message || serverMessage.value
     if (data.state === 'online') {
       const voices = Array.isArray(data.voices) ? data.voices : []
-      serverVoices.value = voices.filter((v: ServerVoice) => KOKORO_ITALIAN_VOICE_IDS.includes(v.id))
+      serverVoices.value = voices.filter((v: ServerVoice) => KOKORO_ITALIAN_VOICE_IDS.includes(v.id as SpotterVoiceId))
       return serverVoices.value.length > 0 ? 'ready' : 'error'
     }
     serverVoices.value = []
@@ -1000,7 +1029,7 @@ onBeforeUnmount(() => {
           <div>
             <span class="voice-kicker">Riferimenti frenata</span>
             <h2>Riferimenti</h2>
-            <p>Seleziona la pista e genera le tracce audio dai punti registrati in allenamento.</p>
+            <p>Seleziona la pista e genera le tracce audio Sara e Nicola dai punti registrati in allenamento.</p>
           </div>
           <div class="reference-track-select">
             <label>
@@ -1016,7 +1045,7 @@ onBeforeUnmount(() => {
             </div>
             <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy" @click="loadReferences">Aggiorna</button>
             <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || !referenceRows.length" @click="generateAllReferences">
-              {{ referencesBatchBusy ? 'Genero...' : 'Genera tutte' }}
+              {{ referencesBatchBusy ? 'Genero...' : 'Genera Sara + Nicola' }}
             </button>
           </div>
         </div>
@@ -1051,7 +1080,7 @@ onBeforeUnmount(() => {
                 <small>posizione {{ entry.normalized_car_position.toFixed(5) }} · {{ entry.car || 'auto n/d' }}</small>
               </div>
               <span class="lap-time-state" :class="{ 'is-ready': Boolean(entry.audio_path) && entry.enabled !== false }">
-                {{ entry.enabled === false ? 'Disattivo' : entry.audio_path ? 'WAV pronto' : 'Manca WAV' }}
+                {{ entry.enabled === false ? 'Disattivo' : entry.audio_path ? 'WAV pronto' : 'Manca WAV per voce' }}
               </span>
             </header>
             <textarea :value="entry.text" rows="2" maxlength="280" @input="updateReferenceText(entry, $event)" />
@@ -1068,7 +1097,7 @@ onBeforeUnmount(() => {
               <button type="button" :disabled="entry.enabled === false || isSpeaking || (!entry.audio_path && (!entry.text?.trim() || serverState !== 'online'))" @click="playReference(entry)">Ascolta</button>
               <button type="button" :disabled="referenceRowBusy(entry)" @click="saveReference(entry)">Salva</button>
               <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || referenceRowBusy(entry)" @click="generateReference(entry)">
-                {{ referenceRowBusy(entry) ? '...' : 'Genera traccia' }}
+                {{ referenceRowBusy(entry) ? '...' : 'Genera voce' }}
               </button>
             </footer>
           </article>

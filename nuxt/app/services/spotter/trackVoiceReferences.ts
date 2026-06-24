@@ -9,6 +9,7 @@ export interface TrackVoiceReference {
   text?: string
   audio_path?: string
   audio_voice?: SpotterVoiceId | string
+  audio_paths?: Partial<Record<SpotterVoiceId | string, string>>
   enabled?: boolean
 }
 
@@ -21,17 +22,28 @@ export function crossedReferencePoint(previous: number, current: number, target:
   return target > previous || target <= current
 }
 
+export function resolveTrackVoiceReferenceAudioPath(
+  point: TrackVoiceReference,
+  voice: SpotterVoiceId,
+) {
+  const multiVoicePath = point.audio_paths?.[voice]?.trim()
+  if (multiVoicePath) return multiVoicePath
+
+  const legacyVoice = point.audio_voice || 'if_sara'
+  if (point.audio_path && legacyVoice === voice) return point.audio_path
+  return ''
+}
+
 export function filterPlayableTrackVoiceReferences(
   points: TrackVoiceReference[],
   voice: SpotterVoiceId,
 ) {
   return points
-    .filter(point =>
-      point.enabled !== false &&
-      point.type === 'braking_reference' &&
-      !!point.audio_path &&
-      (point.audio_voice || 'if_sara') === voice,
-    )
+    .map(point => ({
+      ...point,
+      audio_path: resolveTrackVoiceReferenceAudioPath(point, voice),
+      audio_voice: voice,
+    }))
+    .filter(point => point.enabled !== false && point.type === 'braking_reference' && !!point.audio_path)
     .sort((a, b) => a.normalized_car_position - b.normalized_car_position)
 }
-

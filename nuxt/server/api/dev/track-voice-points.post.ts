@@ -12,6 +12,17 @@ function cleanSpeed(value: unknown) {
   return Math.max(0.5, Math.min(2, speed))
 }
 
+function cleanAudioPaths(value: unknown) {
+  if (!value || typeof value !== 'object') return undefined
+  const cleaned: Record<string, string> = {}
+  for (const [voice, path] of Object.entries(value as Record<string, unknown>)) {
+    if (!SAFE_VOICE_IDS.has(voice)) continue
+    const safePath = cleanText(path)
+    if (safePath) cleaned[voice] = safePath
+  }
+  return cleaned
+}
+
 export default defineEventHandler(async (event) => {
   if (process.env.NODE_ENV === 'production') {
     throw createError({ statusCode: 404, statusMessage: 'Not found' })
@@ -34,9 +45,29 @@ export default defineEventHandler(async (event) => {
     const next = { ...point }
     next.label = cleanText(update.label, point.label)
     next.text = cleanText(update.text, point.text)
-    next.audio_path = cleanText(update.audio_path, point.audio_path)
+
+    const incomingPaths = cleanAudioPaths(update.audio_paths)
+    const mergedPaths = { ...(point.audio_paths || {}) }
+    if (point.audio_path && SAFE_VOICE_IDS.has(point.audio_voice || '')) {
+      mergedPaths[point.audio_voice!] = point.audio_path
+    }
+    if (incomingPaths) {
+      for (const voice of SAFE_VOICE_IDS) {
+        if (incomingPaths[voice]) mergedPaths[voice] = incomingPaths[voice]
+        else if (update.audio_paths && Object.prototype.hasOwnProperty.call(update.audio_paths, voice)) delete mergedPaths[voice]
+      }
+    }
+
     const voice = cleanText(update.audio_voice, point.audio_voice)
-    if (SAFE_VOICE_IDS.has(voice)) next.audio_voice = voice
+    const audioPath = cleanText(update.audio_path, point.audio_path)
+    if (SAFE_VOICE_IDS.has(voice)) {
+      next.audio_voice = voice
+      next.audio_path = audioPath
+      if (audioPath) mergedPaths[voice] = audioPath
+      else if (Object.prototype.hasOwnProperty.call(update, 'audio_path')) delete mergedPaths[voice]
+    }
+
+    next.audio_paths = mergedPaths
     const speed = cleanSpeed(update.speed)
     if (speed !== undefined) next.speed = speed
     if (typeof update.enabled === 'boolean') next.enabled = update.enabled
