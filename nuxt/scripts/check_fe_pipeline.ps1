@@ -1,6 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-$nodeExe = if (Test-Path 'C:\nvm4w\nodejs\node.exe') { 'C:\nvm4w\nodejs\node.exe' } else { 'node.exe' }
+$nodeExe = if (Test-Path 'C:\nvm4w\nodejs\node.exe') { 'C:\nvm4w\nodejs\node.exe' } elseif ($IsWindows -or $env:OS -eq 'Windows_NT') { 'node.exe' } else { 'node' }
 
 function Get-NormalizedPath([string]$path) {
     return $path.Replace('\', '/')
