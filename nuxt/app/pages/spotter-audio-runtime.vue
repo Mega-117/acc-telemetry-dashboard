@@ -30,6 +30,7 @@ const {
   load: loadSpotterVoiceSettings,
 } = useSpotterVoiceSettings()
 const { canEnterApp } = useFirebaseAuth()
+const voiceLabRuntime = useVoiceLabRuntime()
 const canRunSpotterAudio = computed(() => canEnterApp.value)
 
 const trackVoiceReferences = ref<TrackVoiceReference[]>([])
@@ -78,7 +79,7 @@ function stopSpotterAudio() {
 
 async function loadTrackVoiceReferences() {
   try {
-    const data = await $fetch<{ points: TrackVoiceReference[] }>('/api/track-voice-points')
+    const data = await voiceLabRuntime.readVoicePoints<{ points: TrackVoiceReference[] }>()
     trackVoiceReferences.value = filterPlayableTrackVoiceReferences(
       Array.isArray(data.points) ? data.points : [],
       selectedVoice.value,

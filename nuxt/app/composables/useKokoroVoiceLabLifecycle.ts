@@ -15,6 +15,7 @@ export function useKokoroVoiceLabLifecycle() {
   const isVoiceLabActive = useState('kokoro-voice-lab-active', () => false)
   const workCount = useState('kokoro-voice-lab-work-count', () => 0)
   const { push } = useAppNotifications()
+  const voiceLabRuntime = useVoiceLabRuntime()
 
   function cancelShutdown() {
     if (idleShutdownHandle) {
@@ -42,7 +43,7 @@ export function useKokoroVoiceLabLifecycle() {
       idleShutdownHandle = null
       if (isVoiceLabActive.value || isVoiceLabPathActive() || isWorking()) return
       try {
-        const result = await $fetch<{ status: string; message?: string }>('/api/dev/kokoro-stop', { method: 'POST' })
+        const result = await voiceLabRuntime.kokoroStop() as { status: string; message?: string }
         if (result.status === 'stopped' || result.status === 'already-stopped' || result.status === 'offline') {
           push('Motore vocale Kokoro spento.', 'success')
           return

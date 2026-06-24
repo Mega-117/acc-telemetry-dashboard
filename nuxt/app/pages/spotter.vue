@@ -29,6 +29,7 @@ interface TrackVoicePointCatalog {
 }
 
 const { isAdmin } = useFirebaseAuth()
+const voiceLabRuntime = useVoiceLabRuntime()
 const {
   selectedVoice,
   voiceLabel,
@@ -70,7 +71,7 @@ async function loadCatalog() {
   catalogBusy.value = true
   catalogError.value = ''
   try {
-    catalog.value = await $fetch<TrackVoicePointCatalog>('/api/track-voice-points')
+    catalog.value = await voiceLabRuntime.readVoicePoints<TrackVoicePointCatalog>()
     if (!availableTracks.value.includes(selectedTrack.value)) selectedTrack.value = availableTracks.value[0] || 'Spa'
   } catch (error: any) {
     catalogError.value = error?.data?.statusMessage || error?.message || 'Riferimenti non disponibili'
@@ -82,7 +83,7 @@ async function loadCatalog() {
 async function checkRuntime() {
   runtimeState.value = 'checking'
   try {
-    const data = await $fetch<{ state: RuntimeState; message?: string }>('/api/dev/kokoro-ready', { retry: 0 })
+    const data = await voiceLabRuntime.kokoroReady() as { state: RuntimeState; message?: string }
     runtimeState.value = data.state
     runtimeMessage.value = data.message || (data.state === 'online' ? 'Motore vocale online.' : 'Motore vocale non pronto.')
   } catch (error: any) {

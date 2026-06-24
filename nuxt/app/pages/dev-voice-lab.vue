@@ -73,6 +73,7 @@ let bootPollHandle: ReturnType<typeof setTimeout> | null = null
 let voiceLabMounted = false
 const appNotifications = useAppNotifications()
 const kokoroLifecycle = useKokoroVoiceLabLifecycle()
+const voiceLabRuntime = useVoiceLabRuntime()
 const route = useRoute()
 const { isAdmin } = useFirebaseAuth()
 const hasFullVoiceLabAccess = computed(() => isAdmin.value)
@@ -290,7 +291,7 @@ async function loadReferences() {
   referencesError.value = ''
   referencesStatus.value = 'Carico riferimenti...'
   try {
-    referenceCatalog.value = await $fetch<TrackVoicePointCatalog>('/api/dev/track-voice-points')
+    referenceCatalog.value = await voiceLabRuntime.readVoicePoints<TrackVoicePointCatalog>()
     if (!availableReferenceTracks.value.includes(selectedReferenceTrack.value)) {
       selectedReferenceTrack.value = availableReferenceTracks.value[0] || 'Spa'
     }
@@ -323,10 +324,7 @@ async function saveReference(entry: TrackVoicePoint, voice: SpotterVoiceId = ref
   const normalizedEntry = { ...entry, audio_paths: referenceAudioPaths(entry), audio_path: audioPath, audio_voice: voice, enabled: entry.enabled !== false, timing_offset_sec: clampReferenceTimingOffset(entry.timing_offset_sec) }
   referenceTasks.value[entry.id] = { state: 'saving', message: 'Salvo...' }
   try {
-    await $fetch('/api/dev/track-voice-points', {
-      method: 'POST',
-      body: { points: [normalizedEntry] },
-    })
+    await voiceLabRuntime.writeVoicePoints({ points: [normalizedEntry] })
     patchReferenceRow(entry, normalizedEntry)
     referenceTasks.value[entry.id] = { state: 'done', message: 'Salvato' }
     return true
@@ -346,7 +344,7 @@ async function playReference(entry: TrackVoicePoint) {
     await playAudioSource(`${audioPath}?t=${Date.now()}`, label)
     return
   }
-  await playAudioSource(kokoroSpeakUrl(text, referenceVoiceId.value, entry.speed ?? 1.15), label)
+  await playBlob(await synthesize(text, referenceVoiceId.value, entry.speed ?? 1.15), label)
 }
 
 async function generateReference(entry: TrackVoicePoint, voice: SpotterVoiceId = referenceVoiceId.value) {
@@ -363,13 +361,10 @@ async function generateReference(entry: TrackVoicePoint, voice: SpotterVoiceId =
   kokoroLifecycle.beginWork()
   try {
     const blob = await synthesize(text, voice, entry.speed ?? 1.15)
-    const response = await $fetch<{ path: string }>('/api/dev/voice-reference-wav', {
-      method: 'POST',
-      body: {
-        track: entry.track,
-        filename: referenceWavName(entry, voice),
-        dataBase64: await blobToBase64(blob),
-      },
+    const response = await voiceLabRuntime.saveReferenceWav({
+      track: entry.track,
+      filename: referenceWavName(entry, voice),
+      dataBase64: await blobToBase64(blob),
     })
     const savedEntry = withReferenceAudioPath({ ...entry, enabled: true }, voice, response.path)
     patchReferenceRow(entry, savedEntry)
@@ -470,7 +465,7 @@ async function playLapTimeEntry(entry: LapTimeCatalogRow | LapTimeVoiceEntry) {
     if ('exists' in entry && entry.exists) {
       await playAudioSource(`${entry.path}?t=${Date.now()}`, label)
     } else {
-      await playAudioSource(kokoroSpeakUrl(entry.text, lapTimeVoiceId.value, lapTimeSpeed.value), label)
+      await playBlob(await synthesize(entry.text, lapTimeVoiceId.value, lapTimeSpeed.value), label)
     }
   } catch (error: any) {
     lapTimeCatalogError.value = `Ascolto tempo non riuscito: ${error?.message || 'errore'}`
@@ -604,9 +599,7 @@ function markDirty(entry?: VoiceScriptStep | VoiceScriptScenario) {
 // ─── Server Kokoro: stato + autostart ────────────────────────────────────────
 async function probeServer(): Promise<'ready' | 'warming' | 'error' | 'offline'> {
   try {
-    const data = await $fetch<{ state: 'online' | 'starting' | 'offline' | 'error'; message?: string; voices?: ServerVoice[] }>('/api/dev/kokoro-ready', {
-      signal: AbortSignal.timeout(65_000),
-    })
+    const data = await voiceLabRuntime.kokoroReady() as { state: 'online' | 'starting' | 'offline' | 'error'; message?: string; voices?: ServerVoice[] }
     serverMessage.value = data.message || serverMessage.value
     if (data.state === 'online') {
       const voices = Array.isArray(data.voices) ? data.voices : []
@@ -643,7 +636,8 @@ async function ensureKokoro() {
     serverMessage.value = 'Avvio Kokoro e scaldo il modello con una sintesi reale...'
     startBootTimer()
     try {
-      await $fetch('/api/dev/kokoro-start', { method: 'POST' })
+      const startResult = await voiceLabRuntime.kokoroStart() as { status?: string; message?: string }
+      if (startResult?.status === 'error') throw new Error(startResult.message || 'Avvio Kokoro fallito')
     } catch (error: any) {
       stopBootTimer()
       serverState.value = 'error'
@@ -709,14 +703,11 @@ async function saveScript() {
 
 // ─── Sintesi: ascolto e rigenerazione ────────────────────────────────────────
 function kokoroSpeakUrl(text: string, voice: string, speed: number) {
-  return `/api/dev/kokoro-speak?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&speed=${encodeURIComponent(String(speed))}`
+  return voiceLabRuntime.kokoroSpeakUrl(text, voice, speed)
 }
 
 async function synthesize(text: string, voice: string, speed: number): Promise<Blob> {
-  const url = kokoroSpeakUrl(text, voice, speed)
-  const response = await fetch(url, { signal: AbortSignal.timeout(60_000) })
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  return new Blob([await response.arrayBuffer()], { type: 'audio/wav' })
+  return await voiceLabRuntime.synthesize(text, voice, speed)
 }
 
 function revokePreviewAudio() {
@@ -789,7 +780,7 @@ async function playText(text: string, speed: number, label = 'Anteprima') {
   previewAudioLabel.value = label
   previewAudioStatus.value = 'Genero anteprima...'
   try {
-    await playAudioSource(kokoroSpeakUrl(text.trim(), previewVoiceId.value, speed), label)
+    await playBlob(await synthesize(text.trim(), previewVoiceId.value, speed), label)
   } catch (error: any) {
     previewAudioStatus.value = ''
     previewAudioError.value = `Sintesi non riuscita: ${error?.message || 'errore'}`
@@ -923,8 +914,12 @@ onMounted(async () => {
   voiceLabMounted = true
   kokoroLifecycle.enterVoiceLab()
   await nextTick()
-  await Promise.all([ensureKokoro(), loadScript(), loadReferences()])
-  await loadLapTimeCatalog()
+  if (hasFullVoiceLabAccess.value) {
+    await Promise.all([ensureKokoro(), loadScript(), loadReferences()])
+    await loadLapTimeCatalog()
+    return
+  }
+  await Promise.all([ensureKokoro(), loadReferences()])
 })
 
 onBeforeUnmount(() => {

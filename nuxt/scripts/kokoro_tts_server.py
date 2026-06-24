@@ -14,10 +14,10 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(os.environ.get("ACC_KOKORO_ROOT", Path(__file__).resolve().parents[1])).resolve()
 WORKSPACE_ROOT = ROOT.parent
-VOICE_DIR = ROOT / "node_modules" / "kokoro-js" / "voices"
-LOCAL_MODEL_DIR = WORKSPACE_ROOT / "vendor" / "kokoro" / "Kokoro-82M"
+VOICE_DIR = Path(os.environ.get("ACC_KOKORO_VOICE_DIR", ROOT / "node_modules" / "kokoro-js" / "voices")).resolve()
+LOCAL_MODEL_DIR = Path(os.environ.get("ACC_KOKORO_MODEL_DIR", WORKSPACE_ROOT / "vendor" / "kokoro" / "Kokoro-82M")).resolve()
 DEFAULT_REPO_ID = "hexgrad/Kokoro-82M"
 SAMPLE_RATE = 24_000
 WARMUP_TEXT = "prova."
@@ -102,7 +102,7 @@ READINESS = {
 
 
 def configure_temp_dir() -> None:
-    temp_dir = WORKSPACE_ROOT / ".codex-tmp"
+    temp_dir = Path(os.environ.get("ACC_KOKORO_TEMP_DIR", WORKSPACE_ROOT / ".codex-tmp")).resolve()
     temp_dir.mkdir(exist_ok=True)
     os.environ.setdefault("TMP", str(temp_dir))
     os.environ.setdefault("TEMP", str(temp_dir))

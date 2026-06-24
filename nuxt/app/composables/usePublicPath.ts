@@ -11,6 +11,7 @@ export function usePublicPath() {
      * @returns Path completo con baseURL
      */
     function getPublicPath(path: string): string {
+        if (/^(https?:|data:|blob:|file:|acc-voice:)/i.test(path)) return path
         // Rimuovi lo slash iniziale se presente per evitare doppi slash
         const cleanPath = path.startsWith('/') ? path.slice(1) : path
         const base = config.app.baseURL || '/'
