@@ -43,6 +43,7 @@ export default defineConfig({
         'app/services/telemetry/theoreticalTimesCalculator.ts',
         'app/services/spotter/trackVoiceReferences.ts',
         'app/utils/firestoreSanitize.ts',
+        'app/utils/featureAccess.ts',
         'app/utils/sessionParser.ts',
         'server/utils/kokoroRuntimeStatus.ts',
         'server/utils/trackVoicePointMerge.ts',

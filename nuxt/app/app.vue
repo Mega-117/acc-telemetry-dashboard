@@ -146,6 +146,8 @@ const dashboardRoutePrefixes = [
   '/spotter',
   '/dev-voice-lab',
   '/area-pilota',
+  '/hud',
+  '/test-hud',
   '/profilo',
   '/preparazione',
   '/piloti'

@@ -5,12 +5,12 @@
 // ============================================
 
 defineProps<{
-  activeTab?: 'panoramica' | 'sessioni' | 'piste' | 'spotter' | 'area-pilota' | 'test-hud'
+  activeTab?: 'panoramica' | 'sessioni' | 'piste' | 'spotter' | 'area-pilota' | 'hud'
 }>()
 
 const route = useRoute()
-
-// PIP-187: Test HUD e' temporaneamente pubblica per QA overlay develop/prod.
+const { canAccess } = useFeatureAccess()
+const canAccessHud = canAccess('hud')
 
 const baseTabs = [
   { id: 'panoramica', label: 'PANORAMICA', to: '/panoramica' },
@@ -19,7 +19,10 @@ const baseTabs = [
   { id: 'spotter', label: 'SPOTTER', to: '/spotter' }
 ]
 
-const tabs = computed(() => [...baseTabs, { id: 'test-hud', label: 'TEST HUD', to: '/test-hud' }])
+const tabs = computed(() => {
+  if (!canAccessHud.value) return baseTabs
+  return [...baseTabs, { id: 'hud', label: 'HUD', to: '/hud' }]
+})
 
 // Check if tab is active based on current route
 const isActive = (tabTo: string) => {

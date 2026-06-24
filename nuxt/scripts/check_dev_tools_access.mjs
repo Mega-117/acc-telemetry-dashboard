@@ -16,8 +16,7 @@ const requiredFiles = [
   'app/pages/dev-rebuild.vue',
   'app/pages/dev-cleanup.vue',
   'app/pages/dev-data-audit.vue',
-  'app/pages/dev-upload.vue',
-  'app/pages/test-hud.vue'
+  'app/pages/dev-upload.vue'
 ]
 
 for (const relativePath of requiredFiles) {
@@ -25,6 +24,26 @@ for (const relativePath of requiredFiles) {
   assert.match(source, /definePageMeta\s*\(/, `${relativePath} must define page meta`)
   assert.match(source, /middleware:\s*['"]dev-tools['"]/, `${relativePath} must use dev-tools middleware`)
 }
+
+const hud = read('app/pages/hud.vue')
+assert.match(hud, /definePageMeta\s*\(/, 'hud.vue must define page meta')
+assert.match(hud, /middleware:\s*['"]hud-access['"]/, 'hud.vue must use hud-access middleware')
+assert.match(hud, /<h1>HUD<\/h1>/, 'HUD page must use user-facing HUD label')
+assert.doesNotMatch(hud, /middleware:\s*['"]dev-tools['"]/, 'HUD must not use dev-tools middleware')
+
+const testHud = read('app/pages/test-hud.vue')
+assert.match(testHud, /navigateTo\(['"]\/hud['"]\)/, 'test-hud.vue must redirect to /hud')
+assert.doesNotMatch(testHud, /middleware:\s*['"]dev-tools['"]/, 'test-hud legacy redirect must not expose dev-tools access')
+
+const hudMiddleware = read('app/middleware/hud-access.ts')
+assert.match(hudMiddleware, /canAccessFeature\(['"]hud['"]/, 'hud-access middleware must use centralized HUD capability')
+assert.doesNotMatch(hudMiddleware, /enablePilotHud|NUXT_PUBLIC_ENABLE_PILOT_HUD|useRuntimeConfig/, 'hud-access middleware must not depend on an env flag')
+assert.match(hudMiddleware, /navigateTo\(['"]\/panoramica['"]\)/, 'hud-access middleware must redirect denied users to panoramica')
+
+const featureAccess = read('app/utils/featureAccess.ts')
+assert.match(featureAccess, /export function canAccessFeature/, 'feature access must expose a centralized helper')
+assert.match(featureAccess, /AUTHENTICATED_APP_ROLES/, 'HUD access must be role-based for authenticated app users')
+assert.doesNotMatch(featureAccess, /enablePilotHud|parsePublicFlag|NUXT_PUBLIC_ENABLE_PILOT_HUD/, 'HUD access must not depend on an env flag')
 
 const voiceLab = read('app/pages/dev-voice-lab.vue')
 assert.match(voiceLab, /definePageMeta\s*\(/, 'dev-voice-lab.vue must define page meta')
