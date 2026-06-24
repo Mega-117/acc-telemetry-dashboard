@@ -7,7 +7,9 @@ import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
 import {
   crossedReferencePoint,
+  effectiveReferencePosition,
   filterPlayableTrackVoiceReferences,
+  normalizedSpeedPerSecond,
   normalizeTrackName,
   type TrackVoiceReference,
 } from '~/services/spotter/trackVoiceReferences'
@@ -31,6 +33,7 @@ const trackVoiceReferences = ref<TrackVoiceReference[]>([])
 const trackVoiceReferencesArmed = ref(false)
 const playedTrackVoiceReferenceIds = ref<Set<string>>(new Set())
 let previousVoiceReferencePosition: number | null = null
+let previousVoiceReferenceTs: number | null = null
 let audio: HTMLAudioElement | null = null
 let queue = Promise.resolve()
 let generation = 0
@@ -86,6 +89,7 @@ async function loadTrackVoiceReferences() {
 function resetTrackVoiceReferenceLapState() {
   playedTrackVoiceReferenceIds.value = new Set()
   previousVoiceReferencePosition = fastState.value.normalizedCarPosition
+  previousVoiceReferenceTs = Date.now()
 }
 
 function tickTrackVoiceReferences() {
@@ -94,15 +98,20 @@ function tickTrackVoiceReferences() {
   const track = normalizeTrackName(liveLap.value.track)
   if (currentPosition === null || !track) return
 
+  const now = Date.now()
   const previous = previousVoiceReferencePosition
+  const previousTs = previousVoiceReferenceTs
   previousVoiceReferencePosition = currentPosition
-  if (previous === null) return
+  previousVoiceReferenceTs = now
+  if (previous === null || previousTs === null) return
+
+  const speedPerSecond = normalizedSpeedPerSecond(previous, currentPosition, now - previousTs)
 
   const alreadyPlayed = playedTrackVoiceReferenceIds.value
   const nextReference = trackVoiceReferences.value.find(point =>
     normalizeTrackName(point.track) === track &&
     !alreadyPlayed.has(point.id) &&
-    crossedReferencePoint(previous, currentPosition, point.normalized_car_position)
+    crossedReferencePoint(previous, currentPosition, effectiveReferencePosition(point, speedPerSecond))
   )
   if (!nextReference?.audio_path) return
 

@@ -12,6 +12,7 @@ export interface TrackVoicePoint {
   speed?: number
   enabled?: boolean
   lead_time_sec?: number | null
+  timing_offset_sec?: number | null
   created_at?: string
   source?: string
 }

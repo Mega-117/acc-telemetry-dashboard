@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  clampTimingOffsetSec,
   crossedReferencePoint,
+  effectiveReferencePosition,
   filterPlayableTrackVoiceReferences,
+  normalizedSpeedPerSecond,
   normalizeTrackName,
   resolveTrackVoiceReferenceAudioPath,
   type TrackVoiceReference,
@@ -31,6 +34,32 @@ describe('trackVoiceReferences', () => {
     expect(resolveTrackVoiceReferenceAudioPath(points[3]!, 'if_sara')).toBe('/sara.wav')
     expect(resolveTrackVoiceReferenceAudioPath(points[3]!, 'im_nicola')).toBe('/nicola.wav')
     expect(resolveTrackVoiceReferenceAudioPath(points[0]!, 'if_sara')).toBe('/late.wav')
+  })
+
+  it('keeps timing offset zero on the recorded reference point', () => {
+    expect(effectiveReferencePosition({ normalized_car_position: 0.5, timing_offset_sec: 0 }, 0.02)).toBe(0.5)
+    expect(effectiveReferencePosition({ normalized_car_position: 0.5 }, 0.02)).toBe(0.5)
+  })
+
+  it('clamps timing offsets to the supported presets', () => {
+    expect(clampTimingOffsetSec(-8)).toBe(-3)
+    expect(clampTimingOffsetSec(8)).toBe(3)
+    expect(clampTimingOffsetSec(2.6)).toBe(3)
+  })
+
+  it('applies integer timing offsets using normalized speed', () => {
+    expect(effectiveReferencePosition({ normalized_car_position: 0.5, timing_offset_sec: -3 }, 0.02)).toBeCloseTo(0.44)
+    expect(effectiveReferencePosition({ normalized_car_position: 0.5, timing_offset_sec: 2 }, 0.02)).toBeCloseTo(0.54)
+  })
+
+  it('wraps timing offsets across the finish line', () => {
+    expect(effectiveReferencePosition({ normalized_car_position: 0.02, timing_offset_sec: -3 }, 0.02)).toBeCloseTo(0.96)
+    expect(effectiveReferencePosition({ normalized_car_position: 0.98, timing_offset_sec: 2 }, 0.02)).toBeCloseTo(0.02)
+  })
+
+  it('estimates normalized speed from position deltas, including wrap', () => {
+    expect(normalizedSpeedPerSecond(0.1, 0.2, 1000)).toBeCloseTo(0.1)
+    expect(normalizedSpeedPerSecond(0.95, 0.05, 1000)).toBeCloseTo(0.1)
   })
 
   it('detects reference crossings, including finish-line wrap', () => {

@@ -50,6 +50,7 @@ interface TrackVoicePoint {
   audio_paths?: Record<string, string>
   speed?: number
   enabled?: boolean
+  timing_offset_sec?: number | null
   created_at?: string
 }
 
@@ -196,6 +197,7 @@ const referenceRows = computed(() => referenceCatalog.value.points
     speed: point.speed ?? 1.15,
     audio_voice: referenceVoiceId.value,
     audio_path: referenceAudioPath(point, referenceVoiceId.value),
+    timing_offset_sec: clampReferenceTimingOffset(point.timing_offset_sec),
   }))
 )
 
@@ -235,6 +237,28 @@ function updateReferenceText(entry: TrackVoicePoint, event: Event) {
 function updateReferenceSpeed(entry: TrackVoicePoint, event: Event) {
   const speed = Number((event.target as HTMLInputElement).value)
   patchReferenceRow(entry, { speed: Number.isFinite(speed) ? speed : 1.15 })
+}
+
+const REFERENCE_TIMING_OFFSETS = [-3, -2, -1, 0, 1, 2, 3]
+
+function clampReferenceTimingOffset(value: unknown) {
+  const offset = Math.round(Number(value) || 0)
+  return Math.max(-3, Math.min(3, offset))
+}
+
+function referenceTimingLabel(offset: number | null | undefined) {
+  const value = clampReferenceTimingOffset(offset)
+  if (value < 0) return `Anticipa ${Math.abs(value)}s`
+  if (value > 0) return `Ritarda ${value}s`
+  return 'Puntuale'
+}
+
+function updateReferenceTimingOffset(entry: TrackVoicePoint, event: Event) {
+  patchReferenceRow(entry, { timing_offset_sec: clampReferenceTimingOffset((event.target as HTMLSelectElement).value) })
+}
+
+function resetReferenceTimingOffset(entry: TrackVoicePoint) {
+  patchReferenceRow(entry, { timing_offset_sec: 0 })
 }
 
 function toggleReferenceEnabled(entry: TrackVoicePoint) {
@@ -296,7 +320,7 @@ function withReferenceAudioPath(entry: TrackVoicePoint, voice: SpotterVoiceId, p
 
 async function saveReference(entry: TrackVoicePoint, voice: SpotterVoiceId = referenceVoiceId.value): Promise<boolean> {
   const audioPath = referenceAudioPath(entry, voice)
-  const normalizedEntry = { ...entry, audio_paths: referenceAudioPaths(entry), audio_path: audioPath, audio_voice: voice, enabled: entry.enabled !== false }
+  const normalizedEntry = { ...entry, audio_paths: referenceAudioPaths(entry), audio_path: audioPath, audio_voice: voice, enabled: entry.enabled !== false, timing_offset_sec: clampReferenceTimingOffset(entry.timing_offset_sec) }
   referenceTasks.value[entry.id] = { state: 'saving', message: 'Salvo...' }
   try {
     await $fetch('/api/dev/track-voice-points', {
@@ -365,6 +389,25 @@ async function generateReference(entry: TrackVoicePoint, voice: SpotterVoiceId =
 
 function latestReferenceRow(id: string) {
   return referenceRows.value.find(point => point.id === id)
+}
+
+async function resetAllReferenceTimingOffsets() {
+  if (referencesBatchBusy.value || !referenceRows.value.length) return
+  referencesBatchBusy.value = true
+  referencesError.value = ''
+  let ok = 0
+  try {
+    for (const row of referenceRows.value) {
+      const current = latestReferenceRow(row.id) || row
+      const resetEntry = { ...current, timing_offset_sec: 0 }
+      patchReferenceRow(current, { timing_offset_sec: 0 })
+      if (await saveReference(resetEntry)) ok += 1
+    }
+    referencesStatus.value = `Timing ripristinato su ${ok}/${referenceRows.value.length} riferimenti.`
+    if (ok === referenceRows.value.length) pushToast(`Timing riferimenti ${selectedReferenceTrack.value}: reset a 0s`, 'success')
+  } finally {
+    referencesBatchBusy.value = false
+  }
 }
 
 async function generateAllReferences() {
@@ -1044,6 +1087,7 @@ onBeforeUnmount(() => {
               <button type="button" :class="{ 'is-active': referenceVoiceId === 'im_nicola' }" :disabled="referencesBatchBusy" @click="setReferenceVoice('im_nicola')">Nicola</button>
             </div>
             <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy" @click="loadReferences">Aggiorna</button>
+            <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy || !referenceRows.length" @click="resetAllReferenceTimingOffsets">Reset timing</button>
             <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || !referenceRows.length" @click="generateAllReferences">
               {{ referencesBatchBusy ? 'Genero...' : 'Genera Sara + Nicola' }}
             </button>
@@ -1077,7 +1121,7 @@ onBeforeUnmount(() => {
               <span class="step-order">{{ index + 1 }}</span>
               <div>
                 <strong>{{ entry.label }}</strong>
-                <small>posizione {{ entry.normalized_car_position.toFixed(5) }} · {{ entry.car || 'auto n/d' }}</small>
+                <small v-if="hasFullVoiceLabAccess">posizione {{ entry.normalized_car_position.toFixed(5) }} · {{ entry.car || 'auto n/d' }}</small>
               </div>
               <span class="lap-time-state" :class="{ 'is-ready': Boolean(entry.audio_path) && entry.enabled !== false }">
                 {{ entry.enabled === false ? 'Disattivo' : entry.audio_path ? 'WAV pronto' : 'Manca WAV per voce' }}
@@ -1089,6 +1133,18 @@ onBeforeUnmount(() => {
                 Velocita
                 <input :value="entry.speed" type="number" min="0.8" max="1.5" step="0.02" @input="updateReferenceSpeed(entry, $event)">
               </label>
+              <span class="reference-control-divider" aria-hidden="true"></span>
+              <label>
+                Timing
+                <select :value="clampReferenceTimingOffset(entry.timing_offset_sec)" @change="updateReferenceTimingOffset(entry, $event)">
+                  <option v-for="offset in REFERENCE_TIMING_OFFSETS" :key="offset" :value="offset">
+                    {{ referenceTimingLabel(offset) }}
+                  </option>
+                </select>
+              </label>
+              <span class="reference-control-divider" aria-hidden="true"></span>
+              <button type="button" class="secondary" :disabled="referenceRowBusy(entry) || clampReferenceTimingOffset(entry.timing_offset_sec) === 0" @click="resetReferenceTimingOffset(entry)">Reset</button>
+              <span class="reference-control-divider" aria-hidden="true"></span>
               <button type="button" :class="{ 'is-active': entry.enabled !== false }" :disabled="referenceRowBusy(entry)" @click="toggleReferenceEnabled(entry)">
                 {{ entry.enabled === false ? 'Disattivo' : 'Attivo' }}
               </button>
@@ -1526,10 +1582,23 @@ onBeforeUnmount(() => {
     input {
       width: 72px;
     }
+
+    label strong {
+      color: #fff;
+      font-size: 11px;
+      text-transform: none;
+      white-space: nowrap;
+    }
   }
 }
 
 .reference-row {
+    .reference-control-divider {
+    width: 1px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.16);
+  }
+
   header {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;

@@ -12,6 +12,11 @@ function cleanSpeed(value: unknown) {
   return Math.max(0.5, Math.min(2, speed))
 }
 
+function cleanTimingOffsetSec(value: unknown) {
+  const offset = Math.round(Number(value) || 0)
+  return Math.max(-3, Math.min(3, offset))
+}
+
 function cleanAudioPaths(value: unknown) {
   if (!value || typeof value !== 'object') return undefined
   const cleaned: Record<string, string> = {}
@@ -71,6 +76,7 @@ export default defineEventHandler(async (event) => {
     const speed = cleanSpeed(update.speed)
     if (speed !== undefined) next.speed = speed
     if (typeof update.enabled === 'boolean') next.enabled = update.enabled
+    if (Object.prototype.hasOwnProperty.call(update, 'timing_offset_sec')) next.timing_offset_sec = cleanTimingOffsetSec(update.timing_offset_sec)
     return next
   })
 
