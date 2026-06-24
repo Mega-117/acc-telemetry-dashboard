@@ -41,6 +41,7 @@ export default defineConfig({
         'app/services/telemetry/raceFuelClassification.ts',
         'app/services/telemetry/sessionMergeLogic.ts',
         'app/services/telemetry/theoreticalTimesCalculator.ts',
+        'app/services/spotter/trackVoiceReferences.ts',
         'app/utils/firestoreSanitize.ts',
         'app/utils/sessionParser.ts',
         'server/utils/kokoroRuntimeStatus.ts',

@@ -68,7 +68,7 @@ async function loadCatalog() {
   catalogBusy.value = true
   catalogError.value = ''
   try {
-    catalog.value = await $fetch<TrackVoicePointCatalog>('/api/dev/track-voice-points')
+    catalog.value = await $fetch<TrackVoicePointCatalog>('/api/track-voice-points')
     if (!availableTracks.value.includes(selectedTrack.value)) selectedTrack.value = availableTracks.value[0] || 'Spa'
   } catch (error: any) {
     catalogError.value = error?.data?.statusMessage || error?.message || 'Riferimenti non disponibili'
@@ -141,10 +141,10 @@ onMounted(() => {
             </article>
 
             <article class="setting-block">
-              <span>Coach allenamenti</span>
+              <span>Avvisi giro</span>
               <strong>{{ coachEnabled ? 'Attivo' : 'Disattivo' }}</strong>
               <button type="button" class="toggle-button" :class="{ 'is-active': coachEnabled }" @click="toggleCoach">
-                {{ coachEnabled ? 'Disattiva coach' : 'Attiva coach' }}
+                {{ coachEnabled ? 'Disattiva avvisi' : 'Attiva avvisi' }}
               </button>
             </article>
           </div>

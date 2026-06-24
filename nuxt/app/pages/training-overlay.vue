@@ -50,18 +50,6 @@ type OverlaySizePreset = 'launcher' | 'placement' | 'select' | 'session' | 'expi
 type OverlaySize = { width: number; height: number }
 type PrimaryOverlayAction = 'confirm-placement' | 'open-selection' | 'start' | 'pause' | 'resume' | 'complete-step' | 'next' | 'reset' | 'none'
 
-interface TrackVoiceReference {
-  id: string
-  track: string
-  type?: string
-  normalized_car_position: number
-  label?: string
-  text?: string
-  audio_path?: string
-  audio_voice?: string
-  enabled?: boolean
-}
-
 interface TrainingOverlaySettings {
   hasConfiguredPosition?: boolean; lastTrainingId?: string
   lastDurationId?: TrainingOverlayDurationModeId; soundEnabled?: boolean
@@ -116,10 +104,7 @@ const showDevControls = computed(() => {
 })
 const isSaving = ref(false)
 const voicePointRecorderEnabled = ref(false)
-const trackVoiceReferences = ref<TrackVoiceReference[]>([])
-const trackVoiceReferencesArmed = ref(false)
-const playedTrackVoiceReferenceIds = ref<Set<string>>(new Set())
-let previousVoiceReferencePosition: number | null = null
+
 const voicePointNotice = ref<{ text: string; tone: 'ok' | 'error' } | null>(null)
 let voicePointNoticeTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -171,7 +156,7 @@ const voice = useQualifyingVoice(
   () => true,
   () => selectedTrainingId.value,
 )
-const { soundEnabled, primeStepAudio, playStepDoneSound, playCountdownBeep, enqueue: enqueueVoice, enqueueStepStart, enqueueAudioPath, announceLap, stopVoice } = voice
+const { soundEnabled, primeStepAudio, playStepDoneSound, playCountdownBeep, enqueue: enqueueVoice, enqueueStepStart, stopVoice } = voice
 
 const overlaySizeComp = useOverlaySize(getOverlayApi, () => overlaySizePreset.value, overlayRoot)
 const { cardSize, scheduleOverlaySizeSync, connectResizeObserver, disconnectResizeObserver, cleanup: cleanupSize } = overlaySizeComp
@@ -327,7 +312,7 @@ const {
 } = useSessionOrchestrator(
   phase, activeStepIndex, remainingMs, selectedTrainingId, selectedModeId, isSettingsOpen,
   selectedMode, canManuallyAdvanceStep, autoAdvanceStep, autoAdvanceSeconds, closeShortcutStopConfirm, cancelStopHold,
-  enqueueVoice, enqueueStepStart, announceLap, primeStepAudio, stopVoice, playStepDoneSound, playCountdownBeep,
+  enqueueVoice, enqueueStepStart, () => {}, primeStepAudio, stopVoice, playStepDoneSound, playCountdownBeep,
   liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap,
   trackingStart, trackingComplete, trackingAbandon, savePreferences,
   stepBudgetMs,
@@ -442,72 +427,10 @@ function showVoicePointNotice(text: string, tone: 'ok' | 'error' = 'ok') {
   scheduleOverlaySizeSync()
 }
 
-function normalizeTrackName(value: string | null | undefined) {
-  return String(value || '').trim().toLowerCase()
-}
-
-function canUseTrackVoiceReferences() {
-  return typeof window !== 'undefined'
-}
-
-function loadTrackVoiceReferencePreference() {
-  if (!canUseTrackVoiceReferences()) return
-  loadSpotterVoiceSettings()
-}
-
-async function loadTrackVoiceReferences() {
-  if (!canUseTrackVoiceReferences()) return
-  try {
-    const data = await $fetch<{ points: TrackVoiceReference[] }>('/api/dev/track-voice-points')
-    trackVoiceReferences.value = (Array.isArray(data.points) ? data.points : [])
-      .filter(point => point.enabled !== false && point.type === 'braking_reference' && point.audio_path && (point.audio_voice || 'if_sara') === spotterVoice.value)
-      .sort((a, b) => a.normalized_car_position - b.normalized_car_position)
-  } catch (error) {
-    trackVoiceReferences.value = []
-    if (import.meta.dev) console.warn('[overlay] riferimenti vocali non caricati', error)
-  }
-}
-
 function toggleTrackVoiceReferences() {
-  if (!canUseTrackVoiceReferences()) return
   const enabled = !trackVoiceReferencesEnabled.value
   setReferencesEnabled(enabled)
-  if (!enabled) {
-    trackVoiceReferencesArmed.value = false
-    playedTrackVoiceReferenceIds.value = new Set()
-  }
   showVoicePointNotice(enabled ? 'Riferimenti vocali attivi.' : 'Riferimenti vocali disattivi.', 'ok')
-}
-
-function resetTrackVoiceReferenceLapState() {
-  playedTrackVoiceReferenceIds.value = new Set()
-  previousVoiceReferencePosition = fastState.value.normalizedCarPosition
-}
-
-function crossedReferencePoint(previous: number, current: number, target: number) {
-  if (previous <= current) return previous < target && target <= current
-  return target > previous || target <= current
-}
-
-function tickTrackVoiceReferences() {
-  if (!trackVoiceReferencesEnabled.value || !trackVoiceReferencesArmed.value || !soundEnabled.value) return
-  const currentPosition = fastState.value.normalizedCarPosition
-  const track = normalizeTrackName(liveLap.value.track)
-  if (currentPosition === null || !track) return
-  const previous = previousVoiceReferencePosition
-  previousVoiceReferencePosition = currentPosition
-  if (previous === null) return
-
-  const alreadyPlayed = playedTrackVoiceReferenceIds.value
-  const nextReference = trackVoiceReferences.value.find(point =>
-    normalizeTrackName(point.track) === track &&
-    !alreadyPlayed.has(point.id) &&
-    crossedReferencePoint(previous, currentPosition, point.normalized_car_position)
-  )
-  if (!nextReference?.audio_path) return
-  playedTrackVoiceReferenceIds.value = new Set([...alreadyPlayed, nextReference.id])
-  enqueueAudioPath(nextReference.audio_path)
-  if (import.meta.dev) console.debug('[overlay] riferimento vocale', nextReference.label || nextReference.id)
 }
 
 function toggleVoicePointRecorder() {
@@ -595,7 +518,6 @@ onMounted(async () => {
   selectedModeId.value = resolveTrainingOverlayModeId(settings?.lastDurationId)
   soundEnabled.value = settings?.soundEnabled !== false
   runtimeVoicePointRecorderAllowed.value = settings?.enableVoicePointRecorder === true
-  spotterEnabled.value = settings?.spotterEnabled === true
   autoDimDuringRun.value = settings?.autoDimDuringRun !== false
   autoAdvanceStep.value = settings?.autoAdvanceStep !== false
   autoAdvanceSeconds.value = resolveAutoAdvanceSeconds(settings?.autoAdvanceSeconds)
@@ -603,8 +525,7 @@ onMounted(async () => {
   originCorner.value = resolveOverlayOriginCorner(settings?.originCorner)
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000
   phase.value = settings?.hasConfiguredPosition || !api ? 'launcher' : 'placement'
-  loadTrackVoiceReferencePreference()
-  await loadTrackVoiceReferences()
+  loadSpotterVoiceSettings()
   startLiveStatePolling()
   startFastStatePolling()
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
@@ -614,32 +535,10 @@ onMounted(async () => {
   }
   connectResizeObserver(); scheduleOverlaySizeSync()
 })
-watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
-  if (!canUseTrackVoiceReferences()) return
-  if ((newVal ?? 0) > (oldVal ?? -1)) {
-    trackVoiceReferencesArmed.value = (newVal ?? 0) >= 1
-    resetTrackVoiceReferenceLapState()
-  }
-})
-
-watch(() => spotterVoice.value, async () => {
-  await loadTrackVoiceReferences()
-  resetTrackVoiceReferenceLapState()
-})
-
-watch(() => trackVoiceReferencesEnabled.value, (enabled) => {
-  if (!enabled) {
-    trackVoiceReferencesArmed.value = false
-    playedTrackVoiceReferenceIds.value = new Set()
-  }
-  scheduleOverlaySizeSync()
-})
-
 watch(() => spotterEnabled.value, () => {
   void savePreferences()
 })
 
-watch(() => [fastState.value.normalizedCarPosition, liveLap.value.track], () => tickTrackVoiceReferences())
 
 watch(
   [phase, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
@@ -704,16 +603,7 @@ onBeforeUnmount(() => {
     >
       {{ isTestMode ? 'TEST ON' : 'TEST OFF' }}
     </button>
-    <button
-      v-if="canUseVoicePointRecorder"
-      type="button"
-      class="overlay-dev-toggle overlay-dev-toggle--voice-points overlay-dev-toggle--track-cues"
-      :aria-pressed="trackVoiceReferencesEnabled"
-      title="Riferimenti vocali pista: riproduce i WAV dopo il primo giro (solo localhost/dev)"
-      @click="toggleTrackVoiceReferences"
-    >
-      {{ trackVoiceReferencesEnabled ? 'CUE ON' : 'CUE OFF' }}
-    </button>
+
     <button
       v-if="canUseVoicePointRecorder"
       type="button"
@@ -981,6 +871,5 @@ onBeforeUnmount(() => {
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
 </style>
-
 
 
