@@ -1,8 +1,4 @@
 <script setup lang="ts">
-import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
-import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
-import type { FastOverlayState } from '~/composables/useFastStatePoller'
-import type { SectorHudState } from '~/composables/useLiveStatePoller'
 
 /**
  * OverlayHud.vue
@@ -24,8 +20,6 @@ defineProps<{
     activeTask: string
     formattedTime: string
     liveLap: LiveLapState
-    fastState: FastOverlayState
-    sectorHud: SectorHudState | null
     phase: string
     progressPercent: number
     hudTransitionKey: string
@@ -74,9 +68,6 @@ defineEmits<{
             <Transition name="fade">
                 <span v-if="isSaving" class="saving-indicator" aria-live="polite">salvataggio…</span>
             </Transition>
-
-            <TyreSlipHud :fast-state="fastState" />
-            <SectorDeltaHud :sector-hud="sectorHud" />
 
             <div
                 v-if="phase === 'expired'"

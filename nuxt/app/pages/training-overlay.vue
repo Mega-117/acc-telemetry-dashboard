@@ -261,13 +261,8 @@ const overlaySizePreset = computed<OverlaySizePreset>(() => {
   return 'session'
 })
 const liveHudResizeKey = computed(() => [
-  fastState.value.isLive ? 'fast-live' : 'fast-idle',
-  fastState.value.tyres.length,
-  liveLap.value.sectorHud?.mode ?? 'sector-idle',
-  liveLap.value.sectorHud?.referenceLap ?? 'ref-none',
-  liveLap.value.sectorHud?.sectors
-    .map((sector) => `${sector.index}:${sector.state}:${sector.currentMs ?? 'x'}:${sector.deltaMs ?? 'x'}:${sector.color}`)
-    .join('|') ?? 'no-sectors',
+  liveLap.value.currentLap ?? 'lap-none',
+  liveLap.value.lapValid === false ? 'lap-invalid' : 'lap-valid',
 ].join(';'))
 const overlayThemeStyle = computed(() => ({
   '--overlay-accent': selectedTraining.value.accent,
@@ -923,8 +918,6 @@ onBeforeUnmount(() => {
                     :active-task="activeTask"
                     :formatted-time="formattedTime"
                     :live-lap="liveLap"
-                    :fast-state="fastState"
-                    :sector-hud="liveLap.sectorHud"
                     :phase="phase"
                     :progress-percent="progressPercent"
                     :hud-transition-key="hudTransitionKey"
