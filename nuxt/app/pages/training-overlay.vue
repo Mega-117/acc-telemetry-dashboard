@@ -11,9 +11,6 @@ import {
   type TrainingOverlayId
 } from '~/config/trainingOverlayCatalog'
 import {
-  qualifyingVoiceOptions,
-  resolveQualifyingVoiceId,
-  type QualifyingVoiceId,
   type QualifyingVoiceScenario
 } from '~/config/qualifyingVoiceNotifications'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
@@ -71,7 +68,7 @@ interface TrainingOverlaySettings {
   spotterEnabled?: boolean
   autoDimDuringRun?: boolean; autoAdvanceStep?: boolean; autoAdvanceSeconds?: number
   originMode?: OverlayOriginMode
-  originCorner?: OverlayOriginCorner; qualifyingVoiceId?: QualifyingVoiceId
+  originCorner?: OverlayOriginCorner
   enableVoicePointRecorder?: boolean
 }
 
@@ -170,7 +167,7 @@ const {
 
 const voice = useQualifyingVoice(
   getPublicPath,
-  () => selectedQualifyingVoiceId.value,
+  () => spotterVoice.value,
   () => true,
   () => selectedTrainingId.value,
 )
@@ -301,10 +298,10 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
 
 // ─── Settings composable ─────────────────────────────────────────────────────
 const {
-  autoDimDuringRun, autoAdvanceStep, autoAdvanceSeconds, originMode, originCorner, selectedQualifyingVoiceId,
+  autoDimDuringRun, autoAdvanceStep, autoAdvanceSeconds, originMode, originCorner,
   isTrainingPickerOpen, isSettingsOpen, savePreferences,
   toggleTrainingPicker, toggleSettingsPanel, toggleAutoDimDuringRun, toggleAutoAdvanceStep,
-  selectAutoAdvanceSeconds, selectOriginCorner, selectQualifyingVoice, toggleSound,
+  selectAutoAdvanceSeconds, selectOriginCorner, toggleSound,
 } = useOverlaySettings(
   getOverlayApi, soundEnabled, spotterEnabled, stopVoice, primeStepAudio,
   scheduleOverlaySizeSync, isActiveSession, closeShortcutStopConfirm,
@@ -355,7 +352,6 @@ async function confirmPlacement() {
   selectedModeId.value = resolveTrainingOverlayModeId(settings?.lastDurationId || selectedModeId.value)
   originMode.value = resolveOverlayOriginMode(settings?.originMode || originMode.value)
   originCorner.value = resolveOverlayOriginCorner(settings?.originCorner || originCorner.value)
-  selectedQualifyingVoiceId.value = resolveQualifyingVoiceId(settings?.qualifyingVoiceId || selectedQualifyingVoiceId.value)
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000; phase.value = 'launcher'
   await nextTick()
   scheduleOverlaySizeSync()
@@ -610,7 +606,6 @@ onMounted(async () => {
   autoAdvanceSeconds.value = resolveAutoAdvanceSeconds(settings?.autoAdvanceSeconds)
   originMode.value = resolveOverlayOriginMode(settings?.originMode)
   originCorner.value = resolveOverlayOriginCorner(settings?.originCorner)
-  selectedQualifyingVoiceId.value = resolveQualifyingVoiceId(settings?.qualifyingVoiceId)
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000
   phase.value = settings?.hasConfiguredPosition || !api ? 'launcher' : 'placement'
   loadTrackVoiceReferencePreference()
@@ -653,7 +648,7 @@ watch(() => [fastState.value.normalizedCarPosition, liveLap.value.track], () => 
 
 watch(
   [phase, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
-    selectedQualifyingVoiceId, spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, liveHudResizeKey],
+    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, liveHudResizeKey],
   () => scheduleOverlaySizeSync(),
   { flush: 'post' }
 )
@@ -885,8 +880,6 @@ onBeforeUnmount(() => {
             :sound-enabled="soundEnabled"
             :auto-dim-during-run="autoDimDuringRun"
             :overlay-shortcuts="overlayShortcuts"
-            :qualifying-voice-options="qualifyingVoiceOptions"
-            :selected-qualifying-voice-id="selectedQualifyingVoiceId"
             :is-training-picker-open="isTrainingPickerOpen"
             :is-settings-open="isSettingsOpen"
             @select-training="selectTraining"
@@ -899,7 +892,6 @@ onBeforeUnmount(() => {
                     @toggle-auto-dim="toggleAutoDimDuringRun"
                     @toggle-auto-advance="toggleAutoAdvanceStep"
                     @select-auto-advance-seconds="selectAutoAdvanceSeconds"
-                    @select-voice="selectQualifyingVoice"
                   />
                 </div>
                 <div class="overlay-actions">

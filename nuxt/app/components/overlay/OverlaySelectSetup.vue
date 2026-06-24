@@ -13,7 +13,6 @@ import type {
     TrainingOverlayMode,
     TrainingOverlayTraining,
 } from '~/config/trainingOverlayCatalog'
-import type { QualifyingVoiceId } from '~/config/qualifyingVoiceNotifications'
 import { autoAdvanceSecondsOptions } from '~/composables/useOverlaySettings'
 
 interface PlanChip {
@@ -30,10 +29,6 @@ interface Shortcut {
     value: string
 }
 
-interface VoiceOption {
-    id: QualifyingVoiceId
-    label: string
-}
 
 const props = defineProps<{
     selectedTraining: TrainingOverlayTraining
@@ -46,8 +41,6 @@ const props = defineProps<{
     soundEnabled: boolean
     autoDimDuringRun: boolean
     overlayShortcuts: Shortcut[]
-    qualifyingVoiceOptions: VoiceOption[]
-    selectedQualifyingVoiceId: QualifyingVoiceId
     isTrainingPickerOpen: boolean
     isSettingsOpen: boolean
     autoAdvanceStep: boolean
@@ -61,7 +54,6 @@ const emit = defineEmits<{
     'toggle-settings': []
     'toggle-sound': []
     'toggle-auto-dim': []
-    'select-voice': [id: QualifyingVoiceId]
     'toggle-auto-advance': []
     'select-auto-advance-seconds': [seconds: number]
 }>()
@@ -263,23 +255,6 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                                     Per volante o button box (es. Fanatec via SimHub), mappa i bottoni
                                     su questi tasti: bastano pressioni singole, niente hold.
                                 </p>
-                            </div>
-                        </div>
-
-                        <div class="voice-settings">
-                            <span class="settings-title">Voce qualifica</span>
-                            <div class="voice-choice" role="group" aria-label="Voce qualifica">
-                                <button
-                                    v-for="voice in qualifyingVoiceOptions"
-                                    :key="voice.id"
-                                    type="button"
-                                    :class="{ 'is-active': selectedQualifyingVoiceId === voice.id }"
-                                    :aria-label="`Voce qualifica ${voice.label}`"
-                                    :aria-pressed="selectedQualifyingVoiceId === voice.id"
-                                    @click="emit('select-voice', voice.id)"
-                                >
-                                    {{ voice.label }}
-                                </button>
                             </div>
                         </div>
                     </div>

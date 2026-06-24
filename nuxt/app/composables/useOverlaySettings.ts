@@ -1,5 +1,4 @@
 import { ref, type ComputedRef, type Ref } from 'vue'
-import { type QualifyingVoiceId } from '~/config/qualifyingVoiceNotifications'
 import { type TrainingOverlayDurationModeId, type TrainingOverlayId } from '~/config/trainingOverlayCatalog'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -61,7 +60,6 @@ export function useOverlaySettings(
   const autoAdvanceSeconds = ref(10)
   const originMode = ref<OverlayOriginMode>('manual')
   const originCorner = ref<OverlayOriginCorner>('top-left')
-  const selectedQualifyingVoiceId = ref<QualifyingVoiceId>('if_sara')
   const isTrainingPickerOpen = ref(false)
   const isSettingsOpen = ref(false)
 
@@ -73,7 +71,6 @@ export function useOverlaySettings(
       autoAdvanceStep: autoAdvanceStep.value,
       autoAdvanceSeconds: autoAdvanceSeconds.value,
       originMode: originMode.value, originCorner: originCorner.value,
-      qualifyingVoiceId: selectedQualifyingVoiceId.value,
     })
   }
 
@@ -98,9 +95,6 @@ export function useOverlaySettings(
     originMode.value = 'manual'; originCorner.value = c; void savePreferences(); scheduleOverlaySizeSync()
   }
 
-  function selectQualifyingVoice(id: QualifyingVoiceId) {
-    if (isActiveSession.value) return; selectedQualifyingVoiceId.value = id; void savePreferences()
-  }
 
   function toggleAutoAdvanceStep() { autoAdvanceStep.value = !autoAdvanceStep.value; void savePreferences() }
 
@@ -116,9 +110,9 @@ export function useOverlaySettings(
   }
 
   return {
-    autoDimDuringRun, autoAdvanceStep, autoAdvanceSeconds, originMode, originCorner, selectedQualifyingVoiceId,
+    autoDimDuringRun, autoAdvanceStep, autoAdvanceSeconds, originMode, originCorner,
     isTrainingPickerOpen, isSettingsOpen,
     savePreferences, toggleTrainingPicker, toggleSettingsPanel,
-    toggleAutoDimDuringRun, toggleAutoAdvanceStep, selectAutoAdvanceSeconds, selectOriginCorner, selectQualifyingVoice, toggleSound,
+    toggleAutoDimDuringRun, toggleAutoAdvanceStep, selectAutoAdvanceSeconds, selectOriginCorner, toggleSound,
   }
 }
