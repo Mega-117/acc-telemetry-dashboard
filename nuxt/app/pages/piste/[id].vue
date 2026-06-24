@@ -15,8 +15,8 @@ function handleBack() {
   }
 }
 
-function handleGoToSession(sessionId: string) {
-  navigateTo(`/sessioni/${sessionId}`)
+function handleGoToSession(sessionId: string, routePath?: string) {
+  navigateTo(routePath || `/sessioni/${sessionId}`)
 }
 </script>
 

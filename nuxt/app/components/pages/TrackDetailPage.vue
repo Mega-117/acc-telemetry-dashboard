@@ -46,7 +46,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   back: []
-  'go-to-session': [sessionId: string]
+  'go-to-session': [sessionId: string, routePath: string]
 }>()
 
 const telemetryGateway = useTelemetryGateway()
@@ -404,11 +404,7 @@ function sessionRoute(id: string) {
 }
 
 function goToSession(id: string) {
-  emit('go-to-session', id)
-
-  if (!targetUserId.value) {
-    void navigateTo(`/sessioni/${id}`)
-  }
+  emit('go-to-session', id, sessionRoute(id))
 }
 </script>
 <template>
@@ -539,7 +535,7 @@ function goToSession(id: string) {
               :key="session.id"
               :href="sessionRoute(session.id)"
               class="session-row"
-              @click="goToSession(session.id)"
+              @click.prevent="goToSession(session.id)"
             >
               <!-- Left side: type, time, date, car -->
               <div class="row-left">
