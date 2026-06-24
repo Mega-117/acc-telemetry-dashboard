@@ -1,0 +1,1 @@
+import{aT as i}from"./Dot6BI9m.js";function r(){const e=i();function s(n){const a=n.startsWith("/")?n.slice(1):n,t=e.app.baseURL||"/";return(t.endsWith("/")?t:t+"/")+a}return{getPublicPath:s}}export{r as u};
