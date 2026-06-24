@@ -16,8 +16,7 @@ const baseTabs = [
   { id: 'panoramica', label: 'PANORAMICA', to: '/panoramica' },
   { id: 'sessioni', label: 'SESSIONI', to: '/sessioni' },
   { id: 'piste', label: 'PISTE', to: '/piste' },
-  { id: 'spotter', label: 'SPOTTER', to: '/spotter' },
-  { id: 'area-pilota', label: 'AREA PILOTA', to: '/area-pilota' }
+  { id: 'spotter', label: 'SPOTTER', to: '/spotter' }
 ]
 
 const tabs = computed(() => [...baseTabs, { id: 'test-hud', label: 'TEST HUD', to: '/test-hud' }])
@@ -36,7 +35,7 @@ const isActive = (tabTo: string) => {
         :key="tab.id"
         :to="tab.to"
         class="tab"
-        :class="{ 'tab--active': isActive(tab.to) }"
+        :class="{ 'tab--active': isActive(tab.to), 'tab--section-start': tab.id === 'spotter' }"
       >
         {{ tab.label }}
       </NuxtLink>
@@ -56,6 +55,7 @@ const isActive = (tabTo: string) => {
   display: flex;
   justify-content: center;
   gap: 8px;
+  align-items: center;
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 24px;
@@ -79,6 +79,21 @@ const isActive = (tabTo: string) => {
     color: rgba(255, 255, 255, 0.8);
   }
 
+  &--section-start {
+    margin-left: 12px;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: -10px;
+      width: 1px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.16);
+      transform: translateY(-50%);
+    }
+  }
+
   &--active {
     color: #fff;
 
@@ -94,3 +109,4 @@ const isActive = (tabTo: string) => {
   }
 }
 </style>
+

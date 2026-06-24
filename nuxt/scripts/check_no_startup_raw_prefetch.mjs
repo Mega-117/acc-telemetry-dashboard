@@ -47,8 +47,14 @@ assert.match(
 
 assert.match(
   overviewPage,
-  /recentActivityTitle/,
-  'Panoramica should keep the recent activity summary derived from projection data'
+  /OverviewUpcomingRacesCard\s+:user-id="targetUserId"/,
+  'Panoramica should render upcoming pilot races in the former recent activity slot'
+)
+
+assert.doesNotMatch(
+  overviewPage,
+  /recentActivityTitle|Attivita recenti/,
+  'Panoramica should not render the legacy recent activity summary block'
 )
 
 assert.doesNotMatch(
@@ -66,3 +72,4 @@ for (const relativePath of forbiddenSecondarySnapshotFiles) {
 }
 
 console.log('[NO_STARTUP_RAW_PREFETCH_CHECK] OK')
+

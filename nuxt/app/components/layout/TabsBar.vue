@@ -15,8 +15,7 @@ const tabs = [
   { id: 'panoramica', label: 'PANORAMICA' },
   { id: 'sessioni', label: 'SESSIONI' },
   { id: 'piste', label: 'PISTE' },
-  { id: 'spotter', label: 'SPOTTER' },
-  { id: 'area-pilota', label: 'AREA PILOTA' }
+  { id: 'spotter', label: 'SPOTTER' }
 ]
 </script>
 
@@ -27,7 +26,7 @@ const tabs = [
         v-for="tab in tabs"
         :key="tab.id"
         class="tab"
-        :class="{ 'tab--active': activeTab === tab.id }"
+        :class="{ 'tab--active': activeTab === tab.id, 'tab--section-start': tab.id === 'spotter' }"
         @click="emit('navigate', tab.id)"
       >
         {{ tab.label }}
@@ -47,6 +46,7 @@ const tabs = [
 .tabsbar__inner {
   display: flex;
   gap: 8px;
+  align-items: center;
   max-width: 1400px;
   margin: 0 auto;
   padding: 0 24px;
@@ -69,6 +69,21 @@ const tabs = [
     color: rgba(255, 255, 255, 0.8);
   }
 
+  &--section-start {
+    margin-left: 12px;
+
+    &::before {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: -10px;
+      width: 1px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.16);
+      transform: translateY(-50%);
+    }
+  }
+
   &--active {
     color: #fff;
 
@@ -84,3 +99,4 @@ const tabs = [
   }
 }
 </style>
+

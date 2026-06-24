@@ -1,6 +1,7 @@
 <script setup lang="ts">
 definePageMeta({
-  layout: 'dashboard'
+  layout: 'dashboard',
+  middleware: () => navigateTo('/panoramica')
 })
 </script>
 

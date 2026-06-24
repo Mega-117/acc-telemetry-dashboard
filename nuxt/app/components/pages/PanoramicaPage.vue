@@ -199,7 +199,7 @@ const briefingModeLabel = computed(() => {
 })
 const dailySuggestionReliabilityNote = computed(() => {
   if (briefingSelection.value !== 'auto') {
-    return 'Scenario scelto manualmente. Il riepilogo delle sessioni recenti resta visibile nel box Attivita recenti.'
+    return 'Scenario scelto manualmente. Le prossime gare restano visibili nel calendario pilota.'
   }
   if (dailySuggestion.value.isDataDriven === false) {
     return 'Il consiglio resta prudente finche non ci sono minuti recenti misurabili.'
@@ -214,29 +214,6 @@ const prepSessionTarget = computed(() => ({
     scenario: dailySuggestion.value.scenario || 'race_real'
   }
 }))
-const pilotAreaTarget = computed(() => ({ path: '/area-pilota' }))
-
-const recentMinutes = computed(() => {
-  return activityTotals.value.practice.minutes + activityTotals.value.qualify.minutes + activityTotals.value.race.minutes
-})
-
-const recentSessions = computed(() => {
-  return activityTotals.value.practice.sessions + activityTotals.value.qualify.sessions + activityTotals.value.race.sessions
-})
-
-const recentActivityTitle = computed(() => {
-  if (recentSessions.value <= 0) return 'Nessuna sessione negli ultimi 7 giorni'
-  const sessionLabel = recentSessions.value === 1 ? 'sessione registrata' : 'sessioni registrate'
-  return `Ultimi 7 giorni: ${recentSessions.value} ${sessionLabel}`
-})
-
-const recentActivityDescription = computed(() => {
-  if (recentSessions.value <= 0) {
-    return 'Appena registri nuove sessioni, qui vedrai volume, minuti totali e distribuzione tra pratica, qualifica e gara.'
-  }
-  return 'Riepilogo delle sessioni effettive salvate: volume totale, minuti guidati e distribuzione per tipo sessione.'
-})
-
 const goToTrack = (track: { id: string } | null) => {
   if (!track?.id) return
   const trackId = track.id
@@ -294,49 +271,7 @@ const goToTrack = (track: { id: string } | null) => {
           </p>
         </div>
         
-        <div class="driver-state coach-card">
-          <div class="coach-card__header driver-header">
-            <div>
-              <span class="eyebrow">Ultimi 7 giorni</span>
-              <h2 class="coach-title">Attivita recenti</h2>
-            </div>
-          </div>
-
-          <div class="driver-slide-container">
-            <div class="driver-slide-panel driver-slide-panel--recent">
-              <div class="driver-summary">
-                <p class="insight-text">{{ recentActivityTitle }}</p>
-                <p class="coach-note">{{ recentActivityDescription }}</p>
-              </div>
-
-              <div class="driver-metrics">
-                <div>
-                  <span class="metric-value">{{ recentSessions }}</span>
-                  <span class="metric-label">sessioni</span>
-                </div>
-                <div>
-                  <span class="metric-value">{{ Math.round(recentMinutes) }}</span>
-                  <span class="metric-label">min totali</span>
-                </div>
-              </div>
-
-              <div class="recent-breakdown" aria-label="Sessioni per tipo negli ultimi 7 giorni">
-                <div class="recent-breakdown__row">
-                  <span>Pratica</span>
-                  <strong>{{ activityTotals.practice.sessions }}</strong>
-                </div>
-                <div class="recent-breakdown__row">
-                  <span>Qualifica</span>
-                  <strong>{{ activityTotals.qualify.sessions }}</strong>
-                </div>
-                <div class="recent-breakdown__row">
-                  <span>Gara</span>
-                  <strong>{{ activityTotals.race.sessions }}</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <OverviewUpcomingRacesCard :user-id="targetUserId" />
       </div>
 
       <!-- Original Section: Data Grid -->
