@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 definePageMeta({
   layout: 'dashboard'
@@ -44,6 +44,7 @@ interface TrainingPlan {
 }
 
 const route = useRoute()
+const router = useRouter()
 
 const trainingOrder: TrainingId[] = [
   'tracktitan_input',
@@ -732,6 +733,17 @@ watch([selectedTraining, selectedDuration], () => {
   activeStepIndex.value = 0
 })
 
+function selectTrainingTab(trainingId: TrainingId) {
+  if (selectedTraining.value === trainingId) return
+  selectedTraining.value = trainingId
+  void router.replace({
+    query: {
+      ...route.query,
+      scenario: trainingId
+    }
+  })
+}
+
 const selectedDurationPlan = computed(() => {
   return selectedPlan.value.durations.find((duration) => duration.id === selectedDuration.value)
     || selectedPlan.value.durations[0]!
@@ -745,10 +757,24 @@ const activeStep = computed(() => {
 
 <template>
   <LayoutPageContainer>
-    <TrainingTrackTitanSegmentFocus v-if="selectedTraining === 'tracktitan_input'" />
+    <div class="prep-page" :class="toneClass">
+      <nav class="training-tabs" aria-label="Cambia allenamento">
+        <button
+          v-for="trainingId in trainingOrder"
+          :key="trainingId"
+          type="button"
+          :class="{ 'training-tabs__button--active': selectedTraining === trainingId }"
+          :aria-pressed="selectedTraining === trainingId"
+          @click="selectTrainingTab(trainingId)"
+        >
+          {{ trainingPlans[trainingId].label }}
+        </button>
+      </nav>
 
-    <div v-else class="prep-page" :class="toneClass">
-      <header class="prep-hero">
+      <TrainingTrackTitanSegmentFocus v-if="selectedTraining === 'tracktitan_input'" />
+
+      <template v-else>
+        <header class="prep-hero">
         <div class="prep-hero__copy">
           <span class="eyebrow">Preparazione allenamento</span>
           <h1>{{ selectedPlan.title }}</h1>
@@ -868,6 +894,7 @@ const activeStep = computed(() => {
           </article>
         </aside>
       </section>
+      </template>
     </div>
   </LayoutPageContainer>
 </template>
@@ -910,6 +937,41 @@ const activeStep = computed(() => {
   --accent-rgb: 34, 197, 94;
   --accent: #22c55e;
   --accent-end: #14b8a6;
+}
+
+.training-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.training-tabs button {
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+.training-tabs button:hover,
+.training-tabs button:focus-visible {
+  border-color: rgba(var(--accent-rgb), 0.32);
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.training-tabs__button--active {
+  border-color: rgba(var(--accent-rgb), 0.46) !important;
+  background: rgba(var(--accent-rgb), 0.2) !important;
+  color: #fff !important;
 }
 
 .prep-hero,
@@ -1220,6 +1282,15 @@ const activeStep = computed(() => {
 }
 
 @media (max-width: 760px) {
+  .training-tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .training-tabs button {
+    padding: 0 10px;
+  }
+
   .prep-hero,
   .prep-card {
     padding: 18px;
@@ -1243,3 +1314,5 @@ const activeStep = computed(() => {
   }
 }
 </style>
+
+
