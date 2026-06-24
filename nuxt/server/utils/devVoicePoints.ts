@@ -1,29 +1,11 @@
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-
-export interface TrackVoicePoint {
-  id: string
-  track: string
-  car?: string
-  type?: string
-  normalized_car_position: number
-  label?: string
-  text?: string
-  audio_path?: string
-  audio_voice?: string
-  audio_paths?: Record<string, string>
-  speed?: number
-  enabled?: boolean
-  lead_time_sec?: number | null
-  created_at?: string
-  source?: string
-}
-
-export interface TrackVoicePointStore {
-  schema: string
-  version: number
-  points: TrackVoicePoint[]
-}
+import defaultVoicePointStore from '../data/track-voice-points.defaults.json'
+import {
+  mergeTrackVoicePointStores,
+  type TrackVoicePoint,
+  type TrackVoicePointStore,
+} from './trackVoicePointMerge'
 
 const VOICE_POINTS_SCHEMA = 'acc.track_voice_points.v1'
 const LOCAL_WORKSPACE_ROOT = 'D:\\Archivio\\Desktop\\Nuova cartella (9)'
@@ -56,12 +38,21 @@ async function resolveSuiteRoot() {
   return candidates[0] || process.cwd()
 }
 
+function bundledVoicePoints(): TrackVoicePointStore {
+  const store = defaultVoicePointStore as TrackVoicePointStore
+  return {
+    schema: store.schema || VOICE_POINTS_SCHEMA,
+    version: Number(store.version || 1),
+    points: Array.isArray(store.points) ? store.points : [],
+  }
+}
+
 export async function voicePointsPath() {
   const suiteRoot = await resolveSuiteRoot()
   return join(suiteRoot, 'training_data', 'voice_points.json')
 }
 
-export async function readVoicePoints(): Promise<TrackVoicePointStore> {
+async function readLocalVoicePoints(): Promise<TrackVoicePointStore> {
   const path = await voicePointsPath()
   try {
     const raw = await readFile(path, 'utf8')
@@ -74,6 +65,10 @@ export async function readVoicePoints(): Promise<TrackVoicePointStore> {
   } catch {
     return { schema: VOICE_POINTS_SCHEMA, version: 1, points: [] }
   }
+}
+
+export async function readVoicePoints(): Promise<TrackVoicePointStore> {
+  return mergeTrackVoicePointStores(bundledVoicePoints(), await readLocalVoicePoints())
 }
 
 export async function writeVoicePoints(store: TrackVoicePointStore) {

@@ -1,0 +1,226 @@
+{
+  "schema": "acc.track_voice_points.v1",
+  "version": 1,
+  "points": [
+    {
+      "id": "vp_20260623164547833_001",
+      "track": "Spa",
+      "car": "ferrari_296_gt3",
+      "type": "braking_reference",
+      "normalized_car_position": 0.99661,
+      "label": "Riferimento 1",
+      "text": "Frena alla macchia a sinistra.",
+      "audio_path": "/voice/references/spa/vp_20260623164547833_001-im_nicola.wav",
+      "lead_time_sec": null,
+      "created_at": "2026-06-23T16:45:47.833Z",
+      "source": "shipped_default",
+      "speed": 1.25,
+      "audio_voice": "im_nicola",
+      "enabled": true,
+      "audio_paths": {
+        "im_nicola": "/voice/references/spa/vp_20260623164547833_001-im_nicola.wav",
+        "if_sara": "/voice/references/spa/vp_20260623164547833_001-if_sara.wav"
+      }
+    },
+    {
+      "id": "vp_20260623164609408_002",
+      "track": "Spa",
+      "car": "ferrari_296_gt3",
+      "type": "braking_reference",
+      "normalized_car_position": 0.09727,
+      "label": "Riferimento 2",
+      "text": "sistema il tracscion",
+      "audio_path": "/voice/references/spa/vp_20260623164609408_002-im_nicola.wav",
+      "lead_time_sec": null,
+      "created_at": "2026-06-23T16:46:09.408Z",
+      "source": "shipped_default",
+      "speed": 1.25,
+      "audio_voice": "im_nicola",
+      "enabled": true,
+      "audio_paths": {
+        "im_nicola": "/voice/references/spa/vp_20260623164609408_002-im_nicola.wav",
+        "if_sara": "/voice/references/spa/vp_20260623164609408_002-if_sara.wav"
+      }
+    },
+    {
+      "id": "vp_20260623164628462_003",
+      "track": "Spa",
+      "car": "ferrari_296_gt3",
+      "type": "braking_reference",
+      "normalized_car_position": 0.24628,
+      "label": "Riferimento 3",
+      "text": "portati tutto a sinistra e frena prima del cordolo.",
+      "audio_path": "/voice/references/spa/vp_20260623164628462_003-im_nicola.wav",
+      "lead_time_sec": null,
+      "created_at": "2026-06-23T16:46:28.462Z",
+      "source": "shipped_default",
+      "speed": 1.25,
+      "audio_voice": "im_nicola",
+      "enabled": true,
+      "audio_paths": {
+        "im_nicola": "/voice/references/spa/vp_20260623164628462_003-im_nicola.wav",
+        "if_sara": "/voice/references/spa/vp_20260623164628462_003-if_sara.wav"
+      }
+    },
+    {
+      "id": "vp_20260623164652492_004",
+      "track": "Spa",
+      "car": "ferrari_296_gt3",
+      "type": "braking_reference",
+      "normalized_car_position": 0.39126,
+      "label": "Riferimento 4",
+      "text": "tutto a sinistra fino all'inizio del cordolo.",
+      "audio_path": "/voice/references/spa/vp_20260623164652492_004-im_nicola.wav",
+      "lead_time_sec": null,
+      "created_at": "2026-06-23T16:46:52.492Z",
+      "source": "shipped_default",
+      "speed": 1.25,
+      "audio_voice": "im_nicola",
+      "enabled": true,
+      "audio_paths": {
+        "im_nicola": "/voice/references/spa/vp_20260623164652492_004-im_nicola.wav",
+        "if_sara": "/voice/references/spa/vp_20260623164652492_004-if_sara.wav"
+      }
+    },
+    {
+      "id": "vp_20260623164704889_005",
+      "track": "Spa",
+      "car": "ferrari_296_gt3",
+      "type": "braking_reference",
+      "normalized_car_position": 0.44468,
+      "label": "Riferimento 5",
+      "text": "tutto a destra macchia nera per terra",
+      "audio_path": "/voice/references/spa/vp_20260623164704889_005-im_nicola.wav",
+      "lead_time_sec": null,
+      "created_at": "2026-06-23T16:47:04.889Z",
+      "source": "shipped_default",
+      "speed": 1.25,
+      "audio_voice": "im_nicola",
+      "enabled": true,
+      "audio_paths": {
+        "im_nicola": "/voice/references/spa/vp_20260623164704889_005-im_nicola.wav",
+        "if_sara": "/voice/references/spa/vp_20260623164704889_005-if_sara.wav"
+      }
+    },
+    {
+      "id": "vp_20260623164716026_006",
+      "track": "Spa",
+      "car": "ferrari_296_gt3",
+      "type": "braking_reference",
+      "normalized_car_position": 0.49777,
+      "label": "Riferimento 6",
+      "text": "tutto a destra , finestra rossa a destra. terza marcia.",
+      "audio_path": "/voice/references/spa/vp_20260623164716026_006-im_nicola.wav",
+      "lead_time_sec": null,
+      "created_at": "2026-06-23T16:47:16.026Z",
+      "source": "shipped_default",
+      "speed": 1.25,
+      "audio_voice": "im_nicola",
+      "enabled": true,
+      "audio_paths": {
+        "im_nicola": "/voice/references/spa/vp_20260623164716026_006-im_nicola.wav",
+        "if_sara": "/voice/references/spa/vp_20260623164716026_006-if_sara.wav"
+      }
+    },
+    {
+      "id": "vp_20260623164734115_007",
+      "track": "Spa",
+      "car": "ferrari_296_gt3",
+      "type": "braking_reference",
+      "normalized_car_position": 0.60727,
+      "label": "Riferimento 7",
+      "text": "tutto a sinistra sotto il cartellone",
+      "audio_path": "/voice/references/spa/vp_20260623164734115_007-im_nicola.wav",
+      "lead_time_sec": null,
+      "created_at": "2026-06-23T16:47:34.115Z",
+      "source": "shipped_default",
+      "speed": 1.25,
+      "audio_voice": "im_nicola",
+      "enabled": true,
+      "audio_paths": {
+        "im_nicola": "/voice/references/spa/vp_20260623164734115_007-im_nicola.wav",
+        "if_sara": "/voice/references/spa/vp_20260623164734115_007-if_sara.wav"
+      }
+    },
+    {
+      "id": "vp_20260623164751171_008",
+      "track": "Spa",
+      "car": "ferrari_296_gt3",
+      "type": "braking_reference",
+      "normalized_car_position": 0.67851,
+      "label": "Riferimento 8",
+      "text": "tutto a sinistra, poco prima del cordolo",
+      "audio_path": "/voice/references/spa/vp_20260623164751171_008-im_nicola.wav",
+      "lead_time_sec": null,
+      "created_at": "2026-06-23T16:47:51.171Z",
+      "source": "shipped_default",
+      "speed": 1.25,
+      "audio_voice": "im_nicola",
+      "enabled": true,
+      "audio_paths": {
+        "im_nicola": "/voice/references/spa/vp_20260623164751171_008-im_nicola.wav",
+        "if_sara": "/voice/references/spa/vp_20260623164751171_008-if_sara.wav"
+      }
+    },
+    {
+      "id": "vp_20260623164800938_009",
+      "track": "Spa",
+      "car": "ferrari_296_gt3",
+      "type": "braking_reference",
+      "normalized_car_position": 0.71516,
+      "label": "Riferimento 9",
+      "text": "largo a sinistra e poi dentro",
+      "audio_path": "/voice/references/spa/vp_20260623164800938_009-im_nicola.wav",
+      "lead_time_sec": null,
+      "created_at": "2026-06-23T16:48:00.938Z",
+      "source": "shipped_default",
+      "speed": 1.25,
+      "audio_voice": "im_nicola",
+      "enabled": true,
+      "audio_paths": {
+        "im_nicola": "/voice/references/spa/vp_20260623164800938_009-im_nicola.wav",
+        "if_sara": "/voice/references/spa/vp_20260623164800938_009-if_sara.wav"
+      }
+    },
+    {
+      "id": "vp_20260623164814999_010",
+      "track": "Spa",
+      "car": "ferrari_296_gt3",
+      "type": "braking_reference",
+      "normalized_car_position": 0.80715,
+      "label": "Riferimento 10",
+      "text": "sistemare il traction",
+      "audio_path": "/voice/references/spa/vp_20260623164814999_010-im_nicola.wav",
+      "lead_time_sec": null,
+      "created_at": "2026-06-23T16:48:14.999Z",
+      "source": "shipped_default",
+      "speed": 1.25,
+      "audio_voice": "im_nicola",
+      "enabled": true,
+      "audio_paths": {
+        "im_nicola": "/voice/references/spa/vp_20260623164814999_010-im_nicola.wav",
+        "if_sara": "/voice/references/spa/vp_20260623164814999_010-if_sara.wav"
+      }
+    },
+    {
+      "id": "vp_20260623164829601_011",
+      "track": "Spa",
+      "car": "ferrari_296_gt3",
+      "type": "braking_reference",
+      "normalized_car_position": 0.92104,
+      "label": "Riferimento 11",
+      "text": "Tutto a sinistra, frena poco dopo la linea",
+      "audio_path": "/voice/references/spa/vp_20260623164829601_011-im_nicola.wav",
+      "lead_time_sec": null,
+      "created_at": "2026-06-23T16:48:29.601Z",
+      "source": "shipped_default",
+      "speed": 1.25,
+      "audio_voice": "im_nicola",
+      "enabled": true,
+      "audio_paths": {
+        "im_nicola": "/voice/references/spa/vp_20260623164829601_011-im_nicola.wav",
+        "if_sara": "/voice/references/spa/vp_20260623164829601_011-if_sara.wav"
+      }
+    }
+  ]
+}
