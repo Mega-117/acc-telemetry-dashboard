@@ -1,1 +1,0 @@
-import{t as a,aa as n,n as t,ak as o,_ as s}from"./Dot6BI9m.js";const _={class:"page-container"},c=a({__name:"PageContainer",setup(r){return(e,p)=>(n(),t("div",_,[o(e.$slots,"default",{},void 0)]))}}),d=Object.assign(s(c,[["__scopeId","data-v-71e40101"]]),{__name:"LayoutPageContainer"});export{d as _};

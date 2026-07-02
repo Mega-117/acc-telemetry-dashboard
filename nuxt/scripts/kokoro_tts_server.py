@@ -18,6 +18,12 @@ ROOT = Path(os.environ.get("ACC_KOKORO_ROOT", Path(__file__).resolve().parents[1
 WORKSPACE_ROOT = ROOT.parent
 VOICE_DIR = Path(os.environ.get("ACC_KOKORO_VOICE_DIR", ROOT / "node_modules" / "kokoro-js" / "voices")).resolve()
 LOCAL_MODEL_DIR = Path(os.environ.get("ACC_KOKORO_MODEL_DIR", WORKSPACE_ROOT / "vendor" / "kokoro" / "Kokoro-82M")).resolve()
+ONNX_MODEL_PATH = Path(os.environ.get("ACC_KOKORO_ONNX_MODEL", ROOT / "model" / "kokoro-v1.0.onnx")).resolve()
+ONNX_VOICES_PATH = Path(os.environ.get("ACC_KOKORO_ONNX_VOICES", ROOT / "model" / "voices-v1.0.bin")).resolve()
+ENGINE = os.environ.get(
+    "ACC_KOKORO_ENGINE",
+    "onnx" if ONNX_MODEL_PATH.exists() and ONNX_VOICES_PATH.exists() else "legacy",
+).strip().lower()
 DEFAULT_REPO_ID = "hexgrad/Kokoro-82M"
 SAMPLE_RATE = 24_000
 WARMUP_TEXT = "prova."
@@ -32,6 +38,18 @@ LANGUAGE_BY_PREFIX = {
     "j": ("ja-JP", "Japanese"),
     "p": ("pt-BR", "Portuguese"),
     "z": ("zh-CN", "Mandarin Chinese"),
+}
+
+ONNX_LANGUAGE_BY_PREFIX = {
+    "a": "en-us",
+    "b": "en-gb",
+    "e": "es",
+    "f": "fr-fr",
+    "h": "hi",
+    "i": "it",
+    "j": "ja",
+    "p": "pt-br",
+    "z": "zh",
 }
 
 VOICE_LABELS = {
@@ -133,7 +151,45 @@ def find_cached_model_dir() -> Path | None:
     return None
 
 
-class KokoroRuntime:
+class KokoroOnnxRuntime:
+    def __init__(self) -> None:
+        self.model = None
+        self.np = None
+        self.Kokoro = None
+
+    def ensure_imports(self) -> None:
+        if self.Kokoro is not None:
+            return
+
+        import numpy as np
+        from kokoro_onnx import Kokoro
+
+        self.np = np
+        self.Kokoro = Kokoro
+
+    def get_model(self):
+        if self.model is not None:
+            return self.model
+
+        self.ensure_imports()
+        if not ONNX_MODEL_PATH.exists():
+            raise RuntimeError(f"Kokoro ONNX model not found: {ONNX_MODEL_PATH}")
+        if not ONNX_VOICES_PATH.exists():
+            raise RuntimeError(f"Kokoro ONNX voices not found: {ONNX_VOICES_PATH}")
+
+        self.model = self.Kokoro(str(ONNX_MODEL_PATH), str(ONNX_VOICES_PATH))
+        return self.model
+
+    def synthesize(self, text: str, voice: str, speed: float) -> bytes:
+        lang_code = ONNX_LANGUAGE_BY_PREFIX.get(voice[0].lower(), "en-us")
+        audio, sample_rate = self.get_model().create(text, voice=voice, speed=speed, lang=lang_code)
+        audio_array = self.np.asarray(audio, dtype=self.np.float32)
+        if audio_array.size == 0:
+            raise RuntimeError("Kokoro did not return audio.")
+        return to_wav(audio_array, int(sample_rate or SAMPLE_RATE))
+
+
+class KokoroLegacyRuntime:
     def __init__(self) -> None:
         self.model = None
         self.pipelines = {}
@@ -225,7 +281,16 @@ class KokoroRuntime:
         return to_wav(audio)
 
 
-def to_wav(audio) -> bytes:
+class KokoroRuntime:
+    def __init__(self) -> None:
+        self.engine = ENGINE
+        self.runtime = KokoroOnnxRuntime() if self.engine == "onnx" else KokoroLegacyRuntime()
+
+    def synthesize(self, text: str, voice: str, speed: float) -> bytes:
+        return self.runtime.synthesize(text, voice, speed)
+
+
+def to_wav(audio, sample_rate: int = SAMPLE_RATE) -> bytes:
     import numpy as np
 
     pcm = np.clip(audio, -1.0, 1.0)
@@ -234,15 +299,21 @@ def to_wav(audio) -> bytes:
     with wave.open(buffer, "wb") as wav:
         wav.setnchannels(1)
         wav.setsampwidth(2)
-        wav.setframerate(SAMPLE_RATE)
+        wav.setframerate(sample_rate)
         wav.writeframes(pcm.tobytes())
     return buffer.getvalue()
 
 
+def voice_is_available(voice: str) -> bool:
+    if ENGINE == "onnx":
+        return voice in VOICE_LABELS and ONNX_MODEL_PATH.exists() and ONNX_VOICES_PATH.exists()
+    return (VOICE_DIR / f"{voice}.bin").exists()
+
+
 def list_voices() -> list[dict[str, str]]:
     voices = []
-    for path in sorted(VOICE_DIR.glob("*.bin")):
-        voice_id = path.stem
+    voice_ids = sorted(VOICE_LABELS) if ENGINE == "onnx" else [path.stem for path in sorted(VOICE_DIR.glob("*.bin"))]
+    for voice_id in voice_ids:
         lang, language_name = LANGUAGE_BY_PREFIX.get(voice_id[0], ("unknown", "Unknown"))
         gender = "Female" if len(voice_id) > 1 and voice_id[1] == "f" else "Male"
         label = VOICE_LABELS.get(voice_id, voice_id)
@@ -307,7 +378,7 @@ class KokoroHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/health":
-                self.write_json({"ok": True, "engine": "kokoro", "readiness": readiness_payload()})
+                self.write_json({"ok": True, "engine": "kokoro", "runtime": ENGINE, "readiness": readiness_payload()})
             elif parsed.path == "/ready":
                 readiness = readiness_payload()
                 state = readiness.get("state")
@@ -315,11 +386,12 @@ class KokoroHandler(BaseHTTPRequestHandler):
                 self.write_json({
                     "ok": state == "ready",
                     "engine": "kokoro",
+                    "runtime": ENGINE,
                     "readiness": readiness,
                     "voices": list_voices() if state == "ready" else [],
                 }, status=status)
             elif parsed.path == "/voices":
-                self.write_json({"engine": "kokoro", "voices": list_voices()})
+                self.write_json({"engine": "kokoro", "runtime": ENGINE, "voices": list_voices()})
             elif parsed.path == "/speak":
                 self.handle_speak(parsed.query)
             else:
@@ -337,7 +409,7 @@ class KokoroHandler(BaseHTTPRequestHandler):
         if not text:
             self.write_json({"error": "Missing text"}, status=400)
             return
-        if not (VOICE_DIR / f"{voice}.bin").exists():
+        if not voice_is_available(voice):
             self.write_json({"error": f"Unknown voice: {voice}"}, status=404)
             return
         if speed < 0.5 or speed > 2:
@@ -370,11 +442,16 @@ def main() -> None:
     parser.add_argument("--port", default=5111, type=int)
     args = parser.parse_args()
 
-    if not VOICE_DIR.exists():
+    if ENGINE == "onnx":
+        if not ONNX_MODEL_PATH.exists():
+            raise RuntimeError(f"Kokoro ONNX model not found: {ONNX_MODEL_PATH}")
+        if not ONNX_VOICES_PATH.exists():
+            raise RuntimeError(f"Kokoro ONNX voices not found: {ONNX_VOICES_PATH}")
+    elif not VOICE_DIR.exists():
         raise RuntimeError(f"Kokoro voice directory not found: {VOICE_DIR}")
 
     # Niente istanze duplicate sulla stessa porta (PIP-138): su Windows
-    # SO_REUSEADDR lascerebbe convivere più server su :5111 e le richieste
+    # SO_REUSEADDR lascerebbe convivere piu' server su :5111 e le richieste
     # verrebbero instradate a caso -> il voice lab flappa online/offline. Con
     # reuse disattivato, una seconda istanza fallisce il bind ed esce subito:
     # resta un solo server sano.
@@ -382,10 +459,11 @@ def main() -> None:
     try:
         server = ThreadingHTTPServer((args.host, args.port), KokoroHandler)
     except OSError as exc:
-        print(f"Kokoro: porta {args.port} già in uso (un'altra istanza è attiva). Esco. [{exc}]")
+        print(f"Kokoro: porta {args.port} gia' in uso (un'altra istanza e' attiva). Esco. [{exc}]")
         return
 
     print(f"Kokoro TTS server listening on http://{args.host}:{args.port}")
+    print(f"Runtime: {ENGINE}")
     print(f"Voices: {len(list_voices())}")
     threading.Thread(target=warmup_runtime, daemon=True).start()
     server.serve_forever()

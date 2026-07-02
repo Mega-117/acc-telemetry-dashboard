@@ -8,6 +8,9 @@ interface DesktopSpeakResponse {
   error?: string
 }
 
+const LOCAL_VOICE_LAB_BRIDGE = 'http://127.0.0.1:5112'
+const LOCAL_PROGRAM_UNAVAILABLE = 'Programma locale ACC Suite non raggiungibile. Avvia il launcher locale e riprova.'
+
 function getElectronApi(): any | null {
   if (typeof window === 'undefined') return null
   return (window as any).electronAPI || null
@@ -18,6 +21,24 @@ function base64ToBlob(dataBase64: string, mime = 'audio/wav') {
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
   return new Blob([bytes], { type: mime })
+}
+
+async function localBridgeJson<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${LOCAL_VOICE_LAB_BRIDGE}${path}`, {
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(options.headers || {}),
+    },
+    signal: options.signal || AbortSignal.timeout(65_000),
+  })
+  const data = await response.json().catch(() => null)
+  if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`)
+  return data as T
+}
+
+function localProgramError(error: any) {
+  return new Error(error?.message || LOCAL_PROGRAM_UNAVAILABLE)
 }
 
 export function useVoiceLabRuntime() {
@@ -33,19 +54,31 @@ export function useVoiceLabRuntime() {
   async function kokoroReady(): Promise<{ state: KokoroState; message?: string; voices?: any[] }> {
     const api = desktopApi()
     if (api) return await api.kokoroReady()
-    return await $fetch<any>('/api/dev/kokoro-ready' as string, { signal: AbortSignal.timeout(65_000) })
+    try {
+      return await localBridgeJson('/kokoro-ready')
+    } catch (error: any) {
+      return { state: 'offline', message: error?.message || LOCAL_PROGRAM_UNAVAILABLE }
+    }
   }
 
   async function kokoroStart() {
     const api = desktopApi()
     if (api) return await api.kokoroStart()
-    return await $fetch<any>('/api/dev/kokoro-start' as string, { method: 'POST' })
+    try {
+      return await localBridgeJson('/kokoro-start', { method: 'POST' })
+    } catch (error) {
+      throw localProgramError(error)
+    }
   }
 
   async function kokoroStop() {
     const api = desktopApi()
     if (api?.kokoroStop) return await api.kokoroStop()
-    return await $fetch<any>('/api/dev/kokoro-stop' as string, { method: 'POST' })
+    try {
+      return await localBridgeJson('/kokoro-stop', { method: 'POST' })
+    } catch (error) {
+      throw localProgramError(error)
+    }
   }
 
   async function synthesize(text: string, voice: string, speed: number): Promise<Blob> {
@@ -56,16 +89,21 @@ export function useVoiceLabRuntime() {
       return base64ToBlob(response.dataBase64, response.mime || 'audio/wav')
     }
 
-    const url = `/api/dev/kokoro-speak?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&speed=${encodeURIComponent(String(speed))}`
-    const response = await fetch(url, { signal: AbortSignal.timeout(60_000) })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    return new Blob([await response.arrayBuffer()], { type: 'audio/wav' })
+    try {
+      const response = await localBridgeJson<DesktopSpeakResponse>('/kokoro-speak', {
+        method: 'POST',
+        body: JSON.stringify({ text, voice, speed }),
+        signal: AbortSignal.timeout(60_000),
+      })
+      if (!response?.ok || !response.dataBase64) throw new Error(response?.error || 'Sintesi Kokoro fallita')
+      return base64ToBlob(response.dataBase64, response.mime || 'audio/wav')
+    } catch (error) {
+      throw localProgramError(error)
+    }
   }
 
-  function kokoroSpeakUrl(text: string, voice: string, speed: number) {
-    const api = desktopApi()
-    if (api) return ''
-    return `/api/dev/kokoro-speak?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(voice)}&speed=${encodeURIComponent(String(speed))}`
+  function kokoroSpeakUrl(_text?: string, _voice?: string, _speed?: number) {
+    return ''
   }
 
   async function saveReferenceWav(payload: { track: string; filename: string; dataBase64: string }): Promise<{ path: string }> {
@@ -75,13 +113,26 @@ export function useVoiceLabRuntime() {
       if (!result?.ok || !result.path) throw new Error(result?.error || 'Salvataggio WAV fallito')
       return { path: result.path }
     }
-    return await $fetch<any>('/api/dev/voice-reference-wav' as string, { method: 'POST', body: payload })
+    try {
+      const result = await localBridgeJson<any>('/voice-lab/save-reference-wav', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      if (!result?.ok || !result.path) throw new Error(result?.error || 'Salvataggio WAV fallito')
+      return { path: result.path }
+    } catch (error) {
+      throw localProgramError(error)
+    }
   }
 
   async function readVoicePoints<T>(): Promise<T> {
     const api = desktopApi()
     if (api?.voiceLabReadVoicePoints) return await api.voiceLabReadVoicePoints()
-    return await $fetch<any>('/api/track-voice-points' as string) as T
+    try {
+      return await localBridgeJson<T>('/voice-lab/voice-points')
+    } catch (error) {
+      throw localProgramError(error)
+    }
   }
 
   async function writeVoicePoints(payload: { points: any[] }) {
@@ -91,7 +142,16 @@ export function useVoiceLabRuntime() {
       if (!result?.ok) throw new Error(result?.error || 'Salvataggio riferimenti fallito')
       return result
     }
-    return await $fetch<any>('/api/dev/track-voice-points' as string, { method: 'POST', body: payload })
+    try {
+      const result = await localBridgeJson<any>('/voice-lab/voice-points', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })
+      if (!result?.ok) throw new Error(result?.error || 'Salvataggio riferimenti fallito')
+      return result
+    } catch (error) {
+      throw localProgramError(error)
+    }
   }
 
   return {
