@@ -14,12 +14,28 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 
-ROOT = Path(os.environ.get("ACC_KOKORO_ROOT", Path(__file__).resolve().parents[1])).resolve()
+ROOT = Path(
+    os.environ.get("ACC_KOKORO_ROOT", Path(__file__).resolve().parents[1])
+).resolve()
 WORKSPACE_ROOT = ROOT.parent
-VOICE_DIR = Path(os.environ.get("ACC_KOKORO_VOICE_DIR", ROOT / "node_modules" / "kokoro-js" / "voices")).resolve()
-LOCAL_MODEL_DIR = Path(os.environ.get("ACC_KOKORO_MODEL_DIR", WORKSPACE_ROOT / "vendor" / "kokoro" / "Kokoro-82M")).resolve()
-ONNX_MODEL_PATH = Path(os.environ.get("ACC_KOKORO_ONNX_MODEL", ROOT / "model" / "kokoro-v1.0.onnx")).resolve()
-ONNX_VOICES_PATH = Path(os.environ.get("ACC_KOKORO_ONNX_VOICES", ROOT / "model" / "voices-v1.0.bin")).resolve()
+VOICE_DIR = Path(
+    os.environ.get(
+        "ACC_KOKORO_VOICE_DIR",
+        ROOT / "node_modules" / "kokoro-js" / "voices",
+    )
+).resolve()
+LOCAL_MODEL_DIR = Path(
+    os.environ.get(
+        "ACC_KOKORO_MODEL_DIR",
+        WORKSPACE_ROOT / "vendor" / "kokoro" / "Kokoro-82M",
+    )
+).resolve()
+ONNX_MODEL_PATH = Path(
+    os.environ.get("ACC_KOKORO_ONNX_MODEL", ROOT / "model" / "kokoro-v1.0.onnx")
+).resolve()
+ONNX_VOICES_PATH = Path(
+    os.environ.get("ACC_KOKORO_ONNX_VOICES", ROOT / "model" / "voices-v1.0.bin")
+).resolve()
 ENGINE = os.environ.get(
     "ACC_KOKORO_ENGINE",
     "onnx" if ONNX_MODEL_PATH.exists() and ONNX_VOICES_PATH.exists() else "legacy",
@@ -306,13 +322,21 @@ def to_wav(audio, sample_rate: int = SAMPLE_RATE) -> bytes:
 
 def voice_is_available(voice: str) -> bool:
     if ENGINE == "onnx":
-        return voice in VOICE_LABELS and ONNX_MODEL_PATH.exists() and ONNX_VOICES_PATH.exists()
+        return (
+            voice in VOICE_LABELS
+            and ONNX_MODEL_PATH.exists()
+            and ONNX_VOICES_PATH.exists()
+        )
     return (VOICE_DIR / f"{voice}.bin").exists()
 
 
 def list_voices() -> list[dict[str, str]]:
     voices = []
-    voice_ids = sorted(VOICE_LABELS) if ENGINE == "onnx" else [path.stem for path in sorted(VOICE_DIR.glob("*.bin"))]
+    voice_ids = (
+        sorted(VOICE_LABELS)
+        if ENGINE == "onnx"
+        else [path.stem for path in sorted(VOICE_DIR.glob("*.bin"))]
+    )
     for voice_id in voice_ids:
         lang, language_name = LANGUAGE_BY_PREFIX.get(voice_id[0], ("unknown", "Unknown"))
         gender = "Female" if len(voice_id) > 1 and voice_id[1] == "f" else "Male"
@@ -378,7 +402,12 @@ class KokoroHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         try:
             if parsed.path == "/health":
-                self.write_json({"ok": True, "engine": "kokoro", "runtime": ENGINE, "readiness": readiness_payload()})
+                self.write_json({
+                    "ok": True,
+                    "engine": "kokoro",
+                    "runtime": ENGINE,
+                    "readiness": readiness_payload(),
+                })
             elif parsed.path == "/ready":
                 readiness = readiness_payload()
                 state = readiness.get("state")
