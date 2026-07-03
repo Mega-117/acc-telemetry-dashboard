@@ -906,25 +906,39 @@ async function saveMainChanges() {
   await saveScript()
 }
 
+// L'utente normale (reference-only) ascolta i WAV già presenti: il motore
+// Kokoro serve solo a chi può generare, quindi non va avviato né gestito.
+let kokoroLifecycleEntered = false
+
+async function loadFullVoiceLabData() {
+  kokoroLifecycleEntered = true
+  kokoroLifecycle.enterVoiceLab()
+  await Promise.all([ensureKokoro(), loadScript(), loadReferences()])
+  await loadLapTimeCatalog()
+}
+
 watch(isReferenceOnlyMode, (referenceOnly) => {
-  if (referenceOnly) voiceLabSection.value = 'references'
+  if (referenceOnly) {
+    voiceLabSection.value = 'references'
+    return
+  }
+  // Il ruolo admin può risolversi dopo il mount (auth async): completa il caricamento admin.
+  if (voiceLabMounted && !kokoroLifecycleEntered) void loadFullVoiceLabData()
 }, { immediate: true })
 
 onMounted(async () => {
   voiceLabMounted = true
-  kokoroLifecycle.enterVoiceLab()
   await nextTick()
   if (hasFullVoiceLabAccess.value) {
-    await Promise.all([ensureKokoro(), loadScript(), loadReferences()])
-    await loadLapTimeCatalog()
+    await loadFullVoiceLabData()
     return
   }
-  await Promise.all([ensureKokoro(), loadReferences()])
+  await loadReferences()
 })
 
 onBeforeUnmount(() => {
   voiceLabMounted = false
-  kokoroLifecycle.leaveVoiceLab()
+  if (kokoroLifecycleEntered) kokoroLifecycle.leaveVoiceLab()
   stopVoice()
   revokePreviewAudio()
   stopBootTimer()
@@ -946,10 +960,10 @@ onBeforeUnmount(() => {
             Server locale su <code>{{ TTS_SERVER }}</code> (avvio automatico).
           </p>
           <p v-else>
-            Gestisci le tracce audio dei riferimenti pista. Il motore vocale Kokoro viene avviato localmente quando serve generare o ascoltare un riferimento.
+            Ascolta le indicazioni vocali di riferimento per ogni pista e regola quali sono attive e con quanto anticipo vengono annunciate.
           </p>
         </div>
-        <div class="server-card" :class="`server-card--${serverState === 'starting' ? 'checking' : serverState}`" data-testid="voice-lab-server-card">
+        <div v-if="hasFullVoiceLabAccess" class="server-card" :class="`server-card--${serverState === 'starting' ? 'checking' : serverState}`" data-testid="voice-lab-server-card">
           <span class="server-card__label"><i class="server-dot" :class="`server-dot--${serverState}`" />Motore vocale</span>
           <strong>{{ serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : serverState === 'error' ? 'Errore' : `Avvio… ${bootElapsed}s` }}</strong>
           <p>{{ serverMessage }}</p>
@@ -1067,7 +1081,8 @@ onBeforeUnmount(() => {
           <div>
             <span class="voice-kicker">Riferimenti frenata</span>
             <h2>Riferimenti</h2>
-            <p>Seleziona la pista e genera le tracce audio Sara e Nicola dai punti registrati in allenamento.</p>
+            <p v-if="hasFullVoiceLabAccess">Seleziona la pista e genera le tracce audio Sara e Nicola dai punti registrati in allenamento.</p>
+            <p v-else>Seleziona la pista e la voce, ascolta le indicazioni e scegli quali attivare.</p>
           </div>
           <div class="reference-track-select">
             <label>
@@ -1083,7 +1098,7 @@ onBeforeUnmount(() => {
             </div>
             <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy" @click="loadReferences">Aggiorna</button>
             <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy || !referenceRows.length" @click="resetAllReferenceTimingOffsets">Reset timing</button>
-            <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || !referenceRows.length" @click="generateAllReferences">
+            <button v-if="hasFullVoiceLabAccess" type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || !referenceRows.length" @click="generateAllReferences">
               {{ referencesBatchBusy ? 'Genero...' : 'Genera Sara + Nicola' }}
             </button>
           </div>
@@ -1122,9 +1137,9 @@ onBeforeUnmount(() => {
                 {{ entry.enabled === false ? 'Disattivo' : entry.audio_path ? 'WAV pronto' : 'Manca WAV per voce' }}
               </span>
             </header>
-            <textarea :value="entry.text" rows="2" maxlength="280" @input="updateReferenceText(entry, $event)" />
+            <textarea :value="entry.text" rows="2" maxlength="280" :readonly="isReferenceOnlyMode" @input="updateReferenceText(entry, $event)" />
             <footer>
-              <label>
+              <label v-if="hasFullVoiceLabAccess">
                 Velocita
                 <input :value="entry.speed" type="number" min="0.8" max="1.5" step="0.02" @input="updateReferenceSpeed(entry, $event)">
               </label>
@@ -1147,7 +1162,7 @@ onBeforeUnmount(() => {
               <span class="row-status" :class="`row-status--${referenceRowState(entry)}`">{{ referenceTasks[entry.id]?.message || '' }}</span>
               <button type="button" :disabled="entry.enabled === false || isSpeaking || (!entry.audio_path && (!entry.text?.trim() || serverState !== 'online'))" @click="playReference(entry)">Ascolta</button>
               <button type="button" :disabled="referenceRowBusy(entry)" @click="saveReference(entry)">Salva</button>
-              <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || referenceRowBusy(entry)" @click="generateReference(entry)">
+              <button v-if="hasFullVoiceLabAccess" type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || referenceRowBusy(entry)" @click="generateReference(entry)">
                 {{ referenceRowBusy(entry) ? '...' : 'Genera voce' }}
               </button>
             </footer>
@@ -1243,7 +1258,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section class="playground">
+      <section v-if="hasFullVoiceLabAccess" class="playground">
         <div class="playground-head">
           <div>
             <span class="voice-kicker">Prova libera</span>
