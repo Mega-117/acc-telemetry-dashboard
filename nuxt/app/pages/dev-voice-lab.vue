@@ -906,14 +906,15 @@ async function saveMainChanges() {
   await saveScript()
 }
 
-// L'utente normale (reference-only) ascolta i WAV già presenti: il motore
-// Kokoro serve solo a chi può generare, quindi non va avviato né gestito.
-let kokoroLifecycleEntered = false
+// Anche l'utente normale genera e ascolta i riferimenti: il motore Kokoro
+// del programma locale si avvia per tutti. Le sezioni admin (copione, tempi
+// giro) si caricano solo con accesso completo, anche se il ruolo arriva
+// dopo il mount (auth async).
+let adminDataLoaded = false
 
-async function loadFullVoiceLabData() {
-  kokoroLifecycleEntered = true
-  kokoroLifecycle.enterVoiceLab()
-  await Promise.all([ensureKokoro(), loadScript(), loadReferences()])
+async function loadAdminVoiceLabData() {
+  adminDataLoaded = true
+  await loadScript()
   await loadLapTimeCatalog()
 }
 
@@ -922,23 +923,23 @@ watch(isReferenceOnlyMode, (referenceOnly) => {
     voiceLabSection.value = 'references'
     return
   }
-  // Il ruolo admin può risolversi dopo il mount (auth async): completa il caricamento admin.
-  if (voiceLabMounted && !kokoroLifecycleEntered) void loadFullVoiceLabData()
+  if (voiceLabMounted && !adminDataLoaded) void loadAdminVoiceLabData()
 }, { immediate: true })
 
 onMounted(async () => {
   voiceLabMounted = true
+  kokoroLifecycle.enterVoiceLab()
   await nextTick()
   if (hasFullVoiceLabAccess.value) {
-    await loadFullVoiceLabData()
+    await Promise.all([ensureKokoro(), loadAdminVoiceLabData(), loadReferences()])
     return
   }
-  await loadReferences()
+  await Promise.all([ensureKokoro(), loadReferences()])
 })
 
 onBeforeUnmount(() => {
   voiceLabMounted = false
-  if (kokoroLifecycleEntered) kokoroLifecycle.leaveVoiceLab()
+  kokoroLifecycle.leaveVoiceLab()
   stopVoice()
   revokePreviewAudio()
   stopBootTimer()
@@ -960,10 +961,10 @@ onBeforeUnmount(() => {
             Server locale su <code>{{ TTS_SERVER }}</code> (avvio automatico).
           </p>
           <p v-else>
-            Ascolta le indicazioni vocali di riferimento per ogni pista e regola quali sono attive e con quanto anticipo vengono annunciate.
+            Genera e ascolta le indicazioni vocali di riferimento per ogni pista e regola quali sono attive e con quanto anticipo vengono annunciate. Il motore vocale gira nel programma locale ACC Suite.
           </p>
         </div>
-        <div v-if="hasFullVoiceLabAccess" class="server-card" :class="`server-card--${serverState === 'starting' ? 'checking' : serverState}`" data-testid="voice-lab-server-card">
+        <div class="server-card" :class="`server-card--${serverState === 'starting' ? 'checking' : serverState}`" data-testid="voice-lab-server-card">
           <span class="server-card__label"><i class="server-dot" :class="`server-dot--${serverState}`" />Motore vocale</span>
           <strong>{{ serverState === 'online' ? 'Online' : serverState === 'offline' ? 'Offline' : serverState === 'error' ? 'Errore' : `Avvio… ${bootElapsed}s` }}</strong>
           <p>{{ serverMessage }}</p>
@@ -1081,8 +1082,7 @@ onBeforeUnmount(() => {
           <div>
             <span class="voice-kicker">Riferimenti frenata</span>
             <h2>Riferimenti</h2>
-            <p v-if="hasFullVoiceLabAccess">Seleziona la pista e genera le tracce audio Sara e Nicola dai punti registrati in allenamento.</p>
-            <p v-else>Seleziona la pista e la voce, ascolta le indicazioni e scegli quali attivare.</p>
+            <p>Seleziona la pista e genera le tracce audio Sara e Nicola dai punti registrati in allenamento.</p>
           </div>
           <div class="reference-track-select">
             <label>
@@ -1098,7 +1098,7 @@ onBeforeUnmount(() => {
             </div>
             <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy" @click="loadReferences">Aggiorna</button>
             <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy || !referenceRows.length" @click="resetAllReferenceTimingOffsets">Reset timing</button>
-            <button v-if="hasFullVoiceLabAccess" type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || !referenceRows.length" @click="generateAllReferences">
+            <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || !referenceRows.length" @click="generateAllReferences">
               {{ referencesBatchBusy ? 'Genero...' : 'Genera Sara + Nicola' }}
             </button>
           </div>
@@ -1137,9 +1137,9 @@ onBeforeUnmount(() => {
                 {{ entry.enabled === false ? 'Disattivo' : entry.audio_path ? 'WAV pronto' : 'Manca WAV per voce' }}
               </span>
             </header>
-            <textarea :value="entry.text" rows="2" maxlength="280" :readonly="isReferenceOnlyMode" @input="updateReferenceText(entry, $event)" />
+            <textarea :value="entry.text" rows="2" maxlength="280" @input="updateReferenceText(entry, $event)" />
             <footer>
-              <label v-if="hasFullVoiceLabAccess">
+              <label>
                 Velocita
                 <input :value="entry.speed" type="number" min="0.8" max="1.5" step="0.02" @input="updateReferenceSpeed(entry, $event)">
               </label>
@@ -1162,7 +1162,7 @@ onBeforeUnmount(() => {
               <span class="row-status" :class="`row-status--${referenceRowState(entry)}`">{{ referenceTasks[entry.id]?.message || '' }}</span>
               <button type="button" :disabled="entry.enabled === false || isSpeaking || (!entry.audio_path && (!entry.text?.trim() || serverState !== 'online'))" @click="playReference(entry)">Ascolta</button>
               <button type="button" :disabled="referenceRowBusy(entry)" @click="saveReference(entry)">Salva</button>
-              <button v-if="hasFullVoiceLabAccess" type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || referenceRowBusy(entry)" @click="generateReference(entry)">
+              <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || referenceRowBusy(entry)" @click="generateReference(entry)">
                 {{ referenceRowBusy(entry) ? '...' : 'Genera voce' }}
               </button>
             </footer>
