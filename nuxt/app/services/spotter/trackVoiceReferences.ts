@@ -34,9 +34,14 @@ export function normalizedSpeedPerSecond(previous: number, current: number, elap
   return forwardNormalizedDelta(previous, current) / (elapsedMs / 1000)
 }
 
+// Range unico del timing offset (PIP-217): server Nuxt e kokoroRuntime desktop
+// replicano gli stessi limiti nei loro clamp.
+export const TRACK_VOICE_TIMING_OFFSET_MIN_SEC = -10
+export const TRACK_VOICE_TIMING_OFFSET_MAX_SEC = 10
+
 export function clampTimingOffsetSec(value: unknown) {
   const rounded = Math.round(Number(value) || 0)
-  return Math.max(-3, Math.min(3, rounded))
+  return Math.max(TRACK_VOICE_TIMING_OFFSET_MIN_SEC, Math.min(TRACK_VOICE_TIMING_OFFSET_MAX_SEC, rounded))
 }
 
 export function wrapNormalizedPosition(value: number) {

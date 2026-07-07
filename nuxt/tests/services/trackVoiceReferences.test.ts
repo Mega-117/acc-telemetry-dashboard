@@ -42,8 +42,10 @@ describe('trackVoiceReferences', () => {
   })
 
   it('clamps timing offsets to the supported presets', () => {
-    expect(clampTimingOffsetSec(-8)).toBe(-3)
-    expect(clampTimingOffsetSec(8)).toBe(3)
+    expect(clampTimingOffsetSec(-15)).toBe(-10)
+    expect(clampTimingOffsetSec(15)).toBe(10)
+    expect(clampTimingOffsetSec(-10)).toBe(-10)
+    expect(clampTimingOffsetSec(10)).toBe(10)
     expect(clampTimingOffsetSec(2.6)).toBe(3)
   })
 

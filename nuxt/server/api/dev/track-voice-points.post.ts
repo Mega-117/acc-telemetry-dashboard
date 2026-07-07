@@ -12,9 +12,11 @@ function cleanSpeed(value: unknown) {
   return Math.max(0.5, Math.min(2, speed))
 }
 
+// Stessi limiti di TRACK_VOICE_TIMING_OFFSET_MIN/MAX_SEC in
+// app/services/spotter/trackVoiceReferences.ts (PIP-217).
 function cleanTimingOffsetSec(value: unknown) {
   const offset = Math.round(Number(value) || 0)
-  return Math.max(-3, Math.min(3, offset))
+  return Math.max(-10, Math.min(10, offset))
 }
 
 function cleanAudioPaths(value: unknown) {

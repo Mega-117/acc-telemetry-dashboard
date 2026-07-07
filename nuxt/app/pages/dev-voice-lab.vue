@@ -14,7 +14,12 @@ import {
   type LapTimeAudioVoice,
   type LapTimeVoiceEntry,
 } from '~/services/overlay/lapTimeAnnouncer'
-import { resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
+import {
+  TRACK_VOICE_TIMING_OFFSET_MAX_SEC,
+  TRACK_VOICE_TIMING_OFFSET_MIN_SEC,
+  clampTimingOffsetSec,
+  resolveTrackVoiceReferenceAudioPath,
+} from '~/services/spotter/trackVoiceReferences'
 
 definePageMeta({
   layout: 'dashboard'
@@ -265,12 +270,12 @@ function updateReferenceSpeed(entry: TrackVoicePoint, event: Event) {
   scheduleReferenceAutoSave(entry.id)
 }
 
-const REFERENCE_TIMING_OFFSETS = [-3, -2, -1, 0, 1, 2, 3]
+const REFERENCE_TIMING_OFFSETS = Array.from(
+  { length: TRACK_VOICE_TIMING_OFFSET_MAX_SEC - TRACK_VOICE_TIMING_OFFSET_MIN_SEC + 1 },
+  (_, index) => TRACK_VOICE_TIMING_OFFSET_MIN_SEC + index,
+)
 
-function clampReferenceTimingOffset(value: unknown) {
-  const offset = Math.round(Number(value) || 0)
-  return Math.max(-3, Math.min(3, offset))
-}
+const clampReferenceTimingOffset = clampTimingOffsetSec
 
 function referenceTimingLabel(offset: number | null | undefined) {
   const value = clampReferenceTimingOffset(offset)
