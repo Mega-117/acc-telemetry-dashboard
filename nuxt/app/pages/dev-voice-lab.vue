@@ -231,13 +231,38 @@ function referenceWavName(entry: TrackVoicePoint, voice: SpotterVoiceId) {
   return `${entry.id}-${voice}.wav`
 }
 
+// Auto-save (PIP-215): senza bottone Salva ogni modifica persiste da sola,
+// con debounce per non scrivere a ogni tasto nel textarea.
+const REFERENCE_AUTOSAVE_DEBOUNCE_MS = 600
+const referenceAutoSaveTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+
+function scheduleReferenceAutoSave(entryId: string) {
+  if (referenceAutoSaveTimers[entryId]) clearTimeout(referenceAutoSaveTimers[entryId])
+  referenceAutoSaveTimers[entryId] = setTimeout(() => {
+    delete referenceAutoSaveTimers[entryId]
+    const current = latestReferenceRow(entryId)
+    if (current) void saveReference(current)
+  }, REFERENCE_AUTOSAVE_DEBOUNCE_MS)
+}
+
+function flushReferenceAutoSaves() {
+  for (const entryId of Object.keys(referenceAutoSaveTimers)) {
+    clearTimeout(referenceAutoSaveTimers[entryId]!)
+    delete referenceAutoSaveTimers[entryId]
+    const current = latestReferenceRow(entryId)
+    if (current) void saveReference(current)
+  }
+}
+
 function updateReferenceText(entry: TrackVoicePoint, event: Event) {
   patchReferenceRow(entry, { text: (event.target as HTMLTextAreaElement).value })
+  scheduleReferenceAutoSave(entry.id)
 }
 
 function updateReferenceSpeed(entry: TrackVoicePoint, event: Event) {
   const speed = Number((event.target as HTMLInputElement).value)
   patchReferenceRow(entry, { speed: Number.isFinite(speed) ? speed : 1.15 })
+  scheduleReferenceAutoSave(entry.id)
 }
 
 const REFERENCE_TIMING_OFFSETS = [-3, -2, -1, 0, 1, 2, 3]
@@ -256,14 +281,17 @@ function referenceTimingLabel(offset: number | null | undefined) {
 
 function updateReferenceTimingOffset(entry: TrackVoicePoint, event: Event) {
   patchReferenceRow(entry, { timing_offset_sec: clampReferenceTimingOffset((event.target as HTMLSelectElement).value) })
+  scheduleReferenceAutoSave(entry.id)
 }
 
 function resetReferenceTimingOffset(entry: TrackVoicePoint) {
   patchReferenceRow(entry, { timing_offset_sec: 0 })
+  scheduleReferenceAutoSave(entry.id)
 }
 
 function toggleReferenceEnabled(entry: TrackVoicePoint) {
   patchReferenceRow(entry, { enabled: entry.enabled === false })
+  scheduleReferenceAutoSave(entry.id)
 }
 
 function setReferenceVoice(voice: SpotterVoiceId) {
@@ -334,17 +362,14 @@ async function saveReference(entry: TrackVoicePoint, voice: SpotterVoiceId = ref
   }
 }
 
+/**
+ * Anteprima TTS (PIP-215): sintetizza sempre il testo del box con la velocita'
+ * impostata, mai il WAV salvato — cosi' si sente la modifica prima di generare.
+ */
 async function playReference(entry: TrackVoicePoint) {
   if (entry.enabled === false) return
-  const text = entry.text ?? ''
-  const audioPath = referenceAudioPath(entry)
-  if (!text.trim() && !audioPath) return
-  const label = `${entry.label || text || 'Riferimento'} - ${referenceVoiceId.value === 'im_nicola' ? 'Nicola' : 'Sara'}`
-  if (audioPath) {
-    await playAudioSource(`${audioPath}?t=${Date.now()}`, label)
-    return
-  }
-  await playBlob(await synthesize(text, referenceVoiceId.value, entry.speed ?? 1.15), label)
+  const label = `${entry.label || entry.text || 'Riferimento'} - ${referenceVoiceId.value === 'im_nicola' ? 'Nicola' : 'Sara'}`
+  await playText(entry.text ?? '', entry.speed ?? 1.15, label, referenceVoiceId.value)
 }
 
 async function generateReference(entry: TrackVoicePoint, voice: SpotterVoiceId = referenceVoiceId.value) {
@@ -771,7 +796,7 @@ async function playAudioSource(sourceUrl: string, label: string, isObjectUrl = f
   }
 }
 
-async function playText(text: string, speed: number, label = 'Anteprima') {
+async function playText(text: string, speed: number, label = 'Anteprima', voice = previewVoiceId.value) {
   if (serverState.value !== 'online' || isSpeaking.value || !text.trim()) return
   isSpeaking.value = true
   kokoroLifecycle.beginWork()
@@ -780,7 +805,7 @@ async function playText(text: string, speed: number, label = 'Anteprima') {
   previewAudioLabel.value = label
   previewAudioStatus.value = 'Genero anteprima...'
   try {
-    await playBlob(await synthesize(text.trim(), previewVoiceId.value, speed), label)
+    await playBlob(await synthesize(text.trim(), voice, speed), label)
   } catch (error: any) {
     previewAudioStatus.value = ''
     previewAudioError.value = `Sintesi non riuscita: ${error?.message || 'errore'}`
@@ -939,6 +964,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   voiceLabMounted = false
+  flushReferenceAutoSaves()
   kokoroLifecycle.leaveVoiceLab()
   stopVoice()
   revokePreviewAudio()
@@ -1160,11 +1186,7 @@ onBeforeUnmount(() => {
               </button>
 
               <span class="row-status" :class="`row-status--${referenceRowState(entry)}`">{{ referenceTasks[entry.id]?.message || '' }}</span>
-              <button type="button" :disabled="entry.enabled === false || isSpeaking || (!entry.audio_path && (!entry.text?.trim() || serverState !== 'online'))" @click="playReference(entry)">Ascolta</button>
-              <button type="button" :disabled="referenceRowBusy(entry)" @click="saveReference(entry)">Salva</button>
-              <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || referenceRowBusy(entry)" @click="generateReference(entry)">
-                {{ referenceRowBusy(entry) ? '...' : 'Genera voce' }}
-              </button>
+              <button type="button" :disabled="entry.enabled === false || isSpeaking || !entry.text?.trim() || serverState !== 'online'" @click="playReference(entry)">Ascolta</button>
             </footer>
           </article>
         </div>
