@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   clampTimingOffsetSec,
+  advanceTrackVoiceReferenceTick,
   crossedReferencePoint,
   effectiveReferencePosition,
   filterPlayableTrackVoiceReferences,
@@ -56,9 +57,10 @@ describe('trackVoiceReferences', () => {
     expect(effectiveReferencePosition({ normalized_car_position: 0.5, timing_offset_sec: 2 }, 0.02)).toBeCloseTo(0.54)
   })
 
-  it('wraps timing offsets across the finish line', () => {
-    expect(effectiveReferencePosition({ normalized_car_position: 0.02, timing_offset_sec: -3 }, 0.02)).toBeCloseTo(0.96)
-    expect(effectiveReferencePosition({ normalized_car_position: 0.98, timing_offset_sec: 2 }, 0.02)).toBeCloseTo(0.02)
+  it('clamps timing offsets at the finish line instead of wrapping (PIP-216)', () => {
+    expect(effectiveReferencePosition({ normalized_car_position: 0.02, timing_offset_sec: -3 }, 0.02)).toBe(0)
+    expect(effectiveReferencePosition({ normalized_car_position: 0.98, timing_offset_sec: 2 }, 0.02)).toBeCloseTo(1, 4)
+    expect(effectiveReferencePosition({ normalized_car_position: 0.98, timing_offset_sec: 2 }, 0.02)).toBeLessThan(1)
   })
 
   it('estimates normalized speed from position deltas, including wrap', () => {
@@ -91,5 +93,65 @@ describe('trackVoiceReferences', () => {
     expect(crossedReferencePoint(0.92, 0.08, 0.97)).toBe(true)
     expect(crossedReferencePoint(0.92, 0.08, 0.04)).toBe(true)
     expect(crossedReferencePoint(0.92, 0.08, 0.5)).toBe(false)
+  })
+})
+
+describe('advanceTrackVoiceReferenceTick (PIP-216)', () => {
+  const ref = (id: string, position: number, timingOffsetSec = 0): TrackVoiceReference => ({
+    id,
+    track: 'Spa',
+    type: 'braking_reference',
+    normalized_car_position: position,
+    audio_path: `/${id}.wav`,
+    timing_offset_sec: timingOffsetSec,
+  })
+  const tick = (input: Partial<Parameters<typeof advanceTrackVoiceReferenceTick>[0]>) =>
+    advanceTrackVoiceReferenceTick({
+      previous: 0,
+      current: 0,
+      elapsedMs: 250,
+      playedIds: new Set<string>(),
+      references: [],
+      ...input,
+    })
+
+  it('announces every point crossed in a single tick, in crossing order', () => {
+    const outcome = tick({ previous: 0.30, current: 0.34, references: [ref('b', 0.33), ref('a', 0.31)] })
+    expect(outcome.toAnnounce.map(point => point.id)).toEqual(['a', 'b'])
+    expect([...outcome.playedIds].sort()).toEqual(['a', 'b'])
+  })
+
+  it('never repeats a point already played in the lap', () => {
+    const outcome = tick({ previous: 0.30, current: 0.34, playedIds: new Set(['a']), references: [ref('a', 0.31), ref('b', 0.33)] })
+    expect(outcome.toAnnounce.map(point => point.id)).toEqual(['b'])
+  })
+
+  it('treats a small backward step as jitter, not as a lap wrap', () => {
+    const outcome = tick({ previous: 0.50, current: 0.45, playedIds: new Set(['a']), references: [ref('a', 0.48), ref('z', 0.99)] })
+    expect(outcome.toAnnounce).toEqual([])
+    expect([...outcome.playedIds]).toEqual(['a'])
+  })
+
+  it('on a real wrap announces the missed end-of-lap point once and restarts the per-lap set', () => {
+    const outcome = tick({
+      previous: 0.98,
+      current: 0.02,
+      playedIds: new Set(['mid']),
+      references: [ref('mid', 0.5), ref('line', 0.9966), ref('start', 0.01)],
+    })
+    expect(outcome.toAnnounce.map(point => point.id)).toEqual(['line', 'start'])
+    expect([...outcome.playedIds]).toEqual(['start'])
+  })
+
+  it('does not repeat an end-of-lap point already played before the wrap', () => {
+    const outcome = tick({ previous: 0.98, current: 0.02, playedIds: new Set(['line']), references: [ref('line', 0.9966)] })
+    expect(outcome.toAnnounce).toEqual([])
+    expect(outcome.playedIds.size).toBe(0)
+  })
+
+  it('consumes points skipped by a stale-data jump without announcing them late', () => {
+    const outcome = tick({ previous: 0.10, current: 0.40, references: [ref('a', 0.2), ref('b', 0.3)] })
+    expect(outcome.toAnnounce).toEqual([])
+    expect([...outcome.playedIds].sort()).toEqual(['a', 'b'])
   })
 })

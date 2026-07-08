@@ -63,12 +63,77 @@ export function wrapNormalizedPosition(value: number) {
   return ((value % 1) + 1) % 1
 }
 
+// Appena sotto 1: un punto spinto oltre il traguardo resta annunciabile
+// sull'ultimo tratto del giro invece di "trasferirsi" al giro dopo.
+const MAX_EFFECTIVE_REFERENCE_POSITION = 1 - 1e-6
+
 export function effectiveReferencePosition(point: Pick<TrackVoiceReference, 'normalized_car_position' | 'timing_offset_sec'>, speedPerSecond: number) {
   const offsetSec = clampTimingOffsetSec(point.timing_offset_sec)
+  const base = wrapNormalizedPosition(point.normalized_car_position)
   if (offsetSec === 0 || !Number.isFinite(speedPerSecond) || speedPerSecond <= 0) {
-    return wrapNormalizedPosition(point.normalized_car_position)
+    return base
   }
-  return wrapNormalizedPosition(point.normalized_car_position + offsetSec * speedPerSecond)
+  // PIP-216: l'offset anticipa/ritarda dentro il giro ma non puo' mai
+  // spostare il punto oltre il traguardo (in nessuna direzione).
+  const shifted = base + offsetSec * speedPerSecond
+  return Math.min(Math.max(shifted, 0), MAX_EFFECTIVE_REFERENCE_POSITION)
+}
+
+// Un passo indietro sotto questa soglia e' jitter/spin/retromarcia, non un
+// passaggio del traguardo: nessun crossing e stima velocita' scartata.
+export const TRACK_VOICE_WRAP_BACKWARD_THRESHOLD = 0.5
+// Avanzamento massimo plausibile tra due tick (~250ms): oltre, il campione e'
+// un recupero da dato stale — i punti scavalcati si consumano senza annuncio.
+export const TRACK_VOICE_MAX_ANNOUNCE_TICK_DELTA = 0.1
+
+export interface TrackVoiceReferenceTickInput {
+  previous: number
+  current: number
+  elapsedMs: number
+  playedIds: ReadonlySet<string>
+  references: TrackVoiceReference[]
+}
+
+export interface TrackVoiceReferenceTickResult {
+  playedIds: Set<string>
+  toAnnounce: TrackVoiceReference[]
+}
+
+// PIP-216: unico punto di verita' dell'avanzamento riferimenti. Contratto:
+// ogni punto e' annunciato esattamente una volta per giro quando l'auto lo
+// supera, anche se il campionamento l'ha scavalcato; il ciclo del giro viene
+// dal flusso di posizione (wrap reale), non dagli eventi lap del live state.
+export function advanceTrackVoiceReferenceTick(input: TrackVoiceReferenceTickInput): TrackVoiceReferenceTickResult {
+  const { previous, current, elapsedMs, playedIds, references } = input
+  const backwardDistance = previous - current
+  if (backwardDistance > 0 && backwardDistance < TRACK_VOICE_WRAP_BACKWARD_THRESHOLD) {
+    return { playedIds: new Set(playedIds), toAnnounce: [] }
+  }
+  const isWrap = backwardDistance >= TRACK_VOICE_WRAP_BACKWARD_THRESHOLD
+  const forwardDelta = forwardNormalizedDelta(previous, current)
+  const plausibleTick = forwardDelta <= TRACK_VOICE_MAX_ANNOUNCE_TICK_DELTA
+  const speedPerSecond = plausibleTick ? normalizedSpeedPerSecond(previous, current, elapsedMs) : 0
+
+  const crossed = references
+    .map(point => ({ point, target: effectiveReferencePosition(point, speedPerSecond) }))
+    .filter(({ target }) => crossedReferencePoint(previous, current, target))
+    .sort((a, b) => forwardNormalizedDelta(previous, a.target) - forwardNormalizedDelta(previous, b.target))
+
+  // Sul wrap il set per-giro riparte: restano segnati solo i punti gia'
+  // superati dopo il traguardo; quelli di fine giro appartengono al giro chiuso.
+  const nextPlayedIds = isWrap ? new Set<string>() : new Set(playedIds)
+  const toAnnounce: TrackVoiceReference[] = []
+  for (const { point, target } of crossed) {
+    const inClosedLapSegment = isWrap && target > previous
+    if (inClosedLapSegment) {
+      if (!playedIds.has(point.id) && plausibleTick) toAnnounce.push(point)
+      continue
+    }
+    if (nextPlayedIds.has(point.id)) continue
+    nextPlayedIds.add(point.id)
+    if (plausibleTick) toAnnounce.push(point)
+  }
+  return { playedIds: nextPlayedIds, toAnnounce }
 }
 
 export function resolveTrackVoiceReferenceAudioPath(

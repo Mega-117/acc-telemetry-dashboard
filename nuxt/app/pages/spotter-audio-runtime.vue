@@ -7,11 +7,9 @@ import { usePublicPath } from '~/composables/usePublicPath'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
 import {
-  crossedReferencePoint,
-  effectiveReferencePosition,
+  advanceTrackVoiceReferenceTick,
   filterPlayableTrackVoiceReferences,
   isLapCountIncrement,
-  normalizedSpeedPerSecond,
   normalizeTrackName,
   shouldArmTrackVoiceReferences,
   type TrackVoiceReference,
@@ -133,19 +131,20 @@ function tickTrackVoiceReferences() {
   previousVoiceReferenceTs = now
   if (previous === null || previousTs === null) return
 
-  const speedPerSecond = normalizedSpeedPerSecond(previous, currentPosition, now - previousTs)
-
-  const alreadyPlayed = playedTrackVoiceReferenceIds.value
-  const nextReference = trackVoiceReferences.value.find(point =>
-    normalizeTrackName(point.track) === track &&
-    !alreadyPlayed.has(point.id) &&
-    crossedReferencePoint(previous, currentPosition, effectiveReferencePosition(point, speedPerSecond))
-  )
-  if (!nextReference?.audio_path) return
-
-  playedTrackVoiceReferenceIds.value = new Set([...alreadyPlayed, nextReference.id])
-  enqueueAudioPath(nextReference.audio_path)
-  if (import.meta.dev) console.debug('[spotter-audio-runtime] riferimento vocale', nextReference.label || nextReference.id)
+  // PIP-216: crossing, jitter, wrap e set per-giro vivono nella logica pura.
+  const outcome = advanceTrackVoiceReferenceTick({
+    previous,
+    current: currentPosition,
+    elapsedMs: now - previousTs,
+    playedIds: playedTrackVoiceReferenceIds.value,
+    references: trackVoiceReferences.value.filter(point => normalizeTrackName(point.track) === track),
+  })
+  playedTrackVoiceReferenceIds.value = outcome.playedIds
+  for (const reference of outcome.toAnnounce) {
+    if (!reference.audio_path) continue
+    enqueueAudioPath(reference.audio_path)
+    if (import.meta.dev) console.debug('[spotter-audio-runtime] riferimento vocale', reference.label || reference.id)
+  }
 }
 
 function announceLapTime() {
@@ -169,10 +168,11 @@ onMounted(async () => {
 watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
   if (!canRunSpotterAudio.value) return
   evaluateTrackVoiceReferencesArming()
-  // Reset per-giro e tempo giro solo su un incremento reale tra campioni
-  // freschi: le transizioni da/verso null sono recuperi di dato stale.
+  // Tempo giro solo su un incremento reale tra campioni freschi: le
+  // transizioni da/verso null sono recuperi di dato stale. Il ciclo per-giro
+  // dei riferimenti NON si resetta qui: lo governa il wrap del flusso di
+  // posizione (PIP-216), immune al lag tra live poller e fast poller.
   if (!isLapCountIncrement(oldVal, newVal)) return
-  resetTrackVoiceReferenceLapState()
   announceLapTime()
 })
 
