@@ -148,6 +148,38 @@ export function resolveTrackVoiceReferenceAudioPath(
   return ''
 }
 
+// PIP-223: dizionario voce -> WAV completo di un punto, con la coppia legacy
+// (audio_path/audio_voice, default if_sara come nel resolve) migrata dentro.
+// audio_paths esplicito vince sul legacy, come in resolveTrackVoiceReferenceAudioPath.
+export function collectReferenceAudioPaths(point: TrackVoiceReference): Record<string, string> {
+  const audioPaths: Record<string, string> = {}
+  for (const [voice, path] of Object.entries(point.audio_paths || {})) {
+    if (typeof path === 'string' && path.trim()) audioPaths[voice] = path
+  }
+  const legacyVoice = String(point.audio_voice || 'if_sara')
+  if (point.audio_path && !audioPaths[legacyVoice]) audioPaths[legacyVoice] = point.audio_path
+  return audioPaths
+}
+
+// PIP-223: entry di salvataggio costruita dal punto grezzo + campi editati.
+// La riga della UI riflette la voce selezionata; il salvataggio non deve mai
+// perdere o riassegnare i WAV delle altre voci. Un audio_paths esplicito
+// nell'editato (es. WAV appena generato o azzerato) e' autoritativo; senza,
+// la base audio viene dal punto grezzo.
+export function buildReferenceSaveEntry<T extends TrackVoiceReference>(raw: T, edited: T, voice: SpotterVoiceId): T {
+  const audioPaths = edited.audio_paths
+    ? collectReferenceAudioPaths({ ...edited, audio_path: '' })
+    : collectReferenceAudioPaths(raw)
+  const audioPath = audioPaths[voice] || ''
+  return {
+    ...raw,
+    ...edited,
+    audio_paths: audioPaths,
+    audio_path: audioPath,
+    audio_voice: voice,
+  }
+}
+
 export function filterPlayableTrackVoiceReferences(
   points: TrackVoiceReference[],
   voice: SpotterVoiceId,

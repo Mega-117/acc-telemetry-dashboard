@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   clampTimingOffsetSec,
   advanceTrackVoiceReferenceTick,
+  buildReferenceSaveEntry,
   crossedReferencePoint,
   effectiveReferencePosition,
   filterPlayableTrackVoiceReferences,
@@ -93,6 +94,48 @@ describe('trackVoiceReferences', () => {
     expect(crossedReferencePoint(0.92, 0.08, 0.97)).toBe(true)
     expect(crossedReferencePoint(0.92, 0.08, 0.04)).toBe(true)
     expect(crossedReferencePoint(0.92, 0.08, 0.5)).toBe(false)
+  })
+})
+
+describe('buildReferenceSaveEntry (PIP-223)', () => {
+  const legacyPoint: TrackVoiceReference = {
+    id: 'legacy',
+    track: 'Spa',
+    type: 'braking_reference',
+    normalized_car_position: 0.3,
+    text: 'frena tardi',
+    audio_path: '/nicola.wav',
+    audio_voice: 'im_nicola',
+  }
+
+  it('keeps the legacy wav when editing with the other voice selected', () => {
+    const editedRow = { ...legacyPoint, text: 'testo nuovo', audio_voice: 'if_sara', audio_path: '', audio_paths: undefined }
+    const saved = buildReferenceSaveEntry(legacyPoint, editedRow, 'if_sara')
+    expect(saved.audio_paths).toEqual({ im_nicola: '/nicola.wav' })
+    expect(saved.text).toBe('testo nuovo')
+    expect(resolveTrackVoiceReferenceAudioPath(saved, 'im_nicola')).toBe('/nicola.wav')
+  })
+
+  it('migrates a legacy point without audio_voice using the default voice', () => {
+    const point = { ...legacyPoint, audio_voice: undefined }
+    const saved = buildReferenceSaveEntry(point, { ...point, audio_path: '', audio_paths: undefined }, 'im_nicola')
+    expect(saved.audio_paths).toEqual({ if_sara: '/nicola.wav' })
+  })
+
+  it('treats an explicit audio_paths on the edited entry as authoritative', () => {
+    const multiVoice = { ...legacyPoint, audio_path: '', audio_voice: undefined, audio_paths: { if_sara: '/sara.wav', im_nicola: '/nicola-2.wav' } }
+    const cleared = buildReferenceSaveEntry(multiVoice, { ...multiVoice, audio_paths: { if_sara: '/sara.wav' } }, 'im_nicola')
+    expect(cleared.audio_paths).toEqual({ if_sara: '/sara.wav' })
+    expect(cleared.audio_path).toBe('')
+    expect(cleared.audio_voice).toBe('im_nicola')
+  })
+
+  it('points audio_path at the requested voice when its wav exists', () => {
+    const multiVoice = { ...legacyPoint, audio_path: '', audio_voice: undefined, audio_paths: { if_sara: '/sara.wav', im_nicola: '/nicola-2.wav' } }
+    const saved = buildReferenceSaveEntry(multiVoice, { ...multiVoice }, 'if_sara')
+    expect(saved.audio_path).toBe('/sara.wav')
+    expect(saved.audio_voice).toBe('if_sara')
+    expect(saved.audio_paths).toEqual({ if_sara: '/sara.wav', im_nicola: '/nicola-2.wav' })
   })
 })
 

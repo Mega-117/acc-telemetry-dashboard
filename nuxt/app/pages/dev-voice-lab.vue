@@ -17,7 +17,9 @@ import {
 import {
   TRACK_VOICE_TIMING_OFFSET_MAX_SEC,
   TRACK_VOICE_TIMING_OFFSET_MIN_SEC,
+  buildReferenceSaveEntry,
   clampTimingOffsetSec,
+  collectReferenceAudioPaths,
   resolveTrackVoiceReferenceAudioPath,
 } from '~/services/spotter/trackVoiceReferences'
 
@@ -337,24 +339,30 @@ async function loadReferences() {
   }
 }
 
-function referenceAudioPaths(entry: TrackVoicePoint) {
-  const audioPaths = { ...(entry.audio_paths || {}) }
-  if (entry.audio_path && KOKORO_ITALIAN_VOICE_IDS.includes(entry.audio_voice as SpotterVoiceId)) {
-    audioPaths[entry.audio_voice as SpotterVoiceId] = entry.audio_path
-  }
-  return audioPaths
+function rawReferencePoint(id: string) {
+  return referenceCatalog.value.points.find(point => point.id === id)
 }
 
 function withReferenceAudioPath(entry: TrackVoicePoint, voice: SpotterVoiceId, path: string): TrackVoicePoint {
-  const audioPaths = referenceAudioPaths(entry)
+  // PIP-223: base audio dal punto grezzo del catalogo, cosi' la modifica di
+  // una voce non perde i WAV dell'altra (la riga computata riflette solo la
+  // voce selezionata).
+  const raw = rawReferencePoint(entry.id) ?? entry
+  const audioPaths = { ...collectReferenceAudioPaths(raw), ...(entry.audio_paths || {}) }
   if (path) audioPaths[voice] = path
   else delete audioPaths[voice]
   return { ...entry, audio_paths: audioPaths, audio_path: path, audio_voice: voice }
 }
 
 async function saveReference(entry: TrackVoicePoint, voice: SpotterVoiceId = referenceVoiceId.value): Promise<boolean> {
-  const audioPath = referenceAudioPath(entry, voice)
-  const normalizedEntry = { ...entry, audio_paths: referenceAudioPaths(entry), audio_path: audioPath, audio_voice: voice, enabled: entry.enabled !== false, timing_offset_sec: clampReferenceTimingOffset(entry.timing_offset_sec) }
+  // PIP-223: il salvataggio parte dal punto grezzo + campi editati; i WAV
+  // esistenti (legacy o multi-voce) non vengono mai persi ne' riassegnati.
+  const raw = rawReferencePoint(entry.id) ?? entry
+  const normalizedEntry = {
+    ...buildReferenceSaveEntry(raw, entry, voice),
+    enabled: entry.enabled !== false,
+    timing_offset_sec: clampReferenceTimingOffset(entry.timing_offset_sec),
+  }
   referenceTasks.value[entry.id] = { state: 'saving', message: 'Salvo...' }
   try {
     await voiceLabRuntime.writeVoicePoints({ points: [normalizedEntry] })
