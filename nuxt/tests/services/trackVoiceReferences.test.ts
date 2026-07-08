@@ -4,9 +4,11 @@ import {
   crossedReferencePoint,
   effectiveReferencePosition,
   filterPlayableTrackVoiceReferences,
+  isLapCountIncrement,
   normalizedSpeedPerSecond,
   normalizeTrackName,
   resolveTrackVoiceReferenceAudioPath,
+  shouldArmTrackVoiceReferences,
   type TrackVoiceReference,
 } from '~/services/spotter/trackVoiceReferences'
 
@@ -62,6 +64,25 @@ describe('trackVoiceReferences', () => {
   it('estimates normalized speed from position deltas, including wrap', () => {
     expect(normalizedSpeedPerSecond(0.1, 0.2, 1000)).toBeCloseTo(0.1)
     expect(normalizedSpeedPerSecond(0.95, 0.05, 1000)).toBeCloseTo(0.1)
+  })
+
+  it('arms references level-triggered from the first completed lap (PIP-220)', () => {
+    expect(shouldArmTrackVoiceReferences(null)).toBe(false)
+    expect(shouldArmTrackVoiceReferences(undefined)).toBe(false)
+    expect(shouldArmTrackVoiceReferences(0)).toBe(false)
+    expect(shouldArmTrackVoiceReferences(1)).toBe(true)
+    expect(shouldArmTrackVoiceReferences(7)).toBe(true)
+    expect(shouldArmTrackVoiceReferences(Number.NaN)).toBe(false)
+  })
+
+  it('treats only fresh numeric increases as lap increments, not stale-data recoveries', () => {
+    expect(isLapCountIncrement(0, 1)).toBe(true)
+    expect(isLapCountIncrement(3, 4)).toBe(true)
+    expect(isLapCountIncrement(1, 1)).toBe(false)
+    expect(isLapCountIncrement(2, 1)).toBe(false)
+    expect(isLapCountIncrement(null, 1)).toBe(false)
+    expect(isLapCountIncrement(1, null)).toBe(false)
+    expect(isLapCountIncrement(undefined, 2)).toBe(false)
   })
 
   it('detects reference crossings, including finish-line wrap', () => {

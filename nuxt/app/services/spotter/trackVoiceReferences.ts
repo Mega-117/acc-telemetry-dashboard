@@ -34,6 +34,20 @@ export function normalizedSpeedPerSecond(previous: number, current: number, elap
   return forwardNormalizedDelta(previous, current) / (elapsedMs / 1000)
 }
 
+// Arming level-triggered (PIP-220): i riferimenti sono attivi appena risulta
+// completato almeno un giro (fine out-lap), indipendentemente dall'osservazione
+// dell'incremento — live_state e' event-driven/freshness-gated e puo' saltare
+// da null direttamente a N, perdendo l'edge 0 -> 1.
+export function shouldArmTrackVoiceReferences(lapsCompleted: number | null | undefined) {
+  return typeof lapsCompleted === 'number' && Number.isFinite(lapsCompleted) && lapsCompleted >= 1
+}
+
+// Vero solo tra due campioni numerici freschi: le transizioni da/verso null
+// (dato stale) non sono passaggi di giro e non devono annunciare tempi.
+export function isLapCountIncrement(previous: number | null | undefined, current: number | null | undefined) {
+  return typeof previous === 'number' && typeof current === 'number' && current > previous
+}
+
 // Range unico del timing offset (PIP-217): server Nuxt e kokoroRuntime desktop
 // replicano gli stessi limiti nei loro clamp.
 export const TRACK_VOICE_TIMING_OFFSET_MIN_SEC = -10

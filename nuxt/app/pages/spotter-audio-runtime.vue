@@ -10,8 +10,10 @@ import {
   crossedReferencePoint,
   effectiveReferencePosition,
   filterPlayableTrackVoiceReferences,
+  isLapCountIncrement,
   normalizedSpeedPerSecond,
   normalizeTrackName,
+  shouldArmTrackVoiceReferences,
   type TrackVoiceReference,
 } from '~/services/spotter/trackVoiceReferences'
 
@@ -96,6 +98,16 @@ function resetTrackVoiceReferenceLapState() {
   previousVoiceReferenceTs = Date.now()
 }
 
+// PIP-220: arming level-triggered — arma appena lapsCompleted >= 1, senza
+// dipendere dall'edge (che live_state puo' non esporre mai come 0 -> 1).
+function evaluateTrackVoiceReferencesArming() {
+  if (trackVoiceReferencesArmed.value) return
+  if (!canRunSpotterAudio.value || !referencesEnabled.value) return
+  if (!shouldArmTrackVoiceReferences(liveLap.value.lapsCompleted)) return
+  trackVoiceReferencesArmed.value = true
+  resetTrackVoiceReferenceLapState()
+}
+
 function disarmTrackVoiceReferences() {
   trackVoiceReferencesArmed.value = false
   playedTrackVoiceReferenceIds.value = new Set()
@@ -156,9 +168,10 @@ onMounted(async () => {
 
 watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
   if (!canRunSpotterAudio.value) return
-  if (newVal === null || oldVal === null) return
-  if (newVal <= oldVal) return
-  trackVoiceReferencesArmed.value = newVal >= 1
+  evaluateTrackVoiceReferencesArming()
+  // Reset per-giro e tempo giro solo su un incremento reale tra campioni
+  // freschi: le transizioni da/verso null sono recuperi di dato stale.
+  if (!isLapCountIncrement(oldVal, newVal)) return
   resetTrackVoiceReferenceLapState()
   announceLapTime()
 })
@@ -171,7 +184,9 @@ watch(() => selectedVoice.value, async () => {
 watch(() => referencesEnabled.value, (enabled) => {
   if (!enabled) {
     disarmTrackVoiceReferences()
+    return
   }
+  evaluateTrackVoiceReferencesArming()
 })
 
 watch(canRunSpotterAudio, (canRun) => {
@@ -180,6 +195,7 @@ watch(canRunSpotterAudio, (canRun) => {
     return
   }
   resetTrackVoiceReferenceLapState()
+  evaluateTrackVoiceReferencesArming()
 })
 
 watch(() => [fastState.value.normalizedCarPosition, liveLap.value.track], () => tickTrackVoiceReferences())
