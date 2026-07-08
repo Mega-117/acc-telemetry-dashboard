@@ -30,13 +30,39 @@ describe('trackVoicePointMerge', () => {
     expect(merged.points[1].audio_paths?.if_sara).toBe('/local-sara-2.wav')
   })
 
-  it('sostituisce il set locale della pista quando il numero riferimenti cambia', () => {
+  it('preserva le personalizzazioni locali anche quando il numero riferimenti cambia (PIP-222)', () => {
     const localSpa = [{ ...defaultSpa[0], text: 'utente uno' }]
 
     const merged = mergeTrackVoicePointStores(store(defaultSpa), store(localSpa))
 
     expect(merged.points.map(point => point.id)).toEqual(['spa-1', 'spa-2'])
-    expect(merged.points[0].text).toBe('default uno')
+    expect(merged.points[0].text).toBe('utente uno')
+    expect(merged.points[1].text).toBe('default due')
+  })
+
+  it('somma i punti marcati dall utente che non esistono nei default (PIP-222)', () => {
+    const userPoint: TrackVoicePoint = { id: 'vp_123', track: 'Spa', type: 'braking_reference', normalized_car_position: 0.55, text: 'punto utente', audio_paths: { if_sara: '/user.wav' } }
+    const localSpa = [{ ...defaultSpa[0], text: 'utente uno' }, { ...defaultSpa[1] }, userPoint]
+
+    const merged = mergeTrackVoicePointStores(store(defaultSpa), store(localSpa))
+
+    expect(merged.points.map(point => point.id)).toEqual(['spa-1', 'spa-2', 'vp_123'])
+    expect(merged.points[0].text).toBe('utente uno')
+    expect(merged.points[2]).toMatchObject({ text: 'punto utente', audio_paths: { if_sara: '/user.wav' } })
+  })
+
+  it('riaggancia i dati locali per posizione quando gli id shipped cambiano (PIP-222)', () => {
+    const renamedDefaults = defaultSpa.map((point, index) => ({ ...point, id: `spa-v2-${index + 1}` }))
+    const localSpa: TrackVoicePoint[] = [
+      { ...defaultSpa[0], text: 'utente uno', audio_paths: { im_nicola: '/local-1.wav' } },
+      { ...defaultSpa[1], text: 'utente due' },
+    ]
+
+    const merged = mergeTrackVoicePointStores(store(renamedDefaults), store(localSpa))
+
+    expect(merged.points).toHaveLength(2)
+    expect(merged.points[0]).toMatchObject({ normalized_car_position: 0.1, text: 'utente uno' })
+    expect(merged.points[1]).toMatchObject({ normalized_car_position: 0.2, text: 'utente due' })
   })
 
   it('aggiunge nuove piste default senza cancellare piste locali non presenti nel rilascio', () => {

@@ -57,12 +57,43 @@ function mergeCompatiblePoint(defaultPoint: TrackVoicePoint, localPoint: TrackVo
   }
 }
 
-function mergeCompatibleGroup(defaultGroup: TrackVoicePoint[], localGroup: TrackVoicePoint[]) {
-  const localById = new Map(localGroup.map(point => [point.id, point]))
-  return defaultGroup.map((defaultPoint, index) => {
-    const localPoint = localById.get(defaultPoint.id) || localGroup[index] || defaultPoint
-    return mergeCompatiblePoint(defaultPoint, localPoint)
+// Due punti entro questa distanza normalizzata (~0.05% del giro) sono lo
+// stesso punto fisico: fallback quando gli id shipped cambiano tra versioni.
+const POSITION_MATCH_TOLERANCE = 0.0005
+
+// PIP-222: merge per identita' del punto (id, poi posizione), mai per
+// conteggio. I punti locali senza corrispondente shipped (es. marcati
+// dall'utente) si sommano: i dati locali non vengono mai scartati.
+function mergeGroupByIdentity(defaultGroup: TrackVoicePoint[], localGroup: TrackVoicePoint[]) {
+  const matchedLocalIndexes = new Set<number>()
+  const localIndexById = new Map(localGroup.map((point, index) => [point.id, index]))
+
+  const findLocalMatch = (defaultPoint: TrackVoicePoint) => {
+    const byId = localIndexById.get(defaultPoint.id)
+    if (byId !== undefined && !matchedLocalIndexes.has(byId)) return byId
+    let best = -1
+    let bestDistance = POSITION_MATCH_TOLERANCE
+    localGroup.forEach((localPoint, index) => {
+      if (matchedLocalIndexes.has(index)) return
+      const distance = Math.abs(Number(localPoint.normalized_car_position) - Number(defaultPoint.normalized_car_position))
+      if (Number.isFinite(distance) && distance <= bestDistance) {
+        best = index
+        bestDistance = distance
+      }
+    })
+    return best >= 0 ? best : undefined
+  }
+
+  const merged = defaultGroup.map((defaultPoint) => {
+    const localIndex = findLocalMatch(defaultPoint)
+    if (localIndex === undefined) return defaultPoint
+    matchedLocalIndexes.add(localIndex)
+    return mergeCompatiblePoint(defaultPoint, localGroup[localIndex]!)
   })
+  localGroup.forEach((localPoint, index) => {
+    if (!matchedLocalIndexes.has(index)) merged.push(localPoint)
+  })
+  return merged
 }
 
 export function mergeTrackVoicePointStores(
@@ -89,11 +120,7 @@ export function mergeTrackVoicePointStores(
     }
 
     usedLocalGroups.add(key)
-    if (localGroup.length === defaultGroup.length) {
-      mergedPoints.push(...mergeCompatibleGroup(defaultGroup, localGroup))
-    } else {
-      mergedPoints.push(...defaultGroup)
-    }
+    mergedPoints.push(...mergeGroupByIdentity(defaultGroup, localGroup))
   }
 
   for (const key of localGrouped.order) {
