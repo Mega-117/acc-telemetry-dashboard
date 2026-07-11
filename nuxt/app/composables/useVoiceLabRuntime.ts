@@ -146,6 +146,7 @@ export function useVoiceLabRuntime() {
       const result = await localBridgeJson<any>('/voice-lab/voice-points', {
         method: 'POST',
         body: JSON.stringify(payload),
+        keepalive: true,
       })
       if (!result?.ok) throw new Error(result?.error || 'Salvataggio riferimenti fallito')
       return result

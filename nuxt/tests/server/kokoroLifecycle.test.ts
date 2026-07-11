@@ -6,6 +6,7 @@ const stopRoute = readFileSync(resolve(process.cwd(), 'server/api/dev/kokoro-sto
 const voiceLab = readFileSync(resolve(process.cwd(), 'app/pages/dev-voice-lab.vue'), 'utf8')
 const app = readFileSync(resolve(process.cwd(), 'app/app.vue'), 'utf8')
 const lifecycle = readFileSync(resolve(process.cwd(), 'app/composables/useKokoroVoiceLabLifecycle.ts'), 'utf8')
+const voiceLabRuntime = readFileSync(resolve(process.cwd(), 'app/composables/useVoiceLabRuntime.ts'), 'utf8')
 
 describe('kokoro VoiceLab lifecycle', () => {
   it('non spegne processi Kokoro non gestiti da ACC Suite', () => {
@@ -24,5 +25,28 @@ describe('kokoro VoiceLab lifecycle', () => {
     expect(app).toContain('kokoroVoiceLabLifecycle.resumePendingLeaveIfNeeded()')
     expect(voiceLab).toContain('kokoroLifecycle.beginWork()')
     expect(voiceLab).toContain('kokoroLifecycle.endWork()')
+  })
+
+  it('rende espliciti autosave, anteprima e azioni globali per il pilota', () => {
+    expect(voiceLab).toContain('Voce anteprima')
+expect(voiceLab).toContain('Testo condiviso tra Sara e Nicola · salvataggio automatico')
+    expect(voiceLab).toContain('reference-copy-field')
+    expect(voiceLab).toContain('reference-switch')
+    expect(voiceLab).toContain('reference-listen')
+    expect(voiceLab).toContain('Velocità voce')
+    expect(voiceLab).toContain('option v-for="speed in TRACK_VOICE_SPEED_OPTIONS"')
+    expect(voiceLab).toContain('Quando pronunciarlo')
+    expect(voiceLab).toContain('Usa in pista')
+    expect(voiceLab).toContain('role="switch"')
+    expect(voiceLab).toContain(':aria-checked="entry.enabled !== false"')
+    expect(voiceLab).toContain('Audio da aggiornare')
+    expect(voiceLab).toContain('Azzera anticipi/ritardi')
+    expect(voiceLab).toContain('window.confirm(')
+    expect(voiceLab).toContain("Vale per Sara e Nicola. I testi non cambiano.")
+    expect(voiceLab).toContain('referencesWithStaleAudio')
+    expect(voiceLab).toContain('referencesNeedingAudioUpdate')
+expect(voiceLab).toContain('flushReferenceAutoSaves()')
+    expect(voiceLab).toContain("window.addEventListener('pagehide', handleVoiceLabPageHide)")
+    expect(voiceLabRuntime).toContain('keepalive: true')
   })
 })

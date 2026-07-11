@@ -9,6 +9,7 @@ import {
   isLapCountIncrement,
   normalizedSpeedPerSecond,
   normalizeTrackName,
+  normalizeTrackVoiceSpeed,
   resolveTrackVoiceReferenceAudioPath,
   shouldArmTrackVoiceReferences,
   type TrackVoiceReference,
@@ -30,6 +31,13 @@ describe('trackVoiceReferences', () => {
     expect(normalizeTrackName(null)).toBe('')
   })
 
+  it('normalizes legacy voice speeds to the nearest supported option', () => {
+    expect(normalizeTrackVoiceSpeed(0.8)).toBe(1)
+    expect(normalizeTrackVoiceSpeed(1.15)).toBe(1.25)
+    expect(normalizeTrackVoiceSpeed(1.6)).toBe(1.5)
+    expect(normalizeTrackVoiceSpeed(3)).toBe(2)
+    expect(normalizeTrackVoiceSpeed(undefined)).toBe(1.25)
+  })
   it('keeps only playable braking references for the selected voice, sorted by position', () => {
     expect(filterPlayableTrackVoiceReferences(points, 'if_sara').map(point => point.id)).toEqual(['early', 'multi-voice', 'late'])
   })

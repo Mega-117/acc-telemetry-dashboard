@@ -15,11 +15,14 @@ import {
   type LapTimeVoiceEntry,
 } from '~/services/overlay/lapTimeAnnouncer'
 import {
+  TRACK_VOICE_DEFAULT_SPEED,
+  TRACK_VOICE_SPEED_OPTIONS,
   TRACK_VOICE_TIMING_OFFSET_MAX_SEC,
   TRACK_VOICE_TIMING_OFFSET_MIN_SEC,
   buildReferenceSaveEntry,
   clampTimingOffsetSec,
   collectReferenceAudioPaths,
+  normalizeTrackVoiceSpeed,
   resolveTrackVoiceReferenceAudioPath,
 } from '~/services/spotter/trackVoiceReferences'
 
@@ -190,6 +193,7 @@ const referencesStatus = ref('')
 const referencesError = ref('')
 const referencesBatchBusy = ref(false)
 const referenceTasks = ref<Record<string, { state: RowState; message: string }>>({})
+const referencesWithStaleAudio = ref<Set<string>>(new Set())
 
 const availableReferenceTracks = computed(() => {
   const tracks = referenceCatalog.value.tracks.length ? referenceCatalog.value.tracks : ['Spa']
@@ -202,7 +206,7 @@ const referenceRows = computed(() => referenceCatalog.value.points
     ...point,
     label: point.label?.trim() || `Riferimento ${index + 1}`,
     text: point.text ?? `Riferimento ${index + 1}`,
-    speed: point.speed ?? 1.15,
+    speed: normalizeTrackVoiceSpeed(point.speed),
     audio_voice: referenceVoiceId.value,
     audio_path: referenceAudioPath(point, referenceVoiceId.value),
     timing_offset_sec: clampReferenceTimingOffset(point.timing_offset_sec),
@@ -221,6 +225,31 @@ function referenceRowBusy(entry: TrackVoicePoint): boolean {
   const s = referenceRowState(entry)
   return s === 'saving' || s === 'generating'
 }
+
+function markReferenceAudioStale(entryId: string) {
+  referencesWithStaleAudio.value = new Set([...referencesWithStaleAudio.value, entryId])
+}
+
+function markReferenceAudioCurrent(entryId: string) {
+  const next = new Set(referencesWithStaleAudio.value)
+  next.delete(entryId)
+  referencesWithStaleAudio.value = next
+}
+
+function referenceNeedsAudioUpdate(entry: TrackVoicePoint): boolean {
+  if (entry.enabled === false) return false
+  if (referencesWithStaleAudio.value.has(entry.id)) return true
+  const paths = collectReferenceAudioPaths(rawReferencePoint(entry.id) ?? entry)
+  return KOKORO_ITALIAN_VOICE_IDS.some(voice => !paths[voice])
+}
+
+const referencesNeedingAudioUpdate = computed(() => referenceRows.value.filter(referenceNeedsAudioUpdate))
+
+const generateReferencesLabel = computed(() => {
+  const count = referencesNeedingAudioUpdate.value.length
+  if (!count) return 'Audio aggiornato'
+  return count === 1 ? 'Aggiorna 1 riferimento' : `Aggiorna ${count} riferimenti`
+})
 
 function patchReferenceRow(entry: TrackVoicePoint, patch: Partial<TrackVoicePoint>) {
   referenceCatalog.value = {
@@ -261,14 +290,19 @@ function flushReferenceAutoSaves() {
   }
 }
 
+function handleVoiceLabPageHide() {
+  flushReferenceAutoSaves()
+}
 function updateReferenceText(entry: TrackVoicePoint, event: Event) {
   patchReferenceRow(entry, { text: (event.target as HTMLTextAreaElement).value })
+  markReferenceAudioStale(entry.id)
   scheduleReferenceAutoSave(entry.id)
 }
 
 function updateReferenceSpeed(entry: TrackVoicePoint, event: Event) {
   const speed = Number((event.target as HTMLInputElement).value)
-  patchReferenceRow(entry, { speed: Number.isFinite(speed) ? speed : 1.15 })
+  patchReferenceRow(entry, { speed: normalizeTrackVoiceSpeed(speed) })
+  markReferenceAudioStale(entry.id)
   scheduleReferenceAutoSave(entry.id)
 }
 
@@ -281,9 +315,9 @@ const clampReferenceTimingOffset = clampTimingOffsetSec
 
 function referenceTimingLabel(offset: number | null | undefined) {
   const value = clampReferenceTimingOffset(offset)
-  if (value < 0) return `Anticipa ${Math.abs(value)}s`
-  if (value > 0) return `Ritarda ${value}s`
-  return 'Puntuale'
+  if (value < 0) return `${Math.abs(value)} s prima`
+  if (value > 0) return `${value} s dopo`
+  return 'Sul punto'
 }
 
 function updateReferenceTimingOffset(entry: TrackVoicePoint, event: Event) {
@@ -291,10 +325,6 @@ function updateReferenceTimingOffset(entry: TrackVoicePoint, event: Event) {
   scheduleReferenceAutoSave(entry.id)
 }
 
-function resetReferenceTimingOffset(entry: TrackVoicePoint) {
-  patchReferenceRow(entry, { timing_offset_sec: 0 })
-  scheduleReferenceAutoSave(entry.id)
-}
 
 function toggleReferenceEnabled(entry: TrackVoicePoint) {
   patchReferenceRow(entry, { enabled: entry.enabled === false })
@@ -426,6 +456,11 @@ function latestReferenceRow(id: string) {
 
 async function resetAllReferenceTimingOffsets() {
   if (referencesBatchBusy.value || !referenceRows.value.length) return
+  const confirmed = window.confirm(
+    `Riportare tutti i ${referenceRows.value.length} riferimenti di ${selectedReferenceTrack.value} a “Sul punto”? `
+    + 'Vale per Sara e Nicola. I testi non cambiano.',
+  )
+  if (!confirmed) return
   referencesBatchBusy.value = true
   referencesError.value = ''
   let ok = 0
@@ -444,19 +479,25 @@ async function resetAllReferenceTimingOffsets() {
 }
 
 async function generateAllReferences() {
-  if (serverState.value !== 'online' || referencesBatchBusy.value || !referenceRows.value.length) return
+  if (serverState.value !== 'online' || referencesBatchBusy.value || !referencesNeedingAudioUpdate.value.length) return
   referencesBatchBusy.value = true
   referencesError.value = ''
   let ok = 0
-  const total = referenceRows.value.length * KOKORO_ITALIAN_VOICE_IDS.length
+  const rowsToGenerate = [...referencesNeedingAudioUpdate.value]
+  const total = rowsToGenerate.length * KOKORO_ITALIAN_VOICE_IDS.length
   try {
-    for (let i = 0; i < referenceRows.value.length; i += 1) {
-      const rowId = referenceRows.value[i]!.id
+    for (let i = 0; i < rowsToGenerate.length; i += 1) {
+      const rowId = rowsToGenerate[i]!.id
+      let rowOk = 0
       for (const voice of KOKORO_ITALIAN_VOICE_IDS) {
-        const current = latestReferenceRow(rowId) || referenceRows.value[i]!
+        const current = latestReferenceRow(rowId) || rowsToGenerate[i]!
         referencesStatus.value = `Genero riferimenti ${ok + 1}/${total}...`
-        if (await generateReference(current, voice)) ok += 1
+        if (await generateReference(current, voice)) {
+          ok += 1
+          rowOk += 1
+        }
       }
+      if (rowOk === KOKORO_ITALIAN_VOICE_IDS.length) markReferenceAudioCurrent(rowId)
     }
     referencesStatus.value = `Generate ${ok}/${total} tracce Sara e Nicola per ${selectedReferenceTrack.value}.`
     if (ok === total) pushToast(`Riferimenti ${selectedReferenceTrack.value}: WAV Sara e Nicola generati`, 'success')
@@ -966,6 +1007,7 @@ watch(isReferenceOnlyMode, (referenceOnly) => {
 
 onMounted(async () => {
   voiceLabMounted = true
+  window.addEventListener('pagehide', handleVoiceLabPageHide)
   kokoroLifecycle.enterVoiceLab()
   await nextTick()
   if (hasFullVoiceLabAccess.value) {
@@ -977,6 +1019,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   voiceLabMounted = false
+  window.removeEventListener('pagehide', handleVoiceLabPageHide)
   flushReferenceAutoSaves()
   kokoroLifecycle.leaveVoiceLab()
   stopVoice()
@@ -1117,7 +1160,7 @@ onBeforeUnmount(() => {
       </section>
 
       <section v-else class="reference-editor" data-testid="voice-reference-editor">
-        <div class="panel-head">
+        <div class="panel-head reference-panel-head">
           <div>
             <span class="voice-kicker">Riferimenti frenata</span>
             <h2>Riferimenti</h2>
@@ -1131,14 +1174,24 @@ onBeforeUnmount(() => {
               </select>
             </label>
             <div class="voice-toggle voice-toggle--compact">
-              <span>Voce</span>
-              <button type="button" :class="{ 'is-active': referenceVoiceId === 'if_sara' }" :disabled="referencesBatchBusy" @click="setReferenceVoice('if_sara')">Sara</button>
-              <button type="button" :class="{ 'is-active': referenceVoiceId === 'im_nicola' }" :disabled="referencesBatchBusy" @click="setReferenceVoice('im_nicola')">Nicola</button>
+              <span>Voce anteprima</span>
+              <button type="button" :class="{ 'is-active': referenceVoiceId === 'if_sara' }" :aria-pressed="referenceVoiceId === 'if_sara'" :disabled="referencesBatchBusy" @click="setReferenceVoice('if_sara')">Sara</button>
+              <button type="button" :class="{ 'is-active': referenceVoiceId === 'im_nicola' }" :aria-pressed="referenceVoiceId === 'im_nicola'" :disabled="referencesBatchBusy" @click="setReferenceVoice('im_nicola')">Nicola</button>
             </div>
-            <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy" @click="loadReferences">Aggiorna</button>
-            <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy || !referenceRows.length" @click="resetAllReferenceTimingOffsets">Reset timing</button>
-            <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || !referenceRows.length" @click="generateAllReferences">
-              {{ referencesBatchBusy ? 'Genero...' : 'Genera Sara + Nicola' }}
+
+          </div>
+        </div>
+
+        <div class="reference-global-bar">
+          <p class="reference-editor-note">
+            <strong>{{ referenceRows.length }} riferimenti</strong>
+            <span>Testo condiviso tra Sara e Nicola · salvataggio automatico</span>
+          </p>
+          <div class="reference-global-actions">
+            <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy" @click="loadReferences">Ricarica</button>
+            <button type="button" class="secondary" :disabled="referencesBusy || referencesBatchBusy || !referenceRows.length" @click="resetAllReferenceTimingOffsets">Azzera anticipi/ritardi</button>
+            <button type="button" class="primary" :disabled="serverState !== 'online' || referencesBatchBusy || !referencesNeedingAudioUpdate.length" @click="generateAllReferences">
+              {{ referencesBatchBusy ? 'Genero...' : generateReferencesLabel }}
             </button>
           </div>
         </div>
@@ -1172,41 +1225,47 @@ onBeforeUnmount(() => {
                 <strong>{{ entry.label }}</strong>
                 <small v-if="hasFullVoiceLabAccess">posizione {{ entry.normalized_car_position.toFixed(5) }} · {{ entry.car || 'auto n/d' }}</small>
               </div>
-              <span class="lap-time-state" :class="{ 'is-ready': Boolean(entry.audio_path) && entry.enabled !== false }">
-                {{ entry.enabled === false ? 'Disattivo' : entry.audio_path ? 'WAV pronto' : 'Manca WAV per voce' }}
+              <span class="lap-time-state" :class="{ 'is-ready': !referenceNeedsAudioUpdate(entry) && entry.enabled !== false }">
+                {{ entry.enabled === false ? 'Non usato in pista' : referenceNeedsAudioUpdate(entry) ? 'Audio da aggiornare' : 'WAV pronto' }}
               </span>
             </header>
-            <textarea :value="entry.text" rows="2" maxlength="280" @input="updateReferenceText(entry, $event)" />
+            <label class="reference-copy-field">
+              <span>Frase pronunciata</span>
+              <textarea :value="entry.text" :aria-label="`Testo ${entry.label}`" rows="2" maxlength="280" @input="updateReferenceText(entry, $event)" />
+            </label>
             <footer>
-              <label>
-                Velocita
-                <input :value="entry.speed" type="number" min="0.8" max="1.5" step="0.02" @input="updateReferenceSpeed(entry, $event)">
+              <label class="reference-setting">
+                Velocità voce
+                <span class="reference-speed-control">
+                  <select :value="entry.speed" :aria-label="`Velocità voce ${entry.label}`" @change="updateReferenceSpeed(entry, $event)">
+                    <option v-for="speed in TRACK_VOICE_SPEED_OPTIONS" :key="speed" :value="speed">{{ String(speed).replace('.', ',') }}×</option>
+                  </select>
+                </span>
               </label>
-              <span class="reference-control-divider" aria-hidden="true"></span>
-              <label>
-                Timing
-                <select :value="clampReferenceTimingOffset(entry.timing_offset_sec)" @change="updateReferenceTimingOffset(entry, $event)">
+              <label class="reference-setting reference-setting--timing">
+                Quando pronunciarlo
+                <select :value="clampReferenceTimingOffset(entry.timing_offset_sec)" :aria-label="`Quando pronunciare ${entry.label}`" @change="updateReferenceTimingOffset(entry, $event)">
                   <option v-for="offset in REFERENCE_TIMING_OFFSETS" :key="offset" :value="offset">
                     {{ referenceTimingLabel(offset) }}
                   </option>
                 </select>
               </label>
-              <span class="reference-control-divider" aria-hidden="true"></span>
-              <button type="button" class="secondary" :disabled="referenceRowBusy(entry) || clampReferenceTimingOffset(entry.timing_offset_sec) === 0" @click="resetReferenceTimingOffset(entry)">Reset</button>
-              <span class="reference-control-divider" aria-hidden="true"></span>
-              <button type="button" :class="{ 'is-active': entry.enabled !== false }" :disabled="referenceRowBusy(entry)" @click="toggleReferenceEnabled(entry)">
-                {{ entry.enabled === false ? 'Disattivo' : 'Attivo' }}
+
+              <button type="button" class="reference-availability" role="switch" :aria-checked="entry.enabled !== false" :class="{ 'is-active': entry.enabled !== false }" :disabled="referenceRowBusy(entry)" @click="toggleReferenceEnabled(entry)">
+                <span class="reference-availability__label">Usa in pista</span>
+                <span class="reference-switch" aria-hidden="true"><i /></span>
+                <strong>{{ entry.enabled === false ? 'Non attivo' : 'Attivo' }}</strong>
               </button>
 
               <span class="row-status" :class="`row-status--${referenceRowState(entry)}`">{{ referenceTasks[entry.id]?.message || '' }}</span>
-              <button type="button" :disabled="entry.enabled === false || isSpeaking || !entry.text?.trim() || serverState !== 'online'" @click="playReference(entry)">Ascolta</button>
+              <button type="button" class="reference-listen" :disabled="entry.enabled === false || isSpeaking || !entry.text?.trim() || serverState !== 'online'" @click="playReference(entry)"><span aria-hidden="true">▶</span> Ascolta</button>
             </footer>
           </article>
         </div>
       </section>
 
       <section v-if="hasFullVoiceLabAccess" class="lap-time-library" data-testid="lap-time-library">
-        <div class="panel-head">
+        <div class="panel-head reference-panel-head">
           <div>
             <span class="voice-kicker">Tempi giro</span>
             <h2>Libreria audio pre-generata</h2>
@@ -1550,6 +1609,13 @@ onBeforeUnmount(() => {
   color: #fde68a !important;
 }
 
+.reference-editor-note {
+  margin: -4px 0 0;
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .phrase-rows,
 .reference-rows {
   display: grid;
@@ -1638,7 +1704,7 @@ onBeforeUnmount(() => {
 }
 
 .reference-row {
-    .reference-control-divider {
+  .reference-control-divider {
     width: 1px;
     height: 28px;
     background: rgba(255, 255, 255, 0.16);
@@ -1656,6 +1722,38 @@ onBeforeUnmount(() => {
     margin-top: 3px;
     color: rgba(255, 255, 255, 0.52);
     font-size: 12px;
+  }
+
+  .reference-speed-control {
+    display: inline-flex;
+    gap: 5px;
+    align-items: center;
+  }
+
+  .reference-availability {
+    gap: 8px;
+    padding-right: 8px;
+
+    span {
+      color: rgba(255, 255, 255, 0.68);
+      font-size: 10px;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    strong {
+      min-width: 28px;
+      padding: 5px 7px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 11px;
+    }
+
+    &.is-active strong {
+      background: rgba($accent-success, 0.2);
+      color: #bbf7d0;
+    }
   }
 }
 
@@ -2030,6 +2128,382 @@ button {
   .lap-time-preview,
   .lap-time-row {
     grid-template-columns: 1fr;
+  }
+
+  .reference-track-select {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 620px) {
+  .reference-track-select {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+
+    button,
+    label,
+    select,
+    .voice-toggle {
+      width: 100%;
+    }
+  }
+
+  .reference-row {
+    header {
+      grid-template-columns: auto minmax(0, 1fr);
+
+      .lap-time-state {
+        grid-column: 1 / -1;
+        justify-self: start;
+      }
+    }
+
+    footer {
+      align-items: stretch;
+
+      label {
+        justify-content: space-between;
+        width: 100%;
+      }
+
+      .reference-control-divider {
+        display: none;
+      }
+
+      .reference-availability {
+        justify-content: space-between;
+        width: 100%;
+      }
+
+      .row-status {
+        width: 100%;
+        min-width: 0;
+      }
+    }
+  }
+}
+
+/* VoiceLab pilot layout refinement — PIP-227 */
+.voice-lab {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  gap: 24px;
+}
+
+.voice-hero {
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+  gap: 28px;
+  min-height: 190px;
+  padding: 32px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.045);
+
+  h1 {
+    margin: 10px 0 14px;
+    font-size: clamp(38px, 4vw, 48px);
+    line-height: 0.98;
+  }
+
+  p {
+    max-width: 720px;
+    font-size: 15px;
+  }
+}
+
+.server-card {
+  align-content: center;
+  padding: 22px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.reference-editor {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.reference-panel-head {
+  gap: 24px;
+  align-items: center;
+
+  > div:first-child {
+    max-width: 560px;
+  }
+
+  h2 {
+    margin-top: 6px;
+    font-size: 26px;
+  }
+}
+
+.reference-track-select {
+  align-items: center;
+
+  label,
+  .voice-toggle {
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.18);
+  }
+}
+
+.reference-global-bar {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.reference-editor-note {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+
+  strong {
+    color: #fff;
+    font-size: 13px;
+  }
+
+  span {
+    color: rgba(255, 255, 255, 0.52);
+    font-size: 12px;
+  }
+}
+
+.reference-global-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.reference-rows {
+  gap: 10px;
+}
+
+.reference-row {
+  gap: 12px;
+  padding: 16px;
+  border-color: rgba(255, 255, 255, 0.055);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.24);
+
+  textarea {
+    min-height: 50px;
+    padding: 12px 14px;
+    border-color: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.055);
+    font-size: 14px;
+    line-height: 1.45;
+
+    &:focus {
+      border-color: rgba($racing-orange, 0.72);
+      box-shadow: 0 0 0 3px rgba($racing-orange, 0.12);
+    }
+  }
+
+  footer {
+    gap: 10px;
+    align-items: end;
+  }
+}
+
+.reference-copy-field,
+.reference-setting {
+  display: grid !important;
+  gap: 7px !important;
+  align-items: stretch !important;
+  color: rgba(255, 255, 255, 0.48) !important;
+  font-size: 10px !important;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.reference-copy-field {
+  width: 100%;
+}
+
+.reference-setting {
+  min-width: 150px;
+
+  input,
+  select {
+    width: 100% !important;
+    min-height: 40px !important;
+    padding: 0 34px 0 12px !important;
+    border-color: rgba(255, 255, 255, 0.13) !important;
+    border-radius: 10px !important;
+    background-color: rgba(255, 255, 255, 0.06) !important;
+    font-size: 13px;
+    cursor: pointer;
+  }
+}
+
+.reference-setting select option {
+  background: #15151d;
+  color: #fff;
+}
+.reference-setting--timing {
+  min-width: 190px;
+}
+
+.reference-speed-control {
+  position: relative;
+  display: block !important;
+
+  strong {
+    position: absolute;
+    top: 50%;
+    right: 12px;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.58) !important;
+  }
+}
+
+.reference-availability {
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas:
+    'label label'
+    'switch state';
+  gap: 7px 9px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  justify-items: start;
+
+  .reference-availability__label {
+    grid-area: label;
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  strong {
+    grid-area: state;
+    align-self: center;
+    min-width: 0;
+    padding: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 12px;
+  }
+
+  &.is-active strong {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.82);
+  }
+}
+
+.reference-switch {
+  position: relative;
+  grid-area: switch;
+  width: 38px;
+  height: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.11);
+  transition: background 0.18s ease, border-color 0.18s ease;
+
+  i {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.8);
+    transition: transform 0.18s ease;
+  }
+
+  .is-active & {
+    border-color: rgba($accent-success, 0.52);
+    background: rgba($accent-success, 0.88);
+
+    i {
+      transform: translateX(16px);
+      background: #0c1510;
+    }
+  }
+}
+
+.reference-listen {
+  min-height: 40px;
+  padding: 0 16px;
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.09);
+  font-size: 13px;
+
+  span {
+    color: $racing-orange;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 1040px) {
+  .voice-hero {
+    min-height: 0;
+    padding: 26px;
+  }
+
+  .reference-panel-head,
+  .reference-global-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reference-global-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 620px) {
+  .voice-hero,
+  .reference-editor {
+    padding: 18px;
+    border-radius: 16px;
+  }
+
+  .voice-hero h1 {
+    font-size: 36px;
+  }
+
+  .reference-global-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+
+    button {
+      width: 100%;
+    }
+  }
+
+  .reference-row footer {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .reference-setting,
+  .reference-setting--timing,
+  .reference-availability,
+  .reference-listen {
+    width: 100%;
+  }
+
+  .reference-availability {
+    grid-template-columns: auto 1fr;
+    justify-content: start;
   }
 }
 </style>

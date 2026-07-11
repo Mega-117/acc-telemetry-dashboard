@@ -6,10 +6,14 @@ function cleanText(value: unknown, fallback = '') {
   return String(value ?? fallback).trim().slice(0, 280)
 }
 
+const REFERENCE_SPEED_OPTIONS = [1, 1.25, 1.5, 2] as const
+
 function cleanSpeed(value: unknown) {
   const speed = Number(value)
   if (!Number.isFinite(speed)) return undefined
-  return Math.max(0.5, Math.min(2, speed))
+  return REFERENCE_SPEED_OPTIONS.reduce((nearest, option) =>
+    Math.abs(option - speed) < Math.abs(nearest - speed) ? option : nearest
+  )
 }
 
 // Stessi limiti di TRACK_VOICE_TIMING_OFFSET_MIN/MAX_SEC in

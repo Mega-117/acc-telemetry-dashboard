@@ -14,6 +14,16 @@ export interface TrackVoiceReference {
   timing_offset_sec?: number | null
 }
 
+export const TRACK_VOICE_SPEED_OPTIONS = [1, 1.25, 1.5, 2] as const
+export const TRACK_VOICE_DEFAULT_SPEED = 1.25
+
+export function normalizeTrackVoiceSpeed(value: unknown, fallback = TRACK_VOICE_DEFAULT_SPEED) {
+  const speed = Number(value)
+  if (!Number.isFinite(speed)) return fallback
+  return TRACK_VOICE_SPEED_OPTIONS.reduce((nearest, option) =>
+    Math.abs(option - speed) < Math.abs(nearest - speed) ? option : nearest
+  )
+}
 export function normalizeTrackName(value: string | null | undefined) {
   return String(value || '').trim().toLowerCase()
 }
