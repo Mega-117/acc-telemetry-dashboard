@@ -12,6 +12,7 @@ import {
   normalizeTrackVoiceSpeed,
   resolveTrackVoiceReferenceAudioPath,
   shouldArmTrackVoiceReferences,
+  shouldDisarmTrackVoiceReferences,
   type TrackVoiceReference,
 } from '~/services/spotter/trackVoiceReferences'
 
@@ -77,13 +78,22 @@ describe('trackVoiceReferences', () => {
     expect(normalizedSpeedPerSecond(0.95, 0.05, 1000)).toBeCloseTo(0.1)
   })
 
-  it('arms references level-triggered from the first completed lap (PIP-220)', () => {
-    expect(shouldArmTrackVoiceReferences(null)).toBe(false)
-    expect(shouldArmTrackVoiceReferences(undefined)).toBe(false)
-    expect(shouldArmTrackVoiceReferences(0)).toBe(false)
-    expect(shouldArmTrackVoiceReferences(1)).toBe(true)
-    expect(shouldArmTrackVoiceReferences(7)).toBe(true)
-    expect(shouldArmTrackVoiceReferences(Number.NaN)).toBe(false)
+  it('uses the logger phase as the authoritative arming contract (PIP-228)', () => {
+    expect(shouldArmTrackVoiceReferences('garage', 7)).toBe(false)
+    expect(shouldArmTrackVoiceReferences('outlap', 7)).toBe(false)
+    expect(shouldArmTrackVoiceReferences('pit_lane_active', 7)).toBe(false)
+    expect(shouldArmTrackVoiceReferences('active', 0)).toBe(true)
+    expect(shouldDisarmTrackVoiceReferences('garage')).toBe(true)
+    expect(shouldDisarmTrackVoiceReferences('outlap')).toBe(true)
+    expect(shouldDisarmTrackVoiceReferences('pit_lane_outlap')).toBe(true)
+    expect(shouldDisarmTrackVoiceReferences('pit_lane_active')).toBe(false)
+  })
+
+  it('falls back to completed laps only when an old logger omits the phase', () => {
+    expect(shouldArmTrackVoiceReferences(null, 0)).toBe(false)
+    expect(shouldArmTrackVoiceReferences(null, 1)).toBe(true)
+    expect(shouldArmTrackVoiceReferences(undefined, 7)).toBe(true)
+    expect(shouldArmTrackVoiceReferences(undefined, Number.NaN)).toBe(false)
   })
 
   it('treats only fresh numeric increases as lap increments, not stale-data recoveries', () => {

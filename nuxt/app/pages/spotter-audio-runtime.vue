@@ -7,13 +7,15 @@ import { usePublicPath } from '~/composables/usePublicPath'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
 import {
-  advanceTrackVoiceReferenceTick,
   filterPlayableTrackVoiceReferences,
   isLapCountIncrement,
   normalizeTrackName,
-  shouldArmTrackVoiceReferences,
   type TrackVoiceReference,
 } from '~/services/spotter/trackVoiceReferences'
+import {
+  advanceTrackVoiceReferenceRuntime,
+  createTrackVoiceReferenceRuntimeState,
+} from '~/services/spotter/trackVoiceReferenceRuntime'
 
 definePageMeta({ layout: false })
 
@@ -34,10 +36,7 @@ const voiceLabRuntime = useVoiceLabRuntime()
 const canRunSpotterAudio = computed(() => canEnterApp.value)
 
 const trackVoiceReferences = ref<TrackVoiceReference[]>([])
-const trackVoiceReferencesArmed = ref(false)
-const playedTrackVoiceReferenceIds = ref<Set<string>>(new Set())
-let previousVoiceReferencePosition: number | null = null
-let previousVoiceReferenceTs: number | null = null
+const trackVoiceReferenceRuntimeState = ref(createTrackVoiceReferenceRuntimeState())
 let audio: HTMLAudioElement | null = null
 let queue = Promise.resolve()
 let generation = 0
@@ -91,26 +90,11 @@ async function loadTrackVoiceReferences() {
 }
 
 function resetTrackVoiceReferenceLapState() {
-  playedTrackVoiceReferenceIds.value = new Set()
-  previousVoiceReferencePosition = fastState.value.normalizedCarPosition
-  previousVoiceReferenceTs = Date.now()
-}
-
-// PIP-220: arming level-triggered — arma appena lapsCompleted >= 1, senza
-// dipendere dall'edge (che live_state puo' non esporre mai come 0 -> 1).
-function evaluateTrackVoiceReferencesArming() {
-  if (trackVoiceReferencesArmed.value) return
-  if (!canRunSpotterAudio.value || !referencesEnabled.value) return
-  if (!shouldArmTrackVoiceReferences(liveLap.value.lapsCompleted)) return
-  trackVoiceReferencesArmed.value = true
-  resetTrackVoiceReferenceLapState()
+  trackVoiceReferenceRuntimeState.value = createTrackVoiceReferenceRuntimeState()
 }
 
 function disarmTrackVoiceReferences() {
-  trackVoiceReferencesArmed.value = false
-  playedTrackVoiceReferenceIds.value = new Set()
-  previousVoiceReferencePosition = null
-  previousVoiceReferenceTs = null
+  resetTrackVoiceReferenceLapState()
 }
 
 function stopRuntimeAudioForLogout() {
@@ -119,27 +103,18 @@ function stopRuntimeAudioForLogout() {
 }
 
 function tickTrackVoiceReferences() {
-  if (!canRunSpotterAudio.value || !referencesEnabled.value || !trackVoiceReferencesArmed.value) return
+  if (!canRunSpotterAudio.value || !referencesEnabled.value) return
   const currentPosition = fastState.value.normalizedCarPosition
   const track = normalizeTrackName(liveLap.value.track)
-  if (currentPosition === null || !track) return
-
-  const now = Date.now()
-  const previous = previousVoiceReferencePosition
-  const previousTs = previousVoiceReferenceTs
-  previousVoiceReferencePosition = currentPosition
-  previousVoiceReferenceTs = now
-  if (previous === null || previousTs === null) return
-
-  // PIP-216: crossing, jitter, wrap e set per-giro vivono nella logica pura.
-  const outcome = advanceTrackVoiceReferenceTick({
-    previous,
-    current: currentPosition,
-    elapsedMs: now - previousTs,
-    playedIds: playedTrackVoiceReferenceIds.value,
+  const outcome = advanceTrackVoiceReferenceRuntime(trackVoiceReferenceRuntimeState.value, {
+    phase: fastState.value.trackReferencePhase,
+    eligible: fastState.value.trackReferencesEligible,
+    legacyLapsCompleted: liveLap.value.lapsCompleted,
+    position: currentPosition,
+    now: Date.now(),
     references: trackVoiceReferences.value.filter(point => normalizeTrackName(point.track) === track),
   })
-  playedTrackVoiceReferenceIds.value = outcome.playedIds
+  trackVoiceReferenceRuntimeState.value = outcome.state
   for (const reference of outcome.toAnnounce) {
     if (!reference.audio_path) continue
     enqueueAudioPath(reference.audio_path)
@@ -167,7 +142,8 @@ onMounted(async () => {
 
 watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
   if (!canRunSpotterAudio.value) return
-  evaluateTrackVoiceReferencesArming()
+  // Compatibilità con logger vecchi: con la fase autorevole presente, il
+  // contatore giri non governa più l'arming.
   // Tempo giro solo su un incremento reale tra campioni freschi: le
   // transizioni da/verso null sono recuperi di dato stale. Il ciclo per-giro
   // dei riferimenti NON si resetta qui: lo governa il wrap del flusso di
@@ -186,7 +162,7 @@ watch(() => referencesEnabled.value, (enabled) => {
     disarmTrackVoiceReferences()
     return
   }
-  evaluateTrackVoiceReferencesArming()
+  tickTrackVoiceReferences()
 })
 
 watch(canRunSpotterAudio, (canRun) => {
@@ -195,10 +171,18 @@ watch(canRunSpotterAudio, (canRun) => {
     return
   }
   resetTrackVoiceReferenceLapState()
-  evaluateTrackVoiceReferencesArming()
+  tickTrackVoiceReferences()
 })
 
-watch(() => [fastState.value.normalizedCarPosition, liveLap.value.track], () => tickTrackVoiceReferences())
+watch(
+  () => [
+    fastState.value.normalizedCarPosition,
+    fastState.value.trackReferencePhase,
+    fastState.value.trackReferencesEligible,
+    liveLap.value.track,
+  ],
+  () => tickTrackVoiceReferences(),
+)
 
 onBeforeUnmount(() => {
   stopLiveStatePolling()
@@ -208,7 +192,10 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="spotter-audio-runtime" aria-hidden="true" />
+  <main
+    class="spotter-audio-runtime"
+    aria-hidden="true"
+  ></main>
 </template>
 
 <style scoped>

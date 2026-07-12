@@ -18,6 +18,8 @@ function makeState(overrides: Record<string, any> = {}) {
     speed_kmh: 132.4,
     gas: 0.7,
     brake: 0.1,
+    track_reference_phase: 'active',
+    track_references_eligible: true,
     tyres: [
       { id: 'FL', wheel_slip: 0.4, wheel_slip_scaled: 4, slip_band: 'white', pressure_psi: 27.1, core_temp_c: 78.2 },
       { id: 'FR', wheel_slip: 1.2, wheel_slip_scaled: 12, slip_band: 'green', slip_state: 'ok', pressure_psi: 27.3, core_temp_c: 78.4 },
@@ -49,11 +51,24 @@ describe('useFastStatePoller', () => {
     expect(isFastStateActive.value).toBe(true)
     expect(fastState.value.speedKmh).toBe(132.4)
     expect(fastState.value.gas).toBe(0.7)
+    expect(fastState.value.trackReferencePhase).toBe('active')
+    expect(fastState.value.trackReferencesEligible).toBe(true)
     expect(fastState.value.tyres.map(t => t.id)).toEqual(['FL', 'FR', 'RL', 'RR'])
     expect(fastState.value.tyres.map(t => t.slipBand)).toEqual(['white', 'green', 'yellow', 'red'])
     expect(fastState.value.tyres.map(t => t.slipState)).toEqual(['ok', 'ok', 'limit', 'lockup'])
     expect(fastState.value.tyres[2]?.slipRatio).toBe(0.02)
     expect(fastState.value.tyres[2]?.wheelSlipScaled).toBe(14.5)
+  })
+
+  it('degrada in modo sicuro se la fase riferimenti non e riconosciuta', async () => {
+    const api = { getFastState: vi.fn(async () => makeState({ track_reference_phase: 'mystery', track_references_eligible: 1 })) }
+    const { fastState, startFastStatePolling } = useFastStatePoller(() => api)
+
+    startFastStatePolling()
+    await flushPromises()
+
+    expect(fastState.value.trackReferencePhase).toBeNull()
+    expect(fastState.value.trackReferencesEligible).toBe(false)
   })
 
   it('nasconde il widget se fast_state e stantio', async () => {

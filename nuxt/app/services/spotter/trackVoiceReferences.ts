@@ -1,5 +1,7 @@
 import type { SpotterVoiceId } from '~/composables/useSpotterVoiceSettings'
 
+export type TrackReferencePhase = 'garage' | 'outlap' | 'active' | 'pit_lane_active' | 'pit_lane_outlap'
+
 export interface TrackVoiceReference {
   id: string
   track: string
@@ -44,12 +46,21 @@ export function normalizedSpeedPerSecond(previous: number, current: number, elap
   return forwardNormalizedDelta(previous, current) / (elapsedMs / 1000)
 }
 
-// Arming level-triggered (PIP-220): i riferimenti sono attivi appena risulta
-// completato almeno un giro (fine out-lap), indipendentemente dall'osservazione
-// dell'incremento — live_state e' event-driven/freshness-gated e puo' saltare
-// da null direttamente a N, perdendo l'edge 0 -> 1.
-export function shouldArmTrackVoiceReferences(lapsCompleted: number | null | undefined) {
-  return typeof lapsCompleted === 'number' && Number.isFinite(lapsCompleted) && lapsCompleted >= 1
+// PIP-228: la fase autorevole arriva dal logger, che vede pit/outlap/teleport
+// nello stesso snapshot. Il contatore giri resta solo un fallback compatibile
+// con logger precedenti, che non espongono ancora track_reference_phase.
+export function shouldArmTrackVoiceReferences(
+  phase: TrackReferencePhase | null | undefined,
+  legacyLapsCompleted?: number | null,
+) {
+  if (phase !== null && phase !== undefined) return phase === 'active'
+  return typeof legacyLapsCompleted === 'number'
+    && Number.isFinite(legacyLapsCompleted)
+    && legacyLapsCompleted >= 1
+}
+
+export function shouldDisarmTrackVoiceReferences(phase: TrackReferencePhase | null | undefined) {
+  return phase === 'garage' || phase === 'outlap' || phase === 'pit_lane_outlap'
 }
 
 // Vero solo tra due campioni numerici freschi: le transizioni da/verso null

@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import type { TrackReferencePhase } from '~/services/spotter/trackVoiceReferences'
 
 export type FastStateSlipBand = 'white' | 'green' | 'yellow' | 'orange' | 'red'
 export type FastStateSlipState = 'ok' | 'limit' | 'sliding' | 'wheelspin' | 'lockup'
@@ -20,6 +21,8 @@ export interface FastOverlayState {
   speedKmh: number | null
   gas: number | null
   brake: number | null
+  trackReferencePhase: TrackReferencePhase | null
+  trackReferencesEligible: boolean
   tyres: FastStateTyre[]
 }
 
@@ -29,6 +32,8 @@ const EMPTY_FAST_STATE: FastOverlayState = {
   speedKmh: null,
   gas: null,
   brake: null,
+  trackReferencePhase: null,
+  trackReferencesEligible: false,
   tyres: [],
 }
 
@@ -37,6 +42,7 @@ const FAST_STATE_POLL_MS = 250
 const MAX_CONSECUTIVE_ERRORS = 3
 const VALID_BANDS = new Set<FastStateSlipBand>(['white', 'green', 'yellow', 'orange', 'red'])
 const VALID_SLIP_STATES = new Set<FastStateSlipState>(['ok', 'limit', 'sliding', 'wheelspin', 'lockup'])
+const VALID_TRACK_REFERENCE_PHASES = new Set<TrackReferencePhase>(['garage', 'outlap', 'active', 'pit_lane_active', 'pit_lane_outlap'])
 
 function toNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
@@ -52,6 +58,12 @@ function normalizeSlipState(value: unknown): FastStateSlipState {
   return typeof value === 'string' && VALID_SLIP_STATES.has(value as FastStateSlipState)
     ? value as FastStateSlipState
     : 'ok'
+}
+
+function normalizeTrackReferencePhase(value: unknown): TrackReferencePhase | null {
+  return typeof value === 'string' && VALID_TRACK_REFERENCE_PHASES.has(value as TrackReferencePhase)
+    ? value as TrackReferencePhase
+    : null
 }
 
 function isFastStateFresh(ts: unknown): boolean {
@@ -89,6 +101,8 @@ function normalizeFastState(state: any): FastOverlayState {
     speedKmh: toNumber(state.speed_kmh),
     gas: toNumber(state.gas),
     brake: toNumber(state.brake),
+    trackReferencePhase: normalizeTrackReferencePhase(state.track_reference_phase),
+    trackReferencesEligible: state.track_references_eligible === true,
     tyres,
   }
 }
