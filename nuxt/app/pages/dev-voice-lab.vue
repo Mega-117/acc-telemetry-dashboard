@@ -25,6 +25,7 @@ import {
   normalizeTrackVoiceSpeed,
   resolveTrackVoiceReferenceAudioPath,
 } from '~/services/spotter/trackVoiceReferences'
+import { publishTrackVoiceReferencesChanged } from '~/services/spotter/trackVoiceReferenceChanges'
 
 definePageMeta({
   layout: 'dashboard'
@@ -396,6 +397,7 @@ async function saveReference(entry: TrackVoicePoint, voice: SpotterVoiceId = ref
   referenceTasks.value[entry.id] = { state: 'saving', message: 'Salvo...' }
   try {
     await voiceLabRuntime.writeVoicePoints({ points: [normalizedEntry] })
+    publishTrackVoiceReferencesChanged()
     patchReferenceRow(entry, normalizedEntry)
     referenceTasks.value[entry.id] = { state: 'done', message: 'Salvato' }
     return true

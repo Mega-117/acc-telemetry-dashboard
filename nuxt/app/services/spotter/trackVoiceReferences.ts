@@ -46,6 +46,31 @@ export function normalizedSpeedPerSecond(previous: number, current: number, elap
   return forwardNormalizedDelta(previous, current) / (elapsedMs / 1000)
 }
 
+const TRACK_VOICE_SPEED_EMA_TAU_MS = 2_000
+const TRACK_VOICE_MIN_SPEED_SAMPLE_MS = 50
+const TRACK_VOICE_DELAY_MAX_LATE_MS = 1_000
+
+export function updateSmoothedNormalizedSpeed(
+  previous: number,
+  current: number,
+  elapsedMs: number,
+  smoothedSpeedPerSecond: number | null,
+) {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < TRACK_VOICE_MIN_SPEED_SAMPLE_MS) return smoothedSpeedPerSecond
+  const delta = forwardNormalizedDelta(previous, current)
+  if (delta <= 0 || delta > TRACK_VOICE_MAX_ANNOUNCE_TICK_DELTA) return smoothedSpeedPerSecond
+  const sample = delta / (elapsedMs / 1000)
+  if (!Number.isFinite(sample) || sample <= 0) return smoothedSpeedPerSecond
+  if (smoothedSpeedPerSecond === null || !Number.isFinite(smoothedSpeedPerSecond) || smoothedSpeedPerSecond <= 0) return sample
+  const alpha = 1 - Math.exp(-elapsedMs / TRACK_VOICE_SPEED_EMA_TAU_MS)
+  return smoothedSpeedPerSecond + alpha * (sample - smoothedSpeedPerSecond)
+}
+
+export function estimatedSecondsToReference(current: number, target: number, smoothedSpeedPerSecond: number | null) {
+  if (smoothedSpeedPerSecond === null || !Number.isFinite(smoothedSpeedPerSecond) || smoothedSpeedPerSecond <= 0) return null
+  return forwardNormalizedDelta(wrapNormalizedPosition(current), wrapNormalizedPosition(target)) / smoothedSpeedPerSecond
+}
+
 // PIP-228: la fase autorevole arriva dal logger, che vede pit/outlap/teleport
 // nello stesso snapshot. Il contatore giri resta solo un fallback compatibile
 // con logger precedenti, che non espongono ancora track_reference_phase.
@@ -84,22 +109,6 @@ export function wrapNormalizedPosition(value: number) {
   return ((value % 1) + 1) % 1
 }
 
-// Appena sotto 1: un punto spinto oltre il traguardo resta annunciabile
-// sull'ultimo tratto del giro invece di "trasferirsi" al giro dopo.
-const MAX_EFFECTIVE_REFERENCE_POSITION = 1 - 1e-6
-
-export function effectiveReferencePosition(point: Pick<TrackVoiceReference, 'normalized_car_position' | 'timing_offset_sec'>, speedPerSecond: number) {
-  const offsetSec = clampTimingOffsetSec(point.timing_offset_sec)
-  const base = wrapNormalizedPosition(point.normalized_car_position)
-  if (offsetSec === 0 || !Number.isFinite(speedPerSecond) || speedPerSecond <= 0) {
-    return base
-  }
-  // PIP-216: l'offset anticipa/ritarda dentro il giro ma non puo' mai
-  // spostare il punto oltre il traguardo (in nessuna direzione).
-  const shifted = base + offsetSec * speedPerSecond
-  return Math.min(Math.max(shifted, 0), MAX_EFFECTIVE_REFERENCE_POSITION)
-}
-
 // Un passo indietro sotto questa soglia e' jitter/spin/retromarcia, non un
 // passaggio del traguardo: nessun crossing e stima velocita' scartata.
 export const TRACK_VOICE_WRAP_BACKWARD_THRESHOLD = 0.5
@@ -111,13 +120,19 @@ export interface TrackVoiceReferenceTickInput {
   previous: number
   current: number
   elapsedMs: number
+  nowMs: number
   playedIds: ReadonlySet<string>
+  smoothedSpeedPerSecond: number | null
+  pendingDelayed: ReadonlyMap<string, number>
   references: TrackVoiceReference[]
 }
 
 export interface TrackVoiceReferenceTickResult {
   playedIds: Set<string>
   toAnnounce: TrackVoiceReference[]
+  smoothedSpeedPerSecond: number | null
+  pendingDelayed: Map<string, number>
+  acceptCurrentPosition: boolean
 }
 
 // PIP-216: unico punto di verita' dell'avanzamento riferimenti. Contratto:
@@ -125,36 +140,106 @@ export interface TrackVoiceReferenceTickResult {
 // supera, anche se il campionamento l'ha scavalcato; il ciclo del giro viene
 // dal flusso di posizione (wrap reale), non dagli eventi lap del live state.
 export function advanceTrackVoiceReferenceTick(input: TrackVoiceReferenceTickInput): TrackVoiceReferenceTickResult {
-  const { previous, current, elapsedMs, playedIds, references } = input
+  const { previous, current, elapsedMs, nowMs, playedIds, references } = input
   const backwardDistance = previous - current
   if (backwardDistance > 0 && backwardDistance < TRACK_VOICE_WRAP_BACKWARD_THRESHOLD) {
-    return { playedIds: new Set(playedIds), toAnnounce: [] }
+    return {
+      playedIds: new Set(playedIds),
+      toAnnounce: [],
+      smoothedSpeedPerSecond: input.smoothedSpeedPerSecond,
+      pendingDelayed: new Map(input.pendingDelayed),
+      acceptCurrentPosition: false,
+    }
   }
   const isWrap = backwardDistance >= TRACK_VOICE_WRAP_BACKWARD_THRESHOLD
   const forwardDelta = forwardNormalizedDelta(previous, current)
   const plausibleTick = forwardDelta <= TRACK_VOICE_MAX_ANNOUNCE_TICK_DELTA
-  const speedPerSecond = plausibleTick ? normalizedSpeedPerSecond(previous, current, elapsedMs) : 0
-
-  const crossed = references
-    .map(point => ({ point, target: effectiveReferencePosition(point, speedPerSecond) }))
-    .filter(({ target }) => crossedReferencePoint(previous, current, target))
-    .sort((a, b) => forwardNormalizedDelta(previous, a.target) - forwardNormalizedDelta(previous, b.target))
+  const smoothedSpeedPerSecond = plausibleTick
+    ? updateSmoothedNormalizedSpeed(previous, current, elapsedMs, input.smoothedSpeedPerSecond)
+    : input.smoothedSpeedPerSecond
 
   // Sul wrap il set per-giro riparte: restano segnati solo i punti gia'
   // superati dopo il traguardo; quelli di fine giro appartengono al giro chiuso.
   const nextPlayedIds = isWrap ? new Set<string>() : new Set(playedIds)
+  const pendingDelayed = new Map(input.pendingDelayed)
   const toAnnounce: TrackVoiceReference[] = []
-  for (const { point, target } of crossed) {
-    const inClosedLapSegment = isWrap && target > previous
-    if (inClosedLapSegment) {
-      if (!playedIds.has(point.id) && plausibleTick) toAnnounce.push(point)
+  const announcedIds = new Set<string>()
+
+  const referenceById = new Map(references.map(point => [point.id, point]))
+  for (const [id, fireAtMs] of pendingDelayed) {
+    const point = referenceById.get(id)
+    if (!point) {
+      pendingDelayed.delete(id)
       continue
     }
-    if (nextPlayedIds.has(point.id)) continue
-    nextPlayedIds.add(point.id)
-    if (plausibleTick) toAnnounce.push(point)
+    // Un ritardo che oltrepasserebbe il traguardo viene pronunciato sul wrap:
+    // non deve migrare al giro successivo (stesso contratto del vecchio clamp).
+    const due = nowMs >= fireAtMs
+    const freshEnough = plausibleTick && nowMs - fireAtMs <= TRACK_VOICE_DELAY_MAX_LATE_MS
+    const plausibleWrap = isWrap && plausibleTick
+    if (due || isWrap) {
+      if (!playedIds.has(id) && (plausibleWrap || freshEnough)) {
+        toAnnounce.push(point)
+        announcedIds.add(id)
+      }
+      if (!isWrap) nextPlayedIds.add(id)
+      pendingDelayed.delete(id)
+    }
   }
-  return { playedIds: nextPlayedIds, toAnnounce }
+
+  const orderedReferences = [...references].sort((a, b) =>
+    forwardNormalizedDelta(current, a.normalized_car_position)
+      - forwardNormalizedDelta(current, b.normalized_car_position),
+  )
+
+  for (const point of orderedReferences) {
+    const offsetSec = clampTimingOffsetSec(point.timing_offset_sec)
+    const base = wrapNormalizedPosition(point.normalized_car_position)
+    const crossedBase = crossedReferencePoint(previous, current, base)
+    const inClosedLapSegment = isWrap && base > previous
+    const alreadyPlayed = inClosedLapSegment ? playedIds.has(point.id) : nextPlayedIds.has(point.id)
+    if (alreadyPlayed || announcedIds.has(point.id) || pendingDelayed.has(point.id)) continue
+
+    if (!plausibleTick) {
+      if (crossedBase) {
+        if (!inClosedLapSegment) nextPlayedIds.add(point.id)
+      }
+      continue
+    }
+
+    if (offsetSec < 0) {
+      // Un anticipo non appartiene mai al giro precedente: per un punto vicino
+      // al via la prima occasione valida e' il primo tick dopo il wrap.
+      const etaSec = current <= base
+        ? estimatedSecondsToReference(current, base, smoothedSpeedPerSecond)
+        : null
+      if (etaSec !== null && etaSec <= Math.abs(offsetSec)) {
+        toAnnounce.push(point)
+        nextPlayedIds.add(point.id)
+      } else if (crossedBase) {
+        // Fallback conservativo: meglio il cue sul punto che perderlo del tutto
+        // quando non esiste ancora una stima di velocita' affidabile.
+        toAnnounce.push(point)
+        if (!inClosedLapSegment) nextPlayedIds.add(point.id)
+      }
+      continue
+    }
+
+    if (!crossedBase) continue
+    if (offsetSec === 0 || inClosedLapSegment) {
+      toAnnounce.push(point)
+      if (!inClosedLapSegment) nextPlayedIds.add(point.id)
+      continue
+    }
+    pendingDelayed.set(point.id, nowMs + offsetSec * 1_000)
+  }
+  return {
+    playedIds: nextPlayedIds,
+    toAnnounce,
+    smoothedSpeedPerSecond,
+    pendingDelayed,
+    acceptCurrentPosition: true,
+  }
 }
 
 export function resolveTrackVoiceReferenceAudioPath(

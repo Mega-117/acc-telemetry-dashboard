@@ -16,6 +16,7 @@ import {
   advanceTrackVoiceReferenceRuntime,
   createTrackVoiceReferenceRuntimeState,
 } from '~/services/spotter/trackVoiceReferenceRuntime'
+import { subscribeTrackVoiceReferencesChanged } from '~/services/spotter/trackVoiceReferenceChanges'
 
 definePageMeta({ layout: false })
 
@@ -40,6 +41,7 @@ const trackVoiceReferenceRuntimeState = ref(createTrackVoiceReferenceRuntimeStat
 let audio: HTMLAudioElement | null = null
 let queue = Promise.resolve()
 let generation = 0
+let removeTrackVoiceReferenceChangeListener = () => {}
 
 function getRuntimeApi(): any | null {
   if (typeof window === 'undefined') return null
@@ -136,6 +138,10 @@ function announceLapTime() {
 onMounted(async () => {
   loadSpotterVoiceSettings()
   await loadTrackVoiceReferences()
+  removeTrackVoiceReferenceChangeListener = subscribeTrackVoiceReferencesChanged(async () => {
+    await loadTrackVoiceReferences()
+    tickTrackVoiceReferences()
+  })
   startLiveStatePolling()
   startFastStatePolling()
 })
@@ -174,6 +180,12 @@ watch(canRunSpotterAudio, (canRun) => {
   tickTrackVoiceReferences()
 })
 
+watch(() => fastState.value.trackReferencePhase, async (phase, previousPhase) => {
+  if (phase !== 'active' || previousPhase === 'active') return
+  await loadTrackVoiceReferences()
+  tickTrackVoiceReferences()
+})
+
 watch(
   () => [
     fastState.value.normalizedCarPosition,
@@ -185,6 +197,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  removeTrackVoiceReferenceChangeListener()
   stopLiveStatePolling()
   stopFastStatePolling()
   stopSpotterAudio()

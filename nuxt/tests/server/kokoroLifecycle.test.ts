@@ -7,6 +7,7 @@ const voiceLab = readFileSync(resolve(process.cwd(), 'app/pages/dev-voice-lab.vu
 const app = readFileSync(resolve(process.cwd(), 'app/app.vue'), 'utf8')
 const lifecycle = readFileSync(resolve(process.cwd(), 'app/composables/useKokoroVoiceLabLifecycle.ts'), 'utf8')
 const voiceLabRuntime = readFileSync(resolve(process.cwd(), 'app/composables/useVoiceLabRuntime.ts'), 'utf8')
+const spotterRuntime = readFileSync(resolve(process.cwd(), 'app/pages/spotter-audio-runtime.vue'), 'utf8')
 
 describe('kokoro VoiceLab lifecycle', () => {
   it('non spegne processi Kokoro non gestiti da ACC Suite', () => {
@@ -48,5 +49,11 @@ expect(voiceLab).toContain('Testo condiviso tra Sara e Nicola · salvataggio aut
 expect(voiceLab).toContain('flushReferenceAutoSaves()')
     expect(voiceLab).toContain("window.addEventListener('pagehide', handleVoiceLabPageHide)")
     expect(voiceLabRuntime).toContain('keepalive: true')
+  })
+
+  it('ricarica i riferimenti senza azzerare il giro gia pronunciato', () => {
+    expect(spotterRuntime).toContain('subscribeTrackVoiceReferencesChanged(async () =>')
+    expect(spotterRuntime).toContain("phase !== 'active' || previousPhase === 'active'")
+    expect(spotterRuntime).not.toMatch(/subscribeTrackVoiceReferencesChanged[\s\S]{0,180}resetTrackVoiceReferenceLapState/)
   })
 })

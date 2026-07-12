@@ -65,4 +65,69 @@ describe('trackVoiceReferenceRuntime (PIP-228)', () => {
     )
     expect(result.state.armed).toBe(true)
   })
+
+  it('replays a full car drive: silent outlap, active flying lap, ETA cue nine seconds early', () => {
+    const spaReference: TrackVoiceReference = {
+      id: 'spa-last-chicane',
+      track: 'spa',
+      normalized_car_position: 0.92104,
+      timing_offset_sec: -9,
+    }
+    let state = createTrackVoiceReferenceRuntimeState()
+    const announced: Array<{ id: string, position: number, now: number }> = []
+
+    const driveFrame = (phase: TrackVoiceReferenceRuntimeInput['phase'], eligible: boolean, position: number, now: number) => {
+      const outcome = advanceTrackVoiceReferenceRuntime(state, step({
+        phase,
+        eligible,
+        position,
+        now,
+        references: [spaReference],
+      }))
+      state = outcome.state
+      for (const point of outcome.toAnnounce) announced.push({ id: point.id, position, now })
+    }
+
+    // Stessa forma del replay ACC PIP-228: garage -> outlap -> wrap -> active.
+    driveFrame('garage', false, 0.04, 0)
+    for (let index = 1; index <= 95; index++) driveFrame('outlap', false, index / 100, index * 250)
+    driveFrame('outlap', false, 0.99, 24_000)
+    driveFrame('active', true, 0.01, 24_250)
+    expect(announced).toEqual([])
+
+    // Giro lanciato a ~0.008 di pista/s con un duplicato e jitter temporale.
+    let position = 0.01
+    let now = 24_250
+    while (position < 0.94) {
+      const next = Math.min(0.94, position + 0.002)
+      now += 250
+      driveFrame('active', true, next, now)
+      if (Math.abs(next - 0.80) < 0.001) driveFrame('active', true, next, now)
+      position = next
+    }
+
+    expect(announced).toHaveLength(1)
+    expect(announced[0]!.id).toBe(spaReference.id)
+    expect(announced[0]!.position).toBeGreaterThanOrEqual(0.848)
+    expect(announced[0]!.position).toBeLessThanOrEqual(0.852)
+    expect((spaReference.normalized_car_position - announced[0]!.position) / 0.008).toBeCloseTo(9, 0)
+  })
+
+  it('drops a pending delayed cue during pause and reseeds timing on resume', () => {
+    const delayed: TrackVoiceReference = { id: 'delayed', track: 'spa', normalized_car_position: 0.5, timing_offset_sec: 3 }
+    let state = advanceTrackVoiceReferenceRuntime(
+      createTrackVoiceReferenceRuntimeState(),
+      step({ position: 0.49, now: 1_000, references: [delayed] }),
+    ).state
+    state = advanceTrackVoiceReferenceRuntime(state, step({ position: 0.51, now: 1_250, references: [delayed] })).state
+    expect(state.pendingDelayed.has(delayed.id)).toBe(true)
+
+    state = advanceTrackVoiceReferenceRuntime(state, step({ eligible: false, position: 0.51, now: 2_000, references: [delayed] })).state
+    expect(state.pendingDelayed.size).toBe(0)
+    expect(state.previousTs).toBeNull()
+
+    const resumed = advanceTrackVoiceReferenceRuntime(state, step({ position: 0.52, now: 20_000, references: [delayed] }))
+    expect(resumed.toAnnounce).toEqual([])
+    expect(resumed.state.previousTs).toBe(20_000)
+  })
 })

@@ -4,15 +4,16 @@ import {
   advanceTrackVoiceReferenceTick,
   buildReferenceSaveEntry,
   crossedReferencePoint,
-  effectiveReferencePosition,
   filterPlayableTrackVoiceReferences,
   isLapCountIncrement,
+  estimatedSecondsToReference,
   normalizedSpeedPerSecond,
   normalizeTrackName,
   normalizeTrackVoiceSpeed,
   resolveTrackVoiceReferenceAudioPath,
   shouldArmTrackVoiceReferences,
   shouldDisarmTrackVoiceReferences,
+  updateSmoothedNormalizedSpeed,
   type TrackVoiceReference,
 } from '~/services/spotter/trackVoiceReferences'
 
@@ -49,28 +50,12 @@ describe('trackVoiceReferences', () => {
     expect(resolveTrackVoiceReferenceAudioPath(points[0]!, 'if_sara')).toBe('/late.wav')
   })
 
-  it('keeps timing offset zero on the recorded reference point', () => {
-    expect(effectiveReferencePosition({ normalized_car_position: 0.5, timing_offset_sec: 0 }, 0.02)).toBe(0.5)
-    expect(effectiveReferencePosition({ normalized_car_position: 0.5 }, 0.02)).toBe(0.5)
-  })
-
   it('clamps timing offsets to the supported presets', () => {
     expect(clampTimingOffsetSec(-15)).toBe(-10)
     expect(clampTimingOffsetSec(15)).toBe(10)
     expect(clampTimingOffsetSec(-10)).toBe(-10)
     expect(clampTimingOffsetSec(10)).toBe(10)
     expect(clampTimingOffsetSec(2.6)).toBe(3)
-  })
-
-  it('applies integer timing offsets using normalized speed', () => {
-    expect(effectiveReferencePosition({ normalized_car_position: 0.5, timing_offset_sec: -3 }, 0.02)).toBeCloseTo(0.44)
-    expect(effectiveReferencePosition({ normalized_car_position: 0.5, timing_offset_sec: 2 }, 0.02)).toBeCloseTo(0.54)
-  })
-
-  it('clamps timing offsets at the finish line instead of wrapping (PIP-216)', () => {
-    expect(effectiveReferencePosition({ normalized_car_position: 0.02, timing_offset_sec: -3 }, 0.02)).toBe(0)
-    expect(effectiveReferencePosition({ normalized_car_position: 0.98, timing_offset_sec: 2 }, 0.02)).toBeCloseTo(1, 4)
-    expect(effectiveReferencePosition({ normalized_car_position: 0.98, timing_offset_sec: 2 }, 0.02)).toBeLessThan(1)
   })
 
   it('estimates normalized speed from position deltas, including wrap', () => {
@@ -87,6 +72,15 @@ describe('trackVoiceReferences', () => {
     expect(shouldDisarmTrackVoiceReferences('outlap')).toBe(true)
     expect(shouldDisarmTrackVoiceReferences('pit_lane_outlap')).toBe(true)
     expect(shouldDisarmTrackVoiceReferences('pit_lane_active')).toBe(false)
+  })
+
+  it('keeps a stable speed estimate across duplicate or zero-time samples', () => {
+    const seeded = updateSmoothedNormalizedSpeed(0.1, 0.102, 250, null)
+    expect(seeded).toBeCloseTo(0.008)
+    expect(updateSmoothedNormalizedSpeed(0.102, 0.102, 0, seeded)).toBe(seeded)
+    expect(updateSmoothedNormalizedSpeed(0.102, 0.103, 10, seeded)).toBe(seeded)
+    expect(updateSmoothedNormalizedSpeed(0.102, 0.102, 250, seeded)).toBe(seeded)
+    expect(estimatedSecondsToReference(0.84, 0.92, seeded)).toBeCloseTo(10)
   })
 
   it('falls back to completed laps only when an old logger omits the phase', () => {
@@ -171,7 +165,10 @@ describe('advanceTrackVoiceReferenceTick (PIP-216)', () => {
       previous: 0,
       current: 0,
       elapsedMs: 250,
+      nowMs: 250,
       playedIds: new Set<string>(),
+      smoothedSpeedPerSecond: null,
+      pendingDelayed: new Map<string, number>(),
       references: [],
       ...input,
     })
@@ -214,5 +211,132 @@ describe('advanceTrackVoiceReferenceTick (PIP-216)', () => {
     const outcome = tick({ previous: 0.10, current: 0.40, references: [ref('a', 0.2), ref('b', 0.3)] })
     expect(outcome.toAnnounce).toEqual([])
     expect([...outcome.playedIds].sort()).toEqual(['a', 'b'])
+  })
+
+  it('announces a negative offset from ETA even with duplicate samples', () => {
+    let playedIds = new Set<string>()
+    let smoothedSpeedPerSecond: number | null = null
+    let pendingDelayed = new Map<string, number>()
+    let previous = 0.80
+    let nowMs = 0
+    const announced: string[] = []
+    const reference = ref('early-nine', 0.92104, -9)
+
+    for (const current of [0.802, 0.802, 0.804, 0.806, 0.808, 0.810, 0.812, 0.814, 0.816, 0.818, 0.820, 0.822, 0.824, 0.826, 0.828, 0.830, 0.832, 0.834, 0.836, 0.838, 0.840, 0.842, 0.844, 0.846, 0.848, 0.850]) {
+      nowMs += current === previous ? 0 : 250
+      const outcome = tick({ previous, current, elapsedMs: current === previous ? 0 : 250, nowMs, playedIds, smoothedSpeedPerSecond, pendingDelayed, references: [reference] })
+      announced.push(...outcome.toAnnounce.map(point => point.id))
+      playedIds = outcome.playedIds
+      smoothedSpeedPerSecond = outcome.smoothedSpeedPerSecond
+      pendingDelayed = outcome.pendingDelayed
+      if (outcome.acceptCurrentPosition) previous = current
+    }
+
+    expect(announced).toEqual(['early-nine'])
+    expect(previous).toBeLessThan(reference.normalized_car_position)
+  })
+
+  it('delays a positive offset with monotonic time and never repeats it', () => {
+    const reference = ref('after-three', 0.5, 3)
+    const crossed = tick({ previous: 0.49, current: 0.51, nowMs: 1_000, references: [reference] })
+    expect(crossed.toAnnounce).toEqual([])
+    expect(crossed.pendingDelayed.get(reference.id)).toBe(4_000)
+
+    const waiting = tick({
+      previous: 0.51, current: 0.52, nowMs: 3_999,
+      playedIds: crossed.playedIds,
+      smoothedSpeedPerSecond: crossed.smoothedSpeedPerSecond,
+      pendingDelayed: crossed.pendingDelayed,
+      references: [reference],
+    })
+    expect(waiting.toAnnounce).toEqual([])
+
+    const due = tick({
+      previous: 0.52, current: 0.53, nowMs: 4_000,
+      playedIds: waiting.playedIds,
+      smoothedSpeedPerSecond: waiting.smoothedSpeedPerSecond,
+      pendingDelayed: waiting.pendingDelayed,
+      references: [reference],
+    })
+    expect(due.toAnnounce.map(point => point.id)).toEqual(['after-three'])
+    expect(due.pendingDelayed.size).toBe(0)
+  })
+
+  it('keeps zero offset crossing behavior unchanged', () => {
+    const outcome = tick({ previous: 0.49, current: 0.51, references: [ref('on-point', 0.5, 0)] })
+    expect(outcome.toAnnounce.map(point => point.id)).toEqual(['on-point'])
+  })
+
+  it('clamps a pending positive delay to the wrap without queueing it twice', () => {
+    const reference = ref('late-at-line', 0.98, 3)
+    const scheduled = tick({ previous: 0.97, current: 0.985, nowMs: 1_000, references: [reference] })
+    expect(scheduled.pendingDelayed.has(reference.id)).toBe(true)
+
+    const wrapped = tick({
+      previous: 0.985, current: 0.01, nowMs: 1_250,
+      playedIds: scheduled.playedIds,
+      smoothedSpeedPerSecond: scheduled.smoothedSpeedPerSecond,
+      pendingDelayed: scheduled.pendingDelayed,
+      references: [reference],
+    })
+    expect(wrapped.toAnnounce.map(point => point.id)).toEqual(['late-at-line'])
+    expect(wrapped.pendingDelayed.size).toBe(0)
+  })
+
+  it('never moves a negative offset to the previous lap or repeats it after wrap', () => {
+    const reference = ref('after-line', 0.05, -9)
+    const beforeLine = tick({
+      previous: 0.976, current: 0.978, elapsedMs: 250, nowMs: 1_000,
+      smoothedSpeedPerSecond: 0.008,
+      references: [reference],
+    })
+    expect(beforeLine.toAnnounce).toEqual([])
+
+    const wrapped = tick({
+      previous: 0.998, current: 0.01, elapsedMs: 250, nowMs: 1_250,
+      playedIds: beforeLine.playedIds,
+      smoothedSpeedPerSecond: beforeLine.smoothedSpeedPerSecond,
+      pendingDelayed: beforeLine.pendingDelayed,
+      references: [reference],
+    })
+    expect(wrapped.toAnnounce.map(point => point.id)).toEqual(['after-line'])
+
+    const next = tick({
+      previous: 0.01, current: 0.012, elapsedMs: 250, nowMs: 1_500,
+      playedIds: wrapped.playedIds,
+      smoothedSpeedPerSecond: wrapped.smoothedSpeedPerSecond,
+      pendingDelayed: wrapped.pendingDelayed,
+      references: [reference],
+    })
+    expect(next.toAnnounce).toEqual([])
+  })
+
+  it('consumes a positive delay that is stale after a telemetry freeze', () => {
+    const reference = ref('stale-delay', 0.5, 2)
+    const scheduled = tick({ previous: 0.49, current: 0.51, nowMs: 1_000, references: [reference] })
+    const recovered = tick({
+      previous: 0.51, current: 0.52, elapsedMs: 5_000, nowMs: 6_000,
+      playedIds: scheduled.playedIds,
+      smoothedSpeedPerSecond: scheduled.smoothedSpeedPerSecond,
+      pendingDelayed: scheduled.pendingDelayed,
+      references: [reference],
+    })
+    expect(recovered.toAnnounce).toEqual([])
+    expect(recovered.pendingDelayed.size).toBe(0)
+    expect(recovered.playedIds.has(reference.id)).toBe(true)
+  })
+
+  it('does not mistake a stale wrap-shaped recovery for a valid delay clamp', () => {
+    const reference = ref('stale-wrap-delay', 0.98, 3)
+    const scheduled = tick({ previous: 0.97, current: 0.985, nowMs: 1_000, references: [reference] })
+    const recovered = tick({
+      previous: 0.985, current: 0.20, elapsedMs: 5_000, nowMs: 6_000,
+      playedIds: scheduled.playedIds,
+      smoothedSpeedPerSecond: scheduled.smoothedSpeedPerSecond,
+      pendingDelayed: scheduled.pendingDelayed,
+      references: [reference],
+    })
+    expect(recovered.toAnnounce).toEqual([])
+    expect(recovered.pendingDelayed.size).toBe(0)
   })
 })
