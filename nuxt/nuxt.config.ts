@@ -103,9 +103,9 @@ export default defineNuxtConfig({
 
   vite: {
     optimizeDeps: {
-      // Vite 7 dependency pre-bundling can fail on Windows with this Nuxt app
-      // while the server remains otherwise usable. Disable it only for dev.
-      disabled: 'dev',
+      // chartjs-plugin-zoom imports the CommonJS-only hammerjs package. Keep
+      // discovery constrained, but pre-bundle these explicit dependencies in
+      // dev so SessionDetailPage can be loaded through client-side routing.
       noDiscovery: true,
       include: ['chartjs-plugin-zoom', 'hammerjs']
     },

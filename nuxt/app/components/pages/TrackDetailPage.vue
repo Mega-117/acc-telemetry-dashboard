@@ -611,10 +611,11 @@ function goToSession(id: string) {
 
           <div class="best-reference-stack">
             <button
+              type="button"
               :class="['best-reference-card best-reference-card--qualy', { 'best-reference-card--clickable': track.bestQualySessionId }]"
               :disabled="!track.bestQualySessionId"
               title="Vai alla sessione qualifica"
-              @click.stop="track.bestQualySessionId && goToSession(track.bestQualySessionId)"
+              @click="track.bestQualySessionId && goToSession(track.bestQualySessionId)"
             >
               <span class="reference-card-title">Best qualifica</span>
               <span class="reference-card-time">{{ track.bestQualy || '--:--.---' }}</span>
@@ -639,10 +640,11 @@ function goToSession(id: string) {
               </div>
               <div class="race-reference-card__metrics">
                 <button
+                  type="button"
                   :class="['race-reference-metric race-reference-metric--best', { 'race-reference-metric--clickable': selectedRaceReference.bestRaceSessionId }]"
                   :disabled="!selectedRaceReference.bestRaceSessionId"
                   title="Vai alla sessione best gara"
-                  @click.stop="selectedRaceReference.bestRaceSessionId && goToSession(selectedRaceReference.bestRaceSessionId)"
+                  @click="selectedRaceReference.bestRaceSessionId && goToSession(selectedRaceReference.bestRaceSessionId)"
                 >
                   <span class="reference-card-title">Best gara</span>
                   <span class="reference-card-time">{{ selectedRaceReference.bestRace || '--:--.---' }}</span>
@@ -654,10 +656,11 @@ function goToSession(id: string) {
                   <span v-if="selectedRaceReference.bestRaceSessionId" class="fuel-cell-action" aria-hidden="true">↗</span>
                 </button>
                 <button
+                  type="button"
                   :class="['race-reference-metric race-reference-metric--avg', { 'race-reference-metric--clickable': selectedRaceReference.avgRaceSessionId }]"
                   :disabled="!selectedRaceReference.avgRaceSessionId"
                   title="Vai alla sessione media gara"
-                  @click.stop="selectedRaceReference.avgRaceSessionId && goToSession(selectedRaceReference.avgRaceSessionId)"
+                  @click="selectedRaceReference.avgRaceSessionId && goToSession(selectedRaceReference.avgRaceSessionId)"
                 >
                   <span class="reference-card-title">Media gara</span>
                   <span class="reference-card-time">{{ selectedRaceReference.avgRace || '--:--.---' }}</span>
