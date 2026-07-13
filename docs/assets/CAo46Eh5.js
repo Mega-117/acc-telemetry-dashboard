@@ -1,1 +1,0 @@
-import{t as o,n as t,ak as a,aa as n,_ as s}from"./ChadfepG.js";const _={class:"page-container"},c=o({__name:"PageContainer",setup(r){return(e,p)=>(n(),t("div",_,[a(e.$slots,"default",{},void 0)]))}}),i=s(c,[["__scopeId","data-v-e95cf441"]]);export{i as _};

@@ -1,1 +1,0 @@
-import{t as e,a7 as n,a0 as s,n as o,j as t,aa as c,_ as r}from"./ChadfepG.js";const d={class:"loading-redirect"},i=e({__name:"index",setup(_){return n(()=>{s("/panoramica")}),(p,a)=>(c(),o("div",d,[...a[0]||(a[0]=[t("div",{class:"loading-spinner"},null,-1)])]))}}),m=r(i,[["__scopeId","data-v-0e3c9fac"]]);export{m as default};

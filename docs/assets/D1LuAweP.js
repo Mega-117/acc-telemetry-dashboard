@@ -1,1 +1,0 @@
-import{t as s,aR as t,a7 as o,n,j as r,aa as _,_ as c}from"./ChadfepG.js";const d={class:"redirect-screen"},p=s({__name:"[...slug]",setup(u){const a=t();return o(()=>{a.replace("/panoramica")}),(i,e)=>(_(),n("div",d,[...e[0]||(e[0]=[r("p",null,"Reindirizzamento...",-1)])]))}}),m=c(p,[["__scopeId","data-v-8fcd027d"]]);export{m as default};
