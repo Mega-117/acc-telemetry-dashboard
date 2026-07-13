@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { spotterVoiceOptions, useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
+import SessionModePicker from '~/components/spotter/SessionModePicker.vue'
 
 definePageMeta({ layout: 'dashboard' })
 
@@ -35,9 +36,13 @@ const {
   voiceLabel,
   referencesEnabled,
   coachEnabled,
+  referenceSessionModes,
+  lapTimeSessionModes,
   selectVoice,
   toggleReferences,
   toggleCoach,
+  setReferenceSessionModes,
+  setLapTimeSessionModes,
 } = useSpotterVoiceSettings()
 const selectedTrack = ref('Spa')
 const catalog = ref<TrackVoicePointCatalog>({ tracks: ['Spa'], points: [] })
@@ -141,6 +146,11 @@ onMounted(() => {
               <button type="button" class="toggle-button" :class="{ 'is-active': referencesEnabled }" @click="toggleReferences">
                 {{ referencesEnabled ? 'Disattiva riferimenti' : 'Attiva riferimenti' }}
               </button>
+              <SessionModePicker
+                :model-value="referenceSessionModes"
+                label="Sessioni abilitate per i riferimenti pista"
+                @update:model-value="setReferenceSessionModes"
+              />
             </article>
 
             <article class="setting-block">
@@ -149,6 +159,11 @@ onMounted(() => {
               <button type="button" class="toggle-button" :class="{ 'is-active': coachEnabled }" @click="toggleCoach">
                 {{ coachEnabled ? 'Disattiva avvisi' : 'Attiva avvisi' }}
               </button>
+              <SessionModePicker
+                :model-value="lapTimeSessionModes"
+                label="Sessioni abilitate per gli avvisi giro"
+                @update:model-value="setLapTimeSessionModes"
+              />
             </article>
           </div>
           <p class="panel-note">{{ runtimeMessage }}</p>

@@ -1,4 +1,11 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import {
+  DEFAULT_SPOTTER_SESSION_MODES,
+  normalizeSpotterSessionModes,
+  serializeSpotterSessionModes,
+  toggleSpotterSessionMode,
+  type SpotterSessionMode,
+} from '~/services/spotter/spotterSessionPolicy'
 
 export type SpotterVoiceId = 'if_sara' | 'im_nicola'
 
@@ -11,6 +18,8 @@ const STORAGE_KEYS = {
   voice: 'acc.spotter.voice',
   referencesEnabled: 'acc.trackVoiceReferences.enabled',
   coachEnabled: 'acc.spotter.trainingCoach.enabled',
+  referenceSessionModes: 'acc.trackVoiceReferences.sessionModes',
+  lapTimeSessionModes: 'acc.spotter.trainingCoach.sessionModes',
 }
 
 const SETTINGS_CHANGED_EVENT = 'acc-spotter-voice-settings-change'
@@ -18,6 +27,8 @@ const SETTINGS_CHANGED_EVENT = 'acc-spotter-voice-settings-change'
 const selectedVoice = ref<SpotterVoiceId>('if_sara')
 const referencesEnabled = ref(false)
 const coachEnabled = ref(false)
+const referenceSessionModes = ref<SpotterSessionMode[]>([...DEFAULT_SPOTTER_SESSION_MODES])
+const lapTimeSessionModes = ref<SpotterSessionMode[]>([...DEFAULT_SPOTTER_SESSION_MODES])
 const loaded = ref(false)
 
 function resolveVoiceId(value: unknown): SpotterVoiceId {
@@ -35,6 +46,8 @@ function readSettings() {
   const coachRaw = window.localStorage.getItem(STORAGE_KEYS.coachEnabled)
   referencesEnabled.value = referencesRaw === null ? true : referencesRaw === '1'
   coachEnabled.value = coachRaw === null ? true : coachRaw === '1'
+  referenceSessionModes.value = normalizeSpotterSessionModes(window.localStorage.getItem(STORAGE_KEYS.referenceSessionModes))
+  lapTimeSessionModes.value = normalizeSpotterSessionModes(window.localStorage.getItem(STORAGE_KEYS.lapTimeSessionModes))
   loaded.value = true
 }
 
@@ -72,6 +85,24 @@ function toggleCoach() {
   setCoachEnabled(!coachEnabled.value)
 }
 
+function setReferenceSessionModes(modes: SpotterSessionMode[]) {
+  referenceSessionModes.value = normalizeSpotterSessionModes(modes)
+  writeSetting(STORAGE_KEYS.referenceSessionModes, serializeSpotterSessionModes(referenceSessionModes.value))
+}
+
+function toggleReferenceSessionMode(mode: SpotterSessionMode) {
+  setReferenceSessionModes(toggleSpotterSessionMode(referenceSessionModes.value, mode))
+}
+
+function setLapTimeSessionModes(modes: SpotterSessionMode[]) {
+  lapTimeSessionModes.value = normalizeSpotterSessionModes(modes)
+  writeSetting(STORAGE_KEYS.lapTimeSessionModes, serializeSpotterSessionModes(lapTimeSessionModes.value))
+}
+
+function toggleLapTimeSessionMode(mode: SpotterSessionMode) {
+  setLapTimeSessionModes(toggleSpotterSessionMode(lapTimeSessionModes.value, mode))
+}
+
 export function useSpotterVoiceSettings() {
   const voiceLabel = computed(() => spotterVoiceOptions.find(voice => voice.id === selectedVoice.value)?.label || 'Sara')
 
@@ -99,11 +130,17 @@ export function useSpotterVoiceSettings() {
     voiceLabel,
     referencesEnabled,
     coachEnabled,
+    referenceSessionModes,
+    lapTimeSessionModes,
     load: readSettings,
     selectVoice,
     setReferencesEnabled,
     toggleReferences,
     setCoachEnabled,
     toggleCoach,
+    setReferenceSessionModes,
+    toggleReferenceSessionMode,
+    setLapTimeSessionModes,
+    toggleLapTimeSessionMode,
   }
 }

@@ -17,6 +17,7 @@ export interface FastStateTyre {
 
 export interface FastOverlayState {
   isLive: boolean
+  sessionType: number | null
   normalizedCarPosition: number | null
   speedKmh: number | null
   gas: number | null
@@ -28,6 +29,7 @@ export interface FastOverlayState {
 
 const EMPTY_FAST_STATE: FastOverlayState = {
   isLive: false,
+  sessionType: null,
   normalizedCarPosition: null,
   speedKmh: null,
   gas: null,
@@ -97,6 +99,7 @@ function normalizeFastState(state: any): FastOverlayState {
 
   return {
     isLive: state.is_live === true,
+    sessionType: toNumber(state.session_type),
     normalizedCarPosition: toNumber(state.normalized_car_position),
     speedKmh: toNumber(state.speed_kmh),
     gas: toNumber(state.gas),

@@ -15,6 +15,7 @@ function makeState(overrides: Record<string, any> = {}) {
   return {
     ts: freshTs(),
     is_live: true,
+    session_type: 0,
     speed_kmh: 132.4,
     gas: 0.7,
     brake: 0.1,
@@ -50,6 +51,7 @@ describe('useFastStatePoller', () => {
 
     expect(isFastStateActive.value).toBe(true)
     expect(fastState.value.speedKmh).toBe(132.4)
+    expect(fastState.value.sessionType).toBe(0)
     expect(fastState.value.gas).toBe(0.7)
     expect(fastState.value.trackReferencePhase).toBe('active')
     expect(fastState.value.trackReferencesEligible).toBe(true)
@@ -69,6 +71,16 @@ describe('useFastStatePoller', () => {
 
     expect(fastState.value.trackReferencePhase).toBeNull()
     expect(fastState.value.trackReferencesEligible).toBe(false)
+  })
+
+  it('degrada a sessione sconosciuta quando session_type manca o non e numerico', async () => {
+    const api = { getFastState: vi.fn(async () => makeState({ session_type: 'race' })) }
+    const { fastState, startFastStatePolling } = useFastStatePoller(() => api)
+
+    startFastStatePolling()
+    await flushPromises()
+
+    expect(fastState.value.sessionType).toBeNull()
   })
 
   it('nasconde il widget se fast_state e stantio', async () => {

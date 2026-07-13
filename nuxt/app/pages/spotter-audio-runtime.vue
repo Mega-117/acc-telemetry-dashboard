@@ -17,6 +17,10 @@ import {
   createTrackVoiceReferenceRuntimeState,
 } from '~/services/spotter/trackVoiceReferenceRuntime'
 import { subscribeTrackVoiceReferencesChanged } from '~/services/spotter/trackVoiceReferenceChanges'
+import {
+  isSpotterFeatureAllowed,
+  isSpotterSessionChange,
+} from '~/services/spotter/spotterSessionPolicy'
 
 definePageMeta({ layout: false })
 
@@ -30,6 +34,8 @@ const {
   selectedVoice,
   referencesEnabled,
   coachEnabled: lapTimeAnnouncementsEnabled,
+  referenceSessionModes,
+  lapTimeSessionModes,
   load: loadSpotterVoiceSettings,
 } = useSpotterVoiceSettings()
 const { canEnterApp } = useFirebaseAuth()
@@ -50,6 +56,16 @@ function getRuntimeApi(): any | null {
 
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getRuntimeApi)
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getRuntimeApi)
+const referencesAllowedForSession = computed(() => isSpotterFeatureAllowed(
+  referencesEnabled.value,
+  referenceSessionModes.value,
+  fastState.value.sessionType,
+))
+const lapTimesAllowedForSession = computed(() => isSpotterFeatureAllowed(
+  lapTimeAnnouncementsEnabled.value,
+  lapTimeSessionModes.value,
+  fastState.value.sessionType,
+))
 
 function playAudioPath(path: string, gen: number): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -105,7 +121,7 @@ function stopRuntimeAudioForLogout() {
 }
 
 function tickTrackVoiceReferences() {
-  if (!canRunSpotterAudio.value || !referencesEnabled.value) return
+  if (!canRunSpotterAudio.value || !referencesAllowedForSession.value) return
   const currentPosition = fastState.value.normalizedCarPosition
   const track = normalizeTrackName(liveLap.value.track)
   const outcome = advanceTrackVoiceReferenceRuntime(trackVoiceReferenceRuntimeState.value, {
@@ -125,7 +141,7 @@ function tickTrackVoiceReferences() {
 }
 
 function announceLapTime() {
-  if (!canRunSpotterAudio.value || !lapTimeAnnouncementsEnabled.value) return
+  if (!canRunSpotterAudio.value || !lapTimesAllowedForSession.value) return
   const audioEntry = resolveLapTimeVoiceEntry(
     liveLap.value.lastLapTimeMs,
     liveLap.value.lapValid ?? true,
@@ -163,7 +179,7 @@ watch(() => selectedVoice.value, async () => {
   resetTrackVoiceReferenceLapState()
 })
 
-watch(() => referencesEnabled.value, (enabled) => {
+watch(referencesAllowedForSession, (enabled) => {
   if (!enabled) {
     disarmTrackVoiceReferences()
     return
@@ -183,6 +199,16 @@ watch(canRunSpotterAudio, (canRun) => {
 watch(() => fastState.value.trackReferencePhase, async (phase, previousPhase) => {
   if (phase !== 'active' || previousPhase === 'active') return
   await loadTrackVoiceReferences()
+  tickTrackVoiceReferences()
+})
+
+watch(() => fastState.value.sessionType, (sessionType, previousSessionType) => {
+  if (isSpotterSessionChange(previousSessionType, sessionType)) {
+    // Una nuova sessione e' un nuovo ciclo di riferimenti anche quando
+    // entrambe le modalita' sono abilitate e ACC passa active -> active.
+    // La FIFO audio resta intatta: si azzera solo lo stato per-giro.
+    resetTrackVoiceReferenceLapState()
+  }
   tickTrackVoiceReferences()
 })
 

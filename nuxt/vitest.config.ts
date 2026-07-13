@@ -44,6 +44,7 @@ export default defineConfig({
         'app/services/spotter/trackVoiceReferences.ts',
         'app/services/spotter/trackVoiceReferenceRuntime.ts',
         'app/services/spotter/trackVoiceReferenceChanges.ts',
+        'app/services/spotter/spotterSessionPolicy.ts',
         'app/utils/firestoreSanitize.ts',
         'app/utils/featureAccess.ts',
         'app/utils/sessionParser.ts',
@@ -52,6 +53,7 @@ export default defineConfig({
         'server/utils/voiceScriptNormalize.ts',
         // ── Phase 3: composables ─────────────────────────────────────────
         'app/composables/useLiveStatePoller.ts',
+        'app/composables/useSpotterVoiceSettings.ts',
         'app/composables/useFastStatePoller.ts',
         'app/composables/useSessionOrchestrator.ts',
         'app/composables/useCoachInsights.ts',
