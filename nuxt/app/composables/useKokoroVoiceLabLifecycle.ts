@@ -1,4 +1,5 @@
 import { useAppNotifications } from './useAppNotifications'
+import { useVoiceLabRuntime } from './useVoiceLabRuntime'
 
 const VOICE_LAB_PATH = '/dev-voice-lab'
 const VOICE_LAB_MARKER = 'kokoro-voice-lab-active'

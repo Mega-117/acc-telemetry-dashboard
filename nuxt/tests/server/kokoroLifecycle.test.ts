@@ -8,6 +8,7 @@ const app = readFileSync(resolve(process.cwd(), 'app/app.vue'), 'utf8')
 const lifecycle = readFileSync(resolve(process.cwd(), 'app/composables/useKokoroVoiceLabLifecycle.ts'), 'utf8')
 const voiceLabRuntime = readFileSync(resolve(process.cwd(), 'app/composables/useVoiceLabRuntime.ts'), 'utf8')
 const spotterRuntime = readFileSync(resolve(process.cwd(), 'app/pages/spotter-audio-runtime.vue'), 'utf8')
+const spotterPage = readFileSync(resolve(process.cwd(), 'app/pages/spotter.vue'), 'utf8')
 
 describe('kokoro VoiceLab lifecycle', () => {
   it('non spegne processi Kokoro non gestiti da ACC Suite', () => {
@@ -17,6 +18,7 @@ describe('kokoro VoiceLab lifecycle', () => {
   })
 
   it('usa una finestra idle di 10 secondi fuori dal VoiceLab', () => {
+    expect(lifecycle).toContain("import { useVoiceLabRuntime } from './useVoiceLabRuntime'")
     expect(lifecycle).toContain('KOKORO_IDLE_SHUTDOWN_MS = 10_000')
     expect(lifecycle).toContain("VOICE_LAB_MARKER = 'kokoro-voice-lab-active'")
     expect(lifecycle).toContain("window.location.pathname.replace(/\\/+$/, '') === VOICE_LAB_PATH")
@@ -26,6 +28,12 @@ describe('kokoro VoiceLab lifecycle', () => {
     expect(app).toContain('kokoroVoiceLabLifecycle.resumePendingLeaveIfNeeded()')
     expect(voiceLab).toContain('kokoroLifecycle.beginWork()')
     expect(voiceLab).toContain('kokoroLifecycle.endWork()')
+  })
+
+  it('importa esplicitamente il runtime vocale nelle route di produzione', () => {
+    expect(spotterRuntime).toContain("import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'")
+    expect(spotterPage).toContain("import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'")
+    expect(voiceLab).toContain("import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'")
   })
 
   it('rende espliciti autosave, anteprima e azioni globali per il pilota', () => {

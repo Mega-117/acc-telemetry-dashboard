@@ -4,6 +4,7 @@ import { useAppNotifications } from '~/composables/useAppNotifications'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import type { SpotterVoiceId } from '~/composables/useSpotterVoiceSettings'
+import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { trainingOverlayCatalog, trainingOverlayOrder, type TrainingOverlayId } from '~/config/trainingOverlayCatalog'
 import type { VoiceScript, VoiceScriptScenario, VoiceScriptStep } from '~/config/voiceScript'
 import {

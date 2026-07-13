@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { spotterVoiceOptions, useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
+import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
 import SessionModePicker from '~/components/spotter/SessionModePicker.vue'
 

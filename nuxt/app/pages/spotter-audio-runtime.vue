@@ -5,6 +5,7 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
+import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
 import {
   filterPlayableTrackVoiceReferences,
