@@ -84,6 +84,20 @@ export default defineNuxtConfig({
           ].join('; ')
         }
       ],
+      script: isDev ? [] : [
+        {
+          innerHTML: `(() => {
+            const queryPath = new URLSearchParams(window.location.search).get('spa-redirect-path')
+            const savedPath = window.sessionStorage.getItem('spa-redirect-path')
+            const redirectPath = queryPath || savedPath
+            if (!redirectPath) return
+
+            window.sessionStorage.removeItem('spa-redirect-path')
+            const appBase = ${JSON.stringify(baseURL.replace(/\/$/, ''))}
+            window.history.replaceState(null, '', appBase + redirectPath)
+          })()`
+        }
+      ],
       link: [
         // Google Fonts: Inter + Outfit
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },

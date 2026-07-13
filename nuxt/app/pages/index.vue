@@ -4,8 +4,11 @@ definePageMeta({
   layout: false
 })
 
+const route = useRoute()
+
 // Redirect on mount
 onMounted(() => {
+  if (typeof route.query['spa-redirect-path'] === 'string') return
   navigateTo('/panoramica')
 })
 </script>

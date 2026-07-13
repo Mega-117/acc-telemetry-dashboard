@@ -4,6 +4,8 @@
 // Auto-detects active tab from current route
 // ============================================
 
+import { useFeatureAccess } from '~/composables/useFeatureAccess'
+
 defineProps<{
   activeTab?: 'panoramica' | 'sessioni' | 'piste' | 'spotter' | 'area-pilota' | 'hud'
 }>()

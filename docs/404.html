@@ -16,14 +16,19 @@
         const fullPath = window.location.pathname;
         let appPath = fullPath.replace(basePath, '');
 
-        // Store the intended path in sessionStorage
+        // Store the intended path as a fallback for older published bundles.
         if (appPath && appPath !== '/' && appPath !== '/index.html') {
             sessionStorage.setItem('spa-redirect-path', appPath + window.location.search);
             console.log('[404] Saving path for SPA redirect:', appPath);
         }
 
-        // Redirect to the base URL
-        window.location.replace(basePath + '/');
+        // Pass the intended path explicitly. This avoids a race between the
+        // root page redirect and the app mounted hook on a cold deep link.
+        const redirectPath = appPath + window.location.search;
+        const redirectQuery = appPath && appPath !== '/' && appPath !== '/index.html'
+            ? '?spa-redirect-path=' + encodeURIComponent(redirectPath)
+            : '';
+        window.location.replace(basePath + '/' + redirectQuery);
     </script>
 </head>
 

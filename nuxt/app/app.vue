@@ -20,6 +20,7 @@ const getRouteQueryString = (value: unknown): string => {
   if (Array.isArray(value)) return String(value[0] || '')
   return typeof value === 'string' ? value : ''
 }
+const pendingSpaRedirectPath = ref(getRouteQueryString(route.query['spa-redirect-path']))
 const browserOverlayPath = ref('')
 const browserOverlayIntent = ref(false)
 const refreshBrowserOverlayLocation = () => {
@@ -80,12 +81,14 @@ useHead(() => {
 })
 
 // === SPA REDIRECT HANDLING (GitHub Pages 404 fix) ===
-onMounted(() => {
+onMounted(async () => {
   refreshBrowserOverlayLocation()
   kokoroVoiceLabLifecycle.resumePendingLeaveIfNeeded()
-  const queryRedirectPath = getRouteQueryString(route.query['spa-redirect-path'])
-  if (getRouteQueryString(route.query.overlay) === 'training' && queryRedirectPath) {
-    router.replace(queryRedirectPath)
+  const queryRedirectPath = pendingSpaRedirectPath.value
+  if (queryRedirectPath) {
+    sessionStorage.removeItem('spa-redirect-path')
+    await router.replace(queryRedirectPath)
+    pendingSpaRedirectPath.value = ''
     return
   }
 
@@ -212,6 +215,11 @@ const enterDashboard = (delayMs = 0) => {
 
     appState.value = 'dashboard'
     listenToActivitiesTracked(currentUser.value.uid)
+    if (pendingSpaRedirectPath.value) {
+      router.replace(pendingSpaRedirectPath.value)
+      return
+    }
+
     if (!isDashboardRoute(normalizedRoutePath.value)) {
       router.push('/panoramica')
     }
