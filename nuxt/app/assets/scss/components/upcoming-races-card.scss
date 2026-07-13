@@ -4,7 +4,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  min-height: 190px;
+  min-height: 230px;
   max-height: 560px;
   padding: 24px;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -83,16 +83,74 @@
 
 .featured-race {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 14px;
+  grid-template-areas:
+    'countdown main'
+    'countdown actions';
+  grid-template-columns: minmax(116px, 0.34fr) minmax(0, 1fr);
+  gap: 12px 24px;
   align-items: center;
-  padding: 12px 14px;
+  min-height: 224px;
+  padding: 20px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.032);
 }
 
+.featured-race--with-list {
+  min-height: 152px;
+}
+
+.race-countdown {
+  grid-area: countdown;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding-right: 24px;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.race-countdown__label,
+.race-countdown__unit,
+.race-countdown__suffix {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.race-countdown__label,
+.race-countdown__suffix {
+  white-space: nowrap;
+}
+
+.race-countdown__metric {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 7px 0 5px;
+}
+
+.race-countdown__value {
+  margin: 0;
+  color: #fff;
+  font-size: 56px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 0.92;
+}
+
+.race-countdown--today .race-countdown__value {
+  color: $racing-orange;
+  font-size: 44px;
+  text-transform: uppercase;
+}
+
 .featured-race__main {
+  grid-area: main;
   min-width: 0;
 }
 
@@ -106,22 +164,17 @@
 }
 
 .featured-race h3 {
-  overflow: hidden;
   margin: 0;
   color: #fff;
-  font-size: 17px;
-  line-height: 1.18;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 19px;
+  line-height: 1.28;
 }
 
 .featured-race p {
-  overflow: hidden;
-  margin: 3px 0 0;
+  margin: 7px 0 0;
   color: rgba(255, 255, 255, 0.58);
   font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.45;
 }
 
 .race-row-actions,
@@ -129,6 +182,13 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.featured-race > .race-row-actions {
+  grid-area: actions;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .race-row-actions a,
@@ -372,8 +432,41 @@ input[type='datetime-local']::-webkit-calendar-picker-indicator {
   }
 
   .featured-race {
+    grid-template-areas:
+      'countdown'
+      'main'
+      'actions';
     grid-template-columns: 1fr;
+    gap: 18px;
     align-items: stretch;
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .race-countdown {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 12px;
+    align-items: end;
+    padding: 0 0 18px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .race-countdown__label {
+    grid-column: 1 / -1;
+  }
+
+  .race-countdown__metric {
+    margin-bottom: 0;
+  }
+
+  .race-countdown__value {
+    font-size: 48px;
+  }
+
+  .race-countdown--today .race-countdown__value {
+    font-size: 38px;
   }
 
   .race-row-actions {

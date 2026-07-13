@@ -48,6 +48,7 @@ export default defineConfig({
         'app/utils/firestoreSanitize.ts',
         'app/utils/featureAccess.ts',
         'app/utils/sessionParser.ts',
+        'app/utils/raceCalendarCountdown.ts',
         'server/utils/kokoroRuntimeStatus.ts',
         'server/utils/trackVoicePointMerge.ts',
         'server/utils/voiceScriptNormalize.ts',

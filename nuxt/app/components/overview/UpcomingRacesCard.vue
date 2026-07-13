@@ -9,6 +9,7 @@ import {
   type RaceCalendarEvent,
   type RaceCalendarEventInput,
 } from '~/repositories/raceCalendarRepository'
+import { getRaceCalendarCountdown } from '~/utils/raceCalendarCountdown'
 
 const props = defineProps<{
   userId: string | null | undefined
@@ -25,6 +26,8 @@ const errorMessage = ref('')
 const modalMode = ref<ModalMode>('create')
 const selectedEvent = ref<RaceCalendarEvent | null>(null)
 const isModalOpen = ref(false)
+const nowMs = ref(Date.now())
+let clockTimer: number | null = null
 const form = ref({
   title: '',
   startsAt: '',
@@ -35,7 +38,7 @@ const form = ref({
 })
 
 const upcomingEvents = computed(() => {
-  const now = Date.now()
+  const now = nowMs.value
   return events.value
     .filter((event) => {
       const startsAtMs = Date.parse(event.startsAt)
@@ -45,6 +48,10 @@ const upcomingEvents = computed(() => {
 })
 
 const featuredEvent = computed(() => upcomingEvents.value[0] || null)
+const featuredCountdown = computed(() => featuredEvent.value
+  ? getRaceCalendarCountdown(featuredEvent.value.startsAt, new Date(nowMs.value))
+  : null,
+)
 const secondaryEvents = computed(() => upcomingEvents.value.slice(1))
 const modalTitle = computed(() => {
   if (modalMode.value === 'delete') return 'Elimina gara'
@@ -200,10 +207,14 @@ watch(
 
 onMounted(() => {
   window.addEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
+  clockTimer = window.setInterval(() => {
+    nowMs.value = Date.now()
+  }, 60_000)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
+  if (clockTimer !== null) window.clearInterval(clockTimer)
 })
 </script>
 
@@ -223,7 +234,27 @@ onBeforeUnmount(() => {
       <span>Aggiungi la prossima gara per averla sempre in vista.</span>
     </div>
     <div v-else class="race-content">
-      <article class="featured-race">
+      <article
+        class="featured-race"
+        :class="{ 'featured-race--with-list': secondaryEvents.length > 0 }"
+      >
+        <div
+          v-if="featuredCountdown"
+          class="race-countdown"
+          :class="{ 'race-countdown--today': featuredCountdown.days === 0 }"
+          role="status"
+          aria-live="polite"
+          :aria-label="featuredCountdown.ariaLabel"
+        >
+          <span class="race-countdown__label">{{ featuredCountdown.leadingLabel }}</span>
+          <span class="race-countdown__metric">
+            <strong class="race-countdown__value">{{ featuredCountdown.value }}</strong>
+            <span v-if="featuredCountdown.unit" class="race-countdown__unit">{{ featuredCountdown.unit }}</span>
+          </span>
+          <span v-if="featuredCountdown.trailingLabel" class="race-countdown__suffix">
+            {{ featuredCountdown.trailingLabel }}
+          </span>
+        </div>
         <div class="featured-race__main">
           <span class="race-date">{{ formatEventDate(featuredEvent.startsAt) }}</span>
           <h3>{{ featuredEvent.title }}</h3>
@@ -239,7 +270,7 @@ onBeforeUnmount(() => {
 
       <div v-if="secondaryEvents.length" class="race-list-block">
         <div class="race-list-header">
-          <span>Altre gare</span>
+          <span>{{ secondaryEvents.length === 1 ? 'Gara successiva' : 'Gare successive' }}</span>
           <strong>{{ secondaryEvents.length }}</strong>
         </div>
         <div class="race-list" aria-label="Altre gare pianificate">
