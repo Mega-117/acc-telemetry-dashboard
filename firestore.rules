@@ -125,6 +125,32 @@ service cloud.firestore {
         allow read: if isCoachOfUser(userId);
       }
 
+      match /diagnostics/{eventId} {
+        allow create: if isOwner(userId)
+                      && request.resource.data.keys().hasAll([
+                        'schemaVersion', 'eventId', 'fingerprint', 'userId',
+                        'component', 'severity', 'code', 'message', 'stack',
+                        'context', 'occurredAt', 'receivedAt', 'suiteVersion',
+                        'channel'
+                      ])
+                      && request.resource.data.keys().hasOnly([
+                        'schemaVersion', 'eventId', 'fingerprint', 'userId',
+                        'component', 'severity', 'code', 'message', 'stack',
+                        'context', 'occurredAt', 'receivedAt', 'suiteVersion',
+                        'channel'
+                      ])
+                      && request.resource.data.schemaVersion == 1
+                      && request.resource.data.eventId == eventId
+                      && request.resource.data.userId == userId
+                      && request.resource.data.message is string
+                      && request.resource.data.message.size() <= 2000
+                      && request.resource.data.stack is string
+                      && request.resource.data.stack.size() <= 8000
+                      && request.resource.data.context is map;
+        allow read, delete: if isAdmin();
+        allow update: if false;
+      }
+
       match /raceCalendar/{eventId} {
         allow read: if isAdmin();
         allow read, write: if isOwner(userId);

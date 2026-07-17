@@ -16,6 +16,7 @@
     "check:sync-trackbests-aggregate": "node scripts/check_sync_trackbests_aggregate.mjs",
     "check:pilots-pagination": "node scripts/check_pilots_pagination.mjs",
     "check:pilot-directory-sync": "node scripts/check_pilot_directory_sync.mjs",
+    "check:client-diagnostics": "node scripts/check_client_diagnostics.mjs",
     "check:session-detail-modes": "node scripts/check_session_detail_modes.mjs",
     "check:session-detail-race-theoretical-buckets": "node scripts/check_session_detail_race_theoretical_buckets.mjs",
     "check:session-pager-merge": "node scripts/check_session_pager_merge.mjs",

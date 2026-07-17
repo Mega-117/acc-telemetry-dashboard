@@ -9,6 +9,7 @@ import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useActivityFeed } from '~/composables/useActivityFeed'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
 import { useClientHeartbeat } from '~/composables/useClientHeartbeat'
+import { useClientDiagnostics } from '~/composables/useClientDiagnostics'
 import { endFirebaseScenario, startFirebaseScenario, withFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
@@ -65,6 +66,7 @@ const isPrimaryClientRuntime = computed(() => {
     && !isStandaloneDevRoute.value
 })
 useClientHeartbeat({ enabled: isPrimaryClientRuntime })
+useClientDiagnostics({ enabled: isPrimaryClientRuntime })
 
 watch(normalizedRoutePath, (path, previousPath) => {
   if (path === '/dev-voice-lab') {

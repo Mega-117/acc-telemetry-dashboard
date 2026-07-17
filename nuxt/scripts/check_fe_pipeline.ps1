@@ -155,6 +155,13 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+$clientDiagnosticsScript = Join-Path $PSScriptRoot 'check_client_diagnostics.mjs'
+& $nodeExe $clientDiagnosticsScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Client diagnostics contract failed'
+    exit 1
+}
+
 $ownerRebuildScript = Join-Path $PSScriptRoot 'check_owner_rebuild_contract.mjs'
 & $nodeExe $ownerRebuildScript
 if ($LASTEXITCODE -ne 0) {

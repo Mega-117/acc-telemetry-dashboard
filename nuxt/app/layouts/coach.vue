@@ -51,6 +51,10 @@ const areaTitle = computed(() => isAdmin.value ? 'GESTIONE UTENTI' : 'AREA PILOT
           <span class="area-name">{{ areaTitle }}</span>
         </div>
 
+        <NuxtLink v-if="isAdmin" class="diagnostics-link" to="/admin-diagnostics">
+          Diagnostica
+        </NuxtLink>
+
         <!-- Spacer -->
         <div class="header-spacer"></div>
 
@@ -146,6 +150,20 @@ const areaTitle = computed(() => isAdmin.value ? 'GESTIONE UTENTI' : 'AREA PILOT
   font-weight: 700;
   letter-spacing: 2px;
   color: #fff;
+}
+
+.diagnostics-link {
+  padding: 8px 12px;
+  color: #c4b5fd;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid rgba(#8b5cf6, 0.4);
+  border-radius: 8px;
+}
+
+.diagnostics-link:hover {
+  background: rgba(#8b5cf6, 0.12);
 }
 
 .header-spacer {
