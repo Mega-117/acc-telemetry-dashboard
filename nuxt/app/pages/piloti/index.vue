@@ -6,6 +6,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { endFirebaseScenario, startFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { getClientHeartbeatStatus } from '~/services/monitoring/clientHeartbeatService'
 import {
   PILOT_PAGE_SIZE,
   countPilotDirectory,
@@ -116,9 +117,22 @@ function getInitials(pilot: Pilot): string {
   return pilot.nickname.slice(0, 2).toUpperCase()
 }
 
-function getVersionClass(version: string): string {
-  void version
+function getVersionClass(pilot: Pilot): string {
+  const status = getClientHeartbeatStatus(pilot.clientLastHeartbeatAt)
+  if (status === 'recent') return 'version-badge--current'
+  if (status === 'stale') return 'version-badge--outdated'
   return 'version-badge--unknown'
+}
+
+function formatHeartbeat(dateStr?: string): string {
+  const status = getClientHeartbeatStatus(dateStr)
+  if (status === 'unknown') return 'Heartbeat sconosciuto'
+  const diffMinutes = Math.max(0, Math.floor((Date.now() - Date.parse(dateStr!)) / 60000))
+  if (diffMinutes < 1) return 'Attivo ora'
+  if (diffMinutes < 60) return `Attivo ${diffMinutes} min fa`
+  const diffHours = Math.floor(diffMinutes / 60)
+  if (diffHours < 24) return `Attivo ${diffHours} h fa`
+  return `Ultimo avvio ${Math.floor(diffHours / 24)} gg fa`
 }
 
 function formatDate(dateStr?: string): string {
@@ -209,8 +223,12 @@ watch(searchQuery, () => {
         <span class="lr-sessions">{{ pilot.totalSessions || 0 }}</span>
         <span class="lr-last">{{ formatDate(pilot.lastSession) }}</span>
         <span v-if="isAdmin" class="lr-version">
-          <span v-if="pilot.suiteVersion" class="version-badge" :class="getVersionClass(pilot.suiteVersion)">v{{ pilot.suiteVersion }}</span>
+          <span v-if="pilot.suiteVersion" class="version-badge" :class="getVersionClass(pilot)">v{{ pilot.suiteVersion }}</span>
           <span v-else class="version-badge version-badge--unknown">—</span>
+          <small class="version-meta">
+            {{ pilot.clientChannel || 'canale sconosciuto' }} · {{ formatHeartbeat(pilot.clientLastHeartbeatAt) }}
+          </small>
+          <small v-if="pilot.clientUpdateState === 'pending'" class="version-pending">Aggiornamento in corso</small>
         </span>
         <span class="lr-cta">
           Visualizza
@@ -365,7 +383,7 @@ watch(searchQuery, () => {
 .lh-sessions, .lh-last, .lh-version { text-align: center; }
 
 .list-header--admin {
-  grid-template-columns: 1.2fr 1fr 100px 140px 90px 120px;
+  grid-template-columns: 1.2fr 1fr 100px 140px 160px 120px;
 }
 
 .list-row {
@@ -463,11 +481,27 @@ watch(searchQuery, () => {
 }
 
 .list-row--admin {
-  grid-template-columns: 1.2fr 1fr 100px 140px 90px 120px;
+  grid-template-columns: 1.2fr 1fr 100px 140px 160px 120px;
 }
 
 .lr-version {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
   text-align: center;
+}
+
+.version-meta,
+.version-pending {
+  font-family: $font-primary;
+  font-size: 9px;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.version-pending {
+  color: #eab308;
 }
 
 .version-badge {

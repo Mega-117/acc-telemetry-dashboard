@@ -31,7 +31,6 @@ import { refreshSyncProjections } from '~/services/sync/syncProjectionRefreshSer
 import type { UserProjectionDelta } from '~/services/sync/syncUserProjectionDeltaService'
 import { resolveSyncTriggerAction, type SyncTrigger } from '~/services/sync/syncTriggerPolicy'
 import { useOwnerDataMaintenance } from './useOwnerDataMaintenance'
-import { updatePilotDirectoryActivity } from '~/services/pilotDirectoryProjectionService'
 import { getRecentActivityDateKeys, getTelemetryActivityDateKey } from '~/services/telemetry/activityProjectionService'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
@@ -148,39 +147,6 @@ function getElectronApi(): any | null {
     return (window as any).electronAPI || null
 }
 
-async function updateSuiteVersion(uid: string): Promise<boolean> {
-    try {
-        const electronAPI = getElectronApi()
-        if (!electronAPI?.getSuiteVersion) return false
-        const version = await electronAPI.getSuiteVersion()
-        if (!version) return false
-
-        const userRef = doc(db, `users/${uid}`)
-        const suiteVersion = version.launcher || version.webapp || null
-        const suiteVersionUpdatedAt = new Date().toISOString()
-        await setDoc(userRef, {
-            suiteVersion,
-            suiteVersionDetail: version,
-            suiteVersionUpdatedAt
-        }, { merge: true })
-        await updatePilotDirectoryActivity({
-            db,
-            uid,
-            fields: {
-                suiteVersion,
-                suiteVersionUpdatedAt
-            },
-            setDocFn: setDoc
-        })
-        console.log(`[SYNC] Suite version updated: ${version.launcher}`)
-        return true
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-    } catch (versionError: any) {
-        console.warn('[SYNC] Could not update suite version:', versionError.message)
-        return false
-    }
-}
-
 export function useElectronSync() {
     const { currentUser, canEnterApp } = useFirebaseAuth()
     const { loadSessions, resetAllTrackBests, clearTrackDerivedCaches } = useTelemetryData()
@@ -284,7 +250,7 @@ export function useElectronSync() {
     function getMaintenanceService() {
         return createSyncMaintenanceService({
             electronAPI: getElectronApi(),
-            updateSuiteVersion,
+            updateSuiteVersion: async () => false,
             canonicalizeSummary: canonicalizeSummaryFromLocalDomain,
             getDocsFn: getDocs,
             setDocFn: setDoc,
@@ -513,7 +479,7 @@ export function useElectronSync() {
                     runLegacyMigration: false,
                     runZeroLapCleanup: true,
                     runRetentionCleanup: true,
-                    updateVersion: true
+                    updateVersion: false
                 })
                 needsTrackBestsRebuild = needsTrackBestsRebuild || maintenance.needsTrackBestsRebuild
                 changedCount += maintenance.needsProjectionRefresh ? 1 : 0

@@ -18,6 +18,9 @@ export interface PilotDirectoryItem {
   totalSessions?: number
   suiteVersion?: string
   suiteVersionUpdatedAt?: string
+  clientChannel?: string
+  clientUpdateState?: string
+  clientLastHeartbeatAt?: string
 }
 
 export interface PilotDirectoryPage {
@@ -63,7 +66,10 @@ function mapPilotDoc(docSnap: any): PilotDirectoryItem {
     lastSession: data.lastSessionDate || undefined,
     totalSessions: data.sessionsLast7Days ?? 0,
     suiteVersion: data.suiteVersion || undefined,
-    suiteVersionUpdatedAt: data.suiteVersionUpdatedAt || undefined
+    suiteVersionUpdatedAt: data.suiteVersionUpdatedAt || undefined,
+    clientChannel: data.clientChannel || undefined,
+    clientUpdateState: data.clientUpdateState || undefined,
+    clientLastHeartbeatAt: data.clientLastHeartbeatAt || undefined
   }
 }
 

@@ -76,6 +76,9 @@ export function buildPilotDirectoryDocument(input: {
   lastSessionDate?: string | null
   suiteVersion?: string | null
   suiteVersionUpdatedAt?: string | null
+  clientChannel?: string | null
+  clientUpdateState?: string | null
+  clientLastHeartbeatAt?: string | null
 }) {
   const firstName = input.firstName || ''
   const lastName = input.lastName || ''
@@ -93,6 +96,9 @@ export function buildPilotDirectoryDocument(input: {
     lastSessionDate: input.lastSessionDate || null,
     suiteVersion: input.suiteVersion || null,
     suiteVersionUpdatedAt: input.suiteVersionUpdatedAt || null,
+    clientChannel: input.clientChannel || null,
+    clientUpdateState: input.clientUpdateState || null,
+    clientLastHeartbeatAt: input.clientLastHeartbeatAt || null,
     ...buildPilotDirectoryFields({
       firstName,
       lastName,

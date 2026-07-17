@@ -18,6 +18,11 @@ export interface PilotDirectoryUserData {
   lastSessionDate?: string | null
   suiteVersion?: string | null
   suiteVersionUpdatedAt?: string | null
+  clientRuntime?: {
+    channel?: string | null
+    updateState?: string | null
+    lastHeartbeatAt?: string | null
+  }
 }
 
 export interface PilotDirectoryActivityFields {
@@ -25,6 +30,9 @@ export interface PilotDirectoryActivityFields {
   lastSessionDate?: string | null
   suiteVersion?: string | null
   suiteVersionUpdatedAt?: string | null
+  clientChannel?: string | null
+  clientUpdateState?: string | null
+  clientLastHeartbeatAt?: string | null
 }
 
 export interface PilotDirectoryRepairResult {
@@ -52,7 +60,10 @@ export function buildPilotDirectoryProjection(uid: string, userData: PilotDirect
     sessionsLast7Days: userData.stats?.sessionsLast7Days ?? userData.sessionsLast7Days ?? 0,
     lastSessionDate: userData.stats?.lastSessionDate ?? userData.lastSessionDate ?? null,
     suiteVersion: userData.suiteVersion || null,
-    suiteVersionUpdatedAt: userData.suiteVersionUpdatedAt || null
+    suiteVersionUpdatedAt: userData.suiteVersionUpdatedAt || null,
+    clientChannel: userData.clientRuntime?.channel || null,
+    clientUpdateState: userData.clientRuntime?.updateState || null,
+    clientLastHeartbeatAt: userData.clientRuntime?.lastHeartbeatAt || null
   })
 }
 
