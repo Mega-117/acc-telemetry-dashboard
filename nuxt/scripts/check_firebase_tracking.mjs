@@ -12,6 +12,7 @@ const monitoredNames = new Set([
   'getDoc',
   'getDocs',
   'onSnapshot',
+  'runTransaction',
   'setDoc',
   'updateDoc',
   'writeBatch'

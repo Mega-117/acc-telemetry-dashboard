@@ -14,6 +14,7 @@ import {
   getDoc as fbGetDoc,
   getDocs as fbGetDocs,
   onSnapshot as fbOnSnapshot,
+  runTransaction as fbRunTransaction,
   setDoc as fbSetDoc,
   updateDoc as fbUpdateDoc,
   writeBatch as fbWriteBatch,
@@ -21,7 +22,8 @@ import {
   type Firestore,
   type Query,
   type QuerySnapshot,
-  type SetOptions
+  type SetOptions,
+  type Transaction
 } from 'firebase/firestore'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import { canUseDevTools } from '~/utils/devToolsAccess'
@@ -489,6 +491,30 @@ export async function trackedUpdateDoc(ref: DocumentReference, data: any, caller
   const startedAt = Date.now()
   await fbUpdateDoc(ref, sanitizeForFirestore(data))
   createOperationLogger('UPDATE', caller, ref, 0, 1, startedAt, 1)
+}
+
+export async function trackedRunTransaction<T>(
+  db: Firestore,
+  caller: string,
+  target: DocumentReference,
+  updateFunction: (transaction: Transaction) => Promise<T>,
+  estimates: { reads?: number; writes?: number } = {}
+): Promise<T> {
+  const startedAt = Date.now()
+  const result = await fbRunTransaction(db, updateFunction)
+  const billedReads = Math.max(0, Number(estimates.reads || 0))
+  const billedWrites = Math.max(0, Number(estimates.writes || 0))
+  createOperationLogger(
+    'WRITE',
+    caller,
+    target,
+    billedReads,
+    billedWrites,
+    startedAt,
+    billedReads + billedWrites,
+    `transaction=true, estimatedReads=${billedReads}, estimatedWrites=${billedWrites}`
+  )
+  return result
 }
 
 export function trackedOnSnapshot(

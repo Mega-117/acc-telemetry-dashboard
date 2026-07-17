@@ -37,6 +37,7 @@ export default defineConfig({
         'app/services/projections/trackBestProjectionGuard.ts',
         'app/services/session-detail/sessionMath.ts',
         'app/services/session-detail/sessionLapSeries.ts',
+        'app/services/sync/firebaseStructureHealthService.ts',
         'app/services/sync/ownerDataRepairService.ts',
         'app/services/sync/sessionUploadService.ts',
         'app/services/sync/syncTriggerPolicy.ts',

@@ -124,6 +124,24 @@ function getVersionClass(pilot: Pilot): string {
   return 'version-badge--unknown'
 }
 
+function getFirebaseHealthLabel(status?: string): string {
+  if (status === 'healthy') return 'Firebase OK'
+  if (status === 'repairing') return 'Verifica in corso'
+  if (status === 'partial') return 'Firebase parziale'
+  if (status === 'blocked') return 'Firebase bloccato'
+  if (status === 'future_schema') return 'Versione futura'
+  return 'Firebase non verificato'
+}
+
+function getFirebaseHealthClass(status?: string): string {
+  if (status === 'healthy') return 'firebase-health--healthy'
+  if (status === 'repairing') return 'firebase-health--repairing'
+  if (status === 'partial') return 'firebase-health--partial'
+  if (status === 'blocked') return 'firebase-health--blocked'
+  if (status === 'future_schema') return 'firebase-health--future'
+  return 'firebase-health--unknown'
+}
+
 function formatHeartbeat(dateStr?: string): string {
   const status = getClientHeartbeatStatus(dateStr)
   if (status === 'unknown') return 'Heartbeat sconosciuto'
@@ -229,6 +247,13 @@ watch(searchQuery, () => {
             {{ pilot.clientChannel || 'canale sconosciuto' }} · {{ formatHeartbeat(pilot.clientLastHeartbeatAt) }}
           </small>
           <small v-if="pilot.clientUpdateState === 'pending'" class="version-pending">Aggiornamento in corso</small>
+          <small
+            class="firebase-health"
+            :class="getFirebaseHealthClass(pilot.firebaseHealthStatus)"
+            :title="pilot.firebaseHealthCode || 'Controllo struttura Firebase non ancora eseguito'"
+          >
+            {{ getFirebaseHealthLabel(pilot.firebaseHealthStatus) }}
+          </small>
         </span>
         <span class="lr-cta">
           Visualizza
@@ -502,6 +527,33 @@ watch(searchQuery, () => {
 
 .version-pending {
   color: #eab308;
+}
+
+.firebase-health {
+  font-family: $font-primary;
+  font-size: 9px;
+  line-height: 1.2;
+
+  &--healthy {
+    color: #22c55e;
+  }
+
+  &--repairing,
+  &--partial {
+    color: #eab308;
+  }
+
+  &--blocked {
+    color: #ef4444;
+  }
+
+  &--future {
+    color: #a78bfa;
+  }
+
+  &--unknown {
+    color: rgba(255, 255, 255, 0.35);
+  }
 }
 
 .version-badge {

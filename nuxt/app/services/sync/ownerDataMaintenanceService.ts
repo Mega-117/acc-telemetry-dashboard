@@ -14,6 +14,15 @@ import {
   type OwnerProjectionRebuildReport,
   type OwnerSessionListProjectionRebuildReport
 } from './ownerDataRepairService'
+import {
+  claimFirebaseStructureLease,
+  classifyFirebaseStructureError,
+  classifyFirebaseStructureOutcome,
+  createFirebaseStructureLeaseId,
+  inspectFirebaseStructureState,
+  publishFirebaseStructureHealth,
+  type FirebaseStructureHealthState
+} from './firebaseStructureHealthService'
 
 const CALLER = 'OwnerDataMaintenance'
 export const OWNER_DATA_MIGRATION_VERSION = 5
@@ -49,6 +58,11 @@ export interface OwnerDataMaintenanceStoredState {
   updatedAt?: string | null
   lastError?: string | null
   report?: Record<string, unknown> | null
+}
+
+interface OwnerDataMaintenanceEnvelope {
+  migration: OwnerDataMaintenanceStoredState | null
+  health: FirebaseStructureHealthState | null
 }
 
 export interface OwnerDataMaintenanceReport {
@@ -145,11 +159,6 @@ function needsVersionedRawReprocess(state: OwnerDataMaintenanceStoredState | nul
   return Number(state?.version || 0) < OWNER_DATA_MIGRATION_VERSION
 }
 
-function isStoredStateCurrent(state: OwnerDataMaintenanceStoredState | null | undefined): boolean {
-  return state?.status === 'completed'
-    && Number(state?.version || 0) >= OWNER_DATA_MIGRATION_VERSION
-    && Number(state?.bestRulesVersion || 0) >= BEST_RULES_VERSION
-}
 
 function isStoredStateReadyForSessionListUpgrade(state: OwnerDataMaintenanceStoredState | null | undefined): boolean {
   return state?.status === 'completed'
@@ -158,10 +167,13 @@ function isStoredStateReadyForSessionListUpgrade(state: OwnerDataMaintenanceStor
     && Number(state?.bestRulesVersion || 0) >= BEST_RULES_VERSION
 }
 
-async function readStoredState(uid: string): Promise<OwnerDataMaintenanceStoredState | null> {
+async function readStoredState(uid: string): Promise<OwnerDataMaintenanceEnvelope> {
   const snap = await trackedGetDoc(doc(db, `users/${uid}`), CALLER)
-  if (!snap.exists()) return null
-  return (snap.data()?.maintenance?.canonicalDataMigration || null) as OwnerDataMaintenanceStoredState | null
+  const maintenance = snap.exists() ? (snap.data()?.maintenance || {}) : {}
+  return {
+    migration: (maintenance.canonicalDataMigration || null) as OwnerDataMaintenanceStoredState | null,
+    health: (maintenance.firebaseStructureHealth || null) as FirebaseStructureHealthState | null
+  }
 }
 
 async function writeStoredState(uid: string, state: OwnerDataMaintenanceStoredState) {
@@ -206,6 +218,47 @@ function buildReport(params: Partial<OwnerDataMaintenanceReport> & {
   }
 }
 
+async function publishHealthOutcome(
+  uid: string,
+  input: { incompleteCloudOnly?: number; skippedNoRaw?: number } = {}
+) {
+  const outcome = classifyFirebaseStructureOutcome(input)
+  await publishFirebaseStructureHealth({
+    uid,
+    status: outcome.status,
+    targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
+    targetBestRulesVersion: BEST_RULES_VERSION,
+    code: outcome.code,
+    issues: outcome.issues
+  })
+}
+
+async function publishBlockedHealth(uid: string, error: unknown) {
+  await publishFirebaseStructureHealth({
+    uid,
+    status: 'blocked',
+    targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
+    targetBestRulesVersion: BEST_RULES_VERSION,
+    code: classifyFirebaseStructureError(error),
+    issues: []
+  })
+}
+
+function skippedReport(
+  uid: string,
+  startedAt: string,
+  message: string
+): OwnerDataMaintenanceReport {
+  return buildReport({
+    uid,
+    status: 'skipped',
+    phase: 'skipped',
+    message,
+    startedAt,
+    completedAt: nowIso()
+  })
+}
+
 async function markCompleted(uid: string, report: OwnerDataMaintenanceReport) {
   await writeStoredState(uid, {
     status: 'completed',
@@ -243,25 +296,44 @@ export async function runOwnerDataMaintenanceGate(
 ): Promise<OwnerDataMaintenanceReport> {
   const { uid, force = false, onProgress } = options
   const startedAt = nowIso()
+  const leaseId = createFirebaseStructureLeaseId()
+  let leaseAcquired = false
 
   return withFirebaseScenario('maintenance.ownerData.gate', { uid, force }, async () => {
     emit(onProgress, {
       status: 'checking',
       phase: 'checking_status',
       progress: 5,
-      message: 'Controllo dati pilota...'
+      message: 'Controllo struttura dati pilota...'
     })
 
-    const storedState = await readStoredState(uid)
-    if (!force && isStoredStateCurrent(storedState)) {
-      const report = buildReport({
+    const stored = await readStoredState(uid)
+    const storedState = stored.migration
+    const healthDecision = inspectFirebaseStructureState({
+      migration: storedState,
+      health: stored.health,
+      targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
+      targetBestRulesVersion: BEST_RULES_VERSION,
+      force
+    })
+
+    if (healthDecision.action === 'future_schema' || healthDecision.action === 'blocked_schema') {
+      const status = healthDecision.action === 'future_schema' ? 'future_schema' : 'blocked'
+      await publishFirebaseStructureHealth({
         uid,
-        status: 'skipped',
-        phase: 'skipped',
-        message: 'Dati pilota gia aggiornati.',
-        startedAt,
-        completedAt: nowIso()
+        status,
+        targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
+        targetBestRulesVersion: BEST_RULES_VERSION,
+        code: healthDecision.code,
+        issues: []
       })
+      const report = skippedReport(
+        uid,
+        startedAt,
+        healthDecision.action === 'future_schema'
+          ? 'Struttura dati creata da una versione piu recente: nessun downgrade eseguito.'
+          : 'Versione struttura dati non valida: riparazione automatica bloccata.'
+      )
       emit(onProgress, {
         status: 'skipped',
         phase: 'skipped',
@@ -270,6 +342,63 @@ export async function runOwnerDataMaintenanceGate(
         report
       })
       return report
+    }
+
+    if (
+      healthDecision.action === 'skip_healthy'
+      || healthDecision.action === 'skip_partial'
+      || healthDecision.action === 'wait_for_lease'
+    ) {
+      const message = healthDecision.action === 'wait_for_lease'
+        ? 'Controllo struttura gia in corso su un altro client.'
+        : healthDecision.action === 'skip_partial'
+          ? 'Struttura dati verificata con limiti noti.'
+          : 'Struttura dati gia verificata.'
+      const report = skippedReport(uid, startedAt, message)
+      emit(onProgress, {
+        status: 'skipped',
+        phase: 'skipped',
+        progress: 100,
+        message,
+        report
+      })
+      return report
+    }
+
+    leaseAcquired = await claimFirebaseStructureLease({
+      uid,
+      leaseId,
+      targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
+      targetBestRulesVersion: BEST_RULES_VERSION
+    })
+    if (!leaseAcquired) {
+      const report = skippedReport(uid, startedAt, 'Controllo struttura gia in corso su un altro client.')
+      emit(onProgress, {
+        status: 'skipped',
+        phase: 'skipped',
+        progress: 100,
+        message: report.message,
+        report
+      })
+      return report
+    }
+
+    let lightweightVerificationFailed = false
+    if (healthDecision.action === 'verify_current' && stored.health?.status !== 'partial') {
+      const verification = await verifyOwnerMigrationLightweight(uid)
+      if (verification.ok) {
+        await publishHealthOutcome(uid)
+        const report = skippedReport(uid, startedAt, 'Struttura dati verificata.')
+        emit(onProgress, {
+          status: 'skipped',
+          phase: 'skipped',
+          progress: 100,
+          message: report.message,
+          report
+        })
+        return report
+      }
+      lightweightVerificationFailed = true
     }
 
     if (!force && isStoredStateReadyForSessionListUpgrade(storedState)) {
@@ -310,6 +439,7 @@ export async function runOwnerDataMaintenanceGate(
         completedAt: nowIso()
       })
       await markCompleted(uid, report)
+      await publishHealthOutcome(uid)
       emit(onProgress, {
         status: 'completed',
         phase: 'completed',
@@ -341,7 +471,7 @@ export async function runOwnerDataMaintenanceGate(
     }
 
     const versionedRawReprocess = needsVersionedRawReprocess(storedState)
-    if (!force && !versionedRawReprocess && !needsMaintenance(audit)) {
+    if (!force && !versionedRawReprocess && !needsMaintenance(audit) && !lightweightVerificationFailed) {
       const report = buildReport({
         uid,
         status: 'completed',
@@ -353,6 +483,9 @@ export async function runOwnerDataMaintenanceGate(
         completedAt: nowIso()
       })
       await markCompleted(uid, report)
+      await publishHealthOutcome(uid, {
+        incompleteCloudOnly: audit.sessions.incompleteCloudOnly
+      })
       emit(onProgress, {
         status: 'completed',
         phase: 'completed',
@@ -409,6 +542,10 @@ export async function runOwnerDataMaintenanceGate(
       completedAt: nowIso()
     })
     await markCompleted(uid, report)
+    await publishHealthOutcome(uid, {
+      incompleteCloudOnly: audit.sessions.incompleteCloudOnly,
+      skippedNoRaw: cloudReprocess?.skippedNoRaw
+    })
     emit(onProgress, {
       status: 'completed',
       phase: 'completed',
@@ -419,13 +556,18 @@ export async function runOwnerDataMaintenanceGate(
     return report
   }).catch(async (error: any) => {
     const message = error?.message || 'Migrazione dati owner fallita.'
-    await writeStoredState(uid, {
-      status: 'failed',
-      startedAt,
-      completedAt: null,
-      lastError: message,
-      report: null
-    })
+    if (leaseAcquired) {
+      await Promise.allSettled([
+        writeStoredState(uid, {
+          status: 'failed',
+          startedAt,
+          completedAt: null,
+          lastError: message,
+          report: null
+        }),
+        publishBlockedHealth(uid, error)
+      ])
+    }
     emit(onProgress, {
       status: 'failed',
       phase: 'failed',
@@ -436,7 +578,6 @@ export async function runOwnerDataMaintenanceGate(
     throw error
   })
 }
-
 export async function completeOwnerDataMaintenanceAfterLocalSync(
   options: OwnerDataMaintenanceRunOptions
 ): Promise<OwnerDataMaintenanceReport> {

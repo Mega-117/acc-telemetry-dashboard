@@ -176,6 +176,13 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+$firebaseStructureHealthScript = Join-Path $PSScriptRoot 'check_firebase_structure_health.mjs'
+& $nodeExe $firebaseStructureHealthScript
+if ($LASTEXITCODE -ne 0) {
+    Write-Error '[PIPELINE_CHECK] Firebase structure health contract failed'
+    exit 1
+}
+
 $noStartupRawPrefetchScript = Join-Path $PSScriptRoot 'check_no_startup_raw_prefetch.mjs'
 & $nodeExe $noStartupRawPrefetchScript
 if ($LASTEXITCODE -ne 0) {

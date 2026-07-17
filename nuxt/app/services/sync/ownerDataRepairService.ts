@@ -23,6 +23,7 @@ import {
 import { TRACK_DETAIL_PROJECTION_SCHEMA_VERSION } from '~/types/trackProjections'
 import { writeUserProjectionDocuments } from './projectionRebuildService'
 import { writePilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
+import { PILOT_DIRECTORY_SCHEMA_VERSION } from '~/utils/pilotDirectoryFields'
 import {
   SESSION_LIST_PROJECTION_PAGE_SIZE,
   SESSION_LIST_PROJECTION_SCHEMA_VERSION,
@@ -125,6 +126,7 @@ export interface OwnerLightweightVerificationReport {
     trackBestsDocs: number
     trackDetailProjectionDocs: number
     sessionListPageDocs: number
+    pilotDirectoryValid: boolean
     oldTrackBests: string[]
     oldTrackDetailProjections: string[]
   }
@@ -407,7 +409,9 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
       issues.push(issue('error', 'track_detail_projection_denied', error?.message || 'Permessi insufficienti su trackDetailProjections.'))
     }
     try {
-      const sessionListMetaSnap = await getDocTracked(doc(db, `users/${uid}/sessionListMeta/v1`))
+      const pilotDirectorySnap = await getDocTracked(doc(db, `pilotDirectory/${uid}`))
+    const pilotDirectory = pilotDirectorySnap.exists() ? (pilotDirectorySnap.data() || {}) : {}
+    const sessionListMetaSnap = await getDocTracked(doc(db, `users/${uid}/sessionListMeta/v1`))
       const sessionListMeta = sessionListMetaSnap.exists() ? (sessionListMetaSnap.data() || {}) : {}
       sessionListSchemaVersion = Number(sessionListMeta.schemaVersion || 0)
       sessionListTotalSessions = Number(sessionListMeta.totalSessions || 0)
@@ -517,6 +521,8 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
     const userData = userSnap.exists() ? (userSnap.data() || {}) : {}
     const trackBestDocs = await loadCollectionDocs(`users/${uid}/trackBests`)
     const trackDetailDocs = await loadCollectionDocs(`users/${uid}/trackDetailProjections`)
+    const pilotDirectorySnap = await getDocTracked(doc(db, `pilotDirectory/${uid}`))
+    const pilotDirectory = pilotDirectorySnap.exists() ? (pilotDirectorySnap.data() || {}) : {}
     const sessionListMetaSnap = await getDocTracked(doc(db, `users/${uid}/sessionListMeta/v1`))
     const sessionListMeta = sessionListMetaSnap.exists() ? (sessionListMetaSnap.data() || {}) : {}
     const sessionListPageDocs = await loadCollectionDocs(`users/${uid}/sessionListPages`)
@@ -535,12 +541,20 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       .map((docSnap: any) => docSnap.id)
 
+    const pilotDirectoryValid = pilotDirectorySnap.exists()
+      && Number(pilotDirectory.schemaVersion || 0) === PILOT_DIRECTORY_SCHEMA_VERSION
+      && pilotDirectory.uid === uid
+      && typeof pilotDirectory.directorySortName === 'string'
+      && Array.isArray(pilotDirectory.searchPrefixes)
+      && typeof pilotDirectory.role === 'string'
+
     const issues: string[] = []
     if (statsSchemaVersion !== USER_STATS_SCHEMA_VERSION) issues.push('stats_schema_version_mismatch')
     if (sessionIndexSchemaVersion !== SESSION_INDEX_SCHEMA_VERSION) issues.push('session_index_schema_version_mismatch')
     if (sessionListSchemaVersion !== SESSION_LIST_PROJECTION_SCHEMA_VERSION) issues.push('session_list_schema_version_mismatch')
     if (Number(sessionListMeta?.pageCount || 0) !== sessionListPageDocs.length) issues.push('session_list_page_count_mismatch')
     if (Number(sessionListMeta?.totalSessions || 0) !== Number(userData?.stats?.totalSessions || 0)) issues.push('session_list_total_sessions_mismatch')
+    if (!pilotDirectoryValid) issues.push('pilot_directory_missing_or_invalid')
     if (oldTrackBests.length > 0) issues.push('old_track_bests_schema_or_rules')
     if (oldTrackDetailProjections.length > 0) issues.push('old_track_detail_projection_schema')
 
@@ -560,6 +574,7 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
         trackBestsDocs: trackBestDocs.length,
         trackDetailProjectionDocs: trackDetailDocs.length,
         sessionListPageDocs: sessionListPageDocs.length,
+        pilotDirectoryValid,
         oldTrackBests,
         oldTrackDetailProjections
       },

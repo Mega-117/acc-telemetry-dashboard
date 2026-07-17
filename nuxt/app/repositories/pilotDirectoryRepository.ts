@@ -21,6 +21,10 @@ export interface PilotDirectoryItem {
   clientChannel?: string
   clientUpdateState?: string
   clientLastHeartbeatAt?: string
+  firebaseHealthStatus?: string
+  firebaseHealthMigrationVersion?: number
+  firebaseHealthCheckedAt?: string
+  firebaseHealthCode?: string
 }
 
 export interface PilotDirectoryPage {
@@ -69,7 +73,14 @@ function mapPilotDoc(docSnap: any): PilotDirectoryItem {
     suiteVersionUpdatedAt: data.suiteVersionUpdatedAt || undefined,
     clientChannel: data.clientChannel || undefined,
     clientUpdateState: data.clientUpdateState || undefined,
-    clientLastHeartbeatAt: data.clientLastHeartbeatAt || undefined
+    clientLastHeartbeatAt: data.clientLastHeartbeatAt || undefined,
+    firebaseHealthStatus: data.firebaseHealthStatus || undefined,
+    firebaseHealthMigrationVersion: data.firebaseHealthMigrationVersion != null
+      && Number.isFinite(Number(data.firebaseHealthMigrationVersion))
+      ? Number(data.firebaseHealthMigrationVersion)
+      : undefined,
+    firebaseHealthCheckedAt: data.firebaseHealthCheckedAt || undefined,
+    firebaseHealthCode: data.firebaseHealthCode || undefined
   }
 }
 
