@@ -2,11 +2,12 @@ import { onBeforeUnmount, watch, type Ref } from 'vue'
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { trackedSetDoc } from '~/composables/useFirebaseTracker'
+import { trackedGetDoc, trackedSetDoc } from '~/composables/useFirebaseTracker'
 import {
   CLIENT_DIAGNOSTIC_FLUSH_INTERVAL_MS,
   buildDiagnosticDocument,
   createLocalDiagnostic,
+  flushDiagnosticOutbox,
   shouldCaptureDiagnostic,
   type DiagnosticSuiteContext,
   type LocalClientDiagnostic
@@ -93,20 +94,25 @@ export function useClientDiagnostics(options: { enabled: Ref<boolean> }) {
         electronAPI.listDiagnostics(50),
         electronAPI.getSuiteVersion ? electronAPI.getSuiteVersion() : Promise.resolve(null)
       ])
-      const uploadedIds: string[] = []
-      for (const event of events || []) {
-        const payload = buildDiagnosticDocument(event, uid, suite)
-        await trackedSetDoc(
+      const result = await flushDiagnosticOutbox({
+        events: events || [],
+        uid,
+        suite,
+        isUploaded: async (eventId) => {
+          const snapshot = await trackedGetDoc(
+            doc(db, `users/${uid}/diagnostics/${eventId}`),
+            CALLER
+          )
+          return snapshot.exists()
+        },
+        upload: (payload) => trackedSetDoc(
           doc(db, `users/${uid}/diagnostics/${payload.eventId}`),
           payload,
           CALLER
-        )
-        uploadedIds.push(payload.eventId)
-      }
-      if (uploadedIds.length > 0) {
-        await electronAPI.acknowledgeDiagnostics(uploadedIds)
-      }
-      return uploadedIds.length
+        ),
+        acknowledge: (eventId) => electronAPI.acknowledgeDiagnostics!([eventId])
+      })
+      return result.acknowledged
     } catch (error) {
       console.warn('[DIAGNOSTICS] Flush deferred:', error)
       return 0

@@ -40,6 +40,7 @@ async function patchWindowsNitroPrerenderImports(dir: string) {
 export default defineNuxtConfig({
   ssr: false,
   ignore: ignoredRuntimePaths,
+  plugins: isDev ? ['~/plugins/firebase-emulators.client'] : [],
 
   // === COMPATIBILITÀ ===
   compatibilityDate: '2025-01-11',
@@ -79,7 +80,7 @@ export default defineNuxtConfig({
             // acc-voice: e' il protocollo Electron che serve i WAV locali dei
             // riferimenti nella release desktop (PIP-211).
             "media-src 'self' data: blob: acc-voice: http://127.0.0.1:5112 http://localhost:5112",
-            "connect-src 'self' http://127.0.0.1:5112 http://localhost:5112 https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com",
+            `connect-src 'self' http://127.0.0.1:5112 http://localhost:5112${isDev ? ' http://127.0.0.1:8080 http://localhost:8080 http://127.0.0.1:9099 http://localhost:9099' : ''} https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com`,
             "frame-ancestors 'none'",
           ].join('; ')
         }

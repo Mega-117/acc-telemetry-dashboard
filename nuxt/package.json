@@ -8,6 +8,10 @@
     "dev": "nuxt dev --host localhost",
     "generate": "powershell -ExecutionPolicy Bypass -Command \"$env:ACC_NUXT_PUBLIC_DIR='../docs'; nuxt generate\"",
     "preview": "nuxt preview",
+    "dev:firebase-emulators": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:VITE_ACC_FIREBASE_EMULATORS='1'; nuxt dev --host localhost\"",
+    "firebase:emulators": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/firebase-emulators.ps1 -Mode start",
+    "test:firebase": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/firebase-emulators.ps1 -Mode test",
+    "test:firebase:rules": "vitest run --config vitest.firebase.config.ts --maxWorkers=1",
     "voice:kokoro": "python scripts/kokoro_tts_server.py",
     "postinstall": "nuxt prepare",
     "check:parity": "node scripts/check_projection_parity.mjs",
@@ -54,6 +58,7 @@
     "vue-router": "^4.6.4"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
     "@typescript-eslint/eslint-plugin": "^8.32.0",
     "@typescript-eslint/parser": "^8.32.0",
     "@vitejs/plugin-vue": "^6.0.7",

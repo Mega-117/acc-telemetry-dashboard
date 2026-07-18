@@ -9,6 +9,7 @@ const reprocessOwnerCloudRawSummariesMock = vi.hoisted(() => vi.fn())
 const verifyOwnerMigrationLightweightMock = vi.hoisted(() => vi.fn())
 const inspectFirebaseStructureStateMock = vi.hoisted(() => vi.fn())
 const claimFirebaseStructureLeaseMock = vi.hoisted(() => vi.fn())
+const renewFirebaseStructureLeaseMock = vi.hoisted(() => vi.fn())
 const publishFirebaseStructureHealthMock = vi.hoisted(() => vi.fn())
 const classifyFirebaseStructureOutcomeMock = vi.hoisted(() => vi.fn())
 const classifyFirebaseStructureErrorMock = vi.hoisted(() => vi.fn())
@@ -29,9 +30,11 @@ vi.mock('~/services/sync/firebaseStructureHealthService', () => ({
   createFirebaseStructureLeaseId: () => 'lease-1',
   inspectFirebaseStructureState: inspectFirebaseStructureStateMock,
   claimFirebaseStructureLease: claimFirebaseStructureLeaseMock,
+  renewFirebaseStructureLease: renewFirebaseStructureLeaseMock,
   publishFirebaseStructureHealth: publishFirebaseStructureHealthMock,
   classifyFirebaseStructureOutcome: classifyFirebaseStructureOutcomeMock,
-  classifyFirebaseStructureError: classifyFirebaseStructureErrorMock
+  classifyFirebaseStructureError: classifyFirebaseStructureErrorMock,
+  withFirebaseStructureRetry: (operation: () => Promise<unknown>) => operation()
 }))
 
 vi.mock('~/services/sync/ownerDataRepairService', () => ({
@@ -110,7 +113,8 @@ describe('runOwnerDataMaintenanceGate', () => {
     verifyOwnerMigrationLightweightMock.mockResolvedValue({ ok: true, issues: [] })
     inspectFirebaseStructureStateMock.mockReturnValue({ action: 'migrate', code: 'migration_required' })
     claimFirebaseStructureLeaseMock.mockResolvedValue(true)
-    publishFirebaseStructureHealthMock.mockResolvedValue(undefined)
+    renewFirebaseStructureLeaseMock.mockResolvedValue(true)
+    publishFirebaseStructureHealthMock.mockResolvedValue(true)
     classifyFirebaseStructureOutcomeMock.mockReturnValue({
       status: 'healthy',
       code: 'structure_verified',

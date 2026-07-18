@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   buildDiagnosticDocument,
   buildDiagnosticFingerprint,
   createLocalDiagnostic,
+  flushDiagnosticOutbox,
   sanitizeDiagnosticText,
   shouldCaptureDiagnostic
 } from '~/services/monitoring/clientDiagnosticsService'
@@ -58,5 +59,61 @@ describe('clientDiagnosticsService', () => {
       severity: 'error',
       context: { password: '<redacted>', retries: 2 }
     })
+  })
+
+  it('conferma progressivamente gli eventi prima di un errore parziale', async () => {
+    const events = [
+      createLocalDiagnostic({ eventId: 'event-a', message: 'A' }),
+      createLocalDiagnostic({ eventId: 'event-b', message: 'B' })
+    ]
+    const acknowledge = vi.fn().mockResolvedValue(undefined)
+    const upload = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('rete non disponibile'))
+
+    await expect(flushDiagnosticOutbox({
+      events,
+      uid: 'pilot-1',
+      suite: { suite: '0.4.0-dev.1', channel: 'develop' },
+      isUploaded: vi.fn().mockResolvedValue(false),
+      upload,
+      acknowledge
+    })).rejects.toThrow('rete non disponibile')
+
+    expect(acknowledge).toHaveBeenCalledTimes(1)
+    expect(acknowledge).toHaveBeenCalledWith('event-a')
+  })
+
+  it('salta il documento remoto esistente e completa il retry senza duplicarlo', async () => {
+    const events = [
+      createLocalDiagnostic({ eventId: 'event-a', message: 'A' }),
+      createLocalDiagnostic({ eventId: 'event-b', message: 'B' })
+    ]
+    const remoteIds = new Set(['event-a'])
+    const upload = vi.fn(async (payload) => {
+      remoteIds.add(payload.eventId)
+    })
+    const acknowledge = vi.fn().mockResolvedValue(undefined)
+
+    const result = await flushDiagnosticOutbox({
+      events,
+      uid: 'pilot-1',
+      suite: null,
+      isUploaded: async (eventId) => remoteIds.has(eventId),
+      upload,
+      acknowledge
+    })
+
+    expect(result).toEqual({
+      uploaded: 1,
+      acknowledged: 2,
+      alreadyUploaded: 1
+    })
+    expect(upload).toHaveBeenCalledTimes(1)
+    expect(upload.mock.calls[0][0].eventId).toBe('event-b')
+    expect(acknowledge.mock.calls).toEqual([
+      ['event-a'],
+      ['event-b']
+    ])
   })
 })

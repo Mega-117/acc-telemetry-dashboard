@@ -21,6 +21,8 @@ import {
   createFirebaseStructureLeaseId,
   inspectFirebaseStructureState,
   publishFirebaseStructureHealth,
+  renewFirebaseStructureLease,
+  withFirebaseStructureRetry,
   type FirebaseStructureHealthState
 } from './firebaseStructureHealthService'
 
@@ -220,28 +222,47 @@ function buildReport(params: Partial<OwnerDataMaintenanceReport> & {
 
 async function publishHealthOutcome(
   uid: string,
-  input: { incompleteCloudOnly?: number; skippedNoRaw?: number } = {}
+  input: { incompleteCloudOnly?: number; skippedNoRaw?: number } = {},
+  leaseId?: string
 ) {
   const outcome = classifyFirebaseStructureOutcome(input)
-  await publishFirebaseStructureHealth({
+  const published = await withFirebaseStructureRetry(() => publishFirebaseStructureHealth({
     uid,
     status: outcome.status,
     targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
     targetBestRulesVersion: BEST_RULES_VERSION,
     code: outcome.code,
-    issues: outcome.issues
-  })
+    issues: outcome.issues,
+    leaseId
+  }))
+  if (!published) throw createLeaseLostError()
 }
 
-async function publishBlockedHealth(uid: string, error: unknown) {
-  await publishFirebaseStructureHealth({
+function createLeaseLostError(): Error & { code: string } {
+  const error = new Error('Lease struttura Firebase perso durante la migrazione.') as Error & { code: string }
+  error.code = 'structure-lease-lost'
+  return error
+}
+
+async function ensureActiveLease(uid: string, leaseId: string): Promise<void> {
+  const renewed = await withFirebaseStructureRetry(() => renewFirebaseStructureLease({
+    uid,
+    leaseId
+  }))
+  if (!renewed) throw createLeaseLostError()
+}
+
+async function publishBlockedHealth(uid: string, error: unknown, leaseId: string) {
+  const published = await withFirebaseStructureRetry(() => publishFirebaseStructureHealth({
     uid,
     status: 'blocked',
     targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
     targetBestRulesVersion: BEST_RULES_VERSION,
     code: classifyFirebaseStructureError(error),
-    issues: []
-  })
+    issues: [],
+    leaseId
+  }))
+  if (!published) throw createLeaseLostError()
 }
 
 function skippedReport(
@@ -307,7 +328,7 @@ export async function runOwnerDataMaintenanceGate(
       message: 'Controllo struttura dati pilota...'
     })
 
-    const stored = await readStoredState(uid)
+    const stored = await withFirebaseStructureRetry(() => readStoredState(uid))
     const storedState = stored.migration
     const healthDecision = inspectFirebaseStructureState({
       migration: storedState,
@@ -319,14 +340,14 @@ export async function runOwnerDataMaintenanceGate(
 
     if (healthDecision.action === 'future_schema' || healthDecision.action === 'blocked_schema') {
       const status = healthDecision.action === 'future_schema' ? 'future_schema' : 'blocked'
-      await publishFirebaseStructureHealth({
+      await withFirebaseStructureRetry(() => publishFirebaseStructureHealth({
         uid,
         status,
         targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
         targetBestRulesVersion: BEST_RULES_VERSION,
         code: healthDecision.code,
         issues: []
-      })
+      }))
       const report = skippedReport(
         uid,
         startedAt,
@@ -365,12 +386,12 @@ export async function runOwnerDataMaintenanceGate(
       return report
     }
 
-    leaseAcquired = await claimFirebaseStructureLease({
+    leaseAcquired = await withFirebaseStructureRetry(() => claimFirebaseStructureLease({
       uid,
       leaseId,
       targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
       targetBestRulesVersion: BEST_RULES_VERSION
-    })
+    }))
     if (!leaseAcquired) {
       const report = skippedReport(uid, startedAt, 'Controllo struttura gia in corso su un altro client.')
       emit(onProgress, {
@@ -385,9 +406,10 @@ export async function runOwnerDataMaintenanceGate(
 
     let lightweightVerificationFailed = false
     if (healthDecision.action === 'verify_current' && stored.health?.status !== 'partial') {
-      const verification = await verifyOwnerMigrationLightweight(uid)
+      await ensureActiveLease(uid, leaseId)
+      const verification = await withFirebaseStructureRetry(() => verifyOwnerMigrationLightweight(uid))
       if (verification.ok) {
-        await publishHealthOutcome(uid)
+        await publishHealthOutcome(uid, {}, leaseId)
         const report = skippedReport(uid, startedAt, 'Struttura dati verificata.')
         emit(onProgress, {
           status: 'skipped',
@@ -402,13 +424,14 @@ export async function runOwnerDataMaintenanceGate(
     }
 
     if (!force && isStoredStateReadyForSessionListUpgrade(storedState)) {
-      await writeStoredState(uid, {
+      await ensureActiveLease(uid, leaseId)
+      await withFirebaseStructureRetry(() => writeStoredState(uid, {
         status: 'running',
         startedAt,
         completedAt: null,
         lastError: null,
         report: null
-      })
+      }))
 
       emit(onProgress, {
         status: 'running',
@@ -416,7 +439,9 @@ export async function runOwnerDataMaintenanceGate(
         progress: 70,
         message: 'Preparo lista sessioni ottimizzata...'
       })
-      const sessionListRebuild = await rebuildOwnerSessionListProjection(uid)
+      const sessionListRebuild = await withFirebaseStructureRetry(
+        () => rebuildOwnerSessionListProjection(uid)
+      )
 
       emit(onProgress, {
         status: 'running',
@@ -424,7 +449,8 @@ export async function runOwnerDataMaintenanceGate(
         progress: 90,
         message: 'Verifico lista sessioni...'
       })
-      const finalVerification = await verifyOwnerMigrationLightweight(uid)
+      await ensureActiveLease(uid, leaseId)
+      const finalVerification = await withFirebaseStructureRetry(() => verifyOwnerMigrationLightweight(uid))
       if (!finalVerification.ok) {
         throw new Error(`Verifica lista sessioni non pulita: ${finalVerification.issues.join(', ')}`)
       }
@@ -438,8 +464,9 @@ export async function runOwnerDataMaintenanceGate(
         startedAt,
         completedAt: nowIso()
       })
-      await markCompleted(uid, report)
-      await publishHealthOutcome(uid)
+      await ensureActiveLease(uid, leaseId)
+      await withFirebaseStructureRetry(() => markCompleted(uid, report))
+      await publishHealthOutcome(uid, {}, leaseId)
       emit(onProgress, {
         status: 'completed',
         phase: 'completed',
@@ -450,13 +477,14 @@ export async function runOwnerDataMaintenanceGate(
       return report
     }
 
-    await writeStoredState(uid, {
+    await ensureActiveLease(uid, leaseId)
+    await withFirebaseStructureRetry(() => writeStoredState(uid, {
       status: 'running',
       startedAt,
       completedAt: null,
       lastError: null,
       report: null
-    })
+    }))
 
     emit(onProgress, {
       status: 'checking',
@@ -465,7 +493,7 @@ export async function runOwnerDataMaintenanceGate(
       message: 'Controllo coerenza dati cloud...'
     })
 
-    const audit = await auditOwnerData(uid)
+    const audit = await withFirebaseStructureRetry(() => auditOwnerData(uid))
     if (hasPermissionBlocker(audit)) {
       throw new Error('Permessi insufficienti per completare la migrazione dati owner.')
     }
@@ -482,10 +510,11 @@ export async function runOwnerDataMaintenanceGate(
         startedAt,
         completedAt: nowIso()
       })
-      await markCompleted(uid, report)
+      await ensureActiveLease(uid, leaseId)
+      await withFirebaseStructureRetry(() => markCompleted(uid, report))
       await publishHealthOutcome(uid, {
         incompleteCloudOnly: audit.sessions.incompleteCloudOnly
-      })
+      }, leaseId)
       emit(onProgress, {
         status: 'completed',
         phase: 'completed',
@@ -505,7 +534,9 @@ export async function runOwnerDataMaintenanceGate(
         progress: 40,
         message: 'Aggiorno Best/AVG dai dati cloud...'
       })
-      cloudReprocess = await reprocessOwnerCloudRawSummaries(uid, { forceAll: force || versionedRawReprocess })
+      cloudReprocess = await withFirebaseStructureRetry(
+        () => reprocessOwnerCloudRawSummaries(uid, { forceAll: force || versionedRawReprocess })
+      )
       if (cloudReprocess.failedSessions > 0) {
         throw new Error(`Reprocess cloud incompleto: ${cloudReprocess.failedSessions} sessioni fallite.`)
       }
@@ -517,7 +548,7 @@ export async function runOwnerDataMaintenanceGate(
       progress: 70,
       message: 'Ricostruisco riferimenti storici...'
     })
-    const rebuild = await rebuildOwnerProjections(uid)
+    const rebuild = await withFirebaseStructureRetry(() => rebuildOwnerProjections(uid))
 
     emit(onProgress, {
       status: 'running',
@@ -525,7 +556,8 @@ export async function runOwnerDataMaintenanceGate(
       progress: 90,
       message: 'Verifico aggiornamento dati...'
     })
-    const finalVerification = await verifyOwnerMigrationLightweight(uid)
+    await ensureActiveLease(uid, leaseId)
+    const finalVerification = await withFirebaseStructureRetry(() => verifyOwnerMigrationLightweight(uid))
     if (!finalVerification.ok) {
       throw new Error(`Verifica finale non pulita: ${finalVerification.issues.join(', ')}`)
     }
@@ -541,11 +573,12 @@ export async function runOwnerDataMaintenanceGate(
       startedAt,
       completedAt: nowIso()
     })
-    await markCompleted(uid, report)
+    await ensureActiveLease(uid, leaseId)
+    await withFirebaseStructureRetry(() => markCompleted(uid, report))
     await publishHealthOutcome(uid, {
       incompleteCloudOnly: audit.sessions.incompleteCloudOnly,
       skippedNoRaw: cloudReprocess?.skippedNoRaw
-    })
+    }, leaseId)
     emit(onProgress, {
       status: 'completed',
       phase: 'completed',
@@ -557,16 +590,19 @@ export async function runOwnerDataMaintenanceGate(
   }).catch(async (error: any) => {
     const message = error?.message || 'Migrazione dati owner fallita.'
     if (leaseAcquired) {
-      await Promise.allSettled([
-        writeStoredState(uid, {
+      try {
+        await ensureActiveLease(uid, leaseId)
+        await withFirebaseStructureRetry(() => writeStoredState(uid, {
           status: 'failed',
           startedAt,
           completedAt: null,
           lastError: message,
           report: null
-        }),
-        publishBlockedHealth(uid, error)
-      ])
+        }))
+        await publishBlockedHealth(uid, error, leaseId)
+      } catch {
+        // A stale client must not overwrite the state owned by a newer lease.
+      }
     }
     emit(onProgress, {
       status: 'failed',

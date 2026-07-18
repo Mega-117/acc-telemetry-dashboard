@@ -21,6 +21,7 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['tests/**/*.test.ts', 'tests/**/*.spec.ts'],
+    exclude: ['tests/firebase/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -29,6 +30,7 @@ export default defineConfig({
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
         // ── Phase 1–2: services e utils ──────────────────────────────────
+        'app/config/firebaseRuntimeTarget.ts',
         'app/services/gateway/activityProjectionBuilders.ts',
         'app/services/gateway/bestTimesBuilders.ts',
         'app/services/gateway/trackDetailProjectionBuilder.ts',

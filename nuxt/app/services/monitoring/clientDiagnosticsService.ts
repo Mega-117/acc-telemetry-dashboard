@@ -42,6 +42,21 @@ export interface ClientDiagnosticDocument {
   channel: string | null
 }
 
+export interface DiagnosticOutboxFlushInput {
+  events: LocalClientDiagnostic[]
+  uid: string
+  suite: DiagnosticSuiteContext | null
+  isUploaded: (eventId: string) => Promise<boolean>
+  upload: (payload: ClientDiagnosticDocument) => Promise<void>
+  acknowledge: (eventId: string) => Promise<unknown>
+}
+
+export interface DiagnosticOutboxFlushResult {
+  uploaded: number
+  acknowledged: number
+  alreadyUploaded: number
+}
+
 function stableHash(value: string): string {
   let hash = 2166136261
   for (let index = 0; index < value.length; index += 1) {
@@ -147,4 +162,31 @@ export function shouldCaptureDiagnostic(
   return lastCapturedAt === null
     || lastCapturedAt === undefined
     || nowMs - lastCapturedAt >= windowMs
+}
+
+export async function flushDiagnosticOutbox(
+  input: DiagnosticOutboxFlushInput
+): Promise<DiagnosticOutboxFlushResult> {
+  let uploaded = 0
+  let acknowledged = 0
+  let alreadyUploaded = 0
+
+  for (const event of input.events) {
+    const payload = buildDiagnosticDocument(event, input.uid, input.suite)
+    const exists = await input.isUploaded(payload.eventId)
+
+    if (exists) {
+      alreadyUploaded += 1
+    } else {
+      await input.upload(payload)
+      uploaded += 1
+    }
+
+    // Acknowledge each durable event immediately. If a later upload fails,
+    // earlier events never remain stuck in the local outbox.
+    await input.acknowledge(payload.eventId)
+    acknowledged += 1
+  }
+
+  return { uploaded, acknowledged, alreadyUploaded }
 }

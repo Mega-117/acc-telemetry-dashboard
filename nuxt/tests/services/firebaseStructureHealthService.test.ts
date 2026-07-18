@@ -17,9 +17,12 @@ vi.mock('~/composables/useFirebaseTracker', () => ({
 import {
   FIREBASE_STRUCTURE_HEALTH_SCHEMA_VERSION,
   claimFirebaseStructureLease,
+  classifyFirebaseStructureError,
   classifyFirebaseStructureOutcome,
   inspectFirebaseStructureState,
-  publishFirebaseStructureHealth
+  publishFirebaseStructureHealth,
+  renewFirebaseStructureLease,
+  withFirebaseStructureRetry
 } from '~/services/sync/firebaseStructureHealthService'
 
 const NOW = Date.parse('2026-07-17T12:00:00.000Z')
@@ -71,6 +74,78 @@ describe('firebase structure writes', () => {
     expect(trackedSetDocMock).toHaveBeenCalledOnce()
     expect(trackedSetDocMock.mock.calls[0][0]).toEqual(expect.objectContaining({ path: expect.stringContaining('users/uid-1') }))
   })
+
+  it('rinnova soltanto il lease posseduto dal client corrente', async () => {
+    const transaction = {
+      get: vi.fn().mockResolvedValue({
+        data: () => ({
+          maintenance: {
+            firebaseStructureHealth: {
+              status: 'repairing',
+              lease: { id: 'lease-1', acquiredAt: '2026-07-17T11:55:00.000Z' }
+            }
+          }
+        })
+      }),
+      set: vi.fn()
+    }
+    trackedRunTransactionMock.mockImplementation(
+      async (_db: unknown, _caller: string, _target: unknown, callback: (tx: typeof transaction) => Promise<boolean>) => callback(transaction)
+    )
+
+    await expect(renewFirebaseStructureLease({
+      uid: 'uid-1',
+      leaseId: 'lease-1',
+      nowIso: '2026-07-17T12:00:00.000Z'
+    })).resolves.toBe(true)
+    expect(transaction.set).toHaveBeenCalledOnce()
+
+    transaction.get.mockResolvedValueOnce({
+      data: () => ({
+        maintenance: {
+          firebaseStructureHealth: {
+            status: 'repairing',
+            lease: { id: 'newer-lease' }
+          }
+        }
+      })
+    })
+    await expect(renewFirebaseStructureLease({
+      uid: 'uid-1',
+      leaseId: 'lease-1',
+      nowIso: '2026-07-17T12:01:00.000Z'
+    })).resolves.toBe(false)
+  })
+
+  it('impedisce a un lease obsoleto di pubblicare lo stato finale', async () => {
+    const transaction = {
+      get: vi.fn().mockResolvedValue({
+        data: () => ({
+          maintenance: {
+            firebaseStructureHealth: {
+              status: 'repairing',
+              lease: { id: 'newer-lease' }
+            }
+          }
+        })
+      }),
+      set: vi.fn()
+    }
+    trackedRunTransactionMock.mockImplementation(
+      async (_db: unknown, _caller: string, _target: unknown, callback: (tx: typeof transaction) => Promise<boolean>) => callback(transaction)
+    )
+
+    await expect(publishFirebaseStructureHealth({
+      uid: 'uid-1',
+      status: 'healthy',
+      targetMigrationVersion: 5,
+      targetBestRulesVersion: 5,
+      code: 'structure_verified',
+      leaseId: 'stale-lease'
+    })).resolves.toBe(false)
+    expect(transaction.set).not.toHaveBeenCalled()
+    expect(trackedGetDocMock).not.toHaveBeenCalled()
+  })
 })
 
 describe('inspectFirebaseStructureState', () => {
@@ -117,6 +192,31 @@ describe('inspectFirebaseStructureState', () => {
       nowMs: NOW
     })
     expect(result.action).toBe('migrate')
+  })
+
+  it('inizializza una struttura mancante e riprende una migrazione interrotta', () => {
+    expect(inspectFirebaseStructureState({
+      migration: null,
+      health: null,
+      targetMigrationVersion: 5,
+      targetBestRulesVersion: 5,
+      nowMs: NOW
+    }).action).toBe('migrate')
+
+    expect(inspectFirebaseStructureState({
+      migration: {
+        version: 5,
+        bestRulesVersion: 5,
+        status: 'running'
+      },
+      health: {
+        status: 'repairing',
+        lease: { id: 'expired', expiresAt: '2026-07-17T11:00:00.000Z' }
+      },
+      targetMigrationVersion: 5,
+      targetBestRulesVersion: 5,
+      nowMs: NOW
+    }).action).toBe('migrate')
   })
 
   it('non esegue downgrade su una versione futura', () => {
@@ -185,5 +285,47 @@ describe('classifyFirebaseStructureOutcome', () => {
       code: 'structure_verified',
       issues: []
     })
+  })
+})
+describe('firebase structure transient retry', () => {
+  it('ripete con backoff gli errori transitori e poi restituisce il risultato', async () => {
+    const operation = vi.fn()
+      .mockRejectedValueOnce({ code: 'firestore/unavailable' })
+      .mockRejectedValueOnce({ code: 'firestore/resource-exhausted' })
+      .mockResolvedValueOnce('ok')
+    const sleep = vi.fn().mockResolvedValue(undefined)
+
+    await expect(withFirebaseStructureRetry(operation, {
+      attempts: 3,
+      baseDelayMs: 10,
+      sleep
+    })).resolves.toBe('ok')
+
+    expect(operation).toHaveBeenCalledTimes(3)
+    expect(sleep.mock.calls).toEqual([[10], [20]])
+  })
+
+  it('non ripete errori permanenti', async () => {
+    const operation = vi.fn().mockRejectedValue({ code: 'firestore/permission-denied' })
+    const sleep = vi.fn()
+
+    await expect(withFirebaseStructureRetry(operation, {
+      attempts: 3,
+      sleep
+    })).rejects.toMatchObject({ code: 'firestore/permission-denied' })
+    expect(operation).toHaveBeenCalledOnce()
+    expect(sleep).not.toHaveBeenCalled()
+  })
+
+  it('classifica quota e concorrenza come transitori, permessi come permanenti', () => {
+    expect(classifyFirebaseStructureError({
+      code: 'firestore/resource-exhausted'
+    })).toBe('network_transient')
+    expect(classifyFirebaseStructureError({
+      code: 'firestore/aborted'
+    })).toBe('network_transient')
+    expect(classifyFirebaseStructureError({
+      code: 'firestore/permission-denied'
+    })).toBe('permission_denied')
   })
 })

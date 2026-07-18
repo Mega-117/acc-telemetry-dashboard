@@ -147,7 +147,10 @@ service cloud.firestore {
                       && request.resource.data.stack is string
                       && request.resource.data.stack.size() <= 8000
                       && request.resource.data.context is map;
-        allow read, delete: if isAdmin();
+        // The owner may only check a deterministic event ID so a crashed
+        // outbox retry can acknowledge an already-created immutable report.
+        allow get: if isOwner(userId) || isAdmin();
+        allow list, delete: if isAdmin();
         allow update: if false;
       }
 
@@ -175,6 +178,12 @@ service cloud.firestore {
                       && request.resource.data.coachId == request.auth.uid
                       && request.resource.data.pilotId == userId;
       }
+    }
+
+    // Rules v2 requires an explicit recursive match for collection-group
+    // queries. Only admins may enumerate diagnostics across all users.
+    match /{path=**}/diagnostics/{eventId} {
+      allow list: if isAdmin();
     }
   }
 }

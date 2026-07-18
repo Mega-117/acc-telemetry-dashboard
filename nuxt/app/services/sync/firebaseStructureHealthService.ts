@@ -12,6 +12,8 @@ const CALLER = 'FirebaseStructureHealth'
 export const FIREBASE_STRUCTURE_HEALTH_SCHEMA_VERSION = 1
 export const FIREBASE_STRUCTURE_HEALTH_TTL_MS = 24 * 60 * 60 * 1000
 export const FIREBASE_STRUCTURE_LEASE_MS = 10 * 60 * 1000
+export const FIREBASE_STRUCTURE_RETRY_ATTEMPTS = 3
+export const FIREBASE_STRUCTURE_RETRY_BASE_DELAY_MS = 250
 
 export type FirebaseStructureHealthStatus =
   | 'unknown'
@@ -157,6 +159,36 @@ export function createFirebaseStructureLeaseId(): string {
   return `${Date.now().toString(36)}-${random}`
 }
 
+export async function withFirebaseStructureRetry<T>(
+  operation: () => Promise<T>,
+  options: {
+    attempts?: number
+    baseDelayMs?: number
+    sleep?: (delayMs: number) => Promise<void>
+  } = {}
+): Promise<T> {
+  const attempts = Math.max(1, options.attempts ?? FIREBASE_STRUCTURE_RETRY_ATTEMPTS)
+  const baseDelayMs = Math.max(0, options.baseDelayMs ?? FIREBASE_STRUCTURE_RETRY_BASE_DELAY_MS)
+  const sleep = options.sleep || ((delayMs: number) => new Promise<void>((resolve) => {
+    setTimeout(resolve, delayMs)
+  }))
+
+  let lastError: unknown
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await operation()
+    } catch (error) {
+      lastError = error
+      if (classifyFirebaseStructureError(error) !== 'network_transient' || attempt >= attempts) {
+        throw error
+      }
+      await sleep(baseDelayMs * (2 ** (attempt - 1)))
+    }
+  }
+
+  throw lastError
+}
+
 function buildHealthDocument(input: {
   status: FirebaseStructureHealthStatus
   migrationVersion: number
@@ -232,6 +264,43 @@ export async function claimFirebaseStructureLease(input: {
   }, { reads: 1, writes: 1 })
 }
 
+export async function renewFirebaseStructureLease(input: {
+  uid: string
+  leaseId: string
+  nowIso?: string
+  leaseMs?: number
+}): Promise<boolean> {
+  const userRef = doc(db, `users/${input.uid}`)
+  const updatedAt = input.nowIso || new Date().toISOString()
+  const nowMs = Date.parse(updatedAt)
+  const expiresAt = new Date(nowMs + (input.leaseMs ?? FIREBASE_STRUCTURE_LEASE_MS)).toISOString()
+
+  return trackedRunTransaction(db, CALLER, userRef, async (transaction) => {
+    const snap = await transaction.get(userRef)
+    const current = (snap.data()?.maintenance?.firebaseStructureHealth || null) as FirebaseStructureHealthState | null
+    if (current?.status !== 'repairing' || current.lease?.id !== input.leaseId) {
+      return false
+    }
+
+    const health: FirebaseStructureHealthState = {
+      ...current,
+      updatedAt,
+      lease: {
+        ...current.lease,
+        id: input.leaseId,
+        acquiredAt: current.lease?.acquiredAt || updatedAt,
+        expiresAt
+      }
+    }
+    transaction.set(userRef, sanitizeForFirestore({
+      maintenance: {
+        firebaseStructureHealth: health
+      }
+    }), { merge: true })
+    return true
+  }, { reads: 1, writes: 1 })
+}
+
 export async function publishFirebaseStructureHealth(input: {
   uid: string
   status: Exclude<FirebaseStructureHealthStatus, 'unknown' | 'repairing'>
@@ -240,7 +309,8 @@ export async function publishFirebaseStructureHealth(input: {
   code: string
   issues?: string[]
   checkedAt?: string
-}) {
+  leaseId?: string
+}): Promise<boolean> {
   const updatedAt = input.checkedAt || new Date().toISOString()
   const health = buildHealthDocument({
     status: input.status,
@@ -252,11 +322,25 @@ export async function publishFirebaseStructureHealth(input: {
     updatedAt,
     lease: null
   })
-  await trackedSetDoc(doc(db, `users/${input.uid}`), sanitizeForFirestore({
-    maintenance: {
-      firebaseStructureHealth: health
-    }
-  }), { merge: true }, CALLER)
+  const userRef = doc(db, `users/${input.uid}`)
+  const userPatch = sanitizeForFirestore({
+    maintenance: { firebaseStructureHealth: health }
+  })
+
+  if (input.leaseId) {
+    const published = await trackedRunTransaction(db, CALLER, userRef, async (transaction) => {
+      const snap = await transaction.get(userRef)
+      const current = (snap.data()?.maintenance?.firebaseStructureHealth || null) as FirebaseStructureHealthState | null
+      if (current?.status !== 'repairing' || current.lease?.id !== input.leaseId) {
+        return false
+      }
+      transaction.set(userRef, userPatch, { merge: true })
+      return true
+    }, { reads: 1, writes: 1 })
+    if (!published) return false
+  } else {
+    await trackedSetDoc(userRef, userPatch, { merge: true }, CALLER)
+  }
 
   const directoryRef = doc(db, `pilotDirectory/${input.uid}`)
   const directorySnap = await trackedGetDoc(directoryRef, CALLER)
@@ -268,6 +352,7 @@ export async function publishFirebaseStructureHealth(input: {
       CALLER
     )
   }
+  return true
 }
 
 export function classifyFirebaseStructureError(error: unknown): string {
@@ -277,6 +362,10 @@ export function classifyFirebaseStructureError(error: unknown): string {
   if (
     code.includes('unavailable')
     || code.includes('deadline-exceeded')
+    || code.includes('resource-exhausted')
+    || code.includes('aborted')
+    || code.includes('internal')
+    || code.includes('cancelled')
     || message.includes('network')
     || message.includes('offline')
   ) return 'network_transient'
