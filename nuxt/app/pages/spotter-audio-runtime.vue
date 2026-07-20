@@ -23,6 +23,12 @@ import {
   isSpotterFeatureAllowed,
   isSpotterSessionChange,
 } from '~/services/spotter/spotterSessionPolicy'
+import {
+  advancePostCorner,
+  createPostCornerState,
+  resolveCoachOverride,
+} from '~/services/spotter/coachVoiceController'
+import { useCoachStatePoller } from '~/composables/useCoachStatePoller'
 
 definePageMeta({ layout: false })
 
@@ -58,6 +64,15 @@ function getRuntimeApi(): any | null {
 
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getRuntimeApi)
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getRuntimeApi)
+// PIP-256: stato coach adattivo; attivo solo se pista coach = pista corrente
+const { coachState, startCoachStatePolling, stopCoachStatePolling } = useCoachStatePoller(getRuntimeApi)
+let postCornerState = createPostCornerState()
+const activeCoachFocus = computed(() => {
+  const state = coachState.value
+  if (!state?.focus) return null
+  if (normalizeTrackName(state.track) !== normalizeTrackName(liveLap.value.track)) return null
+  return state.focus
+})
 const referencesAllowedForSession = computed(() => isSpotterFeatureAllowed(
   referencesEnabled.value,
   referenceSessionModes.value,
@@ -69,20 +84,34 @@ const lapTimesAllowedForSession = computed(() => isSpotterFeatureAllowed(
   fastState.value.sessionType,
 ))
 
-function playAudioPath(path: string, gen: number): Promise<void> {
-  if (!path || gen !== generation || !canRunSpotterAudio.value) return Promise.resolve()
+function playAudioPath(path: string, gen: number): Promise<'ended' | 'error' | 'timeout' | 'skipped'> {
+  if (!path || gen !== generation || !canRunSpotterAudio.value) return Promise.resolve('skipped')
   const el = new Audio(getPublicPath(path))
   audio = el
   // Watchdog PIP-254: una traccia in stallo viene saltata, la coda prosegue.
-  return playAudioWithWatchdog(el, { label: path }).then(() => {
+  return playAudioWithWatchdog(el, { label: path }).then((outcome) => {
     if (audio === el) audio = null
+    return outcome
   })
 }
 
 function enqueueAudioPath(path: string) {
   if (!path || !canRunSpotterAudio.value) return
   const gen = generation
-  queue = queue.then(() => playAudioPath(path, gen))
+  queue = queue.then(() => playAudioPath(path, gen)).then(() => undefined)
+}
+
+/** PIP-256: prova la correzione coach; se il WAV manca/fallisce suona il
+ * riferimento standard (mai un marker muto per colpa del coach). */
+function enqueueAudioPathWithFallback(primaryPath: string, fallbackPath: string) {
+  if (!canRunSpotterAudio.value) return
+  const gen = generation
+  queue = queue.then(async () => {
+    const outcome = await playAudioPath(primaryPath, gen)
+    if (outcome === 'error' && fallbackPath && fallbackPath !== primaryPath) {
+      await playAudioPath(fallbackPath, gen)
+    }
+  })
 }
 
 function stopSpotterAudio() {
@@ -110,6 +139,7 @@ async function loadTrackVoiceReferences() {
 
 function resetTrackVoiceReferenceLapState() {
   trackVoiceReferenceRuntimeState.value = createTrackVoiceReferenceRuntimeState()
+  postCornerState = createPostCornerState()
 }
 
 function disarmTrackVoiceReferences() {
@@ -134,10 +164,34 @@ function tickTrackVoiceReferences() {
     references: trackVoiceReferences.value.filter(point => normalizeTrackName(point.track) === track),
   })
   trackVoiceReferenceRuntimeState.value = outcome.state
+  // PIP-256: sul marker della curva-focus suona la correzione coach al posto
+  // del riferimento standard; tutte le altre curve restano invariate.
+  const coachOverride = resolveCoachOverride(
+    activeCoachFocus.value,
+    trackVoiceReferences.value.filter(point => normalizeTrackName(point.track) === track),
+    selectedVoice.value,
+  )
   for (const reference of outcome.toAnnounce) {
     if (!reference.audio_path) continue
+    if (coachOverride && reference.id === coachOverride.referenceId) {
+      enqueueAudioPathWithFallback(coachOverride.correctionPath, coachOverride.fallbackPath)
+      if (import.meta.dev) console.debug('[spotter-audio-runtime] correzione coach', reference.label || reference.id)
+      continue
+    }
     enqueueAudioPath(reference.audio_path)
     if (import.meta.dev) console.debug('[spotter-audio-runtime] riferimento vocale', reference.label || reference.id)
+  }
+  // PIP-256: esito post-curva, una sola volta per giro, all'uscita del focus.
+  const postCorner = advancePostCorner(postCornerState, {
+    position: currentPosition,
+    focus: activeCoachFocus.value,
+    outcome: coachState.value?.lastLapOutcome ?? null,
+    voice: selectedVoice.value,
+  })
+  postCornerState = postCorner.state
+  if (postCorner.path) {
+    enqueueAudioPath(postCorner.path)
+    if (import.meta.dev) console.debug('[spotter-audio-runtime] esito coach post-curva')
   }
 }
 
@@ -161,6 +215,7 @@ onMounted(async () => {
   })
   startLiveStatePolling()
   startFastStatePolling()
+  startCoachStatePolling()
 })
 
 watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
@@ -227,6 +282,7 @@ onBeforeUnmount(() => {
   removeTrackVoiceReferenceChangeListener()
   stopLiveStatePolling()
   stopFastStatePolling()
+  stopCoachStatePolling()
   stopSpotterAudio()
 })
 </script>

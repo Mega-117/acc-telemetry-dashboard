@@ -47,6 +47,7 @@ export default defineConfig({
         'app/services/telemetry/sessionMergeLogic.ts',
         'app/services/telemetry/theoreticalTimesCalculator.ts',
         'app/services/audio/audioPlayback.ts',
+        'app/services/spotter/coachVoiceController.ts',
         'app/services/spotter/trackVoiceReferences.ts',
         'app/services/spotter/trackVoiceReferenceRuntime.ts',
         'app/services/spotter/trackVoiceReferenceChanges.ts',
