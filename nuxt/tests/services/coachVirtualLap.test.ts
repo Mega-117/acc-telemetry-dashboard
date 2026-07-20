@@ -21,6 +21,7 @@ import {
 // Bruxelles: apex reale ~3040m su ~6960m -> ~0.437 normalizzato
 const FOCUS_BRUXELLES: CoachFocus = {
   cornerId: 3,
+  cornerName: 'Bruxelles',
   apexNormPos: 0.437,
   metric: 'brake_point',
   direction: 'later',

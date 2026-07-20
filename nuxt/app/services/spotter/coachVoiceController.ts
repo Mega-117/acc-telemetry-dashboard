@@ -19,11 +19,23 @@ export const POST_CORNER_OFFSET = 0.02
 
 export interface CoachFocus {
   cornerId: number
+  cornerName: string | null
   apexNormPos: number
   metric: 'brake_point' | 'vmin' | 'throttle'
   direction: 'later' | 'earlier' | 'faster' | 'slower'
   magnitude: number
   timeLostS: number
+}
+
+/** Riga della tabella curva-per-curva dell'ultimo giro (PIP-258). */
+export interface CoachCornerRow {
+  corner_id: number
+  corner_name: string | null
+  apex_dist_m: number
+  brake_delta_m: number | null
+  vmin_delta_kmh: number
+  throttle_delta_m: number | null
+  time_lost_s: number
 }
 
 export interface CoachVoiceState {
@@ -32,6 +44,7 @@ export interface CoachVoiceState {
   lapsObserved: number
   focus: CoachFocus | null
   lastLapOutcome: 'improved' | 'ok' | 'worse' | null
+  lastLapCorners: CoachCornerRow[]
 }
 
 const METRICS = new Set(['brake_point', 'vmin', 'throttle'])
@@ -50,6 +63,7 @@ export function normalizeCoachState(raw: unknown): CoachVoiceState | null {
     if (Number.isFinite(apex) && apex >= 0 && apex <= 1 && METRICS.has(metric) && DIRECTIONS.has(direction)) {
       focus = {
         cornerId: Number(focusRaw.corner_id) || 0,
+        cornerName: typeof focusRaw.corner_name === 'string' ? focusRaw.corner_name : null,
         apexNormPos: apex,
         metric: metric as CoachFocus['metric'],
         direction: direction as CoachFocus['direction'],
@@ -61,12 +75,26 @@ export function normalizeCoachState(raw: unknown): CoachVoiceState | null {
   const outcome = typeof data.last_lap_outcome === 'string' && OUTCOMES.has(data.last_lap_outcome)
     ? data.last_lap_outcome as CoachVoiceState['lastLapOutcome']
     : null
+  const rows: CoachCornerRow[] = Array.isArray(data.last_lap_corners)
+    ? (data.last_lap_corners as Record<string, unknown>[])
+        .filter(row => row && typeof row === 'object' && Number.isFinite(Number(row.corner_id)))
+        .map(row => ({
+          corner_id: Number(row.corner_id),
+          corner_name: typeof row.corner_name === 'string' ? row.corner_name : null,
+          apex_dist_m: Number(row.apex_dist_m) || 0,
+          brake_delta_m: Number.isFinite(Number(row.brake_delta_m)) ? Number(row.brake_delta_m) : null,
+          vmin_delta_kmh: Number(row.vmin_delta_kmh) || 0,
+          throttle_delta_m: Number.isFinite(Number(row.throttle_delta_m)) ? Number(row.throttle_delta_m) : null,
+          time_lost_s: Number(row.time_lost_s) || 0,
+        }))
+    : []
   return {
     track: typeof data.track === 'string' ? data.track : '',
     car: typeof data.car === 'string' ? data.car : '',
     lapsObserved: Number(data.laps_observed) || 0,
     focus,
     lastLapOutcome: outcome,
+    lastLapCorners: rows,
   }
 }
 

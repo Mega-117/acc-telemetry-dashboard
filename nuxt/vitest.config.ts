@@ -43,6 +43,7 @@ export default defineConfig({
         'app/services/sync/ownerDataRepairService.ts',
         'app/services/sync/sessionUploadService.ts',
         'app/services/sync/syncTriggerPolicy.ts',
+        'app/services/telemetry/lapTraceChart.ts',
         'app/services/telemetry/raceFuelClassification.ts',
         'app/services/telemetry/sessionMergeLogic.ts',
         'app/services/telemetry/theoreticalTimesCalculator.ts',

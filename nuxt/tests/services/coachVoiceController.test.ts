@@ -15,6 +15,7 @@ import type { TrackVoiceReference } from '~/services/spotter/trackVoiceReference
 
 const FOCUS: CoachFocus = {
   cornerId: 3,
+  cornerName: 'Bruxelles',
   apexNormPos: 0.42,
   metric: 'brake_point',
   direction: 'later',
