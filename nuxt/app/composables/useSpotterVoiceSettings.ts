@@ -20,7 +20,14 @@ const STORAGE_KEYS = {
   coachEnabled: 'acc.spotter.trainingCoach.enabled',
   referenceSessionModes: 'acc.trackVoiceReferences.sessionModes',
   lapTimeSessionModes: 'acc.spotter.trainingCoach.sessionModes',
+  adaptiveCoachEnabled: 'acc.adaptiveCoach.enabled',
+  adaptiveCoachSessionModes: 'acc.adaptiveCoach.sessionModes',
+  adaptiveCoachMode: 'acc.adaptiveCoach.mode',
 }
+
+/** PIP-260: 'focus' = una curva alla volta (default), 'all' = ogni curva
+ * con errore persistente parla sul proprio marker. */
+export type AdaptiveCoachMode = 'focus' | 'all'
 
 const SETTINGS_CHANGED_EVENT = 'acc-spotter-voice-settings-change'
 
@@ -29,6 +36,9 @@ const referencesEnabled = ref(false)
 const coachEnabled = ref(false)
 const referenceSessionModes = ref<SpotterSessionMode[]>([...DEFAULT_SPOTTER_SESSION_MODES])
 const lapTimeSessionModes = ref<SpotterSessionMode[]>([...DEFAULT_SPOTTER_SESSION_MODES])
+const adaptiveCoachEnabled = ref(false)
+const adaptiveCoachSessionModes = ref<SpotterSessionMode[]>([...DEFAULT_SPOTTER_SESSION_MODES])
+const adaptiveCoachMode = ref<AdaptiveCoachMode>('focus')
 const loaded = ref(false)
 
 function resolveVoiceId(value: unknown): SpotterVoiceId {
@@ -48,6 +58,10 @@ function readSettings() {
   coachEnabled.value = coachRaw === null ? true : coachRaw === '1'
   referenceSessionModes.value = normalizeSpotterSessionModes(window.localStorage.getItem(STORAGE_KEYS.referenceSessionModes))
   lapTimeSessionModes.value = normalizeSpotterSessionModes(window.localStorage.getItem(STORAGE_KEYS.lapTimeSessionModes))
+  const adaptiveRaw = window.localStorage.getItem(STORAGE_KEYS.adaptiveCoachEnabled)
+  adaptiveCoachEnabled.value = adaptiveRaw === null ? true : adaptiveRaw === '1'
+  adaptiveCoachSessionModes.value = normalizeSpotterSessionModes(window.localStorage.getItem(STORAGE_KEYS.adaptiveCoachSessionModes))
+  adaptiveCoachMode.value = window.localStorage.getItem(STORAGE_KEYS.adaptiveCoachMode) === 'all' ? 'all' : 'focus'
   loaded.value = true
 }
 
@@ -94,6 +108,29 @@ function toggleReferenceSessionMode(mode: SpotterSessionMode) {
   setReferenceSessionModes(toggleSpotterSessionMode(referenceSessionModes.value, mode))
 }
 
+function setAdaptiveCoachEnabled(enabled: boolean) {
+  adaptiveCoachEnabled.value = enabled
+  writeSetting(STORAGE_KEYS.adaptiveCoachEnabled, enabled ? '1' : '0')
+}
+
+function toggleAdaptiveCoach() {
+  setAdaptiveCoachEnabled(!adaptiveCoachEnabled.value)
+}
+
+function setAdaptiveCoachSessionModes(modes: SpotterSessionMode[]) {
+  adaptiveCoachSessionModes.value = normalizeSpotterSessionModes(modes)
+  writeSetting(STORAGE_KEYS.adaptiveCoachSessionModes, serializeSpotterSessionModes(adaptiveCoachSessionModes.value))
+}
+
+function toggleAdaptiveCoachSessionMode(mode: SpotterSessionMode) {
+  setAdaptiveCoachSessionModes(toggleSpotterSessionMode(adaptiveCoachSessionModes.value, mode))
+}
+
+function setAdaptiveCoachMode(mode: AdaptiveCoachMode) {
+  adaptiveCoachMode.value = mode === 'all' ? 'all' : 'focus'
+  writeSetting(STORAGE_KEYS.adaptiveCoachMode, adaptiveCoachMode.value)
+}
+
 function setLapTimeSessionModes(modes: SpotterSessionMode[]) {
   lapTimeSessionModes.value = normalizeSpotterSessionModes(modes)
   writeSetting(STORAGE_KEYS.lapTimeSessionModes, serializeSpotterSessionModes(lapTimeSessionModes.value))
@@ -132,6 +169,9 @@ export function useSpotterVoiceSettings() {
     coachEnabled,
     referenceSessionModes,
     lapTimeSessionModes,
+    adaptiveCoachEnabled,
+    adaptiveCoachSessionModes,
+    adaptiveCoachMode,
     load: readSettings,
     selectVoice,
     setReferencesEnabled,
@@ -142,5 +182,10 @@ export function useSpotterVoiceSettings() {
     toggleReferenceSessionMode,
     setLapTimeSessionModes,
     toggleLapTimeSessionMode,
+    setAdaptiveCoachEnabled,
+    toggleAdaptiveCoach,
+    setAdaptiveCoachSessionModes,
+    toggleAdaptiveCoachSessionMode,
+    setAdaptiveCoachMode,
   }
 }

@@ -29,6 +29,7 @@ import {
   createPostCornerState,
   createPreCornerState,
   resolveCoachOverride,
+  resolveCoachOverrides,
 } from '~/services/spotter/coachVoiceController'
 import { useCoachStatePoller } from '~/composables/useCoachStatePoller'
 
@@ -46,6 +47,9 @@ const {
   coachEnabled: lapTimeAnnouncementsEnabled,
   referenceSessionModes,
   lapTimeSessionModes,
+  adaptiveCoachEnabled,
+  adaptiveCoachSessionModes,
+  adaptiveCoachMode,
   load: loadSpotterVoiceSettings,
 } = useSpotterVoiceSettings()
 const { canEnterApp } = useFirebaseAuth()
@@ -67,14 +71,29 @@ function getRuntimeApi(): any | null {
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getRuntimeApi)
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getRuntimeApi)
 // PIP-256: stato coach adattivo; attivo solo se pista coach = pista corrente
+// e se la voce dedicata "Feedback coach" lo consente (PIP-260)
 const { coachState, startCoachStatePolling, stopCoachStatePolling } = useCoachStatePoller(getRuntimeApi)
 let postCornerState = createPostCornerState()
 let preCornerState = createPreCornerState()
-const activeCoachFocus = computed(() => {
+const coachAllowedForSession = computed(() => isSpotterFeatureAllowed(
+  adaptiveCoachEnabled.value,
+  adaptiveCoachSessionModes.value,
+  fastState.value.sessionType,
+))
+const coachTrackMatches = computed(() => {
   const state = coachState.value
-  if (!state?.focus) return null
-  if (normalizeTrackName(state.track) !== normalizeTrackName(liveLap.value.track)) return null
-  return state.focus
+  return !!state && normalizeTrackName(state.track) === normalizeTrackName(liveLap.value.track)
+})
+const activeCoachFocus = computed(() => {
+  if (!coachAllowedForSession.value || !coachTrackMatches.value) return null
+  return coachState.value?.focus ?? null
+})
+// PIP-260: in modalita' "tutte le curve" ogni verdetto persistente parla sul
+// proprio marker; in modalita' "focus" solo la curva-focus
+const activeCoachAdvices = computed(() => {
+  if (!coachAllowedForSession.value || !coachTrackMatches.value) return []
+  if (adaptiveCoachMode.value === 'all') return coachState.value?.cornersAdvice ?? []
+  return activeCoachFocus.value ? [activeCoachFocus.value] : []
 })
 const referencesAllowedForSession = computed(() => isSpotterFeatureAllowed(
   referencesEnabled.value,
@@ -168,16 +187,18 @@ function tickTrackVoiceReferences() {
     references: trackVoiceReferences.value.filter(point => normalizeTrackName(point.track) === track),
   })
   trackVoiceReferenceRuntimeState.value = outcome.state
-  // PIP-256: sul marker della curva-focus suona la correzione coach al posto
-  // del riferimento standard; tutte le altre curve restano invariate.
-  const coachOverride = resolveCoachOverride(
-    activeCoachFocus.value,
+  // PIP-256/260: sui marker delle curve con verdetto suona la correzione
+  // coach al posto del riferimento standard (una curva in modalita' focus,
+  // tutte in modalita' "tutte le curve"); il resto e' invariato.
+  const coachOverrides = resolveCoachOverrides(
+    activeCoachAdvices.value,
     trackVoiceReferences.value.filter(point => normalizeTrackName(point.track) === track),
     selectedVoice.value,
   )
   for (const reference of outcome.toAnnounce) {
     if (!reference.audio_path) continue
-    if (coachOverride && reference.id === coachOverride.referenceId) {
+    const coachOverride = coachOverrides.get(reference.id)
+    if (coachOverride) {
       enqueueAudioPathWithFallback(coachOverride.correctionPath, coachOverride.fallbackPath)
       if (import.meta.dev) console.debug('[spotter-audio-runtime] correzione coach', reference.label || reference.id)
       continue
@@ -187,11 +208,16 @@ function tickTrackVoiceReferences() {
   }
   // Fallback pre-curva senza marker (QA 2026-07-20): se la curva-focus non
   // ha nessun marker in finestra, la correzione suona su base posizionale.
+  const focusMarkerOverride = resolveCoachOverride(
+    activeCoachFocus.value,
+    trackVoiceReferences.value.filter(point => normalizeTrackName(point.track) === track),
+    selectedVoice.value,
+  )
   const preCorner = advancePreCorner(preCornerState, {
     position: currentPosition,
     focus: activeCoachFocus.value,
     voice: selectedVoice.value,
-    hasMarkerOverride: coachOverride !== null,
+    hasMarkerOverride: focusMarkerOverride !== null,
   })
   preCornerState = preCorner.state
   if (preCorner.path) {

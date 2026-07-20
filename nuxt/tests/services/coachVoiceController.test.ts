@@ -85,6 +85,29 @@ describe('frasi coach', () => {
   })
 })
 
+describe('resolveCoachOverrides (modalità "tutte le curve", PIP-260)', () => {
+  it('un override per verdetto, marker deduplicati (vince chi perde di più)', async () => {
+    const { resolveCoachOverrides, normalizeCoachState, COACH_STATE_SCHEMA: SCHEMA } = await import('~/services/spotter/coachVoiceController')
+    const state = normalizeCoachState({
+      schema: SCHEMA,
+      track: 'spa', car: 'x',
+      corners_advice: [
+        { corner_id: 3, apex_norm_pos: 0.42, metric: 'brake_point', direction: 'later', magnitude: 25, time_lost_s: 0.3 },
+        { corner_id: 8, apex_norm_pos: 0.96, metric: 'vmin', direction: 'faster', magnitude: 7, time_lost_s: 0.2 },
+        { corner_id: 4, apex_norm_pos: 0.44, metric: 'throttle', direction: 'earlier', magnitude: 15, time_lost_s: 0.1 },
+      ],
+    })
+    expect(state?.cornersAdvice).toHaveLength(3)
+    const references = [makeReference('c3', 0.40), makeReference('c8', 0.93)]
+    const overrides = resolveCoachOverrides(state!.cornersAdvice, references, 'if_sara')
+    // c3 prende il verdetto C3; C4 vorrebbe lo stesso marker c3 ma è già
+    // occupato dal verdetto più costoso; c8 prende C8
+    expect(overrides.size).toBe(2)
+    expect(overrides.get('c3')?.correctionPath).toContain('brake_point_later_small')
+    expect(overrides.get('c8')?.correctionPath).toContain('vmin_faster_small')
+  })
+})
+
 describe('resolveCoachOverride', () => {
   it('sceglie il marker piu vicino a monte dell apex della curva-focus', () => {
     const references = [

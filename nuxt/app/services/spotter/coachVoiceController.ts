@@ -61,33 +61,38 @@ export interface CoachVoiceState {
   focus: CoachFocus | null
   lastLapOutcome: 'improved' | 'ok' | 'worse' | null
   lastLapCorners: CoachCornerRow[]
+  /** PIP-260 modalita' "tutte le curve": ogni curva con errore persistente. */
+  cornersAdvice: CoachFocus[]
 }
 
 const METRICS = new Set(['brake_point', 'vmin', 'throttle', 'lift'])
 const DIRECTIONS = new Set(['later', 'earlier', 'faster', 'slower', 'flat'])
 const OUTCOMES = new Set(['improved', 'ok', 'worse'])
 
+function normalizeAdvice(raw: unknown): CoachFocus | null {
+  const advice = raw as Record<string, unknown> | null
+  if (!advice || typeof advice !== 'object') return null
+  const apex = Number(advice.apex_norm_pos)
+  const metric = String(advice.metric)
+  const direction = String(advice.direction)
+  if (!Number.isFinite(apex) || apex < 0 || apex > 1 || !METRICS.has(metric) || !DIRECTIONS.has(direction)) {
+    return null
+  }
+  return {
+    cornerId: Number(advice.corner_id) || 0,
+    cornerName: typeof advice.corner_name === 'string' ? advice.corner_name : null,
+    apexNormPos: apex,
+    metric: metric as CoachFocus['metric'],
+    direction: direction as CoachFocus['direction'],
+    magnitude: Number(advice.magnitude) || 0,
+    timeLostS: Number(advice.time_lost_s) || 0,
+  }
+}
+
 export function normalizeCoachState(raw: unknown): CoachVoiceState | null {
   const data = raw as Record<string, unknown> | null
   if (!data || typeof data !== 'object' || data.schema !== COACH_STATE_SCHEMA) return null
-  const focusRaw = data.focus as Record<string, unknown> | null
-  let focus: CoachFocus | null = null
-  if (focusRaw && typeof focusRaw === 'object') {
-    const apex = Number(focusRaw.apex_norm_pos)
-    const metric = String(focusRaw.metric)
-    const direction = String(focusRaw.direction)
-    if (Number.isFinite(apex) && apex >= 0 && apex <= 1 && METRICS.has(metric) && DIRECTIONS.has(direction)) {
-      focus = {
-        cornerId: Number(focusRaw.corner_id) || 0,
-        cornerName: typeof focusRaw.corner_name === 'string' ? focusRaw.corner_name : null,
-        apexNormPos: apex,
-        metric: metric as CoachFocus['metric'],
-        direction: direction as CoachFocus['direction'],
-        magnitude: Number(focusRaw.magnitude) || 0,
-        timeLostS: Number(focusRaw.time_lost_s) || 0,
-      }
-    }
-  }
+  const focus = normalizeAdvice(data.focus)
   const outcome = typeof data.last_lap_outcome === 'string' && OUTCOMES.has(data.last_lap_outcome)
     ? data.last_lap_outcome as CoachVoiceState['lastLapOutcome']
     : null
@@ -104,6 +109,9 @@ export function normalizeCoachState(raw: unknown): CoachVoiceState | null {
           time_lost_s: Number(row.time_lost_s) || 0,
         }))
     : []
+  const cornersAdvice = Array.isArray(data.corners_advice)
+    ? (data.corners_advice as unknown[]).map(normalizeAdvice).filter((a): a is CoachFocus => a !== null)
+    : []
   return {
     track: typeof data.track === 'string' ? data.track : '',
     car: typeof data.car === 'string' ? data.car : '',
@@ -111,7 +119,27 @@ export function normalizeCoachState(raw: unknown): CoachVoiceState | null {
     focus,
     lastLapOutcome: outcome,
     lastLapCorners: rows,
+    cornersAdvice,
   }
+}
+
+/** PIP-260 "tutte le curve": un override per ogni verdetto che trova il suo
+ * marker; a ogni marker al massimo una correzione (vince il verdetto che
+ * perde piu' tempo, cioe' il primo della lista ordinata dal motore). */
+export function resolveCoachOverrides(
+  advices: CoachFocus[],
+  references: TrackVoiceReference[],
+  voice: string,
+  disabledKeys?: ReadonlySet<string>,
+): Map<string, CoachOverride> {
+  const byReference = new Map<string, CoachOverride>()
+  for (const advice of advices) {
+    const override = resolveCoachOverride(advice, references, voice, disabledKeys)
+    if (override && !byReference.has(override.referenceId)) {
+      byReference.set(override.referenceId, override)
+    }
+  }
+  return byReference
 }
 
 // ── Catalogo frasi (contratto con PIP-257: WAV `acc-voice://coach/<key>-<voice>.wav`,

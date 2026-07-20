@@ -7,18 +7,21 @@ const picker = readFileSync(resolve(process.cwd(), 'app/components/spotter/Sessi
 const runtime = readFileSync(resolve(process.cwd(), 'app/pages/spotter-audio-runtime.vue'), 'utf8')
 
 describe('Spotter session settings wiring', () => {
-  it('uses the same accessible multi-select picker for references and lap alerts', () => {
-    expect(page.match(/<SessionModePicker/g)).toHaveLength(2)
+  it('uses the same accessible multi-select picker for references, coach and lap alerts', () => {
+    // PIP-260: terzo picker per la voce dedicata "Feedback coach"
+    expect(page.match(/<SessionModePicker/g)).toHaveLength(3)
     expect(page).toContain('Sessioni abilitate per i riferimenti pista')
+    expect(page).toContain('Sessioni abilitate per il feedback coach')
     expect(page).toContain('Sessioni abilitate per gli avvisi giro')
     expect(picker).toContain('role="group"')
     expect(picker).toContain(':aria-pressed="modelValue.includes(mode)"')
     expect(picker).toContain("practice: 'Prove libere'")
   })
 
-  it('gates both audio sources through the shared session policy', () => {
+  it('gates all audio sources through the shared session policy', () => {
     expect(runtime).toContain('referencesAllowedForSession')
     expect(runtime).toContain('lapTimesAllowedForSession')
+    expect(runtime).toContain('coachAllowedForSession')
     expect(runtime).toContain('isSpotterFeatureAllowed(')
     expect(runtime).toContain('fastState.value.sessionType')
   })

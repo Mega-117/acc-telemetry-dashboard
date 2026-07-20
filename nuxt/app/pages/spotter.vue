@@ -37,6 +37,12 @@ const {
   voiceLabel,
   referencesEnabled,
   coachEnabled,
+  adaptiveCoachEnabled,
+  adaptiveCoachSessionModes,
+  adaptiveCoachMode,
+  toggleAdaptiveCoach,
+  setAdaptiveCoachSessionModes,
+  setAdaptiveCoachMode,
   referenceSessionModes,
   lapTimeSessionModes,
   selectVoice,
@@ -151,6 +157,23 @@ onMounted(() => {
                 :model-value="referenceSessionModes"
                 label="Sessioni abilitate per i riferimenti pista"
                 @update:model-value="setReferenceSessionModes"
+              />
+            </article>
+
+            <article class="setting-block">
+              <span>Feedback coach</span>
+              <strong>{{ adaptiveCoachEnabled ? 'Attivo' : 'Disattivo' }}</strong>
+              <button type="button" class="toggle-button" :class="{ 'is-active': adaptiveCoachEnabled }" @click="toggleAdaptiveCoach">
+                {{ adaptiveCoachEnabled ? 'Disattiva feedback coach' : 'Attiva feedback coach' }}
+              </button>
+              <div class="segmented-control" aria-label="Modalità feedback coach">
+                <button type="button" :class="{ 'is-active': adaptiveCoachMode === 'focus' }" :disabled="!adaptiveCoachEnabled" @click="setAdaptiveCoachMode('focus')">Solo curva focus</button>
+                <button type="button" :class="{ 'is-active': adaptiveCoachMode === 'all' }" :disabled="!adaptiveCoachEnabled" @click="setAdaptiveCoachMode('all')">Tutte le curve</button>
+              </div>
+              <SessionModePicker
+                :model-value="adaptiveCoachSessionModes"
+                label="Sessioni abilitate per il feedback coach"
+                @update:model-value="setAdaptiveCoachSessionModes"
               />
             </article>
 
