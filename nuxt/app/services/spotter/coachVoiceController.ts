@@ -150,8 +150,10 @@ export interface CoachOverride {
 
 /**
  * Sceglie il marker esistente che "possiede" la curva-focus: il piu' vicino
- * all'apex nella finestra a monte. Nessun marker in finestra = nessun
- * override (la correzione non ha un posto naturale dove suonare).
+ * all'apex nella finestra a monte. La finestra scavalca il traguardo (wrap):
+ * il marker de La Source sta PRIMA della linea per parlare in tempo (QA
+ * pista 2026-07-20). Nessun marker in finestra = nessun override (ci pensa
+ * il fallback posizionale advancePreCorner).
  */
 export function resolveCoachOverride(
   focus: CoachFocus | null,
@@ -166,8 +168,8 @@ export function resolveCoachOverride(
   for (const reference of references) {
     const position = Number(reference.normalized_car_position)
     if (!Number.isFinite(position)) continue
-    const gap = focus.apexNormPos - position
-    if (gap >= 0 && gap <= bestGap) {
+    const gap = ((focus.apexNormPos - position) % 1 + 1) % 1  // wrap sul traguardo
+    if (gap <= bestGap) {
       best = reference
       bestGap = gap
     }
@@ -178,6 +180,58 @@ export function resolveCoachOverride(
     correctionPath: coachPhrasePath(coachPhraseKey(focus), voice),
     fallbackPath: best.audio_path,
   }
+}
+
+// ── Fallback pre-curva senza marker ──────────────────────────────────────────
+/** Anticipo del fallback posizionale (~250m a Spa): usato SOLO quando la
+ * curva-focus non ha nessun marker in finestra. */
+export const PRE_CORNER_LEAD = 0.035
+
+export interface PreCornerState {
+  lastPosition: number | null
+  firedThisLap: boolean
+}
+
+export function createPreCornerState(): PreCornerState {
+  return { lastPosition: null, firedThisLap: false }
+}
+
+export interface PreCornerTickInput {
+  position: number | null
+  focus: CoachFocus | null
+  voice: string
+  /** true quando resolveCoachOverride ha gia' un marker: il fallback tace. */
+  hasMarkerOverride: boolean
+  disabledKeys?: ReadonlySet<string>
+}
+
+export function advancePreCorner(
+  state: PreCornerState,
+  input: PreCornerTickInput,
+): { state: PreCornerState, path: string | null } {
+  const { position, focus, voice, hasMarkerOverride } = input
+  if (position === null || !Number.isFinite(position)) {
+    return { state, path: null }
+  }
+  const next: PreCornerState = { ...state }
+  if (next.lastPosition !== null && next.lastPosition - position > 0.5) {
+    next.firedThisLap = false  // wrap del traguardo: nuovo giro
+  }
+  const previous = next.lastPosition
+  next.lastPosition = position
+  if (!focus || hasMarkerOverride || next.firedThisLap || previous === null) {
+    return { state: next, path: null }
+  }
+  const key = coachPhraseKey(focus)
+  if (!isCoachPhraseEnabled(key, input.disabledKeys)) {
+    return { state: next, path: null }
+  }
+  const trigger = ((focus.apexNormPos - PRE_CORNER_LEAD) % 1 + 1) % 1
+  if (previous < trigger && position >= trigger) {
+    next.firedThisLap = true
+    return { state: next, path: coachPhrasePath(key, voice) }
+  }
+  return { state: next, path: null }
 }
 
 // ── Post-curva: un esito per giro all'uscita della curva-focus ───────────────

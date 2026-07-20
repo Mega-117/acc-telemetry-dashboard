@@ -25,7 +25,9 @@ import {
 } from '~/services/spotter/spotterSessionPolicy'
 import {
   advancePostCorner,
+  advancePreCorner,
   createPostCornerState,
+  createPreCornerState,
   resolveCoachOverride,
 } from '~/services/spotter/coachVoiceController'
 import { useCoachStatePoller } from '~/composables/useCoachStatePoller'
@@ -67,6 +69,7 @@ const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStateP
 // PIP-256: stato coach adattivo; attivo solo se pista coach = pista corrente
 const { coachState, startCoachStatePolling, stopCoachStatePolling } = useCoachStatePoller(getRuntimeApi)
 let postCornerState = createPostCornerState()
+let preCornerState = createPreCornerState()
 const activeCoachFocus = computed(() => {
   const state = coachState.value
   if (!state?.focus) return null
@@ -140,6 +143,7 @@ async function loadTrackVoiceReferences() {
 function resetTrackVoiceReferenceLapState() {
   trackVoiceReferenceRuntimeState.value = createTrackVoiceReferenceRuntimeState()
   postCornerState = createPostCornerState()
+  preCornerState = createPreCornerState()
 }
 
 function disarmTrackVoiceReferences() {
@@ -180,6 +184,19 @@ function tickTrackVoiceReferences() {
     }
     enqueueAudioPath(reference.audio_path)
     if (import.meta.dev) console.debug('[spotter-audio-runtime] riferimento vocale', reference.label || reference.id)
+  }
+  // Fallback pre-curva senza marker (QA 2026-07-20): se la curva-focus non
+  // ha nessun marker in finestra, la correzione suona su base posizionale.
+  const preCorner = advancePreCorner(preCornerState, {
+    position: currentPosition,
+    focus: activeCoachFocus.value,
+    voice: selectedVoice.value,
+    hasMarkerOverride: coachOverride !== null,
+  })
+  preCornerState = preCorner.state
+  if (preCorner.path) {
+    enqueueAudioPath(preCorner.path)
+    if (import.meta.dev) console.debug('[spotter-audio-runtime] correzione coach (fallback posizionale)')
   }
   // PIP-256: esito post-curva, una sola volta per giro, all'uscita del focus.
   const postCorner = advancePostCorner(postCornerState, {

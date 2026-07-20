@@ -11,9 +11,12 @@ import fixture from '../fixtures/spa_296_lap_positions.json'
 import coachScript from '../../app/config/coachVoiceScript.json'
 import {
   POST_CORNER_OFFSET,
+  PRE_CORNER_LEAD,
   advancePostCorner,
+  advancePreCorner,
   coachPhraseKey,
   createPostCornerState,
+  createPreCornerState,
   type CoachFocus,
   type CoachPhraseKey,
 } from '~/services/spotter/coachVoiceController'
@@ -65,6 +68,38 @@ describe('giro virtuale reale a Spa (posizioni vere a 250ms)', () => {
       // suona entro pochi metri dal punto d'uscita previsto
       expect(event.position).toBeGreaterThanOrEqual(trigger)
       expect(event.position).toBeLessThan(trigger + 0.01)
+    }
+  })
+
+  it('fallback pre-curva senza marker: una correzione a giro, ~250m prima dell\'apex', () => {
+    let state = createPreCornerState()
+    const heard: number[] = []
+    for (let lap = 0; lap < 2; lap++) {
+      for (const position of positions) {
+        const step = advancePreCorner(state, {
+          position,
+          focus: FOCUS_BRUXELLES,
+          voice: 'if_sara',
+          hasMarkerOverride: false,
+        })
+        state = step.state
+        if (step.path) heard.push(position)
+      }
+    }
+    expect(heard).toHaveLength(2)
+    const trigger = FOCUS_BRUXELLES.apexNormPos - PRE_CORNER_LEAD
+    for (const position of heard) {
+      expect(position).toBeGreaterThanOrEqual(trigger)
+      expect(position).toBeLessThan(trigger + 0.01)
+    }
+    // con un marker che possiede gia' la curva, il fallback tace
+    let silent = createPreCornerState()
+    for (const position of positions) {
+      const step = advancePreCorner(silent, {
+        position, focus: FOCUS_BRUXELLES, voice: 'if_sara', hasMarkerOverride: true,
+      })
+      silent = step.state
+      expect(step.path).toBeNull()
     }
   })
 

@@ -103,6 +103,18 @@ describe('resolveCoachOverride', () => {
     expect(resolveCoachOverride(null, [makeReference('giusto', 0.40)], 'if_sara')).toBeNull()
   })
 
+  it('la finestra scavalca il traguardo: marker prima della linea aggancia curva 1', () => {
+    // QA pista 2026-07-20: il marker de La Source sta a 0.9966 (prima del
+    // traguardo, per parlare in tempo); l'apex e' a 0.0556
+    const laSource: CoachFocus = { ...FOCUS, cornerId: 1, cornerName: 'La Source', apexNormPos: 0.0556 }
+    const references = [
+      makeReference('bus_stop', 0.9210),
+      makeReference('la_source', 0.9966),
+    ]
+    const override = resolveCoachOverride(laSource, references, 'im_nicola')
+    expect(override?.referenceId).toBe('la_source')
+  })
+
   it('frase disattivata ("Usa in pista" off): niente override ne\' esito', () => {
     const disabledCorrection = new Set(['brake_point_later_small'])
     expect(resolveCoachOverride(FOCUS, [makeReference('giusto', 0.40)], 'if_sara', disabledCorrection)).toBeNull()
