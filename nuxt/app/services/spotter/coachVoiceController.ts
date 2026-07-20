@@ -9,6 +9,22 @@
  */
 
 import type { TrackVoiceReference } from '~/services/spotter/trackVoiceReferences'
+import coachVoiceScriptConfig from '~/config/coachVoiceScript.json'
+
+/** Frasi disattivate dal Voice Lab ("Usa in pista" off): il coach ripiega
+ * sul riferimento standard (pre-curva) o tace (esito post-curva). */
+const DISABLED_PHRASE_KEYS: ReadonlySet<string> = new Set(
+  (coachVoiceScriptConfig.phrases as { key: string, enabled?: boolean }[])
+    .filter(phrase => phrase.enabled === false)
+    .map(phrase => phrase.key),
+)
+
+export function isCoachPhraseEnabled(
+  key: string,
+  disabledKeys: ReadonlySet<string> = DISABLED_PHRASE_KEYS,
+): boolean {
+  return !disabledKeys.has(key)
+}
 
 export const COACH_STATE_SCHEMA = 'acc.coach_state.v1'
 
@@ -140,8 +156,10 @@ export function resolveCoachOverride(
   focus: CoachFocus | null,
   references: TrackVoiceReference[],
   voice: string,
+  disabledKeys?: ReadonlySet<string>,
 ): CoachOverride | null {
   if (!focus) return null
+  if (!isCoachPhraseEnabled(coachPhraseKey(focus), disabledKeys)) return null
   let best: TrackVoiceReference | null = null
   let bestGap = PRE_CORNER_WINDOW
   for (const reference of references) {
@@ -176,6 +194,7 @@ export interface PostCornerTickInput {
   focus: CoachFocus | null
   outcome: CoachVoiceState['lastLapOutcome']
   voice: string
+  disabledKeys?: ReadonlySet<string>
 }
 
 export function advancePostCorner(
@@ -199,7 +218,9 @@ export function advancePostCorner(
   const trigger = Math.min(0.999, focus.apexNormPos + POST_CORNER_OFFSET)
   if (previous < trigger && position >= trigger) {
     next.firedThisLap = true
-    return { state: next, path: coachPhrasePath(`outcome_${outcome}` as CoachPhraseKey, voice) }
+    const key = `outcome_${outcome}` as CoachPhraseKey
+    if (!isCoachPhraseEnabled(key, input.disabledKeys)) return { state: next, path: null }
+    return { state: next, path: coachPhrasePath(key, voice) }
   }
   return { state: next, path: null }
 }

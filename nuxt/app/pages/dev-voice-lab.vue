@@ -114,7 +114,11 @@ const showScenarios = ref(false)
 const pendingRegenKeys = ref<string[]>([])
 const batchBusy = ref(false)
 const batchStatus = ref('')
-const voiceLabSection = ref<'script' | 'references'>(route.query.section === 'references' ? 'references' : 'script')
+const voiceLabSection = ref<'script' | 'references' | 'coach'>(
+  route.query.section === 'references' ? 'references'
+  : route.query.section === 'coach' ? 'coach'
+  : 'script',
+)
 
 // Stato per riga (PIP-138): una sola fonte tipizzata invece di stringhe sparse.
 type RowState = 'idle' | 'saving' | 'generating' | 'done' | 'error'
@@ -792,6 +796,132 @@ async function synthesize(text: string, voice: string, speed: number): Promise<B
   return await voiceLabRuntime.synthesize(text, voice, speed)
 }
 
+// ─── Coach (PIP-259): frasi del coach adattivo ───────────────────────────────
+// Le chiavi sono un contratto col motore (PIP-255/256): da UI si modificano i
+// testi (minimo 3 parole, regola Kokoro/PIP-257), mai l'elenco delle chiavi.
+interface CoachLabPhrase { key: string; text: string; speed?: number; enabled?: boolean }
+interface CoachLabScript { defaultSpeed?: number; voices?: string[]; phrases: CoachLabPhrase[]; [extra: string]: unknown }
+
+const COACH_MIN_WORDS = 3
+const coachScript = ref<CoachLabScript | null>(null)
+const coachError = ref('')
+const coachStatus = ref('')
+const coachDirty = ref(false)
+const coachRowTasks = ref<Record<string, { state: 'saving' | 'generating' | 'done' | 'error'; message: string }>>({})
+const coachBatchBusy = ref(false)
+const coachAudioBust = ref(0)
+const coachVoiceId = ref<SpotterVoiceId>('if_sara')
+let coachAudioEl: HTMLAudioElement | null = null
+
+function coachWordCount(text: string): number {
+  return String(text ?? '').replace(/,/g, ' ').split(/\s+/).filter(Boolean).length
+}
+
+function playCoachWav(key: string, voice: string) {
+  if (coachAudioEl) coachAudioEl.pause()
+  const bust = coachAudioBust.value ? `?v=${coachAudioBust.value}` : ''
+  coachAudioEl = new Audio(`/voice/coach/${key}-${voice}.wav${bust}`)
+  void coachAudioEl.play().catch(() => {
+    coachStatus.value = `WAV non trovato per ${key} (${voice}): rigenera la frase.`
+  })
+}
+
+async function loadCoachScript() {
+  coachError.value = ''
+  try {
+    coachScript.value = await $fetch<CoachLabScript>('/api/dev/coach-voice-script')
+    coachDirty.value = false
+  } catch {
+    coachScript.value = null
+    coachError.value = 'Scheda disponibile solo in sviluppo: in release le frasi si modificano in coachVoiceScript.json e si rigenerano con lo script dedicato (PIP-257).'
+  }
+}
+
+async function saveAndRegenerateCoachPhrase(phrase: CoachLabPhrase, options: { toast?: boolean } = {}) {
+  if (serverState.value !== 'online' || !coachScript.value) return false
+  const shouldToast = options.toast ?? true
+  const words = coachWordCount(phrase.text)
+  if (words < COACH_MIN_WORDS) {
+    coachRowTasks.value[phrase.key] = { state: 'error', message: `${words} parole: minimo ${COACH_MIN_WORDS} (regola Kokoro)` }
+    return false
+  }
+  kokoroLifecycle.beginWork()
+  try {
+    coachRowTasks.value[phrase.key] = { state: 'saving', message: 'Salvo copione coach...' }
+    await $fetch('/api/dev/coach-voice-script', { method: 'POST', body: coachScript.value })
+    coachDirty.value = false
+    const speed = phrase.speed ?? coachScript.value.defaultSpeed ?? 1.15
+    const voices = coachScript.value.voices ?? KOKORO_ITALIAN_VOICE_IDS
+    for (const voice of voices) {
+      coachRowTasks.value[phrase.key] = { state: 'generating', message: `Rigenero ${voice}...` }
+      const blob = await synthesize(phrase.text.trim(), voice, speed)
+      await $fetch('/api/dev/coach-voice-wav', {
+        method: 'POST',
+        body: { filename: `${phrase.key}-${voice}.wav`, dataBase64: await blobToBase64(blob) },
+      })
+    }
+    coachAudioBust.value = Date.now()
+    coachRowTasks.value[phrase.key] = { state: 'done', message: 'WAV aggiornato ✓' }
+    if (shouldToast) pushToast(`${phrase.key}: WAV rigenerato ✓`, 'success')
+    handleKokoroWorkSettled()
+    kokoroLifecycle.endWork()
+    return true
+  } catch (error: any) {
+    const msg = error?.data?.statusMessage || error?.message || 'sintesi fallita'
+    coachRowTasks.value[phrase.key] = { state: 'error', message: `Errore: ${msg}` }
+    if (shouldToast) pushToast(`${phrase.key}: rigenerazione fallita`, 'error')
+    handleKokoroWorkSettled()
+    kokoroLifecycle.endWork()
+    return false
+  }
+}
+
+function updateCoachPhraseSpeed(phrase: CoachLabPhrase, event: Event) {
+  const value = Number((event.target as HTMLSelectElement).value)
+  if (Number.isFinite(value)) phrase.speed = value
+  coachDirty.value = true
+}
+
+/** Attiva/disattiva la frase in pista: salvataggio immediato (come i
+ * Riferimenti). Se disattivata, il runtime ripiega sul riferimento standard
+ * (pre-curva) o tace (esito). */
+async function toggleCoachPhraseEnabled(phrase: CoachLabPhrase) {
+  phrase.enabled = phrase.enabled === false
+  coachDirty.value = true
+  try {
+    await $fetch('/api/dev/coach-voice-script', { method: 'POST', body: coachScript.value })
+    coachDirty.value = false
+    coachStatus.value = `${phrase.key}: ${phrase.enabled === false ? 'non usata in pista' : 'attiva in pista'}.`
+  } catch (error: any) {
+    coachStatus.value = `Salvataggio fallito: ${error?.data?.statusMessage || error?.message || 'errore'}`
+  }
+}
+
+async function regenerateAllCoachPhrases() {
+  if (serverState.value !== 'online' || coachBatchBusy.value || !coachScript.value) return
+  coachBatchBusy.value = true
+  let ok = 0
+  const phrases = coachScript.value.phrases
+  try {
+    for (let i = 0; i < phrases.length; i++) {
+      coachStatus.value = `Rigenerazione frasi coach: ${i + 1}/${phrases.length}`
+      if (await saveAndRegenerateCoachPhrase(phrases[i]!, { toast: false })) ok += 1
+    }
+    coachStatus.value = `${ok}/${phrases.length} frasi rigenerate`
+    pushToast(
+      ok === phrases.length ? `Frasi coach rigenerate ✓ (${ok})` : `Rigenerate ${ok}/${phrases.length}: controlla le righe in errore`,
+      ok === phrases.length ? 'success' : 'error',
+    )
+  } finally {
+    coachBatchBusy.value = false
+    handleKokoroWorkSettled()
+  }
+}
+
+watch(voiceLabSection, (section) => {
+  if (section === 'coach' && !coachScript.value && !coachError.value) void loadCoachScript()
+}, { immediate: true })
+
 function revokePreviewAudio() {
   if (previewAudioObjectUrl.value) {
     URL.revokeObjectURL(previewAudioObjectUrl.value)
@@ -1063,6 +1193,7 @@ onBeforeUnmount(() => {
       <nav v-if="hasFullVoiceLabAccess" class="lab-section-tabs" aria-label="Voice Lab sezioni">
         <button type="button" :class="{ 'is-active': voiceLabSection === 'script' }" @click="voiceLabSection = 'script'">Copione</button>
         <button type="button" :class="{ 'is-active': voiceLabSection === 'references' }" @click="voiceLabSection = 'references'">Riferimenti</button>
+        <button type="button" :class="{ 'is-active': voiceLabSection === 'coach' }" @click="voiceLabSection = 'coach'">Coach</button>
       </nav>
 
       <section v-if="hasFullVoiceLabAccess && voiceLabSection === 'script'" class="script-editor">
@@ -1162,7 +1293,7 @@ onBeforeUnmount(() => {
         </div>
       </section>
 
-      <section v-else class="reference-editor" data-testid="voice-reference-editor">
+      <section v-else-if="voiceLabSection === 'references'" class="reference-editor" data-testid="voice-reference-editor">
         <div class="panel-head reference-panel-head">
           <div>
             <span class="voice-kicker">Riferimenti frenata</span>
@@ -1262,6 +1393,87 @@ onBeforeUnmount(() => {
 
               <span class="row-status" :class="`row-status--${referenceRowState(entry)}`">{{ referenceTasks[entry.id]?.message || '' }}</span>
               <button type="button" class="reference-listen" :disabled="entry.enabled === false || isSpeaking || !entry.text?.trim() || serverState !== 'online'" @click="playReference(entry)"><span aria-hidden="true">▶</span> Ascolta</button>
+            </footer>
+          </article>
+        </div>
+      </section>
+
+      <section v-else-if="voiceLabSection === 'coach'" class="reference-editor coach-editor" data-testid="coach-voice-editor">
+        <div class="panel-head reference-panel-head">
+          <div>
+            <span class="voice-kicker">Coach adattivo</span>
+            <h2>Coach</h2>
+            <p>
+              Le chiavi sono un contratto col motore: si modificano i testi
+              (minimo {{ COACH_MIN_WORDS }} parole, regola Kokoro), non l'elenco.
+              "Salva + Rigenera" produce sia Sara che Nicola.
+            </p>
+          </div>
+          <div class="play-actions">
+            <button type="button" :class="{ 'is-active': coachVoiceId === 'if_sara' }" :aria-pressed="coachVoiceId === 'if_sara'" :disabled="coachBatchBusy" @click="coachVoiceId = 'if_sara'">Sara</button>
+            <button type="button" :class="{ 'is-active': coachVoiceId === 'im_nicola' }" :aria-pressed="coachVoiceId === 'im_nicola'" :disabled="coachBatchBusy" @click="coachVoiceId = 'im_nicola'">Nicola</button>
+          </div>
+        </div>
+
+        <div class="reference-global-bar">
+          <p class="reference-editor-note">
+            <strong>{{ coachScript?.phrases.length ?? 0 }} frasi</strong>
+            <span>Testo condiviso tra Sara e Nicola · rigenera dopo ogni modifica</span>
+          </p>
+          <div class="reference-global-actions">
+            <button type="button" class="secondary" :disabled="coachBatchBusy" @click="loadCoachScript">Ricarica</button>
+            <button type="button" class="primary" :disabled="coachBatchBusy || serverState !== 'online' || !coachScript" @click="regenerateAllCoachPhrases">
+              {{ coachBatchBusy ? 'Genero...' : 'Rigenera tutte (Sara + Nicola)' }}
+            </button>
+          </div>
+        </div>
+
+        <p v-if="coachStatus" class="status-message status-message--compact">{{ coachStatus }}</p>
+        <p v-if="coachError" class="status-message status-message--compact">{{ coachError }}</p>
+
+        <div v-if="!coachScript" class="empty-state">Copione coach non disponibile.</div>
+        <div v-else class="reference-rows">
+          <article v-for="(phrase, index) in coachScript.phrases" :key="phrase.key" class="reference-row">
+            <header>
+              <span class="step-order">{{ index + 1 }}</span>
+              <div>
+                <strong>{{ phrase.key }}</strong>
+                <small>{{ phrase.enabled === false ? 'non usata in pista' : 'attiva in pista' }}</small>
+              </div>
+              <span class="lap-time-state" :class="{ 'is-ready': coachWordCount(phrase.text) >= COACH_MIN_WORDS }">
+                {{ coachWordCount(phrase.text) < COACH_MIN_WORDS
+                  ? `${coachWordCount(phrase.text)} parole — minimo ${COACH_MIN_WORDS}`
+                  : `${coachWordCount(phrase.text)} parole` }}
+              </span>
+            </header>
+            <label class="reference-copy-field">
+              <span>Frase pronunciata</span>
+              <textarea v-model="phrase.text" :aria-label="`Testo ${phrase.key}`" rows="2" maxlength="280" @input="coachDirty = true" />
+            </label>
+            <footer>
+              <label class="reference-setting">
+                Velocità voce
+                <span class="reference-speed-control">
+                  <select :value="phrase.speed ?? coachScript.defaultSpeed ?? 1.15" :aria-label="`Velocità voce ${phrase.key}`" @change="updateCoachPhraseSpeed(phrase, $event)">
+                    <option v-for="speed in TRACK_VOICE_SPEED_OPTIONS" :key="speed" :value="speed">{{ String(speed).replace('.', ',') }}×</option>
+                  </select>
+                </span>
+              </label>
+
+              <button type="button" class="reference-availability" role="switch" :aria-checked="phrase.enabled !== false" :class="{ 'is-active': phrase.enabled !== false }" :disabled="coachBatchBusy" @click="toggleCoachPhraseEnabled(phrase)">
+                <span class="reference-availability__label">Usa in pista</span>
+                <span class="reference-switch" aria-hidden="true"><i /></span>
+                <strong>{{ phrase.enabled === false ? 'Non attivo' : 'Attivo' }}</strong>
+              </button>
+
+              <button
+                type="button"
+                class="primary"
+                :disabled="serverState !== 'online' || coachBatchBusy || coachWordCount(phrase.text) < COACH_MIN_WORDS"
+                @click="saveAndRegenerateCoachPhrase(phrase)"
+              >Salva + Rigenera</button>
+              <span class="row-status">{{ coachRowTasks[phrase.key]?.message || '' }}</span>
+              <button type="button" class="reference-listen" :disabled="phrase.enabled === false" @click="playCoachWav(phrase.key, coachVoiceId)"><span aria-hidden="true">▶</span> Ascolta</button>
             </footer>
           </article>
         </div>

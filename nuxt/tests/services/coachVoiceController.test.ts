@@ -102,6 +102,22 @@ describe('resolveCoachOverride', () => {
     expect(resolveCoachOverride(FOCUS, [makeReference('lontano', 0.1)], 'if_sara')).toBeNull()
     expect(resolveCoachOverride(null, [makeReference('giusto', 0.40)], 'if_sara')).toBeNull()
   })
+
+  it('frase disattivata ("Usa in pista" off): niente override ne\' esito', () => {
+    const disabledCorrection = new Set(['brake_point_later_small'])
+    expect(resolveCoachOverride(FOCUS, [makeReference('giusto', 0.40)], 'if_sara', disabledCorrection)).toBeNull()
+
+    let state = createPostCornerState()
+    const trigger = FOCUS.apexNormPos + POST_CORNER_OFFSET
+    const input = {
+      focus: FOCUS, outcome: 'improved' as const, voice: 'x',
+      disabledKeys: new Set(['outcome_improved']),
+    }
+    let step = advancePostCorner(state, { ...input, position: trigger - 0.01 })
+    state = step.state
+    step = advancePostCorner(state, { ...input, position: trigger + 0.005 })
+    expect(step.path).toBeNull()
+  })
 })
 
 describe('advancePostCorner', () => {

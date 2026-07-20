@@ -61,6 +61,7 @@ export default defineConfig({
         'server/utils/kokoroRuntimeStatus.ts',
         'server/utils/trackVoicePointMerge.ts',
         'server/utils/voiceScriptNormalize.ts',
+        'server/utils/coachVoiceScriptValidate.ts',
         // ── Phase 3: composables ─────────────────────────────────────────
         'app/composables/useLiveStatePoller.ts',
         'app/composables/useSpotterVoiceSettings.ts',
