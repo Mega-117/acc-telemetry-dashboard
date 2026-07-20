@@ -7,6 +7,7 @@ import { usePublicPath } from '~/composables/usePublicPath'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
+import { playAudioWithWatchdog } from '~/services/audio/audioPlayback'
 import {
   filterPlayableTrackVoiceReferences,
   isLapCountIncrement,
@@ -69,13 +70,12 @@ const lapTimesAllowedForSession = computed(() => isSpotterFeatureAllowed(
 ))
 
 function playAudioPath(path: string, gen: number): Promise<void> {
-  return new Promise<void>((resolve) => {
-    if (!path || gen !== generation || !canRunSpotterAudio.value) { resolve(); return }
-    const el = new Audio(getPublicPath(path))
-    audio = el
-    el.onended = () => { if (audio === el) audio = null; resolve() }
-    el.onerror = () => { if (audio === el) audio = null; resolve() }
-    void el.play().catch(() => { if (audio === el) audio = null; resolve() })
+  if (!path || gen !== generation || !canRunSpotterAudio.value) return Promise.resolve()
+  const el = new Audio(getPublicPath(path))
+  audio = el
+  // Watchdog PIP-254: una traccia in stallo viene saltata, la coda prosegue.
+  return playAudioWithWatchdog(el, { label: path }).then(() => {
+    if (audio === el) audio = null
   })
 }
 

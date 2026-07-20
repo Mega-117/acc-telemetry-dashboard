@@ -8,6 +8,7 @@ import {
   type QualifyingVoiceId,
 } from '~/config/qualifyingVoiceNotifications'
 import { resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
+import { playAudioWithWatchdog } from '~/services/audio/audioPlayback'
 
 /**
  * @description Manages the qualifying voice notification system: queues audio phrases for
@@ -97,14 +98,13 @@ export function useQualifyingVoice(
   }
 
   function playPhrase(phrase: QualifyingVoicePhrase, gen: number): Promise<void> {
-    return new Promise<void>((resolve) => {
-      if (!isEnabled() || gen !== generation) { resolve(); return }
-      const voice = selectedVoiceId() || phrase.voice
-      const el = new Audio(getPublicPath(getQualifyingVoiceAudioPath(phrase.scenario, voice)))
-      audio = el
-      el.onended = () => { if (audio === el) audio = null; resolve() }
-      el.onerror = () => { if (audio === el) audio = null; resolve() }
-      void el.play().catch(() => { if (audio === el) audio = null; resolve() })
+    if (!isEnabled() || gen !== generation) return Promise.resolve()
+    const voice = selectedVoiceId() || phrase.voice
+    const el = new Audio(getPublicPath(getQualifyingVoiceAudioPath(phrase.scenario, voice)))
+    audio = el
+    // Watchdog PIP-254: una traccia in stallo viene saltata, la coda prosegue.
+    return playAudioWithWatchdog(el, { label: phrase.scenario }).then(() => {
+      if (audio === el) audio = null
     })
   }
 
@@ -129,24 +129,23 @@ export function useQualifyingVoice(
     const voice = selectedVoiceId()
     const path = getPublicPath(getStepStartAudioPath(trainingId, stepId, voice))
     const gen = generation
-    queue = queue.then(() => new Promise<void>((resolve) => {
-      if (!soundEnabled.value || gen !== generation) { resolve(); return }
+    queue = queue.then(() => {
+      if (!soundEnabled.value || gen !== generation) return
       const el = new Audio(path)
       audio = el
-      el.onended = () => { if (audio === el) audio = null; resolve() }
-      el.onerror = () => { if (audio === el) audio = null; resolve() }
-      void el.play().catch(() => { if (audio === el) audio = null; resolve() })
-    }))
+      return playAudioWithWatchdog(el, { label: path }).then(() => {
+        if (audio === el) audio = null
+      })
+    })
   }
 
   function playAudioPath(path: string, gen: number): Promise<boolean> {
-    return new Promise<boolean>((resolve) => {
-      if (!soundEnabled.value || gen !== generation) { resolve(false); return }
-      const el = new Audio(path)
-      audio = el
-      el.onended = () => { if (audio === el) audio = null; resolve(true) }
-      el.onerror = () => { if (audio === el) audio = null; resolve(false) }
-      void el.play().catch(() => { if (audio === el) audio = null; resolve(false) })
+    if (!soundEnabled.value || gen !== generation) return Promise.resolve(false)
+    const el = new Audio(path)
+    audio = el
+    return playAudioWithWatchdog(el, { label: path }).then((outcome) => {
+      if (audio === el) audio = null
+      return outcome === 'ended'
     })
   }
 
