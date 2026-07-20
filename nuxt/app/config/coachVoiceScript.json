@@ -1,0 +1,22 @@
+{
+  "$schema_note": "Copione frasi coach adattivo (PIP-257). Fonte di verita' unica: le chiavi sono il contratto con coachVoiceController.ts (PIP-256). Regola: ogni testo ha ALMENO 3 parole (Kokoro distorce i testi corti, cfr. PIP-144). WAV: acc-voice://coach/<key>-<voice>.wav",
+  "defaultSpeed": 1.15,
+  "voices": ["if_sara", "im_nicola"],
+  "phrases": [
+    { "key": "brake_point_later_small", "text": "Frena un po' più tardi" },
+    { "key": "brake_point_later_big", "text": "Frena molto più tardi" },
+    { "key": "brake_point_earlier_small", "text": "Frena un po' prima" },
+    { "key": "brake_point_earlier_big", "text": "Frena molto prima" },
+    { "key": "vmin_faster_small", "text": "Porta più velocità in curva" },
+    { "key": "vmin_faster_big", "text": "Porta molta più velocità" },
+    { "key": "vmin_slower_small", "text": "Entra un po' più piano" },
+    { "key": "vmin_slower_big", "text": "Entri troppo forte, più piano" },
+    { "key": "throttle_earlier_small", "text": "Apri il gas prima" },
+    { "key": "throttle_earlier_big", "text": "Apri il gas molto prima" },
+    { "key": "throttle_later_small", "text": "Aspetta di più col gas" },
+    { "key": "throttle_later_big", "text": "Più dolce col gas in uscita" },
+    { "key": "outcome_improved", "text": "Ottimo, continua così" },
+    { "key": "outcome_ok", "text": "Perfetto, curva risolta" },
+    { "key": "outcome_worse", "text": "Riprova al prossimo giro" }
+  ]
+}
