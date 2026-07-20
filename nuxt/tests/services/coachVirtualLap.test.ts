@@ -75,6 +75,7 @@ describe('giro virtuale reale a Spa (posizioni vere a 250ms)', () => {
       brake_point: ['later', 'earlier'],
       vmin: ['faster', 'slower'],
       throttle: ['earlier', 'later'],
+      lift: ['flat'],
     } as const
     for (const metric of Object.keys(directionsByMetric) as (keyof typeof directionsByMetric)[]) {
       for (const direction of directionsByMetric[metric]) {

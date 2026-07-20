@@ -67,6 +67,16 @@
       "enabled": true
     },
     {
+      "key": "lift_flat_small",
+      "text": "Questa si fa in pieno",
+      "enabled": true
+    },
+    {
+      "key": "lift_flat_big",
+      "text": "Resta in pieno, non alzare",
+      "enabled": true
+    },
+    {
       "key": "outcome_improved",
       "text": "Ottimo, continua così",
       "enabled": true

@@ -37,8 +37,8 @@ export interface CoachFocus {
   cornerId: number
   cornerName: string | null
   apexNormPos: number
-  metric: 'brake_point' | 'vmin' | 'throttle'
-  direction: 'later' | 'earlier' | 'faster' | 'slower'
+  metric: 'brake_point' | 'vmin' | 'throttle' | 'lift'
+  direction: 'later' | 'earlier' | 'faster' | 'slower' | 'flat'
   magnitude: number
   timeLostS: number
 }
@@ -63,8 +63,8 @@ export interface CoachVoiceState {
   lastLapCorners: CoachCornerRow[]
 }
 
-const METRICS = new Set(['brake_point', 'vmin', 'throttle'])
-const DIRECTIONS = new Set(['later', 'earlier', 'faster', 'slower'])
+const METRICS = new Set(['brake_point', 'vmin', 'throttle', 'lift'])
+const DIRECTIONS = new Set(['later', 'earlier', 'faster', 'slower', 'flat'])
 const OUTCOMES = new Set(['improved', 'ok', 'worse'])
 
 export function normalizeCoachState(raw: unknown): CoachVoiceState | null {
@@ -123,10 +123,11 @@ export type CoachPhraseKey =
   | 'vmin_slower_small' | 'vmin_slower_big'
   | 'throttle_earlier_small' | 'throttle_earlier_big'
   | 'throttle_later_small' | 'throttle_later_big'
+  | 'lift_flat_small' | 'lift_flat_big'
   | 'outcome_improved' | 'outcome_ok' | 'outcome_worse'
 
-/** Soglie oltre le quali l'errore passa al bucket "big" (m o km/h). */
-const BIG_MAGNITUDE = { brake_point: 35, vmin: 10, throttle: 30 } as const
+/** Soglie oltre le quali l'errore passa al bucket "big" (m, km/h o % alzata). */
+const BIG_MAGNITUDE = { brake_point: 35, vmin: 10, throttle: 30, lift: 25 } as const
 
 export function magnitudeBucket(metric: CoachFocus['metric'], magnitude: number): 'small' | 'big' {
   return magnitude >= BIG_MAGNITUDE[metric] ? 'big' : 'small'
