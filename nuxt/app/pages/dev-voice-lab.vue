@@ -114,9 +114,11 @@ const showScenarios = ref(false)
 const pendingRegenKeys = ref<string[]>([])
 const batchBusy = ref(false)
 const batchStatus = ref('')
-const voiceLabSection = ref<'script' | 'references' | 'coach'>(
+const chatterboxDevEnabled = import.meta.dev
+const voiceLabSection = ref<'script' | 'references' | 'coach' | 'chatterbox'>(
   route.query.section === 'references' ? 'references'
   : route.query.section === 'coach' ? 'coach'
+  : route.query.section === 'chatterbox' && chatterboxDevEnabled ? 'chatterbox'
   : 'script',
 )
 
@@ -1168,8 +1170,8 @@ onBeforeUnmount(() => {
     <section class="voice-lab">
       <header class="voice-hero">
         <div>
-          <span class="voice-kicker">Motore vocale</span>
-          <h1>Kokoro Voice Lab</h1>
+          <span class="voice-kicker">Motori vocali</span>
+          <h1>Voice Lab</h1>
           <p v-if="hasFullVoiceLabAccess">
             Editor del copione vocale dell'overlay: modifica una frase, ascoltala e rigenera i WAV
             senza toccare codice. Fonte unica: <code>app/config/voiceScript.json</code>.
@@ -1194,6 +1196,7 @@ onBeforeUnmount(() => {
         <button type="button" :class="{ 'is-active': voiceLabSection === 'script' }" @click="voiceLabSection = 'script'">Copione</button>
         <button type="button" :class="{ 'is-active': voiceLabSection === 'references' }" @click="voiceLabSection = 'references'">Riferimenti</button>
         <button type="button" :class="{ 'is-active': voiceLabSection === 'coach' }" @click="voiceLabSection = 'coach'">Coach</button>
+        <button v-if="chatterboxDevEnabled" type="button" :class="{ 'is-active': voiceLabSection === 'chatterbox' }" @click="voiceLabSection = 'chatterbox'">Chatterbox</button>
       </nav>
 
       <section v-if="hasFullVoiceLabAccess && voiceLabSection === 'script'" class="script-editor">
@@ -1292,6 +1295,8 @@ onBeforeUnmount(() => {
           </template>
         </div>
       </section>
+
+      <ChatterboxVoiceLabPanel v-else-if="hasFullVoiceLabAccess && chatterboxDevEnabled && voiceLabSection === 'chatterbox'" />
 
       <section v-else-if="voiceLabSection === 'references'" class="reference-editor" data-testid="voice-reference-editor">
         <div class="panel-head reference-panel-head">

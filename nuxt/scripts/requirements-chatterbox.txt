@@ -1,0 +1,4 @@
+# Sandbox Voice Lab only. The model weights are downloaded by Chatterbox on first start.
+# PyPI 0.1.7 espone ancora solo il checkpoint multilingua V2. Questo commit
+# ufficiale introduce la selezione stabile `t3_model="v3"` usata dal runtime.
+chatterbox-tts @ git+https://github.com/resemble-ai/chatterbox.git@5de7a54aa4e5e2baadb0182dde554908b48b85c2
