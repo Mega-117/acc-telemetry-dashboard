@@ -13,15 +13,34 @@ export interface FastStateTyre {
   slipRatio: number | null
   pressurePsi: number | null
   coreTempC: number | null
+  brakeTempC: number | null
+  padLifePct: number | null
+  discLifePct: number | null
+}
+
+export interface FastStateLapPressureAverage {
+  status: 'waiting_for_full_lap' | 'available'
+  lap: number | null
+  tyreSet: number | null
+  values: Record<FastStateTyre['id'], number | null>
 }
 
 export interface FastOverlayState {
   isLive: boolean
+  isEngineRunning: boolean
+  pitLimiterOn: boolean
   sessionType: number | null
   normalizedCarPosition: number | null
   speedKmh: number | null
   gas: number | null
   brake: number | null
+  currentTyreSet: number | null
+  tyreSetAvailable: boolean
+  tyreCompound: 'DRY' | 'WET' | null
+  rainIntensity: number | null
+  rainIntensity10Min: number | null
+  rainIntensity30Min: number | null
+  lapPressureAverage: FastStateLapPressureAverage
   trackReferencePhase: TrackReferencePhase | null
   trackReferencesEligible: boolean
   tyres: FastStateTyre[]
@@ -29,11 +48,25 @@ export interface FastOverlayState {
 
 const EMPTY_FAST_STATE: FastOverlayState = {
   isLive: false,
+  isEngineRunning: false,
+  pitLimiterOn: false,
   sessionType: null,
   normalizedCarPosition: null,
   speedKmh: null,
   gas: null,
   brake: null,
+  currentTyreSet: null,
+  tyreSetAvailable: false,
+  tyreCompound: null,
+  rainIntensity: null,
+  rainIntensity10Min: null,
+  rainIntensity30Min: null,
+  lapPressureAverage: {
+    status: 'waiting_for_full_lap',
+    lap: null,
+    tyreSet: null,
+    values: { FL: null, FR: null, RL: null, RR: null },
+  },
   trackReferencePhase: null,
   trackReferencesEligible: false,
   tyres: [],
@@ -85,6 +118,25 @@ function normalizeTyre(raw: any): FastStateTyre | null {
     slipRatio: toNumber(raw.slip_ratio),
     pressurePsi: toNumber(raw.pressure_psi),
     coreTempC: toNumber(raw.core_temp_c),
+    brakeTempC: toNumber(raw.brake_temp_c),
+    padLifePct: toNumber(raw.pad_life_pct),
+    discLifePct: toNumber(raw.disc_life_pct),
+  }
+}
+
+function normalizeLapPressureAverage(raw: any): FastStateLapPressureAverage {
+  const average = raw?.last_average
+  const values = average?.values
+  return {
+    status: raw?.status === 'available' && average ? 'available' : 'waiting_for_full_lap',
+    lap: toNumber(average?.lap),
+    tyreSet: toNumber(average?.tyre_set),
+    values: {
+      FL: toNumber(values?.FL),
+      FR: toNumber(values?.FR),
+      RL: toNumber(values?.RL),
+      RR: toNumber(values?.RR),
+    },
   }
 }
 
@@ -99,11 +151,22 @@ function normalizeFastState(state: any): FastOverlayState {
 
   return {
     isLive: state.is_live === true,
+    isEngineRunning: state.is_engine_running === true,
+    pitLimiterOn: state.pit_limiter_on === true,
     sessionType: toNumber(state.session_type),
     normalizedCarPosition: toNumber(state.normalized_car_position),
     speedKmh: toNumber(state.speed_kmh),
     gas: toNumber(state.gas),
     brake: toNumber(state.brake),
+    currentTyreSet: toNumber(state.current_tyre_set),
+    tyreSetAvailable: state.tyre_set_available === true,
+    tyreCompound: state.tyre_compound === 'WET'
+      ? 'WET'
+      : state.tyre_compound === 'DRY' ? 'DRY' : null,
+    rainIntensity: toNumber(state.rain_intensity),
+    rainIntensity10Min: toNumber(state.rain_intensity_10min),
+    rainIntensity30Min: toNumber(state.rain_intensity_30min),
+    lapPressureAverage: normalizeLapPressureAverage(state.lap_pressure_avg),
     trackReferencePhase: normalizeTrackReferencePhase(state.track_reference_phase),
     trackReferencesEligible: state.track_references_eligible === true,
     tyres,

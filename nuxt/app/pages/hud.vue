@@ -12,6 +12,7 @@ definePageMeta({
 
 type HudOverlayId = 'tyres' | 'sectors'
 
+
 const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string }> = [
   { id: 'tyres', title: 'Gomme', description: 'Temperature, pressioni e scivolamento per pneumatico (fast_state).' },
   { id: 'sectors', title: 'Settori', description: 'Tempi e delta per settore con codifica colore (live_state).' },
@@ -29,6 +30,7 @@ const isElectron = ref(false)
 const apiReady = ref(false)
 const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false })
 const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1 })
+const tyreVariant = ref<'classic' | 'advanced'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
 const positioning = ref(false)
@@ -75,6 +77,7 @@ async function refreshState() {
       open[overlay.id] = await api.hudOverlayIsOpen(overlay.id)
       const settings = await api.hudOverlayGetSettings(overlay.id)
       if (settings?.scale !== undefined) scale[overlay.id] = settings.scale
+      if (overlay.id === 'tyres') tyreVariant.value = settings?.variant === 'advanced' ? 'advanced' : 'classic'
       if (overlay.id === 'sectors' && typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
       if (overlay.id === 'sectors' && typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
     } catch {
@@ -155,6 +158,15 @@ function onScaleInput(id: HudOverlayId, raw: string) {
   const api = getApi()
   if (!apiReady.value || !api) return
   api.hudOverlaySetScale(id, value).then(() => refreshPlacementStatus()).catch(() => {})
+}
+
+async function setTyreVariant(value: string) {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySaveSettings) return
+  const next = value === 'advanced' ? 'advanced' : 'classic'
+  tyreVariant.value = next
+  const settings = await api.hudOverlaySaveSettings('tyres', { variant: next })
+  tyreVariant.value = settings?.variant === 'advanced' ? 'advanced' : 'classic'
 }
 
 async function toggleSectorReference() {
@@ -243,6 +255,7 @@ async function toggleTraining() {
         >
       </label>
 
+
       <div class="test-hud__grid">
         <!-- Overlay allenamento: solo mostra/nascondi (come Ctrl+K) -->
         <article class="hud-card hud-card--training">
@@ -288,6 +301,22 @@ async function toggleTraining() {
               @input="onScaleInput(overlay.id, ($event.target as HTMLInputElement).value)"
             >
           </div>
+
+          <label v-if="overlay.id === 'tyres'" class="hud-card__option">
+            <span>
+              <strong>Visualizzazione</strong>
+              <em>Classico mantiene l'HUD attuale; Avanzato mostra il pannello stile ACC Drive.</em>
+            </span>
+            <select
+              class="hud-card__select"
+              :value="tyreVariant"
+              :disabled="!apiReady"
+              @change="setTyreVariant(($event.target as HTMLSelectElement).value)"
+            >
+              <option value="classic">Classico</option>
+              <option value="advanced">Avanzato</option>
+            </select>
+          </label>
 
           <template v-if="overlay.id === 'sectors'">
             <label class="hud-card__option">
@@ -465,6 +494,30 @@ async function toggleTraining() {
   strong { color: #fff; font-size: 14px; }
   em { color: rgba(255, 255, 255, 0.55); font-size: 12px; font-style: normal; line-height: 1.35; }
   input { width: 18px; height: 18px; accent-color: #22c55e; }
+}
+
+.hud-card__select {
+  flex: 0 0 136px;
+  min-width: 136px;
+  padding: 8px 30px 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 9px;
+  background-color: #171b25;
+  color: #fff;
+  color-scheme: dark;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+
+  option {
+    background-color: #171b25;
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 }
 
 .hud-slider {

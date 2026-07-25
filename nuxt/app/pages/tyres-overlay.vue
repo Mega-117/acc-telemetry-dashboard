@@ -2,9 +2,10 @@
 // Overlay HUD Gomme (PIP-175): finestra Electron indipendente. Dimensione decisa
 // dal FORMATO (small/medium/large) lato Electron; qui si applica la scala dei
 // font e lo stato di posizionamento. Riusa TyreSlipHud + il poller esistente.
-import { onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
+import TyreAdvancedHud from '~/components/overlay/TyreAdvancedHud.vue'
 import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 
 definePageMeta({ layout: false })
@@ -21,7 +22,11 @@ function getApi(): any | null {
 
 const route = useRoute()
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getApi)
-const { isElectron, scale, loadSettings, start, stop } = useHudOverlay('tyres', getApi)
+const { isElectron, scale, settings, loadSettings, start, stop } = useHudOverlay('tyres', getApi)
+const variant = computed(() => (
+  settings.value?.variant === 'advanced' || route.query.variant === 'advanced'
+    ? 'advanced' : 'classic'
+))
 
 onMounted(() => {
   startFastStatePolling()
@@ -42,7 +47,8 @@ onBeforeUnmount(() => {
     :class="{ 'hud-overlay--web': !isElectron }"
   >
     <div class="hud-overlay__panel">
-      <TyreSlipHud :fast-state="fastState" />
+      <TyreAdvancedHud v-if="variant === 'advanced'" :fast-state="fastState" />
+      <TyreSlipHud v-else :fast-state="fastState" />
     </div>
   </div>
 </template>

@@ -1,19 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { FastOverlayState, FastStateSlipState, FastStateTyre } from '~/composables/useFastStatePoller'
+import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
+import { tyreSlipBarStyle, tyreSlipStateLabel } from '~/utils/tyreSlipPresentation'
 
 const props = defineProps<{
   fastState: FastOverlayState
   compact?: boolean
 }>()
 
-const stateLabels: Record<FastStateSlipState, string> = {
-  ok: 'OK',
-  limit: 'LIMITE',
-  sliding: 'SCIVOLA',
-  wheelspin: 'PATTINA',
-  lockup: 'BLOCCAGGIO',
-}
 
 const idleTyres: FastStateTyre[] = (['FL', 'FR', 'RL', 'RR'] as const).map((id) => ({
   id,
@@ -24,6 +18,9 @@ const idleTyres: FastStateTyre[] = (['FL', 'FR', 'RL', 'RR'] as const).map((id) 
   slipRatio: null,
   pressurePsi: null,
   coreTempC: null,
+  brakeTempC: null,
+  padLifePct: null,
+  discLifePct: null,
 }))
 
 const hasLiveTyres = computed(() => props.fastState.isLive && props.fastState.tyres.length === 4)
@@ -33,8 +30,7 @@ const speedLabel = computed(() => hasLiveTyres.value && props.fastState.speedKmh
   : 'in attesa')
 
 function tyreFillStyle(tyre: FastStateTyre) {
-  const scaled = typeof tyre.wheelSlipScaled === 'number' ? tyre.wheelSlipScaled : 0
-  return { width: `${Math.max(4, Math.min(100, (scaled / 18) * 100))}%` }
+  return tyreSlipBarStyle(tyre.wheelSlipScaled)
 }
 
 function formatSlip(tyre: FastStateTyre) {
@@ -61,7 +57,7 @@ function formatSlip(tyre: FastStateTyre) {
       >
         <div class="tyre-slip__topline">
           <strong>{{ tyre.id }}</strong>
-          <span class="tyre-slip__state">{{ hasLiveTyres ? stateLabels[tyre.slipState] : 'WAIT' }}</span>
+          <span class="tyre-slip__state">{{ tyreSlipStateLabel(tyre.slipState, hasLiveTyres) }}</span>
         </div>
         <div class="tyre-slip__bar" aria-hidden="true">
           <span :style="tyreFillStyle(tyre)" />

@@ -56,6 +56,7 @@ export default defineConfig({
         'app/utils/firestoreSanitize.ts',
         'app/utils/featureAccess.ts',
         'app/utils/authRouteGuard.ts',
+        'app/utils/tyreSlipPresentation.ts',
         'app/utils/sessionParser.ts',
         'app/utils/raceCalendarCountdown.ts',
         'server/utils/chatterboxRuntimeStatus.ts',

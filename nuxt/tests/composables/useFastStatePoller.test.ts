@@ -15,14 +15,27 @@ function makeState(overrides: Record<string, any> = {}) {
   return {
     ts: freshTs(),
     is_live: true,
+    is_engine_running: true,
+    pit_limiter_on: false,
     session_type: 0,
     speed_kmh: 132.4,
     gas: 0.7,
     brake: 0.1,
+    current_tyre_set: 3,
+    tyre_set_available: true,
+    tyre_compound: 'DRY',
+    rain_intensity: 0,
+    rain_intensity_10min: 1,
+    rain_intensity_30min: 3,
+    lap_pressure_avg: {
+      status: 'available',
+      current_tyre_set: 3,
+      last_average: { lap: 4, tyre_set: 3, values: { FL: 27.0, FR: 27.1, RL: 27.2, RR: 27.3 } },
+    },
     track_reference_phase: 'active',
     track_references_eligible: true,
     tyres: [
-      { id: 'FL', wheel_slip: 0.4, wheel_slip_scaled: 4, slip_band: 'white', pressure_psi: 27.1, core_temp_c: 78.2 },
+      { id: 'FL', wheel_slip: 0.4, wheel_slip_scaled: 4, slip_band: 'white', pressure_psi: 27.1, core_temp_c: 78.2, brake_temp_c: 410.2, pad_life_pct: 99.7, disc_life_pct: 99.9 },
       { id: 'FR', wheel_slip: 1.2, wheel_slip_scaled: 12, slip_band: 'green', slip_state: 'ok', pressure_psi: 27.3, core_temp_c: 78.4 },
       { id: 'RL', wheel_slip: 1.45, wheel_slip_scaled: 14.5, slip_band: 'yellow', slip_state: 'limit', slip_ratio: 0.02, pressure_psi: 27.8, core_temp_c: 79.1 },
       { id: 'RR', wheel_slip: 1.8, wheel_slip_scaled: 18, slip_band: 'red', slip_state: 'lockup', slip_ratio: -0.08, pressure_psi: 28.0, core_temp_c: 79.4 },
@@ -53,6 +66,15 @@ describe('useFastStatePoller', () => {
     expect(fastState.value.speedKmh).toBe(132.4)
     expect(fastState.value.sessionType).toBe(0)
     expect(fastState.value.gas).toBe(0.7)
+    expect(fastState.value.isEngineRunning).toBe(true)
+    expect(fastState.value.pitLimiterOn).toBe(false)
+    expect(fastState.value.currentTyreSet).toBe(3)
+    expect(fastState.value.tyreCompound).toBe('DRY')
+    expect(fastState.value.rainIntensity30Min).toBe(3)
+    expect(fastState.value.lapPressureAverage).toEqual({
+      status: 'available', lap: 4, tyreSet: 3,
+      values: { FL: 27.0, FR: 27.1, RL: 27.2, RR: 27.3 },
+    })
     expect(fastState.value.trackReferencePhase).toBe('active')
     expect(fastState.value.trackReferencesEligible).toBe(true)
     expect(fastState.value.tyres.map(t => t.id)).toEqual(['FL', 'FR', 'RL', 'RR'])
@@ -60,6 +82,9 @@ describe('useFastStatePoller', () => {
     expect(fastState.value.tyres.map(t => t.slipState)).toEqual(['ok', 'ok', 'limit', 'lockup'])
     expect(fastState.value.tyres[2]?.slipRatio).toBe(0.02)
     expect(fastState.value.tyres[2]?.wheelSlipScaled).toBe(14.5)
+    expect(fastState.value.tyres[0]?.brakeTempC).toBe(410.2)
+    expect(fastState.value.tyres[0]?.padLifePct).toBe(99.7)
+    expect(fastState.value.tyres[0]?.discLifePct).toBe(99.9)
   })
 
   it('degrada in modo sicuro se la fase riferimenti non e riconosciuta', async () => {

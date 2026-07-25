@@ -683,16 +683,17 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: rgba(226, 238, 247, 0.72);
+  background: var(--tyre-slip-color, rgba(226, 238, 247, 0.72));
   transition:
     width 90ms linear,
     background-color 120ms ease;
 }
 
-.tyre-slip--green .tyre-slip__bar span { background: #22c55e; }
-.tyre-slip--yellow .tyre-slip__bar span { background: #facc15; }
-.tyre-slip--orange .tyre-slip__bar span { background: #fb923c; }
-.tyre-slip--red .tyre-slip__bar span { background: #ef4444; }
+.tyre-slip--white { --tyre-slip-color: rgba(226, 238, 247, 0.72); }
+.tyre-slip--green { --tyre-slip-color: #22c55e; }
+.tyre-slip--yellow { --tyre-slip-color: #facc15; }
+.tyre-slip--orange { --tyre-slip-color: #fb923c; }
+.tyre-slip--red { --tyre-slip-color: #ef4444; }
 
 .tyre-slip--yellow,
 .tyre-slip--orange,
