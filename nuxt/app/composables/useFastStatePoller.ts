@@ -26,14 +26,43 @@ export interface FastStateLapPressureAverage {
 }
 
 export interface FastOverlayState {
+  isFresh: boolean
   isLive: boolean
+  ignitionOn: boolean
   isEngineRunning: boolean
   pitLimiterOn: boolean
   sessionType: number | null
   normalizedCarPosition: number | null
   speedKmh: number | null
+  speedDeltaKmh: number | null
+  referenceSpeedKmh: number | null
+  referenceRpm: number | null
+  referenceGear: number | null
+  referenceEngineMap: number | null
+  referenceTractionControl: number | null
+  referenceTractionControl2: number | null
+  referenceAbs: number | null
   gas: number | null
   brake: number | null
+  rpm: number | null
+  maxRpm: number | null
+  gear: number | null
+  fuelL: number | null
+  fuelPerLapL: number | null
+  fuelLapsRemaining: number | null
+  fuelLeftTimeMs: number | null
+  sessionLapsRemaining: number | null
+  sessionTimeLeftMs: number | null
+  engineMap: number | null
+  tractionControl: number | null
+  tractionControl2: number | null
+  abs: number | null
+  brakeBiasPct: number | null
+  cornerSpeedKmh: number | null
+  directionLightsLeft: boolean
+  directionLightsRight: boolean
+  lightsStage: number | null
+  rainLights: boolean
   currentTyreSet: number | null
   tyreSetAvailable: boolean
   tyreCompound: 'DRY' | 'WET' | null
@@ -47,14 +76,43 @@ export interface FastOverlayState {
 }
 
 const EMPTY_FAST_STATE: FastOverlayState = {
+  isFresh: false,
   isLive: false,
+  ignitionOn: false,
   isEngineRunning: false,
   pitLimiterOn: false,
   sessionType: null,
   normalizedCarPosition: null,
   speedKmh: null,
+  speedDeltaKmh: null,
+  referenceSpeedKmh: null,
+  referenceRpm: null,
+  referenceGear: null,
+  referenceEngineMap: null,
+  referenceTractionControl: null,
+  referenceTractionControl2: null,
+  referenceAbs: null,
   gas: null,
   brake: null,
+  rpm: null,
+  maxRpm: null,
+  gear: null,
+  fuelL: null,
+  fuelPerLapL: null,
+  fuelLapsRemaining: null,
+  fuelLeftTimeMs: null,
+  sessionLapsRemaining: null,
+  sessionTimeLeftMs: null,
+  engineMap: null,
+  tractionControl: null,
+  tractionControl2: null,
+  abs: null,
+  brakeBiasPct: null,
+  cornerSpeedKmh: null,
+  directionLightsLeft: false,
+  directionLightsRight: false,
+  lightsStage: null,
+  rainLights: false,
   currentTyreSet: null,
   tyreSetAvailable: false,
   tyreCompound: null,
@@ -150,14 +208,43 @@ function normalizeFastState(state: any): FastOverlayState {
     : []
 
   return {
+    isFresh: true,
     isLive: state.is_live === true,
+    ignitionOn: state.ignition_on === true,
     isEngineRunning: state.is_engine_running === true,
     pitLimiterOn: state.pit_limiter_on === true,
     sessionType: toNumber(state.session_type),
     normalizedCarPosition: toNumber(state.normalized_car_position),
     speedKmh: toNumber(state.speed_kmh),
+    speedDeltaKmh: toNumber(state.speed_delta_kmh),
+    referenceSpeedKmh: toNumber(state.reference_speed_kmh),
+    referenceRpm: toNumber(state.reference_rpm),
+    referenceGear: toNumber(state.reference_gear),
+    referenceEngineMap: toNumber(state.reference_engine_map),
+    referenceTractionControl: toNumber(state.reference_traction_control),
+    referenceTractionControl2: toNumber(state.reference_traction_control_2),
+    referenceAbs: toNumber(state.reference_abs),
     gas: toNumber(state.gas),
     brake: toNumber(state.brake),
+    rpm: toNumber(state.rpm),
+    maxRpm: toNumber(state.max_rpm),
+    gear: toNumber(state.gear),
+    fuelL: toNumber(state.fuel_l),
+    fuelPerLapL: toNumber(state.fuel_per_lap_l),
+    fuelLapsRemaining: toNumber(state.fuel_laps_remaining),
+    fuelLeftTimeMs: toNumber(state.fuel_left_time_ms),
+    sessionLapsRemaining: toNumber(state.session_laps_remaining),
+    sessionTimeLeftMs: toNumber(state.session_time_left_ms),
+    engineMap: toNumber(state.engine_map),
+    tractionControl: toNumber(state.traction_control),
+    tractionControl2: toNumber(state.traction_control_2),
+    abs: toNumber(state.abs),
+    brakeBiasPct: toNumber(state.brake_bias_pct),
+    cornerSpeedKmh: toNumber(state.corner_speed_kmh),
+    directionLightsLeft: state.direction_lights_left === true,
+    directionLightsRight: state.direction_lights_right === true,
+    lightsStage: toNumber(state.lights_stage),
+    rainLights: state.rain_lights === true,
     currentTyreSet: toNumber(state.current_tyre_set),
     tyreSetAvailable: state.tyre_set_available === true,
     tyreCompound: state.tyre_compound === 'WET'

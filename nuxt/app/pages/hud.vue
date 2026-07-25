@@ -10,7 +10,7 @@ definePageMeta({
   middleware: 'hud-access'
 })
 
-type HudOverlayId = 'tyres' | 'sectors'
+type HudOverlayId = 'tyres' | 'sectors' | 'dashboard'
 
 interface HudReplayScenario {
   id: string
@@ -34,6 +34,7 @@ interface HudReplayStatus {
 const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string }> = [
   { id: 'tyres', title: 'Gomme', description: 'Temperature, pressioni e scivolamento per pneumatico (fast_state).' },
   { id: 'sectors', title: 'Settori', description: 'Tempi e delta per settore con codifica colore (live_state).' },
+  { id: 'dashboard', title: 'Dashboard', description: 'Replica ACC Drive 665×225 con marcia, carburante, elettronica e shift flash.' },
 ]
 
 const SCALE_MIN = 0.6
@@ -46,11 +47,21 @@ function getApi(): any | null {
 
 const isElectron = ref(false)
 const apiReady = ref(false)
-const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false })
-const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1 })
+const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false })
+const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1 })
 const tyreVariant = ref<'classic' | 'advanced'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
+const dashboardSettings = reactive({
+  electronicsReference: false,
+  rpmReference: false,
+  gearReference: false,
+  speedDelta: false,
+  shiftFlashEnabled: true,
+  shiftRpmThreshold: 8200,
+  fuelCriticalFlashEnabled: false,
+  fuelCriticalLapsThreshold: 0.5,
+})
 const positioning = ref(false)
 const trainingOpen = ref(false)
 // Stato "in guida" (PIP-177): quando attivo, gli overlay abilitati appaiono da
@@ -116,6 +127,18 @@ async function refreshState() {
       if (overlay.id === 'tyres') tyreVariant.value = settings?.variant === 'advanced' ? 'advanced' : 'classic'
       if (overlay.id === 'sectors' && typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
       if (overlay.id === 'sectors' && typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
+      if (overlay.id === 'dashboard') {
+        dashboardSettings.electronicsReference = settings?.electronicsReference === true
+        dashboardSettings.rpmReference = settings?.rpmReference === true
+        dashboardSettings.gearReference = settings?.gearReference === true
+        dashboardSettings.speedDelta = settings?.speedDelta === true
+        dashboardSettings.shiftFlashEnabled = settings?.shiftFlashEnabled !== false
+        dashboardSettings.shiftRpmThreshold = Number.isFinite(Number(settings?.shiftRpmThreshold))
+          ? Number(settings.shiftRpmThreshold) : 8200
+        dashboardSettings.fuelCriticalFlashEnabled = settings?.fuelCriticalFlashEnabled === true
+        dashboardSettings.fuelCriticalLapsThreshold = Number.isFinite(Number(settings?.fuelCriticalLapsThreshold))
+          ? Number(settings.fuelCriticalLapsThreshold) : 0.5
+      }
     } catch {
       open[overlay.id] = false
     }
@@ -287,6 +310,26 @@ async function toggleSectorBest() {
   showSectorBest.value = next
   const settings = await api.hudOverlaySaveSettings('sectors', { showBest: next })
   if (typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
+}
+
+async function saveDashboardSetting(
+  key: keyof typeof dashboardSettings,
+  value: boolean | number,
+) {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySaveSettings) return
+  const normalized = key === 'shiftRpmThreshold'
+    ? Math.min(Math.max(Math.round(Number(value) || 8200), 1000), 20000)
+    : key === 'fuelCriticalLapsThreshold'
+      ? Math.round(Math.min(Math.max(Number(value) || 0.5, 0.1), 1) * 10) / 10
+      : value
+  ;(dashboardSettings as any)[key] = normalized
+  const settings = await api.hudOverlaySaveSettings('dashboard', { [key]: normalized })
+  if (settings && key in settings) (dashboardSettings as any)[key] = settings[key]
+}
+
+function toggleDashboardSetting(key: keyof typeof dashboardSettings) {
+  void saveDashboardSetting(key, !(dashboardSettings as any)[key])
 }
 
 
@@ -496,6 +539,62 @@ async function toggleTraining() {
                 :disabled="!apiReady"
                 @change="toggleSectorBest"
               >
+            </label>
+          </template>
+          <template v-if="overlay.id === 'dashboard'">
+            <label class="hud-card__option">
+              <span><strong>Riferimento elettronica</strong><em>Replica l'opzione originale ACC Drive.</em></span>
+              <input type="checkbox" role="switch" :checked="dashboardSettings.electronicsReference" :disabled="!apiReady" @change="toggleDashboardSetting('electronicsReference')">
+            </label>
+            <label class="hud-card__option">
+              <span><strong>Riferimento RPM</strong><em>Mostra il riferimento di cambiata sulla barra giri.</em></span>
+              <input type="checkbox" role="switch" :checked="dashboardSettings.rpmReference" :disabled="!apiReady" @change="toggleDashboardSetting('rpmReference')">
+            </label>
+            <label class="hud-card__option">
+              <span><strong>Riferimento marcia</strong><em>Mantiene l'opzione originale pronta per i riferimenti auto.</em></span>
+              <input type="checkbox" role="switch" :checked="dashboardSettings.gearReference" :disabled="!apiReady" @change="toggleDashboardSetting('gearReference')">
+            </label>
+            <label class="hud-card__option">
+              <span><strong>Delta velocità</strong><em>Usa il delta quando la fonte centrale lo rende disponibile.</em></span>
+              <input type="checkbox" role="switch" :checked="dashboardSettings.speedDelta" :disabled="!apiReady" @change="toggleDashboardSetting('speedDelta')">
+            </label>
+            <label class="hud-card__option">
+              <span><strong>Lampeggio cambiata</strong><em>Fa lampeggiare in blu la barra al raggiungimento della soglia.</em></span>
+              <input type="checkbox" role="switch" :checked="dashboardSettings.shiftFlashEnabled" :disabled="!apiReady" @change="toggleDashboardSetting('shiftFlashEnabled')">
+            </label>
+            <label class="hud-card__option">
+              <span><strong>Soglia lampeggio</strong><em>Regolazione manuale; i profili per auto arriveranno in un task dedicato.</em></span>
+              <span class="hud-card__rpm">
+                <input
+                  type="number"
+                  min="1000"
+                  max="20000"
+                  step="100"
+                  :value="dashboardSettings.shiftRpmThreshold"
+                  :disabled="!apiReady"
+                  @change="saveDashboardSetting('shiftRpmThreshold', Number(($event.target as HTMLInputElement).value))"
+                >
+                <b>RPM</b>
+              </span>
+            </label>
+            <label class="hud-card__option">
+              <span><strong>Lampeggio carburante critico</strong><em>Sotto la soglia critica pulsa solo il bordo; testo e valori restano sempre leggibili.</em></span>
+              <input type="checkbox" role="switch" :checked="dashboardSettings.fuelCriticalFlashEnabled" :disabled="!apiReady" @change="toggleDashboardSetting('fuelCriticalFlashEnabled')">
+            </label>
+            <label class="hud-card__option">
+              <span><strong>Soglia carburante critica</strong><em>L'avviso ACC Drive diventa ambra da 1,0 giro; qui scegli quando inizia il pulse opzionale.</em></span>
+              <span class="hud-card__rpm">
+                <input
+                  type="number"
+                  min="0.1"
+                  max="1"
+                  step="0.1"
+                  :value="dashboardSettings.fuelCriticalLapsThreshold"
+                  :disabled="!apiReady || !dashboardSettings.fuelCriticalFlashEnabled"
+                  @change="saveDashboardSetting('fuelCriticalLapsThreshold', Number(($event.target as HTMLInputElement).value))"
+                >
+                <b>GIRI</b>
+              </span>
             </label>
           </template>
         </article>
@@ -732,6 +831,22 @@ async function toggleTraining() {
     opacity: 0.45;
     cursor: not-allowed;
   }
+}
+
+.hud-card__rpm {
+  display: flex !important;
+  align-items: center;
+  gap: 7px !important;
+  input {
+    width: 94px;
+    padding: 8px;
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 9px;
+    background: #171b25;
+    color: #fff;
+    font-weight: 900;
+  }
+  b { color: rgba(255,255,255,.5); font-size: 11px; }
 }
 
 .hud-slider {

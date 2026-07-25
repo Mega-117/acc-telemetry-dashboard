@@ -8,6 +8,14 @@ export interface HudOverlaySettings {
   showReference?: boolean
   showBest?: boolean
   variant?: 'classic' | 'advanced'
+  electronicsReference?: boolean
+  rpmReference?: boolean
+  gearReference?: boolean
+  speedDelta?: boolean
+  shiftFlashEnabled?: boolean
+  shiftRpmThreshold?: number
+  fuelCriticalFlashEnabled?: boolean
+  fuelCriticalLapsThreshold?: number
 }
 
 export const HUD_SCALE_MIN = 0.6
