@@ -12,6 +12,24 @@ definePageMeta({
 
 type HudOverlayId = 'tyres' | 'sectors'
 
+interface HudReplayScenario {
+  id: string
+  label: string
+  description: string
+  durationMs: number
+}
+
+interface HudReplayStatus {
+  available: boolean
+  running: boolean
+  scenarioId: string | null
+  scenarioLabel: string | null
+  frame: number
+  intervalMs: number
+  error: string | null
+  scenarios?: HudReplayScenario[]
+}
+
 
 const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string }> = [
   { id: 'tyres', title: 'Gomme', description: 'Temperature, pressioni e scivolamento per pneumatico (fast_state).' },
@@ -44,14 +62,32 @@ const placementAutoSaveMs = ref(60000)
 const nowMs = ref(Date.now())
 // Override "Sempre visibili" (PIP-177): forza la comparsa ignorando il rilevamento.
 const alwaysVisible = ref(false)
+const replayStatus = ref<HudReplayStatus>({
+  available: false,
+  running: false,
+  scenarioId: null,
+  scenarioLabel: null,
+  frame: 0,
+  intervalMs: 50,
+  error: null,
+})
+const replayScenarios = ref<HudReplayScenario[]>([])
+const replayScenarioId = ref('full-hud')
+const replayBusy = ref(false)
+const replayMessage = ref('')
 let unsubscribeDriving: (() => void) | null = null
 let placementPollTimer: ReturnType<typeof setInterval> | null = null
+let replayPollTimer: ReturnType<typeof setInterval> | null = null
 
 
 const placementRemainingSeconds = computed(() => {
   if (!positioning.value || placementDeadlineMs.value === null) return null
   return Math.max(0, Math.ceil((placementDeadlineMs.value - nowMs.value) / 1000))
 })
+
+const selectedReplayScenario = computed(() =>
+  replayScenarios.value.find(scenario => scenario.id === replayScenarioId.value) || null
+)
 
 function applyPlacementStatus(status: any) {
   if (!status || typeof status !== 'object') return
@@ -100,6 +136,67 @@ async function refreshState() {
   }
 }
 
+function applyReplayStatus(status: any) {
+  if (!status || typeof status !== 'object') return
+  replayStatus.value = {
+    available: status.available === true,
+    running: status.running === true,
+    scenarioId: typeof status.scenarioId === 'string' ? status.scenarioId : null,
+    scenarioLabel: typeof status.scenarioLabel === 'string' ? status.scenarioLabel : null,
+    frame: Number.isFinite(Number(status.frame)) ? Number(status.frame) : 0,
+    intervalMs: Number.isFinite(Number(status.intervalMs)) ? Number(status.intervalMs) : 50,
+    error: typeof status.error === 'string' ? status.error : null,
+    scenarios: Array.isArray(status.scenarios) ? status.scenarios : undefined,
+  }
+  if (Array.isArray(status.scenarios)) {
+    replayScenarios.value = status.scenarios
+    if (!status.scenarios.some((scenario: HudReplayScenario) => scenario.id === replayScenarioId.value)) {
+      replayScenarioId.value = status.scenarios[0]?.id || 'full-hud'
+    }
+  }
+}
+
+async function refreshReplayStatus() {
+  const api = getApi()
+  if (typeof api?.hudReplayGetStatus !== 'function') return
+  try {
+    applyReplayStatus(await api.hudReplayGetStatus())
+  } catch {
+    replayStatus.value.available = false
+  }
+}
+
+async function startHudReplay() {
+  const api = getApi()
+  if (replayBusy.value || typeof api?.hudReplayStart !== 'function') return
+  replayBusy.value = true
+  replayMessage.value = ''
+  try {
+    const result = await api.hudReplayStart({ scenarioId: replayScenarioId.value, intervalMs: 50 })
+    applyReplayStatus(result)
+    replayMessage.value = result?.running
+      ? 'Replay attivo: gli overlay ricevono gli stessi aggiornamenti del logger reale.'
+      : (result?.error || 'Impossibile avviare il replay.')
+  } finally {
+    replayBusy.value = false
+  }
+}
+
+async function stopHudReplay() {
+  const api = getApi()
+  if (replayBusy.value || typeof api?.hudReplayStop !== 'function') return
+  replayBusy.value = true
+  try {
+    const result = await api.hudReplayStop()
+    applyReplayStatus(result)
+    replayMessage.value = result?.restored
+      ? 'Replay arrestato: fast_state originale ripristinato.'
+      : 'Replay arrestato senza sovrascrivere lo stato corrente.'
+  } finally {
+    replayBusy.value = false
+  }
+}
+
 async function toggleAlwaysVisible() {
   const api = getApi()
   if (!apiReady.value || !api?.hudOverlaySetAlwaysVisible) return
@@ -115,6 +212,10 @@ onMounted(() => {
     nowMs.value = Date.now()
     if (positioning.value) refreshPlacementStatus()
   }, 1000)
+  void refreshReplayStatus()
+  replayPollTimer = setInterval(() => {
+    if (replayStatus.value.running) void refreshReplayStatus()
+  }, 500)
   const api = getApi()
   if (api && typeof api.onHudOverlayDrivingState === 'function') {
     unsubscribeDriving = api.onHudOverlayDrivingState((value: boolean) => { driving.value = !!value })
@@ -124,6 +225,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (unsubscribeDriving) { unsubscribeDriving(); unsubscribeDriving = null }
   if (placementPollTimer) { clearInterval(placementPollTimer); placementPollTimer = null }
+  if (replayPollTimer) { clearInterval(replayPollTimer); replayPollTimer = null }
 })
 
 async function saveAndLock() {
@@ -255,6 +357,56 @@ async function toggleTraining() {
         >
       </label>
 
+      <section
+        v-if="replayStatus.available"
+        class="test-hud__replay"
+        :class="{ 'is-running': replayStatus.running }"
+      >
+        <div class="test-hud__replay-copy">
+          <span class="test-hud__kicker">Strumento QA · solo sviluppo</span>
+          <div class="test-hud__replay-title">
+            <strong>Replay telemetria HUD</strong>
+            <span>{{ replayStatus.running ? `ATTIVO · frame ${replayStatus.frame}` : 'FERMO' }}</span>
+          </div>
+          <p>
+            Alimenta il vero <code>fast_state.json</code>. L'avvio viene rifiutato se il logger ACC
+            sta scrivendo; allo stop il file precedente viene ripristinato.
+          </p>
+        </div>
+
+        <div class="test-hud__replay-controls">
+          <label>
+            <span>Scenario</span>
+            <select
+              v-model="replayScenarioId"
+              class="hud-card__select"
+              :disabled="replayBusy || replayStatus.running"
+            >
+              <option v-for="scenario in replayScenarios" :key="scenario.id" :value="scenario.id">
+                {{ scenario.label }}
+              </option>
+            </select>
+          </label>
+          <p v-if="selectedReplayScenario">{{ selectedReplayScenario.description }}</p>
+          <div>
+            <button
+              type="button"
+              class="btn btn--primary"
+              :disabled="replayBusy || replayStatus.running"
+              @click="startHudReplay"
+            >Avvia replay</button>
+            <button
+              type="button"
+              class="btn"
+              :disabled="replayBusy || !replayStatus.running"
+              @click="stopHudReplay"
+            >Arresta e ripristina</button>
+          </div>
+          <em v-if="replayMessage || replayStatus.error" :class="{ 'is-error': !!replayStatus.error && !replayStatus.running }">
+            {{ replayMessage || replayStatus.error }}
+          </em>
+        </div>
+      </section>
 
       <div class="test-hud__grid">
         <!-- Overlay allenamento: solo mostra/nascondi (come Ctrl+K) -->
@@ -441,6 +593,68 @@ async function toggleTraining() {
   em { color: rgba(255, 255, 255, 0.62); font-size: 14px; font-style: normal; line-height: 1.4; }
 }
 
+.test-hud__replay {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
+  gap: 24px;
+  padding: 20px 22px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.12), transparent 42%),
+    rgba(255, 255, 255, 0.035);
+
+  &.is-running {
+    border-color: rgba(34, 197, 94, 0.55);
+    box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.08);
+  }
+}
+
+.test-hud__replay-copy {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+
+  p {
+    max-width: 680px;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.64);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  code { color: #bfdbfe; }
+}
+
+.test-hud__replay-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  strong { color: #fff; font-size: 20px; }
+  span {
+    padding: 3px 9px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+  }
+}
+
+.test-hud__replay.is-running .test-hud__replay-title span { color: #86efac; background: rgba(34, 197, 94, 0.12); }
+
+.test-hud__replay-controls {
+  display: grid;
+  gap: 8px;
+  label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: rgba(255, 255, 255, 0.58); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
+  p { min-height: 34px; margin: 0; color: rgba(255, 255, 255, 0.52); font-size: 12px; line-height: 1.4; }
+  > div { display: flex; gap: 8px; }
+  > em { color: #86efac; font-size: 12px; font-style: normal; }
+  > em.is-error { color: #fca5a5; }
+}
+
 .test-hud__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -568,4 +782,9 @@ async function toggleTraining() {
 }
 
 .btn--primary { border-color: transparent; background: linear-gradient(90deg, #f97316, #fb923c); color: #1a0d04; }
+
+@media (max-width: 760px) {
+  .test-hud__replay { grid-template-columns: 1fr; }
+  .test-hud__replay-controls label { align-items: stretch; flex-direction: column; }
+}
 </style>
