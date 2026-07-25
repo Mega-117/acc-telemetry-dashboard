@@ -168,7 +168,8 @@ const dashboardRoutePrefixes = [
   '/test-hud',
   '/profilo',
   '/preparazione',
-  '/piloti'
+  '/piloti',
+  '/admin-diagnostics'
 ]
 
 const isDashboardRoute = (path: string) => {

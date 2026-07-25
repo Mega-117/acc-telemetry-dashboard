@@ -4,13 +4,26 @@
 // ============================================
 
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { waitForAuthSettled } from '~/utils/authRouteGuard'
 
-const { userDisplayName, logout: firebaseLogout, isCoach, isAdmin, userRole } = useFirebaseAuth()
+const {
+  userDisplayName,
+  logout: firebaseLogout,
+  isAuthenticated,
+  isCoach,
+  isAdmin,
+  isLoading,
+} = useFirebaseAuth()
 
 // Redirect non-coaches and non-admins
-onMounted(() => {
+onMounted(async () => {
+  await waitForAuthSettled(isLoading)
+  if (!isAuthenticated.value) {
+    await navigateTo('/')
+    return
+  }
   if (!isCoach.value && !isAdmin.value) {
-    navigateTo('/panoramica')
+    await navigateTo('/panoramica')
   }
 })
 

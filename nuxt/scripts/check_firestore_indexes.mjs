@@ -47,6 +47,18 @@ for (const fields of requiredIndexes) {
   )
 }
 
+const diagnosticsOccurredAtOverride = (indexesConfig.fieldOverrides || []).find((override) =>
+  override.collectionGroup === 'diagnostics'
+    && override.fieldPath === 'occurredAt'
+)
+assert.ok(
+  diagnosticsOccurredAtOverride?.indexes?.some((index) =>
+    index.order === 'DESCENDING'
+      && index.queryScope === 'COLLECTION_GROUP'
+  ),
+  'Missing diagnostics collection-group index: occurredAt DESCENDING'
+)
+
 const pager = fs.readFileSync(path.join(projectRoot, 'nuxt/app/composables/useSessionPager.ts'), 'utf8')
 assert.ok(
   pager.includes("where('summary.laps', '>', 0)") && pager.includes("orderBy('meta.date_start', 'desc')"),

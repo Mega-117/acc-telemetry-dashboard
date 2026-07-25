@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import {
   loadRecentClientDiagnostics,
   type ClientDiagnosticItem
@@ -8,10 +7,9 @@ import {
 
 definePageMeta({
   layout: 'coach',
-  middleware: ['coach-or-admin']
+  middleware: ['admin-only']
 })
 
-const { isAdmin, isLoading: authLoading } = useFirebaseAuth()
 const events = ref<ClientDiagnosticItem[]>([])
 const isLoading = ref(true)
 const errorMessage = ref('')
@@ -42,16 +40,7 @@ async function loadEvents() {
   }
 }
 
-onMounted(async () => {
-  while (authLoading.value) {
-    await new Promise((resolve) => setTimeout(resolve, 50))
-  }
-  if (!isAdmin.value) {
-    await navigateTo('/piloti')
-    return
-  }
-  await loadEvents()
-})
+onMounted(loadEvents)
 </script>
 
 <template>
