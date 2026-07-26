@@ -58,6 +58,7 @@ export default defineConfig({
         'app/utils/authRouteGuard.ts',
         'app/utils/tyreSlipPresentation.ts',
         'app/utils/dashboardPresentation.ts',
+        'app/utils/infoPresentation.ts',
         'app/utils/sessionParser.ts',
         'app/utils/raceCalendarCountdown.ts',
         'server/utils/chatterboxRuntimeStatus.ts',

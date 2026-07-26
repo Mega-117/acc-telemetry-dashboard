@@ -10,7 +10,7 @@ definePageMeta({
   middleware: 'hud-access'
 })
 
-type HudOverlayId = 'tyres' | 'sectors' | 'dashboard'
+type HudOverlayId = 'tyres' | 'sectors' | 'dashboard' | 'info'
 
 interface HudReplayScenario {
   id: string
@@ -35,6 +35,7 @@ const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string 
   { id: 'tyres', title: 'Gomme', description: 'Temperature, pressioni e scivolamento per pneumatico (fast_state).' },
   { id: 'sectors', title: 'Settori', description: 'Tempi e delta per settore con codifica colore (live_state).' },
   { id: 'dashboard', title: 'Dashboard', description: 'Replica ACC Drive 665×225 con marcia, carburante, elettronica e shift flash.' },
+  { id: 'info', title: 'Info', description: 'Replica ACC Drive con delta, stint, fuel, grip, best, danni e cronometro.' },
 ]
 
 const SCALE_MIN = 0.6
@@ -47,8 +48,8 @@ function getApi(): any | null {
 
 const isElectron = ref(false)
 const apiReady = ref(false)
-const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false })
-const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1 })
+const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false })
+const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1, info: 1 })
 const tyreVariant = ref<'classic' | 'advanced'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
@@ -62,6 +63,35 @@ const dashboardSettings = reactive({
   fuelCriticalFlashEnabled: false,
   fuelCriticalLapsThreshold: 0.5,
 })
+const infoSettings = reactive({
+  showYellowFlag: true,
+  showDelta: true,
+  showStint: true,
+  showQFuel: false,
+  showFuelLeft: false,
+  showIncidents: false,
+  showGrip: true,
+  showPitExitTraffic: true,
+  showOptimal: false,
+  showBest: true,
+  showDamage: true,
+  showTime: false,
+})
+type InfoSettingKey = keyof typeof infoSettings
+const infoOptionDefinitions: Array<{ key: InfoSettingKey, label: string, description: string }> = [
+  { key: 'showYellowFlag', label: 'Yellow Flag', description: 'Mostra il bordo giallo dell overlay quando ACC espone la bandiera.' },
+  { key: 'showStint', label: 'Stint Time', description: 'Tempo stint pilota o compagno quando disponibile.' },
+  { key: 'showQFuel', label: 'Q-Fuel / Stint-Fuel', description: 'Carburante contestuale necessario o in avanzo.' },
+  { key: 'showFuelLeft', label: 'Fuel Left', description: 'Tempo di guida stimato con il carburante rimasto.' },
+  { key: 'showIncidents', label: 'Incidents', description: 'Invalid Lap 1x, danno 4x.' },
+  { key: 'showDelta', label: 'Delta', description: 'Delta live con barra e colori ACC Drive.' },
+  { key: 'showGrip', label: 'Grip', description: 'Stato grip pista ACC.' },
+  { key: 'showPitExitTraffic', label: 'Pit Exit Traffic', description: 'Traffico previsto all uscita box quando disponibile.' },
+  { key: 'showOptimal', label: 'Optimal', description: 'Giro potenziale dai migliori settori.' },
+  { key: 'showBest', label: 'Best', description: 'Miglior giro della sessione.' },
+  { key: 'showDamage', label: 'Damage', description: 'Danno totale espresso come tempo riparazione.' },
+  { key: 'showTime', label: 'Local Time', description: 'Orologio locale HH:mm:ss, come nell Info ACC Drive.' },
+]
 const positioning = ref(false)
 const trainingOpen = ref(false)
 // Stato "in guida" (PIP-177): quando attivo, gli overlay abilitati appaiono da
@@ -138,6 +168,11 @@ async function refreshState() {
         dashboardSettings.fuelCriticalFlashEnabled = settings?.fuelCriticalFlashEnabled === true
         dashboardSettings.fuelCriticalLapsThreshold = Number.isFinite(Number(settings?.fuelCriticalLapsThreshold))
           ? Number(settings.fuelCriticalLapsThreshold) : 0.5
+      }
+      if (overlay.id === 'info') {
+        for (const definition of infoOptionDefinitions) {
+          infoSettings[definition.key] = settings?.[definition.key] !== false
+        }
       }
     } catch {
       open[overlay.id] = false
@@ -333,6 +368,18 @@ function toggleDashboardSetting(key: keyof typeof dashboardSettings) {
 }
 
 
+
+async function saveInfoSetting(key: InfoSettingKey, value: boolean) {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySaveSettings) return
+  infoSettings[key] = value
+  const settings = await api.hudOverlaySaveSettings('info', { [key]: value })
+  if (settings && typeof settings[key] === 'boolean') infoSettings[key] = settings[key]
+}
+
+function toggleInfoSetting(key: InfoSettingKey) {
+  void saveInfoSetting(key, !infoSettings[key])
+}
 async function toggleTraining() {
   const api = getApi()
   if (!api || typeof api.trainingOverlayToggle !== 'function') return
@@ -595,6 +642,15 @@ async function toggleTraining() {
                 >
                 <b>GIRI</b>
               </span>
+            </label>
+          </template>
+          <template v-if="overlay.id === 'info'">
+            <label v-for="option in infoOptionDefinitions" :key="option.key" class="hud-card__option">
+              <span>
+                <strong>{{ option.label }}</strong>
+                <em>{{ option.description }}</em>
+              </span>
+              <input type="checkbox" role="switch" :checked="infoSettings[option.key]" :disabled="!apiReady" @change="toggleInfoSetting(option.key)">
             </label>
           </template>
         </article>

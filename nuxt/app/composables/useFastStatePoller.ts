@@ -25,7 +25,49 @@ export interface FastStateLapPressureAverage {
   values: Record<FastStateTyre['id'], number | null>
 }
 
+export interface FastStateContext {
+  track: string | null
+  car: string | null
+  sessionType: number | null
+  sessionIndex: number | null
+  sessionUid: string | null
+  serverId: string | null
+}
+
+export interface FastStateInfo {
+  delta: {
+    ms: number
+    available: boolean
+    side: 'negative' | 'positive' | 'zero'
+    ratio: number
+    purple: boolean
+  }
+  stintTimeLeftMs: number | null
+  fuelLabel: string
+  fuelNeededL: number | null
+  fuelLeftTimeMs: number | null
+  incidents: number
+  grip: string | null
+  pitExitTraffic: number | null
+  optimalLapTimeMs: number | null
+  bestLapTimeMs: number | null
+  damageTimeMs: number | null
+  currentLapTimeMs: number
+  lastLapTimeMs: number | null
+  lapValid: boolean
+  lastLapValid: boolean | null
+  lapsCompleted: number
+}
+
 export interface FastOverlayState {
+  context: FastStateContext | null
+  info: FastStateInfo | null
+  flag: number | null
+  lapsCompleted: number
+  currentLapTimeMs: number | null
+  lastLapTimeMs: number | null
+  bestLapTimeMs: number | null
+  lapValid: boolean
   isFresh: boolean
   isLive: boolean
   ignitionOn: boolean
@@ -76,6 +118,14 @@ export interface FastOverlayState {
 }
 
 const EMPTY_FAST_STATE: FastOverlayState = {
+  context: null,
+  info: null,
+  flag: null,
+  lapsCompleted: 0,
+  currentLapTimeMs: null,
+  lastLapTimeMs: null,
+  bestLapTimeMs: null,
+  lapValid: false,
   isFresh: false,
   isLive: false,
   ignitionOn: false,
@@ -139,6 +189,54 @@ const VALID_TRACK_REFERENCE_PHASES = new Set<TrackReferencePhase>(['garage', 'ou
 
 function toNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function toStringOrNull(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function normalizeContext(raw: any): FastStateContext | null {
+  if (!raw || typeof raw !== 'object') return null
+  return {
+    track: toStringOrNull(raw.track),
+    car: toStringOrNull(raw.car),
+    sessionType: toNumber(raw.session_type),
+    sessionIndex: toNumber(raw.session_index),
+    sessionUid: toStringOrNull(raw.session_uid),
+    serverId: toStringOrNull(raw.server_id),
+  }
+}
+
+function normalizeInfo(raw: any): FastStateInfo | null {
+  if (!raw || typeof raw !== 'object') return null
+  const delta = raw.delta && typeof raw.delta === 'object' ? raw.delta : {}
+  const side = ['negative', 'positive', 'zero'].includes(delta.side)
+    ? delta.side as FastStateInfo['delta']['side']
+    : 'zero'
+  return {
+    delta: {
+      ms: toNumber(delta.ms) ?? 0,
+      available: delta.available === true,
+      side,
+      ratio: Math.min(Math.max(toNumber(delta.ratio) ?? 0, 0), 1),
+      purple: delta.purple === true,
+    },
+    stintTimeLeftMs: toNumber(raw.stint_time_left_ms),
+    fuelLabel: toStringOrNull(raw.fuel_label) || 'Q-Fuel',
+    fuelNeededL: toNumber(raw.fuel_needed_l),
+    fuelLeftTimeMs: toNumber(raw.fuel_left_time_ms),
+    incidents: toNumber(raw.incidents) ?? 0,
+    grip: toStringOrNull(raw.grip),
+    pitExitTraffic: toNumber(raw.pit_exit_traffic),
+    optimalLapTimeMs: toNumber(raw.optimal_lap_time_ms),
+    bestLapTimeMs: toNumber(raw.best_lap_time_ms),
+    damageTimeMs: toNumber(raw.damage_time_ms),
+    currentLapTimeMs: toNumber(raw.current_lap_time_ms) ?? 0,
+    lastLapTimeMs: toNumber(raw.last_lap_time_ms),
+    lapValid: raw.lap_valid === true,
+    lastLapValid: typeof raw.last_lap_valid === 'boolean' ? raw.last_lap_valid : null,
+    lapsCompleted: toNumber(raw.laps_completed) ?? 0,
+  }
 }
 
 function normalizeBand(value: unknown): FastStateSlipBand {
@@ -208,6 +306,14 @@ function normalizeFastState(state: any): FastOverlayState {
     : []
 
   return {
+    context: normalizeContext(state.context),
+    info: normalizeInfo(state.info),
+    flag: toNumber(state.flag),
+    lapsCompleted: toNumber(state.laps_completed) ?? 0,
+    currentLapTimeMs: toNumber(state.current_lap_time_ms),
+    lastLapTimeMs: toNumber(state.last_lap_time_ms),
+    bestLapTimeMs: toNumber(state.best_lap_time_ms),
+    lapValid: state.lap_valid === true,
     isFresh: true,
     isLive: state.is_live === true,
     ignitionOn: state.ignition_on === true,

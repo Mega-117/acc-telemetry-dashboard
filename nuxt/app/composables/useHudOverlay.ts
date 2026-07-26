@@ -16,6 +16,17 @@ export interface HudOverlaySettings {
   shiftRpmThreshold?: number
   fuelCriticalFlashEnabled?: boolean
   fuelCriticalLapsThreshold?: number
+  showYellowFlag?: boolean
+  showDelta?: boolean
+  showStint?: boolean
+  showQFuel?: boolean
+  showFuelLeft?: boolean
+  showIncidents?: boolean
+  showGrip?: boolean
+  showPitExitTraffic?: boolean
+  showOptimal?: boolean
+  showDamage?: boolean
+  showTime?: boolean
 }
 
 export const HUD_SCALE_MIN = 0.6

@@ -28,6 +28,7 @@ import {
 } from '~/composables/useOverlaySettings'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
+import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
 import { usePublicPath } from '~/composables/usePublicPath'
@@ -60,6 +61,13 @@ interface TrainingOverlaySettings {
   originCorner?: OverlayOriginCorner
   enableVoicePointRecorder?: boolean
 }
+interface InfoTargetSettings {
+  active: boolean
+  targetTimeMs: number | null
+  toleranceMs: number
+  keepBetweenSessions: boolean
+}
+
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const OVERLAY_WORK_AREA_SIZE: OverlaySize = { width: 472, height: 768 }
@@ -99,6 +107,11 @@ const canUseSpotterControls = computed(() => canEnterApp.value)
 const launcherToolIndex = ref(0)
 const overlayRoot = ref<HTMLElement | null>(null)
 const isPointerOnOverlaySurface = ref(false)
+const isTargetSetupOpen = ref(false)
+const infoTargetActive = ref(false)
+const infoTargetTimeMs = ref(90_000)
+const infoTargetToleranceMs = ref(500)
+const infoTargetKeepBetweenSessions = ref(false)
 const runtimeVoicePointRecorderAllowed = ref(false)
 const showDevControls = computed(() => {
   if (import.meta.dev || runtimeVoicePointRecorderAllowed.value) return true
@@ -342,6 +355,46 @@ async function confirmPlacement() {
 }
 
 async function closeOverlay() { await getOverlayApi()?.trainingOverlayClose?.() }
+function applyInfoTargetSettings(settings: InfoTargetSettings | null | undefined) {
+  if (!settings) return
+  infoTargetActive.value = settings.active === true
+  if (typeof settings.targetTimeMs === 'number' && settings.targetTimeMs >= 1_000) {
+    infoTargetTimeMs.value = settings.targetTimeMs
+  }
+  infoTargetToleranceMs.value = Math.min(Math.max(Math.round(settings.toleranceMs || 500), 100), 1000)
+  infoTargetKeepBetweenSessions.value = settings.keepBetweenSessions === true
+}
+
+function openInfoTargetSetup() {
+  if (!infoTargetActive.value) {
+    const contextual = fastState.value.info?.bestLapTimeMs
+      || fastState.value.info?.lastLapTimeMs
+      || fastState.value.info?.currentLapTimeMs
+    if (contextual && contextual >= 1_000) {
+      infoTargetTimeMs.value = Math.round(contextual / 100) * 100
+    }
+  }
+  isTargetSetupOpen.value = true
+  launcherToolIndex.value = 3
+  scheduleOverlaySizeSync()
+}
+
+function cancelInfoTargetSetup() {
+  isTargetSetupOpen.value = false
+  scheduleOverlaySizeSync()
+}
+
+async function confirmInfoTarget() {
+  const saved = await getOverlayApi()?.infoTargetSaveSettings?.({
+    targetTimeMs: infoTargetTimeMs.value,
+    toleranceMs: infoTargetToleranceMs.value,
+    keepBetweenSessions: infoTargetKeepBetweenSessions.value,
+  }) as InfoTargetSettings | undefined
+  applyInfoTargetSettings(saved)
+  isTargetSetupOpen.value = false
+  await getOverlayApi()?.trainingOverlayClose?.()
+}
+
 
 function toggleCoachAudio() {
   if (!canUseSpotterControls.value) {
@@ -357,6 +410,7 @@ function toggleCoachAudio() {
 }
 
 function runBackAction() {
+  if (isTargetSetupOpen.value) { cancelInfoTargetSetup(); return }
   if (isShortcutStopConfirmOpen.value) { closeShortcutStopConfirm(); return }
   if (phase.value === 'launcher') { closeOverlay(); return }
   if (phase.value === 'placement') { phase.value = 'launcher'; return }
@@ -379,6 +433,7 @@ function executePrimaryAction() {
   const now = Date.now()
   if (now - lastPrimaryActionAt < PRIMARY_ACTION_DEBOUNCE_MS) { setDebugEvent(`debounce ${primaryAction.value}`); return }
   lastPrimaryActionAt = now; setDebugEvent(`azione: ${primaryAction.value}`)
+  if (isTargetSetupOpen.value) { void confirmInfoTarget(); return }
   if (isShortcutStopConfirmOpen.value) { executeStop(); return }
   const actions: Record<PrimaryOverlayAction, () => void> = {
     'confirm-placement': () => void confirmPlacement(),
@@ -524,6 +579,7 @@ function handleLocalShortcut(event: KeyboardEvent) {
 
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
 let removeCommandListener: (() => void) | undefined
+let removeInfoTargetListener: (() => void) | undefined
 
 onMounted(async () => {
   document.body.classList.add('training-overlay-runtime')
@@ -531,6 +587,8 @@ onMounted(async () => {
   const api = getOverlayApi()
   isElectronRuntime.value = !!api
   const settings = await api?.trainingOverlayGetSettings?.() as TrainingOverlaySettings | undefined
+  const targetSettings = await api?.infoTargetGetSettings?.() as InfoTargetSettings | undefined
+  applyInfoTargetSettings(targetSettings)
   selectedTrainingId.value = resolveTrainingOverlayTrainingId(settings?.lastTrainingId)
   selectedModeId.value = resolveTrainingOverlayModeId(settings?.lastDurationId)
   soundEnabled.value = settings?.soundEnabled !== false
@@ -546,6 +604,9 @@ onMounted(async () => {
   startLiveStatePolling()
   startFastStatePolling()
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
+  removeInfoTargetListener = api?.onInfoTargetSettings?.((next: InfoTargetSettings) => {
+    if (!isTargetSetupOpen.value) applyInfoTargetSettings(next)
+  })
   window.addEventListener('keydown', handleLocalShortcut, true)
   if (api?.trainingOverlaySetMousePassthrough) {
     window.addEventListener('mousemove', updateMousePassthrough, true)
@@ -565,7 +626,7 @@ watch(canUseSpotterControls, (canUse) => {
 
 watch(
   [phase, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
-    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, liveHudResizeKey],
+    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, liveHudResizeKey],
   () => scheduleOverlaySizeSync(),
   { flush: 'post' }
 )
@@ -591,6 +652,7 @@ onBeforeUnmount(() => {
   clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopFastStatePolling(); stopVoice(); cleanupSize()
   if (voicePointNoticeTimer) clearTimeout(voicePointNoticeTimer)
   removeCommandListener?.()
+  removeInfoTargetListener?.()
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleLocalShortcut, true)
     window.removeEventListener('mousemove', updateMousePassthrough, true)
@@ -695,11 +757,12 @@ onBeforeUnmount(() => {
               :class="[
                 'overlay-content',
                 `overlay-content--${overlaySizePreset}`,
+                { 'overlay-content--target': isTargetSetupOpen },
               ]"
             >
 
               <template v-if="phase === 'launcher'">
-                <div class="launcher-tools" aria-label="Strumenti live overlay">
+                <div v-if="!isTargetSetupOpen" class="launcher-tools" aria-label="Strumenti live overlay">
                   <header class="launcher-tools__header">
                     <span>
                       Strumenti live
@@ -747,10 +810,33 @@ onBeforeUnmount(() => {
                     >
                       {{ referenceAudioToggleLabel }}
                     </button>
+                    <button
+                      type="button"
+                      class="launcher-tool-button launcher-tool-button--target"
+                      :class="{ 'is-active': infoTargetActive, 'is-selected': launcherToolIndex === 3 }"
+                      :aria-pressed="infoTargetActive"
+                      :aria-current="launcherToolIndex === 3 ? 'true' : undefined"
+                      aria-label="Configura Target giro HUD Info"
+                      @focus="launcherToolIndex = 3"
+                      @click="openInfoTargetSetup"
+                    >
+                      Target giro
+                    </button>
                   </div>
 
                   <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K chiude</p>
                 </div>
+                <InfoTargetSetup
+                  v-else
+                  :target-time-ms="infoTargetTimeMs"
+                  :tolerance-ms="infoTargetToleranceMs"
+                  :keep-between-sessions="infoTargetKeepBetweenSessions"
+                  @set-target-time="infoTargetTimeMs = $event"
+                  @select-tolerance="infoTargetToleranceMs = $event"
+                  @toggle-keep="infoTargetKeepBetweenSessions = !infoTargetKeepBetweenSessions"
+                  @confirm="confirmInfoTarget"
+                  @cancel="cancelInfoTargetSetup"
+                />
               </template>
 
               <template v-else-if="phase === 'completed'">

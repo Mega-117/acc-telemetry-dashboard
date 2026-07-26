@@ -18,6 +18,7 @@ function makeState(overrides: Record<string, any> = {}) {
     is_engine_running: true,
     pit_limiter_on: false,
     session_type: 0,
+    flag: 2,
     speed_kmh: 132.4,
     gas: 0.7,
     brake: 0.1,
@@ -65,6 +66,7 @@ describe('useFastStatePoller', () => {
     expect(isFastStateActive.value).toBe(true)
     expect(fastState.value.speedKmh).toBe(132.4)
     expect(fastState.value.sessionType).toBe(0)
+    expect(fastState.value.flag).toBe(2)
     expect(fastState.value.gas).toBe(0.7)
     expect(fastState.value.isEngineRunning).toBe(true)
     expect(fastState.value.pitLimiterOn).toBe(false)
@@ -85,6 +87,64 @@ describe('useFastStatePoller', () => {
     expect(fastState.value.tyres[0]?.brakeTempC).toBe(410.2)
     expect(fastState.value.tyres[0]?.padLifePct).toBe(99.7)
     expect(fastState.value.tyres[0]?.discLifePct).toBe(99.9)
+  })
+
+  it('normalizza il contratto centralizzato Info e il contesto Target', async () => {
+    const api = {
+      getFastState: vi.fn(async () => makeState({
+        laps_completed: 7,
+        current_lap_time_ms: 44_321,
+        last_lap_time_ms: 91_234,
+        best_lap_time_ms: 90_999,
+        lap_valid: true,
+        context: {
+          track: 'monza',
+          car: 'ferrari_296_gt3',
+          session_type: 2,
+          session_index: 3,
+          session_uid: 'session-42',
+          server_id: null,
+        },
+        info: {
+          delta: { ms: -456, available: true, side: 'negative', ratio: 1.4, purple: true },
+          stint_time_left_ms: 1_200_000,
+          fuel_label: 'Q-Fuel',
+          fuel_needed_l: 2.7,
+          fuel_left_time_ms: 960_000,
+          incidents: 5,
+          grip: 'Green',
+          pit_exit_traffic: null,
+          optimal_lap_time_ms: 90_500,
+          best_lap_time_ms: 90_999,
+          damage_time_ms: 3_200,
+          current_lap_time_ms: 44_321,
+          last_lap_time_ms: 91_234,
+          lap_valid: true,
+          last_lap_valid: false,
+          laps_completed: 7,
+        },
+      })),
+    }
+    const { fastState, startFastStatePolling } = useFastStatePoller(() => api)
+
+    startFastStatePolling()
+    await flushPromises()
+
+    expect(fastState.value.context).toEqual({
+      track: 'monza',
+      car: 'ferrari_296_gt3',
+      sessionType: 2,
+      sessionIndex: 3,
+      sessionUid: 'session-42',
+      serverId: null,
+    })
+    expect(fastState.value.info?.delta).toEqual({
+      ms: -456, available: true, side: 'negative', ratio: 1, purple: true,
+    })
+    expect(fastState.value.info?.fuelNeededL).toBe(2.7)
+    expect(fastState.value.info?.pitExitTraffic).toBeNull()
+    expect(fastState.value.info?.lastLapValid).toBe(false)
+    expect(fastState.value.lapsCompleted).toBe(7)
   })
 
   it('degrada in modo sicuro se la fase riferimenti non e riconosciuta', async () => {
