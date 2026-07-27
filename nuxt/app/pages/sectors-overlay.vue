@@ -5,6 +5,7 @@ import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
+import { normalizeSectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 
 definePageMeta({ layout: false })
 
@@ -23,6 +24,7 @@ const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePol
 const { isElectron, scale, settings, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
 const showReference = computed(() => settings.value?.showReference !== false)
 const showBest = computed(() => settings.value?.showBest !== false)
+const deltaReference = computed(() => normalizeSectorDeltaReference(settings.value?.deltaReference))
 
 onMounted(() => {
   startLiveStatePolling()
@@ -43,7 +45,12 @@ onBeforeUnmount(() => {
     :class="{ 'hud-overlay--web': !isElectron }"
   >
     <div class="hud-overlay__panel">
-      <SectorDeltaHud :sector-hud="liveLap.sectorHud" :show-reference="showReference" :show-best="showBest" />
+      <SectorDeltaHud
+        :sector-hud="liveLap.sectorHud"
+        :show-reference="showReference"
+        :show-best="showBest"
+        :delta-reference="deltaReference"
+      />
     </div>
   </div>
 </template>

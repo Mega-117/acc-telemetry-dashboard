@@ -7,6 +7,7 @@ export interface HudOverlaySettings {
   bounds: unknown
   showReference?: boolean
   showBest?: boolean
+  deltaReference?: 'previousLap' | 'bestSector'
   variant?: 'classic' | 'advanced'
   electronicsReference?: boolean
   rpmReference?: boolean

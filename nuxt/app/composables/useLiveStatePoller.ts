@@ -22,6 +22,7 @@ export interface SectorHudEntry {
   currentMs: number | null
   referenceMs: number | null
   bestMs: number | null
+  bestReferenceMs: number | null
   deltaMs: number | null
   color: SectorHudColor
 }
@@ -94,6 +95,7 @@ function normalizeSectorHud(raw: any): SectorHudState | null {
         currentMs: toNumber(sector.current_ms),
         referenceMs: toNumber(sector.reference_ms),
         bestMs: toNumber(sector.best_ms),
+        bestReferenceMs: toNumber(sector.best_reference_ms),
         deltaMs: toNumber(sector.delta_ms),
         color: normalizeSectorColor(sector.color),
       } satisfies SectorHudEntry

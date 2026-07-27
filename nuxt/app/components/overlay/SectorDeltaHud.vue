@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { SectorHudState, SectorHudEntry } from '~/composables/useLiveStatePoller'
+import {
+  normalizeSectorDeltaReference,
+  resolveSectorDeltaPresentation,
+  type SectorDeltaReference,
+} from '~/utils/sectorDeltaPresentation'
 
 const props = defineProps<{
   sectorHud: SectorHudState | null
@@ -10,6 +15,8 @@ const props = defineProps<{
   showBest?: boolean
   // Per il settore in corso mostra il tempo parziale "live" invece di "--" (PIP-175).
   liveRunning?: boolean
+  // Cambia solo il riferimento usato da delta e colore (PIP-275).
+  deltaReference?: SectorDeltaReference
 }>()
 
 const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
@@ -19,13 +26,22 @@ const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
   referenceMs: null,
   bestMs: null,
   deltaMs: null,
+  bestReferenceMs: null,
   color: 'grey',
 }))
 
 const hasSectorData = computed(() => (props.sectorHud?.sectors?.length ?? 0) === 3)
-const visibleSectors = computed(() => hasSectorData.value ? props.sectorHud!.sectors : idleSectors)
+const selectedReference = computed(() => normalizeSectorDeltaReference(props.deltaReference))
+const visibleSectors = computed(() => {
+  const sectors = hasSectorData.value ? props.sectorHud!.sectors : idleSectors
+  return sectors.map((sector) => ({
+    ...sector,
+    ...resolveSectorDeltaPresentation(sector, selectedReference.value),
+  }))
+})
 const modeLabel = computed(() => props.sectorHud?.mode === 'last_lap' ? 'Ultimo giro' : 'Settori')
 const statusLabel = computed(() => props.sectorHud?.awaitingFlyingLap ? 'attesa giro lanciato' : null)
+const referenceLabel = computed(() => selectedReference.value === 'bestSector' ? 'ref best' : null)
 
 function formatTime(ms: number | null): string {
   if (ms === null) return '--'
@@ -84,6 +100,7 @@ function ariaLabel(sector: SectorHudEntry): string {
     <div class="sector-delta-hud__header">
       <span>{{ modeLabel }}</span>
       <em v-if="statusLabel">{{ statusLabel }}</em>
+      <em v-else-if="referenceLabel">{{ referenceLabel }}</em>
       <em v-else-if="sectorHud?.referenceLap">ref lap {{ sectorHud.referenceLap }}</em>
       <em v-else>ref --</em>
     </div>
@@ -114,7 +131,7 @@ function ariaLabel(sector: SectorHudEntry): string {
         <small
           class="sector-delta__delta"
           :class="{ 'sector-delta__delta--placeholder': sector.state !== 'complete' || sector.deltaMs === null }"
-        >{{ sectorHud?.awaitingFlyingLap ? 'wait' : sector.state === 'complete' ? formatDelta(sector.deltaMs) : sector.state === 'running' ? 'live' : 'wait' }}</small>
+        >{{ sectorHud?.awaitingFlyingLap ? 'wait' : sector.state === 'complete' ? (sector.deltaMs === null ? 'wait' : formatDelta(sector.deltaMs)) : sector.state === 'running' ? 'live' : 'wait' }}</small>
       </div>
     </div>
   </section>

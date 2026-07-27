@@ -53,6 +53,7 @@ const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, das
 const tyreVariant = ref<'classic' | 'advanced'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
+const sectorDeltaReference = ref<'previousLap' | 'bestSector'>('previousLap')
 const dashboardSettings = reactive({
   electronicsReference: false,
   rpmReference: false,
@@ -157,6 +158,7 @@ async function refreshState() {
       if (overlay.id === 'tyres') tyreVariant.value = settings?.variant === 'advanced' ? 'advanced' : 'classic'
       if (overlay.id === 'sectors' && typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
       if (overlay.id === 'sectors' && typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
+      if (overlay.id === 'sectors') sectorDeltaReference.value = settings?.deltaReference === 'bestSector' ? 'bestSector' : 'previousLap'
       if (overlay.id === 'dashboard') {
         dashboardSettings.electronicsReference = settings?.electronicsReference === true
         dashboardSettings.rpmReference = settings?.rpmReference === true
@@ -327,6 +329,15 @@ async function setTyreVariant(value: string) {
   tyreVariant.value = next
   const settings = await api.hudOverlaySaveSettings('tyres', { variant: next })
   tyreVariant.value = settings?.variant === 'advanced' ? 'advanced' : 'classic'
+}
+
+async function setSectorDeltaReference(value: string) {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySaveSettings) return
+  const next = value === 'bestSector' ? 'bestSector' : 'previousLap'
+  sectorDeltaReference.value = next
+  const settings = await api.hudOverlaySaveSettings('sectors', { deltaReference: next })
+  sectorDeltaReference.value = settings?.deltaReference === 'bestSector' ? 'bestSector' : 'previousLap'
 }
 
 async function toggleSectorReference() {
@@ -561,6 +572,21 @@ async function toggleTraining() {
           </label>
 
           <template v-if="overlay.id === 'sectors'">
+            <label class="hud-card__option">
+              <span>
+                <strong>Confronta con</strong>
+                <em>Sceglie il riferimento del delta; se manca, il valore resta “Wait”.</em>
+              </span>
+              <select
+                class="hud-card__select"
+                :value="sectorDeltaReference"
+                :disabled="!apiReady"
+                @change="setSectorDeltaReference(($event.target as HTMLSelectElement).value)"
+              >
+                <option value="previousLap">Giro precedente</option>
+                <option value="bestSector">Miglior settore</option>
+              </select>
+            </label>
             <label class="hud-card__option">
               <span>
                 <strong>Tempo settore precedente</strong>
@@ -866,8 +892,8 @@ async function toggleTraining() {
 }
 
 .hud-card__select {
-  flex: 0 0 136px;
-  min-width: 136px;
+  flex: 0 0 172px;
+  min-width: 172px;
   padding: 8px 30px 8px 10px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 9px;
@@ -880,6 +906,11 @@ async function toggleTraining() {
 
   option {
     background-color: #171b25;
+    color: #fff;
+  }
+
+  option:checked {
+    background-color: #2563eb;
     color: #fff;
   }
 
