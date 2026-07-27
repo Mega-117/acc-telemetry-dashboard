@@ -8,7 +8,7 @@ export interface HudOverlaySettings {
   showReference?: boolean
   showBest?: boolean
   deltaReference?: 'previousLap' | 'bestSector'
-  variant?: 'classic' | 'advanced'
+  variant?: 'classic' | 'advanced' | 'compact'
   electronicsReference?: boolean
   rpmReference?: boolean
   gearReference?: boolean

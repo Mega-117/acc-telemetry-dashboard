@@ -51,6 +51,7 @@ const apiReady = ref(false)
 const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false })
 const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1, info: 1 })
 const tyreVariant = ref<'classic' | 'advanced'>('classic')
+const sectorVariant = ref<'classic' | 'compact'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
 const sectorDeltaReference = ref<'previousLap' | 'bestSector'>('previousLap')
@@ -156,6 +157,7 @@ async function refreshState() {
       const settings = await api.hudOverlayGetSettings(overlay.id)
       if (settings?.scale !== undefined) scale[overlay.id] = settings.scale
       if (overlay.id === 'tyres') tyreVariant.value = settings?.variant === 'advanced' ? 'advanced' : 'classic'
+      if (overlay.id === 'sectors') sectorVariant.value = settings?.variant === 'compact' ? 'compact' : 'classic'
       if (overlay.id === 'sectors' && typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
       if (overlay.id === 'sectors' && typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
       if (overlay.id === 'sectors') sectorDeltaReference.value = settings?.deltaReference === 'bestSector' ? 'bestSector' : 'previousLap'
@@ -338,6 +340,15 @@ async function setSectorDeltaReference(value: string) {
   sectorDeltaReference.value = next
   const settings = await api.hudOverlaySaveSettings('sectors', { deltaReference: next })
   sectorDeltaReference.value = settings?.deltaReference === 'bestSector' ? 'bestSector' : 'previousLap'
+}
+
+async function setSectorVariant(value: string) {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySaveSettings) return
+  const next = value === 'compact' ? 'compact' : 'classic'
+  sectorVariant.value = next
+  const settings = await api.hudOverlaySaveSettings('sectors', { variant: next })
+  sectorVariant.value = settings?.variant === 'compact' ? 'compact' : 'classic'
 }
 
 async function toggleSectorReference() {
@@ -572,6 +583,21 @@ async function toggleTraining() {
           </label>
 
           <template v-if="overlay.id === 'sectors'">
+            <label class="hud-card__option">
+              <span>
+                <strong>Layout</strong>
+                <em>Classico mantiene l'HUD attuale; Compatto mostra cronometro e tre righe essenziali.</em>
+              </span>
+              <select
+                class="hud-card__select"
+                :value="sectorVariant"
+                :disabled="!apiReady"
+                @change="setSectorVariant(($event.target as HTMLSelectElement).value)"
+              >
+                <option value="classic">Classico</option>
+                <option value="compact">Compatto</option>
+              </select>
+            </label>
             <label class="hud-card__option">
               <span>
                 <strong>Confronta con</strong>

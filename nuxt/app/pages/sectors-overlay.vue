@@ -4,6 +4,7 @@
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
+import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
 import { normalizeSectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 
@@ -21,19 +22,31 @@ function getApi(): any | null {
 
 const route = useRoute()
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getApi)
+const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getApi)
 const { isElectron, scale, settings, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
 const showReference = computed(() => settings.value?.showReference !== false)
 const showBest = computed(() => settings.value?.showBest !== false)
 const deltaReference = computed(() => normalizeSectorDeltaReference(settings.value?.deltaReference))
+const variant = computed(() => settings.value?.variant === 'compact' ? 'compact' : 'classic')
+// Stessa sorgente e stessa semantica dell'overlay Info: nessuna regola locale
+// per outlap, pit exit, reset del giro o invalidazione.
+const liveCurrentLapTimeMs = computed(() => (
+  fastState.value.info?.currentLapTimeMs ?? null
+))
+const liveLapValid = computed(() => (
+  fastState.value.info?.lapValid ?? null
+))
 
 onMounted(() => {
   startLiveStatePolling()
+  startFastStatePolling()
   start(route.query.scale)
   loadSettings()
 })
 
 onBeforeUnmount(() => {
   stopLiveStatePolling()
+  stopFastStatePolling()
   stop()
 })
 </script>
@@ -50,6 +63,10 @@ onBeforeUnmount(() => {
         :show-reference="showReference"
         :show-best="showBest"
         :delta-reference="deltaReference"
+        :variant="variant"
+        :live-running="variant === 'compact'"
+        :live-current-lap-time-ms="variant === 'compact' ? liveCurrentLapTimeMs : undefined"
+        :live-lap-valid="variant === 'compact' ? liveLapValid : undefined"
       />
     </div>
   </div>
@@ -65,7 +82,7 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0;
   display: flex;
-  padding: 6px;
+  padding: calc(6px * var(--hud-scale));
   background: transparent;
   box-sizing: border-box;
   color: #f4f8ff;
@@ -78,6 +95,8 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   -webkit-app-region: drag;
@@ -93,6 +112,8 @@ onBeforeUnmount(() => {
   flex: 1;
   width: 100%;
   display: flex;
+  min-height: 0;
+  overflow: hidden;
   flex-direction: column;
   gap: calc(8px * var(--hud-scale));
   background: transparent;

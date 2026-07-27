@@ -73,4 +73,134 @@ describe('SectorDeltaHud', () => {
     expect(html).toContain('>wait</small>')
     expect(html).not.toContain('-0.200</small>')
   })
+
+  it('rende il layout compatto con cronometro e sole tre righe essenziali', async () => {
+    const compactHud: SectorHudState = {
+      ...sectorHud,
+      currentLapTimeMs: 83_456,
+      sectors: sectorHud.sectors.map((item, index) => ({
+        ...item,
+        state: index === 1 ? 'running' : index === 2 ? 'pending' : item.state,
+        currentMs: index > 0 ? null : item.currentMs,
+        deltaMs: index > 0 ? null : item.deltaMs,
+      })),
+    }
+    const html = await renderToString(createSSRApp({
+      render: () => h(SectorDeltaHud, {
+        sectorHud: compactHud,
+        variant: 'compact',
+        showReference: true,
+        showBest: true,
+        deltaReference: 'previousLap',
+        liveRunning: true,
+      }),
+    }))
+
+    expect(html).toContain('SECTORS')
+    expect(html).toContain('1:23.456')
+    expect(html).toContain('CURRENT LAP')
+    expect((html.match(/sector-compact__label/g) || []).length).toBe(3)
+    expect(html).not.toContain('sector-delta__ref')
+    expect(html).not.toContain('sector-delta__best')
+    expect(html).toContain('sector-compact__number--updating')
+    expect(html).toContain('52.655')
+  })
+
+  it('usa il timer Info live per far avanzare current lap e settore attivo tra gli eventi settore', async () => {
+    const eventDrivenHud: SectorHudState = {
+      ...sectorHud,
+      currentLapTimeMs: 41_250,
+      sectors: [
+        { ...entry(1), currentMs: 41_232, deltaMs: null },
+        { ...entry(2), state: 'running', currentMs: 18, deltaMs: null },
+        { ...entry(3), state: 'pending', currentMs: null, deltaMs: null },
+      ],
+    }
+
+    const first = await renderToString(createSSRApp({
+      render: () => h(SectorDeltaHud, {
+        sectorHud: eventDrivenHud,
+        variant: 'compact',
+        liveRunning: true,
+        liveCurrentLapTimeMs: 43_050,
+        liveLapValid: true,
+      }),
+    }))
+    const second = await renderToString(createSSRApp({
+      render: () => h(SectorDeltaHud, {
+        sectorHud: eventDrivenHud,
+        variant: 'compact',
+        liveRunning: true,
+        liveCurrentLapTimeMs: 44_850,
+        liveLapValid: false,
+      }),
+    }))
+
+    expect(first).toContain('0:43.050')
+    expect(first).toContain('1.818')
+    expect(first).not.toContain('sector-compact__lap--invalid')
+    expect(second).toContain('0:44.850')
+    expect(second).toContain('3.618')
+    expect(second).not.toContain('0:41.250')
+    expect(second).not.toContain('>0.018</span>')
+    expect(second).toContain('sector-compact__lap--invalid')
+  })
+
+  it('mostra il current lap Info disponibile senza sbloccare i settori ancora in Wait', async () => {
+    const waitingHud: SectorHudState = {
+      ...sectorHud,
+      awaitingFlyingLap: true,
+      currentLapTimeMs: null,
+      sectors: sectorHud.sectors.map(item => ({
+        ...item,
+        state: 'pending',
+        currentMs: null,
+        deltaMs: null,
+      })),
+    }
+    const html = await renderToString(createSSRApp({
+      render: () => h(SectorDeltaHud, {
+        sectorHud: waitingHud,
+        variant: 'compact',
+        liveCurrentLapTimeMs: 2_921_192,
+        liveLapValid: false,
+      }),
+    }))
+
+    expect(html).toContain('48:41.192')
+    expect(html).toContain('sector-compact__lap--invalid')
+    expect((html.match(/>wait<\/small>/g) || []).length).toBe(3)
+  })
+
+  it('mantiene il placeholder quando il timer Info non è disponibile', async () => {
+    const html = await renderToString(createSSRApp({
+      render: () => h(SectorDeltaHud, {
+        sectorHud: { ...sectorHud, currentLapTimeMs: 12_345 },
+        variant: 'compact',
+        liveCurrentLapTimeMs: null,
+      }),
+    }))
+
+    expect(html).toContain('--:--.---')
+    expect(html).not.toContain('0:12.345')
+  })
+
+  it('colora di rosso il cronometro compatto quando il giro è invalido e conserva Wait senza fallback', async () => {
+    const invalidHud: SectorHudState = {
+      ...sectorHud,
+      lapValid: false,
+      sectors: sectorHud.sectors.map(item => ({ ...item, bestReferenceMs: null })),
+    }
+    const html = await renderToString(createSSRApp({
+      render: () => h(SectorDeltaHud, {
+        sectorHud: invalidHud,
+        variant: 'compact',
+        deltaReference: 'bestSector',
+      }),
+    }))
+
+    expect(html).toContain('sector-compact__lap--invalid')
+    expect((html.match(/>wait<\/small>/g) || []).length).toBe(3)
+    expect(html).not.toContain('-0.200</small>')
+  })
 })
