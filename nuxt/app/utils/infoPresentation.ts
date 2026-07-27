@@ -68,14 +68,22 @@ function positive(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
 }
 
-export function formatInfoLapTime(valueMs: number | null | undefined): string {
-  const value = positive(valueMs)
-  if (value === null) return '--:--.---'
-  const total = Math.max(0, Math.round(value))
+function formatLapTimeTotal(totalMs: number): string {
+  const total = Math.max(0, Math.round(totalMs))
   const minutes = Math.floor(total / 60_000)
   const seconds = Math.floor((total % 60_000) / 1000)
   const milliseconds = total % 1000
   return `${minutes}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`
+}
+
+export function formatInfoLapTime(valueMs: number | null | undefined): string {
+  const value = positive(valueMs)
+  return value === null ? '--:--.---' : formatLapTimeTotal(value)
+}
+
+export function formatInfoRunningLapTime(valueMs: number | null | undefined): string {
+  const value = typeof valueMs === 'number' && Number.isFinite(valueMs) ? valueMs : 0
+  return formatLapTimeTotal(value)
 }
 
 export function formatInfoLocalTime(valueMs: number): string {
@@ -169,7 +177,7 @@ export function buildInfoPresentation(
   if (options.showBest) rows.push({ id: 'best', label: 'Best:', value: formatInfoLapTime(info?.bestLapTimeMs), tone: 'default' })
   if (options.showDamage) rows.push({ id: 'damage', label: 'Damage:', value: formatInfoLapTime(info?.damageTimeMs), tone: 'default' })
   if (options.showTime) rows.push({ id: 'local-time', label: 'Time:', value: '--:--:--', tone: 'default', localTime: true })
-  rows.push({ id: 'lap-timer', label: 'Lap Timer:', value: formatInfoLapTime(info?.currentLapTimeMs ?? 0), tone: 'default', lapTimer: true })
+  rows.push({ id: 'lap-timer', label: 'Lap Timer:', value: formatInfoRunningLapTime(info?.currentLapTimeMs), tone: 'default', lapTimer: true })
 
   return {
     yellowFlagActive: options.showYellowFlag && state.flag === 2,

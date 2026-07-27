@@ -7,6 +7,7 @@ import {
   formatInfoFuelDuration,
   formatInfoLapTime,
   formatInfoLocalTime,
+  formatInfoRunningLapTime,
   formatInfoStintDuration,
 } from '~/utils/infoPresentation'
 
@@ -38,6 +39,8 @@ describe('Info presentation', () => {
     expect(formatInfoDelta(0)).toBe('+0.000')
     expect(formatInfoLapTime(89_123)).toBe('1:29.123')
     expect(formatInfoLapTime(null)).toBe('--:--.---')
+    expect(formatInfoRunningLapTime(0)).toBe('0:00.000')
+    expect(formatInfoRunningLapTime(null)).toBe('0:00.000')
     expect(formatInfoFuelDuration(298_999)).toBe('0:04:58')
     expect(formatInfoFuelDuration(null)).toBe('-:--.---')
     expect(formatInfoStintDuration(0)).toBe('00:00')

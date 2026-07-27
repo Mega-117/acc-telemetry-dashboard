@@ -9,6 +9,7 @@ import {
   evaluateInfoTarget,
   formatInfoLapTime,
   formatInfoLocalTime,
+  formatInfoRunningLapTime,
   type InfoTargetOutcome,
   type InfoTargetSettings,
 } from '~/utils/infoPresentation'
@@ -49,7 +50,7 @@ const lapTimerOutcome = computed<InfoTargetOutcome>(() =>
 )
 const lapTimerValue = computed(() => {
   if (heldLap.value && isHoldingLap.value) return formatInfoLapTime(heldLap.value.timeMs)
-  return formatInfoLapTime(telemetry.fastState.value.info?.currentLapTimeMs ?? 0)
+  return formatInfoRunningLapTime(telemetry.fastState.value.info?.currentLapTimeMs)
 })
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
 const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
