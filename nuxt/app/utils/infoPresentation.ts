@@ -97,6 +97,26 @@ export function formatInfoDuration(valueMs: number | null | undefined): string {
   return `${minutes}:${String(seconds).padStart(2, '0')}.000`
 }
 
+export function formatInfoStintDuration(valueMs: number | null | undefined): string {
+  if (typeof valueMs !== 'number' || !Number.isFinite(valueMs) || valueMs < 0) return '--:--.---'
+  const totalSeconds = Math.floor(valueMs / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
+export function formatInfoFuelDuration(valueMs: number | null | undefined): string {
+  const value = positive(valueMs)
+  if (value === null) return '-:--.---'
+  const totalSeconds = Math.floor(value / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
 export function formatInfoDelta(valueMs: number | null | undefined): string {
   const value = typeof valueMs === 'number' && Number.isFinite(valueMs) ? Math.round(valueMs) : 0
   const sign = value < 0 ? '-' : '+'
@@ -139,12 +159,12 @@ export function buildInfoPresentation(
   const info: FastStateInfo | null = state.info
   const traffic = trafficValue(info?.pitExitTraffic ?? null)
   const rows: InfoRow[] = []
-  if (options.showStint) rows.push({ id: 'stint', label: 'Stint:', value: formatInfoDuration(info?.stintTimeLeftMs), tone: 'default' })
+  if (options.showStint) rows.push({ id: 'stint', label: 'Stint:', value: formatInfoStintDuration(info?.stintTimeLeftMs), tone: 'default' })
   if (options.showQFuel) rows.push({ id: 'q-fuel', label: `${info?.fuelLabel || 'Q-Fuel'}:`, value: fuelValue(info?.fuelNeededL ?? null), tone: fuelTone(info?.fuelNeededL ?? null) })
-  if (options.showFuelLeft) rows.push({ id: 'fuel-left', label: 'Fuel Left:', value: formatInfoDuration(info?.fuelLeftTimeMs), tone: (info?.fuelLeftTimeMs ?? Infinity) <= 240_000 ? 'yellow' : 'default' })
+  if (options.showFuelLeft) rows.push({ id: 'fuel-left', label: 'Fuel Left:', value: formatInfoFuelDuration(info?.fuelLeftTimeMs), tone: (info?.fuelLeftTimeMs ?? Infinity) <= 240_000 ? 'yellow' : 'default' })
   if (options.showIncidents) rows.push({ id: 'incidents', label: 'Incidents:', value: info ? String(info.incidents) : '--', tone: 'default' })
   if (options.showGrip) rows.push({ id: 'grip', label: 'Grip:', value: info?.grip || '--', tone: 'default' })
-  if (options.showPitExitTraffic) rows.push({ id: 'pit-exit', label: 'Pit Exit:', value: traffic.value, tone: traffic.tone })
+  if (options.showPitExitTraffic && state.sessionType === 2) rows.push({ id: 'pit-exit', label: 'Pit Exit:', value: traffic.value, tone: traffic.tone })
   if (options.showOptimal) rows.push({ id: 'optimal', label: 'Optimal:', value: formatInfoLapTime(info?.optimalLapTimeMs), tone: 'default' })
   if (options.showBest) rows.push({ id: 'best', label: 'Best:', value: formatInfoLapTime(info?.bestLapTimeMs), tone: 'default' })
   if (options.showDamage) rows.push({ id: 'damage', label: 'Damage:', value: formatInfoLapTime(info?.damageTimeMs), tone: 'default' })

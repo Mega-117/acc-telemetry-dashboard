@@ -4,8 +4,10 @@ import {
   DEFAULT_INFO_OPTIONS,
   evaluateInfoTarget,
   formatInfoDelta,
+  formatInfoFuelDuration,
   formatInfoLapTime,
   formatInfoLocalTime,
+  formatInfoStintDuration,
 } from '~/utils/infoPresentation'
 
 const state = {
@@ -36,6 +38,11 @@ describe('Info presentation', () => {
     expect(formatInfoDelta(0)).toBe('+0.000')
     expect(formatInfoLapTime(89_123)).toBe('1:29.123')
     expect(formatInfoLapTime(null)).toBe('--:--.---')
+    expect(formatInfoFuelDuration(298_999)).toBe('0:04:58')
+    expect(formatInfoFuelDuration(null)).toBe('-:--.---')
+    expect(formatInfoStintDuration(0)).toBe('00:00')
+    expect(formatInfoStintDuration(413_000)).toBe('06:53')
+    expect(formatInfoStintDuration(null)).toBe('--:--.---')
     const localTime = new Date(2026, 6, 26, 15, 48, 56).getTime()
     expect(formatInfoLocalTime(localTime)).toBe('15:48:56')
   })
@@ -52,10 +59,18 @@ describe('Info presentation', () => {
     expect(model.delta).toMatchObject({ value: '-0.245', side: 'negative', ratio: 0.5 })
     expect(model.rows.map(row => row.id)).toEqual([
       'stint', 'q-fuel', 'fuel-left', 'incidents', 'grip',
-      'pit-exit', 'optimal', 'best', 'damage', 'lap-timer',
+      'optimal', 'best', 'damage', 'lap-timer',
     ])
-    expect(model.rows.find(row => row.id === 'pit-exit')?.value).toBe('--')
+    expect(model.rows.find(row => row.id === 'fuel-left')?.value).toBe('0:06:00')
     expect(model.rows.find(row => row.id === 'lap-timer')?.lapTimer).toBe(true)
+  })
+
+  it('mostra Pit Exit soltanto in gara', () => {
+    const model = buildInfoPresentation({ ...state, sessionType: 2 } as any, {
+      ...DEFAULT_INFO_OPTIONS,
+      showPitExitTraffic: true,
+    })
+    expect(model.rows.find(row => row.id === 'pit-exit')?.value).toBe('--')
   })
 
   it('separa Local Time originale dal Lap Timer Target', () => {
