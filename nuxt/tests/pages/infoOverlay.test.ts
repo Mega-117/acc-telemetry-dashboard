@@ -26,4 +26,17 @@ describe('Info overlay window contract', () => {
     expect(settingsPage).toContain('class="hud-slider"')
     expect(settingsPage).toContain('backgroundOpacity: Math.round((1 - percentage / 100) * 100) / 100')
   })
+
+  it('fills every Delta state from the left edge toward the right', () => {
+    const hud = readFileSync(resolve(process.cwd(), 'app/components/overlay/InfoHud.vue'), 'utf8')
+
+    expect(hud).toContain('class="info-delta__bar"')
+    expect(hud).toContain("model.delta.side === 'zero' ? '0%' : `${model.delta.ratio * 100}%`")
+    expect(hud).toMatch(/\.info-delta__bar i\s*\{[^}]*\bleft:\s*0;/s)
+    expect(hud).toContain('.info-delta--negative .info-delta__bar i { background: #9acd32; }')
+    expect(hud).toContain('.info-delta--positive .info-delta__bar i { background: #ef3038; }')
+    expect(hud).toContain('.info-delta--purple .info-delta__bar i { background: #d000e8; }')
+    expect(hud).not.toContain('grid-template-columns: 1fr 1fr')
+    expect(hud).not.toContain('info-delta__half')
+  })
 })

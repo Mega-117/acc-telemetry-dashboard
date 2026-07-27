@@ -28,13 +28,8 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
       class="info-delta"
       :class="[`info-delta--${model.delta.side}`, { 'info-delta--purple': model.delta.purple }]"
     >
-      <div class="info-delta__bars" aria-hidden="true">
-        <span class="info-delta__half info-delta__half--negative">
-          <i :style="{ width: model.delta.side === 'negative' ? `${model.delta.ratio * 100}%` : '0%' }" />
-        </span>
-        <span class="info-delta__half info-delta__half--positive">
-          <i :style="{ width: model.delta.side === 'positive' ? `${model.delta.ratio * 100}%` : '0%' }" />
-        </span>
+      <div class="info-delta__bar" aria-hidden="true">
+        <i :style="{ width: model.delta.side === 'zero' ? '0%' : `${model.delta.ratio * 100}%` }" />
       </div>
       <strong>{{ model.delta.value }}</strong>
     </div>
@@ -89,18 +84,22 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   color: #090909;
 }
 
-.info-delta__bars {
+.info-delta__bar {
   position: absolute;
   inset: 0;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  overflow: hidden;
 }
 
-.info-delta__half { position: relative; overflow: hidden; }
-.info-delta__half i { position: absolute; inset-block: 0; display: block; transition: width 80ms linear; }
-.info-delta__half--negative i { right: 0; background: #9acd32; }
-.info-delta__half--positive i { left: 0; background: #ef3038; }
-.info-delta--purple .info-delta__half i { background: #d000e8; }
+.info-delta__bar i {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  display: block;
+  transition: width 80ms linear;
+}
+.info-delta--negative .info-delta__bar i { background: #9acd32; }
+.info-delta--positive .info-delta__bar i { background: #ef3038; }
+.info-delta--purple .info-delta__bar i { background: #d000e8; }
 .info-delta--positive, .info-delta--purple { color: #fff; }
 
 .info-delta strong {
