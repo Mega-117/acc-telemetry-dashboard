@@ -12,6 +12,7 @@ export interface FastStateTyre {
   slipState: FastStateSlipState
   slipRatio: number | null
   pressurePsi: number | null
+  pressureLossPsi: number | null
   coreTempC: number | null
   brakeTempC: number | null
   padLifePct: number | null
@@ -273,6 +274,7 @@ function normalizeTyre(raw: any): FastStateTyre | null {
     slipState: normalizeSlipState(raw.slip_state),
     slipRatio: toNumber(raw.slip_ratio),
     pressurePsi: toNumber(raw.pressure_psi),
+    pressureLossPsi: toNumber(raw.pressure_loss_psi),
     coreTempC: toNumber(raw.core_temp_c),
     brakeTempC: toNumber(raw.brake_temp_c),
     padLifePct: toNumber(raw.pad_life_pct),

@@ -1,11 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
-import { tyreSlipBarStyle, tyreSlipStateLabel } from '~/utils/tyreSlipPresentation'
+import { tyreSlipBarStyle } from '~/utils/tyreSlipPresentation'
+import { tyreTemperatureColor } from '~/utils/tyreTemperaturePresentation'
 
 const props = defineProps<{ fastState: FastOverlayState }>()
 
 const wheelIds = ['FL', 'FR', 'RL', 'RR'] as const
+const axles = [
+  { key: 'front', left: 'FL', right: 'FR' },
+  { key: 'rear', left: 'RL', right: 'RR' },
+] as const
 
 const emptyTyre = (id: FastStateTyre['id']): FastStateTyre => ({
   id,
@@ -15,6 +20,7 @@ const emptyTyre = (id: FastStateTyre['id']): FastStateTyre => ({
   slipState: 'ok',
   slipRatio: null,
   pressurePsi: null,
+  pressureLossPsi: null,
   coreTempC: null,
   brakeTempC: null,
   padLifePct: null,
@@ -25,7 +31,6 @@ const tyresById = computed(() => Object.fromEntries(
   wheelIds.map(id => [id, props.fastState.tyres.find(tyre => tyre.id === id) ?? emptyTyre(id)]),
 ) as Record<FastStateTyre['id'], FastStateTyre>)
 
-const targetPressure = computed(() => props.fastState.tyreCompound === 'WET' ? '30.5' : '27.0')
 const setLabel = computed(() => {
   const compound = props.fastState.tyreCompound ?? '--'
   const set = props.fastState.tyreSetAvailable && props.fastState.currentTyreSet !== null
@@ -33,6 +38,7 @@ const setLabel = computed(() => {
     : '--'
   return `${compound} ${set}`
 })
+
 const globalStatus = computed(() => {
   if (!props.fastState.isLive) return 'NO DATA'
   if (!props.fastState.isEngineRunning) return 'ENGINE OFF'
@@ -55,10 +61,15 @@ function averageFor(id: FastStateTyre['id']) {
   return value === null ? '--' : value.toFixed(1)
 }
 
-function axlePadLife(left: FastStateTyre['id'], right: FastStateTyre['id']) {
-  const values = [tyresById.value[left].padLifePct, tyresById.value[right].padLifePct]
-    .filter((value): value is number => value !== null)
-  return values.length ? `${Math.min(...values).toFixed(0)}%` : '--'
+function padLife(tyre: FastStateTyre) {
+  return tyre.padLifePct === null ? '--' : `${tyre.padLifePct.toFixed(0)}%`
+}
+
+function pressureLoss(tyre: FastStateTyre) {
+  if (tyre.pressureLossPsi === null) return '--'
+  const value = Math.max(0, tyre.pressureLossPsi)
+  if (value < 0.005) return '0'
+  return Number(value.toFixed(2)).toString()
 }
 
 function weatherIcon(value: number | null) {
@@ -70,6 +81,15 @@ function weatherIcon(value: number | null) {
 
 function verticalSlipFill(tyre: FastStateTyre) {
   return tyreSlipBarStyle(tyre.wheelSlipScaled, 'vertical')
+}
+
+function tyreStyle(tyre: FastStateTyre) {
+  return {
+    backgroundColor: tyreTemperatureColor(
+      tyre.coreTempC,
+      props.fastState.tyreCompound === 'WET' ? 'WET' : 'DRY',
+    ),
+  }
 }
 </script>
 
@@ -87,59 +107,55 @@ function verticalSlipFill(tyre: FastStateTyre) {
     </div>
 
     <div class="tyre-advanced__panel">
-      <div class="tyre-advanced__target">{{ targetPressure }}</div>
-
-      <div v-for="axle in [
-        { key: 'front', left: 'FL' as const, right: 'FR' as const },
-        { key: 'rear', left: 'RL' as const, right: 'RR' as const },
-      ]" :key="axle.key" class="tyre-advanced__axle">
-        <div class="tyre-advanced__corner">
+      <div v-for="axle in axles" :key="axle.key" class="tyre-advanced__axle">
+        <div class="tyre-advanced__corner tyre-advanced__corner--left">
           <strong>{{ format(tyresById[axle.left].pressurePsi, 1) }}</strong>
-          <small>AVG {{ averageFor(axle.left) }}</small>
-          <div class="tyre-advanced__tyre-line tyre-advanced__tyre-line--left">
+          <small class="tyre-advanced__average">AVG {{ averageFor(axle.left) }}</small>
+          <div class="tyre-advanced__wheel">
             <div
-              class="tyre-advanced__slip-bar"
+              class="tyre-advanced__grip-bar"
               :class="`tyre-slip--${tyresById[axle.left].slipBand}`"
-              aria-hidden="true"
+              role="progressbar"
+              aria-label="Grip"
             >
               <span :style="verticalSlipFill(tyresById[axle.left])" />
             </div>
-            <div class="tyre-advanced__tyre" :class="`is-${tyresById[axle.left].slipState}`">
-              <i v-for="segment in 3" :key="segment" />
+            <div class="tyre-advanced__tyre" :style="tyreStyle(tyresById[axle.left])">
               <b>{{ format(tyresById[axle.left].coreTempC) }}°</b>
             </div>
           </div>
-          <em>{{ tyreSlipStateLabel(tyresById[axle.left].slipState, fastState.isLive && tyresById[axle.left].wheelSlipScaled !== null) }}</em>
+          <small class="tyre-advanced__pressure-loss">{{ pressureLoss(tyresById[axle.left]) }}</small>
         </div>
 
-        <div class="tyre-advanced__brakes">
-          <div class="tyre-advanced__brake-row">
-            <span>{{ format(tyresById[axle.left].brakeTempC) }}°</span>
-            <i />
-            <i />
-            <span>{{ format(tyresById[axle.right].brakeTempC) }}°</span>
-          </div>
-          <strong>{{ axlePadLife(axle.left, axle.right) }}</strong>
-          <small>PASTIGLIE</small>
+        <div class="tyre-advanced__brake tyre-advanced__brake--left">
+          <span>{{ format(tyresById[axle.left].brakeTempC) }}°</span>
+          <i />
+          <strong>{{ padLife(tyresById[axle.left]) }}</strong>
         </div>
 
-        <div class="tyre-advanced__corner">
+        <div class="tyre-advanced__brake tyre-advanced__brake--right">
+          <span>{{ format(tyresById[axle.right].brakeTempC) }}°</span>
+          <i />
+          <strong>{{ padLife(tyresById[axle.right]) }}</strong>
+        </div>
+
+        <div class="tyre-advanced__corner tyre-advanced__corner--right">
           <strong>{{ format(tyresById[axle.right].pressurePsi, 1) }}</strong>
-          <small>AVG {{ averageFor(axle.right) }}</small>
-          <div class="tyre-advanced__tyre-line tyre-advanced__tyre-line--right">
-            <div class="tyre-advanced__tyre" :class="`is-${tyresById[axle.right].slipState}`">
-              <i v-for="segment in 3" :key="segment" />
+          <small class="tyre-advanced__average">AVG {{ averageFor(axle.right) }}</small>
+          <div class="tyre-advanced__wheel">
+            <div class="tyre-advanced__tyre" :style="tyreStyle(tyresById[axle.right])">
               <b>{{ format(tyresById[axle.right].coreTempC) }}°</b>
             </div>
             <div
-              class="tyre-advanced__slip-bar"
+              class="tyre-advanced__grip-bar"
               :class="`tyre-slip--${tyresById[axle.right].slipBand}`"
-              aria-hidden="true"
+              role="progressbar"
+              aria-label="Grip"
             >
               <span :style="verticalSlipFill(tyresById[axle.right])" />
             </div>
           </div>
-          <em>{{ tyreSlipStateLabel(tyresById[axle.right].slipState, fastState.isLive && tyresById[axle.right].wheelSlipScaled !== null) }}</em>
+          <small class="tyre-advanced__pressure-loss">{{ pressureLoss(tyresById[axle.right]) }}</small>
         </div>
       </div>
 
@@ -151,16 +167,13 @@ function verticalSlipFill(tyre: FastStateTyre) {
 
 <style scoped>
 .tyre-advanced {
-  /* La finestra Electron viene gia' ridotta con la scala utente. Questi token
-     mantengono una soglia leggibile senza impedire ai valori di crescere. */
   --tyre-hud-type-weather: max(10px, calc(14px * var(--hud-scale, 1)));
   --tyre-hud-type-weather-icon: max(11px, calc(15px * var(--hud-scale, 1)));
   --tyre-hud-type-label: max(9.5px, calc(9px * var(--hud-scale, 1)));
   --tyre-hud-type-secondary: max(10px, calc(12px * var(--hud-scale, 1)));
-  --tyre-hud-type-target: max(13px, calc(16px * var(--hud-scale, 1)));
   --tyre-hud-type-primary: max(16px, calc(22px * var(--hud-scale, 1)));
   --tyre-hud-type-tyre: max(15px, calc(18px * var(--hud-scale, 1)));
-  --tyre-hud-type-pad: max(14px, calc(19px * var(--hud-scale, 1)));
+  --tyre-hud-type-pad: max(12px, calc(15px * var(--hud-scale, 1)));
   --tyre-hud-type-set: max(14px, calc(17px * var(--hud-scale, 1)));
   --tyre-hud-type-status: max(14px, calc(19px * var(--hud-scale, 1)));
   position: relative;
@@ -211,83 +224,87 @@ function verticalSlipFill(tyre: FastStateTyre) {
   flex: 1;
   flex-direction: column;
   justify-content: space-around;
+  gap: calc(12px * var(--hud-scale, 1));
   width: 100%;
   min-height: 0;
-  padding: calc(20px * var(--hud-scale, 1)) calc(22px * var(--hud-scale, 1))
-    calc(10px * var(--hud-scale, 1));
+  padding: calc(14px * var(--hud-scale, 1)) calc(16px * var(--hud-scale, 1));
+  overflow: hidden;
   border-radius: calc(22px * var(--hud-scale, 1));
   background: #4b4b4b;
   box-sizing: border-box;
 }
 
-.tyre-advanced__target {
-  position: absolute;
-  top: calc(5px * var(--hud-scale, 1));
-  left: 50%;
-  color: #fff;
-  font-size: var(--tyre-hud-type-target);
-  font-weight: 900;
-  transform: translateX(-50%);
-}
-
 .tyre-advanced__axle {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(calc(120px * var(--hud-scale, 1)), .75fr) minmax(0, 1fr);
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(calc(42px * var(--hud-scale, 1)), .42fr)
+    minmax(calc(42px * var(--hud-scale, 1)), .42fr)
+    minmax(0, 1fr);
   align-items: center;
-  gap: calc(10px * var(--hud-scale, 1));
+  gap: calc(8px * var(--hud-scale, 1));
+  grid-template-rows: auto auto auto auto;
+  row-gap: calc(4px * var(--hud-scale, 1));
+  min-height: 0;
 }
 
-.tyre-advanced__corner {
+.tyre-advanced__corner,
+.tyre-advanced__brake {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-row: 1 / -1;
+  grid-template-rows: subgrid;
   justify-items: center;
   min-width: 0;
 }
 
 .tyre-advanced__corner > strong {
+  grid-row: 1;
   font-size: var(--tyre-hud-type-primary);
   line-height: 1;
 }
 
-.tyre-advanced__corner > small {
-  margin: calc(2px * var(--hud-scale, 1)) 0;
+.tyre-advanced__average {
+  grid-row: 2;
   color: #fff;
   font-size: var(--tyre-hud-type-label);
   font-weight: 800;
+  white-space: nowrap;
 }
 
-.tyre-advanced__corner > em {
-  margin-top: calc(2px * var(--hud-scale, 1));
-  color: #fff;
-  font-size: var(--tyre-hud-type-label);
-  font-style: normal;
+.tyre-advanced__pressure-loss {
+  grid-row: 4;
+  color: #ff8a24;
+  font-size: var(--tyre-hud-type-secondary);
   font-weight: 900;
+  line-height: 1;
 }
 
-.tyre-advanced__tyre-line {
+.tyre-advanced__wheel {
   display: grid;
+  grid-row: 3;
   align-items: stretch;
+  justify-content: center;
   gap: calc(4px * var(--hud-scale, 1));
-  width: 90%;
+  width: 100%;
 }
 
-.tyre-advanced__tyre-line--left {
-  grid-template-columns: calc(7px * var(--hud-scale, 1)) minmax(0, 1fr);
+.tyre-advanced__corner--left .tyre-advanced__wheel {
+  grid-template-columns: calc(14px * var(--hud-scale, 1)) minmax(42px, 62px);
 }
 
-.tyre-advanced__tyre-line--right {
-  grid-template-columns: minmax(0, 1fr) calc(7px * var(--hud-scale, 1));
+.tyre-advanced__corner--right .tyre-advanced__wheel {
+  grid-template-columns: minmax(42px, 62px) calc(14px * var(--hud-scale, 1));
 }
 
-.tyre-advanced__slip-bar {
+.tyre-advanced__grip-bar {
   position: relative;
-  height: calc(48px * var(--hud-scale, 1));
+  height: calc(92px * var(--hud-scale, 1));
   overflow: hidden;
   border-radius: 999px;
   background: rgba(255, 255, 255, .11);
 }
 
-.tyre-advanced__slip-bar span {
+.tyre-advanced__grip-bar span {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -295,78 +312,67 @@ function verticalSlipFill(tyre: FastStateTyre) {
   display: block;
   border-radius: inherit;
   background: var(--tyre-slip-color, rgba(226, 238, 247, .72));
-  transition:
-    height 90ms linear,
-    background-color 120ms ease;
+  transition: height 90ms linear;
 }
 
 .tyre-advanced__tyre {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: calc(3px * var(--hud-scale, 1));
-  width: 100%;
-  height: calc(48px * var(--hud-scale, 1));
-  padding: calc(3px * var(--hud-scale, 1));
-  border-radius: calc(12px * var(--hud-scale, 1));
-  background: #777;
+  place-items: center;
+  height: calc(92px * var(--hud-scale, 1));
+  border: 2px solid rgba(255, 255, 255, .24);
+  border-radius: calc(16px * var(--hud-scale, 1));
   box-sizing: border-box;
+  transition: background-color 160ms linear;
 }
 
-.tyre-advanced__tyre i {
-  border-radius: calc(4px * var(--hud-scale, 1));
-  background: #13c7b7;
+.tyre-advanced__tyre::before,
+.tyre-advanced__tyre::after {
+  position: absolute;
+  left: 18%;
+  width: 64%;
+  height: 1px;
+  background: rgba(255, 255, 255, .28);
+  content: "";
 }
+
+.tyre-advanced__tyre::before { top: 25%; }
+.tyre-advanced__tyre::after { bottom: 25%; }
 
 .tyre-advanced__tyre b {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
+  position: relative;
+  z-index: 1;
   color: #fff;
   font-size: var(--tyre-hud-type-tyre);
   text-shadow: 0 1px 3px #000;
 }
 
-.tyre-advanced__tyre.is-limit i { background: #facc15; }
-.tyre-advanced__tyre.is-sliding i { background: #fb923c; }
-.tyre-advanced__tyre.is-wheelspin i { background: #f97316; }
-.tyre-advanced__tyre.is-lockup i { background: #ef4444; }
-
-.tyre-advanced__brakes {
-  display: grid;
-  justify-items: center;
-  gap: calc(2px * var(--hud-scale, 1));
-}
-
-.tyre-advanced__brake-row {
-  display: grid;
-  grid-template-columns: auto 1fr 1fr auto;
+.tyre-advanced__brake {
   align-items: center;
-  gap: calc(4px * var(--hud-scale, 1));
-  width: 100%;
 }
 
-.tyre-advanced__brake-row span {
+.tyre-advanced__brake span {
+  grid-row: 2;
+  align-self: end;
   font-size: var(--tyre-hud-type-secondary);
   font-weight: 900;
+  white-space: nowrap;
 }
 
-.tyre-advanced__brake-row i {
-  height: calc(31px * var(--hud-scale, 1));
-  border-radius: calc(5px * var(--hud-scale, 1));
+.tyre-advanced__brake i {
+  grid-row: 3;
+  align-self: center;
+  width: 70%;
+  height: calc(48px * var(--hud-scale, 1));
+  border: 1px solid rgba(255, 255, 255, .2);
+  border-radius: calc(6px * var(--hud-scale, 1));
   background: #142bd0;
 }
 
-.tyre-advanced__brakes > strong {
+.tyre-advanced__brake strong {
+  grid-row: 4;
   font-size: var(--tyre-hud-type-pad);
   line-height: 1;
-}
-
-.tyre-advanced__brakes > small {
-  color: #fff;
-  font-size: var(--tyre-hud-type-label);
-  font-weight: 800;
 }
 
 .tyre-advanced__set {
@@ -374,6 +380,8 @@ function verticalSlipFill(tyre: FastStateTyre) {
   top: 50%;
   left: 50%;
   padding: calc(2px * var(--hud-scale, 1)) calc(6px * var(--hud-scale, 1));
+  border-radius: 4px;
+  background: rgba(75, 75, 75, .94);
   color: #fff;
   font-size: var(--tyre-hud-type-set);
   font-weight: 900;
@@ -389,7 +397,7 @@ function verticalSlipFill(tyre: FastStateTyre) {
   max-width: 48%;
   padding: calc(5px * var(--hud-scale, 1)) calc(9px * var(--hud-scale, 1));
   border-radius: calc(5px * var(--hud-scale, 1));
-  background: rgba(120, 0, 0, .88);
+  background: rgba(120, 0, 0, .92);
   color: #fff;
   font-size: var(--tyre-hud-type-status);
   font-weight: 950;
@@ -398,63 +406,64 @@ function verticalSlipFill(tyre: FastStateTyre) {
   transform: translate(-50%, -50%);
 }
 
-/* A 60% la V2 vive in una finestra 252x360. Qui la composizione si ricompatta
-   attorno ai testi leggibili, invece di ridurre una seconda volta ogni elemento. */
 @container (max-width: 300px) {
   .tyre-advanced__weather {
     width: 58%;
   }
 
   .tyre-advanced__panel {
-    padding: 18px 8px 7px;
+    gap: 6px;
+    padding: 10px 7px;
     border-radius: 14px;
   }
 
   .tyre-advanced__axle {
-    grid-template-columns: minmax(0, 1fr) minmax(66px, .82fr) minmax(0, 1fr);
-    gap: 4px;
+    grid-template-columns: minmax(0, 1fr) 31px 31px minmax(0, 1fr);
+    gap: 3px;
+    row-gap: 2px;
   }
 
   .tyre-advanced__corner > strong {
     line-height: .95;
   }
 
-  .tyre-advanced__corner > small,
-  .tyre-advanced__corner > em {
+  .tyre-advanced__average {
     letter-spacing: -.025em;
-    white-space: nowrap;
   }
 
-  .tyre-advanced__tyre-line {
+  .tyre-advanced__wheel {
     gap: 3px;
-    width: 100%;
   }
 
-  .tyre-advanced__tyre-line--left {
-    grid-template-columns: 5px minmax(0, 1fr);
+  .tyre-advanced__corner--left .tyre-advanced__wheel {
+    grid-template-columns: 10px minmax(36px, 48px);
   }
 
-  .tyre-advanced__tyre-line--right {
-    grid-template-columns: minmax(0, 1fr) 5px;
+  .tyre-advanced__corner--right .tyre-advanced__wheel {
+    grid-template-columns: minmax(36px, 48px) 10px;
   }
 
-  .tyre-advanced__slip-bar,
+  .tyre-advanced__grip-bar,
   .tyre-advanced__tyre {
+    height: 62px;
+  }
+
+  .tyre-advanced__tyre {
+    border-width: 1px;
+    border-radius: 10px;
+  }
+
+  .tyre-advanced__pressure-loss {
+    font-size: 10px;
+  }
+
+  .tyre-advanced__brake strong {
+    font-size: 10px;
+  }
+
+  .tyre-advanced__brake i {
+    width: 72%;
     height: 34px;
-  }
-
-  .tyre-advanced__tyre {
-    gap: 2px;
-    padding: 2px;
-    border-radius: 8px;
-  }
-
-  .tyre-advanced__brake-row {
-    gap: 2px;
-  }
-
-  .tyre-advanced__brake-row i {
-    height: 24px;
   }
 }
 </style>

@@ -57,6 +57,7 @@ export default defineConfig({
         'app/utils/featureAccess.ts',
         'app/utils/authRouteGuard.ts',
         'app/utils/tyreSlipPresentation.ts',
+        'app/utils/tyreTemperaturePresentation.ts',
         'app/utils/dashboardPresentation.ts',
         'app/utils/infoPresentation.ts',
         'app/utils/sectorDeltaPresentation.ts',
