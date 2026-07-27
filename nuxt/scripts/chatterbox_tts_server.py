@@ -15,7 +15,9 @@ ROOT = Path(__file__).resolve().parents[1]
 VOICE_DIR = Path(
     os.environ.get("ACC_CHATTERBOX_VOICES_DIR", ROOT.parent / "training_data" / "chatterbox_voices")
 ).resolve()
-TEMP_DIR = Path(os.environ.get("ACC_CHATTERBOX_TEMP_DIR", ROOT / ".codex-tmp" / "chatterbox")).resolve()
+TEMP_DIR = Path(
+    os.environ.get("ACC_CHATTERBOX_TEMP_DIR", ROOT / ".codex-tmp" / "chatterbox")
+).resolve()
 DEFAULT_VOICE_ID = "__default__"
 MAX_TEXT_LENGTH = 600
 DEFAULT_EXAGGERATION = 0.5
@@ -110,7 +112,9 @@ class ChatterboxRuntime:
         self.torchaudio = torchaudio
         self.model = ChatterboxMultilingualTTS.from_pretrained(device=self.device, t3_model="v3")
 
-    def synthesize(self, text: str, voice_id: str, exaggeration: float, cfg_weight: float) -> bytes:
+    def synthesize(
+        self, text: str, voice_id: str, exaggeration: float, cfg_weight: float
+    ) -> bytes:
         self.load()
         prompt = resolve_voice_prompt(voice_id)
         kwargs = {
@@ -153,7 +157,9 @@ class ChatterboxHandler(BaseHTTPRequestHandler):
             readiness = readiness_payload()
             state = readiness.get("state")
             status = 200 if state == "ready" else 500 if state == "error" else 503
-            self.write_json({"ok": state == "ready", "engine": "chatterbox", "readiness": readiness}, status)
+            self.write_json(
+                {"ok": state == "ready", "engine": "chatterbox", "readiness": readiness}, status
+            )
             return
         if self.path == "/voices":
             self.write_json({"engine": "chatterbox", "voices": list_voices()})
@@ -178,7 +184,10 @@ class ChatterboxHandler(BaseHTTPRequestHandler):
                 self.write_json({"error": "Testo mancante"}, 400)
                 return
             if len(text) > MAX_TEXT_LENGTH:
-                self.write_json({"error": f"Testo troppo lungo: massimo {MAX_TEXT_LENGTH} caratteri"}, 400)
+                self.write_json(
+                    {"error": f"Testo troppo lungo: massimo {MAX_TEXT_LENGTH} caratteri"},
+                    400,
+                )
                 return
             wav = RUNTIME.synthesize(text, voice, exaggeration, cfg_weight)
             self.send_response(200)
@@ -206,7 +215,9 @@ class ChatterboxHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     configure_runtime_dirs()
-    parser = argparse.ArgumentParser(description="Chatterbox Multilingual V3 server for ACC Suite Voice Lab.")
+    parser = argparse.ArgumentParser(
+        description="Chatterbox Multilingual V3 server for ACC Suite Voice Lab."
+    )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=5121, type=int)
     args = parser.parse_args()

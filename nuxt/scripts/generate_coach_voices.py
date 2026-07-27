@@ -42,7 +42,10 @@ def validate_phrases(phrases: list[dict]) -> list[str]:
     for phrase in phrases:
         words = [w for w in str(phrase.get("text", "")).replace(",", " ").split() if w]
         if len(words) < MIN_WORDS:
-            errors.append(f"  '{phrase.get('key')}': \"{phrase.get('text')}\" ({len(words)} parole, minimo {MIN_WORDS})")
+            errors.append(
+                f"  '{phrase.get('key')}': \"{phrase.get('text')}\" "
+                f"({len(words)} parole, minimo {MIN_WORDS})"
+            )
     return errors
 
 
@@ -74,7 +77,9 @@ def main() -> int:
 
     model_path = os.environ.get("ACC_KOKORO_ONNX_MODEL", "")
     voices_path = os.environ.get("ACC_KOKORO_ONNX_VOICES", "")
-    if not (model_path and Path(model_path).exists() and voices_path and Path(voices_path).exists()):
+    if not (
+        model_path and Path(model_path).exists() and voices_path and Path(voices_path).exists()
+    ):
         print("ERRORE: impostare ACC_KOKORO_ONNX_MODEL e ACC_KOKORO_ONNX_VOICES")
         return 1
 
