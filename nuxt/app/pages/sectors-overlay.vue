@@ -57,7 +57,10 @@ onBeforeUnmount(() => {
     :style="{ '--hud-scale': scale }"
     :class="{ 'hud-overlay--web': !isElectron }"
   >
-    <div class="hud-overlay__panel">
+    <div
+      class="hud-overlay__panel"
+      :class="{ 'hud-overlay__panel--compact': variant === 'compact' }"
+    >
       <SectorDeltaHud
         :sector-hud="liveLap.sectorHud"
         :show-reference="showReference"
@@ -108,6 +111,13 @@ onBeforeUnmount(() => {
 }
 
 // ── L'HUD riempie il pannello ────────────────────────────────────────────────
+.hud-overlay__panel--compact {
+  padding: calc(8px * var(--hud-scale)) calc(14px * var(--hud-scale)) calc(10px * var(--hud-scale));
+  border-color: rgba(255, 255, 255, 0.62);
+  border-radius: calc(12px * var(--hud-scale));
+  background: #000;
+}
+
 .hud-overlay .sector-delta-hud {
   flex: 1;
   width: 100%;

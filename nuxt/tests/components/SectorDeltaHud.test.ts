@@ -97,13 +97,34 @@ describe('SectorDeltaHud', () => {
     }))
 
     expect(html).toContain('SECTORS')
-    expect(html).toContain('1:23.456')
+    expect(html).toContain('01:23.456')
     expect(html).toContain('CURRENT LAP')
     expect((html.match(/sector-compact__label/g) || []).length).toBe(3)
     expect(html).not.toContain('sector-delta__ref')
     expect(html).not.toContain('sector-delta__best')
     expect(html).toContain('sector-compact__number--updating')
     expect(html).toContain('52.655')
+  })
+
+  it('adatta soltanto i tempi settore a tre cifre nel layout compatto', async () => {
+    const longSectorHud: SectorHudState = {
+      ...sectorHud,
+      currentLapTimeMs: 154_257,
+      sectors: [
+        { ...entry(1), currentMs: 30_801 },
+        { ...entry(2), state: 'running', currentMs: 123_456, deltaMs: null },
+        { ...entry(3), state: 'pending', currentMs: null, deltaMs: null },
+      ],
+    }
+    const html = await renderToString(createSSRApp({
+      render: () => h(SectorDeltaHud, {
+        sectorHud: longSectorHud,
+        variant: 'compact',
+      }),
+    }))
+
+    expect(html).toContain('123.456')
+    expect(html).toContain('sector-compact__time-value--long')
   })
 
   it('usa il timer Info live per far avanzare current lap e settore attivo tra gli eventi settore', async () => {
@@ -136,10 +157,10 @@ describe('SectorDeltaHud', () => {
       }),
     }))
 
-    expect(first).toContain('0:43.050')
+    expect(first).toContain('00:43.050')
     expect(first).toContain('1.818')
     expect(first).not.toContain('sector-compact__lap--invalid')
-    expect(second).toContain('0:44.850')
+    expect(second).toContain('00:44.850')
     expect(second).toContain('3.618')
     expect(second).not.toContain('0:41.250')
     expect(second).not.toContain('>0.018</span>')
@@ -182,7 +203,7 @@ describe('SectorDeltaHud', () => {
     }))
 
     expect(html).toContain('--:--.---')
-    expect(html).not.toContain('0:12.345')
+    expect(html).not.toContain('00:12.345')
   })
 
   it('colora di rosso il cronometro compatto quando il giro è invalido e conserva Wait senza fallback', async () => {

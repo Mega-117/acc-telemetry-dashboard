@@ -81,7 +81,7 @@ function formatLapTime(ms: number): string {
   const minutes = Math.floor(safeMs / 60_000)
   const seconds = Math.floor((safeMs % 60_000) / 1000)
   const milliseconds = safeMs % 1000
-  return `${minutes}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`
+  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`
 }
 
 // Tempo parziale "live" del settore in corso = tempo giro corrente meno i
@@ -176,7 +176,10 @@ function ariaLabel(sector: SectorHudEntry): string {
           <strong class="sector-compact__time">
             <span
               :key="sectorAnimationKey(sector)"
-              :class="{ 'sector-compact__number--updating': sector.state === 'running' }"
+              :class="{
+                'sector-compact__number--updating': sector.state === 'running',
+                'sector-compact__time-value--long': valueText(sector).length > 6,
+              }"
             >{{ valueText(sector) }}</span>
           </strong>
           <small
@@ -232,7 +235,7 @@ function ariaLabel(sector: SectorHudEntry): string {
 .sector-delta-hud--compact {
   display: flex;
   flex-direction: column;
-  gap: calc(10px * var(--hud-scale, 1));
+  gap: 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -244,8 +247,8 @@ function ariaLabel(sector: SectorHudEntry): string {
 .sector-compact__header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  column-gap: calc(5px * var(--hud-scale, 1));
+  grid-template-rows: auto auto auto;
+  column-gap: calc(6px * var(--hud-scale, 1));
   flex: 0 0 auto;
   min-height: 0;
 }
@@ -254,7 +257,7 @@ function ariaLabel(sector: SectorHudEntry): string {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
-  gap: calc(6px * var(--hud-scale, 1));
+  gap: calc(5px * var(--hud-scale, 1));
 }
 
 .sector-compact__title::before,
@@ -265,7 +268,7 @@ function ariaLabel(sector: SectorHudEntry): string {
 }
 
 .sector-compact__title::before {
-  width: calc(38px * var(--hud-scale, 1));
+  width: calc(104px * var(--hud-scale, 1));
 }
 
 .sector-compact__title::after {
@@ -273,10 +276,10 @@ function ariaLabel(sector: SectorHudEntry): string {
 }
 
 .sector-compact__title > span {
-  color: rgba(255, 255, 255, 0.7);
-  font-size: calc(10px * var(--hud-scale, 1));
+  color: #c7c9cc;
+  font-size: calc(9px * var(--hud-scale, 1));
   font-weight: 950;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   line-height: 1;
 }
 
@@ -284,11 +287,12 @@ function ariaLabel(sector: SectorHudEntry): string {
   grid-column: 1 / -1;
   justify-self: center;
   color: #facc15;
-  font-size: calc(37px * var(--hud-scale, 1));
+  margin-top: calc(16px * var(--hud-scale, 1));
+  font-size: calc(48px * var(--hud-scale, 1));
   font-variant-numeric: tabular-nums;
   font-weight: 950;
-  letter-spacing: -0.045em;
-  line-height: 0.94;
+  letter-spacing: -0.035em;
+  line-height: 0.88;
 }
 
 .sector-compact__lap--invalid {
@@ -298,8 +302,9 @@ function ariaLabel(sector: SectorHudEntry): string {
 .sector-compact__lap-label {
   grid-column: 2;
   justify-self: end;
-  color: rgba(255, 255, 255, 0.48);
-  font-size: calc(7px * var(--hud-scale, 1));
+  margin-top: calc(2px * var(--hud-scale, 1));
+  color: #6f7277;
+  font-size: calc(10px * var(--hud-scale, 1));
   font-weight: 900;
   line-height: 1;
 }
@@ -307,6 +312,7 @@ function ariaLabel(sector: SectorHudEntry): string {
 .sector-compact__rows {
   display: grid;
   flex: 1;
+  margin-top: calc(5px * var(--hud-scale, 1));
   grid-template-rows: repeat(3, minmax(0, 1fr));
   min-height: 0;
   overflow: hidden;
@@ -314,25 +320,20 @@ function ariaLabel(sector: SectorHudEntry): string {
 
 .sector-compact__row {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  grid-template-columns: calc(39px * var(--hud-scale, 1)) minmax(0, 1fr) max-content;
   align-items: center;
   gap: calc(8px * var(--hud-scale, 1));
   box-sizing: border-box;
   min-height: 0;
-  padding: 0 calc(3px * var(--hud-scale, 1));
+  padding: 0;
   overflow: hidden;
   border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   background: transparent;
 }
 
-.sector-compact__row:last-child {
-  border-bottom: 0;
-}
-
 .sector-compact__label {
-  color: rgba(255, 255, 255, 0.72);
-  font-size: calc(13px * var(--hud-scale, 1));
+  color: #292c31;
+  font-size: calc(20px * var(--hud-scale, 1));
   font-weight: 950;
   letter-spacing: 0.02em;
 }
@@ -340,19 +341,25 @@ function ariaLabel(sector: SectorHudEntry): string {
 .sector-compact__row .sector-compact__time,
 .sector-compact__row .sector-compact__time > span {
   overflow: hidden;
-  color: #fff;
-  font-size: calc(25px * var(--hud-scale, 1));
+  color: #292c31;
+  font-size: calc(38px * var(--hud-scale, 1));
   font-variant-numeric: tabular-nums;
   font-weight: 950;
+  letter-spacing: -0.04em;
   line-height: 1;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.sector-compact__row .sector-compact__time > .sector-compact__time-value--long {
+  font-size: calc(30px * var(--hud-scale, 1));
+  letter-spacing: -0.05em;
+}
+
 .sector-compact__delta {
   justify-self: end;
   overflow: visible;
-  font-size: calc(17px * var(--hud-scale, 1));
+  font-size: calc(22px * var(--hud-scale, 1));
   font-variant-numeric: tabular-nums;
   font-weight: 950;
   line-height: 1;
@@ -360,22 +367,28 @@ function ariaLabel(sector: SectorHudEntry): string {
 }
 
 .sector-compact__row--running {
-  background: rgba(255, 255, 255, 0.035);
+  background: transparent;
+}
+
+.sector-compact__row--running .sector-compact__label,
+.sector-compact__row--running .sector-compact__time,
+.sector-compact__row--running .sector-compact__time > span {
+  color: #e8e4df;
 }
 
 .sector-compact__number--updating {
   display: inline-grid;
-  animation: sector-number-refresh 180ms cubic-bezier(0.2, 0.75, 0.25, 1);
+  animation: sector-number-refresh 140ms ease-out;
 }
 
 @keyframes sector-number-refresh {
   from {
-    opacity: 0.58;
-    transform: translateY(22%);
+    opacity: 0.74;
+    filter: brightness(1.18);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    filter: brightness(1);
   }
 }
 
