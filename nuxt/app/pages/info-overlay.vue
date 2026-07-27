@@ -13,7 +13,7 @@ import {
   type InfoTargetSettings,
 } from '~/utils/infoPresentation'
 
-definePageMeta({ layout: false })
+definePageMeta({ layout: 'hud-overlay' })
 
 const route = useRoute()
 const getApi = () => typeof window === 'undefined' ? null : (window as any).electronAPI || null

@@ -60,6 +60,7 @@ export default defineConfig({
         'app/utils/tyreTemperaturePresentation.ts',
         'app/utils/dashboardPresentation.ts',
         'app/utils/infoPresentation.ts',
+        'app/utils/hudOverlayWindow.ts',
         'app/utils/sectorDeltaPresentation.ts',
         'app/utils/sessionParser.ts',
         'app/utils/raceCalendarCountdown.ts',

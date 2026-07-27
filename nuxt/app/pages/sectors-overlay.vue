@@ -8,7 +8,7 @@ import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
 import { normalizeSectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 
-definePageMeta({ layout: false })
+definePageMeta({ layout: 'hud-overlay' })
 
 useHead({
   htmlAttrs: { class: 'training-overlay-document' },
@@ -82,7 +82,7 @@ onBeforeUnmount(() => {
 .hud-overlay {
   --hud-scale: 1;
   --overlay-accent-rgb: 34, 197, 94;
-  position: fixed;
+  position: absolute;
   inset: 0;
   display: flex;
   padding: calc(6px * var(--hud-scale));

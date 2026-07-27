@@ -8,7 +8,7 @@ import { useHudOverlay } from '~/composables/useHudOverlay'
 import TyreAdvancedHud from '~/components/overlay/TyreAdvancedHud.vue'
 import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 
-definePageMeta({ layout: false })
+definePageMeta({ layout: 'hud-overlay' })
 
 useHead({
   htmlAttrs: { class: 'training-overlay-document' },
@@ -61,7 +61,7 @@ onBeforeUnmount(() => {
 .hud-overlay {
   --hud-scale: 1;
   --overlay-accent-rgb: 34, 197, 94;
-  position: fixed;
+  position: absolute;
   inset: 0;
   display: flex;
   padding: 6px; // margine flottante: il pannello non tocca i bordi finestra
