@@ -28,6 +28,7 @@ export interface HudOverlaySettings {
   showOptimal?: boolean
   showDamage?: boolean
   showTime?: boolean
+  backgroundOpacity?: number
 }
 
 export const HUD_SCALE_MIN = 0.6

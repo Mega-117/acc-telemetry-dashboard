@@ -7,6 +7,7 @@ const props = defineProps<{
   lapTimerValue: string
   lapTimerOutcome: InfoTargetOutcome
   lapTimerFading: boolean
+  backgroundOpacity: number
 }>()
 
 function rowValue(row: InfoPresentation['rows'][number]): string {
@@ -16,7 +17,12 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
 </script>
 
 <template>
-  <section class="info-hud" :class="{ 'info-hud--yellow-flag': model.yellowFlagActive }" aria-label="Info">
+  <section
+    class="info-hud"
+    :class="{ 'info-hud--yellow-flag': model.yellowFlagActive }"
+    :style="{ '--info-background-opacity': String(backgroundOpacity) }"
+    aria-label="Info"
+  >
     <div
       v-if="model.delta.visible"
       class="info-delta"
@@ -64,7 +70,7 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   overflow: hidden;
   border-radius: 24px;
   color: #fff;
-  background: rgba(126, 126, 126, 0.94);
+  background: rgba(0, 0, 0, var(--info-background-opacity, 0.8));
   font-family: Arial, Helvetica, sans-serif;
   font-weight: 800;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.22);

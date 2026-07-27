@@ -53,6 +53,10 @@ const lapTimerValue = computed(() => {
 })
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
 const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
+const backgroundOpacity = computed(() => {
+  const value = Number(overlay.settings.value?.backgroundOpacity)
+  return Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 0.8
+})
 
 watch(
   () => telemetry.fastState.value.info,
@@ -104,6 +108,7 @@ onUnmounted(() => {
       :lap-timer-value="lapTimerValue"
       :lap-timer-outcome="lapTimerOutcome"
       :lap-timer-fading="isFading"
+      :background-opacity="backgroundOpacity"
       class="overlay-canvas"
       :style="canvasStyle"
     />
