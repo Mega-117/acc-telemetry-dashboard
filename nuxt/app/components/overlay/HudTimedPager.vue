@@ -21,17 +21,22 @@ const props = withDefaults(defineProps<{
   defaultPage: string
   initialPage?: string
   temporaryDurationMs?: number
+  floatingSwitcher?: boolean
 }>(), {
   initialPage: undefined,
   temporaryDurationMs: 30_000,
+  floatingSwitcher: false,
 })
 
 const safeInitialPage = props.pages.some(page => page.id === props.initialPage)
   ? props.initialPage
   : props.defaultPage
+const initialPageDefinition = props.pages.find(page => page.id === safeInitialPage)
 const pager = useTimedHudPager({
   defaultPage: props.defaultPage,
   initialPage: safeInitialPage,
+  initialPageTemporary: initialPageDefinition?.temporary
+    ?? safeInitialPage !== props.defaultPage,
   temporaryDurationMs: props.temporaryDurationMs,
 })
 const { activePage, progress, isTemporaryPage } = pager
@@ -45,18 +50,30 @@ function selectPage(page: HudTimedPagerPage) {
   pager.selectPage(page.id, page.temporary ?? page.id !== props.defaultPage)
 }
 
+defineExpose({
+  returnToDefault: pager.returnToDefault,
+})
+
 onMounted(pager.start)
 onBeforeUnmount(pager.dispose)
 </script>
 
 <template>
-  <section class="hud-timed-pager" :data-active-page="activePage">
+  <section
+    class="hud-timed-pager"
+    :class="{ 'hud-timed-pager--floating-switcher': floatingSwitcher }"
+    :data-active-page="activePage"
+  >
     <div class="hud-timed-pager__content">
       <slot :name="activePage" />
     </div>
 
     <footer class="hud-timed-pager__footer">
-      <nav class="hud-timed-pager__switcher" aria-label="Pagina HUD">
+      <nav
+        class="hud-timed-pager__switcher"
+        data-overlay-interactive
+        aria-label="Pagina HUD"
+      >
         <button
           v-for="page in pages"
           :key="page.id"
@@ -153,5 +170,29 @@ onBeforeUnmount(pager.dispose)
   transform-origin: left center;
   transition: transform 100ms linear;
   pointer-events: none;
+}
+
+.hud-timed-pager--floating-switcher .hud-timed-pager__footer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  min-height: 24px;
+  border-top: 0;
+  pointer-events: none;
+}
+
+.hud-timed-pager--floating-switcher .hud-timed-pager__switcher {
+  pointer-events: auto;
+}
+
+.hud-timed-pager--floating-switcher[data-active-page='target'] .hud-timed-pager__footer {
+  top: 0;
+  right: 0;
+  bottom: auto;
+  left: auto;
+  align-items: flex-start;
+  justify-content: flex-end;
 }
 </style>

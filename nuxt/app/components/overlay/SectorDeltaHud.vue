@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { SectorHudState, SectorHudEntry } from '~/composables/useLiveStatePoller'
+import type { InfoTargetOutcome } from '~/utils/infoPresentation'
 import {
   normalizeSectorDeltaReference,
   resolveSectorDeltaPresentation,
@@ -30,8 +31,11 @@ const props = withDefaults(defineProps<{
     timeMs: number | null
     valid: boolean | null
   }
+  // Esito congelato sullo stesso snapshot del giro trattenuto per 7 secondi.
+  targetOutcome?: InfoTargetOutcome
 }>(), {
   showCurrentLap: true,
+  targetOutcome: 'neutral',
 })
 
 const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
@@ -168,7 +172,11 @@ function ariaLabel(sector: SectorHudEntry): string {
         <strong
           v-if="showCurrentLap !== false"
           class="sector-compact__lap"
-          :class="{ 'sector-compact__lap--invalid': compactDisplayLapValid === false }"
+          :class="{
+            'sector-compact__lap--invalid': compactDisplayLapValid === false,
+            'sector-compact__lap--target-inside': targetOutcome === 'inside',
+            'sector-compact__lap--target-outside': targetOutcome === 'outside',
+          }"
         >{{ compactLapTime }}</strong>
         <small
           v-if="showCurrentLap !== false"
@@ -301,6 +309,23 @@ function ariaLabel(sector: SectorHudEntry): string {
 
 .sector-compact__lap--invalid {
   color: #dc1010;
+}
+
+.sector-compact__lap--target-inside,
+.sector-compact__lap--target-outside {
+  border-radius: calc(8px * var(--hud-scale, 1));
+  outline: max(1px, calc(2px * var(--hud-scale, 1))) solid;
+  outline-offset: calc(4px * var(--hud-scale, 1));
+}
+
+.sector-compact__lap--target-inside {
+  outline-color: #18d53b;
+  box-shadow: 0 0 calc(13px * var(--hud-scale, 1)) rgba(24, 213, 59, .42);
+}
+
+.sector-compact__lap--target-outside {
+  outline-color: #dc1010;
+  box-shadow: 0 0 calc(13px * var(--hud-scale, 1)) rgba(220, 16, 16, .42);
 }
 
 .sector-compact__lap-label {

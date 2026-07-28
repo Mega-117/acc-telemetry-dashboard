@@ -66,4 +66,28 @@ describe('useTimedHudPager', () => {
     vi.advanceTimersByTime(30_000)
     expect(pager.activePage.value).toBe('live')
   })
+  it('mantiene TARGET aperta senza timeout quando la pagina non e temporanea', () => {
+    const pager = makePager()
+    pager.selectPage('setup', false)
+    vi.advanceTimersByTime(120_000)
+    expect(pager.activePage.value).toBe('setup')
+    expect(pager.isTemporaryPage.value).toBe(false)
+    expect(pager.progress.value).toBe(0)
+    pager.selectPage('live')
+    expect(pager.activePage.value).toBe('live')
+  })
+
+  it('non avvia timer per una pagina iniziale dichiarata persistente', () => {
+    const pager = useTimedHudPager({
+      defaultPage: 'live' as const,
+      initialPage: 'setup' as const,
+      initialPageTemporary: false,
+      temporaryDurationMs: 30_000,
+    })
+    pager.start()
+    vi.advanceTimersByTime(120_000)
+    expect(pager.activePage.value).toBe('setup')
+    expect(pager.isTemporaryPage.value).toBe(false)
+  })
+
 })

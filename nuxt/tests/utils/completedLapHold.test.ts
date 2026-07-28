@@ -36,10 +36,12 @@ describe('completedLapHold', () => {
       sample({ lapsCompleted: 1, lastLapTimeMs: 141_250, lastLapValid: true }),
       1_000,
     )
+    expect(held.holdStartedAtMs).toBe(1_000)
     expect(held.holdUntilMs).toBe(1_000 + COMPLETED_LAP_HOLD_MS)
     expect(isCompletedLapHeld(held, 7_999)).toBe(true)
     const released = advanceCompletedLapHold(held, sample({ lapsCompleted: 1 }), 8_000)
     expect(isCompletedLapHeld(released, 8_000)).toBe(false)
+    expect(released.holdStartedAtMs).toBeNull()
   })
 
   it('conserva in rosso anche un giro concluso invalido', () => {

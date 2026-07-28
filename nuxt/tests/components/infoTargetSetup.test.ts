@@ -12,4 +12,13 @@ describe('Info Target setup layout contract', () => {
     expect(source).toContain('Margine concesso oltre il target. I giri più veloci restano validi.')
     expect(source).toContain('@wheel.prevent="onWheel(toleranceControl, $event)"')
   })
+
+  it('mantiene Ctrl+K di default e abilita la variante visuale Settori', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/components/overlay/InfoTargetSetup.vue'), 'utf8')
+
+    expect(source).toContain("contextLabel: 'HUD Info'")
+    expect(source).toContain("appearance: 'default'")
+    expect(source).toContain("'info-target-setup--sectors': appearance === 'sectors'")
+    expect(source).toContain('data-overlay-interactive')
+  })
 })

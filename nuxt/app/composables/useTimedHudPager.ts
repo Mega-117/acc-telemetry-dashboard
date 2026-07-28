@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 export interface TimedHudPagerOptions<Page extends string> {
   defaultPage: Page
   initialPage?: Page
+  initialPageTemporary?: boolean
   temporaryDurationMs: number
   progressTickMs?: number
 }
@@ -14,14 +15,17 @@ export interface TimedHudPagerOptions<Page extends string> {
  */
 export function useTimedHudPager<Page extends string>(options: TimedHudPagerOptions<Page>) {
   const activePage = ref<Page>(options.initialPage ?? options.defaultPage)
-  const progress = ref(activePage.value === options.defaultPage ? 0 : 1)
+  const initialPageTemporary = activePage.value !== options.defaultPage
+    && options.initialPageTemporary !== false
+  const progress = ref(initialPageTemporary ? 1 : 0)
+  const temporaryPageActive = ref(initialPageTemporary)
   const temporaryDurationMs = Math.max(1, Number(options.temporaryDurationMs) || 1)
   const progressTickMs = Math.max(16, Number(options.progressTickMs) || 100)
   let deadlineMs: number | null = null
   let expiryTimer: ReturnType<typeof setTimeout> | null = null
   let progressTimer: ReturnType<typeof setInterval> | null = null
 
-  const isTemporaryPage = computed(() => activePage.value !== options.defaultPage)
+  const isTemporaryPage = computed(() => temporaryPageActive.value)
 
   function clearTimers() {
     if (expiryTimer) clearTimeout(expiryTimer)
@@ -29,6 +33,7 @@ export function useTimedHudPager<Page extends string>(options: TimedHudPagerOpti
     expiryTimer = null
     progressTimer = null
     deadlineMs = null
+    temporaryPageActive.value = false
   }
 
   function returnToDefault() {
@@ -46,21 +51,30 @@ export function useTimedHudPager<Page extends string>(options: TimedHudPagerOpti
     clearTimers()
     activePage.value = page
     progress.value = 1
+    temporaryPageActive.value = true
     deadlineMs = Date.now() + temporaryDurationMs
     progressTimer = setInterval(updateProgress, progressTickMs)
     expiryTimer = setTimeout(returnToDefault, temporaryDurationMs)
   }
 
   function selectPage(page: Page, temporary = page !== options.defaultPage) {
-    if (!temporary || page === options.defaultPage) {
+    if (page === options.defaultPage) {
       returnToDefault()
       return
     }
-    showTemporary(page)
+    if (temporary) {
+      showTemporary(page)
+      return
+    }
+    clearTimers()
+    activePage.value = page
+    progress.value = 0
   }
 
   function start() {
-    if (activePage.value !== options.defaultPage) showTemporary(activePage.value)
+    if (activePage.value !== options.defaultPage && options.initialPageTemporary !== false) {
+      showTemporary(activePage.value)
+    }
   }
 
   function dispose() {

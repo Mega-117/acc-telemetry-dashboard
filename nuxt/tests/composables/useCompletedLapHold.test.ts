@@ -29,7 +29,7 @@ describe('useCompletedLapHold', () => {
     vi.useRealTimers()
   })
 
-  it('continua a ricevere il timer nuovo e lo mostra allo scadere dei cinque secondi', async () => {
+  it('continua a ricevere il timer nuovo e lo mostra allo scadere dei sette secondi', async () => {
     vi.useFakeTimers()
     const fastState = ref(state())
     const scope = effectScope()
@@ -47,6 +47,11 @@ describe('useCompletedLapHold', () => {
     await nextTick()
     expect(presentation.displayedLapTimeMs.value).toBe(140_000)
     expect(presentation.displayedLapValid.value).toBe(false)
+    expect(presentation.heldLap.value).toMatchObject({
+      timeMs: 140_000,
+      valid: false,
+      startedAtMs: expect.any(Number),
+    })
 
     fastState.value = state({
       info: {
@@ -63,6 +68,7 @@ describe('useCompletedLapHold', () => {
     await vi.advanceTimersByTimeAsync(7_000)
     expect(presentation.displayedLapTimeMs.value).toBe(2_500)
     expect(presentation.displayedLapValid.value).toBe(true)
+    expect(presentation.heldLap.value).toBeNull()
     scope.stop()
   })
 })

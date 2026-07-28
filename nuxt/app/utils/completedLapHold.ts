@@ -13,6 +13,7 @@ export interface CompletedLapHoldState {
   observedLapsCompleted: number | null
   heldLapTimeMs: number | null
   heldLapValid: boolean | null
+  holdStartedAtMs: number | null
   holdUntilMs: number | null
 }
 
@@ -22,6 +23,7 @@ export function createCompletedLapHoldState(): CompletedLapHoldState {
     observedLapsCompleted: null,
     heldLapTimeMs: null,
     heldLapValid: null,
+    holdStartedAtMs: null,
     holdUntilMs: null,
   }
 }
@@ -65,6 +67,7 @@ export function advanceCompletedLapHold(
       observedLapsCompleted: sample.lapsCompleted,
       heldLapTimeMs: sample.lastLapTimeMs,
       heldLapValid: sample.lastLapValid,
+      holdStartedAtMs: nowMs,
       holdUntilMs: nowMs + COMPLETED_LAP_HOLD_MS,
     }
   }
@@ -74,6 +77,7 @@ export function advanceCompletedLapHold(
       ...previous,
       heldLapTimeMs: null,
       heldLapValid: null,
+      holdStartedAtMs: null,
       holdUntilMs: null,
     }
   }

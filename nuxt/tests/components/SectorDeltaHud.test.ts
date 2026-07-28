@@ -291,4 +291,30 @@ describe('SectorDeltaHud', () => {
     expect((html.match(/>wait<\/small>/g) || []).length).toBe(3)
     expect(html).not.toContain('-0.200</small>')
   })
+  it('mostra l esito Target sul bordo senza cambiare il colore di validita', async () => {
+    const inside = await renderHud({
+      variant: 'compact',
+      compactDisplayLap: { timeMs: 90_000, valid: true },
+      targetOutcome: 'inside',
+    })
+    const outsideInvalid = await renderHud({
+      variant: 'compact',
+      compactDisplayLap: { timeMs: 91_000, valid: false },
+      targetOutcome: 'outside',
+    })
+    const hidden = await renderHud({
+      variant: 'compact',
+      showCurrentLap: false,
+      compactDisplayLap: { timeMs: 90_000, valid: true },
+      targetOutcome: 'inside',
+    })
+
+    expect(inside).toContain('sector-compact__lap--target-inside')
+    expect(inside).not.toContain('sector-compact__lap--invalid')
+    expect(outsideInvalid).toContain('sector-compact__lap--target-outside')
+    expect(outsideInvalid).toContain('sector-compact__lap--invalid')
+    expect(hidden).not.toContain('sector-compact__lap--target-inside')
+    expect(hidden).not.toContain('CURRENT LAP')
+  })
+
 })

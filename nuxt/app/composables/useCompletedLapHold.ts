@@ -63,9 +63,22 @@ export function useCompletedLapHold(fastState: Ref<FastOverlayState>) {
   const displayedLapValid = computed(() => (
     holding.value ? holdState.value.heldLapValid : fastState.value.info?.lapValid ?? null
   ))
+  const heldLap = computed(() => (
+    holding.value
+      && holdState.value.heldLapTimeMs !== null
+      && holdState.value.heldLapValid !== null
+      && holdState.value.holdStartedAtMs !== null
+      ? {
+          timeMs: holdState.value.heldLapTimeMs,
+          valid: holdState.value.heldLapValid,
+          startedAtMs: holdState.value.holdStartedAtMs,
+        }
+      : null
+  ))
 
   return {
     holding,
+    heldLap,
     displayedLapTimeMs,
     displayedLapValid,
   }

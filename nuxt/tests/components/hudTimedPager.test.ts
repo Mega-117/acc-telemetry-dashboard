@@ -47,4 +47,27 @@ describe('HudTimedPager', () => {
     expect(html).toContain('PAGINA SETUP')
     expect(html).toContain('hud-timed-pager__progress')
   })
+  it('supporta una pagina TARGET persistente con switcher flottante e hit region', async () => {
+    const app = createSSRApp({
+      render: () => h(HudTimedPager, {
+        pages: [
+          { id: 'live', label: 'LIVE' },
+          { id: 'target', label: 'TARGET', temporary: false },
+        ],
+        defaultPage: 'live',
+        initialPage: 'target',
+        floatingSwitcher: true,
+      }, {
+        live: () => h('div', 'PAGINA LIVE'),
+        target: () => h('div', 'PAGINA TARGET'),
+      }),
+    })
+
+    const html = await renderToString(app)
+    expect(html).toContain('PAGINA TARGET')
+    expect(html).toContain('hud-timed-pager--floating-switcher')
+    expect(html).toContain('data-overlay-interactive')
+    expect(html).not.toContain('hud-timed-pager__progress')
+  })
+
 })

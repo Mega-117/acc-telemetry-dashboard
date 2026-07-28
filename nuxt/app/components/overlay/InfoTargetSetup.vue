@@ -8,11 +8,16 @@ import {
   type InfoTargetTimeUnit,
 } from '~/utils/infoTargetPicker'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   targetTimeMs: number
   toleranceMs: number
   keepBetweenSessions: boolean
-}>()
+  contextLabel?: string
+  appearance?: 'default' | 'sectors'
+}>(), {
+  contextLabel: 'HUD Info',
+  appearance: 'default',
+})
 
 const emit = defineEmits<{
   'set-target-time': [valueMs: number]
@@ -57,9 +62,14 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 </script>
 
 <template>
-  <section class="info-target-setup" aria-label="Configura Target giro">
+  <section
+    class="info-target-setup"
+    :class="{ 'info-target-setup--sectors': appearance === 'sectors' }"
+    data-overlay-interactive
+    aria-label="Configura Target giro"
+  >
     <header>
-      <span>HUD Info</span>
+      <span>{{ contextLabel }}</span>
       <strong>Target giro</strong>
       <p>Imposta il riferimento del giro completo.</p>
     </header>
@@ -312,4 +322,21 @@ header p { margin: 4px 0 0; color: rgba(255,255,255,.62); font-size: 13px; }
 .target-actions button { min-height: 40px; border-radius: 11px; font-weight: 900; cursor: pointer; }
 .target-confirm { border: 0; color: #111; background: #fb923c; }
 .target-cancel { padding-inline: 16px; border: 1px solid rgba(255,255,255,.15); color: #e5e7eb; background: transparent; }
+.info-target-setup--sectors {
+  height: 100%;
+  min-height: 0;
+  border-color: rgba(255, 255, 255, .18);
+  border-radius: 14px;
+  background: #0b0e11;
+  box-shadow: none;
+  -webkit-app-region: no-drag;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .info-target-setup *,
+  .info-target-setup *::before,
+  .info-target-setup *::after {
+    transition: none !important;
+  }
+}
 </style>
