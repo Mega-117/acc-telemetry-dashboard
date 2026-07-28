@@ -3,6 +3,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import InfoHud from '~/components/overlay/InfoHud.vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
+import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import {
   buildInfoPresentation,
   DEFAULT_INFO_OPTIONS,
@@ -19,6 +20,7 @@ definePageMeta({ layout: 'hud-overlay' })
 const route = useRoute()
 const getApi = () => typeof window === 'undefined' ? null : (window as any).electronAPI || null
 const overlay = useHudOverlay('info', getApi)
+const { backgroundOpacity } = useHudOverlayBackground(overlay.settings)
 const telemetry = useFastStatePoller(getApi)
 const target = ref<InfoTargetSettings | null>(null)
 const clockMs = ref(Date.now())
@@ -54,11 +56,6 @@ const lapTimerValue = computed(() => {
 })
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
 const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
-const backgroundOpacity = computed(() => {
-  const value = Number(overlay.settings.value?.backgroundOpacity)
-  return Number.isFinite(value) ? Math.min(Math.max(value, 0), 1) : 0.8
-})
-
 watch(
   () => telemetry.fastState.value.info,
   (info) => {

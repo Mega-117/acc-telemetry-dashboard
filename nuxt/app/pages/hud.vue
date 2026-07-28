@@ -8,6 +8,12 @@ import {
   supportsHudOverlayPresentationControl,
   type HudOverlayPresentationControl,
 } from '~/utils/hudOverlayPresentationCapabilities'
+import {
+  backgroundOpacityToTransparency,
+  backgroundTransparencyToOpacity,
+  supportsHudOverlayBackground,
+  type HudOverlayBackgroundId,
+} from '~/utils/hudOverlayBackground'
 
 definePageMeta({
   layout: 'dashboard',
@@ -86,7 +92,10 @@ const infoSettings = reactive({
   showDamage: true,
   showTime: false,
 })
-const infoBackgroundTransparency = ref(20)
+const backgroundTransparency = reactive<Record<HudOverlayBackgroundId, number>>({
+  info: 20,
+  tyres: 20,
+})
 type InfoSettingKey = keyof typeof infoSettings
 const infoOptionDefinitions: Array<{ key: InfoSettingKey, label: string, description: string }> = [
   { key: 'showYellowFlag', label: 'Yellow Flag', description: 'Mostra il bordo giallo dell overlay quando ACC espone la bandiera.' },
@@ -181,14 +190,13 @@ async function refreshState() {
         dashboardSettings.fuelCriticalLapsThreshold = Number.isFinite(Number(settings?.fuelCriticalLapsThreshold))
           ? Number(settings.fuelCriticalLapsThreshold) : 0.5
       }
+      if (supportsHudOverlayBackground(overlay.id)) {
+        backgroundTransparency[overlay.id] = backgroundOpacityToTransparency(settings?.backgroundOpacity)
+      }
       if (overlay.id === 'info') {
         for (const definition of infoOptionDefinitions) {
           infoSettings[definition.key] = settings?.[definition.key] !== false
         }
-        const opacity = Number(settings?.backgroundOpacity)
-        infoBackgroundTransparency.value = Number.isFinite(opacity)
-          ? Math.round((1 - Math.min(Math.max(opacity, 0), 1)) * 100)
-          : 20
       }
     } catch {
       open[overlay.id] = false
@@ -415,16 +423,16 @@ function toggleInfoSetting(key: InfoSettingKey) {
   void saveInfoSetting(key, !infoSettings[key])
 }
 
-async function onInfoBackgroundTransparencyInput(value: string) {
+async function onBackgroundTransparencyInput(id: HudOverlayBackgroundId, value: string) {
   const percentage = Math.min(Math.max(Math.round(Number(value) || 0), 0), 100)
-  infoBackgroundTransparency.value = percentage
+  backgroundTransparency[id] = percentage
   const api = getApi()
   if (!apiReady.value || !api?.hudOverlaySaveSettings) return
-  const settings = await api.hudOverlaySaveSettings('info', {
-    backgroundOpacity: Math.round((1 - percentage / 100) * 100) / 100,
+  const settings = await api.hudOverlaySaveSettings(id, {
+    backgroundOpacity: backgroundTransparencyToOpacity(percentage),
   })
   if (Number.isFinite(Number(settings?.backgroundOpacity))) {
-    infoBackgroundTransparency.value = Math.round((1 - Number(settings.backgroundOpacity)) * 100)
+    backgroundTransparency[id] = backgroundOpacityToTransparency(settings.backgroundOpacity)
   }
 }
 async function toggleTraining() {
@@ -607,6 +615,30 @@ async function toggleTraining() {
             </select>
           </label>
 
+          <div
+            v-if="supportsHudOverlayBackground(overlay.id) && (overlay.id !== 'tyres' || tyreVariant === 'advanced')"
+            class="hud-card__size hud-card__background-transparency"
+          >
+            <div class="hud-card__size-row">
+              <span class="hud-card__formats-label">Trasparenza sfondo</span>
+              <span class="hud-card__size-val">{{ backgroundTransparency[overlay.id] }}%</span>
+            </div>
+            <input
+              type="range"
+              class="hud-slider"
+              min="0"
+              max="100"
+              step="5"
+              :value="backgroundTransparency[overlay.id]"
+              :disabled="!apiReady"
+              :aria-label="`Trasparenza sfondo HUD ${overlay.title}`"
+              @input="onBackgroundTransparencyInput(overlay.id, ($event.target as HTMLInputElement).value)"
+            >
+            <em class="hud-card__slider-help">
+              Rende trasparente soltanto lo sfondo nero; testi e valori restano pienamente visibili.
+            </em>
+          </div>
+
           <template v-if="overlay.id === 'sectors'">
             <label class="hud-card__option">
               <span>
@@ -722,24 +754,6 @@ async function toggleTraining() {
             </label>
           </template>
           <template v-if="overlay.id === 'info'">
-            <div class="hud-card__size hud-card__background-transparency">
-              <div class="hud-card__size-row">
-                <span class="hud-card__formats-label">Trasparenza sfondo</span>
-                <span class="hud-card__size-val">{{ infoBackgroundTransparency }}%</span>
-              </div>
-              <input
-                type="range"
-                class="hud-slider"
-                min="0"
-                max="100"
-                step="5"
-                :value="infoBackgroundTransparency"
-                :disabled="!apiReady"
-                aria-label="Trasparenza sfondo HUD Info"
-                @input="onInfoBackgroundTransparencyInput(($event.target as HTMLInputElement).value)"
-              >
-              <em class="hud-card__slider-help">Rende trasparente soltanto lo sfondo nero; testi e valori restano pienamente visibili.</em>
-            </div>
             <label v-for="option in infoOptionDefinitions" :key="option.key" class="hud-card__option">
               <span>
                 <strong>{{ option.label }}</strong>

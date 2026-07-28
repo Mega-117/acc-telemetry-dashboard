@@ -8,6 +8,7 @@ function makeApi() {
     onHudOverlayPlacement: vi.fn((cb: (a: boolean) => void) => { cbs.placement = cb; return () => { cbs.placement = undefined } }),
     onHudOverlayScale: vi.fn((cb: (s: unknown) => void) => { cbs.scale = cb; return () => { cbs.scale = undefined } }),
     onHudOverlaySettings: vi.fn((cb: (s: any) => void) => { cbs.settings = cb; return () => { cbs.settings = undefined } }),
+    hudOverlaySetMousePassthrough: vi.fn().mockResolvedValue(true),
   }
   return { api, cbs }
 }
@@ -79,6 +80,40 @@ describe('useHudOverlay', () => {
     hud.start(1)
     hud.stop()
     expect(off).toHaveBeenCalledTimes(3)
+  })
+
+  it('abilita il mouse solo sulla superficie interattiva dichiarata', () => {
+    const { api } = makeApi()
+    const hud = useHudOverlay('tyres', () => api)
+    hud.start(1)
+    hud.startInteractionSurface('.hud-timed-pager__switcher')
+
+    hud.updateInteractionFromTarget({ closest: () => ({}) })
+    hud.updateInteractionFromTarget({ closest: () => ({}) })
+    hud.updateInteractionFromTarget({ closest: () => null })
+
+    expect(api.hudOverlaySetMousePassthrough.mock.calls).toEqual([
+      ['tyres', true],
+      ['tyres', false],
+      ['tyres', true],
+    ])
+  })
+
+  it('non altera il passthrough durante il posizionamento e lo ripristina alla chiusura', () => {
+    const { api, cbs } = makeApi()
+    const hud = useHudOverlay('tyres', () => api)
+    hud.start(1)
+    hud.startInteractionSurface('.hud-timed-pager__switcher')
+    cbs.placement!(true)
+    hud.updateInteractionFromTarget({ closest: () => ({}) })
+    expect(api.hudOverlaySetMousePassthrough).toHaveBeenCalledTimes(1)
+
+    cbs.placement!(false)
+    hud.updateInteractionFromTarget({ closest: () => ({}) })
+    expect(api.hudOverlaySetMousePassthrough.mock.calls.slice(-2)).toEqual([
+      ['tyres', true],
+      ['tyres', false],
+    ])
   })
 
   it('in web mode (nessuna API) non lancia e resta inerte', async () => {

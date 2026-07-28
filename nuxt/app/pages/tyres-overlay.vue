@@ -5,6 +5,9 @@
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
+import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
+import HudOverlayBackground from '~/components/overlay/HudOverlayBackground.vue'
+import HudTimedPager from '~/components/overlay/HudTimedPager.vue'
 import TyreAdvancedHud from '~/components/overlay/TyreAdvancedHud.vue'
 import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 
@@ -22,15 +25,25 @@ function getApi(): any | null {
 
 const route = useRoute()
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getApi)
-const { isElectron, scale, settings, loadSettings, start, stop } = useHudOverlay('tyres', getApi)
+const overlay = useHudOverlay('tyres', getApi)
+const { isElectron, scale, settings, loadSettings, start, stop, startInteractionSurface } = overlay
+const { backgroundOpacity } = useHudOverlayBackground(settings)
 const variant = computed(() => (
   settings.value?.variant === 'advanced' || route.query.variant === 'advanced'
     ? 'advanced' : 'classic'
 ))
+const advancedPage = computed<'live' | 'setup'>(() => (
+  import.meta.dev && route.query.page === 'setup' ? 'setup' : 'live'
+))
+const advancedPages = [
+  { id: 'live', label: 'LIVE' },
+  { id: 'setup', label: 'SETUP', temporary: true },
+]
 
 onMounted(() => {
   startFastStatePolling()
   start(route.query.scale)
+  startInteractionSurface('.hud-timed-pager__switcher')
   loadSettings()
 })
 
@@ -46,8 +59,25 @@ onBeforeUnmount(() => {
     :style="{ '--hud-scale': scale }"
     :class="{ 'hud-overlay--web': !isElectron }"
   >
-    <div class="hud-overlay__panel">
-      <TyreAdvancedHud v-if="variant === 'advanced'" :fast-state="fastState" />
+    <div
+      class="hud-overlay__panel"
+      :class="{ 'hud-overlay__panel--advanced': variant === 'advanced' }"
+    >
+      <HudOverlayBackground v-if="variant === 'advanced'" :opacity="backgroundOpacity" />
+      <HudTimedPager
+        v-if="variant === 'advanced'"
+        :pages="advancedPages"
+        default-page="live"
+        :initial-page="advancedPage"
+        :temporary-duration-ms="30_000"
+      >
+        <template #live>
+          <TyreAdvancedHud :fast-state="fastState" page="live" />
+        </template>
+        <template #setup>
+          <TyreAdvancedHud :fast-state="fastState" page="setup" />
+        </template>
+      </HudTimedPager>
       <TyreSlipHud v-else :fast-state="fastState" />
     </div>
   </div>
@@ -86,6 +116,16 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   // Sfondo completamente OPACO (nessuna trasparenza) e nessuna ombra.
   background: #0b0e15;
+}
+
+.hud-overlay__panel--advanced {
+  border-color: transparent;
+  background: transparent;
+}
+
+.hud-overlay__panel--advanced > :not(.hud-overlay-background) {
+  position: relative;
+  z-index: 1;
 }
 
 // ── L'HUD riempie il pannello (niente spazio vuoto sopra/sotto) ──────────────

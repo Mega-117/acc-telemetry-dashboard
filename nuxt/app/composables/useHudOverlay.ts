@@ -61,9 +61,51 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
   const scale = ref<number>(HUD_SCALE_DEFAULT)
   const settings = ref<HudOverlaySettings | null>(null)
   let unsubscribers: Array<() => void> = []
+  let interactionSurfaceSelector: string | null = null
+  let lastPointerOnInteractionSurface: boolean | null = null
 
   function api(): any | null {
     return getApi()
+  }
+
+  function setMousePassthrough(ignore: boolean): void {
+    const bridge = api()
+    if (!bridge?.hudOverlaySetMousePassthrough) return
+    void bridge.hudOverlaySetMousePassthrough(overlayId, ignore)
+  }
+
+  function updateInteractionFromTarget(target: unknown): void {
+    if (!interactionSurfaceSelector || isPlacing.value) {
+      lastPointerOnInteractionSurface = null
+      return
+    }
+    const candidate = target as { closest?: (selector: string) => unknown } | null
+    const onSurface = !!candidate?.closest?.(interactionSurfaceSelector)
+    if (onSurface === lastPointerOnInteractionSurface) return
+    lastPointerOnInteractionSurface = onSurface
+    setMousePassthrough(!onSurface)
+  }
+
+  function handleInteractionMouseMove(event: MouseEvent): void {
+    updateInteractionFromTarget(event.target)
+  }
+
+  function startInteractionSurface(selector: string): void {
+    interactionSurfaceSelector = selector
+    lastPointerOnInteractionSurface = null
+    setMousePassthrough(true)
+    if (typeof window !== 'undefined') {
+      window.addEventListener('mousemove', handleInteractionMouseMove, true)
+    }
+  }
+
+  function stopInteractionSurface(): void {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('mousemove', handleInteractionMouseMove, true)
+    }
+    if (interactionSurfaceSelector && !isPlacing.value) setMousePassthrough(true)
+    interactionSurfaceSelector = null
+    lastPointerOnInteractionSurface = null
   }
 
   async function loadSettings(): Promise<HudOverlaySettings | null> {
@@ -89,6 +131,8 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
     if (typeof bridge.onHudOverlayPlacement === 'function') {
       unsubscribers.push(bridge.onHudOverlayPlacement((active: boolean) => {
         isPlacing.value = !!active
+        lastPointerOnInteractionSurface = null
+        if (!isPlacing.value && interactionSurfaceSelector) setMousePassthrough(true)
       }))
     }
     if (typeof bridge.onHudOverlayScale === 'function') {
@@ -106,11 +150,23 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
 
 
   function stop(): void {
+    stopInteractionSurface()
     for (const off of unsubscribers) {
       try { off() } catch { /* listener già rimosso */ }
     }
     unsubscribers = []
   }
 
-  return { isElectron, isPlacing, scale, settings, loadSettings, start, stop }
+  return {
+    isElectron,
+    isPlacing,
+    scale,
+    settings,
+    loadSettings,
+    start,
+    stop,
+    startInteractionSurface,
+    stopInteractionSurface,
+    updateInteractionFromTarget,
+  }
 }

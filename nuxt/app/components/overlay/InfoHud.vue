@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HudOverlayBackground from '~/components/overlay/HudOverlayBackground.vue'
 import type { InfoPresentation, InfoTargetOutcome } from '~/utils/infoPresentation'
 
 const props = defineProps<{
@@ -20,9 +21,9 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   <section
     class="info-hud"
     :class="{ 'info-hud--yellow-flag': model.yellowFlagActive }"
-    :style="{ '--info-background-opacity': String(backgroundOpacity) }"
     aria-label="Info"
   >
+    <HudOverlayBackground :opacity="backgroundOpacity" />
     <div
       v-if="model.delta.visible"
       class="info-delta"
@@ -65,10 +66,15 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   overflow: hidden;
   border-radius: 24px;
   color: #fff;
-  background: rgba(0, 0, 0, var(--info-background-opacity, 0.8));
+  background: transparent;
   font-family: Arial, Helvetica, sans-serif;
   font-weight: 800;
   text-shadow: 0 1px 1px rgba(0, 0, 0, 0.22);
+}
+
+.info-hud > :not(.hud-overlay-background) {
+  position: relative;
+  z-index: 1;
 }
 
 .info-hud--yellow-flag {

@@ -3,8 +3,15 @@ import { computed } from 'vue'
 import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
 import { tyreSlipBarStyle } from '~/utils/tyreSlipPresentation'
 import { tyreTemperatureColor } from '~/utils/tyreTemperaturePresentation'
+import { brakeTemperatureColor } from '~/utils/brakeTemperaturePresentation'
+import TyreSetupHud from './TyreSetupHud.vue'
 
-const props = defineProps<{ fastState: FastOverlayState }>()
+const props = withDefaults(defineProps<{
+  fastState: FastOverlayState
+  page?: 'live' | 'setup'
+}>(), {
+  page: 'live',
+})
 
 const wheelIds = ['FL', 'FR', 'RL', 'RR'] as const
 const axles = [
@@ -23,6 +30,7 @@ const emptyTyre = (id: FastStateTyre['id']): FastStateTyre => ({
   pressureLossPsi: null,
   coreTempC: null,
   brakeTempC: null,
+  brakeCompound: null,
   padLifePct: null,
   discLifePct: null,
 })
@@ -91,10 +99,17 @@ function tyreStyle(tyre: FastStateTyre) {
     ),
   }
 }
+
+function brakeStyle(tyre: FastStateTyre) {
+  return {
+    backgroundColor: brakeTemperatureColor(tyre.brakeTempC, tyre.id, tyre.brakeCompound),
+  }
+}
 </script>
 
 <template>
-  <section class="tyre-advanced" aria-label="Stato avanzato gomme e freni">
+  <TyreSetupHud v-if="page === 'setup'" :fast-state="fastState" />
+  <section v-else class="tyre-advanced" aria-label="Stato avanzato gomme e freni">
     <div class="tyre-advanced__weather">
       <div v-for="item in [
         { label: '0′', value: fastState.rainIntensity },
@@ -129,13 +144,13 @@ function tyreStyle(tyre: FastStateTyre) {
 
         <div class="tyre-advanced__brake tyre-advanced__brake--left">
           <span>{{ format(tyresById[axle.left].brakeTempC) }}°</span>
-          <i />
+          <i :style="brakeStyle(tyresById[axle.left])" />
           <strong>{{ padLife(tyresById[axle.left]) }}</strong>
         </div>
 
         <div class="tyre-advanced__brake tyre-advanced__brake--right">
           <span>{{ format(tyresById[axle.right].brakeTempC) }}°</span>
-          <i />
+          <i :style="brakeStyle(tyresById[axle.right])" />
           <strong>{{ padLife(tyresById[axle.right]) }}</strong>
         </div>
 
@@ -171,8 +186,8 @@ function tyreStyle(tyre: FastStateTyre) {
   --tyre-hud-type-weather-icon: max(11px, calc(15px * var(--hud-scale, 1)));
   --tyre-hud-type-label: max(9.5px, calc(9px * var(--hud-scale, 1)));
   --tyre-hud-type-secondary: max(10px, calc(12px * var(--hud-scale, 1)));
-  --tyre-hud-type-primary: max(16px, calc(22px * var(--hud-scale, 1)));
-  --tyre-hud-type-tyre: max(15px, calc(18px * var(--hud-scale, 1)));
+  --tyre-hud-type-primary: max(15px, calc(18px * var(--hud-scale, 1)));
+  --tyre-hud-type-tyre: max(18px, calc(24px * var(--hud-scale, 1)));
   --tyre-hud-type-pad: max(12px, calc(15px * var(--hud-scale, 1)));
   --tyre-hud-type-set: max(14px, calc(17px * var(--hud-scale, 1)));
   --tyre-hud-type-status: max(14px, calc(19px * var(--hud-scale, 1)));
@@ -182,7 +197,8 @@ function tyreStyle(tyre: FastStateTyre) {
   flex-direction: column;
   align-items: center;
   container-type: inline-size;
-  gap: calc(6px * var(--hud-scale, 1));
+  gap: 0;
+  width: 100%;
   min-height: 0;
   color: #fff;
   font-family: Inter, "Segoe UI", sans-serif;
@@ -192,16 +208,20 @@ function tyreStyle(tyre: FastStateTyre) {
 .tyre-advanced__weather {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  width: 44%;
-  overflow: hidden;
-  border-radius: calc(13px * var(--hud-scale, 1));
-  background: #8d8d8d;
+  width: 100%;
+  padding: 0 calc(8px * var(--hud-scale, 1)) calc(7px * var(--hud-scale, 1));
+  border-bottom: 1px solid rgba(255, 255, 255, .18);
+  box-sizing: border-box;
 }
 
 .tyre-advanced__weather div {
   display: grid;
   place-items: center;
   min-width: 0;
+}
+
+.tyre-advanced__weather div + div {
+  border-left: 1px solid rgba(255, 255, 255, .12);
 }
 
 .tyre-advanced__weather strong {
@@ -212,7 +232,6 @@ function tyreStyle(tyre: FastStateTyre) {
 .tyre-advanced__weather span {
   width: 100%;
   padding: calc(2px * var(--hud-scale, 1)) 0;
-  background: #5d5d5d;
   color: #fff;
   font-size: var(--tyre-hud-type-weather-icon);
   text-align: center;
@@ -223,29 +242,34 @@ function tyreStyle(tyre: FastStateTyre) {
   display: flex;
   flex: 1;
   flex-direction: column;
-  justify-content: space-around;
-  gap: calc(12px * var(--hud-scale, 1));
+  justify-content: stretch;
+  gap: 0;
   width: 100%;
   min-height: 0;
-  padding: calc(14px * var(--hud-scale, 1)) calc(16px * var(--hud-scale, 1));
+  padding: calc(7px * var(--hud-scale, 1)) calc(8px * var(--hud-scale, 1));
   overflow: hidden;
-  border-radius: calc(22px * var(--hud-scale, 1));
-  background: #4b4b4b;
   box-sizing: border-box;
 }
 
 .tyre-advanced__axle {
+  position: relative;
   display: grid;
   grid-template-columns:
     minmax(0, 1fr)
-    minmax(calc(42px * var(--hud-scale, 1)), .42fr)
-    minmax(calc(42px * var(--hud-scale, 1)), .42fr)
+    minmax(calc(34px * var(--hud-scale, 1)), .30fr)
+    minmax(calc(34px * var(--hud-scale, 1)), .30fr)
     minmax(0, 1fr);
   align-items: center;
+  align-content: center;
   gap: calc(8px * var(--hud-scale, 1));
   grid-template-rows: auto auto auto auto;
   row-gap: calc(4px * var(--hud-scale, 1));
+  flex: 1;
   min-height: 0;
+}
+
+.tyre-advanced__axle + .tyre-advanced__axle {
+  border-top: 1px solid rgba(255, 255, 255, .16);
 }
 
 .tyre-advanced__corner,
@@ -265,7 +289,7 @@ function tyreStyle(tyre: FastStateTyre) {
 
 .tyre-advanced__average {
   grid-row: 2;
-  color: #fff;
+  color: rgba(255, 255, 255, .72);
   font-size: var(--tyre-hud-type-label);
   font-weight: 800;
   white-space: nowrap;
@@ -301,7 +325,7 @@ function tyreStyle(tyre: FastStateTyre) {
   height: calc(92px * var(--hud-scale, 1));
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, .11);
+  background: rgba(255, 255, 255, .14);
 }
 
 .tyre-advanced__grip-bar span {
@@ -320,31 +344,18 @@ function tyreStyle(tyre: FastStateTyre) {
   display: grid;
   place-items: center;
   height: calc(92px * var(--hud-scale, 1));
-  border: 2px solid rgba(255, 255, 255, .24);
+  border: 1px solid rgba(255, 255, 255, .38);
   border-radius: calc(16px * var(--hud-scale, 1));
   box-sizing: border-box;
   transition: background-color 160ms linear;
 }
-
-.tyre-advanced__tyre::before,
-.tyre-advanced__tyre::after {
-  position: absolute;
-  left: 18%;
-  width: 64%;
-  height: 1px;
-  background: rgba(255, 255, 255, .28);
-  content: "";
-}
-
-.tyre-advanced__tyre::before { top: 25%; }
-.tyre-advanced__tyre::after { bottom: 25%; }
 
 .tyre-advanced__tyre b {
   position: relative;
   z-index: 1;
   color: #fff;
   font-size: var(--tyre-hud-type-tyre);
-  text-shadow: 0 1px 3px #000;
+  text-shadow: 0 1px 3px #000, 0 0 5px rgba(0, 0, 0, .75);
 }
 
 .tyre-advanced__brake {
@@ -362,11 +373,12 @@ function tyreStyle(tyre: FastStateTyre) {
 .tyre-advanced__brake i {
   grid-row: 3;
   align-self: center;
-  width: 70%;
-  height: calc(48px * var(--hud-scale, 1));
-  border: 1px solid rgba(255, 255, 255, .2);
-  border-radius: calc(6px * var(--hud-scale, 1));
+  width: 44%;
+  height: calc(54px * var(--hud-scale, 1));
+  border: 1px solid rgba(255, 255, 255, .32);
+  border-radius: calc(4px * var(--hud-scale, 1));
   background: #142bd0;
+  transition: background-color 120ms linear;
 }
 
 .tyre-advanced__brake strong {
@@ -379,14 +391,13 @@ function tyreStyle(tyre: FastStateTyre) {
   position: absolute;
   top: 50%;
   left: 50%;
-  padding: calc(2px * var(--hud-scale, 1)) calc(6px * var(--hud-scale, 1));
-  border-radius: 4px;
-  background: rgba(75, 75, 75, .94);
+  padding: calc(2px * var(--hud-scale, 1)) calc(10px * var(--hud-scale, 1));
   color: #fff;
   font-size: var(--tyre-hud-type-set);
   font-weight: 900;
   transform: translate(-50%, -50%);
   white-space: nowrap;
+  text-shadow: 0 1px 3px #000;
 }
 
 .tyre-advanced__status {
@@ -403,18 +414,17 @@ function tyreStyle(tyre: FastStateTyre) {
   font-weight: 950;
   line-height: .95;
   text-align: center;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, calc(-50% + 28px * var(--hud-scale, 1)));
 }
 
 @container (max-width: 300px) {
   .tyre-advanced__weather {
-    width: 58%;
+    padding-right: 4px;
+    padding-left: 4px;
   }
 
   .tyre-advanced__panel {
-    gap: 6px;
-    padding: 10px 7px;
-    border-radius: 14px;
+    padding: 5px 3px;
   }
 
   .tyre-advanced__axle {
@@ -462,8 +472,8 @@ function tyreStyle(tyre: FastStateTyre) {
   }
 
   .tyre-advanced__brake i {
-    width: 72%;
-    height: 34px;
+    width: 46%;
+    height: 36px;
   }
 }
 </style>

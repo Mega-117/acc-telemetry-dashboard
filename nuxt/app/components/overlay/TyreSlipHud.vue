@@ -20,6 +20,7 @@ const idleTyres: FastStateTyre[] = (['FL', 'FR', 'RL', 'RR'] as const).map((id) 
   pressureLossPsi: null,
   coreTempC: null,
   brakeTempC: null,
+  brakeCompound: null,
   padLifePct: null,
   discLifePct: null,
 }))

@@ -1,5 +1,10 @@
 import { computed, ref } from 'vue'
 import type { TrackReferencePhase } from '~/services/spotter/trackVoiceReferences'
+import {
+  emptyTyreSetupViewModel,
+  normalizeTyreSetupViewModel,
+  type TyreSetupViewModel,
+} from '~/services/overlay/tyreSetupViewModel'
 
 export type FastStateSlipBand = 'white' | 'green' | 'yellow' | 'orange' | 'red'
 export type FastStateSlipState = 'ok' | 'limit' | 'sliding' | 'wheelspin' | 'lockup'
@@ -15,6 +20,7 @@ export interface FastStateTyre {
   pressureLossPsi: number | null
   coreTempC: number | null
   brakeTempC: number | null
+  brakeCompound: number | null
   padLifePct: number | null
   discLifePct: number | null
 }
@@ -113,6 +119,7 @@ export interface FastOverlayState {
   rainIntensity10Min: number | null
   rainIntensity30Min: number | null
   lapPressureAverage: FastStateLapPressureAverage
+  tyreSetup: TyreSetupViewModel
   trackReferencePhase: TrackReferencePhase | null
   trackReferencesEligible: boolean
   tyres: FastStateTyre[]
@@ -176,6 +183,7 @@ const EMPTY_FAST_STATE: FastOverlayState = {
     tyreSet: null,
     values: { FL: null, FR: null, RL: null, RR: null },
   },
+  tyreSetup: emptyTyreSetupViewModel(),
   trackReferencePhase: null,
   trackReferencesEligible: false,
   tyres: [],
@@ -277,6 +285,7 @@ function normalizeTyre(raw: any): FastStateTyre | null {
     pressureLossPsi: toNumber(raw.pressure_loss_psi),
     coreTempC: toNumber(raw.core_temp_c),
     brakeTempC: toNumber(raw.brake_temp_c),
+    brakeCompound: toNumber(raw.brake_compound),
     padLifePct: toNumber(raw.pad_life_pct),
     discLifePct: toNumber(raw.disc_life_pct),
   }
@@ -362,6 +371,7 @@ function normalizeFastState(state: any): FastOverlayState {
     rainIntensity10Min: toNumber(state.rain_intensity_10min),
     rainIntensity30Min: toNumber(state.rain_intensity_30min),
     lapPressureAverage: normalizeLapPressureAverage(state.lap_pressure_avg),
+    tyreSetup: normalizeTyreSetupViewModel(state.tyre_setup),
     trackReferencePhase: normalizeTrackReferencePhase(state.track_reference_phase),
     trackReferencesEligible: state.track_references_eligible === true,
     tyres,

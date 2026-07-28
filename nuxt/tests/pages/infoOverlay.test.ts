@@ -17,14 +17,17 @@ describe('Info overlay window contract', () => {
   it('applies the persisted alpha only to the black Info background', () => {
     const page = readFileSync(resolve(process.cwd(), 'app/pages/info-overlay.vue'), 'utf8')
     const hud = readFileSync(resolve(process.cwd(), 'app/components/overlay/InfoHud.vue'), 'utf8')
+    const layer = readFileSync(resolve(process.cwd(), 'app/components/overlay/HudOverlayBackground.vue'), 'utf8')
     const settingsPage = readFileSync(resolve(process.cwd(), 'app/pages/hud.vue'), 'utf8')
 
     expect(page).toContain(':background-opacity="backgroundOpacity"')
-    expect(hud).toContain('background: rgba(0, 0, 0, var(--info-background-opacity, 0.8))')
+    expect(hud).toContain('<HudOverlayBackground :opacity="backgroundOpacity" />')
+    expect(hud).toContain('background: transparent')
+    expect(layer).toContain('background: rgba(0, 0, 0, var(--hud-overlay-background-opacity, .8))')
     expect(hud).not.toMatch(/\.info-hud\s*\{[^}]*\bopacity\s*:/s)
     expect(settingsPage).toContain('Trasparenza sfondo')
     expect(settingsPage).toContain('class="hud-slider"')
-    expect(settingsPage).toContain('backgroundOpacity: Math.round((1 - percentage / 100) * 100) / 100')
+    expect(settingsPage).toContain('backgroundOpacity: backgroundTransparencyToOpacity(percentage)')
   })
 
   it('fills every Delta state from the left edge toward the right', () => {
