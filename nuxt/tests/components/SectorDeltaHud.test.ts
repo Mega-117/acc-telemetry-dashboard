@@ -96,13 +96,13 @@ describe('SectorDeltaHud', () => {
       }),
     }))
 
-    expect(html).toContain('SECTORS')
+    expect(html).toContain('SECTORS · VS LAST LAP')
     expect(html).toContain('01:23.456')
     expect(html).toContain('CURRENT LAP')
     expect((html.match(/sector-compact__label/g) || []).length).toBe(3)
     expect(html).not.toContain('sector-delta__ref')
     expect(html).not.toContain('sector-delta__best')
-    expect(html).toContain('sector-compact__number--updating')
+    expect(html).not.toContain('sector-compact__number--updating')
     expect(html).toContain('52.655')
   })
 
@@ -165,6 +165,39 @@ describe('SectorDeltaHud', () => {
     expect(second).not.toContain('0:41.250')
     expect(second).not.toContain('>0.018</span>')
     expect(second).toContain('sector-compact__lap--invalid')
+  })
+
+  it('usa il valore hero in hold senza fermare il tempo del settore attivo', async () => {
+    const runningHud: SectorHudState = {
+      ...sectorHud,
+      sectors: [
+        { ...entry(1), currentMs: 41_232, deltaMs: null },
+        { ...entry(2), state: 'running', currentMs: 18, deltaMs: null },
+        { ...entry(3), state: 'pending', currentMs: null, deltaMs: null },
+      ],
+    }
+    const html = await renderToString(createSSRApp({
+      render: () => h(SectorDeltaHud, {
+        sectorHud: runningHud,
+        variant: 'compact',
+        liveRunning: true,
+        liveCurrentLapTimeMs: 44_850,
+        liveLapValid: true,
+        compactDisplayLap: { timeMs: 141_250, valid: false },
+      }),
+    }))
+
+    expect(html).toContain('02:21.250')
+    expect(html).toContain('3.618')
+    expect(html).toContain('sector-compact__lap--invalid')
+  })
+
+  it('aggiorna la testata compatta dal riferimento delta selezionato', async () => {
+    const previous = await renderHud({ variant: 'compact', deltaReference: 'previousLap' })
+    const best = await renderHud({ variant: 'compact', deltaReference: 'bestSector' })
+
+    expect(previous).toContain('SECTORS · VS LAST LAP')
+    expect(best).toContain('SECTORS · VS BEST')
   })
 
   it('mostra il current lap Info disponibile senza sbloccare i settori ancora in Wait', async () => {

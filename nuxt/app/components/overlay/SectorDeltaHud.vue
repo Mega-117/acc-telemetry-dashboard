@@ -23,6 +23,11 @@ const props = defineProps<{
   liveCurrentLapTimeMs?: number | null
   // Validita' associata allo stesso campione live dell'overlay Info.
   liveLapValid?: boolean | null
+  // Valore hero gia' risolto dalla presentazione (include l'hold del giro concluso).
+  compactDisplayLap?: {
+    timeMs: number | null
+    valid: boolean | null
+  }
 }>()
 
 const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
@@ -48,21 +53,35 @@ const visibleSectors = computed(() => {
 const modeLabel = computed(() => props.sectorHud?.mode === 'last_lap' ? 'Ultimo giro' : 'Settori')
 const statusLabel = computed(() => props.sectorHud?.awaitingFlyingLap ? 'attesa giro lanciato' : null)
 const referenceLabel = computed(() => selectedReference.value === 'bestSector' ? 'ref best' : null)
-const compactCurrentLapTimeMs = computed(() => (
+const compactLiveLapTimeMs = computed(() => (
   props.liveCurrentLapTimeMs !== undefined
     ? props.liveCurrentLapTimeMs
     : props.sectorHud?.currentLapTimeMs ?? null
 ))
-const compactLapValid = computed(() => (
-  props.liveLapValid !== undefined && props.liveLapValid !== null
-    ? props.liveLapValid
-    : props.sectorHud?.lapValid ?? true
+const compactDisplayLapTimeMs = computed(() => (
+  props.compactDisplayLap
+    ? props.compactDisplayLap.timeMs
+    : compactLiveLapTimeMs.value
+))
+const compactDisplayLapValid = computed(() => (
+  props.compactDisplayLap && props.compactDisplayLap.valid !== null
+    ? props.compactDisplayLap.valid
+    : (
+      props.liveLapValid !== undefined && props.liveLapValid !== null
+        ? props.liveLapValid
+        : props.sectorHud?.lapValid ?? true
+    )
 ))
 const compactLapTime = computed(() => {
-  return compactCurrentLapTimeMs.value === null
+  return compactDisplayLapTimeMs.value === null
     ? '--:--.---'
-    : formatLapTime(compactCurrentLapTimeMs.value)
+    : formatLapTime(compactDisplayLapTimeMs.value)
 })
+const compactTitle = computed(() => (
+  selectedReference.value === 'bestSector'
+    ? 'SECTORS · VS BEST'
+    : 'SECTORS · VS LAST LAP'
+))
 
 function formatTime(ms: number | null): string {
   if (ms === null) return '--'
@@ -88,19 +107,13 @@ function formatLapTime(ms: number): string {
 // settori gia' completati (aggiornato al ritmo del poller).
 function liveElapsedMs(): number | null {
   const hud = props.sectorHud
-  const lapTimeMs = compactCurrentLapTimeMs.value
+  const lapTimeMs = compactLiveLapTimeMs.value
   if (!hud || lapTimeMs === null) return null
   const completed = hud.sectors
     .filter((s) => s.state === 'complete')
     .reduce((acc, s) => acc + (s.currentMs ?? 0), 0)
   const elapsed = lapTimeMs - completed
   return elapsed > 0 ? elapsed : null
-}
-
-// Il testo segue ogni campione; la chiave limita il feedback visivo a 4 Hz,
-// evitando che il push 20 Hz riavvii l'animazione prima che possa essere vista.
-function animationKey(ms: number | null): string {
-  return ms === null ? 'wait' : String(Math.floor(ms / 250))
 }
 
 function valueText(sector: SectorHudEntry): string {
@@ -115,12 +128,6 @@ function valueText(sector: SectorHudEntry): string {
     return '--'
   }
   return sector.currentMs !== null ? formatTime(sector.currentMs) : '--'
-}
-
-function sectorAnimationKey(sector: SectorHudEntry): string {
-  if (sector.state !== 'running') return `stable-${sector.index}`
-  const live = props.liveRunning ? liveElapsedMs() : sector.currentMs
-  return `running-${sector.index}-${animationKey(live)}`
 }
 
 function deltaText(sector: SectorHudEntry): string {
@@ -152,12 +159,11 @@ function ariaLabel(sector: SectorHudEntry): string {
     <template v-if="variant === 'compact'">
       <div class="sector-compact__header">
         <div class="sector-compact__title">
-          <span>SECTORS</span>
+          <span>{{ compactTitle }}</span>
         </div>
         <strong
-          :key="animationKey(compactCurrentLapTimeMs)"
-          class="sector-compact__lap sector-compact__number--updating"
-          :class="{ 'sector-compact__lap--invalid': compactLapValid === false }"
+          class="sector-compact__lap"
+          :class="{ 'sector-compact__lap--invalid': compactDisplayLapValid === false }"
         >{{ compactLapTime }}</strong>
         <small class="sector-compact__lap-label">CURRENT LAP</small>
       </div>
@@ -175,11 +181,7 @@ function ariaLabel(sector: SectorHudEntry): string {
           <span class="sector-compact__label">S{{ sector.index }}</span>
           <strong class="sector-compact__time">
             <span
-              :key="sectorAnimationKey(sector)"
-              :class="{
-                'sector-compact__number--updating': sector.state === 'running',
-                'sector-compact__time-value--long': valueText(sector).length > 6,
-              }"
+              :class="{ 'sector-compact__time-value--long': valueText(sector).length > 6 }"
             >{{ valueText(sector) }}</span>
           </strong>
           <small
@@ -376,25 +378,4 @@ function ariaLabel(sector: SectorHudEntry): string {
   color: #e8e4df;
 }
 
-.sector-compact__number--updating {
-  display: inline-grid;
-  animation: sector-number-refresh 140ms ease-out;
-}
-
-@keyframes sector-number-refresh {
-  from {
-    opacity: 0.74;
-    filter: brightness(1.18);
-  }
-  to {
-    opacity: 1;
-    filter: brightness(1);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .sector-compact__number--updating {
-    animation: none;
-  }
-}
 </style>

@@ -5,6 +5,7 @@ import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
+import { useCompletedLapHold } from '~/composables/useCompletedLapHold'
 import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
 import { normalizeSectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 
@@ -23,6 +24,11 @@ function getApi(): any | null {
 const route = useRoute()
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getApi)
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getApi)
+const { displayedLapTimeMs, displayedLapValid } = useCompletedLapHold(fastState)
+const compactDisplayLap = computed(() => ({
+  timeMs: displayedLapTimeMs.value,
+  valid: displayedLapValid.value,
+}))
 const { isElectron, scale, settings, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
 const showReference = computed(() => settings.value?.showReference !== false)
 const showBest = computed(() => settings.value?.showBest !== false)
@@ -70,6 +76,7 @@ onBeforeUnmount(() => {
         :live-running="variant === 'compact'"
         :live-current-lap-time-ms="variant === 'compact' ? liveCurrentLapTimeMs : undefined"
         :live-lap-valid="variant === 'compact' ? liveLapValid : undefined"
+        :compact-display-lap="variant === 'compact' ? compactDisplayLap : undefined"
       />
     </div>
   </div>

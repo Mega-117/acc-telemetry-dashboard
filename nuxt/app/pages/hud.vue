@@ -4,6 +4,10 @@
 // - Per ogni overlay: on/off + formato fisso (Piccolo/Medio/Grande).
 // Self-contained (come dev.vue): fuori dal contratto useTelemetryGateway.
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import {
+  supportsHudOverlayPresentationControl,
+  type HudOverlayPresentationControl,
+} from '~/utils/hudOverlayPresentationCapabilities'
 
 definePageMeta({
   layout: 'dashboard',
@@ -55,6 +59,9 @@ const sectorVariant = ref<'classic' | 'compact'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
 const sectorDeltaReference = ref<'previousLap' | 'bestSector'>('previousLap')
+function sectorSupports(control: HudOverlayPresentationControl): boolean {
+  return supportsHudOverlayPresentationControl('sectors', sectorVariant.value, control)
+}
 const dashboardSettings = reactive({
   electronicsReference: false,
   rpmReference: false,
@@ -631,7 +638,7 @@ async function toggleTraining() {
                 <option value="bestSector">Miglior settore</option>
               </select>
             </label>
-            <label class="hud-card__option">
+            <label v-if="sectorSupports('sectorPrevious')" class="hud-card__option">
               <span>
                 <strong>Tempo settore precedente</strong>
                 <em>Mostra/nasconde la riga “prec” nel HUD settori.</em>
@@ -644,7 +651,7 @@ async function toggleTraining() {
                 @change="toggleSectorReference"
               >
             </label>
-            <label class="hud-card__option">
+            <label v-if="sectorSupports('sectorBest')" class="hud-card__option">
               <span>
                 <strong>Best settore</strong>
                 <em>Mostra/nasconde il riferimento best usato per il fucsia.</em>

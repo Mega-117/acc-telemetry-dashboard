@@ -62,6 +62,8 @@ export default defineConfig({
         'app/utils/infoPresentation.ts',
         'app/utils/hudOverlayWindow.ts',
         'app/utils/sectorDeltaPresentation.ts',
+        'app/utils/completedLapHold.ts',
+        'app/utils/hudOverlayPresentationCapabilities.ts',
         'app/utils/sessionParser.ts',
         'app/utils/raceCalendarCountdown.ts',
         'server/utils/chatterboxRuntimeStatus.ts',
@@ -75,6 +77,7 @@ export default defineConfig({
         'app/composables/useLiveStatePoller.ts',
         'app/composables/useSpotterVoiceSettings.ts',
         'app/composables/useFastStatePoller.ts',
+        'app/composables/useCompletedLapHold.ts',
         'app/composables/useSessionOrchestrator.ts',
         'app/composables/useCoachInsights.ts',
         // ── Phase 4: composables estratti da useTelemetryData ────────────
