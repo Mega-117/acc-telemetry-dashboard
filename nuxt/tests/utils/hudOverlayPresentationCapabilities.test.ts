@@ -19,6 +19,11 @@ describe('hudOverlayPresentationCapabilities', () => {
     }
   })
 
+  it('espone il controllo current lap soltanto nel Compatto', () => {
+    expect(supportsHudOverlayPresentationControl('sectors', 'classic', 'sectorCurrentLap')).toBe(false)
+    expect(supportsHudOverlayPresentationControl('sectors', 'compact', 'sectorCurrentLap')).toBe(true)
+  })
+
   it('degrada una variante sconosciuta alle capacità Classico del relativo HUD', () => {
     expect(supportsHudOverlayPresentationControl('sectors', 'future', 'sectorPrevious')).toBe(true)
     expect(supportsHudOverlayPresentationControl('tyres', 'future', 'layout')).toBe(true)

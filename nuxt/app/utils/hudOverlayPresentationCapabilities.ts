@@ -4,6 +4,7 @@ export type HudOverlayPresentationControl =
   | 'deltaReference'
   | 'sectorPrevious'
   | 'sectorBest'
+  | 'sectorCurrentLap'
 
 type PresentationRegistry = Record<
   HudOverlayPresentationId,
@@ -17,7 +18,7 @@ export const HUD_OVERLAY_PRESENTATION_CAPABILITIES: PresentationRegistry = {
   },
   sectors: {
     classic: ['layout', 'deltaReference', 'sectorPrevious', 'sectorBest'],
-    compact: ['layout', 'deltaReference'],
+    compact: ['layout', 'deltaReference', 'sectorCurrentLap'],
   },
   dashboard: {
     classic: [],

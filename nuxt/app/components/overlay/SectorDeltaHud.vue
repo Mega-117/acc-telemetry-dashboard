@@ -7,12 +7,14 @@ import {
   type SectorDeltaReference,
 } from '~/utils/sectorDeltaPresentation'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   sectorHud: SectorHudState | null
   // Mostra anche i tempi dei settori del giro di riferimento/precedente (PIP-175).
   showReference?: boolean
   // Mostra anche il best settore persistente del contesto corrente (PIP-181).
   showBest?: boolean
+  // Mostra il tempo giro hero soltanto nel layout Compatto.
+  showCurrentLap?: boolean
   // Per il settore in corso mostra il tempo parziale "live" invece di "--" (PIP-175).
   liveRunning?: boolean
   // Cambia solo il riferimento usato da delta e colore (PIP-275).
@@ -28,7 +30,9 @@ const props = defineProps<{
     timeMs: number | null
     valid: boolean | null
   }
-}>()
+}>(), {
+  showCurrentLap: true,
+})
 
 const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
   index,
@@ -162,10 +166,14 @@ function ariaLabel(sector: SectorHudEntry): string {
           <span>{{ compactTitle }}</span>
         </div>
         <strong
+          v-if="showCurrentLap !== false"
           class="sector-compact__lap"
           :class="{ 'sector-compact__lap--invalid': compactDisplayLapValid === false }"
         >{{ compactLapTime }}</strong>
-        <small class="sector-compact__lap-label">CURRENT LAP</small>
+        <small
+          v-if="showCurrentLap !== false"
+          class="sector-compact__lap-label"
+        >CURRENT LAP</small>
       </div>
       <div class="sector-compact__rows">
         <div

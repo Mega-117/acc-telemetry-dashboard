@@ -123,6 +123,23 @@ describe('SectorDeltaHud', () => {
     expect(html).toContain('52.655')
   })
 
+  it('nasconde hero e CURRENT LAP senza rimuovere header o righe compatte', async () => {
+    const html = await renderHud({
+      variant: 'compact',
+      showCurrentLap: false,
+      compactDisplayLap: { timeMs: 83_456, valid: false },
+    })
+
+    expect(html).toContain('SECTORS · VS · LAST')
+    expect(html).not.toContain('01:23.456')
+    expect(html).not.toContain('CURRENT LAP')
+    expect(html).not.toContain('sector-compact__lap--invalid')
+    expect((html.match(/sector-compact__label/g) || []).length).toBe(3)
+
+    const classic = await renderHud({ variant: 'classic', showCurrentLap: false })
+    expect(classic).toContain('sector-delta-hud__grid')
+  })
+
   it('adatta soltanto i tempi settore a tre cifre nel layout compatto', async () => {
     const longSectorHud: SectorHudState = {
       ...sectorHud,

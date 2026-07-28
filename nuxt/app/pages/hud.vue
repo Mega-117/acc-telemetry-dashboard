@@ -64,6 +64,7 @@ const tyreVariant = ref<'classic' | 'advanced'>('classic')
 const sectorVariant = ref<'classic' | 'compact'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
+const showSectorCurrentLap = ref(true)
 const sectorDeltaReference = ref<'previousLap' | 'bestSector'>('previousLap')
 function sectorSupports(control: HudOverlayPresentationControl): boolean {
   return supportsHudOverlayPresentationControl('sectors', sectorVariant.value, control)
@@ -177,6 +178,7 @@ async function refreshState() {
       if (overlay.id === 'sectors') sectorVariant.value = settings?.variant === 'compact' ? 'compact' : 'classic'
       if (overlay.id === 'sectors' && typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
       if (overlay.id === 'sectors' && typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
+      if (overlay.id === 'sectors' && typeof settings?.showCurrentLap === 'boolean') showSectorCurrentLap.value = settings.showCurrentLap
       if (overlay.id === 'sectors') sectorDeltaReference.value = settings?.deltaReference === 'bestSector' ? 'bestSector' : 'previousLap'
       if (overlay.id === 'dashboard') {
         dashboardSettings.electronicsReference = settings?.electronicsReference === true
@@ -369,6 +371,15 @@ async function setSectorVariant(value: string) {
   sectorVariant.value = next
   const settings = await api.hudOverlaySaveSettings('sectors', { variant: next })
   sectorVariant.value = settings?.variant === 'compact' ? 'compact' : 'classic'
+}
+
+async function toggleSectorCurrentLap() {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySaveSettings) return
+  const next = !showSectorCurrentLap.value
+  showSectorCurrentLap.value = next
+  const settings = await api.hudOverlaySaveSettings('sectors', { showCurrentLap: next })
+  if (typeof settings?.showCurrentLap === 'boolean') showSectorCurrentLap.value = settings.showCurrentLap
 }
 
 async function toggleSectorReference() {
@@ -669,6 +680,19 @@ async function toggleTraining() {
                 <option value="previousLap">Giro precedente</option>
                 <option value="bestSector">Miglior settore</option>
               </select>
+            </label>
+            <label v-if="sectorSupports('sectorCurrentLap')" class="hud-card__option">
+              <span>
+                <strong>Mostra tempo giro</strong>
+                <em>Mostra o nasconde il current lap nel layout Compatto.</em>
+              </span>
+              <input
+                type="checkbox"
+                role="switch"
+                :checked="showSectorCurrentLap"
+                :disabled="!apiReady"
+                @change="toggleSectorCurrentLap"
+              >
             </label>
             <label v-if="sectorSupports('sectorPrevious')" class="hud-card__option">
               <span>

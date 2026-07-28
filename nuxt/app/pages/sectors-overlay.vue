@@ -32,6 +32,7 @@ const compactDisplayLap = computed(() => ({
 const { isElectron, scale, settings, loadSettings, start, stop } = useHudOverlay('sectors', getApi)
 const showReference = computed(() => settings.value?.showReference !== false)
 const showBest = computed(() => settings.value?.showBest !== false)
+const showCurrentLap = computed(() => settings.value?.showCurrentLap !== false)
 const deltaReference = computed(() => normalizeSectorDeltaReference(settings.value?.deltaReference))
 const variant = computed(() => settings.value?.variant === 'compact' ? 'compact' : 'classic')
 // Stessa sorgente e stessa semantica dell'overlay Info: nessuna regola locale
@@ -71,6 +72,7 @@ onBeforeUnmount(() => {
         :sector-hud="liveLap.sectorHud"
         :show-reference="showReference"
         :show-best="showBest"
+        :show-current-lap="showCurrentLap"
         :delta-reference="deltaReference"
         :variant="variant"
         :live-running="variant === 'compact'"
