@@ -20,6 +20,7 @@ describe('HudTimedPager', () => {
 
     const html = await renderToString(app)
     expect(html).toContain('aria-label="Pagina HUD"')
+    expect(html).toContain('hud-timed-pager__footer')
     expect(html).toContain('LIVE')
     expect(html).toContain('SETUP')
     expect(html).toContain('PAGINA LIVE')

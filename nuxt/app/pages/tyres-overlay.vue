@@ -2,7 +2,7 @@
 // Overlay HUD Gomme (PIP-175): finestra Electron indipendente. Dimensione decisa
 // dal FORMATO (small/medium/large) lato Electron; qui si applica la scala dei
 // font e lo stato di posizionamento. Riusa TyreSlipHud + il poller esistente.
-import { computed, onBeforeUnmount, onMounted } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
@@ -26,7 +26,16 @@ function getApi(): any | null {
 const route = useRoute()
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getApi)
 const overlay = useHudOverlay('tyres', getApi)
-const { isElectron, scale, settings, loadSettings, start, stop, startInteractionSurface } = overlay
+const {
+  isElectron,
+  scale,
+  settings,
+  loadSettings,
+  start,
+  stop,
+  startInteractionSurface,
+  setTransientViewport,
+} = overlay
 const { backgroundOpacity } = useHudOverlayBackground(settings)
 const variant = computed(() => (
   settings.value?.variant === 'advanced' || route.query.variant === 'advanced'
@@ -37,8 +46,34 @@ const advancedPage = computed<'live' | 'setup'>(() => (
 ))
 const advancedPages = [
   { id: 'live', label: 'LIVE' },
-  { id: 'setup', label: 'SETUP', temporary: true },
+  {
+    id: 'setup',
+    label: 'SETUP',
+    temporary: true,
+    // Sopra i 300 px di contenuto non scatta il layout ultra-compatto:
+    // le tre colonne mantengono intestazioni e valori leggibili.
+    minViewport: { width: 360, height: 440 },
+  },
 ]
+
+function handleAdvancedPageChange(page: {
+  id: string
+  minViewport?: { width: number; height: number }
+}) {
+  const minViewport = page.id === 'setup' ? page.minViewport : undefined
+  void setTransientViewport({
+    active: !!minViewport,
+    key: 'tyres-setup',
+    minWidth: minViewport?.width,
+    minHeight: minViewport?.height,
+  })
+}
+
+watch(variant, (nextVariant) => {
+  if (nextVariant !== 'advanced') {
+    void setTransientViewport({ active: false, key: 'tyres-setup' })
+  }
+})
 
 onMounted(() => {
   startFastStatePolling()
@@ -48,6 +83,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  void setTransientViewport({ active: false, key: 'tyres-setup' })
   stopFastStatePolling()
   stop()
 })
@@ -70,6 +106,7 @@ onBeforeUnmount(() => {
         default-page="live"
         :initial-page="advancedPage"
         :temporary-duration-ms="30_000"
+        @page-change="handleAdvancedPageChange"
       >
         <template #live>
           <TyreAdvancedHud :fast-state="fastState" page="live" />

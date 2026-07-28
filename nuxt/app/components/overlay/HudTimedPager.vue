@@ -1,12 +1,20 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from 'vue'
+import { onBeforeUnmount, onMounted, watch } from 'vue'
 import { useTimedHudPager } from '~/composables/useTimedHudPager'
 
 interface HudTimedPagerPage {
   id: string
   label: string
   temporary?: boolean
+  minViewport?: {
+    width: number
+    height: number
+  }
 }
+
+const emit = defineEmits<{
+  pageChange: [page: HudTimedPagerPage]
+}>()
 
 const props = withDefaults(defineProps<{
   pages: HudTimedPagerPage[]
@@ -28,6 +36,11 @@ const pager = useTimedHudPager({
 })
 const { activePage, progress, isTemporaryPage } = pager
 
+watch(activePage, (pageId) => {
+  const page = props.pages.find(candidate => candidate.id === pageId)
+  if (page) emit('pageChange', page)
+}, { immediate: true })
+
 function selectPage(page: HudTimedPagerPage) {
   pager.selectPage(page.id, page.temporary ?? page.id !== props.defaultPage)
 }
@@ -38,18 +51,24 @@ onBeforeUnmount(pager.dispose)
 
 <template>
   <section class="hud-timed-pager" :data-active-page="activePage">
-    <nav class="hud-timed-pager__switcher" aria-label="Pagina HUD">
-      <button
-        v-for="page in pages"
-        :key="page.id"
-        type="button"
-        :class="{ 'is-active': activePage === page.id }"
-        :aria-pressed="activePage === page.id"
-        @click="selectPage(page)"
-      >
-        {{ page.label }}
-      </button>
-    </nav>
+    <div class="hud-timed-pager__content">
+      <slot :name="activePage" />
+    </div>
+
+    <footer class="hud-timed-pager__footer">
+      <nav class="hud-timed-pager__switcher" aria-label="Pagina HUD">
+        <button
+          v-for="page in pages"
+          :key="page.id"
+          type="button"
+          :class="{ 'is-active': activePage === page.id }"
+          :aria-pressed="activePage === page.id"
+          @click="selectPage(page)"
+        >
+          {{ page.label }}
+        </button>
+      </nav>
+    </footer>
 
     <span
       v-if="isTemporaryPage"
@@ -57,8 +76,6 @@ onBeforeUnmount(pager.dispose)
       aria-hidden="true"
       :style="{ transform: `scaleX(${progress})` }"
     />
-
-    <slot :name="activePage" />
   </section>
 </template>
 
@@ -66,24 +83,36 @@ onBeforeUnmount(pager.dispose)
 .hud-timed-pager {
   position: relative;
   display: flex;
+  flex-direction: column;
   flex: 1;
   width: 100%;
   min-width: 0;
   min-height: 0;
 }
 
+.hud-timed-pager__content {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.hud-timed-pager__footer {
+  display: flex;
+  flex: 0 0 max(22px, calc(24px * var(--hud-scale, 1)));
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 0;
+  border-top: 1px solid rgba(255, 255, 255, .10);
+}
+
 .hud-timed-pager__switcher {
-  position: absolute;
-  top: calc(4px * var(--hud-scale, 1));
-  left: 50%;
-  z-index: 5;
   display: flex;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, .28);
   border-radius: 999px;
   background: #05070a;
   opacity: 0;
-  transform: translateX(-50%);
   transition: opacity 120ms ease;
   -webkit-app-region: no-drag;
 }
@@ -94,8 +123,8 @@ onBeforeUnmount(pager.dispose)
 }
 
 .hud-timed-pager__switcher button {
-  min-width: calc(48px * var(--hud-scale, 1));
-  padding: calc(3px * var(--hud-scale, 1)) calc(7px * var(--hud-scale, 1));
+  min-width: max(42px, calc(48px * var(--hud-scale, 1)));
+  padding: max(2px, calc(3px * var(--hud-scale, 1))) calc(7px * var(--hud-scale, 1));
   border: 0;
   background: transparent;
   color: rgba(255, 255, 255, .62);

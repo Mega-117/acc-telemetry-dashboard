@@ -19,6 +19,7 @@ import { useTrackingRecord } from '~/composables/useTrackingRecord'
 import { useStopHold } from '~/composables/useStopHold'
 import { useQualifyingVoice } from '~/composables/useQualifyingVoice'
 import { useOverlaySize } from '~/composables/useOverlaySize'
+import { createOverlayInteractionRegions } from '~/composables/useOverlayInteractionRegions'
 import { useTrainingSelection, type PlanPreviewChip } from '~/composables/useTrainingSelection'
 import { useSessionOrchestrator } from '~/composables/useSessionOrchestrator'
 import {
@@ -458,26 +459,15 @@ function executePrimaryAction() {
 // puntatore e' sulla superficie reale dell'overlay. Con forward attivo arrivano
 // solo mousemove: da li' decidiamo quando riattivare la cattura.
 const OVERLAY_SURFACE_SELECTOR = '.overlay-card, .launcher-tools, .placement-work-area, .overlay-dev-toggle, .voice-point-notice'
-let lastPointerOnSurface: boolean | null = null
-
-function updateMousePassthrough(event: MouseEvent) {
-  const api = getOverlayApi()
-  if (!api?.trainingOverlaySetMousePassthrough) return
-  if (phase.value === 'placement') {
-    isPointerOnOverlaySurface.value = true
-    if (lastPointerOnSurface !== true) {
-      lastPointerOnSurface = true
-      void api.trainingOverlaySetMousePassthrough(false)
-    }
-    return
-  }
-  const target = event.target as Element | null
-  const onSurface = !!(target && typeof target.closest === 'function' && target.closest(OVERLAY_SURFACE_SELECTOR))
-  isPointerOnOverlaySurface.value = onSurface
-  if (onSurface === lastPointerOnSurface) return
-  lastPointerOnSurface = onSurface
-  void api.trainingOverlaySetMousePassthrough(!onSurface)
-}
+const interactionRegions = createOverlayInteractionRegions({
+  setMousePassthrough: (ignore) => {
+    void getOverlayApi()?.trainingOverlaySetMousePassthrough?.(ignore)
+  },
+  isInteractionForced: () => phase.value === 'placement',
+  onInteractionChange: (interactive) => {
+    isPointerOnOverlaySurface.value = interactive
+  },
+})
 
 // ─── Input handling ───────────────────────────────────────────────────────────
 function showVoicePointNotice(text: string, tone: 'ok' | 'error' = 'ok') {
@@ -609,7 +599,7 @@ onMounted(async () => {
   })
   window.addEventListener('keydown', handleLocalShortcut, true)
   if (api?.trainingOverlaySetMousePassthrough) {
-    window.addEventListener('mousemove', updateMousePassthrough, true)
+    interactionRegions.start(OVERLAY_SURFACE_SELECTOR)
   }
   connectResizeObserver(); scheduleOverlaySizeSync()
 })
@@ -636,14 +626,8 @@ watch(
   (nextPhase) => {
     const api = getOverlayApi()
     if (!api?.trainingOverlaySetMousePassthrough) return
-    if (nextPhase === 'placement') {
-      isPointerOnOverlaySurface.value = true
-      lastPointerOnSurface = true
-      void api.trainingOverlaySetMousePassthrough(false)
-      scheduleOverlaySizeSync()
-      return
-    }
-    lastPointerOnSurface = null
+    interactionRegions.reset()
+    if (nextPhase === 'placement') scheduleOverlaySizeSync()
   },
   { flush: 'post' }
 )
@@ -655,7 +639,7 @@ onBeforeUnmount(() => {
   removeInfoTargetListener?.()
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleLocalShortcut, true)
-    window.removeEventListener('mousemove', updateMousePassthrough, true)
+    interactionRegions.stop()
   }
   document.body.classList.remove('training-overlay-runtime')
 })

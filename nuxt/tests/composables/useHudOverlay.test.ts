@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { afterEach, describe, it, expect, vi } from 'vitest'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 
 function makeApi() {
@@ -14,6 +14,8 @@ function makeApi() {
 }
 
 describe('useHudOverlay', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
   it('start imposta isElectron e la scala iniziale, e si iscrive agli eventi', () => {
     const { api } = makeApi()
     const hud = useHudOverlay('tyres', () => api)
@@ -88,9 +90,14 @@ describe('useHudOverlay', () => {
     hud.start(1)
     hud.startInteractionSurface('.hud-timed-pager__switcher')
 
-    hud.updateInteractionFromTarget({ closest: () => ({}) })
-    hud.updateInteractionFromTarget({ closest: () => ({}) })
-    hud.updateInteractionFromTarget({ closest: () => null })
+    let inside = true
+    vi.stubGlobal('document', {
+      elementsFromPoint: vi.fn(() => [{ closest: () => inside ? ({}) : null }]),
+    })
+    hud.updateInteractionFromPoint(10, 10)
+    hud.updateInteractionFromPoint(10, 10)
+    inside = false
+    hud.updateInteractionFromPoint(20, 20)
 
     expect(api.hudOverlaySetMousePassthrough.mock.calls).toEqual([
       ['tyres', true],
@@ -104,12 +111,18 @@ describe('useHudOverlay', () => {
     const hud = useHudOverlay('tyres', () => api)
     hud.start(1)
     hud.startInteractionSurface('.hud-timed-pager__switcher')
+    vi.stubGlobal('document', {
+      elementsFromPoint: vi.fn(() => [{ closest: () => ({}) }]),
+    })
     cbs.placement!(true)
-    hud.updateInteractionFromTarget({ closest: () => ({}) })
-    expect(api.hudOverlaySetMousePassthrough).toHaveBeenCalledTimes(1)
+    hud.updateInteractionFromPoint(10, 10)
+    expect(api.hudOverlaySetMousePassthrough.mock.calls).toEqual([
+      ['tyres', true],
+      ['tyres', false],
+    ])
 
     cbs.placement!(false)
-    hud.updateInteractionFromTarget({ closest: () => ({}) })
+    hud.updateInteractionFromPoint(10, 10)
     expect(api.hudOverlaySetMousePassthrough.mock.calls.slice(-2)).toEqual([
       ['tyres', true],
       ['tyres', false],
