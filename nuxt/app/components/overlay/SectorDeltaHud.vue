@@ -79,8 +79,8 @@ const compactLapTime = computed(() => {
 })
 const compactTitle = computed(() => (
   selectedReference.value === 'bestSector'
-    ? 'SECTORS · VS BEST'
-    : 'SECTORS · VS LAST LAP'
+    ? 'SECTORS · VS · BEST'
+    : 'SECTORS · VS · LAST'
 ))
 
 function formatTime(ms: number | null): string {
@@ -257,7 +257,8 @@ function ariaLabel(sector: SectorHudEntry): string {
 
 .sector-compact__title {
   grid-column: 1 / -1;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: calc(5px * var(--hud-scale, 1));
 }
@@ -265,16 +266,9 @@ function ariaLabel(sector: SectorHudEntry): string {
 .sector-compact__title::before,
 .sector-compact__title::after {
   content: '';
+  width: 100%;
   height: 1px;
   background: rgba(255, 255, 255, 0.42);
-}
-
-.sector-compact__title::before {
-  width: calc(104px * var(--hud-scale, 1));
-}
-
-.sector-compact__title::after {
-  flex: 1;
 }
 
 .sector-compact__title > span {

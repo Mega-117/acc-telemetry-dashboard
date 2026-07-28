@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { createSSRApp, h } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { describe, expect, it } from 'vitest'
@@ -38,6 +40,21 @@ async function renderHud(props: Record<string, unknown>): Promise<string> {
 }
 
 describe('SectorDeltaHud', () => {
+  it('centra la testata compatta sull intero contenitore con linee simmetriche', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'app/components/overlay/SectorDeltaHud.vue'),
+      'utf8',
+    )
+
+    expect(source).toMatch(
+      /\.sector-compact__title\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto\s+minmax\(0,\s*1fr\);/s,
+    )
+    expect(source).toMatch(
+      /\.sector-compact__title::before,[\s\S]*?\.sector-compact__title::after\s*\{[^}]*width:\s*100%;/,
+    )
+    expect(source).not.toContain('width: calc(104px * var(--hud-scale, 1));')
+  })
+
   it('nasconde davvero il best senza cambiare il delta selezionato', async () => {
     const html = await renderHud({
       showBest: false,
@@ -96,7 +113,7 @@ describe('SectorDeltaHud', () => {
       }),
     }))
 
-    expect(html).toContain('SECTORS · VS LAST LAP')
+    expect(html).toContain('SECTORS · VS · LAST')
     expect(html).toContain('01:23.456')
     expect(html).toContain('CURRENT LAP')
     expect((html.match(/sector-compact__label/g) || []).length).toBe(3)
@@ -196,8 +213,8 @@ describe('SectorDeltaHud', () => {
     const previous = await renderHud({ variant: 'compact', deltaReference: 'previousLap' })
     const best = await renderHud({ variant: 'compact', deltaReference: 'bestSector' })
 
-    expect(previous).toContain('SECTORS · VS LAST LAP')
-    expect(best).toContain('SECTORS · VS BEST')
+    expect(previous).toContain('SECTORS · VS · LAST')
+    expect(best).toContain('SECTORS · VS · BEST')
   })
 
   it('mostra il current lap Info disponibile senza sbloccare i settori ancora in Wait', async () => {

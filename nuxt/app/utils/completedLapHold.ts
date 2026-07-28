@@ -1,4 +1,4 @@
-export const COMPLETED_LAP_HOLD_MS = 5_000
+export const COMPLETED_LAP_HOLD_MS = 7_000
 
 export interface CompletedLapHoldSample {
   ready: boolean

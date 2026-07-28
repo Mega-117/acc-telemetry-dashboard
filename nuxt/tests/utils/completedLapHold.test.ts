@@ -29,7 +29,7 @@ describe('completedLapHold', () => {
     expect(state.holdUntilMs).toBeNull()
   })
 
-  it('mantiene il giro concluso fino a 4.999 ms e lo rilascia a 5.000 ms', () => {
+  it('mantiene il giro concluso fino a 6.999 ms e lo rilascia a 7.000 ms', () => {
     const baseline = advanceCompletedLapHold(createCompletedLapHoldState(), sample(), 100)
     const held = advanceCompletedLapHold(
       baseline,
@@ -37,9 +37,9 @@ describe('completedLapHold', () => {
       1_000,
     )
     expect(held.holdUntilMs).toBe(1_000 + COMPLETED_LAP_HOLD_MS)
-    expect(isCompletedLapHeld(held, 5_999)).toBe(true)
-    const released = advanceCompletedLapHold(held, sample({ lapsCompleted: 1 }), 6_000)
-    expect(isCompletedLapHeld(released, 6_000)).toBe(false)
+    expect(isCompletedLapHeld(held, 7_999)).toBe(true)
+    const released = advanceCompletedLapHold(held, sample({ lapsCompleted: 1 }), 8_000)
+    expect(isCompletedLapHeld(released, 8_000)).toBe(false)
   })
 
   it('conserva in rosso anche un giro concluso invalido', () => {
