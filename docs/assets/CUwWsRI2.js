@@ -1,1 +1,0 @@
-import{u as a,ac as o,o as n,am as t,_ as s}from"./C-WLTf1d.js";const _={class:"page-container"},c=a({__name:"PageContainer",setup(r){return(e,p)=>(o(),n("div",_,[t(e.$slots,"default",{},void 0)]))}}),m=Object.assign(s(c,[["__scopeId","data-v-71e40101"]]),{__name:"LayoutPageContainer"});export{m as _};
