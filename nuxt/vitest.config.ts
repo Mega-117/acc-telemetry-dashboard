@@ -31,6 +31,7 @@ export default defineConfig({
       include: [
         // ── Phase 1–2: services e utils ──────────────────────────────────
         'app/config/firebaseRuntimeTarget.ts',
+        'app/config/optimalShiftRpm.ts',
         'app/services/gateway/activityProjectionBuilders.ts',
         'app/services/gateway/bestTimesBuilders.ts',
         'app/services/gateway/trackDetailProjectionBuilder.ts',

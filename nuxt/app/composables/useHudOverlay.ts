@@ -15,8 +15,6 @@ export interface HudOverlaySettings {
   rpmReference?: boolean
   gearReference?: boolean
   speedDelta?: boolean
-  shiftFlashEnabled?: boolean
-  shiftRpmThreshold?: number
   fuelCriticalFlashEnabled?: boolean
   fuelCriticalLapsThreshold?: number
   showYellowFlag?: boolean

@@ -1,12 +1,11 @@
 import type { FastOverlayState } from '~/composables/useFastStatePoller'
+import { resolveOptimalShiftRpm } from '~/config/optimalShiftRpm'
 
 export interface DashboardOptions {
   electronicsReference: boolean
   rpmReference: boolean
   gearReference: boolean
   speedDelta: boolean
-  shiftFlashEnabled: boolean
-  shiftRpmThreshold: number
   fuelCriticalFlashEnabled: boolean
   fuelCriticalLapsThreshold: number
 }
@@ -55,8 +54,6 @@ export const DEFAULT_DASHBOARD_OPTIONS: DashboardOptions = {
   rpmReference: false,
   gearReference: false,
   speedDelta: false,
-  shiftFlashEnabled: true,
-  shiftRpmThreshold: 8200,
   fuelCriticalFlashEnabled: false,
   fuelCriticalLapsThreshold: 0.5,
 }
@@ -91,12 +88,6 @@ function formatGear(value: number | null): string {
   return String(Math.max(1, Math.round(value)))
 }
 
-export function normalizeShiftRpmThreshold(value: unknown): number {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) return DEFAULT_DASHBOARD_OPTIONS.shiftRpmThreshold
-  return Math.round(clamp(parsed, 1000, 20000))
-}
-
 export function normalizeFuelCriticalLapsThreshold(value: unknown): number {
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) return DEFAULT_DASHBOARD_OPTIONS.fuelCriticalLapsThreshold
@@ -117,12 +108,11 @@ function resolveFuelUrgency(
 function resolveRpmBand(
   state: FastOverlayState,
   rpm: number,
-  threshold: number,
+  threshold: number | null,
 ): DashboardPresentation['rpmBand'] {
   if (!state.ignitionOn || !state.isEngineRunning) return 'off'
   if (state.pitLimiterOn) return 'pit'
-
-  if (rpm < threshold) return 'green'
+  if (threshold === null || rpm < threshold) return 'green'
   return 'blue'
 }
 
@@ -130,9 +120,10 @@ export function buildDashboardPresentation(
   state: FastOverlayState,
   options: DashboardOptions = DEFAULT_DASHBOARD_OPTIONS,
 ): DashboardPresentation {
-  const rpm = state.rpm ?? 0
+  const rpmValid = typeof state.rpm === 'number' && Number.isFinite(state.rpm) && state.rpm >= 0
+  const rpm = rpmValid ? state.rpm as number : 0
   const maxRpm = state.maxRpm && state.maxRpm > 0 ? state.maxRpm : null
-  const threshold = normalizeShiftRpmThreshold(options.shiftRpmThreshold)
+  const threshold = resolveOptimalShiftRpm(state.context?.car)
   const fuelCriticalThreshold = normalizeFuelCriticalLapsThreshold(options.fuelCriticalLapsThreshold)
   const referenceVisible = state.isFresh && state.isLive && state.ignitionOn && state.isEngineRunning
   const fuelUrgency = resolveFuelUrgency(state, fuelCriticalThreshold)
@@ -176,14 +167,15 @@ export function buildDashboardPresentation(
       && maxRpm !== null && state.referenceRpm !== null
       ? clamp(state.referenceRpm / maxRpm, 0, 1)
       : null,
-    shiftThresholdRatio: referenceVisible && options.rpmReference && options.shiftFlashEnabled && maxRpm !== null
+    shiftThresholdRatio: referenceVisible && options.rpmReference && threshold !== null && maxRpm !== null
       ? clamp(threshold / maxRpm, 0, 1) : null,
     rpmBand: resolveRpmBand(state, rpm, threshold),
     shiftFlash: state.isFresh
       && state.isLive
       && state.ignitionOn
       && state.isEngineRunning
-      && options.shiftFlashEnabled
+      && threshold !== null
+      && rpmValid
       && rpm >= threshold,
     fuelUrgency,
     fuelCriticalPulse: fuelUrgency === 'critical' && options.fuelCriticalFlashEnabled,

@@ -27,4 +27,13 @@ describe('Dashboard overlay window contract', () => {
     )
     expect(component).not.toMatch(/fuel-critical-pulse[^}]*opacity\s*:/)
   })
+  it('does not expose manual shift flash controls on the HUD page', () => {
+    const source = readFileSync(resolve(process.cwd(), 'app/pages/hud.vue'), 'utf8')
+
+    expect(source).not.toContain('shiftFlashEnabled')
+    expect(source).not.toContain('shiftRpmThreshold')
+    expect(source).not.toContain('Lampeggio cambiata')
+    expect(source).not.toContain('Soglia lampeggio')
+  })
+
 })

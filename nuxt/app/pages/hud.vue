@@ -74,8 +74,6 @@ const dashboardSettings = reactive({
   rpmReference: false,
   gearReference: false,
   speedDelta: false,
-  shiftFlashEnabled: true,
-  shiftRpmThreshold: 8200,
   fuelCriticalFlashEnabled: false,
   fuelCriticalLapsThreshold: 0.5,
 })
@@ -185,9 +183,6 @@ async function refreshState() {
         dashboardSettings.rpmReference = settings?.rpmReference === true
         dashboardSettings.gearReference = settings?.gearReference === true
         dashboardSettings.speedDelta = settings?.speedDelta === true
-        dashboardSettings.shiftFlashEnabled = settings?.shiftFlashEnabled !== false
-        dashboardSettings.shiftRpmThreshold = Number.isFinite(Number(settings?.shiftRpmThreshold))
-          ? Number(settings.shiftRpmThreshold) : 8200
         dashboardSettings.fuelCriticalFlashEnabled = settings?.fuelCriticalFlashEnabled === true
         dashboardSettings.fuelCriticalLapsThreshold = Number.isFinite(Number(settings?.fuelCriticalLapsThreshold))
           ? Number(settings.fuelCriticalLapsThreshold) : 0.5
@@ -406,11 +401,9 @@ async function saveDashboardSetting(
 ) {
   const api = getApi()
   if (!apiReady.value || !api?.hudOverlaySaveSettings) return
-  const normalized = key === 'shiftRpmThreshold'
-    ? Math.min(Math.max(Math.round(Number(value) || 8200), 1000), 20000)
-    : key === 'fuelCriticalLapsThreshold'
-      ? Math.round(Math.min(Math.max(Number(value) || 0.5, 0.1), 1) * 10) / 10
-      : value
+  const normalized = key === 'fuelCriticalLapsThreshold'
+    ? Math.round(Math.min(Math.max(Number(value) || 0.5, 0.1), 1) * 10) / 10
+    : value
   ;(dashboardSettings as any)[key] = normalized
   const settings = await api.hudOverlaySaveSettings('dashboard', { [key]: normalized })
   if (settings && key in settings) (dashboardSettings as any)[key] = settings[key]
@@ -737,25 +730,6 @@ async function toggleTraining() {
             <label class="hud-card__option">
               <span><strong>Delta velocità</strong><em>Usa il delta quando la fonte centrale lo rende disponibile.</em></span>
               <input type="checkbox" role="switch" :checked="dashboardSettings.speedDelta" :disabled="!apiReady" @change="toggleDashboardSetting('speedDelta')">
-            </label>
-            <label class="hud-card__option">
-              <span><strong>Lampeggio cambiata</strong><em>Fa lampeggiare in blu la barra al raggiungimento della soglia.</em></span>
-              <input type="checkbox" role="switch" :checked="dashboardSettings.shiftFlashEnabled" :disabled="!apiReady" @change="toggleDashboardSetting('shiftFlashEnabled')">
-            </label>
-            <label class="hud-card__option">
-              <span><strong>Soglia lampeggio</strong><em>Regolazione manuale; i profili per auto arriveranno in un task dedicato.</em></span>
-              <span class="hud-card__rpm">
-                <input
-                  type="number"
-                  min="1000"
-                  max="20000"
-                  step="100"
-                  :value="dashboardSettings.shiftRpmThreshold"
-                  :disabled="!apiReady"
-                  @change="saveDashboardSetting('shiftRpmThreshold', Number(($event.target as HTMLInputElement).value))"
-                >
-                <b>RPM</b>
-              </span>
             </label>
             <label class="hud-card__option">
               <span><strong>Lampeggio carburante critico</strong><em>Sotto la soglia critica pulsa solo il bordo; testo e valori restano sempre leggibili.</em></span>

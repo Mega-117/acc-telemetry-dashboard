@@ -8,7 +8,6 @@ import {
   buildDashboardPresentation,
   DEFAULT_DASHBOARD_OPTIONS,
   normalizeFuelCriticalLapsThreshold,
-  normalizeShiftRpmThreshold,
 } from '~/utils/dashboardPresentation'
 
 definePageMeta({ layout: 'hud-overlay' })
@@ -22,8 +21,6 @@ const options = computed(() => ({
   rpmReference: overlay.settings.value?.rpmReference ?? DEFAULT_DASHBOARD_OPTIONS.rpmReference,
   gearReference: overlay.settings.value?.gearReference ?? DEFAULT_DASHBOARD_OPTIONS.gearReference,
   speedDelta: overlay.settings.value?.speedDelta ?? DEFAULT_DASHBOARD_OPTIONS.speedDelta,
-  shiftFlashEnabled: overlay.settings.value?.shiftFlashEnabled ?? DEFAULT_DASHBOARD_OPTIONS.shiftFlashEnabled,
-  shiftRpmThreshold: normalizeShiftRpmThreshold(overlay.settings.value?.shiftRpmThreshold),
   fuelCriticalFlashEnabled: overlay.settings.value?.fuelCriticalFlashEnabled
     ?? DEFAULT_DASHBOARD_OPTIONS.fuelCriticalFlashEnabled,
   fuelCriticalLapsThreshold: normalizeFuelCriticalLapsThreshold(
