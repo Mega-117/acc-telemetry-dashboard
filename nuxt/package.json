@@ -47,6 +47,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "@lucide/vue": "^1.27.0",
     "chart.js": "^4.5.1",
     "chartjs-plugin-zoom": "^2.2.0",
     "esbuild": "^0.28.0",

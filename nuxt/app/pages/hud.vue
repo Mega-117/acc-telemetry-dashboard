@@ -1,9 +1,11 @@
 <script setup lang="ts">
+/* eslint-disable max-lines -- Legacy self-contained Electron bridge; split tracked separately from PIP-281 layout scope. */
 // HUD (PIP-209): pagina overlay protetta da capability centralizzata.
 // - Interruttore GLOBALE di posizionamento: sblocca/blocca TUTTI gli overlay.
 // - Per ogni overlay: on/off + formato fisso (Piccolo/Medio/Grande).
 // Self-contained (come dev.vue): fuori dal contratto useTelemetryGateway.
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { ChartNoAxesCombined, CircleDot, Clock3, Flag, Info, LayoutDashboard, Trophy } from '@lucide/vue'
 import {
   supportsHudOverlayPresentationControl,
   type HudOverlayPresentationControl,
@@ -21,6 +23,7 @@ definePageMeta({
 })
 
 type HudOverlayId = 'tyres' | 'sectors' | 'dashboard' | 'info'
+type HudSettingsLayout = 'columns' | 'matrix'
 
 interface HudReplayScenario {
   id: string
@@ -42,10 +45,22 @@ interface HudReplayStatus {
 
 
 const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string }> = [
-  { id: 'tyres', title: 'Gomme', description: 'Temperature, pressioni e scivolamento per pneumatico (fast_state).' },
-  { id: 'sectors', title: 'Settori', description: 'Tempi e delta per settore con codifica colore (live_state).' },
-  { id: 'dashboard', title: 'Dashboard', description: 'Replica ACC Drive 665×225 con marcia, carburante, elettronica e shift flash.' },
-  { id: 'info', title: 'Info', description: 'Replica ACC Drive con delta, stint, fuel, grip, best, danni e cronometro.' },
+  { id: 'tyres', title: 'Gomme', description: 'Temperature e pressioni per ogni pneumatico.' },
+  { id: 'sectors', title: 'Settori', description: 'Tempi e delta dei tre settori.' },
+  { id: 'dashboard', title: 'Dashboard', description: 'Marcia, carburante ed elettronica in stile ACC Drive.' },
+  { id: 'info', title: 'Info', description: 'Delta, stint, carburante, grip, tempi e danni.' },
+]
+
+const hudOverlayIcons = {
+  tyres: CircleDot,
+  sectors: Flag,
+  dashboard: LayoutDashboard,
+  info: Info,
+}
+
+const hudSettingsLayouts: Array<{ id: HudSettingsLayout, label: string, description: string }> = [
+  { id: 'columns', label: 'Colonne', description: 'Attivazione ampia, gruppi leggibili su due colonne' },
+  { id: 'matrix', label: 'Matrice', description: 'Griglia compatta con righe e colonne continue' },
 ]
 
 const SCALE_MIN = 0.6
@@ -58,6 +73,7 @@ function getApi(): any | null {
 
 const isElectron = ref(false)
 const apiReady = ref(false)
+const enabled = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false })
 const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false })
 const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1, info: 1 })
 const tyreVariant = ref<'classic' | 'advanced'>('classic')
@@ -96,20 +112,29 @@ const backgroundTransparency = reactive<Record<HudOverlayBackgroundId, number>>(
   tyres: 20,
 })
 type InfoSettingKey = keyof typeof infoSettings
-const infoOptionDefinitions: Array<{ key: InfoSettingKey, label: string, description: string }> = [
-  { key: 'showYellowFlag', label: 'Yellow Flag', description: 'Mostra il bordo giallo dell overlay quando ACC espone la bandiera.' },
-  { key: 'showStint', label: 'Stint Time', description: 'Tempo stint pilota o compagno quando disponibile.' },
-  { key: 'showQFuel', label: 'Q-Fuel / Stint-Fuel', description: 'Carburante contestuale necessario o in avanzo.' },
-  { key: 'showFuelLeft', label: 'Fuel Left', description: 'Tempo di guida stimato con il carburante rimasto.' },
-  { key: 'showIncidents', label: 'Incidents', description: 'Invalid Lap 1x, danno 4x.' },
-  { key: 'showDelta', label: 'Delta', description: 'Delta live con barra e colori ACC Drive.' },
-  { key: 'showGrip', label: 'Grip', description: 'Stato grip pista ACC.' },
-  { key: 'showPitExitTraffic', label: 'Pit Exit Traffic', description: 'Traffico previsto all uscita box quando disponibile.' },
-  { key: 'showOptimal', label: 'Optimal', description: 'Giro potenziale dai migliori settori.' },
-  { key: 'showBest', label: 'Best', description: 'Miglior giro della sessione.' },
-  { key: 'showDamage', label: 'Damage', description: 'Danno totale espresso come tempo riparazione.' },
-  { key: 'showTime', label: 'Local Time', description: 'Orologio locale HH:mm:ss, come nell Info ACC Drive.' },
+const infoOptionDefinitions: Array<{ key: InfoSettingKey, label: string }> = [
+  { key: 'showYellowFlag', label: 'Yellow Flag' },
+  { key: 'showStint', label: 'Stint Time' },
+  { key: 'showQFuel', label: 'Q-Fuel / Stint-Fuel' },
+  { key: 'showFuelLeft', label: 'Fuel Left' },
+  { key: 'showIncidents', label: 'Incidents' },
+  { key: 'showDelta', label: 'Delta' },
+  { key: 'showGrip', label: 'Grip' },
+  { key: 'showPitExitTraffic', label: 'Pit Exit Traffic' },
+  { key: 'showOptimal', label: 'Optimal' },
+  { key: 'showBest', label: 'Best' },
+  { key: 'showDamage', label: 'Damage' },
+  { key: 'showTime', label: 'Local Time' },
 ]
+const infoSettingGroups: Array<{ id: string, label: string, icon: typeof Trophy, keys: InfoSettingKey[] }> = [
+  { id: 'race', label: 'Gara', icon: Trophy, keys: ['showYellowFlag', 'showIncidents', 'showPitExitTraffic'] },
+  { id: 'performance', label: 'Prestazioni', icon: ChartNoAxesCombined, keys: ['showGrip', 'showOptimal', 'showDelta', 'showBest', 'showDamage'] },
+  { id: 'strategy', label: 'Strategia e tempo', icon: Clock3, keys: ['showQFuel', 'showStint', 'showFuelLeft', 'showTime'] },
+]
+
+function getInfoOptions(keys: InfoSettingKey[]) {
+  return infoOptionDefinitions.filter(option => keys.includes(option.key))
+}
 const positioning = ref(false)
 const trainingOpen = ref(false)
 // Stato "in guida" (PIP-177): quando attivo, gli overlay abilitati appaiono da
@@ -134,6 +159,8 @@ const replayScenarios = ref<HudReplayScenario[]>([])
 const replayScenarioId = ref('full-hud')
 const replayBusy = ref(false)
 const replayMessage = ref('')
+const selectedOverlayId = ref<HudOverlayId>('tyres')
+const hudSettingsLayout = ref<HudSettingsLayout>('columns')
 let unsubscribeDriving: (() => void) | null = null
 let placementPollTimer: ReturnType<typeof setInterval> | null = null
 let replayPollTimer: ReturnType<typeof setInterval> | null = null
@@ -147,6 +174,19 @@ const placementRemainingSeconds = computed(() => {
 const selectedReplayScenario = computed(() =>
   replayScenarios.value.find(scenario => scenario.id === replayScenarioId.value) || null
 )
+const selectedOverlay = computed(() =>
+  hudOverlays.find(overlay => overlay.id === selectedOverlayId.value)!
+)
+const selectedHasSpecificControls = computed(() => selectedOverlayId.value !== 'tyres')
+const selectedSettingsDisabled = computed(() => !apiReady.value || !enabled[selectedOverlayId.value])
+
+async function refreshOverlayVisibility() {
+  const api = getApi()
+  if (!apiReady.value || typeof api?.hudOverlayIsOpen !== 'function') return
+  await Promise.all(hudOverlays.map(async (overlay) => {
+    try { open[overlay.id] = await api.hudOverlayIsOpen(overlay.id) } catch { open[overlay.id] = false }
+  }))
+}
 
 function applyPlacementStatus(status: any) {
   if (!status || typeof status !== 'object') return
@@ -171,6 +211,7 @@ async function refreshState() {
     try {
       open[overlay.id] = await api.hudOverlayIsOpen(overlay.id)
       const settings = await api.hudOverlayGetSettings(overlay.id)
+      enabled[overlay.id] = settings?.enabled === true
       if (settings?.scale !== undefined) scale[overlay.id] = settings.scale
       if (overlay.id === 'tyres') tyreVariant.value = settings?.variant === 'advanced' ? 'advanced' : 'classic'
       if (overlay.id === 'sectors') sectorVariant.value = settings?.variant === 'compact' ? 'compact' : 'classic'
@@ -196,6 +237,7 @@ async function refreshState() {
         }
       }
     } catch {
+      enabled[overlay.id] = false
       open[overlay.id] = false
     }
   }
@@ -283,6 +325,7 @@ async function toggleAlwaysVisible() {
   alwaysVisible.value = next
   const saved = await api.hudOverlaySetAlwaysVisible(next)
   if (typeof saved === 'boolean') alwaysVisible.value = saved
+  await refreshOverlayVisibility()
 }
 
 onMounted(() => {
@@ -297,7 +340,10 @@ onMounted(() => {
   }, 500)
   const api = getApi()
   if (api && typeof api.onHudOverlayDrivingState === 'function') {
-    unsubscribeDriving = api.onHudOverlayDrivingState((value: boolean) => { driving.value = !!value })
+    unsubscribeDriving = api.onHudOverlayDrivingState((value: boolean) => {
+      driving.value = !!value
+      void refreshOverlayVisibility()
+    })
   }
 })
 
@@ -312,6 +358,7 @@ async function saveAndLock() {
   if (!apiReady.value || !api?.hudOverlaySetAllPlacement) return
   await api.hudOverlaySetAllPlacement(false)
   await refreshPlacementStatus()
+  await refreshOverlayVisibility()
   positionSaved.value = true
   setTimeout(() => { positionSaved.value = false }, 1600)
 }
@@ -321,14 +368,17 @@ async function startPositioning() {
   if (!apiReady.value || !api?.hudOverlaySetAllPlacement) return
   await api.hudOverlaySetAllPlacement(true)
   await refreshPlacementStatus()
+  await refreshOverlayVisibility()
   positionSaved.value = false
 }
 
 async function toggleHud(id: HudOverlayId) {
   const api = getApi()
   if (!apiReady.value || !api) return
-  if (open[id]) await api.hudOverlayClose(id)
+  if (enabled[id]) await api.hudOverlayClose(id)
   else await api.hudOverlayOpen(id, { scale: scale[id] })
+  const settings = await api.hudOverlayGetSettings(id)
+  enabled[id] = settings?.enabled === true
   open[id] = await api.hudOverlayIsOpen(id)
   await refreshPlacementStatus()
 }
@@ -452,313 +502,538 @@ async function toggleTraining() {
   <LayoutPageContainer>
     <section class="test-hud">
       <header class="test-hud__hero">
-        <span class="test-hud__kicker">Overlay</span>
-        <h1>HUD</h1>
-        <p>
-          Accendi gli overlay, scegli il formato e posizionali.
+        <div>
+          <span class="test-hud__kicker">Overlay</span>
+          <h1>HUD</h1>
+          <p>Scegli un overlay e regola le opzioni disponibili.</p>
+        </div>
+        <p
+          v-if="apiReady"
+          class="test-hud__driving"
+          :class="{ 'is-on': driving }"
+        >
+          <span
+            class="test-hud__driving-dot"
+            aria-hidden="true"
+          ></span>
+          <span>
+            <strong>{{ driving ? 'In guida' : 'Nei menu' }}</strong>
+            <em>{{ alwaysVisible ? 'Sempre visibili attivo' : (driving ? 'Gli overlay abilitati possono apparire' : 'Gli overlay abilitati appariranno quando inizi a guidare') }}</em>
+          </span>
         </p>
-        <p v-if="!isElectron" class="test-hud__warning">
+        <p
+          v-if="!isElectron"
+          class="test-hud__warning"
+        >
           Sei nel browser: i comandi overlay funzionano solo nell'app desktop (Electron).
         </p>
-        <p v-else-if="!apiReady" class="test-hud__warning">
-          App desktop avviata con una versione precedente: <strong>riavvia l'app</strong> per
-          caricare gli overlay aggiornati.
-        </p>
-        <p v-if="apiReady" class="test-hud__driving" :class="{ 'is-on': driving }">
-          <span class="test-hud__driving-dot"></span>
-          In guida: <strong>{{ driving ? 'sì' : 'no' }}</strong>
-          <em>{{ alwaysVisible ? 'override “Sempre visibili” attivo' : (driving ? 'gli overlay abilitati sono visibili' : 'gli overlay abilitati appariranno quando inizi a guidare') }}</em>
+        <p
+          v-else-if="!apiReady"
+          class="test-hud__warning"
+        >
+          App desktop avviata con una versione precedente: <strong>riavvia l'app</strong> per caricare gli overlay aggiornati.
         </p>
       </header>
 
-      <!-- Interruttore globale di posizionamento -->
-      <div class="test-hud__placement" :class="{ 'is-on': positioning }">
-        <div class="test-hud__placement-text">
-          <strong>Posizionamento overlay</strong>
-          <span v-if="positioning">
-            Modifica attiva: sposta o ridimensiona gli overlay. Salvataggio automatico tra
-            <b>{{ placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }}s</b> di inattivita'.
+      <div class="test-hud__global">
+        <section
+          class="test-hud__placement"
+          :class="{ 'is-on': positioning }"
+          aria-labelledby="hud-placement-title"
+        >
+          <div class="test-hud__placement-text">
+            <strong id="hud-placement-title">Posizione di tutti gli overlay</strong>
+            <span v-if="positioning">
+              Modifica attiva. Salvataggio automatico tra
+              <b>{{ placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }}s</b> di inattività.
+            </span>
+            <span v-else>Posizioni salvate e bloccate.</span>
+          </div>
+          <div class="test-hud__placement-actions">
+            <button
+              type="button"
+              class="btn btn--primary"
+              :disabled="!apiReady || positioning"
+              @click="startPositioning"
+            >
+              {{ positioning ? 'Modifica attiva' : 'Modifica posizioni' }}
+            </button>
+            <button
+              type="button"
+              class="btn"
+              :disabled="!apiReady || !positioning"
+              @click="saveAndLock"
+            >
+              {{ positionSaved ? 'Salvato' : 'Salva e blocca' }}
+            </button>
+          </div>
+        </section>
+
+        <label
+          class="test-hud__always"
+          :class="{ 'is-on': alwaysVisible }"
+        >
+          <span class="test-hud__always-text">
+            <strong>Sempre visibili</strong>
+            <em>Mantiene visibili gli overlay abilitati anche fuori dalla guida.</em>
           </span>
-          <span v-else>Bloccato: le posizioni sono fisse.</span>
-        </div>
-        <div class="test-hud__placement-actions">
-          <button type="button" class="btn btn--primary" :disabled="!apiReady || positioning" @click="startPositioning">
-            {{ positioning ? 'Modifica attiva' : 'Modifica posizione overlay' }}
-          </button>
-          <button type="button" class="btn" :disabled="!apiReady || !positioning" @click="saveAndLock">
-            {{ positionSaved ? 'Salvato' : 'Salva e blocca' }}
-          </button>
-        </div>
+          <input
+            type="checkbox"
+            role="switch"
+            :checked="alwaysVisible"
+            :disabled="!apiReady"
+            @change="toggleAlwaysVisible"
+          />
+        </label>
       </div>
 
-      <!-- Override globale: forza la visualizzazione costante (come ACC Drive) -->
-      <label class="test-hud__always" :class="{ 'is-on': alwaysVisible }">
-        <span class="test-hud__always-text">
-          <strong>Sempre visibili</strong>
-          <em>Forza gli overlay abilitati a restare visibili sempre, anche nei menu / ai box (ignora il rilevamento guida).</em>
-        </span>
-        <input
-          type="checkbox"
-          role="switch"
-          :checked="alwaysVisible"
-          :disabled="!apiReady"
-          @change="toggleAlwaysVisible"
-        >
-      </label>
-
-      <section
+      <details
         v-if="replayStatus.available"
         class="test-hud__replay"
         :class="{ 'is-running': replayStatus.running }"
+        :open="replayStatus.running"
       >
-        <div class="test-hud__replay-copy">
-          <span class="test-hud__kicker">Strumento QA · solo sviluppo</span>
-          <div class="test-hud__replay-title">
+        <summary>
+          <span>
             <strong>Replay telemetria HUD</strong>
-            <span>{{ replayStatus.running ? `ATTIVO · frame ${replayStatus.frame}` : 'FERMO' }}</span>
-          </div>
+            <em>Strumento QA · solo sviluppo</em>
+          </span>
+          <b>{{ replayStatus.running ? 'ATTIVO · frame ' + replayStatus.frame : 'FERMO' }}</b>
+        </summary>
+        <div class="test-hud__replay-body">
           <p>
             Alimenta il vero <code>fast_state.json</code>. L'avvio viene rifiutato se il logger ACC
             sta scrivendo; allo stop il file precedente viene ripristinato.
           </p>
-        </div>
-
-        <div class="test-hud__replay-controls">
-          <label>
-            <span>Scenario</span>
-            <select
-              v-model="replayScenarioId"
-              class="hud-card__select"
-              :disabled="replayBusy || replayStatus.running"
+          <div class="test-hud__replay-controls">
+            <label>
+              <span>Scenario</span>
+              <select
+                v-model="replayScenarioId"
+                class="hud-select"
+                :disabled="replayBusy || replayStatus.running"
+              >
+                <option
+                  v-for="scenario in replayScenarios"
+                  :key="scenario.id"
+                  :value="scenario.id"
+                >
+                  {{ scenario.label }}
+                </option>
+              </select>
+            </label>
+            <p v-if="selectedReplayScenario">
+              {{ selectedReplayScenario.description }}
+            </p>
+            <div>
+              <button
+                type="button"
+                class="btn btn--primary"
+                :disabled="replayBusy || replayStatus.running"
+                @click="startHudReplay"
+              >
+                Avvia replay
+              </button>
+              <button
+                type="button"
+                class="btn"
+                :disabled="replayBusy || !replayStatus.running"
+                @click="stopHudReplay"
+              >
+                Arresta e ripristina
+              </button>
+            </div>
+            <em
+              v-if="replayMessage || replayStatus.error"
+              :class="{ 'is-error': !!replayStatus.error && !replayStatus.running }"
             >
-              <option v-for="scenario in replayScenarios" :key="scenario.id" :value="scenario.id">
-                {{ scenario.label }}
-              </option>
-            </select>
-          </label>
-          <p v-if="selectedReplayScenario">{{ selectedReplayScenario.description }}</p>
-          <div>
+              {{ replayMessage || replayStatus.error }}
+            </em>
+          </div>
+        </div>
+      </details>
+
+      <div class="hud-workspace">
+        <aside class="hud-overlay-list">
+          <div class="hud-overlay-list__head">
+            <div>
+              <span class="test-hud__kicker">Overlay HUD</span>
+            </div>
+            <span>{{ hudOverlays.filter(overlay => enabled[overlay.id]).length }}/{{ hudOverlays.length }} abilitati</span>
+          </div>
+
+          <nav aria-label="Overlay HUD configurabili">
             <button
+              v-for="overlay in hudOverlays"
+              :key="overlay.id"
               type="button"
-              class="btn btn--primary"
-              :disabled="replayBusy || replayStatus.running"
-              @click="startHudReplay"
-            >Avvia replay</button>
+              class="hud-overlay-list__item"
+              :class="{ 'is-selected': selectedOverlayId === overlay.id }"
+              :aria-current="selectedOverlayId === overlay.id ? 'true' : undefined"
+              @click="selectedOverlayId = overlay.id"
+            >
+              <span class="hud-overlay-list__label">
+                <component
+                  :is="hudOverlayIcons[overlay.id]"
+                  class="hud-overlay-list__icon"
+                  :size="24"
+                  stroke-width="1.8"
+                  aria-hidden="true"
+                />
+                <span class="hud-overlay-list__title">
+                  <strong>{{ overlay.title }}</strong>
+                  <em :class="{ 'is-on': enabled[overlay.id] }">{{ enabled[overlay.id] ? 'Abilitato' : 'Disabilitato' }}</em>
+                </span>
+              </span>
+              <span
+                class="hud-overlay-list__visibility"
+                :class="{ 'is-visible': open[overlay.id] }"
+              >
+                <i aria-hidden="true"></i>
+                {{ open[overlay.id] ? 'Visibile ora' : (enabled[overlay.id] ? 'In attesa della guida' : 'Non visibile') }}
+              </span>
+            </button>
+          </nav>
+
+          <section
+            class="hud-training"
+            aria-labelledby="hud-training-title"
+          >
+            <div>
+              <strong id="hud-training-title">Allenamento</strong>
+              <span>{{ trainingOpen ? 'Visibile' : 'Nascosto' }}</span>
+            </div>
             <button
               type="button"
               class="btn"
-              :disabled="replayBusy || !replayStatus.running"
-              @click="stopHudReplay"
-            >Arresta e ripristina</button>
-          </div>
-          <em v-if="replayMessage || replayStatus.error" :class="{ 'is-error': !!replayStatus.error && !replayStatus.running }">
-            {{ replayMessage || replayStatus.error }}
-          </em>
-        </div>
-      </section>
-
-      <div class="test-hud__grid">
-        <!-- Overlay allenamento: solo mostra/nascondi (come Ctrl+K) -->
-        <article class="hud-card hud-card--training">
-          <div class="hud-card__head">
-            <strong>Allenamento</strong>
-            <span class="hud-card__state" :class="{ 'is-on': trainingOpen }">{{ trainingOpen ? 'ON' : 'OFF' }}</span>
-          </div>
-          <p>Overlay coaching completo (fasi, voce, step). Qui solo mostra/nascondi.</p>
-          <div class="hud-card__actions">
-            <button type="button" class="btn btn--primary" :disabled="!isElectron" @click="toggleTraining">
-              {{ trainingOpen ? 'Nascondi' : 'Mostra' }}
+              :disabled="!isElectron"
+              @click="toggleTraining"
+            >
+              {{ trainingOpen ? 'Nascondi allenamento' : 'Mostra allenamento' }}
             </button>
-          </div>
-        </article>
+          </section>
+        </aside>
 
-        <!-- Overlay HUD: on/off + formato -->
-        <article v-for="overlay in hudOverlays" :key="overlay.id" class="hud-card">
-          <div class="hud-card__head">
-            <strong>{{ overlay.title }}</strong>
-            <span class="hud-card__state" :class="{ 'is-on': open[overlay.id] }">{{ open[overlay.id] ? 'ON' : 'OFF' }}</span>
-          </div>
-          <p>{{ overlay.description }}</p>
-
-          <div class="hud-card__actions">
-            <button type="button" class="btn btn--primary" :disabled="!apiReady" @click="toggleHud(overlay.id)">
-              {{ open[overlay.id] ? 'Spegni' : 'Accendi' }}
-            </button>
-          </div>
-
-          <div class="hud-card__size">
-            <div class="hud-card__size-row">
-              <span class="hud-card__formats-label">Dimensione</span>
-              <span class="hud-card__size-val">{{ Math.round(scale[overlay.id] * 100) }}%</span>
+        <article
+          class="hud-settings"
+          :class="[
+            `hud-settings--${hudSettingsLayout}`,
+            { 'is-overlay-disabled': !enabled[selectedOverlayId] },
+          ]"
+          :aria-labelledby="'hud-settings-' + selectedOverlay.id"
+        >
+          <header class="hud-settings__head">
+            <div>
+              <span class="test-hud__kicker">Configurazione</span>
+              <h2 :id="'hud-settings-' + selectedOverlay.id">
+                {{ selectedOverlay.title }}
+              </h2>
+              <p>{{ selectedOverlay.description }}</p>
             </div>
-            <input
-              type="range"
-              class="hud-slider"
-              :min="SCALE_MIN"
-              :max="SCALE_MAX"
-              step="0.05"
-              :value="scale[overlay.id]"
-              :disabled="!apiReady"
-              @input="onScaleInput(overlay.id, ($event.target as HTMLInputElement).value)"
-            >
-          </div>
-
-          <label v-if="overlay.id === 'tyres'" class="hud-card__option">
-            <span>
-              <strong>Visualizzazione</strong>
-              <em>Classico mantiene l'HUD attuale; Avanzato mostra il pannello stile ACC Drive.</em>
-            </span>
-            <select
-              class="hud-card__select"
-              :value="tyreVariant"
-              :disabled="!apiReady"
-              @change="setTyreVariant(($event.target as HTMLSelectElement).value)"
-            >
-              <option value="classic">Classico</option>
-              <option value="advanced">Avanzato</option>
-            </select>
-          </label>
-
-          <div
-            v-if="supportsHudOverlayBackground(overlay.id) && (overlay.id !== 'tyres' || tyreVariant === 'advanced')"
-            class="hud-card__size hud-card__background-transparency"
-          >
-            <div class="hud-card__size-row">
-              <span class="hud-card__formats-label">Trasparenza sfondo</span>
-              <span class="hud-card__size-val">{{ backgroundTransparency[overlay.id] }}%</span>
-            </div>
-            <input
-              type="range"
-              class="hud-slider"
-              min="0"
-              max="100"
-              step="5"
-              :value="backgroundTransparency[overlay.id]"
-              :disabled="!apiReady"
-              :aria-label="`Trasparenza sfondo HUD ${overlay.title}`"
-              @input="onBackgroundTransparencyInput(overlay.id, ($event.target as HTMLInputElement).value)"
-            >
-            <em class="hud-card__slider-help">
-              Rende trasparente soltanto lo sfondo nero; testi e valori restano pienamente visibili.
-            </em>
-          </div>
-
-          <template v-if="overlay.id === 'sectors'">
-            <label class="hud-card__option">
-              <span>
-                <strong>Layout</strong>
-                <em>Classico mantiene l'HUD attuale; Compatto mostra cronometro e tre righe essenziali.</em>
-              </span>
-              <select
-                class="hud-card__select"
-                :value="sectorVariant"
-                :disabled="!apiReady"
-                @change="setSectorVariant(($event.target as HTMLSelectElement).value)"
+            <div class="hud-layout-preview">
+              <span
+                id="hud-layout-preview-label"
+                class="hud-sr-only"
+              >Confronta layout</span>
+              <div
+                class="hud-layout-preview__options"
+                role="group"
+                aria-labelledby="hud-layout-preview-label"
               >
-                <option value="classic">Classico</option>
-                <option value="compact">Compatto</option>
-              </select>
-            </label>
-            <label class="hud-card__option">
-              <span>
-                <strong>Confronta con</strong>
-                <em>Sceglie il riferimento del delta; se manca, il valore resta “Wait”.</em>
-              </span>
-              <select
-                class="hud-card__select"
-                :value="sectorDeltaReference"
-                :disabled="!apiReady"
-                @change="setSectorDeltaReference(($event.target as HTMLSelectElement).value)"
-              >
-                <option value="previousLap">Giro precedente</option>
-                <option value="bestSector">Miglior settore</option>
-              </select>
-            </label>
-            <label v-if="sectorSupports('sectorCurrentLap')" class="hud-card__option">
-              <span>
-                <strong>Mostra tempo giro</strong>
-                <em>Mostra o nasconde il current lap nel layout Compatto.</em>
-              </span>
-              <input
-                type="checkbox"
-                role="switch"
-                :checked="showSectorCurrentLap"
-                :disabled="!apiReady"
-                @change="toggleSectorCurrentLap"
-              >
-            </label>
-            <label v-if="sectorSupports('sectorPrevious')" class="hud-card__option">
-              <span>
-                <strong>Tempo settore precedente</strong>
-                <em>Mostra/nasconde la riga “prec” nel HUD settori.</em>
-              </span>
-              <input
-                type="checkbox"
-                role="switch"
-                :checked="showSectorReference"
-                :disabled="!apiReady"
-                @change="toggleSectorReference"
-              >
-            </label>
-            <label v-if="sectorSupports('sectorBest')" class="hud-card__option">
-              <span>
-                <strong>Best settore</strong>
-                <em>Mostra/nasconde il riferimento best usato per il fucsia.</em>
-              </span>
-              <input
-                type="checkbox"
-                role="switch"
-                :checked="showSectorBest"
-                :disabled="!apiReady"
-                @change="toggleSectorBest"
-              >
-            </label>
-          </template>
-          <template v-if="overlay.id === 'dashboard'">
-            <label class="hud-card__option">
-              <span><strong>Riferimento elettronica</strong><em>Replica l'opzione originale ACC Drive.</em></span>
-              <input type="checkbox" role="switch" :checked="dashboardSettings.electronicsReference" :disabled="!apiReady" @change="toggleDashboardSetting('electronicsReference')">
-            </label>
-            <label class="hud-card__option">
-              <span><strong>Riferimento RPM</strong><em>Mostra il riferimento di cambiata sulla barra giri.</em></span>
-              <input type="checkbox" role="switch" :checked="dashboardSettings.rpmReference" :disabled="!apiReady" @change="toggleDashboardSetting('rpmReference')">
-            </label>
-            <label class="hud-card__option">
-              <span><strong>Riferimento marcia</strong><em>Mantiene l'opzione originale pronta per i riferimenti auto.</em></span>
-              <input type="checkbox" role="switch" :checked="dashboardSettings.gearReference" :disabled="!apiReady" @change="toggleDashboardSetting('gearReference')">
-            </label>
-            <label class="hud-card__option">
-              <span><strong>Delta velocità</strong><em>Usa il delta quando la fonte centrale lo rende disponibile.</em></span>
-              <input type="checkbox" role="switch" :checked="dashboardSettings.speedDelta" :disabled="!apiReady" @change="toggleDashboardSetting('speedDelta')">
-            </label>
-            <label class="hud-card__option">
-              <span><strong>Lampeggio carburante critico</strong><em>Sotto la soglia critica pulsa solo il bordo; testo e valori restano sempre leggibili.</em></span>
-              <input type="checkbox" role="switch" :checked="dashboardSettings.fuelCriticalFlashEnabled" :disabled="!apiReady" @change="toggleDashboardSetting('fuelCriticalFlashEnabled')">
-            </label>
-            <label class="hud-card__option">
-              <span><strong>Soglia carburante critica</strong><em>L'avviso ACC Drive diventa ambra da 1,0 giro; qui scegli quando inizia il pulse opzionale.</em></span>
-              <span class="hud-card__rpm">
-                <input
-                  type="number"
-                  min="0.1"
-                  max="1"
-                  step="0.1"
-                  :value="dashboardSettings.fuelCriticalLapsThreshold"
-                  :disabled="!apiReady || !dashboardSettings.fuelCriticalFlashEnabled"
-                  @change="saveDashboardSetting('fuelCriticalLapsThreshold', Number(($event.target as HTMLInputElement).value))"
+                <button
+                  v-for="layout in hudSettingsLayouts"
+                  :key="layout.id"
+                  type="button"
+                  :title="layout.description"
+                  :aria-pressed="hudSettingsLayout === layout.id"
+                  :class="{ 'is-active': hudSettingsLayout === layout.id }"
+                  @click="hudSettingsLayout = layout.id"
                 >
-                <b>GIRI</b>
-              </span>
-            </label>
-          </template>
-          <template v-if="overlay.id === 'info'">
-            <label v-for="option in infoOptionDefinitions" :key="option.key" class="hud-card__option">
-              <span>
-                <strong>{{ option.label }}</strong>
-                <em>{{ option.description }}</em>
-              </span>
-              <input type="checkbox" role="switch" :checked="infoSettings[option.key]" :disabled="!apiReady" @change="toggleInfoSetting(option.key)">
-            </label>
+                  {{ layout.label }}
+                </button>
+              </div>
+            </div>
+          </header>
+
+          <section
+            class="hud-settings__common"
+            aria-labelledby="hud-common-title"
+          >
+            <div class="hud-settings__section-head">
+              <h3 id="hud-common-title">
+                Impostazioni comuni
+              </h3>
+            </div>
+
+            <div class="hud-settings__common-panel hud-settings__control-grid">
+              <div class="hud-control hud-control--state">
+                <label class="hud-control__state-toggle">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    :checked="enabled[selectedOverlayId]"
+                    :disabled="!apiReady"
+                    @change="toggleHud(selectedOverlayId)"
+                  />
+                  <span
+                    class="hud-control__switch"
+                    aria-hidden="true"
+                  ></span>
+                  <strong>Overlay abilitato</strong>
+                </label>
+              </div>
+              <label class="hud-control hud-control--slider">
+                <span>
+                  <strong>Dimensione</strong>
+                </span>
+                <span class="hud-control__range">
+                  <b>{{ Math.round(scale[selectedOverlayId] * 100) }}%</b>
+                  <input
+                    type="range"
+                    class="hud-slider"
+                    :min="SCALE_MIN"
+                    :max="SCALE_MAX"
+                    step="0.05"
+                    :value="scale[selectedOverlayId]"
+                    :disabled="selectedSettingsDisabled"
+                    :aria-label="'Dimensione HUD ' + selectedOverlay.title"
+                    @input="onScaleInput(selectedOverlayId, ($event.target as HTMLInputElement).value)"
+                  />
+                </span>
+              </label>
+
+              <label
+                v-if="selectedOverlayId === 'tyres'"
+                class="hud-control"
+              >
+                <span>
+                  <strong>Visualizzazione</strong>
+                </span>
+                <select
+                  class="hud-select"
+                  :value="tyreVariant"
+                  :disabled="selectedSettingsDisabled"
+                  @change="setTyreVariant(($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="classic">Classico</option>
+                  <option value="advanced">Avanzato</option>
+                </select>
+              </label>
+
+              <label
+                v-if="selectedOverlayId === 'sectors'"
+                class="hud-control"
+              >
+                <span>
+                  <strong>Layout</strong>
+                </span>
+                <select
+                  class="hud-select"
+                  :value="sectorVariant"
+                  :disabled="selectedSettingsDisabled"
+                  @change="setSectorVariant(($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="classic">Classico</option>
+                  <option value="compact">Compatto</option>
+                </select>
+              </label>
+
+              <label
+                v-if="supportsHudOverlayBackground(selectedOverlayId) && (selectedOverlayId !== 'tyres' || tyreVariant === 'advanced')"
+                class="hud-control hud-control--slider"
+              >
+                <span>
+                  <strong>Trasparenza sfondo</strong>
+                </span>
+                <span class="hud-control__range">
+                  <b>{{ backgroundTransparency[selectedOverlayId as HudOverlayBackgroundId] }}%</b>
+                  <input
+                    type="range"
+                    class="hud-slider"
+                    min="0"
+                    max="100"
+                    step="5"
+                    :value="backgroundTransparency[selectedOverlayId as HudOverlayBackgroundId]"
+                    :disabled="selectedSettingsDisabled"
+                    :aria-label="'Trasparenza sfondo HUD ' + selectedOverlay.title"
+                    @input="onBackgroundTransparencyInput(selectedOverlayId as HudOverlayBackgroundId, ($event.target as HTMLInputElement).value)"
+                  />
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <template v-if="selectedHasSpecificControls">
+            <hr
+              class="hud-settings__divider"
+              aria-hidden="true"
+            />
+            <section
+              class="hud-settings__specific"
+              :aria-label="'Opzioni ' + selectedOverlay.title"
+            >
+              <div class="hud-settings__specific-panel hud-settings__control-grid">
+                <template v-if="selectedOverlayId === 'sectors'">
+                  <label class="hud-control">
+                    <span>
+                      <strong>Confronta con</strong>
+                    </span>
+                    <select
+                      class="hud-select"
+                      :value="sectorDeltaReference"
+                      :disabled="selectedSettingsDisabled"
+                      @change="setSectorDeltaReference(($event.target as HTMLSelectElement).value)"
+                    >
+                      <option value="previousLap">Giro precedente</option>
+                      <option value="bestSector">Miglior settore</option>
+                    </select>
+                  </label>
+                  <label
+                    v-if="sectorSupports('sectorCurrentLap')"
+                    class="hud-control"
+                  >
+                    <span><strong>Mostra tempo giro</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="showSectorCurrentLap"
+                      :disabled="selectedSettingsDisabled"
+                      @change="toggleSectorCurrentLap"
+                    />
+                  </label>
+                  <label
+                    v-if="sectorSupports('sectorPrevious')"
+                    class="hud-control"
+                  >
+                    <span><strong>Tempo settore precedente</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="showSectorReference"
+                      :disabled="selectedSettingsDisabled"
+                      @change="toggleSectorReference"
+                    />
+                  </label>
+                  <label
+                    v-if="sectorSupports('sectorBest')"
+                    class="hud-control"
+                  >
+                    <span><strong>Best settore</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="showSectorBest"
+                      :disabled="selectedSettingsDisabled"
+                      @change="toggleSectorBest"
+                    />
+                  </label>
+                </template>
+
+                <template v-else-if="selectedOverlayId === 'dashboard'">
+                  <label class="hud-control">
+                    <span><strong>Riferimento elettronica</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="dashboardSettings.electronicsReference"
+                      :disabled="selectedSettingsDisabled"
+                      @change="toggleDashboardSetting('electronicsReference')"
+                    />
+                  </label>
+                  <label class="hud-control">
+                    <span><strong>Riferimento RPM</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="dashboardSettings.rpmReference"
+                      :disabled="selectedSettingsDisabled"
+                      @change="toggleDashboardSetting('rpmReference')"
+                    />
+                  </label>
+                  <label class="hud-control">
+                    <span><strong>Riferimento marcia</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="dashboardSettings.gearReference"
+                      :disabled="selectedSettingsDisabled"
+                      @change="toggleDashboardSetting('gearReference')"
+                    />
+                  </label>
+                  <label class="hud-control">
+                    <span><strong>Delta velocità</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="dashboardSettings.speedDelta"
+                      :disabled="selectedSettingsDisabled"
+                      @change="toggleDashboardSetting('speedDelta')"
+                    />
+                  </label>
+                  <label class="hud-control">
+                    <span><strong>Lampeggio carburante critico</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="dashboardSettings.fuelCriticalFlashEnabled"
+                      :disabled="selectedSettingsDisabled"
+                      @change="toggleDashboardSetting('fuelCriticalFlashEnabled')"
+                    />
+                  </label>
+                  <label class="hud-control">
+                    <span><strong>Soglia carburante critica</strong></span>
+                    <span class="hud-number">
+                      <input
+                        type="number"
+                        min="0.1"
+                        max="1"
+                        step="0.1"
+                        :value="dashboardSettings.fuelCriticalLapsThreshold"
+                        :disabled="selectedSettingsDisabled || !dashboardSettings.fuelCriticalFlashEnabled"
+                        aria-label="Soglia carburante critica in giri"
+                        @change="saveDashboardSetting('fuelCriticalLapsThreshold', Number(($event.target as HTMLInputElement).value))"
+                      />
+                      <b>giri</b>
+                    </span>
+                  </label>
+                </template>
+
+                <template v-else-if="selectedOverlayId === 'info'">
+                  <section
+                    v-for="group in infoSettingGroups"
+                    :key="group.id"
+                    class="hud-info-group"
+                    :class="'hud-info-group--' + group.id"
+                  >
+                    <div class="hud-info-group__head">
+                      <component
+                        :is="group.icon"
+                        :size="20"
+                        stroke-width="1.9"
+                        aria-hidden="true"
+                      />
+                      <strong>{{ group.label }}</strong>
+                    </div>
+                    <div class="hud-info-group__options">
+                      <label
+                        v-for="option in getInfoOptions(group.keys)"
+                        :key="option.key"
+                        class="hud-control"
+                      >
+                        <span><strong>{{ option.label }}</strong></span>
+                        <input
+                          type="checkbox"
+                          role="switch"
+                          :checked="infoSettings[option.key]"
+                          :disabled="selectedSettingsDisabled"
+                          @change="toggleInfoSetting(option.key)"
+                        />
+                      </label>
+                    </div>
+                  </section>
+                </template>
+              </div>
+            </section>
           </template>
         </article>
       </div>
@@ -768,259 +1043,611 @@ async function toggleTraining() {
 
 <style scoped lang="scss">
 .test-hud {
+  --hud-accent: #fb923c;
+  --hud-accent-strong: #f97316;
+  --hud-surface: rgba(255, 255, 255, 0.035);
+  --hud-surface-raised: rgba(255, 255, 255, 0.055);
+  --hud-border: rgba(255, 255, 255, 0.1);
+  --hud-text-secondary: rgba(255, 255, 255, 0.66);
+  --hud-text-muted: rgba(255, 255, 255, 0.5);
   display: grid;
-  gap: 22px;
+  gap: 24px;
+  color: rgba(255, 255, 255, 0.94);
 }
 
 .test-hud__hero {
-  padding: 34px;
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    radial-gradient(circle at 16% 20%, rgba(251, 146, 60, 0.16), transparent 36%),
-    linear-gradient(135deg, rgba(22, 27, 40, 0.96), rgba(11, 11, 16, 0.96));
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 30px 32px;
+  border: 1px solid var(--hud-border);
+  border-radius: 18px;
+  background: #11131b;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 
-  h1 { margin: 8px 0 10px; color: #fff; font-size: clamp(34px, 5vw, 58px); letter-spacing: -0.04em; }
-  p { max-width: 760px; margin: 0 0 6px; color: rgba(255, 255, 255, 0.68); font-size: 16px; line-height: 1.6; }
+  h1 {
+    margin: 5px 0 8px;
+    color: rgba(255, 255, 255, 0.96);
+    font-size: clamp(32px, 4vw, 48px);
+    letter-spacing: -0.04em;
+  }
+
+  > div > p {
+    max-width: 720px;
+    margin: 0;
+    color: var(--hud-text-secondary);
+    line-height: 1.55;
+  }
 }
 
 .test-hud__kicker {
-  color: rgba(255, 255, 255, 0.52);
-  font-size: 12px; font-weight: 900; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--hud-accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.test-hud__warning { color: #fbbf24; font-weight: 700; }
+.test-hud__warning {
+  max-width: 520px;
+  margin: 0;
+  color: #fbbf24;
+  font-weight: 700;
+}
 
 .test-hud__driving {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  color: rgba(255, 255, 255, 0.6);
-  font-size: 14px;
+  gap: 10px;
+  min-width: 270px;
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--hud-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
 
-  strong { color: rgba(255, 255, 255, 0.85); }
-  em { color: rgba(255, 255, 255, 0.45); font-style: normal; font-size: 13px; }
-  &.is-on strong { color: #22c55e; }
+  > span:last-child { display: grid; gap: 2px; }
+  strong { color: rgba(255, 255, 255, 0.88); font-size: 13px; }
+  em { color: var(--hud-text-muted); font-size: 11px; font-style: normal; }
 }
 
 .test-hud__driving-dot {
-  width: 9px; height: 9px; border-radius: 50%;
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
   background: rgba(255, 255, 255, 0.28);
-  .test-hud__driving.is-on & { background: #22c55e; box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.16); }
+}
+
+.test-hud__driving.is-on .test-hud__driving-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.14);
+}
+
+.test-hud__global {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
+  gap: 16px;
+}
+
+.test-hud__placement,
+.test-hud__always {
+  border: 1px solid var(--hud-border);
+  border-radius: 14px;
+  background: var(--hud-surface);
 }
 
 .test-hud__placement {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 18px 22px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.035);
+  gap: 18px;
+  padding: 17px 19px;
 
   &.is-on {
     border-color: rgba(34, 197, 94, 0.5);
-    background: rgba(34, 197, 94, 0.08);
+    background: rgba(34, 197, 94, 0.07);
   }
-
-  strong { display: block; color: #fff; font-size: 18px; }
-  span { color: rgba(255, 255, 255, 0.62); font-size: 14px; }
-  b { color: #fff; font-weight: 900; }
 }
 
-.test-hud__placement-actions { display: flex; gap: 10px; flex-shrink: 0; }
+.test-hud__placement-text,
+.test-hud__always-text {
+  display: grid;
+  gap: 3px;
+
+  strong { color: rgba(255, 255, 255, 0.94); font-size: 15px; }
+  span,
+  em { color: var(--hud-text-secondary); font-size: 12px; font-style: normal; line-height: 1.4; }
+  b { color: rgba(255, 255, 255, 0.92); }
+}
+
+.test-hud__placement-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
 
 .test-hud__always {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px 22px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.035);
+  padding: 17px 19px;
   cursor: pointer;
 
-  &.is-on { border-color: rgba(251, 146, 60, 0.5); background: rgba(251, 146, 60, 0.08); }
-
-  input { width: 18px; height: 18px; accent-color: #fb923c; flex-shrink: 0; }
-}
-
-.test-hud__always-text {
-  display: grid;
-  gap: 3px;
-  strong { color: #fff; font-size: 18px; }
-  em { color: rgba(255, 255, 255, 0.62); font-size: 14px; font-style: normal; line-height: 1.4; }
-}
-
-.test-hud__replay {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.72fr);
-  gap: 24px;
-  padding: 20px 22px;
-  border: 1px solid rgba(96, 165, 250, 0.35);
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.12), transparent 42%),
-    rgba(255, 255, 255, 0.035);
-
-  &.is-running {
-    border-color: rgba(34, 197, 94, 0.55);
-    box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.08);
+  &.is-on {
+    border-color: rgba(251, 146, 60, 0.45);
+    background: rgba(251, 146, 60, 0.07);
   }
 }
 
-.test-hud__replay-copy {
-  display: grid;
-  align-content: start;
-  gap: 7px;
+.test-hud__always input,
+.hud-control > input[type='checkbox'],
+.hud-control__state-toggle > input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: var(--hud-accent);
+}
 
-  p {
-    max-width: 680px;
-    margin: 0;
-    color: rgba(255, 255, 255, 0.64);
-    font-size: 13px;
+.test-hud__replay {
+  border: 1px solid rgba(96, 165, 250, 0.28);
+  border-radius: 14px;
+  background: var(--hud-surface);
+
+  &.is-running { border-color: rgba(34, 197, 94, 0.5); }
+
+  summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 15px 18px;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  summary::-webkit-details-marker { display: none; }
+  summary > span { display: grid; gap: 2px; }
+  summary strong { font-size: 15px; }
+  summary em { color: var(--hud-text-muted); font-size: 11px; font-style: normal; }
+  summary b { color: #93c5fd; font-size: 11px; letter-spacing: 0.06em; }
+}
+
+.test-hud__replay-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.75fr);
+  gap: 24px;
+  padding: 0 18px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+
+  > p {
+    margin: 16px 0 0;
+    color: var(--hud-text-secondary);
+    font-size: 12px;
     line-height: 1.5;
   }
 
   code { color: #bfdbfe; }
 }
 
-.test-hud__replay-title {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-
-  strong { color: #fff; font-size: 20px; }
-  span {
-    padding: 3px 9px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.62);
-    font-size: 10px;
-    font-weight: 900;
-    letter-spacing: 0.08em;
-  }
-}
-
-.test-hud__replay.is-running .test-hud__replay-title span { color: #86efac; background: rgba(34, 197, 94, 0.12); }
-
 .test-hud__replay-controls {
   display: grid;
   gap: 8px;
-  label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: rgba(255, 255, 255, 0.58); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
-  p { min-height: 34px; margin: 0; color: rgba(255, 255, 255, 0.52); font-size: 12px; line-height: 1.4; }
+  padding-top: 16px;
+
+  label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--hud-text-muted); font-size: 12px; font-weight: 700; }
+  p { min-height: 34px; margin: 0; color: var(--hud-text-muted); font-size: 12px; line-height: 1.4; }
   > div { display: flex; gap: 8px; }
   > em { color: #86efac; font-size: 12px; font-style: normal; }
   > em.is-error { color: #fca5a5; }
 }
 
-.test-hud__grid {
+.hud-workspace {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: minmax(248px, 0.72fr) minmax(0, 2fr);
+  align-items: start;
   gap: 18px;
 }
 
-.hud-card {
+.hud-overlay-list,
+.hud-settings {
+  border: 1px solid var(--hud-border);
+  background: var(--hud-surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.hud-overlay-list {
+  position: sticky;
+  top: 18px;
+  padding: 18px;
+  border-radius: 14px;
+
+  nav { display: grid; gap: 7px; margin-top: 16px; }
+}
+
+.hud-overlay-list__head {
   display: flex;
-  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+
+  h2 { margin: 4px 0 0; font-size: 19px; letter-spacing: -0.02em; }
+  > span { color: var(--hud-text-muted); font-size: 11px; white-space: nowrap; }
+}
+
+.hud-overlay-list__item {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 11px 12px 11px 15px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition: background-color 120ms ease, border-color 120ms ease;
+
+  &::before {
+    position: absolute;
+    inset: 8px auto 8px 0;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: transparent;
+    content: '';
+  }
+
+  &:hover { background: rgba(255, 255, 255, 0.04); }
+  &.is-selected {
+    border-color: rgba(251, 146, 60, 0.26);
+    background: rgba(251, 146, 60, 0.075);
+  }
+  &.is-selected::before { background: var(--hud-accent); }
+}
+
+.hud-overlay-list__title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+
+  strong { font-size: 14px; }
+  em { color: var(--hud-text-muted); font-size: 10px; font-style: normal; font-weight: 700; }
+  em.is-on { color: #86efac; }
+}
+
+.hud-overlay-list__visibility {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 10px;
+
+  i {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  &.is-visible { color: rgba(255, 255, 255, 0.72); }
+  &.is-visible i { background: #22c55e; }
+}
+
+.hud-training {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+  padding-top: 17px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+  > div { display: flex; justify-content: space-between; gap: 12px; }
+  strong { font-size: 13px; }
+  span { color: var(--hud-text-muted); font-size: 10px; }
+  .btn { justify-self: start; }
+}
+
+.hud-settings {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.hud-settings__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px 26px 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.018);
+
+  h2 { margin: 4px 0 6px; font-size: 28px; letter-spacing: -0.035em; }
+  p { max-width: 680px; margin: 0; color: var(--hud-text-secondary); font-size: 13px; line-height: 1.5; }
+}
+
+.hud-layout-preview {
+  display: grid;
+  flex: 0 0 auto;
+  gap: 6px;
+
+  > span {
+    color: var(--hud-text-muted);
+    font-size: 10px;
+    font-weight: 700;
+    text-align: right;
+  }
+}
+
+.hud-layout-preview__options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.16);
+
+  button {
+    min-height: 44px;
+    padding: 7px 11px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--hud-text-muted);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+
+    &:hover { color: rgba(255, 255, 255, 0.9); }
+    &.is-active {
+      background: rgba(251, 146, 60, 0.14);
+      color: #fdba74;
+    }
+  }
+}
+
+.hud-settings__common,
+.hud-settings__specific {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 20px 22px;
+}
+
+.hud-settings__common {
+  gap: 10px;
+}
+
+.hud-settings__section-head {
+  margin-bottom: 2px;
+
+  h3 { margin: 0; font-size: 16px; }
+}
+
+.hud-settings__common-panel,
+.hud-settings__specific-panel {
+  overflow: hidden;
+  gap: 1px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.hud-control--state {
+  display: flex;
+  align-items: center;
+  justify-content: start;
+}
+
+.hud-control__state-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  width: max-content;
+  cursor: pointer;
+
+  strong { color: rgba(255, 255, 255, 0.92); font-size: 13px; }
+}
+
+.hud-settings__control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+
+  > .hud-control {
+    min-width: 0;
+    min-height: 54px;
+    border: 0;
+    border-radius: 0;
+    background: var(--hud-surface);
+  }
+
+  &:has(> .hud-control:first-child:last-child) {
+    grid-template-columns: 1fr;
+  }
+
+  &:has(> .hud-control:nth-child(2):last-child) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  &:has(> .hud-control:nth-child(4):last-child) > .hud-control:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+.hud-settings__common-panel > .hud-control:not(.hud-control--state) {
+  justify-content: flex-start;
   gap: 14px;
-  padding: 22px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.035);
-  color: #fff;
 
-  > p { margin: 0; color: rgba(255, 255, 255, 0.66); line-height: 1.5; }
+  > span:first-child { flex: 0 1 110px; }
 }
 
-.hud-card--training { border-color: rgba(34, 197, 94, 0.28); }
-
-.hud-card__head {
-  display: flex; align-items: center; justify-content: space-between;
-  strong { font-size: 22px; letter-spacing: -0.02em; }
+.hud-settings__common-panel .hud-control__range {
+  grid-template-columns: 42px minmax(88px, 1fr);
+  flex: 1 1 150px;
+  min-width: 140px;
 }
 
-.hud-card__state {
-  padding: 3px 12px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.2);
-  font-size: 12px; font-weight: 900; letter-spacing: 0.08em; color: rgba(255, 255, 255, 0.55);
-  &.is-on { color: #22c55e; border-color: rgba(34, 197, 94, 0.5); }
+.hud-settings__divider {
+  height: 1px;
+  margin: 0 26px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.hud-card__actions { display: flex; gap: 10px; }
+.hud-settings__specific {
+  padding-top: 18px;
 
-.hud-card__size { display: flex; flex-direction: column; gap: 8px; }
-.hud-card__size-row { display: flex; align-items: center; justify-content: space-between; }
-.hud-card__formats-label { color: rgba(255, 255, 255, 0.5); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; }
-.hud-card__size-val { color: #fb923c; font-size: 13px; font-weight: 900; }
-.hud-card__slider-help {
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 12px;
-  font-style: normal;
-  line-height: 1.35;
+  .hud-select { flex-basis: 146px; min-width: 146px; }
 }
 
-.hud-card__option {
+.hud-settings__specific-panel > .hud-control:has(> input[type='checkbox']) {
+  justify-content: flex-start;
+  gap: 10px;
+  cursor: pointer;
+
+  > input[type='checkbox'] {
+    flex: 0 0 auto;
+    order: -1;
+    margin: 0;
+  }
+}
+
+.hud-settings__specific-panel > .hud-control:not(:has(> input[type='checkbox'])) {
+  justify-content: flex-start;
+  gap: 16px;
+
+  > span:first-child { flex: 0 1 150px; }
+}
+
+.hud-settings--band .hud-settings__common-panel {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+
+  > .hud-control--state { grid-column: 1 / -1; }
+  > .hud-control:not(.hud-control--state) { grid-column: span 2; }
+
+  &:has(> .hud-control:nth-child(2):last-child) > .hud-control:not(.hud-control--state) {
+    grid-column: 1 / -1;
+  }
+
+  &:has(> .hud-control:nth-child(3):last-child) > .hud-control:not(.hud-control--state) {
+    grid-column: span 3;
+  }
+}
+
+.hud-settings--flow {
+  .hud-settings__common-panel,
+  .hud-settings__specific-panel {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 22px;
+    row-gap: 8px;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .hud-settings__control-grid > .hud-control {
+    flex: 1 1 240px;
+    padding-inline: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+    background: transparent;
+  }
+
+  .hud-settings__control-grid > .hud-control--state {
+    flex: 0 1 210px;
+  }
+
+  .hud-settings__control-grid > .hud-control--slider {
+    flex-basis: 360px;
+  }
+
+  .hud-settings__specific-panel > .hud-control:has(> input[type='checkbox']) {
+    flex-basis: 190px;
+  }
+
+  .hud-settings__specific-panel > .hud-control:not(:has(> input[type='checkbox'])) {
+    flex-basis: 320px;
+  }
+}
+
+.hud-settings.is-overlay-disabled {
+  .hud-settings__common-panel > .hud-control:not(.hud-control--state),
+  .hud-settings__specific-panel > .hud-control {
+    opacity: 0.4;
+  }
+}
+
+.hud-settings__common-panel > .hud-control:not(.hud-control--state),
+.hud-settings__specific-panel > .hud-control {
+  transition: opacity 140ms ease;
+}
+
+.hud-control {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.035);
+  gap: 20px;
+  min-height: 58px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
 
-  span { display: grid; gap: 3px; }
-  strong { color: #fff; font-size: 14px; }
-  em { color: rgba(255, 255, 255, 0.55); font-size: 12px; font-style: normal; line-height: 1.35; }
-  input { width: 18px; height: 18px; accent-color: #22c55e; }
+  > span:first-child { display: grid; gap: 3px; min-width: 0; }
+  strong { color: rgba(255, 255, 255, 0.92); font-size: 13px; }
+  em { color: var(--hud-text-muted); font-size: 11px; font-style: normal; line-height: 1.35; }
 }
 
-.hud-card__select {
-  flex: 0 0 172px;
-  min-width: 172px;
-  padding: 8px 30px 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 9px;
+.hud-control__range {
+  display: grid !important;
+  grid-template-columns: 48px minmax(150px, 240px);
+  align-items: center;
+  gap: 12px !important;
+  min-width: 250px;
+
+  b {
+    color: var(--hud-accent);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+}
+
+.hud-select,
+.hud-number input {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 7px;
   background-color: #171b25;
-  color: #fff;
+  color: rgba(255, 255, 255, 0.94);
   color-scheme: dark;
   font: inherit;
-  font-weight: 800;
-  cursor: pointer;
-
-  option {
-    background-color: #171b25;
-    color: #fff;
-  }
-
-  option:checked {
-    background-color: #2563eb;
-    color: #fff;
-  }
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.hud-card__rpm {
+.hud-select {
+  flex: 0 0 172px;
+  min-width: 172px;
+  padding: 9px 30px 9px 10px;
+  cursor: pointer;
+
+  option { background-color: #171b25; color: rgba(255, 255, 255, 0.94); }
+}
+
+.hud-number {
   display: flex !important;
   align-items: center;
   gap: 7px !important;
-  input {
-    width: 94px;
-    padding: 8px;
-    border: 1px solid rgba(255,255,255,.2);
-    border-radius: 9px;
-    background: #171b25;
-    color: #fff;
-    font-weight: 900;
-  }
-  b { color: rgba(255,255,255,.5); font-size: 11px; }
+
+  input { width: 86px; padding: 9px; font-variant-numeric: tabular-nums; }
+  b { color: var(--hud-text-muted); font-size: 10px; text-transform: uppercase; }
 }
 
 .hud-slider {
@@ -1030,17 +1657,16 @@ async function toggleTraining() {
   -webkit-appearance: none;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.14);
-  outline: none;
   cursor: pointer;
 
   &::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
     width: 18px;
     height: 18px;
-    border-radius: 50%;
-    background: linear-gradient(90deg, #f97316, #fb923c);
+    appearance: none;
+    -webkit-appearance: none;
     border: 2px solid #1a0d04;
+    border-radius: 50%;
+    background: var(--hud-accent);
     cursor: pointer;
   }
 
@@ -1049,31 +1675,421 @@ async function toggleTraining() {
     height: 18px;
     border: 2px solid #1a0d04;
     border-radius: 50%;
-    background: #fb923c;
+    background: var(--hud-accent);
     cursor: pointer;
   }
-
-  &:disabled { opacity: 0.45; cursor: not-allowed; }
 }
 
 .btn {
-  padding: 8px 16px;
-  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 8px 14px;
   border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
-  color: #fff;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
   font-weight: 800;
-  cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
+  transition: background-color 120ms ease, border-color 120ms ease;
 
-  &:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.32); background: rgba(255, 255, 255, 0.07); }
-  &:disabled { opacity: 0.45; cursor: not-allowed; }
+  &:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.075); }
 }
 
-.btn--primary { border-color: transparent; background: linear-gradient(90deg, #f97316, #fb923c); color: #1a0d04; }
+.btn--primary {
+  border-color: transparent;
+  background: var(--hud-accent);
+  color: #1a0d04;
 
-@media (max-width: 760px) {
-  .test-hud__replay { grid-template-columns: 1fr; }
-  .test-hud__replay-controls label { align-items: stretch; flex-direction: column; }
+  &:hover:not(:disabled) { border-color: transparent; background: #fdba74; }
+}
+
+.btn:disabled,
+.hud-select:disabled,
+.hud-slider:disabled,
+.hud-number input:disabled,
+.hud-control > input:disabled,
+.hud-control__state-toggle > input:disabled,
+.test-hud__always input:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.hud-overlay-list__item:focus-visible,
+.hud-layout-preview__options button:focus-visible,
+.test-hud__replay summary:focus-visible,
+.hud-select:focus-visible,
+.hud-slider:focus-visible,
+.hud-number input:focus-visible,
+.hud-control > input:focus-visible,
+.hud-control__state-toggle > input:focus-visible,
+.test-hud__always input:focus-visible {
+  outline: 2px solid var(--hud-accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 980px) {
+  .test-hud__hero { align-items: flex-start; flex-direction: column; }
+  .test-hud__driving { width: 100%; }
+  .test-hud__global,
+  .hud-workspace { grid-template-columns: 1fr; }
+  .hud-overlay-list { position: static; }
+  .hud-layout-preview { width: 100%; }
+  .hud-layout-preview > span { text-align: left; }
+
+  .hud-settings__control-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    &:has(> .hud-control:first-child:last-child) {
+      grid-template-columns: 1fr;
+    }
+
+    > .hud-control:last-child:nth-child(odd) {
+      grid-column: 1 / -1;
+    }
+
+    &:has(> .hud-control:nth-child(4):last-child) > .hud-control:last-child {
+      grid-column: auto;
+    }
+  }
+
+  .hud-settings--band .hud-settings__common-panel {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+    > .hud-control:not(.hud-control--state) { grid-column: auto; }
+    > .hud-control--state,
+    &:has(> .hud-control:nth-child(2):last-child) > .hud-control:not(.hud-control--state),
+    &:has(> .hud-control:nth-child(4):last-child) > .hud-control:last-child {
+      grid-column: 1 / -1;
+    }
+  }
+
+  .hud-overlay-list nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .test-hud { gap: 16px; }
+  .test-hud__hero { padding: 24px 20px; }
+  .test-hud__placement { align-items: stretch; flex-direction: column; }
+  .test-hud__placement-actions { flex-wrap: wrap; }
+  .test-hud__replay-body { grid-template-columns: 1fr; }
+  .hud-overlay-list nav { grid-template-columns: 1fr; }
+  .hud-settings__head { flex-direction: column; padding: 22px 18px 18px; }
+  .hud-settings__common,
+  .hud-settings__specific { padding: 20px 18px; }
+  .hud-settings__divider { margin: 0 18px; }
+  .hud-layout-preview__options { width: 100%; }
+
+  .hud-settings__control-grid,
+  .hud-settings--band .hud-settings__common-panel {
+    grid-template-columns: 1fr;
+
+    > .hud-control { grid-column: auto !important; }
+  }
+
+  .hud-control:not(:has(> input[type='checkbox'])) { align-items: stretch; flex-direction: column; gap: 12px; }
+  .hud-control > input[type='checkbox'] { align-self: auto; }
+  .hud-control__range { grid-template-columns: 42px minmax(0, 1fr); width: 100%; min-width: 0; }
+  .hud-select { width: 100%; min-width: 0; }
+  .hud-settings__common-panel > .hud-control:not(.hud-control--state) > span:first-child,
+  .hud-settings__specific-panel > .hud-control:not(:has(> input[type='checkbox'])) > span:first-child {
+    flex-basis: auto;
+  }
+  .hud-settings__specific-panel > .hud-control:has(> input[type='checkbox']) {
+    align-items: center;
+    flex-direction: row;
+  }
+}
+
+/* PIP-281 — tre composizioni di confronto: stessi controlli, gerarchie diverse. */
+.hud-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Gli strumenti di guida e QA restano disponibili, ma non interrompono il workspace di configurazione. */
+.test-hud__hero { order: 1; }
+.test-hud__global { order: 2; }
+.test-hud__replay { order: 3; }
+.hud-workspace { order: 4; }
+
+.hud-overlay-list__label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.hud-overlay-list__icon {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.hud-overlay-list__title {
+  flex: 1;
+  align-items: center;
+}
+
+.hud-overlay-list__item.is-selected .hud-overlay-list__icon { color: var(--hud-accent); }
+
+.hud-control__state-toggle {
+  position: relative;
+  gap: 10px;
+}
+
+.hud-control__state-toggle > input[type='checkbox'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.hud-control__switch {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.hud-control__switch::after {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.76);
+  content: '';
+  transition: transform 140ms ease, background-color 140ms ease;
+}
+
+.hud-control__state-toggle > input:checked + .hud-control__switch {
+  border-color: transparent;
+  background: var(--hud-accent);
+}
+
+.hud-control__state-toggle > input:checked + .hud-control__switch::after {
+  transform: translateX(20px);
+  background: #1a0d04;
+}
+
+.hud-control__state-toggle > input:focus-visible + .hud-control__switch {
+  outline: 2px solid var(--hud-accent);
+  outline-offset: 3px;
+}
+
+.hud-info-group { min-width: 0; }
+
+.hud-info-group__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.hud-info-group__head svg { color: var(--hud-accent); }
+.hud-info-group__head strong { font-size: 14px; }
+
+.hud-info-group__options {
+  display: grid;
+  gap: 0;
+}
+
+.hud-info-group__options > .hud-control {
+  min-height: 54px;
+  padding-inline: 6px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  background: transparent;
+}
+
+.hud-info-group__options > .hud-control:last-child { border-bottom: 0; }
+
+/* Variante 2 — Colonne: interruttore a tutta riga, due colonne editoriali. */
+.hud-settings--columns .hud-settings__common { padding: 20px 26px 12px; }
+.hud-settings--columns .hud-settings__common-panel {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: visible;
+  column-gap: 42px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.hud-settings--columns .hud-settings__common-panel > .hud-control {
+  min-height: 76px;
+  padding-inline: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  background: transparent;
+}
+
+.hud-settings--columns .hud-settings__common-panel > .hud-control--state {
+  grid-column: 1 / -1;
+  min-height: 72px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(251, 146, 60, 0.04);
+}
+
+.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(odd):not(.hud-control--state) { padding-right: 32px; }
+.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(even) { padding-left: 32px; border-left: 1px solid rgba(255, 255, 255, 0.1); }
+.hud-settings--columns .hud-settings__specific { padding: 18px 26px 26px; }
+.hud-settings--columns .hud-settings__specific-panel {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 44px;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.hud-settings--columns .hud-info-group--strategy { grid-column: 2; grid-row: 1 / span 2; }
+.hud-settings--columns .hud-info-group--performance { margin-top: 18px; }
+
+
+/* Gli overlay con opzioni specifiche usano le stesse righe compatte di Info. */
+.hud-settings--columns .hud-settings__specific-panel > .hud-control {
+  min-height: 58px;
+  padding-inline: 0;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  background: transparent;
+}
+
+.hud-settings--columns .hud-settings__specific-panel > .hud-control:has(> input[type='checkbox']) {
+  gap: 10px;
+}
+
+.hud-settings--matrix .hud-settings__specific-panel > .hud-control {
+  min-height: 76px;
+  padding: 10px 26px;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  background: transparent;
+}
+
+.hud-settings--matrix .hud-settings__specific-panel > .hud-control:nth-child(3n) { border-right: 0; }
+/* Variante 3 — Matrice: massimo utilizzo dello spazio, griglia continua e leggibile. */
+.hud-settings--matrix .hud-settings__common { padding: 22px 0 0; }
+.hud-settings--matrix .hud-settings__section-head { padding: 0 26px 12px; }
+.hud-settings--matrix .hud-settings__common-panel {
+  grid-template-columns: 1fr;
+  overflow: visible;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  background: transparent;
+}
+
+.hud-settings--matrix .hud-settings__common-panel > .hud-control {
+  min-height: 72px;
+  padding-inline: 26px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  background: transparent;
+}
+
+.hud-settings--matrix .hud-settings__common-panel > .hud-control:last-child { border-bottom: 0; }
+.hud-settings--matrix .hud-settings__common-panel > .hud-control--state { min-height: 74px; background: rgba(251, 146, 60, 0.035); }
+.hud-settings--matrix .hud-settings__common-panel > .hud-control:not(.hud-control--state) { justify-content: flex-start; gap: 34px; }
+.hud-settings--matrix .hud-settings__common-panel > .hud-control:not(.hud-control--state) > span:first-child { flex: 0 0 min(32%, 300px); }
+.hud-settings--matrix .hud-settings__specific { padding: 24px 0 0; }
+.hud-settings--matrix .hud-settings__specific-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  overflow: visible;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  background: transparent;
+}
+
+.hud-settings--matrix .hud-info-group,
+.hud-settings--matrix .hud-info-group__options { display: contents; }
+.hud-settings--matrix .hud-info-group__head { display: none; }
+.hud-settings--matrix .hud-info-group__options > .hud-control {
+  min-height: 76px;
+  padding: 10px 26px;
+  border: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: transparent;
+}
+
+.hud-settings--matrix .hud-info-group__options > .hud-control:nth-child(3n) { border-right: 0; }
+.hud-settings--matrix .hud-info-group__options > .hud-control:last-child { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+
+@media (max-width: 980px) {
+  .hud-settings--columns .hud-settings__specific-panel { gap: 22px; }
+  .hud-settings--matrix .hud-settings__specific-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .hud-settings--matrix .hud-info-group__options > .hud-control:nth-child(3n) { border-right: 1px solid rgba(255, 255, 255, 0.1); }
+  .hud-settings--matrix .hud-info-group__options > .hud-control:nth-child(2n) { border-right: 0; }
+}
+
+@media (max-width: 680px) {
+  .hud-overlay-list__item { padding-left: 12px; }
+  .hud-settings--columns .hud-settings__common { padding-inline: 18px; }
+  .hud-settings--columns .hud-settings__common-panel,
+  .hud-settings--columns .hud-settings__specific-panel,
+  .hud-settings--matrix .hud-settings__specific-panel { grid-template-columns: 1fr; }
+  .hud-settings--columns .hud-settings__common-panel > .hud-control { padding-inline: 0; border-left: 0; }
+  .hud-settings--columns .hud-info-group--strategy { grid-column: auto; grid-row: auto; }
+  .hud-settings--columns .hud-info-group--performance { margin-top: 0; }
+  .hud-settings--matrix .hud-settings__common-panel > .hud-control { padding-inline: 18px; }
+  .hud-settings--matrix .hud-settings__common-panel > .hud-control:not(.hud-control--state) { gap: 16px; }
+  .hud-settings--matrix .hud-settings__common-panel > .hud-control:not(.hud-control--state) > span:first-child { flex-basis: auto; }
+  .hud-settings--matrix .hud-info-group__options > .hud-control { padding-inline: 18px; border-right: 0; }
+}
+
+/* Rifiniture Colonne: attivazione centrata e slider indipendenti. */
+.hud-settings--columns .hud-control--state,
+.hud-settings--columns .hud-control--state .hud-control__state-toggle {
+  align-items: center;
+}
+
+.hud-settings--columns .hud-control--state .hud-control__state-toggle { min-height: 0; }
+.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(odd):not(.hud-control--state) { padding-right: 0; }
+.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(even) { padding-left: 0; border-left: 0; }
+.hud-settings--columns .hud-settings__common-panel > .hud-control--slider > span:first-child strong { white-space: nowrap; }
+
+/* Fascia comune Colonne: padding uniforme, un solo divider prima delle opzioni specifiche. */
+.hud-settings--columns .hud-settings__common { padding-bottom: 0; }
+.hud-settings--columns .hud-settings__common-panel > .hud-control {
+  padding-inline: 18px;
+  border-bottom: 0;
+}
+
+.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(odd):not(.hud-control--state),
+.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(even) {
+  padding-inline: 18px;
+  border-left: 0;
+}
+
+@media (max-width: 680px) {
+  .hud-settings--columns .hud-settings__common-panel > .hud-control,
+  .hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(odd):not(.hud-control--state),
+  .hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(even) { padding-inline: 14px; }
 }
 </style>
