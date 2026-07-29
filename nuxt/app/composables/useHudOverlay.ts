@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { createOverlayInteractionRegions } from '~/composables/useOverlayInteractionRegions'
+import { useOverlayInteractionContract } from '~/composables/useOverlayInteractionContract'
 
 export interface HudOverlaySettings {
   enabled: boolean
@@ -75,23 +75,24 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
     return getApi()
   }
 
-  function setMousePassthrough(ignore: boolean): void {
-    const bridge = api()
-    if (!bridge?.hudOverlaySetMousePassthrough) return
-    void bridge.hudOverlaySetMousePassthrough(overlayId, ignore)
-  }
-
-  const interactionRegions = createOverlayInteractionRegions({
-    setMousePassthrough,
-    isInteractionForced: () => isPlacing.value,
+  const interactionContract = useOverlayInteractionContract({
+    getApi,
+    isForcedCapture: () => isPlacing.value,
   })
+  const { pointerState } = interactionContract
 
-  function startInteractionSurface(selector: string): void {
-    interactionRegions.start(selector)
+  function startInteractionSurface(
+    controlSelector: string,
+    surfaceSelector = '.hud-overlay__panel',
+  ): void {
+    interactionContract.start({
+      surfaceSelector,
+      controlSelector,
+    })
   }
 
   function stopInteractionSurface(): void {
-    interactionRegions.stop()
+    interactionContract.stop()
   }
 
   async function loadSettings(): Promise<HudOverlaySettings | null> {
@@ -123,7 +124,7 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
     if (typeof bridge.onHudOverlayPlacement === 'function') {
       unsubscribers.push(bridge.onHudOverlayPlacement((active: boolean) => {
         isPlacing.value = !!active
-        interactionRegions.reset()
+        interactionContract.refresh()
       }))
     }
     if (typeof bridge.onHudOverlayScale === 'function') {
@@ -159,6 +160,6 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
     stop,
     startInteractionSurface,
     stopInteractionSurface,
-    updateInteractionFromPoint: interactionRegions.updateFromPoint,
+    pointerState,
   }
 }

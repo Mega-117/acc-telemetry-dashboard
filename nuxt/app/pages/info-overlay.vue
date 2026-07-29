@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import InfoHud from '~/components/overlay/InfoHud.vue'
+import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
@@ -78,6 +79,7 @@ watch(
 
 onMounted(async () => {
   overlay.start(route.query.scale)
+  overlay.startInteractionSurface('', '.overlay-canvas')
   await overlay.loadSettings()
   telemetry.startFastStatePolling()
   const api = getApi()
@@ -100,6 +102,7 @@ onUnmounted(() => {
 
 <template>
   <main class="overlay-root">
+    <OverlaySoftwareCursor :state="overlay.pointerState" />
     <InfoHud
       :model="model"
       :local-time-value="localTimeValue"

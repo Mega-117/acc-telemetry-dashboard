@@ -8,6 +8,7 @@ import { useHudOverlay } from '~/composables/useHudOverlay'
 import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import HudOverlayBackground from '~/components/overlay/HudOverlayBackground.vue'
 import HudTimedPager from '~/components/overlay/HudTimedPager.vue'
+import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import TyreAdvancedHud from '~/components/overlay/TyreAdvancedHud.vue'
 import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 
@@ -34,6 +35,7 @@ const {
   start,
   stop,
   startInteractionSurface,
+  pointerState,
   setTransientViewport,
 } = overlay
 const { backgroundOpacity } = useHudOverlayBackground(settings)
@@ -95,6 +97,7 @@ onBeforeUnmount(() => {
     :style="{ '--hud-scale': scale }"
     :class="{ 'hud-overlay--web': !isElectron }"
   >
+    <OverlaySoftwareCursor :state="pointerState" />
     <div
       class="hud-overlay__panel"
       :class="{ 'hud-overlay__panel--advanced': variant === 'advanced' }"

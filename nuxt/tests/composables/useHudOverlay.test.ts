@@ -84,49 +84,23 @@ describe('useHudOverlay', () => {
     expect(off).toHaveBeenCalledTimes(3)
   })
 
-  it('abilita il mouse solo sulla superficie interattiva dichiarata', () => {
+  it('espone lo stato puntatore del contratto centralizzato', () => {
     const { api } = makeApi()
     const hud = useHudOverlay('tyres', () => api)
-    hud.start(1)
-    hud.startInteractionSurface('.hud-timed-pager__switcher')
-
-    let inside = true
-    vi.stubGlobal('document', {
-      elementsFromPoint: vi.fn(() => [{ closest: () => inside ? ({}) : null }]),
+    expect(hud.pointerState).toMatchObject({
+      cursorVisible: false,
+      surfaceHovered: false,
+      controlHovered: false,
     })
-    hud.updateInteractionFromPoint(10, 10)
-    hud.updateInteractionFromPoint(10, 10)
-    inside = false
-    hud.updateInteractionFromPoint(20, 20)
-
-    expect(api.hudOverlaySetMousePassthrough.mock.calls).toEqual([
-      ['tyres', true],
-      ['tyres', false],
-      ['tyres', true],
-    ])
   })
 
-  it('non altera il passthrough durante il posizionamento e lo ripristina alla chiusura', () => {
+  it('il placement aggiorna il contratto senza pilotare il passthrough legacy', () => {
     const { api, cbs } = makeApi()
     const hud = useHudOverlay('tyres', () => api)
     hud.start(1)
-    hud.startInteractionSurface('.hud-timed-pager__switcher')
-    vi.stubGlobal('document', {
-      elementsFromPoint: vi.fn(() => [{ closest: () => ({}) }]),
-    })
     cbs.placement!(true)
-    hud.updateInteractionFromPoint(10, 10)
-    expect(api.hudOverlaySetMousePassthrough.mock.calls).toEqual([
-      ['tyres', true],
-      ['tyres', false],
-    ])
-
     cbs.placement!(false)
-    hud.updateInteractionFromPoint(10, 10)
-    expect(api.hudOverlaySetMousePassthrough.mock.calls.slice(-2)).toEqual([
-      ['tyres', true],
-      ['tyres', false],
-    ])
+    expect(api.hudOverlaySetMousePassthrough).not.toHaveBeenCalled()
   })
 
   it('in web mode (nessuna API) non lancia e resta inerte', async () => {

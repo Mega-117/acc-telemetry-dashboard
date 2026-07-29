@@ -92,6 +92,7 @@ export default defineConfig({
         // ── PIP-175: overlay HUD multipli ────────────────────────────────
         'app/composables/useHudOverlay.ts',
         'app/composables/useOverlayInteractionRegions.ts',
+        'app/composables/useOverlayInteractionContract.ts',
       ],
     },
   },

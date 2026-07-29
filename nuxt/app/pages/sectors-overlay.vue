@@ -9,6 +9,7 @@ import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useCompletedLapHold } from '~/composables/useCompletedLapHold'
 import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
 import HudTimedPager from '~/components/overlay/HudTimedPager.vue'
+import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
 import { normalizeSectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 import {
@@ -62,6 +63,7 @@ const {
   start,
   stop,
   startInteractionSurface,
+  pointerState,
   setTransientViewport,
 } = useHudOverlay('sectors', getApi)
 
@@ -235,6 +237,7 @@ onBeforeUnmount(() => {
       'hud-overlay--target': onTargetPage,
     }"
   >
+    <OverlaySoftwareCursor :state="pointerState" />
     <div
       class="hud-overlay__panel"
       :class="{

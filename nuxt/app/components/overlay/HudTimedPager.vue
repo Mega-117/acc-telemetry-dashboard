@@ -135,6 +135,7 @@ onBeforeUnmount(pager.dispose)
 }
 
 .hud-timed-pager:hover .hud-timed-pager__switcher,
+:global(html.overlay-pointer-surface-hovered) .hud-timed-pager__switcher,
 .hud-timed-pager__switcher:focus-within {
   opacity: 1;
 }

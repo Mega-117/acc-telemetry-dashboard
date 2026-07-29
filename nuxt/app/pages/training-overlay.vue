@@ -19,7 +19,7 @@ import { useTrackingRecord } from '~/composables/useTrackingRecord'
 import { useStopHold } from '~/composables/useStopHold'
 import { useQualifyingVoice } from '~/composables/useQualifyingVoice'
 import { useOverlaySize } from '~/composables/useOverlaySize'
-import { createOverlayInteractionRegions } from '~/composables/useOverlayInteractionRegions'
+import { useOverlayInteractionContract } from '~/composables/useOverlayInteractionContract'
 import { useTrainingSelection, type PlanPreviewChip } from '~/composables/useTrainingSelection'
 import { useSessionOrchestrator } from '~/composables/useSessionOrchestrator'
 import {
@@ -31,6 +31,7 @@ import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
 import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
+import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useDevTestMode } from '~/composables/useDevTestMode'
@@ -454,19 +455,16 @@ function executePrimaryAction() {
   actions[primaryAction.value]?.()
 }
 
-// ─── Click-through (solo Electron) ─────────────────────────────────────────────
-// La finestra ignora il mouse (i click passano alle app sotto) tranne quando il
-// puntatore e' sulla superficie reale dell'overlay. Con forward attivo arrivano
-// solo mousemove: da li' decidiamo quando riattivare la cattura.
+// ─── Contratto interazione overlay (solo Electron) ────────────────────────────
 const OVERLAY_SURFACE_SELECTOR = '.overlay-card, .launcher-tools, .placement-work-area, .overlay-dev-toggle, .voice-point-notice'
-const interactionRegions = createOverlayInteractionRegions({
-  setMousePassthrough: (ignore) => {
-    void getOverlayApi()?.trainingOverlaySetMousePassthrough?.(ignore)
-  },
-  isInteractionForced: () => phase.value === 'placement',
-  onInteractionChange: (interactive) => {
-    isPointerOnOverlaySurface.value = interactive
-  },
+const OVERLAY_CONTROL_SELECTOR = 'button, input, select, textarea, [data-overlay-interactive]'
+const interactionContract = useOverlayInteractionContract({
+  getApi: getOverlayApi,
+  isForcedCapture: () => phase.value === 'placement',
+})
+const { pointerState } = interactionContract
+watch(() => pointerState.surfaceHovered, (hovered) => {
+  isPointerOnOverlaySurface.value = hovered
 })
 
 // ─── Input handling ───────────────────────────────────────────────────────────
@@ -598,8 +596,11 @@ onMounted(async () => {
     if (!isTargetSetupOpen.value) applyInfoTargetSettings(next)
   })
   window.addEventListener('keydown', handleLocalShortcut, true)
-  if (api?.trainingOverlaySetMousePassthrough) {
-    interactionRegions.start(OVERLAY_SURFACE_SELECTOR)
+  if (api?.overlayInteractionUpdateContract) {
+    interactionContract.start({
+      surfaceSelector: OVERLAY_SURFACE_SELECTOR,
+      controlSelector: OVERLAY_CONTROL_SELECTOR,
+    })
   }
   connectResizeObserver(); scheduleOverlaySizeSync()
 })
@@ -625,8 +626,8 @@ watch(
   phase,
   (nextPhase) => {
     const api = getOverlayApi()
-    if (!api?.trainingOverlaySetMousePassthrough) return
-    interactionRegions.reset()
+    if (!api?.overlayInteractionUpdateContract) return
+    interactionContract.refresh()
     if (nextPhase === 'placement') scheduleOverlaySizeSync()
   },
   { flush: 'post' }
@@ -639,7 +640,7 @@ onBeforeUnmount(() => {
   removeInfoTargetListener?.()
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleLocalShortcut, true)
-    interactionRegions.stop()
+    interactionContract.stop()
   }
   document.body.classList.remove('training-overlay-runtime')
 })
@@ -661,6 +662,7 @@ onBeforeUnmount(() => {
       }
     ]"
   >
+    <OverlaySoftwareCursor :state="pointerState" />
     <!-- Controlli dev (PIP-106): solo in sviluppo. Il badge appare quando ON. -->
     <button
       v-if="showDevControls"
