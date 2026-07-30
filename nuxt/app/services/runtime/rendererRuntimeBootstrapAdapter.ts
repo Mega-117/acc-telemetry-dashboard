@@ -170,6 +170,21 @@ function resolveUiStatus(snapshot: RuntimeUiSnapshot | null, gates: RuntimeUiMod
   return 'ready'
 }
 
+function shouldShowRuntimeBanner(
+  snapshot: RuntimeUiSnapshot | null,
+  status: RuntimeUiStatus
+): boolean {
+  if (status === 'ready') return false
+  if (status !== 'running') return true
+
+  const phase = snapshot?.phase || null
+  return snapshot?.lifecycle === 'starting'
+    || phase === 'checking_update'
+    || phase === 'migrating'
+    || phase === 'syncing'
+    || snapshot?.migrationProgress?.status === 'running'
+}
+
 export function deriveRuntimeUiModel(
   snapshot: RuntimeUiSnapshot | null,
   source: RuntimeUiModel['source']
@@ -240,7 +255,10 @@ export function deriveRuntimeUiModel(
   return {
     source,
     status,
-    visible: status !== 'ready',
+    // A pending capability is still deny-by-default, but it is not proof that
+    // update work is running. Avoid a global "in progress" banner for idle/auth
+    // waits while keeping the individual action gates closed and explainable.
+    visible: shouldShowRuntimeBanner(snapshot, status),
     ...copy[status],
     progress: Number.isFinite(progressValue)
       ? Math.max(0, Math.min(100, Math.round(progressValue)))

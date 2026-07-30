@@ -59,6 +59,45 @@ describe('runtime UI capability adapter', () => {
     expect(model.gates.sync.allowed).toBe(false)
   })
 
+  it.each(['idle', 'auth_pending'] as const)(
+    'non presenta %s come aggiornamento attivo ma conserva i gate pending',
+    (phase) => {
+      const model = deriveRuntimeUiModel(snapshot({
+        phase,
+        capabilities: {
+          localRead: { state: 'allowed', reason: 'offline_local_invariant' },
+          localWrite: { state: 'allowed', reason: 'offline_local_invariant' },
+          localProcessing: { state: 'allowed', reason: 'offline_local_invariant' },
+          cloudRead: { state: 'pending', reason: 'auth_cloud_pending' },
+          cloudWrite: { state: 'pending', reason: 'auth_cloud_pending' },
+          sync: { state: 'pending', reason: 'auth_cloud_pending' }
+        }
+      }), 'electron')
+
+      expect(model.status).toBe('running')
+      expect(model.visible).toBe(false)
+      expect(model.gates.cloudWrite.allowed).toBe(false)
+      expect(model.gates.sync.message).toContain('accesso al cloud')
+    }
+  )
+
+  it.each(['checking_update', 'migrating', 'syncing'] as const)(
+    'mostra il banner durante la fase operativa %s',
+    (phase) => {
+      const model = deriveRuntimeUiModel(snapshot({
+        phase,
+        capabilities: {
+          localRead: { state: 'allowed', reason: 'offline_local_invariant' },
+          cloudWrite: { state: 'pending', reason: 'runtime_operation_pending' },
+          sync: { state: 'pending', reason: 'runtime_operation_pending' }
+        }
+      }), 'electron')
+
+      expect(model.status).toBe('running')
+      expect(model.visible).toBe(true)
+    }
+  )
+
   it.each([
     ['future', 'future_schema_guard'],
     ['blocked', 'migration_persistent_failure']
