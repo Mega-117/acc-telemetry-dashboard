@@ -105,6 +105,55 @@ describe('runtimeBootstrapCoordinator', () => {
     ]))
   })
 
+  it('pubblica progresso monotono e usa il sync solo per partial recuperabile', async () => {
+    const progressSnapshots: number[] = []
+    const coordinator = createRuntimeBootstrapCoordinator()
+    const sync = vi.fn(async () => 'recovery-uploaded')
+    let migrationRun = 0
+    const result = await coordinator.run(context(), {
+      checkUpdate: async () => ({ status: 'current' }),
+      migrate: async (onProgress) => {
+        migrationRun += 1
+        await onProgress({ phase: 'audit', progress: 20, status: 'running' })
+        await onProgress({
+          phase: 'final_verification',
+          progress: 90,
+          status: 'sync_pending',
+          resumedFrom: 'partial'
+        })
+        if (migrationRun > 1) {
+          return {
+            status: 'healthy' as const,
+            compatibility: { mode: 'write_critical' as const, trusted: true, issues: [] }
+          }
+        }
+        return {
+          status: 'partial',
+          issues: ['raw_data_unavailable'],
+          compatibility: {
+            mode: 'write_critical' as const,
+            trusted: true,
+            issues: ['raw_data_unavailable']
+          }
+        }
+      },
+      sync,
+      onEvent: (event) => {
+        if (event.code === 'migration_progress') {
+          progressSnapshots.push(coordinator.getSnapshot().migrationProgress?.progress || 0)
+        }
+      }
+    })
+    expect(progressSnapshots).toEqual([20, 90, 90, 90])
+    expect(sync).toHaveBeenCalledOnce()
+    expect(result).toMatchObject({
+      phase: 'ready',
+      syncResult: 'recovery-uploaded',
+      migrationProgress: { progress: 90, resumedFrom: 'partial' }
+    })
+    expect(result.capabilities.sync.state).toBe('allowed')
+  })
+
   it('impedisce a un risultato stale di sostituire lo snapshot nuovo', async () => {
     let releaseOld!: () => void
     const oldWait = new Promise<void>((resolve) => { releaseOld = resolve })

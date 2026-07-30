@@ -14,9 +14,16 @@ import {
   getDoc,
   getDocs,
   query,
+  runTransaction,
   setDoc,
   updateDoc
 } from 'firebase/firestore'
+import {
+  advanceCanonicalMigrationCheckpoint,
+  buildCanonicalMigrationCheckpoint,
+  isCompletedCanonicalMigrationCheckpoint
+} from '~/services/sync/canonicalMigrationCheckpoint'
+import { inspectFirebaseStructureState } from '~/services/sync/firebaseStructureHealthService'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 
 const PROJECT_ID = 'accsuite117'
@@ -164,5 +171,101 @@ describe('heartbeat and admin projection rules', () => {
     const otherDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
     await assertSucceeds(getDoc(doc(adminDb, `pilotDirectory/${PILOT_UID}`)))
     await assertFails(getDoc(doc(otherDb, `pilotDirectory/${PILOT_UID}`)))
+  })
+})
+
+describe('migration checkpoint emulator', () => {
+  it('serializza checkpoint e rifiuta un writer stale dopo cambio lease', async () => {
+    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const userRef = doc(db, `users/${PILOT_UID}`)
+    await assertSucceeds(setDoc(userRef, {
+      maintenance: {
+        canonicalDataMigration: { version: 5, bestRulesVersion: 5, status: 'running' },
+        firebaseStructureHealth: {
+          status: 'repairing',
+          lease: { id: 'lease-1', expiresAt: '2026-07-30T19:00:00.000Z' }
+        }
+      }
+    }, { merge: true }))
+
+    const run = <T>(callback: Parameters<typeof advanceCanonicalMigrationCheckpoint>[0]['runTransaction'] extends (
+      callback: infer C
+    ) => Promise<T> ? C : never) => runTransaction(db, async (transaction) => callback(transaction as never))
+    const first = buildCanonicalMigrationCheckpoint({
+      attempt: 1,
+      phase: 'rebuild',
+      targetMigrationVersion: 5,
+      targetBestRulesVersion: 5
+    })
+    await expect(advanceCanonicalMigrationCheckpoint({
+      runTransaction: run as never,
+      userRef,
+      leaseId: 'lease-1',
+      checkpoint: first
+    })).resolves.toBe('advanced')
+
+    await assertSucceeds(setDoc(userRef, {
+      maintenance: {
+        firebaseStructureHealth: {
+          status: 'repairing',
+          lease: { id: 'lease-2', expiresAt: '2026-07-30T19:10:00.000Z' }
+        }
+      }
+    }, { merge: true }))
+    const stale = buildCanonicalMigrationCheckpoint({
+      attempt: 2,
+      phase: 'checking_status',
+      targetMigrationVersion: 5,
+      targetBestRulesVersion: 5,
+      resumedFrom: 'rebuild'
+    })
+    await expect(advanceCanonicalMigrationCheckpoint({
+      runTransaction: run as never,
+      userRef,
+      leaseId: 'lease-1',
+      checkpoint: stale
+    })).resolves.toBe('stale_lease')
+
+    const beforeResume = (await getDoc(userRef)).data()?.maintenance?.canonicalDataMigration?.checkpoint
+    expect(beforeResume.phase).toBe('rebuild')
+    expect(beforeResume.attempt).toBe(1)
+    await expect(advanceCanonicalMigrationCheckpoint({
+      runTransaction: run as never,
+      userRef,
+      leaseId: 'lease-2',
+      checkpoint: stale
+    })).resolves.toBe('advanced')
+    const resumed = (await getDoc(userRef)).data()?.maintenance?.canonicalDataMigration?.checkpoint
+    expect(resumed).toMatchObject({ attempt: 2, phase: 'checking_status', resumedFrom: 'rebuild' })
+  })
+
+  it('nega downgrade future e richiede completed prima di healthy', async () => {
+    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const userRef = doc(db, `users/${PILOT_UID}`)
+    await assertSucceeds(setDoc(userRef, {
+      maintenance: {
+        canonicalDataMigration: { version: 6, bestRulesVersion: 6, status: 'completed' },
+        firebaseStructureHealth: { status: 'future_schema' }
+      }
+    }, { merge: true }))
+    const stored = (await getDoc(userRef)).data()?.maintenance
+    expect(inspectFirebaseStructureState({
+      migration: stored?.canonicalDataMigration,
+      health: stored?.firebaseStructureHealth,
+      targetMigrationVersion: 5,
+      targetBestRulesVersion: 5
+    }).action).toBe('future_schema')
+
+    const finalVerification = buildCanonicalMigrationCheckpoint({
+      attempt: 1,
+      phase: 'final_verification',
+      targetMigrationVersion: 5,
+      targetBestRulesVersion: 5
+    })
+    expect(isCompletedCanonicalMigrationCheckpoint({
+      checkpoint: finalVerification,
+      targetMigrationVersion: 5,
+      targetBestRulesVersion: 5
+    })).toBe(false)
   })
 })

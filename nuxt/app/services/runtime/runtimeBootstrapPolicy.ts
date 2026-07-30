@@ -13,6 +13,16 @@ export type RuntimeMigrationCompatibility =
   | 'write_critical'
   | 'read_write_critical'
 
+export type RuntimeMigrationActivity = 'none' | 'own_lease' | 'other_lease'
+
+export interface RuntimeMigrationCompatibilityProfile {
+  mode: RuntimeMigrationCompatibility
+  trusted: boolean
+  issues?: string[]
+  activity?: RuntimeMigrationActivity
+  offlineCachedRead?: boolean
+}
+
 export type RuntimeCapabilityState = 'allowed' | 'pending' | 'blocked' | 'not_required'
 
 export interface RuntimeCapability {
@@ -34,7 +44,7 @@ export interface RuntimeBootstrapPolicyInput {
   network: RuntimeNetworkState
   auth: RuntimeAuthState
   health: RuntimeHealthState
-  compatibility?: RuntimeMigrationCompatibility
+  compatibility?: RuntimeMigrationCompatibility | RuntimeMigrationCompatibilityProfile
 }
 
 function capability(state: RuntimeCapabilityState, reason: string): RuntimeCapability {
@@ -69,11 +79,27 @@ export function resolveRuntimeBootstrapCapabilities(
   input: RuntimeBootstrapPolicyInput
 ): RuntimeBootstrapCapabilities {
   const local = localCapabilities()
-  if (input.network === 'offline') return { ...local, ...cloudPending('offline_cloud_pending') }
-  if (input.auth !== 'ready') return { ...local, ...cloudPending('auth_cloud_pending') }
+  const profile: RuntimeMigrationCompatibilityProfile = typeof input.compatibility === 'string'
+    ? { mode: input.compatibility, trusted: true }
+    : input.compatibility || { mode: 'read_write_critical', trusted: false }
+  const readCompatible = profile.trusted && (
+    profile.mode === 'read_compatible' || profile.mode === 'write_critical'
+  )
+  const recoverySyncSafe = input.health === 'partial'
+    && readCompatible
+    && (profile.issues || []).length > 0
+    && (profile.issues || []).every((issue) => (
+      issue === 'incomplete_cloud_only' || issue === 'raw_data_unavailable'
+    ))
 
-  const readCompatible = input.compatibility === 'read_compatible'
-    || input.compatibility === 'write_critical'
+  if (input.network === 'offline') {
+    const cloud = cloudPending('offline_cloud_pending')
+    if (profile.offlineCachedRead === true && readCompatible) {
+      cloud.cloudRead = capability('allowed', 'offline_trusted_cached_read')
+    }
+    return { ...local, ...cloud }
+  }
+  if (input.auth !== 'ready') return { ...local, ...cloudPending('auth_cloud_pending') }
 
   if (input.health === 'healthy') {
     return {
@@ -97,9 +123,15 @@ export function resolveRuntimeBootstrapCapabilities(
       cloudRead: readCompatible
         ? capability('allowed', 'migration_read_compatible')
         : capability('pending', reason),
-      cloudWrite: capability('pending', reason),
-      sync: capability('pending', reason),
-      migrate: capability('allowed', reason),
+      cloudWrite: recoverySyncSafe
+        ? capability('allowed', 'partial_recovery_upload_safe')
+        : capability('pending', reason),
+      sync: recoverySyncSafe
+        ? capability('allowed', 'partial_recovery_sync_safe')
+        : capability('pending', reason),
+      migrate: profile.activity === 'other_lease'
+        ? capability('pending', 'migration_lease_active')
+        : capability('allowed', reason),
       remoteHealth: capability('allowed', reason)
     }
   }

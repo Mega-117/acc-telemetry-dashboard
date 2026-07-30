@@ -3,6 +3,7 @@ import {
   completeOwnerDataMaintenanceAfterLocalSync,
   runOwnerDataMaintenanceGate,
   type OwnerDataMaintenancePhase,
+  type OwnerDataMaintenanceProgress,
   type OwnerDataMaintenanceReport,
   type OwnerDataMaintenanceStatus
 } from '~/services/sync/ownerDataMaintenanceService'
@@ -27,7 +28,11 @@ export function useOwnerDataMaintenance() {
   const isRunning = computed(() => status.value === 'checking' || status.value === 'running' || status.value === 'sync_pending')
   const blocksSync = computed(() => status.value === 'checking' || status.value === 'running')
 
-  async function runGate(uid: string, options: { electronAPI?: any; force?: boolean } = {}) {
+  async function runGate(uid: string, options: {
+    electronAPI?: any
+    force?: boolean
+    onProgress?: (progress: OwnerDataMaintenanceProgress) => void
+  } = {}) {
     return runOwnerDataMaintenanceGate({
       uid,
       electronAPI: options.electronAPI,
@@ -39,6 +44,7 @@ export function useOwnerDataMaintenance() {
         message.value = next.message
         error.value = next.error || null
         if (next.report) report.value = next.report
+        options.onProgress?.(next)
       }
     })
   }

@@ -40,4 +40,61 @@ describe('runtimeBootstrapPolicy', () => {
     expect(result.cloudWrite.state).toBe('blocked')
     expect(result.localWrite.state).toBe('allowed')
   })
+
+  it('consente offline soltanto la lettura cached con compatibilita trusted valida', () => {
+    const trusted = resolveRuntimeBootstrapCapabilities({
+      network: 'offline',
+      auth: 'ready',
+      health: 'partial',
+      compatibility: {
+        mode: 'write_critical', trusted: true, offlineCachedRead: true
+      }
+    })
+    const untrusted = resolveRuntimeBootstrapCapabilities({
+      network: 'offline',
+      auth: 'ready',
+      health: 'partial',
+      compatibility: {
+        mode: 'write_critical', trusted: false, offlineCachedRead: true
+      }
+    })
+    expect(trusted.cloudRead.state).toBe('allowed')
+    expect(trusted.cloudWrite.state).toBe('pending')
+    expect(trusted.sync.state).toBe('pending')
+    expect(trusted.migrate.state).toBe('pending')
+    expect(trusted.remoteHealth.state).toBe('pending')
+    expect(untrusted.cloudRead.state).toBe('pending')
+  })
+
+  it('lascia il normale sync ai partial recuperabili da nuovi raw', () => {
+    const result = resolveRuntimeBootstrapCapabilities({
+      network: 'online',
+      auth: 'ready',
+      health: 'partial',
+      compatibility: {
+        mode: 'write_critical',
+        trusted: true,
+        issues: ['incomplete_cloud_only', 'raw_data_unavailable']
+      }
+    })
+    expect(result.cloudRead.state).toBe('allowed')
+    expect(result.cloudWrite).toEqual({ state: 'allowed', reason: 'partial_recovery_upload_safe' })
+    expect(result.sync).toEqual({ state: 'allowed', reason: 'partial_recovery_sync_safe' })
+    expect(result.migrate.state).toBe('allowed')
+  })
+
+  it('attende il lease concorrente e blocca le mutazioni partial sconosciute', () => {
+    const result = resolveRuntimeBootstrapCapabilities({
+      network: 'online',
+      auth: 'ready',
+      health: 'repairing',
+      compatibility: {
+        mode: 'write_critical', trusted: true, activity: 'other_lease'
+      }
+    })
+    expect(result.cloudRead.state).toBe('allowed')
+    expect(result.cloudWrite.state).toBe('pending')
+    expect(result.sync.state).toBe('pending')
+    expect(result.migrate).toEqual({ state: 'pending', reason: 'migration_lease_active' })
+  })
 })

@@ -47,7 +47,8 @@ describe('runtimeWindowBridge', () => {
         kind: 'progress',
         code: 'bootstrap_ready',
         phase: 'ready'
-      }
+      },
+      migrationProgress: null
     })
     expect(buildRuntimeWindowSnapshot(state)).not.toHaveProperty('coordinatorKey')
   })

@@ -36,12 +36,16 @@ import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvali
 import { createRuntimeBootstrapCoordinator } from '~/services/runtime/runtimeBootstrapCoordinator'
 import {
     buildRendererBootstrapContext,
+    cacheRendererMaintenanceCompatibility,
     canRunBootstrapSync,
     recordRendererBootstrapEvent,
     resolveMaintenanceMigrationResult,
     resolveRendererUpdateResult
 } from '~/services/runtime/rendererRuntimeBootstrapAdapter'
-import type { OwnerDataMaintenanceReport } from '~/services/sync/ownerDataMaintenanceService'
+import {
+    OWNER_DATA_MIGRATION_VERSION,
+    type OwnerDataMaintenanceReport
+} from '~/services/sync/ownerDataMaintenanceService'
 import {
     isRuntimeWindowOwner,
     requestRuntimeWindowManualSync
@@ -567,28 +571,51 @@ export function useElectronSync() {
             electronAPI,
             uid: payload?.uid,
             canEnterApp: canEnterApp.value,
-            isOnline: typeof navigator === 'undefined' || navigator.onLine !== false
+            isOnline: typeof navigator === 'undefined' || navigator.onLine !== false,
+            targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
+            targetBestRulesVersion: BEST_RULES_VERSION,
+            compatibilityStorage: typeof window === 'undefined' ? null : window.localStorage
         })
-        let maintenanceNeedsLocalSync = false
-
         const result = await runtimeBootstrapCoordinator.run(context, {
             checkUpdate: async () => resolveRendererUpdateResult(
                 await electronAPI?.getSuiteVersion?.()
             ),
-            migrate: async () => {
+            migrate: async (publishProgress) => {
                 queueService.setStatus('maintaining')
-                const report = await ownerDataMaintenance.runGate(payload!.uid!, { electronAPI })
-                maintenanceNeedsLocalSync = report.needsSyncBeforeCompletion
+                const report = await ownerDataMaintenance.runGate(payload!.uid!, {
+                    electronAPI,
+                    onProgress: (progress) => {
+                        void publishProgress({
+                            phase: progress.phase === 'final_audit'
+                                ? 'final_verification'
+                                : progress.phase,
+                            progress: progress.progress,
+                            status: progress.status,
+                            code: progress.error || null,
+                            resumedFrom: progress.resumedFrom || null
+                        })
+                    }
+                })
+                cacheRendererMaintenanceCompatibility({
+                    storage: typeof window === 'undefined' ? null : window.localStorage,
+                    uid: payload!.uid!,
+                    report,
+                    targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
+                    targetBestRulesVersion: BEST_RULES_VERSION
+                })
                 return resolveMaintenanceMigrationResult(report as OwnerDataMaintenanceReport)
             },
             sync: async () => {
-                const results = await executeSyncTrigger('authReady', payload, maintenanceNeedsLocalSync)
+                const results = await executeSyncTrigger('authReady', payload, false)
                 if (results.some((item) => item.status === 'error')) {
                     throw new Error('sync_results_contain_errors')
                 }
                 return results
             },
-            onEvent: async (event) => recordRendererBootstrapEvent(electronAPI, event)
+            onEvent: async (event) => {
+                runtimeBootstrapState.value = runtimeBootstrapCoordinator.getSnapshot()
+                await recordRendererBootstrapEvent(electronAPI, event)
+            }
         })
 
         runtimeBootstrapState.value = result

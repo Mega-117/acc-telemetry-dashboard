@@ -16,7 +16,10 @@ describe('rendererRuntimeBootstrapAdapter', () => {
       isOnline: false
     })
     expect(context).toMatchObject({
-      coordinatorKey: 'canonical-key', network: 'offline', auth: 'ready', compatibility: 'write_critical'
+      coordinatorKey: 'canonical-key',
+      network: 'offline',
+      auth: 'ready',
+      compatibility: { mode: 'write_critical', trusted: true }
     })
   })
 
@@ -25,8 +28,15 @@ describe('rendererRuntimeBootstrapAdapter', () => {
     expect(resolveRendererUpdateResult({
       bootstrapUpdate: { status: 'failed', failure: { phase: 'manifest', errorType: 'network' } }
     })).toEqual({ status: 'failed', errorCode: 'manifest:network' })
-    expect(resolveMaintenanceMigrationResult({ status: 'skipped', healthStatus: 'partial' }).status)
-      .toBe('partial')
+    expect(resolveMaintenanceMigrationResult({
+      status: 'skipped',
+      healthStatus: 'partial',
+      healthIssues: ['raw_data_unavailable']
+    })).toMatchObject({
+      status: 'partial',
+      issues: ['raw_data_unavailable'],
+      compatibility: { mode: 'write_critical', trusted: true }
+    })
     expect(resolveMaintenanceMigrationResult({ status: 'skipped' }).status).toBe('partial')
     expect(canRunBootstrapSync({ capabilities: { sync: { state: 'pending' } } })).toBe(false)
     expect(canRunBootstrapSync({ capabilities: { sync: { state: 'allowed' } } })).toBe(true)

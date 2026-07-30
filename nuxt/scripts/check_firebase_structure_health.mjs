@@ -6,6 +6,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const files = {
   service: fs.readFileSync(path.join(root, 'app/services/sync/firebaseStructureHealthService.ts'), 'utf8'),
   gate: fs.readFileSync(path.join(root, 'app/services/sync/ownerDataMaintenanceService.ts'), 'utf8'),
+  checkpoint: fs.readFileSync(path.join(root, 'app/services/sync/canonicalMigrationCheckpoint.ts'), 'utf8'),
   repository: fs.readFileSync(path.join(root, 'app/repositories/pilotDirectoryRepository.ts'), 'utf8'),
   admin: fs.readFileSync(path.join(root, 'app/pages/piloti/index.vue'), 'utf8')
 }
@@ -17,6 +18,9 @@ const requirements = [
   [files.gate, 'verify_current', 'verifica leggera struttura corrente'],
   [files.gate, 'publishHealthOutcome', 'pubblicazione esito health'],
   [files.gate, 'lightweightVerificationFailed', 'rebuild dopo verifica leggera fallita'],
+  [files.gate, "phase: 'partial'", 'partial resta checkpoint recuperabile'],
+  [files.checkpoint, 'stale_lease', 'checkpoint protetto dal lease owner'],
+  [files.checkpoint, 'regression_rejected', 'checkpoint monotono'],
   [files.repository, 'firebaseHealthStatus', 'proiezione directory admin'],
   [files.admin, 'Firebase bloccato', 'stato health visibile admin']
 ]

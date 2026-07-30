@@ -11,6 +11,7 @@ function read(relativePath) {
 }
 
 const service = read('app/services/sync/ownerDataMaintenanceService.ts')
+const checkpoint = read('app/services/sync/canonicalMigrationCheckpoint.ts')
 const canonicalSummaryBridge = read('app/services/sync/canonicalSummaryBridge.ts')
 const composable = read('app/composables/useOwnerDataMaintenance.ts')
 const sync = read('app/composables/useElectronSync.ts')
@@ -19,7 +20,13 @@ const titlebar = read('app/components/electron/ElectronTitlebar.vue')
 const notification = read('app/components/electron/DataMaintenanceNotification.vue')
 
 assert.match(service, /OWNER_DATA_MIGRATION_VERSION/)
-assert.match(service, /maintenance:\s*{\s*canonicalDataMigration/s)
+assert.match(service, /advanceCanonicalMigrationCheckpoint/)
+assert.match(service, /trackedRunTransaction/)
+assert.match(checkpoint, /maintenance:\s*{\s*canonicalDataMigration/s)
+assert.match(checkpoint, /health\.status !== 'repairing'/)
+assert.match(checkpoint, /health\.lease\?\.id !== input\.leaseId/)
+assert.match(checkpoint, /return 'regression_rejected'/)
+assert.match(checkpoint, /return 'idempotent'/)
 assert.match(service, /runOwnerDataMaintenanceGate/)
 assert.match(service, /completeOwnerDataMaintenanceAfterLocalSync/)
 assert.match(service, /auditOwnerData/)

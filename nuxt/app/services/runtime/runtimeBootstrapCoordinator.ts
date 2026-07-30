@@ -4,6 +4,7 @@ import {
   type RuntimeBootstrapCapabilities,
   type RuntimeHealthState,
   type RuntimeMigrationCompatibility,
+  type RuntimeMigrationCompatibilityProfile,
   type RuntimeNetworkState
 } from './runtimeBootstrapPolicy'
 
@@ -38,7 +39,15 @@ export interface RuntimeBootstrapContext {
   network: RuntimeNetworkState
   auth: RuntimeAuthState
   health: RuntimeHealthState
-  compatibility?: RuntimeMigrationCompatibility
+  compatibility?: RuntimeMigrationCompatibility | RuntimeMigrationCompatibilityProfile
+}
+
+export interface RuntimeMigrationProgress {
+  phase: string
+  progress: number
+  status: string
+  code?: string | null
+  resumedFrom?: string | null
 }
 
 export interface RuntimeUpdateResult {
@@ -50,11 +59,15 @@ export interface RuntimeMigrationResult {
   status: 'healthy' | 'partial' | 'waiting_for_lease' | 'blocked' | 'future_schema'
   persistent?: boolean
   errorCode?: string
+  issues?: string[]
+  compatibility?: RuntimeMigrationCompatibilityProfile
 }
 
 export interface RuntimeBootstrapOperations<TSyncResult> {
   checkUpdate: () => Promise<RuntimeUpdateResult>
-  migrate: () => Promise<RuntimeMigrationResult>
+  migrate: (
+    onProgress: (progress: RuntimeMigrationProgress) => void | Promise<void>
+  ) => Promise<RuntimeMigrationResult>
   sync: () => Promise<TSyncResult>
   onEvent?: (event: RuntimeBootstrapEvent) => void | Promise<void>
 }
@@ -63,6 +76,7 @@ export interface RuntimeBootstrapResult<TSyncResult> {
   phase: RuntimeBootstrapPhase
   capabilities: RuntimeBootstrapCapabilities
   events: RuntimeBootstrapEvent[]
+  migrationProgress?: RuntimeMigrationProgress | null
   syncResult?: TSyncResult
 }
 
@@ -95,6 +109,30 @@ export function createRuntimeBootstrapCoordinator(): RuntimeBootstrapCoordinator
   ): Promise<RuntimeBootstrapResult<TSyncResult>> {
     const events: RuntimeBootstrapEvent[] = []
     let health = context.health
+    let compatibility = context.compatibility
+    let migrationProgress: RuntimeMigrationProgress | null = null
+
+    const currentCapabilities = () => resolveRuntimeBootstrapCapabilities({
+      ...context,
+      health,
+      compatibility
+    })
+
+    const applyMigrationResult = (migration: RuntimeMigrationResult) => {
+      health = migration.status === 'waiting_for_lease' ? 'repairing' : migration.status
+      compatibility = migration.compatibility || (typeof compatibility === 'string'
+        ? {
+            mode: compatibility,
+            trusted: true,
+            issues: migration.issues || [],
+            activity: migration.status === 'waiting_for_lease' ? 'other_lease' : 'none'
+          }
+        : {
+            ...(compatibility || { mode: 'read_write_critical', trusted: false }),
+            issues: migration.issues || compatibility?.issues || [],
+            activity: migration.status === 'waiting_for_lease' ? 'other_lease' : 'none'
+          })
+    }
 
     const emit = async (
       kind: RuntimeBootstrapEventKind,
@@ -118,6 +156,14 @@ export function createRuntimeBootstrapCoordinator(): RuntimeBootstrapCoordinator
         details: options.details
       }
       events.push(event)
+      if ((epochs.get(context.coordinatorKey) || 0) === epoch) {
+        snapshot = {
+          phase,
+          capabilities: currentCapabilities(),
+          events: [...events],
+          migrationProgress
+        }
+      }
       try {
         await operations.onEvent?.(event)
       } catch {
@@ -128,8 +174,9 @@ export function createRuntimeBootstrapCoordinator(): RuntimeBootstrapCoordinator
     const finish = (phase: RuntimeBootstrapPhase, syncResult?: TSyncResult) => {
       const result: RuntimeBootstrapResult<TSyncResult> = {
         phase,
-        capabilities: resolveRuntimeBootstrapCapabilities({ ...context, health }),
+        capabilities: currentCapabilities(),
         events,
+        migrationProgress,
         syncResult
       }
       if ((epochs.get(context.coordinatorKey) || 0) === epoch) snapshot = result
@@ -166,7 +213,24 @@ export function createRuntimeBootstrapCoordinator(): RuntimeBootstrapCoordinator
     await emit('progress', 'migration_started', 'migrating')
     let migration: RuntimeMigrationResult
     try {
-      migration = await operations.migrate()
+      migration = await operations.migrate(async (progress) => {
+        const nextProgress = Math.max(
+          migrationProgress?.progress || 0,
+          Math.min(100, Math.max(0, Number(progress.progress) || 0))
+        )
+        migrationProgress = {
+          phase: String(progress.phase || 'checking_status').slice(0, 80),
+          progress: nextProgress,
+          status: String(progress.status || 'running').slice(0, 40),
+          code: progress.code ? String(progress.code).slice(0, 80) : null,
+          resumedFrom: progress.resumedFrom
+            ? String(progress.resumedFrom).slice(0, 80)
+            : null
+        }
+        await emit('progress', 'migration_progress', 'migrating', {
+          details: migrationProgress as unknown as Record<string, unknown>
+        })
+      })
     } catch (error) {
       migration = {
         status: 'blocked',
@@ -174,7 +238,7 @@ export function createRuntimeBootstrapCoordinator(): RuntimeBootstrapCoordinator
         errorCode: error instanceof Error ? error.message : 'migration_failed'
       }
     }
-    health = migration.status === 'waiting_for_lease' ? 'repairing' : migration.status
+    applyMigrationResult(migration)
 
     if (migration.status === 'blocked' || migration.status === 'future_schema') {
       if (migration.persistent === true || migration.status === 'blocked') {
@@ -187,8 +251,44 @@ export function createRuntimeBootstrapCoordinator(): RuntimeBootstrapCoordinator
     }
     if (migration.status === 'partial' || migration.status === 'waiting_for_lease') {
       await emit('progress', 'migration_resume_pending', 'degraded', {
-        details: { status: migration.status }
+        details: { status: migration.status, issues: (migration.issues || []).slice(0, 20) }
       })
+      if (migration.status === 'partial' && currentCapabilities().sync.state === 'allowed') {
+        await emit('progress', 'migration_recovery_sync_started', 'syncing')
+        try {
+          const syncResult = await operations.sync()
+          await emit('progress', 'migration_recovery_sync_completed', 'migrating')
+          const resumed = await operations.migrate(async (progress) => {
+            const nextProgress = Math.max(
+              migrationProgress?.progress || 0,
+              Math.min(100, Math.max(0, Number(progress.progress) || 0))
+            )
+            migrationProgress = { ...progress, progress: nextProgress }
+            await emit('progress', 'migration_progress', 'migrating', {
+              details: migrationProgress as unknown as Record<string, unknown>
+            })
+          })
+          applyMigrationResult(resumed)
+          if (resumed.status === 'healthy') {
+            await emit('progress', 'bootstrap_ready', 'ready')
+            return finish('ready', syncResult)
+          }
+          if (resumed.status === 'blocked' && resumed.persistent === true) {
+            await emit('diagnostic', 'migration_persistent_failure', 'degraded', {
+              notifyNative: true,
+              details: { errorCode: resumed.errorCode || 'blocked' }
+            })
+          }
+          await emit('progress', 'migration_resume_pending', 'degraded', {
+            details: { status: resumed.status, issues: (resumed.issues || []).slice(0, 20) }
+          })
+          return finish('degraded', syncResult)
+        } catch (error) {
+          await emit('diagnostic', 'sync_retry_pending', 'degraded', {
+            details: { errorCode: error instanceof Error ? error.message : 'sync_failed' }
+          })
+        }
+      }
       return finish('degraded')
     }
 

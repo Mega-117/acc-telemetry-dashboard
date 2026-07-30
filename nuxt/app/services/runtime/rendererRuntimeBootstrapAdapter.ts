@@ -4,6 +4,12 @@ import type {
   RuntimeMigrationResult,
   RuntimeUpdateResult
 } from './runtimeBootstrapCoordinator'
+import {
+  clearTrustedRuntimeCompatibility,
+  readTrustedRuntimeCompatibility,
+  writeTrustedRuntimeCompatibility,
+  type RuntimeCompatibilityStorage
+} from './runtimeCompatibilityCache'
 
 interface SuiteVersionState {
   updateState?: string | null
@@ -17,6 +23,8 @@ interface MaintenanceReport {
   status?: string | null
   healthStatus?: string | null
   error?: string | null
+  healthIssues?: string[] | null
+  healthCheckedAt?: string | null
 }
 
 export function canRunBootstrapSync(input: {
@@ -39,15 +47,53 @@ export function resolveRendererUpdateResult(state: SuiteVersionState | null): Ru
 }
 
 export function resolveMaintenanceMigrationResult(report: MaintenanceReport): RuntimeMigrationResult {
-  if (report.healthStatus === 'healthy') return { status: 'healthy' }
-  if (report.healthStatus === 'partial') return { status: 'partial' }
-  if (report.healthStatus === 'repairing') return { status: 'waiting_for_lease' }
-  if (report.healthStatus === 'future_schema') return { status: 'future_schema' }
-  if (report.healthStatus === 'blocked') {
-    return { status: 'blocked', persistent: true, errorCode: report.error || 'blocked' }
+  const issues = (report.healthIssues || []).slice(0, 20)
+  if (report.healthStatus === 'healthy') {
+    return {
+      status: 'healthy',
+      issues: [],
+      compatibility: { mode: 'write_critical', trusted: true, issues: [] }
+    }
   }
-  if (report.status === 'completed') return { status: 'healthy' }
-  return { status: 'partial', errorCode: 'health_status_unknown' }
+  if (report.healthStatus === 'partial') {
+    return {
+      status: 'partial',
+      issues,
+      compatibility: { mode: 'write_critical', trusted: true, issues }
+    }
+  }
+  if (report.healthStatus === 'repairing') {
+    return {
+      status: 'waiting_for_lease',
+      issues,
+      compatibility: {
+        mode: 'write_critical', trusted: true, issues, activity: 'other_lease'
+      }
+    }
+  }
+  if (report.healthStatus === 'future_schema') {
+    return {
+      status: 'future_schema',
+      compatibility: { mode: 'read_write_critical', trusted: false, issues }
+    }
+  }
+  if (report.healthStatus === 'blocked') {
+    return {
+      status: 'blocked',
+      persistent: true,
+      errorCode: report.error || 'blocked',
+      issues,
+      compatibility: { mode: 'write_critical', trusted: true, issues }
+    }
+  }
+  return {
+    status: 'partial',
+    errorCode: 'health_status_unknown',
+    issues: ['health_status_unknown'],
+    compatibility: {
+      mode: 'write_critical', trusted: true, issues: ['health_status_unknown']
+    }
+  }
 }
 
 export async function buildRendererBootstrapContext(input: {
@@ -55,16 +101,54 @@ export async function buildRendererBootstrapContext(input: {
   uid: string | null | undefined
   canEnterApp: boolean
   isOnline: boolean
+  targetMigrationVersion?: number
+  targetBestRulesVersion?: number
+  compatibilityStorage?: RuntimeCompatibilityStorage | null
 }): Promise<RuntimeBootstrapContext> {
   const identity = await input.electronAPI?.getRuntimeIdentity?.()
+  const cached = input.isOnline ? null : readTrustedRuntimeCompatibility({
+    storage: input.compatibilityStorage,
+    uid: input.uid,
+    targetMigrationVersion: input.targetMigrationVersion ?? 5,
+    targetBestRulesVersion: input.targetBestRulesVersion ?? 5
+  })
   return {
     coordinatorKey: String(identity?.coordinatorKey || 'renderer-runtime-fallback'),
     network: input.isOnline ? 'online' : 'offline',
     auth: input.uid && input.canEnterApp ? 'ready' : 'pending',
-    health: 'unknown',
+    health: cached?.health || 'unknown',
     // OWNER_DATA_MIGRATION_VERSION=5 is read-compatible and write-critical.
-    compatibility: 'write_critical'
+    compatibility: cached?.compatibility || {
+      mode: 'write_critical', trusted: true, issues: []
+    }
   }
+}
+
+export function cacheRendererMaintenanceCompatibility(input: {
+  storage: RuntimeCompatibilityStorage | null | undefined
+  uid: string
+  report: MaintenanceReport
+  targetMigrationVersion: number
+  targetBestRulesVersion: number
+}): boolean {
+  if (input.report.healthStatus !== 'healthy' && input.report.healthStatus !== 'partial') {
+    clearTrustedRuntimeCompatibility(input.storage, input.uid)
+    return false
+  }
+  return writeTrustedRuntimeCompatibility({
+    storage: input.storage,
+    record: {
+      schemaVersion: 1,
+      policyVersion: 1,
+      uid: input.uid,
+      migrationVersion: input.targetMigrationVersion,
+      bestRulesVersion: input.targetBestRulesVersion,
+      health: input.report.healthStatus,
+      mode: 'write_critical',
+      issues: (input.report.healthIssues || []).slice(0, 20),
+      checkedAt: input.report.healthCheckedAt || new Date().toISOString()
+    }
+  })
 }
 
 export async function recordRendererBootstrapEvent(

@@ -6,6 +6,7 @@ import {
   trackedSetDoc
 } from '~/composables/useFirebaseTracker'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
+import { isCompletedCanonicalMigrationCheckpoint } from './canonicalMigrationCheckpoint'
 
 const CALLER = 'FirebaseStructureHealth'
 
@@ -49,7 +50,6 @@ export interface CanonicalMigrationState {
 
 export type FirebaseStructureHealthAction =
   | 'skip_healthy'
-  | 'skip_partial'
   | 'verify_current'
   | 'migrate'
   | 'wait_for_lease'
@@ -90,7 +90,7 @@ function isFreshTerminalHealth(
   nowMs: number,
   ttlMs: number
 ): boolean {
-  if (health?.status !== 'healthy' && health?.status !== 'partial') return false
+  if (health?.status !== 'healthy') return false
   if (Number(health.schemaVersion) !== FIREBASE_STRUCTURE_HEALTH_SCHEMA_VERSION) return false
   if (Number(health.migrationVersion) !== targetMigrationVersion) return false
   if (Number(health.bestRulesVersion) < targetBestRulesVersion) return false
@@ -146,9 +146,7 @@ export function inspectFirebaseStructureState(input: {
     nowMs,
     ttlMs
   )) {
-    return input.health?.status === 'partial'
-      ? { action: 'skip_partial', code: input.health.code || 'partial_recently_verified' }
-      : { action: 'skip_healthy', code: 'healthy_recently_verified' }
+    return { action: 'skip_healthy', code: 'healthy_recently_verified' }
   }
 
   return { action: 'verify_current', code: 'health_verification_required' }
@@ -327,11 +325,20 @@ export async function publishFirebaseStructureHealth(input: {
     maintenance: { firebaseStructureHealth: health }
   })
 
+  if (input.status === 'healthy' && !input.leaseId) return false
+
   if (input.leaseId) {
     const published = await trackedRunTransaction(db, CALLER, userRef, async (transaction) => {
       const snap = await transaction.get(userRef)
       const current = (snap.data()?.maintenance?.firebaseStructureHealth || null) as FirebaseStructureHealthState | null
       if (current?.status !== 'repairing' || current.lease?.id !== input.leaseId) {
+        return false
+      }
+      if (input.status === 'healthy' && !isCompletedCanonicalMigrationCheckpoint({
+        checkpoint: snap.data()?.maintenance?.canonicalDataMigration?.checkpoint,
+        targetMigrationVersion: input.targetMigrationVersion,
+        targetBestRulesVersion: input.targetBestRulesVersion
+      })) {
         return false
       }
       transaction.set(userRef, userPatch, { merge: true })

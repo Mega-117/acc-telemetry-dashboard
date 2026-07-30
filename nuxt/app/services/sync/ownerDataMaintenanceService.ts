@@ -1,6 +1,10 @@
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
-import { trackedGetDoc, trackedSetDoc, withFirebaseScenario } from '~/composables/useFirebaseTracker'
+import {
+  trackedGetDoc,
+  trackedRunTransaction,
+  withFirebaseScenario
+} from '~/composables/useFirebaseTracker'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import {
@@ -26,6 +30,13 @@ import {
   type FirebaseStructureHealthState,
   type FirebaseStructureHealthStatus
 } from './firebaseStructureHealthService'
+import {
+  advanceCanonicalMigrationCheckpoint,
+  buildCanonicalMigrationCheckpoint,
+  nextCanonicalMigrationAttempt,
+  type CanonicalMigrationCheckpoint,
+  type CanonicalMigrationCheckpointPhase
+} from './canonicalMigrationCheckpoint'
 
 const CALLER = 'OwnerDataMaintenance'
 export const OWNER_DATA_MIGRATION_VERSION = 5
@@ -61,6 +72,7 @@ export interface OwnerDataMaintenanceStoredState {
   updatedAt?: string | null
   lastError?: string | null
   report?: Record<string, unknown> | null
+  checkpoint?: CanonicalMigrationCheckpoint | null
 }
 
 interface OwnerDataMaintenanceEnvelope {
@@ -86,6 +98,9 @@ export interface OwnerDataMaintenanceReport {
   completedAt?: string | null
   error?: string | null
   healthStatus?: FirebaseStructureHealthStatus
+  healthIssues?: string[]
+  healthCheckedAt?: string | null
+  resumedFrom?: string | null
 }
 
 export interface OwnerDataMaintenanceProgress {
@@ -95,6 +110,7 @@ export interface OwnerDataMaintenanceProgress {
   message: string
   report?: OwnerDataMaintenanceReport | null
   error?: string | null
+  resumedFrom?: string | null
 }
 
 export interface OwnerDataMaintenanceRunOptions {
@@ -180,17 +196,40 @@ async function readStoredState(uid: string): Promise<OwnerDataMaintenanceEnvelop
   }
 }
 
-async function writeStoredState(uid: string, state: OwnerDataMaintenanceStoredState) {
-  await trackedSetDoc(doc(db, `users/${uid}`), sanitizeForFirestore({
-    maintenance: {
-      canonicalDataMigration: {
-        version: OWNER_DATA_MIGRATION_VERSION,
-        bestRulesVersion: BEST_RULES_VERSION,
-        updatedAt: nowIso(),
-        ...state
-      }
-    }
-  }), { merge: true }, CALLER)
+async function persistMigrationCheckpoint(input: {
+  uid: string
+  leaseId: string
+  attempt: number
+  phase: CanonicalMigrationCheckpointPhase
+  resumedFrom?: string | null
+  migrationPatch?: Record<string, unknown>
+}): Promise<CanonicalMigrationCheckpoint> {
+  const checkpoint = buildCanonicalMigrationCheckpoint({
+    attempt: input.attempt,
+    phase: input.phase,
+    targetMigrationVersion: OWNER_DATA_MIGRATION_VERSION,
+    targetBestRulesVersion: BEST_RULES_VERSION,
+    resumedFrom: input.resumedFrom
+  })
+  const userRef = doc(db, `users/${input.uid}`)
+  const result = await advanceCanonicalMigrationCheckpoint({
+    userRef,
+    leaseId: input.leaseId,
+    checkpoint,
+    migrationPatch: sanitizeForFirestore(input.migrationPatch || {}),
+    runTransaction: (callback) => trackedRunTransaction(
+      db,
+      CALLER,
+      userRef,
+      callback,
+      { reads: 1, writes: 1 }
+    )
+  })
+  if (result === 'stale_lease') throw createLeaseLostError()
+  if (result === 'regression_rejected') {
+    throw new Error('Regressione checkpoint migration rifiutata.')
+  }
+  return checkpoint
 }
 
 function emit(
@@ -218,6 +257,8 @@ function buildReport(params: Partial<OwnerDataMaintenanceReport> & {
     needsSyncBeforeCompletion: false,
     completedAt: null,
     error: null,
+    healthIssues: [],
+    healthCheckedAt: null,
     ...params
   }
 }
@@ -228,6 +269,7 @@ async function publishHealthOutcome(
   leaseId?: string
 ) {
   const outcome = classifyFirebaseStructureOutcome(input)
+  const checkedAt = nowIso()
   const published = await withFirebaseStructureRetry(() => publishFirebaseStructureHealth({
     uid,
     status: outcome.status,
@@ -235,10 +277,11 @@ async function publishHealthOutcome(
     targetBestRulesVersion: BEST_RULES_VERSION,
     code: outcome.code,
     issues: outcome.issues,
+    checkedAt,
     leaseId
   }))
   if (!published) throw createLeaseLostError()
-  return outcome.status
+  return { ...outcome, checkedAt }
 }
 
 function createLeaseLostError(): Error & { code: string } {
@@ -285,8 +328,21 @@ function skippedReport(
   })
 }
 
-async function markCompleted(uid: string, report: OwnerDataMaintenanceReport) {
-  await writeStoredState(uid, {
+async function markCompleted(input: {
+  uid: string
+  leaseId: string
+  attempt: number
+  resumedFrom?: string | null
+  report: OwnerDataMaintenanceReport
+}) {
+  const { uid, report } = input
+  await persistMigrationCheckpoint({
+    uid,
+    leaseId: input.leaseId,
+    attempt: input.attempt,
+    phase: 'completed',
+    resumedFrom: input.resumedFrom,
+    migrationPatch: {
     status: 'completed',
     startedAt: report.startedAt,
     completedAt: report.completedAt || nowIso(),
@@ -314,7 +370,54 @@ async function markCompleted(uid: string, report: OwnerDataMaintenanceReport) {
         pageSize: report.sessionListRebuild.pageSize
       } : null
     }
+    }
   })
+}
+
+async function finalizeMaintenanceOutcome(input: {
+  uid: string
+  leaseId: string
+  attempt: number
+  resumedFrom?: string | null
+  report: OwnerDataMaintenanceReport
+  incompleteCloudOnly?: number
+  skippedNoRaw?: number
+}): Promise<void> {
+  const outcome = classifyFirebaseStructureOutcome({
+    incompleteCloudOnly: input.incompleteCloudOnly,
+    skippedNoRaw: input.skippedNoRaw
+  })
+  if (outcome.status === 'healthy') {
+    await markCompleted(input)
+  } else {
+    await persistMigrationCheckpoint({
+      uid: input.uid,
+      leaseId: input.leaseId,
+      attempt: input.attempt,
+      phase: 'partial',
+      resumedFrom: input.resumedFrom,
+      migrationPatch: {
+        status: 'sync_pending',
+        startedAt: input.report.startedAt,
+        completedAt: null,
+        lastError: null,
+        report: {
+          status: 'partial',
+          issueCodes: outcome.issues
+        }
+      }
+    })
+    input.report.status = 'sync_pending'
+    input.report.phase = 'sync_pending'
+    input.report.needsSyncBeforeCompletion = true
+  }
+  const published = await publishHealthOutcome(input.uid, {
+    incompleteCloudOnly: input.incompleteCloudOnly,
+    skippedNoRaw: input.skippedNoRaw
+  }, input.leaseId)
+  input.report.healthStatus = published.status
+  input.report.healthIssues = published.issues
+  input.report.healthCheckedAt = published.checkedAt
 }
 
 export async function runOwnerDataMaintenanceGate(
@@ -324,6 +427,8 @@ export async function runOwnerDataMaintenanceGate(
   const startedAt = nowIso()
   const leaseId = createFirebaseStructureLeaseId()
   let leaseAcquired = false
+  let checkpointAttempt = 1
+  let resumedFrom: string | null = null
 
   return withFirebaseScenario('maintenance.ownerData.gate', { uid, force }, async () => {
     emit(onProgress, {
@@ -335,6 +440,8 @@ export async function runOwnerDataMaintenanceGate(
 
     const stored = await withFirebaseStructureRetry(() => readStoredState(uid))
     const storedState = stored.migration
+    checkpointAttempt = nextCanonicalMigrationAttempt(storedState?.checkpoint)
+    resumedFrom = storedState?.checkpoint?.phase || null
     const healthDecision = inspectFirebaseStructureState({
       migration: storedState,
       health: stored.health,
@@ -373,20 +480,18 @@ export async function runOwnerDataMaintenanceGate(
 
     if (
       healthDecision.action === 'skip_healthy'
-      || healthDecision.action === 'skip_partial'
       || healthDecision.action === 'wait_for_lease'
     ) {
       const message = healthDecision.action === 'wait_for_lease'
         ? 'Controllo struttura gia in corso su un altro client.'
-        : healthDecision.action === 'skip_partial'
-          ? 'Struttura dati verificata con limiti noti.'
-          : 'Struttura dati gia verificata.'
+        : 'Struttura dati gia verificata.'
       const healthStatus = healthDecision.action === 'skip_healthy'
         ? 'healthy'
-        : healthDecision.action === 'skip_partial'
-          ? 'partial'
-          : 'repairing'
+        : 'repairing'
       const report = skippedReport(uid, startedAt, message, healthStatus)
+      report.healthIssues = (stored.health?.issues || []).slice(0, 20)
+      report.healthCheckedAt = stored.health?.checkedAt || null
+      report.resumedFrom = resumedFrom
       emit(onProgress, {
         status: 'skipped',
         phase: 'skipped',
@@ -420,13 +525,35 @@ export async function runOwnerDataMaintenanceGate(
       return report
     }
 
+    await persistMigrationCheckpoint({
+      uid,
+      leaseId,
+      attempt: checkpointAttempt,
+      phase: 'checking_status',
+      resumedFrom,
+      migrationPatch: {
+        status: 'running',
+        startedAt,
+        completedAt: null,
+        lastError: null,
+        report: null
+      }
+    })
+
     let lightweightVerificationFailed = false
     if (healthDecision.action === 'verify_current' && stored.health?.status !== 'partial') {
       await ensureActiveLease(uid, leaseId)
       const verification = await withFirebaseStructureRetry(() => verifyOwnerMigrationLightweight(uid))
       if (verification.ok) {
-        await publishHealthOutcome(uid, {}, leaseId)
         const report = skippedReport(uid, startedAt, 'Struttura dati verificata.', 'healthy')
+        report.resumedFrom = resumedFrom
+        await finalizeMaintenanceOutcome({
+          uid,
+          leaseId,
+          attempt: checkpointAttempt,
+          resumedFrom,
+          report
+        })
         emit(onProgress, {
           status: 'skipped',
           phase: 'skipped',
@@ -441,19 +568,20 @@ export async function runOwnerDataMaintenanceGate(
 
     if (!force && isStoredStateReadyForSessionListUpgrade(storedState)) {
       await ensureActiveLease(uid, leaseId)
-      await withFirebaseStructureRetry(() => writeStoredState(uid, {
-        status: 'running',
-        startedAt,
-        completedAt: null,
-        lastError: null,
-        report: null
-      }))
+      await persistMigrationCheckpoint({
+        uid,
+        leaseId,
+        attempt: checkpointAttempt,
+        phase: 'rebuild',
+        resumedFrom
+      })
 
       emit(onProgress, {
         status: 'running',
         phase: 'rebuild',
         progress: 70,
-        message: 'Preparo lista sessioni ottimizzata...'
+        message: 'Preparo lista sessioni ottimizzata...',
+        resumedFrom
       })
       const sessionListRebuild = await withFirebaseStructureRetry(
         () => rebuildOwnerSessionListProjection(uid)
@@ -466,6 +594,13 @@ export async function runOwnerDataMaintenanceGate(
         message: 'Verifico lista sessioni...'
       })
       await ensureActiveLease(uid, leaseId)
+      await persistMigrationCheckpoint({
+        uid,
+        leaseId,
+        attempt: checkpointAttempt,
+        phase: 'final_verification',
+        resumedFrom
+      })
       const finalVerification = await withFirebaseStructureRetry(() => verifyOwnerMigrationLightweight(uid))
       if (!finalVerification.ok) {
         throw new Error(`Verifica lista sessioni non pulita: ${finalVerification.issues.join(', ')}`)
@@ -481,11 +616,16 @@ export async function runOwnerDataMaintenanceGate(
         completedAt: nowIso()
       })
       await ensureActiveLease(uid, leaseId)
-      await withFirebaseStructureRetry(() => markCompleted(uid, report))
-      report.healthStatus = await publishHealthOutcome(uid, {}, leaseId)
+      await finalizeMaintenanceOutcome({
+        uid,
+        leaseId,
+        attempt: checkpointAttempt,
+        resumedFrom,
+        report
+      })
       emit(onProgress, {
-        status: 'completed',
-        phase: 'completed',
+        status: report.status,
+        phase: report.phase,
         progress: 100,
         message: report.message,
         report
@@ -494,19 +634,20 @@ export async function runOwnerDataMaintenanceGate(
     }
 
     await ensureActiveLease(uid, leaseId)
-    await withFirebaseStructureRetry(() => writeStoredState(uid, {
-      status: 'running',
-      startedAt,
-      completedAt: null,
-      lastError: null,
-      report: null
-    }))
+    await persistMigrationCheckpoint({
+      uid,
+      leaseId,
+      attempt: checkpointAttempt,
+      phase: 'audit',
+      resumedFrom
+    })
 
     emit(onProgress, {
       status: 'checking',
       phase: 'audit',
       progress: 15,
-      message: 'Controllo coerenza dati cloud...'
+      message: 'Controllo coerenza dati cloud...',
+      resumedFrom
     })
 
     const audit = await withFirebaseStructureRetry(() => auditOwnerData(uid))
@@ -527,13 +668,17 @@ export async function runOwnerDataMaintenanceGate(
         completedAt: nowIso()
       })
       await ensureActiveLease(uid, leaseId)
-      await withFirebaseStructureRetry(() => markCompleted(uid, report))
-      report.healthStatus = await publishHealthOutcome(uid, {
+      await finalizeMaintenanceOutcome({
+        uid,
+        leaseId,
+        attempt: checkpointAttempt,
+        resumedFrom,
+        report,
         incompleteCloudOnly: audit.sessions.incompleteCloudOnly
-      }, leaseId)
+      })
       emit(onProgress, {
-        status: 'completed',
-        phase: 'completed',
+        status: report.status,
+        phase: report.phase,
         progress: 100,
         message: report.message,
         report
@@ -544,6 +689,14 @@ export async function runOwnerDataMaintenanceGate(
     const shouldReprocessCloudRaw = force || versionedRawReprocess || needsSummaryMigration(audit)
     let cloudReprocess: OwnerCloudSummaryReprocessReport | null = null
     if (shouldReprocessCloudRaw) {
+      await ensureActiveLease(uid, leaseId)
+      await persistMigrationCheckpoint({
+        uid,
+        leaseId,
+        attempt: checkpointAttempt,
+        phase: 'cloud_reprocess',
+        resumedFrom
+      })
       emit(onProgress, {
         status: 'running',
         phase: 'cloud_reprocess',
@@ -558,6 +711,14 @@ export async function runOwnerDataMaintenanceGate(
       }
     }
 
+    await ensureActiveLease(uid, leaseId)
+    await persistMigrationCheckpoint({
+      uid,
+      leaseId,
+      attempt: checkpointAttempt,
+      phase: 'rebuild',
+      resumedFrom
+    })
     emit(onProgress, {
       status: 'running',
       phase: 'rebuild',
@@ -573,6 +734,13 @@ export async function runOwnerDataMaintenanceGate(
       message: 'Verifico aggiornamento dati...'
     })
     await ensureActiveLease(uid, leaseId)
+    await persistMigrationCheckpoint({
+      uid,
+      leaseId,
+      attempt: checkpointAttempt,
+      phase: 'final_verification',
+      resumedFrom
+    })
     const finalVerification = await withFirebaseStructureRetry(() => verifyOwnerMigrationLightweight(uid))
     if (!finalVerification.ok) {
       throw new Error(`Verifica finale non pulita: ${finalVerification.issues.join(', ')}`)
@@ -590,14 +758,18 @@ export async function runOwnerDataMaintenanceGate(
       completedAt: nowIso()
     })
     await ensureActiveLease(uid, leaseId)
-    await withFirebaseStructureRetry(() => markCompleted(uid, report))
-    report.healthStatus = await publishHealthOutcome(uid, {
+    await finalizeMaintenanceOutcome({
+      uid,
+      leaseId,
+      attempt: checkpointAttempt,
+      resumedFrom,
+      report,
       incompleteCloudOnly: audit.sessions.incompleteCloudOnly,
       skippedNoRaw: cloudReprocess?.skippedNoRaw
-    }, leaseId)
+    })
     emit(onProgress, {
-      status: 'completed',
-      phase: 'completed',
+      status: report.status,
+      phase: report.phase,
       progress: 100,
       message: report.message,
       report
@@ -608,13 +780,20 @@ export async function runOwnerDataMaintenanceGate(
     if (leaseAcquired) {
       try {
         await ensureActiveLease(uid, leaseId)
-        await withFirebaseStructureRetry(() => writeStoredState(uid, {
-          status: 'failed',
-          startedAt,
-          completedAt: null,
-          lastError: message,
-          report: null
-        }))
+        await persistMigrationCheckpoint({
+          uid,
+          leaseId,
+          attempt: checkpointAttempt,
+          phase: 'blocked',
+          resumedFrom,
+          migrationPatch: {
+            status: 'failed',
+            startedAt,
+            completedAt: null,
+            lastError: message,
+            report: null
+          }
+        })
         await publishBlockedHealth(uid, error, leaseId)
       } catch {
         // A stale client must not overwrite the state owned by a newer lease.
@@ -633,65 +812,8 @@ export async function runOwnerDataMaintenanceGate(
 export async function completeOwnerDataMaintenanceAfterLocalSync(
   options: OwnerDataMaintenanceRunOptions
 ): Promise<OwnerDataMaintenanceReport> {
-  const { uid, onProgress } = options
-  const startedAt = nowIso()
-
-  return withFirebaseScenario('maintenance.ownerData.completeAfterLocalSync', { uid }, async () => {
-    emit(onProgress, {
-      status: 'running',
-      phase: 'rebuild',
-      progress: 70,
-      message: 'Ricostruisco riferimenti storici...'
-    })
-    const rebuild = await rebuildOwnerProjections(uid)
-
-    emit(onProgress, {
-      status: 'running',
-      phase: 'final_audit',
-      progress: 90,
-      message: 'Verifico aggiornamento dati...'
-    })
-    const finalVerification = await verifyOwnerMigrationLightweight(uid)
-    if (!finalVerification.ok) {
-      throw new Error(`Verifica finale dopo sync locale non pulita: ${finalVerification.issues.join(', ')}`)
-    }
-
-    const report = buildReport({
-      uid,
-      status: 'completed',
-      phase: 'completed',
-      message: 'Aggiornamento dati completato.',
-      rebuild,
-      startedAt,
-      completedAt: nowIso()
-    })
-    await markCompleted(uid, report)
-    report.healthStatus = 'healthy'
-    emit(onProgress, {
-      status: 'completed',
-      phase: 'completed',
-      progress: 100,
-      message: report.message,
-      report
-    })
-    return report
-  }).catch(async (error: any) => {
-    const message = error?.message || 'Chiusura migrazione dopo sync locale fallita.'
-    await writeStoredState(uid, {
-      status: 'failed',
-      startedAt,
-      completedAt: null,
-      lastError: message,
-      report: null
-    })
-    emit(onProgress, {
-      status: 'failed',
-      phase: 'failed',
-      progress: 100,
-      message,
-      error: message
-    })
-    throw error
-  })
+  // The post-sync verification is a new lease-scoped attempt, never an
+  // unguarded continuation of a lease that may have expired during uploads.
+  return runOwnerDataMaintenanceGate({ ...options, force: true })
 }
 

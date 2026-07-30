@@ -13,6 +13,13 @@ export interface RuntimeWindowSnapshot {
     code: string
     phase: string
   } | null
+  migrationProgress?: {
+    phase: string
+    progress: number
+    status: string
+    code?: string | null
+    resumedFrom?: string | null
+  } | null
   updatedAt?: string
 }
 
@@ -48,7 +55,8 @@ export function buildRuntimeWindowSnapshot(
     reasonCode: lifecycle === 'degraded' ? event?.code || 'bootstrap_degraded' : null,
     lastEvent: event
       ? { kind: event.kind, code: event.code, phase: event.phase }
-      : null
+      : null,
+    migrationProgress: state.migrationProgress || null
   }
 }
 

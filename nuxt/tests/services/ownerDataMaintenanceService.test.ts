@@ -13,6 +13,7 @@ const renewFirebaseStructureLeaseMock = vi.hoisted(() => vi.fn())
 const publishFirebaseStructureHealthMock = vi.hoisted(() => vi.fn())
 const classifyFirebaseStructureOutcomeMock = vi.hoisted(() => vi.fn())
 const classifyFirebaseStructureErrorMock = vi.hoisted(() => vi.fn())
+const advanceCheckpointMock = vi.hoisted(() => vi.fn())
 
 vi.mock('firebase/firestore', () => ({
   doc: (...parts: string[]) => ({ path: parts.join('/') })
@@ -22,8 +23,19 @@ vi.mock('~/config/firebase', () => ({ db: {} }))
 
 vi.mock('~/composables/useFirebaseTracker', () => ({
   trackedGetDoc: getDocMock,
+  trackedRunTransaction: vi.fn(),
   trackedSetDoc: setDocMock,
   withFirebaseScenario: (_name: string, _meta: unknown, fn: () => Promise<unknown>) => fn()
+}))
+
+vi.mock('~/services/sync/canonicalMigrationCheckpoint', () => ({
+  nextCanonicalMigrationAttempt: (checkpoint: { attempt?: number } | null) => Number(checkpoint?.attempt || 0) + 1,
+  buildCanonicalMigrationCheckpoint: (input: Record<string, unknown>) => ({
+    schemaVersion: 1,
+    sequence: (Number(input.attempt) * 1000) + 10,
+    ...input
+  }),
+  advanceCanonicalMigrationCheckpoint: advanceCheckpointMock
 }))
 
 vi.mock('~/services/sync/firebaseStructureHealthService', () => ({
@@ -121,6 +133,7 @@ describe('runOwnerDataMaintenanceGate', () => {
       issues: []
     })
     classifyFirebaseStructureErrorMock.mockReturnValue('unknown_error')
+    advanceCheckpointMock.mockResolvedValue('advanced')
   })
 
   it('salta audit e repair quando lo stato health recente e sano', async () => {
@@ -248,5 +261,44 @@ describe('runOwnerDataMaintenanceGate', () => {
     expect(report.status).toBe('completed')
     expect(reprocessOwnerCloudRawSummariesMock).toHaveBeenCalledWith('uid-1', { forceAll: true })
     expect(rebuildOwnerProjectionsMock).toHaveBeenCalledWith('uid-1')
+  })
+
+  it('mantiene partial recuperabile e abilita il normale sync per nuovi raw', async () => {
+    const audit = cleanAudit()
+    audit.sessions.incompleteCloudOnly = 1
+    audit.sessions.legacy = 1
+    audit.sessions.canonical = 0
+    auditOwnerDataMock.mockResolvedValue(audit)
+    reprocessOwnerCloudRawSummariesMock.mockResolvedValue({
+      scannedSessions: 1,
+      eligibleSessions: 1,
+      processedSessions: 0,
+      updatedSessions: 0,
+      failedSessions: 0,
+      skippedNoRaw: 1
+    })
+    classifyFirebaseStructureOutcomeMock.mockReturnValue({
+      status: 'partial',
+      code: 'repair_completed_with_limits',
+      issues: ['incomplete_cloud_only', 'raw_data_unavailable']
+    })
+    getDocMock.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ maintenance: { canonicalDataMigration: migration } })
+    })
+
+    const { runOwnerDataMaintenanceGate } = await import('~/services/sync/ownerDataMaintenanceService')
+    const report = await runOwnerDataMaintenanceGate({ uid: 'uid-1' })
+
+    expect(report).toMatchObject({
+      status: 'sync_pending',
+      phase: 'sync_pending',
+      needsSyncBeforeCompletion: true,
+      healthStatus: 'partial',
+      healthIssues: ['incomplete_cloud_only', 'raw_data_unavailable']
+    })
+    expect(advanceCheckpointMock).toHaveBeenCalledWith(expect.objectContaining({
+      checkpoint: expect.objectContaining({ phase: 'partial' })
+    }))
   })
 })

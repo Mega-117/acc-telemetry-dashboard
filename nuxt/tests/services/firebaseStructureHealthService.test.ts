@@ -65,7 +65,7 @@ describe('firebase structure writes', () => {
 
     await publishFirebaseStructureHealth({
       uid: 'uid-1',
-      status: 'healthy',
+      status: 'partial',
       targetMigrationVersion: 5,
       targetBestRulesVersion: 5,
       code: 'structure_verified'
@@ -145,6 +145,43 @@ describe('firebase structure writes', () => {
     })).resolves.toBe(false)
     expect(transaction.set).not.toHaveBeenCalled()
     expect(trackedGetDocMock).not.toHaveBeenCalled()
+  })
+
+  it('impedisce healthy senza checkpoint completed coerente', async () => {
+    const transaction = {
+      get: vi.fn().mockResolvedValue({
+        data: () => ({
+          maintenance: {
+            firebaseStructureHealth: {
+              status: 'repairing',
+              lease: { id: 'lease-1' }
+            },
+            canonicalDataMigration: {
+              checkpoint: {
+                schemaVersion: 1,
+                phase: 'final_verification',
+                targetMigrationVersion: 5,
+                targetBestRulesVersion: 5
+              }
+            }
+          }
+        })
+      }),
+      set: vi.fn()
+    }
+    trackedRunTransactionMock.mockImplementation(
+      async (_db: unknown, _caller: string, _target: unknown, callback: (tx: typeof transaction) => Promise<boolean>) => callback(transaction)
+    )
+
+    await expect(publishFirebaseStructureHealth({
+      uid: 'uid-1',
+      status: 'healthy',
+      targetMigrationVersion: 5,
+      targetBestRulesVersion: 5,
+      code: 'structure_verified',
+      leaseId: 'lease-1'
+    })).resolves.toBe(false)
+    expect(transaction.set).not.toHaveBeenCalled()
   })
 })
 
@@ -261,6 +298,24 @@ describe('inspectFirebaseStructureState', () => {
       health: {
         status: 'repairing',
         lease: { id: 'old', expiresAt: '2026-07-17T11:55:00.000Z' }
+      },
+      targetMigrationVersion: 5,
+      targetBestRulesVersion: 5,
+      nowMs: NOW
+    })
+    expect(result.action).toBe('verify_current')
+  })
+
+  it('rivaluta subito un partial fresco invece di trattarlo come terminale', () => {
+    const result = inspectFirebaseStructureState({
+      migration,
+      health: {
+        schemaVersion: FIREBASE_STRUCTURE_HEALTH_SCHEMA_VERSION,
+        migrationVersion: 5,
+        bestRulesVersion: 5,
+        status: 'partial',
+        checkedAt: '2026-07-17T11:59:00.000Z',
+        issues: ['raw_data_unavailable']
       },
       targetMigrationVersion: 5,
       targetBestRulesVersion: 5,
