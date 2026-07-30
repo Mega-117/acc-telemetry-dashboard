@@ -5,7 +5,7 @@
 // This component is only visible when running inside Electron
 // It provides: Refresh, Sync, Minimize, Maximize, Close buttons
 
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onBeforeUnmount, onMounted, nextTick, watch } from 'vue'
 import { useElectronSync } from '~/composables/useElectronSync'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
@@ -17,7 +17,9 @@ const isMaximized = ref(false)
 const isRefreshing = ref(false)
 
 // Sync composable
-const { isSyncing, syncTelemetryFiles, setupAutoSync, syncResults, pendingNotification, dataMaintenance } = useElectronSync()
+const { isSyncing, syncTelemetryFiles, syncResults, pendingNotification, dataMaintenance } = useElectronSync()
+const runtimeLifecycle = ref('starting')
+let unsubscribeRuntimeState: (() => void) | null = null
 const maintenanceStatus = dataMaintenance.status
 const maintenanceProgress = dataMaintenance.progress
 const maintenanceMessage = dataMaintenance.message
@@ -42,9 +44,18 @@ onMounted(async () => {
       console.log('[TITLEBAR] Could not get maximized state')
     }
     
-    // Setup auto-sync for file changes
-    setupAutoSync()
+    const api = (window as any).electronAPI
+    const initialRuntimeState = await api.getRuntimeBootstrapState?.()
+    runtimeLifecycle.value = initialRuntimeState?.lifecycle || 'starting'
+    unsubscribeRuntimeState = api.onRuntimeBootstrapState?.((state: { lifecycle?: string }) => {
+      runtimeLifecycle.value = state?.lifecycle || 'degraded'
+    }) || null
   }
+})
+
+onBeforeUnmount(() => {
+  unsubscribeRuntimeState?.()
+  unsubscribeRuntimeState = null
 })
 
 // Watch for auto-sync notifications (fires only when actual files were synced)
@@ -167,7 +178,7 @@ const closeMaintenanceNotification = () => {
       <button 
         class="titlebar-btn" 
         :class="{ 'syncing': isSyncing }"
-        :title="isSyncing ? 'Sincronizzazione in corso...' : 'Force Sync (sincronizza tutto)'"
+        :title="isSyncing ? 'Sincronizzazione in corso...' : `Force Sync via RuntimeWindow (${runtimeLifecycle})`"
         :disabled="isSyncing"
         @click="handleSync"
       >

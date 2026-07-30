@@ -42,6 +42,10 @@ import {
     resolveRendererUpdateResult
 } from '~/services/runtime/rendererRuntimeBootstrapAdapter'
 import type { OwnerDataMaintenanceReport } from '~/services/sync/ownerDataMaintenanceService'
+import {
+    isRuntimeWindowOwner,
+    requestRuntimeWindowManualSync
+} from '~/services/runtime/runtimeWindowBridge'
 
 const SYNC_CALLER = 'ElectronSync'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
@@ -607,6 +611,17 @@ export function useElectronSync() {
     }
 
     async function syncTelemetryFiles(specificFiles?: TelemetryFileDescriptor[]): Promise<SyncResult[]> {
+        const electronAPI = getElectronApi()
+        if (!isRuntimeWindowOwner(electronAPI)) {
+            const response = await requestRuntimeWindowManualSync(electronAPI)
+            if (response) {
+                return [{
+                    status: 'skipped',
+                    fileName: 'manualForceSync',
+                    reason: `runtime_window_${response.status}`
+                }]
+            }
+        }
         return executeTrigger(
             specificFiles && specificFiles.length > 0 ? 'filesChanged' : 'manualForceSync',
             specificFiles && specificFiles.length > 0 ? { files: specificFiles } : undefined
@@ -625,7 +640,7 @@ export function useElectronSync() {
         if (!isElectron.value || autoSyncInitialized) return
 
         const electronAPI = getElectronApi()
-        if (!electronAPI) return
+        if (!electronAPI || !isRuntimeWindowOwner(electronAPI)) return
 
         autoSyncInitialized = true
         setupAutoSyncController({

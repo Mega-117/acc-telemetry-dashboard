@@ -41,6 +41,7 @@ export default defineConfig({
         'app/services/runtime/runtimeBootstrapPolicy.ts',
         'app/services/runtime/runtimeBootstrapCoordinator.ts',
         'app/services/runtime/rendererRuntimeBootstrapAdapter.ts',
+        'app/services/runtime/runtimeWindowBridge.ts',
         'app/services/session-detail/sessionMath.ts',
         'app/services/session-detail/sessionLapSeries.ts',
         'app/services/sync/firebaseStructureHealthService.ts',

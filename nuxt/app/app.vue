@@ -47,8 +47,14 @@ const isHudOverlayRoute = computed(() => {
     || hudOverlayRoutes.includes(browserOverlayPath.value)
 })
 const standaloneRuntimeRoutes = ['/spotter-audio-runtime']
+const runtimeBootstrapRoute = '/runtime-bootstrap'
+const isRuntimeBootstrapRoute = computed(() => {
+  return normalizedRoutePath.value === runtimeBootstrapRoute
+    || browserOverlayPath.value === runtimeBootstrapRoute
+})
 const isStandaloneRuntimeRoute = computed(() => {
-  return standaloneRuntimeRoutes.includes(normalizedRoutePath.value)
+  return isRuntimeBootstrapRoute.value
+    || standaloneRuntimeRoutes.includes(normalizedRoutePath.value)
     || standaloneRuntimeRoutes.includes(browserOverlayPath.value)
 })
 const standaloneDevRoutes = ['/dev-voice-lab']
@@ -65,8 +71,11 @@ const isPrimaryClientRuntime = computed(() => {
     && !isStandaloneRuntimeRoute.value
     && !isStandaloneDevRoute.value
 })
-useClientHeartbeat({ enabled: isPrimaryClientRuntime })
-useClientDiagnostics({ enabled: isPrimaryClientRuntime })
+useClientHeartbeat({ enabled: isRuntimeBootstrapRoute })
+useClientDiagnostics({
+  captureEnabled: computed(() => isPrimaryClientRuntime.value || isRuntimeBootstrapRoute.value),
+  flushEnabled: isRuntimeBootstrapRoute
+})
 
 watch(normalizedRoutePath, (path, previousPath) => {
   if (path === '/dev-voice-lab') {

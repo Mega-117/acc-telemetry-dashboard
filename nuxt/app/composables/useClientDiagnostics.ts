@@ -34,17 +34,23 @@ function errorDetails(error: unknown): { message: string, stack: string } {
   return { message: String(error || 'Errore sconosciuto'), stack: '' }
 }
 
-export function useClientDiagnostics(options: { enabled: Ref<boolean> }) {
+export function useClientDiagnostics(options: {
+  enabled?: Ref<boolean>
+  captureEnabled?: Ref<boolean>
+  flushEnabled?: Ref<boolean>
+}) {
   const { currentUser, canEnterApp } = useFirebaseAuth()
   const nuxtApp = useNuxtApp()
   const route = useRoute()
   const lastCapturedByFingerprint = new Map<string, number>()
   let intervalId: number | null = null
   let isFlushing = false
+  const canCapture = () => options.captureEnabled?.value ?? options.enabled?.value ?? false
+  const canFlush = () => options.flushEnabled?.value ?? options.enabled?.value ?? false
 
   async function capture(input: LocalClientDiagnostic): Promise<boolean> {
     try {
-      if (!options.enabled.value) return false
+      if (!canCapture()) return false
       const event = createLocalDiagnostic(input)
       const now = Date.now()
       if (!shouldCaptureDiagnostic(lastCapturedByFingerprint.get(event.fingerprint), now)) {
@@ -78,7 +84,7 @@ export function useClientDiagnostics(options: { enabled: Ref<boolean> }) {
     const uid = currentUser.value?.uid
     const electronAPI = getElectronApi()
     if (
-      !options.enabled.value
+      !canFlush()
       || !uid
       || !canEnterApp.value
       || !electronAPI?.listDiagnostics
@@ -165,7 +171,7 @@ export function useClientDiagnostics(options: { enabled: Ref<boolean> }) {
   }
 
   const stopWatch = watch(
-    [currentUser, canEnterApp, options.enabled],
+    [currentUser, canEnterApp, options.flushEnabled || options.enabled!],
     ([user, canEnter, enabled]) => {
       if (user && canEnter && enabled) void flush()
     },

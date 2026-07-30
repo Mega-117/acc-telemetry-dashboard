@@ -28,6 +28,11 @@ const currentUserProfile = ref<any | null>(null)
 
 let authListenerInitialized = false
 
+function ownsLocalIdentityBridge(): boolean {
+    if (typeof window === 'undefined') return true
+    return (window as any).electronAPI?.runtimeBootstrapRole !== 'owner'
+}
+
 async function reloadPersistedUser(user: User): Promise<User | null> {
     try {
         await user.reload()
@@ -55,7 +60,7 @@ async function syncAuthenticatedUser(user: User): Promise<User | null> {
         currentUserProfile.value = null
         userRole.value = 'pilot'
         firestoreNickname.value = user.displayName || user.email?.split('@')[0] || ''
-        await clearLocalUserIdentity()
+        if (ownsLocalIdentityBridge()) await clearLocalUserIdentity()
         return user
     }
 
@@ -63,7 +68,7 @@ async function syncAuthenticatedUser(user: User): Promise<User | null> {
     const ensured = await ensureUserDocument(user)
     userRole.value = ensured.role
     firestoreNickname.value = ensured.nickname
-    await saveLocalUserIdentity(user)
+    if (ownsLocalIdentityBridge()) await saveLocalUserIdentity(user)
     return user
 }
 
@@ -73,7 +78,7 @@ async function syncLoggedOutUser() {
     userProfileCache.clear()
     userProfileRequests.clear()
     currentUserProfile.value = null
-    await clearLocalUserIdentity()
+    if (ownsLocalIdentityBridge()) await clearLocalUserIdentity()
 }
 
 async function loadCachedUserProfile(uid: string, { force = false } = {}) {
