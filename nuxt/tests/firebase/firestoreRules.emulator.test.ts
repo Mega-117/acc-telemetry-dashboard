@@ -29,6 +29,7 @@ import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 const PROJECT_ID = 'accsuite117'
 const PILOT_UID = 'qa-pilot'
 const SECOND_PILOT_UID = 'qa-pilot-2'
+const COACH_UID = 'qa-coach'
 const ADMIN_UID = 'qa-admin'
 
 let testEnv: RulesTestEnvironment
@@ -94,6 +95,10 @@ beforeEach(async () => {
       }),
       setDoc(doc(db, `users/${ADMIN_UID}`), {
         role: 'admin',
+        coachId: null
+      }),
+      setDoc(doc(db, `users/${COACH_UID}`), {
+        role: 'coach',
         coachId: null
       }),
       setDoc(doc(db, `pilotDirectory/${PILOT_UID}`), {
@@ -184,7 +189,7 @@ describe('heartbeat and admin projection rules', () => {
     }))
   })
 
-  it('nega cross-user e consente read/list admin', async () => {
+  it('nega cross-user e coach, consente read/list admin', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(
         doc(context.firestore(), `users/${PILOT_UID}/runtimeInstallations/install-a`),
@@ -192,9 +197,11 @@ describe('heartbeat and admin projection rules', () => {
       )
     })
     const otherDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
     const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
 
     await assertFails(getDoc(doc(otherDb, `users/${PILOT_UID}/runtimeInstallations/install-a`)))
+    await assertFails(getDocs(collectionGroup(coachDb, 'runtimeInstallations')))
     await assertSucceeds(getDoc(doc(adminDb, `users/${PILOT_UID}/runtimeInstallations/install-a`)))
     await assertSucceeds(getDocs(collectionGroup(adminDb, 'runtimeInstallations')))
   })

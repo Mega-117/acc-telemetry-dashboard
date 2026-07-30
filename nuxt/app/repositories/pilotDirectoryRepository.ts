@@ -58,7 +58,7 @@ function buildDirectoryConstraints(params: {
   return constraints
 }
 
-function mapPilotDoc(docSnap: any): PilotDirectoryItem {
+export function mapPilotDirectoryDocument(docSnap: any): PilotDirectoryItem {
   const data = docSnap.data() || {}
   return {
     uid: data.uid || docSnap.id,
@@ -111,7 +111,7 @@ export async function loadPilotDirectoryPage(params: {
   const pageDocs = visibleDocs.slice(0, pageSize)
 
   return {
-    pilots: pageDocs.map(mapPilotDoc),
+    pilots: pageDocs.map(mapPilotDirectoryDocument),
     nextCursor: (pageDocs.length > 0 ? pageDocs[pageDocs.length - 1] : null) as DocumentSnapshot | null,
     hasNext: visibleDocs.length > pageSize
   }

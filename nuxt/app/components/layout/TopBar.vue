@@ -30,7 +30,7 @@ const showVoiceControls = false
 const showNotificationBell = false
 
 const goToCoachArea = () => {
-  navigateTo('/piloti')
+  navigateTo(isAdmin.value ? '/admin/cockpit' : '/piloti')
 }
 
 // ============================================
@@ -184,7 +184,7 @@ onMounted(() => {
         class="coach-button" 
         :class="{ 'coach-button--admin': isAdmin }"
         @click="goToCoachArea"
-        :title="isAdmin ? 'Gestione utenti' : 'I miei piloti'"
+        :title="isAdmin ? 'Cockpit amministratore' : 'I miei piloti'"
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <circle cx="9" cy="7" r="4"/>

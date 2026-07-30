@@ -6,6 +6,7 @@
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { waitForAuthSettled } from '~/utils/authRouteGuard'
 
+const route = useRoute()
 const {
   userDisplayName,
   logout: firebaseLogout,
@@ -42,7 +43,8 @@ const goToProfile = () => {
 
 // Dynamic badge and title based on role
 const areaBadge = computed(() => isAdmin.value ? 'ADMIN' : 'COACH')
-const areaTitle = computed(() => isAdmin.value ? 'GESTIONE UTENTI' : 'AREA PILOTI')
+const areaTitle = computed(() => isAdmin.value ? 'Cockpit amministratore' : 'Area piloti')
+const isAdminRouteActive = (path: string) => route.path === path || route.path.startsWith(`${path}/`)
 </script>
 
 <template>
@@ -64,9 +66,17 @@ const areaTitle = computed(() => isAdmin.value ? 'GESTIONE UTENTI' : 'AREA PILOT
           <span class="area-name">{{ areaTitle }}</span>
         </div>
 
-        <NuxtLink v-if="isAdmin" class="diagnostics-link" to="/admin-diagnostics">
-          Diagnostica
-        </NuxtLink>
+        <nav v-if="isAdmin" class="admin-nav" aria-label="Navigazione amministratore">
+          <NuxtLink to="/admin/cockpit" :aria-current="isAdminRouteActive('/admin/cockpit') ? 'page' : undefined">
+            Cockpit
+          </NuxtLink>
+          <NuxtLink to="/piloti" :aria-current="isAdminRouteActive('/piloti') ? 'page' : undefined">
+            Utenti
+          </NuxtLink>
+          <NuxtLink to="/admin-diagnostics" :aria-current="isAdminRouteActive('/admin-diagnostics') ? 'page' : undefined">
+            Diagnostica
+          </NuxtLink>
+        </nav>
 
         <!-- Spacer -->
         <div class="header-spacer"></div>
@@ -161,22 +171,37 @@ const areaTitle = computed(() => isAdmin.value ? 'GESTIONE UTENTI' : 'AREA PILOT
   font-family: 'Outfit', sans-serif;
   font-size: 18px;
   font-weight: 700;
-  letter-spacing: 2px;
+  letter-spacing: -0.01em;
   color: #fff;
 }
 
-.diagnostics-link {
-  padding: 8px 12px;
-  color: #c4b5fd;
-  font-size: 12px;
-  font-weight: 700;
-  text-decoration: none;
-  border: 1px solid rgba(#8b5cf6, 0.4);
-  border-radius: 8px;
+.admin-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
-.diagnostics-link:hover {
+.admin-nav a {
+  padding: 8px 12px;
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  transition: color 80ms ease-out, background-color 80ms ease-out, border-color 80ms ease-out;
+}
+
+.admin-nav a:hover,
+.admin-nav a[aria-current="page"] {
+  color: #c4b5fd;
   background: rgba(#8b5cf6, 0.12);
+  border-color: rgba(#8b5cf6, 0.3);
+}
+
+.admin-nav a:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
 }
 
 .header-spacer {
@@ -187,5 +212,23 @@ const areaTitle = computed(() => isAdmin.value ? 'GESTIONE UTENTI' : 'AREA PILOT
   max-width: 1400px;
   margin: 0 auto;
   padding: 32px 24px;
+}
+
+@media (max-width: $breakpoint-lg) {
+  .coach-header__inner {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .admin-nav {
+    order: 3;
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .admin-nav a {
+    transition: none;
+  }
 }
 </style>

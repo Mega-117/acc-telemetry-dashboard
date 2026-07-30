@@ -176,6 +176,7 @@ const dashboardRoutePrefixes = [
   '/profilo',
   '/preparazione',
   '/piloti',
+  '/admin',
   '/admin-diagnostics'
 ]
 
