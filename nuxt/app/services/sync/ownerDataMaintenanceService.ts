@@ -23,7 +23,8 @@ import {
   publishFirebaseStructureHealth,
   renewFirebaseStructureLease,
   withFirebaseStructureRetry,
-  type FirebaseStructureHealthState
+  type FirebaseStructureHealthState,
+  type FirebaseStructureHealthStatus
 } from './firebaseStructureHealthService'
 
 const CALLER = 'OwnerDataMaintenance'
@@ -84,6 +85,7 @@ export interface OwnerDataMaintenanceReport {
   startedAt: string
   completedAt?: string | null
   error?: string | null
+  healthStatus?: FirebaseStructureHealthStatus
 }
 
 export interface OwnerDataMaintenanceProgress {
@@ -236,6 +238,7 @@ async function publishHealthOutcome(
     leaseId
   }))
   if (!published) throw createLeaseLostError()
+  return outcome.status
 }
 
 function createLeaseLostError(): Error & { code: string } {
@@ -268,13 +271,15 @@ async function publishBlockedHealth(uid: string, error: unknown, leaseId: string
 function skippedReport(
   uid: string,
   startedAt: string,
-  message: string
+  message: string,
+  healthStatus: FirebaseStructureHealthStatus
 ): OwnerDataMaintenanceReport {
   return buildReport({
     uid,
     status: 'skipped',
     phase: 'skipped',
     message,
+    healthStatus,
     startedAt,
     completedAt: nowIso()
   })
@@ -353,7 +358,8 @@ export async function runOwnerDataMaintenanceGate(
         startedAt,
         healthDecision.action === 'future_schema'
           ? 'Struttura dati creata da una versione piu recente: nessun downgrade eseguito.'
-          : 'Versione struttura dati non valida: riparazione automatica bloccata.'
+          : 'Versione struttura dati non valida: riparazione automatica bloccata.',
+        status
       )
       emit(onProgress, {
         status: 'skipped',
@@ -375,7 +381,12 @@ export async function runOwnerDataMaintenanceGate(
         : healthDecision.action === 'skip_partial'
           ? 'Struttura dati verificata con limiti noti.'
           : 'Struttura dati gia verificata.'
-      const report = skippedReport(uid, startedAt, message)
+      const healthStatus = healthDecision.action === 'skip_healthy'
+        ? 'healthy'
+        : healthDecision.action === 'skip_partial'
+          ? 'partial'
+          : 'repairing'
+      const report = skippedReport(uid, startedAt, message, healthStatus)
       emit(onProgress, {
         status: 'skipped',
         phase: 'skipped',
@@ -393,7 +404,12 @@ export async function runOwnerDataMaintenanceGate(
       targetBestRulesVersion: BEST_RULES_VERSION
     }))
     if (!leaseAcquired) {
-      const report = skippedReport(uid, startedAt, 'Controllo struttura gia in corso su un altro client.')
+      const report = skippedReport(
+        uid,
+        startedAt,
+        'Controllo struttura gia in corso su un altro client.',
+        'repairing'
+      )
       emit(onProgress, {
         status: 'skipped',
         phase: 'skipped',
@@ -410,7 +426,7 @@ export async function runOwnerDataMaintenanceGate(
       const verification = await withFirebaseStructureRetry(() => verifyOwnerMigrationLightweight(uid))
       if (verification.ok) {
         await publishHealthOutcome(uid, {}, leaseId)
-        const report = skippedReport(uid, startedAt, 'Struttura dati verificata.')
+        const report = skippedReport(uid, startedAt, 'Struttura dati verificata.', 'healthy')
         emit(onProgress, {
           status: 'skipped',
           phase: 'skipped',
@@ -466,7 +482,7 @@ export async function runOwnerDataMaintenanceGate(
       })
       await ensureActiveLease(uid, leaseId)
       await withFirebaseStructureRetry(() => markCompleted(uid, report))
-      await publishHealthOutcome(uid, {}, leaseId)
+      report.healthStatus = await publishHealthOutcome(uid, {}, leaseId)
       emit(onProgress, {
         status: 'completed',
         phase: 'completed',
@@ -512,7 +528,7 @@ export async function runOwnerDataMaintenanceGate(
       })
       await ensureActiveLease(uid, leaseId)
       await withFirebaseStructureRetry(() => markCompleted(uid, report))
-      await publishHealthOutcome(uid, {
+      report.healthStatus = await publishHealthOutcome(uid, {
         incompleteCloudOnly: audit.sessions.incompleteCloudOnly
       }, leaseId)
       emit(onProgress, {
@@ -575,7 +591,7 @@ export async function runOwnerDataMaintenanceGate(
     })
     await ensureActiveLease(uid, leaseId)
     await withFirebaseStructureRetry(() => markCompleted(uid, report))
-    await publishHealthOutcome(uid, {
+    report.healthStatus = await publishHealthOutcome(uid, {
       incompleteCloudOnly: audit.sessions.incompleteCloudOnly,
       skippedNoRaw: cloudReprocess?.skippedNoRaw
     }, leaseId)
@@ -650,6 +666,7 @@ export async function completeOwnerDataMaintenanceAfterLocalSync(
       completedAt: nowIso()
     })
     await markCompleted(uid, report)
+    report.healthStatus = 'healthy'
     emit(onProgress, {
       status: 'completed',
       phase: 'completed',

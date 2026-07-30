@@ -41,11 +41,16 @@ assert.match(sync, /ownerDataMaintenance\.completeAfterLocalSync/)
 assert.match(sync, /deferredChangedFiles/)
 assert.match(sync, /Data maintenance is running, deferring trigger/)
 
-const authReadyGateIndex = sync.indexOf('ownerDataMaintenance.runGate')
-const scanIndex = sync.indexOf("queueService.setStatus('scanning')")
+const bootstrapIndex = sync.indexOf('async function executeRuntimeBootstrap')
+const authReadyGateIndex = sync.indexOf('ownerDataMaintenance.runGate', bootstrapIndex)
+const authReadySyncIndex = sync.indexOf("executeSyncTrigger('authReady'", authReadyGateIndex)
+assert.ok(bootstrapIndex >= 0, 'authReady must use the runtime bootstrap coordinator')
 assert.ok(authReadyGateIndex >= 0, 'authReady must call owner data maintenance gate')
-assert.ok(scanIndex >= 0, 'sync must still scan after the gate')
-assert.ok(authReadyGateIndex < scanIndex, 'owner data maintenance gate must run before scanning')
+assert.ok(authReadySyncIndex >= 0, 'runtime bootstrap must still invoke authReady sync')
+assert.ok(
+  authReadyGateIndex < authReadySyncIndex,
+  'runtime bootstrap migration gate must run before authReady sync/scanning'
+)
 
 const directAutoReprocessPattern = /reprocessOwnerCloudRawSummaries|rebuildOwnerProjections/
 assert.ok(!directAutoReprocessPattern.test(sync), 'useElectronSync must not call owner rebuild/reprocess directly')

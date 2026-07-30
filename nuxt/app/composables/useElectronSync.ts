@@ -33,6 +33,15 @@ import { resolveSyncTriggerAction, type SyncTrigger } from '~/services/sync/sync
 import { useOwnerDataMaintenance } from './useOwnerDataMaintenance'
 import { getRecentActivityDateKeys, getTelemetryActivityDateKey } from '~/services/telemetry/activityProjectionService'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
+import { createRuntimeBootstrapCoordinator } from '~/services/runtime/runtimeBootstrapCoordinator'
+import {
+    buildRendererBootstrapContext,
+    canRunBootstrapSync,
+    recordRendererBootstrapEvent,
+    resolveMaintenanceMigrationResult,
+    resolveRendererUpdateResult
+} from '~/services/runtime/rendererRuntimeBootstrapAdapter'
+import type { OwnerDataMaintenanceReport } from '~/services/sync/ownerDataMaintenanceService'
 
 const SYNC_CALLER = 'ElectronSync'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
@@ -54,6 +63,7 @@ let localRegistryCache: Record<string, RegistryCacheEntry> | null = null
 let autoSyncInitialized = false
 let deferredChangedFiles: TelemetryFileDescriptor[] = []
 let lastFullAutoScanCompletedAt = 0
+const runtimeBootstrapCoordinator = createRuntimeBootstrapCoordinator()
 
 const FULL_AUTO_SCAN_DEDUPE_MS = 5000
 
@@ -157,6 +167,7 @@ export function useElectronSync() {
     const syncResults = ref<SyncResult[]>([])
     const lastSyncTime = ref<Date | null>(null)
     const pendingNotification = ref<SyncResult[] | null>(null)
+    const runtimeBootstrapState = ref(runtimeBootstrapCoordinator.getSnapshot())
 
     const isElectron = computed(() => {
         if (typeof window === 'undefined') return false
@@ -363,12 +374,13 @@ export function useElectronSync() {
         }
     }
 
-    async function executeTrigger(
+    async function executeSyncTrigger(
         trigger: SyncTrigger,
         payload?: {
             files?: TelemetryFileDescriptor[]
             uid?: string
-        }
+        },
+        shouldCompleteMaintenanceAfterLocalSync = false
     ): Promise<SyncResult[]> {
         if (!isElectron.value) {
             console.log('[SYNC] Not running in Electron, skipping sync trigger:', trigger)
@@ -433,19 +445,10 @@ export function useElectronSync() {
         let needsTrackBestsRebuild = false
         let trackBestDeltas: TrackBestProjectionDelta[] = []
         let userProjectionDeltas: UserProjectionDelta[] = []
-        let shouldCompleteMaintenanceAfterLocalSync = false
 
         try {
             if (trigger === 'filesChanged') {
                 localRegistryCache = null
-            }
-
-            if (trigger === 'authReady') {
-                queueService.setStatus('maintaining')
-                const maintenanceGate = await ownerDataMaintenance.runGate(uid, {
-                    electronAPI: getElectronApi()
-                })
-                shouldCompleteMaintenanceAfterLocalSync = maintenanceGate.needsSyncBeforeCompletion
             }
 
             queueService.setStatus('scanning')
@@ -554,6 +557,55 @@ export function useElectronSync() {
         }
     }
 
+    async function executeRuntimeBootstrap(payload?: { uid?: string }): Promise<SyncResult[]> {
+        const electronAPI = getElectronApi()
+        const context = await buildRendererBootstrapContext({
+            electronAPI,
+            uid: payload?.uid,
+            canEnterApp: canEnterApp.value,
+            isOnline: typeof navigator === 'undefined' || navigator.onLine !== false
+        })
+        let maintenanceNeedsLocalSync = false
+
+        const result = await runtimeBootstrapCoordinator.run(context, {
+            checkUpdate: async () => resolveRendererUpdateResult(
+                await electronAPI?.getSuiteVersion?.()
+            ),
+            migrate: async () => {
+                queueService.setStatus('maintaining')
+                const report = await ownerDataMaintenance.runGate(payload!.uid!, { electronAPI })
+                maintenanceNeedsLocalSync = report.needsSyncBeforeCompletion
+                return resolveMaintenanceMigrationResult(report as OwnerDataMaintenanceReport)
+            },
+            sync: async () => {
+                const results = await executeSyncTrigger('authReady', payload, maintenanceNeedsLocalSync)
+                if (results.some((item) => item.status === 'error')) {
+                    throw new Error('sync_results_contain_errors')
+                }
+                return results
+            },
+            onEvent: async (event) => recordRendererBootstrapEvent(electronAPI, event)
+        })
+
+        runtimeBootstrapState.value = result
+        return Array.isArray(result.syncResult) ? result.syncResult : []
+    }
+
+    async function executeTrigger(
+        trigger: SyncTrigger,
+        payload?: { files?: TelemetryFileDescriptor[]; uid?: string }
+    ): Promise<SyncResult[]> {
+        if (trigger === 'authReady') return executeRuntimeBootstrap(payload)
+        if (!canRunBootstrapSync(runtimeBootstrapState.value)) {
+            if (trigger === 'filesChanged' && payload?.files?.length) {
+                deferredChangedFiles.push(...payload.files)
+            }
+            console.log('[SYNC] Runtime bootstrap cloud capability pending, deferring trigger:', trigger)
+            return []
+        }
+        return executeSyncTrigger(trigger, payload)
+    }
+
     async function syncTelemetryFiles(specificFiles?: TelemetryFileDescriptor[]): Promise<SyncResult[]> {
         return executeTrigger(
             specificFiles && specificFiles.length > 0 ? 'filesChanged' : 'manualForceSync',
@@ -600,6 +652,7 @@ export function useElectronSync() {
         syncResults,
         lastSyncTime,
         pendingNotification,
+        runtimeBootstrapState,
         dataMaintenance: ownerDataMaintenance,
         syncTelemetryFiles,
         setupAutoSync

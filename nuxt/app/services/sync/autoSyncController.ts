@@ -57,4 +57,11 @@ export function setupAutoSyncController(params: {
     window.clearInterval(stop)
     await handleTrigger('authReady', { uid: user.uid })
   }, 500)
+
+  window.addEventListener('online', async () => {
+    const user = currentUser.value
+    if (!user) return
+    if (AUTH_EMAIL_VERIFICATION_REQUIRED && !user.emailVerified) return
+    await handleTrigger('authReady', { uid: user.uid })
+  })
 }
