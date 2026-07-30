@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useElectronSync } from '~/composables/useElectronSync'
+import { useClientHeartbeat } from '~/composables/useClientHeartbeat'
 import { publishRuntimeWindowSnapshot } from '~/services/runtime/runtimeWindowBridge'
 
 const { runtimeBootstrapState, setupAutoSync, syncTelemetryFiles } = useElectronSync()
+useClientHeartbeat({
+  enabled: computed(() => true),
+  runtimeState: runtimeBootstrapState
+})
 let unsubscribeCommand: (() => void) | null = null
 
 function getElectronApi() {

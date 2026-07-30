@@ -52,6 +52,22 @@ function diagnosticPayload(uid: string, eventId: string) {
   }
 }
 
+function runtimeInstallationPayload(installationId: string, lastContactAt = '2026-07-30T19:00:00.000Z') {
+  return {
+    schemaVersion: 2,
+    installationId,
+    startedAt: '2026-07-30T18:00:00.000Z',
+    lastContactAt,
+    suiteVersion: '0.4.0-dev.4',
+    channel: 'develop',
+    updateState: 'current',
+    lastCheckAt: null,
+    components: { launcher: '0.4.0-dev.4', logger: null, webapp: '0.4.0-dev.4', kokoroRuntime: null },
+    health: { status: 'healthy', phase: 'ready', reasonCode: null },
+    migration: { status: 'healthy', phase: 'completed', progress: 100, code: null, resumedFrom: null }
+  }
+}
+
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: PROJECT_ID,
@@ -139,6 +155,50 @@ describe('diagnostics rules', () => {
 })
 
 describe('heartbeat and admin projection rules', () => {
+  it('mantiene distinte due installazioni dello stesso utente', async () => {
+    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const a = doc(db, `users/${PILOT_UID}/runtimeInstallations/install-a`)
+    const b = doc(db, `users/${PILOT_UID}/runtimeInstallations/install-b`)
+
+    await assertSucceeds(setDoc(a, runtimeInstallationPayload('install-a')))
+    await assertSucceeds(setDoc(b, runtimeInstallationPayload('install-b')))
+    await assertSucceeds(setDoc(a, {
+      ...runtimeInstallationPayload('install-a'),
+      lastContactAt: '2026-07-30T19:15:00.000Z'
+    }))
+
+    const [aSnap, bSnap] = await Promise.all([getDoc(a), getDoc(b)])
+    expect(aSnap.data()?.lastContactAt).toBe('2026-07-30T19:15:00.000Z')
+    expect(bSnap.data()?.lastContactAt).toBe('2026-07-30T19:00:00.000Z')
+  })
+
+  it('vincola schema, identita e startedAt del report installation-aware', async () => {
+    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const ref = doc(db, `users/${PILOT_UID}/runtimeInstallations/install-a`)
+    await assertFails(setDoc(ref, runtimeInstallationPayload('install-b')))
+    await assertFails(setDoc(ref, { ...runtimeInstallationPayload('install-a'), rootKey: 'secret' }))
+    await assertSucceeds(setDoc(ref, runtimeInstallationPayload('install-a')))
+    await assertFails(setDoc(ref, {
+      ...runtimeInstallationPayload('install-a'),
+      startedAt: '2026-07-30T18:30:00.000Z'
+    }))
+  })
+
+  it('nega cross-user e consente read/list admin', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), `users/${PILOT_UID}/runtimeInstallations/install-a`),
+        runtimeInstallationPayload('install-a')
+      )
+    })
+    const otherDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+
+    await assertFails(getDoc(doc(otherDb, `users/${PILOT_UID}/runtimeInstallations/install-a`)))
+    await assertSucceeds(getDoc(doc(adminDb, `users/${PILOT_UID}/runtimeInstallations/install-a`)))
+    await assertSucceeds(getDocs(collectionGroup(adminDb, 'runtimeInstallations')))
+  })
+
   it('permette heartbeat owner e mirror pilotDirectory senza cambiare ruolo', async () => {
     const db = testEnv.authenticatedContext(PILOT_UID).firestore()
     await assertSucceeds(setDoc(doc(db, `users/${PILOT_UID}`), {

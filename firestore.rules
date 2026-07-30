@@ -33,6 +33,69 @@ service cloud.firestore {
              && request.resource.data.coachId == resource.data.coachId;
     }
 
+    function isBoundedNullableString(value, maxSize) {
+      return value == null || (value is string && value.size() <= maxSize);
+    }
+
+    function validRuntimeComponents(components) {
+      return components is map
+             && components.keys().hasAll(['launcher', 'logger', 'webapp', 'kokoroRuntime'])
+             && components.keys().hasOnly(['launcher', 'logger', 'webapp', 'kokoroRuntime'])
+             && isBoundedNullableString(components.launcher, 80)
+             && isBoundedNullableString(components.logger, 80)
+             && isBoundedNullableString(components.webapp, 80)
+             && isBoundedNullableString(components.kokoroRuntime, 80);
+    }
+
+    function validRuntimeHealth(health) {
+      return health is map
+             && health.keys().hasAll(['status', 'phase', 'reasonCode'])
+             && health.keys().hasOnly(['status', 'phase', 'reasonCode'])
+             && health.status is string && health.status.size() <= 40
+             && health.phase is string && health.phase.size() <= 40
+             && isBoundedNullableString(health.reasonCode, 80);
+    }
+
+    function validRuntimeMigration(migration) {
+      return migration is map
+             && migration.keys().hasAll(['status', 'phase', 'progress', 'code', 'resumedFrom'])
+             && migration.keys().hasOnly(['status', 'phase', 'progress', 'code', 'resumedFrom'])
+             && migration.status is string && migration.status.size() <= 40
+             && migration.phase is string && migration.phase.size() <= 80
+             && migration.progress is number
+             && migration.progress >= 0 && migration.progress <= 100
+             && isBoundedNullableString(migration.code, 80)
+             && isBoundedNullableString(migration.resumedFrom, 80);
+    }
+
+    function validRuntimeInstallation(installationId) {
+      return request.resource.data.keys().hasAll([
+               'schemaVersion', 'installationId', 'startedAt', 'lastContactAt',
+               'suiteVersion', 'channel', 'updateState', 'lastCheckAt',
+               'components', 'health', 'migration'
+             ])
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'installationId', 'startedAt', 'lastContactAt',
+               'suiteVersion', 'channel', 'updateState', 'lastCheckAt',
+               'components', 'health', 'migration'
+             ])
+             && request.resource.data.schemaVersion == 2
+             && request.resource.data.installationId == installationId
+             && installationId.size() <= 80
+             && request.resource.data.startedAt is string
+             && request.resource.data.startedAt.size() <= 40
+             && request.resource.data.lastContactAt is string
+             && request.resource.data.lastContactAt.size() <= 40
+             && isBoundedNullableString(request.resource.data.suiteVersion, 80)
+             && isBoundedNullableString(request.resource.data.channel, 24)
+             && request.resource.data.updateState is string
+             && request.resource.data.updateState.size() <= 32
+             && isBoundedNullableString(request.resource.data.lastCheckAt, 40)
+             && validRuntimeComponents(request.resource.data.components)
+             && validRuntimeHealth(request.resource.data.health)
+             && validRuntimeMigration(request.resource.data.migration);
+    }
+
     // Public profile surface for cross-user features (nickname/avatar only).
     match /publicProfiles/{userId} {
       allow read: if isSignedIn();
@@ -62,6 +125,17 @@ service cloud.firestore {
 
       // Admin can read/write everything in users.
       allow read, write: if isAdmin();
+
+      match /runtimeInstallations/{installationId} {
+        allow get, list: if isOwner(userId) || isAdmin();
+        allow create: if isOwner(userId)
+                      && validRuntimeInstallation(installationId);
+        allow update: if isOwner(userId)
+                      && validRuntimeInstallation(installationId)
+                      && request.resource.data.installationId == resource.data.installationId
+                      && request.resource.data.startedAt == resource.data.startedAt;
+        allow delete: if isAdmin();
+      }
 
       // === Sessions subcollection ===
       match /sessions/{sessionId} {
@@ -183,6 +257,10 @@ service cloud.firestore {
     // Rules v2 requires an explicit recursive match for collection-group
     // queries. Only admins may enumerate diagnostics across all users.
     match /{path=**}/diagnostics/{eventId} {
+      allow list: if isAdmin();
+    }
+
+    match /{path=**}/runtimeInstallations/{installationId} {
       allow list: if isAdmin();
     }
   }

@@ -8,7 +8,6 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useActivityFeed } from '~/composables/useActivityFeed'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
-import { useClientHeartbeat } from '~/composables/useClientHeartbeat'
 import { useClientDiagnostics } from '~/composables/useClientDiagnostics'
 import { endFirebaseScenario, startFirebaseScenario, withFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
@@ -71,7 +70,6 @@ const isPrimaryClientRuntime = computed(() => {
     && !isStandaloneRuntimeRoute.value
     && !isStandaloneDevRoute.value
 })
-useClientHeartbeat({ enabled: isRuntimeBootstrapRoute })
 useClientDiagnostics({
   captureEnabled: computed(() => isPrimaryClientRuntime.value || isRuntimeBootstrapRoute.value),
   flushEnabled: isRuntimeBootstrapRoute

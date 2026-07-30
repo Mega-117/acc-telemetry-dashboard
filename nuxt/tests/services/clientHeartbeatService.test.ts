@@ -20,12 +20,29 @@ describe('clientHeartbeatService', () => {
       kokoroRuntime: '1.0.0',
       updateState: 'pending',
       lastCheckAt: '2026-07-17T10:00:00Z'
-    }, '2026-07-17T10:05:00Z')
+    }, '2026-07-17T10:05:00Z', {
+      identity: {
+        installationId: '11111111-1111-4111-8111-111111111111',
+        createdAt: '2026-07-01T08:00:00Z',
+        fallback: false
+      },
+      runtimeState: {
+        phase: 'ready',
+        capabilities: {},
+        events: [],
+        migrationProgress: {
+          phase: 'completed',
+          progress: 100,
+          status: 'healthy'
+        }
+      }
+    })
 
     expect(payload).toMatchObject({
       suiteVersion: '0.4.0-dev.2',
       clientRuntime: {
-        schemaVersion: 1,
+        schemaVersion: 2,
+        installationId: '11111111-1111-4111-8111-111111111111',
         channel: 'develop',
         updateState: 'pending',
         lastHeartbeatAt: '2026-07-17T10:05:00Z',
@@ -35,8 +52,24 @@ describe('clientHeartbeatService', () => {
           webapp: '0.4.0-dev.2',
           kokoroRuntime: '1.0.0'
         }
+      },
+      installationRuntime: {
+        schemaVersion: 2,
+        installationId: '11111111-1111-4111-8111-111111111111',
+        startedAt: '2026-07-01T08:00:00Z',
+        lastContactAt: '2026-07-17T10:05:00Z',
+        health: { status: 'healthy', phase: 'ready' },
+        migration: { status: 'healthy', phase: 'completed', progress: 100 }
       }
     })
+  })
+
+  it('non pubblica un falso report senza identita persistente', () => {
+    expect(buildClientHeartbeatPayload(
+      { suite: '0.4.0' },
+      '2026-07-17T10:05:00Z',
+      { identity: { installationId: null, createdAt: null, fallback: true } }
+    )).toBeNull()
   })
 
   it('supporta il bridge legacy privo del campo suite', () => {
@@ -61,8 +94,8 @@ describe('clientHeartbeatService', () => {
 
   it('classifica client recente, non recente e sconosciuto', () => {
     const now = Date.parse('2026-07-17T12:00:00Z')
-    expect(getClientHeartbeatStatus('2026-07-17T11:00:00Z', now)).toBe('recent')
-    expect(getClientHeartbeatStatus('2026-07-15T11:00:00Z', now)).toBe('stale')
+    expect(getClientHeartbeatStatus('2026-07-17T11:01:00Z', now)).toBe('recent')
+    expect(getClientHeartbeatStatus('2026-07-17T10:59:59Z', now)).toBe('stale')
     expect(getClientHeartbeatStatus(undefined, now)).toBe('unknown')
   })
 })

@@ -36,6 +36,7 @@ export default defineConfig({
         'app/services/gateway/bestTimesBuilders.ts',
         'app/services/gateway/trackDetailProjectionBuilder.ts',
         'app/services/monitoring/clientHeartbeatService.ts',
+        'app/services/monitoring/clientRuntimeReportingService.ts',
         'app/services/monitoring/clientDiagnosticsService.ts',
         'app/services/projections/trackBestProjectionGuard.ts',
         'app/services/runtime/runtimeBootstrapPolicy.ts',
