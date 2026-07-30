@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
 import {
   createRaceCalendarEvent,
   deleteRaceCalendarEvent,
@@ -18,6 +19,7 @@ const props = defineProps<{
 type ModalMode = 'create' | 'edit' | 'delete'
 
 const { currentUser, userRole } = useFirebaseAuth()
+const cloudWriteGate = useRuntimeCapabilityGate().gate('cloudWrite')
 
 const events = ref<RaceCalendarEvent[]>([])
 const isLoading = ref(false)
@@ -101,6 +103,7 @@ function hydrateForm(event: RaceCalendarEvent) {
 }
 
 function openCreateModal() {
+  if (!cloudWriteGate.value.allowed) return
   errorMessage.value = ''
   selectedEvent.value = null
   modalMode.value = 'create'
@@ -109,6 +112,7 @@ function openCreateModal() {
 }
 
 function openEditModal(event: RaceCalendarEvent) {
+  if (!cloudWriteGate.value.allowed) return
   errorMessage.value = ''
   selectedEvent.value = event
   modalMode.value = 'edit'
@@ -117,6 +121,7 @@ function openEditModal(event: RaceCalendarEvent) {
 }
 
 function openDeleteModal(event: RaceCalendarEvent) {
+  if (!cloudWriteGate.value.allowed) return
   errorMessage.value = ''
   selectedEvent.value = event
   modalMode.value = 'delete'
@@ -165,6 +170,10 @@ async function refreshEvents() {
 async function submitModal() {
   if (!props.userId || isSaving.value) return
   errorMessage.value = ''
+  if (!cloudWriteGate.value.allowed) {
+    errorMessage.value = cloudWriteGate.value.message
+    return
+  }
   isSaving.value = true
   try {
     if (modalMode.value === 'delete') {
@@ -225,7 +234,7 @@ onBeforeUnmount(() => {
         <span class="eyebrow">Calendario pilota</span>
         <h2 class="coach-title">Prossime gare</h2>
       </div>
-      <button class="race-action" type="button" @click="openCreateModal">Aggiungi gara</button>
+      <button class="race-action" type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara' : cloudWriteGate.message" @click="openCreateModal">Aggiungi gara</button>
     </div>
 
     <div v-if="isLoading" class="race-empty">Caricamento gare...</div>
@@ -263,8 +272,8 @@ onBeforeUnmount(() => {
         <div class="race-row-actions">
           <a v-if="featuredEvent.simGridUrl" :href="featuredEvent.simGridUrl" target="_blank" rel="noopener">SimGrid</a>
           <a v-if="featuredEvent.raceUrl" :href="featuredEvent.raceUrl" target="_blank" rel="noopener">Link gara</a>
-          <button type="button" @click="openEditModal(featuredEvent)">Modifica</button>
-          <button type="button" class="danger" @click="openDeleteModal(featuredEvent)">Elimina</button>
+          <button type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Modifica gara' : cloudWriteGate.message" @click="openEditModal(featuredEvent)">Modifica</button>
+          <button type="button" class="danger" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Elimina gara' : cloudWriteGate.message" @click="openDeleteModal(featuredEvent)">Elimina</button>
         </div>
       </article>
 
@@ -280,8 +289,8 @@ onBeforeUnmount(() => {
               <span>{{ formatEventDate(event.startsAt) }} - {{ event.trackName }}</span>
             </div>
             <div class="compact-actions">
-              <button type="button" @click="openEditModal(event)">Modifica</button>
-              <button type="button" class="danger" @click="openDeleteModal(event)">Elimina</button>
+              <button type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Modifica gara' : cloudWriteGate.message" @click="openEditModal(event)">Modifica</button>
+              <button type="button" class="danger" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Elimina gara' : cloudWriteGate.message" @click="openDeleteModal(event)">Elimina</button>
             </div>
           </article>
         </div>
@@ -340,7 +349,7 @@ onBeforeUnmount(() => {
 
           <footer>
             <button type="button" class="secondary-action" :disabled="isSaving" @click="closeModal">Annulla</button>
-            <button class="primary-action" :class="{ danger: modalMode === 'delete' }" type="submit" :disabled="isSaving">
+            <button class="primary-action" :class="{ danger: modalMode === 'delete' }" type="submit" :disabled="isSaving || !cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? modalSubmitLabel : cloudWriteGate.message">
               {{ modalSubmitLabel }}
             </button>
           </footer>

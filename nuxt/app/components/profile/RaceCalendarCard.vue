@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
 import {
   createRaceCalendarEvent,
   deleteRaceCalendarEvent,
@@ -10,6 +11,7 @@ import {
 } from '~/repositories/raceCalendarRepository'
 
 const { currentUser } = useFirebaseAuth()
+const cloudWriteGate = useRuntimeCapabilityGate().gate('cloudWrite')
 
 const events = ref<RaceCalendarEvent[]>([])
 const isLoading = ref(false)
@@ -66,6 +68,7 @@ function resetForm() {
 }
 
 function openForm() {
+  if (!cloudWriteGate.value.allowed) return
   errorMessage.value = ''
   editingEventId.value = ''
   isAdding.value = true
@@ -79,6 +82,7 @@ function closeForm() {
 }
 
 function startEditEvent(event: RaceCalendarEvent) {
+  if (!cloudWriteGate.value.allowed) return
   errorMessage.value = ''
   editingEventId.value = event.id
   form.value = {
@@ -106,6 +110,10 @@ async function refreshEvents(userId = currentUser.value?.uid || '') {
 async function saveEvent() {
   if (!currentUser.value || isSaving.value) return
   errorMessage.value = ''
+  if (!cloudWriteGate.value.allowed) {
+    errorMessage.value = cloudWriteGate.value.message
+    return
+  }
 
   if (!form.value.title.trim() || !form.value.startsAt || !form.value.trackName.trim()) {
     errorMessage.value = 'Titolo, data e pista sono obbligatori.'
@@ -130,7 +138,7 @@ async function saveEvent() {
 }
 
 async function removeEvent(eventId: string) {
-  if (!currentUser.value) return
+  if (!currentUser.value || !cloudWriteGate.value.allowed) return
   await deleteRaceCalendarEvent(currentUser.value.uid, eventId)
   events.value = events.value.filter((event) => event.id !== eventId)
 }
@@ -168,7 +176,7 @@ onBeforeUnmount(() => {
       <h3 class="card-title">Calendario gare</h3>
       <div class="card-actions">
         <span class="card-count">{{ upcomingEvents.length }} eventi</span>
-        <button v-if="!isAdding" class="secondary-action" type="button" @click="openForm">Aggiungi</button>
+        <button v-if="!isAdding" class="secondary-action" type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara' : cloudWriteGate.message" @click="openForm">Aggiungi</button>
         <button v-else class="secondary-action" type="button" @click="closeForm">Annulla</button>
       </div>
     </div>
@@ -181,7 +189,7 @@ onBeforeUnmount(() => {
             <strong>Nessuna gara pianificata</strong>
             <span>Il prossimo evento comparira in questa lista.</span>
           </div>
-          <button v-if="!isAdding" class="inline-action" type="button" @click="openForm">Pianifica gara</button>
+          <button v-if="!isAdding" class="inline-action" type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Pianifica gara' : cloudWriteGate.message" @click="openForm">Pianifica gara</button>
         </div>
         <template v-else>
           <article v-for="event in upcomingEvents" :key="event.id" class="event-row">
@@ -201,8 +209,8 @@ onBeforeUnmount(() => {
               </div>
             </div>
             <div class="event-actions">
-              <button class="text-action" type="button" @click="startEditEvent(event)">Modifica</button>
-              <button class="icon-action" type="button" title="Rimuovi evento" @click="removeEvent(event.id)">
+              <button class="text-action" type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Modifica evento' : cloudWriteGate.message" @click="startEditEvent(event)">Modifica</button>
+              <button class="icon-action" type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Rimuovi evento' : cloudWriteGate.message" @click="removeEvent(event.id)">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                   <path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15" />
                 </svg>
@@ -248,7 +256,7 @@ onBeforeUnmount(() => {
           </div>
 
           <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
-          <button class="primary-action" type="submit" :disabled="isSaving">
+          <button class="primary-action" type="submit" :disabled="isSaving || !cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? submitLabel : cloudWriteGate.message">
             {{ submitLabel }}
           </button>
         </form>

@@ -94,6 +94,7 @@ export default defineConfig({
         'app/composables/useTimedHudPager.ts',
         'app/composables/useSessionOrchestrator.ts',
         'app/composables/useCoachInsights.ts',
+        'app/composables/useRuntimeCapabilityGate.ts',
         // ── Phase 4: composables estratti da useTelemetryData ────────────
         'app/composables/useSessionLoader.ts',
         'app/composables/useSessionSharing.ts',

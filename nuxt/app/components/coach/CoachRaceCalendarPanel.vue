@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
 import {
   createRaceCalendarEvent,
   loadRaceCalendarEvents,
@@ -12,6 +13,7 @@ const props = defineProps<{
 }>()
 
 const { currentUser } = useFirebaseAuth()
+const cloudWriteGate = useRuntimeCapabilityGate().gate('cloudWrite')
 
 const events = ref<RaceCalendarEvent[]>([])
 const isLoading = ref(false)
@@ -53,6 +55,7 @@ function resetForm() {
 }
 
 function openForm() {
+  if (!cloudWriteGate.value.allowed) return
   errorMessage.value = ''
   isAdding.value = true
 }
@@ -75,6 +78,10 @@ async function refreshEvents() {
 async function addEvent() {
   if (!currentUser.value || isSaving.value) return
   errorMessage.value = ''
+  if (!cloudWriteGate.value.allowed) {
+    errorMessage.value = cloudWriteGate.value.message
+    return
+  }
 
   if (!form.value.title.trim() || !form.value.startsAt || !form.value.trackName.trim()) {
     errorMessage.value = 'Titolo, data e pista sono obbligatori.'
@@ -119,7 +126,7 @@ onBeforeUnmount(() => {
         <h3>Prossime gare</h3>
         <p>Programma del pilota.</p>
       </div>
-      <button v-if="!isAdding" class="ghost-action" type="button" @click="openForm">Aggiungi</button>
+      <button v-if="!isAdding" class="ghost-action" type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara' : cloudWriteGate.message" @click="openForm">Aggiungi</button>
       <button v-else class="ghost-action" type="button" @click="closeForm">Annulla</button>
     </div>
 
@@ -177,7 +184,7 @@ onBeforeUnmount(() => {
         </div>
 
         <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
-        <button class="primary-action" type="submit" :disabled="isSaving">
+        <button class="primary-action" type="submit" :disabled="isSaving || !cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara al pilota' : cloudWriteGate.message">
           {{ isSaving ? 'Aggiungo...' : 'Aggiungi gara al pilota' }}
         </button>
       </form>

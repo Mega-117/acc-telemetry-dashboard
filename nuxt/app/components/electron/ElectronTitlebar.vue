@@ -5,8 +5,9 @@
 // This component is only visible when running inside Electron
 // It provides: Refresh, Sync, Minimize, Maximize, Close buttons
 
-import { ref, onBeforeUnmount, onMounted, nextTick, watch } from 'vue'
+import { computed, ref, onBeforeUnmount, onMounted, nextTick, watch } from 'vue'
 import { useElectronSync } from '~/composables/useElectronSync'
+import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
 const route = useRoute()
@@ -18,8 +19,10 @@ const isRefreshing = ref(false)
 
 // Sync composable
 const { isSyncing, syncTelemetryFiles, syncResults, pendingNotification, dataMaintenance } = useElectronSync()
-const runtimeLifecycle = ref('starting')
-let unsubscribeRuntimeState: (() => void) | null = null
+const runtimeCapabilities = useRuntimeCapabilityGate()
+const syncGate = runtimeCapabilities.gate('sync')
+const runtimeLifecycle = computed(() => runtimeCapabilities.snapshot.value?.lifecycle || 'starting')
+let releaseRuntimeCapabilities: (() => void) | null = null
 const maintenanceStatus = dataMaintenance.status
 const maintenanceProgress = dataMaintenance.progress
 const maintenanceMessage = dataMaintenance.message
@@ -36,6 +39,7 @@ onMounted(async () => {
   isElectronVisible.value = !!(window as any).electronAPI
   
   if (isElectronVisible.value) {
+    releaseRuntimeCapabilities = runtimeCapabilities.connect()
     // Check initial maximized state
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
@@ -43,19 +47,12 @@ onMounted(async () => {
     } catch (e) {
       console.log('[TITLEBAR] Could not get maximized state')
     }
-    
-    const api = (window as any).electronAPI
-    const initialRuntimeState = await api.getRuntimeBootstrapState?.()
-    runtimeLifecycle.value = initialRuntimeState?.lifecycle || 'starting'
-    unsubscribeRuntimeState = api.onRuntimeBootstrapState?.((state: { lifecycle?: string }) => {
-      runtimeLifecycle.value = state?.lifecycle || 'degraded'
-    }) || null
   }
 })
 
 onBeforeUnmount(() => {
-  unsubscribeRuntimeState?.()
-  unsubscribeRuntimeState = null
+  releaseRuntimeCapabilities?.()
+  releaseRuntimeCapabilities = null
 })
 
 // Watch for auto-sync notifications (fires only when actual files were synced)
@@ -121,6 +118,7 @@ const handleRefresh = async () => {
 }
 
 const handleSync = async () => {
+  if (!syncGate.value.allowed) return
   console.log('[TITLEBAR] Force sync triggered')
   const results = await syncTelemetryFiles()
   console.log('[TITLEBAR] Force sync complete:', results)
@@ -178,8 +176,10 @@ const closeMaintenanceNotification = () => {
       <button 
         class="titlebar-btn" 
         :class="{ 'syncing': isSyncing }"
-        :title="isSyncing ? 'Sincronizzazione in corso...' : `Force Sync via RuntimeWindow (${runtimeLifecycle})`"
-        :disabled="isSyncing"
+        :title="isSyncing ? 'Sincronizzazione in corso...' : syncGate.allowed ? `Force Sync via RuntimeWindow (${runtimeLifecycle})` : syncGate.message"
+        :aria-label="syncGate.allowed ? 'Avvia sincronizzazione cloud' : `Sincronizzazione non disponibile: ${syncGate.message}`"
+        :aria-disabled="isSyncing || !syncGate.allowed"
+        :disabled="isSyncing || !syncGate.allowed"
         @click="handleSync"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

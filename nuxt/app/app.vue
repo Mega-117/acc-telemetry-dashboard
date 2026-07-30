@@ -378,6 +378,7 @@ provide('goToProfile', handleGoToProfile)
 
     <template v-else-if="isStandaloneDevRoute">
       <ElectronTitlebar />
+      <ElectronRuntimeCapabilityBanner />
       <NuxtRouteAnnouncer />
       <div class="dashboard-wrapper">
         <NuxtLayout>
@@ -389,6 +390,7 @@ provide('goToProfile', handleGoToProfile)
     <template v-else>
       <!-- Electron Titlebar (only visible in Electron) -->
       <ElectronTitlebar />
+      <ElectronRuntimeCapabilityBanner />
 
       <ElectronDataMaintenanceNotification
         v-if="isBrowserOnlyRuntime"

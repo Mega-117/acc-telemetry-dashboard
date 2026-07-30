@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { doc } from 'firebase/firestore'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
 import { useTelemetryData } from '~/composables/useTelemetryData'
 import { trackedUpdateDoc } from '~/composables/useFirebaseTracker'
 import { db } from '~/config/firebase'
@@ -22,6 +23,7 @@ type ProfileTab = 'account'
 
 const { currentUser, getUserProfile, updateCachedUserProfile } = useFirebaseAuth()
 const { countSharedSessions, revokeAllSharedSessions, resetAllTrackBests } = useTelemetryData()
+const cloudWriteGate = useRuntimeCapabilityGate().gate('cloudWrite')
 
 const activeTab = ref<ProfileTab>('account')
 const isSaving = ref(false)
@@ -216,7 +218,7 @@ async function loadProfileData(uid: string) {
 }
 
 async function revokeAll() {
-  if (isRevoking.value) return
+  if (isRevoking.value || !cloudWriteGate.value.allowed) return
   isRevoking.value = true
   revokeSuccess.value = false
 
@@ -234,7 +236,7 @@ async function revokeAll() {
 }
 
 async function resetHistoricalBests() {
-  if (isResettingBests.value) return
+  if (isResettingBests.value || !cloudWriteGate.value.allowed) return
 
   if (!confirm('Sei sicuro di voler eliminare tutti i tempi storici? I best verranno ricalcolati automaticamente alla prossima sincronizzazione.')) {
     return
@@ -258,7 +260,7 @@ async function resetHistoricalBests() {
 }
 
 async function handleSaveEquipment() {
-  if (!currentUser.value) return
+  if (!currentUser.value || !cloudWriteGate.value.allowed) return
   isSaving.value = true
 
   try {
@@ -366,7 +368,8 @@ watch(
                   <button
                     class="primary-action"
                     :class="{ 'primary-action--success': saveSuccess }"
-                    :disabled="isSaving"
+                    :disabled="isSaving || !cloudWriteGate.allowed"
+                    :title="cloudWriteGate.allowed ? 'Salva attrezzatura' : cloudWriteGate.message"
                     @click="handleSaveEquipment"
                   >
                     <template v-if="isSaving">Salvataggio...</template>
@@ -530,7 +533,8 @@ watch(
               v-if="sharedSessionsCount > 0"
               class="danger-action"
               :class="{ 'danger-action--success': revokeSuccess }"
-              :disabled="isRevoking"
+              :disabled="isRevoking || !cloudWriteGate.allowed"
+              :title="cloudWriteGate.allowed ? 'Revoca tutte le condivisioni' : cloudWriteGate.message"
               @click="revokeAll"
             >
               <template v-if="isRevoking">Revocando...</template>
@@ -548,7 +552,8 @@ watch(
             <button
               class="danger-action"
               :class="{ 'danger-action--success': resetBestsSuccess }"
-              :disabled="isResettingBests"
+              :disabled="isResettingBests || !cloudWriteGate.allowed"
+              :title="cloudWriteGate.allowed ? 'Elimina i best storici cloud' : cloudWriteGate.message"
               @click="resetHistoricalBests"
             >
               <template v-if="isResettingBests">Eliminando...</template>
