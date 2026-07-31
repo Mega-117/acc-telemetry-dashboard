@@ -1,5 +1,5 @@
 import { onBeforeUnmount, watch, type Ref } from 'vue'
-import { doc } from 'firebase/firestore'
+import { doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { trackedGetDoc, trackedSetDoc } from '~/composables/useFirebaseTracker'
@@ -32,6 +32,13 @@ function errorDetails(error: unknown): { message: string, stack: string } {
     return { message: error.message, stack: error.stack || '' }
   }
   return { message: String(error || 'Errore sconosciuto'), stack: '' }
+}
+
+function toFirestoreDiagnostic(payload: ReturnType<typeof buildDiagnosticDocument>) {
+  return {
+    ...payload,
+    receivedAt: serverTimestamp()
+  }
 }
 
 export function useClientDiagnostics(options: {
@@ -70,7 +77,7 @@ export function useClientDiagnostics(options: {
       const payload = buildDiagnosticDocument(event, uid, suite)
       await trackedSetDoc(
         doc(db, `users/${uid}/diagnostics/${payload.eventId}`),
-        payload,
+        toFirestoreDiagnostic(payload),
         CALLER
       )
       return true
@@ -113,7 +120,7 @@ export function useClientDiagnostics(options: {
         },
         upload: (payload) => trackedSetDoc(
           doc(db, `users/${uid}/diagnostics/${payload.eventId}`),
-          payload,
+          toFirestoreDiagnostic(payload),
           CALLER
         ),
         acknowledge: (eventId) => electronAPI.acknowledgeDiagnostics!([eventId])

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import {
+  countExpiredClientDiagnostics,
+  deleteExpiredClientDiagnostics,
+  diagnosticRetentionCutoffMs,
   loadRecentClientDiagnostics,
   type ClientDiagnosticItem
 } from '~/repositories/clientDiagnosticsRepository'
@@ -16,6 +19,12 @@ const errorMessage = ref('')
 const componentFilter = ref('all')
 const severityFilter = ref('all')
 const selected = ref<ClientDiagnosticItem | null>(null)
+const isCleanupChecking = ref(false)
+const isCleanupRunning = ref(false)
+const cleanupCandidateCount = ref<number | null>(null)
+const cleanupCutoffMs = ref<number | null>(null)
+const cleanupMessage = ref('')
+const cleanupError = ref(false)
 
 const components = computed(() => [...new Set(events.value.map((event) => event.component))].sort())
 const filteredEvents = computed(() => events.value.filter((event) => {
@@ -40,6 +49,50 @@ async function loadEvents() {
   }
 }
 
+async function prepareCleanup() {
+  isCleanupChecking.value = true
+  cleanupMessage.value = ''
+  cleanupError.value = false
+  try {
+    const cutoffMs = diagnosticRetentionCutoffMs()
+    const count = await countExpiredClientDiagnostics(cutoffMs)
+    if (count === 0) {
+      cleanupMessage.value = 'Nessuna diagnostica con timestamp server più vecchio di 30 giorni.'
+      return
+    }
+    cleanupCutoffMs.value = cutoffMs
+    cleanupCandidateCount.value = count
+  } catch (error: any) {
+    cleanupError.value = true
+    cleanupMessage.value = error?.message || 'Impossibile preparare la pulizia.'
+  } finally {
+    isCleanupChecking.value = false
+  }
+}
+
+function cancelCleanup() {
+  cleanupCandidateCount.value = null
+  cleanupCutoffMs.value = null
+}
+
+async function confirmCleanup() {
+  if (cleanupCutoffMs.value === null) return
+  isCleanupRunning.value = true
+  cleanupMessage.value = ''
+  cleanupError.value = false
+  try {
+    const deleted = await deleteExpiredClientDiagnostics({ cutoffMs: cleanupCutoffMs.value })
+    cleanupMessage.value = `Eliminate ${deleted} diagnostiche più vecchie di 30 giorni.`
+    cancelCleanup()
+    await loadEvents()
+  } catch (error: any) {
+    cleanupError.value = true
+    cleanupMessage.value = error?.message || 'Pulizia non completata.'
+  } finally {
+    isCleanupRunning.value = false
+  }
+}
+
 onMounted(loadEvents)
 </script>
 
@@ -51,10 +104,22 @@ onMounted(loadEvents)
         <h1>Diagnostica client</h1>
         <p>Errori sanitizzati ricevuti da frontend, Electron, launcher, updater e logger.</p>
       </div>
-      <button class="refresh-button" :disabled="isLoading" @click="loadEvents">
-        Aggiorna
-      </button>
+      <div class="header-actions">
+        <button class="cleanup-button" :disabled="isCleanupChecking || isCleanupRunning" @click="prepareCleanup">
+          {{ isCleanupChecking ? 'Conteggio…' : 'Elimina diagnostiche >30 giorni' }}
+        </button>
+        <button class="refresh-button" :disabled="isLoading" @click="loadEvents">
+          Aggiorna
+        </button>
+      </div>
     </header>
+
+    <p class="retention-note">
+      Pulizia manuale basata sul timestamp server. I documenti legacy senza timestamp autorevole sono esclusi.
+    </p>
+    <p v-if="cleanupMessage" class="cleanup-message" :class="{ 'cleanup-message--error': cleanupError }" aria-live="polite">
+      {{ cleanupMessage }}
+    </p>
 
     <section class="filters">
       <label>
@@ -124,6 +189,23 @@ onMounted(loadEvents)
         <pre v-if="Object.keys(selected.context || {}).length">{{ JSON.stringify(selected.context, null, 2) }}</pre>
       </article>
     </div>
+
+    <div v-if="cleanupCandidateCount !== null" class="detail-backdrop" @click.self="cancelCleanup">
+      <article class="cleanup-dialog" role="dialog" aria-modal="true" aria-labelledby="cleanup-title">
+        <p class="eyebrow">CONFERMA RICHIESTA</p>
+        <h2 id="cleanup-title">Eliminare {{ cleanupCandidateCount }} diagnostiche?</h2>
+        <p>
+          Saranno eliminate definitivamente solo le diagnostiche con <code>receivedAt</code>
+          server precedente al limite di 30 giorni calcolato ora.
+        </p>
+        <div class="dialog-actions">
+          <button :disabled="isCleanupRunning" @click="cancelCleanup">Annulla</button>
+          <button class="cleanup-confirm" :disabled="isCleanupRunning" @click="confirmCleanup">
+            {{ isCleanupRunning ? 'Eliminazione…' : 'Conferma eliminazione' }}
+          </button>
+        </div>
+      </article>
+    </div>
   </div>
 </template>
 
@@ -135,7 +217,12 @@ onMounted(loadEvents)
 .page-header h1 { margin: 4px 0 8px; font-family: $font-primary; font-size: 32px; }
 .page-header p { margin: 0; color: rgba(255,255,255,.55); }
 .eyebrow { color: #a78bfa !important; font-size: 11px; font-weight: 800; letter-spacing: 1.8px; }
-.refresh-button, select { border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.07); color: #fff; border-radius: 8px; padding: 10px 14px; }
+.header-actions, .dialog-actions { display: flex; gap: 10px; }
+.refresh-button, .cleanup-button, .dialog-actions button, select { border: 1px solid rgba(255,255,255,.15); background: rgba(255,255,255,.07); color: #fff; border-radius: 8px; padding: 10px 14px; }
+.cleanup-button, .cleanup-confirm { border-color: rgba(248,113,113,.45) !important; color: #fecaca !important; }
+.retention-note { margin: -12px 0 20px; color: rgba(255,255,255,.45); font-size: 12px; }
+.cleanup-message { padding: 10px 14px; color: #bbf7d0; background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.2); border-radius: 8px; }
+.cleanup-message--error { color: #fecaca; background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.2); }
 .filters { display: flex; align-items: end; gap: 16px; padding: 16px; margin-bottom: 16px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; }
 .filters label { display: grid; gap: 6px; color: rgba(255,255,255,.55); font-size: 11px; }
 .filters span { margin-left: auto; color: rgba(255,255,255,.45); }
@@ -153,6 +240,10 @@ onMounted(loadEvents)
 .error-banner { color: #fca5a5; }
 .detail-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: rgba(0,0,0,.72); }
 .detail-card { position: relative; width: min(760px, 100%); max-height: 85vh; overflow: auto; padding: 24px; background: #11111b; border: 1px solid rgba(167,139,250,.35); border-radius: 14px; }
+.cleanup-dialog { width: min(520px, 100%); padding: 24px; background: #11111b; border: 1px solid rgba(248,113,113,.35); border-radius: 14px; }
+.cleanup-dialog h2 { margin: 8px 0 12px; }
+.cleanup-dialog p { color: rgba(255,255,255,.65); }
+.dialog-actions { justify-content: flex-end; margin-top: 24px; }
 .detail-close { position: absolute; top: 10px; right: 14px; border: 0; background: transparent; color: #fff; font-size: 28px; cursor: pointer; }
 .detail-card dl { display: grid; grid-template-columns: 100px 1fr; gap: 8px; margin: 20px 0; }
 .detail-card dt { color: rgba(255,255,255,.4); }

@@ -25,7 +25,7 @@ export interface DiagnosticSuiteContext {
   channel?: string | null
 }
 
-export interface ClientDiagnosticDocument {
+export interface ClientDiagnosticUpload {
   schemaVersion: number
   eventId: string
   fingerprint: string
@@ -37,9 +37,12 @@ export interface ClientDiagnosticDocument {
   stack: string
   context: Record<string, string | number | boolean | null>
   occurredAt: string
-  receivedAt: string
   suiteVersion: string | null
   channel: string | null
+}
+
+export interface ClientDiagnosticDocument extends ClientDiagnosticUpload {
+  receivedAt: string
 }
 
 export interface DiagnosticOutboxFlushInput {
@@ -47,7 +50,7 @@ export interface DiagnosticOutboxFlushInput {
   uid: string
   suite: DiagnosticSuiteContext | null
   isUploaded: (eventId: string) => Promise<boolean>
-  upload: (payload: ClientDiagnosticDocument) => Promise<void>
+  upload: (payload: ClientDiagnosticUpload) => Promise<void>
   acknowledge: (eventId: string) => Promise<unknown>
 }
 
@@ -67,11 +70,28 @@ function stableHash(value: string): string {
 }
 
 export function sanitizeDiagnosticText(value: unknown, limit = MAX_MESSAGE_CHARS): string {
-  return String(value || '')
+  let text = String(value || '')
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let decoded = text
+    try {
+      decoded = decodeURIComponent(text)
+    } catch {
+      decoded = text
+        .replace(/%5c/gi, '\\')
+        .replace(/%2f/gi, '/')
+        .replace(/%20/gi, ' ')
+    }
+    if (decoded === text) break
+    text = decoded
+  }
+  return text
+    .replace(/((?:https?|file):\/\/[^\s?#]+)\?[^\s#]*/gi, '$1?<redacted>')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '<email>')
     .replace(/\b(api[_-]?key|authorization|bearer|token|password|secret)\b(\s*[:=]\s*|\s+)[^\s,;]+/gi, '$1=<redacted>')
-    .replace(/([a-z]:\\users\\)[^\\\s]+/gi, '$1<user>')
-    .replace(/\b[a-z]:\\(?:[^\\\r\n:*?"<>|]+\\)*[^\\\r\n:*?"<>|]*/gi, '<path>')
+    .replace(/(?:file:\/+)?\b[a-z]:[\\/][^\r\n"'<>|?&)\]]*/gi, '<path>')
+    .replace(/\\\\[^\\/\s]+[\\/][^\r\n"'<>|?&)\]]*/gi, '<path>')
+    .replace(/\/(?:users|home)\/[^/\s]+(?:\/[^\r\n"'<>?&)\]]*)?/gi, '<path>')
+    .replace(/(<path>)\?[^\s#]*/g, '$1?<redacted>')
     .slice(0, limit)
 }
 
@@ -109,8 +129,14 @@ export function createLocalDiagnostic(input: LocalClientDiagnostic): Required<Lo
     .replace(/[^a-zA-Z0-9_.-]/g, '_')
     .slice(0, 80)
   const message = sanitizeDiagnosticText(input.message)
-  const fingerprint = input.fingerprint || buildDiagnosticFingerprint(component, code, message)
-  const eventId = input.eventId
+  const suppliedFingerprint = String(input.fingerprint || '')
+    .replace(/[^a-zA-Z0-9_-]/g, '')
+    .slice(0, 64)
+  const fingerprint = suppliedFingerprint || buildDiagnosticFingerprint(component, code, message)
+  const suppliedEventId = String(input.eventId || '')
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 80)
+  const eventId = suppliedEventId
     || `${Date.now().toString(36)}-${fingerprint}-${Math.random().toString(36).slice(2, 8)}`
 
   return {
@@ -125,16 +151,15 @@ export function createLocalDiagnostic(input: LocalClientDiagnostic): Required<Lo
     message,
     stack: sanitizeDiagnosticText(input.stack, MAX_STACK_CHARS),
     context: sanitizeDiagnosticContext(input.context),
-    occurredAt: input.occurredAt || new Date().toISOString()
+    occurredAt: sanitizeDiagnosticText(input.occurredAt || new Date().toISOString(), 40)
   }
 }
 
 export function buildDiagnosticDocument(
   input: LocalClientDiagnostic,
   userId: string,
-  suite: DiagnosticSuiteContext | null,
-  receivedAt = new Date().toISOString()
-): ClientDiagnosticDocument {
+  suite: DiagnosticSuiteContext | null
+): ClientDiagnosticUpload {
   const event = createLocalDiagnostic(input)
   return {
     schemaVersion: CLIENT_DIAGNOSTIC_SCHEMA_VERSION,
@@ -148,7 +173,6 @@ export function buildDiagnosticDocument(
     stack: event.stack,
     context: event.context as Record<string, string | number | boolean | null>,
     occurredAt: event.occurredAt,
-    receivedAt,
     suiteVersion: suite?.suite || null,
     channel: suite?.channel || null
   }

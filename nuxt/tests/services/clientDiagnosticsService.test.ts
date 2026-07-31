@@ -11,11 +11,18 @@ import {
 describe('clientDiagnosticsService', () => {
   it('sanitizza email, token e path Windows', () => {
     const safe = sanitizeDiagnosticText(
-      'test@example.com token=abc C:\\Users\\Enrico\\secret.txt'
+      'test@example.com token=abc C:\\Users\\Enrico\\secret.txt '
+      + 'C:/Users/Mario/AppData/client.js '
+      + 'file:///C:/Users/Luigi%20QA/log.txt?session=private '
+      + 'https://example.test/app.js?token=query-secret'
     )
     expect(safe).not.toContain('test@example.com')
     expect(safe).not.toContain('token=abc')
     expect(safe).not.toContain('Enrico')
+    expect(safe).not.toContain('Mario')
+    expect(safe).not.toContain('Luigi')
+    expect(safe).not.toContain('query-secret')
+    expect(safe).not.toContain('session=private')
   })
 
   it('stabilizza il fingerprint ignorando numeri variabili', () => {
@@ -23,7 +30,7 @@ describe('clientDiagnosticsService', () => {
       .toBe(buildDiagnosticFingerprint('launcher', 'update', 'errore 456'))
   })
 
-  it('costruisce il documento Firebase canonico', () => {
+  it('costruisce il payload Firebase canonico senza timestamp client di ricezione', () => {
     const document = buildDiagnosticDocument({
       eventId: 'evt-1',
       component: 'electron',
@@ -34,7 +41,7 @@ describe('clientDiagnosticsService', () => {
     }, 'user-1', {
       suite: '0.4.0-dev.1',
       channel: 'develop'
-    }, '2026-07-17T10:01:00Z')
+    })
 
     expect(document).toMatchObject({
       schemaVersion: 1,
@@ -43,6 +50,7 @@ describe('clientDiagnosticsService', () => {
       suiteVersion: '0.4.0-dev.1',
       channel: 'develop'
     })
+    expect(document).not.toHaveProperty('receivedAt')
   })
 
   it('deduplica entro la finestra e accetta dopo la scadenza', () => {
@@ -58,6 +66,18 @@ describe('clientDiagnosticsService', () => {
     })).toMatchObject({
       severity: 'error',
       context: { password: '<redacted>', retries: 2 }
+    })
+  })
+
+  it('normalizza eventId, fingerprint e timestamp osservato', () => {
+    expect(createLocalDiagnostic({
+      eventId: '../unsafe event',
+      fingerprint: 'bad fingerprint!',
+      occurredAt: '2026-07-17T10:00:00Z?token=secret'
+    })).toMatchObject({
+      eventId: '___unsafe_event',
+      fingerprint: 'badfingerprint',
+      occurredAt: '2026-07-17T10:00:00Z?token=<redacted>'
     })
   })
 

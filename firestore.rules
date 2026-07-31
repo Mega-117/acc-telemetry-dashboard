@@ -96,6 +96,49 @@ service cloud.firestore {
              && validRuntimeMigration(request.resource.data.migration);
     }
 
+    function validDiagnosticEvent(eventId, userId) {
+      return request.resource.data.keys().hasAll([
+               'schemaVersion', 'eventId', 'fingerprint', 'userId',
+               'component', 'severity', 'code', 'message', 'stack',
+               'context', 'occurredAt', 'receivedAt', 'suiteVersion',
+               'channel'
+             ])
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'eventId', 'fingerprint', 'userId',
+               'component', 'severity', 'code', 'message', 'stack',
+               'context', 'occurredAt', 'receivedAt', 'suiteVersion',
+               'channel'
+             ])
+             && request.resource.data.schemaVersion == 1
+             && request.resource.data.eventId is string
+             && request.resource.data.eventId == eventId
+             && request.resource.data.eventId.size() <= 80
+             && request.resource.data.fingerprint is string
+             && request.resource.data.fingerprint.size() <= 64
+             && request.resource.data.userId is string
+             && request.resource.data.userId == userId
+             && request.resource.data.component is string
+             && request.resource.data.component.size() <= 48
+             && request.resource.data.severity in ['warning', 'error', 'fatal']
+             && request.resource.data.code is string
+             && request.resource.data.code.size() <= 80
+             && request.resource.data.message is string
+             && request.resource.data.message.size() <= 2000
+             && request.resource.data.stack is string
+             && request.resource.data.stack.size() <= 8000
+             && request.resource.data.context is map
+             && request.resource.data.context.keys().size() <= 12
+             && request.resource.data.occurredAt is string
+             && request.resource.data.occurredAt.size() <= 40
+             && request.resource.data.receivedAt is timestamp
+             && request.resource.data.receivedAt == request.time
+             && isBoundedNullableString(request.resource.data.suiteVersion, 80)
+             && (
+               request.resource.data.channel == null
+               || request.resource.data.channel in ['main', 'develop']
+             );
+    }
+
     // Public profile surface for cross-user features (nickname/avatar only).
     match /publicProfiles/{userId} {
       allow read: if isSignedIn();
@@ -201,26 +244,7 @@ service cloud.firestore {
 
       match /diagnostics/{eventId} {
         allow create: if isOwner(userId)
-                      && request.resource.data.keys().hasAll([
-                        'schemaVersion', 'eventId', 'fingerprint', 'userId',
-                        'component', 'severity', 'code', 'message', 'stack',
-                        'context', 'occurredAt', 'receivedAt', 'suiteVersion',
-                        'channel'
-                      ])
-                      && request.resource.data.keys().hasOnly([
-                        'schemaVersion', 'eventId', 'fingerprint', 'userId',
-                        'component', 'severity', 'code', 'message', 'stack',
-                        'context', 'occurredAt', 'receivedAt', 'suiteVersion',
-                        'channel'
-                      ])
-                      && request.resource.data.schemaVersion == 1
-                      && request.resource.data.eventId == eventId
-                      && request.resource.data.userId == userId
-                      && request.resource.data.message is string
-                      && request.resource.data.message.size() <= 2000
-                      && request.resource.data.stack is string
-                      && request.resource.data.stack.size() <= 8000
-                      && request.resource.data.context is map;
+                      && validDiagnosticEvent(eventId, userId);
         // The owner may only check a deterministic event ID so a crashed
         // outbox retry can acknowledge an already-created immutable report.
         allow get: if isOwner(userId) || isAdmin();

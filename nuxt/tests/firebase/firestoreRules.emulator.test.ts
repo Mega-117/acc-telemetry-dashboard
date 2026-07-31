@@ -13,10 +13,15 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
   query,
   runTransaction,
+  serverTimestamp,
   setDoc,
-  updateDoc
+  Timestamp,
+  updateDoc,
+  where
 } from 'firebase/firestore'
 import {
   advanceCanonicalMigrationCheckpoint,
@@ -47,7 +52,7 @@ function diagnosticPayload(uid: string, eventId: string) {
     stack: '',
     context: { source: 'emulator' },
     occurredAt: '2026-07-18T10:00:00.000Z',
-    receivedAt: '2026-07-18T10:00:01.000Z',
+    receivedAt: serverTimestamp(),
     suiteVersion: '0.4.0-dev.1',
     channel: 'develop'
   }
@@ -124,6 +129,22 @@ describe('diagnostics rules', () => {
     await assertFails(getDocs(collection(db, `users/${PILOT_UID}/diagnostics`)))
   })
 
+  it('vincola tipi, enum, timestamp server e limiti diagnostica', async () => {
+    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const ref = doc(db, `users/${PILOT_UID}/diagnostics/event-1`)
+    const payload = diagnosticPayload(PILOT_UID, 'event-1')
+
+    await assertFails(setDoc(ref, { ...payload, severity: 'debug' }))
+    await assertFails(setDoc(ref, { ...payload, code: 'x'.repeat(81) }))
+    await assertFails(setDoc(ref, { ...payload, receivedAt: '2026-07-18T10:00:01.000Z' }))
+    await assertFails(setDoc(ref, { ...payload, channel: 'production' }))
+    await assertFails(setDoc(ref, {
+      ...payload,
+      context: Object.fromEntries(Array.from({ length: 13 }, (_, index) => [`key${index}`, index]))
+    }))
+    await assertFails(setDoc(ref, { ...payload, unexpected: true }))
+  })
+
   it('nega modifica e accesso tra piloti', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(
@@ -156,6 +177,41 @@ describe('diagnostics rules', () => {
     await assertSucceeds(deleteDoc(
       doc(adminDb, `users/${PILOT_UID}/diagnostics/event-1`)
     ))
+  })
+
+  it('nega list collection-group diagnostica a coach e piloti', async () => {
+    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
+    const pilotDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    await assertFails(getDocs(collectionGroup(coachDb, 'diagnostics')))
+    await assertFails(getDocs(collectionGroup(pilotDb, 'diagnostics')))
+  })
+
+  it('consente solo all’admin la query di pulizia su receivedAt autorevole', async () => {
+    const cutoff = Timestamp.fromMillis(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await Promise.all([
+        setDoc(doc(db, `users/${PILOT_UID}/diagnostics/expired`), {
+          ...diagnosticPayload(PILOT_UID, 'expired'),
+          receivedAt: Timestamp.fromMillis(cutoff.toMillis() - 1000)
+        }),
+        setDoc(doc(db, `users/${PILOT_UID}/diagnostics/recent`), {
+          ...diagnosticPayload(PILOT_UID, 'recent'),
+          receivedAt: Timestamp.fromMillis(cutoff.toMillis() + 1000)
+        })
+      ])
+    })
+
+    const cleanupQuery = (db: ReturnType<ReturnType<typeof testEnv.authenticatedContext>['firestore']>) => query(
+      collectionGroup(db, 'diagnostics'),
+      where('receivedAt', '<=', cutoff),
+      orderBy('receivedAt', 'asc'),
+      limit(200)
+    )
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    await assertSucceeds(getDocs(cleanupQuery(adminDb)))
+    await assertFails(getDocs(cleanupQuery(testEnv.authenticatedContext(COACH_UID).firestore())))
+    await assertFails(getDocs(cleanupQuery(testEnv.authenticatedContext(SECOND_PILOT_UID).firestore())))
   })
 })
 
