@@ -57,6 +57,22 @@ describe('AdminCockpitTable', () => {
     expect(html).toContain('skeleton-row')
   })
 
+  it('conserva le righe durante refresh e relativo errore senza tornare allo skeleton', async () => {
+    const refreshingHtml = await renderToString(createSSRApp(AdminCockpitTable, {
+      rows: rows(),
+      loading: true,
+    }))
+    const refreshErrorHtml = await renderToString(createSSRApp(AdminCockpitTable, {
+      rows: rows(),
+      error: 'Permesso temporaneamente non disponibile',
+    }))
+
+    expect(refreshingHtml).toContain('install-a')
+    expect(refreshingHtml).not.toContain('skeleton-row')
+    expect(refreshErrorHtml).toContain('Aggiornamento non riuscito')
+    expect(refreshErrorHtml).toContain('install-a')
+  })
+
   it('espone stati errore ed empty accessibili', async () => {
     const errorHtml = await renderToString(createSSRApp(AdminCockpitTable, {
       rows: [],

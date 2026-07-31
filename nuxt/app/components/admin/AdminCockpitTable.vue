@@ -74,18 +74,23 @@ const skeletonRows = Array.from({ length: 6 }, (_, index) => index)
 
     <div v-if="error" class="state-panel state-panel--error" role="alert">
       <div>
-        <strong>Fotografia non disponibile</strong>
+        <strong>{{ rows.length > 0 ? 'Aggiornamento non riuscito' : 'Fotografia non disponibile' }}</strong>
         <p>{{ error }}</p>
       </div>
       <button type="button" @click="emit('retry')">Riprova</button>
     </div>
 
-    <div v-else-if="!loading && rows.length === 0" class="state-panel" role="status">
+    <div v-if="!error && !loading && rows.length === 0" class="state-panel" role="status">
       <strong>Nessun report runtime</strong>
       <p>Le installazioni compariranno dopo il primo report della RuntimeWindow.</p>
     </div>
 
-    <div v-else class="table-scroll" tabindex="0" aria-label="Tabella installazioni; scorri orizzontalmente per tutte le colonne">
+    <div
+      v-if="rows.length > 0 || (loading && !error)"
+      class="table-scroll"
+      tabindex="0"
+      aria-label="Tabella installazioni; scorri orizzontalmente per tutte le colonne"
+    >
       <table :aria-busy="loading ? 'true' : 'false'">
         <thead>
           <tr>
@@ -99,7 +104,7 @@ const skeletonRows = Array.from({ length: 6 }, (_, index) => index)
             <th scope="col">Errori sintetici</th>
           </tr>
         </thead>
-        <tbody v-if="loading">
+        <tbody v-if="loading && rows.length === 0">
           <tr v-for="index in skeletonRows" :key="index" class="skeleton-row" aria-hidden="true">
             <td v-for="column in 8" :key="column"><span class="skeleton-line"></span></td>
           </tr>
