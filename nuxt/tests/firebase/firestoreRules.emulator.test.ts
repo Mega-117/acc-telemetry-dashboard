@@ -181,11 +181,19 @@ describe('diagnostics rules', () => {
     ))
   })
 
-  it('nega list collection-group diagnostica a coach e piloti', async () => {
+  it('nega lettura ed eliminazione diagnostica a coach e piloti', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), `users/${PILOT_UID}/diagnostics/restricted`),
+        diagnosticPayload(PILOT_UID, 'restricted')
+      )
+    })
     const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
     const pilotDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
     await assertFails(getDocs(collectionGroup(coachDb, 'diagnostics')))
     await assertFails(getDocs(collectionGroup(pilotDb, 'diagnostics')))
+    await assertFails(deleteDoc(doc(coachDb, `users/${PILOT_UID}/diagnostics/restricted`)))
+    await assertFails(deleteDoc(doc(pilotDb, `users/${PILOT_UID}/diagnostics/restricted`)))
   })
 
   it('consente solo all’admin la query di pulizia su receivedAt autorevole', async () => {

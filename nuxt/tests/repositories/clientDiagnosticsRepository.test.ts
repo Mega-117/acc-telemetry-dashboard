@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   CLIENT_DIAGNOSTICS_CLEANUP_BATCH_SIZE,
+  CLIENT_DIAGNOSTICS_PAGE_SIZE,
   CLIENT_DIAGNOSTICS_RETENTION_DAYS,
   countExpiredClientDiagnostics,
   deleteExpiredClientDiagnostics,
@@ -16,6 +17,9 @@ function diagnosticRefs(count: number, offset = 0) {
 }
 
 describe('clientDiagnosticsRepository cleanup', () => {
+  it('usa esattamente 50 eventi per pagina', () => {
+    expect(CLIENT_DIAGNOSTICS_PAGE_SIZE).toBe(50)
+  })
   it('calcola il cutoff a 30 giorni esatti', () => {
     const now = Date.parse('2026-07-31T12:00:00.000Z')
     expect(diagnosticRetentionCutoffMs(now)).toBe(now - CLIENT_DIAGNOSTICS_RETENTION_DAYS * DAY_MS)

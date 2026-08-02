@@ -66,6 +66,7 @@ export default defineConfig({
         'app/services/spotter/trackVoiceReferenceChanges.ts',
         'app/services/spotter/spotterSessionPolicy.ts',
         'app/utils/firestoreSanitize.ts',
+        'app/utils/diagnosticsPresentation.ts',
         'app/utils/featureAccess.ts',
         'app/utils/authRouteGuard.ts',
         'app/utils/tyreSlipPresentation.ts',
