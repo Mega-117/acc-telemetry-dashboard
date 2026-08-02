@@ -23,6 +23,8 @@ export interface SuiteVersionInfo {
 export interface RuntimeInstallationIdentity {
   installationId?: string | null
   createdAt?: string | null
+  lastSuiteLaunchAt?: string | null
+  lastDashboardOpenedAt?: string | null
   fallback?: boolean
 }
 
@@ -30,6 +32,8 @@ export interface RuntimeInstallationHeartbeat {
   schemaVersion: 2
   installationId: string
   startedAt: string
+  lastSuiteLaunchAt?: string
+  lastDashboardOpenedAt?: string
   lastContactAt: string
   suiteVersion: string | null
   channel: string | null
@@ -152,6 +156,8 @@ export function buildClientHeartbeatPayload(
     kokoroRuntime: boundedString(version.kokoroRuntime, MAX_VERSION_LENGTH)
   }
   const runtimeSummary = buildRuntimeSummary(context.runtimeState)
+  const lastSuiteLaunchAt = boundedString(context.identity.lastSuiteLaunchAt, 40)
+  const lastDashboardOpenedAt = boundedString(context.identity.lastDashboardOpenedAt, 40)
   const installationRuntime: RuntimeInstallationHeartbeat = {
     schemaVersion: CLIENT_HEARTBEAT_SCHEMA_VERSION,
     installationId,
@@ -162,7 +168,9 @@ export function buildClientHeartbeatPayload(
     updateState: version.updateState || 'current',
     lastCheckAt: boundedString(version.lastCheckAt, 40),
     components,
-    ...runtimeSummary
+    ...runtimeSummary,
+    ...(lastSuiteLaunchAt ? { lastSuiteLaunchAt } : {}),
+    ...(lastDashboardOpenedAt ? { lastDashboardOpenedAt } : {})
   }
 
   return {
@@ -186,11 +194,23 @@ export function buildClientHeartbeatPayload(
 export function shouldSendClientHeartbeat(
   lastSuccessfulHeartbeatAt: string | null | undefined,
   nowMs: number,
-  intervalMs = CLIENT_HEARTBEAT_INTERVAL_MS
+  intervalMs = CLIENT_HEARTBEAT_INTERVAL_MS,
+  runtimeActivityAt?: string | null
 ): boolean {
   if (!lastSuccessfulHeartbeatAt) return true
   const lastMs = Date.parse(lastSuccessfulHeartbeatAt)
+  const activityMs = runtimeActivityAt ? Date.parse(runtimeActivityAt) : Number.NaN
+  if (Number.isFinite(activityMs) && (!Number.isFinite(lastMs) || activityMs > lastMs)) return true
   return !Number.isFinite(lastMs) || nowMs - lastMs >= intervalMs
+}
+
+export function getLatestRuntimeActivityAt(
+  identity: RuntimeInstallationIdentity | null | undefined
+): string | null {
+  const candidates = [identity?.lastSuiteLaunchAt, identity?.lastDashboardOpenedAt]
+    .map(value => boundedString(value, 40))
+    .filter((value): value is string => typeof value === 'string' && Number.isFinite(Date.parse(value)))
+  return candidates.sort((left, right) => Date.parse(right) - Date.parse(left))[0] || null
 }
 
 export function getClientHeartbeatStatus(

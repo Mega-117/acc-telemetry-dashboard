@@ -15,7 +15,9 @@ function rows(): AdminCockpitRow[] {
     installation: {
       ownerUid: 'pilot-1',
       installationId,
-      startedAt: '2026-07-30T18:00:00.000Z',
+      installationRegisteredAt: '2026-07-30T18:00:00.000Z',
+      lastSuiteLaunchAt: installationId === 'install-a' ? '2026-07-30T18:45:00.000Z' : null,
+      lastDashboardOpenedAt: installationId === 'install-a' ? '2026-07-30T18:50:00.000Z' : null,
       lastContactAt: now,
       suiteVersion: '0.4.0-dev.4',
       channel: 'develop',
@@ -46,6 +48,12 @@ describe('AdminCockpitTable', () => {
     expect(html).toContain('install-a')
     expect(html).toContain('install-b')
     expect(html).toContain('2 installazioni')
+    expect(html).toContain('Installazione registrata il')
+    expect(html).toContain('Ultimo avvio della Suite')
+    expect(html).toContain('Ultima apertura Dashboard')
+    expect(html).toContain('Ultima connessione')
+    expect(html).toContain('Mai registrato')
+    expect(html).not.toContain('<th scope="col">Avvio</th>')
     expect(html).toContain('Contatto recente')
     expect(html).toContain('Nessun report per-installazione')
     expect(html.toLowerCase()).not.toContain('online')

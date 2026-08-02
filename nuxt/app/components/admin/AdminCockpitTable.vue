@@ -12,8 +12,8 @@ const emit = defineEmits<{
   retry: []
 }>()
 
-function formatTimestamp(value: string | null | undefined): string {
-  if (!value) return 'Non disponibile'
+function formatTimestamp(value: string | null | undefined, fallback = 'Non disponibile'): string {
+  if (!value) return fallback
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('it-IT', {
@@ -97,8 +97,10 @@ const skeletonRows = Array.from({ length: 6 }, (_, index) => index)
             <th scope="col">Utente</th>
             <th scope="col">Installazione</th>
             <th scope="col">Versioni</th>
-            <th scope="col">Avvio</th>
-            <th scope="col">Ultimo contatto</th>
+            <th scope="col">Installazione registrata il</th>
+            <th scope="col">Ultimo avvio della Suite</th>
+            <th scope="col">Ultima apertura Dashboard</th>
+            <th scope="col">Ultima connessione</th>
             <th scope="col">Update</th>
             <th scope="col">Health e migrazione</th>
             <th scope="col">Errori sintetici</th>
@@ -106,7 +108,7 @@ const skeletonRows = Array.from({ length: 6 }, (_, index) => index)
         </thead>
         <tbody v-if="loading && rows.length === 0">
           <tr v-for="index in skeletonRows" :key="index" class="skeleton-row" aria-hidden="true">
-            <td v-for="column in 8" :key="column"><span class="skeleton-line"></span></td>
+            <td v-for="column in 10" :key="column"><span class="skeleton-line"></span></td>
           </tr>
         </tbody>
         <tbody v-else>
@@ -136,8 +138,18 @@ const skeletonRows = Array.from({ length: 6 }, (_, index) => index)
                 </span>
               </td>
               <td>
-                <time class="mono" :datetime="row.installation.startedAt || undefined">
-                  {{ formatTimestamp(row.installation.startedAt) }}
+                <time class="mono" :datetime="row.installation.installationRegisteredAt || undefined">
+                  {{ formatTimestamp(row.installation.installationRegisteredAt) }}
+                </time>
+              </td>
+              <td>
+                <time class="mono" :datetime="row.installation.lastSuiteLaunchAt || undefined">
+                  {{ formatTimestamp(row.installation.lastSuiteLaunchAt, 'Mai registrato') }}
+                </time>
+              </td>
+              <td>
+                <time class="mono" :datetime="row.installation.lastDashboardOpenedAt || undefined">
+                  {{ formatTimestamp(row.installation.lastDashboardOpenedAt, 'Mai registrato') }}
                 </time>
               </td>
               <td>
@@ -174,7 +186,7 @@ const skeletonRows = Array.from({ length: 6 }, (_, index) => index)
                 <code v-for="code in diagnosticCodes(row)" v-else :key="code">{{ code }}</code>
               </td>
             </template>
-            <td v-else colspan="7">
+            <td v-else colspan="9">
               <span class="status-line">
                 <i class="status-dot status-dot--neutral"></i>
                 Nessun report per-installazione nella fotografia corrente
@@ -244,7 +256,7 @@ h2 {
 
 table {
   width: 100%;
-  min-width: 1320px;
+  min-width: 1640px;
   border-collapse: collapse;
   color: $text-secondary;
   font-family: $font-primary;

@@ -3,6 +3,7 @@ import {
   CLIENT_HEARTBEAT_INTERVAL_MS,
   buildClientHeartbeatPayload,
   getClientHeartbeatStatus,
+  getLatestRuntimeActivityAt,
   normalizeSuiteVersionInfo,
   shouldSendClientHeartbeat
 } from '~/services/monitoring/clientHeartbeatService'
@@ -24,6 +25,8 @@ describe('clientHeartbeatService', () => {
       identity: {
         installationId: '11111111-1111-4111-8111-111111111111',
         createdAt: '2026-07-01T08:00:00Z',
+        lastSuiteLaunchAt: '2026-07-17T09:58:00Z',
+        lastDashboardOpenedAt: '2026-07-17T10:02:00Z',
         fallback: false
       },
       runtimeState: {
@@ -57,6 +60,8 @@ describe('clientHeartbeatService', () => {
         schemaVersion: 2,
         installationId: '11111111-1111-4111-8111-111111111111',
         startedAt: '2026-07-01T08:00:00Z',
+        lastSuiteLaunchAt: '2026-07-17T09:58:00Z',
+        lastDashboardOpenedAt: '2026-07-17T10:02:00Z',
         lastContactAt: '2026-07-17T10:05:00Z',
         health: { status: 'healthy', phase: 'ready' },
         migration: { status: 'healthy', phase: 'completed', progress: 100 }
@@ -87,9 +92,23 @@ describe('clientHeartbeatService', () => {
     expect(shouldSendClientHeartbeat(null, now)).toBe(true)
     expect(shouldSendClientHeartbeat('2026-07-17T10:20:00Z', now)).toBe(false)
     expect(shouldSendClientHeartbeat(
+      '2026-07-17T10:20:00Z',
+      now,
+      CLIENT_HEARTBEAT_INTERVAL_MS,
+      '2026-07-17T10:25:00Z'
+    )).toBe(true)
+    expect(shouldSendClientHeartbeat(
       new Date(now - CLIENT_HEARTBEAT_INTERVAL_MS).toISOString(),
       now
     )).toBe(true)
+  })
+
+  it('ricava l attivita runtime piu recente e ignora valori invalidi', () => {
+    expect(getLatestRuntimeActivityAt({
+      lastSuiteLaunchAt: '2026-07-17T10:00:00Z',
+      lastDashboardOpenedAt: '2026-07-17T10:05:00Z'
+    })).toBe('2026-07-17T10:05:00Z')
+    expect(getLatestRuntimeActivityAt({ lastSuiteLaunchAt: 'invalid' })).toBeNull()
   })
 
   it('classifica client recente, non recente e sconosciuto', () => {

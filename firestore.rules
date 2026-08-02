@@ -76,6 +76,7 @@ service cloud.firestore {
              ])
              && request.resource.data.keys().hasOnly([
                'schemaVersion', 'installationId', 'startedAt', 'lastContactAt',
+               'lastSuiteLaunchAt', 'lastDashboardOpenedAt',
                'suiteVersion', 'channel', 'updateState', 'lastCheckAt',
                'components', 'health', 'migration'
              ])
@@ -86,6 +87,8 @@ service cloud.firestore {
              && request.resource.data.startedAt.size() <= 40
              && request.resource.data.lastContactAt is string
              && request.resource.data.lastContactAt.size() <= 40
+             && isBoundedNullableString(request.resource.data.get('lastSuiteLaunchAt', null), 40)
+             && isBoundedNullableString(request.resource.data.get('lastDashboardOpenedAt', null), 40)
              && isBoundedNullableString(request.resource.data.suiteVersion, 80)
              && isBoundedNullableString(request.resource.data.channel, 24)
              && request.resource.data.updateState is string

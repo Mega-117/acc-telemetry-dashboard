@@ -26,6 +26,8 @@ function payload(installationId: string): ClientHeartbeatPayload {
       schemaVersion: 2,
       installationId,
       startedAt: '2026-07-30T18:00:00.000Z',
+      lastSuiteLaunchAt: '2026-07-30T18:45:00.000Z',
+      lastDashboardOpenedAt: '2026-07-30T18:50:00.000Z',
       lastContactAt,
       suiteVersion: '0.4.0-dev.4',
       channel: 'develop',
@@ -63,6 +65,12 @@ describe('clientRuntimeReportingService', () => {
       reads: CLIENT_RUNTIME_REPORT_READ_BUDGET
     })
     expect(setDocFn).toHaveBeenCalledTimes(3)
+    expect(setDocFn.mock.calls[0]?.[1]).toMatchObject({
+      startedAt: '2026-07-30T18:00:00.000Z',
+      lastSuiteLaunchAt: '2026-07-30T18:45:00.000Z',
+      lastDashboardOpenedAt: '2026-07-30T18:50:00.000Z',
+      lastContactAt: '2026-07-30T19:00:00.000Z'
+    })
     expect(paths).toEqual([
       'users/pilot-1/runtimeInstallations/install-a',
       'users/pilot-1',

@@ -63,6 +63,8 @@ function runtimeInstallationPayload(installationId: string, lastContactAt = '202
     schemaVersion: 2,
     installationId,
     startedAt: '2026-07-30T18:00:00.000Z',
+    lastSuiteLaunchAt: '2026-07-30T18:45:00.000Z',
+    lastDashboardOpenedAt: '2026-07-30T18:50:00.000Z',
     lastContactAt,
     suiteVersion: '0.4.0-dev.4',
     channel: 'develop',
@@ -238,6 +240,14 @@ describe('heartbeat and admin projection rules', () => {
     const ref = doc(db, `users/${PILOT_UID}/runtimeInstallations/install-a`)
     await assertFails(setDoc(ref, runtimeInstallationPayload('install-b')))
     await assertFails(setDoc(ref, { ...runtimeInstallationPayload('install-a'), rootKey: 'secret' }))
+    await assertFails(setDoc(ref, {
+      ...runtimeInstallationPayload('install-a'),
+      lastSuiteLaunchAt: 42
+    }))
+    const legacyPayload: Record<string, unknown> = runtimeInstallationPayload('install-a')
+    delete legacyPayload.lastSuiteLaunchAt
+    delete legacyPayload.lastDashboardOpenedAt
+    await assertSucceeds(setDoc(ref, legacyPayload))
     await assertSucceeds(setDoc(ref, runtimeInstallationPayload('install-a')))
     await assertFails(setDoc(ref, {
       ...runtimeInstallationPayload('install-a'),

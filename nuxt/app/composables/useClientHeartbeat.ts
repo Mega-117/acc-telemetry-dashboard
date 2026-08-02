@@ -5,6 +5,7 @@ import { trackedSetDoc } from '~/composables/useFirebaseTracker'
 import {
   CLIENT_HEARTBEAT_INTERVAL_MS,
   buildClientHeartbeatPayload,
+  getLatestRuntimeActivityAt,
   shouldSendClientHeartbeat,
   type RuntimeInstallationIdentity,
   type SuiteVersionInfo
@@ -18,6 +19,7 @@ const STORAGE_KEY_PREFIX = 'acc_client_heartbeat_'
 type ElectronHeartbeatApi = {
   getSuiteVersion?: () => Promise<SuiteVersionInfo | null>
   getRuntimeIdentity?: () => Promise<RuntimeInstallationIdentity | null>
+  onWindowFocused?: (callback: () => void) => (() => void) | void
 }
 
 function getElectronApi(): ElectronHeartbeatApi | null {
@@ -41,6 +43,7 @@ export function useClientHeartbeat(options: {
 }) {
   const { currentUser, canEnterApp } = useFirebaseAuth()
   let intervalId: number | null = null
+  let unsubscribeWindowFocused: (() => void) | null = null
   let isSending = false
 
   async function sendHeartbeat(force = false): Promise<boolean> {
@@ -64,7 +67,14 @@ export function useClientHeartbeat(options: {
       if (!installationId || identity?.fallback === true) return false
       const nowMs = Date.now()
       const storageOwner = `${uid}_${installationId}`
-      if (!force && !shouldSendClientHeartbeat(getStoredHeartbeatAt(storageOwner), nowMs)) {
+      const lastHeartbeatAt = getStoredHeartbeatAt(storageOwner)
+      const latestRuntimeActivityAt = getLatestRuntimeActivityAt(identity)
+      if (!force && !shouldSendClientHeartbeat(
+        lastHeartbeatAt,
+        nowMs,
+        CLIENT_HEARTBEAT_INTERVAL_MS,
+        latestRuntimeActivityAt
+      )) {
         return false
       }
 
@@ -107,10 +117,15 @@ export function useClientHeartbeat(options: {
     { immediate: true }
   )
 
+  function handleRuntimeActivity() {
+    void sendHeartbeat(false)
+  }
+
   if (typeof window !== 'undefined') {
-    intervalId = window.setInterval(() => {
-      void sendHeartbeat(false)
-    }, CLIENT_HEARTBEAT_INTERVAL_MS)
+    intervalId = window.setInterval(handleRuntimeActivity, CLIENT_HEARTBEAT_INTERVAL_MS)
+    window.addEventListener('online', handleRuntimeActivity)
+    const unsubscribe = getElectronApi()?.onWindowFocused?.(handleRuntimeActivity)
+    unsubscribeWindowFocused = typeof unsubscribe === 'function' ? unsubscribe : null
   }
 
   onBeforeUnmount(() => {
@@ -119,6 +134,11 @@ export function useClientHeartbeat(options: {
       clearInterval(intervalId)
       intervalId = null
     }
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('online', handleRuntimeActivity)
+    }
+    unsubscribeWindowFocused?.()
+    unsubscribeWindowFocused = null
   })
 
   return {

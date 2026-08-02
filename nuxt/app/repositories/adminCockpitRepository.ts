@@ -16,7 +16,9 @@ export const ADMIN_COCKPIT_WRITE_BUDGET = 0
 export interface AdminCockpitInstallation {
   ownerUid: string
   installationId: string
-  startedAt: string | null
+  installationRegisteredAt: string | null
+  lastSuiteLaunchAt: string | null
+  lastDashboardOpenedAt: string | null
   lastContactAt: string | null
   suiteVersion: string | null
   channel: string | null
@@ -89,7 +91,9 @@ export function mapAdminCockpitInstallation(docSnap: any): AdminCockpitInstallat
   return {
     ownerUid,
     installationId,
-    startedAt: textOrNull(data.startedAt),
+    installationRegisteredAt: textOrNull(data.startedAt),
+    lastSuiteLaunchAt: textOrNull(data.lastSuiteLaunchAt),
+    lastDashboardOpenedAt: textOrNull(data.lastDashboardOpenedAt),
     lastContactAt: textOrNull(data.lastContactAt),
     suiteVersion: textOrNull(data.suiteVersion),
     channel: textOrNull(data.channel),
