@@ -13,7 +13,8 @@ describe('Dashboard fast-state normalization', () => {
         fuel_per_lap_l: 2.7, fuel_laps_remaining: 14.9, fuel_left_time_ms: 531_001,
         session_laps_remaining: 6, session_time_left_ms: 1000,
         engine_map: 2, traction_control: 3, traction_control_2: 1,
-        abs: 4, brake_bias_pct: 54.8, corner_speed_kmh: null,
+        abs: 4, traction_control_in_action: true, abs_in_action: false,
+        is_in_pit_lane: false, brake_bias_pct: 54.8, corner_speed_kmh: null,
         direction_lights_left: true, direction_lights_right: false,
         lights_stage: 2, rain_lights: true,
       })),
@@ -26,7 +27,8 @@ describe('Dashboard fast-state normalization', () => {
       isFresh: true, ignitionOn: true, rpm: 8120, maxRpm: 9000, gear: 4,
       fuelL: 40.2, fuelPerLapL: 2.7, fuelLapsRemaining: 14.9, fuelLeftTimeMs: 531_001,
       sessionLapsRemaining: 6, engineMap: 2, tractionControl: 3,
-      tractionControl2: 1, abs: 4, brakeBiasPct: 54.8,
+      tractionControl2: 1, abs: 4, tractionControlInAction: true, absInAction: false,
+      isInPitLane: false, brakeBiasPct: 54.8,
       directionLightsLeft: true, lightsStage: 2, rainLights: true,
     })
     poller.stopFastStatePolling()

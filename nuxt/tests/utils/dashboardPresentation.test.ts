@@ -32,7 +32,7 @@ function state(overrides: Partial<FastOverlayState> = {}): FastOverlayState {
   return {
     context: context(), info: null, flag: null, lapsCompleted: 0,
     currentLapTimeMs: null, lastLapTimeMs: null, bestLapTimeMs: null, lapValid: true,
-    isFresh: true, isLive: true, ignitionOn: true, isEngineRunning: true, pitLimiterOn: false,
+    isFresh: true, isLive: true, ignitionOn: true, isEngineRunning: true, pitLimiterOn: false, isInPitLane: false,
     sessionType: 2, normalizedCarPosition: 0.4, speedKmh: 123.4, speedDeltaKmh: null,
     referenceSpeedKmh: null, referenceRpm: null, referenceGear: null,
     referenceEngineMap: null, referenceTractionControl: null,
@@ -40,7 +40,7 @@ function state(overrides: Partial<FastOverlayState> = {}): FastOverlayState {
     gas: 0.7, brake: 0.2, rpm: 7800, maxRpm: 12000, gear: 3,
     fuelL: 42.35, fuelPerLapL: 2.71, fuelLapsRemaining: 15.6, fuelLeftTimeMs: 531_001,
     sessionLapsRemaining: 8, sessionTimeLeftMs: 1000, engineMap: 2,
-    tractionControl: 3, tractionControl2: 1, abs: 4, brakeBiasPct: 54.8,
+    tractionControl: 3, tractionControl2: 1, abs: 4, tractionControlInAction: false, absInAction: false, brakeBiasPct: 54.8,
     cornerSpeedKmh: null, directionLightsLeft: false, directionLightsRight: false,
     lightsStage: 1, rainLights: false, currentTyreSet: null, tyreSetAvailable: false,
     tyreCompound: null, rainIntensity: null, rainIntensity10Min: null, rainIntensity30Min: null,
@@ -171,6 +171,23 @@ describe('dashboardPresentation', () => {
       tractionControl2Reference: '3', absReference: '4',
     })
   })
+
+  it('replica ACC Drive: riempie solo il riquadro dell intervento reale ABS o TC', () => {
+    expect(buildDashboardPresentation(state({ tractionControlInAction: true })))
+      .toMatchObject({ tractionControlActive: true, absActive: false })
+    expect(buildDashboardPresentation(state({ absInAction: true })))
+      .toMatchObject({ tractionControlActive: false, absActive: true })
+    expect(buildDashboardPresentation(state({ tractionControlInAction: true, absInAction: true })))
+      .toMatchObject({ tractionControlActive: true, absActive: true })
+  })
+
+  it.each([
+    { isFresh: false }, { isLive: false }, { ignitionOn: false }, { isEngineRunning: false }, { isInPitLane: true },
+  ])('does not show intervention effects with unreliable or non-driving telemetry: %o', (invalid) => {
+    const model = buildDashboardPresentation(state({ tractionControlInAction: true, absInAction: true, ...invalid }))
+    expect(model).toMatchObject({ tractionControlActive: false, absActive: false })
+  })
+
 
   it('mantiene precedenza off e pit e usa la soglia auto per verde/blu', () => {
     expect(buildDashboardPresentation(state({ ignitionOn: false, isEngineRunning: false })).rpmBand).toBe('off')

@@ -53,12 +53,12 @@ defineProps<{ model: DashboardPresentation }>()
 
     <div class="tile tile--cyan map"><b>MAP</b><strong>{{ model.engineMap }}</strong><small v-if="model.engineMapReference !== null">{{ model.engineMapReference }}</small></div>
     <div class="tile tile--orange tc2"><b>TC2</b><strong>{{ model.tractionControl2 }}</strong><small v-if="model.tractionControl2Reference !== null">{{ model.tractionControl2Reference }}</small></div>
-    <div class="tile tile--red tc"><b>TC</b><strong>{{ model.tractionControl }}</strong><small v-if="model.tractionControlReference !== null">{{ model.tractionControlReference }}</small></div>
+    <div class="tile tile--red tc" :class="{ 'tc--active': model.tractionControlActive }"><b>TC</b><strong>{{ model.tractionControl }}</strong><small v-if="model.tractionControlReference !== null">{{ model.tractionControlReference }}</small></div>
     <div class="inputs">
       <span class="inputs__gas" :style="{ width: `${model.throttlePct}%` }" />
       <span class="inputs__brake" :style="{ width: `${model.brakePct}%` }" />
     </div>
-    <div class="tile tile--blue abs"><b>ABS</b><strong>{{ model.abs }}</strong><small v-if="model.absReference !== null">{{ model.absReference }}</small></div>
+    <div class="tile tile--blue abs" :class="{ 'abs--active': model.absActive }"><b>ABS</b><strong>{{ model.abs }}</strong><small v-if="model.absReference !== null">{{ model.absReference }}</small></div>
     <div class="tile tile--green bb"><b>BB</b><strong>{{ model.brakeBias }}</strong></div>
     <div class="tile tile--darkred cs"><b>CS</b><strong>{{ model.cornerSpeed }}</strong></div>
   </div>
@@ -113,6 +113,9 @@ defineProps<{ model: DashboardPresentation }>()
 .dashboard--fuel-critical-pulse .laps,
 .dashboard--fuel-critical-pulse .fuel-left{animation:fuel-critical-pulse 520ms steps(1,end) infinite}
 .dashboard--running .tc{border-color:#9acd32;background:#000;color:#fff}
+/* ACC Drive fills the item with its border colour during a real intervention; it does not flash. */
+.dashboard--running .tc.tc--active{background:#9acd32}
+.abs.abs--active{background:#1900ff}
 .fuel-lap{left:10px;top:58px;width:121px;height:68px}.fuel{left:138px;top:58px;width:121px;height:68px}
 .gear{left:266px;top:58px;width:120px;height:120px}.gear strong{font-size:80px;line-height:82px}
 .laps{left:394px;top:58px;width:120px;height:68px}.fuel-left{left:522px;top:58px;width:121px;height:68px}

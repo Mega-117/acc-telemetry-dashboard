@@ -31,6 +31,8 @@ export interface DashboardPresentation {
   tractionControl2Reference: string | null
   abs: string
   absReference: string | null
+  tractionControlActive: boolean
+  absActive: boolean
   brakeBias: string
   cornerSpeed: string
   throttlePct: number
@@ -105,6 +107,15 @@ function resolveFuelUrgency(
   return 'normal'
 }
 
+function interventionVisible(state: FastOverlayState, active: boolean): boolean {
+  return active
+    && state.isFresh
+    && state.isLive
+    && state.ignitionOn
+    && state.isEngineRunning
+    && !state.isInPitLane
+}
+
 function resolveRpmBand(
   state: FastOverlayState,
   rpm: number,
@@ -158,6 +169,8 @@ export function buildDashboardPresentation(
     abs: integer(state.abs),
     absReference: referenceVisible && options.electronicsReference && state.referenceAbs !== null
       ? integer(state.referenceAbs) : null,
+    tractionControlActive: interventionVisible(state, state.tractionControlInAction),
+    absActive: interventionVisible(state, state.absInAction),
     brakeBias: state.brakeBiasPct === null ? '--.-' : state.brakeBiasPct.toFixed(1),
     cornerSpeed: state.cornerSpeedKmh === null ? '0' : integer(state.cornerSpeedKmh),
     throttlePct: clamp((state.gas ?? 0) * 100, 0, 100),

@@ -27,6 +27,16 @@ describe('Dashboard overlay window contract', () => {
     )
     expect(component).not.toMatch(/fuel-critical-pulse[^}]*opacity\s*:/)
   })
+  it('fills only ABS or TC on a real intervention without adding an animation', () => {
+    const component = readFileSync(resolve(process.cwd(), 'app/components/overlay/DashboardHud.vue'), 'utf8')
+    expect(component).toContain("'tc--active': model.tractionControlActive")
+    expect(component).toContain("'abs--active': model.absActive")
+    expect(component).toMatch(/\.dashboard--running \.tc\.tc--active\{background:#9acd32\}/)
+    expect(component).toMatch(/\.abs\.abs--active\{background:#1900ff\}/)
+    expect(component).not.toMatch(/tc--active[^}]*animation|abs--active[^}]*animation/)
+  })
+
+
   it('does not expose manual shift flash controls on the HUD page', () => {
     const source = readFileSync(resolve(process.cwd(), 'app/pages/hud.vue'), 'utf8')
 

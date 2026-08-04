@@ -80,6 +80,7 @@ export interface FastOverlayState {
   ignitionOn: boolean
   isEngineRunning: boolean
   pitLimiterOn: boolean
+  isInPitLane: boolean
   sessionType: number | null
   normalizedCarPosition: number | null
   speedKmh: number | null
@@ -106,6 +107,8 @@ export interface FastOverlayState {
   tractionControl: number | null
   tractionControl2: number | null
   abs: number | null
+  tractionControlInAction: boolean
+  absInAction: boolean
   brakeBiasPct: number | null
   cornerSpeedKmh: number | null
   directionLightsLeft: boolean
@@ -139,6 +142,7 @@ const EMPTY_FAST_STATE: FastOverlayState = {
   ignitionOn: false,
   isEngineRunning: false,
   pitLimiterOn: false,
+  isInPitLane: false,
   sessionType: null,
   normalizedCarPosition: null,
   speedKmh: null,
@@ -165,6 +169,8 @@ const EMPTY_FAST_STATE: FastOverlayState = {
   tractionControl: null,
   tractionControl2: null,
   abs: null,
+  tractionControlInAction: false,
+  absInAction: false,
   brakeBiasPct: null,
   cornerSpeedKmh: null,
   directionLightsLeft: false,
@@ -330,6 +336,7 @@ function normalizeFastState(state: any): FastOverlayState {
     ignitionOn: state.ignition_on === true,
     isEngineRunning: state.is_engine_running === true,
     pitLimiterOn: state.pit_limiter_on === true,
+    isInPitLane: state.is_in_pit_lane === true,
     sessionType: toNumber(state.session_type),
     normalizedCarPosition: toNumber(state.normalized_car_position),
     speedKmh: toNumber(state.speed_kmh),
@@ -356,6 +363,8 @@ function normalizeFastState(state: any): FastOverlayState {
     tractionControl: toNumber(state.traction_control),
     tractionControl2: toNumber(state.traction_control_2),
     abs: toNumber(state.abs),
+    tractionControlInAction: state.traction_control_in_action === true,
+    absInAction: state.abs_in_action === true,
     brakeBiasPct: toNumber(state.brake_bias_pct),
     cornerSpeedKmh: toNumber(state.corner_speed_kmh),
     directionLightsLeft: state.direction_lights_left === true,
