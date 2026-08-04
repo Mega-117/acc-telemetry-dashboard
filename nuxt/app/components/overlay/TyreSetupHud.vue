@@ -12,6 +12,7 @@ import { brakeTemperatureColor } from '~/utils/brakeTemperaturePresentation'
 const props = defineProps<{ fastState: FastOverlayState }>()
 
 const setup = computed(() => props.fastState.tyreSetup)
+const hasSnapshot = computed(() => setup.value.status === 'available' && setup.value.lastLap !== null)
 const emptyValues: TyreWheelValues = { FL: null, FR: null, RL: null, RR: null }
 
 function formatPressure(value: number | null) {
@@ -73,7 +74,12 @@ function startingPressure(id: TyreWheelId) {
       <span>LAST LAP</span>
     </header>
 
-    <div class="tyre-setup__columns">
+    <div v-if="!hasSnapshot" class="tyre-setup__empty" role="status">
+      <strong>NESSUN DATO</strong>
+      <span>Completa un giro valido</span>
+    </div>
+
+    <div v-else class="tyre-setup__columns">
       <section class="tyre-setup__column">
         <h2>TYRE PRESSURE</h2>
         <div v-for="stat in ['high', 'avg'] as const" :key="stat" class="tyre-setup__metric">
@@ -127,7 +133,7 @@ function startingPressure(id: TyreWheelId) {
       </section>
     </div>
 
-    <footer class="tyre-setup__start">
+    <footer v-if="hasSnapshot" class="tyre-setup__start">
       <div>
         <strong>START PRESSURE</strong>
         <span>RUN START · SET VALUE</span>
@@ -171,6 +177,24 @@ function startingPressure(id: TyreWheelId) {
   font-size: max(9px, calc(10px * var(--hud-scale, 1)));
   font-weight: 800;
   letter-spacing: .08em;
+}
+
+.tyre-setup__empty {
+  display: grid;
+  grid-row: 2 / -1;
+  place-content: center;
+  gap: calc(5px * var(--hud-scale, 1));
+  color: rgba(255, 255, 255, .58);
+  text-align: center;
+}
+
+.tyre-setup__empty strong {
+  color: #fff;
+  font-size: max(16px, calc(22px * var(--hud-scale, 1)));
+}
+
+.tyre-setup__empty span {
+  font-size: max(10px, calc(12px * var(--hud-scale, 1)));
 }
 
 .tyre-setup__columns {

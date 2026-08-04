@@ -93,10 +93,12 @@ export function normalizeTyreSetupViewModel(raw: any): TyreSetupViewModel {
   const pressureHigh = normalizeWheelValues(lastLapRaw?.pressure?.high)
   const pressureAvg = normalizeWheelValues(lastLapRaw?.pressure?.avg)
   const hasPressureLap = hasEveryWheel(pressureHigh) && hasEveryWheel(pressureAvg)
-  const startingValues = normalizeWheelValues(raw.starting_pressure?.values)
+  const setupLoss = normalizeWheelValues(lastLapRaw?.total_pressure_loss)
+  const setupStartingPressure = lastLapRaw?.starting_pressure
+  const startingValues = normalizeWheelValues(setupStartingPressure?.values)
   const hasExactStartingPressure = (
-    raw.starting_pressure?.status === 'available'
-    && raw.starting_pressure?.source === 'mfd_applied'
+    setupStartingPressure?.status === 'available'
+    && setupStartingPressure?.source === 'mfd_applied'
     && hasEveryPositiveWheel(startingValues)
   )
 
@@ -117,18 +119,20 @@ export function normalizeTyreSetupViewModel(raw: any): TyreSetupViewModel {
           brakeCompounds: normalizeWheelValues(lastLapRaw?.brake_compounds),
         }
       : null,
-    totalPressureLoss: normalizeWheelValues(raw.total_pressure_loss),
+    // SETUP is one immutable valid-lap snapshot: never read current LIVE run
+    // values from the top-level payload here.
+    totalPressureLoss: setupLoss,
     startingPressure: hasExactStartingPressure
       ? {
           status: 'available',
           source: 'mfd_applied',
-          tyreSet: toNumber(raw.starting_pressure?.tyre_set),
+          tyreSet: toNumber(setupStartingPressure?.tyre_set),
           values: startingValues,
         }
       : {
           status: 'unavailable',
           source: null,
-          tyreSet: toNumber(raw.starting_pressure?.tyre_set),
+          tyreSet: toNumber(setupStartingPressure?.tyre_set),
           values: null,
         },
   }

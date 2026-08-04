@@ -33,13 +33,21 @@ describe('tyreSetupViewModel', () => {
           low: wheels(336),
         },
         brake_compounds: { FL: 1, FR: 1, RL: 2, RR: 2 },
+        total_pressure_loss: wheels(0.4),
+        starting_pressure: {
+          status: 'available',
+          source: 'mfd_applied',
+          tyre_set: 3,
+          values: wheels(26.1),
+        },
       },
-      total_pressure_loss: wheels(0),
+      // Different LIVE values must never leak into SETUP.
+      total_pressure_loss: wheels(1.4),
       starting_pressure: {
         status: 'available',
         source: 'mfd_applied',
-        tyre_set: 3,
-        values: wheels(26.1),
+        tyre_set: 4,
+        values: wheels(25.1),
       },
     })
 
@@ -47,7 +55,7 @@ describe('tyreSetupViewModel', () => {
     expect(model.lastLap?.pressure.avg.FL).toBe(26.8)
     expect(model.lastLap?.tyreTemperature?.low.RR).toBe(87.3)
     expect(model.lastLap?.brakeCompounds.RL).toBe(2)
-    expect(model.totalPressureLoss.FR).toBe(0.1)
+    expect(model.totalPressureLoss.FR).toBe(0.5)
     expect(model.startingPressure).toMatchObject({
       status: 'available',
       source: 'mfd_applied',
@@ -57,17 +65,23 @@ describe('tyreSetupViewModel', () => {
 
   it('rifiuta una pressione iniziale fisica o incompleta', () => {
     const physical = normalizeTyreSetupViewModel({
-      starting_pressure: {
-        status: 'available',
-        source: 'physical_start',
-        values: wheels(26),
+      last_lap: {
+        pressure: { high: wheels(27), avg: wheels(26.8) },
+        starting_pressure: {
+          status: 'available',
+          source: 'physical_start',
+          values: wheels(26),
+        },
       },
     })
     const incomplete = normalizeTyreSetupViewModel({
-      starting_pressure: {
-        status: 'available',
-        source: 'mfd_applied',
-        values: { FL: 26.1 },
+      last_lap: {
+        pressure: { high: wheels(27), avg: wheels(26.8) },
+        starting_pressure: {
+          status: 'available',
+          source: 'mfd_applied',
+          values: { FL: 26.1 },
+        },
       },
     })
 
@@ -79,7 +93,10 @@ describe('tyreSetupViewModel', () => {
     expect(normalizeTyreSetupViewModel(null)).toEqual(emptyTyreSetupViewModel())
     expect(normalizeTyreSetupViewModel({ status: 'available' }).lastLap).toBeNull()
     expect(normalizeTyreSetupViewModel({
-      total_pressure_loss: { FL: null, FR: null, RL: null, RR: null },
+      last_lap: {
+        pressure: { high: wheels(27), avg: wheels(26.8) },
+        total_pressure_loss: { FL: null, FR: null, RL: null, RR: null },
+      },
     }).totalPressureLoss).toEqual({ FL: null, FR: null, RL: null, RR: null })
   })
 })

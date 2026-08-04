@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { createSSRApp, h } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { describe, expect, it } from 'vitest'
@@ -70,4 +71,30 @@ describe('HudTimedPager', () => {
     expect(html).not.toContain('hud-timed-pager__progress')
   })
 
+  it('rende visibili i controlli quando il main segnala hover sulla superficie', async () => {
+    const app = createSSRApp({
+      render: () => h(HudTimedPager, {
+        pages: [
+          { id: 'live', label: 'LIVE' },
+          { id: 'setup', label: 'SETUP' },
+        ],
+        defaultPage: 'live',
+        revealControls: true,
+      }, {
+        live: () => h('div', 'PAGINA LIVE'),
+      }),
+    })
+
+    const html = await renderToString(app)
+    expect(html).toContain('hud-timed-pager--controls-visible')
+  })
+  it('non usa hover/focus DOM che possono restare appiccicati nelle finestre click-through', () => {
+    const source = readFileSync(
+      new URL('../../app/components/overlay/HudTimedPager.vue', import.meta.url),
+      'utf8',
+    )
+    expect(source).not.toContain('.hud-timed-pager:hover')
+    expect(source).not.toContain('.hud-timed-pager__switcher:focus-within')
+    expect(source).not.toContain(':global(html.overlay-pointer-surface-hovered)')
+  })
 })

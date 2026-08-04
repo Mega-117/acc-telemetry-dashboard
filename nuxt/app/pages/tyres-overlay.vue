@@ -80,7 +80,7 @@ watch(variant, (nextVariant) => {
 onMounted(() => {
   startFastStatePolling()
   start(route.query.scale)
-  startInteractionSurface('.hud-timed-pager__switcher')
+  startInteractionSurface()
   loadSettings()
 })
 
@@ -109,6 +109,7 @@ onBeforeUnmount(() => {
         default-page="live"
         :initial-page="advancedPage"
         :temporary-duration-ms="30_000"
+        :reveal-controls="pointerState.surfaceHovered"
         @page-change="handleAdvancedPageChange"
       >
         <template #live>

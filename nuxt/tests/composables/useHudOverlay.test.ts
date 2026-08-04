@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
-import { useHudOverlay } from '~/composables/useHudOverlay'
+import { HUD_OVERLAY_INTERACTIONS, useHudOverlay } from '~/composables/useHudOverlay'
 
 function makeApi() {
   const cbs: { placement?: (a: boolean) => void; scale?: (s: unknown) => void; settings?: (s: any) => void } = {}
@@ -12,6 +12,21 @@ function makeApi() {
   }
   return { api, cbs }
 }
+
+describe('HUD_OVERLAY_INTERACTIONS', () => {
+  it('dichiara in un solo posto superfici intere e controlli opzionali', () => {
+    expect(HUD_OVERLAY_INTERACTIONS.tyres).toEqual({
+      surfaceSelector: '.hud-overlay__panel',
+      controlSelector: '.hud-timed-pager__switcher',
+    })
+    expect(HUD_OVERLAY_INTERACTIONS.sectors).toEqual({
+      surfaceSelector: '.hud-overlay__panel',
+      controlSelector: '[data-overlay-interactive]',
+    })
+    expect(HUD_OVERLAY_INTERACTIONS.dashboard?.controlSelector).toBe('')
+    expect(HUD_OVERLAY_INTERACTIONS.info?.controlSelector).toBe('')
+  })
+})
 
 describe('useHudOverlay', () => {
   afterEach(() => vi.unstubAllGlobals())

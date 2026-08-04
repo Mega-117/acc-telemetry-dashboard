@@ -62,7 +62,7 @@ describe('TyreSetupHud', () => {
     expect(html).not.toContain('27.0 psi')
   })
 
-  it('mostra trattini quando il valore setup esatto non è disponibile', async () => {
+  it('mostra uno stato nessun dato finche non esiste un giro valido', async () => {
     const app = createSSRApp(TyreAdvancedHud, {
       page: 'setup',
       fastState: {
@@ -72,7 +72,8 @@ describe('TyreSetupHud', () => {
     })
 
     const html = await renderToString(app)
-    expect(html).toContain('START PRESSURE')
-    expect(html).toContain('--')
+    expect(html).toContain('NESSUN DATO')
+    expect(html).toContain('Completa un giro valido')
+    expect(html).not.toContain('START PRESSURE')
   })
 })

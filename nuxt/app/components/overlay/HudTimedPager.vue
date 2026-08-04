@@ -22,10 +22,12 @@ const props = withDefaults(defineProps<{
   initialPage?: string
   temporaryDurationMs?: number
   floatingSwitcher?: boolean
+  revealControls?: boolean
 }>(), {
   initialPage: undefined,
   temporaryDurationMs: 30_000,
   floatingSwitcher: false,
+  revealControls: false,
 })
 
 const safeInitialPage = props.pages.some(page => page.id === props.initialPage)
@@ -61,7 +63,10 @@ onBeforeUnmount(pager.dispose)
 <template>
   <section
     class="hud-timed-pager"
-    :class="{ 'hud-timed-pager--floating-switcher': floatingSwitcher }"
+    :class="{
+      'hud-timed-pager--floating-switcher': floatingSwitcher,
+      'hud-timed-pager--controls-visible': revealControls,
+    }"
     :data-active-page="activePage"
   >
     <div class="hud-timed-pager__content">
@@ -134,9 +139,7 @@ onBeforeUnmount(pager.dispose)
   -webkit-app-region: no-drag;
 }
 
-.hud-timed-pager:hover .hud-timed-pager__switcher,
-:global(html.overlay-pointer-surface-hovered) .hud-timed-pager__switcher,
-.hud-timed-pager__switcher:focus-within {
+.hud-timed-pager--controls-visible .hud-timed-pager__switcher {
   opacity: 1;
 }
 

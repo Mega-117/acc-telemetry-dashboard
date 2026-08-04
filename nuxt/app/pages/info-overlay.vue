@@ -79,7 +79,7 @@ watch(
 
 onMounted(async () => {
   overlay.start(route.query.scale)
-  overlay.startInteractionSurface('', '.overlay-canvas')
+  overlay.startInteractionSurface()
   await overlay.loadSettings()
   telemetry.startFastStatePolling()
   const api = getApi()

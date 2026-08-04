@@ -35,6 +35,34 @@ export const HUD_SCALE_MIN = 0.6
 export const HUD_SCALE_MAX = 1.6
 export const HUD_SCALE_DEFAULT = 1
 
+export interface HudOverlayInteractionDescriptor {
+  surfaceSelector: string
+  controlSelector: string
+}
+
+/**
+ * Unica dichiarazione delle superfici native: aggiungere qui un futuro overlay
+ * evita arbitri hover duplicati nelle singole pagine.
+ */
+export const HUD_OVERLAY_INTERACTIONS: Record<string, HudOverlayInteractionDescriptor> = {
+  tyres: {
+    surfaceSelector: '.hud-overlay__panel',
+    controlSelector: '.hud-timed-pager__switcher',
+  },
+  sectors: {
+    surfaceSelector: '.hud-overlay__panel',
+    controlSelector: '[data-overlay-interactive]',
+  },
+  dashboard: {
+    surfaceSelector: '.overlay-canvas',
+    controlSelector: '',
+  },
+  info: {
+    surfaceSelector: '.overlay-canvas',
+    controlSelector: '',
+  },
+}
+
 export interface HudTransientViewportRequest {
   active: boolean
   key?: string
@@ -80,12 +108,13 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
   const { pointerState } = interactionContract
 
   function startInteractionSurface(
-    controlSelector: string,
-    surfaceSelector = '.hud-overlay__panel',
+    controlSelector?: string,
+    surfaceSelector?: string,
   ): void {
+    const declared = HUD_OVERLAY_INTERACTIONS[overlayId]
     interactionContract.start({
-      surfaceSelector,
-      controlSelector,
+      surfaceSelector: surfaceSelector ?? declared?.surfaceSelector ?? '.hud-overlay__panel',
+      controlSelector: controlSelector ?? declared?.controlSelector ?? '',
     })
   }
 

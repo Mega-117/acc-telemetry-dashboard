@@ -209,7 +209,7 @@ onMounted(async () => {
     })
   }
   mounted.value = true
-  startInteractionSurface('[data-overlay-interactive]')
+  startInteractionSurface()
   if (compactPage.value === 'target') {
     if (variant.value === 'compact' && !isPlacing.value) {
       await updateTransientViewport(true)
@@ -252,6 +252,7 @@ onBeforeUnmount(() => {
         default-page="live"
         :initial-page="compactPage"
         floating-switcher
+        :reveal-controls="pointerState.surfaceHovered"
         @page-change="handlePageChange"
       >
         <template #live>

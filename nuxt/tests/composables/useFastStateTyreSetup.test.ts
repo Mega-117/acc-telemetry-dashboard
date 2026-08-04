@@ -37,13 +37,20 @@ describe('useFastStatePoller tyre setup contract', () => {
               low: wheels(336),
             },
             brake_compounds: { FL: 1, FR: 1, RL: 2, RR: 2 },
+            total_pressure_loss: wheels(0.4),
+            starting_pressure: {
+              status: 'available',
+              source: 'mfd_applied',
+              tyre_set: 3,
+              values: wheels(26.1),
+            },
           },
           total_pressure_loss: wheels(0),
           starting_pressure: {
             status: 'available',
             source: 'mfd_applied',
-            tyre_set: 3,
-            values: wheels(26.1),
+            tyre_set: 4,
+            values: wheels(25.1),
           },
         },
       })),
@@ -56,6 +63,7 @@ describe('useFastStatePoller tyre setup contract', () => {
 
     expect(fastState.value.tyreSetup.lastLap?.pressure.high.FL).toBe(27.1)
     expect(fastState.value.tyreSetup.lastLap?.brakeTemperature?.low.RR).toBe(336.3)
+    expect(fastState.value.tyreSetup.totalPressureLoss.FL).toBe(0.4)
     expect(fastState.value.tyreSetup.startingPressure.values?.FL).toBe(26.1)
 
     stopFastStatePolling()
