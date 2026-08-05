@@ -11,6 +11,7 @@ import {
     refreshEmailVerificationState,
     registerWithEmail,
     resendCurrentVerificationEmail,
+    sendPasswordResetWithEmail,
     translateAuthError
 } from '~/services/auth/authService'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
@@ -224,6 +225,17 @@ export function useFirebaseAuth() {
         }
     }
 
+    const resetPassword = async (email: string) => {
+        try {
+            await sendPasswordResetWithEmail(email)
+            return { success: true }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Firebase Auth errors expose a runtime code
+        } catch (error: any) {
+            console.error('[AUTH] Password reset error:', error?.code || 'unknown')
+            return { success: false, error: translateAuthError(error?.code) }
+        }
+    }
+
     const checkEmailVerified = async () => {
         if (!currentUser.value) {
             return { verified: false, error: 'Utente non autenticato' }
@@ -259,6 +271,7 @@ export function useFirebaseAuth() {
         login,
         logout,
         resendVerificationEmail,
+        resetPassword,
         checkEmailVerified,
         getUserProfile: loadCachedUserProfile,
         refreshUserProfile,

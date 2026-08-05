@@ -3,6 +3,7 @@ import {
     signInWithEmailAndPassword,
     signOut,
     sendEmailVerification,
+    sendPasswordResetEmail,
     updateProfile,
     type User
 } from 'firebase/auth'
@@ -18,7 +19,11 @@ export function translateAuthError(code: string): string {
         'auth/wrong-password': 'Password errata',
         'auth/invalid-credential': 'Credenziali non valide',
         'auth/too-many-requests': 'Troppi tentativi, riprova piu tardi',
-        'auth/network-request-failed': 'Errore di rete, controlla la connessione'
+        'auth/network-request-failed': 'Errore di rete, controlla la connessione',
+        'auth/operation-not-allowed': 'Il recupero password non è disponibile al momento',
+        'auth/unauthorized-continue-uri': 'Il link di recupero non è configurato per questa app',
+        'auth/invalid-continue-uri': 'Il link di recupero non è configurato correttamente',
+        'auth/missing-continue-uri': 'Il link di recupero non è configurato correttamente'
     }
     return messages[code] || 'Errore di autenticazione'
 }
@@ -44,6 +49,10 @@ export async function registerWithEmail(params: {
 export async function loginWithEmail(email: string, password: string) {
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
     return { user: userCredential.user }
+}
+
+export async function sendPasswordResetWithEmail(email: string) {
+    await sendPasswordResetEmail(auth, email)
 }
 
 export async function logoutCurrentUser() {

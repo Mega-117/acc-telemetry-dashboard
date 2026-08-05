@@ -16,7 +16,7 @@ const registerFormRef = ref()
 const resetFormRef = ref()
 
 // Firebase Auth
-const { login, register, authError } = useFirebaseAuth()
+const { login, register, resetPassword } = useFirebaseAuth()
 const isSubmitting = ref(false)
 
 // Emit events to parent
@@ -78,10 +78,20 @@ const handleRegister = async (data: { firstName: string; lastName: string; nickn
   }
 }
 
-const handleResetPassword = (email: string) => {
-  console.log('[AUTH] Reset:', email)
-  // TODO: Implement password reset with Firebase
-  resetFormRef.value?.setSuccess(true)
+const handleResetPassword = async (email: string) => {
+  isSubmitting.value = true
+  resetFormRef.value?.setLoading(true)
+
+  const result = await resetPassword(email)
+
+  isSubmitting.value = false
+  resetFormRef.value?.setLoading(false)
+
+  if (result.success) {
+    resetFormRef.value?.setSuccess(true)
+  } else {
+    resetFormRef.value?.setError(result.error)
+  }
 }
 </script>
 
