@@ -1,1 +1,0 @@
-import{u as t,ad as r,l as s,aI as i,a2 as p}from"./CQLYYuxF.js";import{_ as m}from"./BHUOt1mD.js";import"./DybVS7eq.js";import"./lPsNG5Yw.js";import"./7zK3M_nO.js";const d=t({__name:"index",setup(_){return(o,a)=>{const e=m;return r(),s(e,{onGoToTrack:a[0]||(a[0]=n=>("navigateTo"in o?o.navigateTo:i(p))(`/piste/${n}`))})}}});export{d as default};
