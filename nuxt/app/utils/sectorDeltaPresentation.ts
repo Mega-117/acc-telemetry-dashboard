@@ -11,6 +11,10 @@ export function normalizeSectorDeltaReference(value: unknown): SectorDeltaRefere
   return value === 'bestSector' ? 'bestSector' : 'previousLap'
 }
 
+export function sectorDeltaReferenceToken(reference: SectorDeltaReference): 'BEST' | 'LAST' {
+  return reference === 'bestSector' ? 'BEST' : 'LAST'
+}
+
 /**
  * Deriva soltanto delta e colore dal riferimento scelto. Tempi, best persistito
  * e visibilità delle righe restano responsabilità dei rispettivi layer.

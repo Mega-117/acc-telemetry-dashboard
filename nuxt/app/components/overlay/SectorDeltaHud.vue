@@ -5,6 +5,7 @@ import type { InfoTargetOutcome } from '~/utils/infoPresentation'
 import {
   normalizeSectorDeltaReference,
   resolveSectorDeltaPresentation,
+  sectorDeltaReferenceToken,
   type SectorDeltaReference,
 } from '~/utils/sectorDeltaPresentation'
 
@@ -58,9 +59,7 @@ const visibleSectors = computed(() => {
     ...resolveSectorDeltaPresentation(sector, selectedReference.value),
   }))
 })
-const modeLabel = computed(() => props.sectorHud?.mode === 'last_lap' ? 'Ultimo giro' : 'Settori')
-const statusLabel = computed(() => props.sectorHud?.awaitingFlyingLap ? 'attesa giro lanciato' : null)
-const referenceLabel = computed(() => selectedReference.value === 'bestSector' ? 'ref best' : null)
+const comparisonToken = computed(() => sectorDeltaReferenceToken(selectedReference.value))
 const compactLiveLapTimeMs = computed(() => (
   props.liveCurrentLapTimeMs !== undefined
     ? props.liveCurrentLapTimeMs
@@ -86,9 +85,7 @@ const compactLapTime = computed(() => {
     : formatLapTime(compactDisplayLapTimeMs.value)
 })
 const compactTitle = computed(() => (
-  selectedReference.value === 'bestSector'
-    ? 'SECTORS · VS · BEST'
-    : 'SECTORS · VS · LAST'
+  `SECTORS · VS · ${comparisonToken.value}`
 ))
 
 function formatTime(ms: number | null): string {
@@ -208,12 +205,9 @@ function ariaLabel(sector: SectorHudEntry): string {
       </div>
     </template>
     <template v-else>
-      <div class="sector-delta-hud__header">
-        <span>{{ modeLabel }}</span>
-        <em v-if="statusLabel">{{ statusLabel }}</em>
-        <em v-else-if="referenceLabel">{{ referenceLabel }}</em>
-        <em v-else-if="sectorHud?.referenceLap">ref lap {{ sectorHud.referenceLap }}</em>
-        <em v-else>ref --</em>
+      <div class="sector-delta-hud__header sector-delta-hud__header--classic">
+        <span class="sector-delta-hud__title">SETTORI</span>
+        <em class="sector-delta-hud__comparison">VS {{ comparisonToken }}</em>
       </div>
       <div class="sector-delta-hud__grid">
         <div

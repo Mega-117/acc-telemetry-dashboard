@@ -40,6 +40,20 @@ async function renderHud(props: Record<string, unknown>): Promise<string> {
 }
 
 describe('SectorDeltaHud', () => {
+  it('centra insieme SETTORI e il confronto nel layout a tre riquadri', () => {
+    const source = readFileSync(
+      resolve(process.cwd(), 'app/pages/sectors-overlay.vue'),
+      'utf8',
+    )
+
+    expect(source).toMatch(
+      /\.hud-overlay \.sector-delta-hud__header--classic\s*\{[^}]*display:\s*flex;[^}]*justify-content:\s*center;[^}]*gap:\s*calc\(8px \* var\(--hud-scale\)\);/s,
+    )
+    expect(source).not.toMatch(
+      /\.hud-overlay \.sector-delta-hud__comparison\s*\{[^}]*justify-self:\s*end;/s,
+    )
+  })
+
   it('centra la testata compatta sull intero contenitore con linee simmetriche', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'app/components/overlay/SectorDeltaHud.vue'),
@@ -65,7 +79,8 @@ describe('SectorDeltaHud', () => {
     expect(html).not.toContain('sector-delta__best')
     expect(html).toContain('sector-delta__ref')
     expect(html).toContain('+0.300')
-    expect(html).toContain('ref best')
+    expect(html).toContain('SETTORI')
+    expect(html).toContain('VS BEST')
   })
 
   it('le checkbox di visibilità non cambiano il delta del giro precedente', async () => {
@@ -78,7 +93,8 @@ describe('SectorDeltaHud', () => {
     expect(html).not.toContain('sector-delta__best')
     expect(html).not.toContain('sector-delta__ref')
     expect(html).toContain('-0.200')
-    expect(html).toContain('ref lap 2')
+    expect(html).toContain('SETTORI')
+    expect(html).toContain('VS LAST')
   })
 
   it('mostra wait senza fallback quando manca il best selezionato', async () => {

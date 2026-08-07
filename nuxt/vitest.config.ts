@@ -80,6 +80,7 @@ export default defineConfig({
         'app/utils/hudOverlayPresentationCapabilities.ts',
         'app/utils/hudOverlayBackground.ts',
         'app/utils/brakeTemperaturePresentation.ts',
+        'app/utils/brakeAxlePresentation.ts',
         'app/utils/sessionParser.ts',
         'app/utils/raceCalendarCountdown.ts',
         'server/utils/chatterboxRuntimeStatus.ts',

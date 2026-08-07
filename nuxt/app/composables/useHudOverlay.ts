@@ -34,6 +34,13 @@ export interface HudOverlaySettings {
 export const HUD_SCALE_MIN = 0.6
 export const HUD_SCALE_MAX = 1.6
 export const HUD_SCALE_DEFAULT = 1
+export const HUD_SCALE_MIN_BY_OVERLAY: Readonly<Record<string, number>> = {
+  tyres: 0.5,
+}
+
+export function getHudOverlayScaleMin(overlayId: string): number {
+  return HUD_SCALE_MIN_BY_OVERLAY[overlayId] ?? HUD_SCALE_MIN
+}
 
 export interface HudOverlayInteractionDescriptor {
   surfaceSelector: string
@@ -70,10 +77,10 @@ export interface HudTransientViewportRequest {
   minHeight?: number
 }
 
-function clampScale(value: unknown): number {
+function clampScale(value: unknown, overlayId: string): number {
   const n = Number(value)
   if (!Number.isFinite(n)) return HUD_SCALE_DEFAULT
-  return Math.min(Math.max(n, HUD_SCALE_MIN), HUD_SCALE_MAX)
+  return Math.min(Math.max(n, getHudOverlayScaleMin(overlayId)), HUD_SCALE_MAX)
 }
 
 /**
@@ -127,7 +134,7 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
     if (!bridge?.hudOverlayGetSettings) return null
     const loaded = await bridge.hudOverlayGetSettings(overlayId)
     settings.value = loaded ?? null
-    if (loaded?.scale !== undefined) scale.value = clampScale(loaded.scale)
+    if (loaded?.scale !== undefined) scale.value = clampScale(loaded.scale, overlayId)
     return settings.value
   }
 
@@ -144,7 +151,7 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
   function start(initialScale?: unknown): void {
     isElectron.value = !!api()
     if (initialScale !== undefined && initialScale !== null && initialScale !== '') {
-      scale.value = clampScale(initialScale)
+      scale.value = clampScale(initialScale, overlayId)
     }
     const bridge = api()
     if (!bridge) return
@@ -156,13 +163,13 @@ export function useHudOverlay(overlayId: string, getApi: () => any | null) {
     }
     if (typeof bridge.onHudOverlayScale === 'function') {
       unsubscribers.push(bridge.onHudOverlayScale((value: unknown) => {
-        scale.value = clampScale(value)
+        scale.value = clampScale(value, overlayId)
       }))
     }
     if (typeof bridge.onHudOverlaySettings === 'function') {
       unsubscribers.push(bridge.onHudOverlaySettings((value: HudOverlaySettings) => {
         settings.value = value ?? null
-        if (value?.scale !== undefined) scale.value = clampScale(value.scale)
+        if (value?.scale !== undefined) scale.value = clampScale(value.scale, overlayId)
       }))
     }
   }

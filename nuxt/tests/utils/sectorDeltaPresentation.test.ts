@@ -3,6 +3,7 @@ import type { SectorHudEntry } from '~/composables/useLiveStatePoller'
 import {
   normalizeSectorDeltaReference,
   resolveSectorDeltaPresentation,
+  sectorDeltaReferenceToken,
 } from '~/utils/sectorDeltaPresentation'
 
 function sector(overrides: Partial<SectorHudEntry> = {}): SectorHudEntry {
@@ -24,6 +25,11 @@ describe('sectorDeltaPresentation', () => {
     expect(normalizeSectorDeltaReference(undefined)).toBe('previousLap')
     expect(normalizeSectorDeltaReference('other')).toBe('previousLap')
     expect(normalizeSectorDeltaReference('bestSector')).toBe('bestSector')
+  })
+
+  it('espone un solo token BEST/LAST consumato da entrambi i layout', () => {
+    expect(sectorDeltaReferenceToken('previousLap')).toBe('LAST')
+    expect(sectorDeltaReferenceToken('bestSector')).toBe('BEST')
   })
 
   it('preserva delta e colore esistenti con Giro precedente', () => {

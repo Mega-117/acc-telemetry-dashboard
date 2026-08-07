@@ -30,6 +30,18 @@ describe('Info overlay window contract', () => {
     expect(settingsPage).toContain('backgroundOpacity: backgroundTransparencyToOpacity(percentage)')
   })
 
+  it('adatta pannello e BrowserWindow alle sole righe visibili senza cambiare larghezza', () => {
+    const page = readFileSync(resolve(process.cwd(), 'app/pages/info-overlay.vue'), 'utf8')
+    const hud = readFileSync(resolve(process.cwd(), 'app/components/overlay/InfoHud.vue'), 'utf8')
+    expect(hud).toMatch(/\.info-hud\s*\{[^}]*width:\s*344px;[^}]*height:\s*auto;/s)
+    expect(hud).not.toContain('height: 512px')
+    expect(hud).toContain('overflow: visible')
+    expect(page).toContain("api.hudOverlaySetSize('info'")
+    expect(page).toContain('width: Math.ceil(window.innerWidth)')
+    expect(page).toContain('height: Math.ceil(rect.height)')
+    expect(page).toContain('new ResizeObserver')
+  })
+
   it('fills every Delta state from the left edge toward the right', () => {
     const hud = readFileSync(resolve(process.cwd(), 'app/components/overlay/InfoHud.vue'), 'utf8')
 

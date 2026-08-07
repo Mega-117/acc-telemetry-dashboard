@@ -3,7 +3,10 @@ import { computed } from 'vue'
 import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
 import { tyreSlipBarStyle } from '~/utils/tyreSlipPresentation'
 import { tyreTemperatureColor } from '~/utils/tyreTemperaturePresentation'
-import { brakeTemperatureColor } from '~/utils/brakeTemperaturePresentation'
+import {
+  buildBrakeAxlePresentation,
+  type BrakeAxlePresentation,
+} from '~/utils/brakeAxlePresentation'
 import TyreSetupHud from './TyreSetupHud.vue'
 
 const props = withDefaults(defineProps<{
@@ -38,6 +41,10 @@ const emptyTyre = (id: FastStateTyre['id']): FastStateTyre => ({
 const tyresById = computed(() => Object.fromEntries(
   wheelIds.map(id => [id, props.fastState.tyres.find(tyre => tyre.id === id) ?? emptyTyre(id)]),
 ) as Record<FastStateTyre['id'], FastStateTyre>)
+const brakeAxleByKey = computed(() => ({
+  front: buildBrakeAxlePresentation(tyresById.value.FL, tyresById.value.FR),
+  rear: buildBrakeAxlePresentation(tyresById.value.RL, tyresById.value.RR),
+}))
 
 const setLabel = computed(() => {
   const compound = props.fastState.tyreCompound ?? '--'
@@ -69,10 +76,6 @@ function averageFor(id: FastStateTyre['id']) {
   return value === null ? '--' : value.toFixed(1)
 }
 
-function padLife(tyre: FastStateTyre) {
-  return tyre.padLifePct === null ? '--' : `${tyre.padLifePct.toFixed(0)}%`
-}
-
 function pressureLoss(tyre: FastStateTyre) {
   if (tyre.pressureLossPsi === null) return '--'
   const value = Math.max(0, tyre.pressureLossPsi)
@@ -100,10 +103,14 @@ function tyreStyle(tyre: FastStateTyre) {
   }
 }
 
-function brakeStyle(tyre: FastStateTyre) {
+function brakeAxleStyle(model: BrakeAxlePresentation) {
   return {
-    backgroundColor: brakeTemperatureColor(tyre.brakeTempC, tyre.id, tyre.brakeCompound),
+    background: `linear-gradient(90deg, ${model.leftTemperatureColor} 0 50%, ${model.rightTemperatureColor} 50% 100%)`,
   }
+}
+
+function formatBrakeAverage(value: number | null, suffix: '°' | '%') {
+  return value === null ? '—' : `${value.toFixed(0)}${suffix}`
 }
 </script>
 
@@ -142,16 +149,17 @@ function brakeStyle(tyre: FastStateTyre) {
           <small class="tyre-advanced__pressure-loss">{{ pressureLoss(tyresById[axle.left]) }}</small>
         </div>
 
-        <div class="tyre-advanced__brake tyre-advanced__brake--left">
-          <span>{{ format(tyresById[axle.left].brakeTempC) }}°</span>
-          <i :style="brakeStyle(tyresById[axle.left])" />
-          <strong>{{ padLife(tyresById[axle.left]) }}</strong>
-        </div>
-
-        <div class="tyre-advanced__brake tyre-advanced__brake--right">
-          <span>{{ format(tyresById[axle.right].brakeTempC) }}°</span>
-          <i :style="brakeStyle(tyresById[axle.right])" />
-          <strong>{{ padLife(tyresById[axle.right]) }}</strong>
+        <div
+          class="tyre-advanced__brake-axle"
+          :class="{
+            'tyre-advanced__brake-axle--alert': brakeAxleByKey[axle.key].temperatureAnomaly || brakeAxleByKey[axle.key].wearAnomaly,
+            'tyre-advanced__brake-axle--missing': brakeAxleByKey[axle.key].hasMissingData,
+          }"
+        >
+          <small>{{ axle.key === 'front' ? 'FRONT AVG' : 'REAR AVG' }}</small>
+          <span>{{ formatBrakeAverage(brakeAxleByKey[axle.key].temperatureAverageC, '°') }}</span>
+          <i :style="brakeAxleStyle(brakeAxleByKey[axle.key])" />
+          <strong>{{ formatBrakeAverage(brakeAxleByKey[axle.key].padLifeAveragePct, '%') }}</strong>
         </div>
 
         <div class="tyre-advanced__corner tyre-advanced__corner--right">
@@ -184,11 +192,11 @@ function brakeStyle(tyre: FastStateTyre) {
 .tyre-advanced {
   --tyre-hud-type-weather: max(10px, calc(14px * var(--hud-scale, 1)));
   --tyre-hud-type-weather-icon: max(11px, calc(15px * var(--hud-scale, 1)));
-  --tyre-hud-type-label: max(9.5px, calc(9px * var(--hud-scale, 1)));
-  --tyre-hud-type-secondary: max(10px, calc(12px * var(--hud-scale, 1)));
-  --tyre-hud-type-primary: max(15px, calc(18px * var(--hud-scale, 1)));
-  --tyre-hud-type-tyre: max(18px, calc(24px * var(--hud-scale, 1)));
-  --tyre-hud-type-pad: max(12px, calc(15px * var(--hud-scale, 1)));
+  --tyre-hud-type-label: max(11px, calc(11px * var(--hud-scale, 1)));
+  --tyre-hud-type-secondary: max(13px, calc(15px * var(--hud-scale, 1)));
+  --tyre-hud-type-primary: max(18px, calc(21px * var(--hud-scale, 1)));
+  --tyre-hud-type-tyre: max(22px, calc(27px * var(--hud-scale, 1)));
+  --tyre-hud-type-pad: max(14px, calc(17px * var(--hud-scale, 1)));
   --tyre-hud-type-set: max(14px, calc(17px * var(--hud-scale, 1)));
   --tyre-hud-type-status: max(14px, calc(19px * var(--hud-scale, 1)));
   position: relative;
@@ -273,7 +281,7 @@ function brakeStyle(tyre: FastStateTyre) {
 }
 
 .tyre-advanced__corner,
-.tyre-advanced__brake {
+.tyre-advanced__brake-axle {
   display: grid;
   grid-row: 1 / -1;
   grid-template-rows: subgrid;
@@ -358,11 +366,21 @@ function brakeStyle(tyre: FastStateTyre) {
   text-shadow: 0 1px 3px #000, 0 0 5px rgba(0, 0, 0, .75);
 }
 
-.tyre-advanced__brake {
+.tyre-advanced__brake-axle {
+  grid-column: 2 / 4;
   align-items: center;
 }
 
-.tyre-advanced__brake span {
+.tyre-advanced__brake-axle > small {
+  grid-row: 1;
+  align-self: end;
+  color: rgba(255, 255, 255, .72);
+  font-size: var(--tyre-hud-type-label);
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.tyre-advanced__brake-axle span {
   grid-row: 2;
   align-self: end;
   font-size: var(--tyre-hud-type-secondary);
@@ -370,10 +388,10 @@ function brakeStyle(tyre: FastStateTyre) {
   white-space: nowrap;
 }
 
-.tyre-advanced__brake i {
+.tyre-advanced__brake-axle i {
   grid-row: 3;
   align-self: center;
-  width: 44%;
+  width: 54%;
   height: calc(54px * var(--hud-scale, 1));
   border: 1px solid rgba(255, 255, 255, .32);
   border-radius: calc(4px * var(--hud-scale, 1));
@@ -381,10 +399,19 @@ function brakeStyle(tyre: FastStateTyre) {
   transition: background-color 120ms linear;
 }
 
-.tyre-advanced__brake strong {
+.tyre-advanced__brake-axle strong {
   grid-row: 4;
   font-size: var(--tyre-hud-type-pad);
   line-height: 1;
+}
+
+.tyre-advanced__brake-axle--alert i {
+  outline: max(1px, calc(2px * var(--hud-scale, 1))) solid #ff3b30;
+  box-shadow: 0 0 calc(10px * var(--hud-scale, 1)) rgba(255, 59, 48, .72);
+}
+
+.tyre-advanced__brake-axle--missing i {
+  border-style: dashed;
 }
 
 .tyre-advanced__set {
@@ -467,12 +494,17 @@ function brakeStyle(tyre: FastStateTyre) {
     font-size: 10px;
   }
 
-  .tyre-advanced__brake strong {
-    font-size: 10px;
+  .tyre-advanced__brake-axle > small {
+    font-size: 9px;
   }
 
-  .tyre-advanced__brake i {
-    width: 46%;
+  .tyre-advanced__brake-axle span,
+  .tyre-advanced__brake-axle strong {
+    font-size: 12px;
+  }
+
+  .tyre-advanced__brake-axle i {
+    width: 52%;
     height: 36px;
   }
 }

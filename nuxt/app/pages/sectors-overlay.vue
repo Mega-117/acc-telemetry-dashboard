@@ -360,6 +360,24 @@ onBeforeUnmount(() => {
   gap: calc(8px * var(--hud-scale));
 }
 
+.hud-overlay .sector-delta-hud__header--classic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: calc(8px * var(--hud-scale));
+}
+
+.hud-overlay .sector-delta-hud__title {
+  font-weight: 950;
+  letter-spacing: .08em;
+}
+
+.hud-overlay .sector-delta-hud__comparison {
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+
 .hud-overlay .sector-delta {
   min-height: 0;
   // Colonna: etichetta, tempo attuale, delta, tempo giro precedente.

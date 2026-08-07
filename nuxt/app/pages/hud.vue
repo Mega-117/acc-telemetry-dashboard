@@ -16,6 +16,7 @@ import {
   supportsHudOverlayBackground,
   type HudOverlayBackgroundId,
 } from '~/utils/hudOverlayBackground'
+import { getHudOverlayScaleMin } from '~/composables/useHudOverlay'
 
 definePageMeta({
   layout: 'dashboard',
@@ -63,8 +64,8 @@ const hudSettingsLayouts: Array<{ id: HudSettingsLayout, label: string, descript
   { id: 'matrix', label: 'Matrice', description: 'Griglia compatta con righe e colonne continue' },
 ]
 
-const SCALE_MIN = 0.6
 const SCALE_MAX = 1.6
+const scaleMinFor = (id: HudOverlayId) => getHudOverlayScaleMin(id)
 
 function getApi(): any | null {
   if (typeof window === 'undefined') return null
@@ -384,7 +385,7 @@ async function toggleHud(id: HudOverlayId) {
 }
 
 function onScaleInput(id: HudOverlayId, raw: string) {
-  const value = Math.min(Math.max(parseFloat(raw), SCALE_MIN), SCALE_MAX)
+  const value = Math.min(Math.max(parseFloat(raw), scaleMinFor(id)), SCALE_MAX)
   scale[id] = value
   const api = getApi()
   if (!apiReady.value || !api) return
@@ -791,7 +792,7 @@ async function toggleTraining() {
                   <input
                     type="range"
                     class="hud-slider"
-                    :min="SCALE_MIN"
+                    :min="scaleMinFor(selectedOverlayId)"
                     :max="SCALE_MAX"
                     step="0.05"
                     :value="scale[selectedOverlayId]"

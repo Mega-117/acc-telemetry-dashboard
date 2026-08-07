@@ -1,6 +1,7 @@
 import type { FastStateTyre } from '~/composables/useFastStatePoller'
 
 export type BrakeCompound = 0 | 1 | 2 | 3
+export type BrakeTemperatureBand = 'missing' | 'blue' | 'lightBlue' | 'green' | 'yellow' | 'orange' | 'red'
 
 interface BrakeColorRanges {
   lightBlue: readonly [number, number]
@@ -52,6 +53,22 @@ function bandProgress(temp: number, range: readonly [number, number]): number | 
 
 function rgb(r: number, g: number, b: number): string {
   return `rgb(${r}, ${g}, ${b})`
+}
+
+export function brakeTemperatureBand(
+  tempC: number | null,
+  wheelId: FastStateTyre['id'],
+  compound: number | null,
+): BrakeTemperatureBand {
+  if (tempC === null || !Number.isFinite(tempC)) return 'missing'
+  const temp = Math.trunc(tempC)
+  const ranges = rangesFor(wheelId, compound)
+  if (temp > ranges.orange[1]) return 'red'
+  if (bandProgress(temp, ranges.orange) !== null) return 'orange'
+  if (bandProgress(temp, ranges.yellow) !== null) return 'yellow'
+  if (bandProgress(temp, ranges.green) !== null) return 'green'
+  if (bandProgress(temp, ranges.lightBlue) !== null) return 'lightBlue'
+  return 'blue'
 }
 
 export function brakeTemperatureColor(

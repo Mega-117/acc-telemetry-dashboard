@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import InfoHud from '~/components/overlay/InfoHud.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
@@ -24,11 +24,13 @@ const overlay = useHudOverlay('info', getApi)
 const { backgroundOpacity } = useHudOverlayBackground(overlay.settings)
 const telemetry = useFastStatePoller(getApi)
 const target = ref<InfoTargetSettings | null>(null)
+const canvasElement = ref<HTMLDivElement | null>(null)
 const clockMs = ref(Date.now())
 const heldLap = ref<{ timeMs: number, outcome: InfoTargetOutcome, startedAtMs: number } | null>(null)
 let previousLapsCompleted: number | null = null
 let timer: ReturnType<typeof setInterval> | null = null
 let removeTargetListener: (() => void) | null = null
+let resizeObserver: ResizeObserver | null = null
 
 const options = computed(() => ({
   showYellowFlag: overlay.settings.value?.showYellowFlag ?? DEFAULT_INFO_OPTIONS.showYellowFlag,
@@ -57,6 +59,20 @@ const lapTimerValue = computed(() => {
 })
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
 const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
+
+async function syncInfoViewport() {
+  await nextTick()
+  const canvas = canvasElement.value
+  const api = getApi()
+  if (!canvas || typeof api?.hudOverlaySetSize !== 'function') return
+  const rect = canvas.getBoundingClientRect()
+  await api.hudOverlaySetSize('info', {
+    width: Math.ceil(window.innerWidth),
+    height: Math.ceil(rect.height),
+  })
+}
+
+watch(() => overlay.scale.value, () => { void syncInfoViewport() })
 watch(
   () => telemetry.fastState.value.info,
   (info) => {
@@ -90,12 +106,18 @@ onMounted(async () => {
     })
   }
   timer = setInterval(() => { clockMs.value = Date.now() }, 50)
+  if (typeof ResizeObserver === 'function' && canvasElement.value) {
+    resizeObserver = new ResizeObserver(() => { void syncInfoViewport() })
+    resizeObserver.observe(canvasElement.value)
+  }
+  await syncInfoViewport()
 })
 
 onUnmounted(() => {
   telemetry.stopFastStatePolling()
   overlay.stop()
   removeTargetListener?.()
+  resizeObserver?.disconnect()
   if (timer) clearInterval(timer)
 })
 </script>
@@ -103,16 +125,20 @@ onUnmounted(() => {
 <template>
   <main class="overlay-root">
     <OverlaySoftwareCursor :state="overlay.pointerState" />
-    <InfoHud
-      :model="model"
-      :local-time-value="localTimeValue"
-      :lap-timer-value="lapTimerValue"
-      :lap-timer-outcome="lapTimerOutcome"
-      :lap-timer-fading="isFading"
-      :background-opacity="backgroundOpacity"
+    <div
+      ref="canvasElement"
       class="overlay-canvas"
       :style="canvasStyle"
-    />
+    >
+      <InfoHud
+        :model="model"
+        :local-time-value="localTimeValue"
+        :lap-timer-value="lapTimerValue"
+        :lap-timer-outcome="lapTimerOutcome"
+        :lap-timer-fading="isFading"
+        :background-opacity="backgroundOpacity"
+      />
+    </div>
   </main>
 </template>
 

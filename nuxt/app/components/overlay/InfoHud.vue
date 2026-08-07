@@ -61,9 +61,9 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
 .info-hud {
   box-sizing: border-box;
   width: 344px;
-  height: 512px;
+  height: auto;
   padding: 20px 20px 18px;
-  overflow: hidden;
+  overflow: visible;
   border-radius: 24px;
   color: #fff;
   background: transparent;
