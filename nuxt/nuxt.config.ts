@@ -8,6 +8,8 @@ const baseURL = isDev ? '/' : '/acc-telemetry-dashboard/docs/'
 const buildAssetsDir = isDev ? '/_nuxt/' : '/assets/'
 const ignoredRuntimePaths = ['**/.tmp_edge_profile/**', '**/.tmp_edge_profile', '**/dist/**', '**/dist']
 const staticPublicDir = process.env.ACC_NUXT_PUBLIC_DIR
+const standingsSmokeBuildDir = process.env.STANDINGS_SMOKE_BUILD_DIR?.trim()
+const standingsSmokeWithoutOptimizeDeps = process.env.STANDINGS_SMOKE_DISABLE_OPTIMIZER === '1'
 
 async function patchWindowsNitroPrerenderImports(dir: string) {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => [])
@@ -41,6 +43,7 @@ export default defineNuxtConfig({
   ssr: false,
   ignore: ignoredRuntimePaths,
   plugins: isDev ? ['~/plugins/firebase-emulators.client'] : [],
+  ...(standingsSmokeBuildDir ? { buildDir: standingsSmokeBuildDir } : {}),
 
   // === COMPATIBILITÀ ===
   compatibilityDate: '2025-01-11',
@@ -122,7 +125,7 @@ export default defineNuxtConfig({
       // discovery constrained, but pre-bundle these explicit dependencies in
       // dev so SessionDetailPage can be loaded through client-side routing.
       noDiscovery: true,
-      include: ['chartjs-plugin-zoom', 'hammerjs']
+      include: standingsSmokeWithoutOptimizeDeps ? [] : ['chartjs-plugin-zoom', 'hammerjs']
     },
     server: {
       watch: {

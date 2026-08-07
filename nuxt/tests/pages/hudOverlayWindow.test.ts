@@ -24,6 +24,7 @@ describe('Shared HUD overlay window contract', () => {
       'sectors-overlay',
       'dashboard-overlay',
       'info-overlay',
+      'standings-overlay',
     ])
 
     for (const route of routes) {

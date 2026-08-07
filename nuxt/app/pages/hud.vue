@@ -5,7 +5,7 @@
 // - Per ogni overlay: on/off + formato fisso (Piccolo/Medio/Grande).
 // Self-contained (come dev.vue): fuori dal contratto useTelemetryGateway.
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { ChartNoAxesCombined, CircleDot, Clock3, Flag, Info, LayoutDashboard, Trophy } from '@lucide/vue'
+import { ChartNoAxesCombined, CircleDot, Clock3, Flag, Info, LayoutDashboard, ListOrdered, Trophy } from '@lucide/vue'
 import {
   supportsHudOverlayPresentationControl,
   type HudOverlayPresentationControl,
@@ -16,14 +16,14 @@ import {
   supportsHudOverlayBackground,
   type HudOverlayBackgroundId,
 } from '~/utils/hudOverlayBackground'
-import { getHudOverlayScaleMin } from '~/composables/useHudOverlay'
+import { getHudOverlayScaleMax, getHudOverlayScaleMin } from '~/composables/useHudOverlay'
 
 definePageMeta({
   layout: 'dashboard',
   middleware: 'hud-access'
 })
 
-type HudOverlayId = 'tyres' | 'sectors' | 'dashboard' | 'info'
+type HudOverlayId = 'tyres' | 'sectors' | 'dashboard' | 'info' | 'standings'
 type HudSettingsLayout = 'columns' | 'matrix'
 
 interface HudReplayScenario {
@@ -50,6 +50,7 @@ const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string 
   { id: 'sectors', title: 'Settori', description: 'Tempi e delta dei tre settori.' },
   { id: 'dashboard', title: 'Dashboard', description: 'Marcia, carburante ed elettronica in stile ACC Drive.' },
   { id: 'info', title: 'Info', description: 'Delta, stint, carburante, grip, tempi e danni.' },
+  { id: 'standings', title: 'Standings', description: 'Classifica di classe con top e auto intorno al pilota.' },
 ]
 
 const hudOverlayIcons = {
@@ -57,6 +58,7 @@ const hudOverlayIcons = {
   sectors: Flag,
   dashboard: LayoutDashboard,
   info: Info,
+  standings: ListOrdered,
 }
 
 const hudSettingsLayouts: Array<{ id: HudSettingsLayout, label: string, description: string }> = [
@@ -64,8 +66,8 @@ const hudSettingsLayouts: Array<{ id: HudSettingsLayout, label: string, descript
   { id: 'matrix', label: 'Matrice', description: 'Griglia compatta con righe e colonne continue' },
 ]
 
-const SCALE_MAX = 1.6
 const scaleMinFor = (id: HudOverlayId) => getHudOverlayScaleMin(id)
+const scaleMaxFor = (id: HudOverlayId) => getHudOverlayScaleMax(id)
 
 function getApi(): any | null {
   if (typeof window === 'undefined') return null
@@ -74,9 +76,9 @@ function getApi(): any | null {
 
 const isElectron = ref(false)
 const apiReady = ref(false)
-const enabled = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false })
-const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false })
-const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1, info: 1 })
+const enabled = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false })
+const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false })
+const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1, info: 1, standings: 0.8 })
 const tyreVariant = ref<'classic' | 'advanced'>('classic')
 const sectorVariant = ref<'classic' | 'compact'>('classic')
 const showSectorReference = ref(true)
@@ -108,9 +110,22 @@ const infoSettings = reactive({
   showDamage: true,
   showTime: false,
 })
+const standingsSettings = reactive({
+  topCars: 3,
+  carsAhead: 3,
+  carsBehind: 3,
+  showStintTimer: true,
+  showCarNumber: true,
+  showIncidents: false,
+  showFastestLap: true,
+  showLastLap: true,
+  showLapProgressBar: true,
+  showTurnNumber: false,
+})
 const backgroundTransparency = reactive<Record<HudOverlayBackgroundId, number>>({
   info: 20,
   tyres: 20,
+  standings: 50,
 })
 type InfoSettingKey = keyof typeof infoSettings
 const infoOptionDefinitions: Array<{ key: InfoSettingKey, label: string }> = [
@@ -131,6 +146,22 @@ const infoSettingGroups: Array<{ id: string, label: string, icon: typeof Trophy,
   { id: 'race', label: 'Gara', icon: Trophy, keys: ['showYellowFlag', 'showIncidents', 'showPitExitTraffic'] },
   { id: 'performance', label: 'Prestazioni', icon: ChartNoAxesCombined, keys: ['showGrip', 'showOptimal', 'showDelta', 'showBest', 'showDamage'] },
   { id: 'strategy', label: 'Strategia e tempo', icon: Clock3, keys: ['showQFuel', 'showStint', 'showFuelLeft', 'showTime'] },
+]
+
+type StandingsBooleanSettingKey = Exclude<keyof typeof standingsSettings, 'topCars' | 'carsAhead' | 'carsBehind'>
+const standingsBooleanOptions: Array<{
+  key: StandingsBooleanSettingKey
+  label: string
+  supported: boolean
+  dependency?: string
+}> = [
+  { key: 'showCarNumber', label: 'Car Number', supported: true },
+  { key: 'showFastestLap', label: 'Fastest Lap', supported: true },
+  { key: 'showLastLap', label: 'Last Lap', supported: true },
+  { key: 'showStintTimer', label: 'Stint Time', supported: false, dependency: 'Richiede telemetria stint avversari.' },
+  { key: 'showLapProgressBar', label: 'Lap Progress', supported: true },
+  { key: 'showIncidents', label: 'Incidents', supported: false, dependency: 'Richiede provider incidenti.' },
+  { key: 'showTurnNumber', label: 'Turn Number', supported: false, dependency: 'Richiede mappa curve autorevole.' },
 ]
 
 function getInfoOptions(keys: InfoSettingKey[]) {
@@ -229,8 +260,19 @@ async function refreshState() {
         dashboardSettings.fuelCriticalLapsThreshold = Number.isFinite(Number(settings?.fuelCriticalLapsThreshold))
           ? Number(settings.fuelCriticalLapsThreshold) : 0.5
       }
+      if (overlay.id === 'standings') {
+        for (const key of ['topCars', 'carsAhead', 'carsBehind'] as const) {
+          const numeric = Number(settings?.[key])
+          if (Number.isFinite(numeric)) standingsSettings[key] = Math.round(Math.min(Math.max(numeric, 0), 5))
+        }
+        for (const definition of standingsBooleanOptions) {
+          if (typeof settings?.[definition.key] === 'boolean') {
+            standingsSettings[definition.key] = settings[definition.key]
+          }
+        }
+      }
       if (supportsHudOverlayBackground(overlay.id)) {
-        backgroundTransparency[overlay.id] = backgroundOpacityToTransparency(settings?.backgroundOpacity)
+        backgroundTransparency[overlay.id] = backgroundOpacityToTransparency(settings?.backgroundOpacity, overlay.id)
       }
       if (overlay.id === 'info') {
         for (const definition of infoOptionDefinitions) {
@@ -385,7 +427,7 @@ async function toggleHud(id: HudOverlayId) {
 }
 
 function onScaleInput(id: HudOverlayId, raw: string) {
-  const value = Math.min(Math.max(parseFloat(raw), scaleMinFor(id)), SCALE_MAX)
+  const value = Math.min(Math.max(parseFloat(raw), scaleMinFor(id)), scaleMaxFor(id))
   scale[id] = value
   const api = getApi()
   if (!apiReady.value || !api) return
@@ -476,6 +518,27 @@ async function saveInfoSetting(key: InfoSettingKey, value: boolean) {
 
 function toggleInfoSetting(key: InfoSettingKey) {
   void saveInfoSetting(key, !infoSettings[key])
+}
+
+async function saveStandingsSetting(
+  key: keyof typeof standingsSettings,
+  value: boolean | number,
+) {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySaveSettings) return
+  const normalized = typeof standingsSettings[key] === 'number'
+    ? Math.round(Math.min(Math.max(Number(value) || 0, 0), 5))
+    : value === true
+  ;(standingsSettings as Record<string, boolean | number>)[key] = normalized
+  const settings = await api.hudOverlaySaveSettings('standings', { [key]: normalized })
+  if (settings && key in settings) {
+    ;(standingsSettings as Record<string, boolean | number>)[key] = settings[key]
+  }
+}
+
+function toggleStandingsSetting(option: typeof standingsBooleanOptions[number]) {
+  if (!option.supported) return
+  void saveStandingsSetting(option.key, !standingsSettings[option.key])
 }
 
 async function onBackgroundTransparencyInput(id: HudOverlayBackgroundId, value: string) {
@@ -793,8 +856,8 @@ async function toggleTraining() {
                     type="range"
                     class="hud-slider"
                     :min="scaleMinFor(selectedOverlayId)"
-                    :max="SCALE_MAX"
-                    step="0.05"
+                    :max="scaleMaxFor(selectedOverlayId)"
+                    :step="selectedOverlayId === 'standings' ? 0.1 : 0.05"
                     :value="scale[selectedOverlayId]"
                     :disabled="selectedSettingsDisabled"
                     :aria-label="'Dimensione HUD ' + selectedOverlay.title"
@@ -996,6 +1059,79 @@ async function toggleTraining() {
                       />
                       <b>giri</b>
                     </span>
+                  </label>
+                </template>
+
+                <template v-else-if="selectedOverlayId === 'standings'">
+                  <label class="hud-control hud-control--slider">
+                    <span><strong>Top Cars</strong></span>
+                    <span class="hud-control__range">
+                      <b>{{ standingsSettings.topCars }}</b>
+                      <input
+                        type="range"
+                        class="hud-slider"
+                        min="0"
+                        max="5"
+                        step="1"
+                        :value="standingsSettings.topCars"
+                        :disabled="selectedSettingsDisabled"
+                        aria-label="Top Cars"
+                        @input="saveStandingsSetting('topCars', Number(($event.target as HTMLInputElement).value))"
+                      />
+                    </span>
+                  </label>
+                  <label class="hud-control hud-control--slider">
+                    <span><strong>Cars Ahead</strong></span>
+                    <span class="hud-control__range">
+                      <b>{{ standingsSettings.carsAhead }}</b>
+                      <input
+                        type="range"
+                        class="hud-slider"
+                        min="0"
+                        max="5"
+                        step="1"
+                        :value="standingsSettings.carsAhead"
+                        :disabled="selectedSettingsDisabled"
+                        aria-label="Cars Ahead"
+                        @input="saveStandingsSetting('carsAhead', Number(($event.target as HTMLInputElement).value))"
+                      />
+                    </span>
+                  </label>
+                  <label class="hud-control hud-control--slider">
+                    <span><strong>Cars Behind</strong></span>
+                    <span class="hud-control__range">
+                      <b>{{ standingsSettings.carsBehind }}</b>
+                      <input
+                        type="range"
+                        class="hud-slider"
+                        min="0"
+                        max="5"
+                        step="1"
+                        :value="standingsSettings.carsBehind"
+                        :disabled="selectedSettingsDisabled"
+                        aria-label="Cars Behind"
+                        @input="saveStandingsSetting('carsBehind', Number(($event.target as HTMLInputElement).value))"
+                      />
+                    </span>
+                  </label>
+                  <label
+                    v-for="option in standingsBooleanOptions"
+                    :key="option.key"
+                    class="hud-control hud-control--standings"
+                    :class="{ 'is-unavailable': !option.supported }"
+                    :title="option.dependency"
+                  >
+                    <span>
+                      <strong>{{ option.label }}</strong>
+                      <small v-if="!option.supported">{{ option.dependency }}</small>
+                    </span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="standingsSettings[option.key]"
+                      :disabled="selectedSettingsDisabled || !option.supported"
+                      @change="toggleStandingsSetting(option)"
+                    />
                   </label>
                 </template>
 
@@ -1604,6 +1740,16 @@ async function toggleTraining() {
   > span:first-child { display: grid; gap: 3px; min-width: 0; }
   strong { color: rgba(255, 255, 255, 0.92); font-size: 13px; }
   em { color: var(--hud-text-muted); font-size: 11px; font-style: normal; line-height: 1.35; }
+}
+
+.hud-control--standings small {
+  color: var(--hud-text-muted);
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.hud-control--standings.is-unavailable {
+  opacity: 0.52;
 }
 
 .hud-control__range {

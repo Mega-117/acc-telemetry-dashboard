@@ -1,0 +1,225 @@
+import { describe, expect, it } from 'vitest'
+import {
+  buildStandingsPresentation,
+  formatStandingsDriverName,
+  formatStandingsLapTime,
+  formatStandingsRemainingTime,
+  formatStandingsSessionType,
+  formatStandingsTemperatures,
+  selectStandingsCars,
+  standingsCarNumberColors,
+  type StandingsCarSnapshot,
+  type StandingsStateEnvelope,
+} from '../../app/services/overlay/standingsPresentation'
+
+const NOW_MS = 1_785_956_769_847
+
+function car(position: number, overrides: Partial<StandingsCarSnapshot> = {}): StandingsCarSnapshot {
+  return {
+    car_index: 100 + position,
+    car_class: 'GT3',
+    race_number: position,
+    current_driver_index: 0,
+    drivers: [{ first_name: 'Alex', last_name: `Driver${position}` }],
+    cup_position: position,
+    laps: 10,
+    spline_position: position / 10,
+    best_lap: { time_ms: 130_000 + position, is_invalid: false, is_valid_for_best: true },
+    last_lap: { time_ms: 131_000 + position, is_invalid: false, is_valid_for_best: true },
+    car_location: 1,
+    realtime_updated_at_ms: NOW_MS - 100,
+    has_identity: true,
+    has_realtime: true,
+    ...overrides,
+  }
+}
+
+function state(cars: StandingsCarSnapshot[], focusedCarIndex = 108): StandingsStateEnvelope {
+  return {
+    status: 'available',
+    reason: null,
+    snapshot: {
+      freshness: { generated_at_ms: NOW_MS - 100, ttl_ms: 5000 },
+      session: {
+        event_index: 1,
+        session_index: 2,
+        focused_car_index: focusedCarIndex,
+        is_replay: false,
+        session_type: 0,
+        phase: 4,
+        session_time_ms: 60_000,
+        session_end_time_ms: 3_661_000,
+        weather: { ambient_temp: 22.4, track_temp: 31.6 },
+      },
+      cars,
+    },
+  }
+}
+
+describe('standingsPresentation', () => {
+  it('riempie il target adattivo e compensa top/window per focus P1, P2, overlap e fondo', () => {
+    const cars = Array.from({ length: 12 }, (_, index) => car(index + 1))
+    cars.push(car(4, { car_index: 204, car_class: 'GT4' }))
+    cars.push(car(5, { car_index: 205, realtime_updated_at_ms: NOW_MS - 5001 }))
+    const options = {
+      topCars: 3,
+      carsAhead: 2,
+      carsBehind: 2,
+    }
+
+    const expected = new Map([
+      [101, [1, 2, 3, 4, 5, 6, 7, 8]],
+      [102, [1, 2, 3, 4, 5, 6, 7, 8]],
+      [104, [1, 2, 3, 4, 5, 6, 7, 8]],
+      [112, [1, 2, 3, 8, 9, 10, 11, 12]],
+    ])
+    expected.forEach((positions, focusedCarIndex) => {
+      const model = buildStandingsPresentation(state(cars, focusedCarIndex), options, NOW_MS)
+      expect(model.rows.map(row => row.position)).toEqual(positions)
+      expect(model.rows).toHaveLength(8)
+      expect(model.rows.filter(row => row.focused).map(row => row.carIndex)).toEqual([focusedCarIndex])
+    })
+  })
+
+  it('non inventa la classe da altri campi e nasconde replay/unavailable', () => {
+    const withoutClass = car(8, { car_class: null }) as StandingsCarSnapshot & { cup_category: number }
+    withoutClass.cup_category = 0
+    expect(buildStandingsPresentation(state([withoutClass]), {}, NOW_MS).visible).toBe(false)
+    expect(buildStandingsPresentation({ status: 'unavailable', reason: 'stale', snapshot: null }, {}, NOW_MS).visible).toBe(false)
+
+    const replay = state([car(8)])
+    replay.snapshot!.session.is_replay = true
+    expect(buildStandingsPresentation(replay, {}, NOW_MS).visible).toBe(false)
+  })
+
+  it('filtra righe stale/non affidabili e nasconde l’intero HUD se il focus non resta eleggibile', () => {
+    const staleFocus = state([car(8, { realtime_updated_at_ms: NOW_MS - 5001 })])
+    const unidentifiedFocus = state([car(8, { has_identity: false })])
+    const unrankedFocus = state([car(8, { cup_position: 0 })])
+    expect(buildStandingsPresentation(staleFocus, {}, NOW_MS).visible).toBe(false)
+    expect(buildStandingsPresentation(unidentifiedFocus, {}, NOW_MS).visible).toBe(false)
+    expect(buildStandingsPresentation(unrankedFocus, {}, NOW_MS).visible).toBe(false)
+  })
+
+  it('espone soltanto celle supportate e lascia null i valori assenti', () => {
+    const raw = car(8, {
+      race_number: null,
+      current_driver_index: 9,
+      best_lap: null,
+      best_lap_ms: null,
+      last_lap: null,
+      last_lap_ms: null,
+      spline_position: null,
+    })
+    const model = buildStandingsPresentation(state([raw]), {
+      showCarNumber: true,
+      showFastestLap: true,
+      showLastLap: true,
+      showLapProgressBar: true,
+    }, NOW_MS)
+    expect(model.rows[0]).toMatchObject({
+      carNumber: null,
+      driverName: 'NoData',
+      bestLap: null,
+      lastLap: null,
+      progressPercent: null,
+      hasProgress: false,
+    })
+    expect(model.rows[0]).not.toHaveProperty('delta')
+    expect(model.rows[0]).not.toHaveProperty('teamName')
+    expect(model.rows[0]).not.toHaveProperty('laps')
+    expect(model.rows[0]).not.toHaveProperty('lfmElo')
+    expect(model.rows[0]).not.toHaveProperty('incidents')
+    expect(model.rows[0]).not.toHaveProperty('stintTimer')
+  })
+
+  it('clampa i conteggi 0-5 e marca il best di classe senza includere righe extra', () => {
+    const model = buildStandingsPresentation(state([car(1), car(8), car(9)]), {
+      topCars: 99,
+      carsAhead: -2,
+      carsBehind: 0,
+      showCarNumber: false,
+      showFastestLap: true,
+      showLastLap: false,
+      showLapProgressBar: false,
+    }, NOW_MS)
+    expect(model.rows.map(row => row.position)).toEqual([1, 8, 9])
+    expect(model.rows[0].fastestInClass).toBe(true)
+    expect(model.columns).toEqual({ carNumber: false, lastLap: false, bestLap: true, progress: false })
+    expect(model.rows.every(row => row.carNumber === null && row.lastLap === null && row.progressPercent === null)).toBe(true)
+  })
+
+  it('costruisce l’header supportato nell’ordine dati canonico', () => {
+    const model = buildStandingsPresentation(state([car(8)]), {}, NOW_MS)
+    expect(model.header).toEqual({
+      sessionType: 'Practice',
+      timeLeft: '01:00:01',
+      temperatures: '22/32°',
+      carClass: 'GT3',
+    })
+    expect(formatStandingsSessionType(0)).toBe('Practice')
+    expect(formatStandingsSessionType(1)).toBe('Qualifying')
+    expect(formatStandingsSessionType(2)).toBe('Race')
+    expect(formatStandingsSessionType(3)).toBe('Hotlap')
+    expect(formatStandingsSessionType(4)).toBe('TimeAttack')
+    expect(formatStandingsSessionType(5)).toBeNull()
+    expect(formatStandingsRemainingTime(5000, 4000)).toBe('00:00:00')
+    expect(formatStandingsRemainingTime(null, 4000)).toBeNull()
+    expect(formatStandingsTemperatures({ ambient_temp: 23.6, track_temp: 31.2 })).toBe('24/31°')
+    expect(formatStandingsTemperatures({ ambient_temp: 20, track_temp: null })).toBeNull()
+  })
+
+  it('formatta pilota, tempi e palette numero senza fallback inventati', () => {
+    expect(formatStandingsLapTime(125_678)).toBe('2:05.678')
+    expect(formatStandingsLapTime(null)).toBeNull()
+    expect(formatStandingsDriverName(car(1))).toBe('A. Driver1')
+    expect(formatStandingsDriverName(car(1, {
+      drivers: [{ first_name: '', last_name: 'Driver1' }],
+    }))).toBe('. Driver1')
+    expect(formatStandingsDriverName(car(1, {
+      drivers: [{ first_name: 'Alex', last_name: '' }],
+    }))).toBe('NoData')
+    expect(formatStandingsDriverName(car(1, { drivers: [], current_driver_index: 0 }))).toBe('NoData')
+    expect(standingsCarNumberColors('GT3')).toEqual({ background: 'transparent', color: 'white' })
+    expect(standingsCarNumberColors('GT4').background).toBe('rgb(38, 38, 69)')
+    expect(standingsCarNumberColors('ST').background).toBe('rgb(204, 168, 0)')
+    expect(standingsCarNumberColors('Cup').background).toBe('rgb(69, 124, 69)')
+    expect(standingsCarNumberColors('CHL').background).toBe('red')
+    expect(standingsCarNumberColors('TCX').background).toBe('rgb(0, 124, 167)')
+    expect(standingsCarNumberColors('GT2').background).toBe('darkred')
+  })
+
+  it('mostra progress solo non-Race e forza zero in pit lane', () => {
+    const practice = state([
+      car(8, { car_location: 2, spline_position: 0.75 }),
+      car(9, { spline_position: 0.42 }),
+    ])
+    const practiceModel = buildStandingsPresentation(practice, { topCars: 0, carsAhead: 0, carsBehind: 1 }, NOW_MS)
+    expect(practiceModel.columns.progress).toBe(true)
+    expect(practiceModel.rows.map(row => row.progressPercent)).toEqual([0, 42])
+    expect(practiceModel.rows.map(row => row.hasProgress)).toEqual([false, true])
+    expect(practiceModel.rows.map(row => row.inPitLane)).toEqual([true, false])
+
+    practice.snapshot!.session.session_type = 2
+    const raceModel = buildStandingsPresentation(practice, {}, NOW_MS)
+    expect(raceModel.columns.progress).toBe(false)
+    expect(raceModel.rows.every(row => row.progressPercent === null)).toBe(true)
+    expect(raceModel.rows.every(row => row.hasProgress === false)).toBe(true)
+  })
+
+  it('propaga gli highlight soltanto alle celle previste', () => {
+    const model = buildStandingsPresentation(state([car(8)]), {}, NOW_MS, {
+      108: { positionFlash: 'improved', lastLapPersonalBest: 'focused' },
+    })
+    expect(model.rows[0]).toMatchObject({
+      positionFlash: 'improved',
+      lastLapPersonalBest: 'focused',
+    })
+  })
+
+  it('la selezione pura non oltrepassa il roster disponibile', () => {
+    const cars = [car(1), car(2)]
+    expect(selectStandingsCars(cars, 1, { topCars: 5, carsAhead: 5, carsBehind: 5 })).toEqual(cars)
+    expect(selectStandingsCars(cars, -1, { topCars: 3, carsAhead: 3, carsBehind: 3 })).toEqual([])
+  })
+})

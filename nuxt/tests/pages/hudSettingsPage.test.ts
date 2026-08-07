@@ -76,9 +76,12 @@ describe('HUD settings page layout contract', () => {
     expect(source).toContain("v-if=\"selectedOverlayId === 'tyres'\"")
     expect(source).toContain("v-if=\"selectedOverlayId === 'sectors'\"")
     expect(source).toContain("v-else-if=\"selectedOverlayId === 'dashboard'\"")
+    expect(source).toContain("v-else-if=\"selectedOverlayId === 'standings'\"")
     expect(source).toContain("v-else-if=\"selectedOverlayId === 'info'\"")
     expect(source).toContain('supportsHudOverlayBackground(selectedOverlayId)')
     expect(source).toContain("v-if=\"sectorSupports('sectorCurrentLap')\"")
+    expect(source).toContain(':disabled="selectedSettingsDisabled || !option.supported"')
+    expect(source).toContain('Richiede telemetria stint avversari.')
   })
 
   it('provides keyboard-visible selection semantics', () => {

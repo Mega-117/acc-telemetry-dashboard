@@ -1,5 +1,7 @@
 import { afterEach, describe, it, expect, vi } from 'vitest'
 import {
+  getHudOverlayScaleDefault,
+  getHudOverlayScaleMax,
   getHudOverlayScaleMin,
   HUD_OVERLAY_INTERACTIONS,
   useHudOverlay,
@@ -29,6 +31,7 @@ describe('HUD_OVERLAY_INTERACTIONS', () => {
     })
     expect(HUD_OVERLAY_INTERACTIONS.dashboard?.controlSelector).toBe('')
     expect(HUD_OVERLAY_INTERACTIONS.info?.controlSelector).toBe('')
+    expect(HUD_OVERLAY_INTERACTIONS.standings?.surfaceSelector).toBe('.overlay-canvas')
   })
 })
 
@@ -52,10 +55,14 @@ describe('useHudOverlay', () => {
     expect(hud.scale.value).toBe(1.6)
   })
 
-  it('espone il minimo Gomme 0.50 senza abbassare gli altri overlay', () => {
+  it('espone i range per-ID senza cambiare gli overlay esistenti', () => {
     expect(getHudOverlayScaleMin('tyres')).toBe(0.5)
     expect(getHudOverlayScaleMin('sectors')).toBe(0.6)
     expect(getHudOverlayScaleMin('info')).toBe(0.6)
+    expect(getHudOverlayScaleMin('standings')).toBe(0.3)
+    expect(getHudOverlayScaleMax('standings')).toBe(3)
+    expect(getHudOverlayScaleMax('info')).toBe(1.6)
+    expect(getHudOverlayScaleDefault('standings')).toBe(0.8)
   })
 
   it('l\'evento placement aggiorna isPlacing', () => {
@@ -79,6 +86,9 @@ describe('useHudOverlay', () => {
     const sectors = useHudOverlay('sectors', () => api)
     sectors.start(0.1)
     expect(sectors.scale.value).toBe(0.6)
+    const standings = useHudOverlay('standings', () => api)
+    standings.start(9)
+    expect(standings.scale.value).toBe(3)
   })
 
   it('settings push aggiorna settings e scala senza UI diagnostica overlay-side', () => {

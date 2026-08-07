@@ -40,7 +40,7 @@ const isTrainingOverlayIntent = computed(() => {
 // Overlay HUD semplici (PIP-175): come il training overlay, vivono in una
 // finestra Electron dedicata e vanno renderizzati standalone, fuori dalla shell
 // auth/dashboard (che altrimenti li redirige a /panoramica).
-const hudOverlayRoutes = ['/tyres-overlay', '/sectors-overlay', '/dashboard-overlay', '/info-overlay']
+const hudOverlayRoutes = ['/tyres-overlay', '/sectors-overlay', '/dashboard-overlay', '/info-overlay', '/standings-overlay']
 const isHudOverlayRoute = computed(() => {
   return hudOverlayRoutes.includes(normalizedRoutePath.value)
     || hudOverlayRoutes.includes(browserOverlayPath.value)

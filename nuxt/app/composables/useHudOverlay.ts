@@ -29,6 +29,15 @@ export interface HudOverlaySettings {
   showDamage?: boolean
   showTime?: boolean
   backgroundOpacity?: number
+  topCars?: number
+  carsAhead?: number
+  carsBehind?: number
+  showStintTimer?: boolean
+  showCarNumber?: boolean
+  showFastestLap?: boolean
+  showLastLap?: boolean
+  showLapProgressBar?: boolean
+  showTurnNumber?: boolean
 }
 
 export const HUD_SCALE_MIN = 0.6
@@ -36,10 +45,25 @@ export const HUD_SCALE_MAX = 1.6
 export const HUD_SCALE_DEFAULT = 1
 export const HUD_SCALE_MIN_BY_OVERLAY: Readonly<Record<string, number>> = {
   tyres: 0.5,
+  standings: 0.3,
+}
+export const HUD_SCALE_MAX_BY_OVERLAY: Readonly<Record<string, number>> = {
+  standings: 3,
+}
+export const HUD_SCALE_DEFAULT_BY_OVERLAY: Readonly<Record<string, number>> = {
+  standings: 0.8,
 }
 
 export function getHudOverlayScaleMin(overlayId: string): number {
   return HUD_SCALE_MIN_BY_OVERLAY[overlayId] ?? HUD_SCALE_MIN
+}
+
+export function getHudOverlayScaleMax(overlayId: string): number {
+  return HUD_SCALE_MAX_BY_OVERLAY[overlayId] ?? HUD_SCALE_MAX
+}
+
+export function getHudOverlayScaleDefault(overlayId: string): number {
+  return HUD_SCALE_DEFAULT_BY_OVERLAY[overlayId] ?? HUD_SCALE_DEFAULT
 }
 
 export interface HudOverlayInteractionDescriptor {
@@ -68,6 +92,10 @@ export const HUD_OVERLAY_INTERACTIONS: Record<string, HudOverlayInteractionDescr
     surfaceSelector: '.overlay-canvas',
     controlSelector: '',
   },
+  standings: {
+    surfaceSelector: '.overlay-canvas',
+    controlSelector: '',
+  },
 }
 
 export interface HudTransientViewportRequest {
@@ -79,8 +107,8 @@ export interface HudTransientViewportRequest {
 
 function clampScale(value: unknown, overlayId: string): number {
   const n = Number(value)
-  if (!Number.isFinite(n)) return HUD_SCALE_DEFAULT
-  return Math.min(Math.max(n, getHudOverlayScaleMin(overlayId)), HUD_SCALE_MAX)
+  if (!Number.isFinite(n)) return getHudOverlayScaleDefault(overlayId)
+  return Math.min(Math.max(n, getHudOverlayScaleMin(overlayId)), getHudOverlayScaleMax(overlayId))
 }
 
 /**
@@ -100,7 +128,7 @@ function clampScale(value: unknown, overlayId: string): number {
 export function useHudOverlay(overlayId: string, getApi: () => any | null) {
   const isElectron = ref(false)
   const isPlacing = ref(false)
-  const scale = ref<number>(HUD_SCALE_DEFAULT)
+  const scale = ref<number>(getHudOverlayScaleDefault(overlayId))
   const settings = ref<HudOverlaySettings | null>(null)
   let unsubscribers: Array<() => void> = []
 
