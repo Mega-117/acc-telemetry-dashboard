@@ -47,6 +47,9 @@ export default [
         extraFileExtensions: ['.vue'],
       },
     },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+    },
     rules: {
       // ── Dimensioni file ──────────────────────────────────────────────────
       // Phase-3 budget: 550 righe (training-overlay.vue è a 531).
@@ -60,6 +63,9 @@ export default [
       'vue/require-v-for-key': 'error',
       'vue/no-use-v-if-with-v-for': 'error',
       'vue/component-api-style': ['warn', ['script-setup', 'composition']],
+
+      // Keep TypeScript escape hatches visible inside <script setup> blocks.
+      '@typescript-eslint/no-explicit-any': 'error',
 
       // ── Stile ────────────────────────────────────────────────────────────
       'vue/html-indent': ['warn', 2],
