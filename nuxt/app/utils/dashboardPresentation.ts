@@ -1,5 +1,11 @@
 import type { FastOverlayState } from '~/composables/useFastStatePoller'
 import { resolveOptimalShiftRpm } from '~/config/optimalShiftRpm'
+import {
+  formatStandingsDriverName,
+  formatStandingsLapTime,
+} from '~/services/overlay/standingsPresentation'
+import type { StandingsCarSnapshot, StandingsLapSnapshot } from '~/services/overlay/standingsPresentation'
+import { SESSION_TYPES } from '~/utils/telemetryFormat'
 
 export interface DashboardOptions {
   electronicsReference: boolean
@@ -8,6 +14,27 @@ export interface DashboardOptions {
   speedDelta: boolean
   fuelCriticalFlashEnabled: boolean
   fuelCriticalLapsThreshold: number
+}
+
+export interface DashboardSpectatorTiming {
+  label: 'CURRENT' | 'LAST' | 'BEST'
+  lapTime: string
+  splits: [string, string, string]
+  validity: 'VALID' | 'INVALID' | '—'
+}
+
+export interface DashboardSpectatorPresentation {
+  driverName: string
+  carLabel: string
+  position: string
+  laps: string
+  progress: string
+  session: string
+  timings: [
+    DashboardSpectatorTiming,
+    DashboardSpectatorTiming,
+    DashboardSpectatorTiming,
+  ]
 }
 
 export interface DashboardPresentation {
@@ -34,6 +61,7 @@ export interface DashboardPresentation {
   tractionControlActive: boolean
   absActive: boolean
   brakeBias: string
+  inputsAvailable: boolean
   cornerSpeed: string
   throttlePct: number
   brakePct: number
@@ -49,6 +77,7 @@ export interface DashboardPresentation {
   rightIndicatorActive: boolean
   lightsStage: number
   rainLightsActive: boolean
+  spectator: DashboardSpectatorPresentation | null
 }
 
 export const DEFAULT_DASHBOARD_OPTIONS: DashboardOptions = {
@@ -61,6 +90,12 @@ export const DEFAULT_DASHBOARD_OPTIONS: DashboardOptions = {
 }
 
 export const DASHBOARD_FUEL_LOW_LAPS_THRESHOLD = 1
+
+const NORMALIZED_SESSION_LABELS: Readonly<Record<number, string>> = Object.freeze({
+  [SESSION_TYPES.PRACTICE]: 'PRACTICE',
+  [SESSION_TYPES.QUALIFY]: 'QUALIFY',
+  [SESSION_TYPES.RACE]: 'RACE',
+})
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
@@ -88,6 +123,92 @@ function formatGear(value: number | null): string {
   if (value === -1) return 'R'
   if (value === 0) return 'N'
   return String(Math.max(1, Math.round(value)))
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function normalizedSessionLabel(value: unknown): string | null {
+  const sessionType = finiteNumber(value)
+  if (sessionType === null || !Number.isInteger(sessionType)) return null
+  return NORMALIZED_SESSION_LABELS[sessionType] ?? null
+}
+
+function nonNegativeInteger(value: unknown): number | null {
+  const numeric = finiteNumber(value)
+  return numeric !== null && Number.isInteger(numeric) && numeric >= 0 ? numeric : null
+}
+
+function positiveInteger(value: unknown): number | null {
+  const numeric = nonNegativeInteger(value)
+  return numeric !== null && numeric > 0 ? numeric : null
+}
+
+function spectatorLapTime(value: unknown): string {
+  return formatStandingsLapTime(value) ?? '—'
+}
+
+function spectatorSplits(lap: StandingsLapSnapshot | null | undefined): [string, string, string] {
+  const raw = Array.isArray(lap?.splits_ms) ? lap.splits_ms : []
+  return [0, 1, 2].map(index => spectatorLapTime(raw[index])) as [string, string, string]
+}
+
+function spectatorValidity(lap: StandingsLapSnapshot | null | undefined): DashboardSpectatorTiming['validity'] {
+  if (lap?.is_invalid === true) return 'INVALID'
+  if (lap?.is_invalid === false) return 'VALID'
+  return '—'
+}
+
+function spectatorSessionTime(value: number | null): string | null {
+  if (value === null || !Number.isFinite(value) || value < 0) return null
+  const totalSeconds = Math.floor(value / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = String(totalSeconds % 60).padStart(2, '0')
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${seconds}`
+    : `${minutes}:${seconds}`
+}
+
+function spectatorTiming(
+  label: DashboardSpectatorTiming['label'],
+  lapTimeMs: number | null,
+  lap: StandingsLapSnapshot | null | undefined,
+): DashboardSpectatorTiming {
+  return {
+    label,
+    lapTime: spectatorLapTime(lapTimeMs),
+    splits: spectatorSplits(lap),
+    validity: spectatorValidity(lap),
+  }
+}
+
+function buildDashboardSpectatorPresentation(
+  state: FastOverlayState,
+  car: StandingsCarSnapshot | null,
+): DashboardSpectatorPresentation | null {
+  if (state.dataSource !== 'focused') return null
+  const driverName = car ? formatStandingsDriverName(car) : 'NoData'
+  const raceNumber = positiveInteger(car?.race_number)
+  const position = positiveInteger(car?.position)
+  const laps = nonNegativeInteger(car?.laps)
+  const progress = finiteNumber(state.normalizedCarPosition)
+  const sessionLabel = normalizedSessionLabel(state.sessionType) ?? 'SESSION'
+  const sessionTime = spectatorSessionTime(state.sessionTimeLeftMs)
+  return {
+    driverName: driverName === 'NoData' ? '—' : driverName,
+    carLabel: raceNumber !== null ? `#${raceNumber}` : car ? `CAR ${car.car_index}` : 'CAR —',
+    position: position === null ? 'P—' : `P${position}`,
+    laps: laps === null ? '—' : String(laps),
+    progress: progress === null ? '—' : `${(clamp(progress, 0, 1) * 100).toFixed(1)}%`,
+    session: sessionTime ? `${sessionLabel} · ${sessionTime}` : sessionLabel,
+    timings: [
+      spectatorTiming('CURRENT', state.currentLapTimeMs, car?.current_lap),
+      spectatorTiming('LAST', state.lastLapTimeMs, car?.last_lap),
+      spectatorTiming('BEST', state.bestLapTimeMs, car?.best_lap),
+    ],
+  }
 }
 
 export function normalizeFuelCriticalLapsThreshold(value: unknown): number {
@@ -130,7 +251,9 @@ function resolveRpmBand(
 export function buildDashboardPresentation(
   state: FastOverlayState,
   options: DashboardOptions = DEFAULT_DASHBOARD_OPTIONS,
+  focusedCar: StandingsCarSnapshot | null = null,
 ): DashboardPresentation {
+  const spectatorMode = state.dataSource === 'focused'
   const rpmValid = typeof state.rpm === 'number' && Number.isFinite(state.rpm) && state.rpm >= 0
   const rpm = rpmValid ? state.rpm as number : 0
   const maxRpm = state.maxRpm && state.maxRpm > 0 ? state.maxRpm : null
@@ -143,12 +266,12 @@ export function buildDashboardPresentation(
   const remainingValue = oneDecimal(state.fuelLapsRemaining)
 
   return {
-    ignitionLabel: state.ignitionOn && state.isEngineRunning ? String(Math.round(rpm)) : 'IGNITION OFF',
-    speed: String(Math.round(state.speedKmh ?? 0)),
+    ignitionLabel: spectatorMode ? '—' : state.ignitionOn && state.isEngineRunning ? String(Math.round(rpm)) : 'IGNITION OFF',
+    speed: spectatorMode && state.speedKmh === null ? '—' : integer(state.speedKmh),
     speedDelta: referenceVisible && options.speedDelta && state.speedDeltaKmh !== null
       ? Math.abs(state.speedDeltaKmh).toFixed(1) : null,
     speedDeltaFaster: referenceVisible && options.speedDelta && (state.speedDeltaKmh ?? 0) > 0,
-    gear: formatGear(state.gear),
+    gear: spectatorMode && state.gear === null ? '—' : formatGear(state.gear),
     gearReference: referenceVisible && options.gearReference && state.referenceGear !== null
       ? formatGear(state.referenceGear) : null,
     fuelPerLap: state.fuelPerLapL === null ? '--.--' : state.fuelPerLapL.toFixed(2),
@@ -172,7 +295,8 @@ export function buildDashboardPresentation(
     tractionControlActive: interventionVisible(state, state.tractionControlInAction),
     absActive: interventionVisible(state, state.absInAction),
     brakeBias: state.brakeBiasPct === null ? '--.-' : state.brakeBiasPct.toFixed(1),
-    cornerSpeed: state.cornerSpeedKmh === null ? '0' : integer(state.cornerSpeedKmh),
+    cornerSpeed: integer(state.cornerSpeedKmh),
+    inputsAvailable: state.gas !== null && state.brake !== null,
     throttlePct: clamp((state.gas ?? 0) * 100, 0, 100),
     brakePct: clamp((state.brake ?? 0) * 100, 0, 100),
     rpmRatio: maxRpm === null ? 0 : clamp(rpm / maxRpm, 0, 1),
@@ -197,5 +321,6 @@ export function buildDashboardPresentation(
     rightIndicatorActive: state.directionLightsRight,
     lightsStage: Math.max(0, Math.min(2, Math.round(state.lightsStage ?? 0))),
     rainLightsActive: state.rainLights,
+    spectator: buildDashboardSpectatorPresentation(state, focusedCar),
   }
 }

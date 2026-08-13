@@ -1,9 +1,10 @@
-import type {
-  StandingsCarSnapshot,
-  StandingsHighlightMap,
-  StandingsPersonalBestFlash,
-  StandingsPositionFlash,
-  StandingsSnapshot,
+import {
+  selectFreshFocusedClassCars,
+  type StandingsCarSnapshot,
+  type StandingsHighlightMap,
+  type StandingsPersonalBestFlash,
+  type StandingsPositionFlash,
+  type StandingsSnapshot,
 } from './standingsPresentation'
 
 export const POSITION_IMPROVED_FLASH_MS = 5000
@@ -30,11 +31,6 @@ function finiteNumber(value: unknown): number | null {
 function positiveLapTime(value: unknown): number | null {
   const numeric = finiteNumber(value)
   return numeric !== null && numeric > 0 ? Math.round(numeric) : null
-}
-
-function positionOf(car: StandingsCarSnapshot): number | null {
-  const position = finiteNumber(car.cup_position)
-  return position !== null && Number.isInteger(position) && position > 0 ? position : null
 }
 
 function completedLaps(car: StandingsCarSnapshot): number | null {
@@ -134,9 +130,13 @@ export function createStandingsHighlightTracker() {
 
     const nextComparablePositions = new Map<number, number>()
     const nextLastLapTokens = new Map<number, string | null>()
+    const classPositions = new Map(
+      selectFreshFocusedClassCars(snapshot, nowMs)
+        .map((car, index) => [car.car_index, index + 1]),
+    )
 
     snapshot.cars.forEach((car) => {
-      const position = positionOf(car)
+      const position = classPositions.get(car.car_index) ?? null
       const laps = completedLaps(car)
       const canTrackPosition = !phaseBlocksPositions && laps !== null && laps >= 0 && position !== null
       const previousPosition = comparablePositions.get(car.car_index)

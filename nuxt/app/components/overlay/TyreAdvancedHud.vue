@@ -56,6 +56,7 @@ const setLabel = computed(() => {
 
 const globalStatus = computed(() => {
   if (!props.fastState.isLive) return 'NO DATA'
+  if (props.fastState.dataSource === 'focused') return 'DATA N/A'
   if (!props.fastState.isEngineRunning) return 'ENGINE OFF'
   if (props.fastState.pitLimiterOn) return 'PIT LIMITER'
   return null
@@ -495,7 +496,7 @@ function formatBrakeAverage(value: number | null, suffix: '°' | '%') {
   }
 
   .tyre-advanced__brake-axle > small {
-    font-size: 9px;
+    font-size: 10px;
   }
 
   .tyre-advanced__brake-axle span,

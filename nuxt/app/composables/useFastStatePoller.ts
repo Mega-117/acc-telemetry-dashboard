@@ -53,13 +53,14 @@ export interface FastStateInfo {
   fuelLabel: string
   fuelNeededL: number | null
   fuelLeftTimeMs: number | null
-  incidents: number
+  fuelLeftReferenceLapMs: number | null
+  incidents: number | null
   grip: string | null
   pitExitTraffic: number | null
   optimalLapTimeMs: number | null
   bestLapTimeMs: number | null
   damageTimeMs: number | null
-  currentLapTimeMs: number
+  currentLapTimeMs: number | null
   lastLapTimeMs: number | null
   lapValid: boolean
   lastLapValid: boolean | null
@@ -67,6 +68,7 @@ export interface FastStateInfo {
 }
 
 export interface FastOverlayState {
+  dataSource?: 'local' | 'focused'
   context: FastStateContext | null
   info: FastStateInfo | null
   flag: number | null
@@ -129,6 +131,7 @@ export interface FastOverlayState {
 }
 
 const EMPTY_FAST_STATE: FastOverlayState = {
+  dataSource: 'local',
   context: null,
   info: null,
   flag: null,
@@ -240,13 +243,14 @@ function normalizeInfo(raw: any): FastStateInfo | null {
     fuelLabel: toStringOrNull(raw.fuel_label) || 'Q-Fuel',
     fuelNeededL: toNumber(raw.fuel_needed_l),
     fuelLeftTimeMs: toNumber(raw.fuel_left_time_ms),
-    incidents: toNumber(raw.incidents) ?? 0,
+    fuelLeftReferenceLapMs: toNumber(raw.fuel_left_reference_lap_ms),
+    incidents: toNumber(raw.incidents),
     grip: toStringOrNull(raw.grip),
     pitExitTraffic: toNumber(raw.pit_exit_traffic),
     optimalLapTimeMs: toNumber(raw.optimal_lap_time_ms),
     bestLapTimeMs: toNumber(raw.best_lap_time_ms),
     damageTimeMs: toNumber(raw.damage_time_ms),
-    currentLapTimeMs: toNumber(raw.current_lap_time_ms) ?? 0,
+    currentLapTimeMs: toNumber(raw.current_lap_time_ms),
     lastLapTimeMs: toNumber(raw.last_lap_time_ms),
     lapValid: raw.lap_valid === true,
     lastLapValid: typeof raw.last_lap_valid === 'boolean' ? raw.last_lap_valid : null,
@@ -323,6 +327,7 @@ function normalizeFastState(state: any): FastOverlayState {
     : []
 
   return {
+    dataSource: 'local',
     context: normalizeContext(state.context),
     info: normalizeInfo(state.info),
     flag: toNumber(state.flag),

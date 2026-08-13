@@ -5,6 +5,7 @@ export interface StandingsDriverSnapshot {
 
 export interface StandingsLapSnapshot {
   time_ms?: unknown
+  splits_ms?: unknown
   is_invalid?: unknown
   is_valid_for_best?: unknown
   lap_type?: unknown
@@ -17,13 +18,22 @@ export interface StandingsCarSnapshot {
   current_driver_index?: unknown
   drivers: StandingsDriverSnapshot[]
   cup_position?: unknown
+  position?: unknown
+  delta_ms?: unknown
+  predicted_lap_ms?: unknown
+  engine_running?: unknown
+  kmh?: unknown
+  gear?: unknown
   laps?: unknown
   spline_position?: unknown
   best_lap_ms?: unknown
   last_lap_ms?: unknown
   best_lap?: StandingsLapSnapshot | null
+  current_lap_ms?: unknown
   last_lap?: StandingsLapSnapshot | null
   car_location?: unknown
+  stint_elapsed_ms?: unknown
+  current_lap?: StandingsLapSnapshot | null
   realtime_updated_at_ms?: unknown
   has_identity: boolean
   has_realtime: boolean
@@ -34,20 +44,32 @@ export interface StandingsSessionSnapshot {
   session_index?: unknown
   focused_car_index: number
   is_replay: boolean
+  local_car_index?: unknown
   session_type?: unknown
   phase?: unknown
   session_time_ms?: unknown
   session_end_time_ms?: unknown
+  best_session_lap_ms?: unknown
   weather?: {
     ambient_temp?: unknown
     track_temp?: unknown
+    rain_level?: unknown
   }
+}
+
+export interface FocusedPitExitTrafficSnapshot {
+  available?: unknown
+  reason?: unknown
+  count?: unknown
+  rear_window?: unknown
+  front_window?: unknown
 }
 
 export interface StandingsSnapshot {
   freshness: { generated_at_ms: number, ttl_ms: number }
   session: StandingsSessionSnapshot
   cars: StandingsCarSnapshot[]
+  focused_pit_exit_traffic?: FocusedPitExitTrafficSnapshot
 }
 
 export interface StandingsStateEnvelope {
@@ -126,6 +148,12 @@ export const DEFAULT_STANDINGS_OPTIONS: Readonly<StandingsPresentationOptions> =
 })
 
 const FUTURE_TOLERANCE_MS = 1000
+export const ACC_BROADCASTING_SESSION_TYPES = Object.freeze({
+  PRACTICE: 0,
+  QUALIFYING: 4,
+  SUPERPOLE: 9,
+  RACE: 10,
+})
 
 function hiddenPresentation(options: StandingsPresentationOptions): StandingsPresentation {
   return {
@@ -203,11 +231,10 @@ export function formatStandingsLapTime(value: unknown): string | null {
 }
 
 const SESSION_TYPE_LABELS: Readonly<Record<number, string>> = Object.freeze({
-  0: 'Practice',
-  1: 'Qualifying',
-  2: 'Race',
-  3: 'Hotlap',
-  4: 'TimeAttack',
+  [ACC_BROADCASTING_SESSION_TYPES.PRACTICE]: 'Practice',
+  [ACC_BROADCASTING_SESSION_TYPES.QUALIFYING]: 'Qualifying',
+  [ACC_BROADCASTING_SESSION_TYPES.SUPERPOLE]: 'Superpole',
+  [ACC_BROADCASTING_SESSION_TYPES.RACE]: 'Race',
 })
 
 export function formatStandingsSessionType(value: unknown): string | null {
@@ -220,7 +247,9 @@ export function formatStandingsRemainingTime(sessionTimeMs: unknown, sessionEndT
   const sessionTime = finiteNumber(sessionTimeMs)
   const sessionEndTime = finiteNumber(sessionEndTimeMs)
   if (sessionTime === null || sessionEndTime === null) return null
-  const totalSeconds = Math.floor(Math.max(0, sessionEndTime - sessionTime) / 1000)
+  // ACC Broadcasting espone session_end_time_ms come countdown residuo.
+  // session_time_ms valida la coppia ma non va sottratto una seconda volta.
+  const totalSeconds = Math.floor(Math.max(0, sessionEndTime) / 1000)
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60
@@ -292,6 +321,33 @@ export function selectStandingsCars(
   return eligible.filter(car => selected.has(car.car_index))
 }
 
+/**
+ * Ordina una sola volta la classe autorevole del focus usando la posizione
+ * assoluta ACC. Il chiamante usa l'indice risultante come posizione di classe;
+ * cup_position appartiene alla cup category e non e' un surrogato valido.
+ */
+export function selectFreshFocusedClassCars(
+  snapshot: StandingsSnapshot,
+  nowMs: number,
+): StandingsCarSnapshot[] {
+  const focus = snapshot.cars.find(car => car.car_index === snapshot.session.focused_car_index)
+  const focusedClass = safeText(focus?.car_class, 80)
+  const ttlMs = finiteNumber(snapshot.freshness?.ttl_ms)
+  const clockMs = finiteNumber(nowMs)
+  if (!focus || !focusedClass || ttlMs === null || ttlMs <= 0 || clockMs === null) return []
+
+  return snapshot.cars
+    .filter(car => (
+      car.has_identity === true
+      && car.has_realtime === true
+      && safeText(car.car_class, 80) === focusedClass
+      && Number.isInteger(Number(car.position))
+      && Number(car.position) > 0
+      && isFreshCar(car, clockMs, ttlMs)
+    ))
+    .sort((left, right) => Number(left.position) - Number(right.position) || left.car_index - right.car_index)
+}
+
 /** Build only the V2 cells backed by authoritative ACC Suite providers. */
 export function buildStandingsPresentation(
   state: StandingsStateEnvelope | null | undefined,
@@ -316,25 +372,18 @@ export function buildStandingsPresentation(
   const snapshot = state.snapshot
   const focus = snapshot.cars.find(car => car.car_index === snapshot.session.focused_car_index)
   const focusedClass = safeText(focus?.car_class, 80)
-  const ttlMs = finiteNumber(snapshot.freshness?.ttl_ms)
   const clockMs = finiteNumber(nowMs)
-  if (!focus || !focusedClass || ttlMs === null || ttlMs <= 0 || clockMs === null) return hidden
+  if (!focus || !focusedClass || clockMs === null) return hidden
 
-  const eligible = snapshot.cars
-    .filter(car => (
-      car.has_identity === true
-      && car.has_realtime === true
-      && safeText(car.car_class, 80) === focusedClass
-      && Number.isInteger(Number(car.cup_position))
-      && Number(car.cup_position) > 0
-      && isFreshCar(car, clockMs, ttlMs)
-    ))
-    .sort((left, right) => Number(left.cup_position) - Number(right.cup_position) || left.car_index - right.car_index)
+  const eligible = selectFreshFocusedClassCars(snapshot, clockMs)
 
   const focusedIndex = eligible.findIndex(car => car.car_index === focus.car_index)
   if (focusedIndex < 0) return hidden
 
   const selectedCars = selectStandingsCars(eligible, focusedIndex, options)
+  const classPositionByCarIndex = new Map(
+    eligible.map((car, index) => [car.car_index, index + 1]),
+  )
 
   const bestInClassMs = eligible
     .map(car => lapTime(car, 'best'))
@@ -343,7 +392,9 @@ export function buildStandingsPresentation(
 
   const sessionType = formatStandingsSessionType(snapshot.session.session_type)
   const sessionTypeCode = finiteNumber(snapshot.session.session_type)
-  const showProgress = options.showLapProgressBar && sessionType !== null && sessionTypeCode !== 2
+  const showProgress = options.showLapProgressBar
+    && sessionType !== null
+    && sessionTypeCode !== ACC_BROADCASTING_SESSION_TYPES.RACE
 
   const rows = selectedCars
     .map((car): StandingsPresentationRow => {
@@ -360,7 +411,7 @@ export function buildStandingsPresentation(
           : null
       return {
         carIndex: car.car_index,
-        position: Number(car.cup_position),
+        position: classPositionByCarIndex.get(car.car_index)!,
         positionFlash: highlight?.positionFlash ?? null,
         carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
           ? String(Math.round(raceNumber)) : null,

@@ -3,7 +3,7 @@
 // dal FORMATO (small/medium/large) lato Electron; qui si applica la scala dei
 // font e lo stato di posizionamento. Riusa TyreSlipHud + il poller esistente.
 import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
-import { useFastStatePoller } from '~/composables/useFastStatePoller'
+import { useOverlayTelemetrySource } from '~/composables/useOverlayTelemetrySource'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import HudOverlayBackground from '~/components/overlay/HudOverlayBackground.vue'
@@ -25,7 +25,7 @@ function getApi(): any | null {
 }
 
 const route = useRoute()
-const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getApi)
+const { fastState, startFastStatePolling, stopFastStatePolling } = useOverlayTelemetrySource(getApi)
 const overlay = useHudOverlay('tyres', getApi)
 const {
   isElectron,
@@ -201,28 +201,28 @@ onBeforeUnmount(() => {
 // ── Testi tutti BIANCHI per massima leggibilità ──────────────────────────────
 .hud-overlay .tyre-slip-hud__header span,
 .hud-overlay .tyre-slip-hud__header strong {
-  font-size: calc(14px * var(--hud-scale));
+  font-size: max(11px, calc(14px * var(--hud-scale)));
   color: #ffffff;
 }
 
 .hud-overlay .tyre-slip__topline strong {
-  font-size: calc(18px * var(--hud-scale));
+  font-size: max(16px, calc(18px * var(--hud-scale)));
   color: #ffffff;
 }
 
 .hud-overlay .tyre-slip__meta span {
-  font-size: calc(13px * var(--hud-scale));
+  font-size: max(11px, calc(13px * var(--hud-scale)));
   color: #ffffff;
 }
 
 .hud-overlay .tyre-slip__state {
-  font-size: calc(13px * var(--hud-scale));
+  font-size: max(11px, calc(13px * var(--hud-scale)));
 }
 
 // Gerarchia gomma: lo SLIP è primario (numero più grande + micro-label),
 // la PRESSIONE è secondaria (più piccola e attenuata).
 .hud-overlay .tyre-slip__meta span:first-child {
-  font-size: calc(15px * var(--hud-scale));
+  font-size: max(14px, calc(15px * var(--hud-scale)));
   font-weight: 900;
 }
 
@@ -234,7 +234,7 @@ onBeforeUnmount(() => {
 }
 
 .hud-overlay .tyre-slip__meta span:last-child {
-  font-size: calc(11px * var(--hud-scale));
+  font-size: max(10px, calc(11px * var(--hud-scale)));
   opacity: 0.6;
 }
 

@@ -17,12 +17,14 @@ function car(index: number, position: number, overrides: Partial<StandingsCarSna
     car_class: 'GT3',
     current_driver_index: 0,
     drivers: [{ first_name: 'Alex', last_name: `Driver${index}` }],
-    cup_position: position,
+    cup_position: 1,
+    position,
     laps: 10,
     best_lap: { time_ms: 100_000, is_invalid: false, is_valid_for_best: true },
     last_lap: { time_ms: 101_000, is_invalid: false, is_valid_for_best: true },
     has_identity: true,
     has_realtime: true,
+    realtime_updated_at_ms: 1000,
     ...overrides,
   }
 }
@@ -77,14 +79,27 @@ describe('standingsHighlightTracker', () => {
     const tracker = createStandingsHighlightTracker()
     tracker.update(snapshot([car(1, 1), car(2, 2), car(3, 3)]), 1000)
 
-    expect(tracker.update(snapshot([car(2, 1), car(3, 2)]), 2000)).toEqual({})
-    expect(tracker.update(snapshot([car(2, 2), car(3, 1)]), 2000 + REMOVED_CAR_SUPPRESSION_MS - 1)).toEqual({})
+    expect(tracker.update(snapshot([
+      car(1, 1, { realtime_updated_at_ms: 2000 }),
+      car(2, 2, { realtime_updated_at_ms: 2000 }),
+    ]), 2000)).toEqual({})
+
+    const beforeSuppressionEnds = 2000 + REMOVED_CAR_SUPPRESSION_MS - 1
+    expect(tracker.update(snapshot([
+      car(1, 2, { realtime_updated_at_ms: beforeSuppressionEnds }),
+      car(2, 1, { realtime_updated_at_ms: beforeSuppressionEnds }),
+    ]), beforeSuppressionEnds)).toEqual({})
+
+    const afterSuppressionAt = 2000 + REMOVED_CAR_SUPPRESSION_MS
     const afterSuppression = tracker.update(
-      snapshot([car(2, 1), car(3, 2)]),
-      2000 + REMOVED_CAR_SUPPRESSION_MS,
+      snapshot([
+        car(1, 1, { realtime_updated_at_ms: afterSuppressionAt }),
+        car(2, 2, { realtime_updated_at_ms: afterSuppressionAt }),
+      ]),
+      afterSuppressionAt,
     )
-    expect(afterSuppression[2]?.positionFlash).toBe('improved')
-    expect(afterSuppression[3]?.positionFlash).toBe('worsened')
+    expect(afterSuppression[1]?.positionFlash).toBe('improved')
+    expect(afterSuppression[2]?.positionFlash).toBe('worsened')
   })
 
   it('evidenzia per 10s solo un nuovo last lap valido uguale al best', () => {

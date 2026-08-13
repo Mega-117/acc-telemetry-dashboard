@@ -113,6 +113,7 @@ describe('useFastStatePoller', () => {
           fuel_label: 'Q-Fuel',
           fuel_needed_l: 2.7,
           fuel_left_time_ms: 960_000,
+          fuel_left_reference_lap_ms: 90_000,
           incidents: 5,
           grip: 'Green',
           pit_exit_traffic: null,
@@ -144,6 +145,7 @@ describe('useFastStatePoller', () => {
       ms: -456, available: true, side: 'negative', ratio: 1, purple: true,
     })
     expect(fastState.value.info?.fuelNeededL).toBe(2.7)
+    expect(fastState.value.info?.fuelLeftReferenceLapMs).toBe(90_000)
     expect(fastState.value.info?.pitExitTraffic).toBeNull()
     expect(fastState.value.info?.lastLapValid).toBe(false)
     expect(fastState.value.lapsCompleted).toBe(7)

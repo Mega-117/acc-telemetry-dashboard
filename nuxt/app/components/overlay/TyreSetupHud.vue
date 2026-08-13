@@ -319,7 +319,7 @@ function startingPressure(id: TyreWheelId) {
 
 .tyre-setup__start-values small {
   color: rgba(255, 255, 255, .48);
-  font-size: max(7px, calc(8px * var(--hud-scale, 1)));
+  font-size: max(10px, calc(8px * var(--hud-scale, 1)));
 }
 
 @container (max-width: 300px) {
@@ -330,7 +330,7 @@ function startingPressure(id: TyreWheelId) {
   }
 
   .tyre-setup__column h2 {
-    font-size: 8px;
+    font-size: 10px;
     letter-spacing: -.02em;
   }
 
@@ -353,7 +353,7 @@ function startingPressure(id: TyreWheelId) {
   }
 
   .tyre-setup__start strong {
-    font-size: 9px;
+    font-size: 10px;
   }
 
   .tyre-setup__start-values span {

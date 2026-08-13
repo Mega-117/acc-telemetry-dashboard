@@ -80,4 +80,33 @@ describe('useStandingsState', () => {
     await vi.advanceTimersByTimeAsync(500)
     expect(api.getStandingsState).toHaveBeenCalledTimes(3)
   })
+
+  it('applica ogni push subito e usa il pull soltanto quando il push si interrompe', async () => {
+    vi.useFakeTimers()
+    let listener: ((value: unknown) => void) | null = null
+    const api = {
+      getStandingsState: vi.fn().mockResolvedValue(available),
+      onStandingsStateUpdate: vi.fn((callback: (value: unknown) => void) => {
+        listener = callback
+        return vi.fn()
+      }),
+    }
+    const standings = useStandingsState(() => api, 250)
+    standings.start()
+    await Promise.resolve()
+    expect(api.getStandingsState).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(200)
+    listener!({ status: 'unavailable', reason: 'push-1', snapshot: null })
+    expect(standings.state.value.reason).toBe('push-1')
+
+    await vi.advanceTimersByTimeAsync(200)
+    listener!({ status: 'unavailable', reason: 'push-2', snapshot: null })
+    expect(standings.state.value.reason).toBe('push-2')
+    expect(api.getStandingsState).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(350)
+    expect(api.getStandingsState).toHaveBeenCalledTimes(2)
+    standings.stop()
+  })
 })

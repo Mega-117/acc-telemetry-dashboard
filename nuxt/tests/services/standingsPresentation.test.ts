@@ -22,6 +22,7 @@ function car(position: number, overrides: Partial<StandingsCarSnapshot> = {}): S
     current_driver_index: 0,
     drivers: [{ first_name: 'Alex', last_name: `Driver${position}` }],
     cup_position: position,
+    position,
     laps: 10,
     spline_position: position / 10,
     best_lap: { time_ms: 130_000 + position, is_invalid: false, is_valid_for_best: true },
@@ -95,10 +96,19 @@ describe('standingsPresentation', () => {
   it('filtra righe stale/non affidabili e nasconde l’intero HUD se il focus non resta eleggibile', () => {
     const staleFocus = state([car(8, { realtime_updated_at_ms: NOW_MS - 5001 })])
     const unidentifiedFocus = state([car(8, { has_identity: false })])
-    const unrankedFocus = state([car(8, { cup_position: 0 })])
+    const unrankedFocus = state([car(8, { position: 0 })])
     expect(buildStandingsPresentation(staleFocus, {}, NOW_MS).visible).toBe(false)
     expect(buildStandingsPresentation(unidentifiedFocus, {}, NOW_MS).visible).toBe(false)
     expect(buildStandingsPresentation(unrankedFocus, {}, NOW_MS).visible).toBe(false)
+  })
+
+  it('ordina con la posizione assoluta ACC e mostra la posizione derivata nella classe', () => {
+    const model = buildStandingsPresentation(state([
+      car(1, { car_index: 101, position: 1, cup_position: 1 }),
+      car(2, { car_index: 102, position: 4, cup_position: 1 }),
+      car(3, { car_index: 103, position: 7, cup_position: 2 }),
+    ], 102), { topCars: 3, carsAhead: 0, carsBehind: 0 }, NOW_MS)
+    expect(model.rows.map(row => row.position)).toEqual([1, 2, 3])
   })
 
   it('espone soltanto celle supportate e lascia null i valori assenti', () => {
@@ -143,7 +153,7 @@ describe('standingsPresentation', () => {
       showLastLap: false,
       showLapProgressBar: false,
     }, NOW_MS)
-    expect(model.rows.map(row => row.position)).toEqual([1, 8, 9])
+    expect(model.rows.map(row => row.position)).toEqual([1, 2, 3])
     expect(model.rows[0].fastestInClass).toBe(true)
     expect(model.columns).toEqual({ carNumber: false, lastLap: false, bestLap: true, progress: false })
     expect(model.rows.every(row => row.carNumber === null && row.lastLap === null && row.progressPercent === null)).toBe(true)
@@ -153,17 +163,16 @@ describe('standingsPresentation', () => {
     const model = buildStandingsPresentation(state([car(8)]), {}, NOW_MS)
     expect(model.header).toEqual({
       sessionType: 'Practice',
-      timeLeft: '01:00:01',
+      timeLeft: '01:01:01',
       temperatures: '22/32°',
       carClass: 'GT3',
     })
     expect(formatStandingsSessionType(0)).toBe('Practice')
-    expect(formatStandingsSessionType(1)).toBe('Qualifying')
-    expect(formatStandingsSessionType(2)).toBe('Race')
-    expect(formatStandingsSessionType(3)).toBe('Hotlap')
-    expect(formatStandingsSessionType(4)).toBe('TimeAttack')
-    expect(formatStandingsSessionType(5)).toBeNull()
-    expect(formatStandingsRemainingTime(5000, 4000)).toBe('00:00:00')
+    expect(formatStandingsSessionType(4)).toBe('Qualifying')
+    expect(formatStandingsSessionType(9)).toBe('Superpole')
+    expect(formatStandingsSessionType(10)).toBe('Race')
+    expect(formatStandingsSessionType(2)).toBeNull()
+    expect(formatStandingsRemainingTime(5000, 4000)).toBe('00:00:04')
     expect(formatStandingsRemainingTime(null, 4000)).toBeNull()
     expect(formatStandingsTemperatures({ ambient_temp: 23.6, track_temp: 31.2 })).toBe('24/31°')
     expect(formatStandingsTemperatures({ ambient_temp: 20, track_temp: null })).toBeNull()
@@ -200,7 +209,7 @@ describe('standingsPresentation', () => {
     expect(practiceModel.rows.map(row => row.hasProgress)).toEqual([false, true])
     expect(practiceModel.rows.map(row => row.inPitLane)).toEqual([true, false])
 
-    practice.snapshot!.session.session_type = 2
+    practice.snapshot!.session.session_type = 10
     const raceModel = buildStandingsPresentation(practice, {}, NOW_MS)
     expect(raceModel.columns.progress).toBe(false)
     expect(raceModel.rows.every(row => row.progressPercent === null)).toBe(true)

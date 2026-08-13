@@ -78,7 +78,7 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
 }
 
 .info-hud--yellow-flag {
-  box-shadow: inset 0 0 0 5px #ffd400;
+  box-shadow: inset 0 0 0 5px #ffff00;
 }
 
 .info-delta {
@@ -86,7 +86,7 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   height: 47px;
   overflow: hidden;
   border-radius: 2px;
-  background: rgba(144, 144, 144, 0.95);
+  background: #808080;
   color: #090909;
 }
 
@@ -101,11 +101,10 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   inset-block: 0;
   left: 0;
   display: block;
-  transition: width 80ms linear;
 }
 .info-delta--negative .info-delta__bar i { background: #9acd32; }
-.info-delta--positive .info-delta__bar i { background: #ef3038; }
-.info-delta--purple .info-delta__bar i { background: #d000e8; }
+.info-delta--positive .info-delta__bar i { background: #ff0000; }
+.info-delta--purple .info-delta__bar i { background: #b600b6; }
 .info-delta--positive, .info-delta--purple { color: #fff; }
 
 .info-delta strong {
@@ -149,10 +148,10 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
   font-variant-numeric: tabular-nums;
 }
 
-.info-row--yellow strong { color: #f5ec00; }
-.info-row--orange strong { color: #ff9d00; }
-.info-row--green strong { color: #8ee14a; }
-.info-row--red strong { color: #ff2f38; }
+.info-row--yellow strong { color: #ffff00; }
+.info-row--orange strong { color: #ffa500; }
+.info-row--green strong { color: #008000; }
+.info-row--red strong { color: #ff0000; }
 
 .info-row--lap-timer {
   transition: background-color 500ms ease, color 500ms ease;

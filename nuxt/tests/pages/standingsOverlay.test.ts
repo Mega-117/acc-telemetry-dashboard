@@ -20,7 +20,8 @@ describe('Standings overlay contract', () => {
 
   it('mantiene canvas nativo 900x600 e nasconde tutto senza modello affidabile', () => {
     expect(page).toMatch(/\.overlay-canvas\{[^}]*width:900px;height:600px/s)
-    expect(hud).toMatch(/\.standings-hud\s*\{[^}]*width:\s*900px;[^}]*height:\s*600px;/s)
+    expect(page).not.toContain('setTransientViewport')
+    expect(hud).toMatch(/\.standings-hud\s*\{[^}]*width:900px;[^}]*height:600px;/s)
     expect(hud).toMatch(/\.standings-hud\s*\{[^}]*border-radius:\s*8px;/s)
     expect(hud).toContain('v-if="model.visible"')
     expect(hud).toContain('<HudOverlayBackground :opacity="backgroundOpacity" />')
@@ -44,6 +45,7 @@ describe('Standings overlay contract', () => {
     expect(hud).not.toContain('row.delta')
     expect(hud).not.toContain('teamName')
     expect(hud).not.toContain('is-focused')
+    expect(hud).not.toContain('AIR/TRK')
     expect(hud).not.toContain('nth-child')
   })
 

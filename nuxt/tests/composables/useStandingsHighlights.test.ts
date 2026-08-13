@@ -6,17 +6,19 @@ import type {
   StandingsStateEnvelope,
 } from '../../app/services/overlay/standingsPresentation'
 
-function car(position: number): StandingsCarSnapshot {
+function car(index: number, position: number): StandingsCarSnapshot {
   return {
-    car_index: 1,
+    car_index: index,
     car_class: 'GT3',
     drivers: [],
-    cup_position: position,
+    cup_position: 1,
+    position,
     laps: 5,
     best_lap: { time_ms: 100_000 },
     last_lap: { time_ms: 101_000, is_invalid: false, is_valid_for_best: true },
     has_identity: true,
     has_realtime: true,
+    realtime_updated_at_ms: 1000,
   }
 }
 
@@ -33,7 +35,7 @@ function available(position: number): StandingsStateEnvelope {
         is_replay: false,
         phase: 4,
       },
-      cars: [car(position)],
+      cars: [car(1, position), car(2, position === 1 ? 2 : 1)],
     },
   }
 }

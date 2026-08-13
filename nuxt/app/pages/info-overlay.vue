@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import InfoHud from '~/components/overlay/InfoHud.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
-import { useFastStatePoller } from '~/composables/useFastStatePoller'
+import { useOverlayTelemetrySource } from '~/composables/useOverlayTelemetrySource'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import {
@@ -22,7 +22,7 @@ const route = useRoute()
 const getApi = () => typeof window === 'undefined' ? null : (window as any).electronAPI || null
 const overlay = useHudOverlay('info', getApi)
 const { backgroundOpacity } = useHudOverlayBackground(overlay.settings)
-const telemetry = useFastStatePoller(getApi)
+const telemetry = useOverlayTelemetrySource(getApi)
 const target = ref<InfoTargetSettings | null>(null)
 const canvasElement = ref<HTMLDivElement | null>(null)
 const clockMs = ref(Date.now())

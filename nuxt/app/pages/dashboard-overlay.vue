@@ -2,7 +2,10 @@
 import { computed, onMounted, onUnmounted } from 'vue'
 import DashboardHud from '~/components/overlay/DashboardHud.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
-import { useFastStatePoller } from '~/composables/useFastStatePoller'
+import {
+  FOCUSED_CAR_FEED_INTERVAL_MS,
+  useOverlayTelemetrySource,
+} from '~/composables/useOverlayTelemetrySource'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import {
   buildDashboardPresentation,
@@ -15,7 +18,7 @@ definePageMeta({ layout: 'hud-overlay' })
 const route = useRoute()
 const getApi = () => typeof window === 'undefined' ? null : (window as any).electronAPI || null
 const overlay = useHudOverlay('dashboard', getApi)
-const telemetry = useFastStatePoller(getApi)
+const telemetry = useOverlayTelemetrySource(getApi, FOCUSED_CAR_FEED_INTERVAL_MS)
 const options = computed(() => ({
   electronicsReference: overlay.settings.value?.electronicsReference ?? DEFAULT_DASHBOARD_OPTIONS.electronicsReference,
   rpmReference: overlay.settings.value?.rpmReference ?? DEFAULT_DASHBOARD_OPTIONS.rpmReference,
@@ -27,7 +30,11 @@ const options = computed(() => ({
     overlay.settings.value?.fuelCriticalLapsThreshold,
   ),
 }))
-const model = computed(() => buildDashboardPresentation(telemetry.fastState.value, options.value))
+const model = computed(() => buildDashboardPresentation(
+  telemetry.fastState.value,
+  options.value,
+  telemetry.focusedCar.value,
+))
 const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
 
 onMounted(async () => {

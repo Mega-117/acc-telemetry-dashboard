@@ -19,6 +19,7 @@ const state = {
     fuelLabel: 'Q-Fuel',
     fuelNeededL: 0,
     fuelLeftTimeMs: 360_000,
+    fuelLeftReferenceLapMs: 90_000,
     incidents: 2,
     grip: 'Green',
     pitExitTraffic: null,
@@ -40,7 +41,7 @@ describe('Info presentation', () => {
     expect(formatInfoLapTime(89_123)).toBe('1:29.123')
     expect(formatInfoLapTime(null)).toBe('--:--.---')
     expect(formatInfoRunningLapTime(0)).toBe('0:00.000')
-    expect(formatInfoRunningLapTime(null)).toBe('0:00.000')
+    expect(formatInfoRunningLapTime(null)).toBe('--:--.---')
     expect(formatInfoFuelDuration(298_999)).toBe('0:04:58')
     expect(formatInfoFuelDuration(null)).toBe('-:--.---')
     expect(formatInfoStintDuration(0)).toBe('00:00')
@@ -74,6 +75,61 @@ describe('Info presentation', () => {
       showPitExitTraffic: true,
     })
     expect(model.rows.find(row => row.id === 'pit-exit')?.value).toBe('--')
+  })
+
+  it('classifica il traffico Pit Exit già attribuito dal provider', () => {
+    const options = { ...DEFAULT_INFO_OPTIONS, showPitExitTraffic: true }
+    const row = (value: number | null) => buildInfoPresentation({
+      ...state,
+      sessionType: 2,
+      info: { ...state.info, pitExitTraffic: value },
+    } as any, options).rows.find(item => item.id === 'pit-exit')
+
+    expect(row(0)).toMatchObject({ value: 'Clear', tone: 'default' })
+    expect(row(2)).toMatchObject({ value: 'Low', tone: 'yellow' })
+    expect(row(4)).toMatchObject({ value: 'Busy', tone: 'orange' })
+    expect(row(5)).toMatchObject({ value: 'Crowded', tone: 'red' })
+  })
+
+  it('mantiene il Delta neutro e la barra visibili quando il valore e zero', () => {
+    const model = buildInfoPresentation({
+      ...state,
+      info: {
+        ...state.info,
+        delta: { ms: 0, available: false, side: 'zero', ratio: 0, purple: false },
+      },
+    } as any, DEFAULT_INFO_OPTIONS)
+
+    expect(model.delta).toEqual({
+      visible: true,
+      value: '+0.000',
+      side: 'zero',
+      ratio: 0,
+      purple: false,
+    })
+    expect(buildInfoPresentation(state, {
+      ...DEFAULT_INFO_OPTIONS,
+      showDelta: false,
+    }).delta.visible).toBe(false)
+  })
+
+  it('applica le soglie ACC Drive per il colore Fuel Left', () => {
+    const row = (valueMs: number | null, referenceLapMs: number | null) => buildInfoPresentation({
+      ...state,
+      info: {
+        ...state.info,
+        fuelLeftTimeMs: valueMs,
+        fuelLeftReferenceLapMs: referenceLapMs,
+      },
+    } as any, {
+      ...DEFAULT_INFO_OPTIONS,
+      showFuelLeft: true,
+    }).rows.find(item => item.id === 'fuel-left')
+
+    expect(row(300_000, 90_000)).toMatchObject({ tone: 'default' })
+    expect(row(240_000, 90_000)).toMatchObject({ tone: 'yellow' })
+    expect(row(90_000, 90_000)).toMatchObject({ tone: 'orange' })
+    expect(row(0, 90_000)).toMatchObject({ value: '-:--.---', tone: 'orange' })
   })
 
   it('separa Local Time originale dal Lap Timer Target', () => {

@@ -6,10 +6,7 @@ import { useHudOverlay } from '~/composables/useHudOverlay'
 import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import { useStandingsHighlights } from '~/composables/useStandingsHighlights'
 import { useStandingsState } from '~/composables/useStandingsState'
-import {
-  buildStandingsPresentation,
-  DEFAULT_STANDINGS_OPTIONS,
-} from '~/services/overlay/standingsPresentation'
+import { buildStandingsPresentation, DEFAULT_STANDINGS_OPTIONS } from '~/services/overlay/standingsPresentation'
 
 definePageMeta({ layout: 'hud-overlay' })
 
@@ -19,22 +16,8 @@ const overlay = useHudOverlay('standings', getApi)
 const standings = useStandingsState(getApi)
 const standingsHighlights = useStandingsHighlights(standings.state, standings.nowMs)
 const { backgroundOpacity } = useHudOverlayBackground(overlay.settings, 'standings')
-
-const options = computed(() => ({
-  topCars: overlay.settings.value?.topCars ?? DEFAULT_STANDINGS_OPTIONS.topCars,
-  carsAhead: overlay.settings.value?.carsAhead ?? DEFAULT_STANDINGS_OPTIONS.carsAhead,
-  carsBehind: overlay.settings.value?.carsBehind ?? DEFAULT_STANDINGS_OPTIONS.carsBehind,
-  showCarNumber: overlay.settings.value?.showCarNumber ?? DEFAULT_STANDINGS_OPTIONS.showCarNumber,
-  showFastestLap: overlay.settings.value?.showFastestLap ?? DEFAULT_STANDINGS_OPTIONS.showFastestLap,
-  showLastLap: overlay.settings.value?.showLastLap ?? DEFAULT_STANDINGS_OPTIONS.showLastLap,
-  showLapProgressBar: overlay.settings.value?.showLapProgressBar ?? DEFAULT_STANDINGS_OPTIONS.showLapProgressBar,
-}))
-const model = computed(() => buildStandingsPresentation(
-  standings.state.value,
-  options.value,
-  standings.nowMs.value,
-  standingsHighlights.highlights.value,
-))
+const options = computed(() => ({ topCars:overlay.settings.value?.topCars ?? DEFAULT_STANDINGS_OPTIONS.topCars,carsAhead:overlay.settings.value?.carsAhead ?? DEFAULT_STANDINGS_OPTIONS.carsAhead,carsBehind:overlay.settings.value?.carsBehind ?? DEFAULT_STANDINGS_OPTIONS.carsBehind,showCarNumber:overlay.settings.value?.showCarNumber ?? DEFAULT_STANDINGS_OPTIONS.showCarNumber,showFastestLap:overlay.settings.value?.showFastestLap ?? DEFAULT_STANDINGS_OPTIONS.showFastestLap,showLastLap:overlay.settings.value?.showLastLap ?? DEFAULT_STANDINGS_OPTIONS.showLastLap,showLapProgressBar:overlay.settings.value?.showLapProgressBar ?? DEFAULT_STANDINGS_OPTIONS.showLapProgressBar }))
+const model = computed(() => buildStandingsPresentation(standings.state.value, options.value, standings.nowMs.value, standingsHighlights.highlights.value))
 const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
 
 onMounted(async () => {
@@ -43,7 +26,6 @@ onMounted(async () => {
   await overlay.loadSettings()
   standings.start()
 })
-
 onUnmounted(() => {
   standingsHighlights.stop()
   standings.stop()
@@ -51,21 +33,7 @@ onUnmounted(() => {
 })
 </script>
 
-<template>
-  <main class="overlay-root">
-    <OverlaySoftwareCursor :state="overlay.pointerState" />
-    <div
-      class="overlay-canvas"
-      :style="canvasStyle"
-    >
-      <StandingsHud
-        :model="model"
-        :background-opacity="backgroundOpacity"
-      />
-    </div>
-  </main>
-</template>
-
+<template><main class="overlay-root"><OverlaySoftwareCursor :state="overlay.pointerState" /><div class="overlay-canvas" :style="canvasStyle"><StandingsHud :model="model" :background-opacity="backgroundOpacity" /></div></main></template>
 <style scoped>
 :global(html),:global(body),:global(#__nuxt){margin:0;width:100%;height:100%;overflow:hidden;background:transparent!important}
 .overlay-root{position:relative;width:100%;height:100%;overflow:hidden;background:transparent;-webkit-app-region:drag;user-select:none}

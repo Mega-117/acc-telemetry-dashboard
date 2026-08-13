@@ -27,7 +27,7 @@ const idleTyres: FastStateTyre[] = (['FL', 'FR', 'RL', 'RR'] as const).map((id) 
 
 const hasLiveTyres = computed(() => props.fastState.isLive && props.fastState.tyres.length === 4)
 const visibleTyres = computed(() => hasLiveTyres.value ? props.fastState.tyres : idleTyres)
-const speedLabel = computed(() => hasLiveTyres.value && props.fastState.speedKmh !== null
+const speedLabel = computed(() => props.fastState.speedKmh !== null
   ? `${Math.round(props.fastState.speedKmh)} km/h`
   : 'in attesa')
 

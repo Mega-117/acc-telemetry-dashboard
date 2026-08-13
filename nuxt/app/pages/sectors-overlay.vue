@@ -5,7 +5,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
-import { useFastStatePoller } from '~/composables/useFastStatePoller'
+import { useOverlayTelemetrySource } from '~/composables/useOverlayTelemetrySource'
 import { useCompletedLapHold } from '~/composables/useCompletedLapHold'
 import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
 import HudTimedPager from '~/components/overlay/HudTimedPager.vue'
@@ -48,7 +48,8 @@ function getApi(): any | null {
 
 const route = useRoute()
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getApi)
-const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getApi)
+const telemetry = useOverlayTelemetrySource(getApi)
+const { fastState, startFastStatePolling, stopFastStatePolling } = telemetry
 const {
   heldLap,
   displayedLapTimeMs,
@@ -95,6 +96,9 @@ const compactDisplayLap = computed(() => ({
 const liveCurrentLapTimeMs = computed(() => fastState.value.info?.currentLapTimeMs ?? null)
 const liveLapValid = computed(() => fastState.value.info?.lapValid ?? null)
 const rootScale = computed(() => onTargetPage.value ? 1 : scale.value)
+const visibleSectorHud = computed(() => telemetry.source.value === 'focused'
+  ? telemetry.sectorHud.value
+  : liveLap.value.sectorHud)
 
 function contextualTargetTimeMs(): number {
   const contextual = fastState.value.info?.bestLapTimeMs
@@ -257,7 +261,7 @@ onBeforeUnmount(() => {
       >
         <template #live>
           <SectorDeltaHud
-            :sector-hud="liveLap.sectorHud"
+            :sector-hud="visibleSectorHud"
             :show-reference="showReference"
             :show-best="showBest"
             :show-current-lap="showCurrentLap"
@@ -287,7 +291,7 @@ onBeforeUnmount(() => {
       </HudTimedPager>
       <SectorDeltaHud
         v-else
-        :sector-hud="liveLap.sectorHud"
+        :sector-hud="visibleSectorHud"
         :show-reference="showReference"
         :show-best="showBest"
         :show-current-lap="showCurrentLap"

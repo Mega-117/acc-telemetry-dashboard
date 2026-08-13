@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FastOverlayState } from '~/composables/useFastStatePoller'
+import type { StandingsCarSnapshot } from '~/services/overlay/standingsPresentation'
 import { emptyTyreSetupViewModel } from '~/services/overlay/tyreSetupViewModel'
 import {
   buildDashboardPresentation,
@@ -54,12 +55,36 @@ function state(overrides: Partial<FastOverlayState> = {}): FastOverlayState {
   }
 }
 
+function focusedCar(): StandingsCarSnapshot {
+  return {
+    car_index: 1024,
+    car_class: null,
+    race_number: 16,
+    current_driver_index: 0,
+    drivers: [{ first_name: 'Jakub', last_name: 'Ivanko' }],
+    position: 1,
+    laps: 3,
+    spline_position: 0.812,
+    kmh: 239,
+    gear: 5,
+    current_lap_ms: 93_556,
+    current_lap: { time_ms: 93_556, splits_ms: [30_000, null, null], is_invalid: false },
+    last_lap_ms: 112_267,
+    last_lap: { time_ms: 112_267, splits_ms: [36_000, 37_000, 39_267], is_invalid: true },
+    best_lap_ms: 110_912,
+    best_lap: { time_ms: 110_912, splits_ms: [35_000, 36_000, 39_912], is_invalid: false },
+    has_identity: true,
+    has_realtime: true,
+  }
+}
+
 describe('dashboardPresentation', () => {
   it('formatta i dati e la convenzione marce R/N/1+', () => {
     expect(buildDashboardPresentation(state({ gear: -1 })).gear).toBe('R')
     expect(buildDashboardPresentation(state({ gear: 0 })).gear).toBe('N')
     const model = buildDashboardPresentation(state())
     expect(model).toMatchObject({ ignitionLabel: '7800', speed: '123', fuelPerLap: '2.71', brakeBias: '54.8' })
+    expect(model.spectator).toBeNull()
     expect(model.remainingLabel).toBe('Laps Left')
     expect(model.remainingValue).toBe('15.6')
     expect(model.fuelLeft).toBe('0:08:51')
@@ -77,6 +102,48 @@ describe('dashboardPresentation', () => {
     })
     expect(model.rpmReferenceRatio).toBeNull()
   })
+  it('mostra tutti e soli i dati UDP provati del pilota osservato', () => {
+    const model = buildDashboardPresentation(state({
+      dataSource: 'focused', ignitionOn: false, isEngineRunning: false,
+      speedKmh: 239, gear: 5, lapsCompleted: 3, normalizedCarPosition: 0.812,
+      currentLapTimeMs: 93_556, lastLapTimeMs: 112_267, bestLapTimeMs: 110_912,
+      sessionTimeLeftMs: 732_000, gas: null, brake: null, rpm: null, maxRpm: null,
+      fuelL: null, fuelPerLapL: null, fuelLapsRemaining: null, fuelLeftTimeMs: null,
+      engineMap: null, tractionControl: null, tractionControl2: null, abs: null,
+      brakeBiasPct: null, cornerSpeedKmh: null,
+    }), DEFAULT_DASHBOARD_OPTIONS, focusedCar())
+
+    expect(model).toMatchObject({
+      ignitionLabel: '—', speed: '239', gear: '5', fuel: '--.-',
+      fuelPerLap: '--.--', engineMap: '-', tractionControl: '-', tractionControl2: '-',
+      abs: '-', brakeBias: '--.-', cornerSpeed: '-', inputsAvailable: false,
+      rpmRatio: 0, rpmReferenceRatio: null, shiftThresholdRatio: null, shiftFlash: false,
+      spectator: {
+        driverName: 'J. Ivanko', carLabel: '#16', position: 'P1', laps: '3',
+        progress: '81.2%', session: 'RACE · 12:12',
+      },
+    })
+    expect(model.spectator?.timings).toEqual([
+      { label: 'CURRENT', lapTime: '1:33.556', splits: ['0:30.000', '—', '—'], validity: 'VALID' },
+      { label: 'LAST', lapTime: '1:52.267', splits: ['0:36.000', '0:37.000', '0:39.267'], validity: 'INVALID' },
+      { label: 'BEST', lapTime: '1:50.912', splits: ['0:35.000', '0:36.000', '0:39.912'], validity: 'VALID' },
+    ])
+  })
+
+  it('mantiene il ramo spectator ma azzera i selected values quando il feed diventa stale', () => {
+    const model = buildDashboardPresentation(state({
+      dataSource: 'focused', speedKmh: null, gear: null, normalizedCarPosition: null,
+      currentLapTimeMs: null, lastLapTimeMs: null, bestLapTimeMs: null,
+      sessionTimeLeftMs: null, gas: null, brake: null,
+    }), DEFAULT_DASHBOARD_OPTIONS, null)
+
+    expect(model).toMatchObject({ speed: '—', gear: '—' })
+    expect(model.spectator).toMatchObject({
+      driverName: '—', carLabel: 'CAR —', position: 'P—', laps: '—', progress: '—', session: 'RACE',
+    })
+    expect(model.spectator?.timings.every(timing => timing.lapTime === '—')).toBe(true)
+  })
+
 
   it.each(Object.entries(EXPECTED_SHIFT_RPM))(
     'usa per %s la soglia verificata %i senza fallback',

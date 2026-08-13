@@ -82,8 +82,8 @@ export function formatInfoLapTime(valueMs: number | null | undefined): string {
 }
 
 export function formatInfoRunningLapTime(valueMs: number | null | undefined): string {
-  const value = typeof valueMs === 'number' && Number.isFinite(valueMs) ? valueMs : 0
-  return formatLapTimeTotal(value)
+  const value = typeof valueMs === 'number' && Number.isFinite(valueMs) ? valueMs : null
+  return value === null ? '--:--.---' : formatLapTimeTotal(value)
 }
 
 export function formatInfoLocalTime(valueMs: number): string {
@@ -152,12 +152,25 @@ function fuelValue(value: number | null): string {
   return value === null ? '---' : `${value.toFixed(1)}L`
 }
 
+function fuelLeftTone(
+  valueMs: number | null | undefined,
+  referenceLapMs: number | null | undefined,
+): InfoRow['tone'] {
+  const value = typeof valueMs === 'number' && Number.isFinite(valueMs) && valueMs >= 0
+    ? valueMs
+    : null
+  if (value === null || value > 240_000) return 'default'
+  const reference = positive(referenceLapMs)
+  if (reference === null || value > reference) return 'yellow'
+  return 'orange'
+}
+
 function trafficValue(value: number | null): { value: string, tone: InfoRow['tone'] } {
   if (value === null) return { value: '--', tone: 'default' }
   if (value <= 0) return { value: 'Clear', tone: 'default' }
-  if (value <= 2) return { value: String(value), tone: 'yellow' }
-  if (value <= 4) return { value: String(value), tone: 'orange' }
-  return { value: String(value), tone: 'red' }
+  if (value <= 2) return { value: 'Low', tone: 'yellow' }
+  if (value <= 4) return { value: 'Busy', tone: 'orange' }
+  return { value: 'Crowded', tone: 'red' }
 }
 
 export function buildInfoPresentation(
@@ -169,8 +182,8 @@ export function buildInfoPresentation(
   const rows: InfoRow[] = []
   if (options.showStint) rows.push({ id: 'stint', label: 'Stint:', value: formatInfoStintDuration(info?.stintTimeLeftMs), tone: 'default' })
   if (options.showQFuel) rows.push({ id: 'q-fuel', label: `${info?.fuelLabel || 'Q-Fuel'}:`, value: fuelValue(info?.fuelNeededL ?? null), tone: fuelTone(info?.fuelNeededL ?? null) })
-  if (options.showFuelLeft) rows.push({ id: 'fuel-left', label: 'Fuel Left:', value: formatInfoFuelDuration(info?.fuelLeftTimeMs), tone: (info?.fuelLeftTimeMs ?? Infinity) <= 240_000 ? 'yellow' : 'default' })
-  if (options.showIncidents) rows.push({ id: 'incidents', label: 'Incidents:', value: info ? String(info.incidents) : '--', tone: 'default' })
+  if (options.showFuelLeft) rows.push({ id: 'fuel-left', label: 'Fuel Left:', value: formatInfoFuelDuration(info?.fuelLeftTimeMs), tone: fuelLeftTone(info?.fuelLeftTimeMs, info?.fuelLeftReferenceLapMs) })
+  if (options.showIncidents) rows.push({ id: 'incidents', label: 'Incidents:', value: info?.incidents === null || info?.incidents === undefined ? '--' : String(info.incidents), tone: 'default' })
   if (options.showGrip) rows.push({ id: 'grip', label: 'Grip:', value: info?.grip || '--', tone: 'default' })
   if (options.showPitExitTraffic && state.sessionType === 2) rows.push({ id: 'pit-exit', label: 'Pit Exit:', value: traffic.value, tone: traffic.tone })
   if (options.showOptimal) rows.push({ id: 'optimal', label: 'Optimal:', value: formatInfoLapTime(info?.optimalLapTimeMs), tone: 'default' })

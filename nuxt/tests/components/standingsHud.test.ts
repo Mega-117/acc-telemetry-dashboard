@@ -59,9 +59,10 @@ describe('StandingsHud DOM', () => {
       backgroundOpacity: 0.5,
     }))
     expect(html).not.toContain('STANDINGS')
-    expect(html).not.toMatch(/>POS<|>PILOTA<|>DELTA</)
+    expect(html).not.toMatch(/>POS<|>DRIVER<|>PIT<|>BEST<|>LAST</)
     expect(html).not.toContain('standings-columns')
     expect(html).not.toContain('is-focused')
+    expect(html).not.toContain('AIR/TRK')
     expect(html).not.toContain('teamName')
     expect(html).not.toContain('row.delta')
   })
