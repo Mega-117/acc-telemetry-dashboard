@@ -6,7 +6,7 @@
 //   - max-lines a 400 per .ts (nuovi composables Phase 3 ≤ 130 righe)
 //   - TypeScript strict già attivo via tsconfig → solo regole @typescript-eslint
 //     senza duplicare i controlli del compilatore
-//   - Regole type-aware abilitate (project: './tsconfig.json')
+//   - Regole type-aware abilitate tramite TypeScript Project Service
 //
 // Progressione soglie:
 //   Phase 1: .vue 900 / .ts 400
@@ -78,7 +78,8 @@ export default [
       parser: tsParser,
       parserOptions: {
         sourceType: 'module',
-        project: './tsconfig.json',
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
       },
     },
     plugins: {
