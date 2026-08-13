@@ -1,6 +1,7 @@
 import { watch, type Ref } from 'vue'
 import { canAccessFeature } from '~/utils/featureAccess'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { markHudRoutePhase } from '~/utils/hudRoutePerformance'
 
 function waitForAuthSettled(isLoading: Ref<boolean>): Promise<void> {
   return new Promise((resolve) => {
@@ -14,13 +15,17 @@ function waitForAuthSettled(isLoading: Ref<boolean>): Promise<void> {
 export default defineNuxtRouteMiddleware(async () => {
   if (import.meta.server) return
 
+  markHudRoutePhase('middleware-start')
+
   const { isAdmin, isLoading, userRole } = useFirebaseAuth()
   if (isLoading.value) await waitForAuthSettled(isLoading)
+  markHudRoutePhase('auth-settled')
 
   const allowed = canAccessFeature('hud', {
     role: userRole.value,
     isAdmin: isAdmin.value
   })
+  markHudRoutePhase('middleware-end')
 
   if (!allowed) {
     return navigateTo('/panoramica')

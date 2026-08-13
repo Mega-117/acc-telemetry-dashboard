@@ -5,6 +5,7 @@
 // ============================================
 
 import { useFeatureAccess } from '~/composables/useFeatureAccess'
+import { markHudRoutePhase, startHudRouteTiming } from '~/utils/hudRoutePerformance'
 
 defineProps<{
   activeTab?: 'panoramica' | 'sessioni' | 'piste' | 'spotter' | 'area-pilota' | 'hud'
@@ -30,6 +31,12 @@ const tabs = computed(() => {
 const isActive = (tabTo: string) => {
   return route.path.startsWith(tabTo)
 }
+
+function onTabClick(tab: { id: string }) {
+  if (tab.id !== 'hud') return
+  startHudRouteTiming('hud-tab-click', import.meta.dev ? 'development' : 'packaged')
+  markHudRoutePhase('click')
+}
 </script>
 
 <template>
@@ -41,6 +48,7 @@ const isActive = (tabTo: string) => {
         :to="tab.to"
         class="tab"
         :class="{ 'tab--active': isActive(tab.to), 'tab--section-start': tab.id === 'spotter' }"
+        @click="onTabClick(tab)"
       >
         {{ tab.label }}
       </NuxtLink>

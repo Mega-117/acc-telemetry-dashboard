@@ -1,3 +1,9 @@
+<script lang="ts">
+import { markHudRoutePhase as markHudRouteModulePhase } from '~/utils/hudRoutePerformance'
+
+if (import.meta.client) markHudRouteModulePhase('route-module-evaluated')
+</script>
+
 <script setup lang="ts">
 /* eslint-disable max-lines -- Legacy self-contained Electron bridge; split tracked separately from PIP-281 layout scope. */
 // HUD (PIP-209): pagina overlay protetta da capability centralizzata.
@@ -17,6 +23,14 @@ import {
   type HudOverlayBackgroundId,
 } from '~/utils/hudOverlayBackground'
 import { getHudOverlayScaleMax, getHudOverlayScaleMin } from '~/composables/useHudOverlay'
+import {
+  afterHudNextPaint,
+  finishHudRouteTiming,
+  formatHudRouteTimingSummary,
+  markHudRoutePhase,
+} from '~/utils/hudRoutePerformance'
+
+if (import.meta.client) markHudRoutePhase('setup-start')
 
 definePageMeta({
   layout: 'dashboard',
@@ -193,6 +207,7 @@ const replayBusy = ref(false)
 const replayMessage = ref('')
 const selectedOverlayId = ref<HudOverlayId>('tyres')
 const hudSettingsLayout = ref<HudSettingsLayout>('columns')
+const hudPerformanceSummary = ref('')
 let unsubscribeDriving: (() => void) | null = null
 let placementPollTimer: ReturnType<typeof setInterval> | null = null
 let replayPollTimer: ReturnType<typeof setInterval> | null = null
@@ -371,8 +386,27 @@ async function toggleAlwaysVisible() {
   await refreshOverlayVisibility()
 }
 
+async function observeHudInitialReady() {
+  markHudRoutePhase('mounted')
+  const nextPaint = afterHudNextPaint().then(() => markHudRoutePhase('next-paint'))
+  let refreshSucceeded = true
+  try {
+    await refreshState()
+  } catch {
+    refreshSucceeded = false
+    console.error('[HUD_PERF] refreshState failed')
+  } finally {
+    markHudRoutePhase('refresh-complete')
+  }
+  await nextPaint
+  hudPerformanceSummary.value = formatHudRouteTimingSummary(finishHudRouteTiming({
+    apiReady: apiReady.value,
+    refreshSucceeded,
+  }))
+}
+
 onMounted(() => {
-  refreshState()
+  void observeHudInitialReady()
   placementPollTimer = setInterval(() => {
     nowMs.value = Date.now()
     if (positioning.value) refreshPlacementStatus()
@@ -565,6 +599,11 @@ async function toggleTraining() {
 <template>
   <LayoutPageContainer>
     <section class="test-hud">
+      <output
+        class="hud-sr-only"
+        aria-live="polite"
+        data-testid="hud-performance-summary"
+      >{{ hudPerformanceSummary }}</output>
       <header class="test-hud__hero">
         <div>
           <span class="test-hud__kicker">Overlay</span>

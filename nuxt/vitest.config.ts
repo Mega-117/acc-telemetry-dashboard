@@ -84,6 +84,7 @@ export default defineConfig({
         'app/utils/completedLapHold.ts',
         'app/utils/hudOverlayPresentationCapabilities.ts',
         'app/utils/hudOverlayBackground.ts',
+        'app/utils/hudRoutePerformance.ts',
         'app/utils/brakeTemperaturePresentation.ts',
         'app/utils/brakeAxlePresentation.ts',
         'app/utils/sessionParser.ts',
