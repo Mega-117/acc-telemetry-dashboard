@@ -32,6 +32,7 @@ function available(position: number): StandingsStateEnvelope {
         event_index: 1,
         session_index: 1,
         focused_car_index: 1,
+        local_car_index: 1,
         is_replay: false,
         phase: 4,
       },

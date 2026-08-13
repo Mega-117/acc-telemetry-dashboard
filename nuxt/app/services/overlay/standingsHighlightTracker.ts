@@ -1,5 +1,5 @@
 import {
-  selectFreshFocusedClassCars,
+  selectFreshLocalClassCars,
   type StandingsCarSnapshot,
   type StandingsHighlightMap,
   type StandingsPersonalBestFlash,
@@ -131,7 +131,7 @@ export function createStandingsHighlightTracker() {
     const nextComparablePositions = new Map<number, number>()
     const nextLastLapTokens = new Map<number, string | null>()
     const classPositions = new Map(
-      selectFreshFocusedClassCars(snapshot, nowMs)
+      selectFreshLocalClassCars(snapshot, nowMs)
         .map((car, index) => [car.car_index, index + 1]),
     )
 
@@ -169,7 +169,7 @@ export function createStandingsHighlightTracker() {
         && isValidPersonalBest(car)
       ) {
         personalBestFlashes.set(car.car_index, {
-          value: car.car_index === snapshot.session.focused_car_index ? 'focused' : 'other',
+          value: car.car_index === snapshot.session.local_car_index ? 'focused' : 'other',
           expiresAtMs: nowMs + PERSONAL_BEST_FLASH_MS,
         })
       }

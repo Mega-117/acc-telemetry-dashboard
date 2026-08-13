@@ -36,6 +36,7 @@ function snapshot(cars: StandingsCarSnapshot[], overrides: Partial<StandingsSnap
       event_index: 1,
       session_index: 1,
       focused_car_index: 1,
+      local_car_index: 1,
       is_replay: false,
       session_type: 2,
       phase: 4,
@@ -124,6 +125,29 @@ describe('standingsHighlightTracker', () => {
     expect(highlighted[2]?.lastLapPersonalBest).toBe('other')
     expect(tracker.getHighlights(2000 + PERSONAL_BEST_FLASH_MS - 1)[1]).toBeDefined()
     expect(tracker.getHighlights(2000 + PERSONAL_BEST_FLASH_MS)).toEqual({})
+  })
+
+  it('usa classe e PB dell’auto locale quando il focus remoto appartiene a un’altra classe', () => {
+    const tracker = createStandingsHighlightTracker()
+    const session = { focused_car_index: 9, local_car_index: 1 }
+    tracker.update(snapshot([
+      car(1, 2),
+      car(2, 1),
+      car(9, 1, { car_class: 'GT4' }),
+    ], session), 1000)
+
+    const highlighted = tracker.update(snapshot([
+      car(1, 1, {
+        laps: 11,
+        best_lap: { time_ms: 99_000 },
+        last_lap: { time_ms: 99_000, is_invalid: false, is_valid_for_best: true },
+      }),
+      car(2, 2),
+      car(9, 1, { car_class: 'GT4' }),
+    ], session), 2000)
+
+    expect(highlighted[1]?.lastLapPersonalBest).toBe('focused')
+    expect(highlighted[9]).toBeUndefined()
   })
 
   it('non evidenzia last lap invalidi o senza valid_for_best e resetta tra sessioni', () => {

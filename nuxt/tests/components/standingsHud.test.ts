@@ -13,6 +13,25 @@ function model(): StandingsPresentation {
       temperatures: '22/32°',
       carClass: 'GT3',
     },
+    layout: {
+      width: 538,
+      height: 340,
+      rowCapacity: 10,
+      paddingX: 10,
+      paddingY: 10,
+      headerHeight: 40,
+      rowHeight: 28,
+      columnGap: 8,
+      columnWidths: {
+        position: 30,
+        driver: 140,
+        carNumber: 50,
+        pit: 22,
+        bestLap: 76,
+        lastLap: 76,
+        progress: 76,
+      },
+    },
     rows: [{
       carIndex: 7,
       position: 2,
@@ -28,6 +47,7 @@ function model(): StandingsPresentation {
       progressPercent: 42,
       hasProgress: true,
       focused: true,
+      local: true,
     }],
     columns: { carNumber: true, lastLap: true, bestLap: true, progress: true },
   }
@@ -47,13 +67,15 @@ describe('StandingsHud DOM', () => {
     for (const value of ['V. Rossi', '46', '>P<', '2:16.500', '2:17.001']) {
       expect(html).toContain(value)
     }
-    expect(html).toMatch(/class="[^"]*is-improved[^"]*standings-row__position|class="[^"]*standings-row__position[^"]*is-improved/)
-    expect(html).toMatch(/class="[^"]*has-progress[^"]*standings-row|class="[^"]*standings-row[^"]*has-progress/)
+    expect(html).not.toContain('is-improved')
+    expect(html).toMatch(/class="[^"]*standings-row[^"]*is-local|class="[^"]*is-local[^"]*standings-row/)
+    expect(html).toContain('standings-row__progress-cell')
+    expect(html).toContain('standings-row__progress')
     expect(html).toMatch(/class="[^"]*is-fastest[^"]*standings-row__best|class="[^"]*standings-row__best[^"]*is-fastest/)
     expect(html).toMatch(/class="[^"]*is-pb-focused[^"]*standings-row__last|class="[^"]*standings-row__last[^"]*is-pb-focused/)
   })
 
-  it('non monta titoli, column label, team, gap o focus full-row inventati', async () => {
+  it('non monta titoli, column label, team o focus full-row inventati e usa solo il local autorevole', async () => {
     const html = await renderToString(createSSRApp(StandingsHud, {
       model: model(),
       backgroundOpacity: 0.5,
@@ -62,12 +84,13 @@ describe('StandingsHud DOM', () => {
     expect(html).not.toMatch(/>POS<|>DRIVER<|>PIT<|>BEST<|>LAST</)
     expect(html).not.toContain('standings-columns')
     expect(html).not.toContain('is-focused')
+    expect(html).toContain('is-local')
     expect(html).not.toContain('AIR/TRK')
     expect(html).not.toContain('teamName')
     expect(html).not.toContain('row.delta')
   })
 
-  it('non aggiunge altezza progress o classi highlight quando le celle sono inattive', async () => {
+  it('mantiene la cella progress riservata a zero senza classi highlight', async () => {
     const inactive = model()
     inactive.rows[0].positionFlash = null
     inactive.rows[0].lastLapPersonalBest = null
@@ -80,7 +103,8 @@ describe('StandingsHud DOM', () => {
     expect(html).not.toContain('has-progress')
     expect(html).not.toContain('is-improved')
     expect(html).not.toContain('is-pb-')
-    expect(html).not.toContain('standings-row__progress')
+    expect(html).toContain('standings-row__progress-cell')
+    expect(html).toContain('width:0%')
   })
 
   it('non monta il contenitore quando il modello non è affidabile', async () => {

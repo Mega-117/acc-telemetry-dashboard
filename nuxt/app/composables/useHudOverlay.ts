@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { useOverlayInteractionContract } from '~/composables/useOverlayInteractionContract'
+import type { StandingsLayout } from '~/services/overlay/standingsLayout'
 
 export interface HudOverlaySettings {
   enabled: boolean
@@ -38,6 +39,7 @@ export interface HudOverlaySettings {
   showLastLap?: boolean
   showLapProgressBar?: boolean
   showTurnNumber?: boolean
+  standingsLayout?: StandingsLayout
 }
 
 export const HUD_SCALE_MIN = 0.6
@@ -105,6 +107,19 @@ export interface HudTransientViewportRequest {
   minHeight?: number
 }
 
+export interface HudOverlayBridge {
+  hudOverlayGetSettings?: (overlayId: string) => Promise<HudOverlaySettings | null>
+  hudOverlaySetTransientViewport?: (
+    overlayId: string,
+    request: HudTransientViewportRequest,
+  ) => Promise<unknown>
+  onHudOverlayPlacement?: (callback: (active: boolean) => void) => () => void
+  onHudOverlayScale?: (callback: (scale: unknown) => void) => () => void
+  onHudOverlaySettings?: (callback: (settings: HudOverlaySettings) => void) => () => void
+  setOverlayMousePassthrough?: (ignore: boolean) => Promise<unknown>
+  onOverlayPointerState?: (callback: (state: unknown) => void) => () => void
+}
+
 function clampScale(value: unknown, overlayId: string): number {
   const n = Number(value)
   if (!Number.isFinite(n)) return getHudOverlayScaleDefault(overlayId)
@@ -125,14 +140,14 @@ function clampScale(value: unknown, overlayId: string): number {
  * @param overlayId - id dell'overlay ('tyres' | 'sectors').
  * @param getApi - factory che ritorna l'API Electron, o null fuori da Electron.
  */
-export function useHudOverlay(overlayId: string, getApi: () => any | null) {
+export function useHudOverlay(overlayId: string, getApi: () => HudOverlayBridge | null) {
   const isElectron = ref(false)
   const isPlacing = ref(false)
   const scale = ref<number>(getHudOverlayScaleDefault(overlayId))
   const settings = ref<HudOverlaySettings | null>(null)
   let unsubscribers: Array<() => void> = []
 
-  function api(): any | null {
+  function api(): HudOverlayBridge | null {
     return getApi()
   }
 

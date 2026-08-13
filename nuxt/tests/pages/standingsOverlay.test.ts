@@ -18,16 +18,19 @@ describe('Standings overlay contract', () => {
     expect(page).toContain('standings.stop()')
   })
 
-  it('mantiene canvas nativo 900x600 e nasconde tutto senza modello affidabile', () => {
-    expect(page).toMatch(/\.overlay-canvas\{[^}]*width:900px;height:600px/s)
+  it('usa esclusivamente il layout persistito dal manager e nasconde tutto senza modello affidabile', () => {
+    expect(page).toContain('model.value.layout.width')
+    expect(page).toContain('model.value.layout.height')
+    expect(page).not.toMatch(/\.overlay-canvas\{[^}]*width:\s*900px|height:\s*600px/s)
     expect(page).not.toContain('setTransientViewport')
-    expect(hud).toMatch(/\.standings-hud\s*\{[^}]*width:900px;[^}]*height:600px;/s)
+    expect(hud).toContain(':style="layoutStyle"')
+    expect(hud).not.toMatch(/\.standings-hud\s*\{[^}]*width:\s*900px|height:\s*600px;/s)
     expect(hud).toMatch(/\.standings-hud\s*\{[^}]*border-radius:\s*8px;/s)
     expect(hud).toContain('v-if="model.visible"')
     expect(hud).toContain('<HudOverlayBackground :opacity="backgroundOpacity" />')
   })
 
-  it('renderizza l’header reference e nessuna colonna/focus di riga inventati', () => {
+  it('renderizza l’header reference e nessun focus di riga inventato', () => {
     const headerFields = [
       'model.header.sessionType',
       'model.header.timeLeft',
@@ -45,21 +48,21 @@ describe('Standings overlay contract', () => {
     expect(hud).not.toContain('row.delta')
     expect(hud).not.toContain('teamName')
     expect(hud).not.toContain('is-focused')
+    expect(hud).toContain("'is-local': row.local")
     expect(hud).not.toContain('AIR/TRK')
     expect(hud).not.toContain('nth-child')
   })
 
-  it('mantiene larghezze e highlight sulle sole celle reference', () => {
-    expect(hud).toMatch(/\.standings-row__position\s*\{[^}]*flex:\s*0 0 30px;/s)
-    expect(hud).toMatch(/\.standings-row__driver\s*\{[^}]*140px;/s)
-    expect(hud).toMatch(/\.standings-row__number\s*\{[^}]*50px;/s)
-    expect(hud).toMatch(/\.standings-row__pit\s*\{[^}]*22px;/s)
-    expect(hud).toMatch(/\.standings-row__best,[\s\S]*?\.standings-row__last\s*\{[^}]*76px;/s)
+  it('usa una griglia fissa da costanti manager e riserva la progress senza assoluti', () => {
+    expect(hud).toContain('gridTemplateColumns')
+    expect(hud).toContain('model.layout.columnWidths.progress')
+    expect(hud).toContain('class="standings-row__progress-cell"')
     expect(hud).toMatch(/\.standings-row__progress\s*\{[^}]*height:\s*4px;[^}]*opacity:\s*0\.6;/s)
-    expect(hud).toMatch(/\.standings-row\s*\{[^}]*height:\s*24px;[^}]*min-height:\s*24px;/s)
-    expect(hud).toMatch(/\.standings-row\.has-progress\s*\{[^}]*height:\s*28px;[^}]*padding-bottom:\s*4px;/s)
+    expect(hud).toMatch(/\.standings-row\s*\{[^}]*display:\s*grid;[^}]*height:\s*var\(--standings-row-height\)/s)
+    expect(hud).not.toMatch(/\.standings-row__progress\s*\{[^}]*position:\s*absolute/s)
+    expect(hud).not.toContain('.standings-row.has-progress')
     expect(hud).toMatch(/\.standings-row__position\s*\{[^}]*height:\s*24px;/s)
-    expect(hud).toContain(":class=\"{ 'has-progress': model.columns.progress && row.hasProgress }\"")
+    expect(hud).toContain("'is-local': row.local")
     expect(hud).toContain("row.inPitLane ? 'P' : ''")
     expect(hud).toContain('row.positionFlash')
     expect(hud).toContain('row.lastLapPersonalBest')
@@ -70,6 +73,7 @@ describe('Standings overlay contract', () => {
     expect(hud).not.toMatch(/\.standings-row__last\.is-pb-(?:focused|other)\s*\{[^}]*background:/s)
     expect(hud).not.toMatch(/animation:|@keyframes|brightness\(/)
     expect(hud).not.toContain('grid-auto-rows: 32px')
+    expect(hud).toMatch(/\.standings-row__driver\s*\{[^}]*text-overflow:\s*ellipsis/s)
   })
 
   it('non renderizza celle prive di provider', () => {

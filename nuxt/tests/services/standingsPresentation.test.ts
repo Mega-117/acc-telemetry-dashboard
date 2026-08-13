@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildStandingsPresentation,
+  buildStandingsPresentation as buildStandingsPresentationRaw,
   formatStandingsDriverName,
   formatStandingsLapTime,
   formatStandingsRemainingTime,
@@ -9,10 +9,31 @@ import {
   selectStandingsCars,
   standingsCarNumberColors,
   type StandingsCarSnapshot,
+  type StandingsHighlightMap,
+  type StandingsPresentationOptions,
   type StandingsStateEnvelope,
 } from '../../app/services/overlay/standingsPresentation'
 
 const NOW_MS = 1_785_956_769_847
+const STANDINGS_LAYOUT = {
+  width: 538,
+  height: 340,
+  rowCapacity: 10,
+  paddingX: 10,
+  paddingY: 10,
+  headerHeight: 40,
+  rowHeight: 28,
+  columnGap: 8,
+  columnWidths: {
+    position: 30,
+    driver: 140,
+    carNumber: 50,
+    pit: 22,
+    bestLap: 76,
+    lastLap: 76,
+    progress: 76,
+  },
+}
 
 function car(position: number, overrides: Partial<StandingsCarSnapshot> = {}): StandingsCarSnapshot {
   return {
@@ -35,7 +56,7 @@ function car(position: number, overrides: Partial<StandingsCarSnapshot> = {}): S
   }
 }
 
-function state(cars: StandingsCarSnapshot[], focusedCarIndex = 108): StandingsStateEnvelope {
+function state(cars: StandingsCarSnapshot[], focusedCarIndex = 108, localCarIndex = focusedCarIndex): StandingsStateEnvelope {
   return {
     status: 'available',
     reason: null,
@@ -45,6 +66,7 @@ function state(cars: StandingsCarSnapshot[], focusedCarIndex = 108): StandingsSt
         event_index: 1,
         session_index: 2,
         focused_car_index: focusedCarIndex,
+        local_car_index: localCarIndex,
         is_replay: false,
         session_type: 0,
         phase: 4,
@@ -57,8 +79,34 @@ function state(cars: StandingsCarSnapshot[], focusedCarIndex = 108): StandingsSt
   }
 }
 
+function buildStandingsPresentation(
+  stateValue: StandingsStateEnvelope | null | undefined,
+  options: Partial<StandingsPresentationOptions> = {},
+  nowMs = NOW_MS,
+  highlights: StandingsHighlightMap = {},
+) {
+  const clampCount = (value: unknown, fallback: number) => {
+    const numeric = Number(value ?? fallback)
+    return Math.round(Math.min(Math.max(Number.isFinite(numeric) ? numeric : fallback, 0), 5))
+  }
+  const rowCapacity = clampCount(options.topCars, 3)
+    + clampCount(options.carsAhead, 3)
+    + clampCount(options.carsBehind, 3)
+    + 1
+  return buildStandingsPresentationRaw(stateValue, {
+    ...options,
+    standingsLayout: {
+      ...STANDINGS_LAYOUT,
+      rowCapacity,
+      height: STANDINGS_LAYOUT.paddingY * 2
+        + STANDINGS_LAYOUT.headerHeight
+        + rowCapacity * STANDINGS_LAYOUT.rowHeight,
+    },
+  }, nowMs, highlights)
+}
+
 describe('standingsPresentation', () => {
-  it('riempie il target adattivo e compensa top/window per focus P1, P2, overlap e fondo', () => {
+  it('riempie il target adattivo e compensa top/window attorno all’auto locale anche con focus remoto', () => {
     const cars = Array.from({ length: 12 }, (_, index) => car(index + 1))
     cars.push(car(4, { car_index: 204, car_class: 'GT4' }))
     cars.push(car(5, { car_index: 205, realtime_updated_at_ms: NOW_MS - 5001 }))
@@ -74,11 +122,11 @@ describe('standingsPresentation', () => {
       [104, [1, 2, 3, 4, 5, 6, 7, 8]],
       [112, [1, 2, 3, 8, 9, 10, 11, 12]],
     ])
-    expected.forEach((positions, focusedCarIndex) => {
-      const model = buildStandingsPresentation(state(cars, focusedCarIndex), options, NOW_MS)
+    expected.forEach((positions, localCarIndex) => {
+      const model = buildStandingsPresentation(state(cars, 101, localCarIndex), options, NOW_MS)
       expect(model.rows.map(row => row.position)).toEqual(positions)
       expect(model.rows).toHaveLength(8)
-      expect(model.rows.filter(row => row.focused).map(row => row.carIndex)).toEqual([focusedCarIndex])
+      expect(model.rows.filter(row => row.local).map(row => row.carIndex)).toEqual([localCarIndex])
     })
   })
 
@@ -93,13 +141,13 @@ describe('standingsPresentation', () => {
     expect(buildStandingsPresentation(replay, {}, NOW_MS).visible).toBe(false)
   })
 
-  it('filtra righe stale/non affidabili e nasconde l’intero HUD se il focus non resta eleggibile', () => {
-    const staleFocus = state([car(8, { realtime_updated_at_ms: NOW_MS - 5001 })])
-    const unidentifiedFocus = state([car(8, { has_identity: false })])
-    const unrankedFocus = state([car(8, { position: 0 })])
-    expect(buildStandingsPresentation(staleFocus, {}, NOW_MS).visible).toBe(false)
-    expect(buildStandingsPresentation(unidentifiedFocus, {}, NOW_MS).visible).toBe(false)
-    expect(buildStandingsPresentation(unrankedFocus, {}, NOW_MS).visible).toBe(false)
+  it('filtra righe stale/non affidabili e nasconde l’intero HUD se l’auto locale non resta eleggibile', () => {
+    const staleLocal = state([car(8, { realtime_updated_at_ms: NOW_MS - 5001 })])
+    const unidentifiedLocal = state([car(8, { has_identity: false })])
+    const unrankedLocal = state([car(8, { position: 0 })])
+    expect(buildStandingsPresentation(staleLocal, {}, NOW_MS).visible).toBe(false)
+    expect(buildStandingsPresentation(unidentifiedLocal, {}, NOW_MS).visible).toBe(false)
+    expect(buildStandingsPresentation(unrankedLocal, {}, NOW_MS).visible).toBe(false)
   })
 
   it('ordina con la posizione assoluta ACC e mostra la posizione derivata nella classe', () => {
@@ -141,6 +189,7 @@ describe('standingsPresentation', () => {
     expect(model.rows[0]).not.toHaveProperty('lfmElo')
     expect(model.rows[0]).not.toHaveProperty('incidents')
     expect(model.rows[0]).not.toHaveProperty('stintTimer')
+    expect(model.layout).toEqual(STANDINGS_LAYOUT)
   })
 
   it('clampa i conteggi 0-5 e marca il best di classe senza includere righe extra', () => {
@@ -211,19 +260,29 @@ describe('standingsPresentation', () => {
 
     practice.snapshot!.session.session_type = 10
     const raceModel = buildStandingsPresentation(practice, {}, NOW_MS)
-    expect(raceModel.columns.progress).toBe(false)
+    expect(raceModel.columns.progress).toBe(true)
     expect(raceModel.rows.every(row => row.progressPercent === null)).toBe(true)
     expect(raceModel.rows.every(row => row.hasProgress === false)).toBe(true)
   })
 
-  it('propaga gli highlight soltanto alle celle previste', () => {
-    const model = buildStandingsPresentation(state([car(8)]), {}, NOW_MS, {
+  it('la riga locale sopprime il flash posizione secondario ma conserva dati PB', () => {
+    const model = buildStandingsPresentation(state([car(7), car(8)], 107, 108), {}, NOW_MS, {
       108: { positionFlash: 'improved', lastLapPersonalBest: 'focused' },
     })
-    expect(model.rows[0]).toMatchObject({
-      positionFlash: 'improved',
+    expect(model.rows.find(row => row.local)).toMatchObject({
+      positionFlash: null,
       lastLapPersonalBest: 'focused',
     })
+  })
+
+  it('header e classe seguono l’auto locale senza inferire dal focus', () => {
+    const model = buildStandingsPresentation(state([
+      car(1, { car_index: 101, car_class: 'GT4' }),
+      car(8, { car_index: 108, car_class: 'GT3' }),
+    ], 101, 108), { topCars: 0, carsAhead: 0, carsBehind: 0 }, NOW_MS)
+    expect(model.header.carClass).toBe('GT3')
+    expect(model.rows).toHaveLength(1)
+    expect(model.rows[0]).toMatchObject({ carIndex: 108, local: true })
   })
 
   it('la selezione pura non oltrepassa il roster disponibile', () => {

@@ -1,3 +1,7 @@
+import { standingsCarNumberColors, type StandingsCarNumberColors } from './standingsCarNumber'
+import { EMPTY_STANDINGS_LAYOUT, normalizeStandingsLayout, type StandingsLayout } from './standingsLayout'
+
+export { standingsCarNumberColors } from './standingsCarNumber'
 export interface StandingsDriverSnapshot {
   first_name?: unknown
   last_name?: unknown
@@ -86,6 +90,7 @@ export interface StandingsPresentationOptions {
   showFastestLap: boolean
   showLastLap: boolean
   showLapProgressBar: boolean
+  standingsLayout: StandingsLayout | null
 }
 
 export type StandingsPositionFlash = 'improved' | 'worsened'
@@ -97,11 +102,6 @@ export interface StandingsRowHighlight {
 }
 
 export type StandingsHighlightMap = Readonly<Record<number, StandingsRowHighlight>>
-
-export interface StandingsCarNumberColors {
-  background: string
-  color: string
-}
 
 export interface StandingsPresentationRow {
   carIndex: number
@@ -117,6 +117,7 @@ export interface StandingsPresentationRow {
   lastLapPersonalBest: StandingsPersonalBestFlash | null
   progressPercent: number | null
   hasProgress: boolean
+  local: boolean
   focused: boolean
 }
 
@@ -135,6 +136,7 @@ export interface StandingsPresentation {
     bestLap: boolean
     progress: boolean
   }
+  layout: StandingsLayout
 }
 
 export const DEFAULT_STANDINGS_OPTIONS: Readonly<StandingsPresentationOptions> = Object.freeze({
@@ -145,6 +147,7 @@ export const DEFAULT_STANDINGS_OPTIONS: Readonly<StandingsPresentationOptions> =
   showFastestLap: true,
   showLastLap: true,
   showLapProgressBar: true,
+  standingsLayout: null,
 })
 
 const FUTURE_TOLERANCE_MS = 1000
@@ -171,6 +174,7 @@ function hiddenPresentation(options: StandingsPresentationOptions): StandingsPre
       bestLap: options.showFastestLap,
       progress: options.showLapProgressBar,
     },
+    layout: options.standingsLayout ?? EMPTY_STANDINGS_LAYOUT,
   }
 }
 
@@ -263,28 +267,12 @@ export function formatStandingsTemperatures(weather: StandingsSessionSnapshot['w
   return `${Math.round(ambient)}/${Math.round(track)}°`
 }
 
-export function standingsCarNumberColors(carClass: unknown): StandingsCarNumberColors {
-  const normalized = safeText(carClass, 80)?.toUpperCase() ?? ''
-  const backgrounds: Readonly<Record<string, string>> = {
-    GT4: 'rgb(38, 38, 69)',
-    ST: 'rgb(204, 168, 0)',
-    CUP: 'rgb(69, 124, 69)',
-    CHL: 'red',
-    TCX: 'rgb(0, 124, 167)',
-    GT2: 'darkred',
-  }
-  return {
-    background: backgrounds[normalized] ?? 'transparent',
-    color: 'white',
-  }
-}
-
 export function selectStandingsCars(
   eligible: StandingsCarSnapshot[],
-  focusedIndex: number,
+  localIndex: number,
   options: Pick<StandingsPresentationOptions, 'topCars' | 'carsAhead' | 'carsBehind'>,
 ): StandingsCarSnapshot[] {
-  if (focusedIndex < 0 || focusedIndex >= eligible.length) return []
+  if (localIndex < 0 || localIndex >= eligible.length) return []
 
   const target = Math.min(
     eligible.length,
@@ -302,7 +290,7 @@ export function selectStandingsCars(
 
   const windowSize = Math.min(eligible.length, options.carsAhead + options.carsBehind + 1)
   const windowStart = Math.min(
-    Math.max(0, focusedIndex - options.carsAhead),
+    Math.max(0, localIndex - options.carsAhead),
     eligible.length - windowSize,
   )
   const windowEnd = windowStart + windowSize
@@ -322,25 +310,28 @@ export function selectStandingsCars(
 }
 
 /**
- * Ordina una sola volta la classe autorevole del focus usando la posizione
+ * Ordina una sola volta la classe autorevole dell'auto locale usando la posizione
  * assoluta ACC. Il chiamante usa l'indice risultante come posizione di classe;
  * cup_position appartiene alla cup category e non e' un surrogato valido.
  */
-export function selectFreshFocusedClassCars(
+export function selectFreshLocalClassCars(
   snapshot: StandingsSnapshot,
   nowMs: number,
 ): StandingsCarSnapshot[] {
-  const focus = snapshot.cars.find(car => car.car_index === snapshot.session.focused_car_index)
-  const focusedClass = safeText(focus?.car_class, 80)
+  const localCarIndex = finiteNumber(snapshot.session.local_car_index)
+  const local = Number.isInteger(localCarIndex)
+    ? snapshot.cars.find(car => car.car_index === localCarIndex)
+    : null
+  const localClass = safeText(local?.car_class, 80)
   const ttlMs = finiteNumber(snapshot.freshness?.ttl_ms)
   const clockMs = finiteNumber(nowMs)
-  if (!focus || !focusedClass || ttlMs === null || ttlMs <= 0 || clockMs === null) return []
+  if (!local || !localClass || ttlMs === null || ttlMs <= 0 || clockMs === null) return []
 
   return snapshot.cars
     .filter(car => (
       car.has_identity === true
       && car.has_realtime === true
-      && safeText(car.car_class, 80) === focusedClass
+      && safeText(car.car_class, 80) === localClass
       && Number.isInteger(Number(car.position))
       && Number(car.position) > 0
       && isFreshCar(car, clockMs, ttlMs)
@@ -363,24 +354,30 @@ export function buildStandingsPresentation(
     showFastestLap: optionsInput.showFastestLap ?? DEFAULT_STANDINGS_OPTIONS.showFastestLap,
     showLastLap: optionsInput.showLastLap ?? DEFAULT_STANDINGS_OPTIONS.showLastLap,
     showLapProgressBar: optionsInput.showLapProgressBar ?? DEFAULT_STANDINGS_OPTIONS.showLapProgressBar,
+    standingsLayout: normalizeStandingsLayout(optionsInput.standingsLayout),
   }
   const hidden = hiddenPresentation(options)
+  const configuredRowCapacity = options.topCars + options.carsAhead + options.carsBehind + 1
+  if (!options.standingsLayout || options.standingsLayout.rowCapacity !== configuredRowCapacity) return hidden
   if (state?.status !== 'available' || !state.snapshot || state.snapshot.session.is_replay === true) {
     return hidden
   }
 
   const snapshot = state.snapshot
+  const localCarIndex = finiteNumber(snapshot.session.local_car_index)
+  if (!Number.isInteger(localCarIndex) || localCarIndex === null || localCarIndex < 0) return hidden
+  const local = snapshot.cars.find(car => car.car_index === localCarIndex)
   const focus = snapshot.cars.find(car => car.car_index === snapshot.session.focused_car_index)
-  const focusedClass = safeText(focus?.car_class, 80)
+  const localClass = safeText(local?.car_class, 80)
   const clockMs = finiteNumber(nowMs)
-  if (!focus || !focusedClass || clockMs === null) return hidden
+  if (!local || !localClass || clockMs === null) return hidden
 
-  const eligible = selectFreshFocusedClassCars(snapshot, clockMs)
+  const eligible = selectFreshLocalClassCars(snapshot, clockMs)
 
-  const focusedIndex = eligible.findIndex(car => car.car_index === focus.car_index)
-  if (focusedIndex < 0) return hidden
+  const localIndex = eligible.findIndex(car => car.car_index === local.car_index)
+  if (localIndex < 0) return hidden
 
-  const selectedCars = selectStandingsCars(eligible, focusedIndex, options)
+  const selectedCars = selectStandingsCars(eligible, localIndex, options)
   const classPositionByCarIndex = new Map(
     eligible.map((car, index) => [car.car_index, index + 1]),
   )
@@ -392,27 +389,28 @@ export function buildStandingsPresentation(
 
   const sessionType = formatStandingsSessionType(snapshot.session.session_type)
   const sessionTypeCode = finiteNumber(snapshot.session.session_type)
-  const showProgress = options.showLapProgressBar
+  const showProgressData = options.showLapProgressBar
     && sessionType !== null
     && sessionTypeCode !== ACC_BROADCASTING_SESSION_TYPES.RACE
 
   const rows = selectedCars
     .map((car): StandingsPresentationRow => {
-      const focused = car.car_index === focus.car_index
+      const focused = car.car_index === focus?.car_index
+      const isLocal = car.car_index === local.car_index
       const bestLapMs = lapTime(car, 'best')
       const raceNumber = finiteNumber(car.race_number)
       const spline = finiteNumber(car.spline_position)
       const inPitLane = finiteNumber(car.car_location) === 2
       const highlight = highlights[car.car_index]
-      const progressPercent = showProgress && inPitLane
+      const progressPercent = showProgressData && inPitLane
         ? 0
-        : showProgress && spline !== null
+        : showProgressData && spline !== null
           ? Math.round(Math.min(Math.max(spline, 0), 1) * 1000) / 10
           : null
       return {
         carIndex: car.car_index,
-        position: classPositionByCarIndex.get(car.car_index)!,
-        positionFlash: highlight?.positionFlash ?? null,
+        position: classPositionByCarIndex.get(car.car_index) as number,
+        positionFlash: isLocal ? null : (highlight?.positionFlash ?? null),
         carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
           ? String(Math.round(raceNumber)) : null,
         carNumberColors: standingsCarNumberColors(car.car_class),
@@ -424,6 +422,7 @@ export function buildStandingsPresentation(
         lastLapPersonalBest: highlight?.lastLapPersonalBest ?? null,
         progressPercent,
         hasProgress: progressPercent !== null && progressPercent > 0,
+        local: isLocal,
         focused,
       }
     })
@@ -437,14 +436,15 @@ export function buildStandingsPresentation(
         snapshot.session.session_end_time_ms,
       ),
       temperatures: formatStandingsTemperatures(snapshot.session.weather),
-      carClass: focusedClass,
+      carClass: localClass,
     },
     rows,
     columns: {
       carNumber: options.showCarNumber,
       lastLap: options.showLastLap,
       bestLap: options.showFastestLap,
-      progress: showProgress,
+      progress: options.showLapProgressBar,
     },
+    layout: options.standingsLayout,
   }
 }
