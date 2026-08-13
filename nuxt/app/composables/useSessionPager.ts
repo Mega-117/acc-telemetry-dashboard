@@ -14,7 +14,8 @@ import {
 import { trackedGetCountFromServer, trackedGetDoc, trackedGetDocs } from './useFirebaseTracker'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { db } from '~/config/firebase'
-import { formatCarName, formatTrackName, getCarCategory, type CarCategory, type SessionDocument } from './useTelemetryData'
+import { formatCarName, formatTrackName, getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
+import type { SessionDocument } from '~/types/telemetry'
 import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
 import {
     buildLogicalSessionKey,

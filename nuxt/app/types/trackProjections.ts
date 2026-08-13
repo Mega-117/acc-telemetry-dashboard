@@ -1,4 +1,4 @@
-import type { CarCategory } from '~/composables/useTelemetryData'
+import type { CarCategory } from '~/utils/telemetryFormat'
 
 export const TRACK_DETAIL_PROJECTION_SCHEMA_VERSION = 1
 

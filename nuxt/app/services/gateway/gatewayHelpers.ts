@@ -1,6 +1,6 @@
 import { normalizeTrackId as normalizeTrackProjectionId } from '~/services/projections/trackMetadata'
 import type { UserProjectionDocument } from '~/repositories/telemetryProjectionRepository'
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 
 type TrackStatProjection = {
     track: string

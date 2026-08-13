@@ -1,7 +1,7 @@
 import { type CarCategory, getCarCategory } from '~/utils/telemetryFormat'
 import { normalizeTrackId as normalizeTrackProjectionId } from '~/services/projections/trackMetadata'
 import { isSupportedTrackBestProjection } from '~/services/projections/trackBestProjectionGuard'
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 
 export const OVERVIEW_GRIP_PRIORITY = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
 export const OVERVIEW_GRIP_SCAN_ORDER = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']

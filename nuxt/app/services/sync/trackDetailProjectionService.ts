@@ -6,9 +6,9 @@ import {
   formatLapTime,
   getCarCategory,
   getSessionTypeLabel,
-  type CarCategory,
-  type SessionDocument
-} from '~/composables/useTelemetryData'
+  type CarCategory
+} from '~/utils/telemetryFormat'
+import type { SessionDocument } from '~/types/telemetry'
 import { normalizeTrackId } from '~/services/projections/trackMetadata'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import {

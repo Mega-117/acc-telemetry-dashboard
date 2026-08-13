@@ -1,7 +1,7 @@
 import { rebuildTrackBestsProjection, writeUserProjectionDocuments } from './projectionRebuildService'
 import { applyTrackBestsProjectionDeltas, type TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { applyUserProjectionDeltas, type UserProjectionDelta } from './syncUserProjectionDeltaService'
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 
 export async function refreshSyncProjections(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type

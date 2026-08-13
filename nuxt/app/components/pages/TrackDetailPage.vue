@@ -19,7 +19,7 @@ import {
 import {
   CAR_CATEGORIES,
   type CarCategory
-} from '~/composables/useTelemetryData'
+} from '~/utils/telemetryFormat'
 import { usePilotContext } from '~/composables/usePilotContext'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'

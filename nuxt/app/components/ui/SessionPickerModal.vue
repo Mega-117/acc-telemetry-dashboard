@@ -5,9 +5,9 @@ import {
   formatLapTime,
   formatTime,
   formatCarName,
-  getSessionTypeLabel,
-  type SessionDocument
-} from '~/composables/useTelemetryData'
+  getSessionTypeLabel
+} from '~/utils/telemetryFormat'
+import type { SessionDocument } from '~/types/telemetry'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 

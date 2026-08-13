@@ -3,7 +3,8 @@
 // Runs on page load in dev mode, logs results to console
 // ============================================
 
-import { type FullSession, type StintData, type LapData, formatLapTime } from './useTelemetryData'
+import { formatLapTime } from '~/utils/telemetryFormat'
+import type { FullSession, LapData, StintData } from '~/types/telemetry'
 
 // === TYPES ===
 

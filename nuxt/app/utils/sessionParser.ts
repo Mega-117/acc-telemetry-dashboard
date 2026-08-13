@@ -5,7 +5,7 @@
 // This module consumes the canonical summary when present and only keeps a
 // compatibility fallback for legacy payloads that have not been reprocessed yet.
 
-import type { SessionMeta, SessionSummary } from '~/composables/useTelemetryData'
+import type { SessionMeta, SessionSummary } from '~/types/telemetry'
 import {
   RACE_FUEL_BUCKETS,
   classifyHistoricalEligibility,

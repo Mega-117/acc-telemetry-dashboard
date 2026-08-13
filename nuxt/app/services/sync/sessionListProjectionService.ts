@@ -1,6 +1,7 @@
 import { doc } from 'firebase/firestore'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
-import { getCarCategory, type CarCategory, type SessionDocument } from '~/composables/useTelemetryData'
+import { getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
+import type { SessionDocument } from '~/types/telemetry'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 
 export const SESSION_LIST_PROJECTION_SCHEMA_VERSION = 1

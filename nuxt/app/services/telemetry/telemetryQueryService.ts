@@ -1,4 +1,4 @@
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 import { normalizeTrackKey } from './telemetryMergeService'
 
 export function selectTrackSessions(sessions: SessionDocument[], trackId: string): SessionDocument[] {

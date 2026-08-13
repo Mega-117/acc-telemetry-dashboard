@@ -9,7 +9,7 @@ import {
 } from '~/services/gateway/activityProjectionBuilders'
 import { buildRecentActivityBuckets } from '~/services/telemetry/activityProjectionService'
 import type { OverviewProjection } from '~/types/overviewProjections'
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers

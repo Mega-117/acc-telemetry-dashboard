@@ -1,5 +1,5 @@
 import { collection, doc, limit, orderBy, query, where } from 'firebase/firestore'
-import type { FullSession, SessionDocument } from '~/composables/useTelemetryData'
+import type { FullSession, SessionDocument } from '~/types/telemetry'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 
 export async function loadCloudSessionsBounded(params: {

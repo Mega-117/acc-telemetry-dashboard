@@ -1,5 +1,5 @@
 import { SESSION_TYPES } from '~/utils/telemetryFormat'
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 import type { OverviewProjection } from '~/types/overviewProjections'
 import {
     buildRecentActivityBuckets,

@@ -10,49 +10,14 @@ import {
     parseTelemetryDate, formatLocalDateKey,
 } from '~/utils/telemetryFormat'
 import {
-    type GripBestTimes,
-    type TheoreticalTimes,
-} from '~/services/telemetry/theoreticalTimesCalculator'
-import {
     buildActivityWindowFromSessions,
     getTrackActivityTotalsFromSessions,
     getHistoricalBestTimesFromSessions
 } from '~/services/telemetry/activityProjectionService'
 import { useSessionLoader } from '~/composables/useSessionLoader'
-import type { SessionDocument } from '~/composables/useSessionLoader'
 import { useTrackBests } from '~/composables/useTrackBests'
 import { useSessionSharing } from '~/composables/useSessionSharing'
-
-// Re-export per backwards compatibility — importare direttamente da ~/utils/telemetryFormat
-export {
-    CAR_CATEGORIES, SESSION_TYPES,
-    type CarCategory, type SessionType,
-    MAX_REASONABLE_LAP_MS,
-    getCarCategory, getSessionTypeLabel, getSessionTypeDisplay,
-    formatLapTime, formatDriveTime, formatCarName, formatTrackName,
-    formatDate, formatDateFull, formatTime,
-    parseTelemetryDate, formatLocalDateKey,
-} from '~/utils/telemetryFormat'
-
-// Re-export types from extracted modules for backward compatibility
-export type { GripBestTimes, TheoreticalTimes } from '~/services/telemetry/theoreticalTimesCalculator'
-export {
-    dedupeCloudSessions,
-    mergeSessionLocalPreferred,
-    mergeSessionsDeterministic,
-} from '~/services/telemetry/sessionMergeLogic'
-
-// === TYPES (re-exported from useSessionLoader to maintain backward compatibility) ===
-export type {
-    LapData,
-    StintData,
-    SessionMeta,
-    SessionSummary,
-    SessionDocument,
-    FullSession,
-    LoadSessionsSourceMode,
-    LoadSessionsOptions,
-} from '~/composables/useSessionLoader'
+import type { SessionDocument } from '~/types/telemetry'
 
 // === COMPOSABLE ===
 

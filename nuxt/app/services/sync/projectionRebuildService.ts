@@ -4,7 +4,7 @@ import { buildUserStatsProjection } from './userStatsProjectionService'
 import { applyTrackBestsProjectionDeltas, type TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { writeTrackDetailProjectionDocuments } from './trackDetailProjectionService'
 import { writeSessionListProjectionDocuments } from './sessionListProjectionService'
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import { updatePilotDirectoryActivity } from '~/services/pilotDirectoryProjectionService'
 

@@ -1,4 +1,4 @@
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 
 export const USER_STATS_SCHEMA_VERSION = 1
 

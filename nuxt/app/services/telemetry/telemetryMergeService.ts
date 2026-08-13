@@ -1,4 +1,4 @@
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 
 export function normalizeTrackKey(track: string): string {
   return (track || '').toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')

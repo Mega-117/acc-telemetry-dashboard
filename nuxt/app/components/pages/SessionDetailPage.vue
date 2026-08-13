@@ -18,8 +18,8 @@ import {
   Filler
 } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom'
-import { 
-  useTelemetryData, 
+import { useTelemetryData } from '~/composables/useTelemetryData'
+import {
   formatLapTime,
   formatCarName,
   formatTrackName,
@@ -27,11 +27,9 @@ import {
   formatTime,
   getSessionTypeLabel,
   getCarCategory,
-  MAX_REASONABLE_LAP_MS,
-  type FullSession,
-  type StintData,
-  type LapData
-} from '~/composables/useTelemetryData'
+  MAX_REASONABLE_LAP_MS
+} from '~/utils/telemetryFormat'
+import type { FullSession, LapData, StintData } from '~/types/telemetry'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useCoachInsights } from '~/composables/useCoachInsights'
 import { runSessionValidation } from '~/composables/useDebugValidator'

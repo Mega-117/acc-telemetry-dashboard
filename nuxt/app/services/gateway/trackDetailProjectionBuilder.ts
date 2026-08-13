@@ -8,7 +8,7 @@ import {
 } from '~/utils/telemetryFormat'
 import { normalizeTrackId as normalizeTrackProjectionId, resolveTrackMetadata } from '~/services/projections/trackMetadata'
 import { isSupportedTrackBestProjection } from '~/services/projections/trackBestProjectionGuard'
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 import {
     type TrackActivityProjection,
     type TrackDetailProjection,

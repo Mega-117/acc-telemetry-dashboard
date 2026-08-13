@@ -7,7 +7,7 @@ import {
   trackedSetDoc,
   withFirebaseScenario
 } from '~/composables/useFirebaseTracker'
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 import { BEST_RULES_VERSION, extractMetadata } from '~/utils/sessionParser'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import { normalizeTrackId } from '~/services/projections/trackMetadata'

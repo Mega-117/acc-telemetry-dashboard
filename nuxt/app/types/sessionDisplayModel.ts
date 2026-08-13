@@ -1,4 +1,4 @@
-import type { SessionType } from '~/composables/useTelemetryData'
+import type { SessionType } from '~/utils/telemetryFormat'
 
 export interface SessionDisplayStint {
   number: number

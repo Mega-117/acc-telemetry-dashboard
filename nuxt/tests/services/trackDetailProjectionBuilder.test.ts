@@ -15,7 +15,7 @@ import {
     dedupeHistoricalPoints,
     buildTrackDetailFromProjectionDocument
 } from '~/services/gateway/trackDetailProjectionBuilder'
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 import type {
     TrackDetailProjectionDocument,
     TrackActivityProjection,

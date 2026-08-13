@@ -1,6 +1,6 @@
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { buildActivityProjectionFromEntries } from '~/services/telemetry/activityProjectionService'
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 
 export const SESSION_INDEX_SCHEMA_VERSION = 2
 export const SESSION_INDEX_MAX_ITEMS = 200

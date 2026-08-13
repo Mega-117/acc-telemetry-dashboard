@@ -1,4 +1,4 @@
-import type { FullSession } from '~/composables/useTelemetryData'
+import type { FullSession } from '~/types/telemetry'
 
 export function autoSelectComparisonStints(params: {
   primarySession: { stints: Array<{ number: number }> }

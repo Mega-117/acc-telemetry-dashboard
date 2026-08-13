@@ -1,5 +1,5 @@
 import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
-import type { FullSession, SessionDocument } from '~/composables/useTelemetryData'
+import type { FullSession, SessionDocument } from '~/types/telemetry'
 import { ensureLocalTelemetrySummariesCanonical } from '~/utils/localCanonicalSummary'
 
 export function isSessionFileCandidate(fileName: string, rawObj: any): boolean {

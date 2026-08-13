@@ -6,7 +6,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { doc, collection, query } from 'firebase/firestore'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { useTelemetryData, formatLapTime } from '~/composables/useTelemetryData'
+import { useTelemetryData } from '~/composables/useTelemetryData'
+import { formatLapTime } from '~/utils/telemetryFormat'
 import { trackedDeleteDoc, trackedGetDocs } from '~/composables/useFirebaseTracker'
 import { db } from '~/config/firebase'
 

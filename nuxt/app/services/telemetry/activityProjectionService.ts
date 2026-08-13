@@ -1,4 +1,4 @@
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 
 export type ActivitySessionTypes = { PRACTICE: number; QUALIFY: number; RACE: number }
 

@@ -1,5 +1,5 @@
-import type { SessionDocument } from '~/composables/useTelemetryData'
-import type { CarCategory } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
+import type { CarCategory } from '~/utils/telemetryFormat'
 import { RACE_FUEL_BUCKETS, getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 import type { TrackDetailProjection, TrackFuelBucketReference, TrackHistoricalPointProjection, TrackRecentSessionProjection } from '~/types/trackProjections'
 

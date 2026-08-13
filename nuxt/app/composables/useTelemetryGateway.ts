@@ -1,12 +1,9 @@
 import { computed, ref } from 'vue'
+import { useTelemetryData } from './useTelemetryData'
 import {
     CAR_CATEGORIES,
     SESSION_TYPES,
-    useTelemetryData,
-    type LoadSessionsSourceMode,
     type CarCategory,
-    type FullSession,
-    type SessionDocument,
     formatLapTime,
     formatDriveTime,
     formatCarName,
@@ -14,7 +11,8 @@ import {
     formatDate,
     getSessionTypeLabel,
     getCarCategory
-} from './useTelemetryData'
+} from '~/utils/telemetryFormat'
+import type { FullSession, LoadSessionsSourceMode, SessionDocument } from '~/types/telemetry'
 import { useSessionPager, type SessionPagerFilters } from './useSessionPager'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { buildTrackOverviewProjection } from '~/services/projections/buildTrackOverviewProjection'

@@ -1,5 +1,5 @@
 import { doc, serverTimestamp } from 'firebase/firestore'
-import { CAR_CATEGORIES, getCarCategory, type CarCategory } from '~/composables/useTelemetryData'
+import { CAR_CATEGORIES, getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
 import { normalizeTrackId } from '~/services/projections/trackMetadata'
 import { RACE_FUEL_BUCKETS, getRaceFuelBucket, type RaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'

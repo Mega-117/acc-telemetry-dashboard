@@ -1,4 +1,4 @@
-import type { FullSession } from '~/composables/useTelemetryData'
+import type { FullSession } from '~/types/telemetry'
 import { getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 import type { SessionDisplayModel, SessionDisplayLap, SessionDisplayStint } from '~/types/sessionDisplayModel'
 

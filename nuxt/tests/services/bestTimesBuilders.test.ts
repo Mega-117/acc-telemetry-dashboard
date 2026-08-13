@@ -11,7 +11,7 @@ import {
     mergePendingOverviewBestsByTrack,
     type TrackBestTimes
 } from '~/services/gateway/bestTimesBuilders'
-import type { SessionDocument } from '~/composables/useTelemetryData'
+import type { SessionDocument } from '~/types/telemetry'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers

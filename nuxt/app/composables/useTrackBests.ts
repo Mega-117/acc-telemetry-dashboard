@@ -19,7 +19,7 @@ import { RACE_FUEL_BUCKETS, getRaceFuelBucket } from '~/services/telemetry/raceF
 import { TRACK_BESTS_SCHEMA_VERSION } from '~/services/sync/trackBestsProjectionService'
 import { getTrackActivityTotalsFromSessions } from '~/services/telemetry/activityProjectionService'
 import { globalSessions } from '~/composables/useSessionLoader'
-import type { SessionDocument } from '~/composables/useSessionLoader'
+import type { SessionDocument } from '~/types/telemetry'
 
 const CALLER = 'TrackBests'
 async function getDoc(ref: DocumentReference) { return trackedGetDoc(ref, CALLER) }

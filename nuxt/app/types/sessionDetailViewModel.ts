@@ -1,4 +1,4 @@
-import type { FullSession } from '~/composables/useTelemetryData'
+import type { FullSession } from '~/types/telemetry'
 
 export interface SessionDetailViewModel {
   sessionId: string
