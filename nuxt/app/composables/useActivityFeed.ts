@@ -1,5 +1,4 @@
 import { ref, computed } from 'vue'
-import { getAuth } from 'firebase/auth'
 import {
   getFirestore,
   collection,
@@ -53,7 +52,6 @@ let unsubscribeSnapshot: (() => void) | null = null
 
 export function useActivityFeed() {
   const db = getFirestore()
-  const auth = getAuth()
 
   // Computed properties
   const unreadCount = computed(() => activities.value.filter(a => !a.isRead).length)

@@ -3,38 +3,61 @@
 // ============================================
 
 import { ref, computed } from 'vue'
-import { onAuthStateChanged, type User } from 'firebase/auth'
-import { auth } from '~/config/firebase'
-import {
-    loginWithEmail,
-    logoutCurrentUser,
-    refreshEmailVerificationState,
-    registerWithEmail,
-    resendCurrentVerificationEmail,
-    sendPasswordResetWithEmail,
-    translateAuthError
-} from '~/services/auth/authService'
+import type { User } from 'firebase/auth'
+import type { UserProfileDocument } from '~/services/auth/userProvisioningService'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
-import { clearLocalUserIdentity, saveLocalUserIdentity } from '~/services/auth/localIdentityBridge'
-import { ensureUserDocument, getUserProfile } from '~/services/auth/userProvisioningService'
+import {
+    clearLocalUserIdentity,
+    isSecondaryLocalRuntimeRenderer,
+    requestLocalRuntimeAttestation,
+    requiresLocalIdentityBridge,
+    saveLocalUserIdentity,
+    shouldObserveFirebaseAuth
+} from '~/services/auth/localIdentityBridge'
 
 const currentUser = ref<User | null>(null)
 const userRole = ref<string>('pilot')
 const firestoreNickname = ref<string>('')
 const isLoading = ref(true)
 const authError = ref<string | null>(null)
-const userProfileCache = new Map<string, any | null>()
-const userProfileRequests = new Map<string, Promise<any | null>>()
-const currentUserProfile = ref<any | null>(null)
+const isSecondaryLocalRuntime = ref(false)
+const isLocalRuntimeAttested = ref(false)
+type CachedUserProfile = UserProfileDocument
+const userProfileCache = new Map<string, CachedUserProfile | null>()
+const userProfileRequests = new Map<string, Promise<CachedUserProfile | null>>()
+const currentUserProfile = ref<CachedUserProfile | null>(null)
 
 let authListenerInitialized = false
+let authStateRevision = 0
+let observedAuthUid: string | null = null
+let authDependenciesPromise: ReturnType<typeof loadAuthDependencies> | null = null
+
+function loadAuthDependencies() {
+    return Promise.all([
+        import('firebase/auth'),
+        import('~/config/firebaseAuth'),
+        import('~/services/auth/authService'),
+        import('~/services/auth/userProvisioningService')
+    ]).then(([firebaseAuth, firebaseConfig, authService, userProvisioning]) => ({
+        ...firebaseAuth,
+        ...firebaseConfig,
+        ...authService,
+        ...userProvisioning
+    }))
+}
+
+function getAuthDependencies() {
+    authDependenciesPromise ||= loadAuthDependencies()
+    return authDependenciesPromise
+}
 
 function ownsLocalIdentityBridge(): boolean {
     if (typeof window === 'undefined') return true
-    return (window as any).electronAPI?.runtimeBootstrapRole !== 'owner'
+    return requiresLocalIdentityBridge()
 }
 
 async function reloadPersistedUser(user: User): Promise<User | null> {
+    const { auth, logoutCurrentUser } = await getAuthDependencies()
     try {
         await user.reload()
         await user.getIdToken(true)
@@ -47,17 +70,24 @@ async function reloadPersistedUser(user: User): Promise<User | null> {
     }
 }
 
-async function syncAuthenticatedUser(user: User): Promise<User | null> {
+async function syncAuthenticatedUser(
+    user: User,
+    isCurrentRevision: () => boolean = () => true,
+): Promise<User | null> {
+    const { ensureUserDocument, logoutCurrentUser } = await getAuthDependencies()
     const freshUser = await reloadPersistedUser(user)
 
     if (!freshUser) {
+        if (!isCurrentRevision()) return null
         await syncLoggedOutUser()
         return null
     }
+    if (!isCurrentRevision()) return null
 
     user = freshUser
 
     if (AUTH_EMAIL_VERIFICATION_REQUIRED && !user.emailVerified) {
+        if (!isCurrentRevision()) return null
         currentUserProfile.value = null
         userRole.value = 'pilot'
         firestoreNickname.value = user.displayName || user.email?.split('@')[0] || ''
@@ -67,9 +97,20 @@ async function syncAuthenticatedUser(user: User): Promise<User | null> {
 
     currentUserProfile.value = userProfileCache.get(user.uid) ?? null
     const ensured = await ensureUserDocument(user)
+    if (!isCurrentRevision()) return null
     userRole.value = ensured.role
     firestoreNickname.value = ensured.nickname
-    if (ownsLocalIdentityBridge()) await saveLocalUserIdentity(user)
+    if (ownsLocalIdentityBridge()) {
+        if (!isCurrentRevision()) return null
+        const saved = await saveLocalUserIdentity(user)
+        if (!isCurrentRevision()) return null
+        if (requiresLocalIdentityBridge() && !saved) {
+            console.error('[AUTH] Local runtime rejected identity; signing out fail-closed')
+            await logoutCurrentUser().catch(() => {})
+            await syncLoggedOutUser()
+            return null
+        }
+    }
     return user
 }
 
@@ -93,11 +134,15 @@ async function loadCachedUserProfile(uid: string, { force = false } = {}) {
         return userProfileRequests.get(uid)!
     }
 
-    const request = getUserProfile(uid)
+    const { getUserProfile } = await getAuthDependencies()
+    const request: Promise<CachedUserProfile | null> = getUserProfile(uid)
         .then((profile) => {
-            userProfileCache.set(uid, profile)
-            if (currentUser.value?.uid === uid) currentUserProfile.value = profile
-            return profile
+            const cachedProfile = profile && typeof profile === 'object'
+                ? profile as CachedUserProfile
+                : null
+            userProfileCache.set(uid, cachedProfile)
+            if (currentUser.value?.uid === uid) currentUserProfile.value = cachedProfile
+            return cachedProfile
         })
         .finally(() => {
             userProfileRequests.delete(uid)
@@ -111,7 +156,7 @@ async function refreshUserProfile(uid: string) {
     return loadCachedUserProfile(uid, { force: true })
 }
 
-function updateCachedUserProfile(uid: string, patch: Record<string, any>) {
+function updateCachedUserProfile(uid: string, patch: CachedUserProfile) {
     const nextProfile = {
         ...(userProfileCache.get(uid) || {}),
         ...patch
@@ -133,17 +178,62 @@ function clearCachedUserProfile(uid?: string) {
     currentUserProfile.value = null
 }
 
-function initAuthListener() {
+async function initAuthListener() {
     if (authListenerInitialized) return
 
     authListenerInitialized = true
+    isSecondaryLocalRuntime.value = isSecondaryLocalRuntimeRenderer()
+    if (!shouldObserveFirebaseAuth()) {
+        isLocalRuntimeAttested.value = await requestLocalRuntimeAttestation()
+        isLoading.value = false
+        if (!isLocalRuntimeAttested.value) {
+            console.error('[AUTH] Secondary local runtime denied by main-process attestation')
+        }
+        return
+    }
+    let authRuntime
+    try {
+        authRuntime = await getAuthDependencies()
+    } catch (error) {
+        isLoading.value = false
+        console.error('[AUTH] Firebase Auth initialization failed:', error)
+        return
+    }
+    const { auth, onAuthStateChanged } = authRuntime
     onAuthStateChanged(auth, async (user) => {
-        if (user) {
-            currentUser.value = await syncAuthenticatedUser(user)
-        } else {
+        const revision = ++authStateRevision
+        const previousObservedUid = observedAuthUid
+        observedAuthUid = user?.uid || null
+        const previousUid = currentUser.value?.uid || null
+        if (!user || previousUid !== user.uid) {
+            // Never keep the previous user's dashboard/settings visible while
+            // provisioning, switching account or revoking an expired session.
             currentUser.value = null
+        }
+
+        if (
+            ownsLocalIdentityBridge()
+            && previousObservedUid
+            && previousObservedUid !== observedAuthUid
+        ) {
+            // Revoke the previous core before provisioning another UID. Any
+            // older callback sees the revision change at its next await.
+            await clearLocalUserIdentity()
+            if (revision !== authStateRevision) return
+        }
+
+        let synchronizedUser: User | null = null
+        if (user) {
+            synchronizedUser = await syncAuthenticatedUser(
+                user,
+                () => revision === authStateRevision,
+            )
+        } else {
             await syncLoggedOutUser()
         }
+
+        if (revision !== authStateRevision) return
+        currentUser.value = synchronizedUser
 
         isLoading.value = false
         console.log('[AUTH] State changed:', user?.email ?? 'logged out', '| Role:', userRole.value)
@@ -172,6 +262,7 @@ export function useFirebaseAuth() {
         lastName: string = ''
     ) => {
         authError.value = null
+        const { registerWithEmail, translateAuthError } = await getAuthDependencies()
         try {
             const { user } = await registerWithEmail({ email, password, nickname, firstName, lastName })
             console.log('[AUTH] Registered:', email, 'Verification email sent')
@@ -186,6 +277,7 @@ export function useFirebaseAuth() {
 
     const login = async (email: string, password: string) => {
         authError.value = null
+        const { loginWithEmail, translateAuthError } = await getAuthDependencies()
         try {
             const { user } = await loginWithEmail(email, password)
             console.log('[AUTH] Logged in:', email)
@@ -199,6 +291,7 @@ export function useFirebaseAuth() {
     }
 
     const logout = async () => {
+        const { logoutCurrentUser } = await getAuthDependencies()
         try {
             await logoutCurrentUser()
             console.log('[AUTH] Logged out')
@@ -214,6 +307,7 @@ export function useFirebaseAuth() {
         if (!currentUser.value) {
             return { success: false, error: 'Utente non autenticato' }
         }
+        const { resendCurrentVerificationEmail, translateAuthError } = await getAuthDependencies()
         try {
             await resendCurrentVerificationEmail(currentUser.value)
             console.log('[AUTH] Verification email resent')
@@ -226,6 +320,7 @@ export function useFirebaseAuth() {
     }
 
     const resetPassword = async (email: string) => {
+        const { sendPasswordResetWithEmail, translateAuthError } = await getAuthDependencies()
         try {
             await sendPasswordResetWithEmail(email)
             return { success: true }
@@ -240,6 +335,7 @@ export function useFirebaseAuth() {
         if (!currentUser.value) {
             return { verified: false, error: 'Utente non autenticato' }
         }
+        const { refreshEmailVerificationState } = await getAuthDependencies()
         try {
             const refreshed = await refreshEmailVerificationState(currentUser.value)
             currentUser.value = refreshed.user
@@ -255,11 +351,13 @@ export function useFirebaseAuth() {
         }
     }
 
-    initAuthListener()
+    void initAuthListener()
 
     return {
         currentUser,
         isLoading,
+        isSecondaryLocalRuntime,
+        isLocalRuntimeAttested,
         authError,
         isAuthenticated,
         isEmailVerified,

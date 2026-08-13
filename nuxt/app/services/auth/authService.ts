@@ -7,7 +7,7 @@ import {
     updateProfile,
     type User
 } from 'firebase/auth'
-import { auth } from '~/config/firebase'
+import { auth } from '~/config/firebaseAuth'
 import { createInitialUserDocument } from './userProvisioningService'
 
 export function translateAuthError(code: string): string {

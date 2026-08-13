@@ -122,10 +122,26 @@ onMounted(async () => {
 const { 
   currentUser, 
   isLoading: authLoading, 
+  isSecondaryLocalRuntime,
+  isLocalRuntimeAttested,
   canEnterApp,
   needsEmailVerification,
   logout: firebaseLogout
 } = useFirebaseAuth()
+const isProtectedRuntimeRoute = computed(() => (
+  isTrainingOverlayIntent.value
+  || isHudOverlayRoute.value
+  || isStandaloneRuntimeRoute.value
+  || isStandaloneDevRoute.value
+))
+const canMountProtectedRuntime = computed(() => (
+  !authLoading.value
+  && (
+    isSecondaryLocalRuntime.value
+      ? isLocalRuntimeAttested.value
+      : canEnterApp.value
+  )
+))
 
 // === TELEMETRY DATA GATEWAY (single source of truth) ===
 const telemetryGateway = useTelemetryGateway()
@@ -363,7 +379,29 @@ provide('goToProfile', handleGoToProfile)
   <div id="app" :class="{ 'app--training-overlay': isTrainingOverlayIntent || isHudOverlayRoute || isStandaloneRuntimeRoute }">
     <UiAppNotifications v-if="!isTrainingOverlayIntent && !isHudOverlayRoute && !isStandaloneRuntimeRoute" />
 
-    <template v-if="isStandaloneRuntimeRoute">
+    <template v-if="isProtectedRuntimeRoute && isSecondaryLocalRuntime && !canMountProtectedRuntime">
+      <div class="initializing-screen" :aria-label="authLoading ? 'Attestazione runtime locale' : 'Runtime locale non autorizzato'">
+        <div class="initializing-content">
+          <div class="initializing-spinner"></div>
+        </div>
+      </div>
+    </template>
+
+    <template v-else-if="isProtectedRuntimeRoute && !canMountProtectedRuntime">
+      <div v-if="authLoading" class="initializing-screen" aria-label="Verifica sessione">
+        <div class="initializing-content">
+          <div class="initializing-spinner"></div>
+        </div>
+      </div>
+      <AuthOverlay
+        v-else
+        key="runtime-auth"
+        @login-success="handleLoginSuccess"
+        @register-success="handleRegisterSuccess"
+      />
+    </template>
+
+    <template v-else-if="isStandaloneRuntimeRoute">
       <NuxtPage />
     </template>
 

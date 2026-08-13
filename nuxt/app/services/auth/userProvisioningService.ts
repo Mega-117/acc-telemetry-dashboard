@@ -25,6 +25,12 @@ export interface EnsuredUserProfile {
     nickname: string
 }
 
+export interface UserProfileDocument extends Record<string, unknown> {
+    nickname?: string
+    displayName?: string
+    coachId?: string | null
+}
+
 function getDefaultNickname(user: Pick<User, 'displayName' | 'email'>) {
     return user.displayName || user.email?.split('@')[0] || 'Utente'
 }
@@ -186,11 +192,11 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
     }
 }
 
-export async function getUserProfile(uid: string) {
+export async function getUserProfile(uid: string): Promise<UserProfileDocument | null> {
     try {
         const docSnap = await getDocTracked(doc(db, 'users', uid))
         if (docSnap.exists()) {
-            return docSnap.data()
+            return docSnap.data() as UserProfileDocument
         }
         return null
     } catch (error) {

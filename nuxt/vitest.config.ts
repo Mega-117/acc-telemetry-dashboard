@@ -32,6 +32,7 @@ export default defineConfig({
         // ── Phase 1–2: services e utils ──────────────────────────────────
         'app/config/firebaseRuntimeTarget.ts',
         'app/services/auth/authService.ts',
+        'app/services/auth/localIdentityBridge.ts',
         'app/config/optimalShiftRpm.ts',
         'app/services/gateway/activityProjectionBuilders.ts',
         'app/services/gateway/bestTimesBuilders.ts',

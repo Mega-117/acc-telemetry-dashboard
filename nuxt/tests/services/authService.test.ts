@@ -13,7 +13,7 @@ vi.mock('firebase/auth', () => ({
   updateProfile: updateProfileMock
 }))
 
-vi.mock('~/config/firebase', () => ({ auth: {} }))
+vi.mock('~/config/firebaseAuth', () => ({ auth: {} }))
 vi.mock('~/services/auth/userProvisioningService', () => ({
   createInitialUserDocument: createInitialUserDocumentMock
 }))
