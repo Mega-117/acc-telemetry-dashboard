@@ -1,6 +1,6 @@
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
-export default defineNuxtRouteMiddleware(async (to, from) => {
+export default defineNuxtRouteMiddleware(async (to, _from) => {
     const { isCoach, isLoading, isAuthenticated } = useFirebaseAuth()
 
     // Wait for auth to initialize if loading

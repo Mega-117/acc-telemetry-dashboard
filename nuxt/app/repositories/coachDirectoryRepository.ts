@@ -24,17 +24,6 @@ export function clearCoachDirectoryCache(coachId?: string) {
   coachCache.clear()
 }
 
-function mapCoachDoc(docSnap: any): CoachDirectoryItem {
-  const data = docSnap.data() || {}
-  return {
-    uid: data.uid || docSnap.id,
-    firstName: data.firstName || '',
-    lastName: data.lastName || '',
-    nickname: data.nickname || 'Coach',
-    role: data.role || 'coach'
-  }
-}
-
 export function getCoachDisplayName(coach: CoachDirectoryItem | null | undefined): string {
   if (!coach) return ''
   if (coach.firstName && coach.lastName) return `${coach.firstName} ${coach.lastName}`

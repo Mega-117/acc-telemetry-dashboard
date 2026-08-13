@@ -35,7 +35,7 @@ export function useKokoroVoiceLabLifecycle() {
     cancelShutdown()
   }
 
-  function scheduleShutdown(reason = 'idle') {
+  function scheduleShutdown(_reason = 'idle') {
     if (isVoiceLabActive.value || isVoiceLabPathActive() || isWorking()) return
 
     cancelShutdown()

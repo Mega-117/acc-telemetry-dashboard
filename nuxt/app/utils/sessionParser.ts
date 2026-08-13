@@ -10,8 +10,7 @@ import {
   RACE_FUEL_BUCKETS,
   classifyHistoricalEligibility,
   classifyStintTypeFromFuel,
-  getRaceFuelBucket,
-  type HistoricalEligibility
+  getRaceFuelBucket
 } from '~/services/telemetry/raceFuelClassification'
 
 type BestConditions = { airTemp: number; roadTemp: number; grip: string }

@@ -1,12 +1,9 @@
 import { computed } from 'vue'
 
 import {
-    CAR_CATEGORIES, SESSION_TYPES,
-    type CarCategory, type SessionType,
-    MAX_REASONABLE_LAP_MS,
-    getCarCategory, getSessionTypeLabel, getSessionTypeDisplay,
-    formatLapTime, formatDriveTime, formatCarName, formatTrackName,
-    formatDate, formatDateFull, formatTime,
+    CAR_CATEGORIES,
+    type CarCategory,
+    formatDriveTime,
     parseTelemetryDate, formatLocalDateKey,
 } from '~/utils/telemetryFormat'
 import {

@@ -17,14 +17,14 @@ import { playAudioWithWatchdog } from '~/services/audio/audioPlayback'
  * @param getPublicPath - Resolves a relative asset path to an absolute public URL.
  * @param selectedVoiceId - Returns the currently selected voice pack id.
  * @param isSoundEnabled - Returns whether audio feedback is enabled.
- * @param selectedTrainingId - Returns the active training overlay id (used to scope notifications).
+ * @param _selectedTrainingId - Reserved positional callback for the training overlay contract.
  * @returns Object with soundEnabled ref, enqueueVoice, stopVoice, primeStepAudio, playStepDoneSound functions.
  */
 export function useQualifyingVoice(
   getPublicPath: (p: string) => string,
   selectedVoiceId: () => QualifyingVoiceId,
   isSoundEnabled: () => boolean,
-  selectedTrainingId: () => string,
+  _selectedTrainingId: () => string,
 ) {
   let audio: HTMLAudioElement | null = null
   let queue = Promise.resolve()

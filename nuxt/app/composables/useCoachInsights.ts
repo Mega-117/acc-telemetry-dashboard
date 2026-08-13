@@ -213,8 +213,6 @@ export function useCoachInsights() {
     let validLaps = 0
     let bestLapMs = Infinity
     let avgLapMsSum = 0
-    let stintsCount = session.stints.length
-
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     session.stints.forEach((stint: any) => {
       const laps = stint.laps || []

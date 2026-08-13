@@ -31,12 +31,9 @@ export function createSyncMaintenanceService(params: {
   const {
     electronAPI,
     updateSuiteVersion,
-    canonicalizeSummary,
     getDocsFn,
-    setDocFn,
     deleteDocFn,
     db,
-    bestRulesVersion,
     syncedFilesRetentionDays
   } = params
 

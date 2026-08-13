@@ -1,8 +1,6 @@
 import { computed, ref } from 'vue'
 import { useTelemetryData } from './useTelemetryData'
 import {
-    CAR_CATEGORIES,
-    SESSION_TYPES,
     type CarCategory,
     formatLapTime,
     formatDriveTime,
@@ -18,16 +16,12 @@ import { useFirebaseAuth } from './useFirebaseAuth'
 import { buildTrackOverviewProjection } from '~/services/projections/buildTrackOverviewProjection'
 import { buildTrackDetailProjection } from '~/services/projections/buildTrackDetailProjection'
 import { buildOverviewProjection } from '~/services/projections/buildOverviewProjection'
-import { TRACK_METADATA, normalizeTrackId as normalizeTrackProjectionId, resolveTrackMetadata } from '~/services/projections/trackMetadata'
+import { TRACK_METADATA, resolveTrackMetadata } from '~/services/projections/trackMetadata'
 import {
     TRACK_DETAIL_PROJECTION_SCHEMA_VERSION,
-    type TrackActivityProjection,
     type TrackDetailProjection,
     type TrackDetailProjectionDocument,
-    type TrackFuelBucketReference,
-    type TrackHistoricalPointProjection,
-    type TrackOverviewProjectionItem,
-    type TrackRecentSessionProjection
+    type TrackOverviewProjectionItem
 } from '~/types/trackProjections'
 import type { OverviewProjection } from '~/types/overviewProjections'
 import { loadSessionDetailViewModel } from '~/services/session-detail/loadSessionDetailViewModel'
@@ -38,15 +32,8 @@ import {
     loadTrackBest,
     loadTrackBestsMap,
     loadTrackDetailProjectionDoc,
-    loadUserProjection,
-    type UserProjectionDocument
+    loadUserProjection
 } from '~/repositories/telemetryProjectionRepository'
-import {
-    buildRecentActivityBuckets,
-    getActivityBucketForSessionType,
-    getRecentActivityDateKeys,
-    getTelemetryActivityDateKey
-} from '~/services/telemetry/activityProjectionService'
 import {
     normalizeTrackKey,
     trackMatches,
@@ -55,15 +42,9 @@ import {
     mergePendingTrackStats
 } from '~/services/gateway/gatewayHelpers'
 import {
-    OVERVIEW_GRIP_PRIORITY,
-    OVERVIEW_GRIP_SCAN_ORDER,
     type TrackBestTimes,
-    type TrackBestTimeField,
-    buildBestTimesFromTrackBestDoc,
-    updateBestTimeWithGrip,
     buildOverviewBestTimesFromTrackBestDoc,
     buildTrackBestsMapFromDocs,
-    updateBestTime,
     mergePendingBestsByTrack,
     mergePendingOverviewBestsByTrack
 } from '~/services/gateway/bestTimesBuilders'
@@ -77,17 +58,6 @@ import {
 } from '~/services/gateway/activityProjectionBuilders'
 import {
     getNewestSessionEntry,
-    normalizeActivity,
-    buildRecentSessionProjection,
-    buildHistoricalPointProjection,
-    buildActivityFromSessions,
-    buildPendingGripBest,
-    mergeGripBest,
-    getRaceFuelBucket,
-    normalizeTrackFuelBucketRecord,
-    buildRaceFuelBucketReferences,
-    dedupeRecentSessions,
-    dedupeHistoricalPoints,
     buildTrackDetailFromProjectionDocument
 } from '~/services/gateway/trackDetailProjectionBuilder'
 
@@ -136,16 +106,6 @@ export interface TrackSnapshot {
     sessions: SessionDocument[]
     trackStat: ReturnType<typeof useTelemetryData>['trackStats']['value'][number] | null
     bestsByGrip: Record<string, any>
-}
-
-type TrackStatProjection = {
-    track: string
-    sessions: number
-    lastSession?: string | null
-    bestQualy?: number | null
-    bestRace?: number | null
-    bestAvgRace?: number | null
-    bestByGrip?: Record<string, { bestQualy?: number | null; bestRace?: number | null }>
 }
 
 const MAX_DIAGNOSTICS = 300

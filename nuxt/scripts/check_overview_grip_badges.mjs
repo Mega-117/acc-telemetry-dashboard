@@ -13,6 +13,7 @@ function read(relativePath) {
 
 const types = read('nuxt/app/types/overviewProjections.ts')
 const gateway = read('nuxt/app/composables/useTelemetryGateway.ts')
+const bestTimesBuilders = read('nuxt/app/services/gateway/bestTimesBuilders.ts')
 const builder = read('nuxt/app/services/projections/buildOverviewProjection.ts')
 const card = read('nuxt/app/components/cards/TrackPerformanceCard.vue')
 const page = read('nuxt/app/components/pages/PanoramicaPage.vue')
@@ -25,11 +26,16 @@ for (const field of ['bestQualyGrip', 'bestRaceGrip', 'bestAvgRaceGrip']) {
 for (const token of [
   'OVERVIEW_GRIP_PRIORITY',
   'OVERVIEW_GRIP_SCAN_ORDER',
-  'buildOverviewBestTimesFromTrackBestDoc',
-  'mergePendingOverviewBestsByTrack',
   'updateBestTimeWithGrip'
 ]) {
-  assert.ok(gateway.includes(token), `useTelemetryGateway missing overview grip token: ${token}`)
+  assert.ok(bestTimesBuilders.includes(token), `bestTimesBuilders missing overview grip primitive: ${token}`)
+}
+
+for (const token of [
+  'buildOverviewBestTimesFromTrackBestDoc',
+  'mergePendingOverviewBestsByTrack'
+]) {
+  assert.ok(gateway.includes(token), `useTelemetryGateway missing overview grip wiring: ${token}`)
 }
 
 assert.ok(

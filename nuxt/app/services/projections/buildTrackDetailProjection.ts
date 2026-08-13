@@ -92,7 +92,7 @@ export function buildTrackDetailProjection(params: {
     .map((session) => {
       const summary = session.summary as any
       const dateStr = session.meta.date_start?.split('T')[0] || ''
-      const [_, month, day] = dateStr.split('-')
+      const [, month, day] = dateStr.split('-')
       const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
       const dateLabel = day && month ? `${parseInt(day, 10)} ${months[parseInt(month, 10) - 1] || 'N/A'}` : 'N/A'
 

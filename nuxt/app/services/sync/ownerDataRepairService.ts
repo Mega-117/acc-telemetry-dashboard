@@ -409,9 +409,8 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
       issues.push(issue('error', 'track_detail_projection_denied', error?.message || 'Permessi insufficienti su trackDetailProjections.'))
     }
     try {
-      const pilotDirectorySnap = await getDocTracked(doc(db, `pilotDirectory/${uid}`))
-    const pilotDirectory = pilotDirectorySnap.exists() ? (pilotDirectorySnap.data() || {}) : {}
-    const sessionListMetaSnap = await getDocTracked(doc(db, `users/${uid}/sessionListMeta/v1`))
+      await getDocTracked(doc(db, `pilotDirectory/${uid}`))
+      const sessionListMetaSnap = await getDocTracked(doc(db, `users/${uid}/sessionListMeta/v1`))
       const sessionListMeta = sessionListMetaSnap.exists() ? (sessionListMetaSnap.data() || {}) : {}
       sessionListSchemaVersion = Number(sessionListMeta.schemaVersion || 0)
       sessionListTotalSessions = Number(sessionListMeta.totalSessions || 0)

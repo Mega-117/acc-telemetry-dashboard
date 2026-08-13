@@ -107,7 +107,7 @@ export function useTrackBests() {
 
     async function calculateAllBestTimesForTrack(
         trackId: string,
-        userId?: string
+        _userId?: string
     ): Promise<{ bests: CategoryBests; lastSessionDate: string | null }> {
         const trackIdNorm = trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
         const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
@@ -416,7 +416,7 @@ export function useTrackBests() {
             try {
                 sessionStorage.removeItem('acc_trackBests_cache')
                 sessionStorage.removeItem('acc_trackActivity_cache')
-            } catch (e) {
+            } catch {
                 // Ignore storage errors
             }
 

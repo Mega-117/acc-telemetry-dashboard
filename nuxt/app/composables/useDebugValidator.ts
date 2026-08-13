@@ -4,7 +4,7 @@
 // ============================================
 
 import { formatLapTime } from '~/utils/telemetryFormat'
-import type { FullSession, LapData, StintData } from '~/types/telemetry'
+import type { FullSession } from '~/types/telemetry'
 
 // === TYPES ===
 
@@ -40,14 +40,6 @@ function formatValue(value: any): string {
         return JSON.stringify(value).slice(0, 100)
     }
     return String(value)
-}
-
-function isValidNumber(value: any): boolean {
-    return typeof value === 'number' && !Number.isNaN(value) && Number.isFinite(value)
-}
-
-function approxEqual(a: number, b: number, tolerance: number = 1): boolean {
-    return Math.abs(a - b) <= tolerance
 }
 
 // === TEST FUNCTIONS ===
@@ -180,7 +172,6 @@ export function validateSessionDetail(
     // === TEST 7: Session type consistency ===
     const sessionType = fs.session_info.session_type
     const hasQualyStints = fs.stints.some(s => s.type === 'Qualify')
-    const hasRaceStints = fs.stints.some(s => s.type === 'Race')
 
     if (sessionType === 1) { // Qualify-only session
         results.push({
@@ -234,7 +225,6 @@ export function validateTrackDetail(
 
     // === TEST 2: Activity totals are sums ===
     const calculatedTotalLaps = trackSessions.reduce((sum, s) => sum + ((s.summary as any)?.laps || 0), 0)
-    const calculatedValidLaps = trackSessions.reduce((sum, s) => sum + ((s.summary as any)?.lapsValid || 0), 0)
 
     results.push({
         name: 'Activity: Total Laps Sum',

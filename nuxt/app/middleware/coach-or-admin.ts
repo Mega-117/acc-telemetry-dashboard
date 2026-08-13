@@ -1,7 +1,7 @@
 // Middleware for coach OR admin access
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
-export default defineNuxtRouteMiddleware(async (to, from) => {
+export default defineNuxtRouteMiddleware(async () => {
     const { isAuthenticated, userRole, isLoading } = useFirebaseAuth()
 
     // Wait for auth to load
