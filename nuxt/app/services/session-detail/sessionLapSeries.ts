@@ -1,43 +1,19 @@
 import { timeToSeconds } from '~/services/session-detail/sessionMath'
+import type {
+  LapSeriesSource,
+  LapSeriesSummary,
+  NormalizedLapPoint,
+  SessionDetailLap
+} from '~/types/sessionDetailViewModel'
 
-export type LapSeriesSource = 'a' | 'b'
+export type { LapSeriesSource, LapSeriesSummary, NormalizedLapPoint } from '~/types/sessionDetailViewModel'
 
-export type NormalizedLapPoint = {
-  raw: Record<string, any>
-  source: LapSeriesSource
-  strategy: 'A' | 'B'
-  stintNumber: number
-  stintLapNumber: number
-  sessionLapNumber: number
-  displayIndex: number
-  chartIndex: number
-  exclusionKey: string
-  time: string
-  timeSeconds: number
-  valid: boolean
-  pit: boolean
-  fuel: number | null
-  air: number | null
-  grip: string
-  isStintStart: boolean
-  stintIndex: number
-}
-
-export type LapSeriesSummary = {
-  laps: number
-  validLapsCount: number
-  bestMs: number | null
-  avgMs: number | null
-  avgWarning: boolean
-  durationMs: number
-}
-
-export function getLapNumber(lap: Record<string, any>, fallbackIndex: number): number {
+export function getLapNumber(lap: SessionDetailLap, fallbackIndex: number): number {
   const value = Number(lap.lap ?? lap.lapNumber ?? lap.lap_number ?? lap.number)
   return Number.isFinite(value) && value > 0 ? value : fallbackIndex + 1
 }
 
-export function getLapTimeLabel(lap: Record<string, any>): string {
+export function getLapTimeLabel(lap: SessionDetailLap): string {
   return String(lap.time ?? lap.lapTime ?? '')
 }
 
@@ -52,7 +28,7 @@ export function buildLapExclusionKey(params: {
 }
 
 export function normalizeLapSeries(params: {
-  laps: Record<string, any>[]
+  laps: SessionDetailLap[]
   source: LapSeriesSource
   strategy: 'A' | 'B'
   stintNumber: number
@@ -67,8 +43,8 @@ export function normalizeLapSeries(params: {
     const sessionLapNumber = Number(lap.sessionLapNumber ?? lap._sessionLapNumber ?? stintLapNumber)
     const displayIndex = displayStart + index + 1
     const time = getLapTimeLabel(lap)
-    const air = Number(lap.airTemp ?? lap.air)
-    const fuel = Number(lap.fuel)
+    const air = Number(lap.airTemp ?? lap.air ?? lap.air_temp ?? lap.temp)
+    const fuel = Number(lap.fuel ?? lap.fuel_remaining)
 
     return {
       raw: lap,
@@ -86,11 +62,11 @@ export function normalizeLapSeries(params: {
       }),
       time,
       timeSeconds: timeToSeconds(time),
-      valid: Boolean(lap.valid),
-      pit: Boolean(lap.pit),
+      valid: Boolean(lap.valid ?? lap.is_valid),
+      pit: Boolean(lap.pit ?? lap.has_pit_stop),
       fuel: Number.isFinite(fuel) ? fuel : null,
       air: Number.isFinite(air) ? air : null,
-      grip: String(lap.grip ?? 'Unknown'),
+      grip: String(lap.grip ?? lap.grip_level ?? lap.track_grip_status ?? 'Unknown'),
       isStintStart: index === 0 || Boolean(lap._isStintStart),
       stintIndex
     }
@@ -99,7 +75,7 @@ export function normalizeLapSeries(params: {
 
 export function normalizeStrategyLapSeries(params: {
   stints: Array<{ number: number }>
-  getLaps: (stintNumber: number, stintIndex: number) => Record<string, any>[]
+  getLaps: (stintNumber: number, stintIndex: number) => SessionDetailLap[]
   source: LapSeriesSource
   strategy: 'A' | 'B'
 }): NormalizedLapPoint[] {

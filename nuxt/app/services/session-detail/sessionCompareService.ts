@@ -1,4 +1,8 @@
-import type { FullSession } from '~/types/telemetry'
+import type { FullSession, LapData, StintData } from '~/types/telemetry'
+
+function isValidComparisonLap(lap: LapData): boolean {
+  return lap.is_valid && !lap.has_pit_stop
+}
 
 export function autoSelectComparisonStints(params: {
   primarySession: { stints: Array<{ number: number }> }
@@ -17,12 +21,12 @@ export function autoSelectComparisonStints(params: {
   let bestSecondaryStint: number | null = null
   let bestSecondaryLapMs: number | null = null
 
-  stints.forEach((stint: any) => {
-    const validLaps = (stint.laps || []).filter((lap: any) => lap.is_valid && !lap.has_pit_stop)
+  stints.forEach((stint: StintData) => {
+    const validLaps = (stint.laps || []).filter(isValidComparisonLap)
     if (validLaps.length === 0) return
-    const bestMs = Math.min(...validLaps.map((lap: any) => lap.lap_time_ms))
+    const bestMs = Math.min(...validLaps.map((lap: LapData) => lap.lap_time_ms))
     const isRace = stint.type !== 'Qualify'
-    const currentIsRace = bestSecondaryStint !== null && stints.find((item: any) => item.stint_number === bestSecondaryStint)?.type !== 'Qualify'
+    const currentIsRace = bestSecondaryStint !== null && stints.find((item: StintData) => item.stint_number === bestSecondaryStint)?.type !== 'Qualify'
 
     if (bestSecondaryLapMs === null || (isRace && !currentIsRace) || (isRace === currentIsRace && bestMs < bestSecondaryLapMs)) {
       bestSecondaryLapMs = bestMs

@@ -1,10 +1,27 @@
 import type { FullSession } from '~/types/telemetry'
+import type { SessionDetailUserIdentity } from '~/types/sessionDetailViewModel'
+
+function getErrorDetails(error: unknown): { code?: string; message?: string } {
+  if (!error || typeof error !== 'object') return {}
+  const record = error as Record<string, unknown>
+  return {
+    code: typeof record.code === 'string' ? record.code : undefined,
+    message: typeof record.message === 'string' ? record.message : undefined
+  }
+}
+
+export function getSessionDetailLoadError(error: unknown): string {
+  const details = getErrorDetails(error)
+  return details.code === 'permission-denied'
+    ? 'Sessione non condivisa o accesso negato'
+    : (details.message || 'Errore caricamento')
+}
 
 export async function loadSessionDetailViewModel(params: {
   sessionId: string
   externalUserId?: string
   targetUserId?: string | null
-  currentUser: { value: any }
+  currentUser: { value: SessionDetailUserIdentity | null | undefined }
   currentUserDisplayName?: string
   telemetryGateway: {
     getSessionDetail: (sessionId: string, targetUserId?: string, options?: { isCoachAccess?: boolean; warmupSessions?: boolean }) => Promise<FullSession | null>
@@ -37,13 +54,11 @@ export async function loadSessionDetailViewModel(params: {
       loadError: null,
       userIdToLoad
     }
-  } catch (e: any) {
+  } catch (error: unknown) {
     return {
       fullSession: null,
       currentUserNickname,
-      loadError: e.code === 'permission-denied'
-        ? 'Sessione non condivisa o accesso negato'
-        : (e.message || 'Errore caricamento'),
+      loadError: getSessionDetailLoadError(error),
       userIdToLoad
     }
   }

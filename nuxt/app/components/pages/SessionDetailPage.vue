@@ -15,7 +15,11 @@ import {
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
+  type ChartDataset,
+  type LegendItem,
+  type ScriptableLineSegmentContext,
+  type TooltipItem
 } from 'chart.js'
 import zoomPlugin from 'chartjs-plugin-zoom'
 import { useTelemetryData } from '~/composables/useTelemetryData'
@@ -36,7 +40,13 @@ import { runSessionValidation } from '~/composables/useDebugValidator'
 import { usePilotContext } from '~/composables/usePilotContext'
 import { shareSessionLink } from '~/services/session-detail/sessionShareService'
 import { autoSelectComparisonStints } from '~/services/session-detail/sessionCompareService'
-import { buildBestSectorSummary, buildComparisonRows } from '~/services/session-detail/sessionComparisonTableService'
+import { getSessionDetailLoadError } from '~/services/session-detail/loadSessionDetailViewModel'
+import {
+  buildBestSectorSummary,
+  buildComparisonRows,
+  buildSessionDetailLaps,
+  buildSessionDetailStint
+} from '~/services/session-detail/sessionComparisonTableService'
 import { timeToSeconds, secondsToTime } from '~/services/session-detail/sessionMath'
 import { buildSessionDisplayModel } from '~/services/session-detail/buildSessionDisplayModel'
 import {
@@ -54,6 +64,7 @@ import type {
   TheoreticalReferenceDetails,
   TheoreticalReferenceSource
 } from '~/services/telemetry/theoreticalTimesCalculator'
+import type { SessionDetailLap, SessionDetailStint } from '~/types/sessionDetailViewModel'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
@@ -74,7 +85,10 @@ const excludedLaps = ref<Set<string>>(new Set())
 const excludedLapsB = ref<Set<string>>(new Set()) // For Stint B in compare mode
 const excludedLapsCrossB = ref<Set<string>>(new Set()) // For Session B in cross-session mode
 const showLapManager = ref(false)
-const chartRef = ref<any>(null)
+type SessionChartRef = { chart?: ChartJS<'line'> }
+type SessionChartDataset = ChartDataset<'line', Array<number | null>> & { _points?: NormalizedLapPoint[] }
+
+const chartRef = ref<SessionChartRef | null>(null)
 
 // Layout mode for Stint Stats Card (1-5 variants)
 const stintLayoutMode = ref<1 | 2 | 3 | 4 | 5>(1)
@@ -233,11 +247,9 @@ onMounted(async () => {
         props.externalUserId ? '(SHARED)' : ''
       )
     }
-  } catch (e: any) {
-    console.error('[SESSION_DETAIL] Load error:', e)
-    loadError.value = e.code === 'permission-denied' 
-      ? 'Sessione non condivisa o accesso negato'
-      : (e.message || 'Errore caricamento')
+  } catch (error: unknown) {
+    console.error('[SESSION_DETAIL] Load error:', error)
+    loadError.value = getSessionDetailLoadError(error)
   } finally {
     isLoading.value = false
     
@@ -329,14 +341,14 @@ function autoSelectBestStints(sessionBData: FullSession): void {
   let s2BestStintNum: number | null = null
   let s2BestLapMs: number | null = null
   
-  s2Stints.forEach((stint: any) => {
-    const validLaps = (stint.laps || []).filter((l: any) => l.is_valid && !l.has_pit_stop)
+  s2Stints.forEach((stint: StintData) => {
+    const validLaps = (stint.laps || []).filter((lap: LapData) => lap.is_valid && !lap.has_pit_stop)
     if (validLaps.length === 0) return
-    const bestMs = Math.min(...validLaps.map((l: any) => l.lap_time_ms))
+    const bestMs = Math.min(...validLaps.map((lap: LapData) => lap.lap_time_ms))
     
     // Prefer Race stints over Qualify
     const isRace = stint.type !== 'Qualify'
-    const currentIsRace = s2BestStintNum !== null && s2Stints.find((s: any) => s.stint_number === s2BestStintNum)?.type !== 'Qualify'
+    const currentIsRace = s2BestStintNum !== null && s2Stints.find((stint: StintData) => stint.stint_number === s2BestStintNum)?.type !== 'Qualify'
     
     if (s2BestLapMs === null || (isRace && !currentIsRace) || (isRace === currentIsRace && bestMs < s2BestLapMs)) {
       s2BestLapMs = bestMs
@@ -418,18 +430,8 @@ const stintBSecondSource = ref<'a' | 'b'>('b')
 // Computed: stints from Session B formatted for display
 const crossSessionStints = computed(() => {
   if (!crossSessionData.value) return []
-  
-  const stints = crossSessionData.value.stints || []
-  return stints.map((stint: any) => ({
-    number: stint.stint_number,
-    type: stint.type === 'Qualify' ? 'Q' : stint.type === 'Race' ? 'R' : 'P',
-    laps: stint.laps?.length || 0,
-    best: stint.laps?.reduce((min: number | null, lap: any) => {
-      if (!lap.is_valid || lap.has_pit_stop) return min
-      return min === null ? lap.lap_time_ms : Math.min(min, lap.lap_time_ms)
-    }, null),
-    avgCleanLap: stint.avg_clean_lap
-  }))
+
+  return crossSessionData.value.stints.map((stint) => buildSessionDetailStint(stint, formatLapTime))
 })
 
 // Cross-session compare mode is active when both stints are selected
@@ -459,49 +461,23 @@ const isStrategyMode = computed(() =>
 )
 
 // Helper: get stints array for a given source
-function getStintsForSource(source: 'a' | 'b') {
+function getStintsForSource(source: 'a' | 'b'): SessionDetailStint[] {
   if (source === 'a') return session.value.stints
   // Source 'b': cross-session data
   if (!crossSessionData.value) return session.value.stints
-  return (crossSessionData.value.stints || []).map((s: any) => ({
-    number: s.stint_number,
-    type: s.type === 'Qualify' ? 'Q' : s.type === 'Race' ? 'R' : 'P',
-    laps: s.laps?.length || 0,
-    best: formatLapTime(s.laps?.reduce((min: number | null, lap: any) => {
-      if (!lap.is_valid || lap.has_pit_stop) return min
-      return min === null ? lap.lap_time_ms : Math.min(min, lap.lap_time_ms)
-    }, null)),
-    bestMs: s.laps?.reduce((min: number | null, lap: any) => {
-      if (!lap.is_valid || lap.has_pit_stop) return min
-      return min === null ? lap.lap_time_ms : Math.min(min, lap.lap_time_ms)
-    }, null),
-    avg: formatLapTime(s.avg_clean_lap),
-    avgMs: s.avg_clean_lap,
-    avgWarning: (s.laps?.filter((l: any) => l.is_valid && !l.has_pit_stop).length || 0) < 5,
-    validLapsCount: s.laps?.filter((l: any) => l.is_valid && !l.has_pit_stop).length || 0,
-    durationMs: s.stint_drive_time_ms || s.laps?.reduce((sum: number, lap: any) => sum + (lap.lap_time_ms || 0), 0) || 0
-  }))
+  return crossSessionData.value.stints.map((stint) => buildSessionDetailStint(stint, formatLapTime))
 }
 
 // Helper: get laps data for a given source and stint number
-function getLapsForSource(source: 'a' | 'b', stintNum: number): any[] {
+function getLapsForSource(source: 'a' | 'b', stintNum: number): SessionDetailLap[] {
   if (source === 'a') {
     return session.value.lapsData[stintNum as keyof typeof session.value.lapsData] || []
   }
   // Source 'b': cross-session raw laps
   if (!crossSessionData.value) return []
-  const crossStint = (crossSessionData.value.stints || []).find((s: any) => s.stint_number === stintNum)
+  const crossStint = crossSessionData.value.stints.find((stint) => stint.stint_number === stintNum)
   if (!crossStint?.laps) return []
-  return crossStint.laps.map((lap: any, idx: number) => ({
-    number: lap.lap_number || idx + 1,
-    lapNumber: lap.lap_number || idx + 1,
-    time: formatLapTime(lap.lap_time_ms),
-    timeMs: lap.lap_time_ms,
-    valid: lap.is_valid,
-    pit: lap.has_pit_stop,
-    grip: lap.grip_level || 'Opt',
-    temp: lap.air_temp || 0
-  }))
+  return buildSessionDetailLaps(crossStint.laps, formatLapTime)
 }
 
 // Check if next consecutive stint exists for Strategy A
@@ -510,7 +486,7 @@ const canAddNextStintA = computed(() => {
   if (strategyASecond.value !== null) return false
   const nextStint = selectedCrossStintA.value + 1
   const stints = getStintsForSource(stintASource.value)
-  return stints.some((s: any) => s.number === nextStint)
+  return stints.some((stint) => stint.number === nextStint)
 })
 
 // Check if next consecutive stint exists for Strategy B
@@ -519,7 +495,7 @@ const canAddNextStintB = computed(() => {
   if (strategyBSecond.value !== null) return false
   const nextStint = selectedCrossStintB.value + 1
   const stints = getStintsForSource(stintBSource.value)
-  return stints.some((s: any) => s.number === nextStint)
+  return stints.some((stint) => stint.number === nextStint)
 })
 
 function addNextStintA() {
@@ -619,32 +595,32 @@ const builderStintBLaps = computed(() => {
 // Multi-stint strategy support: Array of all stints in each strategy
 // Now reads from correct session based on source tracking
 const strategyAStints = computed(() => {
-  const stints: any[] = []
+  const stints: SessionDetailStint[] = []
   if (selectedCrossStintA.value) {
     const sourceStints = getStintsForSource(stintASource.value)
-    const stint1 = sourceStints.find((s: any) => s.number === selectedCrossStintA.value)
+    const stint1 = sourceStints.find((stint) => stint.number === selectedCrossStintA.value)
     if (stint1) stints.push(stint1)
   }
   if (strategyASecond.value) {
     const sourceStints = getStintsForSource(stintASecondSource.value)
-    const stint2 = sourceStints.find((s: any) => s.number === strategyASecond.value)
+    const stint2 = sourceStints.find((stint) => stint.number === strategyASecond.value)
     if (stint2) stints.push(stint2)
   }
   return stints
 })
 
 const strategyBStints = computed(() => {
-  const stints: any[] = []
+  const stints: SessionDetailStint[] = []
   
   if (selectedCrossStintB.value) {
     const sourceStints = getStintsForSource(stintBSource.value)
-    const stint1 = sourceStints.find((s: any) => s.number === selectedCrossStintB.value)
-    if (stint1) stints.push(stint1 as any)
+    const stint1 = sourceStints.find((stint) => stint.number === selectedCrossStintB.value)
+    if (stint1) stints.push(stint1)
   }
   if (strategyBSecond.value) {
     const sourceStints = getStintsForSource(stintBSecondSource.value)
-    const stint2 = sourceStints.find((s: any) => s.number === strategyBSecond.value)
-    if (stint2) stints.push(stint2 as any)
+    const stint2 = sourceStints.find((stint) => stint.number === strategyBSecond.value)
+    if (stint2) stints.push(stint2)
   }
   return stints
 })
@@ -666,12 +642,12 @@ const strategyBTotalDurationMs = computed(() => {
 // Concatenated laps for all stints in Strategy A (with stint markers)
 // Uses source tracking to read laps from correct session
 const strategyAAllLaps = computed(() => {
-  const allLaps: any[] = []
+  const allLaps: SessionDetailLap[] = []
   const sources = [stintASource.value, stintASecondSource.value]
   strategyAStints.value.forEach((stint, stintIdx) => {
     const source = sources[stintIdx] || 'a'
     const stintLaps = getLapsForSource(source, stint.number)
-    stintLaps.forEach((lap: any, lapIdx: number) => {
+    stintLaps.forEach((lap, lapIdx) => {
       allLaps.push({
         ...lap,
         _stintIndex: stintIdx,
@@ -687,12 +663,12 @@ const strategyAAllLaps = computed(() => {
 // Concatenated laps for all stints in Strategy B (with stint markers)
 // Uses source tracking to read laps from correct session
 const strategyBAllLaps = computed(() => {
-  const allLaps: any[] = []
+  const allLaps: SessionDetailLap[] = []
   const sources = [stintBSource.value, stintBSecondSource.value]
   strategyBStints.value.forEach((stint, stintIdx) => {
     const source = sources[stintIdx] || 'b'
     const stintLaps = getLapsForSource(source, stint.number)
-    stintLaps.forEach((lap: any, lapIdx: number) => {
+    stintLaps.forEach((lap, lapIdx) => {
       allLaps.push({
         ...lap,
         _stintIndex: stintIdx,
@@ -1169,22 +1145,10 @@ const crossStintA = computed(() => {
 
 const crossStintB = computed(() => {
   if (!selectedCrossStintB.value || !crossSessionData.value) return null
-  const stints = crossSessionData.value.stints || []
-  const raw = stints.find((s: any) => s.stint_number === selectedCrossStintB.value)
+  const raw = crossSessionData.value.stints.find((stint) => stint.stint_number === selectedCrossStintB.value)
   if (!raw) return null
-  
-  // Format to match session.stints structure
-  return {
-    number: raw.stint_number,
-    type: raw.type === 'Qualify' ? 'Q' : raw.type === 'Race' ? 'R' : 'P',
-    laps: raw.laps?.length || 0,
-    best: formatLapTime(raw.laps?.reduce((min: number | null, lap: any) => {
-      if (!lap.is_valid || lap.has_pit_stop) return min
-      return min === null ? lap.lap_time_ms : Math.min(min, lap.lap_time_ms)
-    }, null)),
-    avgCleanLap: formatLapTime(raw.avg_clean_lap),
-    deltaVsTheo: '—'
-  }
+
+  return buildSessionDetailStint(raw, formatLapTime)
 })
 
 const crossStintALaps = computed(() => {
@@ -1194,25 +1158,10 @@ const crossStintALaps = computed(() => {
 
 const crossStintBLaps = computed(() => {
   if (!selectedCrossStintB.value || !crossSessionData.value) return []
-  const stints = crossSessionData.value.stints || []
-  const stintData = stints.find((s: any) => s.stint_number === selectedCrossStintB.value)
+  const stintData = crossSessionData.value.stints.find((stint) => stint.stint_number === selectedCrossStintB.value)
   if (!stintData || !stintData.laps) return []
-  
-  // Format laps to match session.lapsData structure
-  return stintData.laps.map((lap: any, idx: number) => ({
-    lapNumber: lap.lap_number || idx + 1,
-    lapTime: formatLapTime(lap.lap_time_ms),
-    lapTimeMs: lap.lap_time_ms,
-    valid: lap.is_valid && !lap.has_pit_stop,
-    pit: lap.has_pit_stop,
-    s1: formatLapTime(lap.sector_times_ms?.[0]),
-    s2: formatLapTime(lap.sector_times_ms?.[1]),
-    s3: formatLapTime(lap.sector_times_ms?.[2]),
-    fuel: lap.fuel_remaining,
-    air: lap.air_temp,
-    road: lap.road_temp,
-    grip: lap.track_grip_status
-  }))
+
+  return buildSessionDetailLaps(stintData.laps, formatLapTime)
 })
 
 // Current tab laps for table (in compare mode)
@@ -1224,7 +1173,7 @@ const currentCrossTabLaps = computed(() => activeTableTab.value === 'A' ? crossS
 const currentCrossTabStint = computed(() => activeTableTab.value === 'A' ? crossStintA.value : crossStintB.value)
 
 // Get laps for individual stint tabs (handles A-{num} and B-{num} format)
-function getLapsForTable(): any[] {
+function getLapsForTable(): SessionDetailLap[] {
   const tab = activeTableTab.value
   
   // Parse tab format: 'A-1', 'A-2', 'B-1', 'B-2', etc.
@@ -1242,23 +1191,9 @@ function getLapsForTable(): any[] {
       }
       // For cross-session compare, B stints are from crossSessionData
       if (isCrossSessionCompare.value && crossSessionData.value) {
-        const stints = crossSessionData.value.stints || []
-        const stintData = stints.find((s: any) => s.stint_number === stintNum)
+        const stintData = crossSessionData.value.stints.find((stint) => stint.stint_number === stintNum)
         if (stintData?.laps) {
-          return stintData.laps.map((lap: any, idx: number) => ({
-            lapNumber: lap.lap_number || idx + 1,
-            lapTime: formatLapTime(lap.lap_time_ms),
-            lapTimeMs: lap.lap_time_ms,
-            valid: lap.is_valid && !lap.has_pit_stop,
-            pit: lap.has_pit_stop,
-            s1: formatLapTime(lap.sector_times_ms?.[0]),
-            s2: formatLapTime(lap.sector_times_ms?.[1]),
-            s3: formatLapTime(lap.sector_times_ms?.[2]),
-            fuel: lap.fuel_remaining,
-            air: lap.air_temp,
-            road: lap.road_temp,
-            grip: lap.track_grip_status
-          }))
+          return buildSessionDetailLaps(stintData.laps, formatLapTime)
         }
       }
       return session.value.lapsData[stintNum] || []
@@ -1276,7 +1211,7 @@ function getLapsForTable(): any[] {
 // Uses raw ms values for accurate comparison.
 const bestSectors = computed(() => buildBestSectorSummary(getLapsForTable()))
 
-function isBestSector(lap: any, sectorIndex: number): boolean {
+function isBestSector(lap: SessionDetailLap, sectorIndex: number): boolean {
   const sms = lap.sector_times_ms || []
   const val = sms[sectorIndex]
   if (!val || val <= 0) return false
@@ -1284,7 +1219,7 @@ function isBestSector(lap: any, sectorIndex: number): boolean {
   return best !== null && val === best
 }
 
-function isBestLap(lap: any): boolean {
+function isBestLap(lap: SessionDetailLap): boolean {
   const ms = lap.lap_time_ms || lap.lapTimeMs
   return bestSectors.value.lapMs !== null && ms === bestSectors.value.lapMs
 }
@@ -1294,8 +1229,8 @@ function isBestLap(lap: any): boolean {
 // ========================================
 // Get aligned lap data for comparison view (A vs B side by side)
 const comparisonLapsData = computed(() => {
-  let lapsA: any[] = []
-  let lapsB: any[] = []
+  let lapsA: SessionDetailLap[] = []
+  let lapsB: SessionDetailLap[] = []
 
   if (isBuilderSameSessionCompare.value) {
     lapsA = includedLapPointsA.value.map(comparisonLapFromPoint)
@@ -1330,40 +1265,16 @@ const crossStintA2Laps = computed(() => {
 // Second stint for Strategy B (from cross session)
 const crossStintB2 = computed(() => {
   if (!strategyBSecond.value || !crossSessionData.value) return null
-  const stints = crossSessionData.value.stints || []
-  const raw = stints.find((s: any) => s.stint_number === strategyBSecond.value)
+  const raw = crossSessionData.value.stints.find((stint) => stint.stint_number === strategyBSecond.value)
   if (!raw) return null
-  return {
-    number: raw.stint_number,
-    type: raw.type === 'Qualify' ? 'Q' : raw.type === 'Race' ? 'R' : 'P',
-    laps: raw.laps?.length || 0,
-    best: formatLapTime(raw.laps?.reduce((min: number | null, lap: any) => {
-      if (!lap.is_valid || lap.has_pit_stop) return min
-      return min === null ? lap.lap_time_ms : Math.min(min, lap.lap_time_ms)
-    }, null)),
-    avgCleanLap: formatLapTime(raw.avg_clean_lap),
-    durationMs: raw.stint_drive_time_ms || raw.laps?.reduce((sum: number, lap: any) => sum + (lap.lap_time_ms || 0), 0) || 0
-  }
+  return buildSessionDetailStint(raw, formatLapTime)
 })
 
 const crossStintB2Laps = computed(() => {
   if (!strategyBSecond.value || !crossSessionData.value) return []
-  const stints = crossSessionData.value.stints || []
-  const stintData = stints.find((s: any) => s.stint_number === strategyBSecond.value)
+  const stintData = crossSessionData.value.stints.find((stint) => stint.stint_number === strategyBSecond.value)
   if (!stintData || !stintData.laps) return []
-  return stintData.laps.map((lap: any, idx: number) => ({
-    lapNumber: lap.lap_number || idx + 1,
-    lapTime: formatLapTime(lap.lap_time_ms),
-    lapTimeMs: lap.lap_time_ms,
-    valid: lap.is_valid && !lap.has_pit_stop,
-    pit: lap.has_pit_stop,
-    s1: formatLapTime(lap.sector_times_ms?.[0]),
-    s2: formatLapTime(lap.sector_times_ms?.[1]),
-    s3: formatLapTime(lap.sector_times_ms?.[2]),
-    fuel: lap.fuel_remaining,
-    air: lap.air_temp,
-    grip: lap.track_grip_status
-  }))
+  return buildSessionDetailLaps(stintData.laps, formatLapTime)
 })
 
 // Strategy total durations (sum of both stints)
@@ -1497,7 +1408,7 @@ function getGradientColor(pct: number): string {
 // ========================================
 // COMPARE MODE HELPER FUNCTIONS
 // ========================================
-function getStintTempDisplay(laps: any[]): number {
+function getStintTempDisplay(laps: SessionDetailLap[]): number {
   // Support both field names: airTemp (session.lapsData) and air (crossStintBLaps)
   const validLaps = laps.filter(l => !l.pit && (l.airTemp || l.air))
   if (validLaps.length === 0) return 0
@@ -1505,14 +1416,14 @@ function getStintTempDisplay(laps: any[]): number {
   return Math.round(sum / validLaps.length)
 }
 
-function getStintGripDisplay(laps: any[]): string {
+function getStintGripDisplay(laps: SessionDetailLap[]): string {
   const validLaps = laps.filter(l => !l.pit && l.grip && l.grip !== 'Unknown')
   if (validLaps.length === 0) return 'Optimum'
   
   // Count grip occurrences
   const gripCounts: Record<string, number> = {}
   for (const lap of validLaps) {
-    let grip = lap.grip === 'Opt' ? 'Optimum' : lap.grip
+    const grip = lap.grip === 'Opt' ? 'Optimum' : (lap.grip ?? 'Optimum')
     gripCounts[grip] = (gripCounts[grip] || 0) + 1
   }
   
@@ -1528,19 +1439,19 @@ function getStintGripDisplay(laps: any[]): string {
   return dominant
 }
 
-function getStintDurationMinutes(stint: any): number {
+function getStintDurationMinutes(stint: Pick<SessionDetailStint, 'durationMs'> | null | undefined): number {
   if (!stint?.durationMs) return 0
   return Math.floor(stint.durationMs / 60000)
 }
 
 // Precise duration format: "mm:ss.ms" (e.g., "51:34.765")
-function getStintDurationPrecise(stint: any): string {
+function getStintDurationPrecise(stint: Pick<SessionDetailStint, 'durationMs'> | null | undefined): string {
   if (!stint?.durationMs) return '0:00.000'
   return formatDurationMs(stint.durationMs)
 }
 
 // Calculate duration from laps array (for cross-session where durationMs might not be available)
-function getCrossStintDurationMinutes(laps: any[]): number {
+function getCrossStintDurationMinutes(laps: SessionDetailLap[]): number {
   if (!laps || laps.length === 0) return 0
   // Sum all lap times in ms
   const totalMs = laps.reduce((sum, lap) => sum + (lap.lapTimeMs || 0), 0)
@@ -1548,7 +1459,7 @@ function getCrossStintDurationMinutes(laps: any[]): number {
 }
 
 // Precise duration from laps: "mm:ss.ms"
-function getCrossStintDurationPrecise(laps: any[]): string {
+function getCrossStintDurationPrecise(laps: SessionDetailLap[]): string {
   if (!laps || laps.length === 0) return '0:00.000'
   const totalMs = laps.reduce((sum, lap) => sum + (lap.lapTimeMs || 0), 0)
   return formatDurationMs(totalMs)
@@ -1596,7 +1507,7 @@ function formatSectorTime(sectorTime: string | number | null | undefined): strin
 
 // Format compare delta between two times (ms)
 // Positive = B is slower than A, Negative = B is faster than A
-function formatCompareDelta(aMs: number | undefined, bMs: number | undefined): string {
+function formatCompareDelta(aMs: number | null | undefined, bMs: number | null | undefined): string {
   if (!aMs || !bMs) return '—'
   const deltaMs = aMs - bMs
   const deltaSec = deltaMs / 1000
@@ -1606,7 +1517,7 @@ function formatCompareDelta(aMs: number | undefined, bMs: number | undefined): s
 }
 
 // Get delta class for coloring (A vs B)
-function getCompareDeltaClass(aMs: number | undefined, bMs: number | undefined): string {
+function getCompareDeltaClass(aMs: number | null | undefined, bMs: number | null | undefined): string {
   if (!aMs || !bMs) return 'far'
   const deltaMs = aMs - bMs
   const deltaSec = deltaMs / 1000
@@ -1804,7 +1715,7 @@ watch(
 // Centralized target threshold constant (0.6s = 6 decimi)
 const TARGET_THRESHOLD_S = 0.6
 
-function lapExclusionKey(lap: any, source: LapSeriesSource, stintNumber: number | null | undefined): string {
+function lapExclusionKey(lap: SessionDetailLap, source: LapSeriesSource, stintNumber: number | null | undefined): string {
   return buildLapExclusionKey({
     source,
     stintNumber,
@@ -1833,7 +1744,7 @@ function buildStrategyPoints(params: {
   return points
 }
 
-function isLapExcludedInCurrentTable(lap: any): boolean {
+function isLapExcludedInCurrentTable(lap: SessionDetailLap): boolean {
   const activeTab = activeTableTab.value
   if (activeTab.startsWith('B-')) {
     const stintNumber = Number(activeTab.replace('B-', ''))
@@ -1919,7 +1830,7 @@ function formatSummaryTime(ms: number | null): string | null {
   return ms == null ? null : formatLapTime(ms)
 }
 
-function buildStrategySummaryRows(stints: any[], points: NormalizedLapPoint[]) {
+function buildStrategySummaryRows(stints: SessionDetailStint[], points: NormalizedLapPoint[]) {
   return stints.map((stint, stintIndex) => {
     const summary = buildIncludedLapSummary(points.filter((point) => point.stintIndex === stintIndex))
     return {
@@ -2023,7 +1934,7 @@ const chartData = computed(() => {
     return 1
   })
   
-  const datasets: any[] = [
+  const datasets: SessionChartDataset[] = [
     {
       label: isBuilderSameSessionCompare.value 
         ? `Strategia A (${strategyAStints.value.map(s => `#${s.number}`).join('+')})` 
@@ -2044,7 +1955,7 @@ const chartData = computed(() => {
       _points: lapsA,
       // Segment coloring for multi-stint strategies
       segment: (isBuilderSameSessionCompare.value || isCrossSessionCompare.value) ? {
-        borderColor: (ctx: any) => {
+        borderColor: (ctx: ScriptableLineSegmentContext) => {
           const lap = lapsA[ctx.p1DataIndex]
           // Use lighter blue for 2nd stint
           return (lap?.stintIndex ?? 0) > 0 ? '#60a5fa' : '#3b82f6'
@@ -2131,7 +2042,7 @@ const chartData = computed(() => {
       tension: 0,
       _points: lapsB,
       segment: {
-        borderColor: (ctx: any) => {
+        borderColor: (ctx: ScriptableLineSegmentContext) => {
           // Change line color at stint boundaries
           const lap = lapsB[ctx.p1DataIndex]
           return (lap?.stintIndex ?? 0) > 0 ? '#a78bfa' : '#8b5cf6'
@@ -2175,7 +2086,7 @@ const chartData = computed(() => {
     // Extend theo and target lines to max length
     const theoDataset = datasets.find(d => d.label?.startsWith('Teorico'))
     if (theoDataset && Array.isArray(theoDataset.data) && theoDataset.data.length < maxLapCount) {
-      const theoValue = theoDataset.data[0]
+      const theoValue = theoDataset.data[0] ?? null
       for (let i = theoDataset.data.length; i < maxLapCount; i++) {
         theoDataset.data.push(theoValue)
       }
@@ -2183,7 +2094,7 @@ const chartData = computed(() => {
     
     const targetDataset = datasets.find(d => d.label?.startsWith('Target'))
     if (targetDataset && Array.isArray(targetDataset.data) && targetDataset.data.length < maxLapCount) {
-      const targetValue = targetDataset.data[0]
+      const targetValue = targetDataset.data[0] ?? null
       for (let i = targetDataset.data.length; i < maxLapCount; i++) {
         targetDataset.data.push(targetValue)
       }
@@ -2203,26 +2114,29 @@ const chartOptions = {
       labels: {
         color: 'rgba(255,255,255,0.7)',
         font: { size: 11 },
-        filter: (item: any) => !item.text.startsWith('_') // Hide internal labels
+        filter: (item: LegendItem) => !item.text.startsWith('_') // Hide internal labels
       }
     },
     tooltip: {
       backgroundColor: 'rgba(15,15,25,0.95)',
       callbacks: {
-        title: (items: any[]) => {
+        title: (items: TooltipItem<'line'>[]) => {
           if (!items.length) return ''
-          const pointItem = items.find((item) => item.dataset?._points?.[item.dataIndex])
-          const point = pointItem?.dataset?._points?.[pointItem.dataIndex]
+          const pointItem = items.find((item) => (item.dataset as SessionChartDataset)._points?.[item.dataIndex])
+          const point = pointItem
+            ? (pointItem.dataset as SessionChartDataset)._points?.[pointItem.dataIndex]
+            : undefined
           if (point) return buildLapTooltipTitle(point)
           // Show the lap label (e.g. "G5") from the X-axis labels
-          return `Giro ${items[0].label?.replace('G', '') || ''}`
+          return `Giro ${items[0]?.label?.replace('G', '') || ''}`
         },
-        label: (ctx: any) => {
+        label: (ctx: TooltipItem<'line'>) => {
           if (ctx.dataset.label?.startsWith('_')) return '' // Hide internal tooltip
-          const point = ctx.dataset?._points?.[ctx.dataIndex]
-          if (point) return [`${ctx.dataset.label}: ${secondsToTime(ctx.raw)}`, ...buildLapTooltipLines(point)]
+          const point = (ctx.dataset as SessionChartDataset)._points?.[ctx.dataIndex]
+          const raw = typeof ctx.raw === 'number' ? ctx.raw : null
+          if (point && raw !== null) return [`${ctx.dataset.label}: ${secondsToTime(raw)}`, ...buildLapTooltipLines(point)]
           if (ctx.raw == null) return ''
-          return `${ctx.dataset.label}: ${secondsToTime(ctx.raw)}`
+          return raw === null ? '' : `${ctx.dataset.label}: ${secondsToTime(raw)}`
         }
       }
     },
