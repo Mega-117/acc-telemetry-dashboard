@@ -57,37 +57,19 @@ export async function calculateSummaryHash(summary: any): Promise<string> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-function canRebuildSummaryFromLocalRaw(rawObj: any): boolean {
-  return Array.isArray(rawObj?.stints) && rawObj.stints.length > 0
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 export function prepareSummaryForUpload(rawObj: any):
-  | { ok: true; meta: any; summary: any; summarySource: 'canonical' | 'legacy_fallback' }
+  | { ok: true; meta: any; summary: any; summarySource: 'canonical' }
   | { ok: false; meta: any; reason: 'legacy_local_requires_reprocess' } {
   const canonical = extractMetadata(rawObj)
-
-  if (canRebuildSummaryFromLocalRaw(rawObj)) {
-    const rebuilt = extractMetadata(rawObj, { allowLegacyFallback: true, forceRawRebuild: true })
-    return {
-      ok: true,
-      meta: rebuilt.meta,
-      summary: {
-        ...rebuilt.summary,
-        best_rules_version: BEST_RULES_VERSION
-      },
-      summarySource: canonical.summarySource === 'canonical' ? 'canonical' : 'legacy_fallback'
-    }
-  }
 
   if (canonical.summarySource === 'canonical') {
     return {
       ok: true,
       meta: canonical.meta,
-      summary: {
-        ...canonical.summary,
-        best_rules_version: BEST_RULES_VERSION
-      },
+      // The recorded file is the historical source of truth. Parsing may normalize
+      // a view for old consumers, but the synchronization copy must stay byte-for-
+      // byte equivalent at the JSON value level and retain future provenance fields.
+      summary: rawObj.summary,
       summarySource: 'canonical'
     }
   }

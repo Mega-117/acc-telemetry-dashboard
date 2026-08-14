@@ -28,6 +28,7 @@ import {
   buildCanonicalMigrationCheckpoint,
   isCompletedCanonicalMigrationCheckpoint
 } from '~/services/sync/canonicalMigrationCheckpoint'
+import { createSessionUploadService } from '~/services/sync/sessionUploadService'
 import { inspectFirebaseStructureState } from '~/services/sync/firebaseStructureHealthService'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 
@@ -119,6 +120,74 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await testEnv.cleanup()
+})
+
+describe('canonical session synchronization', () => {
+  it('round-trips the Python V5 summary without reinterpretation', async () => {
+    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const canonicalSummary = {
+      best_rules_version: 5,
+      laps: 2,
+      lapsValid: 2,
+      bestLap: 100000,
+      avgCleanLap: 100500,
+      totalTime: 201000,
+      stintCount: 1,
+      best_qualy_ms: null,
+      best_qualy_conditions: null,
+      best_session_race_ms: 109999,
+      best_session_race_conditions: { airTemp: 20, roadTemp: 28, grip: 'Fast' },
+      best_race_ms: 109999,
+      best_race_conditions: { airTemp: 20, roadTemp: 28, grip: 'Fast' },
+      best_avg_race_ms: 100500,
+      best_avg_race_conditions: { airTemp: 20, roadTemp: 28, grip: 'Fast' },
+      best_by_grip: { Fast: { source: 'python_fixture' } },
+      provenance: { source: 'python', generated_at: '2026-08-14T10:00:00.000Z' }
+    }
+    const rawObj = {
+      ownerId: PILOT_UID,
+      session_info: {
+        track: 'spa',
+        date_start: '2026-08-14T10:00:00.000Z',
+        car_model: 'amr_v8_vantage_gt3',
+        session_type: 2,
+        laps_total: 2,
+        laps_valid: 2,
+        session_best_lap: 100000,
+        avg_clean_lap: 100500,
+        total_drive_time_ms: 201000
+      },
+      stints: [{
+        fuel_start: 60,
+        laps: [
+          { lap_time_ms: 100000, is_valid: true },
+          { lap_time_ms: 101000, is_valid: true }
+        ]
+      }],
+      summary: canonicalSummary
+    }
+    const rawText = JSON.stringify(rawObj)
+    const service = createSessionUploadService({
+      db,
+      chunkSize: 100000,
+      getExistingSession: async () => null,
+      loadRegistryCache: async () => ({}),
+      canSkipViaRegistry: () => false,
+      deleteOldChunks: async () => undefined
+    })
+
+    const result = await service.uploadOrUpdateSession(
+      rawObj,
+      rawText,
+      'pip-321-canonical.json',
+      PILOT_UID
+    )
+
+    expect(result.status).toBe('created')
+    expect(result.sessionId).toBeTruthy()
+    const stored = await assertSucceeds(getDoc(doc(db, `users/${PILOT_UID}/sessions/${result.sessionId}`)))
+    expect(stored.data()?.summary).toEqual(canonicalSummary)
+  })
 })
 
 describe('diagnostics rules', () => {
