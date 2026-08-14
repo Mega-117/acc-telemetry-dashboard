@@ -29,6 +29,7 @@ export default [
       'dist/**',
       '.nuxt/**',
       '.output/**',
+      'coverage/**',
       'public/**',
       '*.config.mjs',        // questo file stesso
       'scripts/**',

@@ -88,7 +88,16 @@ jobs:
         working-directory: .
 
       - name: Run tests
-        run: pytest --tb=short -q 2>&1 || echo "No Python tests found"
+        run: |
+          set +e
+          pytest --tb=short -q
+          pytest_status=$?
+          set -e
+          if [ "$pytest_status" -eq 5 ]; then
+            echo "No Python tests collected"
+            exit 0
+          fi
+          exit "$pytest_status"
         working-directory: .
 
   # ─────────────────────────────────────────────

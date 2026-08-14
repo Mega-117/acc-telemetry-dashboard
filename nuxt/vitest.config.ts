@@ -25,6 +25,12 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
+      thresholds: {
+        statements: 75,
+        branches: 70,
+        functions: 80,
+        lines: 75,
+      },
       // Lista esplicita: solo i file che hanno test associati.
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
