@@ -6,6 +6,7 @@
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
 const { userDisplayName, userEmail, logout: firebaseLogout } = useFirebaseAuth()
+const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 const route = useRoute()
 const router = useRouter()
 
@@ -32,8 +33,9 @@ const displayName = computed(() => {
 
 // Handlers
 const handleLogout = async () => {
-  await firebaseLogout()
-  navigateTo('/')
+  await runConfirmedLogout(async () => {
+    await navigateTo('/')
+  })
 }
 
 const handleGoToProfile = () => {

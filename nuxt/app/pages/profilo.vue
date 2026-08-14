@@ -11,6 +11,7 @@ definePageMeta({
 })
 
 const { userDisplayName, logout: firebaseLogout, userRole } = useFirebaseAuth()
+const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 
 // Get user email from Firebase
 const { currentUser } = useFirebaseAuth()
@@ -56,8 +57,9 @@ onMounted(async () => {
 })
 
 const handleLogout = async () => {
-  await firebaseLogout()
-  navigateTo('/')
+  await runConfirmedLogout(async () => {
+    await navigateTo('/')
+  })
 }
 
 const handleBack = async () => {

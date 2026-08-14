@@ -15,6 +15,7 @@ const {
   isAdmin,
   isLoading,
 } = useFirebaseAuth()
+const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 
 // Redirect non-coaches and non-admins
 onMounted(async () => {
@@ -29,8 +30,9 @@ onMounted(async () => {
 })
 
 const handleLogout = async () => {
-  await firebaseLogout()
-  navigateTo('/')
+  await runConfirmedLogout(async () => {
+    await navigateTo('/')
+  })
 }
 
 const goToDashboard = () => {

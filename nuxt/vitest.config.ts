@@ -39,6 +39,7 @@ export default defineConfig({
         'app/config/firebaseRuntimeTarget.ts',
         'app/services/auth/authService.ts',
         'app/services/auth/localIdentityBridge.ts',
+        'app/composables/useConfirmedLogout.ts',
         'app/config/optimalShiftRpm.ts',
         'app/services/gateway/activityProjectionBuilders.ts',
         'app/services/gateway/bestTimesBuilders.ts',

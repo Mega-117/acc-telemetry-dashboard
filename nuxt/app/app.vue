@@ -128,6 +128,7 @@ const {
   needsEmailVerification,
   logout: firebaseLogout
 } = useFirebaseAuth()
+const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 const isProtectedRuntimeRoute = computed(() => (
   isTrainingOverlayIntent.value
   || isHudOverlayRoute.value
@@ -356,10 +357,11 @@ const handleResendEmail = () => {
 }
 
 const handleLogout = async () => {
-  await firebaseLogout()
-  userEmail.value = ''
-  authState.value = 'login'
-  appState.value = 'auth'
+  await runConfirmedLogout(() => {
+    userEmail.value = ''
+    authState.value = 'login'
+    appState.value = 'auth'
+  })
 }
 
 const handleGoToProfile = () => {
