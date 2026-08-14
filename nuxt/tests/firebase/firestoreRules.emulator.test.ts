@@ -30,13 +30,14 @@ import {
 } from '~/services/sync/canonicalMigrationCheckpoint'
 import { createSessionUploadService } from '~/services/sync/sessionUploadService'
 import { inspectFirebaseStructureState } from '~/services/sync/firebaseStructureHealthService'
-import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 const PROJECT_ID = 'accsuite117'
 const PILOT_UID = 'qa-pilot'
 const SECOND_PILOT_UID = 'qa-pilot-2'
 const COACH_UID = 'qa-coach'
 const ADMIN_UID = 'qa-admin'
+const FRESH_PILOT_UID = 'qa-fresh-pilot'
 
 let testEnv: RulesTestEnvironment
 
@@ -120,6 +121,28 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await testEnv.cleanup()
+})
+
+describe('fresh user provisioning contract', () => {
+  it('accetta create e retry dello stesso profilo pilot completo', async () => {
+    const db = testEnv.authenticatedContext(FRESH_PILOT_UID).firestore()
+    const userRef = doc(db, `users/${FRESH_PILOT_UID}`)
+    const payload = {
+      uid: FRESH_PILOT_UID,
+      email: 'qa-fresh-pilot@accsuite.invalid',
+      nickname: 'qa-fresh-pilot',
+      role: 'pilot',
+      coachId: null,
+      createdAt: '2026-08-14T13:00:00.000Z',
+      emailVerified: true
+    }
+
+    await assertSucceeds(setDoc(userRef, payload))
+    await assertSucceeds(setDoc(userRef, payload))
+
+    const stored = await assertSucceeds(getDoc(userRef))
+    expect(stored.data()?.coachId).toBeNull()
+  })
 })
 
 describe('canonical session synchronization', () => {

@@ -4,6 +4,7 @@
 // ============================================
 
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
 import { waitForAuthSettled } from '~/utils/authRouteGuard'
 
 const route = useRoute()

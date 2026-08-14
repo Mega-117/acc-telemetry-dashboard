@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Profile page - rendered via Nuxt file-based routing
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
 
 definePageMeta({
   layout: false,

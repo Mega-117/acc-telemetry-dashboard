@@ -92,6 +92,12 @@ describe('createConfirmedLogoutCoordinator', () => {
 })
 
 describe('logout entry-point contract', () => {
+  it('importa esplicitamente il notifier usato dal composable runtime', () => {
+    const composable = source('../../app/composables/useConfirmedLogout.ts')
+
+    expect(composable).toContain("import { useAppNotifications } from '~/composables/useAppNotifications'")
+  })
+
   it.each([
     '../../app/app.vue',
     '../../app/layouts/dashboard.vue',
@@ -100,6 +106,7 @@ describe('logout entry-point contract', () => {
   ])('%s delega la transizione al coordinatore condiviso', (relativePath) => {
     const entryPoint = source(relativePath)
 
+    expect(entryPoint).toContain("import { useConfirmedLogout } from '~/composables/useConfirmedLogout'")
     expect(entryPoint).toContain('useConfirmedLogout(firebaseLogout)')
     expect(entryPoint).toContain('runConfirmedLogout')
     expect(entryPoint).not.toContain('await firebaseLogout()')

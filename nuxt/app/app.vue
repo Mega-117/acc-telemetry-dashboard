@@ -5,6 +5,7 @@
 
 import { ref, computed, onMounted, onBeforeMount, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useActivityFeed } from '~/composables/useActivityFeed'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'

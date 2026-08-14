@@ -1,3 +1,5 @@
+import { useAppNotifications } from '~/composables/useAppNotifications'
+
 export const LOGOUT_FAILURE_MESSAGE = 'Logout non riuscito. La sessione resta attiva: riprova.'
 
 export interface LogoutResult {

@@ -48,7 +48,13 @@ export async function registerWithEmail(params: {
 
 export async function loginWithEmail(email: string, password: string) {
     const userCredential = await signInWithEmailAndPassword(auth, email, password)
-    return { user: userCredential.user }
+    // signInWithEmailAndPassword can resolve before fields such as
+    // emailVerified reflect a verification completed in another session.
+    // Refresh the canonical Auth user before the UI decides which surface to
+    // expose, otherwise a verified user can remain trapped in the email gate.
+    await userCredential.user.reload()
+    await userCredential.user.getIdToken(true)
+    return { user: auth.currentUser ?? userCredential.user }
 }
 
 export async function sendPasswordResetWithEmail(email: string) {

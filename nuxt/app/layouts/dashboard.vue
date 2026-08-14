@@ -4,6 +4,7 @@
 // ============================================
 
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
 
 const { userDisplayName, userEmail, logout: firebaseLogout } = useFirebaseAuth()
 const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)

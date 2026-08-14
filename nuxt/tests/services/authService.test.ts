@@ -1,31 +1,77 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const sendPasswordResetEmailMock = vi.hoisted(() => vi.fn())
+const signInWithEmailAndPasswordMock = vi.hoisted(() => vi.fn())
 const updateProfileMock = vi.hoisted(() => vi.fn())
 const createInitialUserDocumentMock = vi.hoisted(() => vi.fn())
+const authMock = vi.hoisted(() => ({
+  currentUser: null as null | {
+    emailVerified: boolean
+    reload: ReturnType<typeof vi.fn>
+    getIdToken: ReturnType<typeof vi.fn>
+  }
+}))
 
 vi.mock('firebase/auth', () => ({
   createUserWithEmailAndPassword: vi.fn(),
-  signInWithEmailAndPassword: vi.fn(),
+  signInWithEmailAndPassword: signInWithEmailAndPasswordMock,
   signOut: vi.fn(),
   sendEmailVerification: vi.fn(),
   sendPasswordResetEmail: sendPasswordResetEmailMock,
   updateProfile: updateProfileMock
 }))
 
-vi.mock('~/config/firebaseAuth', () => ({ auth: {} }))
+vi.mock('~/config/firebaseAuth', () => ({ auth: authMock }))
 vi.mock('~/services/auth/userProvisioningService', () => ({
   createInitialUserDocument: createInitialUserDocumentMock
 }))
 
 import {
+  loginWithEmail,
   sendPasswordResetWithEmail,
   translateAuthError
 } from '~/services/auth/authService'
 
+describe('loginWithEmail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authMock.currentUser = null
+  })
+
+  it('refreshes the canonical Firebase user before exposing email verification state', async () => {
+    const user = {
+      emailVerified: false,
+      reload: vi.fn(async () => {
+        user.emailVerified = true
+      }),
+      getIdToken: vi.fn().mockResolvedValue('fresh-token')
+    }
+    signInWithEmailAndPasswordMock.mockImplementation(async () => {
+      authMock.currentUser = user
+      return { user }
+    })
+
+    const result = await loginWithEmail('qa@example.invalid', 'local-only-password')
+
+    expect(signInWithEmailAndPasswordMock).toHaveBeenCalledWith(
+      authMock,
+      'qa@example.invalid',
+      'local-only-password'
+    )
+    expect(user.reload).toHaveBeenCalledOnce()
+    expect(user.getIdToken).toHaveBeenCalledWith(true)
+    expect(user.reload.mock.invocationCallOrder[0]).toBeLessThan(
+      user.getIdToken.mock.invocationCallOrder[0]
+    )
+    expect(result.user).toBe(user)
+    expect(result.user.emailVerified).toBe(true)
+  })
+})
+
 describe('sendPasswordResetWithEmail', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    authMock.currentUser = null
   })
 
   it('asks Firebase Auth to send the reset email and resolves after Firebase accepts it', async () => {
@@ -34,7 +80,7 @@ describe('sendPasswordResetWithEmail', () => {
     await expect(sendPasswordResetWithEmail('qa@example.invalid')).resolves.toBeUndefined()
 
     expect(sendPasswordResetEmailMock).toHaveBeenCalledOnce()
-    expect(sendPasswordResetEmailMock).toHaveBeenCalledWith({}, 'qa@example.invalid')
+    expect(sendPasswordResetEmailMock).toHaveBeenCalledWith(authMock, 'qa@example.invalid')
   })
 
   it('propagates Firebase failures without mutating user or profile data', async () => {

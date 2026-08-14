@@ -134,6 +134,7 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
                 email: user.email,
                 nickname: defaultNickname,
                 role: 'pilot',
+                coachId: null,
                 createdAt: new Date().toISOString(),
                 emailVerified: user.emailVerified,
                 ...buildPilotDirectoryFields({
