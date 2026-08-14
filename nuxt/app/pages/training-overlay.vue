@@ -136,6 +136,54 @@ function getOverlayApi(): any | null {
   return (window as any).electronAPI || null
 }
 
+// Dry-pressure automation is always actionable: the logger supplies read-only
+// telemetry while the Electron controller owns all input and visible outcomes.
+const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not_fresh' })
+const isDryPressurePreviewOpen = ref(false)
+const dryPressureBridgeStatus = ref('Pronto a inviare il test.')
+let dryPressureTimer: ReturnType<typeof setInterval> | null = null
+async function refreshDryPressureState() {
+  const next = await getOverlayApi()?.trainingOverlayGetDryPressureState?.()
+  if (next) dryPressureState.value = next
+}
+async function applyDryPressure() {
+  isDryPressurePreviewOpen.value = true
+  try {
+    const response = await getOverlayApi()?.trainingOverlayApplyDryPressure?.()
+    if (!response?.accepted) dryPressureState.value = { state: 'blocked', reason: 'command_not_accepted' }
+  } catch (_) { dryPressureState.value = { state: 'blocked', reason: 'command_not_accepted' } }
+  await refreshDryPressureState()
+}
+async function testDryPressure() {
+  isDryPressurePreviewOpen.value = true
+  dryPressureState.value = { ...dryPressureState.value, state: 'running', reason: 'Click ricevuto: avvio Automation Controller…' }
+  dryPressureBridgeStatus.value = 'Click ricevuto → IPC Electron → controller ACC…'
+  try {
+    const result = await getOverlayApi()?.trainingOverlayTestDryPressure?.()
+    if (!result?.accepted) {
+      dryPressureState.value = { ...dryPressureState.value, state: 'blocked', reason: result?.reason || 'Test non avviato: prerequisito tecnico non verificato. Nessun input inviato.' }
+      dryPressureBridgeStatus.value = `Bloccato: ${result?.reason || 'controller senza esito verificato.'}`
+    } else {
+      dryPressureBridgeStatus.value = `Completato dal controller (${result.requestId || 'id non disponibile'}): quattro readback verificati.`
+    }
+  } catch (_) {
+    dryPressureState.value = { ...dryPressureState.value, state: 'blocked', reason: 'Bridge Electron/controller interrotto. Nessun retry cieco.' }
+    dryPressureBridgeStatus.value = 'Errore bridge: il controller non ha restituito un esito.'
+  }
+  await refreshDryPressureState()
+}
+async function restoreTestDryPressure() {
+  dryPressureBridgeStatus.value = 'Ripristino richiesto → controller ACC…'
+  try {
+    const result = await getOverlayApi()?.trainingOverlayRestoreTestDryPressure?.()
+    dryPressureBridgeStatus.value = result?.accepted ? 'Ripristino completato e verificato.' : `Ripristino bloccato: ${result?.reason || 'pre-valori o gate mancanti.'}`
+  } catch (_) {
+    dryPressureState.value = { ...dryPressureState.value, state: 'blocked', reason: 'Ripristino non avviato: bridge/controller non disponibile. Nessun input inviato.' }
+    dryPressureBridgeStatus.value = 'Errore bridge durante il ripristino.'
+  }
+  await refreshDryPressureState()
+}
+
 // ─── Composables ─────────────────────────────────────────────────────────────
 const { liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap } =
   useLiveStatePoller(getOverlayApi)
@@ -591,6 +639,8 @@ onMounted(async () => {
   loadSpotterVoiceSettings()
   startLiveStatePolling()
   startFastStatePolling()
+  await refreshDryPressureState()
+  dryPressureTimer = setInterval(() => { void refreshDryPressureState() }, 500)
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
   removeInfoTargetListener = api?.onInfoTargetSettings?.((next: InfoTargetSettings) => {
     if (!isTargetSetupOpen.value) applyInfoTargetSettings(next)
@@ -634,6 +684,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  if (dryPressureTimer) clearInterval(dryPressureTimer)
   clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopFastStatePolling(); stopVoice(); cleanupSize()
   if (voicePointNoticeTimer) clearTimeout(voicePointNoticeTimer)
   removeCommandListener?.()
@@ -808,6 +859,29 @@ onBeforeUnmount(() => {
                     >
                       Target giro
                     </button>
+                    <button type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Test regolazione pressioni</button>
+                    <p class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
+                    <p v-for="(wheelState, wheel) in dryPressureState.result?.wheels || {}" :key="`test-${wheel}`" class="launcher-hint" role="status">
+                      {{ wheel }} · {{ wheelState.status }} · prima {{ wheelState.pre ?? wheelState.target ?? '—' }} · dopo {{ wheelState.post ?? '—' }} · {{ wheelState.readback || wheelState.reason || 'in attesa' }}
+                    </p>
+                    <button v-if="dryPressureState.result?.preValues && dryPressureState.result?.canRestore !== false" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Ripristina test pressioni</button>
+                    <button
+                      type="button"
+                      class="launcher-tool-button launcher-tool-button--training"
+                      aria-label="Regola pressioni asciutto"
+                      @click="applyDryPressure"
+                    >
+                      Regola pressioni — asciutto
+                    </button>
+                  </div>
+                  <p class="launcher-hint" role="status">
+                    Pressioni: {{ dryPressureState.state === 'ready' ? 'Pronto' : dryPressureState.state === 'running' ? 'In corso' : dryPressureState.state === 'completed' ? 'Completato' : dryPressureState.state === 'blocked' ? 'Bloccato' : 'Non disponibile' }} · {{ dryPressureState.reason || 'verifica dati' }}
+                  </p>
+                  <div class="launcher-hint" role="status" aria-label="Anteprima regolazione pressioni asciutto">
+                    <p>Giri usati: {{ dryPressureState.recommendation?.laps || 0 }} (validi {{ dryPressureState.recommendation?.validLaps || 0 }}, invalidi {{ dryPressureState.recommendation?.invalidLaps || 0 }}).</p>
+                    <p v-for="row in dryPressureState.preview || []" :key="row.wheel">{{ row.wheel }} · media {{ row.averagePsi ?? '—' }} · target 27,0 · Δ {{ row.deltaPsi ?? '—' }} · MFD {{ row.currentPsi ?? 'MFD non disponibile' }} · imposta {{ row.requiresCalibration ? 'richiede calibrazione' : (row.willSetPsi ?? 'MFD non disponibile') }} · click {{ row.requiresCalibration ? 'richiede calibrazione' : (row.clicks ?? 'MFD non disponibile') }}</p>
+                    <p v-if="!dryPressureState.recommendation?.averagePsi">Anteprima analitica non disponibile: {{ dryPressureState.reason || 'attendo almeno un giro asciutto completo e telemetria fresca.' }}</p>
+                    <p v-if="!dryPressureState.calibrationReady">Preview disponibile; applicazione bloccata: calibrazione mancante o non compatibile.</p>
                   </div>
 
                   <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K chiude</p>
