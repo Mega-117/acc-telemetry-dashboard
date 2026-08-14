@@ -1,1 +1,0 @@
-import{b9 as a}from"./2RwYi6ev.js";function s(t){return t.isAuthenticated?t.isAdmin?null:"/panoramica":"/"}function c(t,r=4e3){return t.value?new Promise(n=>{let e;const i=()=>{clearTimeout(o),e?.(),n()},o=setTimeout(i,r);e=a(t,u=>{u||i()})}):Promise.resolve()}export{s as g,c as w};
