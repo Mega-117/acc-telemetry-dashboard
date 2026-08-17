@@ -32,11 +32,13 @@ export function useOwnerDataMaintenance() {
     electronAPI?: any
     force?: boolean
     onProgress?: (progress: OwnerDataMaintenanceProgress) => void
+    assertActive?: () => void
   } = {}) {
     return runOwnerDataMaintenanceGate({
       uid,
       electronAPI: options.electronAPI,
       force: options.force,
+      assertActive: options.assertActive,
       onProgress: (next) => {
         status.value = next.status
         phase.value = next.phase
@@ -49,9 +51,10 @@ export function useOwnerDataMaintenance() {
     })
   }
 
-  async function completeAfterLocalSync(uid: string) {
+  async function completeAfterLocalSync(uid: string, options: { assertActive?: () => void } = {}) {
     return completeOwnerDataMaintenanceAfterLocalSync({
       uid,
+      assertActive: options.assertActive,
       onProgress: (next) => {
         status.value = next.status
         phase.value = next.phase

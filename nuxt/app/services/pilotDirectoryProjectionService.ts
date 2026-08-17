@@ -117,9 +117,13 @@ export async function updatePilotDirectoryActivity(params: {
   docFn?: FirestoreDocFn
 }) {
   const { db, uid, fields, setDocFn, docFn = doc } = params
-  await setDocFn(docFn(db, `pilotDirectory/${uid}`), sanitizeForFirestore({
+  await setDocFn(docFn(db, `pilotDirectory/${uid}`), buildPilotDirectoryActivityDocument(uid, fields), { merge: true })
+}
+
+export function buildPilotDirectoryActivityDocument(uid: string, fields: PilotDirectoryActivityFields) {
+  return sanitizeForFirestore({
     schemaVersion: PILOT_DIRECTORY_SCHEMA_VERSION,
     uid,
     ...fields
-  }), { merge: true })
+  })
 }

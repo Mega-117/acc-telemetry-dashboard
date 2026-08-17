@@ -1,60 +1,62 @@
 import { doc } from 'firebase/firestore'
-import { updatePilotDirectoryActivity } from '~/services/pilotDirectoryProjectionService'
+import { buildPilotDirectoryActivityDocument } from '~/services/pilotDirectoryProjectionService'
 import type { ClientHeartbeatPayload } from '~/services/monitoring/clientHeartbeatService'
 
 export const CLIENT_RUNTIME_REPORT_WRITE_BUDGET = 3
 export const CLIENT_RUNTIME_REPORT_READ_BUDGET = 0
 
 type FirestoreDocFn = (db: unknown, path: string) => unknown
-type FirestoreSetDocFn = (ref: unknown, data: unknown, options?: unknown) => Promise<unknown>
+type FirestoreWriteBatch = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- adapter boundary for Firestore and tests
+  set: (ref: any, data: any, options?: any) => void
+  commit: () => Promise<unknown>
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- adapter boundary for Firestore and tests
+type FirestoreWriteBatchFn = (db: any) => FirestoreWriteBatch
 
 export async function writeClientRuntimeReport(params: {
   db: unknown
   uid: string
   payload: ClientHeartbeatPayload
-  setDocFn: FirestoreSetDocFn
+  writeBatchFn: FirestoreWriteBatchFn
   docFn?: FirestoreDocFn
-  updateProjectionFn?: typeof updatePilotDirectoryActivity
+  assertCurrent?: () => void
 }): Promise<{ writes: number, reads: 0 }> {
   const {
     db,
     uid,
     payload,
-    setDocFn,
+    writeBatchFn,
     docFn = doc as unknown as FirestoreDocFn,
-    updateProjectionFn = updatePilotDirectoryActivity
+    assertCurrent = () => {}
   } = params
   const installationId = payload.installationRuntime.installationId
+  const batch = writeBatchFn(db)
 
-  await setDocFn(
+  batch.set(
     docFn(db, `users/${uid}/runtimeInstallations/${installationId}`),
     payload.installationRuntime,
     { merge: true }
   )
 
-  const adapterWrites = await Promise.allSettled([
-    setDocFn(docFn(db, `users/${uid}`), {
-      suiteVersion: payload.suiteVersion,
-      suiteVersionDetail: payload.suiteVersionDetail,
-      suiteVersionUpdatedAt: payload.suiteVersionUpdatedAt,
-      clientRuntime: payload.clientRuntime
-    }, { merge: true }),
-    updateProjectionFn({
-      db,
-      uid,
-      fields: {
-        suiteVersion: payload.suiteVersion,
-        suiteVersionUpdatedAt: payload.suiteVersionUpdatedAt,
-        clientChannel: payload.clientRuntime.channel,
-        clientUpdateState: payload.clientRuntime.updateState,
-        clientLastHeartbeatAt: payload.clientRuntime.lastHeartbeatAt
-      },
-      setDocFn,
-      docFn
-    })
-  ])
-  const rejected = adapterWrites.find((result) => result.status === 'rejected')
-  if (rejected?.status === 'rejected') throw rejected.reason
+  batch.set(docFn(db, `users/${uid}`), {
+    suiteVersion: payload.suiteVersion,
+    suiteVersionDetail: payload.suiteVersionDetail,
+    suiteVersionUpdatedAt: payload.suiteVersionUpdatedAt,
+    clientRuntime: payload.clientRuntime
+  }, { merge: true })
+
+  batch.set(docFn(db, `pilotDirectory/${uid}`), buildPilotDirectoryActivityDocument(uid, {
+    suiteVersion: payload.suiteVersion,
+    suiteVersionUpdatedAt: payload.suiteVersionUpdatedAt,
+    clientChannel: payload.clientRuntime.channel,
+    clientUpdateState: payload.clientRuntime.updateState,
+    clientLastHeartbeatAt: payload.clientRuntime.lastHeartbeatAt
+  }), { merge: true })
+
+  assertCurrent()
+  await batch.commit()
+  assertCurrent()
 
   return {
     writes: CLIENT_RUNTIME_REPORT_WRITE_BUDGET,

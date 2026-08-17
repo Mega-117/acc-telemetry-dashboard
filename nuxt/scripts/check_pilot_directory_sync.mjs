@@ -32,7 +32,9 @@ assert.equal(ownerRepairSource.includes('writePilotDirectoryFromUser'), true, 'o
 assert.equal(deltaSource.includes('updatePilotDirectoryActivity'), true, 'sync delta must use partial pilotDirectory activity update')
 assert.equal(rebuildSource.includes('updatePilotDirectoryActivity'), true, 'projection rebuild must use partial pilotDirectory activity update')
 assert.equal(clientHeartbeatSource.includes('writeClientRuntimeReport'), true, 'Client heartbeat must delegate to the centralized runtime reporter')
-assert.equal(runtimeReportingSource.includes('updatePilotDirectoryActivity'), true, 'Runtime reporter must use partial pilotDirectory runtime update')
+assert.equal(runtimeReportingSource.includes('buildPilotDirectoryActivityDocument'), true, 'Runtime reporter must reuse the centralized partial pilotDirectory document builder')
+assert.equal((runtimeReportingSource.match(/batch\.set\(/g) || []).length, 3, 'Runtime reporter must stage exactly three heartbeat projections in one batch')
+assert.equal(runtimeReportingSource.includes('await batch.commit()'), true, 'Runtime reporter must commit all heartbeat projections atomically')
 
 assert.equal(deltaSource.includes('coachId'), false, 'sync delta must not write coachId')
 assert.equal(deltaSource.includes("role:"), false, 'sync delta must not write role')

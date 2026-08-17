@@ -38,6 +38,14 @@ export interface RuntimeWindowElectronApi {
   onRuntimeBootstrapState?: (callback: (snapshot: RuntimeWindowSnapshot) => void) => (() => void)
 }
 
+function cloneIpcValue<T>(value: T, fallback: T): T {
+  try {
+    return JSON.parse(JSON.stringify(value)) as T
+  } catch {
+    return fallback
+  }
+}
+
 export function isRuntimeWindowOwner(api: RuntimeWindowElectronApi | null | undefined): boolean {
   return api?.runtimeBootstrapRole === 'owner'
 }
@@ -51,12 +59,15 @@ export function buildRuntimeWindowSnapshot(
     schemaVersion: RUNTIME_WINDOW_SCHEMA_VERSION,
     lifecycle,
     phase: state.phase,
-    capabilities: state.capabilities as unknown as Record<string, unknown>,
+    capabilities: cloneIpcValue(
+      state.capabilities as unknown as Record<string, unknown>,
+      {}
+    ),
     reasonCode: lifecycle === 'degraded' ? event?.code || 'bootstrap_degraded' : null,
     lastEvent: event
       ? { kind: event.kind, code: event.code, phase: event.phase }
       : null,
-    migrationProgress: state.migrationProgress || null
+    migrationProgress: cloneIpcValue(state.migrationProgress || null, null)
   }
 }
 
@@ -65,8 +76,13 @@ export async function publishRuntimeWindowSnapshot(
   state: RuntimeBootstrapResult<unknown>
 ): Promise<boolean> {
   if (!isRuntimeWindowOwner(api) || !api?.publishRuntimeBootstrapState) return false
+  const lifecycle: RuntimeWindowSnapshot['lifecycle'] = state.phase === 'ready'
+    ? 'ready'
+    : state.phase === 'degraded'
+      ? 'degraded'
+      : 'starting'
   await api.publishRuntimeBootstrapState(
-    buildRuntimeWindowSnapshot(state, state.phase === 'degraded' ? 'degraded' : 'ready')
+    buildRuntimeWindowSnapshot(state, lifecycle)
   )
   return true
 }
@@ -74,7 +90,7 @@ export async function publishRuntimeWindowSnapshot(
 export async function requestRuntimeWindowManualSync(
   api: RuntimeWindowElectronApi | null | undefined
 ) {
-  if (isRuntimeWindowOwner(api) || !api?.requestRuntimeBootstrapCommand) return null
+  if (!isRuntimeWindowOwner(api) || !api?.requestRuntimeBootstrapCommand) return null
   return api.requestRuntimeBootstrapCommand({
     schemaVersion: RUNTIME_WINDOW_SCHEMA_VERSION,
     type: 'manual-sync'

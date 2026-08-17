@@ -12,6 +12,7 @@ import {
   type DiagnosticSuiteContext,
   type LocalClientDiagnostic
 } from '~/services/monitoring/clientDiagnosticsService'
+import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTracker'
 
 const CALLER = 'ClientDiagnostics'
 
@@ -45,6 +46,7 @@ export function useClientDiagnostics(options: {
   enabled?: Ref<boolean>
   captureEnabled?: Ref<boolean>
   flushEnabled?: Ref<boolean>
+  isLeaseCurrent?: (uid: string) => boolean
 }) {
   const { currentUser, canEnterApp } = useFirebaseAuth()
   const nuxtApp = useNuxtApp()
@@ -52,6 +54,8 @@ export function useClientDiagnostics(options: {
   const lastCapturedByFingerprint = new Map<string, number>()
   let intervalId: number | null = null
   let isFlushing = false
+  let flushQueued = false
+  const ownerOperations = createOwnerOperationTracker()
   const canCapture = () => options.captureEnabled?.value ?? options.enabled?.value ?? false
   const canFlush = () => options.flushEnabled?.value ?? options.enabled?.value ?? false
 
@@ -74,6 +78,7 @@ export function useClientDiagnostics(options: {
       const uid = currentUser.value?.uid
       if (!uid || !canEnterApp.value) return false
       const suite = electronAPI?.getSuiteVersion ? await electronAPI.getSuiteVersion() : null
+      if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
       const payload = buildDiagnosticDocument(event, uid, suite)
       await trackedSetDoc(
         doc(db, `users/${uid}/diagnostics/${payload.eventId}`),
@@ -87,7 +92,7 @@ export function useClientDiagnostics(options: {
     }
   }
 
-  async function flush(): Promise<number> {
+  async function performFlush(): Promise<number> {
     const uid = currentUser.value?.uid
     const electronAPI = getElectronApi()
     if (
@@ -96,8 +101,13 @@ export function useClientDiagnostics(options: {
       || !canEnterApp.value
       || !electronAPI?.listDiagnostics
       || !electronAPI?.acknowledgeDiagnostics
-      || isFlushing
     ) {
+      return 0
+    }
+    if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return 0
+
+    if (isFlushing) {
+      flushQueued = true
       return 0
     }
 
@@ -107,6 +117,7 @@ export function useClientDiagnostics(options: {
         electronAPI.listDiagnostics(50),
         electronAPI.getSuiteVersion ? electronAPI.getSuiteVersion() : Promise.resolve(null)
       ])
+      if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return 0
       const result = await flushDiagnosticOutbox({
         events: events || [],
         uid,
@@ -123,7 +134,8 @@ export function useClientDiagnostics(options: {
           toFirestoreDiagnostic(payload),
           CALLER
         ),
-        acknowledge: (eventId) => electronAPI.acknowledgeDiagnostics!([eventId])
+        acknowledge: (eventId) => electronAPI.acknowledgeDiagnostics!([eventId]),
+        isCurrent: options.isLeaseCurrent ? () => options.isLeaseCurrent!(uid) : undefined
       })
       return result.acknowledged
     } catch (error) {
@@ -131,7 +143,15 @@ export function useClientDiagnostics(options: {
       return 0
     } finally {
       isFlushing = false
+      if (flushQueued) {
+        flushQueued = false
+        void flush()
+      }
     }
+  }
+
+  function flush(): Promise<number> {
+    return ownerOperations.track(performFlush())
   }
 
   const onWindowError = (event: ErrorEvent) => {
@@ -200,5 +220,9 @@ export function useClientDiagnostics(options: {
     }
   })
 
-  return { capture, flush }
+  return {
+    capture,
+    flush,
+    waitForIdle: () => ownerOperations.drain()
+  }
 }

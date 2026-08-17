@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { reactive } from 'vue'
 import {
   buildRuntimeWindowSnapshot,
   isRuntimeWindowOwner,
@@ -51,9 +52,12 @@ describe('runtimeWindowBridge', () => {
       migrationProgress: null
     })
     expect(buildRuntimeWindowSnapshot(state)).not.toHaveProperty('coordinatorKey')
+
+    const proxyState = reactive(state)
+    expect(() => structuredClone(buildRuntimeWindowSnapshot(proxyState))).not.toThrow()
   })
 
-  it('inoltra manual sync solo dal consumer', async () => {
+  it('inoltra manual sync soltanto dall owner attraverso un solo broker', async () => {
     const requestRuntimeBootstrapCommand = vi.fn().mockResolvedValue({
       schemaVersion: 1,
       status: 'accepted',
@@ -62,16 +66,24 @@ describe('runtimeWindowBridge', () => {
     await expect(requestRuntimeWindowManualSync({
       runtimeBootstrapRole: 'consumer',
       requestRuntimeBootstrapCommand
-    })).resolves.toMatchObject({ status: 'accepted' })
-    expect(requestRuntimeBootstrapCommand).toHaveBeenCalledWith({
-      schemaVersion: 1,
-      type: 'manual-sync'
-    })
+    })).resolves.toBeNull()
+    expect(requestRuntimeBootstrapCommand).not.toHaveBeenCalled()
 
     await expect(requestRuntimeWindowManualSync({
       runtimeBootstrapRole: 'owner',
       requestRuntimeBootstrapCommand
-    })).resolves.toBeNull()
+    })).resolves.toMatchObject({ status: 'accepted' })
     expect(requestRuntimeBootstrapCommand).toHaveBeenCalledTimes(1)
+  })
+
+  it('pubblica idle e migrating come starting, mai come owner ready', async () => {
+    const publishRuntimeBootstrapState = vi.fn().mockResolvedValue({ ok: true })
+    const api = { runtimeBootstrapRole: 'owner' as const, publishRuntimeBootstrapState }
+
+    await publishRuntimeWindowSnapshot(api, { ...state, phase: 'idle' })
+    await publishRuntimeWindowSnapshot(api, { ...state, phase: 'migrating' })
+
+    expect(publishRuntimeBootstrapState.mock.calls.map(([snapshot]) => snapshot.lifecycle))
+      .toEqual(['starting', 'starting'])
   })
 })

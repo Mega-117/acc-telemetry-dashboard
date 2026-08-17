@@ -1,7 +1,7 @@
 import { onBeforeUnmount, watch, type Ref } from 'vue'
 import { db } from '~/config/firebase'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { trackedSetDoc } from '~/composables/useFirebaseTracker'
+import { trackedWriteBatch } from '~/composables/useFirebaseTracker'
 import {
   CLIENT_HEARTBEAT_INTERVAL_MS,
   buildClientHeartbeatPayload,
@@ -12,6 +12,7 @@ import {
 } from '~/services/monitoring/clientHeartbeatService'
 import { writeClientRuntimeReport } from '~/services/monitoring/clientRuntimeReportingService'
 import type { RuntimeBootstrapResult } from '~/services/runtime/runtimeBootstrapCoordinator'
+import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTracker'
 
 const CALLER = 'ClientHeartbeat'
 const STORAGE_KEY_PREFIX = 'acc_client_heartbeat_'
@@ -40,13 +41,17 @@ function storeHeartbeatAt(uid: string, heartbeatAt: string) {
 export function useClientHeartbeat(options: {
   enabled: Ref<boolean>
   runtimeState: Ref<RuntimeBootstrapResult<unknown>>
+  isLeaseCurrent?: (uid: string) => boolean
 }) {
   const { currentUser, canEnterApp } = useFirebaseAuth()
   let intervalId: number | null = null
   let unsubscribeWindowFocused: (() => void) | null = null
   let isSending = false
+  let sendQueued = false
+  let sendQueuedForce = false
+  const ownerOperations = createOwnerOperationTracker()
 
-  async function sendHeartbeat(force = false): Promise<boolean> {
+  async function performHeartbeat(force = false): Promise<boolean> {
     const uid = currentUser.value?.uid
     const electronAPI = getElectronApi()
     if (
@@ -55,14 +60,21 @@ export function useClientHeartbeat(options: {
       || !canEnterApp.value
       || !electronAPI?.getSuiteVersion
       || !electronAPI?.getRuntimeIdentity
-      || isSending
     ) {
+      return false
+    }
+    if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
+
+    if (isSending) {
+      sendQueued = true
+      sendQueuedForce = sendQueuedForce || force
       return false
     }
 
     isSending = true
     try {
       const identity = await electronAPI.getRuntimeIdentity()
+      if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
       const installationId = identity?.installationId
       if (!installationId || identity?.fallback === true) return false
       const nowMs = Date.now()
@@ -79,6 +91,7 @@ export function useClientHeartbeat(options: {
       }
 
       const version = await electronAPI.getSuiteVersion()
+      if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
       const heartbeatAt = new Date(nowMs).toISOString()
       const payload = version ? buildClientHeartbeatPayload(version, heartbeatAt, {
         identity,
@@ -90,28 +103,43 @@ export function useClientHeartbeat(options: {
         db,
         uid,
         payload,
-        setDocFn: (ref, data, writeOptions) => trackedSetDoc(
-          ref as Parameters<typeof trackedSetDoc>[0],
-          data,
-          writeOptions as { merge: true },
+        writeBatchFn: (firestore) => trackedWriteBatch(
+          firestore as Parameters<typeof trackedWriteBatch>[0],
           CALLER
-        )
+        ),
+        assertCurrent: options.isLeaseCurrent
+          ? () => {
+              if (!options.isLeaseCurrent!(uid)) throw new Error('cloud_owner_lease_stale')
+            }
+          : undefined
       })
+      if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
       storeHeartbeatAt(storageOwner, heartbeatAt)
+      console.info('[HEARTBEAT] Client runtime report committed reason=auth_ready')
       return true
     } catch (error: any) {
       console.warn('[HEARTBEAT] Client heartbeat failed:', error?.message || error)
       return false
     } finally {
       isSending = false
+      if (sendQueued) {
+        const queuedForce = sendQueuedForce
+        sendQueued = false
+        sendQueuedForce = false
+        void sendHeartbeat(queuedForce)
+      }
     }
+  }
+
+  function sendHeartbeat(force = false): Promise<boolean> {
+    return ownerOperations.track(performHeartbeat(force))
   }
 
   const stopWatch = watch(
     [currentUser, canEnterApp, options.enabled],
     ([user, canEnter, enabled]) => {
       if (user && canEnter && enabled) {
-        void sendHeartbeat(false)
+        void sendHeartbeat(true)
       }
     },
     { immediate: true }
@@ -142,6 +170,7 @@ export function useClientHeartbeat(options: {
   })
 
   return {
-    sendHeartbeat
+    sendHeartbeat,
+    waitForIdle: () => ownerOperations.drain()
   }
 }

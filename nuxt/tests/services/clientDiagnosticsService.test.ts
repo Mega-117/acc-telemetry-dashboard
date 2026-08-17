@@ -136,4 +136,25 @@ describe('clientDiagnosticsService', () => {
       ['event-b']
     ])
   })
+
+  it('non ack-a un evento se il lease diventa stale dopo la persistenza', async () => {
+    let current = true
+    const acknowledge = vi.fn().mockResolvedValue(undefined)
+    const upload = vi.fn(async () => {
+      current = false
+    })
+
+    await expect(flushDiagnosticOutbox({
+      events: [createLocalDiagnostic({ eventId: 'event-stale', message: 'stale' })],
+      uid: 'pilot-a',
+      suite: null,
+      isUploaded: vi.fn().mockResolvedValue(false),
+      upload,
+      acknowledge,
+      isCurrent: () => current
+    })).rejects.toThrow('cloud_owner_lease_stale')
+
+    expect(upload).toHaveBeenCalledTimes(1)
+    expect(acknowledge).not.toHaveBeenCalled()
+  })
 })

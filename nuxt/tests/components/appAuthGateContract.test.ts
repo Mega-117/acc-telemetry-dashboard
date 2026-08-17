@@ -56,4 +56,27 @@ describe('App protected runtime route contract', () => {
     expect(revisionGuard).toBeGreaterThan(0)
     expect(revisionGuard).toBeLessThan(bridgeSave)
   })
+
+  it('monta i job cloud solo nel primary e lascia RuntimeWindow consumer pura', () => {
+    const ownerSource = readFileSync(
+      fileURLToPath(new URL('../../app/composables/usePrimaryCloudOwner.ts', import.meta.url)),
+      'utf8',
+    )
+    const runtimePage = readFileSync(
+      fileURLToPath(new URL('../../app/pages/runtime-bootstrap.vue', import.meta.url)),
+      'utf8',
+    )
+
+    expect(appSource).toContain('usePrimaryCloudOwner')
+    expect(appSource).toContain('flushEnabled: primaryCloudOwner.jobsEnabled')
+    expect(ownerSource).toContain("api?.localIdentityRole === 'primary'")
+    expect(ownerSource).toContain('isRuntimeWindowOwner(api)')
+    expect(ownerSource).toContain('await waitForOwnerJobsIdle()')
+    expect(ownerSource).toContain('sync.waitForOwnerIdle()')
+    expect(ownerSource).toContain('heartbeat.waitForIdle()')
+    expect(appSource).toContain('primaryCloudOwner.registerOwnerDrainer(clientDiagnostics.waitForIdle)')
+    expect(runtimePage).not.toContain('useElectronSync')
+    expect(runtimePage).not.toContain('useClientHeartbeat')
+    expect(runtimePage).not.toMatch(/firebase/i)
+  })
 })

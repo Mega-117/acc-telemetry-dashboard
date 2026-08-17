@@ -10,6 +10,7 @@ import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useActivityFeed } from '~/composables/useActivityFeed'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
 import { useClientDiagnostics } from '~/composables/useClientDiagnostics'
+import { usePrimaryCloudOwner } from '~/composables/usePrimaryCloudOwner'
 import { endFirebaseScenario, startFirebaseScenario, withFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
@@ -71,11 +72,6 @@ const isPrimaryClientRuntime = computed(() => {
     && !isStandaloneRuntimeRoute.value
     && !isStandaloneDevRoute.value
 })
-useClientDiagnostics({
-  captureEnabled: computed(() => isPrimaryClientRuntime.value || isRuntimeBootstrapRoute.value),
-  flushEnabled: isRuntimeBootstrapRoute
-})
-
 watch(normalizedRoutePath, (path, previousPath) => {
   if (path === '/dev-voice-lab') {
     kokoroVoiceLabLifecycle.enterVoiceLab()
@@ -129,6 +125,16 @@ const {
   needsEmailVerification,
   logout: firebaseLogout
 } = useFirebaseAuth()
+const primaryCloudOwner = usePrimaryCloudOwner({
+  currentUser,
+  canEnterApp
+})
+const clientDiagnostics = useClientDiagnostics({
+  captureEnabled: computed(() => isPrimaryClientRuntime.value || isRuntimeBootstrapRoute.value),
+  flushEnabled: primaryCloudOwner.jobsEnabled,
+  isLeaseCurrent: primaryCloudOwner.isLeaseCurrent
+})
+primaryCloudOwner.registerOwnerDrainer(clientDiagnostics.waitForIdle)
 const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 const isProtectedRuntimeRoute = computed(() => (
   isTrainingOverlayIntent.value

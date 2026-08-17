@@ -226,15 +226,20 @@ export async function claimFirebaseStructureLease(input: {
   targetBestRulesVersion: number
   nowIso?: string
   leaseMs?: number
+  assertActive?: () => void
 }): Promise<boolean> {
+  const assertActive = input.assertActive || (() => {})
+  assertActive()
   const userRef = doc(db, `users/${input.uid}`)
 
   const updatedAt = input.nowIso || new Date().toISOString()
   const nowMs = Date.parse(updatedAt)
   const expiresAt = new Date(nowMs + (input.leaseMs ?? FIREBASE_STRUCTURE_LEASE_MS)).toISOString()
 
-  return trackedRunTransaction(db, CALLER, userRef, async (transaction) => {
+  const claimed = await trackedRunTransaction(db, CALLER, userRef, async (transaction) => {
+    assertActive()
     const snap = await transaction.get(userRef)
+    assertActive()
     const current = (snap.data()?.maintenance?.firebaseStructureHealth || null) as FirebaseStructureHealthState | null
     if (hasActiveLease(current, nowMs) && current?.lease?.id !== input.leaseId) {
       return false
@@ -253,6 +258,7 @@ export async function claimFirebaseStructureLease(input: {
       }
     })
 
+    assertActive()
     transaction.set(userRef, sanitizeForFirestore({
       maintenance: {
         firebaseStructureHealth: health
@@ -260,6 +266,8 @@ export async function claimFirebaseStructureLease(input: {
     }), { merge: true })
     return true
   }, { reads: 1, writes: 1 })
+  assertActive()
+  return claimed
 }
 
 export async function renewFirebaseStructureLease(input: {
@@ -267,14 +275,19 @@ export async function renewFirebaseStructureLease(input: {
   leaseId: string
   nowIso?: string
   leaseMs?: number
+  assertActive?: () => void
 }): Promise<boolean> {
+  const assertActive = input.assertActive || (() => {})
+  assertActive()
   const userRef = doc(db, `users/${input.uid}`)
   const updatedAt = input.nowIso || new Date().toISOString()
   const nowMs = Date.parse(updatedAt)
   const expiresAt = new Date(nowMs + (input.leaseMs ?? FIREBASE_STRUCTURE_LEASE_MS)).toISOString()
 
-  return trackedRunTransaction(db, CALLER, userRef, async (transaction) => {
+  const renewed = await trackedRunTransaction(db, CALLER, userRef, async (transaction) => {
+    assertActive()
     const snap = await transaction.get(userRef)
+    assertActive()
     const current = (snap.data()?.maintenance?.firebaseStructureHealth || null) as FirebaseStructureHealthState | null
     if (current?.status !== 'repairing' || current.lease?.id !== input.leaseId) {
       return false
@@ -290,6 +303,7 @@ export async function renewFirebaseStructureLease(input: {
         expiresAt
       }
     }
+    assertActive()
     transaction.set(userRef, sanitizeForFirestore({
       maintenance: {
         firebaseStructureHealth: health
@@ -297,6 +311,8 @@ export async function renewFirebaseStructureLease(input: {
     }), { merge: true })
     return true
   }, { reads: 1, writes: 1 })
+  assertActive()
+  return renewed
 }
 
 export async function publishFirebaseStructureHealth(input: {
@@ -308,7 +324,10 @@ export async function publishFirebaseStructureHealth(input: {
   issues?: string[]
   checkedAt?: string
   leaseId?: string
+  assertActive?: () => void
 }): Promise<boolean> {
+  const assertActive = input.assertActive || (() => {})
+  assertActive()
   const updatedAt = input.checkedAt || new Date().toISOString()
   const health = buildHealthDocument({
     status: input.status,
@@ -329,7 +348,9 @@ export async function publishFirebaseStructureHealth(input: {
 
   if (input.leaseId) {
     const published = await trackedRunTransaction(db, CALLER, userRef, async (transaction) => {
+      assertActive()
       const snap = await transaction.get(userRef)
+      assertActive()
       const current = (snap.data()?.maintenance?.firebaseStructureHealth || null) as FirebaseStructureHealthState | null
       if (current?.status !== 'repairing' || current.lease?.id !== input.leaseId) {
         return false
@@ -341,23 +362,31 @@ export async function publishFirebaseStructureHealth(input: {
       })) {
         return false
       }
+      assertActive()
       transaction.set(userRef, userPatch, { merge: true })
       return true
     }, { reads: 1, writes: 1 })
+    assertActive()
     if (!published) return false
   } else {
+    assertActive()
     await trackedSetDoc(userRef, userPatch, { merge: true }, CALLER)
+    assertActive()
   }
 
   const directoryRef = doc(db, `pilotDirectory/${input.uid}`)
+  assertActive()
   const directorySnap = await trackedGetDoc(directoryRef, CALLER)
+  assertActive()
   if (directorySnap.exists()) {
+    assertActive()
     await trackedSetDoc(
       directoryRef,
       sanitizeForFirestore(buildPilotDirectorySummary(health)),
       { merge: true },
       CALLER
     )
+    assertActive()
   }
   return true
 }

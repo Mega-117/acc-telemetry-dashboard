@@ -52,6 +52,7 @@ export interface DiagnosticOutboxFlushInput {
   isUploaded: (eventId: string) => Promise<boolean>
   upload: (payload: ClientDiagnosticUpload) => Promise<void>
   acknowledge: (eventId: string) => Promise<unknown>
+  isCurrent?: () => boolean
 }
 
 export interface DiagnosticOutboxFlushResult {
@@ -194,21 +195,31 @@ export async function flushDiagnosticOutbox(
   let uploaded = 0
   let acknowledged = 0
   let alreadyUploaded = 0
+  const assertCurrent = () => {
+    if (input.isCurrent && !input.isCurrent()) {
+      throw new Error('cloud_owner_lease_stale')
+    }
+  }
 
   for (const event of input.events) {
+    assertCurrent()
     const payload = buildDiagnosticDocument(event, input.uid, input.suite)
     const exists = await input.isUploaded(payload.eventId)
+    assertCurrent()
 
     if (exists) {
       alreadyUploaded += 1
     } else {
       await input.upload(payload)
+      assertCurrent()
       uploaded += 1
     }
 
     // Acknowledge each durable event immediately. If a later upload fails,
     // earlier events never remain stuck in the local outbox.
+    assertCurrent()
     await input.acknowledge(payload.eventId)
+    assertCurrent()
     acknowledged += 1
   }
 

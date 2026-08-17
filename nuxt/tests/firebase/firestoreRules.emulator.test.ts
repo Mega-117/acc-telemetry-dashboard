@@ -484,7 +484,7 @@ describe('canonical session synchronization', () => {
       getExistingSession: async () => null,
       loadRegistryCache: async () => ({}),
       canSkipViaRegistry: () => false,
-      deleteOldChunks: async () => undefined
+      listExistingChunks: async () => []
     })
 
     const result = await service.uploadOrUpdateSession(

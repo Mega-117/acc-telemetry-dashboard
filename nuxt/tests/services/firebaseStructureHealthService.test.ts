@@ -60,6 +60,40 @@ describe('firebase structure writes', () => {
     expect(transaction.set.mock.calls[0][0]).toEqual(expect.objectContaining({ path: expect.stringContaining('users/uid-1') }))
   })
 
+  it('non crea un lease fantasma se il cloud owner viene revocato durante la transaction', async () => {
+    let resolveGet!: (value: { data: () => { maintenance: Record<string, never> } }) => void
+    const pendingGet = new Promise<{ data: () => { maintenance: Record<string, never> } }>((resolve) => {
+      resolveGet = resolve
+    })
+    const transaction = {
+      get: vi.fn(() => pendingGet),
+      set: vi.fn()
+    }
+    trackedRunTransactionMock.mockImplementation(
+      async (_db: unknown, _caller: string, _target: unknown, callback: (tx: typeof transaction) => Promise<boolean>) => callback(transaction)
+    )
+    let active = true
+    const assertActive = () => {
+      if (!active) throw new Error('cloud_owner_lease_stale')
+    }
+
+    const claim = claimFirebaseStructureLease({
+      uid: 'uid-1',
+      leaseId: 'lease-1',
+      targetMigrationVersion: 5,
+      targetBestRulesVersion: 5,
+      nowIso: '2026-07-17T12:00:00.000Z',
+      assertActive
+    })
+
+    expect(transaction.get).toHaveBeenCalledOnce()
+    active = false
+    resolveGet({ data: () => ({ maintenance: {} }) })
+
+    await expect(claim).rejects.toThrow('cloud_owner_lease_stale')
+    expect(transaction.set).not.toHaveBeenCalled()
+  })
+
   it('non crea il mirror admin quando pilotDirectory non esiste', async () => {
     trackedGetDocMock.mockResolvedValue({ exists: () => false })
 

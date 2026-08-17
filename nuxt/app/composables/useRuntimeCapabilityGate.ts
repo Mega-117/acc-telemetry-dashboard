@@ -23,7 +23,10 @@ export function createRuntimeCapabilityStore() {
 
   function connect(api: RuntimeWindowElectronApi | null | undefined): () => void {
     consumers += 1
-    const isElectronConsumer = api?.runtimeBootstrapRole === 'consumer'
+    const isElectronConsumer = (
+      api?.runtimeBootstrapRole === 'consumer'
+      || api?.runtimeBootstrapRole === 'owner'
+    )
       && typeof api.getRuntimeBootstrapState === 'function'
     source.value = isElectronConsumer ? 'electron' : 'browser'
 

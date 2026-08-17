@@ -94,9 +94,18 @@ export function createSessionUploadService(params: {
     hashes: { fileHash: string; rawDataHash: string; summaryHash: string },
     uid: string
   ) => boolean
-  deleteOldChunks: (uid: string, sessionId: string) => Promise<void>
+  listExistingChunks: (uid: string, sessionId: string) => Promise<Array<{ id: string, ref: unknown }>>
+  assertActive?: () => void
 }) {
-  const { db, chunkSize, getExistingSession, loadRegistryCache, canSkipViaRegistry, deleteOldChunks } = params
+  const {
+    db,
+    chunkSize,
+    getExistingSession,
+    loadRegistryCache,
+    canSkipViaRegistry,
+    listExistingChunks,
+    assertActive = () => {}
+  } = params
 
   return {
     async uploadOrUpdateSession(
@@ -108,6 +117,7 @@ export function createSessionUploadService(params: {
       options: { precomputedHash?: string } = {}
     ) {
       try {
+        assertActive()
         const totalLaps = rawObj.session_info?.laps_total || 0
         if (totalLaps === 0) {
           return { status: 'skipped' as const, fileName, reason: 'zero_laps' }
@@ -126,6 +136,7 @@ export function createSessionUploadService(params: {
         const fileHash = options.precomputedHash || await calculateContentHash(rawText)
         const rawDataHash = await calculateRawDataHash(rawObj)
         const summaryHash = await calculateSummaryHash(summaryWithRules)
+        assertActive()
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         const getExistingRulesVersion = (existingDoc: any): number =>
@@ -135,9 +146,11 @@ export function createSessionUploadService(params: {
         let existing: any = null
         let existingChecked = false
         const registry = await loadRegistryCache()
+        assertActive()
         const registryEntry = registry[fileName]
         if (canSkipViaRegistry(registry, fileName, { fileHash, rawDataHash, summaryHash }, uid)) {
           existing = await getExistingSession(uid, sessionId)
+          assertActive()
           existingChecked = true
           const existingRulesVersion = getExistingRulesVersion(existing)
           if (existing && existing.fileHash === fileHash && existingRulesVersion >= BEST_RULES_VERSION) {
@@ -147,11 +160,13 @@ export function createSessionUploadService(params: {
 
         if (!existingChecked) {
           existing = await getExistingSession(uid, sessionId)
+          assertActive()
         }
 
         let isUpdate = false
         let chunksNeedUpdate = true
         let isRulesMigration = false
+        let existingChunks: Array<{ id: string, ref: unknown }> = []
         if (existing) {
           isUpdate = true
           const existingRulesVersion = getExistingRulesVersion(existing)
@@ -175,7 +190,9 @@ export function createSessionUploadService(params: {
             chunksNeedUpdate = false
             isRulesMigration = true
           } else {
-            await deleteOldChunks(uid, sessionId)
+            assertActive()
+            existingChunks = await listExistingChunks(uid, sessionId)
+            assertActive()
           }
         }
 
@@ -206,9 +223,17 @@ export function createSessionUploadService(params: {
             const chunkRef = doc(collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`), `${idx}`)
             batch.set(chunkRef, { idx, chunk: chunks[idx] })
           }
+          const nextChunkIds = new Set(chunks.map((_, idx) => String(idx)))
+          for (const existingChunk of existingChunks) {
+            if (!nextChunkIds.has(String(existingChunk.id))) {
+              batch.delete(existingChunk.ref as any)
+            }
+          }
         }
 
+        assertActive()
         await batch.commit()
+        assertActive()
         const projectionDelta: TrackBestProjectionDelta = {
           trackId: meta.track,
           sessionId,

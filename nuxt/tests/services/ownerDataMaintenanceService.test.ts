@@ -215,7 +215,9 @@ describe('runOwnerDataMaintenanceGate', () => {
 
     expect(report.status).toBe('completed')
     expect(auditOwnerDataMock).toHaveBeenCalledWith('uid-1')
-    expect(rebuildOwnerProjectionsMock).toHaveBeenCalledWith('uid-1')
+    expect(rebuildOwnerProjectionsMock).toHaveBeenCalledWith('uid-1', {
+      assertActive: expect.any(Function)
+    })
   })
 
   it('riesegue audit completo per uno stato partial scaduto', async () => {
@@ -259,8 +261,53 @@ describe('runOwnerDataMaintenanceGate', () => {
     const report = await runOwnerDataMaintenanceGate({ uid: 'uid-1' })
 
     expect(report.status).toBe('completed')
-    expect(reprocessOwnerCloudRawSummariesMock).toHaveBeenCalledWith('uid-1', { forceAll: true })
-    expect(rebuildOwnerProjectionsMock).toHaveBeenCalledWith('uid-1')
+    expect(reprocessOwnerCloudRawSummariesMock).toHaveBeenCalledWith('uid-1', {
+      forceAll: true,
+      assertActive: expect.any(Function)
+    })
+    expect(rebuildOwnerProjectionsMock).toHaveBeenCalledWith('uid-1', {
+      assertActive: expect.any(Function)
+    })
+  })
+
+  it('interrompe il vecchio owner dopo revoke senza checkpoint blocked o write successive', async () => {
+    let active = true
+    getDocMock.mockResolvedValue({
+      exists: () => true,
+      data: () => ({
+        maintenance: {
+          canonicalDataMigration: {
+            version: 4,
+            bestRulesVersion: 5,
+            status: 'completed'
+          }
+        }
+      })
+    })
+    reprocessOwnerCloudRawSummariesMock.mockImplementation(async (_uid, options) => {
+      expect(options.assertActive).toEqual(expect.any(Function))
+      active = false
+      return {
+        scannedSessions: 1,
+        eligibleSessions: 1,
+        processedSessions: 1,
+        updatedSessions: 1,
+        failedSessions: 0,
+        skippedNoRaw: 0
+      }
+    })
+    const assertActive = () => {
+      if (!active) throw new Error('cloud_owner_lease_stale')
+    }
+
+    const { runOwnerDataMaintenanceGate } = await import('~/services/sync/ownerDataMaintenanceService')
+    await expect(runOwnerDataMaintenanceGate({ uid: 'uid-1', assertActive }))
+      .rejects.toThrow('cloud_owner_lease_stale')
+
+    expect(rebuildOwnerProjectionsMock).not.toHaveBeenCalled()
+    expect(verifyOwnerMigrationLightweightMock).not.toHaveBeenCalled()
+    expect(publishFirebaseStructureHealthMock).not.toHaveBeenCalled()
+    expect(advanceCheckpointMock.mock.calls.some(([input]) => input.checkpoint?.phase === 'blocked')).toBe(false)
   })
 
   it('mantiene partial recuperabile e abilita il normale sync per nuovi raw', async () => {

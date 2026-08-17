@@ -43,10 +43,8 @@ function payload(installationId: string): ClientHeartbeatPayload {
 describe('clientRuntimeReportingService', () => {
   it('scrive una fonte per-installazione e due adapter con budget 3 write/0 read', async () => {
     const paths: string[] = []
-    const setDocFn = vi.fn(async () => undefined)
-    const updateProjectionFn = vi.fn(async (params: any) => {
-      await params.setDocFn(params.docFn(params.db, `pilotDirectory/${params.uid}`), params.fields, { merge: true })
-    })
+    const set = vi.fn()
+    const commit = vi.fn(async () => undefined)
 
     const result = await writeClientRuntimeReport({
       db: {},
@@ -56,16 +54,16 @@ describe('clientRuntimeReportingService', () => {
         paths.push(path)
         return path
       },
-      setDocFn,
-      updateProjectionFn
+      writeBatchFn: () => ({ set, commit })
     })
 
     expect(result).toEqual({
       writes: CLIENT_RUNTIME_REPORT_WRITE_BUDGET,
       reads: CLIENT_RUNTIME_REPORT_READ_BUDGET
     })
-    expect(setDocFn).toHaveBeenCalledTimes(3)
-    expect(setDocFn.mock.calls[0]?.[1]).toMatchObject({
+    expect(set).toHaveBeenCalledTimes(3)
+    expect(commit).toHaveBeenCalledTimes(1)
+    expect(set.mock.calls[0]?.[1]).toMatchObject({
       startedAt: '2026-07-30T18:00:00.000Z',
       lastSuiteLaunchAt: '2026-07-30T18:45:00.000Z',
       lastDashboardOpenedAt: '2026-07-30T18:50:00.000Z',
@@ -80,16 +78,20 @@ describe('clientRuntimeReportingService', () => {
 
   it('non tocca una installazione sibling quando cambia il writer', async () => {
     const documents = new Map<string, unknown>()
-    const setDocFn = vi.fn(async (ref: unknown, data: unknown) => {
-      documents.set(String(ref), data)
+    const writeBatchFn = vi.fn(() => {
+      const pending: Array<[unknown, unknown]> = []
+      return {
+        set: (ref: unknown, data: unknown) => pending.push([ref, data]),
+        commit: async () => {
+          for (const [ref, data] of pending) documents.set(String(ref), data)
+        }
+      }
     })
-    const updateProjectionFn = vi.fn(async () => undefined)
     const common = {
       db: {},
       uid: 'pilot-1',
       docFn: (_db: unknown, path: string) => path,
-      setDocFn,
-      updateProjectionFn
+      writeBatchFn
     }
 
     await writeClientRuntimeReport({ ...common, payload: payload('install-a') })
@@ -98,5 +100,27 @@ describe('clientRuntimeReportingService', () => {
 
     expect(documents.has('users/pilot-1/runtimeInstallations/install-a')).toBe(true)
     expect(documents.has('users/pilot-1/runtimeInstallations/install-b')).toBe(true)
+  })
+
+  it('mantiene atomiche e coerenti le tre proiezioni', async () => {
+    const set = vi.fn()
+    const commit = vi.fn(async () => { throw new Error('batch denied') })
+
+    await expect(writeClientRuntimeReport({
+      db: {},
+      uid: 'pilot-1',
+      payload: payload('install-a'),
+      docFn: (_db, path) => path,
+      writeBatchFn: () => ({ set, commit })
+    })).rejects.toThrow('batch denied')
+
+    expect(set).toHaveBeenCalledTimes(3)
+    expect(commit).toHaveBeenCalledTimes(1)
+    const installation = set.mock.calls[0]?.[1]
+    const user = set.mock.calls[1]?.[1]
+    const directory = set.mock.calls[2]?.[1]
+    expect(installation.lastContactAt).toBe(user.clientRuntime.lastHeartbeatAt)
+    expect(directory.clientLastHeartbeatAt).toBe(user.clientRuntime.lastHeartbeatAt)
+    expect(directory.suiteVersion).toBe(user.suiteVersion)
   })
 })

@@ -154,6 +154,11 @@ export interface OwnerCloudSummaryReprocessReport {
 
 export interface OwnerCloudSummaryReprocessOptions {
   forceAll?: boolean
+  assertActive?: () => void
+}
+
+export interface OwnerDataRepairGuardOptions {
+  assertActive?: () => void
 }
 
 function issue(
@@ -259,10 +264,14 @@ async function loadCollectionDocs(path: string): Promise<any[]> {
   return snap.docs || []
 }
 
-async function deleteCollectionDocs(path: string): Promise<number> {
+async function deleteCollectionDocs(path: string, assertActive: () => void = () => {}): Promise<number> {
+  assertActive()
   const docs = await loadCollectionDocs(path)
+  assertActive()
   for (const docSnap of docs) {
+    assertActive()
     await deleteDocTracked(docSnap.ref)
+    assertActive()
   }
   return docs.length
 }
@@ -585,22 +594,47 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
 export async function runOwnerProjectionRepairWrites(input: {
   writeFullPilotDirectory: () => Promise<void>
   writeUserProjection: () => Promise<void>
+  assertActive?: () => void
 }): Promise<boolean> {
+  const assertActive = input.assertActive || (() => {})
   let wrotePilotDirectory = false
   try {
+    assertActive()
     await input.writeFullPilotDirectory()
+    assertActive()
     wrotePilotDirectory = true
   } catch {
+    assertActive()
     // User projections remain repairable even when the optional directory mirror is unavailable.
   }
 
+  assertActive()
   await input.writeUserProjection()
+  assertActive()
   return wrotePilotDirectory
 }
 
-export async function rebuildOwnerProjections(uid: string): Promise<OwnerProjectionRebuildReport> {
+export async function rebuildOwnerProjections(
+  uid: string,
+  options: OwnerDataRepairGuardOptions = {}
+): Promise<OwnerProjectionRebuildReport> {
+  const assertActive = options.assertActive || (() => {})
+  const guardedGetDoc = async (ref: any) => {
+    assertActive()
+    const result = await getDocTracked(ref)
+    assertActive()
+    return result
+  }
+  const guardedSetDoc = async (ref: any, data: any, writeOptions?: any) => {
+    assertActive()
+    const result = await setDocTracked(ref, data, writeOptions)
+    assertActive()
+    return result
+  }
   return withFirebaseScenario('dev.ownerRebuild.projections', { uid }, async () => {
+    assertActive()
     const sessions = await loadOwnerSessions(uid)
+    assertActive()
     const trackIds = getTrackIdsFromSessions(sessions)
     const stats = buildUserStatsProjection(sessions)
     const deltas: TrackBestProjectionDelta[] = sessions
@@ -613,21 +647,23 @@ export async function rebuildOwnerProjections(uid: string): Promise<OwnerProject
         car: session.meta.car
       }))
 
-    const deletedTrackBests = await deleteCollectionDocs(`users/${uid}/trackBests`)
-    const deletedTrackDetailProjections = await deleteCollectionDocs(`users/${uid}/trackDetailProjections`)
+    const deletedTrackBests = await deleteCollectionDocs(`users/${uid}/trackBests`, assertActive)
+    const deletedTrackDetailProjections = await deleteCollectionDocs(`users/${uid}/trackDetailProjections`, assertActive)
 
+    assertActive()
     const trackBestsResult = await applyTrackBestsProjectionDeltas({
       db,
       uid,
       deltas,
-      getDocFn: getDocTracked,
-      setDocFn: setDocTracked,
+      getDocFn: guardedGetDoc,
+      setDocFn: guardedSetDoc,
       bestRulesVersion: BEST_RULES_VERSION
     })
+    assertActive()
 
     const wrotePilotDirectory = await runOwnerProjectionRepairWrites({
       writeFullPilotDirectory: async () => {
-        const userSnap = await getDocTracked(doc(db, `users/${uid}`))
+        const userSnap = await guardedGetDoc(doc(db, `users/${uid}`))
         const userData = userSnap.exists() ? (userSnap.data() || {}) : {}
         await writePilotDirectoryFromUser({
           db,
@@ -641,16 +677,18 @@ export async function rebuildOwnerProjections(uid: string): Promise<OwnerProject
               lastSessionDate: stats.lastSessionDate
             }
           },
-          setDocFn: setDocTracked
+          setDocFn: guardedSetDoc
         })
       },
       writeUserProjection: () => writeUserProjectionDocuments({
         db,
         uid,
         sessions,
-        setDocFn: setDocTracked
-      })
+        setDocFn: guardedSetDoc
+      }),
+      assertActive
     })
+    assertActive()
 
     return {
       generatedAt: new Date().toISOString(),
@@ -667,15 +705,27 @@ export async function rebuildOwnerProjections(uid: string): Promise<OwnerProject
   })
 }
 
-export async function rebuildOwnerSessionListProjection(uid: string): Promise<OwnerSessionListProjectionRebuildReport> {
+export async function rebuildOwnerSessionListProjection(
+  uid: string,
+  options: OwnerDataRepairGuardOptions = {}
+): Promise<OwnerSessionListProjectionRebuildReport> {
+  const assertActive = options.assertActive || (() => {})
   return withFirebaseScenario('maintenance.ownerData.sessionListProjectionRebuild', { uid }, async () => {
+    assertActive()
     const sessions = await loadOwnerSessions(uid)
+    assertActive()
     const projection = await writeSessionListProjectionDocuments({
       db,
       uid,
       sessions,
-      setDocFn: setDocTracked
+      setDocFn: async (ref: any, data: any, writeOptions?: any) => {
+        assertActive()
+        const result = await setDocTracked(ref, data, writeOptions)
+        assertActive()
+        return result
+      }
     })
+    assertActive()
 
     return {
       generatedAt: new Date().toISOString(),
@@ -692,9 +742,12 @@ export async function reprocessOwnerCloudRawSummaries(
   options: OwnerCloudSummaryReprocessOptions = {}
 ): Promise<OwnerCloudSummaryReprocessReport> {
   const forceAll = options.forceAll === true
+  const assertActive = options.assertActive || (() => {})
 
   return withFirebaseScenario('dev.ownerRebuild.cloudRawSummaries', { uid, forceAll }, async () => {
+    assertActive()
     const sessionDocs = await loadCollectionDocs(`users/${uid}/sessions`)
+    assertActive()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     const eligibleDocs = sessionDocs.filter((docSnap: any) => {
       if (forceAll) return true
@@ -721,13 +774,16 @@ export async function reprocessOwnerCloudRawSummaries(
 
     for (const docSnap of eligibleDocs) {
       try {
+        assertActive()
         const rawObj = await reconstructRawPayloadFromChunks(uid, docSnap.id, getDocsTracked)
+        assertActive()
         if (!rawObj) {
           report.skippedNoRaw += 1
           continue
         }
 
         const canonical = await canonicalizeCloudRawPayload(rawObj)
+        assertActive()
         if (!canonical?.summary) {
           report.failedSessions += 1
           report.errors.push({ sessionId: docSnap.id, message: 'Canonical summary non generato.' })
@@ -759,10 +815,13 @@ export async function reprocessOwnerCloudRawSummaries(
           continue
         }
 
+        assertActive()
         await setDocTracked(docSnap.ref, nextPayload, { merge: true })
+        assertActive()
         report.updatedSessions += 1
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       } catch (error: any) {
+        assertActive()
         report.failedSessions += 1
         report.errors.push({
           sessionId: docSnap.id,
@@ -771,6 +830,7 @@ export async function reprocessOwnerCloudRawSummaries(
       }
     }
 
+    assertActive()
     return {
       ...report,
       errors: report.errors.slice(0, MAX_ISSUES)
