@@ -109,6 +109,7 @@ export interface HudTransientViewportRequest {
 
 export interface HudOverlayBridge {
   hudOverlayGetSettings?: (overlayId: string) => Promise<HudOverlaySettings | null>
+  hudOverlayContentReady?: (overlayId: string) => Promise<boolean>
   hudOverlaySetTransientViewport?: (
     overlayId: string,
     request: HudTransientViewportRequest,

@@ -206,6 +206,7 @@ function focusedFastState(
 
   return {
     dataSource: 'focused',
+    localDriver: null,
     context: {
       track: local.context?.track ?? null,
       car: null,

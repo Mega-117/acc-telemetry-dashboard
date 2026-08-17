@@ -15,6 +15,12 @@ function makeState(overrides: Record<string, any> = {}) {
   return {
     ts: freshTs(),
     is_live: true,
+    local_driver: {
+      car_index: 17,
+      first_name: 'Enrico',
+      last_name: 'Saiani',
+      position: 4,
+    },
     is_engine_running: true,
     pit_limiter_on: false,
     session_type: 0,
@@ -66,6 +72,12 @@ describe('useFastStatePoller', () => {
     expect(isFastStateActive.value).toBe(true)
     expect(fastState.value.speedKmh).toBe(132.4)
     expect(fastState.value.sessionType).toBe(0)
+    expect(fastState.value.localDriver).toEqual({
+      carIndex: 17,
+      firstName: 'Enrico',
+      lastName: 'Saiani',
+      position: 4,
+    })
     expect(fastState.value.flag).toBe(2)
     expect(fastState.value.gas).toBe(0.7)
     expect(fastState.value.isEngineRunning).toBe(true)
@@ -89,6 +101,25 @@ describe('useFastStatePoller', () => {
     expect(fastState.value.tyres[0]?.brakeCompound).toBe(1)
     expect(fastState.value.tyres[0]?.padLifePct).toBe(99.7)
     expect(fastState.value.tyres[0]?.discLifePct).toBe(99.9)
+  })
+
+  it('espone una promise che si risolve solo dopo il primo snapshot', async () => {
+    let resolveSnapshot: ((state: any) => void) | null = null
+    const api = {
+      getFastState: vi.fn(() => new Promise(resolve => { resolveSnapshot = resolve })),
+    }
+    const { fastState, startFastStatePolling } = useFastStatePoller(() => api)
+
+    let firstPollCompleted = false
+    const firstPoll = startFastStatePolling().then(() => { firstPollCompleted = true })
+    await flushPromises()
+    expect(firstPollCompleted).toBe(false)
+    expect(fastState.value.localDriver).toBeNull()
+
+    resolveSnapshot!(makeState())
+    await firstPoll
+    expect(firstPollCompleted).toBe(true)
+    expect(fastState.value.localDriver?.carIndex).toBe(17)
   })
 
   it('normalizza il contratto centralizzato Info e il contesto Target', async () => {
@@ -187,8 +218,7 @@ describe('useFastStatePoller', () => {
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval')
     const { isFastStateActive, startFastStatePolling } = useFastStatePoller(() => ({}))
 
-    startFastStatePolling()
-    await flushPromises()
+    await startFastStatePolling()
 
     expect(isFastStateActive.value).toBe(false)
     expect(setIntervalSpy).not.toHaveBeenCalled()

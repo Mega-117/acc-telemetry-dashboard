@@ -12,13 +12,20 @@ describe('Standings overlay contract', () => {
     expect(page).toContain("definePageMeta({ layout: 'hud-overlay' })")
     expect(page).toContain("useHudOverlay('standings', getApi)")
     expect(page).toContain('useStandingsState(getApi)')
+    expect(page).toContain('useFastStatePoller(getApi)')
+    expect(page).toContain('route.query.standingsBootstrap')
     expect(page).toContain('useStandingsHighlights(standings.state, standings.nowMs)')
     expect(page).toContain('standings.start()')
+    expect(page).toContain('fastState.startFastStatePolling()')
+    expect(page).toContain('await firstFastState')
+    expect(page).toContain("hudOverlayContentReady?.('standings')")
+    expect(page).toContain('requestAnimationFrame(() => requestAnimationFrame')
     expect(page).toContain('standingsHighlights.stop()')
     expect(page).toContain('standings.stop()')
+    expect(page).toContain('fastState.stopFastStatePolling()')
   })
 
-  it('usa esclusivamente il layout persistito dal manager e nasconde tutto senza modello affidabile', () => {
+  it('usa esclusivamente il layout persistito/bootstrap del manager e non deriva geometria dal renderer', () => {
     expect(page).toContain('model.value.layout.width')
     expect(page).toContain('model.value.layout.height')
     expect(page).not.toMatch(/\.overlay-canvas\{[^}]*width:\s*900px|height:\s*600px/s)

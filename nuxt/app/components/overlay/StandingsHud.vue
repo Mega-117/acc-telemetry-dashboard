@@ -54,7 +54,7 @@ const gridTemplateColumns = computed(() => [
     <div class="standings-rows">
       <div
         v-for="row in model.rows"
-        :key="row.carIndex"
+        :key="row.carIndex ?? 'local'"
         class="standings-row"
         :class="{ 'is-local': row.local }"
         :style="{ gridTemplateColumns }"
@@ -62,7 +62,7 @@ const gridTemplateColumns = computed(() => [
         <strong
           class="standings-row__position"
           :class="!row.local && row.positionFlash ? `is-${row.positionFlash}` : null"
-        >{{ row.position }}</strong>
+        >{{ row.position ?? '—' }}</strong>
         <strong class="standings-row__driver">{{ row.driverName }}</strong>
         <strong
           v-if="model.columns.carNumber"
@@ -97,6 +97,11 @@ const gridTemplateColumns = computed(() => [
           ></i>
         </span>
       </div>
+      <p
+        v-if="model.message"
+        class="standings-recovery"
+        role="status"
+      >{{ model.message }}</p>
     </div>
   </section>
 </template>
@@ -108,6 +113,7 @@ const gridTemplateColumns = computed(() => [
 .standings-header__left,.standings-header__right { display:flex;min-width:0;gap:28px;align-items:center;overflow:hidden;text-overflow:ellipsis; }
 .standings-header__right { margin-left:auto; }
 .standings-rows { display:flex;flex-direction:column;align-items:stretch;min-height:0;overflow:hidden; }
+.standings-recovery { display:flex;align-items:center;min-height:var(--standings-row-height);margin:0;color:rgba(255,255,255,0.76);font-size:14px;font-weight:600;letter-spacing:0.01em; }
 .standings-row { display:grid;height:var(--standings-row-height);min-height:var(--standings-row-height);column-gap:var(--standings-column-gap);align-items:center;box-sizing:border-box;overflow:hidden;color:white;font-size:18px;font-weight:700;line-height:1; }
 .standings-row > strong { box-sizing:border-box;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .standings-row.is-local { background:rgba(0,170,255,0.34);box-shadow:inset 0 0 0 1px rgba(131,231,255,0.72); }

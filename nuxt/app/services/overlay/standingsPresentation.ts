@@ -74,6 +74,22 @@ export interface StandingsSnapshot {
   session: StandingsSessionSnapshot
   cars: StandingsCarSnapshot[]
   focused_pit_exit_traffic?: FocusedPitExitTrafficSnapshot
+  roster?: {
+    entry_list_received?: unknown
+    expected_cars?: unknown
+    identified_cars?: unknown
+    realtime_cars?: unknown
+    complete?: unknown
+  }
+}
+
+export interface StandingsLocalDriverSnapshot {
+  isFresh: boolean
+  isLive: boolean
+  carIndex: number | null
+  firstName: string | null
+  lastName: string | null
+  position: number | null
 }
 
 export interface StandingsStateEnvelope {
@@ -104,8 +120,8 @@ export interface StandingsRowHighlight {
 export type StandingsHighlightMap = Readonly<Record<number, StandingsRowHighlight>>
 
 export interface StandingsPresentationRow {
-  carIndex: number
-  position: number
+  carIndex: number | null
+  position: number | null
   positionFlash: StandingsPositionFlash | null
   carNumber: string | null
   carNumberColors: StandingsCarNumberColors
@@ -123,6 +139,7 @@ export interface StandingsPresentationRow {
 
 export interface StandingsPresentation {
   visible: boolean
+  message: string | null
   header: {
     sessionType: string | null
     timeLeft: string | null
@@ -161,6 +178,7 @@ export const ACC_BROADCASTING_SESSION_TYPES = Object.freeze({
 function hiddenPresentation(options: StandingsPresentationOptions): StandingsPresentation {
   return {
     visible: false,
+    message: null,
     header: {
       sessionType: null,
       timeLeft: null,
@@ -317,8 +335,9 @@ export function selectStandingsCars(
 export function selectFreshLocalClassCars(
   snapshot: StandingsSnapshot,
   nowMs: number,
+  localCarIndexOverride?: number | null,
 ): StandingsCarSnapshot[] {
-  const localCarIndex = finiteNumber(snapshot.session.local_car_index)
+  const localCarIndex = finiteNumber(localCarIndexOverride ?? snapshot.session.local_car_index)
   const local = Number.isInteger(localCarIndex)
     ? snapshot.cars.find(car => car.car_index === localCarIndex)
     : null
@@ -345,6 +364,7 @@ export function buildStandingsPresentation(
   optionsInput: Partial<StandingsPresentationOptions> = {},
   nowMs = Date.now(),
   highlights: StandingsHighlightMap = {},
+  localDriverInput: StandingsLocalDriverSnapshot | null = null,
 ): StandingsPresentation {
   const options: StandingsPresentationOptions = {
     topCars: clampCarCount(optionsInput.topCars ?? DEFAULT_STANDINGS_OPTIONS.topCars),
@@ -359,25 +379,58 @@ export function buildStandingsPresentation(
   const hidden = hiddenPresentation(options)
   const configuredRowCapacity = options.topCars + options.carsAhead + options.carsBehind + 1
   if (!options.standingsLayout || options.standingsLayout.rowCapacity !== configuredRowCapacity) return hidden
-  if (state?.status !== 'available' || !state.snapshot || state.snapshot.session.is_replay === true) {
-    return hidden
+  const clockMs = finiteNumber(nowMs)
+  if (clockMs === null) return hidden
+
+  const snapshot = state?.status === 'available'
+    && state.snapshot
+    && state.snapshot.session.is_replay !== true
+    ? state.snapshot
+    : null
+  const sharedLocal = localDriverInput?.isFresh === true && localDriverInput.isLive === true
+    ? localDriverInput
+    : null
+  const sharedCarIndex = finiteNumber(sharedLocal?.carIndex)
+  const localCarIndex = Number.isInteger(sharedCarIndex) && sharedCarIndex !== null && sharedCarIndex >= 0
+    ? sharedCarIndex
+    : null
+  const udpLocal = localCarIndex === null
+    ? null
+    : snapshot?.cars.find(car => car.car_index === localCarIndex) ?? null
+  const focus = snapshot?.cars.find(car => car.car_index === snapshot.session.focused_car_index)
+  const localClass = udpLocal?.has_identity === true ? safeText(udpLocal.car_class, 80) : null
+  const localPosition = (() => {
+    const shared = finiteNumber(sharedLocal?.position)
+    if (shared !== null && Number.isInteger(shared) && shared > 0) return shared
+    return null
+  })()
+  const hasLocal = sharedLocal !== null
+
+  let eligible: StandingsCarSnapshot[] = []
+  if (snapshot && localClass && localCarIndex !== null) {
+    eligible = selectFreshLocalClassCars(snapshot, clockMs, localCarIndex)
+    const withoutLocal = eligible.filter(car => car.car_index !== localCarIndex)
+    eligible = withoutLocal
+    if (hasLocal && localPosition !== null) {
+      const localCandidate: StandingsCarSnapshot = {
+        ...(udpLocal ?? {}),
+        car_index: localCarIndex,
+        car_class: localClass,
+        drivers: udpLocal?.drivers ?? [],
+        position: localPosition,
+        has_identity: udpLocal?.has_identity === true,
+        has_realtime: true,
+        realtime_updated_at_ms: clockMs,
+      }
+      eligible = [...withoutLocal, localCandidate]
+        .sort((left, right) => Number(left.position) - Number(right.position) || left.car_index - right.car_index)
+    }
   }
 
-  const snapshot = state.snapshot
-  const localCarIndex = finiteNumber(snapshot.session.local_car_index)
-  if (!Number.isInteger(localCarIndex) || localCarIndex === null || localCarIndex < 0) return hidden
-  const local = snapshot.cars.find(car => car.car_index === localCarIndex)
-  const focus = snapshot.cars.find(car => car.car_index === snapshot.session.focused_car_index)
-  const localClass = safeText(local?.car_class, 80)
-  const clockMs = finiteNumber(nowMs)
-  if (!local || !localClass || clockMs === null) return hidden
-
-  const eligible = selectFreshLocalClassCars(snapshot, clockMs)
-
-  const localIndex = eligible.findIndex(car => car.car_index === local.car_index)
-  if (localIndex < 0) return hidden
-
-  const selectedCars = selectStandingsCars(eligible, localIndex, options)
+  const localIndex = localCarIndex === null
+    ? -1
+    : eligible.findIndex(car => car.car_index === localCarIndex)
+  const selectedCars = localIndex >= 0 ? selectStandingsCars(eligible, localIndex, options) : []
   const classPositionByCarIndex = new Map(
     eligible.map((car, index) => [car.car_index, index + 1]),
   )
@@ -387,16 +440,16 @@ export function buildStandingsPresentation(
     .filter((value): value is number => value !== null)
     .reduce<number | null>((best, value) => best === null || value < best ? value : best, null)
 
-  const sessionType = formatStandingsSessionType(snapshot.session.session_type)
-  const sessionTypeCode = finiteNumber(snapshot.session.session_type)
+  const sessionType = formatStandingsSessionType(snapshot?.session.session_type)
+  const sessionTypeCode = finiteNumber(snapshot?.session.session_type)
   const showProgressData = options.showLapProgressBar
     && sessionType !== null
     && sessionTypeCode !== ACC_BROADCASTING_SESSION_TYPES.RACE
 
-  const rows = selectedCars
+  let rows = selectedCars
     .map((car): StandingsPresentationRow => {
       const focused = car.car_index === focus?.car_index
-      const isLocal = car.car_index === local.car_index
+      const isLocal = car.car_index === localCarIndex
       const bestLapMs = lapTime(car, 'best')
       const raceNumber = finiteNumber(car.race_number)
       const spline = finiteNumber(car.spline_position)
@@ -414,7 +467,7 @@ export function buildStandingsPresentation(
         carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
           ? String(Math.round(raceNumber)) : null,
         carNumberColors: standingsCarNumberColors(car.car_class),
-        driverName: formatStandingsDriverName(car),
+        driverName: isLocal ? formatLocalDriverName(sharedLocal) : formatStandingsDriverName(car),
         inPitLane,
         lastLap: options.showLastLap ? formatStandingsLapTime(lapTime(car, 'last')) : null,
         bestLap: options.showFastestLap ? formatStandingsLapTime(bestLapMs) : null,
@@ -427,15 +480,52 @@ export function buildStandingsPresentation(
       }
     })
 
+  if (hasLocal && rows.every(row => row.local !== true)) {
+    const localName = formatLocalDriverName(sharedLocal)
+    const raceNumber = finiteNumber(udpLocal?.race_number)
+    rows = [{
+      carIndex: localCarIndex,
+      position: localPosition,
+      positionFlash: null,
+      carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
+        ? String(Math.round(raceNumber)) : null,
+      carNumberColors: standingsCarNumberColors(localClass),
+      driverName: localName,
+      inPitLane: finiteNumber(udpLocal?.car_location) === 2,
+      lastLap: options.showLastLap ? formatStandingsLapTime(udpLocal ? lapTime(udpLocal, 'last') : null) : null,
+      bestLap: options.showFastestLap ? formatStandingsLapTime(udpLocal ? lapTime(udpLocal, 'best') : null) : null,
+      fastestInClass: false,
+      lastLapPersonalBest: null,
+      progressPercent: null,
+      hasProgress: false,
+      local: true,
+      focused: localCarIndex !== null && localCarIndex === focus?.car_index,
+    }]
+  }
+
+  const rosterComplete = snapshot?.roster?.complete === true
+    || (snapshot?.cars.length ? snapshot.cars.every(car => car.has_identity === true) : false)
+  const realtimeComplete = snapshot?.cars.length
+    ? snapshot.cars.every(car => car.has_realtime === true && isFreshCar(car, clockMs, snapshot.freshness.ttl_ms))
+    : false
+  const message = !snapshot || !hasLocal || !localClass || !rosterComplete || !realtimeComplete
+    ? 'Classifica in aggiornamento…'
+    : null
+  if (message && rows.length >= options.standingsLayout.rowCapacity) {
+    const removable = [...rows].reverse().find(row => row.local !== true)
+    if (removable) rows = rows.filter(row => row !== removable)
+  }
+
   return {
-    visible: rows.length > 0,
+    visible: true,
+    message,
     header: {
       sessionType,
       timeLeft: formatStandingsRemainingTime(
-        snapshot.session.session_time_ms,
-        snapshot.session.session_end_time_ms,
+        snapshot?.session.session_time_ms,
+        snapshot?.session.session_end_time_ms,
       ),
-      temperatures: formatStandingsTemperatures(snapshot.session.weather),
+      temperatures: formatStandingsTemperatures(snapshot?.session.weather),
       carClass: localClass,
     },
     rows,
@@ -447,4 +537,14 @@ export function buildStandingsPresentation(
     },
     layout: options.standingsLayout,
   }
+}
+
+function formatLocalDriverName(
+  local: StandingsLocalDriverSnapshot | null,
+): string {
+  const firstName = safeText(local?.firstName, 60)
+  const lastName = safeText(local?.lastName, 60)
+  if (lastName) return `${firstName?.charAt(0).toUpperCase() ?? ''}. ${lastName}`
+  if (firstName) return firstName
+  return 'Pilota locale'
 }

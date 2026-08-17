@@ -11,6 +11,7 @@ import {
   type StandingsCarSnapshot,
   type StandingsHighlightMap,
   type StandingsPresentationOptions,
+  type StandingsLocalDriverSnapshot,
   type StandingsStateEnvelope,
 } from '../../app/services/overlay/standingsPresentation'
 
@@ -84,6 +85,7 @@ function buildStandingsPresentation(
   options: Partial<StandingsPresentationOptions> = {},
   nowMs = NOW_MS,
   highlights: StandingsHighlightMap = {},
+  localDriverInput?: StandingsLocalDriverSnapshot | null,
 ) {
   const clampCount = (value: unknown, fallback: number) => {
     const numeric = Number(value ?? fallback)
@@ -93,6 +95,21 @@ function buildStandingsPresentation(
     + clampCount(options.carsAhead, 3)
     + clampCount(options.carsBehind, 3)
     + 1
+  const snapshot = stateValue?.snapshot
+  const localCarIndex = Number(snapshot?.session.local_car_index)
+  const localCar = Number.isInteger(localCarIndex)
+    ? snapshot?.cars.find(item => item.car_index === localCarIndex)
+    : null
+  const localDriver = localDriverInput === undefined && localCar
+    ? {
+        isFresh: true,
+        isLive: true,
+        carIndex: localCar.car_index,
+        firstName: String(localCar.drivers[0]?.first_name ?? ''),
+        lastName: String(localCar.drivers[0]?.last_name ?? ''),
+        position: Number(localCar.position),
+      }
+    : localDriverInput ?? null
   return buildStandingsPresentationRaw(stateValue, {
     ...options,
     standingsLayout: {
@@ -102,7 +119,7 @@ function buildStandingsPresentation(
         + STANDINGS_LAYOUT.headerHeight
         + rowCapacity * STANDINGS_LAYOUT.rowHeight,
     },
-  }, nowMs, highlights)
+  }, nowMs, highlights, localDriver)
 }
 
 describe('standingsPresentation', () => {
@@ -117,37 +134,112 @@ describe('standingsPresentation', () => {
     }
 
     const expected = new Map([
-      [101, [1, 2, 3, 4, 5, 6, 7, 8]],
-      [102, [1, 2, 3, 4, 5, 6, 7, 8]],
-      [104, [1, 2, 3, 4, 5, 6, 7, 8]],
-      [112, [1, 2, 3, 8, 9, 10, 11, 12]],
+      [101, [1, 2, 3, 4, 5, 6, 7]],
+      [102, [1, 2, 3, 4, 5, 6, 7]],
+      [104, [1, 2, 3, 4, 5, 6, 7]],
+      [112, [1, 2, 3, 8, 9, 10, 12]],
     ])
     expected.forEach((positions, localCarIndex) => {
       const model = buildStandingsPresentation(state(cars, 101, localCarIndex), options, NOW_MS)
       expect(model.rows.map(row => row.position)).toEqual(positions)
-      expect(model.rows).toHaveLength(8)
+      expect(model.rows).toHaveLength(7)
+      expect(model.message).toBe('Classifica in aggiornamento…')
       expect(model.rows.filter(row => row.local).map(row => row.carIndex)).toEqual([localCarIndex])
     })
   })
 
-  it('non inventa la classe da altri campi e nasconde replay/unavailable', () => {
+  it('non inventa la classe da altri campi e non nasconde per replay/unavailable UDP', () => {
     const withoutClass = car(8, { car_class: null }) as StandingsCarSnapshot & { cup_category: number }
     withoutClass.cup_category = 0
-    expect(buildStandingsPresentation(state([withoutClass]), {}, NOW_MS).visible).toBe(false)
-    expect(buildStandingsPresentation({ status: 'unavailable', reason: 'stale', snapshot: null }, {}, NOW_MS).visible).toBe(false)
+    const classless = buildStandingsPresentation(state([withoutClass]), {}, NOW_MS)
+    expect(classless.visible).toBe(true)
+    expect(classless.rows).toHaveLength(1)
+    expect(classless.header.carClass).toBeNull()
+    expect(classless.message).toBe('Classifica in aggiornamento…')
+
+    const local: StandingsLocalDriverSnapshot = {
+      isFresh: true,
+      isLive: true,
+      carIndex: 108,
+      firstName: 'Alex',
+      lastName: 'Driver8',
+      position: 8,
+    }
+    const unavailable = buildStandingsPresentation(
+      { status: 'unavailable', reason: 'stale', snapshot: null }, {}, NOW_MS, {}, local,
+    )
+    expect(unavailable.visible).toBe(true)
+    expect(unavailable.rows).toHaveLength(1)
+    expect(unavailable.message).toBe('Classifica in aggiornamento…')
 
     const replay = state([car(8)])
     replay.snapshot!.session.is_replay = true
-    expect(buildStandingsPresentation(replay, {}, NOW_MS).visible).toBe(false)
+    expect(buildStandingsPresentation(replay, {}, NOW_MS).visible).toBe(true)
   })
 
-  it('filtra righe stale/non affidabili e nasconde l’intero HUD se l’auto locale non resta eleggibile', () => {
+  it('filtra righe UDP stale/non affidabili ma conserva sempre la riga locale shared-memory', () => {
     const staleLocal = state([car(8, { realtime_updated_at_ms: NOW_MS - 5001 })])
     const unidentifiedLocal = state([car(8, { has_identity: false })])
     const unrankedLocal = state([car(8, { position: 0 })])
-    expect(buildStandingsPresentation(staleLocal, {}, NOW_MS).visible).toBe(false)
-    expect(buildStandingsPresentation(unidentifiedLocal, {}, NOW_MS).visible).toBe(false)
-    expect(buildStandingsPresentation(unrankedLocal, {}, NOW_MS).visible).toBe(false)
+    for (const candidate of [staleLocal, unidentifiedLocal, unrankedLocal]) {
+      const model = buildStandingsPresentation(candidate, {}, NOW_MS)
+      expect(model.visible).toBe(true)
+      expect(model.rows).toHaveLength(1)
+      expect(model.rows[0].local).toBe(true)
+    }
+  })
+
+  it('apre LIVE prima di UDP e mostra pilota locale con recovery neutro', () => {
+    const local: StandingsLocalDriverSnapshot = {
+      isFresh: true,
+      isLive: true,
+      carIndex: 17,
+      firstName: 'Enrico',
+      lastName: 'Saiani',
+      position: 4,
+    }
+    const model = buildStandingsPresentation(
+      { status: 'unavailable', reason: 'read-error', snapshot: null }, {}, NOW_MS, {}, local,
+    )
+
+    expect(model.visible).toBe(true)
+    expect(model.message).toBe('Classifica in aggiornamento…')
+    expect(model.rows).toEqual([expect.objectContaining({
+      carIndex: 17,
+      position: 4,
+      driverName: 'E. Saiani',
+      local: true,
+    })])
+  })
+
+  it('con entry list tardiva o classe locale mancante non mostra classifiche multi-classe', () => {
+    const local = car(8, { car_class: null })
+    const opponent = car(2, { car_index: 202, car_class: 'GT3' })
+    const model = buildStandingsPresentation(
+      state([opponent, local], 108, 108),
+      { topCars: 3, carsAhead: 3, carsBehind: 3 },
+      NOW_MS,
+    )
+
+    expect(model.visible).toBe(true)
+    expect(model.header.carClass).toBeNull()
+    expect(model.rows.map(row => row.carIndex)).toEqual([108])
+    expect(model.message).toBe('Classifica in aggiornamento…')
+  })
+
+  it('locale senza avversari resta visibile senza inventare altre righe', () => {
+    const model = buildStandingsPresentation(state([car(8)]), {}, NOW_MS)
+    expect(model.visible).toBe(true)
+    expect(model.rows).toHaveLength(1)
+    expect(model.rows[0].local).toBe(true)
+    expect(model.message).toBeNull()
+  })
+
+  it('non ricava la riga locale dal solo UDP quando shared-memory manca', () => {
+    const model = buildStandingsPresentation(state([car(8)]), {}, NOW_MS, {}, null)
+    expect(model.visible).toBe(true)
+    expect(model.rows).toEqual([])
+    expect(model.message).toBe('Classifica in aggiornamento…')
   })
 
   it('ordina con la posizione assoluta ACC e mostra la posizione derivata nella classe', () => {
@@ -177,7 +269,7 @@ describe('standingsPresentation', () => {
     }, NOW_MS)
     expect(model.rows[0]).toMatchObject({
       carNumber: null,
-      driverName: 'NoData',
+      driverName: 'A. Driver8',
       bestLap: null,
       lastLap: null,
       progressPercent: null,

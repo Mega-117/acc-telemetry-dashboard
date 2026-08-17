@@ -41,6 +41,13 @@ export interface FastStateContext {
   serverId: string | null
 }
 
+export interface FastStateLocalDriver {
+  carIndex: number | null
+  firstName: string | null
+  lastName: string | null
+  position: number | null
+}
+
 export interface FastStateInfo {
   delta: {
     ms: number
@@ -70,6 +77,7 @@ export interface FastStateInfo {
 export interface FastOverlayState {
   dataSource?: 'local' | 'focused'
   context: FastStateContext | null
+  localDriver: FastStateLocalDriver | null
   info: FastStateInfo | null
   flag: number | null
   lapsCompleted: number
@@ -133,6 +141,7 @@ export interface FastOverlayState {
 const EMPTY_FAST_STATE: FastOverlayState = {
   dataSource: 'local',
   context: null,
+  localDriver: null,
   info: null,
   flag: null,
   lapsCompleted: 0,
@@ -222,6 +231,18 @@ function normalizeContext(raw: any): FastStateContext | null {
     sessionIndex: toNumber(raw.session_index),
     sessionUid: toStringOrNull(raw.session_uid),
     serverId: toStringOrNull(raw.server_id),
+  }
+}
+
+function normalizeLocalDriver(raw: any): FastStateLocalDriver | null {
+  if (!raw || typeof raw !== 'object') return null
+  const carIndex = toNumber(raw.car_index)
+  const position = toNumber(raw.position)
+  return {
+    carIndex: carIndex !== null && Number.isInteger(carIndex) && carIndex >= 0 ? carIndex : null,
+    firstName: toStringOrNull(raw.first_name),
+    lastName: toStringOrNull(raw.last_name),
+    position: position !== null && Number.isInteger(position) && position > 0 ? position : null,
   }
 }
 
@@ -329,6 +350,7 @@ function normalizeFastState(state: any): FastOverlayState {
   return {
     dataSource: 'local',
     context: normalizeContext(state.context),
+    localDriver: normalizeLocalDriver(state.local_driver),
     info: normalizeInfo(state.info),
     flag: toNumber(state.flag),
     lapsCompleted: toNumber(state.laps_completed) ?? 0,
@@ -402,13 +424,13 @@ export function useFastStatePoller(getApi: () => any | null) {
     fastState.value = normalizeFastState(state)
   }
 
-  function startFastStatePolling() {
+  function startFastStatePolling(): Promise<void> {
     stopFastStatePolling()
 
     const api = getApi()
     if (!api?.getFastState) {
       applyState(null)
-      return
+      return Promise.resolve()
     }
 
     if (typeof api.onFastStateUpdate === 'function') {
@@ -432,8 +454,9 @@ export function useFastStatePoller(getApi: () => any | null) {
       }
     }
 
-    void pollOnce()
+    const firstPoll = pollOnce()
     fastStateInterval = setInterval(pollOnce, FAST_STATE_POLL_MS)
+    return firstPoll
   }
 
   function stopFastStatePolling() {

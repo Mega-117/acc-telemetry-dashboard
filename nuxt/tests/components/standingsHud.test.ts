@@ -49,6 +49,7 @@ function model(): StandingsPresentation {
       focused: true,
       local: true,
     }],
+    message: null,
     columns: { carNumber: true, lastLap: true, bestLap: true, progress: true },
   }
 }
@@ -105,6 +106,19 @@ describe('StandingsHud DOM', () => {
     expect(html).not.toContain('is-pb-')
     expect(html).toContain('standings-row__progress-cell')
     expect(html).toContain('width:0%')
+  })
+
+  it('mostra il messaggio neutro di recovery dentro il pannello senza nascondere la riga locale', async () => {
+    const recovering = model()
+    recovering.message = 'Classifica in aggiornamento…'
+    const html = await renderToString(createSSRApp(StandingsHud, {
+      model: recovering,
+      backgroundOpacity: 0.5,
+    }))
+
+    expect(html).toContain('Classifica in aggiornamento…')
+    expect(html).toContain('V. Rossi')
+    expect(html).toContain('standings-recovery')
   })
 
   it('non monta il contenitore quando il modello non è affidabile', async () => {
