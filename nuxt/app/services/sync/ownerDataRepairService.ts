@@ -582,6 +582,22 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
   })
 }
 
+export async function runOwnerProjectionRepairWrites(input: {
+  writeFullPilotDirectory: () => Promise<void>
+  writeUserProjection: () => Promise<void>
+}): Promise<boolean> {
+  let wrotePilotDirectory = false
+  try {
+    await input.writeFullPilotDirectory()
+    wrotePilotDirectory = true
+  } catch {
+    // User projections remain repairable even when the optional directory mirror is unavailable.
+  }
+
+  await input.writeUserProjection()
+  return wrotePilotDirectory
+}
+
 export async function rebuildOwnerProjections(uid: string): Promise<OwnerProjectionRebuildReport> {
   return withFirebaseScenario('dev.ownerRebuild.projections', { uid }, async () => {
     const sessions = await loadOwnerSessions(uid)
@@ -609,32 +625,32 @@ export async function rebuildOwnerProjections(uid: string): Promise<OwnerProject
       bestRulesVersion: BEST_RULES_VERSION
     })
 
-    await writeUserProjectionDocuments({
-      db,
-      uid,
-      sessions,
-      setDocFn: setDocTracked
-    })
-
-    let wrotePilotDirectory = false
-    try {
-      const userSnap = await getDocTracked(doc(db, `users/${uid}`))
-      const userData = userSnap.exists() ? (userSnap.data() || {}) : {}
-      await writePilotDirectoryFromUser({
+    const wrotePilotDirectory = await runOwnerProjectionRepairWrites({
+      writeFullPilotDirectory: async () => {
+        const userSnap = await getDocTracked(doc(db, `users/${uid}`))
+        const userData = userSnap.exists() ? (userSnap.data() || {}) : {}
+        await writePilotDirectoryFromUser({
+          db,
+          uid,
+          userData: {
+            uid,
+            ...userData,
+            stats: {
+              ...(userData.stats || {}),
+              sessionsLast7Days: stats.sessionsLast7Days,
+              lastSessionDate: stats.lastSessionDate
+            }
+          },
+          setDocFn: setDocTracked
+        })
+      },
+      writeUserProjection: () => writeUserProjectionDocuments({
         db,
         uid,
-        userData: {
-          uid,
-          ...userData,
-          sessionsLast7Days: stats.sessionsLast7Days,
-          lastSessionDate: stats.lastSessionDate
-        },
+        sessions,
         setDocFn: setDocTracked
       })
-      wrotePilotDirectory = true
-    } catch {
-      wrotePilotDirectory = false
-    }
+    })
 
     return {
       generatedAt: new Date().toISOString(),

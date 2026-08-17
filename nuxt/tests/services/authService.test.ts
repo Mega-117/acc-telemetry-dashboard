@@ -28,6 +28,7 @@ vi.mock('~/services/auth/userProvisioningService', () => ({
 
 import {
   loginWithEmail,
+  refreshEmailVerificationState,
   sendPasswordResetWithEmail,
   translateAuthError
 } from '~/services/auth/authService'
@@ -65,6 +66,33 @@ describe('loginWithEmail', () => {
     )
     expect(result.user).toBe(user)
     expect(result.user.emailVerified).toBe(true)
+  })
+})
+
+describe('refreshEmailVerificationState', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authMock.currentUser = null
+  })
+
+  it('refreshes the ID token after reload before exposing the verified user', async () => {
+    const user = {
+      emailVerified: false,
+      reload: vi.fn(async () => {
+        user.emailVerified = true
+      }),
+      getIdToken: vi.fn().mockResolvedValue('fresh-token')
+    }
+    authMock.currentUser = user
+
+    const result = await refreshEmailVerificationState(user as never)
+
+    expect(user.reload).toHaveBeenCalledOnce()
+    expect(user.getIdToken).toHaveBeenCalledWith(true)
+    expect(user.reload.mock.invocationCallOrder[0]).toBeLessThan(
+      user.getIdToken.mock.invocationCallOrder[0]
+    )
+    expect(result).toEqual({ verified: true, user })
   })
 })
 

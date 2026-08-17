@@ -30,6 +30,7 @@ import {
 } from '~/services/sync/canonicalMigrationCheckpoint'
 import { createSessionUploadService } from '~/services/sync/sessionUploadService'
 import { inspectFirebaseStructureState } from '~/services/sync/firebaseStructureHealthService'
+import { repairPilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 const PROJECT_ID = 'accsuite117'
@@ -38,6 +39,7 @@ const SECOND_PILOT_UID = 'qa-pilot-2'
 const COACH_UID = 'qa-coach'
 const ADMIN_UID = 'qa-admin'
 const FRESH_PILOT_UID = 'qa-fresh-pilot'
+const FRESH_PILOT_EMAIL = 'qa-fresh-pilot@accsuite.invalid'
 
 let testEnv: RulesTestEnvironment
 
@@ -78,6 +80,54 @@ function runtimeInstallationPayload(installationId: string, lastContactAt = '202
   }
 }
 
+function initialPilotUserPayload(uid: string, overrides: Record<string, unknown> = {}) {
+  return {
+    uid,
+    email: `${uid}@accsuite.invalid`,
+    nickname: uid,
+    role: 'pilot',
+    coachId: null,
+    createdAt: '2026-08-14T13:00:00.000Z',
+    emailVerified: true,
+    directorySortName: uid,
+    searchPrefixes: [uid],
+    ...overrides
+  }
+}
+
+function publicProfilePayload(uid: string, overrides: Record<string, unknown> = {}) {
+  return {
+    uid,
+    nickname: uid,
+    avatarUrl: null,
+    createdAt: '2026-08-14T13:00:00.000Z',
+    updatedAt: '2026-08-14T13:00:00.000Z',
+    ...overrides
+  }
+}
+
+function pilotDirectoryPayload(uid: string, overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1,
+    uid,
+    firstName: '',
+    lastName: '',
+    nickname: uid,
+    role: 'pilot',
+    coachId: null,
+    sessionsLast7Days: 0,
+    lastSessionDate: null,
+    suiteVersion: null,
+    suiteVersionUpdatedAt: null,
+    clientChannel: null,
+    clientUpdateState: null,
+    clientLastHeartbeatAt: null,
+    directorySortName: uid,
+    searchPrefixes: [uid],
+    ...overrides
+  }
+}
+
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: PROJECT_ID,
@@ -95,26 +145,26 @@ beforeEach(async () => {
     const db = context.firestore()
     await Promise.all([
       setDoc(doc(db, `users/${PILOT_UID}`), {
+        uid: PILOT_UID,
         role: 'pilot',
         coachId: null
       }),
       setDoc(doc(db, `users/${SECOND_PILOT_UID}`), {
+        uid: SECOND_PILOT_UID,
         role: 'pilot',
         coachId: null
       }),
       setDoc(doc(db, `users/${ADMIN_UID}`), {
+        uid: ADMIN_UID,
         role: 'admin',
         coachId: null
       }),
       setDoc(doc(db, `users/${COACH_UID}`), {
+        uid: COACH_UID,
         role: 'coach',
         coachId: null
       }),
-      setDoc(doc(db, `pilotDirectory/${PILOT_UID}`), {
-        uid: PILOT_UID,
-        role: 'pilot',
-        coachId: null
-      })
+      setDoc(doc(db, `pilotDirectory/${PILOT_UID}`), pilotDirectoryPayload(PILOT_UID))
     ])
   })
 })
@@ -125,23 +175,261 @@ afterAll(async () => {
 
 describe('fresh user provisioning contract', () => {
   it('accetta create e retry dello stesso profilo pilot completo', async () => {
-    const db = testEnv.authenticatedContext(FRESH_PILOT_UID).firestore()
+    const db = testEnv.authenticatedContext(FRESH_PILOT_UID, {
+      email: FRESH_PILOT_EMAIL,
+      email_verified: true
+    }).firestore()
     const userRef = doc(db, `users/${FRESH_PILOT_UID}`)
-    const payload = {
-      uid: FRESH_PILOT_UID,
-      email: 'qa-fresh-pilot@accsuite.invalid',
-      nickname: 'qa-fresh-pilot',
-      role: 'pilot',
-      coachId: null,
-      createdAt: '2026-08-14T13:00:00.000Z',
-      emailVerified: true
-    }
+    const payload = initialPilotUserPayload(FRESH_PILOT_UID)
 
     await assertSucceeds(setDoc(userRef, payload))
     await assertSucceeds(setDoc(userRef, payload))
+    await assertSucceeds(setDoc(
+      doc(db, `pilotDirectory/${FRESH_PILOT_UID}`),
+      pilotDirectoryPayload(FRESH_PILOT_UID)
+    ))
+    await assertSucceeds(setDoc(
+      doc(db, `publicProfiles/${FRESH_PILOT_UID}`),
+      publicProfilePayload(FRESH_PILOT_UID)
+    ))
 
     const stored = await assertSucceeds(getDoc(userRef))
     expect(stored.data()?.coachId).toBeNull()
+  })
+})
+
+describe('top-level profile authorization matrix', () => {
+  it('nega self-admin, self-coach, identita incoerente e shape user extra o incompleta', async () => {
+    const db = testEnv.authenticatedContext(FRESH_PILOT_UID, {
+      email: FRESH_PILOT_EMAIL,
+      email_verified: true
+    }).firestore()
+    const userRef = doc(db, `users/${FRESH_PILOT_UID}`)
+    const payload = initialPilotUserPayload(FRESH_PILOT_UID)
+
+    await assertFails(setDoc(userRef, { ...payload, role: 'admin' }))
+    await assertFails(setDoc(userRef, { ...payload, role: 'coach' }))
+    await assertFails(setDoc(userRef, { ...payload, coachId: FRESH_PILOT_UID }))
+    await assertFails(setDoc(userRef, { ...payload, uid: SECOND_PILOT_UID }))
+    await assertFails(setDoc(userRef, { ...payload, email: 'spoofed@accsuite.invalid' }))
+    await assertFails(setDoc(userRef, { ...payload, emailVerified: false }))
+    await assertFails(setDoc(userRef, { ...payload, serverOwned: true }))
+    await assertFails(setDoc(userRef, { ...payload, nickname: 42 }))
+    await assertFails(setDoc(userRef, { ...payload, searchPrefixes: 'qa' }))
+
+    const incomplete = { ...payload } as Record<string, unknown>
+    delete incomplete.searchPrefixes
+    await assertFails(setDoc(userRef, incomplete))
+    await assertFails(setDoc(
+      doc(db, `users/${SECOND_PILOT_UID}`),
+      initialPilotUserPayload(SECOND_PILOT_UID)
+    ))
+  })
+
+  it('consente update owner legittimi ma blocca trusted fields e delete user', async () => {
+    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const userRef = doc(db, `users/${PILOT_UID}`)
+
+    await assertSucceeds(setDoc(userRef, {
+      equipment: { wheel: 'QA Wheel' },
+      stats: { schemaVersion: 1, totalSessions: 2 },
+      maintenance: { firebaseStructureHealth: { status: 'repairing' } }
+    }, { merge: true }))
+    await assertFails(updateDoc(userRef, { role: 'admin' }))
+    await assertFails(updateDoc(userRef, { coachId: PILOT_UID }))
+    await assertFails(updateDoc(userRef, { uid: SECOND_PILOT_UID }))
+    await assertFails(updateDoc(userRef, { createdAt: 'spoofed' }))
+    await assertFails(setDoc(userRef, { serverOwned: true }, { merge: true }))
+    await assertFails(deleteDoc(userRef))
+  })
+
+  it('vincola email ed emailVerified del profilo esistente ai claim Auth', async () => {
+    const uid = 'qa-auth-identity'
+    const email = `${uid}@accsuite.invalid`
+    const db = testEnv.authenticatedContext(uid, {
+      email,
+      email_verified: true
+    }).firestore()
+    const userRef = doc(db, `users/${uid}`)
+
+    await assertSucceeds(setDoc(userRef, initialPilotUserPayload(uid)))
+    await assertFails(updateDoc(userRef, { email: 'spoofed@accsuite.invalid' }))
+    await assertFails(updateDoc(userRef, { emailVerified: false }))
+    await assertSucceeds(updateDoc(userRef, { nickname: 'QA Auth' }))
+  })
+
+  it('consente all admin create, update e delete user', async () => {
+    const uid = 'qa-admin-managed-user'
+    const db = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const userRef = doc(db, `users/${uid}`)
+
+    await assertSucceeds(setDoc(userRef, {
+      uid,
+      role: 'coach',
+      coachId: null,
+      createdAt: '2026-08-17T20:00:00.000Z'
+    }))
+    await assertSucceeds(updateDoc(userRef, { role: 'pilot', coachId: COACH_UID }))
+    await assertSucceeds(deleteDoc(userRef))
+  })
+
+  it('consente read al coach assegnato ma nega mutazioni e pilot-spoof', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await setDoc(doc(db, `users/${PILOT_UID}`), {
+        uid: PILOT_UID,
+        role: 'pilot',
+        coachId: COACH_UID
+      })
+    })
+
+    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
+    const pilotSpoofDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    await assertSucceeds(getDoc(doc(coachDb, `users/${PILOT_UID}`)))
+    await assertFails(setDoc(doc(coachDb, 'users/qa-coach-created'), {
+      uid: 'qa-coach-created',
+      role: 'pilot',
+      coachId: COACH_UID
+    }))
+    await assertFails(updateDoc(doc(coachDb, `users/${PILOT_UID}`), { nickname: 'tamper' }))
+    await assertFails(deleteDoc(doc(coachDb, `users/${PILOT_UID}`)))
+
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), `users/${PILOT_UID}`), {
+        coachId: SECOND_PILOT_UID
+      })
+    })
+    await assertFails(getDoc(doc(pilotSpoofDb, `users/${PILOT_UID}`)))
+  })
+
+  it('limita publicProfiles owner ai campi pubblici e riserva delete all admin', async () => {
+    const db = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const profileRef = doc(db, `publicProfiles/${PILOT_UID}`)
+    const ensurePayload = publicProfilePayload(PILOT_UID) as Record<string, unknown>
+    delete ensurePayload.createdAt
+
+    await assertSucceeds(setDoc(profileRef, ensurePayload))
+    await assertSucceeds(updateDoc(profileRef, {
+      nickname: 'QA Pilot',
+      updatedAt: '2026-08-17T20:01:00.000Z'
+    }))
+    await assertFails(setDoc(profileRef, { role: 'admin' }, { merge: true }))
+    await assertFails(updateDoc(profileRef, { nickname: 42 }))
+    await assertFails(updateDoc(profileRef, { uid: SECOND_PILOT_UID }))
+    await assertFails(updateDoc(profileRef, { createdAt: 'spoofed' }))
+    await assertFails(deleteDoc(profileRef))
+  })
+
+  it('applica la matrice admin/coach a publicProfiles', async () => {
+    const uid = 'qa-public-managed'
+    const profilePath = `publicProfiles/${uid}`
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
+
+    await assertFails(setDoc(doc(coachDb, profilePath), publicProfilePayload(uid)))
+    await assertSucceeds(setDoc(doc(adminDb, profilePath), publicProfilePayload(uid)))
+    await assertFails(updateDoc(doc(coachDb, profilePath), { nickname: 'tamper' }))
+    await assertFails(deleteDoc(doc(coachDb, profilePath)))
+    await assertSucceeds(updateDoc(doc(adminDb, profilePath), {
+      createdAt: '2026-08-17T20:02:00.000Z'
+    }))
+    await assertSucceeds(deleteDoc(doc(adminDb, profilePath)))
+  })
+
+  it('richiede directory owner completa, allowlisted e coerente con users', async () => {
+    const uid = 'qa-directory-owner'
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `users/${uid}`), {
+        uid,
+        role: 'pilot',
+        coachId: null
+      })
+    })
+    const db = testEnv.authenticatedContext(uid).firestore()
+    const directoryRef = doc(db, `pilotDirectory/${uid}`)
+    const payload = pilotDirectoryPayload(uid)
+
+    await assertFails(setDoc(directoryRef, { schemaVersion: 1, uid }))
+    await assertFails(setDoc(directoryRef, { ...payload, role: 'admin' }))
+    await assertFails(setDoc(directoryRef, { ...payload, coachId: uid }))
+    await assertFails(setDoc(directoryRef, { ...payload, uid: SECOND_PILOT_UID }))
+    await assertFails(setDoc(directoryRef, { ...payload, serverOwned: true }))
+    await assertFails(setDoc(directoryRef, { ...payload, sessionsLast7Days: 'three' }))
+    await assertSucceeds(setDoc(directoryRef, payload))
+    await assertSucceeds(setDoc(directoryRef, {
+      schemaVersion: 1,
+      uid,
+      sessionsLast7Days: 3,
+      lastSessionDate: '2026-08-17T20:03:00.000Z',
+      suiteVersion: '0.4.0-dev.5',
+      suiteVersionUpdatedAt: '2026-08-17T20:03:00.000Z',
+      clientChannel: 'develop',
+      clientUpdateState: 'current',
+      clientLastHeartbeatAt: '2026-08-17T20:03:00.000Z',
+      firebaseHealthStatus: 'healthy',
+      firebaseHealthMigrationVersion: 5,
+      firebaseHealthCheckedAt: '2026-08-17T20:03:00.000Z',
+      firebaseHealthCode: 'structure_verified'
+    }, { merge: true }))
+    await assertFails(updateDoc(directoryRef, { role: 'admin' }))
+    await assertFails(updateDoc(directoryRef, { coachId: uid }))
+    await assertFails(setDoc(directoryRef, { trustedExtra: true }, { merge: true }))
+    await assertFails(deleteDoc(directoryRef))
+  })
+
+  it('ripara una directory mancante e proietta solo coach autorevole', async () => {
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    await assertSucceeds(updateDoc(doc(adminDb, `users/${PILOT_UID}`), {
+      coachId: COACH_UID
+    }))
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await deleteDoc(doc(context.firestore(), `pilotDirectory/${PILOT_UID}`))
+    })
+
+    const ownerDb = testEnv.authenticatedContext(PILOT_UID).firestore()
+    await expect(repairPilotDirectoryFromUser({
+      db: ownerDb,
+      uid: PILOT_UID,
+      getDocFn: getDoc,
+      setDocFn: setDoc
+    })).resolves.toMatchObject({ uid: PILOT_UID, wrote: true })
+
+    const stored = await assertSucceeds(getDoc(doc(ownerDb, `pilotDirectory/${PILOT_UID}`)))
+    expect(stored.data()).toMatchObject({
+      uid: PILOT_UID,
+      role: 'pilot',
+      coachId: COACH_UID
+    })
+    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
+    await assertSucceeds(getDoc(doc(coachDb, `pilotDirectory/${PILOT_UID}`)))
+    await assertFails(getDoc(doc(
+      testEnv.authenticatedContext(SECOND_PILOT_UID).firestore(),
+      `pilotDirectory/${PILOT_UID}`
+    )))
+  })
+
+  it('applica create, update e delete admin e nega le stesse mutazioni al coach', async () => {
+    const uid = 'qa-directory-managed'
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `users/${uid}`), {
+        uid,
+        role: 'pilot',
+        coachId: null
+      })
+    })
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
+    const path = `pilotDirectory/${uid}`
+
+    await assertFails(setDoc(doc(coachDb, path), pilotDirectoryPayload(uid)))
+    await assertSucceeds(setDoc(doc(adminDb, path), pilotDirectoryPayload(uid)))
+    await assertFails(updateDoc(doc(coachDb, path), { nickname: 'tamper' }))
+    await assertFails(deleteDoc(doc(coachDb, path)))
+    await assertSucceeds(updateDoc(doc(adminDb, path), { nickname: 'Admin managed' }))
+    await assertFails(updateDoc(doc(adminDb, path), { role: 'admin' }))
+    await assertSucceeds(updateDoc(doc(adminDb, `users/${uid}`), { role: 'coach' }))
+    await assertSucceeds(updateDoc(doc(adminDb, path), { role: 'coach' }))
+    await assertSucceeds(deleteDoc(doc(adminDb, path)))
   })
 })
 

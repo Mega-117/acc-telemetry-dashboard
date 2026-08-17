@@ -16,25 +16,182 @@ service cloud.firestore {
              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    function isCoachOfUser(userId) {
-      return isSignedIn()
-             && exists(/databases/$(database)/documents/users/$(userId))
-             && get(/databases/$(database)/documents/users/$(userId)).data.coachId == request.auth.uid;
-    }
-
     function isCurrentUserCoach() {
       return isSignedIn()
              && exists(/databases/$(database)/documents/users/$(request.auth.uid))
              && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'coach';
     }
 
-    function preservesRoleAndCoach() {
-      return request.resource.data.role == resource.data.role
-             && request.resource.data.coachId == resource.data.coachId;
+    function isCoachOfUser(userId) {
+      return isCurrentUserCoach()
+             && exists(/databases/$(database)/documents/users/$(userId))
+             && get(/databases/$(database)/documents/users/$(userId)).data.coachId == request.auth.uid;
     }
 
     function isBoundedNullableString(value, maxSize) {
       return value == null || (value is string && value.size() <= maxSize);
+    }
+
+    function isNullableString(value) {
+      return value == null || value is string;
+    }
+
+    function validInitialPilotUser(userId) {
+      return request.resource.data.keys().hasAll([
+               'uid', 'email', 'nickname', 'role', 'coachId', 'createdAt',
+               'emailVerified', 'directorySortName', 'searchPrefixes'
+             ])
+             && request.resource.data.keys().hasOnly([
+               'uid', 'email', 'firstName', 'lastName', 'nickname', 'role',
+               'coachId', 'createdAt', 'emailVerified', 'directorySortName',
+               'searchPrefixes'
+             ])
+             && request.resource.data.uid == userId
+             && request.resource.data.uid == request.auth.uid
+             && request.resource.data.email == request.auth.token.get('email', null)
+             && request.resource.data.emailVerified == request.auth.token.get('email_verified', false)
+             && request.resource.data.nickname is string
+             && request.resource.data.nickname.size() > 0
+             && request.resource.data.role == 'pilot'
+             && request.resource.data.coachId == null
+             && request.resource.data.createdAt is string
+             && request.resource.data.get('firstName', '') is string
+             && request.resource.data.get('lastName', '') is string
+             && request.resource.data.directorySortName is string
+             && request.resource.data.directorySortName.size() > 0
+             && request.resource.data.searchPrefixes is list
+             && request.resource.data.searchPrefixes.size() <= 200;
+    }
+
+    function validOwnerUserUpdate(userId) {
+      return request.resource.data.uid == userId
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'uid', 'email', 'emailVerified', 'firstName', 'lastName',
+               'nickname', 'directorySortName', 'searchPrefixes', 'equipment',
+               'stats', 'sessionIndex', 'suiteVersion', 'suiteVersionDetail',
+               'suiteVersionUpdatedAt', 'clientRuntime', 'maintenance'
+             ])
+             && request.resource.data.get('role', null) == resource.data.get('role', null)
+             && request.resource.data.get('coachId', null) == resource.data.get('coachId', null)
+             && request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null)
+             && (!resource.data.keys().hasAny(['role']) || request.resource.data.keys().hasAny(['role']))
+             && (!resource.data.keys().hasAny(['coachId']) || request.resource.data.keys().hasAny(['coachId']))
+             && (!resource.data.keys().hasAny(['createdAt']) || request.resource.data.keys().hasAny(['createdAt']))
+             && (!resource.data.keys().hasAny(['email']) || request.resource.data.keys().hasAny(['email']))
+             && (!resource.data.keys().hasAny(['emailVerified']) || request.resource.data.keys().hasAny(['emailVerified']))
+             && (
+               !request.resource.data.keys().hasAny(['email'])
+               || request.resource.data.email == request.auth.token.get('email', null)
+             )
+             && (
+               !request.resource.data.keys().hasAny(['emailVerified'])
+               || request.resource.data.emailVerified == request.auth.token.get('email_verified', false)
+             );
+    }
+
+    function validPublicProfileFields(userId) {
+      return request.resource.data.keys().hasAll(['uid', 'nickname', 'avatarUrl', 'updatedAt'])
+             && request.resource.data.uid == userId
+             && request.resource.data.nickname is string
+             && request.resource.data.nickname.size() > 0
+             && isNullableString(request.resource.data.avatarUrl)
+             && request.resource.data.updatedAt is string
+             && request.resource.data.get('createdAt', '') is string;
+    }
+
+    function validPublicProfileCreate(userId) {
+      return validPublicProfileFields(userId)
+             && request.resource.data.keys().hasOnly([
+               'uid', 'nickname', 'avatarUrl', 'createdAt', 'updatedAt'
+             ]);
+    }
+
+    function validOwnerPublicProfileUpdate(userId) {
+      return validPublicProfileFields(userId)
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'nickname', 'avatarUrl', 'updatedAt'
+             ]);
+    }
+
+    function validAdminPublicProfileUpdate(userId) {
+      return validPublicProfileFields(userId)
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'uid', 'nickname', 'avatarUrl', 'createdAt', 'updatedAt'
+             ]);
+    }
+
+    function validPilotDirectoryFields(userId) {
+      return request.resource.data.keys().hasAll([
+               'schemaVersion', 'uid', 'firstName', 'lastName', 'nickname',
+               'role', 'coachId', 'sessionsLast7Days', 'lastSessionDate',
+               'suiteVersion', 'suiteVersionUpdatedAt', 'clientChannel',
+               'clientUpdateState', 'clientLastHeartbeatAt',
+               'directorySortName', 'searchPrefixes'
+             ])
+             && request.resource.data.schemaVersion == 1
+             && request.resource.data.uid == userId
+             && request.resource.data.firstName is string
+             && request.resource.data.lastName is string
+             && request.resource.data.nickname is string
+             && request.resource.data.nickname.size() > 0
+             && request.resource.data.role in ['pilot', 'coach', 'admin']
+             && isNullableString(request.resource.data.coachId)
+             && request.resource.data.sessionsLast7Days is number
+             && request.resource.data.sessionsLast7Days >= 0
+             && isNullableString(request.resource.data.lastSessionDate)
+             && isNullableString(request.resource.data.suiteVersion)
+             && isNullableString(request.resource.data.suiteVersionUpdatedAt)
+             && isNullableString(request.resource.data.clientChannel)
+             && isNullableString(request.resource.data.clientUpdateState)
+             && isNullableString(request.resource.data.clientLastHeartbeatAt)
+             && request.resource.data.directorySortName is string
+             && request.resource.data.directorySortName.size() > 0
+             && request.resource.data.searchPrefixes is list
+             && request.resource.data.searchPrefixes.size() <= 200
+             && isNullableString(request.resource.data.get('firebaseHealthStatus', null))
+             && (
+               request.resource.data.get('firebaseHealthMigrationVersion', null) == null
+               || (
+                 request.resource.data.firebaseHealthMigrationVersion is number
+                 && request.resource.data.firebaseHealthMigrationVersion >= 0
+               )
+             )
+             && isNullableString(request.resource.data.get('firebaseHealthCheckedAt', null))
+             && isNullableString(request.resource.data.get('firebaseHealthCode', null));
+    }
+
+    function pilotDirectoryRoleAndCoachMatchUser(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId))
+             && request.resource.data.role == get(/databases/$(database)/documents/users/$(userId)).data.role
+             && request.resource.data.coachId == get(/databases/$(database)/documents/users/$(userId)).data.get('coachId', null);
+    }
+
+    function validPilotDirectoryCreate(userId) {
+      return validPilotDirectoryFields(userId)
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'uid', 'firstName', 'lastName', 'nickname',
+               'role', 'coachId', 'sessionsLast7Days', 'lastSessionDate',
+               'suiteVersion', 'suiteVersionUpdatedAt', 'clientChannel',
+               'clientUpdateState', 'clientLastHeartbeatAt',
+               'directorySortName', 'searchPrefixes', 'firebaseHealthStatus',
+               'firebaseHealthMigrationVersion', 'firebaseHealthCheckedAt',
+               'firebaseHealthCode'
+             ])
+             && pilotDirectoryRoleAndCoachMatchUser(userId);
+    }
+
+    function validPilotDirectoryUpdate(userId) {
+      return validPilotDirectoryFields(userId)
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+               'schemaVersion', 'uid', 'firstName', 'lastName', 'nickname',
+               'role', 'coachId', 'sessionsLast7Days', 'lastSessionDate',
+               'suiteVersion', 'suiteVersionUpdatedAt', 'clientChannel',
+               'clientUpdateState', 'clientLastHeartbeatAt',
+               'directorySortName', 'searchPrefixes', 'firebaseHealthStatus',
+               'firebaseHealthMigrationVersion', 'firebaseHealthCheckedAt',
+               'firebaseHealthCode'
+             ])
+             && pilotDirectoryRoleAndCoachMatchUser(userId);
     }
 
     function validRuntimeComponents(components) {
@@ -145,7 +302,11 @@ service cloud.firestore {
     // Public profile surface for cross-user features (nickname/avatar only).
     match /publicProfiles/{userId} {
       allow read: if isSignedIn();
-      allow write: if isOwner(userId) || isAdmin();
+      allow create: if (isOwner(userId) || isAdmin())
+                    && validPublicProfileCreate(userId);
+      allow update: if (isOwner(userId) && validOwnerPublicProfileUpdate(userId))
+                    || (isAdmin() && validAdminPublicProfileUpdate(userId));
+      allow delete: if isAdmin();
     }
 
     // Lightweight user directory for coach/admin pilot lists.
@@ -153,9 +314,11 @@ service cloud.firestore {
     match /pilotDirectory/{userId} {
       allow read: if isOwner(userId)
                   || isAdmin()
-                  || (isSignedIn() && resource.data.coachId == request.auth.uid);
-      allow create: if isOwner(userId) || isAdmin();
-      allow update: if isAdmin() || (isOwner(userId) && preservesRoleAndCoach());
+                  || (isCurrentUserCoach() && resource.data.coachId == request.auth.uid);
+      allow create: if (isOwner(userId) || isAdmin())
+                    && validPilotDirectoryCreate(userId);
+      allow update: if (isOwner(userId) || isAdmin())
+                    && validPilotDirectoryUpdate(userId);
       allow delete: if isAdmin();
     }
 
@@ -163,8 +326,8 @@ service cloud.firestore {
     match /users/{userId} {
       // Owner can read and update own profile/runtime state, but cannot self-change role or coach assignment.
       allow read: if isOwner(userId);
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) && preservesRoleAndCoach();
+      allow create: if isOwner(userId) && validInitialPilotUser(userId);
+      allow update: if isOwner(userId) && validOwnerUserUpdate(userId);
 
       // Coach can read assigned pilots only.
       allow read: if isCoachOfUser(userId);

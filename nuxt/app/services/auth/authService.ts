@@ -75,6 +75,9 @@ export async function refreshEmailVerificationState(user: User | null) {
     }
 
     await user.reload()
+    // Firestore Rules bind emailVerified to the Auth token claim. Refresh the
+    // token before provisioning mirrors the reloaded User state into Firestore.
+    await user.getIdToken(true)
     return {
         verified: auth.currentUser?.emailVerified ?? false,
         user: auth.currentUser
