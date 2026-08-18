@@ -2,6 +2,7 @@ import { computed } from 'vue'
 
 import {
     CAR_CATEGORIES,
+    SESSION_TYPES,
     type CarCategory,
     formatDriveTime,
     parseTelemetryDate, formatLocalDateKey,

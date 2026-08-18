@@ -4,6 +4,7 @@ import {
   DEFAULT_INFO_OPTIONS,
   evaluateInfoTarget,
   formatInfoDelta,
+  formatInfoDuration,
   formatInfoFuelDuration,
   formatInfoLapTime,
   formatInfoLocalTime,
@@ -42,6 +43,9 @@ describe('Info presentation', () => {
     expect(formatInfoLapTime(null)).toBe('--:--.---')
     expect(formatInfoRunningLapTime(0)).toBe('0:00.000')
     expect(formatInfoRunningLapTime(null)).toBe('--:--.---')
+    expect(formatInfoDuration(298_999)).toBe('4:58.000')
+    expect(formatInfoDuration(3_661_000)).toBe('1:01:01')
+    expect(formatInfoDuration(null)).toBe('--:--.---')
     expect(formatInfoFuelDuration(298_999)).toBe('0:04:58')
     expect(formatInfoFuelDuration(null)).toBe('-:--.---')
     expect(formatInfoStintDuration(0)).toBe('00:00')

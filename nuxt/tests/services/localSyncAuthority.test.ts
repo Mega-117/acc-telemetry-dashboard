@@ -251,4 +251,50 @@ describe('renderer local-session authority contract', () => {
     ] as any)
     expect(queue.size()).toBe(1)
   })
+
+  it('reports queue lifecycle and drains each unique item into a reconciled result', async () => {
+    const onStatusChange = vi.fn()
+    const queue = createSyncQueueService({ onStatusChange })
+    expect(queue.getStatus()).toBe('idle')
+
+    expect(queue.enqueue([
+      { fileName: 'first.json', sessionId: 'session-a' },
+      { fileName: 'second.json', sessionId: 'session-b' }
+    ] as any)).toBe(2)
+    expect(queue.getStatus()).toBe('queued')
+
+    const processor = vi.fn(async (item: any) => ({
+      result: item.fileName,
+      didChange: true,
+      dirtySessionId: item.sessionId,
+      dirtyTrack: 'spa'
+    }))
+    await expect(queue.drain(processor)).resolves.toEqual({
+      results: ['first.json', 'second.json'],
+      dirtySessionIds: ['session-a', 'session-b'],
+      dirtyTracks: ['spa'],
+      changedCount: 2
+    })
+
+    expect(processor).toHaveBeenCalledTimes(2)
+    expect(queue.size()).toBe(0)
+    expect(queue.getStatus()).toBe('idle')
+    expect(onStatusChange.mock.calls.map(([status]) => status)).toEqual([
+      'queued',
+      'uploading',
+      'idle'
+    ])
+  })
+
+  it('clears queued work and returns the queue to idle', () => {
+    const onStatusChange = vi.fn()
+    const queue = createSyncQueueService({ onStatusChange })
+    queue.enqueue([{ fileName: 'pending.json', sessionId: 'session-a' }] as any)
+
+    queue.clear()
+
+    expect(queue.size()).toBe(0)
+    expect(queue.getStatus()).toBe('idle')
+    expect(onStatusChange).toHaveBeenLastCalledWith('idle')
+  })
 })

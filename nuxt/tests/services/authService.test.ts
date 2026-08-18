@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const sendPasswordResetEmailMock = vi.hoisted(() => vi.fn())
+const createUserWithEmailAndPasswordMock = vi.hoisted(() => vi.fn())
 const signInWithEmailAndPasswordMock = vi.hoisted(() => vi.fn())
+const signOutMock = vi.hoisted(() => vi.fn())
+const sendEmailVerificationMock = vi.hoisted(() => vi.fn())
 const updateProfileMock = vi.hoisted(() => vi.fn())
 const createInitialUserDocumentMock = vi.hoisted(() => vi.fn())
 const authMock = vi.hoisted(() => ({
@@ -13,10 +16,10 @@ const authMock = vi.hoisted(() => ({
 }))
 
 vi.mock('firebase/auth', () => ({
-  createUserWithEmailAndPassword: vi.fn(),
+  createUserWithEmailAndPassword: createUserWithEmailAndPasswordMock,
   signInWithEmailAndPassword: signInWithEmailAndPasswordMock,
-  signOut: vi.fn(),
-  sendEmailVerification: vi.fn(),
+  signOut: signOutMock,
+  sendEmailVerification: sendEmailVerificationMock,
   sendPasswordResetEmail: sendPasswordResetEmailMock,
   updateProfile: updateProfileMock
 }))
@@ -28,10 +31,63 @@ vi.mock('~/services/auth/userProvisioningService', () => ({
 
 import {
   loginWithEmail,
+  logoutCurrentUser,
+  registerWithEmail,
   refreshEmailVerificationState,
+  resendCurrentVerificationEmail,
   sendPasswordResetWithEmail,
   translateAuthError
 } from '~/services/auth/authService'
+
+describe('registration and account actions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    authMock.currentUser = null
+  })
+
+  it('registers the Firebase user, provisions the profile, and sends verification', async () => {
+    const user = { uid: 'uid-new' }
+    createUserWithEmailAndPasswordMock.mockResolvedValue({ user })
+    updateProfileMock.mockResolvedValue(undefined)
+    createInitialUserDocumentMock.mockResolvedValue(undefined)
+    sendEmailVerificationMock.mockResolvedValue(undefined)
+
+    await expect(registerWithEmail({
+      email: 'new@example.invalid',
+      password: 'secret-123',
+      nickname: 'NewDriver',
+      firstName: 'New',
+      lastName: 'Driver'
+    })).resolves.toEqual({ user })
+
+    expect(createUserWithEmailAndPasswordMock).toHaveBeenCalledWith(
+      authMock,
+      'new@example.invalid',
+      'secret-123'
+    )
+    expect(updateProfileMock).toHaveBeenCalledWith(user, { displayName: 'NewDriver' })
+    expect(createInitialUserDocumentMock).toHaveBeenCalledWith(user, {
+      firstName: 'New',
+      lastName: 'Driver',
+      nickname: 'NewDriver'
+    })
+    expect(sendEmailVerificationMock).toHaveBeenCalledWith(user)
+  })
+
+  it('delegates logout and verification resend to Firebase Auth', async () => {
+    const user = { uid: 'uid-current' }
+    signOutMock.mockResolvedValue(undefined)
+    sendEmailVerificationMock.mockResolvedValue(undefined)
+
+    await expect(logoutCurrentUser()).resolves.toBeUndefined()
+    await expect(resendCurrentVerificationEmail(user as any)).resolves.toBeUndefined()
+
+    expect(signOutMock).toHaveBeenCalledOnce()
+    expect(signOutMock).toHaveBeenCalledWith(authMock)
+    expect(sendEmailVerificationMock).toHaveBeenCalledOnce()
+    expect(sendEmailVerificationMock).toHaveBeenCalledWith(user)
+  })
+})
 
 describe('loginWithEmail', () => {
   beforeEach(() => {
