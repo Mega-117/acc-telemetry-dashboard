@@ -7,6 +7,7 @@ export interface ReprocessTelemetryResult {
   bestRulesVersion?: number | null
   error?: string
   stderr?: string
+  files?: Array<{ name: string; mtime: number; size: number }>
 }
 
 function getElectronApi(): any | null {
@@ -14,18 +15,18 @@ function getElectronApi(): any | null {
   return (window as any).electronAPI || null
 }
 
-function normalizeFilePaths(filePaths?: string[]): string[] {
-  if (!Array.isArray(filePaths)) return []
-  return Array.from(new Set(filePaths.map((filePath) => String(filePath || '').trim()).filter(Boolean)))
+function normalizeFileNames(fileNames?: string[]): string[] {
+  if (!Array.isArray(fileNames)) return []
+  return Array.from(new Set(fileNames.map((fileName) => String(fileName || '').trim()).filter(Boolean)))
 }
 
 export async function reprocessTelemetrySummaries(payload: {
-  filePaths?: string[]
+  fileNames?: string[]
 } = {}): Promise<ReprocessTelemetryResult | null> {
   const electronAPI = getElectronApi()
   if (!electronAPI?.reprocessTelemetrySummaries) return null
   return await electronAPI.reprocessTelemetrySummaries({
-    filePaths: normalizeFilePaths(payload.filePaths)
+    fileNames: normalizeFileNames(payload.fileNames)
   })
 }
 

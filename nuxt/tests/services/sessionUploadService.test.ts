@@ -1,8 +1,22 @@
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { fileURLToPath } from 'node:url'
+import { describe, expect, it, vi } from 'vitest'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
-import { prepareSummaryForUpload } from '~/services/sync/sessionUploadService'
+import { createSessionUploadService, prepareSummaryForUpload } from '~/services/sync/sessionUploadService'
+
+const uploadMocks = vi.hoisted(() => ({
+  trackedWriteBatch: vi.fn()
+}))
+
+vi.mock('firebase/firestore', () => ({
+  collection: vi.fn((...parts: unknown[]) => ({ kind: 'collection', parts })),
+  doc: vi.fn((...parts: unknown[]) => ({ kind: 'doc', parts })),
+  serverTimestamp: vi.fn(() => ({ __serverTimestamp: true }))
+}))
+
+vi.mock('~/composables/useFirebaseTracker', () => ({
+  trackedWriteBatch: uploadMocks.trackedWriteBatch
+}))
 
 function makeLegacyRaceRaw(overrides: Record<string, unknown> = {}) {
   return {
@@ -41,6 +55,31 @@ function makeLegacyRaceRaw(overrides: Record<string, unknown> = {}) {
 }
 
 describe('prepareSummaryForUpload', () => {
+  it.each([
+    [null, 'owner_missing'],
+    ['uid-foreign', 'owner_mismatch']
+  ])('nega prima di ogni cloud I/O un owner locale %s', async (ownerId, reason) => {
+    const getExistingSession = vi.fn()
+    const loadRegistryCache = vi.fn()
+    const service = createSessionUploadService({
+      db: {},
+      chunkSize: 100,
+      getExistingSession,
+      loadRegistryCache,
+      canSkipViaRegistry: () => false,
+      listExistingChunks: vi.fn()
+    })
+
+    await expect(service.uploadOrUpdateSession(
+      { ownerId, session_info: { laps_total: 1 } },
+      '{}',
+      'session.json',
+      'uid-current'
+    )).resolves.toMatchObject({ status: 'skipped', reason })
+    expect(getExistingSession).not.toHaveBeenCalled()
+    expect(loadRegistryCache).not.toHaveBeenCalled()
+  })
+
   it('richiede il reprocess Python per un JSON locale legacy anche se contiene raw/stint', () => {
     const prepared = prepareSummaryForUpload(makeLegacyRaceRaw())
 
@@ -114,14 +153,72 @@ describe('prepareSummaryForUpload', () => {
   })
 
   it('mantiene il reprocess Python prima di rescan e upload, quindi un bridge fallito resta fail-closed', () => {
-    const syncSource = readFileSync(resolve(process.cwd(), 'app/composables/useElectronSync.ts'), 'utf8')
-    const reprocessAt = syncSource.indexOf('await ensureLocalTelemetrySummariesCanonical({')
+    const syncSource = readFileSync(
+      fileURLToPath(new URL('../../app/composables/useElectronSync.ts', import.meta.url)),
+      'utf8'
+    )
+    const boundaryAt = syncSource.indexOf('const reprocessResult = await runLocalMutationBoundary({')
+    const reprocessAt = syncSource.indexOf('run: () => ensureLocalTelemetrySummariesCanonical({', boundaryAt)
+    const failClosedAt = syncSource.indexOf('if (reprocessResult?.ok !== true)', reprocessAt)
+    const freshDescriptorsAt = syncSource.indexOf('fileNames: requestedFileNames', reprocessAt)
     const rescanAt = syncSource.indexOf('const rescanned = await getScanService().scanPendingFiles({', reprocessAt)
-    const uploadAt = syncSource.indexOf('const result = await uploadService.uploadOrUpdateSession(', rescanAt)
+    const uploadAt = syncSource.indexOf('const result: SyncResult = await uploadService.uploadOrUpdateSession(', rescanAt)
+    const journalAt = syncSource.indexOf('mutationJournal.recordUploadMutation({', uploadAt)
+    const postUploadAssertAt = syncSource.indexOf('assertLeaseCurrent(isCurrent)', journalAt)
 
-    expect(reprocessAt).toBeGreaterThan(-1)
+    expect(boundaryAt).toBeGreaterThan(-1)
+    expect(reprocessAt).toBeGreaterThan(boundaryAt)
+    expect(failClosedAt).toBeGreaterThan(reprocessAt)
+    expect(freshDescriptorsAt).toBeGreaterThan(reprocessAt)
     expect(rescanAt).toBeGreaterThan(reprocessAt)
     expect(uploadAt).toBeGreaterThan(rescanAt)
+    expect(journalAt).toBeGreaterThan(uploadAt)
+    expect(postUploadAssertAt).toBeGreaterThan(journalAt)
+    expect(syncSource).not.toContain('files: pendingFiles.map((file) => file.file)')
+    expect(syncSource).not.toContain('reprocessResult?.files')
+    expect(syncSource).toContain('fileNames: requestedFileNames')
+  })
+
+  it('segnala una commit cloud riuscita anche se la lease diventa stale subito dopo', async () => {
+    let active = true
+    const batch = {
+      set: vi.fn(),
+      delete: vi.fn(),
+      commit: vi.fn(async () => { active = false })
+    }
+    uploadMocks.trackedWriteBatch.mockReturnValueOnce(batch)
+    const service = createSessionUploadService({
+      db: {},
+      chunkSize: 100000,
+      getExistingSession: vi.fn(async () => null),
+      loadRegistryCache: vi.fn(async () => ({})),
+      canSkipViaRegistry: () => false,
+      listExistingChunks: vi.fn(async () => []),
+      assertActive: () => {
+        if (!active) throw new Error('cloud_owner_lease_stale')
+      }
+    })
+    const raw = makeLegacyRaceRaw({
+      ownerId: 'uid-current',
+      summary: {
+        best_rules_version: BEST_RULES_VERSION,
+        provenance: { source: 'python' }
+      }
+    })
+
+    await expect(service.uploadOrUpdateSession(
+      raw,
+      JSON.stringify(raw),
+      'session.json',
+      'uid-current'
+    )).resolves.toMatchObject({
+      status: 'error',
+      committedStatus: 'created',
+      sessionId: expect.any(String),
+      projectionDelta: expect.objectContaining({ trackId: 'spa' }),
+      error: 'cloud_owner_lease_stale'
+    })
+    expect(batch.commit).toHaveBeenCalledTimes(1)
   })
 
   it('salta un JSON locale legacy senza stints invece di promuovere solo il numero versione', () => {

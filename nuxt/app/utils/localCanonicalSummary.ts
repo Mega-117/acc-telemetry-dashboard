@@ -13,24 +13,24 @@ function getElectronApi(): any | null {
   return (window as any).electronAPI || null
 }
 
-function normalizeFilePaths(filePaths?: string[]): string[] {
-  if (!Array.isArray(filePaths)) return []
+function normalizeFileNames(fileNames?: string[]): string[] {
+  if (!Array.isArray(fileNames)) return []
   return Array.from(
     new Set(
-      filePaths
-        .filter((filePath): filePath is string => typeof filePath === 'string')
-        .map((filePath) => filePath.trim())
+      fileNames
+        .filter((fileName): fileName is string => typeof fileName === 'string')
+        .map((fileName) => fileName.trim())
         .filter(Boolean)
     )
   )
 }
 
-async function invokeReprocess(payload: { filePaths?: string[] } = {}): Promise<ReprocessTelemetryResult | null> {
+async function invokeReprocess(payload: { fileNames?: string[] } = {}): Promise<ReprocessTelemetryResult | null> {
   const electronAPI = getElectronApi()
   if (!electronAPI?.reprocessTelemetrySummaries) return null
 
   const result = await reprocessTelemetrySummaries({
-    filePaths: normalizeFilePaths(payload.filePaths)
+    fileNames: normalizeFileNames(payload.fileNames)
   })
 
   if (!result) return null
@@ -47,13 +47,13 @@ async function invokeReprocess(payload: { filePaths?: string[] } = {}): Promise<
 }
 
 export async function ensureLocalTelemetrySummariesCanonical(options: {
-  filePaths?: string[]
+  fileNames?: string[]
   force?: boolean
 } = {}): Promise<ReprocessTelemetryResult | null> {
-  const filePaths = normalizeFilePaths(options.filePaths)
+  const fileNames = normalizeFileNames(options.fileNames)
 
-  if (filePaths.length > 0) {
-    return invokeReprocess({ filePaths })
+  if (fileNames.length > 0) {
+    return invokeReprocess({ fileNames })
   }
 
   const now = Date.now()

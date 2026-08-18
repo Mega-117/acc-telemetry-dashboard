@@ -1,24 +1,27 @@
-import { BEST_RULES_VERSION, extractMetadata, generateSessionId } from '~/utils/sessionParser'
+import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
 import { isSessionFileCandidate } from '~/repositories/telemetryLocalRepository'
 import { calculateRawDataHash, calculateSummaryHash, type RegistryCacheEntry } from './sessionUploadService'
+import { isRegistryEntryCurrentForFile, selectFreshReprocessedFiles } from './syncRegistryPolicy'
 
 export interface TelemetryFileDescriptor {
   name: string
-  path: string
   mtime: number
   size: number
+  sessionId?: string
+  fileHash?: string
+  bestRulesVersion?: number
 }
 
 export type SyncScanSkipReason =
   | 'invalid_file'
   | 'read_error'
   | 'zero_laps'
+  | 'owner_missing'
   | 'owner_mismatch'
 
 export interface PendingSyncFile {
   file: TelemetryFileDescriptor
   fileName: string
-  filePath: string
   rawObj: any
   rawText: string
   fileHash: string
@@ -30,7 +33,6 @@ export interface PendingSyncFile {
 export interface ScannedSyncFile {
   file: TelemetryFileDescriptor
   fileName: string
-  filePath: string
   sessionId: string
   fileHash: string
   rawDataHash?: string
@@ -40,7 +42,6 @@ export interface ScannedSyncFile {
 export interface SkippedSyncFile {
   file: TelemetryFileDescriptor
   fileName: string
-  filePath: string
   reason: SyncScanSkipReason
   error?: string
 }
@@ -60,18 +61,20 @@ export function createSyncScanService(params: {
 }) {
   const { electronAPI, loadRegistryCache, calculateContentHash } = params
 
-  async function getFiles(specificFiles?: TelemetryFileDescriptor[]): Promise<TelemetryFileDescriptor[]> {
-    if (Array.isArray(specificFiles)) return specificFiles
+  async function getFiles(fileNames?: string[]): Promise<TelemetryFileDescriptor[]> {
     const files = await electronAPI?.getTelemetryFiles?.()
-    return Array.isArray(files) ? files : []
+    const listed = Array.isArray(files) ? files : []
+    return Array.isArray(fileNames)
+      ? selectFreshReprocessedFiles(listed, fileNames)
+      : listed
   }
 
   async function scanPendingFiles(params: {
     ownerId: string
-    files?: TelemetryFileDescriptor[]
+    fileNames?: string[]
   }): Promise<SyncScanResult> {
-    const { ownerId, files: specificFiles } = params
-    const files = await getFiles(specificFiles)
+    const { ownerId, fileNames } = params
+    const files = await getFiles(fileNames)
     const registrySnapshot = await loadRegistryCache()
 
     const pendingFiles: PendingSyncFile[] = []
@@ -80,22 +83,19 @@ export function createSyncScanService(params: {
 
     for (const file of files) {
       const fileName = String(file?.name || '')
-      const filePath = String(file?.path || '')
 
       try {
         const registryEntry = registrySnapshot[fileName]
-        const registryMetadataHit = !!registryEntry
-          && registryEntry.uploadedBy === ownerId
-          && registryEntry.sessionId
-          && Number(registryEntry.mtime || 0) === Number(file.mtime || 0)
-          && Number(registryEntry.size || 0) === Number(file.size || 0)
-          && Number(registryEntry.bestRulesVersion || 0) >= BEST_RULES_VERSION
+        const registryMetadataHit = isRegistryEntryCurrentForFile({
+          entry: registryEntry,
+          file,
+          ownerId
+        })
 
-        if (registryMetadataHit) {
+        if (registryMetadataHit && registryEntry) {
           unchangedFiles.push({
             file,
             fileName,
-            filePath,
             fileHash: registryEntry.fileHash,
             rawDataHash: registryEntry.rawDataHash,
             summaryHash: registryEntry.summaryHash,
@@ -104,20 +104,25 @@ export function createSyncScanService(params: {
           continue
         }
 
-        const rawObj = await electronAPI?.readFile?.(filePath)
+        const rawObj = await electronAPI?.readFile?.(fileName)
         if (!rawObj || !isSessionFileCandidate(fileName, rawObj)) {
-          skippedFiles.push({ file, fileName, filePath, reason: 'invalid_file' })
+          skippedFiles.push({ file, fileName, reason: 'invalid_file' })
           continue
         }
 
-        if (rawObj.ownerId && rawObj.ownerId !== ownerId) {
-          skippedFiles.push({ file, fileName, filePath, reason: 'owner_mismatch' })
+        if (typeof rawObj.ownerId !== 'string' || !rawObj.ownerId) {
+          skippedFiles.push({ file, fileName, reason: 'owner_missing' })
+          continue
+        }
+
+        if (rawObj.ownerId !== ownerId) {
+          skippedFiles.push({ file, fileName, reason: 'owner_mismatch' })
           continue
         }
 
         const totalLaps = Number(rawObj?.session_info?.laps_total || 0)
         if (totalLaps === 0) {
-          skippedFiles.push({ file, fileName, filePath, reason: 'zero_laps' })
+          skippedFiles.push({ file, fileName, reason: 'zero_laps' })
           continue
         }
 
@@ -127,17 +132,19 @@ export function createSyncScanService(params: {
         const fileHash = await calculateContentHash(rawText)
         const rawDataHash = await calculateRawDataHash(rawObj)
         const summaryHash = await calculateSummaryHash(rawObj.summary || null)
-        const registryHit = !!registryEntry
-          && registryEntry.fileHash === fileHash
-          && registryEntry.uploadedBy === ownerId
-          && registryEntry.sessionId === sessionId
-          && Number(registryEntry.bestRulesVersion || 0) >= BEST_RULES_VERSION
+        const registryHit = isRegistryEntryCurrentForFile({
+          entry: registryEntry,
+          file,
+          ownerId,
+          sessionId,
+          fileHash,
+          bestRulesVersion: Number(rawObj?.summary?.best_rules_version)
+        })
 
         if (registryHit) {
           unchangedFiles.push({
             file,
             fileName,
-            filePath,
             fileHash,
             rawDataHash,
             summaryHash,
@@ -149,7 +156,6 @@ export function createSyncScanService(params: {
         pendingFiles.push({
           file,
           fileName,
-          filePath,
           rawObj,
           rawText,
           fileHash,
@@ -161,7 +167,6 @@ export function createSyncScanService(params: {
         skippedFiles.push({
           file,
           fileName,
-          filePath,
           reason: 'read_error',
           error: error?.message || 'unknown_read_error'
         })

@@ -52,7 +52,7 @@ export function resolveSyncTriggerAction(trigger: SyncTrigger): SyncTriggerActio
         trigger,
         scanMode: 'full',
         processPending: true,
-        runMaintenance: true,
+        runMaintenance: false,
         interactive: true
       }
   }

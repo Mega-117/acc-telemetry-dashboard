@@ -1,6 +1,8 @@
 import { cleanupZeroLapSessions } from './ghostCleanupService'
 
 const retentionCleanupRun = new Set<string>()
+export const SYNC_DESTRUCTIVE_MAINTENANCE_CONFIRMATION = 'DELETE_SYNC_MAINTENANCE_DATA'
+const LOCAL_CLEANUP_CONFIRMATION = 'DELETE_SYNCED_LOCAL_SESSION_FILES'
 
 export interface SyncMaintenanceResult {
   cloudMigrated: number
@@ -44,15 +46,24 @@ export function createSyncMaintenanceService(params: {
     runZeroLapCleanup?: boolean
     runRetentionCleanup?: boolean
     updateVersion?: boolean
+    destructiveConfirmation?: string
   }): Promise<SyncMaintenanceResult> {
     const {
       uid,
       interactive = false,
       runLegacyMigration = false,
-      runZeroLapCleanup = true,
-      runRetentionCleanup = interactive,
-      updateVersion = true
+      runZeroLapCleanup = false,
+      runRetentionCleanup = false,
+      updateVersion = true,
+      destructiveConfirmation = ''
     } = params
+
+    if (
+      (runZeroLapCleanup || runRetentionCleanup)
+      && destructiveConfirmation !== SYNC_DESTRUCTIVE_MAINTENANCE_CONFIRMATION
+    ) {
+      throw new Error('destructive-maintenance-confirmation-required')
+    }
 
     let cloudMigrated = 0
     let cleanedZeroLap = 0
@@ -75,7 +86,10 @@ export function createSyncMaintenanceService(params: {
     if (runRetentionCleanup && electronAPI?.cleanupSyncedFiles) {
       const retentionKey = `${uid}:${interactive ? 'interactive' : 'auto'}`
       if (interactive || !retentionCleanupRun.has(retentionKey)) {
-        await electronAPI.cleanupSyncedFiles(syncedFilesRetentionDays, uid)
+        await electronAPI.cleanupSyncedFiles({
+          retentionDays: syncedFilesRetentionDays,
+          confirmation: LOCAL_CLEANUP_CONFIRMATION
+        })
         retentionCleanupRun.add(retentionKey)
         retentionRan = true
       }

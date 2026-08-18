@@ -6,13 +6,13 @@
 // - scan (detect pending files)
 // - queue (upload only pending files)
 // - projection refresh (only after real changes)
-// - maintenance (legacy migration / cleanup / retention / version update)
+// Destructive maintenance is intentionally outside this normal sync facade.
 
 import { ref, computed } from 'vue'
 import { collection, doc } from 'firebase/firestore'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { useTelemetryData } from './useTelemetryData'
-import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc } from './useFirebaseTracker'
+import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc, trackedGetDocs, trackedSetDoc } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { ensureLocalTelemetrySummariesCanonical } from '~/utils/localCanonicalSummary'
@@ -21,7 +21,6 @@ import {
     calculateContentHash,
     type RegistryCacheEntry
 } from '~/services/sync/sessionUploadService'
-import { canonicalizeTelemetryPayload } from '~/services/sync/canonicalSummaryBridge'
 import type { TrackBestProjectionDelta } from '~/services/sync/trackBestsProjectionService'
 import {
     setupAutoSyncController,
@@ -29,7 +28,12 @@ import {
 } from '~/services/sync/autoSyncController'
 import { createSyncScanService, type PendingSyncFile, type TelemetryFileDescriptor, type SyncScanResult } from '~/services/sync/syncScanService'
 import { createSyncQueueService } from '~/services/sync/syncQueueService'
-import { createSyncMaintenanceService } from '~/services/sync/syncMaintenanceService'
+import {
+    createSyncMutationJournal,
+    recoverPartialSyncMutations,
+    runLocalMutationBoundary,
+    type SyncMutationJournal
+} from '~/services/sync/syncMutationJournal'
 import { refreshSyncProjections } from '~/services/sync/syncProjectionRefreshService'
 import type { UserProjectionDelta } from '~/services/sync/syncUserProjectionDeltaService'
 import { resolveSyncTriggerAction, type SyncTrigger } from '~/services/sync/syncTriggerPolicy'
@@ -65,11 +69,7 @@ async function setDoc(ref: any, data: any, options?: any) {
     if (options) return trackedSetDoc(ref, data, options, SYNC_CALLER)
     return trackedSetDoc(ref, data, SYNC_CALLER)
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-async function deleteDoc(ref: any) { return trackedDeleteDoc(ref, SYNC_CALLER) }
-
 const CHUNK_SIZE = 400000
-const SYNCED_FILES_RETENTION_DAYS = 30
 
 let localRegistryCache: Record<string, RegistryCacheEntry> | null = null
 let deferredChangedFiles: TelemetryFileDescriptor[] = []
@@ -90,6 +90,7 @@ interface SyncResult {
     error?: string
     sessionId?: string
     projectionDelta?: TrackBestProjectionDelta
+    committedStatus?: 'created' | 'updated'
 }
 
 function mapUnchangedScanResult(file: SyncScanResult['unchangedFiles'][number]): SyncResult {
@@ -120,7 +121,7 @@ function mapSkippedScanResult(file: SyncScanResult['skippedFiles'][number]): Syn
 function shouldPersistRegistry(result: SyncResult): boolean {
     return result.status === 'created'
         || result.status === 'updated'
-        || (result.status === 'unchanged' && result.reason !== 'registry_cache_hit')
+        || result.status === 'unchanged'
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
@@ -237,22 +238,6 @@ export function useElectronSync() {
             && (!entry.summaryHash || entry.summaryHash === hashes.summaryHash)
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-    async function canonicalizeSummaryFromLocalDomain(rawObj: any): Promise<any | null> {
-        try {
-            const result = await canonicalizeTelemetryPayload(rawObj)
-            if (!result?.ok || !result?.summary) {
-                console.warn('[SYNC] Local-domain canonicalization failed:', result?.error || 'missing summary')
-                return null
-            }
-            return result.summary
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-        } catch (e: any) {
-            console.warn('[SYNC] Local-domain canonicalization threw:', e.message)
-            return null
-        }
-    }
-
     function getUploadService(isCurrent?: LeaseGuard) {
         return createSessionUploadService({
             db,
@@ -278,66 +263,40 @@ export function useElectronSync() {
         })
     }
 
-    function getMaintenanceService(isCurrent?: LeaseGuard) {
-        return createSyncMaintenanceService({
-            electronAPI: getElectronApi(),
-            updateSuiteVersion: async () => false,
-            canonicalizeSummary: canonicalizeSummaryFromLocalDomain,
-            getDocsFn: async (query) => {
-                assertLeaseCurrent(isCurrent)
-                const result = await getDocs(query)
-                assertLeaseCurrent(isCurrent)
-                return result
-            },
-            setDocFn: async (ref, data, options) => {
-                assertLeaseCurrent(isCurrent)
-                const result = await setDoc(ref, data, options)
-                assertLeaseCurrent(isCurrent)
-                return result
-            },
-            deleteDocFn: async (ref) => {
-                assertLeaseCurrent(isCurrent)
-                const result = await deleteDoc(ref)
-                assertLeaseCurrent(isCurrent)
-                return result
-            },
-            db,
-            bestRulesVersion: BEST_RULES_VERSION,
-            syncedFilesRetentionDays: SYNCED_FILES_RETENTION_DAYS
-        })
-    }
-
     async function persistRegistryEntry(
         uid: string,
         item: PendingSyncFile,
         result: SyncResult,
         isCurrent?: LeaseGuard
-    ) {
+    ): Promise<boolean> {
         const electronAPI = getElectronApi()
-        if (!electronAPI?.updateRegistry) return
-        const entry: RegistryCacheEntry = {
-            uploadedBy: uid,
+        if (!electronAPI?.updateRegistry) return false
+        const entry: Omit<RegistryCacheEntry, 'uploadedBy' | 'uploadedAt'> = {
             fileHash: item.fileHash,
             rawDataHash: item.rawDataHash,
             summaryHash: item.summaryHash,
             sessionId: result.sessionId || item.sessionId,
-            uploadedAt: new Date().toISOString(),
             mtime: item.file.mtime,
             size: item.file.size,
             bestRulesVersion: BEST_RULES_VERSION
         }
         assertLeaseCurrent(isCurrent)
-        await electronAPI.updateRegistry(item.fileName, entry)
+        const canonicalEntry = await electronAPI.updateRegistry(item.fileName, entry)
         assertLeaseCurrent(isCurrent)
-        if (localRegistryCache) {
-            localRegistryCache[item.fileName] = entry
+        if (canonicalEntry?.uploadedBy === uid) {
+            if (localRegistryCache) localRegistryCache[item.fileName] = canonicalEntry
+            return true
+        } else {
+            localRegistryCache = null
+            return false
         }
     }
 
     async function processPendingFiles(
         uid: string,
         pendingFiles: PendingSyncFile[],
-        isCurrent?: LeaseGuard
+        isCurrent: LeaseGuard | undefined,
+        mutationJournal: SyncMutationJournal
     ): Promise<{
         results: SyncResult[]
         changedCount: number
@@ -345,6 +304,7 @@ export function useElectronSync() {
         dirtyTracks: string[]
         trackBestDeltas: TrackBestProjectionDelta[]
         userProjectionDeltas: UserProjectionDelta[]
+        localStateChanged: boolean
     }> {
         if (pendingFiles.length === 0) {
             syncProgress.value = 100
@@ -354,19 +314,28 @@ export function useElectronSync() {
                 dirtySessionIds: [],
                 dirtyTracks: [],
                 trackBestDeltas: [],
-                userProjectionDeltas: []
+                userProjectionDeltas: [],
+                localStateChanged: false
             }
         }
 
         assertLeaseCurrent(isCurrent)
-        await ensureLocalTelemetrySummariesCanonical({
-            filePaths: pendingFiles.map((file) => file.filePath)
+        const requestedFileNames = pendingFiles.map((file) => file.fileName)
+        const reprocessResult = await runLocalMutationBoundary({
+            journal: mutationJournal,
+            run: () => ensureLocalTelemetrySummariesCanonical({
+                fileNames: requestedFileNames
+            }),
+            didMutate: result => Number(result?.updated || 0) > 0
         })
+        if (reprocessResult?.ok !== true) {
+            throw new Error(reprocessResult?.error || 'local-reprocess-failed')
+        }
         assertLeaseCurrent(isCurrent)
 
         const rescanned = await getScanService().scanPendingFiles({
             ownerId: uid,
-            files: pendingFiles.map((file) => file.file)
+            fileNames: requestedFileNames
         })
         assertLeaseCurrent(isCurrent)
 
@@ -378,30 +347,41 @@ export function useElectronSync() {
         queueService.enqueue(rescanned.pendingFiles)
         const totalToUpload = Math.max(1, queueService.size())
         let processed = 0
+        let registryStateChanged = false
         const uploadService = getUploadService(isCurrent)
 
         const drainResult = await queueService.drain<SyncResult>(async (item) => {
             assertLeaseCurrent(isCurrent)
             syncProgress.value = Math.round((processed / totalToUpload) * 100)
-            const result = await uploadService.uploadOrUpdateSession(
+            const result: SyncResult = await uploadService.uploadOrUpdateSession(
                 item.rawObj,
                 item.rawText,
                 item.fileName,
                 uid,
                 { precomputedHash: item.fileHash }
             )
+            const dirtyTrack = result.projectionDelta?.trackId || getTrackIdFromRaw(item.rawObj)
+            mutationJournal.recordUploadMutation({
+                status: result.status,
+                committedStatus: result.committedStatus,
+                sessionId: result.sessionId || item.sessionId,
+                dirtyTrack,
+                projectionDelta: result.projectionDelta
+            })
             assertLeaseCurrent(isCurrent)
             if (shouldPersistRegistry(result)) {
-                await persistRegistryEntry(uid, item, result, isCurrent)
+                const persisted = await persistRegistryEntry(uid, item, result, isCurrent)
+                if (persisted) mutationJournal.recordLocalMutation()
+                registryStateChanged = persisted || registryStateChanged
             }
             processed++
             syncProgress.value = Math.round((processed / totalToUpload) * 100)
 
             return {
                 result,
-                didChange: result.status === 'created' || result.status === 'updated',
+                didChange: result.status === 'created' || result.status === 'updated' || !!result.committedStatus,
                 dirtySessionId: result.sessionId || item.sessionId,
-                dirtyTrack: result.projectionDelta?.trackId || getTrackIdFromRaw(item.rawObj)
+                dirtyTrack
             }
         })
 
@@ -409,10 +389,14 @@ export function useElectronSync() {
             .map((result) => result.projectionDelta)
             .filter((delta): delta is TrackBestProjectionDelta => !!delta)
         const userProjectionDeltas: UserProjectionDelta[] = drainResult.results
-            .filter((result) => (result.status === 'created' || result.status === 'updated') && !!result.projectionDelta)
+            .filter((result) => (
+                result.status === 'created'
+                || result.status === 'updated'
+                || !!result.committedStatus
+            ) && !!result.projectionDelta)
             .map((result) => ({
                 ...result.projectionDelta!,
-                status: result.status as 'created' | 'updated'
+                status: (result.committedStatus || result.status) as 'created' | 'updated'
             }))
 
         syncProgress.value = 100
@@ -422,7 +406,8 @@ export function useElectronSync() {
             dirtySessionIds: drainResult.dirtySessionIds,
             dirtyTracks: drainResult.dirtyTracks,
             trackBestDeltas,
-            userProjectionDeltas
+            userProjectionDeltas,
+            localStateChanged: Number(reprocessResult?.updated || 0) > 0 || registryStateChanged
         }
     }
 
@@ -499,6 +484,8 @@ export function useElectronSync() {
         let needsTrackBestsRebuild = false
         let trackBestDeltas: TrackBestProjectionDelta[] = []
         let userProjectionDeltas: UserProjectionDelta[] = []
+        let localStateChanged = false
+        const mutationJournal = createSyncMutationJournal()
 
         try {
             if (trigger === 'filesChanged') {
@@ -508,7 +495,9 @@ export function useElectronSync() {
             queueService.setStatus('scanning')
             const scanResult = await getScanService().scanPendingFiles({
                 ownerId: uid,
-                files: action.scanMode === 'changed' ? (payload?.files || []) : undefined
+                fileNames: action.scanMode === 'changed'
+                    ? (payload?.files || []).map(file => String(file?.name || ''))
+                    : undefined
             })
             assertLeaseCurrent(isCurrent)
 
@@ -522,27 +511,17 @@ export function useElectronSync() {
             )
 
             if (action.processPending) {
-                const pendingOutcome = await processPendingFiles(uid, scanResult.pendingFiles, isCurrent)
+                const pendingOutcome = await processPendingFiles(
+                    uid,
+                    scanResult.pendingFiles,
+                    isCurrent,
+                    mutationJournal
+                )
                 allResults.push(...pendingOutcome.results)
                 changedCount += pendingOutcome.changedCount
                 trackBestDeltas = [...trackBestDeltas, ...pendingOutcome.trackBestDeltas]
                 userProjectionDeltas = [...userProjectionDeltas, ...pendingOutcome.userProjectionDeltas]
-            }
-
-            if (trigger === 'manualForceSync' && action.runMaintenance) {
-                queueService.setStatus('maintaining')
-                assertLeaseCurrent(isCurrent)
-                const maintenance = await getMaintenanceService(isCurrent).runMaintenance({
-                    uid,
-                    interactive: true,
-                    runLegacyMigration: false,
-                    runZeroLapCleanup: true,
-                    runRetentionCleanup: true,
-                    updateVersion: false
-                })
-                assertLeaseCurrent(isCurrent)
-                needsTrackBestsRebuild = needsTrackBestsRebuild || maintenance.needsTrackBestsRebuild
-                changedCount += maintenance.needsProjectionRefresh ? 1 : 0
+                localStateChanged = localStateChanged || pendingOutcome.localStateChanged
             }
 
             const missingRecentIndexedIds = await findMissingRecentSessionIndexIds(uid, allResults, isCurrent)
@@ -590,7 +569,7 @@ export function useElectronSync() {
             syncResults.value = allResults
             lastSyncTime.value = new Date()
 
-            if (changedCount > 0) {
+            if (changedCount > 0 || localStateChanged) {
                 invalidateTelemetryCaches({ uid, scope: 'sync' })
             }
 
@@ -606,6 +585,35 @@ export function useElectronSync() {
         } catch (error: any) {
             queueService.setStatus('error')
             console.error(`[SYNC] Trigger ${trigger} failed:`, error)
+            try {
+                await recoverPartialSyncMutations({
+                    snapshot: mutationJournal.snapshot(),
+                    isCurrent: () => !isCurrent || isCurrent(),
+                    invalidate: () => {
+                        localRegistryCache = null
+                        invalidateTelemetryCaches({ uid, scope: 'sync' })
+                    },
+                    reconcileCloud: async (partial) => {
+                        await refreshSyncProjections({
+                            db,
+                            uid,
+                            changedCount: partial.cloudChangedCount,
+                            loadSessions,
+                            clearTrackDerivedCaches,
+                            resetAllTrackBests,
+                            getDocFn: getDoc,
+                            setDocFn: setDoc,
+                            bestRulesVersion: BEST_RULES_VERSION,
+                            reason: `${reasonPrefix}_partial_recovery`,
+                            rebuildTrackBests: false,
+                            trackBestDeltas: partial.trackBestDeltas,
+                            userProjectionDeltas: partial.userProjectionDeltas
+                        })
+                    }
+                })
+            } catch (recoveryError) {
+                console.warn(`[SYNC] Partial mutation recovery failed for ${trigger}:`, recoveryError)
+            }
             const result = [{ status: 'error' as const, fileName: trigger, error: error?.message || 'sync_trigger_failed' }]
             syncResults.value = result
             return result

@@ -35,11 +35,11 @@ describe('resolveSyncTriggerAction', () => {
     expect(action.interactive).toBe(false)
   })
 
-  it('manualForceSync: scanMode full, tutti attivi, interactive true', () => {
+  it('manualForceSync: full scan interattivo senza maintenance distruttiva', () => {
     const action = resolveSyncTriggerAction('manualForceSync')
     expect(action.scanMode).toBe('full')
     expect(action.processPending).toBe(true)
-    expect(action.runMaintenance).toBe(true)
+    expect(action.runMaintenance).toBe(false)
     expect(action.interactive).toBe(true)
   })
 

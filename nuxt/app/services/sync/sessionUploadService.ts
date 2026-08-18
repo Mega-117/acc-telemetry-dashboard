@@ -2,18 +2,9 @@ import { collection, doc, serverTimestamp } from 'firebase/firestore'
 import { trackedWriteBatch } from '~/composables/useFirebaseTracker'
 import type { TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { BEST_RULES_VERSION, extractMetadata, generateSessionId } from '~/utils/sessionParser'
+import type { RegistryCacheEntry } from './syncRegistryPolicy'
 
-export interface RegistryCacheEntry {
-  fileHash: string
-  rawDataHash?: string
-  summaryHash?: string
-  mtime: number
-  size: number
-  uploadedBy: string
-  sessionId: string
-  uploadedAt: string
-  bestRulesVersion?: number
-}
+export type { RegistryCacheEntry } from './syncRegistryPolicy'
 
 export function splitTextIntoChunks(str: string, size: number): string[] {
   const chunks: string[] = []
@@ -116,6 +107,11 @@ export function createSessionUploadService(params: {
       uid: string,
       options: { precomputedHash?: string } = {}
     ) {
+      let committedResult: {
+        committedStatus: 'created' | 'updated'
+        sessionId: string
+        projectionDelta: TrackBestProjectionDelta
+      } | null = null
       try {
         assertActive()
         const totalLaps = rawObj.session_info?.laps_total || 0
@@ -123,8 +119,11 @@ export function createSessionUploadService(params: {
           return { status: 'skipped' as const, fileName, reason: 'zero_laps' }
         }
 
-        const fileOwnerId = rawObj.ownerId || null
-        if (fileOwnerId && fileOwnerId !== uid) {
+        const fileOwnerId = typeof rawObj.ownerId === 'string' ? rawObj.ownerId : null
+        if (!fileOwnerId) {
+          return { status: 'skipped' as const, fileName, reason: 'owner_missing' }
+        }
+        if (fileOwnerId !== uid) {
           return { status: 'skipped' as const, fileName, reason: 'owner_mismatch' }
         }
         const preparedSummary = prepareSummaryForUpload(rawObj)
@@ -231,9 +230,6 @@ export function createSessionUploadService(params: {
           }
         }
 
-        assertActive()
-        await batch.commit()
-        assertActive()
         const projectionDelta: TrackBestProjectionDelta = {
           trackId: meta.track,
           sessionId,
@@ -242,9 +238,15 @@ export function createSessionUploadService(params: {
           summary: summaryWithRules,
           car: meta.car
         }
+        const committedStatus = (isUpdate ? 'updated' : 'created') as 'created' | 'updated'
+
+        assertActive()
+        await batch.commit()
+        committedResult = { committedStatus, sessionId, projectionDelta }
+        assertActive()
 
         return {
-          status: (isUpdate ? 'updated' : 'created') as 'created' | 'updated',
+          status: committedStatus,
           fileName,
           sessionId,
           projectionDelta,
@@ -252,7 +254,12 @@ export function createSessionUploadService(params: {
         }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
       } catch (error: any) {
-        return { status: 'error' as const, fileName, error: error.message }
+        return {
+          status: 'error' as const,
+          fileName,
+          error: error.message,
+          ...(committedResult || {})
+        }
       }
     }
   }

@@ -74,6 +74,14 @@ const autoSyncSource = fs.readFileSync(path.join(nuxtRoot, 'app/services/sync/au
 const electronSyncSource = fs.readFileSync(path.join(nuxtRoot, 'app/composables/useElectronSync.ts'), 'utf8')
 assert.match(autoSyncSource, /WINDOW_FOCUS_SYNC_THROTTLE_MS/, 'window focus auto-sync must be throttled')
 assert.match(electronSyncSource, /FULL_AUTO_SCAN_DEDUPE_MS/, 'initial full auto scans must be deduplicated')
+assert.doesNotMatch(electronSyncSource, /runZeroLapCleanup:\s*true/, 'normal sync must not delete zero-lap cloud sessions')
+assert.doesNotMatch(electronSyncSource, /runRetentionCleanup:\s*true/, 'normal sync must not run local retention')
+assert.doesNotMatch(electronSyncSource, /cleanupSyncedFiles\s*\(/, 'normal sync facade must not reach local deletion')
+assert.match(electronSyncSource, /const requestedFileNames\s*=\s*pendingFiles\.map/, 'reprocess IPC must derive basenames only')
+assert.match(electronSyncSource, /if \(reprocessResult\?\.ok !== true\)/, 'failed reprocess must abort before rescan')
+assert.match(electronSyncSource, /fileNames:\s*requestedFileNames/, 'post-reprocess scan must re-list main-owned descriptors by basename')
+assert.doesNotMatch(electronSyncSource, /reprocessResult\?\.files/, 'post-reprocess scan must not trust renderer-carried descriptors')
+assert.doesNotMatch(electronSyncSource, /files:\s*pendingFiles\.map/, 'post-reprocess scan must not reuse stale renderer descriptors')
 
 function hashText(input) {
   return crypto.createHash('sha256').update(input).digest('hex')
@@ -84,7 +92,7 @@ const triggerExpectations = {
   windowFocused: { scanMode: 'none', processPending: false, runMaintenance: false, interactive: false },
   initialFiles: { scanMode: 'none', processPending: false, runMaintenance: false, interactive: false },
   authReady: { scanMode: 'full', processPending: true, runMaintenance: true, interactive: false },
-  manualForceSync: { scanMode: 'full', processPending: true, runMaintenance: true, interactive: true }
+  manualForceSync: { scanMode: 'full', processPending: true, runMaintenance: false, interactive: true }
 }
 
 for (const [trigger, expected] of Object.entries(triggerExpectations)) {
@@ -144,11 +152,17 @@ const ownerMismatch = {
   ownerId: 'owner-2'
 }
 
-const rawByPath = {
+const ownerMissing = {
+  ...validPending,
+  ownerId: null
+}
+
+const rawByName = {
   'pending.json': validPending,
   'unchanged.json': validUnchanged,
   'zero.json': zeroLaps,
   'mismatch.json': ownerMismatch,
+  'ownerless.json': ownerMissing,
   'invalid.txt': { foo: 'bar' }
 }
 
@@ -157,15 +171,23 @@ const readFileCalls = []
 const scanService = createSyncScanService({
   electronAPI: {
     getTelemetryFiles: async () => ([
-      { name: 'pending.json', path: 'pending.json', mtime: 1, size: 10 },
-      { name: 'unchanged.json', path: 'unchanged.json', mtime: 2, size: 10 },
-      { name: 'zero.json', path: 'zero.json', mtime: 3, size: 10 },
-      { name: 'mismatch.json', path: 'mismatch.json', mtime: 4, size: 10 },
-      { name: 'invalid.txt', path: 'invalid.txt', mtime: 5, size: 10 }
+      { name: 'pending.json', mtime: 1, size: 10 },
+      {
+        name: 'unchanged.json',
+        mtime: 2,
+        size: 10,
+        sessionId: '2026_04_23T18_00_00_monza',
+        fileHash: hashText(unchangedText),
+        bestRulesVersion: 999
+      },
+      { name: 'zero.json', mtime: 3, size: 10 },
+      { name: 'mismatch.json', mtime: 4, size: 10 },
+      { name: 'ownerless.json', mtime: 5, size: 10 },
+      { name: 'invalid.txt', mtime: 6, size: 10 }
     ]),
-    readFile: async (filePath) => {
-      readFileCalls.push(filePath)
-      return rawByPath[filePath]
+    readFile: async (fileName) => {
+      readFileCalls.push(fileName)
+      return rawByName[fileName]
     }
   },
   loadRegistryCache: async () => ({
@@ -193,6 +215,7 @@ assert.deepEqual(
   [
     ['zero.json', 'zero_laps'],
     ['mismatch.json', 'owner_mismatch'],
+    ['ownerless.json', 'owner_missing'],
     ['invalid.txt', 'invalid_file']
   ]
 )

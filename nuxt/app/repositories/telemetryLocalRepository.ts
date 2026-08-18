@@ -1,6 +1,7 @@
 import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
 import type { FullSession, SessionDocument } from '~/types/telemetry'
 import { ensureLocalTelemetrySummariesCanonical } from '~/utils/localCanonicalSummary'
+import { isRegistryEntryCurrentForFile } from '~/services/sync/syncRegistryPolicy'
 
 export function isSessionFileCandidate(fileName: string, rawObj: any): boolean {
   const normalized = (fileName || '').toLowerCase()
@@ -17,7 +18,7 @@ export async function loadLocalTelemetrySessions(params: {
   isOnline: boolean
 }): Promise<SessionDocument[]> {
   const { electronAPI, ownerId, isOnline } = params
-  if (!electronAPI?.getTelemetryFiles || !electronAPI?.readFile) return []
+  if (!ownerId || !electronAPI?.getTelemetryFiles || !electronAPI?.readFile) return []
 
   await ensureLocalTelemetrySummariesCanonical()
   const files = await electronAPI.getTelemetryFiles()
@@ -28,14 +29,19 @@ export async function loadLocalTelemetrySessions(params: {
   for (const file of files) {
     try {
       const fileName = String(file?.name || '')
-      const rawObj = await electronAPI.readFile(file.path)
+      const rawObj = await electronAPI.readFile(fileName)
       if (!rawObj || !isSessionFileCandidate(fileName, rawObj)) continue
-      if (rawObj.ownerId && rawObj.ownerId !== ownerId) continue
+      if (typeof rawObj.ownerId !== 'string' || rawObj.ownerId !== ownerId) continue
 
       const { meta, summary, summarySource } = extractMetadata(rawObj)
       const sessionId = generateSessionId(meta.date_start, meta.track)
       const reg = registry[fileName]
-      const isSynced = !!(reg && reg.uploadedBy === ownerId && reg.sessionId === sessionId)
+      const isSynced = isRegistryEntryCurrentForFile({
+        entry: reg,
+        file,
+        ownerId,
+        sessionId
+      })
 
       sessions.push({
         sessionId,
@@ -65,16 +71,16 @@ export async function findLocalFullSessionById(params: {
   ownerId?: string
 }): Promise<FullSession | null> {
   const { electronAPI, sessionId, ownerId } = params
-  if (!electronAPI?.getTelemetryFiles || !electronAPI?.readFile) return null
+  if (!ownerId || !electronAPI?.getTelemetryFiles || !electronAPI?.readFile) return null
 
   await ensureLocalTelemetrySummariesCanonical()
   const files = await electronAPI.getTelemetryFiles()
   for (const file of files || []) {
     const fileName = String(file?.name || '')
     if (fileName.toLowerCase() === 'live_state.json') continue
-    const rawObj = await electronAPI.readFile(file.path)
+    const rawObj = await electronAPI.readFile(fileName)
     if (!rawObj || !isSessionFileCandidate(fileName, rawObj)) continue
-    if (rawObj.ownerId && rawObj.ownerId !== ownerId) continue
+    if (typeof rawObj.ownerId !== 'string' || rawObj.ownerId !== ownerId) continue
 
     const sessionInfo = rawObj.session_info || {}
     const localSessionId = generateSessionId(

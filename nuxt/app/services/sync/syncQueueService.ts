@@ -51,7 +51,7 @@ export function createSyncQueueService(params?: {
   function enqueue(items: PendingSyncFile[]): number {
     let added = 0
     for (const item of items) {
-      const key = item.filePath || item.sessionId || item.fileName
+      const key = item.fileName || item.sessionId
       if (!key) continue
       if (queue.has(key)) continue
       queue.set(key, item)
