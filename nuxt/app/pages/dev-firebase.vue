@@ -75,12 +75,12 @@ function sendSummaryToConsole() {
 
       <section class="stats-grid">
         <article class="stat-card">
-          <span class="stat-label">Billed Reads</span>
-          <strong class="stat-value">{{ totals.billedReads }}</strong>
+          <span class="stat-label">Estimated Reads</span>
+          <strong class="stat-value">{{ totals.estimatedReads }}</strong>
         </article>
         <article class="stat-card stat-card--warm">
-          <span class="stat-label">Billed Writes</span>
-          <strong class="stat-value">{{ totals.billedWrites }}</strong>
+          <span class="stat-label">Estimated Writes</span>
+          <strong class="stat-value">{{ totals.estimatedWrites }}</strong>
         </article>
         <article class="stat-card">
           <span class="stat-label">Read Ops</span>
@@ -128,8 +128,8 @@ function sendSummaryToConsole() {
             </div>
             <div v-for="item in topScenarios" :key="item.id" class="table-row">
               <span class="mono">{{ item.name }}</span>
-              <span>{{ item.billedReads }}</span>
-              <span>{{ item.billedWrites }}</span>
+              <span>{{ item.estimatedReads }}</span>
+              <span>{{ item.estimatedWrites }}</span>
               <span>{{ item.operations }}</span>
             </div>
           </div>
@@ -150,8 +150,8 @@ function sendSummaryToConsole() {
             </div>
             <div v-for="item in topCallers" :key="item.caller" class="table-row">
               <span class="mono">{{ item.caller }}</span>
-              <span>{{ item.billedReads }}</span>
-              <span>{{ item.billedWrites }}</span>
+              <span>{{ item.estimatedReads }}</span>
+              <span>{{ item.estimatedWrites }}</span>
               <span>{{ item.operations }}</span>
             </div>
           </div>
@@ -172,8 +172,8 @@ function sendSummaryToConsole() {
             </div>
             <div v-for="item in topPaths" :key="item.pathBucket" class="table-row">
               <span class="mono">{{ item.pathBucket }}</span>
-              <span>{{ item.billedReads }}</span>
-              <span>{{ item.billedWrites }}</span>
+              <span>{{ item.estimatedReads }}</span>
+              <span>{{ item.estimatedWrites }}</span>
               <span>{{ item.operations }}</span>
             </div>
           </div>
@@ -199,8 +199,8 @@ function sendSummaryToConsole() {
           <div v-for="item in recentScenarioRows" :key="item.id" class="table-row">
             <span>{{ formatTimestamp(item.startedAt) }}</span>
             <span class="mono">{{ item.name }}</span>
-            <span>{{ item.billedReads }}</span>
-            <span>{{ item.billedWrites }}</span>
+            <span>{{ item.estimatedReads }}</span>
+            <span>{{ item.estimatedWrites }}</span>
             <span>{{ item.operations }}</span>
             <span>{{ item.durationMs }}ms</span>
             <span class="mono path-cell">{{ JSON.stringify(item.metadata || {}) }}</span>
@@ -229,8 +229,8 @@ function sendSummaryToConsole() {
             <span class="mono">{{ item.type }}</span>
             <span class="mono">{{ item.caller }}</span>
             <span class="mono path-cell">{{ item.path }}</span>
-            <span>{{ item.billedReads }}</span>
-            <span>{{ item.billedWrites }}</span>
+            <span>{{ item.estimatedReads }}</span>
+            <span>{{ item.estimatedWrites }}</span>
             <span>{{ item.durationMs }}ms</span>
           </div>
         </div>

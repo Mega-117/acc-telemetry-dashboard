@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   buildDiagnosticDateRange,
   diagnosticsViewState,
-  filterAndPaginateDiagnostics,
   formatItalianDiagnosticDate,
   paginationTokens,
   resolveDiagnosticNickname
@@ -54,23 +53,4 @@ describe('diagnosticsPresentation', () => {
     expect(formatItalianDiagnosticDate('2026-08-02T12:34:56.000Z')).toContain('14:34:56')
   })
 
-  it('filtra AND, ordina newest-first e pagina senza indici compositi', () => {
-    const events = Array.from({ length: 120 }, (_, index) => ({
-      id: index,
-      component: index % 2 === 0 ? 'logger' : 'frontend',
-      severity: index % 3 === 0 ? 'error' : 'warning',
-      occurredAt: new Date(Date.UTC(2026, 7, 2, 12, 0, index)).toISOString()
-    }))
-    const result = filterAndPaginateDiagnostics(events, {
-      component: 'logger',
-      severity: 'error',
-      startIso: '2026-08-02T00:00:00.000Z',
-      endExclusiveIso: '2026-08-03T00:00:00.000Z'
-    }, 2, 10)
-
-    expect(result.total).toBe(20)
-    expect(result.items).toHaveLength(10)
-    expect(result.items[0]?.occurredAt > result.items[9]?.occurredAt).toBe(true)
-    expect(result.items.every(event => event.component === 'logger' && event.severity === 'error')).toBe(true)
-  })
 })

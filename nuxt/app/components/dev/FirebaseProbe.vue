@@ -61,7 +61,7 @@ function formatMetadata(metadata: Record<string, unknown> | undefined) {
       @click="toggleProbe"
     >
       <span>FB</span>
-      <strong>{{ totals.billedReads }}/{{ totals.billedWrites }}</strong>
+      <strong>{{ totals.estimatedReads }}/{{ totals.estimatedWrites }}</strong>
     </button>
 
     <div v-else class="probe-panel">
@@ -79,9 +79,9 @@ function formatMetadata(metadata: Record<string, unknown> | undefined) {
 
     <div class="probe-grid" data-testid="firebase-probe-counters">
       <span>Reads</span>
-      <strong data-testid="firebase-probe-reads">{{ totals.billedReads }}</strong>
+      <strong data-testid="firebase-probe-reads">{{ totals.estimatedReads }}</strong>
       <span>Writes</span>
-      <strong data-testid="firebase-probe-writes">{{ totals.billedWrites }}</strong>
+      <strong data-testid="firebase-probe-writes">{{ totals.estimatedWrites }}</strong>
       <span>Read ops</span>
       <strong data-testid="firebase-probe-read-ops">{{ totalReadOps }}</strong>
       <span>Count ops</span>
@@ -98,7 +98,7 @@ function formatMetadata(metadata: Record<string, unknown> | undefined) {
         <div v-if="topScenarios.length === 0" class="empty">none</div>
         <div v-for="item in topScenarios" :key="item.id" class="probe-row">
           <span>{{ item.name }}</span>
-          <strong>R{{ item.billedReads }} W{{ item.billedWrites }} O{{ item.operations }}</strong>
+          <strong>R{{ item.estimatedReads }} W{{ item.estimatedWrites }} O{{ item.operations }}</strong>
         </div>
       </div>
     </details>
@@ -109,7 +109,7 @@ function formatMetadata(metadata: Record<string, unknown> | undefined) {
         <div v-if="topCallers.length === 0" class="empty">none</div>
         <div v-for="item in topCallers" :key="item.caller" class="probe-row">
           <span>{{ item.caller }}</span>
-          <strong>R{{ item.billedReads }} W{{ item.billedWrites }} O{{ item.operations }}</strong>
+          <strong>R{{ item.estimatedReads }} W{{ item.estimatedWrites }} O{{ item.operations }}</strong>
         </div>
       </div>
     </details>
@@ -120,7 +120,7 @@ function formatMetadata(metadata: Record<string, unknown> | undefined) {
         <div v-if="topPaths.length === 0" class="empty">none</div>
         <div v-for="item in topPaths" :key="item.pathBucket" class="probe-row">
           <span>{{ item.pathBucket }}</span>
-          <strong>R{{ item.billedReads }} W{{ item.billedWrites }} O{{ item.operations }}</strong>
+          <strong>R{{ item.estimatedReads }} W{{ item.estimatedWrites }} O{{ item.operations }}</strong>
         </div>
       </div>
     </details>
@@ -130,7 +130,7 @@ function formatMetadata(metadata: Record<string, unknown> | undefined) {
       <div data-testid="firebase-probe-recent-scenarios" class="probe-list">
         <div v-if="recentScenarioRows.length === 0" class="empty">none</div>
         <div v-for="item in recentScenarioRows" :key="item.id" class="probe-row probe-row--stacked">
-          <span>{{ item.name }} R{{ item.billedReads }} W{{ item.billedWrites }} O{{ item.operations }}</span>
+          <span>{{ item.name }} R{{ item.estimatedReads }} W{{ item.estimatedWrites }} O{{ item.operations }}</span>
           <small>{{ formatMetadata(item.metadata) }}</small>
         </div>
       </div>
@@ -141,7 +141,7 @@ function formatMetadata(metadata: Record<string, unknown> | undefined) {
       <div data-testid="firebase-probe-ops" class="probe-list">
         <div v-if="recentOps.length === 0" class="empty">none</div>
         <div v-for="item in recentOps" :key="item.id" class="probe-row probe-row--stacked">
-          <span>{{ item.type }} · {{ item.caller }} · R{{ item.billedReads }} W{{ item.billedWrites }}</span>
+          <span>{{ item.type }} · {{ item.caller }} · R{{ item.estimatedReads }} W{{ item.estimatedWrites }}</span>
           <small>{{ item.path }}</small>
         </div>
       </div>

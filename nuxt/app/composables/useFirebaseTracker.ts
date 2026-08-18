@@ -2,7 +2,7 @@
 // useFirebaseTracker - Centralized Firebase operations monitor
 // ============================================
 // Tracks Firestore reads/writes/listeners in one place so we can:
-// - estimate billed reads/writes for the current app session
+// - estimate reads/writes for the current app session (not Firebase Billing)
 // - understand which caller/path is responsible
 // - debug expensive flows and optimize them over time
 
@@ -47,8 +47,8 @@ export interface FirebaseOperation {
   path: string
   pathBucket: string
   docsCount: number
-  billedReads: number
-  billedWrites: number
+  estimatedReads: number
+  estimatedWrites: number
   writeDocs?: number
   deleteDocs?: number
   scenarioId?: number
@@ -68,24 +68,24 @@ interface FirebaseCallerStats {
   deleteOps: number
   listenerSnapshots: number
   batchCommits: number
-  billedReads: number
-  billedWrites: number
+  estimatedReads: number
+  estimatedWrites: number
   lastSeenAt: number
 }
 
 interface FirebasePathStats {
   pathBucket: string
   operations: number
-  billedReads: number
-  billedWrites: number
+  estimatedReads: number
+  estimatedWrites: number
   lastSeenAt: number
 }
 
 interface FirebaseScenarioCallerStats {
   caller: string
   operations: number
-  billedReads: number
-  billedWrites: number
+  estimatedReads: number
+  estimatedWrites: number
 }
 
 export interface FirebaseScenarioReport {
@@ -96,8 +96,8 @@ export interface FirebaseScenarioReport {
   endedAt: number | null
   durationMs: number
   operations: number
-  billedReads: number
-  billedWrites: number
+  estimatedReads: number
+  estimatedWrites: number
   byCaller: Record<string, FirebaseScenarioCallerStats>
 }
 
@@ -114,8 +114,8 @@ const totalsState = ref({
   listenerSubscriptions: 0,
   listenerSnapshots: 0,
   batchCommits: 0,
-  billedReads: 0,
-  billedWrites: 0
+  estimatedReads: 0,
+  estimatedWrites: 0
 })
 
 const sessionStart = ref(Date.now())
@@ -191,8 +191,8 @@ function ensureCaller(caller: string): FirebaseCallerStats {
     deleteOps: 0,
     listenerSnapshots: 0,
     batchCommits: 0,
-    billedReads: 0,
-    billedWrites: 0,
+    estimatedReads: 0,
+    estimatedWrites: 0,
     lastSeenAt: 0
   }
 
@@ -210,8 +210,8 @@ function ensurePathBucket(pathBucket: string): FirebasePathStats {
   const next: FirebasePathStats = {
     pathBucket,
     operations: 0,
-    billedReads: 0,
-    billedWrites: 0,
+    estimatedReads: 0,
+    estimatedWrites: 0,
     lastSeenAt: 0
   }
 
@@ -234,7 +234,7 @@ function maybeVerboseLog(entry: FirebaseOperation) {
   if (!verboseLogging.value) return
   const scenario = entry.scenarioName ? ` scenario=${entry.scenarioName}` : ''
   console.log(
-    `[FIREBASE] ${entry.type} caller=${entry.caller}${scenario} path=${entry.pathBucket} reads=${entry.billedReads} writes=${entry.billedWrites} docs=${entry.docsCount} duration=${entry.durationMs}ms`
+    `[FIREBASE] ${entry.type} caller=${entry.caller}${scenario} path=${entry.pathBucket} reads=${entry.estimatedReads} writes=${entry.estimatedWrites} docs=${entry.docsCount} duration=${entry.durationMs}ms`
   )
 }
 
@@ -258,19 +258,19 @@ function recordScenarioOperation(entry: FirebaseOperation) {
   if (!scenario) return
 
   scenario.operations += 1
-  scenario.billedReads += entry.billedReads
-  scenario.billedWrites += entry.billedWrites
+  scenario.estimatedReads += entry.estimatedReads
+  scenario.estimatedWrites += entry.estimatedWrites
   scenario.durationMs = (scenario.endedAt || Date.now()) - scenario.startedAt
 
   const caller = scenario.byCaller[entry.caller] || {
     caller: entry.caller,
     operations: 0,
-    billedReads: 0,
-    billedWrites: 0
+    estimatedReads: 0,
+    estimatedWrites: 0
   }
   caller.operations += 1
-  caller.billedReads += entry.billedReads
-  caller.billedWrites += entry.billedWrites
+  caller.estimatedReads += entry.estimatedReads
+  caller.estimatedWrites += entry.estimatedWrites
   scenario.byCaller = {
     ...scenario.byCaller,
     [entry.caller]: caller
@@ -292,8 +292,8 @@ function recordOperation(input: Omit<FirebaseOperation, 'id' | 'pathBucket'>) {
   }
 
   const nextTotals = cloneTotals()
-  nextTotals.billedReads += entry.billedReads
-  nextTotals.billedWrites += entry.billedWrites
+  nextTotals.estimatedReads += entry.estimatedReads
+  nextTotals.estimatedWrites += entry.estimatedWrites
 
   switch (entry.type) {
     case 'READ':
@@ -335,8 +335,8 @@ function recordOperation(input: Omit<FirebaseOperation, 'id' | 'pathBucket'>) {
 
   const caller = ensureCaller(entry.caller)
   caller.operations += 1
-  caller.billedReads += entry.billedReads
-  caller.billedWrites += entry.billedWrites
+  caller.estimatedReads += entry.estimatedReads
+  caller.estimatedWrites += entry.estimatedWrites
   caller.lastSeenAt = entry.startedAt
 
   switch (entry.type) {
@@ -370,8 +370,8 @@ function recordOperation(input: Omit<FirebaseOperation, 'id' | 'pathBucket'>) {
 
   const bucket = ensurePathBucket(entry.pathBucket)
   bucket.operations += 1
-  bucket.billedReads += entry.billedReads
-  bucket.billedWrites += entry.billedWrites
+  bucket.estimatedReads += entry.estimatedReads
+  bucket.estimatedWrites += entry.estimatedWrites
   bucket.lastSeenAt = entry.startedAt
   pathStats.value = { ...pathStats.value, [bucket.pathBucket]: { ...bucket } }
 
@@ -385,8 +385,8 @@ function createOperationLogger(
   caller: string,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   target: any,
-  billedReads: number,
-  billedWrites: number,
+  estimatedReads: number,
+  estimatedWrites: number,
   startedAt: number,
   docsCount: number,
   note?: string,
@@ -396,8 +396,8 @@ function createOperationLogger(
     type,
     caller,
     path: extractFirestorePath(target),
-    billedReads,
-    billedWrites,
+    estimatedReads,
+    estimatedWrites,
     startedAt,
     durationMs: Date.now() - startedAt,
     docsCount,
@@ -417,8 +417,8 @@ export async function trackedGetDoc(ref: DocumentReference, caller: string) {
 export async function trackedGetDocs(q: Query, caller: string) {
   const startedAt = Date.now()
   const result = await fbGetDocs(q)
-  const billedReads = Math.max(result.docs.length, 1)
-  createOperationLogger('QUERY', caller, q, billedReads, 0, startedAt, billedReads, `returned=${result.docs.length}`)
+  const estimatedReads = Math.max(result.docs.length, 1)
+  createOperationLogger('QUERY', caller, q, estimatedReads, 0, startedAt, estimatedReads, `returned=${result.docs.length}`)
   return result
 }
 
@@ -426,12 +426,12 @@ export async function trackedGetCountFromServer(q: Query, caller: string) {
   const startedAt = Date.now()
   const result = await fbGetCountFromServer(q)
   const returnedCount = Number(result.data().count || 0)
-  const billedReads = Math.max(1, Math.ceil(returnedCount / 1000))
+  const estimatedReads = Math.max(1, Math.ceil(returnedCount / 1000))
   createOperationLogger(
     'COUNT',
     caller,
     q,
-    billedReads,
+    estimatedReads,
     0,
     startedAt,
     returnedCount,
@@ -502,17 +502,17 @@ export async function trackedRunTransaction<T>(
 ): Promise<T> {
   const startedAt = Date.now()
   const result = await fbRunTransaction(db, updateFunction)
-  const billedReads = Math.max(0, Number(estimates.reads || 0))
-  const billedWrites = Math.max(0, Number(estimates.writes || 0))
+  const estimatedReads = Math.max(0, Number(estimates.reads || 0))
+  const estimatedWrites = Math.max(0, Number(estimates.writes || 0))
   createOperationLogger(
     'WRITE',
     caller,
     target,
-    billedReads,
-    billedWrites,
+    estimatedReads,
+    estimatedWrites,
     startedAt,
-    billedReads + billedWrites,
-    `transaction=true, estimatedReads=${billedReads}, estimatedWrites=${billedWrites}`
+    estimatedReads + estimatedWrites,
+    `transaction=true, estimatedReads=${estimatedReads}, estimatedWrites=${estimatedWrites}`
   )
   return result
 }
@@ -533,15 +533,15 @@ export function trackedOnSnapshot(
   return fbOnSnapshot(
     q,
     (snapshot) => {
-      const billedReads = Math.max(snapshot.docs.length, 1)
+      const estimatedReads = Math.max(snapshot.docs.length, 1)
       createOperationLogger(
         'LISTEN_SNAPSHOT',
         caller,
         q,
-        billedReads,
+        estimatedReads,
         0,
         Date.now(),
-        billedReads,
+        estimatedReads,
         `returned=${snapshot.docs.length}`,
         scenario
       )
@@ -587,8 +587,8 @@ export function trackedWriteBatch(db: Firestore, caller: string) {
         type: 'BATCH_COMMIT',
         caller,
         path: touchedBuckets.join(', ') || 'batch',
-        billedReads: 0,
-        billedWrites: writes + deletes,
+        estimatedReads: 0,
+        estimatedWrites: writes + deletes,
         writeDocs: writes,
         deleteDocs: deletes,
         startedAt,
@@ -631,8 +631,8 @@ export function startFirebaseScenario(name: string, metadata: Record<string, unk
     endedAt: null,
     durationMs: 0,
     operations: 0,
-    billedReads: 0,
-    billedWrites: 0,
+    estimatedReads: 0,
+    estimatedWrites: 0,
     byCaller: {}
   }
   activeScenarioStack = [...activeScenarioStack, scenario.id]
@@ -702,7 +702,7 @@ export function printFirebaseSummary(label?: string) {
   const totals = getFirebaseTotals()
   const durationSec = Math.round(totals.sessionDurationMs / 1000)
   console.log(`[FIREBASE] Summary${label ? ` - ${label}` : ''}`)
-  console.log(`[FIREBASE] billedReads=${totals.billedReads} billedWrites=${totals.billedWrites} duration=${durationSec}s`)
+  console.log(`[FIREBASE] estimatedReads=${totals.estimatedReads} estimatedWrites=${totals.estimatedWrites} duration=${durationSec}s`)
   console.log(`[FIREBASE] readOps=${totals.readOps} queryOps=${totals.queryOps} countOps=${totals.countOps} writeOps=${totals.writeOps} deleteOps=${totals.deleteOps} batchCommits=${totals.batchCommits} listenerSnapshots=${totals.listenerSnapshots}`)
 }
 
@@ -717,8 +717,8 @@ export function resetFirebaseTracker() {
     listenerSubscriptions: 0,
     listenerSnapshots: 0,
     batchCommits: 0,
-    billedReads: 0,
-    billedWrites: 0
+    estimatedReads: 0,
+    estimatedWrites: 0
   }
   sessionStart.value = Date.now()
   operationsLog.value = []
@@ -743,21 +743,21 @@ export function useFirebaseMonitor() {
   const recentOperations = computed(() => [...operationsLog.value].reverse())
   const callerBreakdown = computed(() =>
     Object.values(callerStats.value).sort((a, b) => {
-      const delta = b.billedReads + b.billedWrites - (a.billedReads + a.billedWrites)
+      const delta = b.estimatedReads + b.estimatedWrites - (a.estimatedReads + a.estimatedWrites)
       if (delta !== 0) return delta
       return b.operations - a.operations
     })
   )
   const pathBreakdown = computed(() =>
     Object.values(pathStats.value).sort((a, b) => {
-      const delta = b.billedReads + b.billedWrites - (a.billedReads + a.billedWrites)
+      const delta = b.estimatedReads + b.estimatedWrites - (a.estimatedReads + a.estimatedWrites)
       if (delta !== 0) return delta
       return b.operations - a.operations
     })
   )
   const scenarioBreakdown = computed(() =>
     getFirebaseScenarios().sort((a, b) => {
-      const delta = b.billedReads + b.billedWrites - (a.billedReads + a.billedWrites)
+      const delta = b.estimatedReads + b.estimatedWrites - (a.estimatedReads + a.estimatedWrites)
       if (delta !== 0) return delta
       return b.operations - a.operations
     })

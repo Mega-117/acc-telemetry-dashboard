@@ -134,33 +134,3 @@ export function paginationTokens(currentPage: number, totalPages: number): Pagin
   })
   return tokens
 }
-
-
-
-
-export function filterAndPaginateDiagnostics<T extends {
-  component: string
-  severity: string
-  occurredAt: string
-}>(
-  events: T[],
-  filters: {
-    component?: string
-    severity?: string
-    startIso: string
-    endExclusiveIso: string
-  },
-  pageNumber: number,
-  pageSize: number
-): { items: T[]; total: number } {
-  const filtered = events
-    .filter(event => event.occurredAt >= filters.startIso && event.occurredAt < filters.endExclusiveIso)
-    .filter(event => !filters.component || event.component === filters.component)
-    .filter(event => !filters.severity || event.severity === filters.severity)
-    .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))
-  const offset = Math.max(0, pageNumber - 1) * pageSize
-  return {
-    items: filtered.slice(offset, offset + pageSize),
-    total: filtered.length
-  }
-}

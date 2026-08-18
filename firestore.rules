@@ -414,7 +414,10 @@ service cloud.firestore {
         // The owner may only check a deterministic event ID so a crashed
         // outbox retry can acknowledge an already-created immutable report.
         allow get: if isOwner(userId) || isAdmin();
-        allow list, delete: if isAdmin();
+        allow list: if isAdmin()
+                    && request.query.limit != null
+                    && request.query.limit <= 1001;
+        allow delete: if isAdmin();
         allow update: if false;
       }
 
@@ -447,7 +450,9 @@ service cloud.firestore {
     // Rules v2 requires an explicit recursive match for collection-group
     // queries. Only admins may enumerate diagnostics across all users.
     match /{path=**}/diagnostics/{eventId} {
-      allow list: if isAdmin();
+      allow list: if isAdmin()
+                  && request.query.limit != null
+                  && request.query.limit <= 1001;
     }
 
     match /{path=**}/runtimeInstallations/{installationId} {

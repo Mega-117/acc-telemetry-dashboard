@@ -2,10 +2,18 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import {
   CLIENT_DIAGNOSTIC_COMPONENT_OPTIONS,
+  CLIENT_DIAGNOSTICS_CLEANUP_BATCH_SIZE,
+  CLIENT_DIAGNOSTICS_CLEANUP_MAX_BATCHES_PER_ACTION,
+  CLIENT_DIAGNOSTICS_MAX_COUNT,
+  CLIENT_DIAGNOSTICS_MAX_CURSOR_HOPS_PER_ACTION,
   CLIENT_DIAGNOSTICS_PAGE_SIZE,
+  ClientDiagnosticsCleanupError,
+  countClientDiagnostics,
+  countExpiredClientDiagnostics,
   deleteExpiredClientDiagnostics,
   diagnosticRetentionCutoffMs,
   loadClientDiagnosticsPage,
+  type ClientDiagnosticsCursor,
   type ClientDiagnosticItem,
   type ClientDiagnosticsFilters,
   type ClientDiagnosticsPage
@@ -18,6 +26,11 @@ import {
   paginationTokens,
   type DiagnosticPeriodPreset
 } from '~/utils/diagnosticsPresentation'
+import {
+  DIAGNOSTICS_ESTIMATE_ASSUMPTIONS,
+  estimateDiagnosticsCleanup,
+  estimateDiagnosticsPages
+} from '~/utils/diagnosticsCostEstimate'
 
 definePageMeta({
   layout: 'coach',
@@ -26,6 +39,7 @@ definePageMeta({
 
 const events = ref<ClientDiagnosticItem[]>([])
 const total = ref(0)
+const totalIsCapped = ref(false)
 const currentPage = ref(1)
 const isPending = ref(true)
 const errorMessage = ref('')
@@ -35,11 +49,19 @@ const periodPreset = ref<DiagnosticPeriodPreset>('7d')
 const customStart = ref('')
 const customEnd = ref('')
 const selected = ref<ClientDiagnosticItem | null>(null)
+const isCleanupChecking = ref(false)
 const isCleanupRunning = ref(false)
+const cleanupCandidateCount = ref<number | null>(null)
+const cleanupCountIsCapped = ref(false)
+const cleanupCutoffMs = ref<number | null>(null)
+const cleanupCursor = ref<ClientDiagnosticsCursor | null>(null)
+const cleanupDeleted = ref(0)
+const cleanupBatches = ref(0)
 const cleanupMessage = ref('')
 const cleanupError = ref(false)
 
 const pageCache = new Map<number, ClientDiagnosticsPage>()
+const pageCursors = new Map<number, ClientDiagnosticsCursor | null>([[1, null]])
 let requestVersion = 0
 let reloadTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -67,6 +89,14 @@ const componentOptions = computed(() => [...new Set([
   ...CLIENT_DIAGNOSTIC_COMPONENT_OPTIONS,
   ...events.value.map(event => event.component)
 ])].sort())
+const pageActionBudget = estimateDiagnosticsPages(
+  CLIENT_DIAGNOSTICS_MAX_CURSOR_HOPS_PER_ACTION,
+  CLIENT_DIAGNOSTICS_PAGE_SIZE
+)
+const cleanupActionBudget = estimateDiagnosticsCleanup(
+  CLIENT_DIAGNOSTICS_CLEANUP_MAX_BATCHES_PER_ACTION,
+  CLIENT_DIAGNOSTICS_CLEANUP_BATCH_SIZE
+)
 
 function friendlyLoadError(): string {
   return 'Impossibile caricare la diagnostica. Controlla la connessione e riprova.'
@@ -77,16 +107,37 @@ async function fetchPage(pageNumber: number, version: number): Promise<ClientDia
   if (cached) return cached
   const filters = activeFilters.value
   if (!filters) return null
-  const page = await loadClientDiagnosticsPage({
-    filters,
-    pageNumber,
-  })
-  if (version !== requestVersion) return null
-  pageCache.set(pageNumber, page)
+  const nearestKnownPage = [...pageCursors.keys()]
+    .filter(knownPage => knownPage <= pageNumber)
+    .sort((left, right) => right - left)[0] || 1
+  let cursor = pageCursors.get(nearestKnownPage) || null
+  let page: ClientDiagnosticsPage | null = null
+
+  for (
+    let nextPage = nearestKnownPage, hops = 1;
+    nextPage <= pageNumber;
+    nextPage += 1, hops += 1
+  ) {
+    if (hops > CLIENT_DIAGNOSTICS_MAX_CURSOR_HOPS_PER_ACTION) {
+      throw new Error('Pagina oltre il limite bounded per singola azione.')
+    }
+    page = pageCache.get(nextPage) || await loadClientDiagnosticsPage({
+      filters,
+      cursor
+    })
+    if (version !== requestVersion) return null
+    pageCache.set(nextPage, page)
+    if (page.nextCursor) pageCursors.set(nextPage + 1, page.nextCursor)
+    if (nextPage < pageNumber && !page.nextCursor) return null
+    cursor = page.nextCursor
+  }
   return page
 }
 
-async function loadPage(pageNumber: number, options: { preserveRows?: boolean } = {}) {
+async function loadPage(
+  pageNumber: number,
+  options: { preserveRows?: boolean, reset?: boolean } = {}
+) {
   const filters = activeFilters.value
   if (!filters) {
     errorMessage.value = 'Seleziona un intervallo personalizzato valido.'
@@ -99,12 +150,20 @@ async function loadPage(pageNumber: number, options: { preserveRows?: boolean } 
   if (!options.preserveRows) events.value = []
 
   try {
+    if (options.reset) {
+      pageCache.clear()
+      pageCursors.clear()
+      pageCursors.set(1, null)
+      const count = await countClientDiagnostics(filters)
+      if (version !== requestVersion) return
+      total.value = count.total
+      totalIsCapped.value = count.capped
+    }
     const requestedPage = await fetchPage(pageNumber, version)
     if (version !== requestVersion) return
     if (!requestedPage) return
     events.value = requestedPage.events
-    total.value = requestedPage.total
-    currentPage.value = Math.min(pageNumber, Math.max(1, Math.ceil(requestedPage.total / CLIENT_DIAGNOSTICS_PAGE_SIZE)))
+    currentPage.value = Math.min(pageNumber, totalPages.value)
     if (selected.value && !events.value.some(event => event.eventId === selected.value?.eventId)) {
       selected.value = null
     }
@@ -116,9 +175,8 @@ async function loadPage(pageNumber: number, options: { preserveRows?: boolean } 
 }
 
 async function resetAndLoad(options: { preserveRows?: boolean } = {}) {
-  pageCache.clear()
   currentPage.value = 1
-  await loadPage(1, options)
+  await loadPage(1, { ...options, reset: true })
 }
 
 function scheduleFilterReload() {
@@ -146,19 +204,83 @@ function resetFilters() {
   customEnd.value = ''
 }
 
-async function runCleanup() {
-  isCleanupRunning.value = true
+async function prepareCleanup() {
+  isCleanupChecking.value = true
   cleanupMessage.value = ''
   cleanupError.value = false
   try {
-    const deleted = await deleteExpiredClientDiagnostics({
-      cutoffMs: diagnosticRetentionCutoffMs()
-    })
-    cleanupMessage.value = `Eliminati ${deleted} eventi diagnostici più vecchi di 30 giorni.`
-    await resetAndLoad({ preserveRows: true })
+    const cutoffMs = diagnosticRetentionCutoffMs()
+    const count = await countExpiredClientDiagnostics(cutoffMs)
+    if (count.total === 0) {
+      cleanupMessage.value = 'Nessun evento con receivedAt server più vecchio di 30 giorni.'
+      return
+    }
+    cleanupCutoffMs.value = cutoffMs
+    cleanupCandidateCount.value = count.total
+    cleanupCountIsCapped.value = count.capped
+    cleanupCursor.value = null
+    cleanupDeleted.value = 0
+    cleanupBatches.value = 0
   } catch {
     cleanupError.value = true
-    cleanupMessage.value = 'Pulizia non completata. Riprova senza cambiare i filtri.'
+    cleanupMessage.value = 'Impossibile preparare la pulizia bounded.'
+  } finally {
+    isCleanupChecking.value = false
+  }
+}
+
+function clearCleanupState() {
+  cleanupCandidateCount.value = null
+  cleanupCountIsCapped.value = false
+  cleanupCutoffMs.value = null
+  cleanupCursor.value = null
+  cleanupDeleted.value = 0
+  cleanupBatches.value = 0
+}
+
+async function cancelCleanup() {
+  const mustReload = cleanupDeleted.value > 0 || cleanupError.value
+  clearCleanupState()
+  if (mustReload) await resetAndLoad({ preserveRows: true })
+}
+
+async function confirmCleanup() {
+  if (cleanupCutoffMs.value === null) return
+  isCleanupRunning.value = true
+  cleanupMessage.value = ''
+  cleanupError.value = false
+  const alreadyDeleted = cleanupDeleted.value
+  const alreadyCompletedBatches = cleanupBatches.value
+  try {
+    const result = await deleteExpiredClientDiagnostics({
+      cutoffMs: cleanupCutoffMs.value,
+      cursor: cleanupCursor.value,
+      onProgress(progress) {
+        cleanupDeleted.value = alreadyDeleted + progress.deleted
+        cleanupBatches.value = alreadyCompletedBatches + progress.batches
+      }
+    })
+    cleanupDeleted.value = alreadyDeleted + result.deleted
+    cleanupBatches.value = alreadyCompletedBatches + result.batches
+    cleanupCursor.value = result.nextCursor
+    if (result.done) {
+      const deleted = cleanupDeleted.value
+      clearCleanupState()
+      cleanupMessage.value = `Eliminati ${deleted} eventi diagnostici scaduti in batch bounded.`
+      await resetAndLoad({ preserveRows: true })
+    } else {
+      cleanupMessage.value = `Eliminati ${cleanupDeleted.value} eventi. Limite per azione raggiunto: continua dal cursore mostrato.`
+    }
+  } catch (error) {
+    cleanupError.value = true
+    if (error instanceof ClientDiagnosticsCleanupError) {
+      cleanupDeleted.value = alreadyDeleted + error.progress.deleted
+      cleanupBatches.value = alreadyCompletedBatches + error.progress.batches
+      cleanupCursor.value = error.progress.nextCursor
+      cleanupMessage.value = `Pulizia parziale dopo ${cleanupDeleted.value} eliminazioni. Riprova dallo stesso cursore.`
+    } else {
+      cleanupMessage.value = 'Pulizia non completata. Riprova senza cambiare cutoff o cursore.'
+    }
   } finally {
     isCleanupRunning.value = false
   }
@@ -180,8 +302,13 @@ onMounted(() => resetAndLoad())
         <p>Errori sanitizzati ricevuti da frontend, Electron, launcher, updater e logger.</p>
       </div>
       <div class="header-actions">
-        <button class="cleanup-button" :disabled="isCleanupRunning" @click="runCleanup">
-          {{ isCleanupRunning ? 'Eliminazione…' : 'Elimina errori più vecchi di 30 giorni' }}
+        <button
+          data-testid="prepare-cleanup"
+          class="cleanup-button"
+          :disabled="isCleanupChecking || isCleanupRunning"
+          @click="prepareCleanup"
+        >
+          {{ isCleanupChecking ? 'Conteggio bounded…' : 'Elimina errori più vecchi di 30 giorni' }}
         </button>
         <button class="refresh-button" :disabled="isPending" @click="refreshEvents">
           {{ viewState === 'refreshing' ? 'Aggiornamento…' : 'Aggiorna' }}
@@ -190,8 +317,18 @@ onMounted(() => resetAndLoad())
     </header>
 
     <p class="retention-note">
-      Pulizia manuale globale basata sul timestamp server; nessuna cancellazione automatica.
+      Retention manuale di 30 giorni basata su <code>receivedAt</code> server.
+      TTL cloud non attivo; <code>occurredAt</code> è solo informativo.
     </p>
+    <aside class="estimate-note" aria-label="Assunzioni stime Firebase">
+      <strong>Costi operativi stimati, non fattura:</strong>
+      massimo {{ pageActionBudget.maxEstimatedReads }} read stimate per salto pagina bounded;
+      cleanup massimo {{ cleanupActionBudget.maxEstimatedReads }} read e
+      {{ cleanupActionBudget.maxEstimatedWrites }} write stimate per azione.
+      <span v-for="assumption in DIAGNOSTICS_ESTIMATE_ASSUMPTIONS" :key="assumption">
+        {{ assumption }}
+      </span>
+    </aside>
     <p
       v-if="cleanupMessage"
       class="cleanup-message"
@@ -239,7 +376,10 @@ onMounted(() => resetAndLoad())
           <input v-model="customEnd" type="date" :min="customStart || undefined">
         </label>
       </template>
-      <span class="page-summary">Totale {{ total }} · Pagina {{ currentPage }} di {{ totalPages }}</span>
+      <span class="page-summary">
+        Totale {{ total }}{{ totalIsCapped ? '+' : '' }} · Pagina {{ currentPage }} di {{ totalPages }}
+        <small v-if="totalIsCapped">(conteggio limitato a {{ CLIENT_DIAGNOSTICS_MAX_COUNT }})</small>
+      </span>
     </section>
 
     <p v-if="errorMessage" class="error-banner" role="alert">
@@ -320,6 +460,33 @@ onMounted(() => resetAndLoad())
         <pre v-if="Object.keys(selected.context || {}).length">{{ JSON.stringify(selected.context, null, 2) }}</pre>
       </article>
     </div>
+
+    <div
+      v-if="cleanupCandidateCount !== null"
+      class="detail-backdrop"
+      @click.self="!isCleanupRunning && cancelCleanup()"
+    >
+      <article data-testid="cleanup-dialog" class="cleanup-dialog" role="dialog" aria-modal="true" aria-labelledby="cleanup-title">
+        <p class="eyebrow">CONFERMA ESPLICITA RICHIESTA</p>
+        <h2 id="cleanup-title">
+          Eliminare {{ cleanupCandidateCount }}{{ cleanupCountIsCapped ? '+' : '' }} eventi scaduti?
+        </h2>
+        <p>
+          Solo eventi con <code>receivedAt</code> server oltre 30 giorni.
+          Ogni azione usa al massimo {{ CLIENT_DIAGNOSTICS_CLEANUP_MAX_BATCHES_PER_ACTION }}
+          batch da {{ CLIENT_DIAGNOSTICS_CLEANUP_BATCH_SIZE }} e può essere ripresa in sicurezza.
+        </p>
+        <p v-if="cleanupDeleted > 0" class="cleanup-progress" aria-live="polite">
+          Progresso: {{ cleanupDeleted }} eliminati in {{ cleanupBatches }} batch.
+        </p>
+        <div class="dialog-actions">
+          <button data-testid="cancel-cleanup" :disabled="isCleanupRunning" @click="cancelCleanup">Annulla</button>
+          <button data-testid="confirm-cleanup" class="cleanup-confirm" :disabled="isCleanupRunning" @click="confirmCleanup">
+            {{ isCleanupRunning ? 'Eliminazione bounded…' : cleanupDeleted > 0 ? 'Continua pulizia' : 'Conferma eliminazione' }}
+          </button>
+        </div>
+      </article>
+    </div>
   </div>
 </template>
 
@@ -338,6 +505,9 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 select option { color: #fff; background: #11111b; }
 .cleanup-button { border-color: rgba(248,113,113,.45); color: #fecaca; }
 .retention-note { margin: -12px 0 20px; color: rgba(255,255,255,.45); font-size: 12px; }
+.estimate-note { display: grid; gap: 4px; margin: -8px 0 20px; padding: 12px 14px; color: rgba(255,255,255,.6); font-size: 12px; background: rgba(59,130,246,.07); border: 1px solid rgba(96,165,250,.2); border-radius: 8px; }
+.estimate-note strong { color: #bfdbfe; }
+.estimate-note span { display: block; }
 .cleanup-message { padding: 10px 14px; color: #bbf7d0; background: rgba(34,197,94,.08); border: 1px solid rgba(34,197,94,.2); border-radius: 8px; }
 .cleanup-message--error { color: #fecaca; background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.2); }
 .filters { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; padding: 16px; margin-bottom: 16px; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.08); border-radius: 12px; }
@@ -363,6 +533,12 @@ select option { color: #fff; background: #11111b; }
 .pagination-ellipsis { color: rgba(255,255,255,.45); padding: 0 4px; }
 .detail-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: rgba(0,0,0,.72); }
 .detail-card { position: relative; width: min(760px, 100%); max-height: 85vh; overflow: auto; padding: 24px; background: #11111b; border: 1px solid rgba(167,139,250,.35); border-radius: 14px; }
+.cleanup-dialog { width: min(560px, 100%); padding: 24px; background: #11111b; border: 1px solid rgba(248,113,113,.35); border-radius: 14px; }
+.cleanup-dialog h2 { margin: 8px 0 12px; }
+.cleanup-dialog p { color: rgba(255,255,255,.68); }
+.cleanup-progress { color: #bbf7d0 !important; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
+.cleanup-confirm { border-color: rgba(248,113,113,.45); color: #fecaca; }
 .detail-close { position: absolute; top: 10px; right: 14px; border: 0; background: transparent; color: #fff; font-size: 28px; }
 .detail-card dl { display: grid; grid-template-columns: 110px 1fr; gap: 8px; margin: 20px 0; }
 .detail-card dt { color: rgba(255,255,255,.5); }

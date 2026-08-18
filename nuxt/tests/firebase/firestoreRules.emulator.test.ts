@@ -11,6 +11,8 @@ import {
   collectionGroup,
   deleteDoc,
   doc,
+  documentId,
+  getCountFromServer,
   getDoc,
   getDocs,
   limit,
@@ -19,9 +21,11 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  startAfter,
   Timestamp,
   updateDoc,
-  where
+  where,
+  writeBatch
 } from 'firebase/firestore'
 import {
   advanceCanonicalMigrationCheckpoint,
@@ -546,7 +550,7 @@ describe('diagnostics rules', () => {
     ))
   })
 
-  it('permette all’admin list e delete', async () => {
+  it('permette all’admin list bounded e delete, negando list non bounded', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(
         doc(context.firestore(), `users/${PILOT_UID}/diagnostics/event-1`),
@@ -555,13 +559,81 @@ describe('diagnostics rules', () => {
     })
 
     const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
-    await assertSucceeds(getDocs(query(collectionGroup(adminDb, 'diagnostics'))))
+    await assertSucceeds(getDocs(query(collectionGroup(adminDb, 'diagnostics'), limit(50))))
+    await assertFails(getDocs(query(collectionGroup(adminDb, 'diagnostics'))))
+    await assertFails(getDocs(query(collectionGroup(adminDb, 'diagnostics'), limit(1002))))
     await assertSucceeds(deleteDoc(
       doc(adminDb, `users/${PILOT_UID}/diagnostics/event-1`)
     ))
   })
 
-  it('nega lettura ed eliminazione diagnostica a coach e piloti', async () => {
+  it('pagina oltre 50 eventi con cursor stabile receivedAt+path e count coerente', async () => {
+    const baseMs = Date.parse('2026-08-18T10:00:00.000Z')
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      const db = context.firestore()
+      await Promise.all(Array.from({ length: 60 }, (_, index) => {
+        const eventId = `bounded-${String(index).padStart(3, '0')}`
+        return setDoc(doc(db, `users/${PILOT_UID}/diagnostics/${eventId}`), {
+          ...diagnosticPayload(PILOT_UID, eventId),
+          component: 'logger',
+          severity: 'error',
+          receivedAt: Timestamp.fromMillis(baseMs - (index === 50 ? 49 : index) * 1000),
+          occurredAt: index === 0
+            ? 'not-a-date'
+            : index === 1
+              ? '2099-01-01T00:00:00.000Z'
+              : index === 59
+                ? '1999-01-01T00:00:00.000Z'
+                : new Date(baseMs + index * 86_400_000).toISOString()
+        })
+      }))
+    })
+
+    const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
+    const constraints = [
+      where('receivedAt', '>=', Timestamp.fromMillis(baseMs - 120_000)),
+      where('receivedAt', '<', Timestamp.fromMillis(baseMs + 1000)),
+      where('component', '==', 'logger'),
+      where('severity', '==', 'error'),
+      orderBy('receivedAt', 'desc'),
+      orderBy(documentId(), 'desc')
+    ] as const
+    const first = await assertSucceeds(getDocs(query(
+      collectionGroup(adminDb, 'diagnostics'),
+      ...constraints,
+      limit(50)
+    )))
+    const firstLast = first.docs.at(-1)!
+    const second = await assertSucceeds(getDocs(query(
+      collectionGroup(adminDb, 'diagnostics'),
+      ...constraints,
+      startAfter(firstLast.data().receivedAt, firstLast.ref.path),
+      limit(50)
+    )))
+    const ids = [...first.docs, ...second.docs].map(snapshot => snapshot.id)
+
+    expect(first.size).toBe(50)
+    expect(second.size).toBe(10)
+    expect(new Set(ids).size).toBe(60)
+    expect(ids[0]).toBe('bounded-000')
+    expect(ids.at(-1)).toBe('bounded-059')
+    expect(first.docs[0]?.data().occurredAt).toBe('not-a-date')
+    expect(first.docs[1]?.data().occurredAt).toBe('2099-01-01T00:00:00.000Z')
+    expect(second.docs.at(-1)?.data().occurredAt).toBe('1999-01-01T00:00:00.000Z')
+    expect(ids.indexOf('bounded-050')).toBeLessThan(ids.indexOf('bounded-049'))
+
+    const count = await assertSucceeds(getCountFromServer(query(
+      collectionGroup(adminDb, 'diagnostics'),
+      where('receivedAt', '>=', Timestamp.fromMillis(baseMs - 120_000)),
+      where('receivedAt', '<', Timestamp.fromMillis(baseMs + 1000)),
+      where('component', '==', 'logger'),
+      where('severity', '==', 'error'),
+      limit(1001)
+    )))
+    expect(count.data().count).toBe(60)
+  })
+
+  it('nega lettura ed eliminazione diagnostica a coach, piloti e non autenticati', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(
         doc(context.firestore(), `users/${PILOT_UID}/diagnostics/restricted`),
@@ -570,10 +642,13 @@ describe('diagnostics rules', () => {
     })
     const coachDb = testEnv.authenticatedContext(COACH_UID).firestore()
     const pilotDb = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
-    await assertFails(getDocs(collectionGroup(coachDb, 'diagnostics')))
-    await assertFails(getDocs(collectionGroup(pilotDb, 'diagnostics')))
+    const unauthenticatedDb = testEnv.unauthenticatedContext().firestore()
+    await assertFails(getDocs(query(collectionGroup(coachDb, 'diagnostics'), limit(50))))
+    await assertFails(getDocs(query(collectionGroup(pilotDb, 'diagnostics'), limit(50))))
+    await assertFails(getDocs(query(collectionGroup(unauthenticatedDb, 'diagnostics'), limit(50))))
     await assertFails(deleteDoc(doc(coachDb, `users/${PILOT_UID}/diagnostics/restricted`)))
     await assertFails(deleteDoc(doc(pilotDb, `users/${PILOT_UID}/diagnostics/restricted`)))
+    await assertFails(deleteDoc(doc(unauthenticatedDb, `users/${PILOT_UID}/diagnostics/restricted`)))
   })
 
   it('consente solo all’admin la query di pulizia su receivedAt autorevole', async () => {
@@ -599,7 +674,12 @@ describe('diagnostics rules', () => {
       limit(200)
     )
     const adminDb = testEnv.authenticatedContext(ADMIN_UID).firestore()
-    await assertSucceeds(getDocs(cleanupQuery(adminDb)))
+    const expired = await assertSucceeds(getDocs(cleanupQuery(adminDb)))
+    const cleanupBatch = writeBatch(adminDb)
+    expired.docs.forEach(snapshot => cleanupBatch.delete(snapshot.ref))
+    await assertSucceeds(cleanupBatch.commit())
+    expect((await getDocs(cleanupQuery(adminDb))).empty).toBe(true)
+    expect((await getDoc(doc(adminDb, `users/${PILOT_UID}/diagnostics/recent`))).exists()).toBe(true)
     await assertFails(getDocs(cleanupQuery(testEnv.authenticatedContext(COACH_UID).firestore())))
     await assertFails(getDocs(cleanupQuery(testEnv.authenticatedContext(SECOND_PILOT_UID).firestore())))
   })

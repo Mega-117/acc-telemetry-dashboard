@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "policies": [
+    {
+      "collectionGroup": "diagnostics",
+      "owner": "ClientDiagnosticsRepository manual admin cleanup",
+      "authorityField": "receivedAt",
+      "maxAgeDays": 30,
+      "mode": "manual-bounded-cleanup",
+      "ttl": {
+        "field": "receivedAt",
+        "enabled": false,
+        "cloudStatus": "not-active",
+        "note": "Local metadata only. Deployment and cloud readback require separate authorization."
+      }
+    }
+  ]
+}
