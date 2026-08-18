@@ -1,0 +1,1 @@
+import{J as o}from"./C1xA6lu3.js";function r(){const n=o();function s(t){if(/^(https?:|data:|blob:|file:|acc-voice:)/i.test(t))return t;const i=t.startsWith("/")?t.slice(1):t,e=n.app.baseURL||"/";return(e.endsWith("/")?e:e+"/")+i}return{getPublicPath:s}}export{r as u};

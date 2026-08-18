@@ -8,7 +8,7 @@ import { useFeatureAccess } from '~/composables/useFeatureAccess'
 import { markHudRoutePhase, startHudRouteTiming } from '~/utils/hudRoutePerformance'
 
 defineProps<{
-  activeTab?: 'panoramica' | 'sessioni' | 'piste' | 'spotter' | 'area-pilota' | 'hud'
+  activeTab?: 'panoramica' | 'sessioni' | 'piste' | 'pitwall' | 'spotter' | 'area-pilota' | 'hud'
 }>()
 
 const route = useRoute()
@@ -19,6 +19,7 @@ const baseTabs = [
   { id: 'panoramica', label: 'PANORAMICA', to: '/panoramica' },
   { id: 'sessioni', label: 'SESSIONI', to: '/sessioni' },
   { id: 'piste', label: 'PISTE', to: '/piste' },
+  { id: 'pitwall', label: 'PITWALL', to: '/pitwall' },
   { id: 'spotter', label: 'SPOTTER', to: '/spotter' }
 ]
 

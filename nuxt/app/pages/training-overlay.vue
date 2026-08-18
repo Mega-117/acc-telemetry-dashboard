@@ -164,7 +164,7 @@ async function testDryPressure() {
       dryPressureState.value = { ...dryPressureState.value, state: 'blocked', reason: result?.reason || 'Test non avviato: prerequisito tecnico non verificato. Nessun input inviato.' }
       dryPressureBridgeStatus.value = `Bloccato: ${result?.reason || 'controller senza esito verificato.'}`
     } else {
-      dryPressureBridgeStatus.value = `Completato dal controller (${result.requestId || 'id non disponibile'}): quattro readback verificati.`
+      dryPressureBridgeStatus.value = `Completato dal controller (${result.requestId || 'id non disponibile'}): 80 click/readback verificati.`
     }
   } catch (_) {
     dryPressureState.value = { ...dryPressureState.value, state: 'blocked', reason: 'Bridge Electron/controller interrotto. Nessun retry cieco.' }
@@ -859,7 +859,7 @@ onBeforeUnmount(() => {
                     >
                       Target giro
                     </button>
-                    <button type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Test regolazione pressioni</button>
+                    <button type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Test regolazione pressioni strategia</button>
                     <p class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
                     <p v-for="(wheelState, wheel) in dryPressureState.result?.wheels || {}" :key="`test-${wheel}`" class="launcher-hint" role="status">
                       {{ wheel }} · {{ wheelState.status }} · prima {{ wheelState.pre ?? wheelState.target ?? '—' }} · dopo {{ wheelState.post ?? '—' }} · {{ wheelState.readback || wheelState.reason || 'in attesa' }}

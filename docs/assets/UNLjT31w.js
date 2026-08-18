@@ -1,1 +1,0 @@
-import{i as r,r as o,u,b as s,p as i}from"./222wkdN_.js";const n=Symbol("pilotContext");function c(e){const t=o(e);return i(n,t),t}function a(){return r(n,o(null))}function p(){const{currentUser:e}=u(),t=a();return s(()=>t.value||e.value?.uid||null)}export{p as a,c as p,a as u};

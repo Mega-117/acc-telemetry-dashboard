@@ -19,6 +19,7 @@ const activeTab = computed(() => {
   const path = route.path
   if (path.startsWith('/sessioni')) return 'sessioni'
   if (path.startsWith('/piste')) return 'piste'
+  if (path.startsWith('/pitwall')) return 'pitwall'
   if (path.startsWith('/spotter') || path.startsWith('/dev-voice-lab')) return 'spotter'
   if (path.startsWith('/area-pilota')) return 'area-pilota'
   if (path.startsWith('/hud') || path.startsWith('/test-hud')) return 'hud'

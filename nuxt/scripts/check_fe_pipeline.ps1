@@ -39,7 +39,10 @@ $legacyPatterns = @(
 # quindi forzare il gateway sarebbe una chiamata a vuoto solo per zittire il check.
 # Aggiungere qui SOLO con motivo scritto.
 $gatewayExempt = @(
-    'PilotAreaPage.vue'   # solo useFirebaseAuth per copy/visibilita per ruolo; nessuna telemetria (PIP-131)
+    'PilotAreaPage.vue',  # solo useFirebaseAuth per copy/visibilita per ruolo; nessuna telemetria (PIP-131)
+    'PitwallPage.vue'     # schermata front-end con dati mockati: nessuna fonte reale letta.
+                          # RIMUOVERE questa riga quando la pitwall verra' agganciata ai dati veri
+                          # (mfd_pressures / mfd_fuel / mfdTyreSet / isInPitLane).
 )
 
 $missingGateway = @()
