@@ -60,4 +60,31 @@ describe('useOwnerDataMaintenance lease wiring', () => {
     expect(maintenance.report.value).toEqual(report)
     expect(mocks.runGate.mock.calls[0][0].assertActive).toBe(assertActive)
   })
+
+  it('non proietta progresso intermedio durante un retry background ma applica il terminale', async () => {
+    const maintenance = useOwnerDataMaintenance()
+    const onProgress = vi.fn()
+    mocks.runGate.mockImplementation(async (options) => {
+      options.onProgress({
+        status: 'running',
+        phase: 'cloud_reprocess',
+        progress: 40,
+        message: 'Retry in background'
+      })
+      options.onProgress({
+        status: 'completed',
+        phase: 'completed',
+        progress: 100,
+        message: 'Completato'
+      })
+      return { status: 'completed' }
+    })
+
+    await maintenance.runGate('uid-a', { presentationMode: 'background', onProgress })
+
+    expect(maintenance.status.value).toBe('completed')
+    expect(maintenance.phase.value).toBe('completed')
+    expect(maintenance.progress.value).toBe(100)
+    expect(onProgress).toHaveBeenCalledTimes(2)
+  })
 })

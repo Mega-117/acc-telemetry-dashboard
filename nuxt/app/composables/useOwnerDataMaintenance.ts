@@ -15,6 +15,16 @@ const message = ref('')
 const error = ref<string | null>(null)
 const report = ref<OwnerDataMaintenanceReport | null>(null)
 
+export function shouldProjectMaintenanceProgress(
+  presentationMode: 'foreground' | 'background',
+  nextStatus: OwnerDataMaintenanceStatus
+): boolean {
+  return presentationMode === 'foreground'
+    || nextStatus === 'completed'
+    || nextStatus === 'failed'
+    || nextStatus === 'skipped'
+}
+
 function resetMaintenanceState() {
   status.value = 'idle'
   phase.value = 'idle'
@@ -31,6 +41,7 @@ export function useOwnerDataMaintenance() {
   async function runGate(uid: string, options: {
     electronAPI?: any
     force?: boolean
+    presentationMode?: 'foreground' | 'background'
     onProgress?: (progress: OwnerDataMaintenanceProgress) => void
     assertActive?: () => void
   } = {}) {
@@ -40,12 +51,14 @@ export function useOwnerDataMaintenance() {
       force: options.force,
       assertActive: options.assertActive,
       onProgress: (next) => {
-        status.value = next.status
-        phase.value = next.phase
-        progress.value = next.progress
-        message.value = next.message
-        error.value = next.error || null
-        if (next.report) report.value = next.report
+        if (shouldProjectMaintenanceProgress(options.presentationMode || 'foreground', next.status)) {
+          status.value = next.status
+          phase.value = next.phase
+          progress.value = next.progress
+          message.value = next.message
+          error.value = next.error || null
+          if (next.report) report.value = next.report
+        }
         options.onProgress?.(next)
       }
     })

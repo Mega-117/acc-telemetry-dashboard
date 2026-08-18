@@ -75,6 +75,10 @@ interface RuntimeUiSnapshot {
   } | null
 }
 
+export function shouldPublishRuntimeBootstrapSnapshot(backgroundRetry: boolean): boolean {
+  return !backgroundRetry
+}
+
 const CAPABILITY_NAMES: RuntimeUiCapabilityName[] = [
   'localRead',
   'localWrite',

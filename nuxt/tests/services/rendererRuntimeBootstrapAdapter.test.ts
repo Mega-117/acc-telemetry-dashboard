@@ -4,7 +4,8 @@ import {
   canRunBootstrapSync,
   recordRendererBootstrapEvent,
   resolveMaintenanceMigrationResult,
-  resolveRendererUpdateResult
+  resolveRendererUpdateResult,
+  shouldPublishRuntimeBootstrapSnapshot
 } from '~/services/runtime/rendererRuntimeBootstrapAdapter'
 
 describe('rendererRuntimeBootstrapAdapter', () => {
@@ -61,5 +62,10 @@ describe('rendererRuntimeBootstrapAdapter', () => {
       context: expect.objectContaining({ notifyNative: true, openUi: false })
     }))
     expect(JSON.stringify(captureDiagnostic.mock.calls[0][0])).not.toContain('not-forwarded')
+  })
+
+  it('mantiene atomico lo stato UI durante i retry bootstrap in background', () => {
+    expect(shouldPublishRuntimeBootstrapSnapshot(false)).toBe(true)
+    expect(shouldPublishRuntimeBootstrapSnapshot(true)).toBe(false)
   })
 })

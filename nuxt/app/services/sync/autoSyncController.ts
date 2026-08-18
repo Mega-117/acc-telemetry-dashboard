@@ -50,15 +50,18 @@ type AutoSyncElectronApi = {
   onRuntimeBootstrapCommand?: (callback: (command: { schemaVersion?: number; type?: string }) => void) => (() => void) | void
 }
 
+export interface AutoSyncTriggerPayload {
+  files?: TelemetryFileDescriptor[]
+  uid?: string
+  backgroundRetry?: boolean
+}
+
 export function setupAutoSyncController(params: {
   isElectron: boolean
   electronAPI: AutoSyncElectronApi | null | undefined
   lease: CloudOwnerLease
   isLeaseCurrent: (lease: CloudOwnerLease) => boolean
-  handleTrigger: (trigger: SyncTrigger, payload?: {
-    files?: TelemetryFileDescriptor[]
-    uid?: string
-  }) => Promise<void>
+  handleTrigger: (trigger: SyncTrigger, payload?: AutoSyncTriggerPayload) => Promise<void>
   onInitialRegistry?: (data: { files?: unknown[]; registry?: unknown }) => void
   maxAuthReadyAttempts?: number
   maxAuthReadyTotalAttempts?: number
@@ -88,6 +91,7 @@ export function setupAutoSyncController(params: {
   let authReady = false
   let authReadyAttempts = 0
   let authReadyTotalAttempts = 0
+  let hasAttemptedAuthReady = false
   let authReadyInFlight: Promise<void> | null = null
   let rearmRequested = false
   let retryTimer: number | null = null
@@ -138,9 +142,11 @@ export function setupAutoSyncController(params: {
     if (!current() || authReady || authReadyInFlight || authReadyTotalAttempts >= maxAuthReadyTotalAttempts) return
     authReadyAttempts += 1
     authReadyTotalAttempts += 1
+    const backgroundRetry = hasAttemptedAuthReady
+    hasAttemptedAuthReady = true
     authReadyInFlight = (async () => {
       try {
-        await handleTrigger('authReady', { uid: lease.uid })
+        await handleTrigger('authReady', { uid: lease.uid, backgroundRetry })
         if (current()) {
           authReady = true
           const pendingFiles = bufferedChangedFiles

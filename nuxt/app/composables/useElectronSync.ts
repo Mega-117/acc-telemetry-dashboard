@@ -48,7 +48,8 @@ import {
     canRunBootstrapSync,
     recordRendererBootstrapEvent,
     resolveMaintenanceMigrationResult,
-    resolveRendererUpdateResult
+    resolveRendererUpdateResult,
+    shouldPublishRuntimeBootstrapSnapshot
 } from '~/services/runtime/rendererRuntimeBootstrapAdapter'
 import {
     OWNER_DATA_MIGRATION_VERSION,
@@ -647,9 +648,10 @@ export function useElectronSync() {
     }
 
     async function executeRuntimeBootstrap(
-        payload?: { uid?: string },
+        payload?: { uid?: string; backgroundRetry?: boolean },
         isCurrent?: LeaseGuard
     ): Promise<SyncResult[]> {
+        const backgroundRetry = payload?.backgroundRetry === true
         const electronAPI = getElectronApi()
         const context = await buildRendererBootstrapContext({
             electronAPI,
@@ -671,8 +673,10 @@ export function useElectronSync() {
                 queueService.setStatus('maintaining')
                 const report = await ownerDataMaintenance.runGate(payload!.uid!, {
                     electronAPI,
+                    presentationMode: backgroundRetry ? 'background' : 'foreground',
                     assertActive: () => assertLeaseCurrent(isCurrent),
                     onProgress: (progress) => {
+                        if (backgroundRetry) return
                         void publishProgress({
                             phase: progress.phase === 'final_audit'
                                 ? 'final_verification'
@@ -704,7 +708,9 @@ export function useElectronSync() {
             },
             onEvent: async (event) => {
                 if (isCurrent && !isCurrent()) return
-                runtimeBootstrapState.value = runtimeBootstrapCoordinator.getSnapshot()
+                if (shouldPublishRuntimeBootstrapSnapshot(backgroundRetry)) {
+                    runtimeBootstrapState.value = runtimeBootstrapCoordinator.getSnapshot()
+                }
                 await recordRendererBootstrapEvent(electronAPI, event)
             }
         })
@@ -716,7 +722,7 @@ export function useElectronSync() {
 
     async function executeTrigger(
         trigger: SyncTrigger,
-        payload?: { files?: TelemetryFileDescriptor[]; uid?: string },
+        payload?: { files?: TelemetryFileDescriptor[]; uid?: string; backgroundRetry?: boolean },
         isCurrent?: LeaseGuard
     ): Promise<SyncResult[]> {
         assertLeaseCurrent(isCurrent)

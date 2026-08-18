@@ -86,6 +86,10 @@ describe('primary cloud owner auto-sync lifecycle', () => {
 
     await settle()
     expect(handleTrigger).toHaveBeenCalledTimes(1)
+    expect(handleTrigger).toHaveBeenNthCalledWith(1, 'authReady', {
+      uid: 'uid-1',
+      backgroundRetry: false
+    })
     timers.shift()?.()
     await settle()
     timers.shift()?.()
@@ -109,7 +113,11 @@ describe('primary cloud owner auto-sync lifecycle', () => {
     await settle()
     expect(handleTrigger).toHaveBeenCalledTimes(6)
     expect(handleTrigger.mock.calls.filter(([trigger]) => trigger === 'authReady')).toHaveLength(6)
-    expect(handleTrigger).toHaveBeenLastCalledWith('authReady', { uid: 'uid-1' })
+    expect(handleTrigger).toHaveBeenLastCalledWith('authReady', {
+      uid: 'uid-1',
+      backgroundRetry: true
+    })
+    expect(handleTrigger.mock.calls.slice(1, 6).every(([, payload]) => payload.backgroundRetry === true)).toBe(true)
     expect(timers).toHaveLength(0)
 
     events.get('online')?.()
