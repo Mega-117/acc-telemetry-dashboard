@@ -7,5 +7,7 @@ definePageMeta({
 </script>
 
 <template>
-  <PitwallPage />
+  <div class="pitwall-route">
+    <PitwallPage />
+  </div>
 </template>

@@ -206,7 +206,7 @@ describe('Pitwall wiring', () => {
   it('monta il pannello nel layout dashboard', () => {
     expect(page).toContain("import PitwallPage from '~/components/pages/PitwallPage.vue'")
     expect(page).toContain("layout: 'dashboard'")
-    expect(page).toContain('<PitwallPage />')
+    expect(page).toMatch(/<div class="pitwall-route">\s*<PitwallPage\s*\/>\s*<\/div>/)
   })
 
   it('importa esplicitamente i mattoncini della pitwall', () => {
