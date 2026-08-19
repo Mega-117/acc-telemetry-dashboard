@@ -9,6 +9,7 @@ import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useCoachInsights } from '~/composables/useCoachInsights'
 import { usePilotContext, useTargetUserId } from '~/composables/usePilotContext'
 import { usePublicPath } from '~/composables/usePublicPath'
+import { loadOverviewProjectionRecoverably } from '~/services/gateway/overviewProjectionLoadPolicy'
 import type { OverviewProjection } from '~/types/overviewProjections'
 import type { CoachBriefingScenario } from '~/composables/useCoachInsights'
 
@@ -96,8 +97,17 @@ const emptyActivityTotals = {
 
 
 async function loadOverview() {
-  const projection = await telemetryGateway.getOverviewProjection(targetUserId.value || undefined)
-  overviewProjection.value = projection
+  const result = await loadOverviewProjectionRecoverably(
+    () => telemetryGateway.getOverviewProjection(targetUserId.value || undefined)
+  )
+  if (result.status === 'ready') {
+    overviewProjection.value = result.projection
+    return
+  }
+
+  // The runtime capability banner owns the user-facing cloud state. Keeping
+  // this view mounted lets its background retry recover without a Nuxt 500.
+  console.warn('[PANORAMICA] Cloud projection unavailable; keeping current view:', result.error)
 }
 
 
