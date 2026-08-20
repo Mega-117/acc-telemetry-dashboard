@@ -426,7 +426,7 @@ provide('goToProfile', handleGoToProfile)
 
     <template v-else-if="isStandaloneDevRoute">
       <ElectronTitlebar />
-      <ElectronRuntimeCapabilityBanner />
+      <ElectronRuntimeCapabilityBanner v-if="canEnterApp" />
       <NuxtRouteAnnouncer />
       <div class="dashboard-wrapper">
         <NuxtLayout>
@@ -438,7 +438,7 @@ provide('goToProfile', handleGoToProfile)
     <template v-else>
       <!-- Electron Titlebar (only visible in Electron) -->
       <ElectronTitlebar />
-      <ElectronRuntimeCapabilityBanner />
+      <ElectronRuntimeCapabilityBanner v-if="canEnterApp" />
 
       <ElectronDataMaintenanceNotification
         v-if="isBrowserOnlyRuntime"

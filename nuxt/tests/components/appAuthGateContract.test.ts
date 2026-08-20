@@ -9,6 +9,13 @@ const appSource = readFileSync(
 )
 
 describe('App protected runtime route contract', () => {
+  it('non monta il banner cloud prima che la sessione possa entrare nell'app', () => {
+    const bannerMounts = appSource.match(/<ElectronRuntimeCapabilityBanner\b[^>]*\/>/g) ?? []
+
+    expect(bannerMounts).toHaveLength(2)
+    expect(bannerMounts.every((mount) => mount.includes('v-if="canEnterApp"'))).toBe(true)
+  })
+
   it('gates every standalone runtime before mounting NuxtPage', () => {
     expect(appSource).toContain('const isProtectedRuntimeRoute = computed')
     expect(appSource).toContain('const canMountProtectedRuntime = computed')
