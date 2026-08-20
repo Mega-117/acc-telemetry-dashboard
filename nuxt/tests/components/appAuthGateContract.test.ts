@@ -9,7 +9,7 @@ const appSource = readFileSync(
 )
 
 describe('App protected runtime route contract', () => {
-  it('non monta il banner cloud prima che la sessione possa entrare nell'app', () => {
+  it("non monta il banner cloud prima che la sessione possa entrare nell'app", () => {
     const bannerMounts = appSource.match(/<ElectronRuntimeCapabilityBanner\b[^>]*\/>/g) ?? []
 
     expect(bannerMounts).toHaveLength(2)
