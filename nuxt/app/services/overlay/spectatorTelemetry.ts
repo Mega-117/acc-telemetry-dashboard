@@ -185,6 +185,25 @@ function focusedInfo(
   }
 }
 
+function localFastStateWithFocusedFacts(
+  local: FastOverlayState,
+  state: StandingsStateEnvelope,
+  car: StandingsCarSnapshot | null,
+): FastOverlayState {
+  if (!local.info) return local
+
+  return {
+    ...local,
+    info: {
+      ...local.info,
+      // ACC Drive owns these two facts in its per-car broadcast model. Keep
+      // shared-memory values authoritative for every other local Info field.
+      stintTimeLeftMs: nonNegativeInteger(car?.stint_elapsed_ms),
+      pitExitTraffic: focusedPitExitTraffic(state),
+    },
+  }
+}
+
 function sessionTimeLeftMs(session: StandingsSessionSnapshot | null | undefined): number | null {
   const current = finiteNumber(session?.session_time_ms)
   const remaining = finiteNumber(session?.session_end_time_ms)
@@ -354,7 +373,13 @@ export function routeOverlayTelemetry(
     return { source: 'local', fastState: local, sectorHud: null, focusedCar: null }
   }
   if (focusedIndex === localIndex) {
-    return { source: 'local', fastState: local, sectorHud: null, focusedCar: null }
+    const localCar = snapshot.cars.find(car => car.car_index === localIndex) ?? null
+    return {
+      source: 'local',
+      fastState: localFastStateWithFocusedFacts(local, focusedState, localCar),
+      sectorHud: null,
+      focusedCar: null,
+    }
   }
 
   const focusedCar = snapshot.cars.find(car => car.car_index === focusedIndex) ?? null

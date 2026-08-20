@@ -99,6 +99,112 @@ describe('spectator telemetry routing', () => {
     expect(result.sectorHud).toBeNull()
   })
 
+  it('fonde i fatti Info broadcast anche quando il focus coincide con il pilota utente', () => {
+    const localWithInfo = {
+      ...local,
+      info: {
+        delta: { ms: -120, available: true, side: 'negative', ratio: 0.24, purple: false },
+        stintTimeLeftMs: 951_000,
+        fuelLabel: 'Last-Stint',
+        fuelNeededL: null,
+        fuelLeftTimeMs: 2_100_000,
+        fuelLeftReferenceLapMs: 90_000,
+        incidents: 0,
+        grip: 'Optimum',
+        pitExitTraffic: null,
+        optimalLapTimeMs: null,
+        bestLapTimeMs: 90_000,
+        damageTimeMs: 0,
+        currentLapTimeMs: 45_000,
+        lastLapTimeMs: 90_000,
+        lapValid: true,
+        lastLapValid: true,
+        lapsCompleted: 3,
+      },
+    } as FastOverlayState
+    const state = envelope(1023)
+    state.snapshot!.cars[0].stint_elapsed_ms = 413_000
+    state.snapshot!.focused_pit_exit_traffic = {
+      available: true,
+      reason: null,
+      count: 2,
+      rear_window: 0.07,
+      front_window: 0.03,
+    }
+
+    const result = routeOverlayTelemetry(localWithInfo, state)
+
+    expect(result.source).toBe('local')
+    expect(result.fastState.info).toMatchObject({
+      stintTimeLeftMs: 413_000,
+      pitExitTraffic: 2,
+      fuelLabel: 'Last-Stint',
+      fuelLeftTimeMs: 2_100_000,
+      grip: 'Optimum',
+    })
+  })
+
+  it('sostituisce il timer stint locale con placeholder se il broadcast non lo prova', () => {
+    const localWithInfo = {
+      ...local,
+      info: {
+        delta: { ms: 0, available: false, side: 'zero', ratio: 0, purple: false },
+        stintTimeLeftMs: 951_000,
+      },
+    } as FastOverlayState
+
+    expect(routeOverlayTelemetry(localWithInfo, envelope(1023)).fastState.info?.stintTimeLeftMs).toBeNull()
+  })
+
+  it('riproduce a 50 Hz i fatti broadcast senza sovrascrivere gli altri campi Info locali', () => {
+    const localWithInfo = {
+      ...local,
+      info: {
+        delta: { ms: -120, available: true, side: 'negative', ratio: 0.24, purple: false },
+        stintTimeLeftMs: null,
+        fuelLabel: 'Last-Stint',
+        fuelNeededL: 3.5,
+        fuelLeftTimeMs: 2_100_000,
+        fuelLeftReferenceLapMs: 90_000,
+        incidents: 4,
+        grip: 'Optimum',
+        pitExitTraffic: null,
+        optimalLapTimeMs: 89_500,
+        bestLapTimeMs: 90_000,
+        damageTimeMs: 1_200,
+        currentLapTimeMs: 45_000,
+        lastLapTimeMs: 90_000,
+        lapValid: true,
+        lastLapValid: true,
+        lapsCompleted: 3,
+      },
+    } as FastOverlayState
+
+    const samples = Array.from({ length: 50 }, (_, index) => {
+      const state = envelope(1023)
+      state.snapshot!.freshness.generated_at_ms += index * 20
+      state.snapshot!.cars[0].stint_elapsed_ms = index * 20
+      state.snapshot!.focused_pit_exit_traffic = index < 25
+        ? { available: false, reason: 'not-at-pit-exit', count: null, rear_window: 0.07, front_window: 0.03 }
+        : { available: true, reason: null, count: 2, rear_window: 0.07, front_window: 0.03 }
+      return routeOverlayTelemetry(localWithInfo, state).fastState.info
+    })
+
+    expect(samples[0]).toMatchObject({ stintTimeLeftMs: 0, pitExitTraffic: null })
+    expect(samples[24]).toMatchObject({ stintTimeLeftMs: 480, pitExitTraffic: null })
+    expect(samples[25]).toMatchObject({ stintTimeLeftMs: 500, pitExitTraffic: 2 })
+    expect(samples[49]).toMatchObject({
+      stintTimeLeftMs: 980,
+      pitExitTraffic: 2,
+      fuelLabel: 'Last-Stint',
+      fuelLeftTimeMs: 2_100_000,
+      incidents: 4,
+      grip: 'Optimum',
+      optimalLapTimeMs: 89_500,
+      damageTimeMs: 1_200,
+    })
+  })
+
   it('usa soltanto i campi UDP provati per la macchina osservata', () => {
     const result = routeOverlayTelemetry(local, envelope())
     expect(result.source).toBe('focused')
