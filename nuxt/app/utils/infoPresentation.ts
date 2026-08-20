@@ -21,7 +21,6 @@ export interface InfoRow {
   value: string
   tone: 'default' | 'yellow' | 'orange' | 'green' | 'red'
   localTime?: boolean
-  lapTimer?: boolean
 }
 
 export interface InfoPresentation {
@@ -191,8 +190,6 @@ export function buildInfoPresentation(
   if (options.showBest) rows.push({ id: 'best', label: 'Best:', value: formatInfoLapTime(info?.bestLapTimeMs), tone: 'default' })
   if (options.showDamage) rows.push({ id: 'damage', label: 'Damage:', value: formatInfoLapTime(info?.damageTimeMs), tone: 'default' })
   if (options.showTime) rows.push({ id: 'local-time', label: 'Time:', value: '--:--:--', tone: 'default', localTime: true })
-  rows.push({ id: 'lap-timer', label: 'Lap Timer:', value: formatInfoRunningLapTime(info?.currentLapTimeMs), tone: 'default', lapTimer: true })
-
   return {
     yellowFlagActive: options.showYellowFlag && state.flag === 2,
     delta: {

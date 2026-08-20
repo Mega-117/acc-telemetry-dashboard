@@ -8,12 +8,7 @@ import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import {
   buildInfoPresentation,
   DEFAULT_INFO_OPTIONS,
-  evaluateInfoTarget,
-  formatInfoLapTime,
   formatInfoLocalTime,
-  formatInfoRunningLapTime,
-  type InfoTargetOutcome,
-  type InfoTargetSettings,
 } from '~/utils/infoPresentation'
 
 definePageMeta({ layout: 'hud-overlay' })
@@ -23,13 +18,9 @@ const getApi = () => typeof window === 'undefined' ? null : (window as any).elec
 const overlay = useHudOverlay('info', getApi)
 const { backgroundOpacity } = useHudOverlayBackground(overlay.settings)
 const telemetry = useOverlayTelemetrySource(getApi)
-const target = ref<InfoTargetSettings | null>(null)
 const canvasElement = ref<HTMLDivElement | null>(null)
 const clockMs = ref(Date.now())
-const heldLap = ref<{ timeMs: number, outcome: InfoTargetOutcome, startedAtMs: number } | null>(null)
-let previousLapsCompleted: number | null = null
 let timer: ReturnType<typeof setInterval> | null = null
-let removeTargetListener: (() => void) | null = null
 let resizeObserver: ResizeObserver | null = null
 
 const options = computed(() => ({
@@ -47,16 +38,6 @@ const options = computed(() => ({
   showTime: overlay.settings.value?.showTime ?? DEFAULT_INFO_OPTIONS.showTime,
 }))
 const model = computed(() => buildInfoPresentation(telemetry.fastState.value, options.value))
-const heldAgeMs = computed(() => heldLap.value ? clockMs.value - heldLap.value.startedAtMs : Infinity)
-const isHoldingLap = computed(() => heldAgeMs.value < 3500)
-const isFading = computed(() => heldAgeMs.value >= 3000 && heldAgeMs.value < 3500)
-const lapTimerOutcome = computed<InfoTargetOutcome>(() =>
-  heldLap.value && heldAgeMs.value < 3000 ? heldLap.value.outcome : 'neutral',
-)
-const lapTimerValue = computed(() => {
-  if (heldLap.value && isHoldingLap.value) return formatInfoLapTime(heldLap.value.timeMs)
-  return formatInfoRunningLapTime(telemetry.fastState.value.info?.currentLapTimeMs)
-})
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
 const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
 
@@ -73,39 +54,12 @@ async function syncInfoViewport() {
 }
 
 watch(() => overlay.scale.value, () => { void syncInfoViewport() })
-watch(
-  () => telemetry.fastState.value.info,
-  (info) => {
-    if (!info) return
-    if (previousLapsCompleted === null) {
-      previousLapsCompleted = info.lapsCompleted
-      return
-    }
-    if (info.lapsCompleted > previousLapsCompleted && info.lastLapTimeMs) {
-      heldLap.value = {
-        timeMs: info.lastLapTimeMs,
-        outcome: evaluateInfoTarget(info.lastLapTimeMs, info.lastLapValid === true, target.value),
-        startedAtMs: Date.now(),
-      }
-    }
-    previousLapsCompleted = info.lapsCompleted
-  },
-  { deep: true },
-)
-
 onMounted(async () => {
   overlay.start(route.query.scale)
   overlay.startInteractionSurface()
   await overlay.loadSettings()
   telemetry.startFastStatePolling()
-  const api = getApi()
-  target.value = await api?.infoTargetGetSettings?.() || null
-  if (typeof api?.onInfoTargetSettings === 'function') {
-    removeTargetListener = api.onInfoTargetSettings((settings: InfoTargetSettings) => {
-      target.value = settings
-    })
-  }
-  timer = setInterval(() => { clockMs.value = Date.now() }, 50)
+  timer = setInterval(() => { clockMs.value = Date.now() }, 1000)
   if (typeof ResizeObserver === 'function' && canvasElement.value) {
     resizeObserver = new ResizeObserver(() => { void syncInfoViewport() })
     resizeObserver.observe(canvasElement.value)
@@ -116,7 +70,6 @@ onMounted(async () => {
 onUnmounted(() => {
   telemetry.stopFastStatePolling()
   overlay.stop()
-  removeTargetListener?.()
   resizeObserver?.disconnect()
   if (timer) clearInterval(timer)
 })
@@ -133,9 +86,6 @@ onUnmounted(() => {
       <InfoHud
         :model="model"
         :local-time-value="localTimeValue"
-        :lap-timer-value="lapTimerValue"
-        :lap-timer-outcome="lapTimerOutcome"
-        :lap-timer-fading="isFading"
         :background-opacity="backgroundOpacity"
       />
     </div>

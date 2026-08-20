@@ -62,6 +62,7 @@ export interface StandingsSessionSnapshot {
 }
 
 export interface FocusedPitExitTrafficSnapshot {
+  // ACC Drive-style prediction around the focused car.
   available?: unknown
   reason?: unknown
   count?: unknown
@@ -70,6 +71,7 @@ export interface FocusedPitExitTrafficSnapshot {
 }
 
 export interface StandingsSnapshot {
+  focused_flag?: { available?: unknown, reason?: unknown, flag?: unknown }
   freshness: { generated_at_ms: number, ttl_ms: number }
   session: StandingsSessionSnapshot
   cars: StandingsCarSnapshot[]

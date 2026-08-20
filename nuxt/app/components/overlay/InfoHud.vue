@@ -1,19 +1,16 @@
 <script setup lang="ts">
 import HudOverlayBackground from '~/components/overlay/HudOverlayBackground.vue'
-import type { InfoPresentation, InfoTargetOutcome } from '~/utils/infoPresentation'
+import type { InfoPresentation } from '~/utils/infoPresentation'
 
 const props = defineProps<{
   model: InfoPresentation
   localTimeValue: string
-  lapTimerValue: string
-  lapTimerOutcome: InfoTargetOutcome
-  lapTimerFading: boolean
   backgroundOpacity: number
 }>()
 
 function rowValue(row: InfoPresentation['rows'][number]): string {
   if (row.localTime) return props.localTimeValue
-  return row.lapTimer ? props.lapTimerValue : row.value
+  return row.value
 }
 </script>
 
@@ -40,15 +37,7 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
         v-for="row in model.rows"
         :key="row.id"
         class="info-row"
-        :class="[
-          `info-row--${row.tone}`,
-          {
-            'info-row--lap-timer': row.lapTimer,
-            'info-row--inside': row.lapTimer && lapTimerOutcome === 'inside',
-            'info-row--outside': row.lapTimer && lapTimerOutcome === 'outside',
-            'info-row--fading': row.lapTimer && lapTimerFading,
-          },
-        ]"
+        :class="`info-row--${row.tone}`"
       >
         <span>{{ row.label }}</span>
         <strong>{{ rowValue(row) }}</strong>
@@ -59,6 +48,7 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
 
 <style scoped>
 .info-hud {
+  position: relative;
   box-sizing: border-box;
   width: 344px;
   height: auto;
@@ -78,7 +68,17 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
 }
 
 .info-hud--yellow-flag {
-  box-shadow: inset 0 0 0 5px #ffff00;
+  box-shadow: none;
+}
+
+.info-hud--yellow-flag::after {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  border: 5px solid #ffff00;
+  border-radius: 24px;
+  content: '';
+  pointer-events: none;
 }
 
 .info-delta {
@@ -153,10 +153,4 @@ function rowValue(row: InfoPresentation['rows'][number]): string {
 .info-row--green strong { color: #008000; }
 .info-row--red strong { color: #ff0000; }
 
-.info-row--lap-timer {
-  transition: background-color 500ms ease, color 500ms ease;
-}
-.info-row--lap-timer.info-row--inside { color: #fff; background: #238a3d; }
-.info-row--lap-timer.info-row--outside { color: #fff; background: #b4262c; }
-.info-row--lap-timer.info-row--fading { background: transparent; color: #fff; }
 </style>

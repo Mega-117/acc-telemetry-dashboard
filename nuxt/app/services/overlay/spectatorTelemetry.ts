@@ -185,6 +185,12 @@ function focusedInfo(
   }
 }
 
+function focusedFlag(state: StandingsStateEnvelope | null): number | null {
+  const flag = state?.snapshot?.focused_flag
+  if (flag?.available !== true) return null
+  return flag.flag === 'Yellow' ? 2 : 0
+}
+
 function localFastStateWithFocusedFacts(
   local: FastOverlayState,
   state: StandingsStateEnvelope,
@@ -194,6 +200,7 @@ function localFastStateWithFocusedFacts(
 
   return {
     ...local,
+    flag: focusedFlag(state),
     info: {
       ...local.info,
       // ACC Drive owns these two facts in its per-car broadcast model. Keep
@@ -235,7 +242,7 @@ function focusedFastState(
       serverId: local.context?.serverId ?? null,
     },
     info,
-    flag: null,
+    flag: focusedFlag(state),
     lapsCompleted: info.lapsCompleted,
     currentLapTimeMs: info.currentLapTimeMs,
     lastLapTimeMs: info.lastLapTimeMs,

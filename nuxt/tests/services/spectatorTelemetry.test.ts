@@ -131,10 +131,12 @@ describe('spectator telemetry routing', () => {
       rear_window: 0.07,
       front_window: 0.03,
     }
+    state.snapshot!.focused_flag = { available: true, reason: null, flag: 'Yellow' }
 
     const result = routeOverlayTelemetry(localWithInfo, state)
 
     expect(result.source).toBe('local')
+    expect(result.fastState.flag).toBe(2)
     expect(result.fastState.info).toMatchObject({
       stintTimeLeftMs: 413_000,
       pitExitTraffic: 2,
@@ -184,16 +186,23 @@ describe('spectator telemetry routing', () => {
       const state = envelope(1023)
       state.snapshot!.freshness.generated_at_ms += index * 20
       state.snapshot!.cars[0].stint_elapsed_ms = index * 20
+      state.snapshot!.focused_flag = {
+        available: true,
+        reason: null,
+        flag: index >= 10 && index < 30 ? 'Yellow' : 'Green',
+      }
       state.snapshot!.focused_pit_exit_traffic = index < 25
         ? { available: false, reason: 'not-at-pit-exit', count: null, rear_window: 0.07, front_window: 0.03 }
         : { available: true, reason: null, count: 2, rear_window: 0.07, front_window: 0.03 }
-      return routeOverlayTelemetry(localWithInfo, state).fastState.info
+      return routeOverlayTelemetry(localWithInfo, state).fastState
     })
 
-    expect(samples[0]).toMatchObject({ stintTimeLeftMs: 0, pitExitTraffic: null })
-    expect(samples[24]).toMatchObject({ stintTimeLeftMs: 480, pitExitTraffic: null })
-    expect(samples[25]).toMatchObject({ stintTimeLeftMs: 500, pitExitTraffic: 2 })
-    expect(samples[49]).toMatchObject({
+    expect(samples[0]).toMatchObject({ flag: 0, info: { stintTimeLeftMs: 0, pitExitTraffic: null } })
+    expect(samples[10].flag).toBe(2)
+    expect(samples[24].info).toMatchObject({ stintTimeLeftMs: 480, pitExitTraffic: null })
+    expect(samples[25].info).toMatchObject({ stintTimeLeftMs: 500, pitExitTraffic: 2 })
+    expect(samples[30].flag).toBe(0)
+    expect(samples[49].info).toMatchObject({
       stintTimeLeftMs: 980,
       pitExitTraffic: 2,
       fuelLabel: 'Last-Stint',

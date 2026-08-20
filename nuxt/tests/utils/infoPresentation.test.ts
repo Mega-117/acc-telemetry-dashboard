@@ -67,10 +67,10 @@ describe('Info presentation', () => {
     expect(model.delta).toMatchObject({ value: '-0.245', side: 'negative', ratio: 0.5 })
     expect(model.rows.map(row => row.id)).toEqual([
       'stint', 'q-fuel', 'fuel-left', 'incidents', 'grip',
-      'optimal', 'best', 'damage', 'lap-timer',
+      'optimal', 'best', 'damage',
     ])
     expect(model.rows.find(row => row.id === 'fuel-left')?.value).toBe('0:06:00')
-    expect(model.rows.find(row => row.id === 'lap-timer')?.lapTimer).toBe(true)
+    expect(model.rows.find(row => row.id === 'lap-timer')).toBeUndefined()
   })
 
   it('mostra Pit Exit soltanto in gara', () => {
@@ -136,9 +136,10 @@ describe('Info presentation', () => {
     expect(row(0, 90_000)).toMatchObject({ value: '-:--.---', tone: 'orange' })
   })
 
-  it('separa Local Time originale dal Lap Timer Target', () => {
+  it('mantiene Local Time senza aggiungere Lap Timer', () => {
     const model = buildInfoPresentation(state, { ...DEFAULT_INFO_OPTIONS, showTime: true })
-    expect(model.rows.slice(-2).map(row => row.id)).toEqual(['local-time', 'lap-timer'])
+    expect(model.rows.at(-1)?.id).toBe('local-time')
+    expect(model.rows.find(row => row.id === 'lap-timer')).toBeUndefined()
     expect(model.rows.find(row => row.id === 'local-time')).toMatchObject({
       label: 'Time:',
       value: '--:--:--',
