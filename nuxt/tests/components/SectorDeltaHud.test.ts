@@ -143,7 +143,7 @@ describe('SectorDeltaHud', () => {
     const html = await renderHud({
       variant: 'compact',
       showCurrentLap: false,
-      compactDisplayLap: { timeMs: 83_456, valid: false },
+      compactDisplayLap: { timeMs: 83_456 },
     })
 
     expect(html).toContain('SECTORS · VS · LAST')
@@ -154,6 +154,19 @@ describe('SectorDeltaHud', () => {
 
     const classic = await renderHud({ variant: 'classic', showCurrentLap: false })
     expect(classic).toContain('sector-delta-hud__grid')
+  })
+
+  it('rende neutra la validita mancante senza fallback ottimistico', async () => {
+    const html = await renderToString(createSSRApp({
+      render: () => h(SectorDeltaHud, {
+        sectorHud: null,
+        variant: 'compact',
+        compactDisplayLap: { timeMs: 12_345 },
+      }),
+    }))
+
+    expect(html).toContain('sector-compact__lap--unknown')
+    expect(html).not.toContain('sector-compact__lap--invalid')
   })
 
   it('adatta soltanto i tempi settore a tre cifre nel layout compatto', async () => {
@@ -217,7 +230,7 @@ describe('SectorDeltaHud', () => {
     expect(second).toContain('sector-compact__lap--invalid')
   })
 
-  it('usa il valore hero in hold senza fermare il tempo del settore attivo', async () => {
+  it('usa il tempo hero in hold ma colora dalla validita corrente latched', async () => {
     const runningHud: SectorHudState = {
       ...sectorHud,
       sectors: [
@@ -232,8 +245,8 @@ describe('SectorDeltaHud', () => {
         variant: 'compact',
         liveRunning: true,
         liveCurrentLapTimeMs: 44_850,
-        liveLapValid: true,
-        compactDisplayLap: { timeMs: 141_250, valid: false },
+        liveLapValid: false,
+        compactDisplayLap: { timeMs: 141_250 },
       }),
     }))
 
@@ -310,18 +323,19 @@ describe('SectorDeltaHud', () => {
   it('mostra l esito Target sul bordo senza cambiare il colore di validita', async () => {
     const inside = await renderHud({
       variant: 'compact',
-      compactDisplayLap: { timeMs: 90_000, valid: true },
+      compactDisplayLap: { timeMs: 90_000 },
       targetOutcome: 'inside',
     })
     const outsideInvalid = await renderHud({
       variant: 'compact',
-      compactDisplayLap: { timeMs: 91_000, valid: false },
+      compactDisplayLap: { timeMs: 91_000 },
+      liveLapValid: false,
       targetOutcome: 'outside',
     })
     const hidden = await renderHud({
       variant: 'compact',
       showCurrentLap: false,
-      compactDisplayLap: { timeMs: 90_000, valid: true },
+      compactDisplayLap: { timeMs: 90_000 },
       targetOutcome: 'inside',
     })
 

@@ -22,6 +22,9 @@ describe('spectator HUD source contract', () => {
     const content = source('app/pages/sectors-overlay.vue')
     expect(content).toContain("telemetry.source.value === 'focused'")
     expect(content).toContain(':sector-hud="visibleSectorHud"')
+    expect(content).toContain('resolveCurrentLapValidity(')
+    expect(content).toContain('visibleSectorHud.value?.lapValid')
+    expect(content).not.toContain('const liveLapValid = computed(() => fastState.value.info?.lapValid')
   })
 
   it('Dashboard e gomme distinguono dati non disponibili da zero', () => {

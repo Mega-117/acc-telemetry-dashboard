@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { SectorHudEntry } from '~/composables/useLiveStatePoller'
 import {
   normalizeSectorDeltaReference,
+  resolveCurrentLapValidity,
   resolveSectorDeltaPresentation,
   sectorDeltaReferenceToken,
 } from '~/utils/sectorDeltaPresentation'
@@ -30,6 +31,12 @@ describe('sectorDeltaPresentation', () => {
   it('espone un solo token BEST/LAST consumato da entrambi i layout', () => {
     expect(sectorDeltaReferenceToken('previousLap')).toBe('LAST')
     expect(sectorDeltaReferenceToken('bestSector')).toBe('BEST')
+  })
+
+  it('mantiene il latch invalido quando il campione fast torna valido', () => {
+    expect(resolveCurrentLapValidity(true, false)).toBe(false)
+    expect(resolveCurrentLapValidity(true, null)).toBeNull()
+    expect(resolveCurrentLapValidity(false, true)).toBe(true)
   })
 
   it('preserva delta e colore esistenti con Giro precedente', () => {

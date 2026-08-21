@@ -25,17 +25,17 @@ const props = withDefaults(defineProps<{
   variant?: 'classic' | 'compact'
   // Campione live dell'overlay Info, usato solo per i numeri ancora in corso.
   liveCurrentLapTimeMs?: number | null
-  // Validita' associata allo stesso campione live dell'overlay Info.
+  // Validita' corrente canonica e latched fino al rollover.
   liveLapValid?: boolean | null
   // Valore hero gia' risolto dalla presentazione (include l'hold del giro concluso).
   compactDisplayLap?: {
     timeMs: number | null
-    valid: boolean | null
   }
   // Esito congelato sullo stesso snapshot del giro trattenuto per 7 secondi.
   targetOutcome?: InfoTargetOutcome
 }>(), {
   showCurrentLap: true,
+  liveLapValid: null,
   targetOutcome: 'neutral',
 })
 
@@ -70,15 +70,12 @@ const compactDisplayLapTimeMs = computed(() => (
     ? props.compactDisplayLap.timeMs
     : compactLiveLapTimeMs.value
 ))
-const compactDisplayLapValid = computed(() => (
-  props.compactDisplayLap && props.compactDisplayLap.valid !== null
-    ? props.compactDisplayLap.valid
-    : (
-      props.liveLapValid !== undefined && props.liveLapValid !== null
-        ? props.liveLapValid
-        : props.sectorHud?.lapValid ?? true
-    )
-))
+const compactCurrentLapValid = computed(() => {
+  if (props.liveLapValid !== undefined && props.liveLapValid !== null) {
+    return props.liveLapValid
+  }
+  return props.sectorHud?.lapValid ?? null
+})
 const compactLapTime = computed(() => {
   return compactDisplayLapTimeMs.value === null
     ? '--:--.---'
@@ -170,7 +167,8 @@ function ariaLabel(sector: SectorHudEntry): string {
           v-if="showCurrentLap !== false"
           class="sector-compact__lap"
           :class="{
-            'sector-compact__lap--invalid': compactDisplayLapValid === false,
+            'sector-compact__lap--invalid': compactCurrentLapValid === false,
+            'sector-compact__lap--unknown': compactCurrentLapValid === null,
             'sector-compact__lap--target-inside': targetOutcome === 'inside',
             'sector-compact__lap--target-outside': targetOutcome === 'outside',
           }"
@@ -303,6 +301,10 @@ function ariaLabel(sector: SectorHudEntry): string {
 
 .sector-compact__lap--invalid {
   color: #dc1010;
+}
+
+.sector-compact__lap--unknown {
+  color: #6f7277;
 }
 
 .sector-compact__lap--target-inside,
