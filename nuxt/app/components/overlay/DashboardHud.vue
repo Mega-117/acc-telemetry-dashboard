@@ -100,7 +100,7 @@ defineProps<{ model: DashboardPresentation }>()
 
     <div class="tile tile--cyan fuel-lap"><b>Fuel/Lap</b><strong>{{ model.fuelPerLap }}</strong></div>
     <div class="tile tile--orange fuel"><b>Fuel</b><strong>{{ model.fuel }}</strong></div>
-    <div class="tile tile--cyan gear"><b>Gear</b><strong>{{ model.gear }}</strong><small v-if="model.gearReference !== null">{{ model.gearReference }}</small></div>
+    <div class="tile tile--cyan gear" :class="{ 'gear--pit': model.pitLimiterOn }"><b>Gear</b><strong>{{ model.gear }}</strong><small v-if="model.gearReference !== null">{{ model.gearReference }}</small></div>
     <div class="tile tile--orange laps"><b>{{ model.remainingLabel }}</b><strong>{{ model.remainingValue }}</strong></div>
     <div class="tile tile--orange fuel-left"><b>Fuel Left</b><strong>{{ model.fuelLeft }}</strong></div>
 
@@ -207,12 +207,12 @@ defineProps<{ model: DashboardPresentation }>()
 .tc.tc--off-warning{border-color:#ff101b;animation:tc-off-warning 1s linear infinite}
 .abs.abs--active{background:#1900ff}
 .fuel-lap{left:10px;top:58px;width:121px;height:68px}.fuel{left:138px;top:58px;width:121px;height:68px}
-.gear{left:266px;top:58px;width:120px;height:120px}.gear strong{font-size:80px;line-height:82px}
+.gear{left:266px;top:58px;width:120px;height:120px}.gear strong{font-size:80px;line-height:82px}.gear.gear--pit{background:#0000ff}
 .laps{left:394px;top:58px;width:120px;height:68px}.fuel-left{left:522px;top:58px;width:121px;height:68px}
 .map{left:10px;top:133px;width:78px;height:69px}.tc2{left:95px;top:133px;width:77px;height:69px}.tc{left:180px;top:133px;width:79px;height:69px}
 .abs{left:394px;top:133px;width:77px;height:69px}.bb{left:478px;top:133px;width:78px;height:69px}.cs{left:563px;top:133px;width:80px;height:69px}
 .map b,.tc2 b,.tc b,.abs b,.bb b,.cs b{font-size:23px}.map strong,.tc2 strong,.tc strong,.abs strong,.bb strong,.cs strong{font-size:31px}
-.fuel-left strong{font-size:27px}.bb strong{font-size:27px}
+.laps b,.fuel-left b{font-size:20px;line-height:25px}.fuel-left strong{font-size:27px}.bb strong{font-size:27px}
 .cs--faster strong{color:#ff00ff}.cs--slower strong{color:#ffff00}
 .inputs { position:absolute; left:266px; top:184px; width:120px; height:18px; overflow:hidden; border-radius:6px; background:#111; }
 .inputs__gas,.inputs__brake{position:absolute;left:0;height:50%}.inputs__gas{top:0;background:#16a34a}.inputs__brake{bottom:0;background:#dc2626}

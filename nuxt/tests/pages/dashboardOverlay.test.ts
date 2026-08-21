@@ -40,9 +40,17 @@ describe('Dashboard overlay window contract', () => {
 
   it('uses compact numeric variants for long Dashboard values', () => {
     const component = readFileSync(resolve(process.cwd(), 'app/components/overlay/DashboardHud.vue'), 'utf8')
+    expect(component).toMatch(/\.laps b,\.fuel-left b\{font-size:20px;line-height:25px\}/)
     expect(component).toMatch(/\.fuel-left strong\{font-size:27px\}/)
     expect(component).toMatch(/\.bb strong\{font-size:27px\}/)
     expect(component).toContain('font-variant-numeric: tabular-nums')
+  })
+
+  it('fills the gear tile together with the RPM bar while the pit limiter is active', () => {
+    const component = readFileSync(resolve(process.cwd(), 'app/components/overlay/DashboardHud.vue'), 'utf8')
+    expect(component).toContain("'gear--pit': model.pitLimiterOn")
+    expect(component).toMatch(/\.gear\.gear--pit\{background:#0000ff\}/)
+    expect(component).toMatch(/\.rpm-bar--pit\{background:#0000ff\}/)
   })
 
 
