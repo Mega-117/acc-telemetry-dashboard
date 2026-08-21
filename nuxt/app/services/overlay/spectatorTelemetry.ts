@@ -284,6 +284,8 @@ function focusedFastState(
     absInAction: false,
     brakeBiasPct: null,
     cornerSpeedKmh: null,
+    cornerSpeedDeltaKmh: null,
+    cornerSpeedMode: 'empty',
     directionLightsLeft: false,
     directionLightsRight: false,
     lightsStage: null,

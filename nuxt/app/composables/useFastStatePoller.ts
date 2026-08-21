@@ -121,6 +121,8 @@ export interface FastOverlayState {
   absInAction: boolean
   brakeBiasPct: number | null
   cornerSpeedKmh: number | null
+  cornerSpeedDeltaKmh: number | null
+  cornerSpeedMode: 'empty' | 'absolute' | 'delta'
   directionLightsLeft: boolean
   directionLightsRight: boolean
   lightsStage: number | null
@@ -185,6 +187,8 @@ const EMPTY_FAST_STATE: FastOverlayState = {
   absInAction: false,
   brakeBiasPct: null,
   cornerSpeedKmh: null,
+  cornerSpeedDeltaKmh: null,
+  cornerSpeedMode: 'empty',
   directionLightsLeft: false,
   directionLightsRight: false,
   lightsStage: null,
@@ -394,6 +398,10 @@ function normalizeFastState(state: any): FastOverlayState {
     absInAction: state.abs_in_action === true,
     brakeBiasPct: toNumber(state.brake_bias_pct),
     cornerSpeedKmh: toNumber(state.corner_speed_kmh),
+    cornerSpeedDeltaKmh: toNumber(state.corner_speed_delta_kmh),
+    cornerSpeedMode: state.corner_speed_mode === 'delta'
+      ? 'delta'
+      : state.corner_speed_mode === 'absolute' ? 'absolute' : 'empty',
     directionLightsLeft: state.direction_lights_left === true,
     directionLightsRight: state.direction_lights_right === true,
     lightsStage: toNumber(state.lights_stage),

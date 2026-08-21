@@ -42,7 +42,8 @@ function state(overrides: Partial<FastOverlayState> = {}): FastOverlayState {
     fuelL: 42.35, fuelPerLapL: 2.71, fuelLapsRemaining: 15.6, fuelLeftTimeMs: 531_001,
     sessionLapsRemaining: 8, sessionTimeLeftMs: 1000, engineMap: 2,
     tractionControl: 3, tractionControl2: 1, abs: 4, tractionControlInAction: false, absInAction: false, brakeBiasPct: 54.8,
-    cornerSpeedKmh: null, directionLightsLeft: false, directionLightsRight: false,
+    cornerSpeedKmh: null, cornerSpeedDeltaKmh: null, cornerSpeedMode: 'empty',
+    directionLightsLeft: false, directionLightsRight: false,
     lightsStage: 1, rainLights: false, currentTyreSet: null, tyreSetAvailable: false,
     tyreCompound: null, rainIntensity: null, rainIntensity10Min: null, rainIntensity30Min: null,
     lapPressureAverage: {
@@ -246,6 +247,31 @@ describe('dashboardPresentation', () => {
       .toMatchObject({ tractionControlActive: false, absActive: true })
     expect(buildDashboardPresentation(state({ tractionControlInAction: true, absInAction: true })))
       .toMatchObject({ tractionControlActive: true, absActive: true })
+  })
+
+  it('separa warning TC zero e intervento reale anche a motore spento', () => {
+    expect(buildDashboardPresentation(state({ tractionControl: 0 })))
+      .toMatchObject({ tractionControlOffWarning: true, tractionControlActive: false })
+    expect(buildDashboardPresentation(state({ tractionControl: 6, ignitionOn: false, isEngineRunning: false })))
+      .toMatchObject({ tractionControlOffWarning: false, tractionControlActive: false })
+  })
+
+  it('mostra delta Corner Speed con tono producer-owned e poi assoluto', () => {
+    expect(buildDashboardPresentation(state({
+      cornerSpeedKmh: 86, cornerSpeedDeltaKmh: 4, cornerSpeedMode: 'delta',
+    }))).toMatchObject({ cornerSpeed: '4', cornerSpeedTone: 'faster' })
+    expect(buildDashboardPresentation(state({
+      cornerSpeedKmh: 86, cornerSpeedDeltaKmh: -3, cornerSpeedMode: 'delta',
+    }))).toMatchObject({ cornerSpeed: '-3', cornerSpeedTone: 'slower' })
+    expect(buildDashboardPresentation(state({
+      cornerSpeedKmh: 86, cornerSpeedDeltaKmh: null, cornerSpeedMode: 'absolute',
+    }))).toMatchObject({ cornerSpeed: '86', cornerSpeedTone: 'neutral' })
+    expect(buildDashboardPresentation(state())).toMatchObject({ cornerSpeed: '0' })
+  })
+
+  it('sostituisce gli RPM con PIT LIMITER ON quando il limiter e attivo', () => {
+    expect(buildDashboardPresentation(state({ pitLimiterOn: true })))
+      .toMatchObject({ ignitionLabel: 'PIT LIMITER ON', rpmBand: 'pit' })
   })
 
   it.each([

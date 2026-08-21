@@ -59,10 +59,12 @@ export interface DashboardPresentation {
   abs: string
   absReference: string | null
   tractionControlActive: boolean
+  tractionControlOffWarning: boolean
   absActive: boolean
   brakeBias: string
   inputsAvailable: boolean
   cornerSpeed: string
+  cornerSpeedTone: 'neutral' | 'faster' | 'slower'
   throttlePct: number
   brakePct: number
   rpmRatio: number
@@ -105,8 +107,8 @@ function oneDecimal(value: number | null, fallback = '--.-'): string {
   return value === null ? fallback : value.toFixed(1)
 }
 
-function integer(value: number | null): string {
-  return value === null ? '-' : String(Math.round(value))
+function integer(value: number | null, fallback = '-'): string {
+  return value === null ? fallback : String(Math.round(value))
 }
 
 function fuelTime(valueMs: number | null): string {
@@ -261,12 +263,18 @@ export function buildDashboardPresentation(
   const fuelCriticalThreshold = normalizeFuelCriticalLapsThreshold(options.fuelCriticalLapsThreshold)
   const referenceVisible = state.isFresh && state.isLive && state.ignitionOn && state.isEngineRunning
   const fuelUrgency = resolveFuelUrgency(state, fuelCriticalThreshold)
+  const cornerDelta = state.cornerSpeedMode === 'delta' ? state.cornerSpeedDeltaKmh : null
+  const cornerValue = cornerDelta ?? state.cornerSpeedKmh
 
   const remainingLabel = 'Laps Left' as const
   const remainingValue = oneDecimal(state.fuelLapsRemaining)
 
   return {
-    ignitionLabel: spectatorMode ? '—' : state.ignitionOn && state.isEngineRunning ? String(Math.round(rpm)) : 'IGNITION OFF',
+    ignitionLabel: spectatorMode
+      ? '—'
+      : state.ignitionOn && state.isEngineRunning
+        ? state.pitLimiterOn ? 'PIT LIMITER ON' : String(Math.round(rpm))
+        : 'IGNITION OFF',
     speed: spectatorMode && state.speedKmh === null ? '—' : integer(state.speedKmh),
     speedDelta: referenceVisible && options.speedDelta && state.speedDeltaKmh !== null
       ? Math.abs(state.speedDeltaKmh).toFixed(1) : null,
@@ -293,9 +301,13 @@ export function buildDashboardPresentation(
     absReference: referenceVisible && options.electronicsReference && state.referenceAbs !== null
       ? integer(state.referenceAbs) : null,
     tractionControlActive: interventionVisible(state, state.tractionControlInAction),
+    tractionControlOffWarning: referenceVisible && state.tractionControl === 0,
     absActive: interventionVisible(state, state.absInAction),
     brakeBias: state.brakeBiasPct === null ? '--.-' : state.brakeBiasPct.toFixed(1),
-    cornerSpeed: integer(state.cornerSpeedKmh),
+    cornerSpeed: spectatorMode ? '-' : integer(cornerValue, '0'),
+    cornerSpeedTone: cornerDelta === null || cornerDelta === 0
+      ? 'neutral'
+      : cornerDelta > 0 ? 'faster' : 'slower',
     inputsAvailable: state.gas !== null && state.brake !== null,
     throttlePct: clamp((state.gas ?? 0) * 100, 0, 100),
     brakePct: clamp((state.brake ?? 0) * 100, 0, 100),

@@ -106,14 +106,14 @@ defineProps<{ model: DashboardPresentation }>()
 
     <div class="tile tile--cyan map"><b>MAP</b><strong>{{ model.engineMap }}</strong><small v-if="model.engineMapReference !== null">{{ model.engineMapReference }}</small></div>
     <div class="tile tile--orange tc2"><b>TC2</b><strong>{{ model.tractionControl2 }}</strong><small v-if="model.tractionControl2Reference !== null">{{ model.tractionControl2Reference }}</small></div>
-    <div class="tile tile--red tc" :class="{ 'tc--active': model.tractionControlActive }"><b>TC</b><strong>{{ model.tractionControl }}</strong><small v-if="model.tractionControlReference !== null">{{ model.tractionControlReference }}</small></div>
+    <div class="tile tc" :class="{ 'tc--active': model.tractionControlActive, 'tc--off-warning': model.tractionControlOffWarning }"><b>TC</b><strong>{{ model.tractionControl }}</strong><small v-if="model.tractionControlReference !== null">{{ model.tractionControlReference }}</small></div>
     <div class="inputs" :class="{ 'inputs--unavailable': !model.inputsAvailable }">
       <span class="inputs__gas" :style="{ width: `${model.throttlePct}%` }" />
       <span class="inputs__brake" :style="{ width: `${model.brakePct}%` }" />
     </div>
     <div class="tile tile--blue abs" :class="{ 'abs--active': model.absActive }"><b>ABS</b><strong>{{ model.abs }}</strong><small v-if="model.absReference !== null">{{ model.absReference }}</small></div>
     <div class="tile tile--green bb"><b>BB</b><strong>{{ model.brakeBias }}</strong></div>
-    <div class="tile tile--darkred cs"><b>CS</b><strong>{{ model.cornerSpeed }}</strong></div>
+    <div class="tile tile--darkred cs" :class="`cs--${model.cornerSpeedTone}`"><b>CS</b><strong>{{ model.cornerSpeed }}</strong></div>
     </template>
   </div>
 </template>
@@ -131,6 +131,7 @@ defineProps<{ model: DashboardPresentation }>()
   color: #f8f8f8;
   font-family: Arial, Helvetica, sans-serif;
   font-weight: 900;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 .spectator{position:absolute;inset:0;box-sizing:border-box;display:grid;grid-template-rows:36px 112px 43px;gap:5px;padding:5px;font-variant-numeric:tabular-nums}
@@ -192,7 +193,7 @@ defineProps<{ model: DashboardPresentation }>()
 .tile small{position:absolute;right:3px;top:3px;padding:1px 2px;background:#fff;color:#000;font-size:10px;line-height:11px}
 .inputs--unavailable::after{content:"—";position:absolute;inset:0;display:grid;place-items:center;color:#fff;font-size:14px;line-height:1}
 .inputs--unavailable .inputs__gas,.inputs--unavailable .inputs__brake{display:none}
-.tile--cyan{border-color:#00c8d4}.tile--orange{border-color:#ffae00;color:#ffae00}.tile--red{border-color:#ff101b;background:#fa101b;color:#fff}.tile--blue{border-color:#1900ff}.tile--green{border-color:#009a28}.tile--darkred{border-color:#9f1820}
+.tile--cyan{border-color:#00c8d4}.tile--orange{border-color:#ffae00;color:#ffae00}.tile--blue{border-color:#1900ff}.tile--green{border-color:#009a28}.tile--darkred{border-color:#9f1820}
 .dashboard--running .fuel,.dashboard--running .laps,.dashboard--running .fuel-left{border-color:#00c8d4;background:#000;color:#fff}
 .dashboard--running.dashboard--fuel-low .fuel,
 .dashboard--running.dashboard--fuel-low .laps,
@@ -200,9 +201,10 @@ defineProps<{ model: DashboardPresentation }>()
 .dashboard--fuel-critical-pulse .fuel,
 .dashboard--fuel-critical-pulse .laps,
 .dashboard--fuel-critical-pulse .fuel-left{animation:fuel-critical-pulse 520ms steps(1,end) infinite}
-.dashboard--running .tc{border-color:#9acd32;background:#000;color:#fff}
-/* ACC Drive fills the item with its border colour during a real intervention; it does not flash. */
-.dashboard--running .tc.tc--active{background:#9acd32}
+.tc{border-color:#9acd32;background:#000;color:#fff}
+/* Action fill follows the real ACC flag. TC level zero has a separate border warning. */
+.tc.tc--active{background:#9acd32}
+.tc.tc--off-warning{border-color:#ff101b;animation:tc-off-warning 1s linear infinite}
 .abs.abs--active{background:#1900ff}
 .fuel-lap{left:10px;top:58px;width:121px;height:68px}.fuel{left:138px;top:58px;width:121px;height:68px}
 .gear{left:266px;top:58px;width:120px;height:120px}.gear strong{font-size:80px;line-height:82px}
@@ -210,9 +212,12 @@ defineProps<{ model: DashboardPresentation }>()
 .map{left:10px;top:133px;width:78px;height:69px}.tc2{left:95px;top:133px;width:77px;height:69px}.tc{left:180px;top:133px;width:79px;height:69px}
 .abs{left:394px;top:133px;width:77px;height:69px}.bb{left:478px;top:133px;width:78px;height:69px}.cs{left:563px;top:133px;width:80px;height:69px}
 .map b,.tc2 b,.tc b,.abs b,.bb b,.cs b{font-size:23px}.map strong,.tc2 strong,.tc strong,.abs strong,.bb strong,.cs strong{font-size:31px}
+.fuel-left strong{font-size:27px}.bb strong{font-size:27px}
+.cs--faster strong{color:#ff00ff}.cs--slower strong{color:#ffff00}
 .inputs { position:absolute; left:266px; top:184px; width:120px; height:18px; overflow:hidden; border-radius:6px; background:#111; }
 .inputs__gas,.inputs__brake{position:absolute;left:0;height:50%}.inputs__gas{top:0;background:#16a34a}.inputs__brake{bottom:0;background:#dc2626}
 @keyframes shift-flash { 0%,49%{background:#001a8d}50%,100%{background:#46c7ff} }
+@keyframes tc-off-warning { 0%,49%{border-color:rgba(255,16,27,0)}50%,100%{border-color:#ff101b} }
 @keyframes fuel-critical-pulse {
   0%,49%{border-color:#ffae00;box-shadow:inset 0 0 0 1px #ffae00}
   50%,100%{border-color:#5f4100;box-shadow:none}

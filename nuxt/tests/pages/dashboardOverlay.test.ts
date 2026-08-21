@@ -27,13 +27,22 @@ describe('Dashboard overlay window contract', () => {
     )
     expect(component).not.toMatch(/fuel-critical-pulse[^}]*opacity\s*:/)
   })
-  it('fills only ABS or TC on a real intervention without adding an animation', () => {
+  it('fills only ABS or TC on a real intervention and keeps TC-off warning separate', () => {
     const component = readFileSync(resolve(process.cwd(), 'app/components/overlay/DashboardHud.vue'), 'utf8')
     expect(component).toContain("'tc--active': model.tractionControlActive")
     expect(component).toContain("'abs--active': model.absActive")
-    expect(component).toMatch(/\.dashboard--running \.tc\.tc--active\{background:#9acd32\}/)
+    expect(component).toMatch(/\.tc\.tc--active\{background:#9acd32\}/)
     expect(component).toMatch(/\.abs\.abs--active\{background:#1900ff\}/)
     expect(component).not.toMatch(/tc--active[^}]*animation|abs--active[^}]*animation/)
+    expect(component).toContain("'tc--off-warning': model.tractionControlOffWarning")
+    expect(component).toMatch(/\.tc\.tc--off-warning\{border-color:#ff101b;animation:tc-off-warning/)
+  })
+
+  it('uses compact numeric variants for long Dashboard values', () => {
+    const component = readFileSync(resolve(process.cwd(), 'app/components/overlay/DashboardHud.vue'), 'utf8')
+    expect(component).toMatch(/\.fuel-left strong\{font-size:27px\}/)
+    expect(component).toMatch(/\.bb strong\{font-size:27px\}/)
+    expect(component).toContain('font-variant-numeric: tabular-nums')
   })
 
 
