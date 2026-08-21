@@ -5,22 +5,33 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AuthOverlay from '~/components/auth/AuthOverlay.vue'
 
 const resetPasswordMock = vi.hoisted(() => vi.fn())
+const loginMock = vi.hoisted(() => vi.fn())
+const registerMock = vi.hoisted(() => vi.fn())
 
 vi.mock('~/composables/useFirebaseAuth', () => ({
   useFirebaseAuth: () => ({
-    login: vi.fn(),
-    register: vi.fn(),
+    login: loginMock,
+    register: registerMock,
     resetPassword: resetPasswordMock
   })
 }))
 
 const LoginStub = defineComponent({
-  emits: ['forgotPassword'],
+  emits: ['forgotPassword', 'submit'],
   setup(_, { emit }) {
-    return () => h('button', {
-      'data-testid': 'forgot-password',
-      onClick: () => emit('forgotPassword')
-    }, 'forgot')
+    return () => h('div', [
+      h('button', {
+        'data-testid': 'forgot-password',
+        onClick: () => emit('forgotPassword')
+      }, 'forgot'),
+      h('button', {
+        'data-testid': 'submit-login',
+        onClick: () => emit('submit', {
+          email: 'verified@example.invalid',
+          password: 'secret',
+        })
+      }, 'login'),
+    ])
   }
 })
 
@@ -74,6 +85,21 @@ describe('AuthOverlay password reset', () => {
       }
     })
   }
+
+  it('non emette un secondo verdetto emailVerified dopo il login', async () => {
+    loginMock.mockResolvedValue({
+      success: true,
+      user: { emailVerified: false },
+    })
+    const wrapper = mountOverlay()
+
+    await wrapper.get('[data-testid="submit-login"]').trigger('click')
+    await nextTick()
+
+    expect(wrapper.emitted('login-success')).toEqual([
+      ['verified@example.invalid'],
+    ])
+  })
 
 
   it('shows success only after Firebase reset resolves', async () => {

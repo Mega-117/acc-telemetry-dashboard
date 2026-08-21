@@ -1,4 +1,5 @@
 import type { User } from 'firebase/auth'
+import type { AuthStartupOutcome } from './authSessionPolicy'
 
 type ElectronAPI = {
     isElectron?: boolean
@@ -10,6 +11,7 @@ type ElectronAPI = {
         displayName: string
     }) => Promise<boolean>
     clearUserIdentity?: () => Promise<boolean>
+    publishAuthStartupOutcome?: (outcome: AuthStartupOutcome) => Promise<boolean>
 }
 
 function getElectronAPI(): ElectronAPI | null {
@@ -90,6 +92,22 @@ export async function clearLocalUserIdentity() {
         return await electronAPI.clearUserIdentity()
     } catch (e) {
         console.error('[AUTH] Identity clear failed:', e)
+        return false
+    }
+}
+
+export async function publishAuthStartupOutcome(outcome: AuthStartupOutcome) {
+    try {
+        const electronAPI = getElectronAPI()
+        if (
+            electronAPI?.localIdentityRole !== 'primary'
+            || !electronAPI.publishAuthStartupOutcome
+        ) {
+            return false
+        }
+        return await electronAPI.publishAuthStartupOutcome(outcome) === true
+    } catch (e) {
+        console.error('[AUTH] Startup outcome publish failed:', e)
         return false
     }
 }

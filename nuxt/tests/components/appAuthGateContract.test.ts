@@ -57,11 +57,43 @@ describe('App protected runtime route contract', () => {
     expect(authSource).toContain('previousObservedUid !== observedAuthUid')
     expect(authSource).toContain('await clearLocalUserIdentity()')
     expect(authSource).toContain('() => revision === authStateRevision')
+    expect(authSource).toContain("const authSessionStatus = ref<AuthSessionStatus>('initializing')")
+    expect(authSource).toContain("result.status === 'recoverable'")
+    expect(authSource).toContain('authRecoveryCoordinator.schedule()')
 
-    const revisionGuard = authSource.indexOf('if (!isCurrentRevision()) return null')
+    const revisionGuard = authSource.indexOf('if (!isCurrentRevision()) return {')
     const bridgeSave = authSource.indexOf('const saved = await saveLocalUserIdentity(user)')
     expect(revisionGuard).toBeGreaterThan(0)
     expect(revisionGuard).toBeLessThan(bridgeSave)
+  })
+
+  it('usa un solo stato auth per shell e startup Electron', () => {
+    const overlaySource = readFileSync(
+      fileURLToPath(new URL('../../app/components/auth/AuthOverlay.vue', import.meta.url)),
+      'utf8',
+    )
+
+    expect(appSource).toContain('watch([authLoading, authSessionStatus]')
+    expect(appSource).toContain('applyAuthSessionToShell(status, initial)')
+    expect(appSource).toContain('publishAuthStartupOutcome(outcome)')
+    expect(appSource).not.toContain('handleLoginSuccess = (email: string, emailVerified: boolean)')
+    expect(overlaySource).not.toContain('!!result.user?.emailVerified')
+  })
+
+  it('riconcilia lo stato autorevole prima di ogni reinvio verifica', () => {
+    const authSource = readFileSync(
+      fileURLToPath(new URL('../../app/composables/useFirebaseAuth.ts', import.meta.url)),
+      'utf8',
+    )
+    const resendStart = authSource.indexOf('const resendVerificationEmail = async () =>')
+    const resetStart = authSource.indexOf('const resetPassword = async', resendStart)
+    const resendBlock = authSource.slice(resendStart, resetStart)
+
+    expect(resendBlock).toContain('const verification = await checkEmailVerified()')
+    expect(resendBlock.indexOf('await checkEmailVerified()')).toBeLessThan(
+      resendBlock.indexOf('await resendCurrentVerificationEmail(currentUser.value)'),
+    )
+    expect(resendBlock).toContain('alreadyVerified: true')
   })
 
   it('monta i job cloud solo nel primary e lascia RuntimeWindow consumer pura', () => {

@@ -38,6 +38,8 @@ export default defineConfig({
         // ── Phase 1–2: services e utils ──────────────────────────────────
         'app/config/firebaseRuntimeTarget.ts',
         'app/services/auth/authService.ts',
+        'app/services/auth/authSessionPolicy.ts',
+        'app/services/auth/authSessionRecoveryCoordinator.ts',
         'app/services/auth/userProvisioningService.ts',
         'app/services/auth/localIdentityBridge.ts',
         'app/composables/useConfirmedLogout.ts',

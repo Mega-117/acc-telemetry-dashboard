@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   isSecondaryLocalRuntimeRenderer,
   requestLocalRuntimeAttestation,
+  publishAuthStartupOutcome,
   requiresLocalIdentityBridge,
   saveLocalUserIdentity,
   shouldObserveFirebaseAuth,
@@ -151,5 +152,27 @@ describe('local identity runtime bridge', () => {
       email: null,
       displayName: 'User',
     })
+  })
+
+  it('pubblica lo startup auth soltanto dal renderer primario', async () => {
+    const publish = vi.fn().mockResolvedValue(true)
+    vi.stubGlobal('window', {
+      electronAPI: {
+        localIdentityRole: 'primary',
+        publishAuthStartupOutcome: publish,
+      },
+    })
+
+    await expect(publishAuthStartupOutcome('login-required')).resolves.toBe(true)
+    expect(publish).toHaveBeenCalledWith('login-required')
+
+    vi.stubGlobal('window', {
+      electronAPI: {
+        localIdentityRole: 'consumer',
+        publishAuthStartupOutcome: publish,
+      },
+    })
+    await expect(publishAuthStartupOutcome('ready')).resolves.toBe(false)
+    expect(publish).toHaveBeenCalledOnce()
   })
 })

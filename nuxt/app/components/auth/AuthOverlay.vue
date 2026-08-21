@@ -21,7 +21,7 @@ const isSubmitting = ref(false)
 
 // Emit events to parent
 const emit = defineEmits<{
-  'login-success': [email: string, emailVerified: boolean]
+  'login-success': [email: string]
   'register-success': [email: string]
 }>()
 
@@ -57,7 +57,8 @@ const handleLogin = async (credentials: { email: string; password: string }) => 
   isSubmitting.value = false
   
   if (result.success) {
-    emit('login-success', credentials.email, !!result.user?.emailVerified)
+    // The global Firebase observer owns verification and shell routing.
+    emit('login-success', credentials.email)
   } else {
     // Error is already set in authError by the composable
     loginFormRef.value?.setError(result.error)

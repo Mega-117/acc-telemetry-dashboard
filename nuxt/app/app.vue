@@ -15,6 +15,8 @@ import { endFirebaseScenario, startFirebaseScenario, withFirebaseScenario } from
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
 import { canUseDevTools } from '~/utils/devToolsAccess'
+import { toAuthStartupOutcome, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
+import { publishAuthStartupOutcome } from '~/services/auth/localIdentityBridge'
 
 // === NUXT ROUTER ===
 const route = useRoute()
@@ -121,8 +123,8 @@ const {
   isLoading: authLoading, 
   isSecondaryLocalRuntime,
   isLocalRuntimeAttested,
+  authSessionStatus,
   canEnterApp,
-  needsEmailVerification,
   logout: firebaseLogout
 } = useFirebaseAuth()
 const primaryCloudOwner = usePrimaryCloudOwner({
@@ -249,6 +251,18 @@ const showEmailVerificationGate = () => {
   stopListening()
 }
 
+let terminalAuthStartupOutcomePublished = false
+let lastAuthStartupOutcome: string | null = null
+watch(authSessionStatus, (status) => {
+  if (!isPrimaryClientRuntime.value || terminalAuthStartupOutcomePublished) return
+  const outcome = toAuthStartupOutcome(status)
+  if (!outcome || outcome === lastAuthStartupOutcome) return
+  lastAuthStartupOutcome = outcome
+  void publishAuthStartupOutcome(outcome).then((accepted) => {
+    if (accepted && outcome !== 'recoverable') terminalAuthStartupOutcomePublished = true
+  })
+}, { immediate: true })
+
 const enterDashboard = (delayMs = 0) => {
   const startDashboard = () => {
     if (!canEnterApp.value || !currentUser.value) {
@@ -277,71 +291,51 @@ const enterDashboard = (delayMs = 0) => {
   startDashboard()
 }
 
-// === WATCH AUTH LOADING STATE ===
-// This watch handles the INITIAL auth check when the app loads
-watch(authLoading, (loading) => {
+const applyAuthSessionToShell = (status: AuthSessionStatus, initial: boolean) => {
+  if (status === 'initializing' || status === 'recoverable') {
+    appState.value = 'loading'
+    stopListening()
+    return
+  }
+
+  if (status === 'signed-out') {
+    appState.value = 'auth'
+    authState.value = 'login'
+    stopListening()
+    return
+  }
+
+  if (!currentUser.value) {
+    appState.value = 'loading'
+    stopListening()
+    return
+  }
+
+  userEmail.value = currentUser.value.email || ''
+  if (status === 'unverified') {
+    showEmailVerificationGate()
+    return
+  }
+
+  enterDashboard(initial ? 0 : 1000)
+}
+
+// A single canonical auth status owns initial bootstrap and later transitions.
+watch([authLoading, authSessionStatus], ([loading, status]) => {
   if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneRuntimeRoute.value || isStandaloneDevRoute.value) {
     hasInitialized.value = true
     return
   }
 
-  if (!loading && !hasInitialized.value) {
-    hasInitialized.value = true
-    
-    if (currentUser.value) {
-      userEmail.value = currentUser.value.email || ''
-      
-      if (needsEmailVerification.value) {
-        showEmailVerificationGate()
-      } else {
-        enterDashboard()
-      }
-    } else {
-      // No user -> show login
-      appState.value = 'auth'
-      stopListening()
-    }
-  }
+  if (loading) return
+  const initial = !hasInitialized.value
+  hasInitialized.value = true
+  applyAuthSessionToShell(status, initial)
 }, { immediate: true })
 
-// === WATCH USER CHANGES (after initialization) ===
-// This handles login/logout AFTER the initial load
-watch(currentUser, (user, oldUser) => {
-  if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneRuntimeRoute.value || isStandaloneDevRoute.value) return
-
-  // Skip if we haven't initialized yet (handled by authLoading watch)
-  if (!hasInitialized.value) return
-  
-  if (user) {
-    userEmail.value = user.email || ''
-    
-    if (needsEmailVerification.value) {
-      showEmailVerificationGate()
-    } else {
-      if (appState.value === 'auth') {
-        enterDashboard(1000)
-      } else {
-        listenToActivitiesTracked(user.uid)
-      }
-    }
-  } else if (oldUser) {
-    // User logged out
-    appState.value = 'auth'
-    authState.value = 'login'
-    stopListening()
-  }
-})
-
 // === HANDLERS ===
-const handleLoginSuccess = (email: string, emailVerified: boolean) => {
+const handleLoginSuccess = (email: string) => {
   userEmail.value = email
-  
-  if (AUTH_EMAIL_VERIFICATION_REQUIRED && !emailVerified) {
-    showEmailVerificationGate()
-    return
-  }
-  
-  enterDashboard(1500)
 }
 
 const handleRegisterSuccess = (email: string) => {

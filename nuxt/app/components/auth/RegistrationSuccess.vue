@@ -3,7 +3,7 @@
 // RegistrationSuccess - Email Verification Screen
 // ============================================
 
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
 defineProps<{
@@ -61,6 +61,10 @@ const startResendCooldown = () => {
 
 onBeforeUnmount(() => {
   stopResendCooldown()
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('focus', handleVerificationRecoverySignal)
+    window.removeEventListener('online', handleVerificationRecoverySignal)
+  }
 })
 
 const handleResendEmail = async () => {
@@ -74,6 +78,11 @@ const handleResendEmail = async () => {
   const result = await resendVerificationEmail()
   
   isResending.value = false
+
+  if (result.success && result.alreadyVerified) {
+    emit('goToDashboard')
+    return
+  }
   
   if (result.success) {
     resendSuccess.value = true
@@ -83,10 +92,11 @@ const handleResendEmail = async () => {
     resendError.value = result.error || 'Errore invio email'
   }
   
-  emit('resendEmail')
+  if (result.success) emit('resendEmail')
 }
 
-const handleCheckVerification = async () => {
+const reconcileVerification = async ({ showError }: { showError: boolean }) => {
+  if (isChecking.value) return { verified: false, error: null }
   isChecking.value = true
   verificationError.value = false
   verificationMessage.value = ''
@@ -97,11 +107,28 @@ const handleCheckVerification = async () => {
   
   if (result.verified) {
     emit('goToDashboard')
-  } else {
+  } else if (showError) {
     verificationError.value = true
     verificationMessage.value = result.error || 'Email non ancora verificata. Clicca il link ricevuto via email e riprova.'
   }
+  return result
 }
+
+const handleCheckVerification = async () => {
+  await reconcileVerification({ showError: true })
+}
+
+function handleVerificationRecoverySignal() {
+  void reconcileVerification({ showError: false })
+}
+
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', handleVerificationRecoverySignal)
+    window.addEventListener('online', handleVerificationRecoverySignal)
+  }
+  void reconcileVerification({ showError: false })
+})
 </script>
 
 <template>
