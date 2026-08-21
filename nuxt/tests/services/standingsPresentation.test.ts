@@ -17,21 +17,22 @@ import {
 
 const NOW_MS = 1_785_956_769_847
 const STANDINGS_LAYOUT = {
-  width: 538,
-  height: 340,
+  width: 486,
+  height: 384,
   rowCapacity: 10,
   paddingX: 10,
   paddingY: 10,
-  headerHeight: 40,
+  headerHeight: 48,
   rowHeight: 28,
+  rowGap: 4,
   columnGap: 8,
   columnWidths: {
     position: 30,
     driver: 140,
     carNumber: 50,
     pit: 22,
-    bestLap: 76,
-    lastLap: 76,
+    bestLap: 92,
+    lastLap: 92,
     progress: 76,
   },
 }
@@ -117,7 +118,8 @@ function buildStandingsPresentation(
       rowCapacity,
       height: STANDINGS_LAYOUT.paddingY * 2
         + STANDINGS_LAYOUT.headerHeight
-        + rowCapacity * STANDINGS_LAYOUT.rowHeight,
+        + rowCapacity * STANDINGS_LAYOUT.rowHeight
+        + Math.max(0, rowCapacity - 1) * STANDINGS_LAYOUT.rowGap,
     },
   }, nowMs, highlights, localDriver)
 }
@@ -154,7 +156,7 @@ describe('standingsPresentation', () => {
     const classless = buildStandingsPresentation(state([withoutClass]), {}, NOW_MS)
     expect(classless.visible).toBe(true)
     expect(classless.rows).toHaveLength(1)
-    expect(classless.header.carClass).toBeNull()
+    expect(classless.header).not.toHaveProperty('carClass')
     expect(classless.message).toBe('Classifica in aggiornamento…')
 
     const local: StandingsLocalDriverSnapshot = {
@@ -222,7 +224,7 @@ describe('standingsPresentation', () => {
     )
 
     expect(model.visible).toBe(true)
-    expect(model.header.carClass).toBeNull()
+    expect(model.header).not.toHaveProperty('carClass')
     expect(model.rows.map(row => row.carIndex)).toEqual([108])
     expect(model.message).toBe('Classifica in aggiornamento…')
   })
@@ -272,7 +274,7 @@ describe('standingsPresentation', () => {
       driverName: 'A. Driver8',
       bestLap: null,
       lastLap: null,
-      progressPercent: null,
+      progressPercent: 0,
       hasProgress: false,
     })
     expect(model.rows[0]).not.toHaveProperty('delta')
@@ -306,7 +308,6 @@ describe('standingsPresentation', () => {
       sessionType: 'Practice',
       timeLeft: '01:01:01',
       temperatures: '22/32°',
-      carClass: 'GT3',
     })
     expect(formatStandingsSessionType(0)).toBe('Practice')
     expect(formatStandingsSessionType(4)).toBe('Qualifying')
@@ -339,7 +340,7 @@ describe('standingsPresentation', () => {
     expect(standingsCarNumberColors('GT2').background).toBe('darkred')
   })
 
-  it('mostra progress solo non-Race e forza zero in pit lane', () => {
+  it('mostra progress in ogni sessione e forza zero per pit o dato assente', () => {
     const practice = state([
       car(8, { car_location: 2, spline_position: 0.75 }),
       car(9, { spline_position: 0.42 }),
@@ -353,8 +354,13 @@ describe('standingsPresentation', () => {
     practice.snapshot!.session.session_type = 10
     const raceModel = buildStandingsPresentation(practice, {}, NOW_MS)
     expect(raceModel.columns.progress).toBe(true)
-    expect(raceModel.rows.every(row => row.progressPercent === null)).toBe(true)
-    expect(raceModel.rows.every(row => row.hasProgress === false)).toBe(true)
+    expect(raceModel.rows.map(row => row.progressPercent)).toEqual([0, 42])
+    expect(raceModel.rows.map(row => row.hasProgress)).toEqual([false, true])
+
+    practice.snapshot!.session.session_type = 2
+    const unknownModel = buildStandingsPresentation(practice, {}, NOW_MS)
+    expect(unknownModel.header.sessionType).toBeNull()
+    expect(unknownModel.rows.map(row => row.progressPercent)).toEqual([0, 42])
   })
 
   it('la riga locale sopprime il flash posizione secondario ma conserva dati PB', () => {
@@ -367,12 +373,12 @@ describe('standingsPresentation', () => {
     })
   })
 
-  it('header e classe seguono l’auto locale senza inferire dal focus', () => {
+  it('la selezione classe segue l’auto locale senza esporla nell’header', () => {
     const model = buildStandingsPresentation(state([
       car(1, { car_index: 101, car_class: 'GT4' }),
       car(8, { car_index: 108, car_class: 'GT3' }),
     ], 101, 108), { topCars: 0, carsAhead: 0, carsBehind: 0 }, NOW_MS)
-    expect(model.header.carClass).toBe('GT3')
+    expect(model.header).not.toHaveProperty('carClass')
     expect(model.rows).toHaveLength(1)
     expect(model.rows[0]).toMatchObject({ carIndex: 108, local: true })
   })

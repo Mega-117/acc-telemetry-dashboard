@@ -6,6 +6,7 @@ export interface StandingsLayout {
   paddingY: number
   headerHeight: number
   rowHeight: number
+  rowGap: number
   columnGap: number
   columnWidths: {
     position: number
@@ -26,6 +27,7 @@ export const EMPTY_STANDINGS_LAYOUT: Readonly<StandingsLayout> = Object.freeze({
   paddingY: 0,
   headerHeight: 0,
   rowHeight: 0,
+  rowGap: 0,
   columnGap: 0,
   columnWidths: Object.freeze({
     position: 0,
@@ -44,7 +46,7 @@ export function normalizeStandingsLayout(value: unknown): StandingsLayout | null
   const source = value as Partial<StandingsLayout>
   const columns = source.columnWidths
   if (!columns || typeof columns !== 'object') return null
-  const numericKeys: Array<keyof Omit<StandingsLayout, 'columnWidths'>> = [
+  const numericKeys: Array<Exclude<keyof Omit<StandingsLayout, 'columnWidths'>, 'rowGap'>> = [
     'width', 'height', 'rowCapacity', 'paddingX', 'paddingY', 'headerHeight', 'rowHeight', 'columnGap',
   ]
   const columnKeys: Array<keyof StandingsLayout['columnWidths']> = [
@@ -58,6 +60,8 @@ export function normalizeStandingsLayout(value: unknown): StandingsLayout | null
     || !Number.isInteger(Number(source.rowCapacity))
     || Number(source.rowCapacity) <= 0
   ) return null
+  const rowGap = source.rowGap === undefined ? 0 : Number(source.rowGap)
+  if (!Number.isFinite(rowGap) || rowGap < 0) return null
   return {
     width: Number(source.width),
     height: Number(source.height),
@@ -66,6 +70,7 @@ export function normalizeStandingsLayout(value: unknown): StandingsLayout | null
     paddingY: Number(source.paddingY),
     headerHeight: Number(source.headerHeight),
     rowHeight: Number(source.rowHeight),
+    rowGap,
     columnGap: Number(source.columnGap),
     columnWidths: Object.fromEntries(
       columnKeys.map(key => [key, Number(columns[key])]),

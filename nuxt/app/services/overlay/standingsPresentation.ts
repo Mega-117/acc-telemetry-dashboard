@@ -146,7 +146,6 @@ export interface StandingsPresentation {
     sessionType: string | null
     timeLeft: string | null
     temperatures: string | null
-    carClass: string | null
   }
   rows: StandingsPresentationRow[]
   columns: {
@@ -185,7 +184,6 @@ function hiddenPresentation(options: StandingsPresentationOptions): StandingsPre
       sessionType: null,
       timeLeft: null,
       temperatures: null,
-      carClass: null,
     },
     rows: [],
     columns: {
@@ -329,6 +327,17 @@ export function selectStandingsCars(
   return eligible.filter(car => selected.has(car.car_index))
 }
 
+function standingsProgressPercent(
+  car: Pick<StandingsCarSnapshot, 'car_location' | 'spline_position'> | null,
+  visible: boolean,
+): number | null {
+  if (!visible) return null
+  if (finiteNumber(car?.car_location) === 2) return 0
+  const spline = finiteNumber(car?.spline_position)
+  if (spline === null) return 0
+  return Math.round(Math.min(Math.max(spline, 0), 1) * 1000) / 10
+}
+
 /**
  * Ordina una sola volta la classe autorevole dell'auto locale usando la posizione
  * assoluta ACC. Il chiamante usa l'indice risultante come posizione di classe;
@@ -443,10 +452,7 @@ export function buildStandingsPresentation(
     .reduce<number | null>((best, value) => best === null || value < best ? value : best, null)
 
   const sessionType = formatStandingsSessionType(snapshot?.session.session_type)
-  const sessionTypeCode = finiteNumber(snapshot?.session.session_type)
   const showProgressData = options.showLapProgressBar
-    && sessionType !== null
-    && sessionTypeCode !== ACC_BROADCASTING_SESSION_TYPES.RACE
 
   let rows = selectedCars
     .map((car): StandingsPresentationRow => {
@@ -454,14 +460,9 @@ export function buildStandingsPresentation(
       const isLocal = car.car_index === localCarIndex
       const bestLapMs = lapTime(car, 'best')
       const raceNumber = finiteNumber(car.race_number)
-      const spline = finiteNumber(car.spline_position)
       const inPitLane = finiteNumber(car.car_location) === 2
       const highlight = highlights[car.car_index]
-      const progressPercent = showProgressData && inPitLane
-        ? 0
-        : showProgressData && spline !== null
-          ? Math.round(Math.min(Math.max(spline, 0), 1) * 1000) / 10
-          : null
+      const progressPercent = standingsProgressPercent(car, showProgressData)
       return {
         carIndex: car.car_index,
         position: classPositionByCarIndex.get(car.car_index) as number,
@@ -485,6 +486,8 @@ export function buildStandingsPresentation(
   if (hasLocal && rows.every(row => row.local !== true)) {
     const localName = formatLocalDriverName(sharedLocal)
     const raceNumber = finiteNumber(udpLocal?.race_number)
+    const localInPitLane = finiteNumber(udpLocal?.car_location) === 2
+    const localProgressPercent = standingsProgressPercent(udpLocal ?? null, showProgressData)
     rows = [{
       carIndex: localCarIndex,
       position: localPosition,
@@ -493,13 +496,13 @@ export function buildStandingsPresentation(
         ? String(Math.round(raceNumber)) : null,
       carNumberColors: standingsCarNumberColors(localClass),
       driverName: localName,
-      inPitLane: finiteNumber(udpLocal?.car_location) === 2,
+      inPitLane: localInPitLane,
       lastLap: options.showLastLap ? formatStandingsLapTime(udpLocal ? lapTime(udpLocal, 'last') : null) : null,
       bestLap: options.showFastestLap ? formatStandingsLapTime(udpLocal ? lapTime(udpLocal, 'best') : null) : null,
       fastestInClass: false,
       lastLapPersonalBest: null,
-      progressPercent: null,
-      hasProgress: false,
+      progressPercent: localProgressPercent,
+      hasProgress: localProgressPercent !== null && localProgressPercent > 0,
       local: true,
       focused: localCarIndex !== null && localCarIndex === focus?.car_index,
     }]
@@ -528,7 +531,6 @@ export function buildStandingsPresentation(
         snapshot?.session.session_end_time_ms,
       ),
       temperatures: formatStandingsTemperatures(snapshot?.session.weather),
-      carClass: localClass,
     },
     rows,
     columns: {

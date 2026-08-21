@@ -11,24 +11,24 @@ function model(): StandingsPresentation {
       sessionType: 'Practice',
       timeLeft: '01:02:03',
       temperatures: '22/32°',
-      carClass: 'GT3',
     },
     layout: {
-      width: 538,
-      height: 340,
+      width: 486,
+      height: 384,
       rowCapacity: 10,
       paddingX: 10,
       paddingY: 10,
-      headerHeight: 40,
+      headerHeight: 48,
       rowHeight: 28,
+      rowGap: 4,
       columnGap: 8,
       columnWidths: {
         position: 30,
         driver: 140,
         carNumber: 50,
         pit: 22,
-        bestLap: 76,
-        lastLap: 76,
+        bestLap: 92,
+        lastLap: 92,
         progress: 76,
       },
     },
@@ -61,7 +61,7 @@ describe('StandingsHud DOM', () => {
       backgroundOpacity: 0.5,
     }))
 
-    const headerValues = ['Practice', '01:02:03', '22/32°', 'GT3']
+    const headerValues = ['Practice', '01:02:03', '22/32°', 'Best', 'Last']
     const indexes = headerValues.map(value => html.indexOf(value))
     expect(indexes.every(index => index >= 0)).toBe(true)
     expect(indexes).toEqual([...indexes].sort((left, right) => left - right))
@@ -70,28 +70,30 @@ describe('StandingsHud DOM', () => {
     }
     expect(html).not.toContain('is-improved')
     expect(html).toMatch(/class="[^"]*standings-row[^"]*is-local|class="[^"]*is-local[^"]*standings-row/)
-    expect(html).toContain('standings-row__progress-cell')
+    expect(html).toContain('standings-row__progress-track')
     expect(html).toContain('standings-row__progress')
     expect(html).toMatch(/class="[^"]*is-fastest[^"]*standings-row__best|class="[^"]*standings-row__best[^"]*is-fastest/)
     expect(html).toMatch(/class="[^"]*is-pb-focused[^"]*standings-row__last|class="[^"]*standings-row__last[^"]*is-pb-focused/)
   })
 
-  it('non monta titoli, column label, team o focus full-row inventati e usa solo il local autorevole', async () => {
+  it('monta solo le label Best/Last, senza categoria o campi inventati', async () => {
     const html = await renderToString(createSSRApp(StandingsHud, {
       model: model(),
       backgroundOpacity: 0.5,
     }))
     expect(html).not.toContain('STANDINGS')
-    expect(html).not.toMatch(/>POS<|>DRIVER<|>PIT<|>BEST<|>LAST</)
-    expect(html).not.toContain('standings-columns')
+    expect(html).not.toMatch(/>POS<|>DRIVER<|>PIT</)
+    expect(html).toMatch(/>Best<.*>Last</s)
+    expect(html).toContain('standings-columns')
     expect(html).not.toContain('is-focused')
     expect(html).toContain('is-local')
     expect(html).not.toContain('AIR/TRK')
     expect(html).not.toContain('teamName')
     expect(html).not.toContain('row.delta')
+    expect(html).not.toContain('GT3')
   })
 
-  it('mantiene la cella progress riservata a zero senza classi highlight', async () => {
+  it('mantiene il bordo progress a tutta riga a zero senza classi highlight', async () => {
     const inactive = model()
     inactive.rows[0].positionFlash = null
     inactive.rows[0].lastLapPersonalBest = null
@@ -104,7 +106,7 @@ describe('StandingsHud DOM', () => {
     expect(html).not.toContain('has-progress')
     expect(html).not.toContain('is-improved')
     expect(html).not.toContain('is-pb-')
-    expect(html).toContain('standings-row__progress-cell')
+    expect(html).toContain('standings-row__progress-track')
     expect(html).toContain('width:0%')
   })
 

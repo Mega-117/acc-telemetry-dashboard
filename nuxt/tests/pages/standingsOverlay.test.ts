@@ -37,21 +37,23 @@ describe('Standings overlay contract', () => {
     expect(hud).toContain('<HudOverlayBackground :opacity="backgroundOpacity" />')
   })
 
-  it('renderizza l’header reference e nessun focus di riga inventato', () => {
+  it('renderizza metadati, temperatura e sole label Best/Last', () => {
     const headerFields = [
       'model.header.sessionType',
       'model.header.timeLeft',
       'model.header.temperatures',
-      'model.header.carClass',
     ]
     const positions = headerFields.map(field => hud.indexOf(field))
     expect(positions.every(position => position >= 0)).toBe(true)
     expect(positions).toEqual([...positions].sort((left, right) => left - right))
     expect(hud).toContain('class="standings-header__left"')
-    expect(hud).toContain('class="standings-header__right"')
-    expect(hud).toMatch(/\.standings-header__right\s*\{\s*margin-left:\s*auto;/s)
+    expect(hud).toContain('class="standings-header__temperature"')
+    expect(hud).toMatch(/\.standings-header__temperature\s*\{[^}]*margin-left:\s*auto;/s)
     expect(hud).not.toContain('STANDINGS')
-    expect(hud).not.toContain('standings-columns')
+    expect(hud).toContain('standings-columns')
+    expect(hud).toMatch(/<strong v-if="model\.columns\.bestLap">Best<\/strong>/)
+    expect(hud).toMatch(/<strong v-if="model\.columns\.lastLap">Last<\/strong>/)
+    expect(hud).not.toContain('model.header.carClass')
     expect(hud).not.toContain('row.delta')
     expect(hud).not.toContain('teamName')
     expect(hud).not.toContain('is-focused')
@@ -60,13 +62,14 @@ describe('Standings overlay contract', () => {
     expect(hud).not.toContain('nth-child')
   })
 
-  it('usa una griglia fissa da costanti manager e riserva la progress senza assoluti', () => {
+  it('usa la griglia manager-owned e il progress come bordo assoluto a tutta riga', () => {
     expect(hud).toContain('gridTemplateColumns')
-    expect(hud).toContain('model.layout.columnWidths.progress')
-    expect(hud).toContain('class="standings-row__progress-cell"')
-    expect(hud).toMatch(/\.standings-row__progress\s*\{[^}]*height:\s*4px;[^}]*opacity:\s*0\.6;/s)
+    expect(hud).not.toContain('model.layout.columnWidths.progress')
+    expect(hud).toContain('class="standings-row__progress-track"')
+    expect(hud).toMatch(/\.standings-row__progress-track\s*\{[^}]*position:\s*absolute;[^}]*right:\s*0;[^}]*bottom:\s*0;[^}]*left:\s*0;[^}]*height:\s*2px;/s)
+    expect(hud).toMatch(/\.standings-row__progress\s*\{[^}]*height:\s*100%;[^}]*opacity:\s*0\.72;/s)
     expect(hud).toMatch(/\.standings-row\s*\{[^}]*display:\s*grid;[^}]*height:\s*var\(--standings-row-height\)/s)
-    expect(hud).not.toMatch(/\.standings-row__progress\s*\{[^}]*position:\s*absolute/s)
+    expect(hud).toMatch(/\.standings-rows\s*\{[^}]*row-gap:\s*var\(--standings-row-gap\)/s)
     expect(hud).not.toContain('.standings-row.has-progress')
     expect(hud).toMatch(/\.standings-row__position\s*\{[^}]*height:\s*24px;/s)
     expect(hud).toContain("'is-local': row.local")
