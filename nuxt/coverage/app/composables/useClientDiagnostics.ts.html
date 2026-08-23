@@ -577,13 +577,13 @@ export function useClientDiagnostics(options: {
   let isFlushing = false
   let flushQueued = false
   const ownerOperations = createOwnerOperationTracker()
-  const <span class="fstat-no" title="function not covered" >canCapture = () =&gt; <span class="cstat-no" title="statement not covered" >o</span>ptions.captureEnabled?.value ?? options.enabled?.value ?? false</span>
+  const canCapture = <span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >o</span>ptions.captureEnabled?.value ?? options.enabled?.value ?? false</span>
   const canFlush = () =&gt; options.flushEnabled?.value ?? <span class="branch-1 cbranch-no" title="branch not covered" >options.enabled?.value ?? <span class="branch-2 cbranch-no" title="branch not covered" >f</span>alse</span>
 &nbsp;
   async function <span class="fstat-no" title="function not covered" >capture(i</span>nput: LocalClientDiagnostic): Promise&lt;boolean&gt; {
 <span class="cstat-no" title="statement not covered" >    try {</span>
 <span class="cstat-no" title="statement not covered" >      if (!canCapture()) <span class="cstat-no" title="statement not covered" >return false</span></span>
-      const event = <span class="cstat-no" title="statement not covered" >createLocalDiagnostic(input)</span>
+      const <span class="cstat-no" title="statement not covered" >event = createLocalDiagnostic(input)</span>
       const now = <span class="cstat-no" title="statement not covered" >Date.now()</span>
 <span class="cstat-no" title="statement not covered" >      if (!shouldCaptureDiagnostic(lastCapturedByFingerprint.get(event.fingerprint), now)) {</span>
 <span class="cstat-no" title="statement not covered" >        return false</span>
@@ -600,7 +600,7 @@ export function useClientDiagnostics(options: {
 <span class="cstat-no" title="statement not covered" >      if (!uid || !canEnterApp.value) <span class="cstat-no" title="statement not covered" >return false</span></span>
       const suite = <span class="cstat-no" title="statement not covered" >electronAPI?.getSuiteVersion ? await electronAPI.getSuiteVersion() : null</span>
 <span class="cstat-no" title="statement not covered" >      if (options.isLeaseCurrent &amp;&amp; !options.isLeaseCurrent(uid)) <span class="cstat-no" title="statement not covered" >return false</span></span>
-      const payload = <span class="cstat-no" title="statement not covered" >buildDiagnosticDocument(event, uid, suite)</span>
+      const <span class="cstat-no" title="statement not covered" >payload = buildDiagnosticDocument(event, uid, suite)</span>
 <span class="cstat-no" title="statement not covered" >      await trackedSetDoc(</span>
         doc(db, `users/${uid}/diagnostics/${payload.eventId}`),
         toFirestoreDiagnostic(payload),
@@ -650,13 +650,13 @@ export function useClientDiagnostics(options: {
           )
 <span class="cstat-no" title="statement not covered" >          return snapshot.exists()</span>
         },
-<span class="fstat-no" title="function not covered" >        upload: (p</span>ayload) =&gt; <span class="cstat-no" title="statement not covered" >trackedSetDoc(</span>
+        upload: <span class="fstat-no" title="function not covered" >(<span class="cstat-no" title="statement not covered" >p</span>ayload) =&gt; trackedSetDoc(</span>
           doc(db, `users/${uid}/diagnostics/${payload.eventId}`),
           toFirestoreDiagnostic(payload),
           CALLER
         ),
-<span class="fstat-no" title="function not covered" >        acknowledge: (e</span>ventId) =&gt; <span class="cstat-no" title="statement not covered" >electronAPI.acknowledgeDiagnostics!([eventId]),</span>
-        isCurrent: options.<span class="fstat-no" title="function not covered" >isLeaseCurrent ? () =&gt; <span class="cstat-no" title="statement not covered" >o</span>ptions.isLeaseCurrent!(uid) : u</span>ndefined
+        acknowledge: <span class="fstat-no" title="function not covered" >(e</span>ventId) =&gt; <span class="cstat-no" title="statement not covered" >electronAPI.acknowledgeDiagnostics!([eventId]),</span>
+        isCurrent: options.isLeaseCurrent ? <span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >o</span>ptions.isLeaseCurrent!(uid) : u</span>ndefined
       })
 <span class="cstat-no" title="statement not covered" >      return result.acknowledged</span>
     } catch (error) {
@@ -675,7 +675,7 @@ export function useClientDiagnostics(options: {
     return ownerOperations.track(performFlush())
   }
 &nbsp;
-  const <span class="fstat-no" title="function not covered" >onWindowError = (e</span>vent: ErrorEvent) =&gt; {
+  const onWindowError = <span class="fstat-no" title="function not covered" >(e</span>vent: ErrorEvent) =&gt; {
 <span class="cstat-no" title="statement not covered" >    void capture({</span>
       component: 'frontend',
       severity: 'error',
@@ -685,7 +685,7 @@ export function useClientDiagnostics(options: {
       context: { route: route.path }
     })
   }
-  const <span class="fstat-no" title="function not covered" >onUnhandledRejection = (e</span>vent: PromiseRejectionEvent) =&gt; {
+  const onUnhandledRejection = <span class="fstat-no" title="function not covered" >(e</span>vent: PromiseRejectionEvent) =&gt; {
     const details = <span class="cstat-no" title="statement not covered" >errorDetails(event.reason)</span>
 <span class="cstat-no" title="statement not covered" >    void capture({</span>
       component: 'frontend',
@@ -698,7 +698,7 @@ export function useClientDiagnostics(options: {
   }
 &nbsp;
   const previousVueErrorHandler = nuxtApp.vueApp.config.errorHandler
-  const <span class="fstat-no" title="function not covered" >vueErrorHandler = (e</span>rror: unknown, instance: unknown, info: string) =&gt; {
+  const vueErrorHandler = <span class="fstat-no" title="function not covered" >(e</span>rror: unknown, instance: unknown, info: string) =&gt; {
     const details = <span class="cstat-no" title="statement not covered" >errorDetails(error)</span>
 <span class="cstat-no" title="statement not covered" >    void capture({</span>
       component: 'frontend',
@@ -715,7 +715,7 @@ export function useClientDiagnostics(options: {
   <span class="missing-if-branch" title="else path not taken" >E</span>if (typeof window !== 'undefined') {
     window.addEventListener('error', onWindowError)
     window.addEventListener('unhandledrejection', onUnhandledRejection)
-    intervalId = window.<span class="fstat-no" title="function not covered" >setInterval(() =&gt; <span class="cstat-no" title="statement not covered" >v</span>oid flush(), C</span>LIENT_DIAGNOSTIC_FLUSH_INTERVAL_MS)
+    intervalId = window.setInterval(<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >v</span>oid flush(), C</span>LIENT_DIAGNOSTIC_FLUSH_INTERVAL_MS)
   }
 &nbsp;
   const stopWatch = watch(
@@ -726,7 +726,7 @@ export function useClientDiagnostics(options: {
     { immediate: true }
   )
 &nbsp;
-<span class="fstat-no" title="function not covered" >  onBeforeUnmount(() =&gt; {</span>
+  onBeforeUnmount(<span class="fstat-no" title="function not covered" >() =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    stopWatch()</span>
 <span class="cstat-no" title="statement not covered" >    if (typeof window !== 'undefined') {</span>
 <span class="cstat-no" title="statement not covered" >      window.removeEventListener('error', onWindowError)</span>
@@ -744,7 +744,7 @@ export function useClientDiagnostics(options: {
   return {
     capture,
     flush,
-<span class="fstat-no" title="function not covered" >    waitForIdle: () =&gt; <span class="cstat-no" title="statement not covered" >o</span>wnerOperations.drain()</span>
+    waitForIdle: <span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >o</span>wnerOperations.drain()</span>
   }
 }
 &nbsp;</pre></td></tr></table></pre>
@@ -754,7 +754,7 @@ export function useClientDiagnostics(options: {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-18T19:44:21.397Z
+                at 2026-08-23T19:48:28.484Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

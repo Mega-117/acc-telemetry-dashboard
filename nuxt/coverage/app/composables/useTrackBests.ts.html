@@ -1561,7 +1561,7 @@ export function useTrackBests() {
                 }
 &nbsp;
                 // Best Race Sprint
-                const sprintTime = sessionBest.bestRaceSprint || (sessionBest.bestRace &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >getRaceFuelBucket(sessionBest.bestRaceFuel) &amp;&amp; <span class="branch-2 cbranch-no" title="branch not covered" >s</span>essionBest.bestRaceFuel &lt;= 80 ? <span class="branch-0 cbranch-no" title="branch not covered" >s</span>essionBest.bestRace : n</span>ull)
+                const sprintTime = sessionBest.bestRaceSprint || (sessionBest.<span class="branch-1 cbranch-no" title="branch not covered" >bestRace &amp;&amp; getRaceFuelBucket(sessionBest.bestRaceFuel) &amp;&amp; <span class="branch-2 cbranch-no" title="branch not covered" >s</span>essionBest.bestRaceFuel &lt;= 80 ? <span class="branch-0 cbranch-no" title="branch not covered" >s</span>essionBest.bestRace : n</span>ull)
                 <span class="missing-if-branch" title="if path not taken" >I</span>if (sprintTime &amp;&amp; (<span class="branch-1 cbranch-no" title="branch not covered" >!currentBest.bestRaceSprint || <span class="branch-2 cbranch-no" title="branch not covered" >s</span>printTime &lt; currentBest.bestRaceSprint)) {</span>
 <span class="cstat-no" title="statement not covered" >                    currentBest.bestRaceSprint = sprintTime</span>
 <span class="cstat-no" title="statement not covered" >                    currentBest.bestRaceSprintTemp = sessionBest.bestRaceSprintTemp || sessionBest.bestRaceTemp</span>
@@ -1581,7 +1581,7 @@ export function useTrackBests() {
                 }
 &nbsp;
                 // Best Avg Sprint
-                const avgSprintTime = sessionBest.bestAvgSprint || (sessionBest.bestAvgRace &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >getRaceFuelBucket(sessionBest.bestAvgRaceFuel) &amp;&amp; <span class="branch-2 cbranch-no" title="branch not covered" >s</span>essionBest.bestAvgRaceFuel &lt;= 80 ? <span class="branch-0 cbranch-no" title="branch not covered" >s</span>essionBest.bestAvgRace : n</span>ull)
+                const avgSprintTime = sessionBest.bestAvgSprint || (sessionBest.<span class="branch-1 cbranch-no" title="branch not covered" >bestAvgRace &amp;&amp; getRaceFuelBucket(sessionBest.bestAvgRaceFuel) &amp;&amp; <span class="branch-2 cbranch-no" title="branch not covered" >s</span>essionBest.bestAvgRaceFuel &lt;= 80 ? <span class="branch-0 cbranch-no" title="branch not covered" >s</span>essionBest.bestAvgRace : n</span>ull)
                 <span class="missing-if-branch" title="if path not taken" >I</span>if (avgSprintTime &amp;&amp; (<span class="branch-1 cbranch-no" title="branch not covered" >!currentBest.bestAvgSprint || <span class="branch-2 cbranch-no" title="branch not covered" >a</span>vgSprintTime &lt; currentBest.bestAvgSprint)) {</span>
 <span class="cstat-no" title="statement not covered" >                    currentBest.bestAvgSprint = avgSprintTime</span>
 <span class="cstat-no" title="statement not covered" >                    currentBest.bestAvgSprintTemp = sessionBest.bestAvgSprintTemp || sessionBest.bestAvgRaceTemp</span>
@@ -1648,7 +1648,7 @@ export function useTrackBests() {
     ): Promise&lt;Record&lt;string, GripBestTimes&gt;&gt; {
         const targetUserId = userId || currentUser.value?.uid
         const trackIdNorm = trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
-        const cacheKey = `${trackIdNorm}_${targetUserId || <span class="branch-1 cbranch-no" title="branch not covered" >'anon'}`</span>
+        const cacheKey = `${trackIdNorm}_${targetUserId || <span class="branch-1 cbranch-no" title="branch not covered" >'anon'}</span>`
 &nbsp;
         <span class="missing-if-branch" title="if path not taken" >I</span>if (trackBestsCache.value[cacheKey]) {
 <span class="cstat-no" title="statement not covered" >            console.log(`[TRACK_BESTS] cache HIT for ${trackIdNorm} (category: ${category})`)</span>
@@ -1659,7 +1659,7 @@ export function useTrackBests() {
         const prefetchInFlight = targetUserId ? trackBestsPrefetchInFlight.get(targetUserId) : <span class="branch-1 cbranch-no" title="branch not covered" >null</span>
         <span class="missing-if-branch" title="if path not taken" >I</span>if (prefetchInFlight) {
 <span class="cstat-no" title="statement not covered" >            console.log(`[TRACK_BESTS] waiting for batch prefetch (${trackIdNorm})`)</span>
-<span class="cstat-no" title="statement not covered" >            await prefetchInFlight.<span class="fstat-no" title="function not covered" >catch(() =&gt; <span class="cstat-no" title="statement not covered" >0</span>)</span></span>
+<span class="cstat-no" title="statement not covered" >            await prefetchInFlight.catch(<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >0</span>)</span></span>
             const cachedAfterPrefetch = (
 <span class="cstat-no" title="statement not covered" >                trackBestsCache.value as Record&lt;string, { bests: CategoryBests; lastSessionDate: string | null } | undefined&gt;</span>
             )[cacheKey]
@@ -1679,7 +1679,7 @@ export function useTrackBests() {
 &nbsp;
 <span class="cstat-no" title="statement not covered" >                    if (version &gt;= TRACK_BESTS_SCHEMA_VERSION &amp;&amp; data.bests) {</span>
 <span class="cstat-no" title="statement not covered" >                        console.log(`[TRACK_BESTS] Firebase HIT V2 for ${trackIdNorm}`)</span>
-                        const isV2Structure = <span class="cstat-no" title="statement not covered" >CAR_CATEGORIES.<span class="fstat-no" title="function not covered" >some(c</span>at =&gt; <span class="cstat-no" title="statement not covered" >data.bests[cat])</span></span>
+                        const isV2Structure = <span class="cstat-no" title="statement not covered" >CAR_CATEGORIES.some(<span class="fstat-no" title="function not covered" >cat =&gt; <span class="cstat-no" title="statement not covered" >d</span>ata.bests[cat])</span></span>
 <span class="cstat-no" title="statement not covered" >                        if (isV2Structure) {</span>
                             const cached = <span class="cstat-no" title="statement not covered" >{</span>
                                 bests: data.bests as CategoryBests,
@@ -1723,14 +1723,14 @@ export function useTrackBests() {
     async function invalidateTrackBests(trackId: string, userId?: string, clearFirebase: boolean = false) {
         const trackIdNorm = trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
         const targetUserId = userId || currentUser.value?.uid
-        const cacheKey = `${trackIdNorm}_${targetUserId || <span class="branch-1 cbranch-no" title="branch not covered" >'anon'}`</span>
+        const cacheKey = `${trackIdNorm}_${targetUserId || <span class="branch-1 cbranch-no" title="branch not covered" >'anon'}</span>`
 &nbsp;
         delete trackBestsCache.value[cacheKey]
         console.log(`[TRACK_BESTS] cache INVALIDATED for ${trackIdNorm}`)
 &nbsp;
         <span class="missing-if-branch" title="if path not taken" >I</span>if (clearFirebase &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >targetUserId &amp;&amp; <span class="branch-2 cbranch-no" title="branch not covered" >!</span>isElectron.value) {</span>
 <span class="cstat-no" title="statement not covered" >            try {</span>
-                const docRef = <span class="cstat-no" title="statement not covered" >doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)</span>
+                const <span class="cstat-no" title="statement not covered" >docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)</span>
 <span class="cstat-no" title="statement not covered" >                await trackedDeleteDoc(docRef, CALLER)</span>
 <span class="cstat-no" title="statement not covered" >                console.log(`[TRACK_BESTS] DELETED from Firebase for ${trackIdNorm}`)</span>
             } catch (e) {
@@ -1771,7 +1771,7 @@ export function useTrackBests() {
 <span class="cstat-no" title="statement not covered" >        console.log(`[TRACK_BESTS] 🗑️ Resetting ALL trackBests for user ${targetUserId}...`)</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        try {</span>
-            const trackBestsRef = <span class="cstat-no" title="statement not covered" >collection(db, `users/${targetUserId}/trackBests`)</span>
+            const <span class="cstat-no" title="statement not covered" >trackBestsRef = collection(db, `users/${targetUserId}/trackBests`)</span>
             const snapshot = <span class="cstat-no" title="statement not covered" >await getDocs(query(trackBestsRef))</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >            if (snapshot.empty) {</span>
@@ -1780,8 +1780,8 @@ export function useTrackBests() {
 <span class="cstat-no" title="statement not covered" >                return 0</span>
             }
 &nbsp;
-            const batch = <span class="cstat-no" title="statement not covered" >trackedWriteBatch(db, CALLER)</span>
-<span class="cstat-no" title="statement not covered" >            snapshot.docs.<span class="fstat-no" title="function not covered" >forEach(d</span>ocSnap =&gt; {</span>
+            const <span class="cstat-no" title="statement not covered" >batch = trackedWriteBatch(db, CALLER)</span>
+<span class="cstat-no" title="statement not covered" >            snapshot.docs.forEach(<span class="fstat-no" title="function not covered" >docSnap =&gt; {</span></span>
 <span class="cstat-no" title="statement not covered" >                batch.delete(docSnap.ref)</span>
             })
 <span class="cstat-no" title="statement not covered" >            await batch.commit()</span>
@@ -1843,14 +1843,14 @@ export function useTrackBests() {
                 let loadedCount = 0
                 const standardGrips = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
 &nbsp;
-                snapshot.<span class="fstat-no" title="function not covered" >forEach(d</span>ocSnap =&gt; {
+                snapshot.forEach(<span class="fstat-no" title="function not covered" >docSnap =&gt; {</span>
                     const trackIdNorm = <span class="cstat-no" title="statement not covered" >docSnap.id</span>
                     const data = <span class="cstat-no" title="statement not covered" >docSnap.data()</span>
                     const cacheKey = <span class="cstat-no" title="statement not covered" >`${trackIdNorm}_${targetUserId}`</span>
                     const version = <span class="cstat-no" title="statement not covered" >data.version || 1</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >                    if (version &gt;= TRACK_BESTS_SCHEMA_VERSION &amp;&amp; data.bests) {</span>
-                        const isV2Structure = <span class="cstat-no" title="statement not covered" >CAR_CATEGORIES.<span class="fstat-no" title="function not covered" >some(c</span>at =&gt; <span class="cstat-no" title="statement not covered" >data.bests[cat])</span></span>
+                        const isV2Structure = <span class="cstat-no" title="statement not covered" >CAR_CATEGORIES.some(<span class="fstat-no" title="function not covered" >cat =&gt; <span class="cstat-no" title="statement not covered" >d</span>ata.bests[cat])</span></span>
 <span class="cstat-no" title="statement not covered" >                        if (isV2Structure) {</span>
 <span class="cstat-no" title="statement not covered" >                            trackBestsCache.value[cacheKey] = {</span>
                                 bests: data.bests as CategoryBests,
@@ -1981,7 +1981,7 @@ export function useTrackBests() {
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        if (targetUserId &amp;&amp; !isElectron.value) {</span>
 <span class="cstat-no" title="statement not covered" >            try {</span>
-                const docRef = <span class="cstat-no" title="statement not covered" >doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)</span>
+                const <span class="cstat-no" title="statement not covered" >docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)</span>
                 const docSnap = <span class="cstat-no" title="statement not covered" >await getDoc(docRef)</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >                if (docSnap.exists()) {</span>
@@ -2010,10 +2010,10 @@ export function useTrackBests() {
         }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        console.log(`[TRACK_BESTS] trackActivity MISS for ${trackIdNorm}, calculating...`)</span>
-        const trackSessions = <span class="cstat-no" title="statement not covered" >sessions.value.<span class="fstat-no" title="function not covered" >filter(</span></span>
-            (<span class="cstat-no" title="statement not covered" >s: SessionDocument) =&gt; (s.meta.track || '').toLowerCase() === trackId.toLowerCase()</span>
+        const trackSessions = <span class="cstat-no" title="statement not covered" >sessions.value.filter(</span>
+<span class="fstat-no" title="function not covered" >            (<span class="cstat-no" title="statement not covered" >s</span>: SessionDocument) =&gt; (s.meta.track || '').toLowerCase() === trackId.toLowerCase()</span>
         )
-        const calculated = <span class="cstat-no" title="statement not covered" >getTrackActivityTotalsFromSessions(trackSessions, formatDriveTime)</span>
+        const <span class="cstat-no" title="statement not covered" >calculated = getTrackActivityTotalsFromSessions(trackSessions, formatDriveTime)</span>
 <span class="cstat-no" title="statement not covered" >        trackActivityCache.value[cacheKey] = calculated</span>
 <span class="cstat-no" title="statement not covered" >        return calculated</span>
     }
@@ -2031,7 +2031,7 @@ export function useTrackBests() {
         prefetchAllTrackBests,
         getTrackActivity,
         getTheoreticalTimes,
-        isPrefetchComplete: <span class="fstat-no" title="function not covered" >computed(() =&gt; <span class="cstat-no" title="statement not covered" >g</span>lobalPrefetchComplete.value)</span>,
+        isPrefetchComplete: computed(<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >g</span>lobalPrefetchComplete.value)</span>,
     }
 }
 &nbsp;</pre></td></tr></table></pre>
@@ -2041,7 +2041,7 @@ export function useTrackBests() {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-18T19:44:21.397Z
+                at 2026-08-23T19:48:28.484Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

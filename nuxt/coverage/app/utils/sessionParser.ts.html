@@ -1081,20 +1081,20 @@ function updateBucketBest(bucketMap: Record&lt;string, unknown&gt;, bucket: stri
 }
 &nbsp;
 function <span class="fstat-no" title="function not covered" >average(v</span>alues: Array&lt;unknown&gt;): number | null {
-  const parsed = <span class="cstat-no" title="statement not covered" >values.map(toPositiveNumber).<span class="fstat-no" title="function not covered" >filter((v</span>alue): value is number =&gt; <span class="cstat-no" title="statement not covered" >value !== null)</span></span>
+  const parsed = <span class="cstat-no" title="statement not covered" >values.map(toPositiveNumber).filter(<span class="fstat-no" title="function not covered" >(v</span>alue): value is number =&gt; <span class="cstat-no" title="statement not covered" >value !== null)</span></span>
 <span class="cstat-no" title="statement not covered" >  if (!parsed.length) <span class="cstat-no" title="statement not covered" >return null</span></span>
-<span class="cstat-no" title="statement not covered" >  return Math.round(parsed.<span class="fstat-no" title="function not covered" >reduce((s</span>um, value) =&gt; <span class="cstat-no" title="statement not covered" >sum + value, 0</span>) / parsed.length)</span>
+<span class="cstat-no" title="statement not covered" >  return Math.round(parsed.reduce(<span class="fstat-no" title="function not covered" >(s</span>um, value) =&gt; <span class="cstat-no" title="statement not covered" >sum + value, 0</span>) / parsed.length)</span>
 }
 &nbsp;
 function <span class="fstat-no" title="function not covered" >dominantGrip(l</span>aps: Record&lt;string, unknown&gt;[]): string {
   const counts = <span class="cstat-no" title="statement not covered" >new Map&lt;string, number&gt;()</span>
-<span class="cstat-no" title="statement not covered" >  laps.<span class="fstat-no" title="function not covered" >forEach((l</span>ap) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >  laps.forEach(<span class="fstat-no" title="function not covered" >(l</span>ap) =&gt; {</span>
     const grip = <span class="cstat-no" title="statement not covered" >normalizeGrip(String(lap?.['track_grip_status'] || 'Unknown'))</span>
 <span class="cstat-no" title="statement not covered" >    counts.set(grip, (counts.get(grip) || 0) + 1)</span>
   })
   let selected = <span class="cstat-no" title="statement not covered" >'Unknown'</span>
   let bestCount = <span class="cstat-no" title="statement not covered" >-1</span>
-<span class="cstat-no" title="statement not covered" >  counts.<span class="fstat-no" title="function not covered" >forEach((c</span>ount, grip) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >  counts.forEach(<span class="fstat-no" title="function not covered" >(c</span>ount, grip) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    if (count &gt; bestCount) {</span>
 <span class="cstat-no" title="statement not covered" >      selected = grip</span>
 <span class="cstat-no" title="statement not covered" >      bestCount = count</span>
@@ -1105,8 +1105,8 @@ function <span class="fstat-no" title="function not covered" >dominantGrip(l</sp
 &nbsp;
 function <span class="fstat-no" title="function not covered" >buildAvgConditions(l</span>aps: Record&lt;string, unknown&gt;[]): BestConditions {
 <span class="cstat-no" title="statement not covered" >  return {</span>
-    airTemp: average(laps.<span class="fstat-no" title="function not covered" >map((l</span>ap) =&gt; <span class="cstat-no" title="statement not covered" >lap?.['air_temp'])</span>) ?? 0,
-    roadTemp: average(laps.<span class="fstat-no" title="function not covered" >map((l</span>ap) =&gt; <span class="cstat-no" title="statement not covered" >lap?.['road_temp'])</span>) ?? 0,
+    airTemp: average(laps.map(<span class="fstat-no" title="function not covered" >(l</span>ap) =&gt; <span class="cstat-no" title="statement not covered" >lap?.['air_temp'])</span>) ?? 0,
+    roadTemp: average(laps.map(<span class="fstat-no" title="function not covered" >(l</span>ap) =&gt; <span class="cstat-no" title="statement not covered" >lap?.['road_temp'])</span>) ?? 0,
     grip: dominantGrip(laps)
   }
 }
@@ -1119,7 +1119,7 @@ function normalizeCanonicalSummary(rawObj: Record&lt;string, unknown&gt;, sessio
   }
 &nbsp;
   return {
-    laps: toNonNegativeInt(existing['laps'] ?? sessionInfo[<span class="branch-2 cbranch-no" title="branch not covered" >'laps_total'] ?? (rawObj?.['laps'] as unknown[] | undefined)?.length)</span>,
+    laps: toNonNegativeInt(existing['laps'] ?? sessionInfo['laps_total'] ?? (<span class="branch-2 cbranch-no" title="branch not covered" >rawObj?.['laps'] as unknown[] | undefined)?.length)</span>,
     lapsValid: toNonNegativeInt(existing['lapsValid'] ?? sessionInfo['laps_valid']),
     bestLap: toPositiveNumber(existing['bestLap'] ?? sessionInfo['session_best_lap']),
     avgCleanLap: toPositiveNumber(existing['avgCleanLap'] ?? sessionInfo['avg_clean_lap']),
@@ -1272,7 +1272,7 @@ function buildLegacyCompatibilitySummary(rawObj: Record&lt;string, unknown&gt;, 
 <span class="cstat-no" title="statement not covered" >      gripBest.bestAvgRaceFuel = stintFuelStart</span>
     }
 &nbsp;
-    const avgBucket = <span class="cstat-no" title="statement not covered" >getRaceFuelBucket(stintFuelStart)</span>
+    const <span class="cstat-no" title="statement not covered" >avgBucket = getRaceFuelBucket(stintFuelStart)</span>
 <span class="cstat-no" title="statement not covered" >    if (gripBest &amp;&amp; avgBucket) {</span>
 <span class="cstat-no" title="statement not covered" >      updateBucketBest(</span>
         gripBest.raceAvgByFuelBucket,
@@ -1289,7 +1289,7 @@ function buildLegacyCompatibilitySummary(rawObj: Record&lt;string, unknown&gt;, 
   })
 &nbsp;
   return {
-    laps: toNonNegativeInt(sessionInfo[<span class="branch-1 cbranch-no" title="branch not covered" >'laps_total'] ?? (rawObj?.['laps'] as unknown[] | undefined)?.length)</span>,
+    laps: toNonNegativeInt(sessionInfo['laps_total'] ?? (<span class="branch-1 cbranch-no" title="branch not covered" >rawObj?.['laps'] as unknown[] | undefined)?.length)</span>,
     lapsValid: toNonNegativeInt(sessionInfo['laps_valid']),
     bestLap: toPositiveNumber(sessionInfo['session_best_lap'] ?? rawObj?.['bestLap']),
     avgCleanLap: toPositiveNumber(sessionInfo['avg_clean_lap']),
@@ -1360,7 +1360,7 @@ export function extractMetadata(
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-18T19:44:21.397Z
+                at 2026-08-23T19:48:28.484Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

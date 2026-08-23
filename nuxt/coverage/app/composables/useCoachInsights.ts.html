@@ -796,7 +796,7 @@ export function useCoachInsights() {
   // HOME PAGE INSIGHTS (Daily Suggestion &amp; Driver State)
   // -------------------------------------------------------------
   
-  const <span class="fstat-no" title="function not covered" >getDailySuggestionScenarios = () =&gt; <span class="cstat-no" title="statement not covered" >d</span>ailySuggestionScenarioOptions</span>
+  const getDailySuggestionScenarios = <span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >d</span>ailySuggestionScenarioOptions</span>
 &nbsp;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   const resolveDailySuggestionScenario = (recentSessions: any[]): CoachBriefingScenario =&gt; {
@@ -912,7 +912,7 @@ export function useCoachInsights() {
   // -------------------------------------------------------------
   
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-  const <span class="fstat-no" title="function not covered" >generateSessionInsight = (s</span>ession: any): Insight =&gt; {
+  const generateSessionInsight = <span class="fstat-no" title="function not covered" >(s</span>ession: any): Insight =&gt; {
 <span class="cstat-no" title="statement not covered" >    if (!session || !session.stints || session.stints.length === 0) {</span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
         type: 'neutral',
@@ -925,11 +925,11 @@ export function useCoachInsights() {
     let bestLapMs = <span class="cstat-no" title="statement not covered" >Infinity</span>
     let avgLapMsSum = <span class="cstat-no" title="statement not covered" >0</span>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-<span class="cstat-no" title="statement not covered" >    session.stints.<span class="fstat-no" title="function not covered" >forEach((s</span>tint: any) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >    session.stints.forEach(<span class="fstat-no" title="function not covered" >(s</span>tint: any) =&gt; {</span>
       const laps = <span class="cstat-no" title="statement not covered" >stint.laps || []</span>
 <span class="cstat-no" title="statement not covered" >      totalLaps += laps.length</span>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-<span class="cstat-no" title="statement not covered" >      laps.<span class="fstat-no" title="function not covered" >forEach((l</span>ap: any) =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >      laps.forEach(<span class="fstat-no" title="function not covered" >(l</span>ap: any) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >        if (lap.is_valid &amp;&amp; !lap.has_pit_stop) {</span>
 <span class="cstat-no" title="statement not covered" >          validLaps++</span>
 <span class="cstat-no" title="statement not covered" >          avgLapMsSum += lap.lap_time_ms</span>
@@ -957,9 +957,9 @@ export function useCoachInsights() {
 &nbsp;
     // Heuristic 2: Good long run
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-    const longestStint = <span class="cstat-no" title="statement not covered" >session.stints.<span class="fstat-no" title="function not covered" >reduce((p</span>rev: any, current: any) =&gt; (<span class="cstat-no" title="statement not covered" >prev.laps?.length &gt; current.laps?.length) ? prev : current, {</span>})</span>
+    const longestStint = <span class="cstat-no" title="statement not covered" >session.stints.reduce(<span class="fstat-no" title="function not covered" >(p</span>rev: any, current: any) =&gt; (<span class="cstat-no" title="statement not covered" >prev.laps?.length &gt; current.laps?.length) ? prev : current, {</span>})</span>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-<span class="cstat-no" title="statement not covered" >    if (longestStint.laps &amp;&amp; longestStint.laps.length &gt; 8 &amp;&amp; (longestStint.laps.<span class="fstat-no" title="function not covered" >filter((l</span>:any)=&gt;<span class="cstat-no" title="statement not covered" >l.is_valid)</span>.length / longestStint.laps.length &gt; 0.8)) {</span>
+<span class="cstat-no" title="statement not covered" >    if (longestStint.laps &amp;&amp; longestStint.laps.length &gt; 8 &amp;&amp; (longestStint.laps.filter(<span class="fstat-no" title="function not covered" >(l</span>:any)=&gt;<span class="cstat-no" title="statement not covered" >l.is_valid)</span>.length / longestStint.laps.length &gt; 0.8)) {</span>
 <span class="cstat-no" title="statement not covered" >      return {</span>
         type: 'positive',
         message: 'Ottimo long run.',
@@ -992,7 +992,7 @@ export function useCoachInsights() {
   // -------------------------------------------------------------
   
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-  const <span class="fstat-no" title="function not covered" >generateComparisonInsight = (s</span>tintA: any, stintB: any): Insight =&gt; {
+  const generateComparisonInsight = <span class="fstat-no" title="function not covered" >(s</span>tintA: any, stintB: any): Insight =&gt; {
 <span class="cstat-no" title="statement not covered" >    if (!stintA || !stintB) <span class="cstat-no" title="statement not covered" >return { type: 'neutral', message: 'Seleziona due stint.' }</span></span>
     
     const avgA = <span class="cstat-no" title="statement not covered" >stintA.avg_clean_lap || 0</span>
@@ -1039,7 +1039,7 @@ export function useCoachInsights() {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-18T19:44:21.397Z
+                at 2026-08-23T19:48:28.484Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

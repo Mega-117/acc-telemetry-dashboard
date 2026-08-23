@@ -1993,7 +1993,7 @@ function summarizeAudit(audit: OwnerDataAuditReport | null | undefined) {
       oldTrackDetailProjections: audit.projections.oldTrackDetailProjections.length
     },
     permissions: audit.permissions,
-    issueCodes: audit.issues.<span class="fstat-no" title="function not covered" >map((i</span>tem) =&gt; <span class="cstat-no" title="statement not covered" >item.code)</span>
+    issueCodes: audit.issues.map(<span class="fstat-no" title="function not covered" >(i</span>tem) =&gt; <span class="cstat-no" title="statement not covered" >item.code)</span>
   }
 }
 &nbsp;
@@ -2051,7 +2051,7 @@ async function persistMigrationCheckpoint(input: {
   migrationPatch?: Record&lt;string, unknown&gt;
   assertActive?: () =&gt; void
 }): Promise&lt;CanonicalMigrationCheckpoint&gt; {
-  const assertActive = input.<span class="fstat-no" title="function not covered" ><span class="branch-1 cbranch-no" title="branch not covered" >assertActive || (() =&gt; {</span>})</span>
+  const assertActive = input.assertActive || (<span class="fstat-no" title="function not covered" ><span class="branch-1 cbranch-no" title="branch not covered" >() =&gt; {</span>})</span>
   assertActive()
   const checkpoint = buildCanonicalMigrationCheckpoint({
     attempt: input.attempt,
@@ -2127,7 +2127,7 @@ async function publishHealthOutcome(
   uid: string,
   input: { incompleteCloudOnly?: number; skippedNoRaw?: number } = {},
   leaseId?: string,
-<span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >  assertActive: () =&gt; void = () =&gt; {</span>}</span>
+  assertActive: () =&gt; void = <span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >() =&gt; {</span>}</span>
 ) {
   const outcome = classifyFirebaseStructureOutcome(input)
   const checkedAt = nowIso()
@@ -2160,7 +2160,7 @@ function <span class="fstat-no" title="function not covered" >createLeaseLostErr
 async function ensureActiveLease(
   uid: string,
   leaseId: string,
-<span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >  assertActive: () =&gt; void = () =&gt; {</span>}</span>
+  assertActive: () =&gt; void = <span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >() =&gt; {</span>}</span>
 ): Promise&lt;void&gt; {
   const renewed = await withFirebaseStructureRetry(async () =&gt; {
     assertActive()
@@ -2175,7 +2175,7 @@ async function <span class="fstat-no" title="function not covered" >publishBlock
   uid: string,
   error: unknown,
   leaseId: string,
-<span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >  assertActive: () =&gt; void = () =&gt; {</span>}</span>
+  assertActive: () =&gt; void = <span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >() =&gt; {</span>}</span>
 ) {
   const published = <span class="cstat-no" title="statement not covered" >await withFirebaseStructureRetry(<span class="fstat-no" title="function not covered" >async () =&gt; {</span></span>
 <span class="cstat-no" title="statement not covered" >    assertActive()</span>
@@ -2270,7 +2270,7 @@ async function finalizeMaintenanceOutcome(input: {
   skippedNoRaw?: number
   assertActive?: () =&gt; void
 }): Promise&lt;void&gt; {
-  const assertActive = input.<span class="fstat-no" title="function not covered" ><span class="branch-1 cbranch-no" title="branch not covered" >assertActive || (() =&gt; {</span>})</span>
+  const assertActive = input.assertActive || (<span class="fstat-no" title="function not covered" ><span class="branch-1 cbranch-no" title="branch not covered" >() =&gt; {</span>})</span>
   assertActive()
   const outcome = classifyFirebaseStructureOutcome({
     incompleteCloudOnly: input.incompleteCloudOnly,
@@ -2486,8 +2486,8 @@ export async function runOwnerDataMaintenanceGate(
         message: 'Preparo lista sessioni ottimizzata...',
         resumedFrom
       })
-      const sessionListRebuild = <span class="cstat-no" title="statement not covered" >await <span class="fstat-no" title="function not covered" >retryActive(</span></span>
-        () =&gt; <span class="cstat-no" title="statement not covered" >rebuildOwnerSessionListProjection(uid, { assertActive })</span>
+      const sessionListRebuild = <span class="cstat-no" title="statement not covered" >await retryActive(</span>
+<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >        () =&gt; r</span>ebuildOwnerSessionListProjection(uid, { assertActive })</span>
       )
 &nbsp;
 <span class="cstat-no" title="statement not covered" >      emit(onProgress, {</span>
@@ -2505,7 +2505,7 @@ export async function runOwnerDataMaintenanceGate(
         resumedFrom,
         assertActive
       })
-      const finalVerification = <span class="cstat-no" title="statement not covered" >await <span class="fstat-no" title="function not covered" >retryActive(() =&gt; <span class="cstat-no" title="statement not covered" >v</span>erifyOwnerMigrationLightweight(uid))</span></span>
+      const finalVerification = <span class="cstat-no" title="statement not covered" >await retryActive(<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >() =&gt; v</span>erifyOwnerMigrationLightweight(uid))</span></span>
 <span class="cstat-no" title="statement not covered" >      if (!finalVerification.ok) {</span>
 <span class="cstat-no" title="statement not covered" >        throw new Error(`Verifica lista sessioni non pulita: ${finalVerification.issues.join(', ')}`)</span>
       }
@@ -2740,7 +2740,7 @@ export async function <span class="fstat-no" title="function not covered" >compl
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-18T19:44:21.397Z
+                at 2026-08-23T19:48:28.484Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

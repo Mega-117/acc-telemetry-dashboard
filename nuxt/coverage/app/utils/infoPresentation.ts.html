@@ -30,9 +30,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">83.92% </span>
+                <span class="strong">83.48% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>94/112</span>
+                <span class='fraction'>91/109</span>
             </div>
         
             
@@ -267,10 +267,7 @@
 <a name='L202'></a><a href='#L202'>202</a>
 <a name='L203'></a><a href='#L203'>203</a>
 <a name='L204'></a><a href='#L204'>204</a>
-<a name='L205'></a><a href='#L205'>205</a>
-<a name='L206'></a><a href='#L206'>206</a>
-<a name='L207'></a><a href='#L207'>207</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L205'></a><a href='#L205'>205</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -336,15 +333,15 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">48x</span>
+<span class="cline-any cline-yes">64x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">42x</span>
-<span class="cline-any cline-yes">42x</span>
-<span class="cline-any cline-yes">42x</span>
-<span class="cline-any cline-yes">42x</span>
-<span class="cline-any cline-yes">42x</span>
+<span class="cline-any cline-yes">29x</span>
+<span class="cline-any cline-yes">29x</span>
+<span class="cline-any cline-yes">29x</span>
+<span class="cline-any cline-yes">29x</span>
+<span class="cline-any cline-yes">29x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -353,8 +350,8 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">15x</span>
-<span class="cline-any cline-yes">15x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -378,12 +375,13 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">16x</span>
-<span class="cline-any cline-yes">15x</span>
-<span class="cline-any cline-yes">15x</span>
-<span class="cline-any cline-yes">15x</span>
-<span class="cline-any cline-yes">15x</span>
-<span class="cline-any cline-yes">15x</span>
-<span class="cline-any cline-yes">15x</span>
+<span class="cline-any cline-yes">16x</span>
+<span class="cline-any cline-yes">14x</span>
+<span class="cline-any cline-yes">14x</span>
+<span class="cline-any cline-yes">14x</span>
+<span class="cline-any cline-yes">14x</span>
+<span class="cline-any cline-yes">14x</span>
+<span class="cline-any cline-yes">14x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -461,8 +459,6 @@
 <span class="cline-any cline-yes">13x</span>
 <span class="cline-any cline-yes">13x</span>
 <span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-yes">13x</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">13x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -498,7 +494,6 @@ export interface InfoRow {
   value: string
   tone: 'default' | 'yellow' | 'orange' | 'green' | 'red'
   localTime?: boolean
-  lapTimer?: boolean
 }
 &nbsp;
 export interface InfoPresentation {
@@ -583,8 +578,9 @@ export function formatInfoDuration(valueMs: number | null | undefined): string {
 }
 &nbsp;
 export function formatInfoStintDuration(valueMs: number | null | undefined): string {
-  if (typeof valueMs !== 'number' || !Number.isFinite(valueMs) || valueMs &lt; 0) return '--:--.---'
-  const totalSeconds = Math.floor(valueMs / 1000)
+  const value = positive(valueMs)
+  if (value === null) return '-:--.---'
+  const totalSeconds = Math.floor(value / 1000)
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = totalSeconds % 60
@@ -658,7 +654,7 @@ export function buildInfoPresentation(
   const traffic = trafficValue(info?.pitExitTraffic ?? null)
   const rows: InfoRow[] = []
   <span class="missing-if-branch" title="else path not taken" >E</span>if (options.showStint) rows.push({ id: 'stint', label: 'Stint:', value: formatInfoStintDuration(info?.stintTimeLeftMs), tone: 'default' })
-  if (options.showQFuel) rows.push({ id: 'q-fuel', label: `${info?.fuelLabel || <span class="branch-1 cbranch-no" title="branch not covered" >'Q-Fuel'}:</span>`, value: fuelValue(info?.fuelNeededL ?? <span class="branch-1 cbranch-no" title="branch not covered" >null)</span>, tone: fuelTone(info?.fuelNeededL ?? <span class="branch-1 cbranch-no" title="branch not covered" >null)</span> })
+  if (options.showQFuel) rows.push({ id: 'q-fuel', label: `${info?.fuelLabel || <span class="branch-1 cbranch-no" title="branch not covered" >'Q-Fuel'}</span>:`, value: fuelValue(info?.fuelNeededL ?? <span class="branch-1 cbranch-no" title="branch not covered" >null)</span>, tone: fuelTone(info?.fuelNeededL ?? <span class="branch-1 cbranch-no" title="branch not covered" >null)</span> })
   if (options.showFuelLeft) rows.push({ id: 'fuel-left', label: 'Fuel Left:', value: formatInfoFuelDuration(info?.fuelLeftTimeMs), tone: fuelLeftTone(info?.fuelLeftTimeMs, info?.fuelLeftReferenceLapMs) })
   if (options.showIncidents) rows.push({ id: 'incidents', label: 'Incidents:', value: info?.incidents === null || info?.incidents === undefined ? <span class="branch-0 cbranch-no" title="branch not covered" >'--' : S</span>tring(info.incidents), tone: 'default' })
   <span class="missing-if-branch" title="else path not taken" >E</span>if (options.showGrip) rows.push({ id: 'grip', label: 'Grip:', value: info?.grip || <span class="branch-1 cbranch-no" title="branch not covered" >'--', t</span>one: 'default' })
@@ -667,8 +663,6 @@ export function buildInfoPresentation(
   <span class="missing-if-branch" title="else path not taken" >E</span>if (options.showBest) rows.push({ id: 'best', label: 'Best:', value: formatInfoLapTime(info?.bestLapTimeMs), tone: 'default' })
   <span class="missing-if-branch" title="else path not taken" >E</span>if (options.showDamage) rows.push({ id: 'damage', label: 'Damage:', value: formatInfoLapTime(info?.damageTimeMs), tone: 'default' })
   if (options.showTime) rows.push({ id: 'local-time', label: 'Time:', value: '--:--:--', tone: 'default', localTime: true })
-  rows.push({ id: 'lap-timer', label: 'Lap Timer:', value: formatInfoRunningLapTime(info?.currentLapTimeMs), tone: 'default', lapTimer: true })
-&nbsp;
   return {
     yellowFlagActive: options.showYellowFlag &amp;&amp; state.flag === 2,
     delta: {
@@ -688,7 +682,7 @@ export function buildInfoPresentation(
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-18T19:44:21.397Z
+                at 2026-08-23T19:48:28.484Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

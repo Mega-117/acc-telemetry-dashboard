@@ -975,7 +975,7 @@ function trackMatches(left: string | null | undefined, right: string | null | un
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 export function getNewestSessionEntry(sessionIndex: any, pendingSessions: SessionDocument[]): { car: string | null; date: string | null } {
     const newestIndexEntry = Array.isArray(sessionIndex?.sessionsList) ? sessionIndex.sessionsList[0] : null
-    const newestPending = [...pendingSessions].sort((a, b) =&gt; (b.meta.date_start || <span class="branch-1 cbranch-no" title="branch not covered" >'')</span>.localeCompare(a.meta.date_start || <span class="branch-1 cbranch-no" title="branch not covered" >'')</span>)[0] || null
+    const newestPending = [...pendingSessions].sort((a, b) =&gt; (b.meta.date_start || <span class="branch-1 cbranch-no" title="branch not covered" >'').l</span>ocaleCompare(a.meta.date_start || <span class="branch-1 cbranch-no" title="branch not covered" >'')</span>)[0] || null
     if (newestPending &amp;&amp; (!newestIndexEntry?.date || newestPending.meta.date_start &gt; newestIndexEntry.date)) {
         return {
             car: newestPending.meta.car || <span class="branch-1 cbranch-no" title="branch not covered" >null,</span>
@@ -1016,7 +1016,7 @@ export function buildRecentSessionProjection(session: SessionDocument): TrackRec
         laps: summary.laps || <span class="branch-1 cbranch-no" title="branch not covered" >0,</span>
         stints: summary.stintCount || <span class="branch-1 cbranch-no" title="branch not covered" >0,</span>
         bestQualy: summary.best_qualy_ms ? formatLapTime(summary.best_qualy_ms) : undefined,
-        bestRace: sessionRaceTime ? <span class="branch-0 cbranch-no" title="branch not covered" >formatLapTime(sessionRaceTime) : u</span>ndefined
+        bestRace: <span class="branch-0 cbranch-no" title="branch not covered" >sessionRaceTime ? formatLapTime(sessionRaceTime) : u</span>ndefined
     }
 }
 &nbsp;
@@ -1025,13 +1025,13 @@ export function buildHistoricalPointProjection(session: SessionDocument): TrackH
     const dateStr = session.meta.date_start?.split('T')[0] || ''
     const [, month, day] = dateStr.split('-')
     const months = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic']
-    const dateLabel = day &amp;&amp; month ? `${parseInt(day, 10)} ${months[parseInt(month, 10) - 1] || <span class="branch-1 cbranch-no" title="branch not covered" >'N/A'}` : '</span>N/A'
+    const dateLabel = day &amp;&amp; month ? `${parseInt(day, 10)} ${months[parseInt(month, 10) - 1] || <span class="branch-1 cbranch-no" title="branch not covered" >'N/A'}</span>` : 'N/A'
     const qualyTime = summary.best_qualy_ms || null
     return {
         date: dateLabel,
         sessionId: session.sessionId,
         bestQualy: qualyTime ? formatLapTime(qualyTime) : undefined,
-        bestRace: summary.best_race_ms ? <span class="branch-0 cbranch-no" title="branch not covered" >formatLapTime(summary.best_race_ms) : u</span>ndefined
+        bestRace: summary.<span class="branch-0 cbranch-no" title="branch not covered" >best_race_ms ? formatLapTime(summary.best_race_ms) : u</span>ndefined
     }
 }
 &nbsp;
@@ -1167,7 +1167,7 @@ function syncTopLevelRaceBestFromBucketMap(
     const candidate = RACE_FUEL_BUCKETS
         .map((bucket) =&gt; normalizeTrackFuelBucketRecord(target[mapKey]?.[bucket]))
         .filter((record): record is NormalizedFuelBucketRecord =&gt; !!record)
-        .<span class="fstat-no" title="function not covered" >sort((a</span>, b) =&gt; <span class="cstat-no" title="statement not covered" >a.timeMs - b.timeMs)</span>[0]
+        .sort(<span class="fstat-no" title="function not covered" >(a</span>, b) =&gt; <span class="cstat-no" title="statement not covered" >a.timeMs - b.timeMs)</span>[0]
 &nbsp;
     if (!candidate || (target[targetKey] &amp;&amp; Number(target[targetKey]) &lt;= candidate.timeMs)) {
         return
@@ -1251,7 +1251,7 @@ export function buildTrackDetailFromProjectionDocument(params: {
         .filter((session) =&gt; trackMatches(session.meta?.track, normalizedTrackId))
         .filter((session) =&gt; getCarCategory(session.meta?.car || <span class="branch-1 cbranch-no" title="branch not covered" >'')</span> === category)
         .filter((session) =&gt; Number(session.summary?.laps || 0) &gt; 0)
-        .<span class="fstat-no" title="function not covered" >sort((a</span>, <span class="cstat-no" title="statement not covered" >b) =&gt; (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))</span>
+        .sort(<span class="fstat-no" title="function not covered" >(a</span>, <span class="cstat-no" title="statement not covered" >b) =&gt; (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))</span>
     const pendingActivity = buildActivityFromSessions(pendingValidSessions)
     const gripBests = mergeGripBest(
         supportedTrackBestDoc?.bests?.[category]?.[selectedGrip] || {},
@@ -1339,7 +1339,7 @@ export function buildTrackDetailFromProjectionDocument(params: {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-18T19:44:21.397Z
+                at 2026-08-23T19:48:28.484Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

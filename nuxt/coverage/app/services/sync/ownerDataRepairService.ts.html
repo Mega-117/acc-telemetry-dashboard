@@ -1969,7 +1969,7 @@ async function <span class="fstat-no" title="function not covered" >canonicalize
   summary: any
   mode: 'local_domain' | 'cloud_raw_fallback'
 } | null&gt; {
-  const parsed = <span class="cstat-no" title="statement not covered" >extractMetadata(rawObj, { allowLegacyFallback: true, forceRawRebuild: true })</span>
+  const <span class="cstat-no" title="statement not covered" >parsed = extractMetadata(rawObj, { allowLegacyFallback: true, forceRawRebuild: true })</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  try {</span>
     const localDomainResult = <span class="cstat-no" title="statement not covered" >await canonicalizeTelemetryPayload(rawObj)</span>
@@ -2007,7 +2007,7 @@ async function <span class="fstat-no" title="function not covered" >loadCollecti
 <span class="cstat-no" title="statement not covered" >  return snap.docs || []</span>
 }
 &nbsp;
-async function <span class="fstat-no" title="function not covered" >deleteCollectionDocs(p</span>ath: string, <span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >assertActive: () =&gt; void = () =&gt; {</span>}): Promise&lt;number&gt; {</span>
+async function <span class="fstat-no" title="function not covered" >deleteCollectionDocs(p</span>ath: string, assertActive: () =&gt; void = <span class="fstat-no" title="function not covered" ><span class="branch-0 cbranch-no" title="branch not covered" >() =&gt; {</span>}): Promise&lt;number&gt; {</span>
 <span class="cstat-no" title="statement not covered" >  assertActive()</span>
   const docs = <span class="cstat-no" title="statement not covered" >await loadCollectionDocs(path)</span>
 <span class="cstat-no" title="statement not covered" >  assertActive()</span>
@@ -2040,7 +2040,7 @@ async function <span class="fstat-no" title="function not covered" >mapWithConcu
 &nbsp;
 async function <span class="fstat-no" title="function not covered" >probeRawChunks(u</span>id: string, session: SessionDocument): Promise&lt;'present' | 'missing' | 'denied'&gt; {
 <span class="cstat-no" title="statement not covered" >  try {</span>
-    const chunksRef = <span class="cstat-no" title="statement not covered" >collection(db, `users/${uid}/sessions/${session.sessionId}/rawChunks`)</span>
+    const <span class="cstat-no" title="statement not covered" >chunksRef = collection(db, `users/${uid}/sessions/${session.sessionId}/rawChunks`)</span>
     const snap = <span class="cstat-no" title="statement not covered" >await getDocsTracked(query(chunksRef, limit(1)))</span>
 <span class="cstat-no" title="statement not covered" >    return (snap.docs || []).length &gt; 0 ? 'present' : 'missing'</span>
   } catch {
@@ -2051,7 +2051,7 @@ async function <span class="fstat-no" title="function not covered" >probeRawChun
 function <span class="fstat-no" title="function not covered" >getTrackIdsFromSessions(s</span>essions: SessionDocument[]): string[] {
 <span class="cstat-no" title="statement not covered" >  return Array.from(new Set(</span>
     sessions
-      .<span class="fstat-no" title="function not covered" >map((s</span>ession) =&gt; <span class="cstat-no" title="statement not covered" >normalizeTrackId(session.meta?.track || ''))</span>
+      .map(<span class="fstat-no" title="function not covered" >(<span class="cstat-no" title="statement not covered" >s</span>ession) =&gt; normalizeTrackId(session.meta?.track || ''))</span>
       .filter(Boolean)
   )).sort()
 }
@@ -2108,7 +2108,7 @@ export async function <span class="fstat-no" title="function not covered" >audit
 &nbsp;
     const trackIds = <span class="cstat-no" title="statement not covered" >getTrackIdsFromSessions(sessions)</span>
     const rawStats = <span class="cstat-no" title="statement not covered" >{ present: 0, missing: 0, unknown: 0, probed: 0 }</span>
-    const sessionsNeedingRawProbe = <span class="cstat-no" title="statement not covered" >sessions.<span class="fstat-no" title="function not covered" >filter((s</span>ession) =&gt; <span class="cstat-no" title="statement not covered" >Number(session.rawChunkCount || 0) &lt;= 0 &amp;&amp; Number(session.rawSizeBytes || 0) &lt;= 0)</span></span>
+    const sessionsNeedingRawProbe = <span class="cstat-no" title="statement not covered" >sessions.filter(<span class="fstat-no" title="function not covered" >(s</span>ession) =&gt; <span class="cstat-no" title="statement not covered" >Number(session.rawChunkCount || 0) &lt;= 0 &amp;&amp; Number(session.rawSizeBytes || 0) &lt;= 0)</span></span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    for (const session of sessions) {</span>
 <span class="cstat-no" title="statement not covered" >      if (Number(session.rawChunkCount || 0) &gt; 0 || Number(session.rawSizeBytes || 0) &gt; 0) {</span>
@@ -2134,7 +2134,7 @@ export async function <span class="fstat-no" title="function not covered" >audit
 <span class="cstat-no" title="statement not covered" >        permissions.rawChunks = permissions.rawChunks === 'ok' ? 'partial' : permissions.rawChunks</span>
       }
     }
-<span class="cstat-no" title="statement not covered" >    if (rawProbeResults.<span class="fstat-no" title="function not covered" >some((i</span>tem) =&gt; <span class="cstat-no" title="statement not covered" >item.result === 'denied')</span> &amp;&amp; rawProbeResults.<span class="fstat-no" title="function not covered" >every((i</span>tem) =&gt; <span class="cstat-no" title="statement not covered" >item.result === 'denied')</span>) {</span>
+<span class="cstat-no" title="statement not covered" >    if (rawProbeResults.some(<span class="fstat-no" title="function not covered" >(i</span>tem) =&gt; <span class="cstat-no" title="statement not covered" >item.result === 'denied')</span> &amp;&amp; rawProbeResults.every(<span class="fstat-no" title="function not covered" >(i</span>tem) =&gt; <span class="cstat-no" title="statement not covered" >item.result === 'denied')</span>) {</span>
 <span class="cstat-no" title="statement not covered" >      permissions.rawChunks = 'denied'</span>
     }
 &nbsp;
@@ -2175,15 +2175,15 @@ export async function <span class="fstat-no" title="function not covered" >audit
 &nbsp;
     const trackBestMap = <span class="cstat-no" title="statement not covered" >toDocMap(trackBestDocs)</span>
     const trackDetailMap = <span class="cstat-no" title="statement not covered" >toDocMap(trackDetailDocs)</span>
-    const missingTrackBests = <span class="cstat-no" title="statement not covered" >trackIds.<span class="fstat-no" title="function not covered" >filter((t</span>rackId) =&gt; <span class="cstat-no" title="statement not covered" >!trackBestMap.has(trackId))</span></span>
-    const missingTrackDetailProjections = <span class="cstat-no" title="statement not covered" >trackIds.<span class="fstat-no" title="function not covered" >filter((t</span>rackId) =&gt; <span class="cstat-no" title="statement not covered" >!trackDetailMap.has(trackId))</span></span>
+    const missingTrackBests = <span class="cstat-no" title="statement not covered" >trackIds.filter(<span class="fstat-no" title="function not covered" >(t</span>rackId) =&gt; <span class="cstat-no" title="statement not covered" >!trackBestMap.has(trackId))</span></span>
+    const missingTrackDetailProjections = <span class="cstat-no" title="statement not covered" >trackIds.filter(<span class="fstat-no" title="function not covered" >(t</span>rackId) =&gt; <span class="cstat-no" title="statement not covered" >!trackDetailMap.has(trackId))</span></span>
     const expectedSessionListPageDocs = <span class="cstat-no" title="statement not covered" >Math.ceil(sessions.length / SESSION_LIST_PROJECTION_PAGE_SIZE)</span>
     const oldTrackBests = <span class="cstat-no" title="statement not covered" >Array.from(trackBestMap.entries())</span>
-      .<span class="fstat-no" title="function not covered" >filter(([</span>, data]) =&gt; <span class="cstat-no" title="statement not covered" >isLegacyTrackBestProjectionDoc(data))</span>
-      .<span class="fstat-no" title="function not covered" >map(([</span>trackId]) =&gt; <span class="cstat-no" title="statement not covered" >trackId)</span>
+      .filter(<span class="fstat-no" title="function not covered" >([</span>, data]) =&gt; <span class="cstat-no" title="statement not covered" >isLegacyTrackBestProjectionDoc(data))</span>
+      .map(<span class="fstat-no" title="function not covered" >([</span>trackId]) =&gt; <span class="cstat-no" title="statement not covered" >trackId)</span>
     const oldTrackDetailProjections = <span class="cstat-no" title="statement not covered" >Array.from(trackDetailMap.entries())</span>
-      .<span class="fstat-no" title="function not covered" >filter(([</span>, data]) =&gt; <span class="cstat-no" title="statement not covered" >Number(data?.schemaVersion || 0) !== TRACK_DETAIL_PROJECTION_SCHEMA_VERSION)</span>
-      .<span class="fstat-no" title="function not covered" >map(([</span>trackId]) =&gt; <span class="cstat-no" title="statement not covered" >trackId)</span>
+      .filter(<span class="fstat-no" title="function not covered" >([</span>, data]) =&gt; <span class="cstat-no" title="statement not covered" >Number(data?.schemaVersion || 0) !== TRACK_DETAIL_PROJECTION_SCHEMA_VERSION)</span>
+      .map(<span class="fstat-no" title="function not covered" >([</span>trackId]) =&gt; <span class="cstat-no" title="statement not covered" >trackId)</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    for (const trackId of missingTrackBests.slice(0, MAX_ISSUES)) {</span>
 <span class="cstat-no" title="statement not covered" >      issues.push(issue('warning', 'missing_track_bests', 'Pista con sessioni ma senza trackBests.', { trackId }))</span>
@@ -2283,14 +2283,14 @@ export async function <span class="fstat-no" title="function not covered" >verif
     const sessionListSchemaVersion = <span class="cstat-no" title="statement not covered" >Number(sessionListMeta?.schemaVersion || 0)</span>
     const oldTrackBests = <span class="cstat-no" title="statement not covered" >trackBestDocs</span>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-      .<span class="fstat-no" title="function not covered" >filter((d</span>ocSnap: any) =&gt; <span class="cstat-no" title="statement not covered" >isLegacyTrackBestProjectionDoc(docSnap.data() || {}))</span>
+      .filter(<span class="fstat-no" title="function not covered" >(d</span>ocSnap: any) =&gt; <span class="cstat-no" title="statement not covered" >isLegacyTrackBestProjectionDoc(docSnap.data() || {}))</span>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-      .<span class="fstat-no" title="function not covered" >map((d</span>ocSnap: any) =&gt; <span class="cstat-no" title="statement not covered" >docSnap.id)</span>
+      .map(<span class="fstat-no" title="function not covered" >(d</span>ocSnap: any) =&gt; <span class="cstat-no" title="statement not covered" >docSnap.id)</span>
     const oldTrackDetailProjections = <span class="cstat-no" title="statement not covered" >trackDetailDocs</span>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-      .<span class="fstat-no" title="function not covered" >filter((d</span>ocSnap: any) =&gt; <span class="cstat-no" title="statement not covered" >Number(docSnap.data()?.schemaVersion || 0) !== TRACK_DETAIL_PROJECTION_SCHEMA_VERSION)</span>
+      .filter(<span class="fstat-no" title="function not covered" >(d</span>ocSnap: any) =&gt; <span class="cstat-no" title="statement not covered" >Number(docSnap.data()?.schemaVersion || 0) !== TRACK_DETAIL_PROJECTION_SCHEMA_VERSION)</span>
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-      .<span class="fstat-no" title="function not covered" >map((d</span>ocSnap: any) =&gt; <span class="cstat-no" title="statement not covered" >docSnap.id)</span>
+      .map(<span class="fstat-no" title="function not covered" >(d</span>ocSnap: any) =&gt; <span class="cstat-no" title="statement not covered" >docSnap.id)</span>
 &nbsp;
     const pilotDirectoryValid = <span class="cstat-no" title="statement not covered" >pilotDirectorySnap.exists()</span>
       &amp;&amp; Number(pilotDirectory.schemaVersion || 0) === PILOT_DIRECTORY_SCHEMA_VERSION
@@ -2361,7 +2361,7 @@ export async function <span class="fstat-no" title="function not covered" >rebui
   uid: string,
   options: OwnerDataRepairGuardOptions = <span class="branch-0 cbranch-no" title="branch not covered" >{}</span>
 ): Promise&lt;OwnerProjectionRebuildReport&gt; {
-  const assertActive = <span class="cstat-no" title="statement not covered" >options.<span class="fstat-no" title="function not covered" >assertActive || (() =&gt; {</span>})</span>
+  const assertActive = <span class="cstat-no" title="statement not covered" >options.assertActive || (<span class="fstat-no" title="function not covered" >() =&gt; {</span>})</span>
   const guardedGetDoc = <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >async (r</span>ef: any) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >    assertActive()</span>
     const result = <span class="cstat-no" title="statement not covered" >await getDocTracked(ref)</span>
@@ -2379,10 +2379,10 @@ export async function <span class="fstat-no" title="function not covered" >rebui
     const sessions = <span class="cstat-no" title="statement not covered" >await loadOwnerSessions(uid)</span>
 <span class="cstat-no" title="statement not covered" >    assertActive()</span>
     const trackIds = <span class="cstat-no" title="statement not covered" >getTrackIdsFromSessions(sessions)</span>
-    const stats = <span class="cstat-no" title="statement not covered" >buildUserStatsProjection(sessions)</span>
+    const <span class="cstat-no" title="statement not covered" >stats = buildUserStatsProjection(sessions)</span>
     const deltas: TrackBestProjectionDelta[] = <span class="cstat-no" title="statement not covered" >sessions</span>
-      .<span class="fstat-no" title="function not covered" >filter((s</span>ession) =&gt; <span class="cstat-no" title="statement not covered" >!!session.sessionId &amp;&amp; !!session.meta?.track)</span>
-      .<span class="fstat-no" title="function not covered" >map((s</span>ession) =&gt; (<span class="cstat-no" title="statement not covered" >{</span>
+      .filter(<span class="fstat-no" title="function not covered" >(s</span>ession) =&gt; <span class="cstat-no" title="statement not covered" >!!session.sessionId &amp;&amp; !!session.meta?.track)</span>
+      .map(<span class="fstat-no" title="function not covered" >(s</span>ession) =&gt; (<span class="cstat-no" title="statement not covered" >{</span>
         trackId: session.meta.track,
         sessionId: session.sessionId,
         dateStart: session.meta.date_start,
@@ -2423,7 +2423,7 @@ export async function <span class="fstat-no" title="function not covered" >rebui
           setDocFn: guardedSetDoc
         })
       },
-<span class="fstat-no" title="function not covered" >      writeUserProjection: () =&gt; <span class="cstat-no" title="statement not covered" >w</span>riteUserProjectionDocuments({</span>
+      writeUserProjection: <span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >() =&gt; w</span>riteUserProjectionDocuments({</span>
         db,
         uid,
         sessions,
@@ -2452,7 +2452,7 @@ export async function <span class="fstat-no" title="function not covered" >rebui
   uid: string,
   options: OwnerDataRepairGuardOptions = <span class="branch-0 cbranch-no" title="branch not covered" >{}</span>
 ): Promise&lt;OwnerSessionListProjectionRebuildReport&gt; {
-  const assertActive = <span class="cstat-no" title="statement not covered" >options.<span class="fstat-no" title="function not covered" >assertActive || (() =&gt; {</span>})</span>
+  const assertActive = <span class="cstat-no" title="statement not covered" >options.assertActive || (<span class="fstat-no" title="function not covered" >() =&gt; {</span>})</span>
 <span class="cstat-no" title="statement not covered" >  return withFirebaseScenario('maintenance.ownerData.sessionListProjectionRebuild', { uid }, <span class="fstat-no" title="function not covered" >async () =&gt; {</span></span>
 <span class="cstat-no" title="statement not covered" >    assertActive()</span>
     const sessions = <span class="cstat-no" title="statement not covered" >await loadOwnerSessions(uid)</span>
@@ -2485,14 +2485,14 @@ export async function <span class="fstat-no" title="function not covered" >repro
   options: OwnerCloudSummaryReprocessOptions = <span class="branch-0 cbranch-no" title="branch not covered" >{}</span>
 ): Promise&lt;OwnerCloudSummaryReprocessReport&gt; {
   const forceAll = <span class="cstat-no" title="statement not covered" >options.forceAll === true</span>
-  const assertActive = <span class="cstat-no" title="statement not covered" >options.<span class="fstat-no" title="function not covered" >assertActive || (() =&gt; {</span>})</span>
+  const assertActive = <span class="cstat-no" title="statement not covered" >options.assertActive || (<span class="fstat-no" title="function not covered" >() =&gt; {</span>})</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  return withFirebaseScenario('dev.ownerRebuild.cloudRawSummaries', { uid, forceAll }, <span class="fstat-no" title="function not covered" >async () =&gt; {</span></span>
 <span class="cstat-no" title="statement not covered" >    assertActive()</span>
     const sessionDocs = <span class="cstat-no" title="statement not covered" >await loadCollectionDocs(`users/${uid}/sessions`)</span>
 <span class="cstat-no" title="statement not covered" >    assertActive()</span>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-    const eligibleDocs = <span class="cstat-no" title="statement not covered" >sessionDocs.<span class="fstat-no" title="function not covered" >filter((d</span>ocSnap: any) =&gt; {</span>
+    const eligibleDocs = <span class="cstat-no" title="statement not covered" >sessionDocs.filter(<span class="fstat-no" title="function not covered" >(d</span>ocSnap: any) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >      if (forceAll) <span class="cstat-no" title="statement not covered" >return true</span></span>
       const data = <span class="cstat-no" title="statement not covered" >docSnap.data() || {}</span>
       const version = <span class="cstat-no" title="statement not covered" >Number(data?.summary?.best_rules_version || data?.summaryRulesVersion || 0)</span>
@@ -2541,7 +2541,7 @@ export async function <span class="fstat-no" title="function not covered" >repro
         }
 &nbsp;
         const existingData = <span class="cstat-no" title="statement not covered" >docSnap.data() || {}</span>
-        const nextPayload = <span class="cstat-no" title="statement not covered" >sanitizeForFirestore({</span>
+        const <span class="cstat-no" title="statement not covered" >nextPayload = sanitizeForFirestore({</span>
           meta: canonical.meta || existingData.meta || {},
           summary: canonical.summary,
           summaryRulesVersion: Number(canonical.summary.best_rules_version || BEST_RULES_VERSION)
@@ -2587,7 +2587,7 @@ export async function <span class="fstat-no" title="function not covered" >repro
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-08-18T19:44:21.397Z
+                at 2026-08-23T19:48:28.484Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>
