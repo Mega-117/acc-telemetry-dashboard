@@ -37,7 +37,7 @@ const STANDINGS_LAYOUT = {
     bestLap: 92,
     lastLap: 92,
     progress: 76,
-    gap: 64,
+    gap: 72,
   },
 }
 
@@ -363,6 +363,11 @@ describe('standingsPresentation', () => {
     expect(formatStandingsDriverName(car(1, { drivers: [], current_driver_index: 0 }))).toBe('NoData')
     expect(formatStandingsRelativeGap(60_100)).toEqual({ text: '+60.1', tone: 'ahead' })
     expect(formatStandingsRelativeGap(-164_000)).toEqual({ text: '-164.0', tone: 'behind' })
+    expect(formatStandingsRelativeGap(null, 'laps', 1)).toEqual({ text: '1 Lap', tone: 'neutral' })
+    expect(formatStandingsRelativeGap(null, 'laps', 4)).toEqual({ text: '4 Laps', tone: 'neutral' })
+    expect(formatStandingsRelativeGap(null, 'laps', 12)).toEqual({ text: '12 Laps', tone: 'neutral' })
+    expect(formatStandingsRelativeGap(null, 'laps', 0)).toEqual({ text: '--.-', tone: 'neutral' })
+    expect(formatStandingsRelativeGap(60_100, 'unavailable')).toEqual({ text: '--.-', tone: 'neutral' })
     expect(formatStandingsRelativeGap(null)).toEqual({ text: '--.-', tone: 'neutral' })
   })
 
@@ -370,13 +375,20 @@ describe('standingsPresentation', () => {
     const model = buildStandingsPresentation(state([
       car(1, { manufacturer_key: 'ferrari', relative_gap_ms: 60_100, position: 1, delta_ms: -9999 }),
       car(8, { manufacturer_key: 'bmw', relative_gap_ms: null, position: 8, delta_ms: 7000 }),
-      car(9, { manufacturer_key: 'unknown-brand', relative_gap_ms: -164_000, position: 9, delta_ms: 0 }),
+      car(9, {
+        manufacturer_key: 'unknown-brand',
+        relative_gap_kind: 'laps',
+        relative_gap_ms: null,
+        relative_gap_laps: 1,
+        position: 9,
+        delta_ms: 0,
+      }),
     ], 108, 108), { topCars: 3, carsAhead: 0, carsBehind: 0 }, NOW_MS)
 
     expect(model.rows.map(row => [row.manufacturerLogoSrc, row.relativeGap, row.relativeGapTone])).toEqual([
       ['/standings/manufacturers/ferrari.png', '+60.1', 'ahead'],
       ['/standings/manufacturers/bmw.png', '--.-', 'neutral'],
-      ['/standings/manufacturers/none.png', '-164.0', 'behind'],
+      ['/standings/manufacturers/none.png', '1 Lap', 'neutral'],
     ])
   })
 

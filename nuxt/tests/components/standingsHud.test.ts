@@ -13,7 +13,7 @@ function model(): StandingsPresentation {
       temperatures: '22/32°',
     },
     layout: {
-      width: 606,
+      width: 614,
       height: 444,
       rowCapacity: 10,
       paddingX: 10,
@@ -32,7 +32,7 @@ function model(): StandingsPresentation {
         bestLap: 92,
         lastLap: 92,
         progress: 76,
-        gap: 64,
+        gap: 72,
       },
     },
     rows: [{

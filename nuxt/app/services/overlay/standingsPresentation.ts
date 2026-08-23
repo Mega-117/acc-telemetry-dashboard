@@ -25,7 +25,9 @@ export interface StandingsCarSnapshot {
   cup_position?: unknown
   position?: unknown
   delta_ms?: unknown
+  relative_gap_kind?: unknown
   relative_gap_ms?: unknown
+  relative_gap_laps?: unknown
   relative_gap_reason?: unknown
   predicted_lap_ms?: unknown
   engine_running?: unknown
@@ -346,10 +348,25 @@ export function selectStandingsCars(
   return eligible.filter(car => selected.has(car.car_index))
 }
 
-export function formatStandingsRelativeGap(value: unknown): {
+export function formatStandingsRelativeGap(
+  value: unknown,
+  kind: unknown = 'time',
+  laps: unknown = null,
+): {
   text: string
   tone: StandingsRelativeGapTone
 } {
+  if (kind === 'laps') {
+    const lapCount = finiteNumber(laps)
+    if (lapCount === null || !Number.isInteger(lapCount) || lapCount < 1) {
+      return { text: '--.-', tone: 'neutral' }
+    }
+    return {
+      text: `${lapCount} ${lapCount === 1 ? 'Lap' : 'Laps'}`,
+      tone: 'neutral',
+    }
+  }
+  if (kind !== 'time') return { text: '--.-', tone: 'neutral' }
   const gapMs = finiteNumber(value)
   if (gapMs === null || gapMs === 0) return { text: '--.-', tone: 'neutral' }
   const seconds = Math.abs(gapMs) / 1000
@@ -498,7 +515,11 @@ export function buildStandingsPresentation(
       const manufacturer = standingsManufacturerLogo(car.manufacturer_key)
       const relativeGap = isLocal
         ? { text: '--.-', tone: 'neutral' as const }
-        : formatStandingsRelativeGap(car.relative_gap_ms)
+        : formatStandingsRelativeGap(
+            car.relative_gap_ms,
+            car.relative_gap_kind,
+            car.relative_gap_laps,
+          )
       return {
         carIndex: car.car_index,
         position: classPositionByCarIndex.get(car.car_index) as number,
