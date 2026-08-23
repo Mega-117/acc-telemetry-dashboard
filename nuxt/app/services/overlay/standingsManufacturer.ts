@@ -4,6 +4,10 @@ export interface StandingsManufacturerLogo {
   name: string
 }
 
+export type StandingsPublicPathResolver = (path: string) => string
+
+const identityPublicPath: StandingsPublicPathResolver = path => path
+
 const LOGO_ROOT = '/standings/manufacturers'
 const FALLBACK_LOGO: Readonly<Omit<StandingsManufacturerLogo, 'key'>> = Object.freeze({
   src: `${LOGO_ROOT}/none.png`,
@@ -27,9 +31,16 @@ const LOGOS: Readonly<Record<string, Readonly<Omit<StandingsManufacturerLogo, 'k
   porsche: { src: `${LOGO_ROOT}/porsche.png`, name: 'Porsche' },
 })
 
-export function standingsManufacturerLogo(value: unknown): StandingsManufacturerLogo {
-  if (typeof value !== 'string') return { key: null, ...FALLBACK_LOGO }
-  const key = value.trim().toLowerCase()
-  const logo = LOGOS[key]
-  return logo ? { key, ...logo } : { key: null, ...FALLBACK_LOGO }
+export function standingsManufacturerLogo(
+  value: unknown,
+  resolvePublicPath: StandingsPublicPathResolver = identityPublicPath,
+): StandingsManufacturerLogo {
+  const key = typeof value === 'string' ? value.trim().toLowerCase() : null
+  const logo = key ? LOGOS[key] : null
+  const resolved = logo ?? FALLBACK_LOGO
+  return {
+    key: logo ? key : null,
+    ...resolved,
+    src: resolvePublicPath(resolved.src),
+  }
 }

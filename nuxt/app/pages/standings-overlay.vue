@@ -33,6 +33,7 @@ const standings = useStandingsState(getApi)
 const fastState = useFastStatePoller(getApi)
 const standingsHighlights = useStandingsHighlights(standings.state, standings.nowMs)
 const { backgroundOpacity } = useHudOverlayBackground(overlay.settings, 'standings')
+const { getPublicPath } = usePublicPath()
 function setting<K extends keyof HudOverlaySettings>(key: K): HudOverlaySettings[K] | undefined {
   const live = overlay.settings.value?.[key]
   if (live !== undefined) return live
@@ -63,6 +64,7 @@ const model = computed(() => buildStandingsPresentation(
   standings.nowMs.value,
   standingsHighlights.highlights.value,
   localDriver.value,
+  getPublicPath,
 ))
 const canvasStyle = computed(() => ({
   width: `${model.value.layout.width}px`,

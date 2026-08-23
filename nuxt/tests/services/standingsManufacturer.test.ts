@@ -32,4 +32,13 @@ describe('standingsManufacturerLogo', () => {
       name: 'Costruttore non disponibile',
     })
   })
+
+  it('applica il base path production a loghi noti e fallback', () => {
+    const productionPath = (path: string) => `/acc-telemetry-dashboard/docs${path}`
+
+    expect(standingsManufacturerLogo('ferrari', productionPath).src)
+      .toBe('/acc-telemetry-dashboard/docs/standings/manufacturers/ferrari.png')
+    expect(standingsManufacturerLogo('unknown', productionPath).src)
+      .toBe('/acc-telemetry-dashboard/docs/standings/manufacturers/none.png')
+  })
 })

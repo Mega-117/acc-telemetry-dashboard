@@ -1,5 +1,8 @@
 import { EMPTY_STANDINGS_LAYOUT, normalizeStandingsLayout, type StandingsLayout } from './standingsLayout'
-import { standingsManufacturerLogo } from './standingsManufacturer'
+import {
+  standingsManufacturerLogo,
+  type StandingsPublicPathResolver,
+} from './standingsManufacturer'
 
 export interface StandingsDriverSnapshot {
   first_name?: unknown
@@ -425,6 +428,7 @@ export function buildStandingsPresentation(
   nowMs = Date.now(),
   highlights: StandingsHighlightMap = {},
   localDriverInput: StandingsLocalDriverSnapshot | null = null,
+  resolvePublicPath?: StandingsPublicPathResolver,
 ): StandingsPresentation {
   const options: StandingsPresentationOptions = {
     topCars: clampCarCount(optionsInput.topCars ?? DEFAULT_STANDINGS_OPTIONS.topCars),
@@ -512,7 +516,7 @@ export function buildStandingsPresentation(
       const inPitLane = finiteNumber(car.car_location) === 2
       const highlight = highlights[car.car_index]
       const progressPercent = standingsProgressPercent(car, showProgressData)
-      const manufacturer = standingsManufacturerLogo(car.manufacturer_key)
+      const manufacturer = standingsManufacturerLogo(car.manufacturer_key, resolvePublicPath)
       const relativeGap = isLocal
         ? { text: '--.-', tone: 'neutral' as const }
         : formatStandingsRelativeGap(
@@ -549,7 +553,7 @@ export function buildStandingsPresentation(
     const raceNumber = finiteNumber(udpLocal?.race_number)
     const localInPitLane = finiteNumber(udpLocal?.car_location) === 2
     const localProgressPercent = standingsProgressPercent(udpLocal ?? null, showProgressData)
-    const manufacturer = standingsManufacturerLogo(udpLocal?.manufacturer_key)
+    const manufacturer = standingsManufacturerLogo(udpLocal?.manufacturer_key, resolvePublicPath)
     rows = [{
       carIndex: localCarIndex,
       position: localPosition,

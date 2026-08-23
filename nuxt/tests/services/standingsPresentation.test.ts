@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { StandingsPublicPathResolver } from '../../app/services/overlay/standingsManufacturer'
 import {
   buildStandingsPresentation as buildStandingsPresentationRaw,
   formatStandingsDriverName,
@@ -94,6 +95,7 @@ function buildStandingsPresentation(
   nowMs = NOW_MS,
   highlights: StandingsHighlightMap = {},
   localDriverInput?: StandingsLocalDriverSnapshot | null,
+  resolvePublicPath?: StandingsPublicPathResolver,
 ) {
   const clampCount = (value: unknown, fallback: number) => {
     const numeric = Number(value ?? fallback)
@@ -128,7 +130,7 @@ function buildStandingsPresentation(
         + rowCapacity * STANDINGS_LAYOUT.rowHeight
         + Math.max(0, rowCapacity - 1) * STANDINGS_LAYOUT.rowGap,
     },
-  }, nowMs, highlights, localDriver)
+  }, nowMs, highlights, localDriver, resolvePublicPath)
 }
 
 describe('standingsPresentation', () => {
@@ -389,6 +391,25 @@ describe('standingsPresentation', () => {
       ['/standings/manufacturers/ferrari.png', '+60.1', 'ahead'],
       ['/standings/manufacturers/bmw.png', '--.-', 'neutral'],
       ['/standings/manufacturers/none.png', '1 Lap', 'neutral'],
+    ])
+  })
+
+  it('propaga il resolver public production a tutte le righe', () => {
+    const model = buildStandingsPresentation(
+      state([
+        car(7, { manufacturer_key: 'bmw' }),
+        car(8, { manufacturer_key: 'ferrari' }),
+      ]),
+      {},
+      NOW_MS,
+      {},
+      undefined,
+      path => `/acc-telemetry-dashboard/docs${path}`,
+    )
+
+    expect(model.rows.map(row => row.manufacturerLogoSrc)).toEqual([
+      '/acc-telemetry-dashboard/docs/standings/manufacturers/bmw.png',
+      '/acc-telemetry-dashboard/docs/standings/manufacturers/ferrari.png',
     ])
   })
 
