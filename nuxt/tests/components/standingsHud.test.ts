@@ -13,20 +13,20 @@ function model(): StandingsPresentation {
       temperatures: '22/32°',
     },
     layout: {
-      width: 590,
-      height: 384,
+      width: 600,
+      height: 424,
       rowCapacity: 10,
       paddingX: 10,
       paddingY: 10,
       headerHeight: 48,
-      rowHeight: 28,
+      rowHeight: 32,
       rowGap: 4,
       columnGap: 8,
       vehicleGap: 4,
       columnWidths: {
         position: 30,
         driver: 140,
-        manufacturer: 28,
+        manufacturer: 38,
         carNumber: 50,
         pit: 22,
         bestLap: 92,
@@ -41,7 +41,7 @@ function model(): StandingsPresentation {
       positionFlash: 'improved',
       carNumber: '46',
       carNumberVariant: 'pro-am',
-      manufacturerCode: 'FER',
+      manufacturerLogoSrc: '/standings/manufacturers/ferrari.png',
       manufacturerName: 'Ferrari',
       driverName: 'V. Rossi',
       inPitLane: true,
@@ -72,9 +72,10 @@ describe('StandingsHud DOM', () => {
     const indexes = headerValues.map(value => html.indexOf(value))
     expect(indexes.every(index => index >= 0)).toBe(true)
     expect(indexes).toEqual([...indexes].sort((left, right) => left - right))
-    for (const value of ['V. Rossi', 'FER', '46', '>P<', '2:16.500', '2:17.001', '--.-']) {
+    for (const value of ['V. Rossi', '46', '>P<', '2:16.500', '2:17.001', '--.-']) {
       expect(html).toContain(value)
     }
+    expect(html).not.toContain('>FER<')
     expect(html).not.toContain('is-improved')
     expect(html).toMatch(/class="[^"]*standings-row[^"]*is-local|class="[^"]*is-local[^"]*standings-row/)
     expect(html).toContain('standings-row__progress-track')
@@ -83,6 +84,8 @@ describe('StandingsHud DOM', () => {
     expect(html).toMatch(/class="[^"]*is-pb-focused[^"]*standings-row__last|class="[^"]*standings-row__last[^"]*is-pb-focused/)
     expect(html).toMatch(/class="[^"]*standings-row__number[^"]*has-number|class="[^"]*has-number[^"]*standings-row__number/)
     expect(html).toContain('standings-row__manufacturer')
+    expect(html).toContain('class="standings-row__manufacturer-logo"')
+    expect(html).toContain('src="/standings/manufacturers/ferrari.png"')
     expect(html).toContain('aria-label="Ferrari"')
     expect(html).toMatch(/class="[^"]*standings-row__gap[^"]*is-neutral|class="[^"]*is-neutral[^"]*standings-row__gap/)
     expect(html).toMatch(/class="[^"]*standings-row__number[^"]*is-pro-am|class="[^"]*is-pro-am[^"]*standings-row__number/)

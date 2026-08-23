@@ -1,5 +1,5 @@
 import { EMPTY_STANDINGS_LAYOUT, normalizeStandingsLayout, type StandingsLayout } from './standingsLayout'
-import { standingsManufacturerBadge } from './standingsManufacturer'
+import { standingsManufacturerLogo } from './standingsManufacturer'
 
 export interface StandingsDriverSnapshot {
   first_name?: unknown
@@ -132,7 +132,7 @@ export interface StandingsPresentationRow {
   positionFlash: StandingsPositionFlash | null
   carNumber: string | null
   carNumberVariant: StandingsNumberPlateVariant
-  manufacturerCode: string
+  manufacturerLogoSrc: string
   manufacturerName: string
   driverName: string
   inPitLane: boolean
@@ -495,7 +495,7 @@ export function buildStandingsPresentation(
       const inPitLane = finiteNumber(car.car_location) === 2
       const highlight = highlights[car.car_index]
       const progressPercent = standingsProgressPercent(car, showProgressData)
-      const manufacturer = standingsManufacturerBadge(car.manufacturer_key)
+      const manufacturer = standingsManufacturerLogo(car.manufacturer_key)
       const relativeGap = isLocal
         ? { text: '--.-', tone: 'neutral' as const }
         : formatStandingsRelativeGap(car.relative_gap_ms)
@@ -506,7 +506,7 @@ export function buildStandingsPresentation(
         carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
           ? String(Math.round(raceNumber)) : null,
         carNumberVariant: standingsNumberPlateVariant(car.cup_category),
-        manufacturerCode: manufacturer.code,
+        manufacturerLogoSrc: manufacturer.src,
         manufacturerName: manufacturer.name,
         driverName: isLocal ? formatLocalDriverName(sharedLocal) : formatStandingsDriverName(car),
         inPitLane,
@@ -528,7 +528,7 @@ export function buildStandingsPresentation(
     const raceNumber = finiteNumber(udpLocal?.race_number)
     const localInPitLane = finiteNumber(udpLocal?.car_location) === 2
     const localProgressPercent = standingsProgressPercent(udpLocal ?? null, showProgressData)
-    const manufacturer = standingsManufacturerBadge(udpLocal?.manufacturer_key)
+    const manufacturer = standingsManufacturerLogo(udpLocal?.manufacturer_key)
     rows = [{
       carIndex: localCarIndex,
       position: localPosition,
@@ -536,7 +536,7 @@ export function buildStandingsPresentation(
       carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
         ? String(Math.round(raceNumber)) : null,
       carNumberVariant: standingsNumberPlateVariant(udpLocal?.cup_category),
-      manufacturerCode: manufacturer.code,
+      manufacturerLogoSrc: manufacturer.src,
       manufacturerName: manufacturer.name,
       driverName: localName,
       inPitLane: localInPitLane,

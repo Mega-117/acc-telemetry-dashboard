@@ -89,11 +89,19 @@ const gridTemplateColumns = computed(() => [
         >{{ row.position ?? '—' }}</strong>
         <strong class="standings-row__driver">{{ row.driverName }}</strong>
         <span class="standings-row__vehicle">
-          <strong
+          <span
             class="standings-row__manufacturer"
             :aria-label="row.manufacturerName"
             :title="row.manufacturerName"
-          >{{ row.manufacturerCode }}</strong>
+          >
+            <img
+              class="standings-row__manufacturer-logo"
+              :src="row.manufacturerLogoSrc"
+              alt=""
+              aria-hidden="true"
+              draggable="false"
+            >
+          </span>
           <strong
             v-if="model.columns.carNumber"
             class="standings-row__number"
@@ -159,7 +167,8 @@ const gridTemplateColumns = computed(() => [
 .standings-row.is-local .standings-row__position { color:#00141c;background:#4de3ff; }
 .standings-row__driver { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .standings-row__vehicle { position:relative;z-index:1;display:flex;min-width:0;gap:var(--standings-vehicle-gap);align-items:center; }
-.standings-row__manufacturer { display:flex;flex:0 0 var(--standings-manufacturer-width);width:var(--standings-manufacturer-width);height:24px;align-items:center;justify-content:center;overflow:hidden;color:#111;background:#f2f2f2;font-size:10px;font-weight:900;letter-spacing:-0.04em;line-height:1;text-align:center;outline:1px solid rgba(0,0,0,0.1);outline-offset:-1px; }
+.standings-row__manufacturer { display:flex;flex:0 0 var(--standings-manufacturer-width);width:var(--standings-manufacturer-width);height:30px;align-items:center;justify-content:center;overflow:hidden;background:#f2f2f2;outline:1px solid rgba(0,0,0,0.1);outline-offset:-1px; }
+.standings-row__manufacturer-logo { display:block;width:34px;height:28px;object-fit:contain;object-position:center;user-select:none; }
 .standings-row__number { display:flex;flex:0 0 var(--standings-number-width);width:var(--standings-number-width);height:24px;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
 .standings-row__number.has-number { color:#000;background:#fff; }
 .standings-row__number.has-number.is-pro-am { color:#fff;background:#000; }

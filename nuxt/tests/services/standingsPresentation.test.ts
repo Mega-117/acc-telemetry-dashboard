@@ -18,20 +18,20 @@ import {
 
 const NOW_MS = 1_785_956_769_847
 const STANDINGS_LAYOUT = {
-  width: 590,
-  height: 384,
+  width: 600,
+  height: 424,
   rowCapacity: 10,
   paddingX: 10,
   paddingY: 10,
   headerHeight: 48,
-  rowHeight: 28,
+  rowHeight: 32,
   rowGap: 4,
   columnGap: 8,
   vehicleGap: 4,
   columnWidths: {
     position: 30,
     driver: 140,
-    manufacturer: 28,
+    manufacturer: 38,
     carNumber: 50,
     pit: 22,
     bestLap: 92,
@@ -373,10 +373,10 @@ describe('standingsPresentation', () => {
       car(9, { manufacturer_key: 'unknown-brand', relative_gap_ms: -164_000, position: 9, delta_ms: 0 }),
     ], 108, 108), { topCars: 3, carsAhead: 0, carsBehind: 0 }, NOW_MS)
 
-    expect(model.rows.map(row => [row.manufacturerCode, row.relativeGap, row.relativeGapTone])).toEqual([
-      ['FER', '+60.1', 'ahead'],
-      ['BMW', '--.-', 'neutral'],
-      ['—', '-164.0', 'behind'],
+    expect(model.rows.map(row => [row.manufacturerLogoSrc, row.relativeGap, row.relativeGapTone])).toEqual([
+      ['/standings/manufacturers/ferrari.png', '+60.1', 'ahead'],
+      ['/standings/manufacturers/bmw.png', '--.-', 'neutral'],
+      ['/standings/manufacturers/none.png', '-164.0', 'behind'],
     ])
   })
 
