@@ -1031,10 +1031,21 @@ const hasPreselected = ref(false)
 const selectedStint = computed(() => session.value.stints.find(s => s.number === selectedStintNumber.value))
 const selectedStintLaps = computed(() => session.value.lapsData[selectedStintNumber.value] || [])
 
+function formatFuelStart(fuel: number | null | undefined): string {
+  if (typeof fuel !== 'number' || !Number.isFinite(fuel) || fuel <= 0) return '—'
+  return `${fuel.toFixed(Number.isInteger(fuel) ? 0 : 1)} L`
+}
+
 const stintReferenceLabel = computed(() => {
   if (selectedStint.value?.type !== 'R') return ''
-  const bucket = getRaceFuelBucket(selectedStint.value.fuelStart)
-  if (!bucket) return 'Riferimento: fuel partenza non storico'
+  const fuelStart = selectedStint.value.fuelStart
+  const bucket = getRaceFuelBucket(fuelStart)
+  if (!bucket) {
+    const fuelLabel = formatFuelStart(fuelStart)
+    return fuelLabel === '—'
+      ? 'Riferimento: fuel partenza non disponibile'
+      : `Riferimento: ${fuelLabel} · fuori storico`
+  }
   return `Riferimento: fuel partenza ${bucket}L`
 })
 
@@ -2916,6 +2927,10 @@ const gripZones = computed(() => {
                 <span class="ssc-condition-text">
                   <span class="ssc-cond-lbl">GRIP</span>
                   <span class="ssc-cond-val">{{ stintConditions.grip.dominant }}</span>
+                </span>
+                <span class="ssc-condition-text" data-testid="stint-start-fuel">
+                  <span class="ssc-cond-lbl">FUEL</span>
+                  <span class="ssc-cond-val">{{ formatFuelStart(displayedStint?.fuelStart) }}</span>
                 </span>
               </div>
               <div class="ssc-header-right">

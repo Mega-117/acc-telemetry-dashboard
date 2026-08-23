@@ -10,8 +10,8 @@ const sessionDetailSource = fs.readFileSync(
   path.join(nuxtRoot, 'app/components/pages/SessionDetailPage.vue'),
   'utf8'
 )
-const telemetrySource = fs.readFileSync(
-  path.join(nuxtRoot, 'app/composables/useTelemetryData.ts'),
+const theoreticalSource = fs.readFileSync(
+  path.join(nuxtRoot, 'app/services/telemetry/theoreticalTimesCalculator.ts'),
   'utf8'
 )
 
@@ -22,27 +22,33 @@ assert.match(
 )
 
 assert.match(
-  telemetrySource,
+  theoreticalSource,
   /const stintReferenceFuelBucket = getRaceFuelBucket\(stintFuelStart\)/,
   'getTheoreticalTimes must derive the race reference bucket from stintFuelStart.'
 )
 
 assert.match(
-  telemetrySource,
+  theoreticalSource,
   /const raceReference = resolveRaceReference\(bests, stintReferenceFuelBucket\)/,
   'Race BEST theoretical reference must use the stint starting fuel bucket.'
 )
 
 assert.match(
-  telemetrySource,
+  theoreticalSource,
   /const avgRaceReference = resolveAvgRaceReference\(bests, stintReferenceFuelBucket\)/,
   'Race AVG theoretical reference must use the same stint starting fuel bucket.'
 )
 
 assert.match(
-  telemetrySource,
-  /theoQualy: applyTempAdjustment\(bests\.bestQualy, bests\.bestQualyTemp\)/,
+  theoreticalSource,
+  /const qualyTheoreticalReference = buildTheoreticalReference\('qualy', null, bests\.bestQualy, bests\.bestQualyTemp, stintTemp\)/,
   'Qualifying theoretical reference must remain bestQualy with temperature adjustment.'
+)
+
+assert.match(
+  theoreticalSource,
+  /theoQualy: qualyTheoreticalReference\.adjustedMs/,
+  'Qualifying theoretical output must use the centralized adjusted reference.'
 )
 
 assert.match(
@@ -55,6 +61,18 @@ assert.match(
   sessionDetailSource,
   /data-testid="stint-reference-fuel"/,
   'Race stint UI must expose the fuel-start reference label.'
+)
+
+assert.match(
+  sessionDetailSource,
+  /data-testid="stint-start-fuel"/,
+  'Single-stint header must expose the exact starting fuel next to air and grip.'
+)
+
+assert.match(
+  sessionDetailSource,
+  /Riferimento: \$\{fuelLabel\} · fuori storico/,
+  'A non-historical race stint must explain the exact out-of-range starting fuel.'
 )
 
 console.log('[SESSION_DETAIL_RACE_THEORETICAL_BUCKETS] OK')
