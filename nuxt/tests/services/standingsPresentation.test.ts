@@ -4,6 +4,7 @@ import {
   formatStandingsDriverName,
   formatStandingsLapTime,
   formatStandingsRemainingTime,
+  formatStandingsRelativeGap,
   formatStandingsSessionType,
   formatStandingsTemperatures,
   selectStandingsCars,
@@ -17,7 +18,7 @@ import {
 
 const NOW_MS = 1_785_956_769_847
 const STANDINGS_LAYOUT = {
-  width: 486,
+  width: 590,
   height: 384,
   rowCapacity: 10,
   paddingX: 10,
@@ -26,14 +27,17 @@ const STANDINGS_LAYOUT = {
   rowHeight: 28,
   rowGap: 4,
   columnGap: 8,
+  vehicleGap: 4,
   columnWidths: {
     position: 30,
     driver: 140,
+    manufacturer: 28,
     carNumber: 50,
     pit: 22,
     bestLap: 92,
     lastLap: 92,
     progress: 76,
+    gap: 64,
   },
 }
 
@@ -41,12 +45,14 @@ function car(position: number, overrides: Partial<StandingsCarSnapshot> = {}): S
   return {
     car_index: 100 + position,
     car_class: 'GT3',
+    manufacturer_key: 'ferrari',
     race_number: position,
     cup_category: 0,
     current_driver_index: 0,
     drivers: [{ first_name: 'Alex', last_name: `Driver${position}` }],
     cup_position: position,
     position,
+    relative_gap_ms: position === 8 ? null : (position - 8) * -10_000,
     laps: 10,
     spline_position: position / 10,
     best_lap: { time_ms: 130_000 + position, is_invalid: false, is_valid_for_best: true },
@@ -355,6 +361,23 @@ describe('standingsPresentation', () => {
       drivers: [{ first_name: 'Alex', last_name: '' }],
     }))).toBe('NoData')
     expect(formatStandingsDriverName(car(1, { drivers: [], current_driver_index: 0 }))).toBe('NoData')
+    expect(formatStandingsRelativeGap(60_100)).toEqual({ text: '+60.1', tone: 'ahead' })
+    expect(formatStandingsRelativeGap(-164_000)).toEqual({ text: '-164.0', tone: 'behind' })
+    expect(formatStandingsRelativeGap(null)).toEqual({ text: '--.-', tone: 'neutral' })
+  })
+
+  it('presenta chiave costruttore e gap fisico senza consultare modello, posizione o delta-giro', () => {
+    const model = buildStandingsPresentation(state([
+      car(1, { manufacturer_key: 'ferrari', relative_gap_ms: 60_100, position: 1, delta_ms: -9999 }),
+      car(8, { manufacturer_key: 'bmw', relative_gap_ms: null, position: 8, delta_ms: 7000 }),
+      car(9, { manufacturer_key: 'unknown-brand', relative_gap_ms: -164_000, position: 9, delta_ms: 0 }),
+    ], 108, 108), { topCars: 3, carsAhead: 0, carsBehind: 0 }, NOW_MS)
+
+    expect(model.rows.map(row => [row.manufacturerCode, row.relativeGap, row.relativeGapTone])).toEqual([
+      ['FER', '+60.1', 'ahead'],
+      ['BMW', '--.-', 'neutral'],
+      ['—', '-164.0', 'behind'],
+    ])
   })
 
   it('mostra progress in ogni sessione e forza zero per pit o dato assente', () => {

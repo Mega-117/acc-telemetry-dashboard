@@ -13,7 +13,7 @@ function model(): StandingsPresentation {
       temperatures: '22/32°',
     },
     layout: {
-      width: 486,
+      width: 590,
       height: 384,
       rowCapacity: 10,
       paddingX: 10,
@@ -22,14 +22,17 @@ function model(): StandingsPresentation {
       rowHeight: 28,
       rowGap: 4,
       columnGap: 8,
+      vehicleGap: 4,
       columnWidths: {
         position: 30,
         driver: 140,
+        manufacturer: 28,
         carNumber: 50,
         pit: 22,
         bestLap: 92,
         lastLap: 92,
         progress: 76,
+        gap: 64,
       },
     },
     rows: [{
@@ -38,8 +41,12 @@ function model(): StandingsPresentation {
       positionFlash: 'improved',
       carNumber: '46',
       carNumberVariant: 'pro-am',
+      manufacturerCode: 'FER',
+      manufacturerName: 'Ferrari',
       driverName: 'V. Rossi',
       inPitLane: true,
+      relativeGap: '--.-',
+      relativeGapTone: 'neutral',
       lastLap: '2:17.001',
       bestLap: '2:16.500',
       fastestInClass: true,
@@ -61,11 +68,11 @@ describe('StandingsHud DOM', () => {
       backgroundOpacity: 0.5,
     }))
 
-    const headerValues = ['Practice', '01:02:03', '22/32°', 'Best', 'Last']
+    const headerValues = ['Practice', '01:02:03', '22/32°', 'Best', 'Last', 'Gap']
     const indexes = headerValues.map(value => html.indexOf(value))
     expect(indexes.every(index => index >= 0)).toBe(true)
     expect(indexes).toEqual([...indexes].sort((left, right) => left - right))
-    for (const value of ['V. Rossi', '46', '>P<', '2:16.500', '2:17.001']) {
+    for (const value of ['V. Rossi', 'FER', '46', '>P<', '2:16.500', '2:17.001', '--.-']) {
       expect(html).toContain(value)
     }
     expect(html).not.toContain('is-improved')
@@ -75,6 +82,9 @@ describe('StandingsHud DOM', () => {
     expect(html).toMatch(/class="[^"]*is-fastest[^"]*standings-row__best|class="[^"]*standings-row__best[^"]*is-fastest/)
     expect(html).toMatch(/class="[^"]*is-pb-focused[^"]*standings-row__last|class="[^"]*standings-row__last[^"]*is-pb-focused/)
     expect(html).toMatch(/class="[^"]*standings-row__number[^"]*has-number|class="[^"]*has-number[^"]*standings-row__number/)
+    expect(html).toContain('standings-row__manufacturer')
+    expect(html).toContain('aria-label="Ferrari"')
+    expect(html).toMatch(/class="[^"]*standings-row__gap[^"]*is-neutral|class="[^"]*is-neutral[^"]*standings-row__gap/)
     expect(html).toMatch(/class="[^"]*standings-row__number[^"]*is-pro-am|class="[^"]*is-pro-am[^"]*standings-row__number/)
     expect(html).toMatch(/class="[^"]*standings-row__pit[^"]*is-active|class="[^"]*is-active[^"]*standings-row__pit/)
     expect(html).not.toContain('rgb(38, 38, 69)')
@@ -120,7 +130,7 @@ describe('StandingsHud DOM', () => {
     }))
     expect(html).not.toContain('STANDINGS')
     expect(html).not.toMatch(/>POS<|>DRIVER<|>PIT</)
-    expect(html).toMatch(/>Best<.*>Last</s)
+    expect(html).toMatch(/>Best<.*>Last<.*>Gap</s)
     expect(html).toContain('standings-columns')
     expect(html).not.toContain('is-focused')
     expect(html).toContain('is-local')

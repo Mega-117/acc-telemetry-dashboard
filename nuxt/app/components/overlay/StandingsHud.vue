@@ -16,15 +16,26 @@ const layoutStyle = computed(() => ({
   '--standings-row-height': `${props.model.layout.rowHeight}px`,
   '--standings-row-gap': `${props.model.layout.rowGap}px`,
   '--standings-column-gap': `${props.model.layout.columnGap}px`,
+  '--standings-vehicle-gap': `${props.model.layout.vehicleGap}px`,
+  '--standings-manufacturer-width': `${props.model.layout.columnWidths.manufacturer}px`,
+  '--standings-number-width': `${props.model.layout.columnWidths.carNumber}px`,
 }))
+
+const vehicleWidth = computed(() => (
+  props.model.layout.columnWidths.manufacturer
+  + (props.model.columns.carNumber
+    ? props.model.layout.vehicleGap + props.model.layout.columnWidths.carNumber
+    : 0)
+))
 
 const gridTemplateColumns = computed(() => [
   `${props.model.layout.columnWidths.position}px`,
   `${props.model.layout.columnWidths.driver}px`,
-  ...(props.model.columns.carNumber ? [`${props.model.layout.columnWidths.carNumber}px`] : []),
+  `${vehicleWidth.value}px`,
   `${props.model.layout.columnWidths.pit}px`,
   ...(props.model.columns.bestLap ? [`${props.model.layout.columnWidths.bestLap}px`] : []),
   ...(props.model.columns.lastLap ? [`${props.model.layout.columnWidths.lastLap}px`] : []),
+  `${props.model.layout.columnWidths.gap}px`,
 ].join(' '))
 </script>
 
@@ -56,10 +67,11 @@ const gridTemplateColumns = computed(() => [
       >
         <span></span>
         <span></span>
-        <span v-if="model.columns.carNumber"></span>
+        <span></span>
         <span></span>
         <strong v-if="model.columns.bestLap">Best</strong>
         <strong v-if="model.columns.lastLap">Last</strong>
+        <strong>Gap</strong>
       </div>
     </header>
 
@@ -76,11 +88,18 @@ const gridTemplateColumns = computed(() => [
           :class="!row.local && row.positionFlash ? `is-${row.positionFlash}` : null"
         >{{ row.position ?? '—' }}</strong>
         <strong class="standings-row__driver">{{ row.driverName }}</strong>
-        <strong
-          v-if="model.columns.carNumber"
-          class="standings-row__number"
-          :class="row.carNumber !== null ? ['has-number', `is-${row.carNumberVariant}`] : null"
-        >{{ row.carNumber }}</strong>
+        <span class="standings-row__vehicle">
+          <strong
+            class="standings-row__manufacturer"
+            :aria-label="row.manufacturerName"
+            :title="row.manufacturerName"
+          >{{ row.manufacturerCode }}</strong>
+          <strong
+            v-if="model.columns.carNumber"
+            class="standings-row__number"
+            :class="row.carNumber !== null ? ['has-number', `is-${row.carNumberVariant}`] : null"
+          >{{ row.carNumber }}</strong>
+        </span>
         <strong
           class="standings-row__pit"
           :class="{ 'is-active': row.inPitLane }"
@@ -96,6 +115,10 @@ const gridTemplateColumns = computed(() => [
           class="standings-row__last"
           :class="row.lastLapPersonalBest ? `is-pb-${row.lastLapPersonalBest}` : null"
         >{{ row.lastLap }}</strong>
+        <strong
+          class="standings-row__gap"
+          :class="`is-${row.relativeGapTone}`"
+        >{{ row.relativeGap }}</strong>
         <span
           v-if="model.columns.progress"
           class="standings-row__progress-track"
@@ -135,7 +158,9 @@ const gridTemplateColumns = computed(() => [
 .standings-row__position.is-worsened { color:white;background:red; }
 .standings-row.is-local .standings-row__position { color:#00141c;background:#4de3ff; }
 .standings-row__driver { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-.standings-row__number { display:flex;width:100%;height:24px;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
+.standings-row__vehicle { position:relative;z-index:1;display:flex;min-width:0;gap:var(--standings-vehicle-gap);align-items:center; }
+.standings-row__manufacturer { display:flex;flex:0 0 var(--standings-manufacturer-width);width:var(--standings-manufacturer-width);height:24px;align-items:center;justify-content:center;overflow:hidden;color:#111;background:#f2f2f2;font-size:10px;font-weight:900;letter-spacing:-0.04em;line-height:1;text-align:center;outline:1px solid rgba(0,0,0,0.1);outline-offset:-1px; }
+.standings-row__number { display:flex;flex:0 0 var(--standings-number-width);width:var(--standings-number-width);height:24px;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
 .standings-row__number.has-number { color:#000;background:#fff; }
 .standings-row__number.has-number.is-pro-am { color:#fff;background:#000; }
 .standings-row__number.has-number.is-am { color:#fff;background:#f00; }
@@ -143,6 +168,10 @@ const gridTemplateColumns = computed(() => [
 .standings-row__pit { display:flex;width:100%;aspect-ratio:1;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
 .standings-row__pit.is-active { color:#000;background:#fff; }
 .standings-row__best,.standings-row__last { text-align:right; }
+.standings-row__gap { overflow:hidden;text-align:right;text-overflow:clip;font-size:17px; }
+.standings-row__gap.is-ahead { color:#ff9d00; }
+.standings-row__gap.is-behind { color:#00e7f0; }
+.standings-row__gap.is-neutral { color:rgba(255,255,255,0.64); }
 .standings-row__best.is-fastest { color:magenta; }
 .standings-row__last.is-pb-focused { color:yellow; }
 .standings-row__last.is-pb-other { color:green; }

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { normalizeStandingsLayout } from '../../app/services/overlay/standingsLayout'
 
 const layout = {
-  width: 486,
+  width: 590,
   height: 384,
   rowCapacity: 10,
   paddingX: 10,
@@ -11,14 +11,17 @@ const layout = {
   rowHeight: 28,
   rowGap: 4,
   columnGap: 8,
+  vehicleGap: 4,
   columnWidths: {
     position: 30,
     driver: 140,
+    manufacturer: 28,
     carNumber: 50,
     pit: 22,
     bestLap: 92,
     lastLap: 92,
     progress: 76,
+    gap: 64,
   },
 }
 

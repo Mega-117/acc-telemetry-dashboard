@@ -89,6 +89,7 @@ export default defineConfig({
         'app/services/overlay/tyreSetupViewModel.ts',
         'app/services/overlay/standingsCarNumber.ts',
         'app/services/overlay/standingsLayout.ts',
+        'app/services/overlay/standingsManufacturer.ts',
         'app/services/overlay/standingsPresentation.ts',
         'app/services/overlay/spectatorTelemetry.ts',
         'app/services/overlay/standingsHighlightTracker.ts',

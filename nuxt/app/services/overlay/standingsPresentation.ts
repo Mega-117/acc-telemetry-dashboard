@@ -1,4 +1,5 @@
 import { EMPTY_STANDINGS_LAYOUT, normalizeStandingsLayout, type StandingsLayout } from './standingsLayout'
+import { standingsManufacturerBadge } from './standingsManufacturer'
 
 export interface StandingsDriverSnapshot {
   first_name?: unknown
@@ -16,6 +17,7 @@ export interface StandingsLapSnapshot {
 export interface StandingsCarSnapshot {
   car_index: number
   car_class: string | null
+  manufacturer_key?: unknown
   race_number?: unknown
   cup_category?: unknown
   current_driver_index?: unknown
@@ -23,6 +25,8 @@ export interface StandingsCarSnapshot {
   cup_position?: unknown
   position?: unknown
   delta_ms?: unknown
+  relative_gap_ms?: unknown
+  relative_gap_reason?: unknown
   predicted_lap_ms?: unknown
   engine_running?: unknown
   kmh?: unknown
@@ -113,6 +117,7 @@ export interface StandingsPresentationOptions {
 export type StandingsPositionFlash = 'improved' | 'worsened'
 export type StandingsPersonalBestFlash = 'focused' | 'other'
 export type StandingsNumberPlateVariant = 'pro' | 'pro-am' | 'am' | 'silver' | 'neutral'
+export type StandingsRelativeGapTone = 'ahead' | 'behind' | 'neutral'
 
 export interface StandingsRowHighlight {
   positionFlash: StandingsPositionFlash | null
@@ -127,8 +132,12 @@ export interface StandingsPresentationRow {
   positionFlash: StandingsPositionFlash | null
   carNumber: string | null
   carNumberVariant: StandingsNumberPlateVariant
+  manufacturerCode: string
+  manufacturerName: string
   driverName: string
   inPitLane: boolean
+  relativeGap: string
+  relativeGapTone: StandingsRelativeGapTone
   lastLap: string | null
   bestLap: string | null
   fastestInClass: boolean
@@ -337,6 +346,19 @@ export function selectStandingsCars(
   return eligible.filter(car => selected.has(car.car_index))
 }
 
+export function formatStandingsRelativeGap(value: unknown): {
+  text: string
+  tone: StandingsRelativeGapTone
+} {
+  const gapMs = finiteNumber(value)
+  if (gapMs === null || gapMs === 0) return { text: '--.-', tone: 'neutral' }
+  const seconds = Math.abs(gapMs) / 1000
+  return {
+    text: `${gapMs > 0 ? '+' : '-'}${seconds.toFixed(1)}`,
+    tone: gapMs > 0 ? 'ahead' : 'behind',
+  }
+}
+
 function standingsProgressPercent(
   car: Pick<StandingsCarSnapshot, 'car_location' | 'spline_position'> | null,
   visible: boolean,
@@ -473,6 +495,10 @@ export function buildStandingsPresentation(
       const inPitLane = finiteNumber(car.car_location) === 2
       const highlight = highlights[car.car_index]
       const progressPercent = standingsProgressPercent(car, showProgressData)
+      const manufacturer = standingsManufacturerBadge(car.manufacturer_key)
+      const relativeGap = isLocal
+        ? { text: '--.-', tone: 'neutral' as const }
+        : formatStandingsRelativeGap(car.relative_gap_ms)
       return {
         carIndex: car.car_index,
         position: classPositionByCarIndex.get(car.car_index) as number,
@@ -480,8 +506,12 @@ export function buildStandingsPresentation(
         carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
           ? String(Math.round(raceNumber)) : null,
         carNumberVariant: standingsNumberPlateVariant(car.cup_category),
+        manufacturerCode: manufacturer.code,
+        manufacturerName: manufacturer.name,
         driverName: isLocal ? formatLocalDriverName(sharedLocal) : formatStandingsDriverName(car),
         inPitLane,
+        relativeGap: relativeGap.text,
+        relativeGapTone: relativeGap.tone,
         lastLap: options.showLastLap ? formatStandingsLapTime(lapTime(car, 'last')) : null,
         bestLap: options.showFastestLap ? formatStandingsLapTime(bestLapMs) : null,
         fastestInClass: options.showFastestLap && bestLapMs !== null && bestLapMs === bestInClassMs,
@@ -498,6 +528,7 @@ export function buildStandingsPresentation(
     const raceNumber = finiteNumber(udpLocal?.race_number)
     const localInPitLane = finiteNumber(udpLocal?.car_location) === 2
     const localProgressPercent = standingsProgressPercent(udpLocal ?? null, showProgressData)
+    const manufacturer = standingsManufacturerBadge(udpLocal?.manufacturer_key)
     rows = [{
       carIndex: localCarIndex,
       position: localPosition,
@@ -505,8 +536,12 @@ export function buildStandingsPresentation(
       carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
         ? String(Math.round(raceNumber)) : null,
       carNumberVariant: standingsNumberPlateVariant(udpLocal?.cup_category),
+      manufacturerCode: manufacturer.code,
+      manufacturerName: manufacturer.name,
       driverName: localName,
       inPitLane: localInPitLane,
+      relativeGap: '--.-',
+      relativeGapTone: 'neutral',
       lastLap: options.showLastLap ? formatStandingsLapTime(udpLocal ? lapTime(udpLocal, 'last') : null) : null,
       bestLap: options.showFastestLap ? formatStandingsLapTime(udpLocal ? lapTime(udpLocal, 'best') : null) : null,
       fastestInClass: false,
