@@ -1,6 +1,7 @@
 import { rebuildTrackBestsProjection, writeUserProjectionDocuments } from './projectionRebuildService'
 import { applyTrackBestsProjectionDeltas, type TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { applyUserProjectionDeltas, type UserProjectionDelta } from './syncUserProjectionDeltaService'
+import { applyTrackDetailProjectionDeltas } from './trackDetailProjectionService'
 import type { SessionDocument } from '~/types/telemetry'
 
 export async function refreshSyncProjections(params: {
@@ -68,10 +69,20 @@ export async function refreshSyncProjections(params: {
       setDocFn
     })
 
-    return {
-      sessions: [],
-      projectionsWritten: true,
-      rebuiltTrackBests: false
+    const trackDetailResult = await applyTrackDetailProjectionDeltas({
+      db,
+      uid,
+      deltas: userProjectionDeltas,
+      getDocFn,
+      setDocFn
+    })
+
+    if (!trackDetailResult.requiresFullRebuild) {
+      return {
+        sessions: [],
+        projectionsWritten: true,
+        rebuiltTrackBests: false
+      }
     }
   }
 

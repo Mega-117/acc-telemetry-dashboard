@@ -1,6 +1,6 @@
 import type { CarCategory } from '~/utils/telemetryFormat'
 
-export const TRACK_DETAIL_PROJECTION_SCHEMA_VERSION = 1
+export const TRACK_DETAIL_PROJECTION_SCHEMA_VERSION = 2
 
 export interface TrackFuelBucketReference {
   bucket: string
@@ -72,6 +72,7 @@ export interface TrackHeaderProjection {
 
 export interface TrackRecentSessionProjection {
   id: string
+  dateStart?: string
   date: string
   time: string
   type: 'practice' | 'qualify' | 'race'
@@ -84,6 +85,7 @@ export interface TrackRecentSessionProjection {
 
 export interface TrackHistoricalPointProjection {
   date: string
+  dateStart?: string
   sessionId: string
   bestQualy?: string
   bestRace?: string
@@ -118,6 +120,7 @@ export interface TrackDetailProjectionCategoryDocument {
 export interface TrackDetailProjectionDocument {
   schemaVersion: number
   trackId: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Firestore Timestamp, server sentinel or ISO compatibility value
   updatedAt?: any
   lastSessionDate: string | null
   categories: Partial<Record<CarCategory, TrackDetailProjectionCategoryDocument>>

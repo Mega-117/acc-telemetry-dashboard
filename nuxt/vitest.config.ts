@@ -65,6 +65,7 @@ export default defineConfig({
         'app/services/runtime/runtimeWindowBridge.ts',
         'app/services/session-detail/sessionMath.ts',
         'app/services/session-detail/sessionLapSeries.ts',
+        'app/services/session-detail/sessionStintMetrics.ts',
         'app/services/sync/firebaseStructureHealthService.ts',
         'app/services/sync/canonicalMigrationCheckpoint.ts',
         'app/services/sync/autoSyncController.ts',

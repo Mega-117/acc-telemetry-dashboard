@@ -6,26 +6,15 @@ import type {
   SessionDetailStint
 } from '~/types/sessionDetailViewModel'
 import type { LapData, StintData } from '~/types/telemetry'
+import { buildRawStintMetrics } from './sessionStintMetrics'
 
 type SessionDetailSourceLap = LapData & { grip_level?: string }
-
-function isValidLap(lap: LapData): boolean {
-  return lap.is_valid && !lap.has_pit_stop
-}
-
-function getBestLapMs(laps: LapData[]): number | null {
-  return laps.reduce<number | null>((best, lap) => {
-    if (!isValidLap(lap)) return best
-    return best === null ? lap.lap_time_ms : Math.min(best, lap.lap_time_ms)
-  }, null)
-}
 
 export function buildSessionDetailStint(
   stint: StintData,
   formatLapTime: (value: number | null | undefined) => string
 ): SessionDetailStint {
-  const validLaps = stint.laps.filter(isValidLap)
-  const bestMs = getBestLapMs(stint.laps)
+  const metrics = buildRawStintMetrics(stint)
   const durationMs = stint.stint_drive_time_ms
     || stint.laps.reduce((sum, lap) => sum + (lap.lap_time_ms || 0), 0)
 
@@ -33,13 +22,13 @@ export function buildSessionDetailStint(
     number: stint.stint_number,
     type: stint.type === 'Qualify' ? 'Q' : stint.type === 'Race' ? 'R' : 'P',
     laps: stint.laps.length,
-    best: formatLapTime(bestMs),
-    bestMs,
-    avg: formatLapTime(stint.avg_clean_lap),
-    avgMs: stint.avg_clean_lap,
-    avgCleanLap: formatLapTime(stint.avg_clean_lap),
-    avgWarning: validLaps.length < 5,
-    validLapsCount: validLaps.length,
+    best: formatLapTime(metrics.bestMs),
+    bestMs: metrics.bestMs,
+    avg: formatLapTime(metrics.avgMs),
+    avgMs: metrics.avgMs,
+    avgCleanLap: formatLapTime(metrics.avgMs),
+    avgWarning: metrics.avgWarning,
+    validLapsCount: metrics.cleanLapsCount,
     durationMs,
     deltaVsTheo: '—'
   }

@@ -1,5 +1,5 @@
 import type { FullSession } from '~/types/telemetry'
-import { getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
+import { buildRawStintMetrics, isCleanSessionLap } from './sessionStintMetrics'
 import type { SessionDisplayModel, SessionDisplayLap, SessionDisplayStint } from '~/types/sessionDisplayModel'
 
 export function createEmptySessionDisplayModel(sessionId: string): SessionDisplayModel {
@@ -21,10 +21,6 @@ export function createEmptySessionDisplayModel(sessionId: string): SessionDispla
     stints: [],
     lapsData: {}
   }
-}
-
-function isCleanLap(lap: { lap_time_ms: number; is_valid: boolean; has_pit_stop: boolean; pit_out_lap?: boolean }): boolean {
-  return !!lap.lap_time_ms && lap.is_valid && !lap.has_pit_stop && !lap.pit_out_lap
 }
 
 export function buildSessionDisplayModel(params: {
@@ -54,7 +50,6 @@ export function buildSessionDisplayModel(params: {
 
   const fs = fullSession
   const info = fs.session_info
-  const minValidLapsForAvg = 5
   const sessionBestLap = (
     info.session_best_lap &&
     info.session_best_lap > 0 &&
@@ -62,19 +57,11 @@ export function buildSessionDisplayModel(params: {
   ) ? info.session_best_lap : 0
 
   const stints: SessionDisplayStint[] = fs.stints.map((stint) => {
-    const validLaps = stint.laps.filter(isCleanLap)
-    const raceReferenceLaps = stint.type === 'Race'
-      ? validLaps.filter((lap) => !!getRaceFuelBucket(lap.fuel_start ?? lap.fuel_remaining))
-      : validLaps
-    const validLapsCount = validLaps.length
-    const bestLapMs = raceReferenceLaps.length > 0 ? Math.min(...raceReferenceLaps.map((lap) => lap.lap_time_ms)) : null
-    const avgLapMs = (
-      stint.type === 'Race'
-      && !getRaceFuelBucket(stint.fuel_start)
-    )
-      ? null
-      : (validLapsCount >= minValidLapsForAvg && stint.avg_clean_lap ? stint.avg_clean_lap : null)
-    const avgWarning = validLapsCount > 0 && validLapsCount < minValidLapsForAvg
+    const metrics = buildRawStintMetrics(stint)
+    const validLapsCount = metrics.cleanLapsCount
+    const bestLapMs = metrics.bestMs
+    const avgLapMs = metrics.avgMs
+    const avgWarning = metrics.avgWarning
 
     return {
       number: stint.stint_number,
@@ -124,7 +111,7 @@ export function buildSessionDisplayModel(params: {
   let bestRaceStintNum = 0
 
   fs.stints.forEach((stint) => {
-    const validLaps = stint.laps.filter(isCleanLap)
+    const validLaps = stint.laps.filter(isCleanSessionLap)
     if (validLaps.length === 0) return
 
     if (stint.type === 'Qualify') {
@@ -136,10 +123,9 @@ export function buildSessionDisplayModel(params: {
       return
     }
 
-    const raceReferenceLaps = validLaps.filter((lap) => !!getRaceFuelBucket(lap.fuel_start ?? lap.fuel_remaining))
-    if (raceReferenceLaps.length === 0) return
+    if (stint.type !== 'Race') return
 
-    const bestMs = Math.min(...raceReferenceLaps.map((lap) => lap.lap_time_ms))
+    const bestMs = Math.min(...validLaps.map((lap) => lap.lap_time_ms))
 
     if (!bestRaceMs || bestMs < bestRaceMs) {
       bestRaceMs = bestMs
