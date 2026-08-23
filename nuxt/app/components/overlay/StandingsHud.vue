@@ -79,13 +79,11 @@ const gridTemplateColumns = computed(() => [
         <strong
           v-if="model.columns.carNumber"
           class="standings-row__number"
-          :style="{
-            backgroundColor: row.carNumberColors.background,
-            color: row.carNumberColors.color,
-          }"
+          :class="{ 'has-number': row.carNumber !== null }"
         >{{ row.carNumber }}</strong>
         <strong
           class="standings-row__pit"
+          :class="{ 'is-active': row.inPitLane }"
           :aria-label="row.inPitLane ? 'In pit lane' : 'In pista'"
         >{{ row.inPitLane ? 'P' : '' }}</strong>
         <strong
@@ -137,8 +135,10 @@ const gridTemplateColumns = computed(() => [
 .standings-row__position.is-worsened { color:white;background:red; }
 .standings-row.is-local .standings-row__position { color:#00141c;background:#4de3ff; }
 .standings-row__driver { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-.standings-row__number { text-align:center; }
-.standings-row__pit { text-align:center; }
+.standings-row__number { display:flex;width:100%;height:24px;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
+.standings-row__number.has-number { color:#000;background:#fff; }
+.standings-row__pit { display:flex;width:100%;aspect-ratio:1;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
+.standings-row__pit.is-active { color:#000;background:#fff; }
 .standings-row__best,.standings-row__last { text-align:right; }
 .standings-row__best.is-fastest { color:magenta; }
 .standings-row__last.is-pb-focused { color:yellow; }

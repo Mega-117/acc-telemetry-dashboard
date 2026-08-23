@@ -37,7 +37,6 @@ function model(): StandingsPresentation {
       position: 2,
       positionFlash: 'improved',
       carNumber: '46',
-      carNumberColors: { background: 'rgb(38, 38, 69)', color: 'white' },
       driverName: 'V. Rossi',
       inPitLane: true,
       lastLap: '2:17.001',
@@ -74,6 +73,24 @@ describe('StandingsHud DOM', () => {
     expect(html).toContain('standings-row__progress')
     expect(html).toMatch(/class="[^"]*is-fastest[^"]*standings-row__best|class="[^"]*standings-row__best[^"]*is-fastest/)
     expect(html).toMatch(/class="[^"]*is-pb-focused[^"]*standings-row__last|class="[^"]*standings-row__last[^"]*is-pb-focused/)
+    expect(html).toMatch(/class="[^"]*standings-row__number[^"]*has-number|class="[^"]*has-number[^"]*standings-row__number/)
+    expect(html).toMatch(/class="[^"]*standings-row__pit[^"]*is-active|class="[^"]*is-active[^"]*standings-row__pit/)
+    expect(html).not.toContain('rgb(38, 38, 69)')
+  })
+
+  it('mantiene trasparenti le celle prive di numero e le auto non ai box', async () => {
+    const inactive = model()
+    inactive.rows[0].carNumber = null
+    inactive.rows[0].inPitLane = false
+    const html = await renderToString(createSSRApp(StandingsHud, {
+      model: inactive,
+      backgroundOpacity: 0.5,
+    }))
+
+    expect(html).toContain('standings-row__number')
+    expect(html).toContain('standings-row__pit')
+    expect(html).not.toContain('has-number')
+    expect(html).not.toContain('is-active')
   })
 
   it('monta solo le label Best/Last, senza categoria o campi inventati', async () => {

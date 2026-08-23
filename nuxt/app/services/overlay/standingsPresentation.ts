@@ -1,7 +1,5 @@
-import { standingsCarNumberColors, type StandingsCarNumberColors } from './standingsCarNumber'
 import { EMPTY_STANDINGS_LAYOUT, normalizeStandingsLayout, type StandingsLayout } from './standingsLayout'
 
-export { standingsCarNumberColors } from './standingsCarNumber'
 export interface StandingsDriverSnapshot {
   first_name?: unknown
   last_name?: unknown
@@ -126,7 +124,6 @@ export interface StandingsPresentationRow {
   position: number | null
   positionFlash: StandingsPositionFlash | null
   carNumber: string | null
-  carNumberColors: StandingsCarNumberColors
   driverName: string
   inPitLane: boolean
   lastLap: string | null
@@ -469,7 +466,6 @@ export function buildStandingsPresentation(
         positionFlash: isLocal ? null : (highlight?.positionFlash ?? null),
         carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
           ? String(Math.round(raceNumber)) : null,
-        carNumberColors: standingsCarNumberColors(car.car_class),
         driverName: isLocal ? formatLocalDriverName(sharedLocal) : formatStandingsDriverName(car),
         inPitLane,
         lastLap: options.showLastLap ? formatStandingsLapTime(lapTime(car, 'last')) : null,
@@ -494,7 +490,6 @@ export function buildStandingsPresentation(
       positionFlash: null,
       carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
         ? String(Math.round(raceNumber)) : null,
-      carNumberColors: standingsCarNumberColors(localClass),
       driverName: localName,
       inPitLane: localInPitLane,
       lastLap: options.showLastLap ? formatStandingsLapTime(udpLocal ? lapTime(udpLocal, 'last') : null) : null,

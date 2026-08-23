@@ -7,7 +7,6 @@ import {
   formatStandingsSessionType,
   formatStandingsTemperatures,
   selectStandingsCars,
-  standingsCarNumberColors,
   type StandingsCarSnapshot,
   type StandingsHighlightMap,
   type StandingsPresentationOptions,
@@ -320,7 +319,7 @@ describe('standingsPresentation', () => {
     expect(formatStandingsTemperatures({ ambient_temp: 20, track_temp: null })).toBeNull()
   })
 
-  it('formatta pilota, tempi e palette numero senza fallback inventati', () => {
+  it('formatta pilota e tempi senza fallback inventati', () => {
     expect(formatStandingsLapTime(125_678)).toBe('2:05.678')
     expect(formatStandingsLapTime(null)).toBeNull()
     expect(formatStandingsDriverName(car(1))).toBe('A. Driver1')
@@ -331,13 +330,6 @@ describe('standingsPresentation', () => {
       drivers: [{ first_name: 'Alex', last_name: '' }],
     }))).toBe('NoData')
     expect(formatStandingsDriverName(car(1, { drivers: [], current_driver_index: 0 }))).toBe('NoData')
-    expect(standingsCarNumberColors('GT3')).toEqual({ background: 'transparent', color: 'white' })
-    expect(standingsCarNumberColors('GT4').background).toBe('rgb(38, 38, 69)')
-    expect(standingsCarNumberColors('ST').background).toBe('rgb(204, 168, 0)')
-    expect(standingsCarNumberColors('Cup').background).toBe('rgb(69, 124, 69)')
-    expect(standingsCarNumberColors('CHL').background).toBe('red')
-    expect(standingsCarNumberColors('TCX').background).toBe('rgb(0, 124, 167)')
-    expect(standingsCarNumberColors('GT2').background).toBe('darkred')
   })
 
   it('mostra progress in ogni sessione e forza zero per pit o dato assente', () => {
