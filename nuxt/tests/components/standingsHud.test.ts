@@ -37,6 +37,7 @@ function model(): StandingsPresentation {
       position: 2,
       positionFlash: 'improved',
       carNumber: '46',
+      carNumberVariant: 'pro-am',
       driverName: 'V. Rossi',
       inPitLane: true,
       lastLap: '2:17.001',
@@ -74,6 +75,7 @@ describe('StandingsHud DOM', () => {
     expect(html).toMatch(/class="[^"]*is-fastest[^"]*standings-row__best|class="[^"]*standings-row__best[^"]*is-fastest/)
     expect(html).toMatch(/class="[^"]*is-pb-focused[^"]*standings-row__last|class="[^"]*standings-row__last[^"]*is-pb-focused/)
     expect(html).toMatch(/class="[^"]*standings-row__number[^"]*has-number|class="[^"]*has-number[^"]*standings-row__number/)
+    expect(html).toMatch(/class="[^"]*standings-row__number[^"]*is-pro-am|class="[^"]*is-pro-am[^"]*standings-row__number/)
     expect(html).toMatch(/class="[^"]*standings-row__pit[^"]*is-active|class="[^"]*is-active[^"]*standings-row__pit/)
     expect(html).not.toContain('rgb(38, 38, 69)')
   })
@@ -91,6 +93,24 @@ describe('StandingsHud DOM', () => {
     expect(html).toContain('standings-row__pit')
     expect(html).not.toContain('has-number')
     expect(html).not.toContain('is-active')
+  })
+
+  it('rende le quattro palette equipaggio e il fallback senza esporre CupCategory al template', async () => {
+    const variants = ['pro', 'pro-am', 'am', 'silver', 'neutral'] as const
+    const palette = model()
+    palette.rows = variants.map((variant, index) => ({
+      ...palette.rows[0],
+      carIndex: index + 1,
+      carNumber: String(index + 1),
+      carNumberVariant: variant,
+    }))
+    const html = await renderToString(createSSRApp(StandingsHud, {
+      model: palette,
+      backgroundOpacity: 0.5,
+    }))
+
+    for (const variant of variants) expect(html).toContain(`is-${variant}`)
+    expect(html).not.toContain('cup_category')
   })
 
   it('monta solo le label Best/Last, senza categoria o campi inventati', async () => {

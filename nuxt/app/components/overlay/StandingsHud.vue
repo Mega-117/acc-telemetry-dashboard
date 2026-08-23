@@ -79,7 +79,7 @@ const gridTemplateColumns = computed(() => [
         <strong
           v-if="model.columns.carNumber"
           class="standings-row__number"
-          :class="{ 'has-number': row.carNumber !== null }"
+          :class="row.carNumber !== null ? ['has-number', `is-${row.carNumberVariant}`] : null"
         >{{ row.carNumber }}</strong>
         <strong
           class="standings-row__pit"
@@ -137,6 +137,9 @@ const gridTemplateColumns = computed(() => [
 .standings-row__driver { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .standings-row__number { display:flex;width:100%;height:24px;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
 .standings-row__number.has-number { color:#000;background:#fff; }
+.standings-row__number.has-number.is-pro-am { color:#fff;background:#000; }
+.standings-row__number.has-number.is-am { color:#fff;background:#f00; }
+.standings-row__number.has-number.is-silver { color:#fff;background:#707070; }
 .standings-row__pit { display:flex;width:100%;aspect-ratio:1;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
 .standings-row__pit.is-active { color:#000;background:#fff; }
 .standings-row__best,.standings-row__last { text-align:right; }

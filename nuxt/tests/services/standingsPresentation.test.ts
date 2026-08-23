@@ -7,6 +7,7 @@ import {
   formatStandingsSessionType,
   formatStandingsTemperatures,
   selectStandingsCars,
+  standingsNumberPlateVariant,
   type StandingsCarSnapshot,
   type StandingsHighlightMap,
   type StandingsPresentationOptions,
@@ -41,6 +42,7 @@ function car(position: number, overrides: Partial<StandingsCarSnapshot> = {}): S
     car_index: 100 + position,
     car_class: 'GT3',
     race_number: position,
+    cup_category: 0,
     current_driver_index: 0,
     drivers: [{ first_name: 'Alex', last_name: `Driver${position}` }],
     cup_position: position,
@@ -283,6 +285,29 @@ describe('standingsPresentation', () => {
     expect(model.rows[0]).not.toHaveProperty('incidents')
     expect(model.rows[0]).not.toHaveProperty('stintTimer')
     expect(model.layout).toEqual(STANDINGS_LAYOUT)
+  })
+
+  it('mappa soltanto le CupCategory ACC supportate e degrada in modo neutro', () => {
+    expect([
+      standingsNumberPlateVariant(0),
+      standingsNumberPlateVariant(1),
+      standingsNumberPlateVariant(2),
+      standingsNumberPlateVariant(3),
+    ]).toEqual(['pro', 'pro-am', 'am', 'silver'])
+    for (const value of [4, null, undefined, '1', Number.NaN, 99]) {
+      expect(standingsNumberPlateVariant(value)).toBe('neutral')
+    }
+
+    const model = buildStandingsPresentation(state([
+      car(1, { cup_category: 0 }),
+      car(2, { cup_category: 1 }),
+      car(3, { cup_category: 2 }),
+      car(4, { cup_category: 3 }),
+      car(5, { cup_category: 4 }),
+    ], 103, 103), { topCars: 5, carsAhead: 0, carsBehind: 0 }, NOW_MS)
+    expect(model.rows.map(row => row.carNumberVariant)).toEqual([
+      'pro', 'pro-am', 'am', 'silver', 'neutral',
+    ])
   })
 
   it('clampa i conteggi 0-5 e marca il best di classe senza includere righe extra', () => {

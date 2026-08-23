@@ -17,6 +17,7 @@ export interface StandingsCarSnapshot {
   car_index: number
   car_class: string | null
   race_number?: unknown
+  cup_category?: unknown
   current_driver_index?: unknown
   drivers: StandingsDriverSnapshot[]
   cup_position?: unknown
@@ -111,6 +112,7 @@ export interface StandingsPresentationOptions {
 
 export type StandingsPositionFlash = 'improved' | 'worsened'
 export type StandingsPersonalBestFlash = 'focused' | 'other'
+export type StandingsNumberPlateVariant = 'pro' | 'pro-am' | 'am' | 'silver' | 'neutral'
 
 export interface StandingsRowHighlight {
   positionFlash: StandingsPositionFlash | null
@@ -124,6 +126,7 @@ export interface StandingsPresentationRow {
   position: number | null
   positionFlash: StandingsPositionFlash | null
   carNumber: string | null
+  carNumberVariant: StandingsNumberPlateVariant
   driverName: string
   inPitLane: boolean
   lastLap: string | null
@@ -209,6 +212,16 @@ function finiteNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null
   const numeric = Number(value)
   return Number.isFinite(numeric) ? numeric : null
+}
+
+/** ACC Broadcasting CupCategory controls the entry's number-plate palette. */
+export function standingsNumberPlateVariant(value: unknown): StandingsNumberPlateVariant {
+  if (typeof value !== 'number' || !Number.isInteger(value)) return 'neutral'
+  if (value === 0) return 'pro'
+  if (value === 1) return 'pro-am'
+  if (value === 2) return 'am'
+  if (value === 3) return 'silver'
+  return 'neutral'
 }
 
 function positiveLapTime(value: unknown): number | null {
@@ -466,6 +479,7 @@ export function buildStandingsPresentation(
         positionFlash: isLocal ? null : (highlight?.positionFlash ?? null),
         carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
           ? String(Math.round(raceNumber)) : null,
+        carNumberVariant: standingsNumberPlateVariant(car.cup_category),
         driverName: isLocal ? formatLocalDriverName(sharedLocal) : formatStandingsDriverName(car),
         inPitLane,
         lastLap: options.showLastLap ? formatStandingsLapTime(lapTime(car, 'last')) : null,
@@ -490,6 +504,7 @@ export function buildStandingsPresentation(
       positionFlash: null,
       carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
         ? String(Math.round(raceNumber)) : null,
+      carNumberVariant: standingsNumberPlateVariant(udpLocal?.cup_category),
       driverName: localName,
       inPitLane: localInPitLane,
       lastLap: options.showLastLap ? formatStandingsLapTime(udpLocal ? lapTime(udpLocal, 'last') : null) : null,
