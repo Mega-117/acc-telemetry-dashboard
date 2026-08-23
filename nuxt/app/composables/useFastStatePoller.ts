@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import type { TrackReferencePhase } from '~/services/spotter/trackVoiceReferences'
+import { normalizeSectorHud, type SectorHudState } from '~/composables/useLiveStatePoller'
 import {
   emptyTyreSetupViewModel,
   normalizeTyreSetupViewModel,
@@ -69,7 +70,7 @@ export interface FastStateInfo {
   damageTimeMs: number | null
   currentLapTimeMs: number | null
   lastLapTimeMs: number | null
-  lapValid: boolean
+  lapValid: boolean | null
   lastLapValid: boolean | null
   lapsCompleted: number
 }
@@ -79,12 +80,13 @@ export interface FastOverlayState {
   context: FastStateContext | null
   localDriver: FastStateLocalDriver | null
   info: FastStateInfo | null
+  sectorHud: SectorHudState | null
   flag: number | null
   lapsCompleted: number
   currentLapTimeMs: number | null
   lastLapTimeMs: number | null
   bestLapTimeMs: number | null
-  lapValid: boolean
+  lapValid: boolean | null
   isFresh: boolean
   isLive: boolean
   ignitionOn: boolean
@@ -145,12 +147,13 @@ const EMPTY_FAST_STATE: FastOverlayState = {
   context: null,
   localDriver: null,
   info: null,
+  sectorHud: null,
   flag: null,
   lapsCompleted: 0,
   currentLapTimeMs: null,
   lastLapTimeMs: null,
   bestLapTimeMs: null,
-  lapValid: false,
+  lapValid: null,
   isFresh: false,
   isLive: false,
   ignitionOn: false,
@@ -277,7 +280,7 @@ function normalizeInfo(raw: any): FastStateInfo | null {
     damageTimeMs: toNumber(raw.damage_time_ms),
     currentLapTimeMs: toNumber(raw.current_lap_time_ms),
     lastLapTimeMs: toNumber(raw.last_lap_time_ms),
-    lapValid: raw.lap_valid === true,
+    lapValid: typeof raw.lap_valid === 'boolean' ? raw.lap_valid : null,
     lastLapValid: typeof raw.last_lap_valid === 'boolean' ? raw.last_lap_valid : null,
     lapsCompleted: toNumber(raw.laps_completed) ?? 0,
   }
@@ -356,12 +359,13 @@ function normalizeFastState(state: any): FastOverlayState {
     context: normalizeContext(state.context),
     localDriver: normalizeLocalDriver(state.local_driver),
     info: normalizeInfo(state.info),
+    sectorHud: normalizeSectorHud(state.sector_hud),
     flag: toNumber(state.flag),
     lapsCompleted: toNumber(state.laps_completed) ?? 0,
     currentLapTimeMs: toNumber(state.current_lap_time_ms),
     lastLapTimeMs: toNumber(state.last_lap_time_ms),
     bestLapTimeMs: toNumber(state.best_lap_time_ms),
-    lapValid: state.lap_valid === true,
+    lapValid: typeof state.lap_valid === 'boolean' ? state.lap_valid : null,
     isFresh: true,
     isLive: state.is_live === true,
     ignitionOn: state.ignition_on === true,

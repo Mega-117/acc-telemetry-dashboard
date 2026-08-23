@@ -12,6 +12,7 @@ import HudTimedPager from '~/components/overlay/HudTimedPager.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
 import { normalizeSectorDeltaReference } from '~/utils/sectorDeltaPresentation'
+import { resolveLocalCompactPresentation } from '~/utils/compactSectorPresentation'
 import {
   evaluateInfoTarget,
   type InfoTargetOutcome,
@@ -51,9 +52,9 @@ const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePol
 const telemetry = useOverlayTelemetrySource(getApi)
 const { fastState, startFastStatePolling, stopFastStatePolling } = telemetry
 const {
-  heldLap,
-  displayedLapTimeMs,
-  displayedLapValid,
+  heldLap: focusedHeldLap,
+  displayedLapTimeMs: focusedDisplayedLapTimeMs,
+  displayedLapValid: focusedDisplayedLapValid,
 } = useCompletedLapHold(fastState)
 const {
   isElectron,
@@ -88,15 +89,22 @@ const showCurrentLap = computed(() => settings.value?.showCurrentLap !== false)
 const deltaReference = computed(() => normalizeSectorDeltaReference(settings.value?.deltaReference))
 const variant = computed(() => settings.value?.variant === 'compact' ? 'compact' : 'classic')
 const onTargetPage = computed(() => variant.value === 'compact' && compactPage.value === 'target')
-const compactDisplayLap = computed(() => ({
-  timeMs: displayedLapTimeMs.value,
-  valid: displayedLapValid.value,
-}))
-const liveCurrentLapTimeMs = computed(() => fastState.value.info?.currentLapTimeMs ?? null)
+const localCompactPresentation = computed(() => resolveLocalCompactPresentation(fastState.value))
+const compactDisplayLap = computed(() => telemetry.source.value === 'focused'
+  ? { timeMs: focusedDisplayedLapTimeMs.value, valid: focusedDisplayedLapValid.value }
+  : localCompactPresentation.value.displayLap)
+const heldLap = computed(() => telemetry.source.value === 'focused'
+  ? focusedHeldLap.value
+  : localCompactPresentation.value.heldLap)
+const liveCurrentLapTimeMs = computed(() => telemetry.source.value === 'focused'
+  ? fastState.value.info?.currentLapTimeMs ?? null
+  : fastState.value.sectorHud?.currentLapTimeMs ?? fastState.value.info?.currentLapTimeMs ?? null)
 const rootScale = computed(() => onTargetPage.value ? 1 : scale.value)
 const visibleSectorHud = computed(() => telemetry.source.value === 'focused'
   ? telemetry.sectorHud.value
-  : liveLap.value.sectorHud)
+  : variant.value === 'compact'
+    ? fastState.value.sectorHud
+    : liveLap.value.sectorHud)
 function contextualTargetTimeMs(): number {
   const contextual = fastState.value.info?.bestLapTimeMs
     || fastState.value.info?.lastLapTimeMs

@@ -21,6 +21,10 @@ const DELTA_ELIGIBLE_SESSION_TYPES: ReadonlySet<number> = new Set(
   Object.values(ACC_BROADCASTING_SESSION_TYPES),
 )
 
+function validityFromInvalidFlag(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? !value : null
+}
+
 export interface FocusedInfoDeltaAccumulator {
   key: string | null
   negativeExtremeMs: number
@@ -177,7 +181,7 @@ function focusedInfo(
     damageTimeMs: null,
     currentLapTimeMs: lapTime(car?.current_lap, car?.current_lap_ms),
     lastLapTimeMs: lapTime(car?.last_lap, car?.last_lap_ms),
-    lapValid: car?.current_lap?.is_invalid === false,
+    lapValid: validityFromInvalidFlag(car?.current_lap?.is_invalid),
     lastLapValid: typeof car?.last_lap?.is_invalid === 'boolean'
       ? car.last_lap?.is_invalid === false
       : null,
@@ -242,6 +246,7 @@ function focusedFastState(
       serverId: local.context?.serverId ?? null,
     },
     info,
+    sectorHud: null,
     flag: focusedFlag(state),
     lapsCompleted: info.lapsCompleted,
     currentLapTimeMs: info.currentLapTimeMs,
@@ -347,8 +352,9 @@ export function buildFocusedSectorHud(car: StandingsCarSnapshot): SectorHudState
     currentLapTimeMs,
     lastLapTimeMs: lapTime(car.last_lap, car.last_lap_ms),
     bestLapTimeMs: lapTime(car.best_lap, car.best_lap_ms),
-    lapValid: car.current_lap?.is_invalid === false,
+    lapValid: validityFromInvalidFlag(car.current_lap?.is_invalid),
     awaitingFlyingLap: car.current_lap?.lap_type === 'outlap',
+    holdUntilTs: null,
     sectors,
   }
 }

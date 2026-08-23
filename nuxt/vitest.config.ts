@@ -110,6 +110,7 @@ export default defineConfig({
         'app/utils/hudOverlayWindow.ts',
         'app/utils/sectorDeltaPresentation.ts',
         'app/utils/completedLapHold.ts',
+        'app/utils/compactSectorPresentation.ts',
         'app/utils/hudOverlayPresentationCapabilities.ts',
         'app/utils/hudOverlayBackground.ts',
         'app/utils/hudRoutePerformance.ts',

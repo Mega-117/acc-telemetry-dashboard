@@ -193,6 +193,37 @@ describe('useFastStatePoller', () => {
     expect(fastState.value.trackReferencesEligible).toBe(false)
   })
 
+  it('normalizza sector_hud nello stesso fast snapshot e preserva validita assente', async () => {
+    const api = {
+      getFastState: vi.fn(async () => makeState({
+        lap_valid: undefined,
+        info: { lap_valid: undefined },
+        sector_hud: {
+          version: 1,
+          mode: 'last_lap',
+          lap: 8,
+          last_lap_time_ms: 91_234,
+          hold_until_ts: 123.5,
+          sectors: [1, 2, 3].map(index => ({ index, state: 'complete', color: 'red' })),
+        },
+      })),
+    }
+    const { fastState, startFastStatePolling } = useFastStatePoller(() => api)
+
+    startFastStatePolling()
+    await flushPromises()
+
+    expect(fastState.value.lapValid).toBeNull()
+    expect(fastState.value.info?.lapValid).toBeNull()
+    expect(fastState.value.sectorHud).toMatchObject({
+      mode: 'last_lap',
+      lap: 8,
+      lastLapTimeMs: 91_234,
+      lapValid: null,
+      holdUntilTs: 123.5,
+    })
+  })
+
   it('degrada a sessione sconosciuta quando session_type manca o non e numerico', async () => {
     const api = { getFastState: vi.fn(async () => makeState({ session_type: 'race' })) }
     const { fastState, startFastStatePolling } = useFastStatePoller(() => api)

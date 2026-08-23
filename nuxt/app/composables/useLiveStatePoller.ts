@@ -38,6 +38,7 @@ export interface SectorHudState {
   bestLapTimeMs: number | null
   lapValid: boolean | null
   awaitingFlyingLap: boolean
+  holdUntilTs?: number | null
   sectors: SectorHudEntry[]
 }
 
@@ -81,7 +82,7 @@ function normalizeSectorState(value: unknown): SectorHudEntryState {
     : 'pending'
 }
 
-function normalizeSectorHud(raw: any): SectorHudState | null {
+export function normalizeSectorHud(raw: any): SectorHudState | null {
   if (!raw || typeof raw !== 'object') return null
   if (!Array.isArray(raw.sectors)) return null
 
@@ -115,6 +116,7 @@ function normalizeSectorHud(raw: any): SectorHudState | null {
     bestLapTimeMs: toNumber(raw.best_lap_time_ms),
     lapValid: typeof raw.lap_valid === 'boolean' ? raw.lap_valid : null,
     awaitingFlyingLap: raw.awaiting_flying_lap === true,
+    holdUntilTs: toNumber(raw.hold_until_ts),
     sectors,
   }
 }

@@ -382,6 +382,18 @@ describe('spectator telemetry routing', () => {
     ])
   })
 
+  it('mantiene neutra la validita focused quando il provider non la espone', () => {
+    const state = envelope()
+    const focused = state.snapshot!.cars[1]
+    ;(focused.current_lap as any).is_invalid = undefined
+
+    const result = routeOverlayTelemetry(local, state)
+
+    expect(result.fastState.info?.lapValid).toBeNull()
+    expect(result.fastState.lapValid).toBeNull()
+    expect(result.sectorHud?.lapValid).toBeNull()
+  })
+
   it('resta fail-closed se il provider focused diventa stale durante l osservazione', () => {
     const result = routeOverlayTelemetry(local, {
       status: 'unavailable',
