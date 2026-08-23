@@ -65,7 +65,11 @@ describe('useCompletedLapHold', () => {
     await nextTick()
     expect(presentation.displayedLapTimeMs.value).toBe(140_000)
 
-    await vi.advanceTimersByTimeAsync(7_000)
+    await vi.advanceTimersByTimeAsync(6_999)
+    expect(presentation.displayedLapTimeMs.value).toBe(140_000)
+    expect(presentation.displayedLapValid.value).toBe(false)
+
+    await vi.advanceTimersByTimeAsync(1)
     expect(presentation.displayedLapTimeMs.value).toBe(2_500)
     expect(presentation.displayedLapValid.value).toBe(true)
     expect(presentation.heldLap.value).toBeNull()

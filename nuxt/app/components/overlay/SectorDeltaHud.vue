@@ -25,17 +25,15 @@ const props = withDefaults(defineProps<{
   variant?: 'classic' | 'compact'
   // Campione live dell'overlay Info, usato solo per i numeri ancora in corso.
   liveCurrentLapTimeMs?: number | null
-  // Validita' corrente canonica e latched fino al rollover.
-  liveLapValid?: boolean | null
-  // Valore hero gia' risolto dalla presentazione (include l'hold del giro concluso).
+  // Coppia hero gia' risolta dalla presentazione: live o giro concluso in hold.
   compactDisplayLap?: {
     timeMs: number | null
+    valid: boolean | null
   }
   // Esito congelato sullo stesso snapshot del giro trattenuto per 7 secondi.
   targetOutcome?: InfoTargetOutcome
 }>(), {
   showCurrentLap: true,
-  liveLapValid: null,
   targetOutcome: 'neutral',
 })
 
@@ -70,12 +68,11 @@ const compactDisplayLapTimeMs = computed(() => (
     ? props.compactDisplayLap.timeMs
     : compactLiveLapTimeMs.value
 ))
-const compactCurrentLapValid = computed(() => {
-  if (props.liveLapValid !== undefined && props.liveLapValid !== null) {
-    return props.liveLapValid
-  }
-  return props.sectorHud?.lapValid ?? null
-})
+const compactCurrentLapValid = computed(() => (
+  props.compactDisplayLap
+    ? props.compactDisplayLap.valid
+    : props.sectorHud?.lapValid ?? null
+))
 const compactLapTime = computed(() => {
   return compactDisplayLapTimeMs.value === null
     ? '--:--.---'

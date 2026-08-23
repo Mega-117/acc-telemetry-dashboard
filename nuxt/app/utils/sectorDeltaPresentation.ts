@@ -7,17 +7,6 @@ export interface SectorDeltaPresentation {
   color: SectorHudColor
 }
 
-/**
- * Il flag fast e' un campione grezzo: non puo' rendere nuovamente valido un
- * giro che sector_hud ha gia' invalidato e mantenuto latched fino al rollover.
- */
-export function resolveCurrentLapValidity(
-  _rawFastStateValid: boolean | null | undefined,
-  latchedSectorHudValid: boolean | null | undefined,
-): boolean | null {
-  return typeof latchedSectorHudValid === 'boolean' ? latchedSectorHudValid : null
-}
-
 export function normalizeSectorDeltaReference(value: unknown): SectorDeltaReference {
   return value === 'bestSector' ? 'bestSector' : 'previousLap'
 }

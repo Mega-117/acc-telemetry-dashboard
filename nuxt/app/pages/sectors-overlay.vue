@@ -11,10 +11,7 @@ import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
 import HudTimedPager from '~/components/overlay/HudTimedPager.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
-import {
-  normalizeSectorDeltaReference,
-  resolveCurrentLapValidity,
-} from '~/utils/sectorDeltaPresentation'
+import { normalizeSectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 import {
   evaluateInfoTarget,
   type InfoTargetOutcome,
@@ -56,6 +53,7 @@ const { fastState, startFastStatePolling, stopFastStatePolling } = telemetry
 const {
   heldLap,
   displayedLapTimeMs,
+  displayedLapValid,
 } = useCompletedLapHold(fastState)
 const {
   isElectron,
@@ -92,18 +90,13 @@ const variant = computed(() => settings.value?.variant === 'compact' ? 'compact'
 const onTargetPage = computed(() => variant.value === 'compact' && compactPage.value === 'target')
 const compactDisplayLap = computed(() => ({
   timeMs: displayedLapTimeMs.value,
+  valid: displayedLapValid.value,
 }))
 const liveCurrentLapTimeMs = computed(() => fastState.value.info?.currentLapTimeMs ?? null)
 const rootScale = computed(() => onTargetPage.value ? 1 : scale.value)
 const visibleSectorHud = computed(() => telemetry.source.value === 'focused'
   ? telemetry.sectorHud.value
   : liveLap.value.sectorHud)
-// Il timer resta fast; la validita' corrente usa il latch canonico di sector_hud.
-const liveLapValid = computed(() => resolveCurrentLapValidity(
-  fastState.value.info?.lapValid,
-  visibleSectorHud.value?.lapValid,
-))
-
 function contextualTargetTimeMs(): number {
   const contextual = fastState.value.info?.bestLapTimeMs
     || fastState.value.info?.lastLapTimeMs
@@ -273,7 +266,6 @@ onBeforeUnmount(() => {
             variant="compact"
             live-running
             :live-current-lap-time-ms="liveCurrentLapTimeMs"
-            :live-lap-valid="liveLapValid"
             :compact-display-lap="compactDisplayLap"
             :target-outcome="frozenTargetOutcome"
           />

@@ -143,7 +143,7 @@ describe('SectorDeltaHud', () => {
     const html = await renderHud({
       variant: 'compact',
       showCurrentLap: false,
-      compactDisplayLap: { timeMs: 83_456 },
+      compactDisplayLap: { timeMs: 83_456, valid: true },
     })
 
     expect(html).toContain('SECTORS · VS · LAST')
@@ -161,7 +161,7 @@ describe('SectorDeltaHud', () => {
       render: () => h(SectorDeltaHud, {
         sectorHud: null,
         variant: 'compact',
-        compactDisplayLap: { timeMs: 12_345 },
+        compactDisplayLap: { timeMs: 12_345, valid: null },
       }),
     }))
 
@@ -207,7 +207,7 @@ describe('SectorDeltaHud', () => {
         variant: 'compact',
         liveRunning: true,
         liveCurrentLapTimeMs: 43_050,
-        liveLapValid: true,
+        compactDisplayLap: { timeMs: 43_050, valid: true },
       }),
     }))
     const second = await renderToString(createSSRApp({
@@ -216,7 +216,7 @@ describe('SectorDeltaHud', () => {
         variant: 'compact',
         liveRunning: true,
         liveCurrentLapTimeMs: 44_850,
-        liveLapValid: false,
+        compactDisplayLap: { timeMs: 44_850, valid: false },
       }),
     }))
 
@@ -230,9 +230,10 @@ describe('SectorDeltaHud', () => {
     expect(second).toContain('sector-compact__lap--invalid')
   })
 
-  it('usa il tempo hero in hold ma colora dalla validita corrente latched', async () => {
+  it('usa tempo e validita dello stesso giro completato durante l hold', async () => {
     const runningHud: SectorHudState = {
       ...sectorHud,
+      lapValid: false,
       sectors: [
         { ...entry(1), currentMs: 41_232, deltaMs: null },
         { ...entry(2), state: 'running', currentMs: 18, deltaMs: null },
@@ -245,14 +246,23 @@ describe('SectorDeltaHud', () => {
         variant: 'compact',
         liveRunning: true,
         liveCurrentLapTimeMs: 44_850,
-        liveLapValid: false,
-        compactDisplayLap: { timeMs: 141_250 },
+        compactDisplayLap: { timeMs: 141_250, valid: true },
       }),
     }))
 
     expect(html).toContain('02:21.250')
     expect(html).toContain('3.618')
-    expect(html).toContain('sector-compact__lap--invalid')
+    expect(html).not.toContain('sector-compact__lap--invalid')
+
+    const invalidCompleted = await renderToString(createSSRApp({
+      render: () => h(SectorDeltaHud, {
+        sectorHud: { ...runningHud, lapValid: true },
+        variant: 'compact',
+        compactDisplayLap: { timeMs: 142_500, valid: false },
+      }),
+    }))
+    expect(invalidCompleted).toContain('02:22.500')
+    expect(invalidCompleted).toContain('sector-compact__lap--invalid')
   })
 
   it('aggiorna la testata compatta dal riferimento delta selezionato', async () => {
@@ -279,8 +289,7 @@ describe('SectorDeltaHud', () => {
       render: () => h(SectorDeltaHud, {
         sectorHud: waitingHud,
         variant: 'compact',
-        liveCurrentLapTimeMs: 2_921_192,
-        liveLapValid: false,
+        compactDisplayLap: { timeMs: 2_921_192, valid: false },
       }),
     }))
 
@@ -323,19 +332,18 @@ describe('SectorDeltaHud', () => {
   it('mostra l esito Target sul bordo senza cambiare il colore di validita', async () => {
     const inside = await renderHud({
       variant: 'compact',
-      compactDisplayLap: { timeMs: 90_000 },
+      compactDisplayLap: { timeMs: 90_000, valid: true },
       targetOutcome: 'inside',
     })
     const outsideInvalid = await renderHud({
       variant: 'compact',
-      compactDisplayLap: { timeMs: 91_000 },
-      liveLapValid: false,
+      compactDisplayLap: { timeMs: 91_000, valid: false },
       targetOutcome: 'outside',
     })
     const hidden = await renderHud({
       variant: 'compact',
       showCurrentLap: false,
-      compactDisplayLap: { timeMs: 90_000 },
+      compactDisplayLap: { timeMs: 90_000, valid: true },
       targetOutcome: 'inside',
     })
 
