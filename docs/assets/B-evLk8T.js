@@ -1,1 +1,0 @@
-import{R as c,u as l,S as m,G as i}from"./7KhGEGB1.js";const f=c(async()=>{let e,t;const{isAuthenticated:o,userRole:r,isLoading:n}=l();let a=0;for(;n.value&&a<100;)[e,t]=m(()=>new Promise(u=>setTimeout(u,50))),await e,t(),a++;if(!o.value)return i("/");const s=r.value;if(s!=="coach"&&s!=="admin")return i("/panoramica")});export{f as default};
