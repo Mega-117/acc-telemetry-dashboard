@@ -99,6 +99,7 @@ export default defineConfig({
         'app/services/spotter/trackVoiceReferenceRuntime.ts',
         'app/services/spotter/trackVoiceReferenceChanges.ts',
         'app/services/spotter/spotterSessionPolicy.ts',
+        'app/services/spotter/voiceRuntimePresentation.ts',
         'app/utils/firestoreSanitize.ts',
         'app/utils/diagnosticsPresentation.ts',
         'app/utils/diagnosticsCostEstimate.ts',

@@ -4,6 +4,7 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { spotterVoiceOptions, useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
+import { presentVoiceRuntimeMessage } from '~/services/spotter/voiceRuntimePresentation'
 import SessionModePicker from '~/components/spotter/SessionModePicker.vue'
 
 definePageMeta({ layout: 'dashboard' })
@@ -97,10 +98,15 @@ async function checkRuntime() {
   try {
     const data = await voiceLabRuntime.kokoroReady() as { state: RuntimeState; message?: string }
     runtimeState.value = data.state
-    runtimeMessage.value = data.message || (data.state === 'online' ? 'Motore vocale online.' : 'Motore vocale non pronto.')
+    runtimeMessage.value = presentVoiceRuntimeMessage(
+      data.message,
+      data.state === 'online' ? 'Motore vocale online.' : 'Motore vocale non pronto.',
+    )
   } catch (error: any) {
     runtimeState.value = 'offline'
-    runtimeMessage.value = error?.data?.statusMessage || error?.message || 'Motore vocale non disponibile.'
+    runtimeMessage.value = presentVoiceRuntimeMessage(
+      error?.data?.statusMessage || error?.message,
+    )
   }
 }
 
