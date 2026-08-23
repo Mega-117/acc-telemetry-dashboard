@@ -161,20 +161,20 @@ const gridTemplateColumns = computed(() => [
 .standings-row { position:relative;display:grid;height:var(--standings-row-height);min-height:var(--standings-row-height);column-gap:var(--standings-column-gap);align-items:center;box-sizing:border-box;overflow:hidden;color:white;font-size:18px;font-weight:700;line-height:1; }
 .standings-row > strong { position:relative;z-index:1;box-sizing:border-box;min-width:0;white-space:nowrap; }
 .standings-row.is-local { background:rgba(0,170,255,0.34);box-shadow:inset 1px 0 rgba(131,231,255,0.72),inset -1px 0 rgba(131,231,255,0.72),inset 0 1px rgba(131,231,255,0.72); }
-.standings-row__position { display:flex;align-items:center;justify-content:center;height:24px;color:black;background:yellow; }
+.standings-row__position { display:flex;align-items:center;justify-content:center;height:28px;color:black;background:yellow; }
 .standings-row__position.is-improved { color:white;background:green; }
 .standings-row__position.is-worsened { color:white;background:red; }
 .standings-row.is-local .standings-row__position { color:#00141c;background:#4de3ff; }
 .standings-row__driver { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .standings-row__vehicle { position:relative;z-index:1;display:flex;min-width:0;gap:var(--standings-vehicle-gap);align-items:center; }
-.standings-row__manufacturer { display:flex;flex:0 0 var(--standings-manufacturer-width);width:var(--standings-manufacturer-width);height:30px;align-items:center;justify-content:center;overflow:hidden;background:#f2f2f2;outline:1px solid rgba(0,0,0,0.1);outline-offset:-1px; }
+.standings-row__manufacturer { display:flex;flex:0 0 var(--standings-manufacturer-width);width:var(--standings-manufacturer-width);height:28px;align-items:center;justify-content:center;overflow:hidden;background:#f2f2f2;outline:1px solid rgba(0,0,0,0.1);outline-offset:-1px; }
 .standings-row__manufacturer-logo { display:block;width:34px;height:28px;object-fit:contain;object-position:center;user-select:none; }
-.standings-row__number { display:flex;flex:0 0 var(--standings-number-width);width:var(--standings-number-width);height:24px;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
+.standings-row__number { display:flex;flex:0 0 var(--standings-number-width);width:var(--standings-number-width);height:28px;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
 .standings-row__number.has-number { color:#000;background:#fff; }
 .standings-row__number.has-number.is-pro-am { color:#fff;background:#000; }
 .standings-row__number.has-number.is-am { color:#fff;background:#f00; }
 .standings-row__number.has-number.is-silver { color:#fff;background:#707070; }
-.standings-row__pit { display:flex;width:100%;aspect-ratio:1;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
+.standings-row__pit { display:flex;width:100%;height:28px;align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
 .standings-row__pit.is-active { color:#000;background:#fff; }
 .standings-row__best,.standings-row__last { text-align:right; }
 .standings-row__gap { overflow:hidden;text-align:right;text-overflow:clip;font-size:17px; }
