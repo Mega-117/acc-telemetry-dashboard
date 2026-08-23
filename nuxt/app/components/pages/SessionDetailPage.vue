@@ -2929,7 +2929,7 @@ const gripZones = computed(() => {
                   <span class="ssc-cond-val">{{ stintConditions.grip.dominant }}</span>
                 </span>
                 <span class="ssc-condition-text" data-testid="stint-start-fuel">
-                  <span class="ssc-cond-lbl">FUEL</span>
+                  <span class="ssc-cond-lbl">FUEL START</span>
                   <span class="ssc-cond-val">{{ formatFuelStart(displayedStint?.fuelStart) }}</span>
                 </span>
               </div>

@@ -65,8 +65,8 @@ assert.match(
 
 assert.match(
   sessionDetailSource,
-  /data-testid="stint-start-fuel"/,
-  'Single-stint header must expose the exact starting fuel next to air and grip.'
+  /data-testid="stint-start-fuel"[\s\S]*?<span class="ssc-cond-lbl">FUEL START<\/span>/,
+  'Single-stint header must expose FUEL START next to air and grip.'
 )
 
 assert.match(
