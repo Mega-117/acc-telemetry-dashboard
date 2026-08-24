@@ -34,6 +34,10 @@ const REASONS: Record<string, string> = {
   condizioni_non_asciutte: 'La prima versione richiede pista asciutta.',
   danni_non_disabilitati: 'Disabilita i danni prima di attivare il bot.',
   consumi_non_disabilitati: 'Disabilita consumo carburante e gomme.',
+  fuori_corridoio_sicurezza: 'Fuori dal corridoio sicuro: input neutralizzati.',
+  orientamento_fuori_sicurezza: 'Direzione non sicura: input neutralizzati.',
+  shared_memory_congelata: 'Telemetria ACC congelata: input neutralizzati.',
+  macchina_bloccata: 'Vettura ferma troppo a lungo: input neutralizzati.',
 }
 
 function finiteNumber(value: unknown): number | null {

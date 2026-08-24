@@ -51,4 +51,12 @@ describe('qa bot overlay presentation', () => {
     })
     expect(qaBotPresentation(snapshot).reason).toBe('Dipendenze Python del bot non disponibili.')
   })
+
+  it('explains watchdog stops as neutralized safety events', () => {
+    const snapshot = normalizeQaBotSnapshot({
+      state: 'BLOCKED',
+      reason: 'fuori_corridoio_sicurezza',
+    })
+    expect(qaBotPresentation(snapshot).reason).toContain('input neutralizzati')
+  })
 })
