@@ -33,6 +33,11 @@ import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
+import {
+  normalizeQaBotSnapshot,
+  qaBotPresentation,
+  type QaBotSnapshot,
+} from '~/services/overlay/qaBotPresentation'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useDevTestMode } from '~/composables/useDevTestMode'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
@@ -142,6 +147,52 @@ const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not
 const isDryPressurePreviewOpen = ref(false)
 const dryPressureBridgeStatus = ref('Pronto a inviare il test.')
 let dryPressureTimer: ReturnType<typeof setInterval> | null = null
+const qaBotState = ref<QaBotSnapshot>(normalizeQaBotSnapshot({
+  state: 'OFF',
+  reason: 'bot_off',
+}))
+const qaBotView = computed(() => qaBotPresentation(qaBotState.value))
+let qaBotTimer: ReturnType<typeof setInterval> | null = null
+async function refreshQaBotState() {
+  const api = getOverlayApi()
+  if (!api?.trainingOverlayGetQaBotState) {
+    qaBotState.value = normalizeQaBotSnapshot({
+      state: 'BLOCKED',
+      reason: 'qa_bot_runtime_missing',
+    })
+    return
+  }
+  try {
+    qaBotState.value = normalizeQaBotSnapshot(await api.trainingOverlayGetQaBotState())
+  } catch (_) {
+    qaBotState.value = normalizeQaBotSnapshot({
+      state: 'FAULT',
+      reason: 'qa_bot_state_unavailable',
+    })
+  }
+}
+async function toggleQaBot() {
+  const api = getOverlayApi()
+  const action = qaBotView.value.action
+  if (!api || action === 'none') return
+  qaBotState.value = normalizeQaBotSnapshot({
+    ...qaBotState.value,
+    state: action === 'start' ? 'CHECKING' : 'STOPPING',
+    reason: action === 'start' ? 'checking_preconditions' : 'user_stop',
+  })
+  try {
+    const result = action === 'start'
+      ? await api.trainingOverlayStartQaBot?.()
+      : await api.trainingOverlayStopQaBot?.()
+    qaBotState.value = normalizeQaBotSnapshot(result)
+  } catch (_) {
+    qaBotState.value = normalizeQaBotSnapshot({
+      state: 'FAULT',
+      reason: 'qa_bot_command_failed',
+    })
+  }
+  await refreshQaBotState()
+}
 async function refreshDryPressureState() {
   const next = await getOverlayApi()?.trainingOverlayGetDryPressureState?.()
   if (next) dryPressureState.value = next
@@ -641,6 +692,8 @@ onMounted(async () => {
   startFastStatePolling()
   await refreshDryPressureState()
   dryPressureTimer = setInterval(() => { void refreshDryPressureState() }, 500)
+  await refreshQaBotState()
+  qaBotTimer = setInterval(() => { void refreshQaBotState() }, 250)
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
   removeInfoTargetListener = api?.onInfoTargetSettings?.((next: InfoTargetSettings) => {
     if (!isTargetSetupOpen.value) applyInfoTargetSettings(next)
@@ -685,6 +738,7 @@ watch(
 
 onBeforeUnmount(() => {
   if (dryPressureTimer) clearInterval(dryPressureTimer)
+  if (qaBotTimer) clearInterval(qaBotTimer)
   clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopFastStatePolling(); stopVoice(); cleanupSize()
   if (voicePointNoticeTimer) clearTimeout(voicePointNoticeTimer)
   removeCommandListener?.()
@@ -859,6 +913,24 @@ onBeforeUnmount(() => {
                     >
                       Target giro
                     </button>
+                    <button
+                      type="button"
+                      class="launcher-tool-button launcher-tool-button--training"
+                      :class="{ 'is-active': qaBotView.active, 'is-selected': launcherToolIndex === 4 }"
+                      :aria-pressed="qaBotView.active"
+                      :aria-current="launcherToolIndex === 4 ? 'true' : undefined"
+                      :disabled="qaBotView.pending"
+                      @focus="launcherToolIndex = 4"
+                      @click="toggleQaBot"
+                    >
+                      {{ qaBotView.label }}
+                    </button>
+                    <p class="launcher-hint" role="status" aria-live="polite">
+                      Bot: {{ qaBotView.stateLabel }} · {{ qaBotView.reason }}
+                      <template v-if="qaBotState.state === 'ACTIVE'">
+                        · {{ qaBotState.speedKmh ?? 0 }} km/h · giri validi {{ qaBotState.lapsValid }}/{{ qaBotState.lapsCompleted }}
+                      </template>
+                    </p>
                     <button type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Test regolazione pressioni strategia</button>
                     <p class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
                     <p v-for="(wheelState, wheel) in dryPressureState.result?.wheels || {}" :key="`test-${wheel}`" class="launcher-hint" role="status">

@@ -92,6 +92,7 @@ export default defineConfig({
         'app/services/overlay/standingsManufacturer.ts',
         'app/services/overlay/standingsPresentation.ts',
         'app/services/overlay/spectatorTelemetry.ts',
+        'app/services/overlay/qaBotPresentation.ts',
         'app/services/overlay/standingsHighlightTracker.ts',
         'app/services/audio/audioPlayback.ts',
         'app/services/spotter/coachVoiceController.ts',
