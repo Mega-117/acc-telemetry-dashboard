@@ -103,6 +103,38 @@ describe('useFastStatePoller', () => {
     expect(fastState.value.tyres[0]?.discLifePct).toBe(99.9)
   })
 
+  it('normalizza il danno opzionale e resta compatibile quando manca', async () => {
+    const damage = {
+      version: 1,
+      body: {
+        front: { percentage: 24, repair_time_ms: 6780 }, rear: { percentage: 21, repair_time_ms: 2400 },
+        left: { percentage: 0, repair_time_ms: 0 }, right: { percentage: 68, repair_time_ms: 7800 },
+        repair_time_ms: 9180,
+      },
+      suspension: {
+        FL: { percentage: 16 }, FR: { percentage: 28 }, RL: { percentage: 7 }, RR: { percentage: 19 },
+        repair_time_ms: 12800,
+      },
+      total_repair_time_ms: 21980,
+      event_seq: 4,
+      event_ts: 12.5,
+    }
+    const api = { getFastState: vi.fn(async () => makeState({ damage })) }
+    const { fastState, startFastStatePolling } = useFastStatePoller(() => api)
+
+    await startFastStatePolling()
+
+    expect(fastState.value.damage).toMatchObject({
+      body: { front: { percentage: 24, repairTimeMs: 6780 }, repairTimeMs: 9180 },
+      suspension: { FR: { percentage: 28 }, repairTimeMs: 12800 },
+      totalRepairTimeMs: 21980, eventSeq: 4, eventTs: 12.5,
+    })
+
+    api.getFastState.mockResolvedValueOnce(makeState({ damage: undefined }))
+    await vi.advanceTimersByTimeAsync(250)
+    expect(fastState.value.damage).toBeNull()
+  })
+
   it('espone una promise che si risolve solo dopo il primo snapshot', async () => {
     let resolveSnapshot: ((state: any) => void) | null = null
     const api = {

@@ -93,7 +93,7 @@ const apiReady = ref(false)
 const enabled = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false })
 const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false })
 const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1, info: 1, standings: 0.8 })
-const tyreVariant = ref<'classic' | 'advanced'>('classic')
+const tyreVariant = ref<'classic' | 'advanced' | 'race'>('classic')
 const sectorVariant = ref<'classic' | 'compact'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
@@ -260,7 +260,7 @@ async function refreshState() {
       const settings = await api.hudOverlayGetSettings(overlay.id)
       enabled[overlay.id] = settings?.enabled === true
       if (settings?.scale !== undefined) scale[overlay.id] = settings.scale
-      if (overlay.id === 'tyres') tyreVariant.value = settings?.variant === 'advanced' ? 'advanced' : 'classic'
+      if (overlay.id === 'tyres') tyreVariant.value = settings?.variant === 'advanced' || settings?.variant === 'race' ? settings.variant : 'classic'
       if (overlay.id === 'sectors') sectorVariant.value = settings?.variant === 'compact' ? 'compact' : 'classic'
       if (overlay.id === 'sectors' && typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
       if (overlay.id === 'sectors' && typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
@@ -471,10 +471,10 @@ function onScaleInput(id: HudOverlayId, raw: string) {
 async function setTyreVariant(value: string) {
   const api = getApi()
   if (!apiReady.value || !api?.hudOverlaySaveSettings) return
-  const next = value === 'advanced' ? 'advanced' : 'classic'
+  const next = value === 'advanced' || value === 'race' ? value : 'classic'
   tyreVariant.value = next
   const settings = await api.hudOverlaySaveSettings('tyres', { variant: next })
-  tyreVariant.value = settings?.variant === 'advanced' ? 'advanced' : 'classic'
+  tyreVariant.value = settings?.variant === 'advanced' || settings?.variant === 'race' ? settings.variant : 'classic'
 }
 
 async function setSectorDeltaReference(value: string) {
@@ -920,6 +920,7 @@ async function toggleTraining() {
                 >
                   <option value="classic">Classico</option>
                   <option value="advanced">Avanzato</option>
+                  <option value="race">Race</option>
                 </select>
               </label>
 

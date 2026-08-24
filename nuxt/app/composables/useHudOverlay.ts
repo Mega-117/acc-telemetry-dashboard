@@ -11,7 +11,7 @@ export interface HudOverlaySettings {
   showBest?: boolean
   showCurrentLap?: boolean
   deltaReference?: 'previousLap' | 'bestSector'
-  variant?: 'classic' | 'advanced' | 'compact'
+  variant?: 'classic' | 'advanced' | 'race' | 'compact'
   electronicsReference?: boolean
   rpmReference?: boolean
   gearReference?: boolean
@@ -80,7 +80,7 @@ export interface HudOverlayInteractionDescriptor {
 export const HUD_OVERLAY_INTERACTIONS: Record<string, HudOverlayInteractionDescriptor> = {
   tyres: {
     surfaceSelector: '.hud-overlay__panel',
-    controlSelector: '.hud-timed-pager__switcher',
+    controlSelector: '.hud-timed-pager__switcher, .race-hud__switcher',
   },
   sectors: {
     surfaceSelector: '.hud-overlay__panel',

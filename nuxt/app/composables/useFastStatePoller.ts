@@ -75,12 +75,35 @@ export interface FastStateInfo {
   lapsCompleted: number
 }
 
+export interface FastStateDamageBodyZone {
+  percentage: number | null
+  repairTimeMs: number | null
+}
+
+export interface FastStateDamageSuspensionCorner {
+  percentage: number | null
+}
+
+export interface FastStateDamage {
+  version: number
+  body: Record<'front' | 'rear' | 'left' | 'right', FastStateDamageBodyZone> & {
+    repairTimeMs: number | null
+  }
+  suspension: Record<'FL' | 'FR' | 'RL' | 'RR', FastStateDamageSuspensionCorner> & {
+    repairTimeMs: number | null
+  }
+  totalRepairTimeMs: number | null
+  eventSeq: number
+  eventTs: number | null
+}
+
 export interface FastOverlayState {
   dataSource?: 'local' | 'focused'
   context: FastStateContext | null
   localDriver: FastStateLocalDriver | null
   info: FastStateInfo | null
   sectorHud: SectorHudState | null
+  damage: FastStateDamage | null
   flag: number | null
   lapsCompleted: number
   currentLapTimeMs: number | null
@@ -148,6 +171,7 @@ const EMPTY_FAST_STATE: FastOverlayState = {
   localDriver: null,
   info: null,
   sectorHud: null,
+  damage: null,
   flag: null,
   lapsCompleted: 0,
   currentLapTimeMs: null,
@@ -286,6 +310,43 @@ function normalizeInfo(raw: any): FastStateInfo | null {
   }
 }
 
+function nonNegative(value: unknown): number | null {
+  const parsed = toNumber(value)
+  return parsed === null ? null : Math.max(0, parsed)
+}
+
+function percentage(value: unknown): number | null {
+  const parsed = nonNegative(value)
+  return parsed === null ? null : Math.min(parsed, 100)
+}
+
+function normalizeDamage(raw: any): FastStateDamage | null {
+  if (!raw || typeof raw !== 'object' || raw.version !== 1) return null
+  const bodyZone = (id: 'front' | 'rear' | 'left' | 'right'): FastStateDamageBodyZone => ({
+    percentage: percentage(raw.body?.[id]?.percentage),
+    repairTimeMs: nonNegative(raw.body?.[id]?.repair_time_ms),
+  })
+  const suspensionCorner = (id: 'FL' | 'FR' | 'RL' | 'RR'): FastStateDamageSuspensionCorner => ({
+    percentage: percentage(raw.suspension?.[id]?.percentage),
+  })
+  return {
+    version: 1,
+    body: {
+      front: bodyZone('front'), rear: bodyZone('rear'),
+      left: bodyZone('left'), right: bodyZone('right'),
+      repairTimeMs: nonNegative(raw.body?.repair_time_ms),
+    },
+    suspension: {
+      FL: suspensionCorner('FL'), FR: suspensionCorner('FR'),
+      RL: suspensionCorner('RL'), RR: suspensionCorner('RR'),
+      repairTimeMs: nonNegative(raw.suspension?.repair_time_ms),
+    },
+    totalRepairTimeMs: nonNegative(raw.total_repair_time_ms),
+    eventSeq: Math.max(0, Math.trunc(toNumber(raw.event_seq) ?? 0)),
+    eventTs: toNumber(raw.event_ts),
+  }
+}
+
 function normalizeBand(value: unknown): FastStateSlipBand {
   return typeof value === 'string' && VALID_BANDS.has(value as FastStateSlipBand)
     ? value as FastStateSlipBand
@@ -360,6 +421,7 @@ function normalizeFastState(state: any): FastOverlayState {
     localDriver: normalizeLocalDriver(state.local_driver),
     info: normalizeInfo(state.info),
     sectorHud: normalizeSectorHud(state.sector_hud),
+    damage: normalizeDamage(state.damage),
     flag: toNumber(state.flag),
     lapsCompleted: toNumber(state.laps_completed) ?? 0,
     currentLapTimeMs: toNumber(state.current_lap_time_ms),

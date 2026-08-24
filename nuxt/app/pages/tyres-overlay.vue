@@ -10,7 +10,10 @@ import HudOverlayBackground from '~/components/overlay/HudOverlayBackground.vue'
 import HudTimedPager from '~/components/overlay/HudTimedPager.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import TyreAdvancedHud from '~/components/overlay/TyreAdvancedHud.vue'
+import TyreRaceHud from '~/components/overlay/TyreRaceHud.vue'
+import DamageRaceHud from '~/components/overlay/DamageRaceHud.vue'
 import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
+import { useRaceHudPage, type RaceHudPage } from '~/composables/useRaceHudPage'
 
 definePageMeta({ layout: 'hud-overlay' })
 
@@ -39,10 +42,22 @@ const {
   setTransientViewport,
 } = overlay
 const { backgroundOpacity } = useHudOverlayBackground(settings)
-const variant = computed(() => (
-  settings.value?.variant === 'advanced' || route.query.variant === 'advanced'
-    ? 'advanced' : 'classic'
-))
+const variant = computed<'classic' | 'advanced' | 'race'>(() => {
+  const requested = route.query.variant ?? settings.value?.variant
+  return requested === 'advanced' || requested === 'race' ? requested : 'classic'
+})
+const racePager = useRaceHudPage(fastState)
+const { activePage: racePage, damageFlash: raceDamageFlash } = racePager
+const raceVisible = computed(() => fastState.value.isFresh && fastState.value.isLive && fastState.value.tyres.length === 4)
+const raceBanner = computed(() => {
+  if (!fastState.value.isEngineRunning) return 'ENGINE OFF'
+  if (fastState.value.pitLimiterOn) return 'LIMITER ON'
+  return null
+})
+
+function selectRacePage(page: RaceHudPage) {
+  racePager.selectPage(page)
+}
 const advancedPage = computed<'live' | 'setup'>(() => (
   import.meta.dev && route.query.page === 'setup' ? 'setup' : 'live'
 ))
@@ -100,7 +115,10 @@ onBeforeUnmount(() => {
     <OverlaySoftwareCursor :state="pointerState" />
     <div
       class="hud-overlay__panel"
-      :class="{ 'hud-overlay__panel--advanced': variant === 'advanced' }"
+      :class="{
+        'hud-overlay__panel--advanced': variant === 'advanced',
+        'hud-overlay__panel--race': variant === 'race',
+      }"
     >
       <HudOverlayBackground v-if="variant === 'advanced'" :opacity="backgroundOpacity" />
       <HudTimedPager
@@ -119,6 +137,25 @@ onBeforeUnmount(() => {
           <TyreAdvancedHud :fast-state="fastState" page="setup" />
         </template>
       </HudTimedPager>
+      <section
+        v-else-if="variant === 'race'"
+        v-show="raceVisible"
+        class="race-hud"
+        :class="{
+          'race-hud--yellow': fastState.flag === 2,
+          'race-hud--damage-flash': raceDamageFlash,
+          'race-hud--has-banner': !!raceBanner,
+        }"
+        :data-active-page="racePage"
+      >
+        <nav class="race-hud__switcher" data-overlay-interactive aria-label="Pagina Race HUD">
+          <button type="button" :class="{ active: racePage === 'tyres' }" @click="selectRacePage('tyres')">GOMME</button>
+          <button type="button" :class="{ active: racePage === 'damage' }" @click="selectRacePage('damage')">DANNI</button>
+        </nav>
+        <TyreRaceHud v-if="racePage === 'tyres'" :fast-state="fastState" />
+        <DamageRaceHud v-else :fast-state="fastState" />
+        <div v-if="raceBanner" class="race-hud__banner">{{ raceBanner }}</div>
+      </section>
       <TyreSlipHud v-else :fast-state="fastState" />
     </div>
   </div>
@@ -168,6 +205,35 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
 }
+
+.hud-overlay__panel--race {
+  padding: 0;
+  overflow: hidden;
+  border-color: #555;
+  border-radius: calc(12px * var(--hud-scale));
+  background: #050608;
+}
+
+.race-hud {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: calc(8px * var(--hud-scale));
+  border: calc(2px * var(--hud-scale)) solid transparent;
+  box-sizing: border-box;
+}
+
+.race-hud--has-banner { padding-bottom: calc(54px * var(--hud-scale)); }
+.race-hud--yellow { border-color: #ffd400; }
+.race-hud--damage-flash { border-color: #ff2525; box-shadow: inset 0 0 calc(24px * var(--hud-scale)) rgba(255, 20, 20, .55); }
+.race-hud__switcher { position:absolute; top:calc(7px * var(--hud-scale)); right:calc(7px * var(--hud-scale)); z-index:20; display:flex; overflow:hidden; border:1px solid #666; border-radius:999px; background:#050608; opacity:0; transition:opacity 120ms ease; -webkit-app-region:no-drag; }
+.hud-overlay__panel:hover .race-hud__switcher { opacity:1; }
+.race-hud__switcher button { min-width:calc(52px * var(--hud-scale)); padding:calc(4px * var(--hud-scale)) calc(7px * var(--hud-scale)); border:0; background:transparent; color:#aaa; font:900 max(10px,calc(11px * var(--hud-scale)))/1 Inter,"Segoe UI",sans-serif; cursor:pointer; }
+.race-hud__switcher button+button { border-left:1px solid #555; }.race-hud__switcher button.active { background:#f28a20;color:#050608; }
+.race-hud__banner { position:absolute; right:0; bottom:0; left:0; display:grid; place-items:center; height:calc(46px * var(--hud-scale)); background:#075be8; color:#fff; font:950 max(20px,calc(28px * var(--hud-scale)))/1 Inter,"Segoe UI",sans-serif; letter-spacing:.05em; }
+@media (prefers-reduced-motion: reduce) { .race-hud__switcher { transition:none; }.race-hud--damage-flash { box-shadow:none; } }
 
 // ── L'HUD riempie il pannello (niente spazio vuoto sopra/sotto) ──────────────
 .hud-overlay .tyre-slip-hud {

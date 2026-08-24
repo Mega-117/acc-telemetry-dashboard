@@ -23,7 +23,7 @@ describe('HUD_OVERLAY_INTERACTIONS', () => {
   it('dichiara in un solo posto superfici intere e controlli opzionali', () => {
     expect(HUD_OVERLAY_INTERACTIONS.tyres).toEqual({
       surfaceSelector: '.hud-overlay__panel',
-      controlSelector: '.hud-timed-pager__switcher',
+      controlSelector: '.hud-timed-pager__switcher, .race-hud__switcher',
     })
     expect(HUD_OVERLAY_INTERACTIONS.sectors).toEqual({
       surfaceSelector: '.hud-overlay__panel',

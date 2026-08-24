@@ -247,6 +247,7 @@ function focusedFastState(
     },
     info,
     sectorHud: null,
+    damage: null,
     flag: focusedFlag(state),
     lapsCompleted: info.lapsCompleted,
     currentLapTimeMs: info.currentLapTimeMs,
