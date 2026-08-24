@@ -30,10 +30,10 @@ describe('tyre overlay minimum readability contract', () => {
     const damage = source('app/components/overlay/DamageRaceHud.vue')
     const page = source('app/pages/tyres-overlay.vue')
 
-    expect(race).toContain('max(34px,calc(48px * var(--hud-scale,1)))')
-    expect(race).toContain('max(14px,calc(18px * var(--hud-scale,1)))')
+    expect(race).toContain('max(35px,calc(49px * var(--hud-scale,1)))')
+    expect(race).toContain('max(15px,calc(19px * var(--hud-scale,1)))')
     expect(race).toContain('max(11px,calc(12px * var(--hud-scale,1)))')
-    expect(damage).toContain('max(22px,calc(30px * var(--hud-scale,1)))')
+    expect(damage).toContain('max(24px,calc(32px * var(--hud-scale,1)))')
     expect(page).toContain('max(20px,calc(28px * var(--hud-scale)))')
   })
 })

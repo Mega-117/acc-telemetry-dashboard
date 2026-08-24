@@ -28,7 +28,7 @@ function getApi(): any | null {
 }
 
 const route = useRoute()
-const { fastState, startFastStatePolling, stopFastStatePolling } = useOverlayTelemetrySource(getApi)
+const { fastState, source: telemetrySource, startFastStatePolling, stopFastStatePolling } = useOverlayTelemetrySource(getApi)
 const overlay = useHudOverlay('tyres', getApi)
 const {
   isElectron,
@@ -48,7 +48,11 @@ const variant = computed<'classic' | 'advanced' | 'race'>(() => {
 })
 const racePager = useRaceHudPage(fastState)
 const { activePage: racePage, damageFlash: raceDamageFlash } = racePager
-const raceVisible = computed(() => fastState.value.isFresh && fastState.value.isLive && fastState.value.tyres.length === 4)
+const raceVisible = computed(() => (
+  fastState.value.isFresh
+  && fastState.value.isLive
+  && telemetrySource.value !== 'focused'
+))
 const raceBanner = computed(() => {
   if (!fastState.value.isEngineRunning) return 'ENGINE OFF'
   if (fastState.value.pitLimiterOn) return 'LIMITER ON'

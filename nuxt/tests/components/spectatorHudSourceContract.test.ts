@@ -59,4 +59,12 @@ describe('spectator HUD source contract', () => {
     expect(standingsState).toContain('lastPushAtMs = Date.now()')
     expect(standingsState).toContain('tickMs - lastPushAtMs >= safePollIntervalMs')
   })
+
+  it('Race mostra la telemetria locale anche parziale ma nasconde la fisica focused non supportata', () => {
+    const tyresPage = source('app/pages/tyres-overlay.vue')
+
+    expect(tyresPage).toContain('source: telemetrySource')
+    expect(tyresPage).toContain("telemetrySource.value !== 'focused'")
+    expect(tyresPage).not.toContain('fastState.value.tyres.length === 4')
+  })
 })

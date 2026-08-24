@@ -25,9 +25,9 @@ function fastState() {
       },
       suspension: {
         FL: { percentage: 16 }, FR: { percentage: 28 }, RL: { percentage: 7 }, RR: { percentage: 19 },
-        repairTimeMs: 12800,
+        repairTimeMs: 21000,
       },
-      totalRepairTimeMs: 29780,
+      totalRepairTimeMs: 37980,
     },
   }
 }
@@ -38,9 +38,11 @@ describe('Race HUD components', () => {
     expect(html).toContain('23.2')
     expect(html).toContain('AVG 23.1')
     expect(html).toContain('LOSS 0.18')
-    expect(html).toContain('FRONT')
-    expect(html).toContain('REAR')
-    expect(html).toContain('DRY 2')
+    expect(html).toContain('tyre-race__brake--front')
+    expect(html).toContain('tyre-race__brake--rear')
+    expect(html).toContain('tyre-race__compound')
+    expect(html).toContain('DRY')
+    expect(html).toContain('>2<')
     expect(html.match(/tyre-race__corner--rear/g)).toHaveLength(2)
     expect(html.match(/role=/g) ?? []).toHaveLength(0)
   })
@@ -50,7 +52,21 @@ describe('Race HUD components', () => {
     expect(html).toContain('Sagoma GT3')
     expect(html).toContain('SUSPENSION')
     expect(html).toContain('TOTAL')
-    expect(html).toContain('0:07.80')
+    expect(html).toContain('0:21.00')
+    expect(html).toContain('0:37.98')
     for (const label of ['FL', 'FR', 'RL', 'RR', '24%', '68%']) expect(html).toContain(label)
+  })
+
+  it('mantiene quattro posizioni e usa placeholder quando la telemetria locale e parziale', async () => {
+    const partial = fastState()
+    partial.tyres = partial.tyres.slice(0, 1)
+    partial.lapPressureAverage = { status: 'unavailable', tyreSet: null, values: { FL: null, FR: null, RL: null, RR: null } }
+
+    const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: partial }))
+
+    for (const id of ['fl', 'fr', 'rl', 'rr']) expect(html).toContain(`tyre-race__corner--${id}`)
+    expect(html).toContain('AVG --')
+    expect(html).toContain('LOSS --')
+    expect(html).not.toContain('LOSS 0.00')
   })
 })

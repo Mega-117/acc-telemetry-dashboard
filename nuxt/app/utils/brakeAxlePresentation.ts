@@ -9,6 +9,7 @@ export const BRAKE_PAD_LIFE_WARNING_PCT = 50
 export interface BrakeAxlePresentation {
   temperatureAverageC: number | null
   padLifeAveragePct: number | null
+  temperatureAverageColor: string
   leftTemperatureColor: string
   rightTemperatureColor: string
   temperatureAnomaly: boolean
@@ -37,6 +38,11 @@ export function buildBrakeAxlePresentation(
   return {
     temperatureAverageC,
     padLifeAveragePct,
+    temperatureAverageColor: brakeTemperatureColor(
+      temperatureAverageC,
+      left.id,
+      left.brakeCompound ?? right.brakeCompound,
+    ),
     leftTemperatureColor: brakeTemperatureColor(left.brakeTempC, left.id, left.brakeCompound),
     rightTemperatureColor: brakeTemperatureColor(right.brakeTempC, right.id, right.brakeCompound),
     temperatureAnomaly: bands.some(band => band !== 'missing' && band !== 'green'),

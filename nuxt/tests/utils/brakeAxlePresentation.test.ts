@@ -44,6 +44,13 @@ describe('brakeAxlePresentation', () => {
     expect(model.leftTemperatureColor).not.toBe(model.rightTemperatureColor)
   })
 
+  it('colora il valore aggregato usando la temperatura media mostrata', () => {
+    const model = buildBrakeAxlePresentation(tyre('FL', 181, 90), tyre('FR', 850, 90))
+    expect(model.temperatureAverageC).toBe(515.5)
+    expect(model.temperatureAverageColor).toBe('rgb(54, 255, 0)')
+    expect(model.temperatureAverageColor).not.toBe(model.leftTemperatureColor)
+  })
+
   it('valuta l usura sui lati e non sulla media apparentemente normale', () => {
     const model = buildBrakeAxlePresentation(
       tyre('RL', 300, BRAKE_PAD_LIFE_WARNING_PCT - 1),
