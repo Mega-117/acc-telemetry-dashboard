@@ -43,4 +43,12 @@ describe('qa bot overlay presentation', () => {
       automaticGearbox: true,
     })
   })
+
+  it('translates a missing Python dependency without exposing an internal code', () => {
+    const snapshot = normalizeQaBotSnapshot({
+      state: 'BLOCKED',
+      reason: 'qa_bot_python_dependencies_missing',
+    })
+    expect(qaBotPresentation(snapshot).reason).toBe('Dipendenze Python del bot non disponibili.')
+  })
 })

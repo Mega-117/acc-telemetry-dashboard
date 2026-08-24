@@ -26,6 +26,7 @@ const REASONS: Record<string, string> = {
   startup_timeout: 'Avvio non confermato entro il tempo di sicurezza.',
   qa_bot_runtime_missing: 'Runtime bot non disponibile in questa build.',
   qa_bot_python_missing: 'Runtime Python del bot non disponibile.',
+  qa_bot_python_dependencies_missing: 'Dipendenze Python del bot non disponibili.',
   gamepad_virtuale_non_disponibile: 'Controller Xbox virtuale non disponibile.',
   acc_shared_memory_non_disponibile: 'ACC o shared memory non disponibili.',
   sessione_non_supportata: 'Apri Practice o Hotlap single-player.',
