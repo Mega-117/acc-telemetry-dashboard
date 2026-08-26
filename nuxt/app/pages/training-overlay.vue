@@ -46,6 +46,7 @@ import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 definePageMeta({ layout: false })
 
 const { getPublicPath } = usePublicPath()
+const isPressureNotificationMode = ref(false)
 
 useHead({
   htmlAttrs: { class: 'training-overlay-document' },
@@ -107,8 +108,10 @@ const {
   setReferencesEnabled,
   setCoachEnabled,
 } = useSpotterVoiceSettings()
-const { canEnterApp } = useFirebaseAuth()
-const canUseSpotterControls = computed(() => canEnterApp.value)
+const { canEnterApp, isSecondaryLocalRuntime, isLocalRuntimeAttested } = useFirebaseAuth()
+const canUseSpotterControls = computed(() =>
+  isSecondaryLocalRuntime.value ? isLocalRuntimeAttested.value : canEnterApp.value,
+)
 // Solo evidenziazione visiva del focus mouse/tab: nessun effetto sui comandi
 // globali (PIP-96), Ctrl+N nel launcher avvia sempre l'allenamento.
 const launcherToolIndex = ref(0)
@@ -141,11 +144,25 @@ function getOverlayApi(): any | null {
   return (window as any).electronAPI || null
 }
 
-// Dry-pressure automation is always actionable: the logger supplies read-only
-// telemetry while the Electron controller owns all input and visible outcomes.
+// The logger owns recommendation facts; Electron owns Setup input; this page
+// only presents the versioned plan and never computes pressure corrections.
 const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not_fresh' })
 const isDryPressurePreviewOpen = ref(false)
-const dryPressureBridgeStatus = ref('Pronto a inviare il test.')
+const dryPressureBridgeStatus = ref('Nessuna raccomandazione TEST attiva.')
+const dismissedPressurePlanId = ref<string | null>(null)
+const pressurePopupVisible = computed(() => {
+  const recommendation = dryPressureState.value?.recommendation
+  return recommendation?.status === 'ready'
+    && recommendation?.eligible === true
+    && recommendation?.needs_adjustment === true
+    && recommendation?.plan_id
+    && recommendation.plan_id !== dismissedPressurePlanId.value
+    && dryPressureState.value?.consumed !== true
+})
+function dismissPressurePopup() {
+  dismissedPressurePlanId.value = dryPressureState.value?.recommendation?.plan_id || null
+  if (isPressureNotificationMode.value && typeof window !== 'undefined') window.close()
+}
 let dryPressureTimer: ReturnType<typeof setInterval> | null = null
 const qaBotState = ref<QaBotSnapshot>(normalizeQaBotSnapshot({
   state: 'OFF',
@@ -194,28 +211,31 @@ async function toggleQaBot() {
   await refreshQaBotState()
 }
 async function refreshDryPressureState() {
-  const next = await getOverlayApi()?.trainingOverlayGetDryPressureState?.()
-  if (next) dryPressureState.value = next
+  const next = await getOverlayApi()?.trainingOverlayGetSetupPressureState?.()
+  if (next) {
+    dryPressureState.value = next
+    scheduleOverlaySizeSync()
+  }
 }
 async function applyDryPressure() {
   isDryPressurePreviewOpen.value = true
   try {
-    const response = await getOverlayApi()?.trainingOverlayApplyDryPressure?.()
+    const response = await getOverlayApi()?.trainingOverlayApplySetupPressure?.()
     if (!response?.accepted) dryPressureState.value = { state: 'blocked', reason: 'command_not_accepted' }
   } catch (_) { dryPressureState.value = { state: 'blocked', reason: 'command_not_accepted' } }
   await refreshDryPressureState()
 }
 async function testDryPressure() {
   isDryPressurePreviewOpen.value = true
-  dryPressureState.value = { ...dryPressureState.value, state: 'running', reason: 'Click ricevuto: avvio Automation Controller…' }
-  dryPressureBridgeStatus.value = 'Click ricevuto → IPC Electron → controller ACC…'
+  dryPressureBridgeStatus.value = 'Creo una raccomandazione sintetica monouso…'
   try {
-    const result = await getOverlayApi()?.trainingOverlayTestDryPressure?.()
+    const result = await getOverlayApi()?.trainingOverlayGeneratePressureQa?.()
     if (!result?.accepted) {
       dryPressureState.value = { ...dryPressureState.value, state: 'blocked', reason: result?.reason || 'Test non avviato: prerequisito tecnico non verificato. Nessun input inviato.' }
       dryPressureBridgeStatus.value = `Bloccato: ${result?.reason || 'controller senza esito verificato.'}`
     } else {
-      dryPressureBridgeStatus.value = `Completato dal controller (${result.requestId || 'id non disponibile'}): 80 click/readback verificati.`
+      dismissedPressurePlanId.value = null
+      dryPressureBridgeStatus.value = `Raccomandazione TEST pronta (${result.planId || 'id non disponibile'}). Usa il normale pulsante Regola pressioni.`
     }
   } catch (_) {
     dryPressureState.value = { ...dryPressureState.value, state: 'blocked', reason: 'Bridge Electron/controller interrotto. Nessun retry cieco.' }
@@ -224,10 +244,10 @@ async function testDryPressure() {
   await refreshDryPressureState()
 }
 async function restoreTestDryPressure() {
-  dryPressureBridgeStatus.value = 'Ripristino richiesto → controller ACC…'
+  dryPressureBridgeStatus.value = 'Rimuovo la raccomandazione TEST senza inviare input ACC…'
   try {
-    const result = await getOverlayApi()?.trainingOverlayRestoreTestDryPressure?.()
-    dryPressureBridgeStatus.value = result?.accepted ? 'Ripristino completato e verificato.' : `Ripristino bloccato: ${result?.reason || 'pre-valori o gate mancanti.'}`
+    const result = await getOverlayApi()?.trainingOverlayClearPressureQa?.()
+    dryPressureBridgeStatus.value = result?.accepted ? 'Raccomandazione TEST rimossa.' : `Rimozione bloccata: ${result?.reason || 'fixture non disponibile.'}`
   } catch (_) {
     dryPressureState.value = { ...dryPressureState.value, state: 'blocked', reason: 'Ripristino non avviato: bridge/controller non disponibile. Nessun input inviato.' }
     dryPressureBridgeStatus.value = 'Errore bridge durante il ripristino.'
@@ -669,6 +689,7 @@ let removeCommandListener: (() => void) | undefined
 let removeInfoTargetListener: (() => void) | undefined
 
 onMounted(async () => {
+  isPressureNotificationMode.value = new URLSearchParams(window.location.search).get('pressureNotification') === '1'
   document.body.classList.add('training-overlay-runtime')
   initTestMode()
   const api = getOverlayApi()
@@ -764,13 +785,14 @@ onBeforeUnmount(() => {
         'training-overlay--drag': phase === 'placement',
         'training-overlay--web': !isElectronRuntime,
         'training-overlay--voice-points': voicePointRecorderEnabled,
+        'training-overlay--pressure-notification': isPressureNotificationMode,
       }
     ]"
   >
     <OverlaySoftwareCursor :state="pointerState" />
     <!-- Controlli dev (PIP-106): solo in sviluppo. Il badge appare quando ON. -->
     <button
-      v-if="showDevControls"
+      v-if="showDevControls && !isPressureNotificationMode"
       type="button"
       class="overlay-dev-toggle"
       :aria-pressed="isTestMode"
@@ -781,7 +803,7 @@ onBeforeUnmount(() => {
     </button>
 
     <button
-      v-if="canUseVoicePointRecorder"
+      v-if="canUseVoicePointRecorder && !isPressureNotificationMode"
       type="button"
       class="overlay-dev-toggle overlay-dev-toggle--voice-points"
       :aria-pressed="voicePointRecorderEnabled"
@@ -790,7 +812,19 @@ onBeforeUnmount(() => {
     >
       {{ voicePointRecorderEnabled ? 'REF ON' : 'REF OFF' }}
     </button>
-    <TestModeBadge class="overlay-test-badge" />
+    <TestModeBadge v-if="!isPressureNotificationMode" class="overlay-test-badge" />
+    <Transition name="chip-pop">
+      <aside v-if="isPressureNotificationMode && pressurePopupVisible" class="pressure-recommendation-popup" role="alert" aria-live="assertive">
+        <span v-if="dryPressureState.qaActive" class="pressure-recommendation-popup__test">TEST</span>
+        <strong>Pressioni da regolare</strong>
+        <p>
+          {{ dryPressureState.recommendation?.compound === 'WET' ? 'Bagnato' : 'Asciutto' }} · target
+          {{ dryPressureState.recommendation?.target_psi?.toFixed?.(1) ?? '—' }} PSI.
+          Torna ai pit, apri Ctrl+K e premi Regola pressioni.
+        </p>
+        <button type="button" @click="dismissPressurePopup">Ho capito</button>
+      </aside>
+    </Transition>
     <Transition name="chip-pop">
       <div
         v-if="voicePointNotice"
@@ -802,7 +836,7 @@ onBeforeUnmount(() => {
       </div>
     </Transition>
 
-    <div class="overlay-work-area">
+    <div v-if="!isPressureNotificationMode" class="overlay-work-area">
       <Transition name="overlay-surface" mode="out-in">
         <section
           v-if="phase === 'placement'"
@@ -931,29 +965,38 @@ onBeforeUnmount(() => {
                         · {{ qaBotState.speedKmh ?? 0 }} km/h · giri validi {{ qaBotState.lapsValid }}/{{ qaBotState.lapsCompleted }}
                       </template>
                     </p>
-                    <button type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Test regolazione pressioni strategia</button>
-                    <p class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
-                    <p v-for="(wheelState, wheel) in dryPressureState.result?.wheels || {}" :key="`test-${wheel}`" class="launcher-hint" role="status">
-                      {{ wheel }} · {{ wheelState.status }} · prima {{ wheelState.pre ?? wheelState.target ?? '—' }} · dopo {{ wheelState.post ?? '—' }} · {{ wheelState.readback || wheelState.reason || 'in attesa' }}
-                    </p>
-                    <button v-if="dryPressureState.result?.preValues && dryPressureState.result?.canRestore !== false" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Ripristina test pressioni</button>
+                    <button v-if="dryPressureState.qaAvailable" type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Genera raccomandazione TEST</button>
+                    <p v-if="dryPressureState.qaAvailable" class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
+                    <button v-if="dryPressureState.qaActive" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Rimuovi raccomandazione TEST</button>
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training"
-                      aria-label="Regola pressioni asciutto"
+                      aria-label="Regola pressioni nel Setup ACC"
+                      :disabled="dryPressureState.state !== 'ready'"
                       @click="applyDryPressure"
                     >
-                      Regola pressioni — asciutto
+                      Regola pressioni
                     </button>
                   </div>
                   <p class="launcher-hint" role="status">
                     Pressioni: {{ dryPressureState.state === 'ready' ? 'Pronto' : dryPressureState.state === 'running' ? 'In corso' : dryPressureState.state === 'completed' ? 'Completato' : dryPressureState.state === 'blocked' ? 'Bloccato' : 'Non disponibile' }} · {{ dryPressureState.reason || 'verifica dati' }}
                   </p>
-                  <div class="launcher-hint" role="status" aria-label="Anteprima regolazione pressioni asciutto">
-                    <p>Giri usati: {{ dryPressureState.recommendation?.laps || 0 }} (validi {{ dryPressureState.recommendation?.validLaps || 0 }}, invalidi {{ dryPressureState.recommendation?.invalidLaps || 0 }}).</p>
-                    <p v-for="row in dryPressureState.preview || []" :key="row.wheel">{{ row.wheel }} · media {{ row.averagePsi ?? '—' }} · target 27,0 · Δ {{ row.deltaPsi ?? '—' }} · MFD {{ row.currentPsi ?? 'MFD non disponibile' }} · imposta {{ row.requiresCalibration ? 'richiede calibrazione' : (row.willSetPsi ?? 'MFD non disponibile') }} · click {{ row.requiresCalibration ? 'richiede calibrazione' : (row.clicks ?? 'MFD non disponibile') }}</p>
-                    <p v-if="!dryPressureState.recommendation?.averagePsi">Anteprima analitica non disponibile: {{ dryPressureState.reason || 'attendo almeno un giro asciutto completo e telemetria fresca.' }}</p>
-                    <p v-if="!dryPressureState.calibrationReady">Preview disponibile; applicazione bloccata: calibrazione mancante o non compatibile.</p>
+                  <div class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
+                    <div class="pressure-plan__meta">
+                      <span>{{ dryPressureState.recommendation?.completed_laps || 0 }}/4 giri</span>
+                      <span>{{ dryPressureState.recommendation?.valid_laps || 0 }}/1 valido</span>
+                      <strong>{{ dryPressureState.recommendation?.compound || '—' }}</strong>
+                    </div>
+                    <table v-if="dryPressureState.recommendation?.wheels" class="pressure-plan__table">
+                      <thead><tr><th>Gomma</th><th>AVG</th><th>Persa</th><th>Comp.</th><th>Target</th><th>± click</th></tr></thead>
+                      <tbody>
+                        <tr v-for="row in dryPressureState.preview || []" :key="row.wheel">
+                          <th>{{ row.wheel }}</th><td>{{ row.averagePsi?.toFixed?.(2) ?? '—' }}</td><td>{{ row.totalLossPsi?.toFixed?.(1) ?? '—' }}</td><td>{{ row.compensatedPsi?.toFixed?.(1) ?? '—' }}</td><td>{{ row.targetPsi?.toFixed?.(1) ?? '—' }}</td><td class="pressure-plan__clicks">{{ row.clicks > 0 ? '+' : '' }}{{ row.clicks ?? '—' }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                    <p v-if="dryPressureState.recommendation?.wheels" class="pressure-plan__note">AVG + persa = compensata · il setup cambia dei click indicati.</p>
+                    <p v-else class="pressure-plan__empty">{{ dryPressureState.reason || 'Attendo quattro giri completi, di cui almeno uno valido.' }}</p>
                   </div>
 
                   <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K chiude</p>
@@ -1113,6 +1156,83 @@ onBeforeUnmount(() => {
 
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
+
+.pressure-recommendation-popup {
+  position: absolute;
+  z-index: 30;
+  right: 18px;
+  bottom: 18px;
+  width: min(360px, calc(100% - 36px));
+  padding: 14px 16px;
+  border: 1px solid rgba(239, 68, 68, 0.72);
+  border-radius: 14px;
+  background: rgba(14, 18, 25, 0.96);
+  color: #f8fafc;
+
+  p { margin: 6px 0 10px; color: #cbd5e1; line-height: 1.35; }
+  button { border: 0; border-radius: 8px; padding: 7px 10px; background: #ef4444; color: white; font-weight: 700; }
+}
+
+.pressure-recommendation-popup__test {
+  display: inline-flex;
+  margin-right: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #f59e0b;
+  color: #111827;
+  font-size: 0.68rem;
+  font-weight: 900;
+}
+
+.training-overlay--pressure-notification {
+  width: 100%;
+  height: 100%;
+
+  .pressure-recommendation-popup {
+    inset: 10px;
+    width: auto;
+  }
+}
+
+.pressure-plan {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(2, 6, 12, 0.28);
+  color: rgba(238, 248, 244, 0.78);
+  font-variant-numeric: tabular-nums;
+}
+
+.pressure-plan__meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 9px;
+  font-weight: 800;
+
+  strong { margin-left: auto; color: #f6fff9; }
+}
+
+.pressure-plan__table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 8px;
+  line-height: 1.15;
+  text-align: right;
+
+  th, td { padding: 3px 2px; white-space: nowrap; }
+  thead th { color: rgba(226, 238, 247, 0.5); font-size: 7px; font-weight: 850; }
+  thead th:first-child, tbody th { text-align: left; }
+  tbody tr { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+  tbody th { color: #f6fff9; font-weight: 950; }
+}
+
+.pressure-plan__clicks { color: #86efac; font-weight: 950; }
+.pressure-plan__note, .pressure-plan__empty { margin: 0; color: rgba(226, 238, 247, 0.52); font-size: 8px; line-height: 1.2; text-align: left; }
 </style>
 
 
