@@ -41,6 +41,7 @@ import {
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useDevTestMode } from '~/composables/useDevTestMode'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { resolveLocalRuntimeCapability } from '~/services/auth/localIdentityBridge'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 
 definePageMeta({ layout: false })
@@ -107,9 +108,11 @@ const {
   setCoachEnabled,
 } = useSpotterVoiceSettings()
 const { canEnterApp, isSecondaryLocalRuntime, isLocalRuntimeAttested } = useFirebaseAuth()
-const canUseSpotterControls = computed(() =>
-  isSecondaryLocalRuntime.value ? isLocalRuntimeAttested.value : canEnterApp.value,
-)
+const canUseSpotterControls = computed(() => resolveLocalRuntimeCapability({
+  isSecondaryLocalRuntime: isSecondaryLocalRuntime.value,
+  isLocalRuntimeAttested: isLocalRuntimeAttested.value,
+  canEnterApp: canEnterApp.value,
+}))
 // Solo evidenziazione visiva del focus mouse/tab: nessun effetto sui comandi
 // globali (PIP-96), Ctrl+N nel launcher avvia sempre l'allenamento.
 const launcherToolIndex = ref(0)

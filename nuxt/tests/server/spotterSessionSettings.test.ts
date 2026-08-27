@@ -38,10 +38,18 @@ describe('Spotter session settings wiring', () => {
       runtime.indexOf('watch(() => liveLap.value.lapsCompleted'),
       runtime.indexOf('watch(() => selectedVoice.value'),
     )
-    expect(lapWatch.indexOf('announceLapTime()')).toBeLessThan(
-      lapWatch.indexOf('recordPressureFinishCrossing(pressureVoiceState)'),
+    expect(lapWatch.indexOf('announceLapTime(newVal)')).toBeLessThan(
+      lapWatch.indexOf('pressureVoiceRuntime.recordFinishCrossing(newVal)'),
     )
-    expect(runtime).toContain('pressureWarningVoicePath(selectedVoice.value)')
-    expect(runtime).not.toMatch(/outcome\.announce[\s\S]{0,160}lapTimesAllowedForSession/)
+    expect(runtime).toContain('createPressureRecommendationVoiceRuntime')
+    expect(runtime).not.toMatch(/recordFinishCrossing[\s\S]{0,160}lapTimesAllowedForSession/)
+  })
+
+  it('usa capability attestata, coda riusabile e diagnostica persistente', () => {
+    expect(runtime).toContain('resolveLocalRuntimeCapability')
+    expect(runtime).toContain('createVoicePlaybackQueue')
+    expect(runtime).toContain('createVoiceRuntimeDiagnostics')
+    expect(runtime).not.toContain('let queue = Promise.resolve()')
+    expect(runtime).not.toContain('const { canEnterApp } = useFirebaseAuth()')
   })
 })

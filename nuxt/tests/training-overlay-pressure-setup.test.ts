@@ -24,7 +24,7 @@ describe('training overlay Setup pressure contract', () => {
   })
 
   it('uses main-process attestation as the single auth source in Control K', () => {
-    expect(source).toContain('isSecondaryLocalRuntime.value ? isLocalRuntimeAttested.value : canEnterApp.value')
+    expect(source).toContain('resolveLocalRuntimeCapability')
   })
 
 })

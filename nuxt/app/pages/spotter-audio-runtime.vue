@@ -6,8 +6,14 @@ import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
+import { resolveLocalRuntimeCapability } from '~/services/auth/localIdentityBridge'
 import { resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
-import { playAudioWithWatchdog } from '~/services/audio/audioPlayback'
+import {
+  createVoicePlaybackQueue,
+  type VoiceCue,
+  type VoiceCueSource,
+} from '~/services/audio/voicePlaybackQueue'
+import { createVoiceRuntimeDiagnostics } from '~/services/monitoring/voiceRuntimeDiagnostics'
 import {
   filterPlayableTrackVoiceReferences,
   isLapCountIncrement,
@@ -32,13 +38,7 @@ import {
   resolveCoachOverrides,
 } from '~/services/spotter/coachVoiceController'
 import { useCoachStatePoller } from '~/composables/useCoachStatePoller'
-import {
-  createPressureRecommendationVoiceState,
-  pressureWarningVoicePath,
-  recordPressureFinishCrossing,
-  recordPressureRecommendation,
-  type PressureRecommendationVoiceOutcome,
-} from '~/services/spotter/pressureRecommendationVoice'
+import { createPressureRecommendationVoiceRuntime } from '~/services/spotter/pressureRecommendationVoiceRuntime'
 
 definePageMeta({ layout: false })
 
@@ -59,17 +59,44 @@ const {
   adaptiveCoachMode,
   load: loadSpotterVoiceSettings,
 } = useSpotterVoiceSettings()
-const { canEnterApp } = useFirebaseAuth()
+const { canEnterApp, isSecondaryLocalRuntime, isLocalRuntimeAttested } = useFirebaseAuth()
+const canRunSpotterAudio = computed(() => resolveLocalRuntimeCapability({
+  isSecondaryLocalRuntime: isSecondaryLocalRuntime.value,
+  isLocalRuntimeAttested: isLocalRuntimeAttested.value,
+  canEnterApp: canEnterApp.value,
+}))
 const voiceLabRuntime = useVoiceLabRuntime()
-const canRunSpotterAudio = computed(() => canEnterApp.value)
 
 const trackVoiceReferences = ref<TrackVoiceReference[]>([])
 const trackVoiceReferenceRuntimeState = ref(createTrackVoiceReferenceRuntimeState())
-let audio: HTMLAudioElement | null = null
-let queue = Promise.resolve()
-let generation = 0
 let removeTrackVoiceReferenceChangeListener = () => {}
-let pressureVoiceState = createPressureRecommendationVoiceState()
+let cueSequence = 0
+
+const voiceRuntimeDiagnostics = createVoiceRuntimeDiagnostics()
+const voiceQueue = createVoicePlaybackQueue({
+  createAudio: path => new Audio(getPublicPath(path)),
+  onEvent: event => voiceRuntimeDiagnostics.record({
+    kind: event.kind,
+    cueId: event.cue.id,
+    correlationId: event.cue.correlationId,
+    scenarioId: event.cue.scenarioId,
+    source: event.cue.source,
+    outcome: event.kind.startsWith('playback_') ? event.kind.slice('playback_'.length) : undefined,
+    reason: event.reason,
+  }),
+})
+
+const pressureVoiceRuntime = createPressureRecommendationVoiceRuntime({
+  getVoice: () => selectedVoice.value,
+  enqueue: cue => voiceQueue.enqueue(cue),
+  onEvent: event => voiceRuntimeDiagnostics.record({
+    kind: event.kind,
+    cueId: event.cue?.id,
+    correlationId: event.correlationId,
+    scenarioId: event.cue?.scenarioId,
+    source: event.cue?.source,
+  }),
+})
 
 function getRuntimeApi(): any | null {
   if (typeof window === 'undefined') return null
@@ -114,44 +141,51 @@ const lapTimesAllowedForSession = computed(() => isSpotterFeatureAllowed(
   fastState.value.sessionType,
 ))
 
-function playAudioPath(path: string, gen: number): Promise<'ended' | 'error' | 'timeout' | 'skipped'> {
-  if (!path || gen !== generation || !canRunSpotterAudio.value) return Promise.resolve('skipped')
-  const el = new Audio(getPublicPath(path))
-  audio = el
-  // Watchdog PIP-254: una traccia in stallo viene saltata, la coda prosegue.
-  return playAudioWithWatchdog(el, { label: path }).then((outcome) => {
-    if (audio === el) audio = null
-    return outcome
-  })
-}
-
-function enqueueAudioPath(path: string) {
+function enqueueAudioPath(path: string, metadata: {
+  source?: VoiceCueSource
+  id?: string
+  correlationId?: string
+  scenarioId?: string
+} = {}) {
   if (!path || !canRunSpotterAudio.value) return
-  const gen = generation
-  queue = queue.then(() => playAudioPath(path, gen)).then(() => undefined)
+  const source = metadata.source ?? 'track-reference'
+  const cue: VoiceCue = {
+    id: metadata.id || `${source}-${++cueSequence}`,
+    path,
+    source,
+    correlationId: metadata.correlationId,
+    scenarioId: metadata.scenarioId,
+  }
+  voiceRuntimeDiagnostics.record({
+    kind: 'cue_created',
+    cueId: cue.id,
+    correlationId: cue.correlationId,
+    scenarioId: cue.scenarioId,
+    source: cue.source,
+  })
+  voiceQueue.enqueue(cue)
 }
 
 /** PIP-256: prova la correzione coach; se il WAV manca/fallisce suona il
  * riferimento standard (mai un marker muto per colpa del coach). */
 function enqueueAudioPathWithFallback(primaryPath: string, fallbackPath: string) {
   if (!canRunSpotterAudio.value) return
-  const gen = generation
-  queue = queue.then(async () => {
-    const outcome = await playAudioPath(primaryPath, gen)
-    if (outcome === 'error' && fallbackPath && fallbackPath !== primaryPath) {
-      await playAudioPath(fallbackPath, gen)
-    }
+  const cue: VoiceCue = {
+    id: `coach-${++cueSequence}`,
+    path: primaryPath,
+    fallbackPath,
+    source: 'coach',
+  }
+  voiceRuntimeDiagnostics.record({
+    kind: 'cue_created',
+    cueId: cue.id,
+    source: cue.source,
   })
+  voiceQueue.enqueue(cue)
 }
 
 function stopSpotterAudio() {
-  generation += 1
-  if (audio) {
-    audio.pause()
-    audio.currentTime = 0
-    audio = null
-  }
-  queue = Promise.resolve()
+  voiceQueue.cancelAll()
 }
 
 async function loadTrackVoiceReferences() {
@@ -179,7 +213,7 @@ function disarmTrackVoiceReferences() {
 
 function stopRuntimeAudioForLogout() {
   disarmTrackVoiceReferences()
-  pressureVoiceState = createPressureRecommendationVoiceState()
+  pressureVoiceRuntime.reset()
   stopSpotterAudio()
 }
 
@@ -247,7 +281,7 @@ function tickTrackVoiceReferences() {
   }
 }
 
-function announceLapTime() {
+function announceLapTime(completedLaps: number) {
   if (!canRunSpotterAudio.value || !lapTimesAllowedForSession.value) return
   const audioEntry = resolveLapTimeVoiceEntry(
     liveLap.value.lastLapTimeMs,
@@ -255,14 +289,11 @@ function announceLapTime() {
     selectedVoice.value,
   )
   if (!audioEntry) return
-  enqueueAudioPath(audioEntry.path)
-}
-
-function applyPressureVoiceOutcome(outcome: PressureRecommendationVoiceOutcome) {
-  pressureVoiceState = outcome.state
-  if (!outcome.announce) return
-  enqueueAudioPath(pressureWarningVoicePath(selectedVoice.value))
-  if (import.meta.dev) console.debug('[spotter-audio-runtime] pressioni fuori tolleranza')
+  enqueueAudioPath(audioEntry.path, {
+    source: 'lap-time',
+    id: `lap-time-${completedLaps}`,
+    correlationId: `lap-${completedLaps}`,
+  })
 }
 
 onMounted(async () => {
@@ -285,18 +316,16 @@ watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
   // transizioni da/verso null sono recuperi di dato stale. Il ciclo per-giro
   // dei riferimenti NON si resetta qui: lo governa il wrap del flusso di
   // posizione (PIP-216), immune al lag tra live poller e fast poller.
-  if (!isLapCountIncrement(oldVal, newVal)) return
+  if (!isLapCountIncrement(oldVal, newVal) || typeof newVal !== 'number') return
   // L'eventuale tempo entra per primo nella FIFO. Il coordinatore attende la
   // raccomandazione dello stesso giro di stint se il fast-state arriva dopo.
-  announceLapTime()
-  applyPressureVoiceOutcome(recordPressureFinishCrossing(pressureVoiceState))
+  announceLapTime(newVal)
+  pressureVoiceRuntime.recordFinishCrossing(newVal)
 })
 
 watch(
   () => fastState.value.tyreSetup.pressureRecommendation,
-  recommendation => applyPressureVoiceOutcome(
-    recordPressureRecommendation(pressureVoiceState, recommendation),
-  ),
+  recommendation => pressureVoiceRuntime.recordRecommendation(recommendation),
   { deep: true },
 )
 
@@ -314,12 +343,16 @@ watch(referencesAllowedForSession, (enabled) => {
 })
 
 watch(canRunSpotterAudio, (canRun) => {
+  voiceRuntimeDiagnostics.record({
+    kind: canRun ? 'runtime_authorized' : 'runtime_denied',
+    reason: canRun ? 'local_runtime_capability_granted' : 'local_runtime_capability_revoked',
+  })
   if (!canRun) {
     stopRuntimeAudioForLogout()
     return
   }
   resetTrackVoiceReferenceLapState()
-  pressureVoiceState = createPressureRecommendationVoiceState()
+  pressureVoiceRuntime.reset()
   tickTrackVoiceReferences()
 })
 
@@ -335,7 +368,7 @@ watch(() => fastState.value.sessionType, (sessionType, previousSessionType) => {
     // entrambe le modalita' sono abilitate e ACC passa active -> active.
     // La FIFO audio resta intatta: si azzera solo lo stato per-giro.
     resetTrackVoiceReferenceLapState()
-    pressureVoiceState = createPressureRecommendationVoiceState()
+    pressureVoiceRuntime.reset()
   }
   tickTrackVoiceReferences()
 })

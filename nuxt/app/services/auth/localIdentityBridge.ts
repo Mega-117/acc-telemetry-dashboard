@@ -48,6 +48,16 @@ export function shouldObserveFirebaseAuth() {
     return electronAPI.localIdentityRole === 'primary'
 }
 
+export function resolveLocalRuntimeCapability(input: {
+    isSecondaryLocalRuntime: boolean
+    isLocalRuntimeAttested: boolean
+    canEnterApp: boolean
+}): boolean {
+    return input.isSecondaryLocalRuntime
+        ? input.isLocalRuntimeAttested
+        : input.canEnterApp
+}
+
 export async function requestLocalRuntimeAttestation() {
     const electronAPI = getElectronAPI()
     if (

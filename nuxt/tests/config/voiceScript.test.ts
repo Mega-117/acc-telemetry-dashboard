@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { voiceScript, getScenarioVoicePhrase, getStepVoicePhrase } from '~/config/voiceScript'
 import { trainingOverlayCatalog, trainingOverlayOrder } from '~/config/trainingOverlayCatalog'
@@ -53,11 +55,21 @@ describe('voiceScript - sincronia col catalogo', () => {
   })
 
   it('la frase pressioni è una risorsa di sistema fissa', () => {
-    expect(getScenarioVoicePhrase('pressureAdjustmentNeeded')).toEqual({
-      id: 'pressureAdjustmentNeeded',
-      origin: 'system',
-      text: 'pressioni non ottimali. torna ai box e sistemale.',
-    })
+    const phrase = getScenarioVoicePhrase('pressureAdjustmentNeeded')
+    expect(phrase).toMatchObject({ id: 'pressureAdjustmentNeeded', origin: 'system' })
+    expect(phrase?.text.trim().length).toBeGreaterThan(0)
+    for (const voice of voiceScript.voices) {
+      expect(existsSync(resolve(
+        process.cwd(),
+        'public',
+        'voice',
+        'qualifying',
+        `pressureAdjustmentNeeded-${voice}.wav`,
+      ))).toBe(true)
+    }
+    const voiceLab = readFileSync(resolve(process.cwd(), 'app/pages/dev-voice-lab.vue'), 'utf8')
+    expect(voiceLab).toContain('synthesize(entry.text.trim(), voice, speed)')
+    expect(voiceLab).toContain("await $fetch('/api/dev/voice-script'")
   })
 
   it('testi TTS-friendly: minuscoli e non vuoti', () => {

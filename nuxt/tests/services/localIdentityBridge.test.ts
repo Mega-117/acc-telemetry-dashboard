@@ -6,6 +6,7 @@ import {
   requestLocalRuntimeAttestation,
   publishAuthStartupOutcome,
   requiresLocalIdentityBridge,
+  resolveLocalRuntimeCapability,
   saveLocalUserIdentity,
   shouldObserveFirebaseAuth,
 } from '~/services/auth/localIdentityBridge'
@@ -13,6 +14,24 @@ import {
 describe('local identity runtime bridge', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+  })
+
+  it('separa l ingresso dashboard dalla capability dei renderer attestati', () => {
+    expect(resolveLocalRuntimeCapability({
+      isSecondaryLocalRuntime: false,
+      isLocalRuntimeAttested: false,
+      canEnterApp: true,
+    })).toBe(true)
+    expect(resolveLocalRuntimeCapability({
+      isSecondaryLocalRuntime: true,
+      isLocalRuntimeAttested: true,
+      canEnterApp: false,
+    })).toBe(true)
+    expect(resolveLocalRuntimeCapability({
+      isSecondaryLocalRuntime: true,
+      isLocalRuntimeAttested: false,
+      canEnterApp: true,
+    })).toBe(false)
   })
 
   it('e obbligatorio soltanto nel renderer Electron primario', () => {
