@@ -813,18 +813,16 @@ onBeforeUnmount(() => {
       {{ voicePointRecorderEnabled ? 'REF ON' : 'REF OFF' }}
     </button>
     <TestModeBadge v-if="!isPressureNotificationMode" class="overlay-test-badge" />
-    <Transition name="chip-pop">
-      <aside v-if="isPressureNotificationMode && pressurePopupVisible" class="pressure-recommendation-popup" role="alert" aria-live="assertive">
-        <span v-if="dryPressureState.qaActive" class="pressure-recommendation-popup__test">TEST</span>
-        <strong>Pressioni da regolare</strong>
-        <p>
-          {{ dryPressureState.recommendation?.compound === 'WET' ? 'Bagnato' : 'Asciutto' }} · target
-          {{ dryPressureState.recommendation?.target_psi?.toFixed?.(1) ?? '—' }} PSI.
-          Torna ai pit, apri Ctrl+K e premi Regola pressioni.
-        </p>
-        <button type="button" @click="dismissPressurePopup">Ho capito</button>
-      </aside>
-    </Transition>
+    <aside v-if="isPressureNotificationMode && pressurePopupVisible" class="pressure-recommendation-popup" role="alert" aria-live="assertive">
+      <span v-if="dryPressureState.qaActive" class="pressure-recommendation-popup__test">TEST</span>
+      <strong>Pressioni da regolare</strong>
+      <p>
+        {{ dryPressureState.recommendation?.compound === 'WET' ? 'Bagnato' : 'Asciutto' }} · target
+        {{ dryPressureState.recommendation?.target_psi?.toFixed?.(1) ?? '—' }} PSI.
+        Torna ai pit, apri Ctrl+K e premi Regola pressioni.
+      </p>
+      <button type="button" @click="dismissPressurePopup">Ho capito</button>
+    </aside>
     <Transition name="chip-pop">
       <div
         v-if="voicePointNotice"
@@ -1191,6 +1189,11 @@ onBeforeUnmount(() => {
   .pressure-recommendation-popup {
     inset: 10px;
     width: auto;
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    animation: none;
+    transition: none;
   }
 }
 

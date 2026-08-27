@@ -15,6 +15,8 @@ describe('training overlay Setup pressure contract', () => {
     expect(source).toContain('isPressureNotificationMode && pressurePopupVisible')
     expect(source).toContain("pressureNotification') === '1'")
     expect(source).toContain('window.close()')
+    expect(source).not.toMatch(/<Transition name="chip-pop">\s*<aside v-if="isPressureNotificationMode && pressurePopupVisible"/)
+    expect(source).toMatch(/\.training-overlay--pressure-notification[\s\S]*\.pressure-recommendation-popup[\s\S]*opacity: 1;[\s\S]*visibility: visible;[\s\S]*transition: none;/)
     expect(source).toMatch(/async function refreshDryPressureState\(\)[\s\S]*dryPressureState\.value = next[\s\S]*scheduleOverlaySizeSync\(\)/)
   })
 
@@ -27,4 +29,5 @@ describe('training overlay Setup pressure contract', () => {
   it('uses main-process attestation as the single auth source in Control K', () => {
     expect(source).toContain('isSecondaryLocalRuntime.value ? isLocalRuntimeAttested.value : canEnterApp.value')
   })
+
 })
