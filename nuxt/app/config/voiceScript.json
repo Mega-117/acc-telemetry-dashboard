@@ -15,6 +15,11 @@
       "id": "sessionComplete",
       "origin": "system",
       "text": "allenamento completato, ottimo lavoro. ora fatti un recap a mente: cosa e' andato bene e su cosa lavorare la prossima volta."
+    },
+    {
+      "id": "pressureAdjustmentNeeded",
+      "origin": "system",
+      "text": "pressioni non ottimali. torna ai box e sistemale."
     }
   ],
   "steps": [

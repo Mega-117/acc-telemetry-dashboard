@@ -32,6 +32,13 @@ import {
   resolveCoachOverrides,
 } from '~/services/spotter/coachVoiceController'
 import { useCoachStatePoller } from '~/composables/useCoachStatePoller'
+import {
+  createPressureRecommendationVoiceState,
+  pressureWarningVoicePath,
+  recordPressureFinishCrossing,
+  recordPressureRecommendation,
+  type PressureRecommendationVoiceOutcome,
+} from '~/services/spotter/pressureRecommendationVoice'
 
 definePageMeta({ layout: false })
 
@@ -62,6 +69,7 @@ let audio: HTMLAudioElement | null = null
 let queue = Promise.resolve()
 let generation = 0
 let removeTrackVoiceReferenceChangeListener = () => {}
+let pressureVoiceState = createPressureRecommendationVoiceState()
 
 function getRuntimeApi(): any | null {
   if (typeof window === 'undefined') return null
@@ -171,6 +179,7 @@ function disarmTrackVoiceReferences() {
 
 function stopRuntimeAudioForLogout() {
   disarmTrackVoiceReferences()
+  pressureVoiceState = createPressureRecommendationVoiceState()
   stopSpotterAudio()
 }
 
@@ -249,6 +258,13 @@ function announceLapTime() {
   enqueueAudioPath(audioEntry.path)
 }
 
+function applyPressureVoiceOutcome(outcome: PressureRecommendationVoiceOutcome) {
+  pressureVoiceState = outcome.state
+  if (!outcome.announce) return
+  enqueueAudioPath(pressureWarningVoicePath(selectedVoice.value))
+  if (import.meta.dev) console.debug('[spotter-audio-runtime] pressioni fuori tolleranza')
+}
+
 onMounted(async () => {
   loadSpotterVoiceSettings()
   await loadTrackVoiceReferences()
@@ -270,8 +286,19 @@ watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
   // dei riferimenti NON si resetta qui: lo governa il wrap del flusso di
   // posizione (PIP-216), immune al lag tra live poller e fast poller.
   if (!isLapCountIncrement(oldVal, newVal)) return
+  // L'eventuale tempo entra per primo nella FIFO. Il coordinatore attende la
+  // raccomandazione dello stesso giro di stint se il fast-state arriva dopo.
   announceLapTime()
+  applyPressureVoiceOutcome(recordPressureFinishCrossing(pressureVoiceState))
 })
+
+watch(
+  () => fastState.value.tyreSetup.pressureRecommendation,
+  recommendation => applyPressureVoiceOutcome(
+    recordPressureRecommendation(pressureVoiceState, recommendation),
+  ),
+  { deep: true },
+)
 
 watch(() => selectedVoice.value, async () => {
   await loadTrackVoiceReferences()
@@ -292,6 +319,7 @@ watch(canRunSpotterAudio, (canRun) => {
     return
   }
   resetTrackVoiceReferenceLapState()
+  pressureVoiceState = createPressureRecommendationVoiceState()
   tickTrackVoiceReferences()
 })
 
@@ -307,6 +335,7 @@ watch(() => fastState.value.sessionType, (sessionType, previousSessionType) => {
     // entrambe le modalita' sono abilitate e ACC passa active -> active.
     // La FIFO audio resta intatta: si azzera solo lo stato per-giro.
     resetTrackVoiceReferenceLapState()
+    pressureVoiceState = createPressureRecommendationVoiceState()
   }
   tickTrackVoiceReferences()
 })

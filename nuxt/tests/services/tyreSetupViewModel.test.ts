@@ -49,6 +49,14 @@ describe('tyreSetupViewModel', () => {
         tyre_set: 4,
         values: wheels(25.1),
       },
+      pressure_recommendation: {
+        status: 'ready',
+        eligible: true,
+        needs_adjustment: true,
+        completed_laps: 3,
+        required_completed_laps: 3,
+        plan_id: 'plan-3',
+      },
     })
 
     expect(model.status).toBe('available')
@@ -60,6 +68,14 @@ describe('tyreSetupViewModel', () => {
       status: 'available',
       source: 'mfd_applied',
       tyreSet: 3,
+    })
+    expect(model.pressureRecommendation).toEqual({
+      status: 'ready',
+      eligible: true,
+      needsAdjustment: true,
+      completedLaps: 3,
+      requiredCompletedLaps: 3,
+      planId: 'plan-3',
     })
   })
 
@@ -92,6 +108,7 @@ describe('tyreSetupViewModel', () => {
   it('degrada a valori vuoti senza inventare statistiche', () => {
     expect(normalizeTyreSetupViewModel(null)).toEqual(emptyTyreSetupViewModel())
     expect(normalizeTyreSetupViewModel({ status: 'available' }).lastLap).toBeNull()
+    expect(normalizeTyreSetupViewModel({ pressure_recommendation: {} }).pressureRecommendation).toBeNull()
     expect(normalizeTyreSetupViewModel({
       last_lap: {
         pressure: { high: wheels(27), avg: wheels(26.8) },

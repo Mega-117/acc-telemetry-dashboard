@@ -46,8 +46,6 @@ import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 definePageMeta({ layout: false })
 
 const { getPublicPath } = usePublicPath()
-const isPressureNotificationMode = ref(false)
-
 useHead({
   htmlAttrs: { class: 'training-overlay-document' },
   bodyAttrs: { class: 'training-overlay-runtime' },
@@ -149,20 +147,6 @@ function getOverlayApi(): any | null {
 const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not_fresh' })
 const isDryPressurePreviewOpen = ref(false)
 const dryPressureBridgeStatus = ref('Nessuna raccomandazione TEST attiva.')
-const dismissedPressurePlanId = ref<string | null>(null)
-const pressurePopupVisible = computed(() => {
-  const recommendation = dryPressureState.value?.recommendation
-  return recommendation?.status === 'ready'
-    && recommendation?.eligible === true
-    && recommendation?.needs_adjustment === true
-    && recommendation?.plan_id
-    && recommendation.plan_id !== dismissedPressurePlanId.value
-    && dryPressureState.value?.consumed !== true
-})
-function dismissPressurePopup() {
-  dismissedPressurePlanId.value = dryPressureState.value?.recommendation?.plan_id || null
-  if (isPressureNotificationMode.value && typeof window !== 'undefined') window.close()
-}
 let dryPressureTimer: ReturnType<typeof setInterval> | null = null
 const qaBotState = ref<QaBotSnapshot>(normalizeQaBotSnapshot({
   state: 'OFF',
@@ -234,7 +218,6 @@ async function testDryPressure() {
       dryPressureState.value = { ...dryPressureState.value, state: 'blocked', reason: result?.reason || 'Test non avviato: prerequisito tecnico non verificato. Nessun input inviato.' }
       dryPressureBridgeStatus.value = `Bloccato: ${result?.reason || 'controller senza esito verificato.'}`
     } else {
-      dismissedPressurePlanId.value = null
       dryPressureBridgeStatus.value = `Raccomandazione TEST pronta (${result.planId || 'id non disponibile'}). Usa il normale pulsante Regola pressioni.`
     }
   } catch (_) {
@@ -689,7 +672,6 @@ let removeCommandListener: (() => void) | undefined
 let removeInfoTargetListener: (() => void) | undefined
 
 onMounted(async () => {
-  isPressureNotificationMode.value = new URLSearchParams(window.location.search).get('pressureNotification') === '1'
   document.body.classList.add('training-overlay-runtime')
   initTestMode()
   const api = getOverlayApi()
@@ -785,14 +767,13 @@ onBeforeUnmount(() => {
         'training-overlay--drag': phase === 'placement',
         'training-overlay--web': !isElectronRuntime,
         'training-overlay--voice-points': voicePointRecorderEnabled,
-        'training-overlay--pressure-notification': isPressureNotificationMode,
       }
     ]"
   >
     <OverlaySoftwareCursor :state="pointerState" />
     <!-- Controlli dev (PIP-106): solo in sviluppo. Il badge appare quando ON. -->
     <button
-      v-if="showDevControls && !isPressureNotificationMode"
+      v-if="showDevControls"
       type="button"
       class="overlay-dev-toggle"
       :aria-pressed="isTestMode"
@@ -803,7 +784,7 @@ onBeforeUnmount(() => {
     </button>
 
     <button
-      v-if="canUseVoicePointRecorder && !isPressureNotificationMode"
+      v-if="canUseVoicePointRecorder"
       type="button"
       class="overlay-dev-toggle overlay-dev-toggle--voice-points"
       :aria-pressed="voicePointRecorderEnabled"
@@ -812,17 +793,7 @@ onBeforeUnmount(() => {
     >
       {{ voicePointRecorderEnabled ? 'REF ON' : 'REF OFF' }}
     </button>
-    <TestModeBadge v-if="!isPressureNotificationMode" class="overlay-test-badge" />
-    <aside v-if="isPressureNotificationMode && pressurePopupVisible" class="pressure-recommendation-popup" role="alert" aria-live="assertive">
-      <span v-if="dryPressureState.qaActive" class="pressure-recommendation-popup__test">TEST</span>
-      <strong>Pressioni da regolare</strong>
-      <p>
-        {{ dryPressureState.recommendation?.compound === 'WET' ? 'Bagnato' : 'Asciutto' }} · target
-        {{ dryPressureState.recommendation?.target_psi?.toFixed?.(1) ?? '—' }} PSI.
-        Torna ai pit, apri Ctrl+K e premi Regola pressioni.
-      </p>
-      <button type="button" @click="dismissPressurePopup">Ho capito</button>
-    </aside>
+    <TestModeBadge class="overlay-test-badge" />
     <Transition name="chip-pop">
       <div
         v-if="voicePointNotice"
@@ -834,7 +805,7 @@ onBeforeUnmount(() => {
       </div>
     </Transition>
 
-    <div v-if="!isPressureNotificationMode" class="overlay-work-area">
+    <div class="overlay-work-area">
       <Transition name="overlay-surface" mode="out-in">
         <section
           v-if="phase === 'placement'"
@@ -981,7 +952,7 @@ onBeforeUnmount(() => {
                   </p>
                   <div class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <div class="pressure-plan__meta">
-                      <span>{{ dryPressureState.recommendation?.completed_laps || 0 }}/4 giri</span>
+                      <span>{{ dryPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>
                       <span>{{ dryPressureState.recommendation?.valid_laps || 0 }}/1 valido</span>
                       <strong>{{ dryPressureState.recommendation?.compound || '—' }}</strong>
                     </div>
@@ -994,7 +965,7 @@ onBeforeUnmount(() => {
                       </tbody>
                     </table>
                     <p v-if="dryPressureState.recommendation?.wheels" class="pressure-plan__note">AVG + persa = compensata · il setup cambia dei click indicati.</p>
-                    <p v-else class="pressure-plan__empty">{{ dryPressureState.reason || 'Attendo quattro giri completi, di cui almeno uno valido.' }}</p>
+                    <p v-else class="pressure-plan__empty">{{ dryPressureState.reason || 'Attendo tre giri completi, di cui almeno uno valido.' }}</p>
                   </div>
 
                   <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K chiude</p>
@@ -1154,48 +1125,6 @@ onBeforeUnmount(() => {
 
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
-
-.pressure-recommendation-popup {
-  position: absolute;
-  z-index: 30;
-  right: 18px;
-  bottom: 18px;
-  width: min(360px, calc(100% - 36px));
-  padding: 14px 16px;
-  border: 1px solid rgba(239, 68, 68, 0.72);
-  border-radius: 14px;
-  background: rgba(14, 18, 25, 0.96);
-  color: #f8fafc;
-
-  p { margin: 6px 0 10px; color: #cbd5e1; line-height: 1.35; }
-  button { border: 0; border-radius: 8px; padding: 7px 10px; background: #ef4444; color: white; font-weight: 700; }
-}
-
-.pressure-recommendation-popup__test {
-  display: inline-flex;
-  margin-right: 8px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: #f59e0b;
-  color: #111827;
-  font-size: 0.68rem;
-  font-weight: 900;
-}
-
-.training-overlay--pressure-notification {
-  width: 100%;
-  height: 100%;
-
-  .pressure-recommendation-popup {
-    inset: 10px;
-    width: auto;
-    opacity: 1;
-    visibility: visible;
-    transform: none;
-    animation: none;
-    transition: none;
-  }
-}
 
 .pressure-plan {
   display: grid;

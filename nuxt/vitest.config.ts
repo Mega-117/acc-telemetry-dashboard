@@ -96,6 +96,7 @@ export default defineConfig({
         'app/services/overlay/standingsHighlightTracker.ts',
         'app/services/audio/audioPlayback.ts',
         'app/services/spotter/coachVoiceController.ts',
+        'app/services/spotter/pressureRecommendationVoice.ts',
         'app/services/spotter/trackVoiceReferences.ts',
         'app/services/spotter/trackVoiceReferenceRuntime.ts',
         'app/services/spotter/trackVoiceReferenceChanges.ts',

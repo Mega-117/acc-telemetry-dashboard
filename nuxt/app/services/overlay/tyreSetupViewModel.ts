@@ -8,6 +8,15 @@ export interface TyreMetricStats {
   low: TyreWheelValues
 }
 
+export interface PressureRecommendationViewModel {
+  status: string
+  eligible: boolean
+  needsAdjustment: boolean
+  completedLaps: number
+  requiredCompletedLaps: number
+  planId: string | null
+}
+
 export interface TyreSetupViewModel {
   status: 'waiting_for_full_lap' | 'available'
   currentTyreSet: number | null
@@ -28,6 +37,7 @@ export interface TyreSetupViewModel {
     tyreSet: number | null
     values: TyreWheelValues | null
   }
+  pressureRecommendation: PressureRecommendationViewModel | null
 }
 
 function toNumber(value: unknown): number | null {
@@ -83,6 +93,22 @@ export function emptyTyreSetupViewModel(): TyreSetupViewModel {
       tyreSet: null,
       values: null,
     },
+    pressureRecommendation: null,
+  }
+}
+
+function normalizePressureRecommendation(raw: any): PressureRecommendationViewModel | null {
+  if (!raw || typeof raw !== 'object') return null
+  const completedLaps = toNumber(raw.completed_laps)
+  const requiredCompletedLaps = toNumber(raw.required_completed_laps)
+  if (completedLaps === null || requiredCompletedLaps === null) return null
+  return {
+    status: typeof raw.status === 'string' ? raw.status : 'unknown',
+    eligible: raw.eligible === true,
+    needsAdjustment: raw.needs_adjustment === true,
+    completedLaps,
+    requiredCompletedLaps,
+    planId: typeof raw.plan_id === 'string' && raw.plan_id ? raw.plan_id : null,
   }
 }
 
@@ -135,5 +161,6 @@ export function normalizeTyreSetupViewModel(raw: any): TyreSetupViewModel {
           tyreSet: toNumber(setupStartingPressure?.tyre_set),
           values: null,
         },
+    pressureRecommendation: normalizePressureRecommendation(raw.pressure_recommendation),
   }
 }

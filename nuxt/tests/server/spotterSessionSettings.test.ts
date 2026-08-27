@@ -32,4 +32,16 @@ describe('Spotter session settings wiring', () => {
     expect(runtime).toContain('resetTrackVoiceReferenceLapState()')
     expect(runtime).toContain('La FIFO audio resta intatta')
   })
+
+  it('accoda l’avviso pressioni dopo il tempo senza dipendere dal toggle tempo giro', () => {
+    const lapWatch = runtime.slice(
+      runtime.indexOf('watch(() => liveLap.value.lapsCompleted'),
+      runtime.indexOf('watch(() => selectedVoice.value'),
+    )
+    expect(lapWatch.indexOf('announceLapTime()')).toBeLessThan(
+      lapWatch.indexOf('recordPressureFinishCrossing(pressureVoiceState)'),
+    )
+    expect(runtime).toContain('pressureWarningVoicePath(selectedVoice.value)')
+    expect(runtime).not.toMatch(/outcome\.announce[\s\S]{0,160}lapTimesAllowedForSession/)
+  })
 })

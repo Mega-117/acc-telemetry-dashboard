@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { voiceScript, getStepVoicePhrase } from '~/config/voiceScript'
+import { voiceScript, getScenarioVoicePhrase, getStepVoicePhrase } from '~/config/voiceScript'
 import { trainingOverlayCatalog, trainingOverlayOrder } from '~/config/trainingOverlayCatalog'
 
 // Il copione è la fonte unica delle frasi (PIP-98): deve coprire ogni step
@@ -50,6 +50,14 @@ describe('voiceScript - sincronia col catalogo', () => {
     expect(ids).not.toContain('manualResume')
     expect(ids).not.toContain('stepEnd')
     expect(ids).not.toContain('sessionStart')
+  })
+
+  it('la frase pressioni è una risorsa di sistema fissa', () => {
+    expect(getScenarioVoicePhrase('pressureAdjustmentNeeded')).toEqual({
+      id: 'pressureAdjustmentNeeded',
+      origin: 'system',
+      text: 'pressioni non ottimali. torna ai box e sistemale.',
+    })
   })
 
   it('testi TTS-friendly: minuscoli e non vuoti', () => {
