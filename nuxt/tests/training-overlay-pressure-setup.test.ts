@@ -24,6 +24,8 @@ describe('training overlay Setup pressure contract', () => {
     expect(source).toContain('launcher-tool-button--pressure')
     expect(source).toContain('dryPressurePresentation.guidance')
     expect(styles).toContain('pressure-action-ready-pulse 2.4s ease-in-out infinite')
+    expect(styles).toContain('box-shadow: inset 0 0 18px')
+    expect(styles).toContain('50% { opacity: 1; }')
     expect(styles).toMatch(/prefers-reduced-motion:[\s\S]*launcher-tool-button--pressure\.is-ready::before[\s\S]*animation: none/)
     expect(styles).toMatch(/launcher-tool-button--pressure:disabled[\s\S]*cursor: not-allowed/)
   })
