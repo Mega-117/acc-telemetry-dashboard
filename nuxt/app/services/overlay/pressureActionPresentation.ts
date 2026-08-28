@@ -1,6 +1,7 @@
 export interface PressureActionInput {
   state?: string | null
   reason?: string | null
+  actionReasonCode?: string | null
   testReady?: boolean | null
   consumed?: boolean | null
   recommendation?: {
@@ -47,6 +48,20 @@ export function pressureActionPresentation(input: PressureActionInput | null | u
   const state = input?.state || 'unavailable'
 
   if (state === 'ready') {
+    if (input?.actionReasonCode === 'pit_pause_required') {
+      return {
+        stateLabel: 'Pronto',
+        guidance: 'Torna ai box, ferma l’auto e apri il menu Pausa.',
+        ariaLabel: 'Regola pressioni pronta: torna ai box e apri il menu Pausa',
+      }
+    }
+    if (input?.actionReasonCode === 'pause_menu_required') {
+      return {
+        stateLabel: 'Pronto',
+        guidance: 'Vai al menu Pausa e riprova.',
+        ariaLabel: 'Regola pressioni pronta: vai al menu Pausa e riprova',
+      }
+    }
     return {
       stateLabel: 'Pronto',
       guidance: 'Correzione pronta: premi Regola pressioni.',

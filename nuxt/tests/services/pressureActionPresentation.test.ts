@@ -10,6 +10,22 @@ describe('pressureActionPresentation', () => {
     })
   })
 
+  it('mantiene pronta l azione e guida al menu Pausa dopo un rifiuto recuperabile', () => {
+    expect(pressureActionPresentation({
+      state: 'ready',
+      actionReasonCode: 'pause_menu_required',
+    })).toEqual({
+      stateLabel: 'Pronto',
+      guidance: 'Vai al menu Pausa e riprova.',
+      ariaLabel: 'Regola pressioni pronta: vai al menu Pausa e riprova',
+    })
+
+    expect(pressureActionPresentation({
+      state: 'ready',
+      actionReasonCode: 'pit_pause_required',
+    }).guidance).toBe('Torna ai box, ferma l’auto e apri il menu Pausa.')
+  })
+
   it('spiega i prerequisiti senza nascondere l azione', () => {
     expect(pressureActionPresentation({
       state: 'unavailable',

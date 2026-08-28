@@ -210,7 +210,14 @@ async function applyDryPressure() {
   isDryPressurePreviewOpen.value = true
   try {
     const response = await getOverlayApi()?.trainingOverlayApplySetupPressure?.()
-    if (!response?.accepted) dryPressureState.value = { state: 'blocked', reason: 'command_not_accepted' }
+    if (!response?.accepted) {
+      dryPressureState.value = {
+        ...dryPressureState.value,
+        state: response?.retryable ? 'ready' : 'blocked',
+        reason: response?.reason || 'command_not_accepted',
+        actionReasonCode: response?.reasonCode || null,
+      }
+    }
   } catch (_) { dryPressureState.value = { state: 'blocked', reason: 'command_not_accepted' } }
   await refreshDryPressureState()
 }

@@ -28,6 +28,8 @@ describe('training overlay Setup pressure contract', () => {
     expect(styles).toContain('50% { opacity: 1; }')
     expect(styles).toMatch(/prefers-reduced-motion:[\s\S]*launcher-tool-button--pressure\.is-ready::before[\s\S]*animation: none/)
     expect(styles).toMatch(/launcher-tool-button--pressure:disabled[\s\S]*cursor: not-allowed/)
+    expect(source).toContain("state: response?.retryable ? 'ready' : 'blocked'")
+    expect(source).toContain('actionReasonCode: response?.reasonCode || null')
   })
 
   it('does not present Pit MFD values or a hardcoded dry-only product label', () => {
