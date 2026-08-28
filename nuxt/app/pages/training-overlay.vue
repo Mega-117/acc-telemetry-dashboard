@@ -38,6 +38,7 @@ import {
   qaBotPresentation,
   type QaBotSnapshot,
 } from '~/services/overlay/qaBotPresentation'
+import { pressureActionPresentation } from '~/services/overlay/pressureActionPresentation'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useDevTestMode } from '~/composables/useDevTestMode'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
@@ -148,6 +149,7 @@ function getOverlayApi(): any | null {
 // The logger owns recommendation facts; Electron owns Setup input; this page
 // only presents the versioned plan and never computes pressure corrections.
 const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not_fresh' })
+const dryPressurePresentation = computed(() => pressureActionPresentation(dryPressureState.value))
 const isDryPressurePreviewOpen = ref(false)
 const dryPressureBridgeStatus = ref('Nessuna raccomandazione TEST attiva.')
 let dryPressureTimer: ReturnType<typeof setInterval> | null = null
@@ -942,16 +944,18 @@ onBeforeUnmount(() => {
                     <button v-if="dryPressureState.qaActive" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Rimuovi raccomandazione TEST</button>
                     <button
                       type="button"
-                      class="launcher-tool-button launcher-tool-button--training"
-                      aria-label="Regola pressioni nel Setup ACC"
+                      class="launcher-tool-button launcher-tool-button--training launcher-tool-button--pressure"
+                      :class="{ 'is-ready': dryPressureState.state === 'ready' }"
+                      :aria-label="dryPressurePresentation.ariaLabel"
+                      aria-describedby="pressure-action-status"
                       :disabled="dryPressureState.state !== 'ready'"
                       @click="applyDryPressure"
                     >
-                      Regola pressioni
+                      <span>Regola pressioni</span>
                     </button>
                   </div>
-                  <p class="launcher-hint" role="status">
-                    Pressioni: {{ dryPressureState.state === 'ready' ? 'Pronto' : dryPressureState.state === 'running' ? 'In corso' : dryPressureState.state === 'completed' ? 'Completato' : dryPressureState.state === 'blocked' ? 'Bloccato' : 'Non disponibile' }} · {{ dryPressureState.reason || 'verifica dati' }}
+                  <p id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
+                    Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
                   </p>
                   <div class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <div class="pressure-plan__meta">

@@ -940,6 +940,62 @@
   background: linear-gradient(135deg, rgba(var(--overlay-accent-rgb), 0.38), rgba(var(--overlay-accent-rgb), 0.16));
 }
 
+.launcher-tool-button--pressure {
+  position: relative;
+  isolation: isolate;
+  transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease, opacity 180ms ease;
+}
+
+.launcher-tool-button--pressure > span {
+  position: relative;
+  z-index: 1;
+}
+
+.launcher-tool-button--pressure::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(86, 211, 100, 0.94), rgba(42, 158, 78, 0.68));
+  content: '';
+  opacity: 0;
+  pointer-events: none;
+}
+
+.launcher-tool-button--pressure.is-ready {
+  border-color: rgba(108, 255, 139, 0.72);
+  background: rgba(25, 112, 51, 0.52);
+  color: #f2fff5;
+}
+
+.launcher-tool-button--pressure.is-ready::before {
+  animation: pressure-action-ready-pulse 2.4s ease-in-out infinite;
+}
+
+.launcher-tool-button--pressure:disabled {
+  cursor: not-allowed;
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(226, 238, 232, 0.46);
+  opacity: 0.78;
+}
+
+.launcher-tool-button--pressure:disabled::before {
+  animation: none;
+  opacity: 0;
+}
+
+@keyframes pressure-action-ready-pulse {
+  0%, 100% { opacity: 0.28; }
+  50% { opacity: 0.92; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .launcher-tool-button--pressure.is-ready::before {
+    animation: none;
+    opacity: 0.72;
+  }
+}
+
 .launcher-tool-button--spotter.is-active {
   border-color: rgba(86, 211, 100, 0.55);
   background: rgba(86, 211, 100, 0.16);
