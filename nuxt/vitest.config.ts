@@ -35,6 +35,7 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/components/session-detail/SessionDetailPanelMode.vue',
         // ── Phase 1–2: services e utils ──────────────────────────────────
         'app/config/firebaseRuntimeTarget.ts',
         'app/services/auth/authService.ts',

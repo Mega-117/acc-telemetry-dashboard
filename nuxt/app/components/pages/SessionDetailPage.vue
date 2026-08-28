@@ -65,6 +65,7 @@ import type {
   TheoreticalReferenceSource
 } from '~/services/telemetry/theoreticalTimesCalculator'
 import type { SessionDetailLap, SessionDetailStint } from '~/types/sessionDetailViewModel'
+import SessionDetailPanelMode from '~/components/session-detail/SessionDetailPanelMode.vue'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
@@ -2777,6 +2778,11 @@ const gripZones = computed(() => {
 
       <!-- DETAIL: Analysis Panel -->
       <section class="detail">
+        <SessionDetailPanelMode
+          :stint-number="displayedStintNumber"
+          :stint-type="displayedStint?.type"
+          :laps="displayedStintLaps"
+        >
         <!-- Compare header removed per user request -->
 
         <!-- Stint Header removed per user request (RACE/BEST pills) -->
@@ -3350,6 +3356,7 @@ const gripZones = computed(() => {
         </div>
 
 
+        </SessionDetailPanelMode>
       </section>
     </div>
     </template>
