@@ -32,6 +32,7 @@ function unavailableGuidance(input: PressureActionInput): string {
   if (reason === 'within_tolerance') return 'Pressioni già nella fascia ottimale.'
   if (reason === 'ready' && input.testReady !== true) return 'Ferma l’auto ai box e apri il menu Pausa.'
   if (reason === 'waiting_for_valid_lap') return 'Completa almeno un giro valido.'
+  if (reason === 'waiting_for_stable_pressure') return 'Completa un altro giro regolare per stabilizzare le pressioni.'
   if (reason === 'compound_unavailable') return 'Mescola non ancora rilevata.'
   if (reason === 'source_unavailable') return 'Dati delle pressioni non ancora disponibili.'
   if (reason === 'click_limit_exceeded') return 'Correzione oltre il limite di sicurezza.'

@@ -46,6 +46,13 @@ describe('pressureActionPresentation', () => {
     }).guidance).toBe('Pressioni già nella fascia ottimale.')
   })
 
+  it('chiede un giro regolare quando le pressioni non sono ancora stabili', () => {
+    expect(pressureActionPresentation({
+      state: 'unavailable',
+      recommendation: { status: 'waiting_for_stable_pressure' },
+    }).guidance).toBe('Completa un altro giro regolare per stabilizzare le pressioni.')
+  })
+
   it('distingue un piano pronto ma non ancora applicabile dai giri mancanti', () => {
     expect(pressureActionPresentation({
       state: 'unavailable',
