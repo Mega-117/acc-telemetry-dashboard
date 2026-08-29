@@ -41,6 +41,8 @@ export default defineConfig({
         'app/services/auth/authService.ts',
         'app/services/auth/authSessionPolicy.ts',
         'app/services/auth/authSessionRecoveryCoordinator.ts',
+        'app/services/auth/authRevisionLease.ts',
+        'app/services/auth/retryableSingleFlightLoader.ts',
         'app/services/auth/userProvisioningService.ts',
         'app/services/auth/localIdentityBridge.ts',
         'app/composables/useConfirmedLogout.ts',

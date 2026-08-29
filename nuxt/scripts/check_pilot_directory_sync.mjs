@@ -27,7 +27,8 @@ assert.equal(serviceSource.includes('writePilotDirectoryFromUser'), true, 'pilot
 assert.equal(serviceSource.includes('repairPilotDirectoryFromUser'), true, 'pilotDirectory service must expose repair from users/{uid}')
 assert.equal(serviceSource.includes('updatePilotDirectoryActivity'), true, 'pilotDirectory service must expose partial activity/runtime update')
 
-assert.equal(provisioningSource.includes('writePilotDirectoryFromUser'), true, 'auth provisioning must use centralized pilotDirectory writer')
+assert.equal(provisioningSource.includes('buildPilotDirectoryProjection'), true, 'auth provisioning must reuse the centralized pilotDirectory projection builder')
+assert.equal(provisioningSource.includes('batch.set(pilotDirectoryRef'), true, 'auth provisioning must stage pilotDirectory in its atomic batch')
 assert.equal(ownerRepairSource.includes('writePilotDirectoryFromUser'), true, 'owner rebuild/repair must use centralized pilotDirectory writer')
 assert.equal(deltaSource.includes('updatePilotDirectoryActivity'), true, 'sync delta must use partial pilotDirectory activity update')
 assert.equal(rebuildSource.includes('updatePilotDirectoryActivity'), true, 'projection rebuild must use partial pilotDirectory activity update')

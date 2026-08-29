@@ -11,11 +11,11 @@ describe('auth session recovery coordinator', () => {
     let status: 'recoverable' | 'ready' = 'recoverable'
     const user = { uid: 'pilot-1' } as any
     const listeners = new Map<string, () => void>()
-    const retryUser = vi.fn().mockResolvedValue(undefined)
+    const retryTarget = vi.fn().mockResolvedValue(undefined)
     const coordinator = createAuthSessionRecoveryCoordinator({
       getStatus: () => status,
-      getRecoverableUser: () => status === 'recoverable' ? user : null,
-      retryUser,
+      getRecoverableTarget: () => status === 'recoverable' ? user : null,
+      retryTarget,
       getEventTarget: () => ({
         addEventListener: (type, listener) => listeners.set(type, listener),
       }),
@@ -24,44 +24,44 @@ describe('auth session recovery coordinator', () => {
     return {
       coordinator,
       listeners,
-      retryUser,
+      retryTarget,
       markReady: () => { status = 'ready' },
     }
   }
 
   it('ritenta con backoff bounded mentre lo stato resta recuperabile', async () => {
     vi.useFakeTimers()
-    const { coordinator, retryUser } = setup()
+    const { coordinator, retryTarget } = setup()
     coordinator.schedule()
 
     await vi.advanceTimersByTimeAsync(10)
-    expect(retryUser).toHaveBeenCalledTimes(1)
+    expect(retryTarget).toHaveBeenCalledTimes(1)
     await vi.advanceTimersByTimeAsync(20)
-    expect(retryUser).toHaveBeenCalledTimes(2)
+    expect(retryTarget).toHaveBeenCalledTimes(2)
     await vi.advanceTimersByTimeAsync(100)
-    expect(retryUser).toHaveBeenCalledTimes(2)
+    expect(retryTarget).toHaveBeenCalledTimes(2)
   })
 
   it('online e focus riarmano un retry immediato senza duplicare listener', async () => {
-    const { coordinator, listeners, retryUser } = setup()
+    const { coordinator, listeners, retryTarget } = setup()
     coordinator.installTriggers()
     coordinator.installTriggers()
 
     listeners.get('online')?.()
-    await vi.waitFor(() => expect(retryUser).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(retryTarget).toHaveBeenCalledTimes(1))
     listeners.get('focus')?.()
-    await vi.waitFor(() => expect(retryUser).toHaveBeenCalledTimes(2))
+    await vi.waitFor(() => expect(retryTarget).toHaveBeenCalledTimes(2))
     expect(listeners.size).toBe(2)
   })
 
   it('cancella i retry quando la sessione torna pronta', async () => {
     vi.useFakeTimers()
-    const { coordinator, retryUser, markReady } = setup()
+    const { coordinator, retryTarget, markReady } = setup()
     coordinator.schedule()
     markReady()
     coordinator.clear()
 
     await vi.advanceTimersByTimeAsync(100)
-    expect(retryUser).not.toHaveBeenCalled()
+    expect(retryTarget).not.toHaveBeenCalled()
   })
 })

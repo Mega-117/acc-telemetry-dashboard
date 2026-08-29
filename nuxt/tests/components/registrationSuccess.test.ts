@@ -73,4 +73,35 @@ describe('RegistrationSuccess verification reconciliation', () => {
     expect(wrapper.find('.error-message').exists()).toBe(false)
     expect(wrapper.emitted('goToDashboard')).toBeUndefined()
   })
+
+  it('non avvia reinvio e controllo nello stesso momento', async () => {
+    let resolveInitialCheck!: (result: { verified: boolean; error: null }) => void
+    checkEmailVerified.mockReturnValueOnce(new Promise((resolve) => { resolveInitialCheck = resolve }))
+    const wrapper = mountGate()
+
+    await wrapper.get('.resend-btn').trigger('click')
+    expect(resendVerificationEmail).not.toHaveBeenCalled()
+
+    resolveInitialCheck({ verified: false, error: null })
+    await vi.waitFor(() => expect(wrapper.get('.verify-btn').attributes('disabled')).toBeUndefined())
+
+    let resolveResend!: (result: { success: boolean; alreadyVerified: boolean }) => void
+    resendVerificationEmail.mockReturnValueOnce(new Promise((resolve) => { resolveResend = resolve }))
+    await wrapper.get('.resend-btn').trigger('click')
+    await wrapper.get('.verify-btn').trigger('click')
+
+    expect(resendVerificationEmail).toHaveBeenCalledOnce()
+    expect(checkEmailVerified).toHaveBeenCalledOnce()
+    resolveResend({ success: true, alreadyVerified: false })
+  })
+
+  it('rilascia il lock anche se il controllo rifiuta la promise', async () => {
+    checkEmailVerified.mockRejectedValueOnce(new Error('temporary'))
+    const wrapper = mountGate()
+    await vi.waitFor(() => expect(checkEmailVerified).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(wrapper.get('.verify-btn').attributes('disabled')).toBeUndefined())
+
+    await wrapper.get('.verify-btn').trigger('click')
+    await vi.waitFor(() => expect(checkEmailVerified).toHaveBeenCalledTimes(2))
+  })
 })

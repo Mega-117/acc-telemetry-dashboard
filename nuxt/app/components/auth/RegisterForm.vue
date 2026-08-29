@@ -5,6 +5,12 @@
 
 import { ref } from 'vue'
 
+withDefaults(defineProps<{
+  loading?: boolean
+}>(), {
+  loading: false
+})
+
 const firstName = ref('')
 const lastName = ref('')
 const nickname = ref('')
@@ -12,7 +18,6 @@ const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 const error = ref('')
-const loading = ref(false)
 
 const emit = defineEmits<{
   submit: [data: { firstName: string; lastName: string; nickname: string; email: string; password: string }]
@@ -76,7 +81,6 @@ const clearError = () => {
 // Esporre metodi per il parent
 defineExpose({
   setError: (msg: string) => { error.value = msg },
-  setLoading: (val: boolean) => { loading.value = val },
   reset: () => {
     firstName.value = ''
     lastName.value = ''
@@ -85,7 +89,6 @@ defineExpose({
     password.value = ''
     confirmPassword.value = ''
     error.value = ''
-    loading.value = false
   }
 })
 </script>

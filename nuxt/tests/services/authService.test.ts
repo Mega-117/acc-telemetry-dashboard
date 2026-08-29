@@ -58,7 +58,7 @@ describe('registration and account actions', () => {
       nickname: 'NewDriver',
       firstName: 'New',
       lastName: 'Driver'
-    })).resolves.toEqual({ user })
+    })).resolves.toEqual({ user, profileReady: true, verificationEmailSent: true })
 
     expect(createUserWithEmailAndPasswordMock).toHaveBeenCalledWith(
       authMock,
@@ -72,6 +72,24 @@ describe('registration and account actions', () => {
       nickname: 'NewDriver'
     })
     expect(sendEmailVerificationMock).toHaveBeenCalledWith(user)
+  })
+
+  it('mantiene valida la registrazione se provisioning o email falliscono dopo la creazione account', async () => {
+    const user = { uid: 'uid-partial' }
+    createUserWithEmailAndPasswordMock.mockResolvedValue({ user })
+    updateProfileMock.mockRejectedValue({ code: 'auth/network-request-failed' })
+    createInitialUserDocumentMock.mockRejectedValue({ code: 'unavailable' })
+    sendEmailVerificationMock.mockRejectedValue({ code: 'auth/network-request-failed' })
+
+    await expect(registerWithEmail({
+      email: 'partial@example.invalid',
+      password: 'secret-123',
+      nickname: 'PartialDriver'
+    })).resolves.toEqual({
+      user,
+      profileReady: false,
+      verificationEmailSent: false
+    })
   })
 
   it('delegates logout and verification resend to Firebase Auth', async () => {

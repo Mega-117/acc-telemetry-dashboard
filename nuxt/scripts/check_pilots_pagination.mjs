@@ -34,7 +34,8 @@ assert.equal(repositorySource.includes('data.email'), false, 'pilot directory re
 
 assert.equal(provisioningSource.includes('directorySortName'), true, 'user provisioning must write directorySortName')
 assert.equal(provisioningSource.includes('searchPrefixes'), true, 'user provisioning must write searchPrefixes')
-assert.equal(provisioningSource.includes('writePilotDirectoryFromUser'), true, 'user provisioning must write pilotDirectory projection through centralized service')
+assert.equal(provisioningSource.includes('trackedWriteBatch'), true, 'user provisioning must use the tracked atomic batch boundary')
+assert.equal(provisioningSource.includes('batch.set(pilotDirectoryRef'), true, 'user provisioning must write pilotDirectory inside the atomic batch')
 
 assert.equal(pilotDetailSource.includes("doc(db, 'users', pilotId)"), false, 'pilot detail header must not read heavy users documents')
 assert.equal(pilotDetailSource.includes("doc(db, 'pilotDirectory', pilotId)"), true, 'pilot detail header must read pilotDirectory')

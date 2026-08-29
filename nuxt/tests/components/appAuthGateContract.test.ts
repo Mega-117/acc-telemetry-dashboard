@@ -51,12 +51,12 @@ describe('App protected runtime route contract', () => {
       'utf8',
     )
 
-    expect(authSource).toContain('let observedAuthUid: string | null = null')
+    expect(authSource).toContain('const authRevisionLease = createAuthRevisionLeaseCoordinator()')
     expect(authSource).toContain('if (!shouldObserveFirebaseAuth())')
     expect(authSource).toContain('await requestLocalRuntimeAttestation()')
     expect(authSource).toContain('previousObservedUid !== observedAuthUid')
     expect(authSource).toContain('await clearLocalUserIdentity()')
-    expect(authSource).toContain('() => revision === authStateRevision')
+    expect(authSource).toContain('() => authRevisionLease.isRevisionCurrent(revision)')
     expect(authSource).toContain("const authSessionStatus = ref<AuthSessionStatus>('initializing')")
     expect(authSource).toContain("result.status === 'recoverable'")
     expect(authSource).toContain('authRecoveryCoordinator.schedule()')
@@ -91,8 +91,9 @@ describe('App protected runtime route contract', () => {
 
     expect(resendBlock).toContain('const verification = await checkEmailVerified()')
     expect(resendBlock.indexOf('await checkEmailVerified()')).toBeLessThan(
-      resendBlock.indexOf('await resendCurrentVerificationEmail(currentUser.value)'),
+      resendBlock.indexOf('await resendCurrentVerificationEmail(user)'),
     )
+    expect(resendBlock).toContain('if (!isCurrentAuthLease(lease))')
     expect(resendBlock).toContain('alreadyVerified: true')
   })
 

@@ -354,7 +354,7 @@ const handleGoToDashboard = () => {
 }
 
 const handleResendEmail = () => {
-  console.log('[AUTH] Resending verification email to:', userEmail.value)
+  console.log('[AUTH] Verification email resend requested')
 }
 
 const handleLogout = async () => {

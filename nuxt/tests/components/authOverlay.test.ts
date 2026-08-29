@@ -17,15 +17,18 @@ vi.mock('~/composables/useFirebaseAuth', () => ({
 }))
 
 const LoginStub = defineComponent({
+  props: { loading: Boolean },
   emits: ['forgotPassword', 'submit'],
-  setup(_, { emit }) {
+  setup(props, { emit }) {
     return () => h('div', [
       h('button', {
         'data-testid': 'forgot-password',
+        disabled: props.loading,
         onClick: () => emit('forgotPassword')
       }, 'forgot'),
       h('button', {
         'data-testid': 'submit-login',
+        disabled: props.loading,
         onClick: () => emit('submit', {
           email: 'verified@example.invalid',
           password: 'secret',
@@ -35,23 +38,37 @@ const LoginStub = defineComponent({
   }
 })
 
-const RegisterStub = defineComponent(() => () => h('div', 'register'))
+const RegisterStub = defineComponent({
+  props: { loading: Boolean },
+  emits: ['submit'],
+  setup(props, { emit }) {
+    return () => h('button', {
+      'data-testid': 'submit-register',
+      disabled: props.loading,
+      onClick: () => emit('submit', {
+        firstName: 'QA',
+        lastName: 'Pilot',
+        nickname: 'qa-pilot',
+        email: 'register@example.invalid',
+        password: 'secret',
+      }),
+    }, 'register')
+  },
+})
 
 const ResetStub = defineComponent({
+  props: { loading: Boolean },
   emits: ['submit', 'back'],
-  setup(_, { emit, expose }) {
+  setup(props, { emit, expose }) {
     const state = reactive({
-      loading: false,
       success: false,
       error: ''
     })
 
     expose({
-      setLoading: (value: boolean) => { state.loading = value },
       setSuccess: (value: boolean) => { state.success = value },
       setError: (message: string) => { state.error = message },
       reset: () => {
-        state.loading = false
         state.success = false
         state.error = ''
       }
@@ -60,11 +77,11 @@ const ResetStub = defineComponent({
     return () => h('div', [
       h('button', {
         'data-testid': 'submit-reset',
-        disabled: state.loading,
+        disabled: props.loading,
         onClick: () => emit('submit', 'qa@example.invalid')
       }, 'submit'),
       h('span', { 'data-testid': 'reset-state' }, state.success ? 'success' : state.error),
-      h('span', { 'data-testid': 'reset-loading' }, state.loading ? 'loading' : 'idle')
+      h('span', { 'data-testid': 'reset-loading' }, props.loading ? 'loading' : 'idle')
     ])
   }
 })
@@ -99,6 +116,37 @@ describe('AuthOverlay password reset', () => {
     expect(wrapper.emitted('login-success')).toEqual([
       ['verified@example.invalid'],
     ])
+  })
+
+  it('rende login single-flight anche con due invii concorrenti', async () => {
+    let resolveLogin!: (result: { success: boolean }) => void
+    loginMock.mockReturnValue(new Promise((resolve) => { resolveLogin = resolve }))
+    const wrapper = mountOverlay()
+
+    const button = wrapper.get('[data-testid="submit-login"]')
+    await Promise.all([button.trigger('click'), button.trigger('click')])
+
+    expect(loginMock).toHaveBeenCalledOnce()
+    expect(button.attributes('disabled')).toBeDefined()
+
+    resolveLogin({ success: true })
+    await vi.waitFor(() => expect(wrapper.emitted('login-success')).toHaveLength(1))
+  })
+
+  it('rende registrazione single-flight e blocca il cambio tab durante la richiesta', async () => {
+    let resolveRegister!: (result: { success: boolean }) => void
+    registerMock.mockReturnValue(new Promise((resolve) => { resolveRegister = resolve }))
+    const wrapper = mountOverlay()
+    await wrapper.findAll('.auth-nav__item')[1]!.trigger('click')
+
+    const button = wrapper.get('[data-testid="submit-register"]')
+    await Promise.all([button.trigger('click'), button.trigger('click')])
+
+    expect(registerMock).toHaveBeenCalledOnce()
+    expect(wrapper.findAll('.auth-nav__item').every(tab => tab.attributes('disabled') !== undefined)).toBe(true)
+
+    resolveRegister({ success: true })
+    await vi.waitFor(() => expect(wrapper.emitted('register-success')).toHaveLength(1))
   })
 
 

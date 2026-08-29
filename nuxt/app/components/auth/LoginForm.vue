@@ -5,10 +5,15 @@
 
 import { ref } from 'vue'
 
+withDefaults(defineProps<{
+  loading?: boolean
+}>(), {
+  loading: false
+})
+
 const email = ref('')
 const password = ref('')
 const error = ref('')
-const loading = ref(false)
 
 const emit = defineEmits<{
   submit: [credentials: { email: string; password: string }]
@@ -42,12 +47,10 @@ const clearError = () => {
 // Esporre metodi per il parent
 defineExpose({
   setError: (msg: string) => { error.value = msg },
-  setLoading: (val: boolean) => { loading.value = val },
   reset: () => {
     email.value = ''
     password.value = ''
     error.value = ''
-    loading.value = false
   }
 })
 </script>
@@ -84,6 +87,7 @@ defineExpose({
     
     <UiBaseButton 
       variant="link"
+      :disabled="loading"
       @click="emit('forgotPassword')"
     >
       Password dimenticata?

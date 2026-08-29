@@ -2,8 +2,12 @@ import type { User } from 'firebase/auth'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const trackedGetDocMock = vi.hoisted(() => vi.fn())
-const trackedSetDocMock = vi.hoisted(() => vi.fn())
-const writePilotDirectoryMock = vi.hoisted(() => vi.fn())
+const batchSetMock = vi.hoisted(() => vi.fn())
+const batchCommitMock = vi.hoisted(() => vi.fn())
+const trackedWriteBatchMock = vi.hoisted(() => vi.fn(() => ({
+  set: batchSetMock,
+  commit: batchCommitMock,
+})))
 const buildPilotDirectoryFieldsMock = vi.hoisted(() => vi.fn(() => ({
   directorySortName: 'qa fresh pilot',
   searchPrefixes: ['q', 'qa']
@@ -15,10 +19,18 @@ vi.mock('firebase/firestore', () => ({
 vi.mock('~/config/firebase', () => ({ db: {} }))
 vi.mock('~/composables/useFirebaseTracker', () => ({
   trackedGetDoc: trackedGetDocMock,
-  trackedSetDoc: trackedSetDocMock
+  trackedWriteBatch: trackedWriteBatchMock
 }))
 vi.mock('~/services/pilotDirectoryProjectionService', () => ({
-  writePilotDirectoryFromUser: writePilotDirectoryMock
+  buildPilotDirectoryProjection: (uid: string, data: Record<string, unknown>) => ({
+    schemaVersion: 1,
+    uid,
+    nickname: data.nickname,
+    role: data.role,
+    coachId: data.coachId,
+    directorySortName: data.directorySortName,
+    searchPrefixes: data.searchPrefixes,
+  })
 }))
 vi.mock('~/utils/pilotDirectoryFields', () => ({
   buildPilotDirectoryFields: buildPilotDirectoryFieldsMock
@@ -40,8 +52,7 @@ const freshUser = {
 beforeEach(() => {
   vi.clearAllMocks()
   trackedGetDocMock.mockResolvedValue({ exists: () => false })
-  trackedSetDocMock.mockResolvedValue(undefined)
-  writePilotDirectoryMock.mockResolvedValue(undefined)
+  batchCommitMock.mockResolvedValue(undefined)
 })
 
 describe('ensureUserDocument', () => {
@@ -51,7 +62,7 @@ describe('ensureUserDocument', () => {
       nickname: 'qa-fresh-pilot'
     })
 
-    expect(trackedSetDocMock).toHaveBeenNthCalledWith(
+    expect(batchSetMock).toHaveBeenNthCalledWith(
       1,
       { path: 'users/qa-fresh-pilot' },
       expect.objectContaining({
@@ -59,37 +70,94 @@ describe('ensureUserDocument', () => {
         role: 'pilot',
         coachId: null,
         emailVerified: true
-      }),
-      'AuthProvisioning'
+      })
     )
-    expect(writePilotDirectoryMock).toHaveBeenCalledWith(expect.objectContaining({
-      uid: 'qa-fresh-pilot',
-      userData: expect.objectContaining({
+    expect(batchSetMock).toHaveBeenNthCalledWith(
+      2,
+      { path: 'pilotDirectory/qa-fresh-pilot' },
+      expect.objectContaining({
         role: 'pilot',
         coachId: null
-      })
-    }))
+      }),
+      { merge: true }
+    )
+    expect(batchCommitMock).toHaveBeenCalledOnce()
   })
 
   it('riusa un profilo completo senza scritture di repair', async () => {
-    trackedGetDocMock.mockResolvedValue({
-      exists: () => true,
-      data: () => ({
-        uid: freshUser.uid,
-        role: 'pilot',
-        nickname: 'QA Pilot',
-        directorySortName: 'qa fresh pilot',
-        searchPrefixes: ['q', 'qa'],
-        emailVerified: true
+    const userData = {
+      uid: freshUser.uid,
+      role: 'pilot',
+      coachId: null,
+      nickname: 'QA Pilot',
+      directorySortName: 'qa fresh pilot',
+      searchPrefixes: ['q', 'qa'],
+      emailVerified: true
+    }
+    trackedGetDocMock
+      .mockResolvedValueOnce({ exists: () => true, data: () => userData })
+      .mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({ uid: freshUser.uid, nickname: 'QA Pilot', avatarUrl: null, updatedAt: 'now' })
       })
-    })
+      .mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          schemaVersion: 1,
+          uid: freshUser.uid,
+          role: 'pilot',
+          coachId: null,
+          nickname: 'QA Pilot',
+          directorySortName: 'qa fresh pilot',
+          searchPrefixes: ['q', 'qa']
+        })
+      })
 
     await expect(ensureUserDocument(freshUser)).resolves.toEqual({
       role: 'pilot',
       nickname: 'QA Pilot'
     })
-    expect(trackedSetDocMock).not.toHaveBeenCalled()
-    expect(writePilotDirectoryMock).not.toHaveBeenCalled()
+    expect(batchSetMock).not.toHaveBeenCalled()
+    expect(batchCommitMock).not.toHaveBeenCalled()
+  })
+
+  it('ripara in una batch le proiezioni mancanti di un utente esistente', async () => {
+    trackedGetDocMock
+      .mockResolvedValueOnce({
+        exists: () => true,
+        data: () => ({
+          uid: freshUser.uid,
+          role: 'pilot',
+          coachId: null,
+          nickname: 'QA Pilot',
+          directorySortName: 'qa fresh pilot',
+          searchPrefixes: ['q', 'qa'],
+          emailVerified: true
+        })
+      })
+      .mockResolvedValueOnce({ exists: () => false })
+      .mockResolvedValueOnce({ exists: () => false })
+
+    await expect(ensureUserDocument(freshUser)).resolves.toEqual({ role: 'pilot', nickname: 'QA Pilot' })
+
+    expect(batchSetMock).toHaveBeenCalledWith(
+      { path: 'pilotDirectory/qa-fresh-pilot' },
+      expect.objectContaining({ uid: freshUser.uid, nickname: 'QA Pilot' }),
+      { merge: true }
+    )
+    expect(batchSetMock).toHaveBeenCalledWith(
+      { path: 'publicProfiles/qa-fresh-pilot' },
+      expect.objectContaining({ uid: freshUser.uid, nickname: 'QA Pilot' }),
+      { merge: true }
+    )
+    expect(batchCommitMock).toHaveBeenCalledOnce()
+  })
+
+  it('propaga un errore provisioning invece di fingere un profilo pilot pronto', async () => {
+    const failure = new Error('firestore unavailable')
+    trackedGetDocMock.mockRejectedValueOnce(failure)
+
+    await expect(ensureUserDocument(freshUser)).rejects.toBe(failure)
   })
 })
 
@@ -101,7 +169,7 @@ describe('createInitialUserDocument', () => {
       nickname: 'QA Pilot'
     })).resolves.toEqual({ role: 'pilot', nickname: 'QA Pilot' })
 
-    expect(trackedSetDocMock).toHaveBeenNthCalledWith(
+    expect(batchSetMock).toHaveBeenNthCalledWith(
       1,
       { path: 'users/qa-fresh-pilot' },
       expect.objectContaining({
@@ -109,16 +177,15 @@ describe('createInitialUserDocument', () => {
         role: 'pilot',
         coachId: null,
         nickname: 'QA Pilot'
-      }),
-      'AuthProvisioning'
+      })
     )
-    expect(trackedSetDocMock).toHaveBeenNthCalledWith(
-      2,
+    expect(batchSetMock).toHaveBeenNthCalledWith(
+      3,
       { path: 'publicProfiles/qa-fresh-pilot' },
       expect.objectContaining({ uid: 'qa-fresh-pilot', nickname: 'QA Pilot' }),
-      { merge: true },
-      'AuthProvisioning'
+      { merge: true }
     )
+    expect(batchCommitMock).toHaveBeenCalledOnce()
   })
 })
 

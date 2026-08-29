@@ -68,50 +68,63 @@ onBeforeUnmount(() => {
 })
 
 const handleResendEmail = async () => {
-  if (isResendDisabled.value) return
+  if (isResendDisabled.value || isChecking.value) return
 
   isResending.value = true
   resendError.value = null
   verificationError.value = false
   verificationMessage.value = ''
   
-  const result = await resendVerificationEmail()
-  
-  isResending.value = false
+  try {
+    const result = await resendVerificationEmail()
 
-  if (result.success && result.alreadyVerified) {
-    emit('goToDashboard')
-    return
+    if (result.success && result.alreadyVerified) {
+      emit('goToDashboard')
+      return
+    }
+
+    if (result.success) {
+      resendSuccess.value = true
+      setTimeout(() => resendSuccess.value = false, 3000)
+      startResendCooldown()
+    } else {
+      resendError.value = result.error || 'Errore invio email'
+    }
+
+    if (result.success) emit('resendEmail')
+  } catch {
+    resendError.value = 'Errore invio email'
+  } finally {
+    isResending.value = false
   }
-  
-  if (result.success) {
-    resendSuccess.value = true
-    setTimeout(() => resendSuccess.value = false, 3000)
-    startResendCooldown()
-  } else {
-    resendError.value = result.error || 'Errore invio email'
-  }
-  
-  if (result.success) emit('resendEmail')
 }
 
 const reconcileVerification = async ({ showError }: { showError: boolean }) => {
-  if (isChecking.value) return { verified: false, error: null }
+  if (isChecking.value || isResending.value) return { verified: false, error: null }
   isChecking.value = true
   verificationError.value = false
   verificationMessage.value = ''
   
-  const result = await checkEmailVerified()
-  
-  isChecking.value = false
-  
-  if (result.verified) {
-    emit('goToDashboard')
-  } else if (showError) {
-    verificationError.value = true
-    verificationMessage.value = result.error || 'Email non ancora verificata. Clicca il link ricevuto via email e riprova.'
+  try {
+    const result = await checkEmailVerified()
+
+    if (result.verified) {
+      emit('goToDashboard')
+    } else if (showError) {
+      verificationError.value = true
+      verificationMessage.value = result.error || 'Email non ancora verificata. Clicca il link ricevuto via email e riprova.'
+    }
+    return result
+  } catch {
+    const error = 'Errore durante il controllo della verifica'
+    if (showError) {
+      verificationError.value = true
+      verificationMessage.value = error
+    }
+    return { verified: false, error }
+  } finally {
+    isChecking.value = false
   }
-  return result
 }
 
 const handleCheckVerification = async () => {
@@ -162,7 +175,7 @@ onMounted(() => {
     <button 
       class="verify-btn"
       :class="{ 'verify-btn--loading': isChecking }"
-      :disabled="isChecking"
+      :disabled="isChecking || isResending"
       @click="handleCheckVerification"
     >
       <template v-if="isChecking">

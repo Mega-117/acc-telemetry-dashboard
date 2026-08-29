@@ -1,20 +1,19 @@
-import type { User } from 'firebase/auth'
 import type { AuthSessionStatus } from './authSessionPolicy'
 
 type RecoveryEventTarget = {
   addEventListener: (type: 'online' | 'focus', listener: () => void) => void
 }
 
-export function createAuthSessionRecoveryCoordinator({
+export function createAuthSessionRecoveryCoordinator<T>({
   getStatus,
-  getRecoverableUser,
-  retryUser,
+  getRecoverableTarget,
+  retryTarget,
   getEventTarget,
   delaysMs = [2000, 5000, 15000, 30000],
 }: {
   getStatus: () => AuthSessionStatus
-  getRecoverableUser: () => User | null
-  retryUser: (user: User) => Promise<void>
+  getRecoverableTarget: () => T | null
+  retryTarget: (target: T) => Promise<void>
   getEventTarget: () => RecoveryEventTarget | null
   delaysMs?: number[]
 }) {
@@ -35,7 +34,7 @@ export function createAuthSessionRecoveryCoordinator({
     if (
       retryTimer
       || inFlight
-      || !getRecoverableUser()
+      || !getRecoverableTarget()
       || getStatus() !== 'recoverable'
       || retryAttempt >= delaysMs.length
     ) return
@@ -49,9 +48,9 @@ export function createAuthSessionRecoveryCoordinator({
   }
 
   async function retryNow() {
-    const user = getRecoverableUser()
-    if (inFlight || !user || getStatus() !== 'recoverable') return
-    inFlight = retryUser(user).finally(() => {
+    const target = getRecoverableTarget()
+    if (inFlight || !target || getStatus() !== 'recoverable') return
+    inFlight = retryTarget(target).finally(() => {
       inFlight = null
       if (getStatus() === 'recoverable') schedule()
     })

@@ -161,9 +161,8 @@ service cloud.firestore {
     }
 
     function pilotDirectoryRoleAndCoachMatchUser(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId))
-             && request.resource.data.role == get(/databases/$(database)/documents/users/$(userId)).data.role
-             && request.resource.data.coachId == get(/databases/$(database)/documents/users/$(userId)).data.get('coachId', null);
+      return request.resource.data.role == getAfter(/databases/$(database)/documents/users/$(userId)).data.role
+             && request.resource.data.coachId == getAfter(/databases/$(database)/documents/users/$(userId)).data.get('coachId', null);
     }
 
     function validPilotDirectoryCreate(userId) {

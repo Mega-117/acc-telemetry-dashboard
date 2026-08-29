@@ -178,6 +178,47 @@ afterAll(async () => {
 })
 
 describe('fresh user provisioning contract', () => {
+  it('crea profilo e proiezioni in una sola batch validata sullo stato finale', async () => {
+    const db = testEnv.authenticatedContext(FRESH_PILOT_UID, {
+      email: FRESH_PILOT_EMAIL,
+      email_verified: true
+    }).firestore()
+    const batch = writeBatch(db)
+    batch.set(doc(db, `users/${FRESH_PILOT_UID}`), initialPilotUserPayload(FRESH_PILOT_UID))
+    batch.set(doc(db, `pilotDirectory/${FRESH_PILOT_UID}`), pilotDirectoryPayload(FRESH_PILOT_UID))
+    batch.set(doc(db, `publicProfiles/${FRESH_PILOT_UID}`), publicProfilePayload(FRESH_PILOT_UID))
+
+    await assertSucceeds(batch.commit())
+
+    await expect(getDoc(doc(db, `users/${FRESH_PILOT_UID}`))).resolves.toMatchObject({ exists: expect.any(Function) })
+    expect((await getDoc(doc(db, `users/${FRESH_PILOT_UID}`))).exists()).toBe(true)
+    expect((await getDoc(doc(db, `pilotDirectory/${FRESH_PILOT_UID}`))).exists()).toBe(true)
+    expect((await getDoc(doc(db, `publicProfiles/${FRESH_PILOT_UID}`))).exists()).toBe(true)
+  })
+
+  it('rifiuta tutta la batch se la directory non coincide con il ruolo autorevole', async () => {
+    const db = testEnv.authenticatedContext(FRESH_PILOT_UID, {
+      email: FRESH_PILOT_EMAIL,
+      email_verified: true
+    }).firestore()
+    const batch = writeBatch(db)
+    batch.set(doc(db, `users/${FRESH_PILOT_UID}`), initialPilotUserPayload(FRESH_PILOT_UID))
+    batch.set(
+      doc(db, `pilotDirectory/${FRESH_PILOT_UID}`),
+      pilotDirectoryPayload(FRESH_PILOT_UID, { role: 'coach' })
+    )
+    batch.set(doc(db, `publicProfiles/${FRESH_PILOT_UID}`), publicProfilePayload(FRESH_PILOT_UID))
+
+    await assertFails(batch.commit())
+
+    await testEnv.withSecurityRulesDisabled(async (adminContext) => {
+      const adminDb = adminContext.firestore()
+      expect((await getDoc(doc(adminDb, `users/${FRESH_PILOT_UID}`))).exists()).toBe(false)
+      expect((await getDoc(doc(adminDb, `pilotDirectory/${FRESH_PILOT_UID}`))).exists()).toBe(false)
+      expect((await getDoc(doc(adminDb, `publicProfiles/${FRESH_PILOT_UID}`))).exists()).toBe(false)
+    })
+  })
+
   it('accetta create e retry dello stesso profilo pilot completo', async () => {
     const db = testEnv.authenticatedContext(FRESH_PILOT_UID, {
       email: FRESH_PILOT_EMAIL,

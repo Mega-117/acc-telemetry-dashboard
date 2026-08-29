@@ -35,63 +35,75 @@ const formHeightClass = computed(() => {
 })
 
 const handleTabChange = (tab: 'login' | 'register') => {
+  if (isSubmitting.value) return
   currentTab.value = tab
   currentView.value = tab
 }
 
 const showResetPassword = () => {
+  if (isSubmitting.value) return
   currentView.value = 'reset'
 }
 
 const backToLogin = () => {
+  if (isSubmitting.value) return
   currentView.value = 'login'
   currentTab.value = 'login'
   resetFormRef.value?.reset()
 }
 
 const handleLogin = async (credentials: { email: string; password: string }) => {
+  if (isSubmitting.value) return
   isSubmitting.value = true
-  
-  const result = await login(credentials.email, credentials.password)
-  
-  isSubmitting.value = false
-  
-  if (result.success) {
-    // The global Firebase observer owns verification and shell routing.
-    emit('login-success', credentials.email)
-  } else {
-    // Error is already set in authError by the composable
-    loginFormRef.value?.setError(result.error)
+
+  try {
+    const result = await login(credentials.email, credentials.password)
+    if (result.success) {
+      // The global Firebase observer owns verification and shell routing.
+      emit('login-success', credentials.email)
+    } else {
+      loginFormRef.value?.setError(result.error)
+    }
+  } catch {
+    loginFormRef.value?.setError('Errore di autenticazione')
+  } finally {
+    isSubmitting.value = false
   }
 }
 
 const handleRegister = async (data: { firstName: string; lastName: string; nickname: string; email: string; password: string }) => {
+  if (isSubmitting.value) return
   isSubmitting.value = true
-  
-  const result = await register(data.email, data.password, data.nickname, data.firstName, data.lastName)
-  
-  isSubmitting.value = false
-  
-  if (result.success) {
-    emit('register-success', data.email)
-  } else {
-    registerFormRef.value?.setError(result.error)
+
+  try {
+    const result = await register(data.email, data.password, data.nickname, data.firstName, data.lastName)
+    if (result.success) {
+      emit('register-success', data.email)
+    } else {
+      registerFormRef.value?.setError(result.error)
+    }
+  } catch {
+    registerFormRef.value?.setError('Errore di autenticazione')
+  } finally {
+    isSubmitting.value = false
   }
 }
 
 const handleResetPassword = async (email: string) => {
+  if (isSubmitting.value) return
   isSubmitting.value = true
-  resetFormRef.value?.setLoading(true)
 
-  const result = await resetPassword(email)
-
-  isSubmitting.value = false
-  resetFormRef.value?.setLoading(false)
-
-  if (result.success) {
-    resetFormRef.value?.setSuccess(true)
-  } else {
-    resetFormRef.value?.setError(result.error)
+  try {
+    const result = await resetPassword(email)
+    if (result.success) {
+      resetFormRef.value?.setSuccess(true)
+    } else {
+      resetFormRef.value?.setError(result.error)
+    }
+  } catch {
+    resetFormRef.value?.setError('Errore di autenticazione')
+  } finally {
+    isSubmitting.value = false
   }
 }
 </script>
@@ -123,12 +135,14 @@ const handleResetPassword = async (email: string) => {
         <nav v-if="currentView !== 'reset'" class="auth-nav">
           <button 
             :class="['auth-nav__item', { 'is-active': currentTab === 'login' }]"
+            :disabled="isSubmitting"
             @click="handleTabChange('login')"
           >
             Login
           </button>
           <button 
             :class="['auth-nav__item', { 'is-active': currentTab === 'register' }]"
+            :disabled="isSubmitting"
             @click="handleTabChange('register')"
           >
             Registrati
@@ -142,6 +156,7 @@ const handleResetPassword = async (email: string) => {
               v-if="currentView === 'login'"
               key="login"
               ref="loginFormRef"
+              :loading="isSubmitting"
               @submit="handleLogin"
               @forgot-password="showResetPassword"
             />
@@ -150,6 +165,7 @@ const handleResetPassword = async (email: string) => {
               v-else-if="currentView === 'register'"
               key="register"
               ref="registerFormRef"
+              :loading="isSubmitting"
               @submit="handleRegister"
             />
 
@@ -157,6 +173,7 @@ const handleResetPassword = async (email: string) => {
               v-else
               key="reset"
               ref="resetFormRef"
+              :loading="isSubmitting"
               @submit="handleResetPassword"
               @back="backToLogin"
             />

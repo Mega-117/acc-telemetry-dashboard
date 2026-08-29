@@ -5,10 +5,15 @@
 
 import { ref } from 'vue'
 
+withDefaults(defineProps<{
+  loading?: boolean
+}>(), {
+  loading: false
+})
+
 const email = ref('')
 const error = ref('')
 const success = ref(false)
-const loading = ref(false)
 
 const emit = defineEmits<{
   submit: [email: string]
@@ -33,13 +38,11 @@ const clearError = () => {
 // Esporre metodi per il parent
 defineExpose({
   setError: (msg: string) => { error.value = msg },
-  setLoading: (val: boolean) => { loading.value = val },
   setSuccess: (val: boolean) => { success.value = val },
   reset: () => {
     email.value = ''
     error.value = ''
     success.value = false
-    loading.value = false
   }
 })
 </script>
@@ -52,7 +55,7 @@ defineExpose({
       <p class="reset-success__text">
         Email inviata! Controlla la tua casella di posta (anche spam).
       </p>
-      <UiBaseButton variant="link" @click="emit('back')">
+      <UiBaseButton variant="link" :disabled="loading" @click="emit('back')">
         ← Torna al login
       </UiBaseButton>
     </div>
@@ -83,7 +86,7 @@ defineExpose({
         INVIA LINK
       </UiBaseButton>
       
-      <UiBaseButton variant="link" @click="emit('back')">
+      <UiBaseButton variant="link" :disabled="loading" @click="emit('back')">
         ← Torna al login
       </UiBaseButton>
     </form>

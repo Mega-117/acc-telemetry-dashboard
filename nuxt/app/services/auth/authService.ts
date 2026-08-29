@@ -39,11 +39,39 @@ export async function registerWithEmail(params: {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password)
     const user = userCredential.user
 
-    await updateProfile(user, { displayName: nickname })
-    await createInitialUserDocument(user, { firstName, lastName, nickname })
-    await sendEmailVerification(user)
+    let profileReady = true
+    let verificationEmailSent = true
 
-    return { user }
+    try {
+        await updateProfile(user, { displayName: nickname })
+    } catch (error) {
+        profileReady = false
+        console.warn('[AUTH] Registration display profile deferred:', getAuthErrorCode(error))
+    }
+
+    try {
+        await createInitialUserDocument(user, { firstName, lastName, nickname })
+    } catch (error) {
+        profileReady = false
+        console.warn('[AUTH] Registration Firestore provisioning deferred:', getAuthErrorCode(error))
+    }
+
+    try {
+        await sendEmailVerification(user)
+    } catch (error) {
+        verificationEmailSent = false
+        console.warn('[AUTH] Registration verification email deferred:', getAuthErrorCode(error))
+    }
+
+    return { user, profileReady, verificationEmailSent }
+}
+
+function getAuthErrorCode(error: unknown): string {
+    if (error && typeof error === 'object' && 'code' in error) {
+        const code = (error as { code?: unknown }).code
+        if (typeof code === 'string') return code
+    }
+    return 'unknown'
 }
 
 export async function loginWithEmail(email: string, password: string) {
