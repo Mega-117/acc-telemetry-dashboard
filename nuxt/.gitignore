@@ -6,6 +6,7 @@
 .cache
 .tmp_edge_profile
 dist
+coverage
 
 # Node dependencies
 node_modules

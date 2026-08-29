@@ -8,6 +8,7 @@ import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useStandingsHighlights } from '~/composables/useStandingsHighlights'
 import { useStandingsState } from '~/composables/useStandingsState'
+import { usePublicPath } from '~/composables/usePublicPath'
 import { buildStandingsPresentation, DEFAULT_STANDINGS_OPTIONS } from '~/services/overlay/standingsPresentation'
 
 definePageMeta({ layout: 'hud-overlay' })

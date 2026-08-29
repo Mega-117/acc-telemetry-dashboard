@@ -15,6 +15,7 @@ describe('Standings overlay contract', () => {
     expect(page).toContain('useFastStatePoller(getApi)')
     expect(page).toContain('route.query.standingsBootstrap')
     expect(page).toContain('useStandingsHighlights(standings.state, standings.nowMs)')
+    expect(page).toContain("import { usePublicPath } from '~/composables/usePublicPath'")
     expect(page).toContain('const { getPublicPath } = usePublicPath()')
     expect(page).toMatch(/localDriver\.value,\s*getPublicPath,\s*\)\)/)
     expect(page).toContain('standings.start()')
