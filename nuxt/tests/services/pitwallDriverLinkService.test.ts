@@ -6,7 +6,9 @@ const mocks = vi.hoisted(() => ({
   grant: null as unknown,
   orderListener: null as null | ((snapshot: unknown) => void),
   submitted: [] as unknown[],
-  submitResult: { accepted: true, status: 'applied', reason: null, fields: {} } as Record<string, unknown>
+  submitResult: { accepted: true, status: 'applied', reason: null, fields: {} } as Record<string, unknown>,
+  accReady: true as boolean,
+  statusCalls: 0
 }))
 
 vi.mock('firebase/firestore', () => ({
@@ -66,8 +68,11 @@ function orderSnapshot(orders: Array<{ id: string, status?: string, revision?: n
   }
 }
 
+// Ogni consegna fa piu' salti asincroni: chiedere se e il momento, scrivere
+// lo stato, leggere il permesso, applicare, scrivere l esito. Il conteggio
+// copre due ordini in coda con margine.
 async function settle() {
-  for (let index = 0; index < 12; index += 1) await Promise.resolve()
+  for (let index = 0; index < 60; index += 1) await Promise.resolve()
 }
 
 function start() {
@@ -79,6 +84,16 @@ function start() {
       pitwallSubmitRemoteOrder: async (payload) => {
         mocks.submitted.push(payload)
         return mocks.submitResult as never
+      },
+      pitwallGetLinkStatus: async () => {
+        mocks.statusCalls += 1
+        return {
+          trustedSender: true,
+          driverUid: DRIVER,
+          applying: false,
+          accReady: mocks.accReady,
+          accReason: mocks.accReady ? null : 'Auto non ancora ferma ai box.'
+        }
       }
     },
     now: () => Date.parse('2026-08-30T15:00:00.000Z'),
@@ -93,6 +108,8 @@ beforeEach(() => {
   mocks.orderListener = null
   mocks.grant = { driverUid: DRIVER, engineerUid: ENGINEER, status: 'granted' }
   mocks.submitResult = { accepted: true, status: 'applied', reason: null, fields: {} }
+  mocks.accReady = true
+  mocks.statusCalls = 0
   vi.useFakeTimers()
 })
 
@@ -216,5 +233,44 @@ describe('lato pilota del collegamento', () => {
     listener?.(orderSnapshot([{ id: 'ordine-tardivo' }]))
     await settle()
     expect(mocks.submitted).toHaveLength(0)
+  })
+})
+
+// Segnalato da un utente reale: mentre un ordine aspettava, ogni tentativo
+// sospendeva gli overlay e portava ACC in primo piano, rendendo il PC
+// inutilizzabile. Aspettare deve essere silenzioso.
+describe('un ordine che aspetta non disturba il pilota', () => {
+  it('non consegna nulla a Electron finche ACC non e pronto', async () => {
+    mocks.accReady = false
+    const handle = start()
+    await settle()
+    mocks.orderListener?.(orderSnapshot([{ id: 'ordine-1' }]))
+    await settle()
+
+    // Ha solo chiesto se era il momento: nessun ordine consegnato, nessuno
+    // stato scritto, quindi niente overlay sospesi e niente focus rubato.
+    expect(mocks.statusCalls).toBeGreaterThan(0)
+    expect(mocks.submitted).toHaveLength(0)
+    expect(mocks.updates.filter(entry => entry.path.endsWith('orders/ordine-1'))).toHaveLength(0)
+    handle.stop()
+  })
+
+  it('consegna appena ACC diventa pronto, senza che l ordine sia andato perso', async () => {
+    mocks.accReady = false
+    const handle = start()
+    await settle()
+    mocks.orderListener?.(orderSnapshot([{ id: 'ordine-1' }]))
+    await settle()
+    expect(mocks.submitted).toHaveLength(0)
+
+    // Il pilota rientra ai box.
+    mocks.accReady = true
+    mocks.orderListener?.(orderSnapshot([{ id: 'ordine-1' }]))
+    await settle()
+
+    expect(mocks.submitted).toHaveLength(1)
+    const last = mocks.updates.filter(entry => entry.path.endsWith('orders/ordine-1')).pop()
+    expect(last?.data).toMatchObject({ status: 'applied' })
+    handle.stop()
   })
 })

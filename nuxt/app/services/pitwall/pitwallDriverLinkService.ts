@@ -42,6 +42,19 @@ export const PITWALL_PRESENCE_INTERVAL_MS = 30_000
  */
 export const PITWALL_ORDER_RETRY_INTERVAL_MS = 8_000
 
+/**
+ * Quante volte si riprova un ordine prima di rinunciare.
+ *
+ * Un tetto esiste perche' una condizione che sembra temporanea potrebbe non
+ * esserlo: senza limite, un ordine bloccato riproverebbe per sempre. E'
+ * successo su un PC reale, dove ogni tentativo rubava il primo piano e faceva
+ * lampeggiare gli overlay, rendendo il computer inutilizzabile.
+ *
+ * 40 tentativi da 8 secondi coprono circa cinque minuti: abbastanza per un
+ * rientro ai box, non abbastanza per diventare un problema.
+ */
+export const PITWALL_ORDER_MAX_ATTEMPTS = 40
+
 export interface PitwallDriverElectronApi {
   pitwallSubmitRemoteOrder?: (payload: {
     order: PitwallOrderDocument
@@ -55,7 +68,14 @@ export interface PitwallDriverElectronApi {
     /** L'ordine non e' applicabile adesso ma lo sara': non va concluso. */
     retryable?: boolean
   }>
-  pitwallGetLinkStatus?: () => Promise<{ trustedSender: boolean, driverUid: string | null, applying: boolean }>
+  pitwallGetLinkStatus?: () => Promise<{
+    trustedSender: boolean
+    driverUid: string | null
+    applying: boolean
+    /** ACC e' pronto a ricevere adesso. Letto senza toccare il gioco. */
+    accReady?: boolean
+    accReason?: string | null
+  }>
 }
 
 export interface PitwallDriverLinkOptions {
@@ -104,6 +124,7 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
   // Ordini visti e ancora da applicare, tenuti per riprovare quando il pilota
   // arriva ai box.
   const waiting = new Map<string, PitwallOrderDocument>()
+  const attempts = new Map<string, number>()
   let waitingReason: string | null = null
   let retryTimer: ReturnType<typeof setInterval> | null = null
 
@@ -147,9 +168,33 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
 
   async function deliver(order: PitwallOrderDocument): Promise<void> {
     if (stopped || handled.has(order.orderId)) return
-    handled.add(order.orderId)
 
+    // Si chiede prima se e' il momento, e la domanda non tocca ACC: nessun
+    // input, nessun overlay sospeso. Solo quando la risposta e' si' si va
+    // avanti. Chiedere provando significava rubare il primo piano al pilota a
+    // ogni tentativo, per tutta l'attesa.
+    try {
+      const status = await electronApi.pitwallGetLinkStatus?.()
+      if (status && status.accReady === false) {
+        waitingReason = status.accReason ?? 'ACC non e ancora pronto.'
+        return
+      }
+    } catch {
+      // Stato non leggibile: si prova comunque, ma una sola volta per giro.
+    }
+
+    handled.add(order.orderId)
     const orderRef = doc(ordersRef, order.orderId)
+
+    // Solo adesso, che si sta davvero per applicare, si dichiara "in
+    // lavorazione". Scriverlo prima del controllo avrebbe fatto lampeggiare lo
+    // stato dell'ingegnere a ogni tentativo di un ordine in attesa.
+    try {
+      await trackedUpdateDoc(orderRef, { status: 'applying' }, 'pitwall.markApplying')
+    } catch (error) {
+      log.warn?.('[PITWALL] stato applying non scritto:', (error as Error)?.message)
+    }
+
     let grant: PitwallGrant | null = null
     try {
       grant = await loadGrant(order.senderId)
@@ -172,11 +217,23 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
     // riprova. Scrivere un esito adesso vorrebbe dire buttarlo via proprio
     // mentre il pilota sta rientrando.
     if (outcome.retryable || outcome.status === 'waiting') {
-      handled.delete(order.orderId)
+      const used = (attempts.get(order.orderId) ?? 0) + 1
+      attempts.set(order.orderId, used)
       waitingReason = outcome.reason ?? null
-      return
+      if (used < PITWALL_ORDER_MAX_ATTEMPTS) {
+        handled.delete(order.orderId)
+        return
+      }
+      // Tetto raggiunto: si smette e si dice perche', invece di riprovare per
+      // sempre. L'ingegnere puo' rimandare quando la situazione e' cambiata.
+      outcome = {
+        status: 'failed',
+        reason: `Non applicabile dopo ${used} tentativi: ${outcome.reason ?? 'condizione invariata'}.`,
+        fields: {},
+      }
     }
     waitingReason = null
+    attempts.delete(order.orderId)
 
     try {
       await trackedUpdateDoc(orderRef, {
@@ -238,6 +295,7 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
       presenceTimer = null
       retryTimer = null
       waiting.clear()
+      attempts.clear()
       unsubscribeOrders?.()
       unsubscribeOrders = null
     },
