@@ -11,7 +11,9 @@ import {
   isPitwallGrantUsable,
   isPitwallOrderSettled,
   isPitwallSessionFresh,
+  matchesPitwallSearch,
   pitwallGrantId,
+  pitwallSearchVariants,
   type PitwallSession
 } from '~/services/pitwall/pitwallLink'
 
@@ -173,5 +175,38 @@ describe('cosa legge l ingegnere quando qualcosa non va', () => {
 
   it('un errore sconosciuto si mostra com e, invece di essere nascosto', () => {
     expect(describePitwallLinkError('Qualcosa di imprevisto')).toBe('Qualcosa di imprevisto')
+  })
+})
+
+describe('cercare un utente senza badare alle maiuscole', () => {
+  it('cerca il termine anche in maiuscolo, minuscolo e con iniziale grande', () => {
+    // Firestore confronta byte per byte: senza varianti, "ri" non troverebbe
+    // mai "RICO117". E successo davvero in prova reale.
+    const variants = pitwallSearchVariants('ri')
+    expect(variants).toContain('ri')
+    expect(variants).toContain('RI')
+    expect(variants).toContain('Ri')
+  })
+
+  it('non ripete la stessa variante due volte, per non pagare query inutili', () => {
+    expect(pitwallSearchVariants('RI')).toEqual([...new Set(pitwallSearchVariants('RI'))])
+    expect(new Set(pitwallSearchVariants('abc')).size).toBe(pitwallSearchVariants('abc').length)
+  })
+
+  it('sotto la lunghezza minima non si cerca nulla', () => {
+    expect(pitwallSearchVariants('r')).toEqual([])
+    expect(pitwallSearchVariants(' ')).toEqual([])
+    expect(pitwallSearchVariants('')).toEqual([])
+  })
+
+  it('ignora spazi accidentali intorno al termine', () => {
+    expect(pitwallSearchVariants('  ri  ')).toContain('ri')
+  })
+
+  it('il filtro finale accetta il prefisso a prescindere dalle maiuscole', () => {
+    expect(matchesPitwallSearch('RICO117', 'ri')).toBe(true)
+    expect(matchesPitwallSearch('RICO117', 'RIC')).toBe(true)
+    expect(matchesPitwallSearch('ricoro', 'RI')).toBe(true)
+    expect(matchesPitwallSearch('Enrico', 'ri')).toBe(false)
   })
 })

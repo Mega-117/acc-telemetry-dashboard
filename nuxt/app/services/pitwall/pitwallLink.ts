@@ -212,3 +212,31 @@ export function describePitwallLinkError(raw: string | null | undefined): string
   }
   return message
 }
+
+/** Lunghezza minima per cercare: sotto, il risultato sarebbe mezzo elenco. */
+export const PITWALL_SEARCH_MIN_CHARS = 2
+
+/**
+ * Varianti di maiuscole con cui cercare un soprannome.
+ *
+ * Firestore confronta le stringhe byte per byte: un prefisso `ri` non trova
+ * mai `RICO117`. Non esiste un campo normalizzato sui profili pubblici, e non
+ * si possono riscrivere i documenti altrui per crearlo, quindi si cerca il
+ * termine in poche forme plausibili e si uniscono i risultati.
+ *
+ * Restituisce prefissi distinti, in ordine stabile: stesso termine, stesse
+ * query, quindi stesso costo.
+ */
+export function pitwallSearchVariants(term: string): string[] {
+  const needle = term.trim()
+  if (needle.length < PITWALL_SEARCH_MIN_CHARS) return []
+  const lower = needle.toLowerCase()
+  const upper = needle.toUpperCase()
+  const capitalised = lower.charAt(0).toUpperCase() + lower.slice(1)
+  return [...new Set([needle, lower, upper, capitalised])]
+}
+
+/** Un risultato vale se il soprannome inizia col termine, ignorando le maiuscole. */
+export function matchesPitwallSearch(nickname: string, term: string): boolean {
+  return nickname.toLowerCase().startsWith(term.trim().toLowerCase())
+}

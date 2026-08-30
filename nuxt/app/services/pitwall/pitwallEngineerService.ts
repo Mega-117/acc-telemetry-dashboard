@@ -22,7 +22,9 @@ import {
   buildPitwallOrderDocument,
   buildPitwallPreAuthorisation,
   isPitwallSessionFresh,
+  matchesPitwallSearch,
   pitwallGrantId,
+  pitwallSearchVariants,
   type PitwallGrant,
   type PitwallOrderDocument,
   type PitwallSession,
@@ -220,18 +222,33 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
    * qualcuno non deve dare accesso ai suoi dati.
    */
   async function searchUsers(term: string): Promise<PitwallDirectoryEntry[]> {
-    const needle = term.trim()
-    if (needle.length < 2) return []
-    const snapshot = await trackedGetDocs(query(
-      collection(db, 'publicProfiles'),
-      orderBy('nickname'),
-      startAt(needle),
-      endAt(`${needle}`),
-      limit(20)
-    ), 'pitwall.searchUsers')
-    return snapshot.docs
-      .map(entry => ({ uid: entry.id, nickname: String((entry.data() as { nickname?: string }).nickname ?? entry.id) }))
-      .filter(entry => entry.uid !== engineerUid)
+    const variants = pitwallSearchVariants(term)
+    if (!variants.length) return []
+
+    // Firestore confronta byte per byte: `ri` non troverebbe mai `RICO117`.
+    // Si cerca il termine in poche forme e si uniscono i risultati.
+    const found = new Map<string, PitwallDirectoryEntry>()
+    for (const variant of variants) {
+      let snapshot
+      try {
+        snapshot = await trackedGetDocs(query(
+          collection(db, 'publicProfiles'),
+          orderBy('nickname'),
+          startAt(variant),
+          endAt(`${variant}`),
+          limit(20)
+        ), 'pitwall.searchUsers')
+      } catch {
+        continue
+      }
+      for (const entry of snapshot.docs) {
+        if (entry.id === engineerUid) continue
+        const nickname = String((entry.data() as { nickname?: string }).nickname ?? entry.id)
+        if (!matchesPitwallSearch(nickname, term)) continue
+        found.set(entry.id, { uid: entry.id, nickname })
+      }
+    }
+    return [...found.values()].sort((left, right) => left.nickname.localeCompare(right.nickname))
   }
 
   /**
