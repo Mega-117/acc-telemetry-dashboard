@@ -32,6 +32,18 @@ describe('training overlay Setup pressure contract', () => {
     expect(source).toContain('actionReasonCode: response?.reasonCode || null')
   })
 
+  it('shows a static prominent alert when the latest completed lap is invalid', () => {
+    expect(source).toContain('v-if="dryPressurePresentation.alert"')
+    expect(source).toContain('pressure-invalid-lap-alert')
+    expect(source).toContain("dryPressurePresentation.buttonLabel || 'Regola pressioni'")
+    expect(source).toContain('dryPressurePresentation.alert.title')
+    expect(source).toContain('dryPressurePresentation.alert.guidance')
+    expect(source).not.toContain("dryPressureState.reason || 'Attendo tre giri completi")
+    expect(styles).toContain('border: 1px solid rgba(251, 191, 36, 0.78)')
+    expect(styles).toMatch(/pressure-invalid-lap-alert[\s\S]*background:[\s\S]*245, 158, 11/)
+    expect(styles).not.toMatch(/pressure-invalid-lap-alert[^{]*\{[^}]*animation:/)
+  })
+
   it('does not present Pit MFD values or a hardcoded dry-only product label', () => {
     expect(source).not.toContain('Regola pressioni — asciutto')
     expect(source).not.toContain('MFD non disponibile')

@@ -39,6 +39,43 @@ describe('pressureActionPresentation', () => {
     }).guidance).toBe('Completa 3 giri, di cui almeno 1 valido (2/3, validi 1/1).')
   })
 
+  it('segnala in modo prominente che proprio l ultimo giro e invalido', () => {
+    expect(pressureActionPresentation({
+      state: 'unavailable',
+      recommendation: {
+        status: 'waiting_for_valid_lap',
+        completed_laps: 6,
+        valid_laps: 4,
+        required_completed_laps: 3,
+        required_valid_laps: 1,
+      },
+    })).toMatchObject({
+      stateLabel: 'Non disponibile',
+      guidance: 'L’ultimo giro è invalido. Completa un nuovo giro valido.',
+      buttonLabel: 'Serve un giro valido',
+      alert: {
+        title: 'ULTIMO GIRO NON VALIDO',
+        guidance: 'Completa un nuovo giro valido per sbloccare la regolazione.',
+      },
+    })
+
+    const initialRequirement = pressureActionPresentation({
+      state: 'unavailable',
+      recommendation: {
+        status: 'waiting_for_valid_lap',
+        completed_laps: 3,
+        valid_laps: 0,
+        required_completed_laps: 3,
+        required_valid_laps: 1,
+      },
+    })
+    expect(initialRequirement).toMatchObject({
+      guidance: 'Completa almeno un giro valido.',
+    })
+    expect(initialRequirement.alert).toBeUndefined()
+    expect(initialRequirement.buttonLabel).toBeUndefined()
+  })
+
   it('distingue pressioni gia corrette da dati mancanti', () => {
     expect(pressureActionPresentation({
       state: 'unavailable',

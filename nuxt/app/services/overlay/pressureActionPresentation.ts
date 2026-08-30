@@ -17,6 +17,11 @@ export interface PressureActionPresentation {
   stateLabel: string
   guidance: string
   ariaLabel: string
+  buttonLabel?: string
+  alert?: {
+    title: string
+    guidance: string
+  }
 }
 
 function finiteCount(value: unknown, fallback: number): number {
@@ -24,9 +29,24 @@ function finiteCount(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : fallback
 }
 
+function recommendationReason(input: PressureActionInput): string | null | undefined {
+  return input.recommendation?.status || input.reason
+}
+
+function isLatestLapInvalid(input: PressureActionInput): boolean {
+  if (recommendationReason(input) !== 'waiting_for_valid_lap') return false
+
+  const recommendation = input.recommendation
+  const completed = finiteCount(recommendation?.completed_laps, 0)
+  const requiredCompleted = finiteCount(recommendation?.required_completed_laps, 3)
+  const valid = finiteCount(recommendation?.valid_laps, 0)
+  const requiredValid = finiteCount(recommendation?.required_valid_laps, 1)
+  return completed >= requiredCompleted && requiredValid > 0 && valid >= requiredValid
+}
+
 function unavailableGuidance(input: PressureActionInput): string {
   const recommendation = input.recommendation
-  const reason = recommendation?.status || input.reason
+  const reason = recommendationReason(input)
 
   if (input.consumed === true) return 'Questa correzione è già stata applicata.'
   if (reason === 'within_tolerance') return 'Pressioni già nella fascia ottimale.'
@@ -88,6 +108,20 @@ export function pressureActionPresentation(input: PressureActionInput | null | u
       stateLabel: 'Bloccato',
       guidance: 'Regolazione non disponibile: controlla lo stato di ACC.',
       ariaLabel: 'Regola pressioni nel Setup ACC: regolazione bloccata',
+    }
+  }
+
+  if (isLatestLapInvalid(input || {})) {
+    const guidance = 'Completa un nuovo giro valido per sbloccare la regolazione.'
+    return {
+      stateLabel: 'Non disponibile',
+      guidance: 'L’ultimo giro è invalido. Completa un nuovo giro valido.',
+      ariaLabel: `Regola pressioni non disponibile: ${guidance}`,
+      buttonLabel: 'Serve un giro valido',
+      alert: {
+        title: 'ULTIMO GIRO NON VALIDO',
+        guidance,
+      },
     }
   }
 

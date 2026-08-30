@@ -949,6 +949,18 @@ onBeforeUnmount(() => {
                     <button v-if="dryPressureState.qaAvailable" type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Genera raccomandazione TEST</button>
                     <p v-if="dryPressureState.qaAvailable" class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
                     <button v-if="dryPressureState.qaActive" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Rimuovi raccomandazione TEST</button>
+                    <div
+                      v-if="dryPressurePresentation.alert"
+                      class="pressure-invalid-lap-alert"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <span class="pressure-invalid-lap-alert__icon" aria-hidden="true">!</span>
+                      <span class="pressure-invalid-lap-alert__copy">
+                        <strong>{{ dryPressurePresentation.alert.title }}</strong>
+                        <span>{{ dryPressurePresentation.alert.guidance }}</span>
+                      </span>
+                    </div>
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training launcher-tool-button--pressure"
@@ -958,7 +970,7 @@ onBeforeUnmount(() => {
                       :disabled="dryPressureState.state !== 'ready'"
                       @click="applyDryPressure"
                     >
-                      <span>Regola pressioni</span>
+                      <span>{{ dryPressurePresentation.buttonLabel || 'Regola pressioni' }}</span>
                     </button>
                   </div>
                   <p id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
@@ -979,7 +991,7 @@ onBeforeUnmount(() => {
                       </tbody>
                     </table>
                     <p v-if="dryPressureState.recommendation?.wheels" class="pressure-plan__note">AVG + persa = compensata · il setup cambia dei click indicati.</p>
-                    <p v-else class="pressure-plan__empty">{{ dryPressureState.reason || 'Attendo tre giri completi, di cui almeno uno valido.' }}</p>
+                    <p v-else class="pressure-plan__empty">{{ dryPressurePresentation.guidance }}</p>
                   </div>
 
                   <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K chiude</p>
