@@ -106,6 +106,30 @@ describe('pressureActionPresentation', () => {
     }).guidance).toBe('Questa correzione è già stata applicata.')
   })
 
+  it('spiega che il piano resta sospeso nella griglia Setup', () => {
+    expect(pressureActionPresentation({
+      state: 'unavailable',
+      reason: 'setup_menu_open',
+      recommendation: { status: 'ready' },
+    })).toEqual({
+      stateLabel: 'Sospesa',
+      guidance: 'Esci dal Setup e torna al menu Pausa: la correzione resta pronta.',
+      ariaLabel: 'Regola pressioni sospesa: esci dal Setup e torna al menu Pausa',
+      buttonLabel: 'Esci dal Setup',
+    })
+  })
+
+  it('richiede un nuovo stint quando cambia il set montato', () => {
+    expect(pressureActionPresentation({
+      state: 'unavailable',
+      reason: 'tyre_set_changed',
+      recommendation: { status: 'ready' },
+    })).toMatchObject({
+      guidance: 'Il set gomme montato è cambiato. Completa un nuovo stint per ricalcolare le pressioni.',
+      buttonLabel: 'Serve un nuovo stint',
+    })
+  })
+
   it.each([
     ['running', 'In corso', 'Regolazione delle pressioni in corso.'],
     ['completed', 'Completato', 'Pressioni regolate.'],

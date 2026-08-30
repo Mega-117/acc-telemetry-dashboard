@@ -111,6 +111,24 @@ export function pressureActionPresentation(input: PressureActionInput | null | u
     }
   }
 
+  if (input?.reason === 'setup_menu_open') {
+    return {
+      stateLabel: 'Sospesa',
+      guidance: 'Esci dal Setup e torna al menu Pausa: la correzione resta pronta.',
+      ariaLabel: 'Regola pressioni sospesa: esci dal Setup e torna al menu Pausa',
+      buttonLabel: 'Esci dal Setup',
+    }
+  }
+
+  if (input?.reason === 'tyre_set_changed') {
+    return {
+      stateLabel: 'Non disponibile',
+      guidance: 'Il set gomme montato è cambiato. Completa un nuovo stint per ricalcolare le pressioni.',
+      ariaLabel: 'Regola pressioni non disponibile: set gomme montato cambiato',
+      buttonLabel: 'Serve un nuovo stint',
+    }
+  }
+
   if (isLatestLapInvalid(input || {})) {
     const guidance = 'Completa un nuovo giro valido per sbloccare la regolazione.'
     return {
