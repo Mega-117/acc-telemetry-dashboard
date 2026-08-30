@@ -1068,6 +1068,69 @@ describe('Pit Wall - permesso fra account', () => {
     }))
   })
 
+  it('nessuno puo elencare i permessi di tutti: il filtro sul proprio uid e obbligatorio', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({ status: 'granted' }))
+    })
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+
+    // Senza filtro l'elenco svelerebbe a chiunque chi assiste chi.
+    await assertFails(getDocs(query(collection(outsiderDb, 'pitwallGrants'), limit(200))))
+    // Anche filtrando sull'uid di un altro: il filtro deve essere il proprio.
+    await assertFails(getDocs(query(
+      collection(outsiderDb, 'pitwallGrants'),
+      where('engineerUid', '==', ENGINEER_UID),
+      limit(50)
+    )))
+
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertSucceeds(getDocs(query(
+      collection(engineerDb, 'pitwallGrants'),
+      where('engineerUid', '==', ENGINEER_UID),
+      limit(50)
+    )))
+
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(getDocs(query(
+      collection(driverDb, 'pitwallGrants'),
+      where('driverUid', '==', DRIVER_UID),
+      limit(50)
+    )))
+  })
+
+  // Trovato in prova live: leggere un permesso che ancora non esiste veniva
+  // negato, perche' la regola guardava dentro un documento nullo. Senza questo,
+  // chiedere un collegamento falliva sempre.
+  it('si puo verificare un permesso che non esiste ancora, se l id contiene il proprio uid', async () => {
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertSucceeds(getDoc(doc(engineerDb, `pitwallGrants/${GRANT_ID}`)))
+
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(getDoc(doc(driverDb, `pitwallGrants/${GRANT_ID}`)))
+  })
+
+  it('un estraneo non puo sondare se due altri utenti sono collegati', async () => {
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+    // Documento inesistente fra due terzi: nemmeno l'assenza deve trapelare.
+    await assertFails(getDoc(doc(outsiderDb, `pitwallGrants/${GRANT_ID}`)))
+  })
+
+  it('dopo una revoca l ingegnere puo chiedere di nuovo, e decide sempre il pilota', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({ status: 'revoked' }))
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertSucceeds(updateDoc(doc(engineerDb, `pitwallGrants/${GRANT_ID}`), {
+      status: 'pending',
+      updatedAt: '2026-08-30T16:00:00.000Z'
+    }))
+    // Ma non puo' saltare il passaggio e concedersi il permesso da solo.
+    await assertFails(updateDoc(doc(engineerDb, `pitwallGrants/${GRANT_ID}`), {
+      status: 'granted',
+      updatedAt: '2026-08-30T16:01:00.000Z'
+    }))
+  })
+
   it('un estraneo non legge il permesso di altri', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({ status: 'granted' }))

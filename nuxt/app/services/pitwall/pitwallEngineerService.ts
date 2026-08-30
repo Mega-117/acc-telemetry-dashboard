@@ -6,7 +6,7 @@
 // l'autorita' e' il PC del pilota, che e' l'unico che tocca ACC.
 // ============================================
 
-import { collection, doc, limit, query, where } from 'firebase/firestore'
+import { collection, doc, limit, orderBy, query, startAt, endAt, where } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 // Ogni lettura e scrittura passa dal tracker: la promessa "costo zero" regge
 // solo se il consumo Firebase resta misurabile, non stimato a occhio.
@@ -20,12 +20,26 @@ import {
 import {
   buildPitwallGrantRequest,
   buildPitwallOrderDocument,
+  buildPitwallPreAuthorisation,
   isPitwallSessionFresh,
   pitwallGrantId,
   type PitwallGrant,
   type PitwallOrderDocument,
   type PitwallSession,
 } from './pitwallLink'
+
+export interface PitwallDirectoryEntry {
+  uid: string
+  nickname: string
+}
+
+/** Una richiesta ricevuta dal pilota, in attesa della sua decisione. */
+export interface PitwallIncomingRequest {
+  engineerUid: string
+  nickname: string | null
+  status: PitwallGrant['status']
+  createdAt: string
+}
 
 export interface PitwallLinkedPilot {
   driverUid: string
@@ -59,18 +73,20 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
     const request = buildPitwallGrantRequest(driverUid, engineerUid, nowIso(now), note)
     if (!request) return { ok: false, reason: 'Pilota non valido.' }
 
+    // Tutto dentro un solo try: un rifiuto dei permessi deve diventare un
+    // messaggio, non un'eccezione che porta giu' la pagina.
     const ref = doc(db, 'pitwallGrants', request.id)
-    const existing = await trackedGetDoc(ref, 'pitwall.requestLink')
-    if (existing.exists()) {
-      const grant = existing.data() as PitwallGrant
-      if (grant.status === 'granted') return { ok: true, alreadyGranted: true }
-      if (grant.status === 'pending') return { ok: true, alreadyGranted: false }
-      // Un permesso revocato si puo' richiedere di nuovo: torna in attesa.
-      await trackedUpdateDoc(ref, { status: 'pending', updatedAt: nowIso(now) }, 'pitwall.reRequestLink')
-      return { ok: true, alreadyGranted: false }
-    }
-
     try {
+      const existing = await trackedGetDoc(ref, 'pitwall.requestLink')
+      if (existing.exists()) {
+        const grant = existing.data() as PitwallGrant
+        if (grant.status === 'granted') return { ok: true, alreadyGranted: true }
+        if (grant.status === 'pending') return { ok: true, alreadyGranted: false }
+        // Un permesso revocato si puo' richiedere di nuovo: torna in attesa.
+        await trackedUpdateDoc(ref, { status: 'pending', updatedAt: nowIso(now) }, 'pitwall.reRequestLink')
+        return { ok: true, alreadyGranted: false }
+      }
+
       await trackedSetDoc(ref, request.data, 'pitwall.requestLink')
       return { ok: true, alreadyGranted: false }
     } catch (error) {
@@ -79,15 +95,22 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
   }
 
   /** Ritira la propria richiesta o rinuncia a un collegamento. */
-  async function withdraw(driverUid: string): Promise<void> {
-    await trackedUpdateDoc(doc(db, 'pitwallGrants', pitwallGrantId(driverUid, engineerUid)), {
-      status: 'revoked',
-      updatedAt: nowIso(now),
-    }, 'pitwall.withdraw')
+  async function withdraw(driverUid: string): Promise<{ ok: true } | { ok: false, reason: string }> {
+    try {
+      await trackedUpdateDoc(doc(db, 'pitwallGrants', pitwallGrantId(driverUid, engineerUid)), {
+        status: 'revoked',
+        updatedAt: nowIso(now),
+      }, 'pitwall.withdraw')
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, reason: (error as Error)?.message || 'Revoca rifiutata.' }
+    }
   }
 
   /** I piloti che hanno concesso il collegamento, con la loro raggiungibilita'. */
   async function listLinkedPilots(): Promise<PitwallLinkedPilot[]> {
+    // Un elenco vuoto e' un esito legittimo; un permesso negato non deve
+    // diventare un'eccezione che ferma la pagina.
     const grants = await trackedGetDocs(query(
       collection(db, 'pitwallGrants'),
       where('engineerUid', '==', engineerUid),
@@ -190,5 +213,99 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
     )
   }
 
-  return { requestLink, withdraw, listLinkedPilots, readPilotPresence, sendOrder, watchOrder }
+  /**
+   * Cerca un utente per soprannome, per poterlo invitare.
+   *
+   * Usa i profili pubblici, che contengono solo soprannome e avatar: cercare
+   * qualcuno non deve dare accesso ai suoi dati.
+   */
+  async function searchUsers(term: string): Promise<PitwallDirectoryEntry[]> {
+    const needle = term.trim()
+    if (needle.length < 2) return []
+    const snapshot = await trackedGetDocs(query(
+      collection(db, 'publicProfiles'),
+      orderBy('nickname'),
+      startAt(needle),
+      endAt(`${needle}`),
+      limit(20)
+    ), 'pitwall.searchUsers')
+    return snapshot.docs
+      .map(entry => ({ uid: entry.id, nickname: String((entry.data() as { nickname?: string }).nickname ?? entry.id) }))
+      .filter(entry => entry.uid !== engineerUid)
+  }
+
+  /**
+   * Le richieste ricevute da chi guida: chi vuole assisterlo e non e' ancora
+   * stato autorizzato, piu' chi lo e' gia'.
+   */
+  async function listIncomingRequests(): Promise<PitwallIncomingRequest[]> {
+    const snapshot = await trackedGetDocs(query(
+      collection(db, 'pitwallGrants'),
+      where('driverUid', '==', engineerUid),
+      limit(50)
+    ), 'pitwall.listIncomingRequests')
+
+    const requests: PitwallIncomingRequest[] = []
+    for (const entry of snapshot.docs) {
+      const grant = entry.data() as PitwallGrant
+      let nickname: string | null = null
+      try {
+        const profile = await trackedGetDoc(doc(db, 'publicProfiles', grant.engineerUid), 'pitwall.requesterProfile')
+        nickname = profile.exists() ? String((profile.data() as { nickname?: string }).nickname ?? '') || null : null
+      } catch {
+        nickname = null
+      }
+      requests.push({
+        engineerUid: grant.engineerUid,
+        nickname,
+        status: grant.status,
+        createdAt: grant.createdAt,
+      })
+    }
+    return requests
+  }
+
+  /**
+   * Il pilota decide: concede o toglie. E' l'unico che puo' farlo, e le regole
+   * lo impongono sul server, non solo qui.
+   */
+  async function decideRequest(requesterUid: string, decision: 'granted' | 'revoked'): Promise<
+    { ok: true } | { ok: false, reason: string }
+  > {
+    try {
+      await trackedUpdateDoc(
+        doc(db, 'pitwallGrants', pitwallGrantId(engineerUid, requesterUid)),
+        { status: decision, updatedAt: nowIso(now) },
+        'pitwall.decideRequest'
+      )
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, reason: (error as Error)?.message || 'Decisione rifiutata.' }
+    }
+  }
+
+  /** Pre-autorizza qualcuno senza attendere che chieda. */
+  async function preAuthorise(engineerToTrust: string): Promise<{ ok: true } | { ok: false, reason: string }> {
+    const grant = buildPitwallPreAuthorisation(engineerUid, engineerToTrust, nowIso(now))
+    if (!grant) return { ok: false, reason: 'Utente non valido.' }
+    try {
+      await trackedSetDoc(doc(db, 'pitwallGrants', grant.id), grant.data, 'pitwall.preAuthorise')
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, reason: (error as Error)?.message || 'Pre-autorizzazione rifiutata.' }
+    }
+  }
+
+  return {
+    requestLink,
+    withdraw,
+    listLinkedPilots,
+    readPilotPresence,
+    sendOrder,
+    watchOrder,
+    searchUsers,
+    listIncomingRequests,
+    decideRequest,
+    preAuthorise,
+  }
 }

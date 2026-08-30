@@ -6,6 +6,7 @@ import {
   buildPitwallGrantRequest,
   buildPitwallOrderDocument,
   buildPitwallPreAuthorisation,
+  describePitwallLinkError,
   describePitwallOrderStatus,
   isPitwallGrantUsable,
   isPitwallOrderSettled,
@@ -145,5 +146,32 @@ describe('come si racconta l esito all ingegnere', () => {
 
   it('gli stati del permesso sono i tre previsti dalle regole', () => {
     expect([...PITWALL_GRANT_STATUSES].sort()).toEqual(['granted', 'pending', 'revoked'])
+  })
+})
+
+describe('cosa legge l ingegnere quando qualcosa non va', () => {
+  it('un permesso negato diventa una frase che dice cosa fare', () => {
+    const message = describePitwallLinkError('FirebaseError: Missing or insufficient permissions.')
+    expect(message).toMatch(/permesso negato/i)
+    expect(message).not.toMatch(/insufficient permissions/i)
+  })
+
+  it('un problema di rete non viene scambiato per un divieto', () => {
+    expect(describePitwallLinkError('Failed to get document because the client is offline'))
+      .toMatch(/connessione/i)
+    expect(describePitwallLinkError('unavailable')).toMatch(/connessione/i)
+  })
+
+  it('il limite del servizio si distingue dagli altri errori', () => {
+    expect(describePitwallLinkError('resource-exhausted: quota')).toMatch(/limite/i)
+  })
+
+  it('senza errore non si inventa un messaggio', () => {
+    expect(describePitwallLinkError(null)).toBeNull()
+    expect(describePitwallLinkError('')).toBeNull()
+  })
+
+  it('un errore sconosciuto si mostra com e, invece di essere nascosto', () => {
+    expect(describePitwallLinkError('Qualcosa di imprevisto')).toBe('Qualcosa di imprevisto')
   })
 })

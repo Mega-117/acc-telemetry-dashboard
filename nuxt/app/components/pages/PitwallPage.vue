@@ -147,7 +147,12 @@ function resetToCar() {
 const { currentUser } = useFirebaseAuth()
 const link = usePitwallLink({ engineerUid: () => currentUser.value?.uid ?? null })
 
-onMounted(() => { void link.refreshPilots() })
+const showLinkPanel = ref(false)
+
+onMounted(() => {
+  void link.refreshPilots()
+  void link.refreshIncoming()
+})
 
 /** Quello che viaggia davvero: solo i campi che l'applicatore conosce. */
 function planPayload(): Record<string, unknown> {
@@ -160,6 +165,22 @@ function planPayload(): Record<string, unknown> {
     repairSuspension: repairSuspension.value,
     driverId: driverId.value,
   }
+}
+
+/** Quante richieste aspettano una mia decisione. */
+const pendingCount = computed(
+  () => link.incoming.value.filter(request => request.status === 'pending').length
+)
+
+function describeGrantStatus(status: string): string {
+  if (status === 'granted') return 'autorizzato'
+  if (status === 'pending') return 'in attesa'
+  return 'revocato'
+}
+
+async function askLink(driverUid: string) {
+  await link.requestLink(driverUid)
+  link.selectPilot(driverUid)
 }
 
 function onPilotChange(event: Event) {
@@ -237,6 +258,79 @@ function mockApplyOrder() {
         <span v-if="link.lastError.value" class="link-bar__state link-bar__state--problem">
           {{ link.lastError.value }}
         </span>
+
+        <button
+          type="button"
+          class="link-bar__refresh link-bar__toggle"
+          :aria-expanded="showLinkPanel"
+          @click="showLinkPanel = !showLinkPanel"
+        >
+          Collegamenti
+          <span v-if="pendingCount" class="link-bar__badge">{{ pendingCount }}</span>
+        </button>
+      </section>
+
+      <!--
+        Le due facce del collegamento nello stesso posto: chi assisto io, e chi
+        ha chiesto di assistere me. Tenerle separate in due pagine avrebbe
+        costretto a ricordare in quale ruolo si sta.
+      -->
+      <section v-if="showLinkPanel" class="links">
+        <div class="links__col">
+          <h3 class="links__title">Chiedi di assistere un pilota</h3>
+          <div class="links__row">
+            <input
+              v-model="link.searchTerm.value"
+              class="links__input"
+              type="search"
+              placeholder="Soprannome del pilota"
+              aria-label="Cerca un pilota per soprannome"
+              @keyup.enter="link.search()"
+            >
+            <button type="button" class="links__btn" @click="link.search()">Cerca</button>
+          </div>
+
+          <p v-if="link.notice.value" class="links__note">{{ link.notice.value }}</p>
+
+          <ul v-if="link.searchResults.value.length" class="links__list">
+            <li v-for="found in link.searchResults.value" :key="found.uid" class="links__item">
+              <span class="links__name">{{ found.nickname }}</span>
+              <button type="button" class="links__btn" @click="askLink(found.uid)">Chiedi</button>
+              <button type="button" class="links__btn links__btn--ghost" @click="link.preAuthorise(found.uid)">
+                Pre-autorizza
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <div class="links__col">
+          <h3 class="links__title">Chi vuole assistere me</h3>
+          <p v-if="!link.incoming.value.length" class="links__note">Nessuna richiesta.</p>
+          <ul v-else class="links__list">
+            <li v-for="request in link.incoming.value" :key="request.engineerUid" class="links__item">
+              <span class="links__name">{{ request.nickname || request.engineerUid }}</span>
+              <span class="links__status" :class="`links__status--${request.status}`">
+                {{ describeGrantStatus(request.status) }}
+              </span>
+              <button
+                v-if="request.status !== 'granted'"
+                type="button"
+                class="links__btn"
+                @click="link.decide(request.engineerUid, 'granted')"
+              >
+                Autorizza
+              </button>
+              <button
+                v-if="request.status === 'granted'"
+                type="button"
+                class="links__btn links__btn--ghost"
+                @click="link.decide(request.engineerUid, 'revoked')"
+              >
+                Revoca
+              </button>
+            </li>
+          </ul>
+        </div>
       </section>
 
       <PitwallOrderBar
@@ -501,6 +595,114 @@ function mockApplyOrder() {
 // Un problema non si mimetizza col resto: si vede.
 .link-bar__state--problem {
   color: #ffb03a;
+}
+
+.link-bar__toggle {
+  margin-left: auto;
+}
+
+.link-bar__badge {
+  display: inline-block;
+  min-width: 16px;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #05070c;
+  font-weight: 700;
+  text-align: center;
+}
+
+.links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  background: rgba(12, 12, 18, 0.9);
+}
+
+.links__title {
+  margin: 0 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.links__row {
+  display: flex;
+  gap: 6px;
+}
+
+.links__input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font: inherit;
+}
+
+.links__btn {
+  padding: 4px 10px;
+  border: 1px solid rgba(var(--accent-rgb), 0.5);
+  border-radius: 8px;
+  background: rgba(var(--accent-rgb), 0.12);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.links__btn--ghost {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: transparent;
+}
+
+.links__list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.links__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.links__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.links__status {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.links__status--granted {
+  color: #6fd66f;
+}
+
+.links__status--pending {
+  color: #ffb03a;
+}
+
+.links__note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .card {

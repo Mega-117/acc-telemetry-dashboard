@@ -187,3 +187,28 @@ export function describePitwallOrderStatus(status: PitwallOrderStatus | null | u
     default: return { label: 'Nessun ordine inviato', busy: false, problem: false }
   }
 }
+
+/**
+ * Traduce un errore di rete o di permessi in una frase utile.
+ *
+ * Un ingegnere durante una gara non deve leggere "Missing or insufficient
+ * permissions": deve capire cosa fare. Il messaggio originale resta nei log,
+ * qui si dice la cosa che serve.
+ */
+export function describePitwallLinkError(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const message = String(raw)
+  if (/insufficient permissions|permission-denied/i.test(message)) {
+    return 'Permesso negato: il pilota non ti ha autorizzato, oppure le regole di sicurezza non sono aggiornate.'
+  }
+  if (/unavailable|network|offline|failed to get document because the client is offline/i.test(message)) {
+    return 'Non raggiungibile adesso: controlla la connessione e riprova.'
+  }
+  if (/not-found/i.test(message)) {
+    return 'Questo collegamento non esiste piu.'
+  }
+  if (/quota|resource-exhausted/i.test(message)) {
+    return 'Limite del servizio raggiunto: riprova fra poco.'
+  }
+  return message
+}

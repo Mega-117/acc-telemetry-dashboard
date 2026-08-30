@@ -599,13 +599,25 @@ service cloud.firestore {
     // il pilota puo' pre-autorizzare, entrambi possono revocare. Nessuno puo'
     // autorizzarsi da solo ad assistere un altro.
     match /pitwallGrants/{grantId} {
+      // Su un permesso che non esiste ancora non c'e' `resource`, quindi non
+      // si puo' guardare dentro il documento: si guarda l'id, che e' composto
+      // dai due uid. Cosi' l'ingegnere puo' verificare se ha gia' chiesto,
+      // senza che nessuno possa sondare i collegamenti fra due estranei.
       allow get: if isSignedIn()
-                 && (resource.data.driverUid == request.auth.uid
-                     || resource.data.engineerUid == request.auth.uid);
+                 && (
+                   resource == null
+                     ? grantId.split('__').hasAny([request.auth.uid])
+                     : (resource.data.driverUid == request.auth.uid
+                        || resource.data.engineerUid == request.auth.uid)
+                 );
       // Ognuno enumera soltanto i propri collegamenti, mai quelli altrui.
+      // La condizione guarda il documento, non la query: Firestore accetta
+      // l'elenco solo se il filtro garantisce che ogni risultato la soddisfi.
+      // Una query senza `where` sul proprio uid viene quindi rifiutata, invece
+      // di restituire chi assiste chi a chiunque sia autenticato.
       allow list: if isSignedIn()
-                  && request.query.limit != null
-                  && request.query.limit <= 200;
+                  && (resource.data.driverUid == request.auth.uid
+                      || resource.data.engineerUid == request.auth.uid);
 
       allow create: if validPitwallGrantShape(grantId, request.resource.data.driverUid, request.resource.data.engineerUid)
                     && (validPitwallGrantRequest() || validPitwallGrantPreAuthorisation());
@@ -619,7 +631,13 @@ service cloud.firestore {
                       (resource.data.driverUid == request.auth.uid
                        && request.resource.data.status in ['granted', 'revoked'])
                       || (resource.data.engineerUid == request.auth.uid
-                          && request.resource.data.status == 'revoked')
+                          && (
+                            request.resource.data.status == 'revoked'
+                            // Dopo una revoca l'ingegnere puo' chiedere di
+                            // nuovo: torna in attesa, e decide sempre il pilota.
+                            || (resource.data.status == 'revoked'
+                                && request.resource.data.status == 'pending')
+                          ))
                     );
 
       allow delete: if isSignedIn() && resource.data.driverUid == request.auth.uid;

@@ -10,8 +10,14 @@
 
 import { computed, onScopeDispose, ref, shallowRef } from 'vue'
 import { db } from '~/config/firebase'
-import { createPitwallEngineerService, type PitwallLinkedPilot } from '~/services/pitwall/pitwallEngineerService'
 import {
+  createPitwallEngineerService,
+  type PitwallDirectoryEntry,
+  type PitwallIncomingRequest,
+  type PitwallLinkedPilot,
+} from '~/services/pitwall/pitwallEngineerService'
+import {
+  describePitwallLinkError,
   describePitwallOrderStatus,
   isPitwallOrderSettled,
   type PitwallOrderStatus,
@@ -27,7 +33,9 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   const selectedDriverUid = ref<string | null>(null)
   const loading = ref(false)
   const sending = ref(false)
-  const lastError = ref<string | null>(null)
+  const rawError = ref<string | null>(null)
+  // Cio' che legge l'ingegnere e' la frase tradotta, non il gergo del servizio.
+  const lastError = computed(() => describePitwallLinkError(rawError.value))
 
   const orderId = ref<string | null>(null)
   const orderStatus = ref<PitwallOrderStatus | null>(null)
@@ -35,6 +43,13 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   // Ogni invio incrementa la revisione: il PC del pilota scarta un ordine
   // vecchio arrivato in ritardo invece di tornare indietro nel tempo.
   const revision = ref(0)
+
+  // Le due facce del collegamento vivono nella stessa pagina: chi assisto, e
+  // chi ha chiesto di assistere me.
+  const searchTerm = ref('')
+  const searchResults = ref<PitwallDirectoryEntry[]>([])
+  const incoming = ref<PitwallIncomingRequest[]>([])
+  const notice = ref<string | null>(null)
 
   const serviceRef = shallowRef<ReturnType<typeof createPitwallEngineerService> | null>(null)
   let stopOrderWatch: (() => void) | null = null
@@ -59,7 +74,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
       return
     }
     loading.value = true
-    lastError.value = null
+    rawError.value = null
     try {
       pilots.value = await engineer.listLinkedPilots()
       if (selectedDriverUid.value && !pilots.value.some(p => p.driverUid === selectedDriverUid.value)) {
@@ -67,7 +82,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
         selectPilot(null)
       }
     } catch (error) {
-      lastError.value = (error as Error)?.message || 'Elenco piloti non disponibile.'
+      rawError.value = (error as Error)?.message || 'Elenco piloti non disponibile.'
       pilots.value = []
     } finally {
       loading.value = false
@@ -92,19 +107,31 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     })
   }
 
+  /**
+   * Chiede il collegamento. Qualunque rifiuto diventa un messaggio in pagina:
+   * un errore di permessi non deve mai propagarsi e far cadere la schermata.
+   */
   async function requestLink(driverUid: string, note: string | null = null): Promise<boolean> {
     const engineer = service()
     if (!engineer) {
-      lastError.value = 'Devi essere collegato al tuo account.'
+      rawError.value = 'Devi essere collegato al tuo account.'
       return false
     }
-    const result = await engineer.requestLink(driverUid, note)
-    if (!result.ok) {
-      lastError.value = result.reason
+    try {
+      const result = await engineer.requestLink(driverUid, note)
+      if (!result.ok) {
+        rawError.value = result.reason
+        return false
+      }
+      notice.value = result.alreadyGranted
+        ? 'Sei gia autorizzato da questo pilota.'
+        : 'Richiesta inviata: ora tocca al pilota autorizzarti.'
+      await refreshPilots()
+      return true
+    } catch (error) {
+      rawError.value = (error as Error)?.message || 'Richiesta non riuscita.'
       return false
     }
-    await refreshPilots()
-    return true
   }
 
   /**
@@ -115,18 +142,19 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     const engineer = service()
     const driverUid = selectedDriverUid.value
     if (!engineer || !driverUid) {
-      lastError.value = 'Nessun pilota selezionato.'
+      rawError.value = 'Nessun pilota selezionato.'
       return false
     }
 
     sending.value = true
-    lastError.value = null
+    rawError.value = null
     orderReason.value = null
     try {
       revision.value += 1
       const sent = await engineer.sendOrder({ driverUid, plan, revision: revision.value })
+        .catch((error: unknown) => ({ ok: false as const, reason: (error as Error)?.message || 'Invio non riuscito.' }))
       if (!sent.ok) {
-        lastError.value = sent.reason
+        rawError.value = sent.reason
         orderStatus.value = 'rejected'
         return false
       }
@@ -147,6 +175,72 @@ export function usePitwallLink(options: PitwallLinkOptions) {
       return true
     } finally {
       sending.value = false
+    }
+  }
+
+  /** Cerca un utente da invitare. Sotto due lettere non si cerca nulla. */
+  async function search(): Promise<void> {
+    const engineer = service()
+    if (!engineer) return
+    try {
+      searchResults.value = await engineer.searchUsers(searchTerm.value)
+      if (searchTerm.value.trim().length >= 2 && searchResults.value.length === 0) {
+        notice.value = 'Nessun utente trovato con questo nome.'
+      } else {
+        notice.value = null
+      }
+    } catch (error) {
+      rawError.value = (error as Error)?.message || 'Ricerca non disponibile.'
+      searchResults.value = []
+    }
+  }
+
+  /** Chi ha chiesto di assistermi, e chi ho gia' autorizzato. */
+  async function refreshIncoming(): Promise<void> {
+    const engineer = service()
+    if (!engineer) {
+      incoming.value = []
+      return
+    }
+    try {
+      incoming.value = await engineer.listIncomingRequests()
+    } catch (error) {
+      rawError.value = (error as Error)?.message || 'Richieste non disponibili.'
+      incoming.value = []
+    }
+  }
+
+  /** Il pilota concede o toglie: e' l'unico che puo' deciderlo. */
+  async function decide(requesterUid: string, decision: 'granted' | 'revoked'): Promise<void> {
+    const engineer = service()
+    if (!engineer) return
+    try {
+      const result = await engineer.decideRequest(requesterUid, decision)
+      if (!result.ok) {
+        rawError.value = result.reason
+        return
+      }
+      notice.value = decision === 'granted' ? 'Collegamento autorizzato.' : 'Collegamento revocato.'
+      await refreshIncoming()
+    } catch (error) {
+      rawError.value = (error as Error)?.message || 'Decisione non riuscita.'
+    }
+  }
+
+  /** Autorizza qualcuno in anticipo, senza attendere che chieda. */
+  async function preAuthorise(uid: string): Promise<void> {
+    const engineer = service()
+    if (!engineer) return
+    try {
+      const result = await engineer.preAuthorise(uid)
+      if (!result.ok) {
+        rawError.value = result.reason
+        return
+      }
+      notice.value = 'Utente pre-autorizzato: potra collegarsi senza chiedere.'
+      await refreshIncoming()
+    } catch (error) {
+      rawError.value = (error as Error)?.message || 'Pre-autorizzazione non riuscita.'
     }
   }
 
@@ -174,5 +268,13 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     requestLink,
     sendPlan,
     stop,
+    searchTerm,
+    searchResults,
+    incoming,
+    notice,
+    search,
+    refreshIncoming,
+    decide,
+    preAuthorise,
   }
 }
