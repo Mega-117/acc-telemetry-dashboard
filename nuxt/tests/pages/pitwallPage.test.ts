@@ -169,11 +169,37 @@ describe('Pitwall layout', () => {
   })
 })
 
-describe('Pitwall resta front-end', () => {
-  it('non legge telemetria e non invia nulla alla macchina', () => {
+describe('Pitwall: cosa e reale e cosa e ancora segnaposto', () => {
+  it('invia davvero l ordine quando un pilota collegato e selezionato', () => {
+    expect(panel).toContain("from '~/composables/usePitwallLink'")
+    expect(panel).toContain('await link.sendPlan(planPayload())')
+  })
+
+  it('senza pilota selezionato resta una bozza, invece di fingere di aver inviato', () => {
+    // Il ritorno anticipato e' la differenza fra "non inviato" e "inviato e
+    // finito nel vuoto": senza, la pagina mostrerebbe un ordine come partito.
+    expect(panel).toContain('if (!link.selectedDriverUid.value) return')
+  })
+
+  it('manda solo i campi che l applicatore conosce', () => {
+    // Il piano viaggia esplicito: cosi' un campo nuovo nella UI non finisce
+    // per sbaglio in un ordine che nessuno sa applicare.
+    expect(panel).toContain('function planPayload()')
+    for (const field of ['fuelLiters', 'tyreSet', 'pressures', 'compound', 'repairBodywork', 'repairSuspension', 'driverId']) {
+      expect(panel).toContain(`${field}:`)
+    }
+  })
+
+  it('i valori della macchina sono ancora un segnaposto, e la pagina lo dichiara', () => {
+    // La telemetria live arriva con PIP-360: finche' non c'e', il segnaposto
+    // deve restare riconoscibile invece di sembrare un dato vero.
     expect(panel).toContain('const MOCK_CAR: PitwallCarState')
-    expect(panel).toContain('sentPlan.value = { ...plan.value')
     expect(carCard).toContain('Dati finti: nessuna telemetria letta, niente inviato alla macchina.')
+  })
+
+  it('non parla con Electron: consegnare ad ACC spetta alla finestra runtime', () => {
+    // Il pannello dell'ingegnere gira anche su un tablet, dove Electron non
+    // esiste. Se chiamasse il ponte locale, funzionerebbe solo sul PC che guida.
     expect(panel).not.toMatch(/window\.electron|useFetch|\$fetch|ipcRenderer/)
     expect(carCard).not.toMatch(/window\.electron|useFetch|\$fetch|ipcRenderer/)
   })

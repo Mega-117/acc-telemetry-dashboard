@@ -1,15 +1,21 @@
 <script setup lang="ts">
 // ============================================
 // PitwallPage - pannello di controllo dell'ingegnere di pista.
-// Solo UI con dati mockati: nessuna telemetria letta, nessun comando
-// inviato alla macchina. "Invia" congela l'ordine nello stato locale.
 //
 // Regola di lettura della schermata:
 // ogni voce mostra in grande il valore che sto per mandare e in piccolo
 // quello che ha adesso la macchina; l'accento compare solo dove differiscono.
+//
+// Invio: se un pilota collegato e' selezionato, "Invia" manda l'ordine davvero
+// e la pagina segue l'esito dichiarato dal suo PC. Senza pilota selezionato la
+// pagina resta una bozza locale, e lo dice invece di fingere di aver inviato.
+// I valori della macchina sono ancora un segnaposto finche' non arriva la
+// telemetria live (PIP-360).
 // ============================================
 
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { usePitwallLink } from '~/composables/usePitwallLink'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import PitwallCarCard from '~/components/pitwall/PitwallCarCard.vue'
 import PitwallChipGroup from '~/components/pitwall/PitwallChipGroup.vue'
 import PitwallOrderBar from '~/components/pitwall/PitwallOrderBar.vue'
@@ -137,8 +143,35 @@ function resetToCar() {
   repairSuspension.value = car.value.repairSuspension
 }
 
-function sendToCar() {
+// ── Collegamento reale con il pilota ────────────────────────────
+const { currentUser } = useFirebaseAuth()
+const link = usePitwallLink({ engineerUid: () => currentUser.value?.uid ?? null })
+
+onMounted(() => { void link.refreshPilots() })
+
+/** Quello che viaggia davvero: solo i campi che l'applicatore conosce. */
+function planPayload(): Record<string, unknown> {
+  return {
+    fuelLiters: fuelLiters.value,
+    tyreSet: tyreSet.value,
+    pressures: { ...pressures.value },
+    compound: compound.value,
+    repairBodywork: repairBodywork.value,
+    repairSuspension: repairSuspension.value,
+    driverId: driverId.value,
+  }
+}
+
+function onPilotChange(event: Event) {
+  const value = (event.target as HTMLSelectElement).value
+  link.selectPilot(value || null)
+}
+
+async function sendToCar() {
   sentPlan.value = { ...plan.value, pressures: { ...pressures.value } }
+  // Senza un pilota selezionato non si finge un invio: resta una bozza.
+  if (!link.selectedDriverUid.value) return
+  await link.sendPlan(planPayload())
 }
 
 // ── Comandi finti, solo per leggere la schermata nei suoi stati ──
@@ -160,6 +193,52 @@ function mockApplyOrder() {
   -->
   <div class="pitwall-page">
     <div class="pitwall">
+      <!--
+        A chi sto mandando. Senza un pilota selezionato l'ordine resta una
+        bozza, e va detto qui invece di scoprirlo dopo aver premuto Invia.
+      -->
+      <section class="link-bar">
+        <span class="link-bar__label">Pilota</span>
+
+        <select
+          class="link-bar__select"
+          :value="link.selectedDriverUid.value ?? ''"
+          aria-label="Pilota da assistere"
+          @change="onPilotChange"
+        >
+          <option value="">Nessuno — l'ordine resta una bozza</option>
+          <option
+            v-for="pilot in link.pilots.value"
+            :key="pilot.driverUid"
+            :value="pilot.driverUid"
+          >
+            {{ pilot.driverUid }}{{ pilot.reachable ? ' — in pista' : ' — non raggiungibile' }}
+          </option>
+        </select>
+
+        <button
+          type="button"
+          class="link-bar__refresh"
+          :disabled="link.loading.value"
+          @click="link.refreshPilots()"
+        >
+          {{ link.loading.value ? 'Aggiorno…' : 'Aggiorna' }}
+        </button>
+
+        <span
+          v-if="link.orderStatus.value"
+          class="link-bar__state"
+          :class="{ 'link-bar__state--problem': link.orderProgress.value.problem }"
+        >
+          {{ link.orderProgress.value.label }}
+          <template v-if="link.orderReason.value"> — {{ link.orderReason.value }}</template>
+        </span>
+
+        <span v-if="link.lastError.value" class="link-bar__state link-bar__state--problem">
+          {{ link.lastError.value }}
+        </span>
+      </section>
+
       <PitwallOrderBar
         :status="orderStatus"
         :chips="changeChips"
@@ -380,6 +459,48 @@ function mockApplyOrder() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+// A chi sto mandando: sta in cima perche' e' la prima cosa da sapere.
+.link-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(12, 12, 18, 0.9);
+  font-size: 12px;
+}
+
+.link-bar__label {
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.link-bar__select,
+.link-bar__refresh {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font: inherit;
+}
+
+.link-bar__refresh:disabled {
+  opacity: 0.5;
+}
+
+.link-bar__state {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+// Un problema non si mimetizza col resto: si vede.
+.link-bar__state--problem {
+  color: #ffb03a;
 }
 
 .card {
