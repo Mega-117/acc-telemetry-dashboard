@@ -233,7 +233,7 @@ function mockApplyOrder() {
             :key="pilot.driverUid"
             :value="pilot.driverUid"
           >
-            {{ pilot.driverUid }}{{ pilot.reachable ? ' — in pista' : ' — non raggiungibile' }}
+            {{ pilot.nickname }}{{ pilot.reachable ? ' — in pista' : ' — non raggiungibile' }}
           </option>
         </select>
 

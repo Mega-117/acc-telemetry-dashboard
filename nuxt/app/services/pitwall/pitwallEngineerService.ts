@@ -45,6 +45,8 @@ export interface PitwallIncomingRequest {
 
 export interface PitwallLinkedPilot {
   driverUid: string
+  /** Come si chiama, non il suo identificativo: un uid non dice niente. */
+  nickname: string
   grant: PitwallGrant
   session: PitwallSession | null
   reachable: boolean
@@ -132,8 +134,19 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
         // semplicemente non e' raggiungibile.
         session = null
       }
+      let nickname = grant.driverUid
+      try {
+        const profile = await trackedGetDoc(doc(db, 'publicProfiles', grant.driverUid), 'pitwall.pilotProfile')
+        if (profile.exists()) {
+          nickname = String((profile.data() as { nickname?: string }).nickname ?? '') || grant.driverUid
+        }
+      } catch {
+        // Profilo non leggibile: si mostra l'identificativo, che e' brutto ma
+        // vero, invece di inventare un nome.
+      }
       pilots.push({
         driverUid: grant.driverUid,
+        nickname,
         grant,
         session,
         reachable: isPitwallSessionFresh(session, now()),
