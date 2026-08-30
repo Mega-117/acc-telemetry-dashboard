@@ -62,6 +62,8 @@ export function usePitwallLink(options: PitwallLinkOptions) {
 
   const serviceRef = shallowRef<ReturnType<typeof createPitwallEngineerService> | null>(null)
   let stopOrderWatch: (() => void) | null = null
+  let stopIncomingWatch: (() => void) | null = null
+  let stopGrantedWatch: (() => void) | null = null
 
   function service() {
     const uid = options.engineerUid()
@@ -73,6 +75,9 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   const selectedPilot = computed(
     () => pilots.value.find(pilot => pilot.driverUid === selectedDriverUid.value) ?? null
   )
+  /** Quante richieste aspettano una risposta: e' il numero sul campanello. */
+  const pendingIncoming = computed(() => incoming.value.filter(request => request.status === 'pending'))
+  const grantedIncoming = computed(() => incoming.value.filter(request => request.status === 'granted'))
   const canSend = computed(() => Boolean(selectedPilot.value?.reachable) && !sending.value)
   const orderProgress = computed(() => describePitwallOrderStatus(orderStatus.value))
 
@@ -229,7 +234,9 @@ export function usePitwallLink(options: PitwallLinkOptions) {
         return
       }
       notice.value = decision === 'granted' ? 'Collegamento autorizzato.' : 'Collegamento revocato.'
-      await refreshIncoming()
+      // L'elenco si aggiorna da solo tramite l'ascolto; si rilegge solo se
+      // quell'ascolto non e' attivo, per non pagare due volte la stessa cosa.
+      if (!stopIncomingWatch) await refreshIncoming()
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Decisione non riuscita.'
     }
@@ -246,15 +253,51 @@ export function usePitwallLink(options: PitwallLinkOptions) {
         return
       }
       notice.value = 'Utente pre-autorizzato: potra collegarsi senza chiedere.'
-      await refreshIncoming()
+      if (!stopIncomingWatch) await refreshIncoming()
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Pre-autorizzazione non riuscita.'
     }
   }
 
+  /**
+   * Accende gli ascolti che tengono viva la pagina.
+   *
+   * Senza, l'unico modo di accorgersi di una richiesta o di essere stati
+   * autorizzati era ricaricare: la cosa piu' facile da non fare proprio quando
+   * conta. Da qui in poi arriva tutto da solo.
+   */
+  function watchLive(): void {
+    const engineer = service()
+    if (!engineer) return
+
+    stopIncomingWatch?.()
+    stopIncomingWatch = engineer.watchIncomingRequests(
+      (requests) => { incoming.value = requests },
+      (error) => { rawError.value = error?.message || 'Richieste non disponibili.' }
+    )
+
+    stopGrantedWatch?.()
+    let knownPilots = ''
+    stopGrantedWatch = engineer.watchGrantedPilots(
+      (driverUids) => {
+        // Si ricarica l'elenco solo se e' davvero cambiato *chi* c'e': un
+        // aggiornamento qualsiasi non deve far ripartire nome e presenza.
+        const signature = [...driverUids].sort().join('|')
+        if (signature === knownPilots) return
+        knownPilots = signature
+        void refreshPilots()
+      },
+      (error) => { rawError.value = error?.message || 'Elenco piloti non disponibile.' }
+    )
+  }
+
   function stop(): void {
     stopOrderWatch?.()
+    stopIncomingWatch?.()
+    stopGrantedWatch?.()
     stopOrderWatch = null
+    stopIncomingWatch = null
+    stopGrantedWatch = null
   }
 
   onScopeDispose(stop)
@@ -279,9 +322,12 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     searchTerm,
     searchResults,
     incoming,
+    pendingIncoming,
+    grantedIncoming,
     notice,
     search,
     refreshIncoming,
+    watchLive,
     decide,
     preAuthorise,
   }

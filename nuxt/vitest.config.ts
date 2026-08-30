@@ -54,6 +54,7 @@ export default defineConfig({
         // ── Pit Wall: contratto del collegamento fra pilota e ingegnere ──
         'app/services/pitwall/pitwallLink.ts',
         'app/services/pitwall/pitwallDriverLinkService.ts',
+        'app/services/pitwall/pitwallEngineerService.ts',
         'app/services/gateway/activityProjectionBuilders.ts',
         'app/services/gateway/bestTimesBuilders.ts',
         'app/services/gateway/trackDetailProjectionBuilder.ts',

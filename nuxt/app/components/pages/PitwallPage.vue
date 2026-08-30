@@ -13,7 +13,7 @@
 // telemetria live (PIP-360).
 // ============================================
 
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { usePitwallLink } from '~/composables/usePitwallLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import PitwallCarCard from '~/components/pitwall/PitwallCarCard.vue'
@@ -151,7 +151,9 @@ const showLinkPanel = ref(false)
 
 onMounted(() => {
   void link.refreshPilots()
-  void link.refreshIncoming()
+  // Da qui in poi richieste e autorizzazioni arrivano da sole: nessun
+  // pulsante Aggiorna, nessuna pagina da ricaricare per accorgersene.
+  link.watchLive()
 })
 
 /** Quello che viaggia davvero: solo i campi che l'applicatore conosce. */
@@ -167,16 +169,28 @@ function planPayload(): Record<string, unknown> {
   }
 }
 
-/** Quante richieste aspettano una mia decisione. */
-const pendingCount = computed(
-  () => link.incoming.value.filter(request => request.status === 'pending').length
-)
+/** Chi aspetta una mia risposta adesso: e' l'unica cosa che chiede un'azione. */
+const pendingRequests = computed(() => link.pendingIncoming.value)
+/** Chi ho gia' autorizzato, per poterlo togliere quando voglio. */
+const trustedEngineers = computed(() => link.grantedIncoming.value)
 
-function describeGrantStatus(status: string): string {
-  if (status === 'granted') return 'autorizzato'
-  if (status === 'pending') return 'in attesa'
-  return 'revocato'
+function requesterName(request: { nickname: string | null, engineerUid: string }): string {
+  return request.nickname || request.engineerUid
 }
+
+/**
+ * La ricerca parte da sola mentre si scrive.
+ *
+ * Un pulsante "Cerca" e' un passaggio in piu' da indovinare: chi non e'
+ * pratico scrive il nome e aspetta che succeda qualcosa. La pausa evita di
+ * interrogare il database a ogni lettera.
+ */
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+function onSearchInput() {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => { void link.search() }, 350)
+}
+onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
 
 async function askLink(driverUid: string) {
   await link.requestLink(driverUid)
@@ -218,6 +232,29 @@ function mockApplyOrder() {
         A chi sto mandando. Senza un pilota selezionato l'ordine resta una
         bozza, e va detto qui invece di scoprirlo dopo aver premuto Invia.
       -->
+      <!--
+        Una richiesta in arrivo non si nasconde dentro un pannello: chi la
+        riceve deve capire in un secondo chi e' e cosa deve fare. Compare da
+        sola, senza ricaricare niente.
+      -->
+      <section v-if="pendingRequests.length" class="invite">
+        <div v-for="request in pendingRequests" :key="request.engineerUid" class="invite__row">
+          <span class="invite__text">
+            <strong>{{ requesterName(request) }}</strong> vuole fare da ingegnere per te.
+          </span>
+          <button type="button" class="invite__btn" @click="link.decide(request.engineerUid, 'granted')">
+            Accetta
+          </button>
+          <button type="button" class="invite__btn invite__btn--ghost" @click="link.decide(request.engineerUid, 'revoked')">
+            Rifiuta
+          </button>
+        </div>
+      </section>
+
+      <!--
+        A chi sto mandando. Senza un pilota selezionato l'ordine resta una
+        bozza, e va detto qui invece di scoprirlo dopo aver premuto Invia.
+      -->
       <section class="link-bar">
         <span class="link-bar__label">Pilota</span>
 
@@ -236,15 +273,6 @@ function mockApplyOrder() {
             {{ pilot.nickname }}{{ pilot.reachable ? ' — in pista' : ' — non raggiungibile' }}
           </option>
         </select>
-
-        <button
-          type="button"
-          class="link-bar__refresh"
-          :disabled="link.loading.value"
-          @click="link.refreshPilots()"
-        >
-          {{ link.loading.value ? 'Aggiorno…' : 'Aggiorna' }}
-        </button>
 
         <span
           v-if="link.orderStatus.value"
@@ -265,30 +293,26 @@ function mockApplyOrder() {
           :aria-expanded="showLinkPanel"
           @click="showLinkPanel = !showLinkPanel"
         >
-          Collegamenti
-          <span v-if="pendingCount" class="link-bar__badge">{{ pendingCount }}</span>
+          {{ showLinkPanel ? 'Chiudi' : 'Collegamenti' }}
         </button>
       </section>
 
       <!--
-        Le due facce del collegamento nello stesso posto: chi assisto io, e chi
-        ha chiesto di assistere me. Tenerle separate in due pagine avrebbe
-        costretto a ricordare in quale ruolo si sta.
+        Un solo pannello, due cose sole: chiedere a qualcuno, e vedere chi puo'
+        gia' guidare al posto mio. Tutto il resto era gergo.
       -->
       <section v-if="showLinkPanel" class="links">
         <div class="links__col">
-          <h3 class="links__title">Chiedi di assistere un pilota</h3>
-          <div class="links__row">
-            <input
-              v-model="link.searchTerm.value"
-              class="links__input"
-              type="search"
-              placeholder="Soprannome del pilota"
-              aria-label="Cerca un pilota per soprannome"
-              @keyup.enter="link.search()"
-            >
-            <button type="button" class="links__btn" @click="link.search()">Cerca</button>
-          </div>
+          <h3 class="links__title">Chiedi a un pilota di assisterlo</h3>
+          <p class="links__hint">Scrivi il suo nome: la ricerca parte da sola.</p>
+          <input
+            v-model="link.searchTerm.value"
+            class="links__input"
+            type="search"
+            placeholder="Nome del pilota"
+            aria-label="Cerca un pilota per nome"
+            @input="onSearchInput"
+          >
 
           <p v-if="link.notice.value" class="links__note">{{ link.notice.value }}</p>
 
@@ -296,37 +320,24 @@ function mockApplyOrder() {
             <li v-for="found in link.searchResults.value" :key="found.uid" class="links__item">
               <span class="links__name">{{ found.nickname }}</span>
               <button type="button" class="links__btn" @click="askLink(found.uid)">Chiedi</button>
-              <button type="button" class="links__btn links__btn--ghost" @click="link.preAuthorise(found.uid)">
-                Pre-autorizza
-              </button>
             </li>
           </ul>
         </div>
 
         <div class="links__col">
-          <h3 class="links__title">Chi vuole assistere me</h3>
-          <p v-if="!link.incoming.value.length" class="links__note">Nessuna richiesta.</p>
+          <h3 class="links__title">Chi puo assistere te</h3>
+          <p v-if="!trustedEngineers.length" class="links__hint">
+            Nessuno, per ora. Quando qualcuno te lo chiede compare qui sopra.
+          </p>
           <ul v-else class="links__list">
-            <li v-for="request in link.incoming.value" :key="request.engineerUid" class="links__item">
-              <span class="links__name">{{ request.nickname || request.engineerUid }}</span>
-              <span class="links__status" :class="`links__status--${request.status}`">
-                {{ describeGrantStatus(request.status) }}
-              </span>
+            <li v-for="request in trustedEngineers" :key="request.engineerUid" class="links__item">
+              <span class="links__name">{{ requesterName(request) }}</span>
               <button
-                v-if="request.status !== 'granted'"
-                type="button"
-                class="links__btn"
-                @click="link.decide(request.engineerUid, 'granted')"
-              >
-                Autorizza
-              </button>
-              <button
-                v-if="request.status === 'granted'"
                 type="button"
                 class="links__btn links__btn--ghost"
                 @click="link.decide(request.engineerUid, 'revoked')"
               >
-                Revoca
+                Togli
               </button>
             </li>
           </ul>
@@ -611,6 +622,58 @@ function mockApplyOrder() {
   color: #05070c;
   font-weight: 700;
   text-align: center;
+}
+
+// Una richiesta in arrivo: l'unica cosa in pagina che chiede una risposta.
+.invite {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.55);
+  border-radius: 12px;
+  background: rgba(var(--accent-rgb), 0.1);
+}
+
+.invite__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.invite__text {
+  flex: 1;
+  min-width: 180px;
+}
+
+.invite__btn {
+  padding: 5px 14px;
+  border: 1px solid rgba(var(--accent-rgb), 0.6);
+  border-radius: 8px;
+  background: var(--accent);
+  color: #05070c;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.invite__btn--ghost {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: inherit;
+  font-weight: 400;
+}
+
+.links__hint {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.links__col .links__input {
+  width: 100%;
 }
 
 .links {

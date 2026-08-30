@@ -296,6 +296,87 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
   }
 
   /**
+   * Le stesse richieste, ma in diretta.
+   *
+   * Aspettare che l'utente ricarichi la pagina per accorgersi che qualcuno gli
+   * ha chiesto di assisterlo e' il modo piu' semplice di far sembrare rotto un
+   * collegamento che funziona: la richiesta c'e', ma non si vede. Qui il
+   * documento arriva da solo.
+   *
+   * I nomi si tengono in una piccola cache: senza, ogni aggiornamento
+   * rileggerebbe gli stessi profili, e la promessa di costo zero si regge sul
+   * non ripetere letture inutili.
+   */
+  function watchIncomingRequests(
+    onChange: (requests: PitwallIncomingRequest[]) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    const nicknames = new Map<string, string | null>()
+
+    return trackedOnSnapshot(
+      query(collection(db, 'pitwallGrants'), where('driverUid', '==', engineerUid), limit(50)),
+      'pitwall.watchIncomingRequests',
+      (snapshot) => {
+        const grants = snapshot.docs.map((entry) => entry.data() as PitwallGrant)
+        // Prima si mostra cio' che si sa gia': la richiesta appare subito,
+        // il nome si completa un istante dopo se manca.
+        onChange(grants.map((grant) => ({
+          engineerUid: grant.engineerUid,
+          nickname: nicknames.get(grant.engineerUid) ?? null,
+          status: grant.status,
+          createdAt: grant.createdAt,
+        })))
+
+        const unknown = grants.filter((grant) => !nicknames.has(grant.engineerUid))
+        if (!unknown.length) return
+        void Promise.all(unknown.map(async (grant) => {
+          try {
+            const profile = await trackedGetDoc(doc(db, 'publicProfiles', grant.engineerUid), 'pitwall.requesterProfile')
+            nicknames.set(grant.engineerUid, profile.exists()
+              ? String((profile.data() as { nickname?: string }).nickname ?? '') || null
+              : null)
+          } catch {
+            nicknames.set(grant.engineerUid, null)
+          }
+        })).then(() => {
+          onChange(grants.map((grant) => ({
+            engineerUid: grant.engineerUid,
+            nickname: nicknames.get(grant.engineerUid) ?? null,
+            status: grant.status,
+            createdAt: grant.createdAt,
+          })))
+        })
+      },
+      (error) => onError?.(error)
+    )
+  }
+
+  /**
+   * Quando un pilota autorizza, l'ingegnere deve vederlo comparire senza fare
+   * niente: e' il momento in cui la funzione diventa utile, e chiedergli di
+   * ricaricare proprio li' sarebbe il peggior punto in cui farlo.
+   *
+   * Passa gli uid, non i piloti completi: presenza e nome li ricompone chi
+   * mostra la pagina, che sa gia' come farlo.
+   */
+  function watchGrantedPilots(
+    onChange: (driverUids: string[]) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    return trackedOnSnapshot(
+      query(
+        collection(db, 'pitwallGrants'),
+        where('engineerUid', '==', engineerUid),
+        where('status', '==', 'granted'),
+        limit(50)
+      ),
+      'pitwall.watchGrantedPilots',
+      (snapshot) => onChange(snapshot.docs.map((entry) => (entry.data() as PitwallGrant).driverUid)),
+      (error) => onError?.(error)
+    )
+  }
+
+  /**
    * Il pilota decide: concede o toglie. E' l'unico che puo' farlo, e le regole
    * lo impongono sul server, non solo qui.
    */
@@ -335,6 +416,8 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
     watchOrder,
     searchUsers,
     listIncomingRequests,
+    watchIncomingRequests,
+    watchGrantedPilots,
     decideRequest,
     preAuthorise,
   }
