@@ -911,3 +911,295 @@ describe('migration checkpoint emulator', () => {
     })).toBe(false)
   })
 })
+
+// ============================================================================
+// Pit Wall (PIP-359): il collegamento fra pilota e ingegnere e' un permesso fra
+// due account. Qui si prova che nessuno possa autorizzarsi da solo, che la
+// telemetria non abbia una porta d'ingresso, e che l'esito di un ordine lo
+// dichiari soltanto il PC che lo applica davvero.
+// ============================================================================
+
+const DRIVER_UID = PILOT_UID
+const ENGINEER_UID = SECOND_PILOT_UID
+const OUTSIDER_UID = 'qa-outsider'
+const GRANT_ID = `${DRIVER_UID}__${ENGINEER_UID}`
+
+function pitwallGrantPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1,
+    driverUid: DRIVER_UID,
+    engineerUid: ENGINEER_UID,
+    status: 'pending',
+    createdBy: ENGINEER_UID,
+    createdAt: '2026-08-30T15:00:00.000Z',
+    updatedAt: '2026-08-30T15:00:00.000Z',
+    ...overrides
+  }
+}
+
+function pitwallSessionPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1,
+    driverUid: DRIVER_UID,
+    sessionId: 'sessione-qa',
+    online: true,
+    updatedAt: '2026-08-30T15:00:00.000Z',
+    car: 'ferrari_296_gt3',
+    track: 'nurburgring',
+    ...overrides
+  }
+}
+
+function pitwallSignalPayload(from: string, to: string, overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1,
+    from,
+    to,
+    kind: 'offer',
+    payload: 'v=0 o=- 0 0 IN IP4 127.0.0.1',
+    createdAt: '2026-08-30T15:00:00.000Z',
+    ...overrides
+  }
+}
+
+function pitwallOrderPayload(orderId: string, senderId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1,
+    orderId,
+    revision: 1,
+    senderId,
+    issuedAt: '2026-08-30T15:00:00.000Z',
+    status: 'pending',
+    plan: { fuelLiters: 60, tyreSet: 4 },
+    ...overrides
+  }
+}
+
+async function seedPitwallProfiles() {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore()
+    await Promise.all([
+      setDoc(doc(db, `publicProfiles/${DRIVER_UID}`), publicProfilePayload(DRIVER_UID)),
+      setDoc(doc(db, `publicProfiles/${ENGINEER_UID}`), publicProfilePayload(ENGINEER_UID)),
+      setDoc(doc(db, `publicProfiles/${OUTSIDER_UID}`), publicProfilePayload(OUTSIDER_UID)),
+      setDoc(doc(db, `users/${OUTSIDER_UID}`), { uid: OUTSIDER_UID, role: 'pilot', coachId: null })
+    ])
+  })
+}
+
+async function seedGrantedLink() {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const db = context.firestore()
+    await setDoc(doc(db, `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({ status: 'granted' }))
+    await setDoc(doc(db, `pitwallSessions/${DRIVER_UID}`), pitwallSessionPayload())
+  })
+}
+
+describe('Pit Wall - permesso fra account', () => {
+  beforeEach(seedPitwallProfiles)
+
+  it('l ingegnere chiede il collegamento e la richiesta nasce in attesa', async () => {
+    const db = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertSucceeds(setDoc(doc(db, `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload()))
+  })
+
+  it('nessuno puo autorizzarsi da solo ad assistere un pilota', async () => {
+    const db = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(setDoc(doc(db, `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({ status: 'granted' })))
+  })
+
+  it('non si puo creare un permesso a nome di terzi', async () => {
+    const db = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+    await assertFails(setDoc(doc(db, `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload()))
+    await assertFails(setDoc(doc(db, `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({ status: 'granted', createdBy: OUTSIDER_UID })))
+  })
+
+  it('l id del permesso deve derivare dai due uid, per non avere doppioni divergenti', async () => {
+    const db = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(setDoc(doc(db, 'pitwallGrants/identificatore-inventato'), pitwallGrantPayload()))
+  })
+
+  it('non si chiede un collegamento a un account che non esiste', async () => {
+    const db = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    const ghost = 'qa-fantasma'
+    await assertFails(setDoc(
+      doc(db, `pitwallGrants/${ghost}__${ENGINEER_UID}`),
+      pitwallGrantPayload({ driverUid: ghost })
+    ))
+  })
+
+  it('il pilota puo pre-autorizzare un ingegnere senza attendere una richiesta', async () => {
+    const db = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(setDoc(doc(db, `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({
+      status: 'granted',
+      createdBy: DRIVER_UID
+    })))
+  })
+
+  it('solo il pilota concede; l ingegnere non si approva la propria richiesta', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload())
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(updateDoc(doc(engineerDb, `pitwallGrants/${GRANT_ID}`), {
+      status: 'granted',
+      updatedAt: '2026-08-30T15:05:00.000Z'
+    }))
+
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(updateDoc(doc(driverDb, `pitwallGrants/${GRANT_ID}`), {
+      status: 'granted',
+      updatedAt: '2026-08-30T15:05:00.000Z'
+    }))
+  })
+
+  it('entrambe le parti possono revocare, ma nessuna puo riscrivere le identita', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({ status: 'granted' }))
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(updateDoc(doc(engineerDb, `pitwallGrants/${GRANT_ID}`), {
+      driverUid: OUTSIDER_UID,
+      updatedAt: '2026-08-30T15:06:00.000Z'
+    }))
+    await assertSucceeds(updateDoc(doc(engineerDb, `pitwallGrants/${GRANT_ID}`), {
+      status: 'revoked',
+      updatedAt: '2026-08-30T15:06:00.000Z'
+    }))
+  })
+
+  it('un estraneo non legge il permesso di altri', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({ status: 'granted' }))
+    })
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+    await assertFails(getDoc(doc(outsiderDb, `pitwallGrants/${GRANT_ID}`)))
+  })
+})
+
+describe('Pit Wall - sessione, segnalazione e ordini', () => {
+  beforeEach(async () => {
+    await seedPitwallProfiles()
+    await seedGrantedLink()
+  })
+
+  it('l ingegnere autorizzato vede la sessione del pilota, un estraneo no', async () => {
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertSucceeds(getDoc(doc(engineerDb, `pitwallSessions/${DRIVER_UID}`)))
+
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+    await assertFails(getDoc(doc(outsiderDb, `pitwallSessions/${DRIVER_UID}`)))
+  })
+
+  it('la presenza la scrive solo il pilota', async () => {
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(setDoc(doc(engineerDb, `pitwallSessions/${DRIVER_UID}`), pitwallSessionPayload({ online: false })))
+
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(setDoc(doc(driverDb, `pitwallSessions/${DRIVER_UID}`), pitwallSessionPayload({ online: false })))
+  })
+
+  it('revocato il permesso, l ingegnere perde subito l accesso', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({ status: 'revoked' }))
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(getDoc(doc(engineerDb, `pitwallSessions/${DRIVER_UID}`)))
+  })
+
+  it('la segnalazione viaggia solo fra i due, e sempre a nome di chi la scrive', async () => {
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertSucceeds(setDoc(
+      doc(engineerDb, `pitwallSessions/${DRIVER_UID}/signals/segnale-1`),
+      pitwallSignalPayload(ENGINEER_UID, DRIVER_UID)
+    ))
+    // Non si firma un segnale col nome di un altro.
+    await assertFails(setDoc(
+      doc(engineerDb, `pitwallSessions/${DRIVER_UID}/signals/segnale-falso`),
+      pitwallSignalPayload(DRIVER_UID, ENGINEER_UID)
+    ))
+
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+    await assertFails(setDoc(
+      doc(outsiderDb, `pitwallSessions/${DRIVER_UID}/signals/segnale-estraneo`),
+      pitwallSignalPayload(OUTSIDER_UID, DRIVER_UID)
+    ))
+  })
+
+  it('un segnale enorme viene rifiutato invece di diventare un canale dati', async () => {
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(setDoc(
+      doc(engineerDb, `pitwallSessions/${DRIVER_UID}/signals/segnale-gonfio`),
+      pitwallSignalPayload(ENGINEER_UID, DRIVER_UID, { payload: 'x'.repeat(16001) })
+    ))
+  })
+
+  it('la segnalazione non si riscrive: e effimera, si crea e si cancella', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), `pitwallSessions/${DRIVER_UID}/signals/segnale-1`),
+        pitwallSignalPayload(ENGINEER_UID, DRIVER_UID)
+      )
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(updateDoc(doc(engineerDb, `pitwallSessions/${DRIVER_UID}/signals/segnale-1`), { kind: 'answer' }))
+    await assertSucceeds(deleteDoc(doc(engineerDb, `pitwallSessions/${DRIVER_UID}/signals/segnale-1`)))
+  })
+
+  it('l ingegnere autorizzato invia un ordine, l estraneo no', async () => {
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertSucceeds(setDoc(
+      doc(engineerDb, `pitwallSessions/${DRIVER_UID}/orders/ordine-1`),
+      pitwallOrderPayload('ordine-1', ENGINEER_UID)
+    ))
+
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+    await assertFails(setDoc(
+      doc(outsiderDb, `pitwallSessions/${DRIVER_UID}/orders/ordine-2`),
+      pitwallOrderPayload('ordine-2', OUTSIDER_UID)
+    ))
+  })
+
+  it('un ordine non nasce gia applicato e non si firma a nome altrui', async () => {
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(setDoc(
+      doc(engineerDb, `pitwallSessions/${DRIVER_UID}/orders/ordine-3`),
+      pitwallOrderPayload('ordine-3', ENGINEER_UID, { status: 'applied' })
+    ))
+    await assertFails(setDoc(
+      doc(engineerDb, `pitwallSessions/${DRIVER_UID}/orders/ordine-4`),
+      pitwallOrderPayload('ordine-4', DRIVER_UID)
+    ))
+  })
+
+  it('l esito lo dichiara solo il PC del pilota, che e l unico ad applicare davvero', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), `pitwallSessions/${DRIVER_UID}/orders/ordine-1`),
+        pitwallOrderPayload('ordine-1', ENGINEER_UID)
+      )
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(updateDoc(doc(engineerDb, `pitwallSessions/${DRIVER_UID}/orders/ordine-1`), { status: 'applied' }))
+
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(updateDoc(doc(driverDb, `pitwallSessions/${DRIVER_UID}/orders/ordine-1`), {
+      status: 'applied',
+      appliedAt: '2026-08-30T15:10:00.000Z'
+    }))
+  })
+
+  it('il pilota non puo riscrivere il contenuto di un ordine ricevuto', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), `pitwallSessions/${DRIVER_UID}/orders/ordine-1`),
+        pitwallOrderPayload('ordine-1', ENGINEER_UID)
+      )
+    })
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertFails(updateDoc(doc(driverDb, `pitwallSessions/${DRIVER_UID}/orders/ordine-1`), {
+      plan: { fuelLiters: 5 },
+      status: 'applied'
+    }))
+  })
+})

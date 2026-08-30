@@ -32,6 +32,142 @@ service cloud.firestore {
       return value == null || (value is string && value.size() <= maxSize);
     }
 
+    // === Pit Wall (PIP-359) ===
+    // Il collegamento fra pilota e ingegnere e' un permesso fra due account,
+    // non una stanza con password. L'id del grant e' derivato dai due uid,
+    // cosi' non possono esistere due permessi divergenti per la stessa coppia.
+
+    function pitwallGrantId(driverUid, engineerUid) {
+      return driverUid + '__' + engineerUid;
+    }
+
+    function pitwallGrantPath(driverUid, engineerUid) {
+      return /databases/$(database)/documents/pitwallGrants/$(pitwallGrantId(driverUid, engineerUid));
+    }
+
+    /** L'utente corrente puo' assistere questo pilota adesso. */
+    function hasPitwallGrant(driverUid) {
+      return isSignedIn()
+             && exists(pitwallGrantPath(driverUid, request.auth.uid))
+             && get(pitwallGrantPath(driverUid, request.auth.uid)).data.status == 'granted';
+    }
+
+    /** Pilota assistito o ingegnere autorizzato: i soli due ruoli del canale. */
+    function isPitwallParticipant(driverUid) {
+      return isOwner(driverUid) || hasPitwallGrant(driverUid);
+    }
+
+    function validPitwallGrantShape(grantId, driverUid, engineerUid) {
+      return request.resource.data.keys().hasAll([
+               'schemaVersion', 'driverUid', 'engineerUid', 'status',
+               'createdBy', 'createdAt', 'updatedAt'
+             ])
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'driverUid', 'engineerUid', 'status',
+               'createdBy', 'createdAt', 'updatedAt', 'note'
+             ])
+             && request.resource.data.schemaVersion == 1
+             && request.resource.data.driverUid is string
+             && request.resource.data.engineerUid is string
+             && request.resource.data.driverUid != request.resource.data.engineerUid
+             && grantId == pitwallGrantId(request.resource.data.driverUid, request.resource.data.engineerUid)
+             && request.resource.data.status in ['pending', 'granted', 'revoked']
+             && request.resource.data.createdBy is string
+             && request.resource.data.createdAt is string
+             && request.resource.data.createdAt.size() <= 40
+             && request.resource.data.updatedAt is string
+             && request.resource.data.updatedAt.size() <= 40
+             && isBoundedNullableString(request.resource.data.get('note', null), 200)
+             // Non si chiede un collegamento a un account che non esiste.
+             && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.driverUid))
+             && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.engineerUid));
+    }
+
+    /** L'ingegnere chiede: nasce in attesa e non si auto-approva. */
+    function validPitwallGrantRequest() {
+      return request.resource.data.engineerUid == request.auth.uid
+             && request.resource.data.createdBy == request.auth.uid
+             && request.resource.data.status == 'pending';
+    }
+
+    /** Il pilota pre-autorizza: nasce gia' valido, ma solo per mano sua. */
+    function validPitwallGrantPreAuthorisation() {
+      return request.resource.data.driverUid == request.auth.uid
+             && request.resource.data.createdBy == request.auth.uid
+             && request.resource.data.status == 'granted';
+    }
+
+    /** Su un grant esistente cambia solo lo stato: le identita' sono fissate. */
+    function pitwallGrantIdentityUnchanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'note'])
+             && request.resource.data.driverUid == resource.data.driverUid
+             && request.resource.data.engineerUid == resource.data.engineerUid
+             && request.resource.data.createdBy == resource.data.createdBy
+             && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    function validPitwallSession(driverUid) {
+      return request.resource.data.keys().hasAll([
+               'schemaVersion', 'driverUid', 'sessionId', 'online', 'updatedAt'
+             ])
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'driverUid', 'sessionId', 'online', 'updatedAt', 'car', 'track'
+             ])
+             && request.resource.data.schemaVersion == 1
+             && request.resource.data.driverUid == driverUid
+             && request.resource.data.sessionId is string
+             && request.resource.data.sessionId.size() <= 80
+             && request.resource.data.online is bool
+             && request.resource.data.updatedAt is string
+             && request.resource.data.updatedAt.size() <= 40
+             && isBoundedNullableString(request.resource.data.get('car', null), 80)
+             && isBoundedNullableString(request.resource.data.get('track', null), 80);
+    }
+
+    /**
+     * Segnalazione WebRTC: solo il necessario a farsi trovare, mai telemetria.
+     * Il payload e' limitato perche' un SDP e' grande ma non illimitato.
+     */
+    function validPitwallSignal(driverUid) {
+      return request.resource.data.keys().hasAll(['schemaVersion', 'from', 'to', 'kind', 'payload', 'createdAt'])
+             && request.resource.data.keys().hasOnly(['schemaVersion', 'from', 'to', 'kind', 'payload', 'createdAt'])
+             && request.resource.data.schemaVersion == 1
+             && request.resource.data.from == request.auth.uid
+             && request.resource.data.to is string
+             && request.resource.data.to != request.auth.uid
+             && (request.resource.data.from == driverUid || request.resource.data.to == driverUid)
+             && request.resource.data.kind in ['offer', 'answer', 'ice']
+             && request.resource.data.payload is string
+             && request.resource.data.payload.size() <= 16000
+             && request.resource.data.createdAt is string
+             && request.resource.data.createdAt.size() <= 40;
+    }
+
+    /**
+     * Ordine di strategia: rete di sicurezza quando il canale diretto non c'e'.
+     * E' raro e piccolo; la telemetria non passa mai di qui.
+     */
+    function validPitwallOrder(orderId) {
+      return request.resource.data.keys().hasAll([
+               'schemaVersion', 'orderId', 'revision', 'senderId', 'issuedAt', 'status', 'plan'
+             ])
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'orderId', 'revision', 'senderId', 'issuedAt', 'expiresAt', 'status', 'plan'
+             ])
+             && request.resource.data.schemaVersion == 1
+             && request.resource.data.orderId == orderId
+             && request.resource.data.orderId.size() <= 80
+             && request.resource.data.revision is int
+             && request.resource.data.revision >= 0
+             && request.resource.data.senderId == request.auth.uid
+             && request.resource.data.issuedAt is string
+             && request.resource.data.issuedAt.size() <= 40
+             && isBoundedNullableString(request.resource.data.get('expiresAt', null), 40)
+             && request.resource.data.status == 'pending'
+             && request.resource.data.plan is map
+             && request.resource.data.plan.keys().size() <= 12;
+    }
+
     function isNullableString(value) {
       return value == null || value is string;
     }
@@ -456,6 +592,71 @@ service cloud.firestore {
 
     match /{path=**}/runtimeInstallations/{installationId} {
       allow list: if isAdmin();
+    }
+
+    // === Pit Wall: permessi fra account (PIP-359) ===
+    // Il pilota delega la strategia una volta sola. L'ingegnere puo' chiedere,
+    // il pilota puo' pre-autorizzare, entrambi possono revocare. Nessuno puo'
+    // autorizzarsi da solo ad assistere un altro.
+    match /pitwallGrants/{grantId} {
+      allow get: if isSignedIn()
+                 && (resource.data.driverUid == request.auth.uid
+                     || resource.data.engineerUid == request.auth.uid);
+      // Ognuno enumera soltanto i propri collegamenti, mai quelli altrui.
+      allow list: if isSignedIn()
+                  && request.query.limit != null
+                  && request.query.limit <= 200;
+
+      allow create: if validPitwallGrantShape(grantId, request.resource.data.driverUid, request.resource.data.engineerUid)
+                    && (validPitwallGrantRequest() || validPitwallGrantPreAuthorisation());
+
+      // Solo il pilota concede. Entrambi possono revocare: l'ingegnere ritira
+      // la richiesta, il pilota toglie il permesso.
+      allow update: if isSignedIn()
+                    && validPitwallGrantShape(grantId, resource.data.driverUid, resource.data.engineerUid)
+                    && pitwallGrantIdentityUnchanged()
+                    && (
+                      (resource.data.driverUid == request.auth.uid
+                       && request.resource.data.status in ['granted', 'revoked'])
+                      || (resource.data.engineerUid == request.auth.uid
+                          && request.resource.data.status == 'revoked')
+                    );
+
+      allow delete: if isSignedIn() && resource.data.driverUid == request.auth.uid;
+    }
+
+    // === Pit Wall: presenza, segnalazione e ordini (PIP-359) ===
+    // La telemetria live NON passa da qui: viaggia diretta fra i due PC. Questo
+    // ramo porta solo cio' che serve a farsi trovare e, come rete di sicurezza,
+    // l'ordine di strategia, che e' raro e piccolo.
+    match /pitwallSessions/{driverUid} {
+      allow get: if isPitwallParticipant(driverUid);
+      allow list: if isOwner(driverUid);
+      allow create, update: if isOwner(driverUid) && validPitwallSession(driverUid);
+      allow delete: if isOwner(driverUid);
+
+      match /signals/{signalId} {
+        allow get, list: if isPitwallParticipant(driverUid)
+                         && (resource == null
+                             || resource.data.to == request.auth.uid
+                             || resource.data.from == request.auth.uid);
+        allow create: if isPitwallParticipant(driverUid) && validPitwallSignal(driverUid);
+        // La segnalazione e' effimera: chi l'ha scritta o il pilota la pulisce.
+        allow delete: if isPitwallParticipant(driverUid)
+                      && (resource.data.from == request.auth.uid || isOwner(driverUid));
+        allow update: if false;
+      }
+
+      match /orders/{orderId} {
+        allow get, list: if isPitwallParticipant(driverUid);
+        // L'ingegnere autorizzato invia; il pilota non manda ordini a se stesso.
+        allow create: if hasPitwallGrant(driverUid) && validPitwallOrder(orderId);
+        // Solo il PC del pilota dichiara l'esito: e' l'unico che applica davvero.
+        allow update: if isOwner(driverUid)
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'result', 'appliedAt'])
+                      && request.resource.data.status in ['applying', 'applied', 'partial', 'failed', 'rejected'];
+        allow delete: if isOwner(driverUid);
+      }
     }
   }
 }
