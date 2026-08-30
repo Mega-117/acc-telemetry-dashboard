@@ -40,9 +40,18 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   const orderId = ref<string | null>(null)
   const orderStatus = ref<PitwallOrderStatus | null>(null)
   const orderReason = ref<string | null>(null)
-  // Ogni invio incrementa la revisione: il PC del pilota scarta un ordine
-  // vecchio arrivato in ritardo invece di tornare indietro nel tempo.
-  const revision = ref(0)
+  /**
+   * Numero d'ordine crescente, ricavato dal tempo.
+   *
+   * Il PC del pilota scarta un ordine con revisione non successiva all'ultima
+   * vista: serve a non tornare indietro nel tempo se un messaggio arriva in
+   * ritardo. Un contatore che riparte da zero a ogni ricarica della pagina
+   * farebbe sembrare vecchio il primo invio successivo, e verrebbe scartato.
+   * I secondi dall'epoca crescono sempre, anche fra sessioni e dispositivi.
+   */
+  function nextRevision(): number {
+    return Math.floor(Date.now() / 1000)
+  }
 
   // Le due facce del collegamento vivono nella stessa pagina: chi assisto, e
   // chi ha chiesto di assistere me.
@@ -150,8 +159,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     rawError.value = null
     orderReason.value = null
     try {
-      revision.value += 1
-      const sent = await engineer.sendOrder({ driverUid, plan, revision: revision.value })
+      const sent = await engineer.sendOrder({ driverUid, plan, revision: nextRevision() })
         .catch((error: unknown) => ({ ok: false as const, reason: (error as Error)?.message || 'Invio non riuscito.' }))
       if (!sent.ok) {
         rawError.value = sent.reason

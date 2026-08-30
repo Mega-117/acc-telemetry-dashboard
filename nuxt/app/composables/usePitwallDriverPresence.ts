@@ -1,28 +1,31 @@
 // ============================================
-// Lato pilota del Pit Wall, dentro la finestra runtime.
+// Lato pilota del Pit Wall, nella finestra principale.
 //
-// La finestra runtime e' l'unico renderer con accesso a Firestore e l'unico
-// autorizzato a consegnare un ordine ad ACC: e' quindi il posto giusto per
-// annunciare che il pilota e' in pista e per ascoltare gli ordini in arrivo.
+// Deve girare qui e non nella finestra runtime: quella e' un consumer attestato
+// senza utente Firebase proprio (decisione PIP-317), e senza autenticazione le
+// regole Firestore negano perfino la lettura del permesso. La finestra
+// principale possiede la sessione, quindi e' l'unica che puo' davvero fare
+// questo lavoro.
 //
-// Se non siamo in quella finestra, questo composable non fa niente. Non e' una
-// precauzione cosmetica: partire altrove aprirebbe ascolti duplicati e farebbe
-// arrivare lo stesso ordine due volte.
+// L'identita' del pilota arriva dal processo main, non da un secondo
+// osservatore di Firebase Auth: una sola fonte di verita' per chi e' loggato.
 // ============================================
 
-import { onScopeDispose, ref, watch } from 'vue'
+import { onScopeDispose, ref, watch, type Ref } from 'vue'
 import { db } from '~/config/firebase'
-import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import {
   startPitwallDriverLink,
   type PitwallDriverElectronApi,
   type PitwallDriverLinkHandle,
 } from '~/services/pitwall/pitwallDriverLinkService'
 
-function runtimeElectronApi(): (PitwallDriverElectronApi & { runtimeBootstrapRole?: string }) | null {
+interface PitwallElectronBridge extends PitwallDriverElectronApi {
+  localIdentityRole?: string
+}
+
+function electronBridge(): PitwallElectronBridge | null {
   if (typeof window === 'undefined') return null
-  return (window as unknown as { electronAPI?: PitwallDriverElectronApi & { runtimeBootstrapRole?: string } })
-    .electronAPI ?? null
+  return (window as unknown as { electronAPI?: PitwallElectronBridge }).electronAPI ?? null
 }
 
 /** Identifica questa esecuzione dell'app: cambia a ogni avvio. */
@@ -30,11 +33,21 @@ function newSessionId(): string {
   return `pw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-export function usePitwallDriverPresence() {
-  const { currentUser } = useFirebaseAuth()
+export interface PitwallDriverPresenceOptions {
+  /**
+   * Il proprietario dei lavori cloud, gia' istanziato dalla shell.
+   * Si riceve invece di crearne un secondo: due controllori di lease
+   * competerebbero fra loro sullo stesso account.
+   */
+  jobsEnabled: Ref<boolean>
+}
+
+export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) {
   const active = ref(false)
+  const driverUid = ref<string | null>(null)
   const unavailableReason = ref<string | null>(null)
   let handle: PitwallDriverLinkHandle | null = null
+  let pollTimer: ReturnType<typeof setInterval> | null = null
 
   function stop(): void {
     if (!handle) return
@@ -44,36 +57,64 @@ export function usePitwallDriverPresence() {
     active.value = false
   }
 
-  function start(driverUid: string): void {
-    const electronApi = runtimeElectronApi()
-    if (!electronApi?.pitwallSubmitRemoteOrder) {
-      // Fuori dalla finestra runtime, o su un browser normale: qui il pilota
-      // non c'e' e non va annunciato.
-      unavailableReason.value = 'Il collegamento pilota vive solo nella finestra runtime della suite.'
+  async function sync(): Promise<void> {
+    const bridge = electronBridge()
+    if (!bridge?.pitwallSubmitRemoteOrder || !bridge.pitwallGetLinkStatus) {
+      // Browser normale o finestra secondaria: qui non c'e' nessun pilota da
+      // annunciare, e ACC non e' raggiungibile.
+      unavailableReason.value = 'Il collegamento pilota vive nella finestra principale della suite.'
+      stop()
       return
     }
+
+    // Una sola finestra fa il lavoro cloud: senza questo, due finestre
+    // aperte annuncerebbero lo stesso pilota e consegnerebbero l'ordine due volte.
+    if (!options.jobsEnabled.value) {
+      unavailableReason.value = 'Un altra finestra possiede i lavori cloud.'
+      stop()
+      return
+    }
+
+    let status: { trustedSender: boolean, driverUid: string | null } | null = null
+    try {
+      status = await bridge.pitwallGetLinkStatus()
+    } catch {
+      status = null
+    }
+
+    if (!status?.trustedSender || !status.driverUid) {
+      unavailableReason.value = 'Nessun pilota autenticato su questo computer.'
+      stop()
+      return
+    }
+
+    if (handle && driverUid.value === status.driverUid) return
+
+    // Cambio account: si chiude il collegamento precedente prima di aprirne uno
+    // nuovo, cosi' la presenza del pilota di prima non resta accesa.
+    stop()
+    driverUid.value = status.driverUid
     unavailableReason.value = null
     handle = startPitwallDriverLink({
       db,
-      driverUid,
+      driverUid: status.driverUid,
       sessionId: newSessionId(),
-      electronApi,
+      electronApi: bridge,
     })
     active.value = true
   }
 
-  // Un cambio account chiude il collegamento precedente prima di aprirne uno
-  // nuovo: la presenza del pilota di prima non deve restare accesa.
-  watch(
-    () => currentUser.value?.uid ?? null,
-    (uid) => {
-      stop()
-      if (uid) start(uid)
-    },
-    { immediate: true }
-  )
+  void sync()
+  // L'identita' vive nel main: si ricontrolla invece di osservare un secondo
+  // stato di autenticazione nel renderer.
+  pollTimer = setInterval(() => { void sync() }, 15_000)
+  watch(options.jobsEnabled, () => { void sync() })
 
-  onScopeDispose(stop)
+  onScopeDispose(() => {
+    if (pollTimer) clearInterval(pollTimer)
+    pollTimer = null
+    stop()
+  })
 
-  return { active, unavailableReason, stop }
+  return { active, driverUid, unavailableReason, stop }
 }

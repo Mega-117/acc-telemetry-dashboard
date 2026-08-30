@@ -5,6 +5,7 @@
 
 import { ref, computed, onMounted, onBeforeMount, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { usePitwallDriverPresence } from '~/composables/usePitwallDriverPresence'
 import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useActivityFeed } from '~/composables/useActivityFeed'
@@ -138,6 +139,10 @@ const clientDiagnostics = useClientDiagnostics({
 })
 primaryCloudOwner.registerOwnerDrainer(clientDiagnostics.waitForIdle)
 const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
+// Lato pilota del Pit Wall: annuncia il pilota e ascolta gli ordini in arrivo.
+// Vive qui perche' questa e' la finestra che possiede la sessione Firebase; si
+// disattiva da sola fuori da Electron e quando i lavori cloud sono di un'altra.
+usePitwallDriverPresence({ jobsEnabled: primaryCloudOwner.jobsEnabled })
 const isProtectedRuntimeRoute = computed(() => (
   isTrainingOverlayIntent.value
   || isHudOverlayRoute.value

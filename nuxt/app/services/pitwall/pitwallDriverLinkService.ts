@@ -33,11 +33,28 @@ import {
 /** Ogni quanto il pilota conferma di essere ancora in pista. */
 export const PITWALL_PRESENCE_INTERVAL_MS = 30_000
 
+/**
+ * Ogni quanto si riprova un ordine che aspetta il momento giusto.
+ *
+ * L'ingegnere manda la strategia mentre il pilota e' ancora in pista: l'ordine
+ * deve restare in coda e riprovare finche' l'auto non e' ferma ai box, invece
+ * di fallire subito.
+ */
+export const PITWALL_ORDER_RETRY_INTERVAL_MS = 8_000
+
 export interface PitwallDriverElectronApi {
   pitwallSubmitRemoteOrder?: (payload: {
     order: PitwallOrderDocument
     grant: PitwallGrant | null
-  }) => Promise<{ accepted: boolean, status: string, reason?: string | null, orderId?: string | null, fields?: unknown }>
+  }) => Promise<{
+    accepted: boolean
+    status: string
+    reason?: string | null
+    orderId?: string | null
+    fields?: unknown
+    /** L'ordine non e' applicabile adesso ma lo sara': non va concluso. */
+    retryable?: boolean
+  }>
   pitwallGetLinkStatus?: () => Promise<{ trustedSender: boolean, driverUid: string | null, applying: boolean }>
 }
 
@@ -55,6 +72,8 @@ export interface PitwallDriverLinkHandle {
   publishPresence: (context?: { car?: string | null, track?: string | null }) => Promise<void>
   /** Dichiara che il pilota non e' piu' raggiungibile. */
   goOffline: () => Promise<void>
+  /** Perche' un ordine sta aspettando il momento giusto, se sta aspettando. */
+  waitingReason: () => string | null
   /** Chiude tutti gli ascolti e ferma il battito di presenza. */
   stop: () => void
 }
@@ -82,6 +101,11 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
   // riconsegna dello stesso documento dopo una riconnessione.
   const handled = new Set<string>()
   let delivering: Promise<void> = Promise.resolve()
+  // Ordini visti e ancora da applicare, tenuti per riprovare quando il pilota
+  // arriva ai box.
+  const waiting = new Map<string, PitwallOrderDocument>()
+  let waitingReason: string | null = null
+  let retryTimer: ReturnType<typeof setInterval> | null = null
 
   async function publishPresence(context: { car?: string | null, track?: string | null } = {}): Promise<void> {
     if (stopped) return
@@ -126,14 +150,6 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
     handled.add(order.orderId)
 
     const orderRef = doc(ordersRef, order.orderId)
-    try {
-      // Si dichiara subito che l'ordine e' in lavorazione, cosi' l'ingegnere
-      // vede qualcosa muoversi invece di restare su "inviato".
-      await trackedUpdateDoc(orderRef, { status: 'applying' }, 'pitwall.markApplying')
-    } catch (error) {
-      log.warn?.('[PITWALL] stato applying non scritto:', (error as Error)?.message)
-    }
-
     let grant: PitwallGrant | null = null
     try {
       grant = await loadGrant(order.senderId)
@@ -141,15 +157,26 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
       log.warn?.('[PITWALL] permesso non leggibile:', (error as Error)?.message)
     }
 
-    let outcome: { status: string, reason?: string | null, fields?: unknown }
+    let outcome: { status: string, reason?: string | null, fields?: unknown, retryable?: boolean }
     try {
       const result = await electronApi.pitwallSubmitRemoteOrder?.({ order, grant })
       outcome = result
-        ? { status: result.status, reason: result.reason ?? null, fields: result.fields ?? {} }
+        ? { status: result.status, reason: result.reason ?? null, fields: result.fields ?? {}, retryable: result.retryable }
         : { status: 'rejected', reason: 'Ponte Electron non disponibile.', fields: {} }
     } catch (error) {
       outcome = { status: 'failed', reason: (error as Error)?.message || String(error), fields: {} }
     }
+
+    // Non ancora applicabile - l'auto non e' ai box, la telemetria non e'
+    // pronta - non e' un fallimento: l'ordine resta `pending` su Firestore e si
+    // riprova. Scrivere un esito adesso vorrebbe dire buttarlo via proprio
+    // mentre il pilota sta rientrando.
+    if (outcome.retryable || outcome.status === 'waiting') {
+      handled.delete(order.orderId)
+      waitingReason = outcome.reason ?? null
+      return
+    }
+    waitingReason = null
 
     try {
       await trackedUpdateDoc(orderRef, {
@@ -165,8 +192,13 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
   // Un ordine alla volta anche in ingresso: se ne arrivano due insieme, il
   // secondo aspetta il suo turno invece di correre in parallelo verso ACC.
   function enqueue(order: PitwallOrderDocument): void {
+    waiting.set(order.orderId, order)
     delivering = delivering.then(() => deliver(order)).catch((error) => {
       log.error?.('[PITWALL] consegna ordine fallita:', (error as Error)?.message)
+    }).then(() => {
+      // Se non e' piu' in coda di attesa, e' concluso e non va riprovato.
+      if (!handled.has(order.orderId)) return
+      waiting.delete(order.orderId)
     })
   }
 
@@ -187,14 +219,25 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
 
   void publishPresence()
   presenceTimer = setInterval(() => { void publishPresence() }, PITWALL_PRESENCE_INTERVAL_MS)
+  retryTimer = setInterval(() => {
+    if (stopped) return
+    for (const order of waiting.values()) {
+      if (!handled.has(order.orderId)) enqueue(order)
+    }
+  }, PITWALL_ORDER_RETRY_INTERVAL_MS)
 
   return {
     publishPresence,
     goOffline,
+    /** Perche' un ordine sta aspettando, se sta aspettando. */
+    waitingReason: () => waitingReason,
     stop: () => {
       stopped = true
       if (presenceTimer) clearInterval(presenceTimer)
+      if (retryTimer) clearInterval(retryTimer)
       presenceTimer = null
+      retryTimer = null
+      waiting.clear()
       unsubscribeOrders?.()
       unsubscribeOrders = null
     },
