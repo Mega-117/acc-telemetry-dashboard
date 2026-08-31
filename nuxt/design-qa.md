@@ -9,6 +9,7 @@
 - CSS viewport: 1488 × 1059 at device scale 1
 - Route: `http://localhost:3000/pitwall`
 - Compared together in one visual pass at original resolution.
+- Refinement pass: live CSS viewport 1175 × 896 (1169 px client width), then 1110 × 896 (1104 px client width).
 
 ## State represented
 
@@ -22,11 +23,21 @@ PASS. The implementation preserves the approved hierarchy and spatial grouping: 
 
 - Typography and spacing: PASS. Headings, control labels and numeric values remain legible; fixed-width numeric fields do not move adjacent controls when values grow.
 - Colors and surfaces: PASS. Status colors remain semantic and the MFD uses the approved navy background without decorative title icons.
-- Vehicle asset: PASS. The top-view car is a reusable external SVG with an accessible text alternative and preserves sharpness at all tested sizes.
+- Vehicle asset: PASS. The reusable external SVG now separates front, cabin and rear geometry. Its continuous symmetric curves remove the pinched nose and distorted rear deck while preserving sharpness at all tested sizes.
 - Copy and content: PASS. `Carburante in uscita`, `Pressioni pneumatici (PSI)`, tyre set, compound, tyre change, pressures, brakes, driver, repairs and stop time match the approved MFD vocabulary.
 - Interaction states: PASS. Fuel, pressures and tyre-change controls update without geometry shifts; unavailable ACC-contract controls are visibly disabled rather than simulated.
-- Responsiveness: PASS. Desktop retains two strategy columns; tablet and mobile collapse in reading order; mobile navigation scrolls inside its own bar instead of widening the page.
+- Responsiveness: PASS. At 1169 px client width Strategy (652.5 px) remains on the left and MFD (472.5 px) on the right, with identical top and height and no horizontal overflow. At 1104 px client width the workspace collapses in reading order; mobile navigation scrolls inside its own bar instead of widening the page.
 - Accessibility: PASS. Inputs have labels and spinbutton ranges, the SVG has alt text, native checkboxes/selects remain keyboard reachable, and send/order status changes use accessible live text.
+
+## Refinement pass — 2026-08-31
+
+- Responsive workspace: PASS. At 1169 px client width Strategy remains on the left at 652.5 px and MFD on the right at 472.5 px, with identical top and height and no horizontal overflow. At 1104 px client width the workspace collapses in reading order.
+- Vehicle geometry: PASS. The reusable external SVG now separates front, cabin and rear geometry. Continuous symmetric curves remove the pinched nose and distorted rear deck while preserving sharpness.
+
+## Refinement pass — 2026-08-31
+
+- Responsive workspace: PASS. At 1169 px client width Strategy remains on the left at 652.5 px and MFD on the right at 472.5 px, with identical top and height and no horizontal overflow. At 1104 px client width the workspace collapses in reading order.
+- Vehicle geometry: PASS. The reusable external SVG now separates front, cabin and rear geometry. Continuous symmetric curves remove the pinched nose and distorted rear deck while preserving sharpness.
 
 ## Findings
 

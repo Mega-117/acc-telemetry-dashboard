@@ -42,7 +42,7 @@ describe('Pitwall layout approvato', () => {
   it('separa strategia da inviare e MFD in macchina in due colonne', () => {
     expect(panel).toContain('STRATEGIA DA INVIARE')
     expect(carCard).toContain('MFD IN MACCHINA')
-    expect(panel).toContain('grid-template-columns: 1.03fr .97fr')
+    expect(panel).toContain('grid-template-columns: minmax(650px,1.16fr) minmax(420px,.84fr)')
     expect(carCard).toContain('background: #0b1a2a')
   })
 
@@ -63,8 +63,14 @@ describe('Pitwall layout approvato', () => {
 
   it('collassa in modo leggibile sui viewport stretti', () => {
     expect(panel).toContain('@media (max-width: 1180px)')
+    expect(panel).toContain('@media (max-width: 1120px) { .workspace { grid-template-columns: 1fr; } }')
     expect(panel).toContain('@media (max-width: 760px)')
     expect(carCard).toContain('@media (max-width: 760px)')
+  })
+
+  it('mantiene strategia e MFD affiancati sui laptop larghi', () => {
+    expect(panel).toContain('grid-template-columns: minmax(650px,1.16fr) minmax(420px,.84fr)')
+    expect(panel).not.toContain('@media (max-width: 1180px) { .connections { grid-template-columns: 1fr 1fr; }.connection-cell--recent { grid-column: 1 / -1; }.workspace')
   })
 })
 
@@ -74,6 +80,8 @@ describe('Pitwall pressioni e sagoma vettura', () => {
     expect(carSvg).toContain('<svg')
     expect(carSvg).toContain('viewBox="0 0 120 240"')
     expect(carSvg).toContain('Sagoma vettura vista dall\'alto')
+    expect(carSvg).toContain('id="front"')
+    expect(carSvg).toContain('id="rear"')
   })
 
   it('dispone FL FR RL RR attorno alla sagoma', () => {
