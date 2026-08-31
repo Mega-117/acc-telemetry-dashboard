@@ -127,10 +127,10 @@ export function isPitwallGrantUsable(
 export function describePitwallGrantScope(grant: Pick<PitwallGrant, 'scope' | 'expiresAtMs'> | null | undefined): string {
   if (!grant) return ''
   if (grant.scope === 'once' && grant.expiresAtMs != null) {
-    return `solo per oggi (scade alle ${new Date(grant.expiresAtMs).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`
+    return `per oggi (scade alle ${new Date(grant.expiresAtMs).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`
   }
-  if (grant.scope === 'once') return 'solo per oggi'
-  return 'sempre'
+  if (grant.scope === 'once') return 'per oggi'
+  return 'permanente'
 }
 
 /** Tetto dell'equipaggio pubblicato in presenza: come la EntryList di ACC. */

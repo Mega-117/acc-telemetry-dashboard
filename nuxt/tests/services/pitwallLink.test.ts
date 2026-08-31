@@ -237,12 +237,13 @@ describe('portata del permesso: solo per oggi contro sempre', () => {
   })
 
   it('la portata si racconta senza gergo', () => {
-    expect(describePitwallGrantScope({ scope: 'always', expiresAtMs: null })).toBe('sempre')
-    expect(describePitwallGrantScope({ scope: 'once', expiresAtMs: null })).toBe('solo per oggi')
-    expect(describePitwallGrantScope({ scope: 'once', expiresAtMs: NOW_MS })).toContain('solo per oggi')
-    // Un permesso storico senza portata resta "sempre": era il comportamento
-    // in vigore quando e' stato concesso.
-    expect(describePitwallGrantScope({ scope: null, expiresAtMs: null })).toBe('sempre')
+    expect(describePitwallGrantScope({ scope: 'always', expiresAtMs: null })).toBe('permanente')
+    expect(describePitwallGrantScope({ scope: 'once', expiresAtMs: null })).toBe('per oggi')
+    expect(describePitwallGrantScope({ scope: 'once', expiresAtMs: NOW_MS })).toContain('per oggi')
+    expect(describePitwallGrantScope({ scope: 'once', expiresAtMs: NOW_MS })).toContain('scade alle')
+    // Un permesso storico senza portata resta permanente: era il
+    // comportamento in vigore quando e' stato concesso.
+    expect(describePitwallGrantScope({ scope: null, expiresAtMs: null })).toBe('permanente')
   })
 })
 
