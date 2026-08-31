@@ -32,8 +32,24 @@ import {
   type PitwallOrderDocument,
 } from './pitwallLink'
 
-/** Ogni quanto il pilota conferma di essere ancora in pista. */
+/**
+ * Ogni quanto il pilota conferma di essere ancora in pista, **mentre guida**.
+ *
+ * A questo passo la fotografia della vettura resta utile all'ingegnere.
+ */
 export const PITWALL_PRESENCE_INTERVAL_MS = 30_000
+
+/**
+ * Ogni quanto ci si annuncia quando ACC non e' vivo (menu, gioco chiuso, PC
+ * acceso e basta).
+ *
+ * Il battito serve a farsi trovare, e per quello un colpo ogni cinque minuti
+ * basta e avanza. Tenere il passo da 30 secondi anche a gioco spento e' il
+ * modo piu' rapido di consumare il piano gratuito senza dire niente di nuovo:
+ * misurato, da solo si mangiava meta' del budget giornaliero con quattro
+ * piloti accesi. Qui si taglia di dieci volte.
+ */
+export const PITWALL_PRESENCE_IDLE_INTERVAL_MS = 5 * 60_000
 
 /**
  * Ogni quanto si riprova un ordine che aspetta il momento giusto.
@@ -158,6 +174,9 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
   const attempts = new Map<string, number>()
   let waitingReason: string | null = null
   let retryTimer: ReturnType<typeof setInterval> | null = null
+  // Quando si e' scritta l'ultima presenza: serve a rallentare il battito
+  // quando ACC non e' vivo, senza perdere il primo annuncio.
+  let lastPresenceAtMs = 0
 
   async function publishPresence(context: { car?: string | null, track?: string | null } = {}): Promise<void> {
     if (stopped) return
@@ -179,6 +198,11 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
     const car = carContext?.car ?? lastContext.car
     const track = carContext?.track ?? lastContext.track
 
+    // Quando ACC non e' vivo non c'e' niente di nuovo da dire: ci si annuncia
+    // molto piu' di rado. Il passo veloce si paga solo mentre serve davvero.
+    const live = carContext != null
+    if (!live && now() - lastPresenceAtMs < PITWALL_PRESENCE_IDLE_INTERVAL_MS) return
+
     try {
       await trackedSetDoc(sessionRef, {
         schemaVersion: PITWALL_LINK_SCHEMA_VERSION,
@@ -191,6 +215,7 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
         ...(crew == null ? {} : { crew }),
         ...(strategy == null ? {} : { strategy }),
       }, 'pitwall.publishPresence')
+      lastPresenceAtMs = now()
     } catch (error) {
       log.warn?.('[PITWALL] presenza non pubblicata:', (error as Error)?.message)
     }

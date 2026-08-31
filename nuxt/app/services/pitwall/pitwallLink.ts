@@ -190,6 +190,77 @@ export function isPitwallSessionFresh(
   return Number.isFinite(updatedAt) && nowMs - updatedAt <= maxAgeMs
 }
 
+// ============================================
+// Chi esegue l'ordine, dentro una stanza.
+//
+// L'ordine si manda alla vettura, non alla persona: in endurance i piloti si
+// alternano e chi non guida spegne il PC. Qui si decide chi, fra i membri, e'
+// al volante adesso. Logica pura: la stessa risposta a parita' di dati.
+// ============================================
+
+/** Un membro della stanza: un pilota della vettura, o un ingegnere al muretto. */
+export interface PitwallRoomMember {
+  uid: string
+  nickname: string
+  /** Dichiara di essere al volante: ha ACC aperto e la vettura sotto mano. */
+  driving: boolean
+  /** Ultimo battito, ISO. Un membro vecchio non conta come presente. */
+  updatedAt: string
+}
+
+export type PitwallExecutorReason = 'ready' | 'nobody-driving' | 'multiple-driving' | 'empty-room'
+
+export interface PitwallExecutorResolution {
+  /** Chi applichera' l'ordine. Null quando non si puo' dire con certezza. */
+  executor: PitwallRoomMember | null
+  reason: PitwallExecutorReason
+  /** Popolato solo su `multiple-driving`: chi si contende il volante. */
+  conflicting: PitwallRoomMember[]
+}
+
+/**
+ * Chi e' al volante adesso.
+ *
+ * Un membro vale solo se ha un battito recente: chi ha spento il PC resta nella
+ * stanza (ci rientrera' quando vuole) ma non puo' eseguire niente.
+ *
+ * Con due che si dichiarano al volante non si indovina: si dichiara il
+ * conflitto e chi chiama rifiuta l'ordine. Mandare una strategia alla macchina
+ * sbagliata e' peggio che non mandarla.
+ */
+export function resolvePitwallExecutor(
+  members: PitwallRoomMember[] | null | undefined,
+  nowMs: number,
+  maxAgeMs = 90_000
+): PitwallExecutorResolution {
+  const list = Array.isArray(members) ? members : []
+  if (!list.length) return { executor: null, reason: 'empty-room', conflicting: [] }
+
+  const atTheWheel = list.filter((member) => {
+    if (!member?.driving) return false
+    const updatedAt = Date.parse(member.updatedAt)
+    return Number.isFinite(updatedAt) && nowMs - updatedAt <= maxAgeMs
+  })
+
+  if (!atTheWheel.length) return { executor: null, reason: 'nobody-driving', conflicting: [] }
+  if (atTheWheel.length > 1) return { executor: null, reason: 'multiple-driving', conflicting: atTheWheel }
+  return { executor: atTheWheel[0]!, reason: 'ready', conflicting: [] }
+}
+
+/** Come si racconta all'ingegnere chi applichera' l'ordine, senza gergo. */
+export function describePitwallExecutor(resolution: PitwallExecutorResolution): string {
+  switch (resolution.reason) {
+    case 'ready':
+      return `Al volante: ${resolution.executor?.nickname}`
+    case 'nobody-driving':
+      return 'Nessuno e al volante adesso: l ordine restera in attesa.'
+    case 'multiple-driving':
+      return `Due piloti risultano al volante (${resolution.conflicting.map(m => m.nickname).join(', ')}): l ordine non parte finche non e chiaro chi guida.`
+    default:
+      return 'Nessuno nella stanza.'
+  }
+}
+
 /**
  * Costruisce la richiesta di collegamento. Nasce sempre in attesa: l'ingegnere
  * non puo' autorizzarsi da solo, e le regole lo impedirebbero comunque.

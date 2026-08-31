@@ -325,3 +325,57 @@ describe('un ordine che aspetta non disturba il pilota', () => {
     handle.stop()
   })
 })
+
+describe('il battito non spreca il piano gratuito', () => {
+  it('con ACC vivo si annuncia a ogni giro, come prima', async () => {
+    const handle = startPitwallDriverLink({
+      db: {} as never,
+      driverUid: DRIVER,
+      sessionId: 's-1',
+      electronApi: {},
+      now: () => Date.parse('2026-08-30T15:00:00.000Z'),
+      log: { warn: () => {}, error: () => {} },
+      readCarContext: async () => ({ car: 'ferrari_296_gt3', crew: null, strategy: null })
+    })
+    await settle()
+    vi.advanceTimersByTime(30_000)
+    await settle()
+
+    expect(mocks.sets.filter(entry => entry.path === `pitwallSessions/${DRIVER}`).length)
+      .toBeGreaterThanOrEqual(2)
+    handle.stop()
+  })
+
+  it('con ACC spento salta i giri: un colpo, non uno ogni 30 secondi', async () => {
+    // Il difetto misurato: quattro piloti col PC acceso e il gioco chiuso si
+    // mangiavano meta' del budget giornaliero senza dire niente di nuovo.
+    let clock = Date.parse('2026-08-30T15:00:00.000Z')
+    const handle = startPitwallDriverLink({
+      db: {} as never,
+      driverUid: DRIVER,
+      sessionId: 's-1',
+      electronApi: {},
+      now: () => clock,
+      log: { warn: () => {}, error: () => {} },
+      readCarContext: async () => null
+    })
+    await settle()
+    const dopoIlPrimo = mocks.sets.filter(entry => entry.path === `pitwallSessions/${DRIVER}`).length
+    expect(dopoIlPrimo).toBe(1)
+
+    // Quattro giri di battito: nessuno deve scrivere, sono passati 2 minuti.
+    for (let giro = 0; giro < 4; giro += 1) {
+      clock += 30_000
+      vi.advanceTimersByTime(30_000)
+      await settle()
+    }
+    expect(mocks.sets.filter(entry => entry.path === `pitwallSessions/${DRIVER}`).length).toBe(1)
+
+    // Passati cinque minuti si torna a farsi vedere: resta trovabile.
+    clock += 5 * 60_000
+    vi.advanceTimersByTime(30_000)
+    await settle()
+    expect(mocks.sets.filter(entry => entry.path === `pitwallSessions/${DRIVER}`).length).toBe(2)
+    handle.stop()
+  })
+})
