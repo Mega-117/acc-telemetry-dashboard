@@ -1221,6 +1221,43 @@ describe('Pit Wall - sessione, segnalazione e ordini', () => {
     await assertSucceeds(getDoc(doc(engineerDb, `pitwallSessions/${DRIVER_UID}`)))
   })
 
+  it('la richiesta porta cosa si chiede, e un valore inventato viene rifiutato', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await deleteDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`))
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertSucceeds(setDoc(doc(engineerDb, `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({
+      requestedScope: 'always'
+    })))
+    await assertFails(setDoc(doc(engineerDb, `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({
+      requestedScope: 'per-sempre-e-un-giorno'
+    })))
+  })
+
+  it('un permesso scaduto si puo richiedere di nuovo; uno valido no', async () => {
+    // Scaduto: l'ingegnere torna in attesa, ripulendo la portata passata.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({
+        status: 'granted', scope: 'once', expiresAtMs: Date.now() - 60_000
+      }))
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertSucceeds(updateDoc(doc(engineerDb, `pitwallGrants/${GRANT_ID}`), {
+      status: 'pending', requestedScope: 'always', scope: null, expiresAtMs: null,
+      updatedAt: '2026-08-31T16:00:00.000Z'
+    }))
+
+    // Valido: l'ingegnere non puo' degradare un permesso concesso in attesa.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({
+        status: 'granted', scope: 'always', expiresAtMs: null
+      }))
+    })
+    await assertFails(updateDoc(doc(engineerDb, `pitwallGrants/${GRANT_ID}`), {
+      status: 'pending', updatedAt: '2026-08-31T16:00:00.000Z'
+    }))
+  })
+
   it('"solo per questa volta" senza scadenza non si puo scrivere', async () => {
     // Il pilota concede aggiornando il permesso esistente, come fa il client.
     const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()

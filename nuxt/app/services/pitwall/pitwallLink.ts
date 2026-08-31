@@ -49,6 +49,8 @@ export interface PitwallGrant {
   note?: string | null
   scope?: PitwallGrantScope | null
   expiresAtMs?: number | null
+  /** Cio' che l'ingegnere ha chiesto: propone, non decide. */
+  requestedScope?: PitwallGrantScope | null
 }
 
 /** Un membro dell'equipaggio della vettura, dalla EntryList reale. */
@@ -196,7 +198,8 @@ export function buildPitwallGrantRequest(
   driverUid: string,
   engineerUid: string,
   nowIso: string,
-  note: string | null = null
+  note: string | null = null,
+  requestedScope: PitwallGrantScope | null = null
 ): { id: string, data: PitwallGrant } | null {
   if (!driverUid || !engineerUid || driverUid === engineerUid) return null
   return {
@@ -210,6 +213,7 @@ export function buildPitwallGrantRequest(
       createdAt: nowIso,
       updatedAt: nowIso,
       ...(note == null ? {} : { note: note.slice(0, 200) }),
+      ...(requestedScope == null ? {} : { requestedScope }),
     },
   }
 }

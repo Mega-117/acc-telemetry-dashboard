@@ -70,7 +70,7 @@ service cloud.firestore {
              ])
              && request.resource.data.keys().hasOnly([
                'schemaVersion', 'driverUid', 'engineerUid', 'status',
-               'createdBy', 'createdAt', 'updatedAt', 'note', 'scope', 'expiresAtMs'
+               'createdBy', 'createdAt', 'updatedAt', 'note', 'scope', 'expiresAtMs', 'requestedScope'
              ])
              && request.resource.data.schemaVersion == 1
              && request.resource.data.driverUid is string
@@ -94,6 +94,9 @@ service cloud.firestore {
                  || request.resource.data.get('expiresAtMs', null) != null)
              && (request.resource.data.get('scope', null) != 'always'
                  || request.resource.data.get('expiresAtMs', null) == null)
+             // Cio' che l'ingegnere ha chiesto: propone, non decide.
+             && (request.resource.data.get('requestedScope', null) == null
+                 || request.resource.data.requestedScope in ['once', 'always'])
              // Non si chiede un collegamento a un account che non esiste.
              && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.driverUid))
              && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.engineerUid));
@@ -115,7 +118,7 @@ service cloud.firestore {
 
     /** Su un grant esistente cambia solo lo stato: le identita' sono fissate. */
     function pitwallGrantIdentityUnchanged() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'note', 'scope', 'expiresAtMs'])
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'note', 'scope', 'expiresAtMs', 'requestedScope'])
              && request.resource.data.driverUid == resource.data.driverUid
              && request.resource.data.engineerUid == resource.data.engineerUid
              && request.resource.data.createdBy == resource.data.createdBy
@@ -676,6 +679,12 @@ service cloud.firestore {
                             // Dopo una revoca l'ingegnere puo' chiedere di
                             // nuovo: torna in attesa, e decide sempre il pilota.
                             || (resource.data.status == 'revoked'
+                                && request.resource.data.status == 'pending')
+                            // Un "solo per questa volta" scaduto vale come
+                            // revocato: si puo' chiedere di nuovo, in attesa.
+                            || (resource.data.status == 'granted'
+                                && resource.data.get('expiresAtMs', null) != null
+                                && resource.data.expiresAtMs <= request.time.toMillis()
                                 && request.resource.data.status == 'pending')
                           ))
                     );

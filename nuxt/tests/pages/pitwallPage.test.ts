@@ -217,8 +217,40 @@ describe('Pitwall: cosa e reale e cosa e ancora segnaposto', () => {
   it('il pilota distingue "solo per oggi" da "sempre" quando autorizza', () => {
     expect(panel).toContain("link.decide(request.engineerUid, 'granted', 'once')")
     expect(panel).toContain("link.decide(request.engineerUid, 'granted', 'always')")
-    expect(panel).toContain('Solo per oggi')
+    expect(panel).toContain('Autorizza per oggi')
+    expect(panel).toContain('Autorizza sempre')
     expect(panel).toContain('describePitwallGrantScope')
+  })
+
+  it('chi chiede sceglie il tipo di collegamento, e la richiesta lo dichiara', () => {
+    // Il feedback di review: dalla ricerca si chiede "per oggi" o "sempre",
+    // e il pilota vede cosa e' stato chiesto (evidenziato, ma decide lui).
+    expect(panel).toContain("askLink(found.uid, 'once')")
+    expect(panel).toContain("askLink(found.uid, 'always')")
+    expect(panel).toContain('Chiedi per oggi')
+    expect(panel).toContain('Chiedi sempre')
+    expect(panel).toContain('request.requestedScope')
+    expect(panel).toContain('invite__btn--asked')
+  })
+
+  it('il pannello Piloti sostituisce la select nativa illeggibile', () => {
+    // La select nativa mostrava testo bianco su bianco sul tema scuro.
+    expect(panel).not.toContain('<select')
+    expect(panel).toContain('class="pilots"')
+    expect(panel).toContain('I tuoi piloti')
+    expect(panel).toContain('Richieste inviate')
+    expect(panel).toContain('Collegamenti passati')
+    expect(panel).toContain('Cerca un pilota')
+    expect(panel).toContain('Chi puo assistere te')
+  })
+
+  it('i piloti pronti hanno pallino di presenza e bottone Collegati', () => {
+    expect(panel).toContain('pilots__dot--on')
+    expect(panel).toContain('connectTo(pilot.driverUid)')
+    expect(panel).toContain('Collegati')
+    expect(panel).toContain('link.pendingOutgoing.value')
+    expect(panel).toContain('link.pastOutgoing.value')
+    expect(panel).toContain('link.withdrawRequest(pending.driverUid)')
   })
 
   it('non parla con Electron: consegnare ad ACC spetta alla finestra runtime', () => {

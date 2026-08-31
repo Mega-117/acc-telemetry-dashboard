@@ -234,10 +234,68 @@ describe('chiedere il collegamento', () => {
     expect(mocks.sets).toHaveLength(0)
   })
 
+  it('la richiesta dichiara cosa si chiede: per oggi o per sempre', async () => {
+    await build().requestLink(DRIVER, 'always')
+    expect(mocks.sets[0]?.data).toEqual(expect.objectContaining({ status: 'pending', requestedScope: 'always' }))
+  })
+
+  it('senza indicazione si chiede il collegamento per oggi', async () => {
+    await build().requestLink(DRIVER)
+    expect(mocks.sets[0]?.data).toEqual(expect.objectContaining({ requestedScope: 'once' }))
+  })
+
+  it('un "solo per oggi" scaduto si puo richiedere di nuovo, pulito', async () => {
+    mocks.docs.set(`pitwallGrants/${DRIVER}__${ENGINEER}`, {
+      ...grant(ENGINEER, 'granted'),
+      driverUid: DRIVER,
+      scope: 'once',
+      expiresAtMs: NOW() - 60_000,
+    })
+    const result = await build().requestLink(DRIVER, 'always')
+    expect(result).toEqual({ ok: true, alreadyGranted: false })
+    // La nuova richiesta non si trascina dietro la portata concessa in passato.
+    expect(mocks.updates[0]?.data).toEqual(expect.objectContaining({
+      status: 'pending',
+      requestedScope: 'always',
+      scope: null,
+      expiresAtMs: null,
+    }))
+  })
+
   it('un rifiuto dei permessi diventa un motivo leggibile', async () => {
     mocks.failWrites = 'Missing or insufficient permissions.'
     const result = await build().requestLink(DRIVER)
     expect(result).toEqual({ ok: false, reason: 'Missing or insufficient permissions.' })
+  })
+})
+
+describe('i collegamenti in uscita, in una lista sola', () => {
+  it('divide pronti, in attesa e passati, con i "sempre" in cima', async () => {
+    const base = { schemaVersion: 1, engineerUid: ENGINEER, createdAt: '', updatedAt: '' }
+    mocks.queryResults.push([
+      { id: 'a', data: { ...base, driverUid: 'p-oggi', status: 'granted', scope: 'once', expiresAtMs: NOW() + 60_000 } },
+      { id: 'b', data: { ...base, driverUid: 'p-scaduto', status: 'granted', scope: 'once', expiresAtMs: NOW() - 60_000 } },
+      { id: 'c', data: { ...base, driverUid: 'p-sempre', status: 'granted', scope: 'always', expiresAtMs: null } },
+      { id: 'd', data: { ...base, driverUid: 'p-attesa', status: 'pending', requestedScope: 'always' } },
+      { id: 'e', data: { ...base, driverUid: 'p-revocato', status: 'revoked' } },
+    ])
+    mocks.docs.set('publicProfiles/p-sempre', { nickname: 'Sempre' })
+    mocks.docs.set('pitwallSessions/p-sempre', {
+      schemaVersion: 1, driverUid: 'p-sempre', sessionId: 's', online: true,
+      updatedAt: new Date(NOW()).toISOString(),
+    })
+
+    const links = await build().listOutgoingLinks()
+    expect(links.map(link => `${link.driverUid}:${link.usable ? 'ok' : link.status}`)).toEqual([
+      'p-sempre:ok', 'p-oggi:ok', 'p-attesa:pending', 'p-revocato:revoked', 'p-scaduto:granted',
+    ])
+    // Il pallino: solo chi e' usabile e con presenza fresca risulta in pista.
+    expect(links.find(link => link.driverUid === 'p-sempre')?.reachable).toBe(true)
+    expect(links.find(link => link.driverUid === 'p-oggi')?.reachable).toBe(false)
+    // Cosa era stato chiesto resta visibile sulla richiesta in attesa.
+    expect(links.find(link => link.driverUid === 'p-attesa')?.requestedScope).toBe('always')
+    // La presenza non si legge per i collegamenti non usabili.
+    expect(links.find(link => link.driverUid === 'p-scaduto')?.session).toBeNull()
   })
 })
 

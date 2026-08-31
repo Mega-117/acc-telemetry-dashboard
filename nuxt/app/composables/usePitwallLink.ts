@@ -14,7 +14,7 @@ import {
   createPitwallEngineerService,
   type PitwallDirectoryEntry,
   type PitwallIncomingRequest,
-  type PitwallLinkedPilot,
+  type PitwallOutgoingLink,
 } from '~/services/pitwall/pitwallEngineerService'
 import {
   describePitwallLinkError,
@@ -38,7 +38,11 @@ export interface PitwallLinkOptions {
 }
 
 export function usePitwallLink(options: PitwallLinkOptions) {
-  const pilots = ref<PitwallLinkedPilot[]>([])
+  /**
+   * Tutti i collegamenti in uscita, in una sola lettura: pronti, in attesa e
+   * passati. Le viste della pagina sono filtri di questa lista.
+   */
+  const outgoing = ref<PitwallOutgoingLink[]>([])
   const selectedDriverUid = ref<string | null>(null)
   const loading = ref(false)
   const sending = ref(false)
@@ -83,6 +87,13 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     return serviceRef.value
   }
 
+  /** I piloti a cui posso collegarmi adesso: "sempre" in cima, poi "oggi". */
+  const pilots = computed(() => outgoing.value.filter(link => link.usable))
+  /** Richieste inviate e ancora in attesa dell'autorizzazione del pilota. */
+  const pendingOutgoing = computed(() => outgoing.value.filter(link => !link.usable && link.status === 'pending'))
+  /** Collegamenti passati: revocati o scaduti, da cui si puo' richiedere. */
+  const pastOutgoing = computed(() => outgoing.value.filter(link => !link.usable && link.status !== 'pending'))
+
   const selectedPilot = computed(
     () => pilots.value.find(pilot => pilot.driverUid === selectedDriverUid.value) ?? null
   )
@@ -95,20 +106,20 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   async function refreshPilots(): Promise<void> {
     const engineer = service()
     if (!engineer) {
-      pilots.value = []
+      outgoing.value = []
       return
     }
     loading.value = true
     rawError.value = null
     try {
-      pilots.value = await engineer.listLinkedPilots()
+      outgoing.value = await engineer.listOutgoingLinks()
       if (selectedDriverUid.value && !pilots.value.some(p => p.driverUid === selectedDriverUid.value)) {
         // Il collegamento e' stato revocato mentre la pagina era aperta.
         selectPilot(null)
       }
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Elenco piloti non disponibile.'
-      pilots.value = []
+      outgoing.value = []
     } finally {
       loading.value = false
     }
@@ -129,8 +140,8 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     const engineer = service()
     if (!driverUid || !engineer) return
     void engineer.readPilotPresence(driverUid).then(({ session, reachable }) => {
-      pilots.value = pilots.value.map(pilot => (
-        pilot.driverUid === driverUid ? { ...pilot, session, reachable } : pilot
+      outgoing.value = outgoing.value.map(link => (
+        link.driverUid === driverUid ? { ...link, session, reachable } : link
       ))
     })
   }
@@ -145,29 +156,49 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   }
 
   /**
-   * Chiede il collegamento. Qualunque rifiuto diventa un messaggio in pagina:
-   * un errore di permessi non deve mai propagarsi e far cadere la schermata.
+   * Chiede il collegamento, dicendo cosa si chiede: "solo per oggi" o
+   * "sempre". Qualunque rifiuto diventa un messaggio in pagina: un errore di
+   * permessi non deve mai propagarsi e far cadere la schermata.
    */
-  async function requestLink(driverUid: string, note: string | null = null): Promise<boolean> {
+  async function requestLink(driverUid: string, scope: PitwallGrantScope = 'once'): Promise<boolean> {
     const engineer = service()
     if (!engineer) {
       rawError.value = 'Devi essere collegato al tuo account.'
       return false
     }
     try {
-      const result = await engineer.requestLink(driverUid, note)
+      const result = await engineer.requestLink(driverUid, scope)
       if (!result.ok) {
         rawError.value = result.reason
         return false
       }
       notice.value = result.alreadyGranted
         ? 'Sei gia autorizzato da questo pilota.'
-        : 'Richiesta inviata: ora tocca al pilota autorizzarti.'
+        : (scope === 'always'
+            ? 'Richiesta inviata: hai chiesto il collegamento permanente.'
+            : 'Richiesta inviata: hai chiesto il collegamento per oggi.')
       await refreshPilots()
       return true
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Richiesta non riuscita.'
       return false
+    }
+  }
+
+  /** Ritira una richiesta in attesa (o rinuncia a un collegamento). */
+  async function withdrawRequest(driverUid: string): Promise<void> {
+    const engineer = service()
+    if (!engineer) return
+    try {
+      const result = await engineer.withdraw(driverUid)
+      if (!result.ok) {
+        rawError.value = result.reason
+        return
+      }
+      notice.value = 'Richiesta ritirata.'
+      await refreshPilots()
+    } catch (error) {
+      rawError.value = (error as Error)?.message || 'Ritiro non riuscito.'
     }
   }
 
@@ -345,7 +376,11 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   onScopeDispose(stop)
 
   return {
+    outgoing,
     pilots,
+    pendingOutgoing,
+    pastOutgoing,
+    withdrawRequest,
     selectedDriverUid,
     selectedPilot,
     loading,

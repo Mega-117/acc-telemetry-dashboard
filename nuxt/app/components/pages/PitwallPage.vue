@@ -188,7 +188,9 @@ function resetToCar() {
   repairSuspension.value = false
 }
 
-const showLinkPanel = ref(false)
+// Il pannello Piloti parte aperto quando non c'e' nessuno da assistere: e' la
+// prima cosa da fare. Si chiude da solo appena ci si collega.
+const showLinkPanel = ref(true)
 
 onMounted(() => {
   void link.refreshPilots()
@@ -259,14 +261,34 @@ function onSearchInput() {
 }
 onBeforeUnmount(() => { if (searchTimer) clearTimeout(searchTimer) })
 
-async function askLink(driverUid: string) {
-  await link.requestLink(driverUid)
-  link.selectPilot(driverUid)
+/** Chiede il collegamento dichiarando il tipo: "solo per oggi" o "sempre". */
+async function askLink(driverUid: string, scope: 'once' | 'always') {
+  await link.requestLink(driverUid, scope)
 }
 
-function onPilotChange(event: Event) {
-  const value = (event.target as HTMLSelectElement).value
-  link.selectPilot(value || null)
+/** Si collega a un pilota pronto e chiude il pannello: si torna a lavorare. */
+function connectTo(driverUid: string) {
+  link.selectPilot(driverUid)
+  showLinkPanel.value = false
+}
+
+function disconnect() {
+  link.selectPilot(null)
+  showLinkPanel.value = true
+}
+
+/** La portata del collegamento, corta, per il badge in lista. */
+function outgoingBadge(pilot: { scope: 'once' | 'always' | null, expiresAtMs: number | null }): string {
+  if (pilot.scope === 'once' && pilot.expiresAtMs != null) {
+    return `oggi · scade ${new Date(pilot.expiresAtMs).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`
+  }
+  return 'sempre'
+}
+
+/** Com'e' finito un collegamento passato: scaduto o revocato. */
+function pastLabel(pilot: { status: string, expiresAtMs: number | null }): string {
+  if (pilot.status === 'granted') return 'autorizzazione scaduta'
+  return pilot.status === 'revoked' ? 'revocato o rifiutato' : pilot.status
 }
 
 async function sendToCar() {
@@ -325,18 +347,28 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
         riceve deve capire in un secondo chi e' e cosa deve fare. Compare da
         sola, senza ricaricare niente.
       -->
-      <section v-if="pendingRequests.length" class="invite">
+      <section v-if="pendingRequests.length" class="invite" aria-live="polite">
         <div v-for="request in pendingRequests" :key="request.engineerUid" class="invite__row">
           <span class="invite__text">
-            <strong>{{ requesterName(request) }}</strong> vuole fare da ingegnere per te.
+            🔔 <strong>{{ requesterName(request) }}</strong> vuole farti da ingegnere<template v-if="request.requestedScope"> — chiede: <strong>{{ request.requestedScope === 'always' ? 'sempre' : 'solo per oggi' }}</strong></template>.
           </span>
-          <!-- Due modi di dire si', spiegati dal pulsante stesso: solo per
-               questa giornata (scade da sola) oppure per sempre. -->
-          <button type="button" class="invite__btn" @click="link.decide(request.engineerUid, 'granted', 'once')">
-            Solo per oggi
+          <!-- Due modi di dire si': il pulsante che corrisponde alla richiesta
+               e' evidenziato, ma decide comunque il pilota. -->
+          <button
+            type="button"
+            class="invite__btn"
+            :class="{ 'invite__btn--asked': request.requestedScope !== 'always' }"
+            @click="link.decide(request.engineerUid, 'granted', 'once')"
+          >
+            Autorizza per oggi
           </button>
-          <button type="button" class="invite__btn" @click="link.decide(request.engineerUid, 'granted', 'always')">
-            Sempre
+          <button
+            type="button"
+            class="invite__btn"
+            :class="{ 'invite__btn--asked': request.requestedScope === 'always' }"
+            @click="link.decide(request.engineerUid, 'granted', 'always')"
+          >
+            Autorizza sempre
           </button>
           <button type="button" class="invite__btn invite__btn--ghost" @click="link.decide(request.engineerUid, 'revoked')">
             Rifiuta
@@ -345,79 +377,127 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
       </section>
 
       <!--
-        A chi sto mandando. Senza un pilota selezionato l'ordine resta una
-        bozza, e va detto qui invece di scoprirlo dopo aver premuto Invia.
+        A chi sto mandando, in una riga sola. Il pannello Piloti sotto e' il
+        posto unico per cercare, chiedere, collegarsi e autorizzare: niente
+        select nativa (illeggibile sul tema scuro), niente accordion doppi.
       -->
-      <section class="link-bar">
-        <span class="link-bar__label">Pilota</span>
-
-        <select
-          class="link-bar__select"
-          :value="link.selectedDriverUid.value ?? ''"
-          aria-label="Pilota da assistere"
-          @change="onPilotChange"
-        >
-          <option value="">Nessuno — l'ordine resta una bozza</option>
-          <option
-            v-for="pilot in link.pilots.value"
-            :key="pilot.driverUid"
-            :value="pilot.driverUid"
-          >
-            {{ pilot.nickname }}{{ pilot.reachable ? ' — in pista' : ' — non raggiungibile' }}
-          </option>
-        </select>
+      <section class="pilot-bar">
+        <template v-if="link.selectedPilot.value">
+          <span
+            class="pilot-bar__dot"
+            :class="link.selectedPilot.value.reachable ? 'pilot-bar__dot--on' : 'pilot-bar__dot--off'"
+          />
+          <strong class="pilot-bar__name">{{ link.selectedPilot.value.nickname }}</strong>
+          <span class="pilot-bar__meta">
+            {{ link.selectedPilot.value.reachable ? 'in pista' : 'non raggiungibile' }}
+            · {{ outgoingBadge(link.selectedPilot.value) }}
+          </span>
+          <button type="button" class="pilot-bar__ghost" @click="disconnect">Scollega</button>
+        </template>
+        <template v-else>
+          <span class="pilot-bar__none">Nessun pilota collegato — scegli chi assistere qui sotto.</span>
+        </template>
 
         <span
           v-if="link.orderStatus.value"
-          class="link-bar__state"
-          :class="{ 'link-bar__state--problem': link.orderProgress.value.problem }"
+          class="pilot-bar__state"
+          :class="{ 'pilot-bar__state--problem': link.orderProgress.value.problem }"
         >
           {{ link.orderProgress.value.label }}
           <template v-if="link.orderReason.value"> — {{ link.orderReason.value }}</template>
         </span>
 
-        <span v-if="link.lastError.value" class="link-bar__state link-bar__state--problem">
+        <span v-if="link.lastError.value" class="pilot-bar__state pilot-bar__state--problem">
           {{ link.lastError.value }}
         </span>
 
         <button
           type="button"
-          class="link-bar__refresh link-bar__toggle"
+          class="pilot-bar__toggle"
           :aria-expanded="showLinkPanel"
           @click="showLinkPanel = !showLinkPanel"
         >
-          {{ showLinkPanel ? 'Chiudi' : 'Collegamenti' }}
+          {{ showLinkPanel ? 'Chiudi' : 'Piloti' }}
         </button>
       </section>
 
       <!--
-        Un solo pannello, due cose sole: chiedere a qualcuno, e vedere chi puo'
-        gia' guidare al posto mio. Tutto il resto era gergo.
+        Il pannello Piloti: quattro liste nell'ordine in cui servono. Chi e'
+        pronto (pre-autorizzati "sempre" in cima), chi deve ancora rispondere,
+        chi c'e' stato in passato, e la ricerca per aggiungere qualcuno. In
+        fondo, l'altra faccia: chi puo' assistere te.
       -->
-      <section v-if="showLinkPanel" class="links">
-        <div class="links__col">
-          <h3 class="links__title">Chiedi a un pilota di assisterlo</h3>
-          <p class="links__hint">Scrivi il suo nome: la ricerca parte da sola.</p>
+      <section v-if="showLinkPanel" class="pilots">
+        <div v-if="link.pilots.value.length" class="pilots__section">
+          <h3 class="pilots__title">I tuoi piloti</h3>
+          <ul class="pilots__list">
+            <li v-for="pilot in link.pilots.value" :key="pilot.driverUid" class="pilots__row">
+              <span class="pilots__dot" :class="pilot.reachable ? 'pilots__dot--on' : 'pilots__dot--off'" />
+              <span class="pilots__name">{{ pilot.nickname }}</span>
+              <span class="pilots__badge" :class="{ 'pilots__badge--always': pilot.scope !== 'once' }">
+                {{ outgoingBadge(pilot) }}
+              </span>
+              <span class="pilots__meta">{{ pilot.reachable ? 'in pista' : 'offline' }}</span>
+              <button
+                type="button"
+                class="pilots__btn pilots__btn--primary"
+                :disabled="link.selectedDriverUid.value === pilot.driverUid"
+                @click="connectTo(pilot.driverUid)"
+              >
+                {{ link.selectedDriverUid.value === pilot.driverUid ? 'Collegato' : 'Collegati' }}
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="link.pendingOutgoing.value.length" class="pilots__section">
+          <h3 class="pilots__title">Richieste inviate</h3>
+          <ul class="pilots__list">
+            <li v-for="pending in link.pendingOutgoing.value" :key="pending.driverUid" class="pilots__row">
+              <span class="pilots__wait">⏳</span>
+              <span class="pilots__name">{{ pending.nickname }}</span>
+              <span class="pilots__meta">
+                in attesa che autorizzi
+                <template v-if="pending.requestedScope">(chiesto: {{ pending.requestedScope === 'always' ? 'sempre' : 'per oggi' }})</template>
+              </span>
+              <button type="button" class="pilots__btn pilots__btn--ghost" @click="link.withdrawRequest(pending.driverUid)">
+                Ritira
+              </button>
+            </li>
+          </ul>
+        </div>
+
+        <div v-if="link.pastOutgoing.value.length" class="pilots__section">
+          <h3 class="pilots__title">Collegamenti passati</h3>
+          <ul class="pilots__list">
+            <li v-for="past in link.pastOutgoing.value" :key="past.driverUid" class="pilots__row">
+              <span class="pilots__name">{{ past.nickname }}</span>
+              <span class="pilots__meta">{{ pastLabel(past) }}</span>
+              <button type="button" class="pilots__btn" @click="askLink(past.driverUid, 'once')">Chiedi per oggi</button>
+              <button type="button" class="pilots__btn" @click="askLink(past.driverUid, 'always')">Chiedi sempre</button>
+            </li>
+          </ul>
+        </div>
+
+        <div class="pilots__section">
+          <h3 class="pilots__title">Cerca un pilota</h3>
           <input
             v-model="link.searchTerm.value"
-            class="links__input"
+            class="pilots__input"
             type="search"
-            placeholder="Nome del pilota"
+            placeholder="Nome del pilota — la ricerca parte da sola"
             aria-label="Cerca un pilota per nome"
             @input="onSearchInput"
           >
-
-          <p v-if="link.notice.value" class="links__note">{{ link.notice.value }}</p>
-
-          <ul v-if="link.searchResults.value.length" class="links__list">
-            <li v-for="found in link.searchResults.value" :key="found.uid" class="links__item">
-              <span class="links__name">{{ found.nickname }}</span>
-              <!-- Due ruoli, due verbi: "Chiedi" per assistere lui (deciderà
-                   lui), "Pre-autorizza" perché possa assistere te da subito. -->
-              <button type="button" class="links__btn" @click="askLink(found.uid)">Chiedi</button>
+          <p v-if="link.notice.value" class="pilots__note">{{ link.notice.value }}</p>
+          <ul v-if="link.searchResults.value.length" class="pilots__list">
+            <li v-for="found in link.searchResults.value" :key="found.uid" class="pilots__row">
+              <span class="pilots__name">{{ found.nickname }}</span>
+              <button type="button" class="pilots__btn" @click="askLink(found.uid, 'once')">Chiedi per oggi</button>
+              <button type="button" class="pilots__btn" @click="askLink(found.uid, 'always')">Chiedi sempre</button>
               <button
                 type="button"
-                class="links__btn links__btn--ghost"
+                class="pilots__btn pilots__btn--ghost"
                 title="Autorizzalo in anticipo a farti da ingegnere"
                 @click="link.preAuthorise(found.uid)"
               >
@@ -427,18 +507,20 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
           </ul>
         </div>
 
-        <div class="links__col">
-          <h3 class="links__title">Chi puo assistere te</h3>
-          <p v-if="!trustedEngineers.length" class="links__hint">
-            Nessuno, per ora. Quando qualcuno te lo chiede compare qui sopra.
+        <div class="pilots__section">
+          <h3 class="pilots__title">Chi puo assistere te</h3>
+          <p v-if="!trustedEngineers.length" class="pilots__note">
+            Nessuno, per ora. Quando qualcuno te lo chiede compare il riquadro in cima alla pagina.
           </p>
-          <ul v-else class="links__list">
-            <li v-for="request in trustedEngineers" :key="request.engineerUid" class="links__item">
-              <span class="links__name">{{ requesterName(request) }}</span>
-              <span class="links__status">{{ scopeLabel(request) }}</span>
+          <ul v-else class="pilots__list">
+            <li v-for="request in trustedEngineers" :key="request.engineerUid" class="pilots__row">
+              <span class="pilots__name">{{ requesterName(request) }}</span>
+              <span class="pilots__badge" :class="{ 'pilots__badge--always': request.scope !== 'once' }">
+                {{ scopeLabel(request) }}
+              </span>
               <button
                 type="button"
-                class="links__btn links__btn--ghost"
+                class="pilots__btn pilots__btn--ghost"
                 @click="link.decide(request.engineerUid, 'revoked')"
               >
                 Togli
@@ -691,62 +773,73 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
   gap: 8px;
 }
 
-// A chi sto mandando: sta in cima perche' e' la prima cosa da sapere.
-.link-bar {
+// A chi sto mandando, in una riga: e' la prima cosa da sapere.
+.pilot-bar {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   background: rgba(12, 12, 18, 0.9);
   font-size: 12px;
 }
 
-.link-bar__label {
-  color: rgba(255, 255, 255, 0.55);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+// Il pallino dice subito se il pilota c'e': verde in pista, grigio no.
+.pilot-bar__dot,
+.pilots__dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
 }
 
-.link-bar__select,
-.link-bar__refresh {
-  padding: 4px 8px;
+.pilot-bar__dot--on,
+.pilots__dot--on {
+  background: #6fd66f;
+  box-shadow: 0 0 6px rgba(111, 214, 111, 0.7);
+}
+
+.pilot-bar__dot--off,
+.pilots__dot--off {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.pilot-bar__name {
+  color: #fff;
+  font-size: 13px;
+}
+
+.pilot-bar__meta,
+.pilot-bar__none {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pilot-bar__state {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+// Un problema non si mimetizza col resto: si vede.
+.pilot-bar__state--problem {
+  color: #ffb03a;
+}
+
+.pilot-bar__toggle,
+.pilot-bar__ghost {
+  padding: 4px 10px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.04);
   color: inherit;
   font: inherit;
+  cursor: pointer;
 }
 
-.link-bar__refresh:disabled {
-  opacity: 0.5;
-}
-
-.link-bar__state {
-  color: rgba(255, 255, 255, 0.7);
-}
-
-// Un problema non si mimetizza col resto: si vede.
-.link-bar__state--problem {
-  color: #ffb03a;
-}
-
-.link-bar__toggle {
+.pilot-bar__toggle {
   margin-left: auto;
-}
-
-.link-bar__badge {
-  display: inline-block;
-  min-width: 16px;
-  margin-left: 4px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: var(--accent);
-  color: #05070c;
-  font-weight: 700;
-  text-align: center;
+  border-color: rgba(var(--accent-rgb), 0.5);
 }
 
 // Una richiesta in arrivo: l'unica cosa in pagina che chiede una risposta.
@@ -791,6 +884,13 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
   font-weight: 400;
 }
 
+// Il pulsante che corrisponde a cio' che e' stato chiesto: evidenziato, ma
+// gli altri restano cliccabili perche' decide comunque il pilota.
+.invite__btn--asked {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.85);
+  font-weight: 800;
+}
+
 // Esito per campo dell'ultimo ordine: tre colori per tre verita' diverse.
 .outcomes {
   display: flex;
@@ -824,103 +924,141 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
   color: rgba(255, 255, 255, 0.45);
 }
 
-.links__hint {
-  margin: 0 0 6px;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.55);
-}
-
-.links__col .links__input {
-  width: 100%;
-}
-
-.links {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 10px;
-  padding: 10px;
+// Il pannello Piloti: una colonna sola, sezioni in fila nell'ordine in cui
+// servono. Niente griglia a due colonne: le liste si leggono dall'alto.
+.pilots {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   background: rgba(12, 12, 18, 0.9);
 }
 
-.links__title {
+.pilots__title {
   margin: 0 0 6px;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: rgba(255, 255, 255, 0.55);
 }
 
-.links__row {
-  display: flex;
-  gap: 6px;
+.pilots__section + .pilots__section {
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
-.links__input {
-  flex: 1;
-  min-width: 0;
-  padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: inherit;
-  font: inherit;
-}
-
-.links__btn {
-  padding: 4px 10px;
-  border: 1px solid rgba(var(--accent-rgb), 0.5);
-  border-radius: 8px;
-  background: rgba(var(--accent-rgb), 0.12);
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.links__btn--ghost {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: transparent;
-}
-
-.links__list {
-  margin: 6px 0 0;
+.pilots__list {
+  margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
-.links__item {
+.pilots__row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 32px;
+  font-size: 13px;
+  color: #fff;
 }
 
-.links__name {
-  flex: 1;
-  min-width: 0;
+.pilots__name {
+  min-width: 90px;
   overflow: hidden;
+  font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.links__status {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.5);
+.pilots__meta {
+  flex: 1;
+  min-width: 120px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
 }
 
-.links__status--granted {
+.pilots__wait {
+  flex: 0 0 auto;
+}
+
+// La portata del permesso: "sempre" pieno, "oggi" con la scadenza accanto.
+.pilots__badge {
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pilots__badge--always {
+  border-color: rgba(111, 214, 111, 0.45);
   color: #6fd66f;
 }
 
-.links__status--pending {
-  color: #ffb03a;
+.pilots__input {
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  font: inherit;
 }
 
-.links__note {
+.pilots__input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.pilots__btn {
+  padding: 5px 12px;
+  border: 1px solid rgba(var(--accent-rgb), 0.5);
+  border-radius: 8px;
+  background: rgba(var(--accent-rgb), 0.12);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.pilots__btn:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb), 0.25);
+}
+
+// Collegati e' l'azione che conta: piena, non un fantasma fra i fantasmi.
+.pilots__btn--primary {
+  border-color: rgba(var(--accent-rgb), 0.7);
+  background: var(--accent);
+  color: #05070c;
+  font-weight: 800;
+}
+
+.pilots__btn--primary:hover:not(:disabled) {
+  background: var(--accent);
+  filter: brightness(1.1);
+}
+
+.pilots__btn--primary:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.pilots__btn--ghost {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.pilots__note {
   margin: 6px 0 0;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.5);

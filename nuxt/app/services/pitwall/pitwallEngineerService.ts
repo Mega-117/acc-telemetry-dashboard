@@ -47,6 +47,26 @@ export interface PitwallIncomingRequest {
   /** Portata concessa: "solo per oggi" o "sempre". Null finche' pending. */
   scope: PitwallGrantScope | null
   expiresAtMs: number | null
+  /** Cosa ha chiesto l'ingegnere: si mostra, ma decide il pilota. */
+  requestedScope: PitwallGrantScope | null
+}
+
+/**
+ * Un collegamento in uscita: un pilota che assisto, che ho chiesto di
+ * assistere, o che ho assistito in passato. E' la vista dell'ingegnere.
+ */
+export interface PitwallOutgoingLink {
+  driverUid: string
+  nickname: string
+  status: PitwallGrant['status']
+  scope: PitwallGrantScope | null
+  expiresAtMs: number | null
+  requestedScope: PitwallGrantScope | null
+  /** Concesso e non scaduto: ci si puo' collegare adesso. */
+  usable: boolean
+  /** Solo per i collegamenti usabili: presenza e raggiungibilita'. */
+  session: PitwallSession | null
+  reachable: boolean
 }
 
 export interface PitwallLinkedPilot {
@@ -73,14 +93,18 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
   const now = options.now ?? (() => Date.now())
 
   /**
-   * Chiede il collegamento a un pilota. La richiesta nasce in attesa: sara' il
-   * pilota a concedere. Se aveva gia' pre-autorizzato, il documento esiste
-   * gia' come concesso e non va sovrascritto.
+   * Chiede il collegamento a un pilota, dichiarando cosa si chiede: "solo per
+   * oggi" o "sempre". La richiesta nasce in attesa e decide comunque il
+   * pilota, che pero' vede la proposta. Se aveva gia' pre-autorizzato e il
+   * permesso e' ancora valido, non si sovrascrive niente; un permesso
+   * revocato o scaduto torna in attesa.
    */
-  async function requestLink(driverUid: string, note: string | null = null): Promise<
-    { ok: true, alreadyGranted: boolean } | { ok: false, reason: string }
-  > {
-    const request = buildPitwallGrantRequest(driverUid, engineerUid, nowIso(now), note)
+  async function requestLink(
+    driverUid: string,
+    requestedScope: PitwallGrantScope = 'once',
+    note: string | null = null
+  ): Promise<{ ok: true, alreadyGranted: boolean } | { ok: false, reason: string }> {
+    const request = buildPitwallGrantRequest(driverUid, engineerUid, nowIso(now), note, requestedScope)
     if (!request) return { ok: false, reason: 'Pilota non valido.' }
 
     // Tutto dentro un solo try: un rifiuto dei permessi deve diventare un
@@ -90,10 +114,19 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
       const existing = await trackedGetDoc(ref, 'pitwall.requestLink')
       if (existing.exists()) {
         const grant = existing.data() as PitwallGrant
-        if (grant.status === 'granted') return { ok: true, alreadyGranted: true }
+        if (isPitwallGrantUsable(grant, driverUid, engineerUid, now())) {
+          return { ok: true, alreadyGranted: true }
+        }
         if (grant.status === 'pending') return { ok: true, alreadyGranted: false }
-        // Un permesso revocato si puo' richiedere di nuovo: torna in attesa.
-        await trackedUpdateDoc(ref, { status: 'pending', updatedAt: nowIso(now) }, 'pitwall.reRequestLink')
+        // Revocato o "solo per oggi" scaduto: torna in attesa, con la nuova
+        // proposta e senza trascinarsi dietro la portata concessa in passato.
+        await trackedUpdateDoc(ref, {
+          status: 'pending',
+          requestedScope,
+          scope: null,
+          expiresAtMs: null,
+          updatedAt: nowIso(now),
+        }, 'pitwall.reRequestLink')
         return { ok: true, alreadyGranted: false }
       }
 
@@ -115,6 +148,64 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
     } catch (error) {
       return { ok: false, reason: (error as Error)?.message || 'Revoca rifiutata.' }
     }
+  }
+
+  /** Il soprannome pubblico di un utente; il suo uid se non leggibile. */
+  async function nicknameOf(uid: string): Promise<string> {
+    try {
+      const profile = await trackedGetDoc(doc(db, 'publicProfiles', uid), 'pitwall.pilotProfile')
+      if (profile.exists()) {
+        return String((profile.data() as { nickname?: string }).nickname ?? '') || uid
+      }
+    } catch {
+      // Profilo non leggibile: si mostra l'identificativo, brutto ma vero.
+    }
+    return uid
+  }
+
+  /**
+   * Tutti i collegamenti in uscita, in una sola query: quelli pronti (con
+   * presenza e pallino online), le richieste ancora in attesa, e la storia
+   * (revocati o scaduti) da cui si puo' richiedere. La presenza si legge solo
+   * per i collegamenti usabili: sugli altri le regole la negherebbero comunque.
+   */
+  async function listOutgoingLinks(): Promise<PitwallOutgoingLink[]> {
+    const grants = await trackedGetDocs(query(
+      collection(db, 'pitwallGrants'),
+      where('engineerUid', '==', engineerUid),
+      limit(50)
+    ), 'pitwall.listOutgoingLinks')
+
+    const links: PitwallOutgoingLink[] = []
+    for (const grantDoc of grants.docs) {
+      const grant = grantDoc.data() as PitwallGrant
+      const usable = isPitwallGrantUsable(grant, grant.driverUid, engineerUid, now())
+      let session: PitwallSession | null = null
+      if (usable) {
+        try {
+          const snapshot = await trackedGetDoc(doc(db, 'pitwallSessions', grant.driverUid), 'pitwall.pilotPresence')
+          session = snapshot.exists() ? (snapshot.data() as PitwallSession) : null
+        } catch {
+          session = null
+        }
+      }
+      links.push({
+        driverUid: grant.driverUid,
+        nickname: await nicknameOf(grant.driverUid),
+        status: grant.status,
+        scope: grant.scope ?? null,
+        expiresAtMs: grant.expiresAtMs ?? null,
+        requestedScope: grant.requestedScope ?? null,
+        usable,
+        session,
+        reachable: usable && isPitwallSessionFresh(session, now()),
+      })
+    }
+    // I pre-autorizzati "sempre" in cima, poi gli "oggi", poi il resto.
+    const rank = (link: PitwallOutgoingLink) => (
+      link.usable ? (link.scope === 'once' ? 1 : 0) : (link.status === 'pending' ? 2 : 3)
+    )
+    return links.sort((left, right) => rank(left) - rank(right) || left.nickname.localeCompare(right.nickname))
   }
 
   /** I piloti che hanno concesso il collegamento, con la loro raggiungibilita'. */
@@ -301,6 +392,7 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
         createdAt: grant.createdAt,
         scope: grant.scope ?? null,
         expiresAtMs: grant.expiresAtMs ?? null,
+        requestedScope: grant.requestedScope ?? null,
       })
     }
     return requests
@@ -338,6 +430,7 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
           createdAt: grant.createdAt,
           scope: grant.scope ?? null,
           expiresAtMs: grant.expiresAtMs ?? null,
+          requestedScope: grant.requestedScope ?? null,
         })))
 
         const unknown = grants.filter((grant) => !nicknames.has(grant.engineerUid))
@@ -359,6 +452,7 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
             createdAt: grant.createdAt,
             scope: grant.scope ?? null,
             expiresAtMs: grant.expiresAtMs ?? null,
+            requestedScope: grant.requestedScope ?? null,
           })))
         })
       },
@@ -453,6 +547,7 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
 
   return {
     requestLink,
+    listOutgoingLinks,
     withdraw,
     listLinkedPilots,
     readPilotPresence,
