@@ -360,7 +360,7 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
               <div class="tyres-layout">
                 <div class="pressure-map">
                   <PitwallValueField v-for="wheel in PITWALL_WHEELS" :key="wheel" :class="`tyre-control tyre-control--${wheel.toLowerCase()}`" :title="wheel" :input-label="`Pressione ${wheelLabel(wheel)} in PSI`" :value="pressures[wheel]" :min="PITWALL_PRESSURE_MIN_PSI" :max="PITWALL_PRESSURE_MAX_PSI" :step="0.1" :decimals="1" bare :echo="echo[wheel]" @step="adjustPressure(wheel, $event)" @update:value="setPressure(wheel, $event)" />
-                  <img class="car-silhouette" src="/images/pitwall-car-top.svg?v=5" alt="Sagoma della vettura vista dall’alto">
+                  <img class="car-silhouette" src="/images/pitwall-car-top.svg?v=6" alt="Sagoma della vettura vista dall’alto">
                 </div>
                 <div class="tyre-settings">
                   <PitwallValueField title="Set pneumatici" size="sm" input-label="Numero set pneumatici" :value="tyreSet" :min="PITWALL_TYRE_SET_MIN" :max="PITWALL_TYRE_SET_MAX" bare :echo="echo.tyreSet" @step="tyreSet = stepTyreSet(tyreSet, $event)" @update:value="tyreSet = clampTyreSet($event)" />

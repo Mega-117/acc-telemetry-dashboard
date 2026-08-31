@@ -76,12 +76,14 @@ describe('Pitwall layout approvato', () => {
 
 describe('Pitwall pressioni e sagoma vettura', () => {
   it('usa un asset SVG esterno riusabile, non CSS art', () => {
-    expect(panel).toContain('src="/images/pitwall-car-top.svg?v=5"')
+    expect(panel).toContain('src="/images/pitwall-car-top.svg?v=6"')
     expect(carSvg).toContain('<svg')
     expect(carSvg).toContain('viewBox="0 0 133 246"')
     expect(carSvg).toContain('Sagoma vettura vista dall\'alto')
     expect(carSvg).toContain('id="body"')
     expect(carSvg).toContain('id="trace-1"')
+    expect(carSvg).toContain('#trace-1 { fill: #121c24; }')
+    expect(carSvg).toContain('#trace-13 { fill: #a9afb2; }')
     expect(carSvg).not.toContain('<image')
   })
 

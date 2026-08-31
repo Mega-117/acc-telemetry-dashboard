@@ -85,3 +85,32 @@ PASS. The implementation preserves the approved hierarchy and spatial grouping: 
 No open P1–P3 fidelity or usability findings after the final correction pass. Dynamic online/MFD values differ from the illustrative source by design and are not a fidelity defect. The floating `FB`/inspector widgets visible in development screenshots belong to the local feedback/dev tooling and are not Pitwall product UI.
 
 final result: passed
+
+## Interior-line contrast refinement — 2026-08-31
+
+- Source visual truth: `D:/Archivio/Download/download.png` (133 × 246 px).
+- Before capture: `.codex_tmp/design-qa/pitwall-car-lines-before.png`.
+- Implementation capture: `.codex_tmp/design-qa/pitwall-car-lines-after.png`,
+  browser-rendered at 1307 × 1089 px on `http://localhost:3000/pitwall`.
+- Comparison method: the source, before capture and revised implementation were
+  opened together in one comparison input; the focused car region was judged at
+  its normal in-page scale rather than from SVG markup alone.
+- Colors and visual tokens: PASS. The thirteen traced antialias levels now use a
+  higher-contrast cool-grey ramp (`#121c24` through `#a9afb2`) against the
+  unchanged `#0f171f` body. Windshield, roof, hood, door and rear-deck seams are
+  more legible without introducing a bright accent foreign to the dashboard.
+- Image quality and asset fidelity: PASS. The geometry, `133:246` proportions,
+  14 path elements, path-only construction and transparent exterior remain
+  unchanged; only the existing traced colour levels are remapped.
+- Spacing/layout rhythm: PASS. Asset dimensions and pressure-control positions
+  are unchanged, so the zero-overlap desktop/mobile layout is preserved.
+- Typography and copy/content: unchanged by this asset-only refinement.
+- Iteration history: the previous palette was a P2 legibility issue at normal
+  page scale because several interior antialias levels were too close to the
+  body fill. The palette remap resolves that issue in the fresh browser capture.
+- Follow-up polish: increasing geometric stroke width remains unnecessary; it
+  would alter the supplied source shape and reduce the precision of small seams.
+
+No actionable P0/P1/P2 findings remain for this refinement.
+
+final result: passed
