@@ -76,7 +76,7 @@ describe('Pitwall layout approvato', () => {
 
 describe('Pitwall pressioni e sagoma vettura', () => {
   it('usa un asset SVG esterno riusabile, non CSS art', () => {
-    expect(panel).toContain('src="/images/pitwall-car-top.svg"')
+    expect(panel).toContain('src="/images/pitwall-car-top.svg?v=3"')
     expect(carSvg).toContain('<svg')
     expect(carSvg).toContain('viewBox="0 0 120 240"')
     expect(carSvg).toContain('Sagoma vettura vista dall\'alto')
@@ -98,8 +98,20 @@ describe('Pitwall pressioni e sagoma vettura', () => {
   it('mantiene stepper a larghezza fissa quando i valori cambiano', () => {
     expect(panel).toContain('width: 70px; min-width: 70px; max-width: 70px')
     expect(valueField).toContain('font-variant-numeric')
+    expect(valueField).toContain('align-items: center')
+    expect(valueField).toContain('border: 0')
+    expect(valueField).toContain('class="stepper__unit"')
+    expect(valueField).toContain('line-height: 1.25')
     expect(valueField).toContain("replace('.', ',')")
     expect(valueField).toContain('inputmode="decimal"')
+  })
+
+  it('mantiene il setup pneumatici leggibile e la mappa proporzionata al mockup', () => {
+    expect(panel).toContain('grid-template-columns: minmax(0,1fr) 155px')
+    expect(panel).toContain('width: 112px; height: 224px')
+    expect(panel).toContain('width: 140px')
+    expect(panel).toContain('.tyre-settings :deep(.field--bare) { display: grid')
+    expect(panel).toContain('.tyre-settings :deep(.field__head) { white-space: nowrap; }')
   })
 
   it('conserva limiti, incremento e accessibilità dei controlli', () => {

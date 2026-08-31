@@ -79,8 +79,13 @@ function onInput(event: Event) {
           :value="displayValue"
           @change="onInput"
         />
-        <em v-if="unit">{{ unit }}</em>
       </label>
+
+      <span
+        v-if="unit"
+        class="stepper__unit"
+        aria-hidden="true"
+      >{{ unit }}</span>
 
       <button
         type="button"
@@ -123,13 +128,13 @@ function onInput(event: Event) {
 
 .field--bare {
   padding: 0;
-  border-color: transparent;
+  border: 0;
   border-radius: 0;
   background: transparent;
 }
 
 .field--bare.field--changed {
-  border-color: transparent;
+  border: 0;
   background: transparent;
 }
 
@@ -250,7 +255,7 @@ function onInput(event: Event) {
 .value {
   display: flex;
   flex: 1 1 auto;
-  align-items: baseline;
+  align-items: center;
   justify-content: center;
   gap: 4px;
   padding: 4px 6px;
@@ -268,14 +273,18 @@ function onInput(event: Event) {
 }
 
 .value input {
+  display: block;
   width: 100%;
   min-width: 0;
+  min-height: 1.25em;
+  padding: 0;
   border: 0;
   background: transparent;
   color: #fff;
   font-size: 22px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  line-height: 1.25;
   /* A destra: le cifre restano incolonnate tra le quattro ruote. */
   text-align: right;
   /* Niente frecce native del browser: il campo ha gia' i suoi due bersagli
@@ -301,10 +310,14 @@ function onInput(event: Event) {
   outline-offset: 2px;
 }
 
-.value em {
+.stepper__unit {
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  min-width: 26px;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.45);
   font-size: 11px;
-  font-style: normal;
   font-weight: 900;
   letter-spacing: 0.06em;
 }

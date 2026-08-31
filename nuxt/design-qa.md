@@ -2,14 +2,14 @@
 
 ## Evidence
 
-- Approved source: `D:/temp/codex-clipboard-11c51a56-06fb-4311-b791-647b48daa060.png`
-- Live implementation: `.codex_tmp/design-qa/pitwall-1488x1059.png`
+- Approved source: `D:/temp/codex-clipboard-4b9373f2-9437-48b9-9fe3-6e2315b9405d.png`
+- Live implementation: `.codex_tmp/design-qa/pitwall-after-alignment-1488.png`
 - Source pixels: 1488 × 1059
 - Implementation pixels: 1488 × 1059
 - CSS viewport: 1488 × 1059 at device scale 1
 - Route: `http://localhost:3000/pitwall`
 - Compared together in one visual pass at original resolution.
-- Refinement pass: live CSS viewport 1175 × 896 (1169 px client width), then 1110 × 896 (1104 px client width).
+- Refinement pass: live CSS viewport 1488 × 1059, then 1110 × 900 and 760 × 900.
 
 ## State represented
 
@@ -29,16 +29,17 @@ PASS. The implementation preserves the approved hierarchy and spatial grouping: 
 - Responsiveness: PASS. At 1169 px client width Strategy (652.5 px) remains on the left and MFD (472.5 px) on the right, with identical top and height and no horizontal overflow. At 1104 px client width the workspace collapses in reading order; mobile navigation scrolls inside its own bar instead of widening the page.
 - Accessibility: PASS. Inputs have labels and spinbutton ranges, the SVG has alt text, native checkboxes/selects remain keyboard reachable, and send/order status changes use accessible live text.
 
-## Refinement pass — 2026-08-31
+## Alignment refinement — 2026-08-31
 
-- Responsive workspace: PASS. At 1169 px client width Strategy remains on the left at 652.5 px and MFD on the right at 472.5 px, with identical top and height and no horizontal overflow. At 1104 px client width the workspace collapses in reading order.
-- Vehicle geometry: PASS. The reusable external SVG now separates front, cabin and rear geometry. Continuous symmetric curves remove the pinched nose and distorted rear deck while preserving sharpness.
-
-## Refinement pass — 2026-08-31
-
-- Responsive workspace: PASS. At 1169 px client width Strategy remains on the left at 652.5 px and MFD on the right at 472.5 px, with identical top and height and no horizontal overflow. At 1104 px client width the workspace collapses in reading order.
-- Vehicle geometry: PASS. The reusable external SVG now separates front, cabin and rear geometry. Continuous symmetric curves remove the pinched nose and distorted rear deck while preserving sharpness.
+- Numeric centering: PASS. At 1488 × 1059 every pressure input and its 34 px value cell share the same exact vertical center (`FL/FR 562.9 px`, `RL/RR 720.4 px`).
+- Stable interaction: PASS. Changing FL from `25,0` to `25,1` after layout settlement produces `dx=0`, `dy=0`, `dw=0`, `dh=0`; restoring the value uses the same geometry.
+- Fuel grouping: PASS. Label, input, value cell and dedicated `L` cell all share center `411 px`; the unit no longer consumes numeric width.
+- Tyre set grouping: PASS. `Set pneumatici` occupies one line above the stepper with a 7 px group gap; head and stepper do not intersect.
+- Vehicle geometry: PASS. The external SVG keeps a 120:240 viewBox and renders at 112 × 224 px, with continuous symmetric hood, cabin and rear curves and no aspect-ratio distortion.
+- Responsive workspace: PASS. At 1104 px client width the workspace becomes one column with `scrollWidth=1104`; at 754 px it remains one column with `scrollWidth=754`, the top controls stack, and `Set pneumatici` still occupies one line.
 
 ## Findings
 
 No open P1–P3 fidelity or usability findings after the final correction pass. Dynamic online/MFD values differ from the illustrative source by design and are not a fidelity defect.
+
+final result: passed
