@@ -317,7 +317,10 @@ describe('decidere e revocare', () => {
     const data = mocks.updates[0]?.data as { scope?: string, expiresAtMs?: number }
     expect(data.scope).toBe('once')
     expect(typeof data.expiresAtMs).toBe('number')
-    expect(data.expiresAtMs!).toBeGreaterThan(Date.now())
+    // Si confronta con l'orologio del servizio, non con quello vero: la prima
+    // versione usava Date.now() e passava solo finche' l'ora reale restava
+    // dentro la giornata finta del test. Dopo mezzanotte falliva da sola.
+    expect(data.expiresAtMs!).toBeGreaterThan(NOW())
   })
 
   it('la revoca non tocca la portata: toglie e basta', async () => {
