@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 240" role="img" aria-labelledby="title desc">
+  <title id="title">Sagoma vettura vista dall'alto</title>
+  <desc id="desc">Sagoma tecnica di una vettura GT usata per disporre le quattro pressioni degli pneumatici.</desc>
+  <g fill="none" stroke="#66717a" stroke-linecap="round" stroke-linejoin="round">
+    <path fill="#111a22" stroke-width="1.8" d="M60 4c-15 0-27 4-32 11-4 6-6 18-7 34l-5 17v83l6 25c1 24 4 42 10 50 6 8 16 12 28 12s22-4 28-12c6-8 9-26 10-50l6-25V66l-5-17c-1-16-3-28-7-34C87 8 75 4 60 4Z"/>
+    <path stroke-width="1.35" d="M32 17c8-5 17-7 28-7s20 2 28 7M23 49c10 7 22 11 37 11s27-4 37-11M28 72c9-7 20-11 32-11s23 4 32 11l-8 30H36l-8-30Z"/>
+    <path fill="#0d151c" stroke-width="1.35" d="M36 103h48l5 47-8 24H39l-8-24 5-47Z"/>
+    <path stroke-width="1.35" d="M39 174h42l5 28c-6 5-15 7-26 7s-20-2-26-7l5-28ZM30 213c8 7 18 10 30 10s22-3 30-10"/>
+    <path stroke-width="1" opacity=".8" d="M28 75 22 149m70-74 6 74M31 104l-8 18m66-18 8 18M43 63l-7 38m41-38 7 38M39 174l-5 28m47-28 5 28"/>
+    <path fill="#101820" stroke-width="1.2" d="M18 83 9 88l1 13 10-2m82-16 9 5-1 13-10-2"/>
+    <path stroke-width="1" opacity=".65" d="M47 109c4-2 8-3 13-3s9 1 13 3m-34 58c6 3 13 5 21 5s15-2 21-5"/>
+  </g>
+</svg>

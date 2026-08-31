@@ -21,12 +21,15 @@ const props = withDefaults(defineProps<{
   echo: PitwallEchoCell
   /** sm per le voci che si toccano di rado, lg per il carburante. */
   size?: 'sm' | 'md' | 'lg'
+  /** Variante senza card, usata nei gruppi compatti della plancia Pitwall. */
+  bare?: boolean
 }>(), {
   title: '',
   step: 1,
   unit: '',
   decimals: 0,
   size: 'md',
+  bare: false,
 })
 
 const emit = defineEmits<{
@@ -34,17 +37,18 @@ const emit = defineEmits<{
   'update:value': [value: number]
 }>()
 
-const displayValue = computed(() => props.value.toFixed(props.decimals))
+const displayValue = computed(() => props.value.toFixed(props.decimals).replace('.', ','))
 
 function onInput(event: Event) {
-  emit('update:value', Number((event.target as HTMLInputElement).value))
+  const parsed = Number((event.target as HTMLInputElement).value.replace(',', '.'))
+  if (Number.isFinite(parsed)) emit('update:value', parsed)
 }
 </script>
 
 <template>
   <article
     class="field"
-    :class="[`field--${size}`, { 'field--changed': echo.changed }]"
+    :class="[`field--${size}`, { 'field--changed': echo.changed, 'field--bare': bare }]"
   >
     <header
       v-if="title"
@@ -66,10 +70,12 @@ function onInput(event: Event) {
       <label class="value">
         <span class="sr-only">{{ inputLabel }}</span>
         <input
-          type="number"
-          :step="step"
-          :min="min"
-          :max="max"
+          type="text"
+          inputmode="decimal"
+          role="spinbutton"
+          :aria-valuemin="min"
+          :aria-valuemax="max"
+          :aria-valuenow="value"
           :value="displayValue"
           @change="onInput"
         />
@@ -113,6 +119,18 @@ function onInput(event: Event) {
 .field--changed {
   border-color: rgba(var(--accent-rgb), 0.55);
   background: rgba(var(--accent-rgb), 0.08);
+}
+
+.field--bare {
+  padding: 0;
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+}
+
+.field--bare.field--changed {
+  border-color: transparent;
+  background: transparent;
 }
 
 .field__head {
@@ -163,6 +181,11 @@ function onInput(event: Event) {
   align-items: center;
   justify-content: space-between;
   gap: 6px 12px;
+}
+
+.field--bare.field--lg,
+.field--bare.field--sm {
+  flex-wrap: nowrap;
 }
 
 .field--lg .field__head,
@@ -252,6 +275,7 @@ function onInput(event: Event) {
   color: #fff;
   font-size: 22px;
   font-weight: 800;
+  font-variant-numeric: tabular-nums;
   /* A destra: le cifre restano incolonnate tra le quattro ruote. */
   text-align: right;
   /* Niente frecce native del browser: il campo ha gia' i suoi due bersagli

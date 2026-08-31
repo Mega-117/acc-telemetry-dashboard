@@ -1,187 +1,254 @@
 <script setup lang="ts">
-// ============================================
-// PitwallCarCard - stato reale della macchina del pilota. Si legge soltanto.
-//
-// I dati arrivano dalla presenza che il PC del pilota pubblica ogni 30
-// secondi: vettura, pista, equipaggio dalla EntryList e strategia nel Pit
-// MFD. Un dato vecchio si dichiara vecchio, non si mostra come attuale.
-// ============================================
+// Stato MFD reale della macchina assistita. I campi osservabili arrivano
+// dalla presenza del pilota; quelli che ACC non consente di rileggere sono
+// dichiarati come ultimo ordine o non disponibili, mai spacciati per LIVE.
 
 import { computed } from 'vue'
 import type { PitwallSession } from '~/services/pitwall/pitwallLink'
+import {
+  resolveDriverName,
+  type PitwallDriver,
+  type PitwallPlan,
+  type PitwallStopEstimate,
+} from '~/utils/pitwallPresentation'
 
 const props = defineProps<{
-  /** La presenza del pilota selezionato; null senza pilota. */
   session: PitwallSession | null
-  /** La presenza e' recente: il pilota e' davvero raggiungibile. */
   fresh: boolean
-  /** Quanti secondi ha il dato, per dichiararne l'eta'. */
   ageSeconds: number | null
+  displayPlan: PitwallPlan
+  drivers: PitwallDriver[]
+  stop: PitwallStopEstimate
 }>()
 
-const crew = computed(() => props.session?.crew ?? [])
+type MfdSource = 'live' | 'stale' | 'order' | 'unavailable'
+
+interface MfdRow {
+  label: string
+  value: string
+  source: MfdSource
+}
+
+const strategy = computed(() => props.session?.strategy ?? null)
+const observedSource = computed<MfdSource>(() => props.fresh ? 'live' : 'stale')
+
+function psi(value: number | undefined): string {
+  return value == null ? '—' : `${value.toFixed(1).replace('.', ',')} PSI`
+}
+
+function yesNo(value: boolean): string {
+  return value ? 'Sì' : 'No'
+}
+
+function stopClock(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '—'
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds - minutes * 60
+  return `${String(minutes).padStart(2, '0')}:${rest.toFixed(3).padStart(6, '0')}`
+}
+
+const selectedDriver = computed(() => {
+  const current = props.session?.crew?.find(member => member.current)
+  return current?.name ?? resolveDriverName(props.displayPlan.driverId, props.drivers)
+})
+
+const rows = computed<MfdRow[]>(() => {
+  const snapshot = strategy.value
+  const source = snapshot ? observedSource.value : 'unavailable'
+  return [
+    { label: 'Preset strategia', value: 'Spento', source: 'unavailable' },
+    { label: 'Carburante in uscita', value: snapshot?.fuelToAdd == null ? '—' : `${snapshot.fuelToAdd} L`, source },
+    { label: 'Cambio gomme', value: yesNo(props.displayPlan.changeTyres), source: 'order' },
+    { label: 'Set pneumatici', value: snapshot?.tyreSet == null ? '—' : String(snapshot.tyreSet), source },
+    { label: 'Mescola', value: snapshot?.compound === 'wet' ? 'Wet' : snapshot?.compound === 'dry' ? 'Dry' : '—', source },
+    { label: 'Pressione FL', value: psi(snapshot?.pressures?.FL), source },
+    { label: 'Pressione FR', value: psi(snapshot?.pressures?.FR), source },
+    { label: 'Pressione RL', value: psi(snapshot?.pressures?.RL), source },
+    { label: 'Pressione RR', value: psi(snapshot?.pressures?.RR), source },
+    { label: 'Sostituisci freni', value: 'No', source: 'unavailable' },
+    { label: 'Pilota selezionato', value: selectedDriver.value, source: props.session?.crew?.length ? observedSource.value : 'order' },
+    { label: 'Sospensioni', value: yesNo(props.displayPlan.repairSuspension), source: 'order' },
+    { label: 'Carrozzeria', value: yesNo(props.displayPlan.repairBodywork), source: 'order' },
+  ]
+})
+
+const sourceLabel: Record<MfdSource, string> = {
+  live: 'LIVE',
+  stale: 'DATI VECCHI',
+  order: 'ULTIMO ORDINE',
+  unavailable: 'N/D',
+}
 </script>
 
 <template>
-  <section class="card">
-    <div class="card__head">
-      <h2>Macchina</h2>
-      <span
-        v-if="session"
-        class="tag"
-        :class="fresh ? 'tag--live' : 'tag--stale'"
-      >
+  <section class="mfd" aria-labelledby="pitwall-mfd-title">
+    <header class="mfd__head">
+      <div>
+        <h2 id="pitwall-mfd-title">MFD IN MACCHINA</h2>
+        <p v-if="session" class="mfd__context">
+          <span v-if="session.car">{{ session.car }}</span>
+          <span v-if="session.track">{{ session.track }}</span>
+          <span>{{ ageSeconds == null ? 'mai aggiornato' : `aggiornato ${ageSeconds}s fa` }}</span>
+        </p>
+      </div>
+      <span v-if="session" class="mfd__freshness" :class="fresh ? 'is-live' : 'is-stale'">
         {{ fresh ? 'LIVE' : 'DATI VECCHI' }}
       </span>
-    </div>
+    </header>
 
-    <p v-if="!session" class="note">
-      Nessun pilota selezionato: qui compare la sua macchina.
+    <p v-if="!session" class="mfd__empty">
+      Seleziona un pilota per leggere la strategia impostata nel suo Pit MFD.
     </p>
 
-    <template v-else>
-      <dl class="facts">
-        <template v-if="session.car">
-          <dt>Vettura</dt>
-          <dd>{{ session.car }}</dd>
-        </template>
-        <template v-if="session.track">
-          <dt>Pista</dt>
-          <dd>{{ session.track }}</dd>
-        </template>
-        <dt>Aggiornata</dt>
-        <dd>{{ ageSeconds == null ? 'mai' : `${ageSeconds}s fa` }}</dd>
-      </dl>
+    <div class="mfd__rows">
+      <div v-for="row in rows" :key="row.label" class="mfd__row">
+        <span class="mfd__label">{{ row.label }}</span>
+        <strong class="mfd__value">{{ row.value }}</strong>
+        <span class="mfd__source" :class="`mfd__source--${row.source}`">
+          {{ sourceLabel[row.source] }}
+        </span>
+      </div>
+      <div class="mfd__row mfd__row--stop">
+        <span class="mfd__label">Tempo stop stimato</span>
+        <strong class="mfd__value mfd__value--time">{{ stopClock(stop.seconds) }}</strong>
+        <span class="mfd__source mfd__source--calculated">CALCOLATO</span>
+      </div>
+    </div>
 
-      <!-- L'equipaggio vero della vettura, dalla EntryList del gioco. -->
-      <ul v-if="crew.length" class="crew">
-        <li
-          v-for="member in crew"
-          :key="member.driverIndex"
-          class="crew__member"
-          :class="{ 'crew__member--current': member.current }"
-        >
-          {{ member.name }}
-          <span v-if="member.current" class="crew__now">al volante</span>
-        </li>
-      </ul>
-      <p v-else class="note">
-        Equipaggio non ancora ricevuto dal gioco.
-      </p>
-    </template>
+    <footer class="mfd__order">
+      <slot name="order" />
+    </footer>
   </section>
 </template>
 
 <style lang="scss" scoped>
-.card {
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  background: linear-gradient(145deg, rgba(26, 26, 36, 0.98), rgba(12, 12, 18, 0.98));
+/* Superficie navy distinta dal pannello di comando, come nel mockup. */
+.mfd {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid rgba(91, 133, 177, 0.28);
+  border-radius: 10px;
+  background: #0b1a2a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
 }
 
-.card__head {
+.mfd__head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 16px;
+  padding: 17px 20px 12px;
 }
 
-.card__head h2 {
+.mfd__head h2 {
   margin: 0;
-  color: rgba(255, 255, 255, 0.46);
-  font-size: 10px;
-  font-weight: 900;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  color: #f6f8fb;
+  font-size: 16px;
+  font-weight: 850;
+  letter-spacing: 0.015em;
 }
 
-.tag {
-  padding: 2px 6px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+.mfd__context {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  margin: 5px 0 0;
+  color: #74869a;
+  font-size: 11px;
+}
+
+.mfd__freshness {
+  flex: none;
+  padding: 3px 7px;
+  border: 1px solid currentColor;
   border-radius: 5px;
-  color: rgba(255, 255, 255, 0.45);
   font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.1em;
+  font-weight: 850;
+  letter-spacing: 0.06em;
 }
 
-.tag--live {
-  border-color: rgba(111, 214, 111, 0.5);
-  color: #6fd66f;
+.mfd__freshness.is-live { color: #64d46f; }
+.mfd__freshness.is-stale { color: #ffbd55; }
+
+.mfd__empty {
+  margin: 0 20px 10px;
+  color: #8797a8;
+  font-size: 12px;
 }
 
-/* Un dato vecchio non si mimetizza: si vede che e' vecchio. */
-.tag--stale {
-  border-color: rgba(255, 176, 58, 0.5);
-  color: #ffb03a;
+.mfd__rows {
+  margin: 0 14px 14px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 8px;
+  background: rgba(3, 11, 19, 0.28);
 }
 
-/* Etichetta e valore sulla stessa riga: due righe totali invece di quattro. */
-.facts {
+.mfd__row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 2px 8px;
-  margin: 0 0 10px;
+  grid-template-columns: minmax(170px, 1fr) minmax(120px, .72fr) 104px;
+  align-items: center;
+  gap: 12px;
+  min-height: 41px;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.075);
 }
 
-.facts dt {
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  line-height: 16px;
-  text-transform: uppercase;
+.mfd__row:last-child { border-bottom: 0; }
+
+.mfd__label {
+  color: #d7dee6;
+  font-size: 12px;
 }
 
-.facts dd {
-  margin: 0;
+.mfd__value {
   overflow: hidden;
   color: #fff;
   font-size: 12px;
   font-weight: 800;
-  line-height: 16px;
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.crew {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.crew__member {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 12px;
-}
-
-.crew__member--current {
-  color: #fff;
-  font-weight: 800;
-}
-
-.crew__now {
-  padding: 1px 5px;
-  border: 1px solid rgba(var(--accent-rgb, 40, 183, 255), 0.5);
+.mfd__source {
+  justify-self: end;
+  padding: 3px 6px;
+  border: 1px solid currentColor;
   border-radius: 5px;
-  color: var(--accent, #28b7ff);
   font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
-.note {
-  margin: 8px 0 0;
-  color: rgba(255, 255, 255, 0.35);
-  font-size: 11px;
+.mfd__source--live { color: #5fd36c; }
+.mfd__source--stale { color: #ffbd55; }
+.mfd__source--order { color: #35a9f2; }
+.mfd__source--unavailable { color: #687787; }
+.mfd__source--calculated { color: #788695; }
+
+.mfd__row--stop {
+  min-height: 52px;
+  margin-top: 2px;
+}
+
+.mfd__value--time {
+  color: #ffd738;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: .04em;
+}
+
+.mfd__order {
+  margin: 0 14px 14px;
+}
+
+@media (max-width: 760px) {
+  .mfd__row {
+    grid-template-columns: minmax(120px, 1fr) minmax(92px, .72fr);
+  }
+
+  .mfd__source { display: none; }
 }
 </style>

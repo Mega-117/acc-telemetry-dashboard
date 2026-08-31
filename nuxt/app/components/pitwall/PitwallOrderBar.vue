@@ -1,14 +1,6 @@
 <script setup lang="ts">
-// ============================================
-// PitwallOrderBar - la riga di comando della pitwall.
-// Stato dell'ordine, elenco di cio' che sto cambiando, e l'unica azione
-// primaria della pagina. Non riassume l'ordine intero: quello e' gia'
-// tutto a schermo nelle schede sotto.
-// ============================================
-
 import { computed } from 'vue'
-import PitwallSyncStrip from '~/components/pitwall/PitwallSyncStrip.vue'
-import { formatStopDuration, type PitwallField, type PitwallOrderStatus, type PitwallStopEstimate } from '~/utils/pitwallPresentation'
+import type { PitwallField, PitwallOrderStatus, PitwallStopEstimate } from '~/utils/pitwallPresentation'
 
 const props = defineProps<{
   status: PitwallOrderStatus
@@ -17,9 +9,14 @@ const props = defineProps<{
   canSend: boolean
 }>()
 
-const stopLabel = computed(() => formatStopDuration(props.stop.seconds))
+const stopLabel = computed(() => {
+  const seconds = props.stop.seconds
+  if (!Number.isFinite(seconds) || seconds <= 0) return '—'
+  const minutes = Math.floor(seconds / 60)
+  const rest = seconds - minutes * 60
+  return `${String(minutes).padStart(2, '0')}:${rest.toFixed(3).padStart(6, '0')}`
+})
 
-/** Il dettaglio delle voci sta nel title: serve solo a chi chiede "perche' tanto?". */
 const stopBreakdown = computed(() => (props.stop.parts.length
   ? props.stop.parts.map(part => `${part.label}: ${part.seconds.toFixed(1).replace('.', ',')} s`).join(' · ')
   : 'Nessun servizio richiesto'))
@@ -28,58 +25,99 @@ const emit = defineEmits<{ send: [] }>()
 </script>
 
 <template>
-  <header class="orderbar">
-    <!--
-      Nessun titolo visibile: la navbar ha gia' PITWALL attivo e sottolineato
-      a pochi pixel da qui. Resta solo per chi naviga con screen reader.
-    -->
-    <h1 class="sr-only">
-      Pitwall
-    </h1>
+  <footer class="orderbar">
+    <h1 class="sr-only">Pitwall</h1>
 
-    <PitwallSyncStrip :status="status" />
+    <div class="orderbar__estimate" :title="stopBreakdown">
+      <span class="orderbar__label">Tempo stop stimato</span>
+      <div class="orderbar__time-row">
+        <strong>{{ stopLabel }}</strong>
+        <span>CALCOLATO</span>
+      </div>
+    </div>
 
-    <ul class="changes">
-      <li
-        v-for="chip in chips"
-        :key="chip.field"
-        class="changes__item"
-      >
-        <span>{{ chip.label }}</span>
-        <strong>{{ chip.value }}</strong>
-        <em v-if="chip.delta">{{ chip.delta }}</em>
-      </li>
-    </ul>
-
-    <p
-      v-if="stop.seconds > 0"
-      class="stop"
-      :title="stopBreakdown"
-    >
-      <span>Sosta</span>
-      <strong>{{ stopLabel }}</strong>
+    <p class="sr-only" aria-live="polite">
+      <strong>{{ status.label }}</strong>
+      <span v-if="chips.length">{{ chips.length }} modifiche</span>
     </p>
 
-    <UiBaseButton
-      variant="primary"
-      :disabled="!canSend"
-      @click="emit('send')"
-    >
-      Invia alla macchina
+    <UiBaseButton variant="primary" :disabled="!canSend" @click="emit('send')">
+      <span>INVIA ALLA MACCHINA</span>
+      <span class="orderbar__arrow" aria-hidden="true">›</span>
     </UiBaseButton>
-  </header>
+  </footer>
 </template>
 
 <style lang="scss" scoped>
 .orderbar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(255px, 38%);
   align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  background: linear-gradient(145deg, rgba(26, 26, 36, 0.98), rgba(12, 12, 18, 0.98));
+  gap: 16px;
+  padding: 11px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.orderbar__estimate {
+  min-width: 0;
+}
+
+.orderbar__label {
+  display: block;
+  margin-bottom: 4px;
+  color: #eef2f6;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.orderbar__time-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.orderbar__time-row strong {
+  color: #ffd738;
+  font-size: 24px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+}
+
+.orderbar__time-row span {
+  padding: 2px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  color: #7d8793;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .05em;
+}
+
+.orderbar :deep(.base-button) {
+  min-height: 51px;
+  justify-content: center;
+  gap: 26px;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #7547e9, #8124f4);
+  box-shadow: 0 8px 24px rgba(111, 46, 232, 0.22);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 850;
+  letter-spacing: .015em;
+}
+
+.orderbar :deep(.base-button:hover:not(:disabled)) {
+  filter: brightness(1.08);
+}
+
+.orderbar__arrow {
+  font-size: 28px;
+  font-weight: 300;
+  line-height: .5;
 }
 
 .sr-only {
@@ -94,76 +132,10 @@ const emit = defineEmits<{ send: [] }>()
   border: 0;
 }
 
-/* Solo le voci che cambiano: il resto e' gia' visibile nelle schede. */
-.changes {
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-  list-style: none;
-}
+@media (max-width: 720px) {
+  .orderbar {
+    grid-template-columns: 1fr;
+  }
 
-.changes__item {
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
-  padding: 5px 9px;
-  border: 1px solid rgba(var(--accent-rgb), 0.35);
-  border-radius: 8px;
-  background: rgba(var(--accent-rgb), 0.1);
-  white-space: nowrap;
 }
-
-.changes__item span {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.changes__item strong {
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.changes__item em {
-  color: var(--accent);
-  font-size: 11px;
-  font-style: normal;
-  font-weight: 900;
-}
-
-/* Quanto resta fermo il pilota: il numero che l'ingegnere dice alla radio. */
-.stop {
-  display: flex;
-  flex: none;
-  align-items: baseline;
-  gap: 6px;
-  margin: 0;
-  padding: 5px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 8px;
-  white-space: nowrap;
-}
-
-.stop span {
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 9px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.stop strong {
-  color: #fff;
-  font-size: 15px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-
 </style>

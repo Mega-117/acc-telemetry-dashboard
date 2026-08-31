@@ -48,6 +48,7 @@ const plan: PitwallPlan = {
   fuelLiters: 48,
   compound: 'dry',
   tyreSet: 3,
+  changeTyres: false,
   driverId: 'driver-2',
   repairBodywork: true,
   repairSuspension: false,
@@ -359,6 +360,11 @@ describe('estimatePitStop', () => {
     expect(estimatePitStop({ ...fermo, driverId: 'driver-1' }, autoFerma).parts)
       .toContainEqual({ label: 'Cambio pilota', seconds: PITWALL_STOP_TIMING.driverSwapSeconds })
     expect(estimatePitStop({ ...fermo, compound: 'wet' }, autoFerma).parts)
+      .toContainEqual({ label: 'Cambio gomme', seconds: PITWALL_STOP_TIMING.tyreChangeSeconds })
+  })
+
+  it('vede la richiesta esplicita di cambio gomme anche senza cambiare set o mescola', () => {
+    expect(estimatePitStop({ ...fermo, changeTyres: true }, autoFerma).parts)
       .toContainEqual({ label: 'Cambio gomme', seconds: PITWALL_STOP_TIMING.tyreChangeSeconds })
   })
 })

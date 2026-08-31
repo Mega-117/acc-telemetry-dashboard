@@ -34,6 +34,7 @@ export interface PitwallPlan {
   fuelLiters: number
   compound: PitwallCompound
   tyreSet: number
+  changeTyres: boolean
   driverId: string | null
   repairBodywork: boolean
   repairSuspension: boolean
@@ -185,7 +186,7 @@ export function resolveDriverName(driverId: string | null, drivers: PitwallDrive
 // ============================================
 
 export const PITWALL_FIELDS = [
-  'FL', 'FR', 'RL', 'RR', 'compound', 'tyreSet', 'fuel', 'driver', 'repairs',
+  'FL', 'FR', 'RL', 'RR', 'compound', 'tyreSet', 'changeTyres', 'fuel', 'driver', 'repairs',
 ] as const
 
 export type PitwallField = (typeof PITWALL_FIELDS)[number]
@@ -208,6 +209,7 @@ export function pitwallChangedFields(plan: PitwallPlan, car: PitwallPlan): Pitwa
     if (field === 'fuel') return clampFuel(plan.fuelLiters) !== clampFuel(car.fuelLiters)
     if (field === 'compound') return clampCompound(plan.compound) !== clampCompound(car.compound)
     if (field === 'tyreSet') return clampTyreSet(plan.tyreSet) !== clampTyreSet(car.tyreSet)
+    if (field === 'changeTyres') return plan.changeTyres !== car.changeTyres
     // Nessun pilota scelto significa "non cambiare": non e' una differenza
     // dalla macchina, e non deve accendere un chip ne' togliere l'Allineato.
     if (field === 'driver') return plan.driverId != null && plan.driverId !== car.driverId
@@ -227,6 +229,7 @@ const FIELD_LABELS: Record<PitwallField, string> = {
   RR: 'RR',
   compound: 'Mescola',
   tyreSet: 'Set',
+  changeTyres: 'Cambio gomme',
   fuel: 'Fuel',
   driver: 'Pilota',
   repairs: 'Riparazioni',
@@ -242,6 +245,7 @@ export function pitwallFieldValue(plan: PitwallPlan, field: PitwallField, driver
   if (field === 'fuel') return formatFuel(plan.fuelLiters)
   if (field === 'compound') return formatCompound(plan.compound)
   if (field === 'tyreSet') return formatTyreSet(plan.tyreSet)
+  if (field === 'changeTyres') return plan.changeTyres ? 'Sì' : 'No'
   if (field === 'driver') return resolveDriverName(plan.driverId, drivers)
   return formatRepairs(plan.repairBodywork, plan.repairSuspension)
 }
@@ -322,7 +326,8 @@ export function estimatePitStop(plan: PitwallPlan, car: PitwallPlan): PitwallSto
   const refuel = litresToAdd / PITWALL_STOP_TIMING.refuelLitresPerSecond
   if (refuel > 0) parts.push({ label: `Rifornimento ${Math.round(litresToAdd)} L`, seconds: refuel })
 
-  const tyresChanged = clampCompound(plan.compound) !== clampCompound(car.compound)
+  const tyresChanged = plan.changeTyres
+    || clampCompound(plan.compound) !== clampCompound(car.compound)
     || clampTyreSet(plan.tyreSet) !== clampTyreSet(car.tyreSet)
   const tyres = tyresChanged ? PITWALL_STOP_TIMING.tyreChangeSeconds : 0
   if (tyres > 0) parts.push({ label: 'Cambio gomme', seconds: tyres })
