@@ -211,6 +211,92 @@ service cloud.firestore {
              && request.resource.data.plan.keys().size() <= 12;
     }
 
+    // === Pit Wall: la stanza e' la gara (PIP-362) ===
+    // Collegarsi a una *persona* non regge in endurance: i piloti si alternano
+    // sulla stessa vettura e chi non guida spegne il PC. La stanza vive qui e
+    // sopravvive a chiunque si spenga; l'ordine lo esegue chi guida adesso.
+    //
+    // Chi puo' entrare non e' un segreto condiviso (niente codici da girare):
+    // e' un elenco di invitati che i membri stessi mantengono. Cosi' la regola
+    // resta una sola lettura di lista, senza `get()` a catena.
+
+    function pitwallRoomDoc(roomId) {
+      return get(/databases/$(database)/documents/pitwallRooms/$(roomId)).data;
+    }
+
+    /** Membro effettivo della stanza: e' entrato, non solo invitato. */
+    function isPitwallRoomMember(roomId) {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/pitwallRooms/$(roomId))
+             && request.auth.uid in pitwallRoomDoc(roomId).memberUids;
+    }
+
+    function validPitwallRoom(roomId) {
+      return request.resource.data.keys().hasAll([
+               'schemaVersion', 'roomId', 'label', 'hostUid', 'memberUids', 'allowedUids', 'createdAt', 'updatedAt'
+             ])
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'roomId', 'label', 'hostUid', 'memberUids', 'allowedUids',
+               'createdAt', 'updatedAt', 'track', 'raceNumber', 'teamName'
+             ])
+             && request.resource.data.schemaVersion == 1
+             && request.resource.data.roomId == roomId
+             && roomId.size() <= 64
+             && request.resource.data.label is string
+             && request.resource.data.label.size() <= 120
+             && request.resource.data.hostUid is string
+             && request.resource.data.memberUids is list
+             && request.resource.data.memberUids.size() <= 16
+             && request.resource.data.allowedUids is list
+             && request.resource.data.allowedUids.size() <= 32
+             && request.resource.data.createdAt is string
+             && request.resource.data.createdAt.size() <= 40
+             && request.resource.data.updatedAt is string
+             && request.resource.data.updatedAt.size() <= 40
+             && isBoundedNullableString(request.resource.data.get('track', null), 80)
+             && isBoundedNullableString(request.resource.data.get('teamName', null), 80)
+             && (request.resource.data.get('raceNumber', null) == null
+                 || request.resource.data.raceNumber is int);
+    }
+
+    /** Chi ha fondato la stanza e quando non si riscrivono mai. */
+    function pitwallRoomIdentityUnchanged() {
+      return request.resource.data.roomId == resource.data.roomId
+             && request.resource.data.hostUid == resource.data.hostUid
+             && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    /** Entrare significa aggiungere se stessi, e nessun altro, ai membri. */
+    function pitwallRoomJoinsSelf() {
+      return request.resource.data.memberUids == resource.data.memberUids.concat([request.auth.uid]);
+    }
+
+    /**
+     * Battito di un membro dentro la stanza.
+     * `driving` e' una dichiarazione, non una prova: chi la legge incrocia il
+     * battito e, se due si dichiarano al volante, ferma l'ordine invece di
+     * indovinare a chi mandarlo.
+     */
+    function validPitwallRoomMember(roomId, memberUid) {
+      return request.resource.data.keys().hasAll([
+               'schemaVersion', 'uid', 'nickname', 'driving', 'updatedAt'
+             ])
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'uid', 'nickname', 'driving', 'updatedAt', 'crew', 'strategy'
+             ])
+             && request.resource.data.schemaVersion == 1
+             && request.resource.data.uid == memberUid
+             && request.resource.data.nickname is string
+             && request.resource.data.nickname.size() <= 60
+             && request.resource.data.driving is bool
+             && request.resource.data.updatedAt is string
+             && request.resource.data.updatedAt.size() <= 40
+             && (request.resource.data.get('crew', null) == null
+                 || (request.resource.data.crew is list && request.resource.data.crew.size() <= 16))
+             && (request.resource.data.get('strategy', null) == null
+                 || validPitwallStrategySnapshot(request.resource.data.strategy));
+    }
+
     function isNullableString(value) {
       return value == null || value is string;
     }
@@ -696,6 +782,66 @@ service cloud.firestore {
     // La telemetria live NON passa da qui: viaggia diretta fra i due PC. Questo
     // ramo porta solo cio' che serve a farsi trovare e, come rete di sicurezza,
     // l'ordine di strategia, che e' raro e piccolo.
+    // === Pit Wall: le stanze (PIP-362) ===
+    // Una stanza per vettura in gara. L'identificativo lo calcola ogni PC dai
+    // dati della sessione ACC, quindi nessuno deve girare codici: chi e' in
+    // quella macchina ci arriva da solo. L'ingegnere al muretto entra perche'
+    // un membro l'ha messo fra gli invitati.
+    match /pitwallRooms/{roomId} {
+      // Vede la stanza chi c'e' dentro e chi e' stato invitato: senza questo
+      // l'invitato non potrebbe nemmeno trovare la porta.
+      allow get: if isSignedIn()
+                 && (request.auth.uid in resource.data.memberUids
+                     || request.auth.uid in resource.data.allowedUids);
+      // L'elenco si filtra sempre sui propri: nessuno enumera le gare altrui.
+      allow list: if isSignedIn()
+                  && (request.auth.uid in resource.data.memberUids
+                      || request.auth.uid in resource.data.allowedUids);
+
+      // Il primo che arriva apre la stanza, e ci entra da solo.
+      allow create: if isSignedIn()
+                    && validPitwallRoom(roomId)
+                    && request.resource.data.hostUid == request.auth.uid
+                    && request.resource.data.memberUids == [request.auth.uid];
+
+      // Due sole cose lecite: un membro aggiorna la stanza (etichetta,
+      // invitati); un invitato entra aggiungendo se stesso e nessun altro.
+      allow update: if isSignedIn()
+                    && validPitwallRoom(roomId)
+                    && pitwallRoomIdentityUnchanged()
+                    && (
+                      request.auth.uid in resource.data.memberUids
+                      || (request.auth.uid in resource.data.allowedUids
+                          && pitwallRoomJoinsSelf()
+                          && request.resource.data.allowedUids == resource.data.allowedUids)
+                    );
+
+      // La stanza non si cancella: e' la memoria della gara. Si svuota da se'
+      // quando i battiti scadono.
+      allow delete: if false;
+
+      // Chi c'e' adesso e chi e' al volante.
+      match /members/{memberUid} {
+        allow get, list: if isPitwallRoomMember(roomId);
+        allow create, update: if isPitwallRoomMember(roomId)
+                              && memberUid == request.auth.uid
+                              && validPitwallRoomMember(roomId, memberUid);
+        allow delete: if isSignedIn() && memberUid == request.auth.uid;
+      }
+
+      // L'ordine si manda alla vettura: lo scrive un membro, lo esegue chi
+      // guida. L'esito lo riscrive solo chi l'ha applicato davvero.
+      match /orders/{orderId} {
+        allow get, list: if isPitwallRoomMember(roomId);
+        allow create: if isPitwallRoomMember(roomId) && validPitwallOrder(orderId);
+        allow update: if isPitwallRoomMember(roomId)
+                      && request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(['status', 'result', 'appliedAt', 'appliedBy'])
+                      && request.resource.data.status in ['applying', 'applied', 'partial', 'failed', 'rejected'];
+        allow delete: if false;
+      }
+    }
+
     match /pitwallSessions/{driverUid} {
       allow get: if isPitwallParticipant(driverUid);
       allow list: if isOwner(driverUid);
