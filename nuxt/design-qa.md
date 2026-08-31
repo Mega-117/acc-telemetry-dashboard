@@ -52,6 +52,36 @@ PASS. The implementation preserves the approved hierarchy and spatial grouping: 
 
 ## Findings
 
+## Supplied-source SVG replacement — 2026-08-31
+
+- Visual truth: `D:/Archivio/Download/download.png` (133 × 246 px, opaque
+  charcoal background).
+- Final implementation: `.codex_tmp/design-qa/pitwall-traced-svg-final.png`
+  at the normal desktop viewport; mobile evidence:
+  `.codex_tmp/design-qa/pitwall-traced-svg-final-mobile-zero-overlap.png`.
+- Normalized focused comparison:
+  `.codex_tmp/design-qa/pitwall-car-source-vs-svg-final.png`; the supplied
+  133 × 246 source and the rendered SVG crop were compared together at
+  133 × 246 pixels.
+- Asset fidelity: PASS. The final file uses a `0 0 133 246` viewBox and
+  path-only colour runs traced from the supplied pixels. It contains no
+  `<image>`, data URL, opaque rectangular background, CSS drawing or manually
+  invented car geometry.
+- Shape: PASS. Roof, hood, windshield, mirrors, doors and rear deck follow the
+  supplied source. The earlier hand-built 120:240 silhouette is superseded.
+- Desktop placement: PASS. The SVG element is 132 × 244 px, has zero measured
+  intersection with all four pressure controls and causes zero horizontal
+  overflow.
+- Mobile placement: PASS. At 390 px the SVG element is 101 × 187 px; measured
+  car/control intersections are `[0, 0, 0, 0]` and horizontal overflow is
+  zero.
+- Typography, colors, copy and controls: unchanged by this asset-only pass.
+- Runtime console: PASS. No browser error was present after the final render.
+- Iteration history: the first threshold trace retained the outline but made
+  interior lines discontinuous (P2, rejected). A palette/run trace preserved
+  the supplied anti-aliasing and interior features; the final opacity and scale
+  were then matched in the real Pitwall before this PASS.
+
 No open P1–P3 fidelity or usability findings after the final correction pass. Dynamic online/MFD values differ from the illustrative source by design and are not a fidelity defect. The floating `FB`/inspector widgets visible in development screenshots belong to the local feedback/dev tooling and are not Pitwall product UI.
 
 final result: passed

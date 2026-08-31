@@ -76,12 +76,13 @@ describe('Pitwall layout approvato', () => {
 
 describe('Pitwall pressioni e sagoma vettura', () => {
   it('usa un asset SVG esterno riusabile, non CSS art', () => {
-    expect(panel).toContain('src="/images/pitwall-car-top.svg?v=4"')
+    expect(panel).toContain('src="/images/pitwall-car-top.svg?v=5"')
     expect(carSvg).toContain('<svg')
-    expect(carSvg).toContain('viewBox="0 0 120 240"')
+    expect(carSvg).toContain('viewBox="0 0 133 246"')
     expect(carSvg).toContain('Sagoma vettura vista dall\'alto')
-    expect(carSvg).toContain('id="front"')
-    expect(carSvg).toContain('id="rear"')
+    expect(carSvg).toContain('id="body"')
+    expect(carSvg).toContain('id="trace-1"')
+    expect(carSvg).not.toContain('<image')
   })
 
   it('dispone FL FR RL RR attorno alla sagoma', () => {
@@ -108,7 +109,7 @@ describe('Pitwall pressioni e sagoma vettura', () => {
 
   it('mantiene il setup pneumatici leggibile e la mappa proporzionata al mockup', () => {
     expect(panel).toContain('grid-template-columns: minmax(0,1fr) 155px')
-    expect(panel).toContain('width: 112px; height: 224px')
+    expect(panel).toContain('width: 132px; height: 244px')
     expect(panel).toContain('width: 140px')
     expect(panel).toContain('.tyre-settings :deep(.field--bare) { display: grid')
     expect(panel).toContain('.tyre-settings :deep(.field__head) { white-space: nowrap; }')
@@ -118,7 +119,7 @@ describe('Pitwall pressioni e sagoma vettura', () => {
     expect(panel).toContain('@media (min-width: 1121px) and (max-width: 1280px)')
     expect(panel).toContain('@media (max-width: 480px)')
     expect(panel).toContain('.pressure-map { min-height: 348px; }')
-    expect(panel).toContain('.car-silhouette { top: 84px; width: 88px; height: 176px; }')
+    expect(panel).toContain('.car-silhouette { top: 79px; width: 101px; height: 187px; }')
     expect(panel).toContain('grid-template-columns: 44px 52px 44px')
     expect(panel).toContain('.recent-list { max-height: none; overflow-y: visible; }')
   })
