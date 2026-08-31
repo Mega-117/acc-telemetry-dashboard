@@ -379,3 +379,60 @@ describe('il battito non spreca il piano gratuito', () => {
     handle.stop()
   })
 })
+
+describe('quando il pilota non sta guidando', () => {
+  function startWith(accReady: boolean, accTransient: boolean, reason: string) {
+    return startPitwallDriverLink({
+      db: {} as never,
+      driverUid: DRIVER,
+      sessionId: 's-1',
+      electronApi: {
+        pitwallSubmitRemoteOrder: async (payload) => {
+          mocks.submitted.push(payload)
+          return mocks.submitResult as never
+        },
+        pitwallGetLinkStatus: async () => ({
+          trustedSender: true,
+          driverUid: DRIVER,
+          applying: false,
+          accReady,
+          accReason: reason,
+          accTransient
+        })
+      },
+      now: () => Date.parse('2026-08-30T15:00:00.000Z'),
+      log: { warn: () => {}, error: () => {} }
+    })
+  }
+
+  it('rifiuta subito invece di accodare per cinque minuti', async () => {
+    // Il difetto trovato in prova live: l'applicatore rifiutava, ma il
+    // controllo preliminare accodava e all'applicatore non ci arrivava mai.
+    const handle = startWith(false, false, 'Il pilota non sta guidando.')
+    await settle()
+    mocks.orderListener?.(orderSnapshot([{ id: 'ordine-1' }]))
+    await settle()
+
+    // Nessun tasto verso ACC.
+    expect(mocks.submitted).toHaveLength(0)
+    // L'esito e' scritto subito, col motivo, invece di restare in attesa.
+    const written = mocks.updates.filter(entry => entry.path.endsWith('orders/ordine-1'))
+    expect(written).toHaveLength(1)
+    expect(written[0]?.data).toMatchObject({ status: 'rejected' })
+    expect((written[0]?.data.result as { reason: string }).reason).toMatch(/non sta guidando/i)
+    handle.stop()
+  })
+
+  it('la telemetria che deve ancora arrivare si aspetta, non si rifiuta', async () => {
+    const handle = startWith(false, true, 'Telemetria ACC non ancora pronta.')
+    await settle()
+    mocks.orderListener?.(orderSnapshot([{ id: 'ordine-2' }]))
+    await settle()
+
+    expect(mocks.submitted).toHaveLength(0)
+    // Nessun esito scritto: l'ordine resta in coda e riprova.
+    expect(mocks.updates.filter(entry => entry.path.endsWith('orders/ordine-2'))).toHaveLength(0)
+    expect(handle.waitingReason()).toMatch(/non ancora pronta/i)
+    handle.stop()
+  })
+})

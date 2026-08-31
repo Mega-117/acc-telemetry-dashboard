@@ -93,6 +93,10 @@ export interface PitwallDriverElectronApi {
     /** ACC e' pronto a ricevere adesso. Letto senza toccare il gioco. */
     accReady?: boolean
     accReason?: string | null
+    /** L'impedimento passa da solo: aspettare ha senso, rifiutare no. */
+    accTransient?: boolean
+    /** driving | stopped | menu | offline: cosa sta facendo il pilota. */
+    driverState?: string
   }>
   pitwallGetStrategyState?: () => Promise<{
     live: boolean
@@ -248,14 +252,41 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
     // input, nessun overlay sospeso. Solo quando la risposta e' si' si va
     // avanti. Chiedere provando significava rubare il primo piano al pilota a
     // ogni tentativo, per tutta l'attesa.
+    let notReady: { reason: string, transient: boolean } | null = null
     try {
       const status = await electronApi.pitwallGetLinkStatus?.()
       if (status && status.accReady === false) {
-        waitingReason = status.accReason ?? 'ACC non e ancora pronto.'
-        return
+        notReady = {
+          reason: status.accReason ?? 'ACC non e ancora pronto.',
+          transient: status.accTransient !== false,
+        }
       }
     } catch {
       // Stato non leggibile: si prova comunque, ma una sola volta per giro.
+    }
+
+    // Solo cio' che passa da solo merita di essere aspettato. Se dipende da
+    // cosa sta facendo il pilota - fermo, nei menu, fuori sessione - l'ordine
+    // si chiude subito dicendolo: l'ingegnere lo rimanda quando e' in guida,
+    // invece di vederselo partire da solo qualche minuto dopo.
+    if (notReady?.transient) {
+      waitingReason = notReady.reason
+      return
+    }
+    if (notReady) {
+      handled.add(order.orderId)
+      waiting.delete(order.orderId)
+      waitingReason = null
+      try {
+        await trackedUpdateDoc(doc(ordersRef, order.orderId), {
+          status: 'rejected',
+          appliedAt: new Date(now()).toISOString(),
+          result: { reason: notReady.reason, fields: {} },
+        }, 'pitwall.publishOutcome')
+      } catch (error) {
+        log.error?.('[PITWALL] rifiuto non scritto sull ordine:', (error as Error)?.message)
+      }
+      return
     }
 
     handled.add(order.orderId)
