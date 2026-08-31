@@ -422,12 +422,29 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
     }
   }
 
-  /** Pre-autorizza qualcuno senza attendere che chieda. */
+  /**
+   * Pre-autorizza qualcuno senza attendere che chieda.
+   *
+   * Se il permesso esiste gia' (una vecchia richiesta, anche revocata) si
+   * aggiorna solo lo stato: riscrivere l'intero documento cambierebbe
+   * `createdBy` e le regole - giustamente - lo negherebbero.
+   */
   async function preAuthorise(engineerToTrust: string): Promise<{ ok: true } | { ok: false, reason: string }> {
     const grant = buildPitwallPreAuthorisation(engineerUid, engineerToTrust, nowIso(now))
     if (!grant) return { ok: false, reason: 'Utente non valido.' }
+    const ref = doc(db, 'pitwallGrants', grant.id)
     try {
-      await trackedSetDoc(doc(db, 'pitwallGrants', grant.id), grant.data, 'pitwall.preAuthorise')
+      const existing = await trackedGetDoc(ref, 'pitwall.preAuthorise')
+      if (existing.exists()) {
+        await trackedUpdateDoc(ref, {
+          status: 'granted',
+          scope: 'always',
+          expiresAtMs: null,
+          updatedAt: nowIso(now),
+        }, 'pitwall.preAuthorise')
+        return { ok: true }
+      }
+      await trackedSetDoc(ref, { ...grant.data, scope: 'always', expiresAtMs: null }, 'pitwall.preAuthorise')
       return { ok: true }
     } catch (error) {
       return { ok: false, reason: (error as Error)?.message || 'Pre-autorizzazione rifiutata.' }

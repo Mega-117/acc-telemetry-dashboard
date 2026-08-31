@@ -247,7 +247,10 @@ describe('confronto ordine <-> macchina', () => {
   })
 
   it('vede il cambio pilota e le riparazioni', () => {
-    expect(pitwallChangedFields({ ...plan, driverId: null }, car)).toEqual(['driver'])
+    // Nessun pilota scelto significa "non cambiare", non una differenza: il
+    // chip si accende solo quando si chiede un pilota diverso da chi guida.
+    expect(pitwallChangedFields({ ...plan, driverId: null }, car)).toEqual([])
+    expect(pitwallChangedFields({ ...plan, driverId: 'driver-99' }, car)).toEqual(['driver'])
     expect(pitwallChangedFields({ ...plan, repairSuspension: true }, car)).toEqual(['repairs'])
   })
 })

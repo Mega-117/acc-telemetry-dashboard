@@ -208,7 +208,9 @@ export function pitwallChangedFields(plan: PitwallPlan, car: PitwallPlan): Pitwa
     if (field === 'fuel') return clampFuel(plan.fuelLiters) !== clampFuel(car.fuelLiters)
     if (field === 'compound') return clampCompound(plan.compound) !== clampCompound(car.compound)
     if (field === 'tyreSet') return clampTyreSet(plan.tyreSet) !== clampTyreSet(car.tyreSet)
-    if (field === 'driver') return (plan.driverId ?? null) !== (car.driverId ?? null)
+    // Nessun pilota scelto significa "non cambiare": non e' una differenza
+    // dalla macchina, e non deve accendere un chip ne' togliere l'Allineato.
+    if (field === 'driver') return plan.driverId != null && plan.driverId !== car.driverId
     return plan.repairBodywork !== car.repairBodywork || plan.repairSuspension !== car.repairSuspension
   })
 }

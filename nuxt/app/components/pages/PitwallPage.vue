@@ -412,7 +412,17 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
           <ul v-if="link.searchResults.value.length" class="links__list">
             <li v-for="found in link.searchResults.value" :key="found.uid" class="links__item">
               <span class="links__name">{{ found.nickname }}</span>
+              <!-- Due ruoli, due verbi: "Chiedi" per assistere lui (deciderà
+                   lui), "Pre-autorizza" perché possa assistere te da subito. -->
               <button type="button" class="links__btn" @click="askLink(found.uid)">Chiedi</button>
+              <button
+                type="button"
+                class="links__btn links__btn--ghost"
+                title="Autorizzalo in anticipo a farti da ingegnere"
+                @click="link.preAuthorise(found.uid)"
+              >
+                Pre-autorizza
+              </button>
             </li>
           </ul>
         </div>
