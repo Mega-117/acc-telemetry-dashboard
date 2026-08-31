@@ -34,14 +34,31 @@ describe('SessionDetailPanelMode', () => {
 
     expect(advancedTab.attributes('aria-selected')).toBe('true')
     expect(standardPanel.attributes('style')).toContain('display: none')
-    expect(wrapper.get('[data-testid="session-advanced-preview"]').text()).toContain('Lettura dello stint #2')
-    expect(wrapper.get('[data-testid="session-advanced-preview"]').text()).toContain('1 / 3')
-    expect(wrapper.get('[data-testid="session-advanced-preview"]').text()).toContain('Mock esplorativo')
+    const advancedPanel = wrapper.get('[data-testid="session-advanced-preview"]')
+    expect(advancedPanel.text()).toContain('Debrief allenamento')
+    expect(advancedPanel.text()).toContain('1 / 3')
+    expect(advancedPanel.text()).toContain('Mock esplorativo')
 
     await standardTab.trigger('click')
 
     expect(standardTab.attributes('aria-selected')).toBe('true')
     expect(standardPanel.attributes('style') ?? '').not.toContain('display: none')
+  })
+
+  it('emette mode-change a ogni cambio reale di modalita', async () => {
+    const wrapper = mount(SessionDetailPanelMode, {
+      props: { stintNumber: 1, stintType: 'Q', laps: [] },
+      slots: { default: '<div>Standard</div>' }
+    })
+
+    const advancedTab = wrapper.get('#session-detail-advanced-tab')
+
+    await advancedTab.trigger('click')
+    // Click ripetuto sulla stessa modalita': nessun evento duplicato.
+    await advancedTab.trigger('click')
+    await wrapper.get('#session-detail-standard-tab').trigger('click')
+
+    expect(wrapper.emitted('mode-change')).toEqual([['advanced'], ['standard']])
   })
 
   it('aggiorna il contesto dello stint senza cambiare la modalità scelta', async () => {
@@ -54,7 +71,7 @@ describe('SessionDetailPanelMode', () => {
     await wrapper.setProps({ stintNumber: 4, stintType: 'R' })
 
     expect(wrapper.get('#session-detail-advanced-tab').attributes('aria-selected')).toBe('true')
-    expect(wrapper.get('[data-testid="session-advanced-preview"]').text()).toContain('Lettura dello stint #4')
+    expect(wrapper.find('[data-testid="session-advanced-preview"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('Gara · Stint #4')
   })
 })

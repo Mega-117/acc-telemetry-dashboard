@@ -93,6 +93,9 @@ const chartRef = ref<SessionChartRef | null>(null)
 
 // Layout mode for Stint Stats Card (1-5 variants)
 const stintLayoutMode = ref<1 | 2 | 3 | 4 | 5>(1)
+// Modalita' del pannello dettaglio: in 'advanced' la colonna stint collassa
+// e il debrief occupa l'intero container (PIP-361).
+const detailPanelMode = ref<'standard' | 'advanced'>('standard')
 // Racing style theme - fixed to gold
 const racingStyle = ref<'gold'>('gold')
 // Compare table style mode: A=Gold, B=DualColor, C=Neutral, D=Gold+Badge
@@ -2533,9 +2536,15 @@ const gripZones = computed(() => {
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->
     <!-- ========================================== -->
-    <div class="master-detail">
-      <!-- MASTER: Stint List with Header -->
-      <aside class="master">
+    <div
+      class="master-detail"
+      :class="{ 'master-detail--advanced': detailPanelMode === 'advanced' }"
+    >
+      <!-- MASTER: Stint List with Header (collassata in modalita' Avanzata) -->
+      <aside
+        v-show="detailPanelMode !== 'advanced'"
+        class="master"
+      >
         <!-- <h2 class="master-title">Stint ({{ session.stints.length }})</h2> -->
         
         <!-- CONTROL PANEL - Simplified 
@@ -2782,6 +2791,7 @@ const gripZones = computed(() => {
           :stint-number="displayedStintNumber"
           :stint-type="displayedStint?.type"
           :laps="displayedStintLaps"
+          @mode-change="detailPanelMode = $event"
         >
         <!-- Compare header removed per user request -->
 
@@ -3516,6 +3526,7 @@ const gripZones = computed(() => {
 
 // MASTER / DETAIL
 .master-detail { display: grid; grid-template-columns: 380px 1fr; gap: 32px; flex: 1; min-height: 0; align-items: start; }
+.master-detail--advanced { grid-template-columns: 1fr; }
 
 // MASTER
 .master {

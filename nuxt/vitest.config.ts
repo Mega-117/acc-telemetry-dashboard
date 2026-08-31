@@ -36,6 +36,12 @@ export default defineConfig({
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
         'app/components/session-detail/SessionDetailPanelMode.vue',
+        'app/components/session-detail/SessionAdvancedDebrief.vue',
+        'app/components/session-detail/advanced/AdvancedDebriefContext.vue',
+        'app/components/session-detail/advanced/AdvancedDebriefStintsPace.vue',
+        'app/components/session-detail/advanced/AdvancedDebriefTrackAnalysis.vue',
+        'app/components/session-detail/advanced/AdvancedDebriefActions.vue',
+        'app/components/session-detail/advanced/AdvancedDebriefHistory.vue',
         // ── Phase 1–2: services e utils ──────────────────────────────────
         'app/config/firebaseRuntimeTarget.ts',
         'app/services/auth/authService.ts',

@@ -1,0 +1,224 @@
+// Stili condivisi tra le bande del debrief allenamento avanzato (PIP-361).
+// Ogni componente banda li importa con @use: unica fonte nel codice,
+// selettori scoped per componente in output.
+@use 'variables' as *;
+
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+.tone-ok { color: $accent-success; }
+.tone-warn { color: $accent-warning; }
+.tone-bad { color: $accent-danger-light; }
+.tone-gold { color: $racing-gold; }
+
+.band {
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  background: linear-gradient(145deg, rgba(27, 28, 39, 0.96), rgba(12, 12, 18, 0.96));
+}
+
+.band-title {
+  margin: 0 0 12px;
+  color: rgba(255, 255, 255, 0.46);
+  font: 800 10px/1 'Outfit', sans-serif;
+  letter-spacing: 1.35px;
+  text-transform: uppercase;
+}
+
+.band-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  .band-title { margin-bottom: 12px; }
+}
+
+.band-caption {
+  margin: 12px 0 0;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 10px;
+  line-height: 1.55;
+}
+
+.band-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+
+  &--map { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); }
+
+  @media (max-width: 1180px) {
+    &,
+    &--map { grid-template-columns: 1fr; }
+  }
+}
+
+.mini-title {
+  display: block;
+  margin-bottom: 6px;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
+
+.adv-chip {
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 10px;
+
+  strong { color: rgba(255, 255, 255, 0.88); }
+}
+
+.adv-filter-row {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.adv-filter {
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 5px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+
+  &--on {
+    border-color: rgba(255, 215, 0, 0.4);
+    background: rgba(255, 215, 0, 0.08);
+    color: $racing-gold;
+  }
+}
+
+.adv-badge {
+  padding: 5px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.5px;
+
+  &--ok { border-color: rgba($accent-success, 0.4); color: $accent-success; background: rgba($accent-success, 0.07); }
+  &--warn { border-color: rgba($accent-warning, 0.4); color: $accent-warning; background: rgba($accent-warning, 0.07); }
+  &--gold { border-color: rgba(255, 215, 0, 0.35); color: $racing-gold; background: rgba(255, 215, 0, 0.07); }
+}
+
+.adv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+
+  th {
+    padding: 6px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  td {
+    padding: 7px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .row-gold td { color: $racing-gold; }
+}
+
+.adv-link {
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.plan-list {
+  margin: 0;
+  display: grid;
+  gap: 8px;
+
+  div {
+    display: grid;
+    grid-template-columns: 92px 1fr;
+    gap: 10px;
+    align-items: baseline;
+  }
+
+  dt {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.9px;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  dd {
+    margin: 0;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 11px;
+    line-height: 1.45;
+  }
+}
+
+.chart-frame {
+  overflow: hidden;
+  border-radius: 7px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    rgba(0, 0, 0, 0.2);
+  background-size: 100% 34px, 64px 100%, auto;
+
+  svg { display: block; width: 100%; }
+}
+
+.chart-axis {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 12px 9px;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+}
+
+.coach-box {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-left: 2px solid $racing-gold;
+  background: rgba(255, 215, 0, 0.05);
+
+  p { margin: 0; color: rgba(255, 255, 255, 0.8); font-size: 12px; }
+}
+
+.risk-box {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba($accent-warning, 0.3);
+  border-radius: 7px;
+  background: rgba($accent-warning, 0.06);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.fuel-line {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 11px;
+  line-height: 1.65;
+}
