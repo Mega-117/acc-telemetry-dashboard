@@ -233,13 +233,27 @@ describe('Pitwall: cosa e reale e cosa e ancora segnaposto', () => {
     expect(panel).toContain('invite__btn--asked')
   })
 
+  it('il pannello Piloti e una sezione sola, a griglia 2x2 allineata', () => {
+    // Feedback di review, due volte: prima le sezioni impilate sembravano
+    // tutte la stessa cosa; poi quattro card sparse erano disallineate. La
+    // forma finale: una griglia a scacchiera con linee condivise (gap 1px sul
+    // fondo che fa da divisore), celle sempre presenti anche vuote, titolo
+    // con quadratino colorato per categoria nella stessa posizione.
+    expect(panel).toContain('class="pilots__cell"')
+    expect((panel.match(/class="pilots__cell"/g) ?? []).length).toBe(4)
+    expect(panel).toContain('--cell-accent')
+    expect(panel).toContain('pilots__subtitle')
+    expect(panel).toMatch(/\.pilots \{[\s\S]*?grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/)
+    expect(panel).toMatch(/\.pilots \{[\s\S]*?gap: 1px/)
+    expect(panel).toContain('Niente in sospeso.')
+  })
+
   it('il pannello Piloti sostituisce la select nativa illeggibile', () => {
     // La select nativa mostrava testo bianco su bianco sul tema scuro.
     expect(panel).not.toContain('<select')
     expect(panel).toContain('class="pilots"')
     expect(panel).toContain('I tuoi piloti')
-    expect(panel).toContain('Richieste inviate')
-    expect(panel).toContain('Collegamenti passati')
+    expect(panel).toContain('Richieste e passati')
     expect(panel).toContain('Cerca un pilota')
     expect(panel).toContain('Chi puo assistere te')
   })

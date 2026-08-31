@@ -422,15 +422,22 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
       </section>
 
       <!--
-        Il pannello Piloti: quattro liste nell'ordine in cui servono. Chi e'
-        pronto (pre-autorizzati "sempre" in cima), chi deve ancora rispondere,
-        chi c'e' stato in passato, e la ricerca per aggiungere qualcuno. In
-        fondo, l'altra faccia: chi puo' assistere te.
+        Il pannello Piloti: UNA sezione, dentro una griglia 2x2 a scacchiera.
+        Le celle condividono le stesse linee di divisione e gli stessi bordi:
+        tutto allineato, niente scatole sparse. Le celle esistono sempre,
+        anche vuote, cosi' la griglia non balla quando i dati cambiano.
+
+          I TUOI PILOTI            | CERCA UN PILOTA
+          RICHIESTE E PASSATI      | CHI PUO ASSISTERE TE
       -->
       <section v-if="showLinkPanel" class="pilots">
-        <div v-if="link.pilots.value.length" class="pilots__section">
+        <div class="pilots__cell" style="--cell-accent: #6fd66f">
           <h3 class="pilots__title">I tuoi piloti</h3>
-          <ul class="pilots__list">
+          <p class="pilots__subtitle">pronti: clicca e ti colleghi</p>
+          <p v-if="!link.pilots.value.length" class="pilots__note">
+            Nessuno ancora: cerca un pilota qui a destra e chiedigli il collegamento.
+          </p>
+          <ul v-else class="pilots__list">
             <li v-for="pilot in link.pilots.value" :key="pilot.driverUid" class="pilots__row">
               <span class="pilots__dot" :class="pilot.reachable ? 'pilots__dot--on' : 'pilots__dot--off'" />
               <span class="pilots__name">{{ pilot.nickname }}</span>
@@ -450,42 +457,14 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
           </ul>
         </div>
 
-        <div v-if="link.pendingOutgoing.value.length" class="pilots__section">
-          <h3 class="pilots__title">Richieste inviate</h3>
-          <ul class="pilots__list">
-            <li v-for="pending in link.pendingOutgoing.value" :key="pending.driverUid" class="pilots__row">
-              <span class="pilots__wait">⏳</span>
-              <span class="pilots__name">{{ pending.nickname }}</span>
-              <span class="pilots__meta">
-                in attesa che autorizzi
-                <template v-if="pending.requestedScope">(chiesto: {{ pending.requestedScope === 'always' ? 'sempre' : 'per oggi' }})</template>
-              </span>
-              <button type="button" class="pilots__btn pilots__btn--ghost" @click="link.withdrawRequest(pending.driverUid)">
-                Ritira
-              </button>
-            </li>
-          </ul>
-        </div>
-
-        <div v-if="link.pastOutgoing.value.length" class="pilots__section">
-          <h3 class="pilots__title">Collegamenti passati</h3>
-          <ul class="pilots__list">
-            <li v-for="past in link.pastOutgoing.value" :key="past.driverUid" class="pilots__row">
-              <span class="pilots__name">{{ past.nickname }}</span>
-              <span class="pilots__meta">{{ pastLabel(past) }}</span>
-              <button type="button" class="pilots__btn" @click="askLink(past.driverUid, 'once')">Chiedi per oggi</button>
-              <button type="button" class="pilots__btn" @click="askLink(past.driverUid, 'always')">Chiedi sempre</button>
-            </li>
-          </ul>
-        </div>
-
-        <div class="pilots__section">
+        <div class="pilots__cell" style="--cell-accent: var(--accent)">
           <h3 class="pilots__title">Cerca un pilota</h3>
+          <p class="pilots__subtitle">scrivi il nome: la ricerca parte da sola</p>
           <input
             v-model="link.searchTerm.value"
             class="pilots__input"
             type="search"
-            placeholder="Nome del pilota — la ricerca parte da sola"
+            placeholder="Nome del pilota…"
             aria-label="Cerca un pilota per nome"
             @input="onSearchInput"
           >
@@ -507,8 +486,40 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
           </ul>
         </div>
 
-        <div class="pilots__section">
+        <div class="pilots__cell" style="--cell-accent: #ffb03a">
+          <h3 class="pilots__title">Richieste e passati</h3>
+          <p class="pilots__subtitle">in attesa di un si, o da richiedere</p>
+          <p v-if="!link.pendingOutgoing.value.length && !link.pastOutgoing.value.length" class="pilots__note">
+            Niente in sospeso.
+          </p>
+          <template v-else>
+            <ul v-if="link.pendingOutgoing.value.length" class="pilots__list">
+              <li v-for="pending in link.pendingOutgoing.value" :key="pending.driverUid" class="pilots__row">
+                <span class="pilots__wait">⏳</span>
+                <span class="pilots__name">{{ pending.nickname }}</span>
+                <span class="pilots__meta">
+                  in attesa
+                  <template v-if="pending.requestedScope">(chiesto: {{ pending.requestedScope === 'always' ? 'sempre' : 'per oggi' }})</template>
+                </span>
+                <button type="button" class="pilots__btn pilots__btn--ghost" @click="link.withdrawRequest(pending.driverUid)">
+                  Ritira
+                </button>
+              </li>
+            </ul>
+            <ul v-if="link.pastOutgoing.value.length" class="pilots__list">
+              <li v-for="past in link.pastOutgoing.value" :key="past.driverUid" class="pilots__row">
+                <span class="pilots__name">{{ past.nickname }}</span>
+                <span class="pilots__meta">{{ pastLabel(past) }}</span>
+                <button type="button" class="pilots__btn" @click="askLink(past.driverUid, 'once')">Chiedi per oggi</button>
+                <button type="button" class="pilots__btn" @click="askLink(past.driverUid, 'always')">Chiedi sempre</button>
+              </li>
+            </ul>
+          </template>
+        </div>
+
+        <div class="pilots__cell" style="--cell-accent: #c792ea">
           <h3 class="pilots__title">Chi puo assistere te</h3>
+          <p class="pilots__subtitle">tu al volante: chi comanda la tua sosta</p>
           <p v-if="!trustedEngineers.length" class="pilots__note">
             Nessuno, per ora. Quando qualcuno te lo chiede compare il riquadro in cima alla pagina.
           </p>
@@ -924,30 +935,59 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
   color: rgba(255, 255, 255, 0.45);
 }
 
-// Il pannello Piloti: una colonna sola, sezioni in fila nell'ordine in cui
-// servono. Niente griglia a due colonne: le liste si leggono dall'alto.
+// Il pannello Piloti: UNA sezione con dentro una griglia 2x2 a scacchiera.
+// Il trucco: il contenitore fa da colore delle linee, le celle opache stanno
+// sopra con 1px di distanza. Le divisioni sono quindi linee condivise e
+// perfettamente allineate, non cornici di scatole indipendenti.
 .pilots {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 12px;
-  background: rgba(12, 12, 18, 0.9);
+  background: rgba(255, 255, 255, 0.14);
 }
 
+.pilots__cell {
+  min-width: 0;
+  padding: 10px 12px 12px;
+  background: #12121a;
+}
+
+// Il titolo di cella: quadratino colorato per categoria + etichetta. Stessa
+// posizione in ogni cella, cosi' l'occhio trova subito le quattro zone.
 .pilots__title {
-  margin: 0 0 6px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
   font-size: 11px;
   font-weight: 900;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255, 255, 255, 0.55);
+  color: #fff;
 }
 
-.pilots__section + .pilots__section {
-  padding-top: 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+.pilots__title::before {
+  content: '';
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--cell-accent, rgba(255, 255, 255, 0.4));
+}
+
+.pilots__subtitle {
+  margin: 2px 0 8px 15px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.pilots__list + .pilots__list {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.12);
 }
 
 .pilots__list {
@@ -967,6 +1007,11 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
   min-height: 32px;
   font-size: 13px;
   color: #fff;
+}
+
+// I bottoni stanno tutti a destra, incolonnati: l'occhio sa dove cliccare.
+.pilots__row .pilots__btn:first-of-type {
+  margin-left: auto;
 }
 
 .pilots__name {
@@ -1253,6 +1298,10 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
 
 @media (max-width: 1000px) {
   .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pilots {
     grid-template-columns: 1fr;
   }
 }
