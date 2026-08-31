@@ -3,9 +3,12 @@ import {
   PITWALL_GRANT_STATUSES,
   PITWALL_ORDER_STATUSES,
   PITWALL_TERMINAL_ORDER_STATUSES,
+  boundPitwallCrew,
+  boundPitwallStrategy,
   buildPitwallGrantRequest,
   buildPitwallOrderDocument,
   buildPitwallPreAuthorisation,
+  describePitwallGrantScope,
   describePitwallLinkError,
   describePitwallOrderStatus,
   isPitwallGrantUsable,
@@ -208,5 +211,79 @@ describe('cercare un utente senza badare alle maiuscole', () => {
     expect(matchesPitwallSearch('RICO117', 'RIC')).toBe(true)
     expect(matchesPitwallSearch('ricoro', 'RI')).toBe(true)
     expect(matchesPitwallSearch('Enrico', 'ri')).toBe(false)
+  })
+})
+
+describe('portata del permesso: solo per oggi contro sempre', () => {
+  const grant = () => ({
+    schemaVersion: 1 as const,
+    driverUid: DRIVER,
+    engineerUid: ENGINEER,
+    status: 'granted' as const,
+    createdBy: DRIVER,
+    createdAt: NOW_ISO,
+    updatedAt: NOW_ISO
+  })
+
+  it('un permesso "solo per oggi" scaduto vale come una revoca', () => {
+    const once = { ...grant(), scope: 'once' as const, expiresAtMs: NOW_MS + 1000 }
+    expect(isPitwallGrantUsable(once, DRIVER, ENGINEER, NOW_MS)).toBe(true)
+    expect(isPitwallGrantUsable(once, DRIVER, ENGINEER, NOW_MS + 1001)).toBe(false)
+  })
+
+  it('"sempre" non scade mai da solo', () => {
+    const always = { ...grant(), scope: 'always' as const, expiresAtMs: null }
+    expect(isPitwallGrantUsable(always, DRIVER, ENGINEER, NOW_MS + 10_000_000)).toBe(true)
+  })
+
+  it('la portata si racconta senza gergo', () => {
+    expect(describePitwallGrantScope({ scope: 'always', expiresAtMs: null })).toBe('sempre')
+    expect(describePitwallGrantScope({ scope: 'once', expiresAtMs: null })).toBe('solo per oggi')
+    expect(describePitwallGrantScope({ scope: 'once', expiresAtMs: NOW_MS })).toContain('solo per oggi')
+    // Un permesso storico senza portata resta "sempre": era il comportamento
+    // in vigore quando e' stato concesso.
+    expect(describePitwallGrantScope({ scope: null, expiresAtMs: null })).toBe('sempre')
+  })
+})
+
+describe('fotografia della vettura nella presenza', () => {
+  it('l equipaggio si ferma al tetto e i nomi restano corti', () => {
+    const crew = boundPitwallCrew(Array.from({ length: 20 }, (_, index) => ({
+      driverIndex: index,
+      name: 'Nome molto lungo '.repeat(10),
+      current: index === 2
+    })))
+    expect(crew).toHaveLength(16)
+    expect(crew?.[2]?.current).toBe(true)
+    expect(crew?.[0]?.name.length).toBeLessThanOrEqual(60)
+  })
+
+  it('senza equipaggio non si inventa una lista', () => {
+    expect(boundPitwallCrew(null)).toBeNull()
+    expect(boundPitwallCrew([])).toBeNull()
+    expect(boundPitwallCrew('non-una-lista')).toBeNull()
+  })
+
+  it('la strategia tiene solo numeri veri: un valore assente resta assente', () => {
+    const strategy = boundPitwallStrategy({
+      fuelToAdd: 42,
+      tyreSet: null,
+      pressures: { FL: 24.4, FR: 26.1, RL: 24.8, RR: 25.9 },
+      compound: 'wet'
+    }, NOW_ISO)
+    expect(strategy).toEqual({
+      fuelToAdd: 42,
+      tyreSet: null,
+      pressures: { FL: 24.4, FR: 26.1, RL: 24.8, RR: 25.9 },
+      compound: 'wet',
+      updatedAt: NOW_ISO
+    })
+  })
+
+  it('pressioni incomplete o mescola inventata non passano', () => {
+    const strategy = boundPitwallStrategy({ pressures: { FL: 24.4 }, compound: 'intermedia' }, NOW_ISO)
+    expect(strategy?.pressures).toBeNull()
+    expect(strategy?.compound).toBeNull()
+    expect(strategy?.fuelToAdd).toBeNull()
   })
 })

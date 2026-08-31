@@ -24,6 +24,8 @@ import {
 } from '~/composables/useFirebaseTracker'
 import {
   PITWALL_LINK_SCHEMA_VERSION,
+  boundPitwallCrew,
+  boundPitwallStrategy,
   isPitwallOrderSettled,
   pitwallGrantId,
   type PitwallGrant,
@@ -76,6 +78,23 @@ export interface PitwallDriverElectronApi {
     accReady?: boolean
     accReason?: string | null
   }>
+  pitwallGetStrategyState?: () => Promise<{
+    live: boolean
+    fresh: boolean
+    stationaryPit: boolean
+    car: {
+      pressures: Record<'FL' | 'FR' | 'RL' | 'RR', number> | null
+      tyreSet: number | null
+      fuelToAdd: number | null
+      compound: 'dry' | 'wet' | null
+    }
+    crew?: {
+      available: boolean
+      drivers: { driverIndex: number, firstName: string, lastName: string, shortName: string }[]
+      currentDriverIndex: number | null
+    }
+    identity?: { car?: string | null, track?: string | null } | null
+  }>
 }
 
 export interface PitwallDriverLinkOptions {
@@ -85,6 +104,18 @@ export interface PitwallDriverLinkOptions {
   electronApi: PitwallDriverElectronApi
   now?: () => number
   log?: Pick<Console, 'warn' | 'error'>
+  /**
+   * Fotografia piccola e lenta della vettura da allegare alla presenza:
+   * equipaggio reale e strategia nel Pit MFD. Viaggia dentro la stessa
+   * scrittura ogni 30 secondi, quindi non costa nulla in piu'; non e' il
+   * canale di telemetria live. Null = niente da allegare in questo battito.
+   */
+  readCarContext?: () => Promise<{
+    car?: string | null
+    track?: string | null
+    crew?: unknown
+    strategy?: unknown
+  } | null>
 }
 
 export interface PitwallDriverLinkHandle {
@@ -131,15 +162,34 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
   async function publishPresence(context: { car?: string | null, track?: string | null } = {}): Promise<void> {
     if (stopped) return
     lastContext = { ...lastContext, ...context }
+
+    // La fotografia della vettura si rilegge a ogni battito: equipaggio e
+    // strategia MFD veri, non un segnaposto. Se non e' leggibile si pubblica
+    // la sola presenza: meglio un pilota trovabile senza dettagli che uno
+    // sparito perche' un accessorio e' fallito.
+    let carContext: Awaited<ReturnType<NonNullable<typeof options.readCarContext>>> = null
+    try {
+      carContext = await options.readCarContext?.() ?? null
+    } catch {
+      carContext = null
+    }
+    const nowIso = new Date(now()).toISOString()
+    const crew = boundPitwallCrew(carContext?.crew)
+    const strategy = boundPitwallStrategy(carContext?.strategy, nowIso)
+    const car = carContext?.car ?? lastContext.car
+    const track = carContext?.track ?? lastContext.track
+
     try {
       await trackedSetDoc(sessionRef, {
         schemaVersion: PITWALL_LINK_SCHEMA_VERSION,
         driverUid,
         sessionId,
         online: true,
-        updatedAt: new Date(now()).toISOString(),
-        ...(lastContext.car == null ? {} : { car: lastContext.car }),
-        ...(lastContext.track == null ? {} : { track: lastContext.track }),
+        updatedAt: nowIso,
+        ...(car == null ? {} : { car }),
+        ...(track == null ? {} : { track }),
+        ...(crew == null ? {} : { crew }),
+        ...(strategy == null ? {} : { strategy }),
       }, 'pitwall.publishPresence')
     } catch (error) {
       log.warn?.('[PITWALL] presenza non pubblicata:', (error as Error)?.message)

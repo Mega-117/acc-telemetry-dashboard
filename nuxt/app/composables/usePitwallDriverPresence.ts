@@ -100,6 +100,35 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
       driverUid: status.driverUid,
       sessionId: newSessionId(),
       electronApi: bridge,
+      // Fotografia reale della vettura per l'ingegnere: equipaggio dalla
+      // EntryList e strategia dal Pit MFD. Solo con ACC vivo: dati vecchi non
+      // si pubblicano come attuali.
+      readCarContext: async () => {
+        try {
+          const state = await bridge.pitwallGetStrategyState?.()
+          if (!state?.live || !state.fresh) return null
+          const crew = state.crew?.available
+            ? state.crew.drivers.map(member => ({
+                driverIndex: member.driverIndex,
+                name: `${member.firstName} ${member.lastName}`.trim() || member.shortName,
+                current: member.driverIndex === state.crew?.currentDriverIndex,
+              }))
+            : null
+          return {
+            car: state.identity?.car ?? null,
+            track: state.identity?.track ?? null,
+            crew,
+            strategy: {
+              fuelToAdd: state.car?.fuelToAdd ?? null,
+              tyreSet: state.car?.tyreSet ?? null,
+              pressures: state.car?.pressures ?? null,
+              compound: state.car?.compound ?? null,
+            },
+          }
+        } catch {
+          return null
+        }
+      },
     })
     active.value = true
   }

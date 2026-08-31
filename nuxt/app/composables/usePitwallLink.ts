@@ -20,8 +20,17 @@ import {
   describePitwallLinkError,
   describePitwallOrderStatus,
   isPitwallOrderSettled,
+  type PitwallGrantScope,
   type PitwallOrderStatus,
 } from '~/services/pitwall/pitwallLink'
+
+/** Esito per campo dichiarato dal PC del pilota: mai appiattito in un "fatto". */
+export interface PitwallFieldOutcome {
+  outcome: 'verified' | 'selected' | 'not-verifiable' | null
+  requested: unknown
+  observed: unknown
+  reason: string | null
+}
 
 export interface PitwallLinkOptions {
   /** Uid dell'ingegnere collegato. Null finche' non e' autenticato. */
@@ -40,6 +49,8 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   const orderId = ref<string | null>(null)
   const orderStatus = ref<PitwallOrderStatus | null>(null)
   const orderReason = ref<string | null>(null)
+  /** Esito per campo dell'ultimo ordine: verified, selected e not-verifiable. */
+  const orderFields = ref<Record<string, PitwallFieldOutcome>>({})
   /**
    * Numero d'ordine crescente, ricavato dal tempo.
    *
@@ -104,21 +115,33 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   }
 
   /**
-   * Sceglie il pilota da assistere e ne rilegge subito la presenza.
+   * Sceglie il pilota da assistere e ne rilegge subito la presenza, poi la
+   * tiene aggiornata al passo del suo battito (30 s).
    *
    * La presenza si rilegge invece di ascoltarla: cambia lentamente e un
-   * listener costerebbe di piu' senza dire nulla di piu'.
+   * listener costerebbe di piu' senza dire nulla di piu'. Due letture al
+   * minuto, contate dal tracker, solo mentre un pilota e' selezionato.
    */
-  function selectPilot(driverUid: string | null): void {
-    selectedDriverUid.value = driverUid
-    if (!driverUid) return
+  let presenceTimer: ReturnType<typeof setInterval> | null = null
+
+  function refreshSelectedPresence(): void {
+    const driverUid = selectedDriverUid.value
     const engineer = service()
-    if (!engineer) return
+    if (!driverUid || !engineer) return
     void engineer.readPilotPresence(driverUid).then(({ session, reachable }) => {
       pilots.value = pilots.value.map(pilot => (
         pilot.driverUid === driverUid ? { ...pilot, session, reachable } : pilot
       ))
     })
+  }
+
+  function selectPilot(driverUid: string | null): void {
+    selectedDriverUid.value = driverUid
+    if (presenceTimer) clearInterval(presenceTimer)
+    presenceTimer = null
+    if (!driverUid) return
+    refreshSelectedPresence()
+    presenceTimer = setInterval(refreshSelectedPresence, 30_000)
   }
 
   /**
@@ -163,6 +186,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     sending.value = true
     rawError.value = null
     orderReason.value = null
+    orderFields.value = {}
     try {
       const sent = await engineer.sendOrder({ driverUid, plan, revision: nextRevision() })
         .catch((error: unknown) => ({ ok: false as const, reason: (error as Error)?.message || 'Invio non riuscito.' }))
@@ -178,11 +202,18 @@ export function usePitwallLink(options: PitwallLinkOptions) {
       stopOrderWatch = engineer.watchOrder(driverUid, sent.orderId, (document) => {
         if (!document) return
         orderStatus.value = document.status
-        const result = document.result as { reason?: string | null } | undefined
+        const result = document.result as {
+          reason?: string | null
+          fields?: Record<string, PitwallFieldOutcome>
+        } | undefined
         orderReason.value = result?.reason ?? null
+        orderFields.value = result?.fields ?? {}
         if (isPitwallOrderSettled(document.status)) {
           stopOrderWatch?.()
           stopOrderWatch = null
+          // L'ordine e' concluso: la macchina e' cambiata, si rilegge subito
+          // invece di aspettare il prossimo battito.
+          refreshSelectedPresence()
         }
       })
       return true
@@ -223,17 +254,26 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     }
   }
 
-  /** Il pilota concede o toglie: e' l'unico che puo' deciderlo. */
-  async function decide(requesterUid: string, decision: 'granted' | 'revoked'): Promise<void> {
+  /**
+   * Il pilota concede o toglie: e' l'unico che puo' deciderlo. Concedendo
+   * sceglie la portata: "solo per oggi" scade da solo, "sempre" resta.
+   */
+  async function decide(
+    requesterUid: string,
+    decision: 'granted' | 'revoked',
+    scope: PitwallGrantScope = 'always'
+  ): Promise<void> {
     const engineer = service()
     if (!engineer) return
     try {
-      const result = await engineer.decideRequest(requesterUid, decision)
+      const result = await engineer.decideRequest(requesterUid, decision, scope)
       if (!result.ok) {
         rawError.value = result.reason
         return
       }
-      notice.value = decision === 'granted' ? 'Collegamento autorizzato.' : 'Collegamento revocato.'
+      notice.value = decision === 'granted'
+        ? (scope === 'once' ? 'Collegamento autorizzato solo per oggi.' : 'Collegamento autorizzato.')
+        : 'Collegamento revocato.'
       // L'elenco si aggiorna da solo tramite l'ascolto; si rilegge solo se
       // quell'ascolto non e' attivo, per non pagare due volte la stessa cosa.
       if (!stopIncomingWatch) await refreshIncoming()
@@ -298,6 +338,8 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     stopOrderWatch = null
     stopIncomingWatch = null
     stopGrantedWatch = null
+    if (presenceTimer) clearInterval(presenceTimer)
+    presenceTimer = null
   }
 
   onScopeDispose(stop)
@@ -313,6 +355,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     orderId,
     orderStatus,
     orderReason,
+    orderFields,
     orderProgress,
     refreshPilots,
     selectPilot,

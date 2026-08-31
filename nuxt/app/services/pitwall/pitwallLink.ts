@@ -17,6 +17,17 @@ export const PITWALL_GRANT_ID_SEPARATOR = '__'
 export const PITWALL_GRANT_STATUSES = ['pending', 'granted', 'revoked'] as const
 export type PitwallGrantStatus = (typeof PITWALL_GRANT_STATUSES)[number]
 
+/**
+ * Portata del permesso: "solo per questa volta" oppure "sempre".
+ * `once` nasce con una scadenza (`expiresAtMs`); passata quella vale come una
+ * revoca, sia per le regole Firestore sia per il client.
+ */
+export const PITWALL_GRANT_SCOPES = ['once', 'always'] as const
+export type PitwallGrantScope = (typeof PITWALL_GRANT_SCOPES)[number]
+
+/** Quanto dura un "solo per questa volta": copre una giornata di gara. */
+export const PITWALL_GRANT_ONCE_DURATION_MS = 12 * 60 * 60 * 1000
+
 export const PITWALL_ORDER_STATUSES = [
   'pending', 'applying', 'applied', 'partial', 'failed', 'rejected',
 ] as const
@@ -36,6 +47,29 @@ export interface PitwallGrant {
   createdAt: string
   updatedAt: string
   note?: string | null
+  scope?: PitwallGrantScope | null
+  expiresAtMs?: number | null
+}
+
+/** Un membro dell'equipaggio della vettura, dalla EntryList reale. */
+export interface PitwallCrewMember {
+  driverIndex: number
+  name: string
+  /** Sta guidando adesso. */
+  current: boolean
+}
+
+/**
+ * Fotografia della strategia nel Pit MFD del pilota.
+ * Piccola e lenta: viaggia dentro il battito di presenza, non e' telemetria.
+ */
+export interface PitwallStrategySnapshot {
+  fuelToAdd: number | null
+  tyreSet: number | null
+  pressures: Record<'FL' | 'FR' | 'RL' | 'RR', number> | null
+  /** Nota solo dopo che l'applicatore l'ha osservata: null = sconosciuta. */
+  compound: 'dry' | 'wet' | null
+  updatedAt: string
 }
 
 export interface PitwallSession {
@@ -46,6 +80,8 @@ export interface PitwallSession {
   updatedAt: string
   car?: string | null
   track?: string | null
+  crew?: PitwallCrewMember[] | null
+  strategy?: PitwallStrategySnapshot | null
 }
 
 export interface PitwallOrderDocument {
@@ -68,16 +104,77 @@ export function pitwallGrantId(driverUid: string, engineerUid: string): string {
   return `${driverUid}${PITWALL_GRANT_ID_SEPARATOR}${engineerUid}`
 }
 
-/** Un permesso vale solo se concesso e per la coppia attesa. */
+/**
+ * Un permesso vale solo se concesso, per la coppia attesa e non scaduto:
+ * un "solo per questa volta" oltre la scadenza vale come una revoca.
+ */
 export function isPitwallGrantUsable(
   grant: PitwallGrant | null | undefined,
   driverUid: string,
-  engineerUid: string
+  engineerUid: string,
+  nowMs: number = Date.now()
 ): boolean {
   return Boolean(grant)
     && grant!.status === 'granted'
     && grant!.driverUid === driverUid
     && grant!.engineerUid === engineerUid
+    && (grant!.expiresAtMs == null || grant!.expiresAtMs > nowMs)
+}
+
+/** Come si racconta la portata di un permesso, senza gergo. */
+export function describePitwallGrantScope(grant: Pick<PitwallGrant, 'scope' | 'expiresAtMs'> | null | undefined): string {
+  if (!grant) return ''
+  if (grant.scope === 'once' && grant.expiresAtMs != null) {
+    return `solo per oggi (scade alle ${new Date(grant.expiresAtMs).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })})`
+  }
+  if (grant.scope === 'once') return 'solo per oggi'
+  return 'sempre'
+}
+
+/** Tetto dell'equipaggio pubblicato in presenza: come la EntryList di ACC. */
+export const PITWALL_MAX_SESSION_CREW = 16
+
+/** Limita l'equipaggio alle forme che le regole Firestore accettano. */
+export function boundPitwallCrew(crew: unknown): PitwallCrewMember[] | null {
+  if (!Array.isArray(crew) || !crew.length) return null
+  return crew.slice(0, PITWALL_MAX_SESSION_CREW).map((member, index) => {
+    const entry = member as { driverIndex?: unknown, name?: unknown, current?: unknown }
+    return {
+      driverIndex: Number.isInteger(entry?.driverIndex) ? entry.driverIndex as number : index,
+      name: String(entry?.name ?? '').slice(0, 60),
+      current: entry?.current === true,
+    }
+  })
+}
+
+/** Limita la fotografia della strategia e le da' la sua data. */
+export function boundPitwallStrategy(strategy: unknown, nowIso: string): PitwallStrategySnapshot | null {
+  if (!strategy || typeof strategy !== 'object') return null
+  const source = strategy as {
+    fuelToAdd?: unknown
+    tyreSet?: unknown
+    pressures?: Record<string, unknown> | null
+    compound?: unknown
+  }
+  const wheels = ['FL', 'FR', 'RL', 'RR'] as const
+  // `Number(null)` vale 0: un valore assente non deve diventare un numero.
+  const finiteOrNull = (value: unknown): number | null => (
+    value != null && Number.isFinite(Number(value)) ? Number(value) : null
+  )
+  const pressures = source.pressures && typeof source.pressures === 'object'
+    ? Object.fromEntries(wheels
+        .filter(wheel => finiteOrNull(source.pressures?.[wheel]) != null)
+        .map(wheel => [wheel, Number(source.pressures?.[wheel])]))
+    : null
+  return {
+    fuelToAdd: finiteOrNull(source.fuelToAdd),
+    tyreSet: finiteOrNull(source.tyreSet),
+    pressures: pressures && Object.keys(pressures).length === wheels.length
+      ? pressures as PitwallStrategySnapshot['pressures']
+      : null,
+    compound: source.compound === 'dry' || source.compound === 'wet' ? source.compound : null,
+    updatedAt: nowIso,
+  }
 }
 
 /** Un pilota e' raggiungibile se e' online e il suo stato non e' vecchio. */

@@ -1162,6 +1162,82 @@ describe('Pit Wall - sessione, segnalazione e ordini', () => {
     await assertSucceeds(setDoc(doc(driverDb, `pitwallSessions/${DRIVER_UID}`), pitwallSessionPayload({ online: false })))
   })
 
+  it('la presenza porta equipaggio e fotografia strategia, dentro i limiti', async () => {
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(setDoc(doc(driverDb, `pitwallSessions/${DRIVER_UID}`), pitwallSessionPayload({
+      crew: [
+        { driverIndex: 0, name: 'Enrico Rossi', current: false },
+        { driverIndex: 1, name: 'Marco Bianchi', current: true }
+      ],
+      strategy: {
+        fuelToAdd: 42,
+        tyreSet: 3,
+        pressures: { FL: 24.4, FR: 26.1, RL: 24.8, RR: 25.9 },
+        compound: 'wet',
+        updatedAt: '2026-08-30T15:00:00.000Z'
+      }
+    })))
+  })
+
+  it('un equipaggio oltre il tetto o una strategia deforme vengono rifiutati', async () => {
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertFails(setDoc(doc(driverDb, `pitwallSessions/${DRIVER_UID}`), pitwallSessionPayload({
+      crew: Array.from({ length: 17 }, (_, index) => ({ driverIndex: index, name: `Pilota ${index}`, current: false }))
+    })))
+    // Un campo estraneo nella fotografia sarebbe l'inizio di un canale dati.
+    await assertFails(setDoc(doc(driverDb, `pitwallSessions/${DRIVER_UID}`), pitwallSessionPayload({
+      strategy: { fuelToAdd: 42, telemetria: 'no', updatedAt: '2026-08-30T15:00:00.000Z' }
+    })))
+    await assertFails(setDoc(doc(driverDb, `pitwallSessions/${DRIVER_UID}`), pitwallSessionPayload({
+      strategy: { fuelToAdd: 42, compound: 'intermedia', updatedAt: '2026-08-30T15:00:00.000Z' }
+    })))
+  })
+
+  it('un permesso "solo per questa volta" scaduto vale come revocato anche per il server', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({
+        status: 'granted',
+        scope: 'once',
+        expiresAtMs: Date.now() - 60_000
+      }))
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(getDoc(doc(engineerDb, `pitwallSessions/${DRIVER_UID}`)))
+    await assertFails(setDoc(
+      doc(engineerDb, `pitwallSessions/${DRIVER_UID}/orders/ordine-scaduto`),
+      pitwallOrderPayload('ordine-scaduto', ENGINEER_UID)
+    ))
+  })
+
+  it('un permesso "solo per questa volta" ancora valido funziona come sempre', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({
+        status: 'granted',
+        scope: 'once',
+        expiresAtMs: Date.now() + 60 * 60 * 1000
+      }))
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertSucceeds(getDoc(doc(engineerDb, `pitwallSessions/${DRIVER_UID}`)))
+  })
+
+  it('"solo per questa volta" senza scadenza non si puo scrivere', async () => {
+    // Il pilota concede aggiornando il permesso esistente, come fa il client.
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertFails(updateDoc(doc(driverDb, `pitwallGrants/${GRANT_ID}`), {
+      status: 'granted',
+      scope: 'once',
+      expiresAtMs: null,
+      updatedAt: '2026-08-30T16:00:00.000Z'
+    }))
+    await assertSucceeds(updateDoc(doc(driverDb, `pitwallGrants/${GRANT_ID}`), {
+      status: 'granted',
+      scope: 'once',
+      expiresAtMs: Date.now() + 60_000,
+      updatedAt: '2026-08-30T16:00:00.000Z'
+    }))
+  })
+
   it('revocato il permesso, l ingegnere perde subito l accesso', async () => {
     await testEnv.withSecurityRulesDisabled(async (context) => {
       await setDoc(doc(context.firestore(), `pitwallGrants/${GRANT_ID}`), pitwallGrantPayload({ status: 'revoked' }))

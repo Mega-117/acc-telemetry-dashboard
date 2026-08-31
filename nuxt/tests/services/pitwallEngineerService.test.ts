@@ -249,6 +249,25 @@ describe('decidere e revocare', () => {
     expect(mocks.updates[0]?.data).toEqual(expect.objectContaining({ status: 'granted' }))
   })
 
+  it('senza indicazione la concessione vale per sempre, senza scadenza', async () => {
+    await build().decideRequest('ingegnere-2', 'granted')
+    expect(mocks.updates[0]?.data).toEqual(expect.objectContaining({ scope: 'always', expiresAtMs: null }))
+  })
+
+  it('"solo per oggi" nasce con la scadenza che le regole pretendono', async () => {
+    await build().decideRequest('ingegnere-2', 'granted', 'once')
+    const data = mocks.updates[0]?.data as { scope?: string, expiresAtMs?: number }
+    expect(data.scope).toBe('once')
+    expect(typeof data.expiresAtMs).toBe('number')
+    expect(data.expiresAtMs!).toBeGreaterThan(Date.now())
+  })
+
+  it('la revoca non tocca la portata: toglie e basta', async () => {
+    await build().decideRequest('ingegnere-2', 'revoked')
+    expect(mocks.updates[0]?.data).not.toHaveProperty('scope')
+    expect(mocks.updates[0]?.data).toEqual(expect.objectContaining({ status: 'revoked' }))
+  })
+
   it('ritirarsi da un collegamento e una revoca, non una cancellazione', async () => {
     const result = await build().withdraw(DRIVER)
     expect(result).toEqual({ ok: true })

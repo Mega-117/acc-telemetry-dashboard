@@ -45,11 +45,17 @@ service cloud.firestore {
       return /databases/$(database)/documents/pitwallGrants/$(pitwallGrantId(driverUid, engineerUid));
     }
 
-    /** L'utente corrente puo' assistere questo pilota adesso. */
+    /**
+     * L'utente corrente puo' assistere questo pilota adesso.
+     * Un permesso "solo per questa volta" oltre la sua scadenza vale come una
+     * revoca: il controllo sta qui sul server, non solo nel client.
+     */
     function hasPitwallGrant(driverUid) {
       return isSignedIn()
              && exists(pitwallGrantPath(driverUid, request.auth.uid))
-             && get(pitwallGrantPath(driverUid, request.auth.uid)).data.status == 'granted';
+             && get(pitwallGrantPath(driverUid, request.auth.uid)).data.status == 'granted'
+             && (get(pitwallGrantPath(driverUid, request.auth.uid)).data.get('expiresAtMs', null) == null
+                 || get(pitwallGrantPath(driverUid, request.auth.uid)).data.expiresAtMs > request.time.toMillis());
     }
 
     /** Pilota assistito o ingegnere autorizzato: i soli due ruoli del canale. */
@@ -64,7 +70,7 @@ service cloud.firestore {
              ])
              && request.resource.data.keys().hasOnly([
                'schemaVersion', 'driverUid', 'engineerUid', 'status',
-               'createdBy', 'createdAt', 'updatedAt', 'note'
+               'createdBy', 'createdAt', 'updatedAt', 'note', 'scope', 'expiresAtMs'
              ])
              && request.resource.data.schemaVersion == 1
              && request.resource.data.driverUid is string
@@ -78,6 +84,16 @@ service cloud.firestore {
              && request.resource.data.updatedAt is string
              && request.resource.data.updatedAt.size() <= 40
              && isBoundedNullableString(request.resource.data.get('note', null), 200)
+             // Portata del permesso: "solo per questa volta" ha una scadenza
+             // obbligatoria, "sempre" non ne ha. Assenti = "sempre" storico.
+             && (request.resource.data.get('scope', null) == null
+                 || request.resource.data.scope in ['once', 'always'])
+             && (request.resource.data.get('expiresAtMs', null) == null
+                 || (request.resource.data.expiresAtMs is number && request.resource.data.expiresAtMs > 0))
+             && (request.resource.data.get('scope', null) != 'once'
+                 || request.resource.data.get('expiresAtMs', null) != null)
+             && (request.resource.data.get('scope', null) != 'always'
+                 || request.resource.data.get('expiresAtMs', null) == null)
              // Non si chiede un collegamento a un account che non esiste.
              && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.driverUid))
              && exists(/databases/$(database)/documents/publicProfiles/$(request.resource.data.engineerUid));
@@ -99,11 +115,30 @@ service cloud.firestore {
 
     /** Su un grant esistente cambia solo lo stato: le identita' sono fissate. */
     function pitwallGrantIdentityUnchanged() {
-      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'note'])
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'note', 'scope', 'expiresAtMs'])
              && request.resource.data.driverUid == resource.data.driverUid
              && request.resource.data.engineerUid == resource.data.engineerUid
              && request.resource.data.createdBy == resource.data.createdBy
              && request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    /**
+     * Fotografia della strategia nel Pit MFD, dentro la presenza.
+     * Piccola, lenta (stessa scrittura ogni 30 secondi) e limitata: NON e' il
+     * canale di telemetria live, che resta diretto fra i due PC.
+     */
+    function validPitwallStrategySnapshot(snapshot) {
+      return snapshot.keys().hasOnly(['fuelToAdd', 'tyreSet', 'pressures', 'compound', 'updatedAt'])
+             && (snapshot.get('compound', null) == null
+                 || snapshot.compound in ['dry', 'wet'])
+             && (snapshot.get('fuelToAdd', null) == null
+                 || (snapshot.fuelToAdd is number && snapshot.fuelToAdd >= 0 && snapshot.fuelToAdd <= 200))
+             && (snapshot.get('tyreSet', null) == null
+                 || (snapshot.tyreSet is number && snapshot.tyreSet >= 0 && snapshot.tyreSet <= 60))
+             && (snapshot.get('pressures', null) == null
+                 || (snapshot.pressures is map && snapshot.pressures.keys().hasOnly(['FL', 'FR', 'RL', 'RR'])))
+             && snapshot.updatedAt is string
+             && snapshot.updatedAt.size() <= 40;
     }
 
     function validPitwallSession(driverUid) {
@@ -111,7 +146,7 @@ service cloud.firestore {
                'schemaVersion', 'driverUid', 'sessionId', 'online', 'updatedAt'
              ])
              && request.resource.data.keys().hasOnly([
-               'schemaVersion', 'driverUid', 'sessionId', 'online', 'updatedAt', 'car', 'track'
+               'schemaVersion', 'driverUid', 'sessionId', 'online', 'updatedAt', 'car', 'track', 'crew', 'strategy'
              ])
              && request.resource.data.schemaVersion == 1
              && request.resource.data.driverUid == driverUid
@@ -121,7 +156,12 @@ service cloud.firestore {
              && request.resource.data.updatedAt is string
              && request.resource.data.updatedAt.size() <= 40
              && isBoundedNullableString(request.resource.data.get('car', null), 80)
-             && isBoundedNullableString(request.resource.data.get('track', null), 80);
+             && isBoundedNullableString(request.resource.data.get('track', null), 80)
+             // Equipaggio della vettura: al massimo 16 voci, come la EntryList.
+             && (request.resource.data.get('crew', null) == null
+                 || (request.resource.data.crew is list && request.resource.data.crew.size() <= 16))
+             && (request.resource.data.get('strategy', null) == null
+                 || validPitwallStrategySnapshot(request.resource.data.strategy));
     }
 
     /**

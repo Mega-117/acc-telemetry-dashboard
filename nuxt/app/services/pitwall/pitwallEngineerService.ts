@@ -18,14 +18,17 @@ import {
   trackedUpdateDoc,
 } from '~/composables/useFirebaseTracker'
 import {
+  PITWALL_GRANT_ONCE_DURATION_MS,
   buildPitwallGrantRequest,
   buildPitwallOrderDocument,
   buildPitwallPreAuthorisation,
+  isPitwallGrantUsable,
   isPitwallSessionFresh,
   matchesPitwallSearch,
   pitwallGrantId,
   pitwallSearchVariants,
   type PitwallGrant,
+  type PitwallGrantScope,
   type PitwallOrderDocument,
   type PitwallSession,
 } from './pitwallLink'
@@ -41,6 +44,9 @@ export interface PitwallIncomingRequest {
   nickname: string | null
   status: PitwallGrant['status']
   createdAt: string
+  /** Portata concessa: "solo per oggi" o "sempre". Null finche' pending. */
+  scope: PitwallGrantScope | null
+  expiresAtMs: number | null
 }
 
 export interface PitwallLinkedPilot {
@@ -125,6 +131,9 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
     const pilots: PitwallLinkedPilot[] = []
     for (const grantDoc of grants.docs) {
       const grant = grantDoc.data() as PitwallGrant
+      // Un "solo per oggi" scaduto vale come revocato: non si mostra un
+      // pilota che le regole rifiuterebbero al primo ordine.
+      if (!isPitwallGrantUsable(grant, grant.driverUid, engineerUid, now())) continue
       let session: PitwallSession | null = null
       try {
         const sessionSnapshot = await trackedGetDoc(doc(db, 'pitwallSessions', grant.driverUid), 'pitwall.pilotPresence')
@@ -290,6 +299,8 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
         nickname,
         status: grant.status,
         createdAt: grant.createdAt,
+        scope: grant.scope ?? null,
+        expiresAtMs: grant.expiresAtMs ?? null,
       })
     }
     return requests
@@ -325,6 +336,8 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
           nickname: nicknames.get(grant.engineerUid) ?? null,
           status: grant.status,
           createdAt: grant.createdAt,
+          scope: grant.scope ?? null,
+          expiresAtMs: grant.expiresAtMs ?? null,
         })))
 
         const unknown = grants.filter((grant) => !nicknames.has(grant.engineerUid))
@@ -344,6 +357,8 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
             nickname: nicknames.get(grant.engineerUid) ?? null,
             status: grant.status,
             createdAt: grant.createdAt,
+            scope: grant.scope ?? null,
+            expiresAtMs: grant.expiresAtMs ?? null,
           })))
         })
       },
@@ -379,14 +394,26 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
   /**
    * Il pilota decide: concede o toglie. E' l'unico che puo' farlo, e le regole
    * lo impongono sul server, non solo qui.
+   *
+   * Concedendo sceglie anche la portata: "solo per oggi" nasce con una
+   * scadenza oltre la quale il permesso vale come revocato (anche per le
+   * regole); "sempre" resta finche' qualcuno non lo toglie.
    */
-  async function decideRequest(requesterUid: string, decision: 'granted' | 'revoked'): Promise<
-    { ok: true } | { ok: false, reason: string }
-  > {
+  async function decideRequest(
+    requesterUid: string,
+    decision: 'granted' | 'revoked',
+    scope: PitwallGrantScope = 'always'
+  ): Promise<{ ok: true } | { ok: false, reason: string }> {
+    const grantFields = decision === 'granted'
+      ? {
+          scope,
+          expiresAtMs: scope === 'once' ? now() + PITWALL_GRANT_ONCE_DURATION_MS : null,
+        }
+      : {}
     try {
       await trackedUpdateDoc(
         doc(db, 'pitwallGrants', pitwallGrantId(engineerUid, requesterUid)),
-        { status: decision, updatedAt: nowIso(now) },
+        { status: decision, updatedAt: nowIso(now), ...grantFields },
         'pitwall.decideRequest'
       )
       return { ok: true }

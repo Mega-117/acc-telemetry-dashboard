@@ -49,7 +49,7 @@ describe('Pitwall UI contract', () => {
   })
 
   it('la barra in alto riassume solo cio che sto cambiando', () => {
-    expect(panel).toContain('buildPitwallChangeChips(plan.value, car.value, drivers)')
+    expect(panel).toContain('buildPitwallChangeChips(plan.value, car.value, drivers.value)')
     expect(orderBar).toContain('v-for="chip in chips"')
     expect(orderBar).toContain(':disabled="!canSend"')
     expect(panel).toContain(':can-send="hasChanges"')
@@ -74,7 +74,7 @@ describe('Pitwall UI contract', () => {
 
 describe('Pitwall eco della macchina', () => {
   it('ogni voce mostra accanto al valore da inviare quello gia in macchina', () => {
-    expect(panel).toContain('buildPitwallEcho(plan.value, car.value, drivers)')
+    expect(panel).toContain('buildPitwallEcho(plan.value, car.value, drivers.value)')
     expect(panel).toContain(':echo="echo[wheel]"')
     expect(panel).toContain(':echo="echo.fuel"')
     expect(panel).toContain(':echo="echo.tyreSet"')
@@ -190,11 +190,35 @@ describe('Pitwall: cosa e reale e cosa e ancora segnaposto', () => {
     }
   })
 
-  it('i valori della macchina sono ancora un segnaposto, e la pagina lo dichiara', () => {
-    // La telemetria live arriva con PIP-360: finche' non c'e', il segnaposto
-    // deve restare riconoscibile invece di sembrare un dato vero.
-    expect(panel).toContain('const MOCK_CAR: PitwallCarState')
-    expect(carCard).toContain('Dati finti: nessuna telemetria letta, niente inviato alla macchina.')
+  it('i valori della macchina sono reali: arrivano dalla presenza del pilota', () => {
+    // PIP-360: via i mock. Lo stato macchina viene dalla fotografia che il PC
+    // del pilota pubblica (strategia dal Pit MFD, equipaggio dalla EntryList),
+    // e la pagina non deve piu' contenere valori inventati.
+    expect(panel).not.toContain('MOCK_CAR')
+    expect(panel).not.toContain('Enrico Sayan')
+    expect(panel).toContain('link.selectedPilot.value?.session')
+    expect(panel).toContain('session.value?.strategy')
+    expect(panel).toContain('session.value?.crew')
+    expect(carCard).not.toContain('Dati finti')
+  })
+
+  it('un dato vecchio si dichiara vecchio, non si mostra come attuale', () => {
+    expect(panel).toContain('presenceAgeSeconds')
+    expect(panel).toContain('const carFresh')
+    expect(carCard).toContain('DATI VECCHI')
+  })
+
+  it('l esito dell ordine si legge campo per campo, mai un generico fatto', () => {
+    expect(panel).toContain('fieldOutcomes')
+    expect(panel).toContain("item.outcome === 'verified'")
+    expect(panel).toContain("'outcomes__chip--skipped': item.outcome === 'not-verifiable'")
+  })
+
+  it('il pilota distingue "solo per oggi" da "sempre" quando autorizza', () => {
+    expect(panel).toContain("link.decide(request.engineerUid, 'granted', 'once')")
+    expect(panel).toContain("link.decide(request.engineerUid, 'granted', 'always')")
+    expect(panel).toContain('Solo per oggi')
+    expect(panel).toContain('describePitwallGrantScope')
   })
 
   it('non parla con Electron: consegnare ad ACC spetta alla finestra runtime', () => {
@@ -204,15 +228,11 @@ describe('Pitwall: cosa e reale e cosa e ancora segnaposto', () => {
     expect(carCard).not.toMatch(/window\.electron|useFetch|\$fetch|ipcRenderer/)
   })
 
-  it('marca i comandi finti come tali', () => {
-    expect(panel).toContain('function mockTogglePitLane()')
-    expect(panel).toContain('function mockApplyOrder()')
-    expect(carCard).toContain('>MOCK</span>')
-  })
-
-  it('tiene il simulatore fuori dalla build utente (Principio 4)', () => {
-    expect(carCard).toContain('const showMockControls = import.meta.dev')
-    expect(carCard).toContain('v-if="showMockControls"')
+  it('non restano comandi finti: la macchina la muove solo il PC del pilota', () => {
+    expect(panel).not.toContain('mockTogglePitLane')
+    expect(panel).not.toContain('mockApplyOrder')
+    expect(carCard).not.toContain('MOCK')
+    expect(carCard).not.toContain('showMockControls')
   })
 
   it('non mostra dati che non sono informazione', () => {

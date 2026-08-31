@@ -122,6 +122,57 @@ describe('lato pilota del collegamento', () => {
     handle.stop()
   })
 
+  it('allega alla presenza equipaggio e fotografia strategia veri, nella stessa scrittura', async () => {
+    const handle = startPitwallDriverLink({
+      db: {} as never,
+      driverUid: DRIVER,
+      sessionId: 's-1',
+      electronApi: {},
+      now: () => Date.parse('2026-08-30T15:00:00.000Z'),
+      log: { warn: () => {}, error: () => {} },
+      readCarContext: async () => ({
+        car: 'ferrari_296_gt3',
+        track: 'nurburgring',
+        crew: [
+          { driverIndex: 0, name: 'Enrico Rossi', current: false },
+          { driverIndex: 1, name: 'Marco Bianchi', current: true },
+        ],
+        strategy: { fuelToAdd: 42, tyreSet: 3, pressures: { FL: 24.4, FR: 26.1, RL: 24.8, RR: 25.9 }, compound: 'wet' },
+      }),
+    })
+    await settle()
+    const presence = mocks.sets.find(entry => entry.path === `pitwallSessions/${DRIVER}`)
+    expect(presence?.data).toMatchObject({
+      car: 'ferrari_296_gt3',
+      crew: [
+        { driverIndex: 0, name: 'Enrico Rossi', current: false },
+        { driverIndex: 1, name: 'Marco Bianchi', current: true },
+      ],
+      strategy: { fuelToAdd: 42, tyreSet: 3, compound: 'wet' },
+    })
+    // Una sola scrittura: la fotografia viaggia dentro il battito esistente.
+    expect(mocks.sets.filter(entry => entry.path === `pitwallSessions/${DRIVER}`)).toHaveLength(1)
+    handle.stop()
+  })
+
+  it('se la fotografia non e leggibile pubblica la sola presenza, senza inventare', async () => {
+    const handle = startPitwallDriverLink({
+      db: {} as never,
+      driverUid: DRIVER,
+      sessionId: 's-1',
+      electronApi: {},
+      now: () => Date.parse('2026-08-30T15:00:00.000Z'),
+      log: { warn: () => {}, error: () => {} },
+      readCarContext: async () => { throw new Error('ACC spento') },
+    })
+    await settle()
+    const presence = mocks.sets.find(entry => entry.path === `pitwallSessions/${DRIVER}`)
+    expect(presence?.data).toMatchObject({ online: true })
+    expect(presence?.data).not.toHaveProperty('crew')
+    expect(presence?.data).not.toHaveProperty('strategy')
+    handle.stop()
+  })
+
   it('consegna un ordine a Electron e ne riscrive l esito', async () => {
     const handle = start()
     await settle()
