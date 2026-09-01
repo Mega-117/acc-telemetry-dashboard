@@ -1,5 +1,6 @@
 export type PitwallConceptScreen = 'home' | 'crew-create-identity' | 'crew-create-people' | 'crew-detail' | 'live'
 export type PitwallConceptLiveTab = 'timing' | 'track'
+export type PitwallConceptAccess = 'permanent' | 'temporary' | 'none'
 
 export interface PitwallConceptPerson {
   id: string
@@ -8,7 +9,7 @@ export interface PitwallConceptPerson {
   handle: string
   source: 'crew' | 'guest' | 'global'
   state: 'racing' | 'available' | 'offline' | 'invited'
-  access: 'permanent' | 'temporary' | 'none' | 'pending'
+  access: PitwallConceptAccess
   detail: string
 }
 
@@ -22,8 +23,6 @@ export interface PitwallConceptCrew {
 
 export interface PitwallConceptRecent {
   id: string
-  handle: string
-  initials: string
 }
 
 export interface PitwallConceptCrewImage {
@@ -45,10 +44,10 @@ export const PITWALL_CONCEPT_PEOPLE: PitwallConceptPerson[] = [
   { id: 'mario', name: 'Mario Rossi', initials: 'MR', handle: '@mariorossi', source: 'crew', state: 'racing', access: 'permanent', detail: 'In gara · accesso già autorizzato' },
   { id: 'marco', name: 'Marco Marini', initials: 'MM', handle: '@marcom', source: 'crew', state: 'available', access: 'permanent', detail: 'Nessuna gara attiva' },
   { id: 'andrea', name: 'Andrea Verdi', initials: 'AV', handle: '@andreav', source: 'guest', state: 'racing', access: 'temporary', detail: 'In gara · accesso valido per questa gara' },
-  { id: 'gallo', name: 'Marco Gallo', initials: 'MG', handle: '@marcog', source: 'global', state: 'racing', access: 'none', detail: 'In gara · accesso richiesto' },
-  { id: 'martina', name: 'Martina Conti', initials: 'MC', handle: '@martinac', source: 'global', state: 'available', access: 'none', detail: 'Nessuna gara attiva' },
+  { id: 'gallo', name: 'Marco Gallo', initials: 'MG', handle: '@marcog', source: 'global', state: 'racing', access: 'none', detail: 'Nessun accesso attivo' },
+  { id: 'martina', name: 'Martina Conti', initials: 'MC', handle: '@martinac', source: 'global', state: 'available', access: 'none', detail: 'Nessun accesso attivo' },
   { id: 'luca', name: 'Luca Bianchi', initials: 'LB', handle: '@lucab', source: 'crew', state: 'available', access: 'permanent', detail: 'Nessuna gara attiva' },
-  { id: 'paolo', name: 'Paolo Verdi', initials: 'PV', handle: '@paolov', source: 'global', state: 'available', access: 'pending', detail: 'Richiesta permanente in attesa' },
+  { id: 'paolo', name: 'Paolo Verdi', initials: 'PV', handle: '@paolov', source: 'global', state: 'available', access: 'none', detail: 'Nessun accesso attivo' },
 ]
 
 export const PITWALL_CONCEPT_CREWS: PitwallConceptCrew[] = [
@@ -57,11 +56,11 @@ export const PITWALL_CONCEPT_CREWS: PitwallConceptCrew[] = [
 ]
 
 export const PITWALL_CONCEPT_RECENTS: PitwallConceptRecent[] = [
-  { id: 'andrea', handle: 'andreav', initials: 'AV' },
-  { id: 'mario', handle: 'mariorossi', initials: 'MR' },
-  { id: 'gallo', handle: 'marcog', initials: 'MG' },
-  { id: 'martina', handle: 'martinac', initials: 'MC' },
-  { id: 'paolo', handle: 'paolov', initials: 'PV' },
+  { id: 'andrea' },
+  { id: 'mario' },
+  { id: 'gallo' },
+  { id: 'martina' },
+  { id: 'paolo' },
 ]
 
 export function filterPitwallConceptPeople(query: string, people = PITWALL_CONCEPT_PEOPLE): PitwallConceptPerson[] {
@@ -80,6 +79,12 @@ export function splitPitwallConceptSearch(query: string) {
 
 export function findPitwallConceptPerson(query: string, people = PITWALL_CONCEPT_PEOPLE): PitwallConceptPerson | null {
   return filterPitwallConceptPeople(query, people)[0] ?? null
+}
+
+export function describePitwallConceptAccess(access: PitwallConceptAccess): string | null {
+  if (access === 'permanent') return 'Accesso permanente'
+  if (access === 'temporary') return 'Accesso temporaneo'
+  return null
 }
 
 export const PITWALL_CONCEPT_DEFAULT_PRESSURES = Object.freeze({ FL: 25, FR: 25, RL: 25, RR: 25 })

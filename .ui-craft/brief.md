@@ -27,6 +27,7 @@ Da Pit Wall l’utente individua chi può assistere e avvia il live entro 10 sec
 
 # Learned constraints
 
+- **2026-09-01** — Directory e Recenti espongono soltanto `Accesso permanente`, `Accesso temporaneo` o nessuna etichetta; le richieste in attesa non appartengono ai Recenti. Chi ha accesso usa `Collegati`, gli altri un solo `Richiedi accesso` con scelta temporanea/permanente. *Perché:* una persona deve avere un solo stato leggibile e una sola azione contestuale.
 - **2026-09-01** — Il Concept deve essere più semplice del mockup iniziale: righe fisse, poche superfici e nessuna duplicazione tra strategia e MFD. *Perché:* durante la gara l’utente deve confrontare e agire, non interpretare il layout.
 - **2026-09-01** — Il desktop 16:9 è la superficie prioritaria e lo spazio laterale va usato, non riempito con colonne alte artificialmente. *Perché:* l’app è una control room, non una pagina mobile ingrandita.
 - **2026-09-01** — Il Concept deve dare respiro attraverso proporzioni, raggruppamento e sottrazione dei contenitori, non comprimendo tutte le righe. Lo stile racing tecnologico viene da griglia, ritmo e tipografia dati; non da glow, neon o decorazioni aggiuntive. *Perché:* l’interfaccia deve restare leggibile a colpo d’occhio durante una gara.

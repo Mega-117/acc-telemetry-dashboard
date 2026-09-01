@@ -6,6 +6,7 @@ import {
   PITWALL_CONCEPT_DEFAULT_PRESSURES,
   PITWALL_CONCEPT_PEOPLE,
   PITWALL_CONCEPT_RECENTS,
+  describePitwallConceptAccess,
   filterPitwallConceptPeople,
   stepPitwallConceptPressure,
   type PitwallConceptLiveTab,
@@ -23,11 +24,18 @@ const crewName = ref("Apex One Racing");
 const crewDescription = ref("Endurance, campionato e allenamenti insieme");
 const crewImageId = ref("apex-red");
 const sent = ref(false);
+const accessMenu = ref<string | null>(null);
 const DEFAULT_CREW_IMAGE = PITWALL_CONCEPT_CREW_IMAGES[0]!;
 const searchResults = computed(() =>
   submittedSearch.value
     ? filterPitwallConceptPeople(submittedSearch.value)
     : [],
+);
+const recentPeople = computed(() =>
+  PITWALL_CONCEPT_RECENTS.flatMap((recent) => {
+    const person = PITWALL_CONCEPT_PEOPLE.find((item) => item.id === recent.id);
+    return person ? [person] : [];
+  }),
 );
 const selectedCrewImage = computed(() =>
   PITWALL_CONCEPT_CREW_IMAGES.find((image) => image.id === crewImageId.value)
@@ -89,6 +97,15 @@ function clearSearch() {
   submittedSearch.value = "";
 }
 
+function toggleAccessMenu(scope: "search" | "recent", personId: string) {
+  const key = `${scope}:${personId}`;
+  accessMenu.value = accessMenu.value === key ? null : key;
+}
+
+function closeAccessMenu() {
+  accessMenu.value = null;
+}
+
 function stepPressure(wheel: keyof typeof pressures, direction: 1 | -1) {
   pressures[wheel] = stepPitwallConceptPressure(pressures[wheel], direction);
 }
@@ -146,12 +163,36 @@ function crewImage(imageId: string) {
                   <span
                     class="pwc-avatar"
                     :class="`is-${person.source}`"
-                  >{{ person.initials }}</span> <strong>{{ person.handle.replace('@', '') }}</strong> <button
+                  >{{ person.initials }}</span> <span class="pwc-person-copy">
+                    <strong>{{ person.handle.replace('@', '') }}</strong>
+                    <small v-if="describePitwallConceptAccess(person.access)">{{ describePitwallConceptAccess(person.access) }}</small>
+                  </span> <button
+                    v-if="person.access !== 'none'"
+                    type="button"
                     class="pwc-btn is-primary"
                     @click="go('live')"
+                  >Collegati</button> <div
+                    v-else
+                    class="pwc-access-request"
+                    @keydown.esc="closeAccessMenu"
                   >
-                    Collegati
-                  </button>
+                    <button
+                      type="button"
+                      class="pwc-btn is-outline"
+                      :aria-expanded="accessMenu === `search:${person.id}`"
+                      :aria-controls="`search-access-${person.id}`"
+                      @click="toggleAccessMenu('search', person.id)"
+                    >Richiedi accesso</button>
+                    <div
+                      v-if="accessMenu === `search:${person.id}`"
+                      :id="`search-access-${person.id}`"
+                      class="pwc-request-menu"
+                      aria-label="Tipo di accesso"
+                    >
+                      <button type="button" @click="closeAccessMenu">Per questa gara</button>
+                      <button type="button" @click="closeAccessMenu">Permanente</button>
+                    </div>
+                  </div>
                 </article>
               </template> <div
                 v-else
@@ -196,16 +237,40 @@ function crewImage(imageId: string) {
           </section>
           <section class="pwc-recents">
             <header> <span class="pwc-eyebrow">Ultimi cinque</span> <h2>Recenti</h2> </header> <article
-              v-for="person in PITWALL_CONCEPT_RECENTS"
+              v-for="person in recentPeople"
               :key="person.id"
               class="pwc-recent-person"
             >
-              <span class="pwc-avatar">{{ person.initials }}</span> <strong>{{ person.handle }}</strong> <button
+              <span class="pwc-avatar">{{ person.initials }}</span> <span class="pwc-person-copy">
+                <strong>{{ person.handle.replace('@', '') }}</strong>
+                <small v-if="describePitwallConceptAccess(person.access)">{{ describePitwallConceptAccess(person.access) }}</small>
+              </span> <button
+                v-if="person.access !== 'none'"
+                type="button"
                 class="pwc-btn is-primary"
                 @click="go('live')"
+              >Collegati</button> <div
+                v-else
+                class="pwc-access-request"
+                @keydown.esc="closeAccessMenu"
               >
-                Collegati
-              </button>
+                <button
+                  type="button"
+                  class="pwc-btn is-outline"
+                  :aria-expanded="accessMenu === `recent:${person.id}`"
+                  :aria-controls="`recent-access-${person.id}`"
+                  @click="toggleAccessMenu('recent', person.id)"
+                >Richiedi accesso</button>
+                <div
+                  v-if="accessMenu === `recent:${person.id}`"
+                  :id="`recent-access-${person.id}`"
+                  class="pwc-request-menu"
+                  aria-label="Tipo di accesso"
+                >
+                  <button type="button" @click="closeAccessMenu">Per questa gara</button>
+                  <button type="button" @click="closeAccessMenu">Permanente</button>
+                </div>
+              </div>
             </article>
           </section>
         </aside>
@@ -757,35 +822,31 @@ function crewImage(imageId: string) {
 .pwc-search-outcome { display: grid; gap: 10px; margin-top: 18px; }
 .pwc-search-person {
   display: grid;
-  grid-template-columns: 50px minmax(0, 1fr) auto;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 16px;
-  min-height: 92px;
-  padding: 18px;
+  gap: 12px;
+  min-height: 70px;
+  padding: 10px 14px;
   border: 1px solid var(--pwc-line);
   border-left: 2px solid #8b5cf6;
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.025);
 }
 
-.pwc-search-person strong { display: block; font-size: 17px; }
-.pwc-search-person small { margin-top: 4px; }
-.pwc-search-person div > span {
+.pwc-search-person .pwc-avatar { width: 42px; height: 42px; font-size: 13px; }
+.pwc-person-copy { min-width: 0; }
+.pwc-person-copy strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pwc-search-person strong { font-size: 16px; }
+.pwc-person-copy small {
   display: block;
-  margin-top: 8px;
+  margin-top: 3px;
   color: $text-muted;
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.025em;
 }
-
-.pwc-access-actions { display: flex; gap: 8px; }
-.pwc-request-sent,
-.pwc-recent-pending {
-  color: #fbbf24;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
+.pwc-access-request { position: relative; }
+.pwc-search-person .pwc-btn { min-height: 38px; padding: 8px 14px; font-size: 13px; }
 
 .pwc-search-empty {
   display: flex;
@@ -881,11 +942,10 @@ function crewImage(imageId: string) {
   padding: 8px 4px;
 }
 
-.pwc-recent-person.starts-requests { margin-top: 10px; }
 .pwc-recent-person .pwc-avatar { width: 38px; height: 38px; font-size: 12px; }
-.pwc-recent-person > strong { font-size: 14px; }
+.pwc-recent-person .pwc-person-copy strong { font-size: 14px; }
+.pwc-recent-person .pwc-person-copy small { font-size: 10px; }
 .pwc-recent-person .pwc-btn { min-height: 34px; padding-inline: 12px; font-size: 12px; }
-.pwc-recent-request { position: relative; }
 .pwc-request-menu {
   position: absolute;
   z-index: 3;
@@ -912,6 +972,10 @@ function crewImage(imageId: string) {
 }
 
 .pwc-request-menu button:hover { background: rgba(255, 107, 0, 0.1); }
+.pwc-request-menu button:focus-visible {
+  outline: 2px solid #ff6b00;
+  outline-offset: -2px;
+}
 
 .pwc-image-picker { margin: 0; padding: 0; border: 0; }
 .pwc-image-picker legend { font-weight: 600; }
@@ -940,9 +1004,7 @@ function crewImage(imageId: string) {
   .pwc-find-form > .pwc-btn { width: 100%; }
   .pwc-search-person { grid-template-columns: 44px minmax(0, 1fr); }
   .pwc-search-person > .pwc-btn,
-  .pwc-search-person > .pwc-access-actions,
-  .pwc-search-person > .pwc-request-sent { grid-column: 1 / -1; }
-  .pwc-access-actions { align-items: stretch; flex-direction: column; }
+  .pwc-search-person > .pwc-access-request { grid-column: 1 / -1; }
   .pwc-home-sidebar { border-radius: 14px; }
   .pwc-crews,
   .pwc-recents { padding: 20px 16px; }

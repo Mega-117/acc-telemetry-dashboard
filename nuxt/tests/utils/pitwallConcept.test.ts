@@ -3,7 +3,9 @@ import {
   PITWALL_CONCEPT_CREWS,
   PITWALL_CONCEPT_CREW_IMAGES,
   PITWALL_CONCEPT_DEFAULT_PRESSURES,
+  PITWALL_CONCEPT_PEOPLE,
   PITWALL_CONCEPT_RECENTS,
+  describePitwallConceptAccess,
   filterPitwallConceptPeople,
   findPitwallConceptPerson,
   splitPitwallConceptSearch,
@@ -30,10 +32,18 @@ describe('Pitwall Concept mock model', () => {
     expect(findPitwallConceptPerson('utente che non esiste')).toBeNull()
   })
 
-  it('keeps five recent connections as nickname-only entries without pending state', () => {
+  it('keeps five recent connection ids without duplicating directory data', () => {
     expect(PITWALL_CONCEPT_RECENTS).toHaveLength(5)
-    expect(PITWALL_CONCEPT_RECENTS.every(person => !person.handle.startsWith('@'))).toBe(true)
-    expect(PITWALL_CONCEPT_RECENTS.every(person => !('action' in person))).toBe(true)
+    expect(PITWALL_CONCEPT_RECENTS.every(person => Object.keys(person).join() === 'id')).toBe(true)
+  })
+
+  it('exposes only permanent, temporary or absent access in the static directory', () => {
+    expect(describePitwallConceptAccess('permanent')).toBe('Accesso permanente')
+    expect(describePitwallConceptAccess('temporary')).toBe('Accesso temporaneo')
+    expect(describePitwallConceptAccess('none')).toBeNull()
+    expect(PITWALL_CONCEPT_RECENTS.every(recent =>
+      PITWALL_CONCEPT_PEOPLE.some(person => person.id === recent.id),
+    )).toBe(true)
   })
 
   it('keeps pressure controls deterministic and bounded', () => {
