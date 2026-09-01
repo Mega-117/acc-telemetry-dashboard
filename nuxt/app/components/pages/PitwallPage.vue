@@ -1,8 +1,22 @@
 <script setup lang="ts">
+// La pagina del muretto, dal punto di vista di chi ci sta seduto.
+//
+// Non si assiste piu' una *persona*: si entra nella gara di una vettura. E' la
+// differenza che regge l'endurance - i piloti si alternano, chi non guida
+// spegne il PC, e l'ingegnere non deve rifare niente quando cambia il volante.
+//
+// Tre cose devono restare vere a schermo, sempre:
+//  - si vede chi c'e' e chi sta guidando *adesso*, senza doverlo chiedere;
+//  - il bottone Invia e' spento quando l'ordine non potrebbe partire, e la
+//    pagina dice perche' invece di accettarlo e farlo scadere in silenzio;
+//  - `READY` significa applicata e riletta, mai inviata.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { usePitwallLink } from '~/composables/usePitwallLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { describePitwallGrantScope } from '~/services/pitwall/pitwallLink'
+import type { PitwallSession } from '~/services/pitwall/pitwallLink'
+import { PITWALL_MEMBER_FRESH_MS } from '~/services/pitwall/pitwallRoomContract'
 import PitwallCarCard from '~/components/pitwall/PitwallCarCard.vue'
 import PitwallOrderBar from '~/components/pitwall/PitwallOrderBar.vue'
 import PitwallValueField from '~/components/pitwall/PitwallValueField.vue'
@@ -36,18 +50,45 @@ import {
 } from '~/utils/pitwallPresentation'
 
 const { currentUser } = useFirebaseAuth()
-const link = usePitwallLink({ engineerUid: () => currentUser.value?.uid ?? null })
-const session = computed(() => link.selectedPilot.value?.session ?? null)
+// La gara: chi c'e', chi guida, dove va l'ordine.
+const link = usePitwallRoom({ uid: () => currentUser.value?.uid ?? null })
+// I permessi fra account restano il mattoncino della fiducia: chi mi ha
+// autorizzato una volta si ritrova invitato alle gare senza richiederlo, e da
+// qui si concede o si toglie. Non e' un secondo canale per gli ordini.
+const trust = usePitwallLink({ engineerUid: () => currentUser.value?.uid ?? null })
 
-const nowTick = ref(Date.now())
-let tickTimer: ReturnType<typeof setInterval> | null = null
-const presenceAgeSeconds = computed(() => {
-  const updatedAt = session.value?.updatedAt
-  if (!updatedAt) return null
-  const parsed = Date.parse(updatedAt)
-  return Number.isFinite(parsed) ? Math.max(0, Math.round((nowTick.value - parsed) / 1000)) : null
+const nowTick = computed(() => link.nowTick.value)
+
+/**
+ * La fotografia della vettura arriva da chi e' al volante, non da un "pilota
+ * assistito": e' l'unico che la vede davvero. Si rimodella nella forma che la
+ * scheda macchina conosce gia', invece di riscrivere la scheda.
+ */
+const session = computed<PitwallSession | null>(() => {
+  const snapshot = link.carSnapshot.value
+  const room = link.room.value
+  if (!snapshot || !room) return null
+  return {
+    schemaVersion: 1,
+    driverUid: link.executor.value.executor?.uid ?? '',
+    sessionId: room.roomId,
+    online: true,
+    updatedAt: new Date(snapshot.updatedAtMs).toISOString(),
+    car: null,
+    track: room.track ?? null,
+    crew: snapshot.crew,
+    strategy: snapshot.strategy as PitwallSession['strategy'],
+  }
 })
-const carFresh = computed(() => presenceAgeSeconds.value != null && presenceAgeSeconds.value <= 90)
+
+const presenceAgeSeconds = computed(() => {
+  const updatedAtMs = link.carSnapshot.value?.updatedAtMs
+  if (!updatedAtMs) return null
+  return Math.max(0, Math.round((nowTick.value - updatedAtMs) / 1000))
+})
+const carFresh = computed(() => (
+  presenceAgeSeconds.value != null && presenceAgeSeconds.value <= PITWALL_MEMBER_FRESH_MS / 1000
+))
 const drivers = computed<PitwallDriver[]>(() => (
   (session.value?.crew ?? []).map(member => ({ id: String(member.driverIndex), name: member.name }))
 ))
@@ -102,7 +143,7 @@ const driverOptions = computed(() => [
 ])
 
 let planInitialised = false
-watch(() => link.selectedDriverUid.value, () => { planInitialised = false })
+watch(() => link.selectedRoomId.value, () => { planInitialised = false })
 watch(car, () => {
   if (planInitialised || !session.value?.strategy) return
   planInitialised = true
@@ -135,15 +176,14 @@ function resetToCar() {
 }
 
 onMounted(() => {
-  void link.refreshPilots()
-  link.watchLive()
-  tickTimer = setInterval(() => { nowTick.value = Date.now() }, 5_000)
+  link.start()
+  void trust.refreshIncoming()
+  trust.watchLive()
 })
 
 onBeforeUnmount(() => {
-  if (tickTimer) clearInterval(tickTimer)
   if (searchTimer) clearTimeout(searchTimer)
-  tickTimer = null
+  link.stop()
 })
 
 function planPayload(): Record<string, unknown> {
@@ -163,8 +203,10 @@ function planPayload(): Record<string, unknown> {
 }
 
 const hasChanges = computed(() => Object.keys(planPayload()).length > 0)
-const pendingRequests = computed(() => link.pendingIncoming.value)
-const trustedEngineers = computed(() => link.grantedIncoming.value)
+/** Spento anche quando ci sono modifiche, se l'ordine non potrebbe partire. */
+const sendEnabled = computed(() => hasChanges.value && link.canSend.value)
+const pendingRequests = computed(() => trust.pendingIncoming.value)
+const trustedEngineers = computed(() => trust.grantedIncoming.value)
 
 function requesterName(request: { nickname: string | null, engineerUid: string }): string {
   return request.nickname || request.engineerUid
@@ -173,82 +215,25 @@ function requesterName(request: { nickname: string | null, engineerUid: string }
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
-  searchTimer = setTimeout(() => { void link.search() }, 350)
+  searchTimer = setTimeout(() => { void trust.search() }, 350)
 }
 
-async function askLink(driverUid: string, scope: 'once' | 'always') {
-  await link.requestLink(driverUid, scope)
-}
-
-function connectTo(driverUid: string) { link.selectPilot(driverUid) }
-function disconnect() { link.selectPilot(null) }
-
-function outgoingBadge(pilot: { scope: 'once' | 'always' | null, expiresAtMs: number | null }): string {
-  if (pilot.scope === 'once' && pilot.expiresAtMs != null) {
-    return `valido fino alle ${new Date(pilot.expiresAtMs).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })}`
-  }
-  return 'accesso permanente'
-}
-
-function pastLabel(pilot: { status: string, expiresAtMs: number | null }): string {
-  if (pilot.status === 'granted') return 'autorizzazione scaduta'
-  return pilot.status === 'revoked' ? 'ultima assistenza conclusa' : pilot.status
-}
-
-type RecentPilotStatus = 'ready' | 'pending' | 'past'
-interface RecentPilotRow {
-  driverUid: string
-  nickname: string
-  status: RecentPilotStatus
-  reachable: boolean
-  scope: 'once' | 'always' | null
-  expiresAtMs: number | null
-  detail: string
-}
-
-const recentPilots = computed<RecentPilotRow[]>(() => {
-  const rows = new Map<string, RecentPilotRow>()
-  for (const pilot of link.pilots.value) {
-    rows.set(pilot.driverUid, {
-      driverUid: pilot.driverUid,
-      nickname: pilot.nickname,
-      status: 'ready',
-      reachable: pilot.reachable,
-      scope: pilot.scope,
-      expiresAtMs: pilot.expiresAtMs,
-      detail: pilot.reachable ? 'online' : 'offline',
-    })
-  }
-  for (const pending of link.pendingOutgoing.value) {
-    if (rows.has(pending.driverUid)) continue
-    rows.set(pending.driverUid, {
-      driverUid: pending.driverUid,
-      nickname: pending.nickname,
-      status: 'pending',
-      reachable: false,
-      scope: pending.requestedScope,
-      expiresAtMs: null,
-      detail: 'richiesta in attesa',
-    })
-  }
-  for (const past of link.pastOutgoing.value) {
-    if (rows.has(past.driverUid)) continue
-    rows.set(past.driverUid, {
-      driverUid: past.driverUid,
-      nickname: past.nickname,
-      status: 'past',
-      reachable: false,
-      scope: past.scope,
-      expiresAtMs: past.expiresAtMs,
-      detail: pastLabel(past),
-    })
-  }
-  return [...rows.values()].sort((a, b) => Number(!(a.status === 'ready' && a.scope === 'always')) - Number(!(b.status === 'ready' && b.scope === 'always')))
+/**
+ * Perche' l'invio e' spento, detto in una frase utile.
+ * "Non e' il momento" senza motivo e' il modo piu' rapido di far sembrare
+ * rotto un collegamento che funziona.
+ */
+const blockedReason = computed<string | null>(() => {
+  if (!link.room.value) return 'Nessuna gara selezionata.'
+  if (link.roomClosed.value) return 'Questa gara e chiusa: non accetta piu strategie.'
+  if (!link.amMember.value) return 'Non sei ancora entrato in questa gara.'
+  if (link.executor.value.reason !== 'ready') return link.executorLabel.value
+  if (!hasChanges.value) return 'Nessuna modifica da inviare.'
+  return null
 })
 
 async function sendToCar() {
   sentPlan.value = { ...plan.value, pressures: { ...pressures.value } }
-  if (!link.selectedDriverUid.value) return
   await link.sendPlan(planPayload())
 }
 
@@ -267,6 +252,13 @@ const fieldOutcomes = computed(() => Object.entries(link.orderFields.value).map(
 function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: number | null }): string {
   return describePitwallGrantScope(request)
 }
+
+/** Etichetta di stato della gara, senza gergo e senza identificativi tecnici. */
+const roomStateLabel = computed(() => {
+  if (!link.room.value) return 'Nessuna gara'
+  if (link.roomClosed.value) return 'CHIUSA'
+  return link.executor.value.reason === 'ready' ? 'IN PISTA' : 'IN ATTESA'
+})
 </script>
 
 <template>
@@ -274,75 +266,110 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
     <main class="pitwall">
       <section v-if="pendingRequests.length" class="invite" aria-live="polite">
         <div v-for="request in pendingRequests" :key="request.engineerUid" class="invite__row">
-          <p><strong>{{ requesterName(request) }}</strong> vuole collegarsi come ingegnere di pista.</p>
-          <button type="button" class="btn btn--primary" @click="link.decide(request.engineerUid, 'granted', 'once')">Autorizza per oggi</button>
-          <button type="button" class="btn" @click="link.decide(request.engineerUid, 'granted', 'always')">Autorizza sempre</button>
-          <button type="button" class="btn btn--ghost" @click="link.decide(request.engineerUid, 'revoked')">Rifiuta</button>
+          <p><strong>{{ requesterName(request) }}</strong> vuole entrare nelle tue gare come ingegnere di pista.</p>
+          <button type="button" class="btn btn--primary" @click="trust.decide(request.engineerUid, 'granted', 'once')">Autorizza per oggi</button>
+          <button type="button" class="btn" @click="trust.decide(request.engineerUid, 'granted', 'always')">Autorizza sempre</button>
+          <button type="button" class="btn btn--ghost" @click="trust.decide(request.engineerUid, 'revoked')">Rifiuta</button>
         </div>
       </section>
 
-      <h1 class="page-title">CONNESSIONI</h1>
-      <section class="connections" aria-label="Gestione collegamenti Pitwall">
+      <h1 class="page-title">GARA</h1>
+      <section class="connections" aria-label="Gara ed equipaggio">
         <article class="connection-cell connection-cell--active">
-          <h2 class="eyebrow eyebrow--green">PILOTA ASSISTITO</h2>
-          <template v-if="link.selectedPilot.value">
+          <h2 class="eyebrow eyebrow--green">GARA IN CORSO</h2>
+          <template v-if="link.room.value">
             <div class="active-pilot__name-row">
-              <strong>{{ link.selectedPilot.value.nickname }}</strong>
-              <span class="status-pill" :class="link.selectedPilot.value.reachable ? 'is-online' : 'is-offline'">
-                {{ link.selectedPilot.value.reachable ? 'ONLINE' : 'OFFLINE' }}
+              <strong>{{ link.room.value.label }}</strong>
+              <span class="status-pill" :class="link.executor.value.reason === 'ready' ? 'is-online' : 'is-offline'">
+                {{ roomStateLabel }}
               </span>
             </div>
-            <p class="active-pilot__meta"><span class="check">✓</span>{{ outgoingBadge(link.selectedPilot.value) }}</p>
-            <p class="active-pilot__meta"><span class="clock">◷</span>{{ presenceAgeSeconds == null ? 'In attesa dei dati macchina' : `Dati aggiornati ${presenceAgeSeconds}s fa` }}</p>
-            <button type="button" class="btn active-pilot__disconnect" @click="disconnect">Disconnetti</button>
+            <p class="active-pilot__meta">
+              <span class="check">✓</span>{{ link.executorLabel.value }}
+            </p>
+            <p class="active-pilot__meta">
+              <span class="clock">◷</span>{{ presenceAgeSeconds == null ? 'In attesa dei dati macchina' : `Dati macchina aggiornati ${presenceAgeSeconds}s fa` }}
+            </p>
+            <div class="room-actions">
+              <label v-if="link.rooms.value.length > 1" class="select-control select-control--room">
+                <span>Cambia gara</span>
+                <select :value="link.selectedRoomId.value" @change="link.selectRoom(($event.target as HTMLSelectElement).value)">
+                  <option v-for="entry in link.rooms.value" :key="entry.roomId" :value="entry.roomId">{{ entry.label }}</option>
+                </select>
+              </label>
+              <button v-if="link.isManager.value && !link.roomClosed.value" type="button" class="btn btn--ghost" @click="link.closeRoom()">Chiudi gara</button>
+              <button v-if="link.amMember.value && link.room.value.hostUid !== currentUser?.uid" type="button" class="btn btn--ghost" @click="link.leave()">Esci</button>
+            </div>
           </template>
           <template v-else>
-            <strong class="active-pilot__empty-title">Nessun pilota attivo</strong>
-            <p class="cell-note">Collegati dalla lista dei piloti recenti o cerca un nuovo pilota.</p>
+            <strong class="active-pilot__empty-title">Nessuna gara</strong>
+            <p class="cell-note">
+              La gara compare da sola quando qualcuno dell’equipaggio è in sessione su ACC: non c’è nessun
+              codice da girarsi. Se non compare, chiedi a un membro di invitarti.
+            </p>
           </template>
           <p v-if="link.lastError.value" class="cell-error">{{ link.lastError.value }}</p>
+          <p v-if="link.notice.value" class="cell-notice">{{ link.notice.value }}</p>
         </article>
 
         <article class="connection-cell connection-cell--search">
-          <h2 class="eyebrow eyebrow--blue">CERCA PILOTA</h2>
-          <input v-model="link.searchTerm.value" class="search-input" type="search" placeholder="Cerca pilota per nome…" aria-label="Cerca un pilota per nome" @input="onSearchInput">
-          <p class="cell-note">Cerca un pilota per richiedere accesso o connetterti se hai già un’autorizzazione valida.</p>
-          <p v-if="link.notice.value" class="cell-notice">{{ link.notice.value }}</p>
-          <ul v-if="link.searchResults.value.length" class="search-results">
-            <li v-for="found in link.searchResults.value" :key="found.uid">
+          <h2 class="eyebrow eyebrow--blue">AGGIUNGI ALLA GARA</h2>
+          <input v-model="trust.searchTerm.value" class="search-input" type="search" placeholder="Cerca una persona per nome…" aria-label="Cerca una persona per nome" @input="onSearchInput">
+          <p class="cell-note">
+            <template v-if="link.isManager.value">Invitala a questa gara, oppure autorizzala una volta per tutte: chi ti ha già autorizzato si ritrova invitato da solo alle prossime gare.</template>
+            <template v-else>Solo chi gestisce la gara può invitare. Puoi comunque autorizzare qualcuno ad assisterti nelle tue gare.</template>
+          </p>
+          <p v-if="trust.notice.value" class="cell-notice">{{ trust.notice.value }}</p>
+          <ul v-if="trust.searchResults.value.length" class="search-results">
+            <li v-for="found in trust.searchResults.value" :key="found.uid">
               <strong>{{ found.nickname }}</strong>
-              <button type="button" class="btn" @click="askLink(found.uid, 'once')">Per oggi</button>
-              <button type="button" class="btn" @click="askLink(found.uid, 'always')">Sempre</button>
-              <button type="button" class="btn btn--ghost" @click="link.preAuthorise(found.uid)">Pre-autorizza</button>
+              <button v-if="link.isManager.value && link.room.value" type="button" class="btn btn--primary" @click="link.invite(found.uid)">Invita alla gara</button>
+              <button type="button" class="btn btn--ghost" @click="trust.preAuthorise(found.uid)">Autorizza sempre</button>
             </li>
           </ul>
         </article>
 
         <article class="connection-cell connection-cell--recent">
-          <h2 class="eyebrow eyebrow--purple">PILOTI RECENTI</h2>
+          <h2 class="eyebrow eyebrow--purple">EQUIPAGGIO</h2>
           <div class="recent-list">
-            <div v-for="pilot in recentPilots" :key="pilot.driverUid" class="recent-row">
-              <span class="presence-dot" :class="pilot.reachable ? 'is-online' : pilot.status === 'pending' ? 'is-waiting' : ''" />
-              <strong>{{ pilot.nickname }}</strong>
-              <span v-if="pilot.status === 'ready'" class="grant-pill" :class="{ 'is-permanent': pilot.scope === 'always' }">{{ outgoingBadge(pilot) }}</span>
-              <span v-else class="recent-row__detail">{{ pilot.detail }}</span>
-              <button v-if="pilot.status === 'ready'" type="button" class="btn" :disabled="link.selectedDriverUid.value === pilot.driverUid" @click="connectTo(pilot.driverUid)">
-                {{ link.selectedDriverUid.value === pilot.driverUid ? 'Collegato' : 'Connetti' }}
-              </button>
-              <button v-else-if="pilot.status === 'past'" type="button" class="btn" @click="askLink(pilot.driverUid, 'once')">Richiedi accesso</button>
-              <button v-else type="button" class="btn btn--ghost" @click="link.withdrawRequest(pilot.driverUid)">Ritira</button>
+            <div v-for="person in link.crew.value" :key="person.uid" class="recent-row">
+              <span
+                class="presence-dot"
+                :class="person.driving ? 'is-driving' : person.online ? 'is-online' : person.invited ? 'is-waiting' : ''"
+              />
+              <strong>{{ person.nickname }}{{ person.isSelf ? ' (tu)' : '' }}</strong>
+              <span class="grant-pill" :class="{ 'is-permanent': person.driving }">
+                <template v-if="person.driving">AL VOLANTE</template>
+                <template v-else-if="person.invited">invitato · non ancora entrato</template>
+                <template v-else-if="person.online">{{ person.role === 'manager' ? 'gestisce la gara' : 'presente' }}</template>
+                <template v-else>{{ person.role === 'manager' ? 'gestisce la gara · offline' : 'offline' }}</template>
+              </span>
+              <div class="recent-row__actions">
+                <button
+                  v-if="link.isManager.value && !person.isSelf && !person.invited && person.role !== 'manager'"
+                  type="button" class="btn btn--ghost" @click="link.promote(person.uid)"
+                >Promuovi</button>
+                <button
+                  v-if="link.isManager.value && !person.isSelf && link.room.value?.hostUid !== person.uid"
+                  type="button" class="btn btn--ghost" @click="link.revoke(person.uid)"
+                >Togli</button>
+              </div>
             </div>
-            <div v-for="request in trustedEngineers" :key="`incoming-${request.engineerUid}`" class="recent-row recent-row--incoming">
+            <div v-for="request in trustedEngineers" :key="`trusted-${request.engineerUid}`" class="recent-row recent-row--incoming">
               <span class="presence-dot is-incoming" />
               <strong>{{ requesterName(request) }}</strong>
-              <span class="grant-pill">PUÒ ASSISTIRTI · {{ scopeLabel(request) }}</span>
-              <button type="button" class="btn btn--ghost" @click="link.decide(request.engineerUid, 'revoked')">Revoca</button>
+              <span class="grant-pill">TI HA AUTORIZZATO · {{ scopeLabel(request) }}</span>
+              <div class="recent-row__actions">
+                <button type="button" class="btn btn--ghost" @click="trust.decide(request.engineerUid, 'revoked')">Revoca</button>
+              </div>
             </div>
-            <p v-if="!recentPilots.length && !trustedEngineers.length" class="cell-note">Nessuna assistenza precedente.</p>
+            <p v-if="!link.crew.value.length && !trustedEngineers.length" class="cell-note">Nessun equipaggio: la gara comparirà da sola quando qualcuno è in pista.</p>
           </div>
+          <p v-if="link.executor.value.reason === 'multiple-driving'" class="cell-error">
+            Due piloti risultano al volante: nessun ordine parte finché non è chiaro chi guida.
+          </p>
         </article>
       </section>
-
       <div class="workspace">
         <section class="strategy" aria-labelledby="strategy-title">
           <h2 id="strategy-title" class="panel-title">STRATEGIA DA INVIARE</h2>
@@ -376,7 +403,7 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
             </div>
             <fieldset class="repairs"><legend>Riparazioni</legend><label class="check-control"><input v-model="repairSuspension" type="checkbox"><span>Sospensioni</span></label><label class="check-control"><input v-model="repairBodywork" type="checkbox"><span>Carrozzeria</span></label></fieldset>
           </div>
-          <PitwallOrderBar :status="orderStatus" :chips="changeChips" :stop="stopEstimate" :can-send="hasChanges" @send="sendToCar" />
+          <PitwallOrderBar :status="orderStatus" :chips="changeChips" :stop="stopEstimate" :can-send="sendEnabled" :blocked-reason="blockedReason" @send="sendToCar" />
         </section>
 
         <PitwallCarCard :session="session" :fresh="carFresh" :age-seconds="presenceAgeSeconds" :display-plan="mfdPlan" :drivers="drivers" :stop="stopEstimate">
@@ -409,8 +436,8 @@ function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: num
 .active-pilot__disconnect { float: right; margin-top: -36px; }.cell-note { margin: 16px 0 0; color: #a7b0ba; font-size: 12px; line-height: 1.55; }.cell-error { color: #ffbd55; font-size: 11px; }.cell-notice { color: #54b9f5; font-size: 11px; }
 .search-input { width: 100%; min-height: 42px; padding: 0 14px; border: 1px solid rgba(255,255,255,.16); border-radius: 8px; outline: 0; background: #0b1219; color: #fff; font: inherit; }.search-input:focus { border-color: rgba(53,169,242,.75); box-shadow: 0 0 0 3px rgba(53,169,242,.1); }.search-input::placeholder { color: #818b96; }
 .search-results { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }.search-results li { display: flex; align-items: center; gap: 6px; }.search-results strong { flex: 1; font-size: 12px; }
-.recent-list { display: grid; max-height: 142px; overflow-y: auto; }.recent-row { display: grid; grid-template-columns: 10px minmax(76px,.55fr) minmax(150px,1.15fr) 120px; align-items: center; gap: 9px; min-height: 39px; border-bottom: 1px solid rgba(255,255,255,.08); }.recent-row:last-child { border-bottom: 0; }.recent-row strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }.recent-row__detail { color: #9ca6b0; font-size: 11px; }.recent-row .btn { justify-self: end; width: 120px; }.recent-row--incoming .grant-pill { color: #b89ae9; }
-.presence-dot { width: 9px; height: 9px; border-radius: 3px; background: #737d87; }.presence-dot.is-online { background: #5fcf70; }.presence-dot.is-waiting { background: #ffbd55; }.presence-dot.is-incoming { background: #8d56e8; }
+.recent-list { display: grid; max-height: 142px; overflow-y: auto; }.recent-row { display: grid; grid-template-columns: 10px minmax(76px,.55fr) minmax(150px,1.15fr) minmax(120px,auto); align-items: center; gap: 9px; min-height: 39px; border-bottom: 1px solid rgba(255,255,255,.08); }.recent-row:last-child { border-bottom: 0; }.recent-row strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }.recent-row__detail { color: #9ca6b0; font-size: 11px; }.recent-row .btn { justify-self: end; width: 120px; }.recent-row--incoming .grant-pill { color: #b89ae9; }
+.room-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-top: 14px; }.select-control--room { min-width: 190px; }.recent-row__actions { display: flex; justify-content: flex-end; gap: 6px; }.recent-row__actions .btn { width: auto; padding: 4px 9px; }.presence-dot { width: 9px; height: 9px; border-radius: 3px; background: #737d87; }.presence-dot.is-driving { background: #35a9f2; box-shadow: 0 0 0 3px rgba(53,169,242,.22); }.presence-dot.is-online { background: #5fcf70; }.presence-dot.is-waiting { background: #ffbd55; }.presence-dot.is-incoming { background: #8d56e8; }
 .btn { min-height: 34px; padding: 5px 12px; border: 1px solid rgba(53,169,242,.46); border-radius: 7px; background: rgba(18,91,137,.08); color: #55baf5; font: inherit; font-size: 11px; cursor: pointer; }.btn:hover:not(:disabled),.btn:focus-visible { background: rgba(53,169,242,.14); }.btn:disabled { opacity: .48; cursor: default; }.btn--primary { background: #35a9f2; color: #041019; font-weight: 800; }.btn--ghost { border-color: rgba(255,255,255,.13); color: #9ca7b2; background: transparent; }
 .invite { padding: 10px 12px; border: 1px solid rgba(53,169,242,.45); border-radius: 9px; background: rgba(53,169,242,.08); }.invite__row { display: flex; align-items: center; gap: 8px; }.invite__row p { flex: 1; margin: 0; font-size: 12px; }
 .workspace { display: grid; grid-template-columns: minmax(650px,1.16fr) minmax(420px,.84fr); gap: 12px; align-items: stretch; }

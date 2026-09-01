@@ -77,6 +77,14 @@ export interface PitwallDriverElectronApi {
   pitwallSubmitRemoteOrder?: (payload: {
     order: PitwallOrderDocument
     grant: PitwallGrant | null
+    /**
+     * Autorizzazione alternativa al permesso uno-a-uno: l ordine arriva dalla
+     * Race Room, dove cio che conta e che mittente e pilota siano nello stesso
+     * equipaggio adesso. Le regole Firestore lo hanno gia imposto sul server;
+     * il processo main lo ricontrolla perche e l unico che sa quale pilota e
+     * loggato su questo computer.
+     */
+    room?: { roomId: string, memberUids: string[] } | null
   }) => Promise<{
     accepted: boolean
     status: string
@@ -114,6 +122,20 @@ export interface PitwallDriverElectronApi {
       currentDriverIndex: number | null
     }
     identity?: { car?: string | null, track?: string | null } | null
+    /**
+     * Quale vettura, in quale gara: l impronta che ogni PC calcola da solo dai
+     * dati ACC. Serve a ritrovare la Race Room senza girarsi codici, e non
+     * autorizza nessuno (PIP-362).
+     */
+    vehicle?: {
+      available: boolean
+      reason: string | null
+      fingerprint: string | null
+      label: string | null
+      raceNumber?: number | null
+      teamName?: string | null
+      trackName?: string | null
+    } | null
   }>
 }
 

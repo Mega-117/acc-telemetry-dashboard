@@ -7,6 +7,14 @@ const props = defineProps<{
   chips: { field: PitwallField, label: string, value: string, delta: string }[]
   stop: PitwallStopEstimate
   canSend: boolean
+  /**
+   * Perche l invio e spento, se lo e.
+   *
+   * Un bottone grigio senza motivo e il modo piu rapido di far sembrare rotto
+   * un collegamento che funziona: in gara l ingegnere deve capire in un colpo
+   * d occhio se il problema e suo, del pilota o della macchina.
+   */
+  blockedReason?: string | null
 }>()
 
 const stopLabel = computed(() => {
@@ -41,10 +49,13 @@ const emit = defineEmits<{ send: [] }>()
       <span v-if="chips.length">{{ chips.length }} modifiche</span>
     </p>
 
-    <UiBaseButton variant="primary" :disabled="!canSend" @click="emit('send')">
-      <span>INVIA ALLA MACCHINA</span>
-      <span class="orderbar__arrow" aria-hidden="true">›</span>
-    </UiBaseButton>
+    <div class="orderbar__send">
+      <p v-if="!canSend && blockedReason" class="orderbar__blocked" aria-live="polite">{{ blockedReason }}</p>
+      <UiBaseButton variant="primary" :disabled="!canSend" @click="emit('send')">
+        <span>INVIA ALLA MACCHINA</span>
+        <span class="orderbar__arrow" aria-hidden="true">›</span>
+      </UiBaseButton>
+    </div>
   </footer>
 </template>
 
@@ -62,6 +73,19 @@ const emit = defineEmits<{ send: [] }>()
 
 .orderbar__estimate {
   min-width: 0;
+}
+
+.orderbar__send {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.orderbar__blocked {
+  margin: 0;
+  color: #ffbd55;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .orderbar__label {

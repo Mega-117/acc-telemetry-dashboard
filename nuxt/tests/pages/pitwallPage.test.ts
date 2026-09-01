@@ -13,30 +13,49 @@ const tabsBar = read('app/components/layout/TabsBarRouter.vue')
 const dashboardLayout = read('app/layouts/dashboard.vue')
 
 describe('Pitwall layout approvato', () => {
-  it('usa la fascia connessioni a tre sezioni senza accordion', () => {
-    expect(panel).toContain('PILOTA ASSISTITO')
-    expect(panel).toContain('CERCA PILOTA')
-    expect(panel).toContain('PILOTI RECENTI')
+  it('usa la fascia gara a tre sezioni senza accordion', () => {
+    // La fascia non parla piu' di una persona da assistere: parla della gara,
+    // di chi si aggiunge e di chi c'e' dentro. E' la differenza che regge
+    // l'endurance, e deve restare visibile in un colpo d'occhio.
+    expect(panel).toContain('GARA IN CORSO')
+    expect(panel).toContain('AGGIUNGI ALLA GARA')
+    expect(panel).toContain('EQUIPAGGIO')
     expect(panel).toContain('grid-template-columns: .92fr .94fr 1.34fr')
     expect(panel).not.toContain('showLinkPanel')
     expect(panel).not.toContain('pilot-bar__toggle')
-    expect(panel).not.toContain('Nessun pilota collegato — scegli chi assistere qui sotto')
+    expect(panel).not.toContain('PILOTA ASSISTITO')
   })
 
-  it('mette i permessi permanenti prima dello storico', () => {
-    expect(panel).toContain("a.status === 'ready' && a.scope === 'always'")
-    expect(panel).toContain('recentPilots')
-    expect(panel).toContain('Richiedi accesso')
-    expect(panel).toContain('valido fino alle')
-    expect(panel).toContain('accesso permanente')
+  it('mostra chi guida adesso, chi e presente e chi e solo invitato', () => {
+    expect(panel).toContain('link.crew.value')
+    expect(panel).toContain('AL VOLANTE')
+    expect(panel).toContain('invitato · non ancora entrato')
+    expect(panel).toContain('gestisce la gara')
+    expect(panel).toContain('is-driving')
   })
 
-  it('mantiene ricerca, richieste e revoca dei permessi reali', () => {
+  it('dichiara il conflitto invece di scegliere un pilota a caso', () => {
+    // Con due al volante non si indovina: la pagina lo dice e nessun ordine
+    // parte. Mandare una strategia alla macchina sbagliata e' peggio che non
+    // mandarla.
+    expect(panel).toContain("link.executor.value.reason === 'multiple-driving'")
+    expect(panel).toContain('nessun ordine parte finché non è chiaro chi guida')
+  })
+
+  it('mantiene ricerca, invito alla gara e permessi fra account', () => {
     expect(panel).toContain('@input="onSearchInput"')
-    expect(panel).toContain("askLink(found.uid, 'once')")
-    expect(panel).toContain("askLink(found.uid, 'always')")
-    expect(panel).toContain('link.preAuthorise(found.uid)')
-    expect(panel).toContain("link.decide(request.engineerUid, 'revoked')")
+    expect(panel).toContain('link.invite(found.uid)')
+    expect(panel).toContain('trust.preAuthorise(found.uid)')
+    expect(panel).toContain("trust.decide(request.engineerUid, 'revoked')")
+    // Invitare e' un potere del manager, e la pagina non finge il contrario.
+    expect(panel).toContain('v-if="link.isManager.value && link.room.value"')
+  })
+
+  it('permette di uscire e di chiudere la gara senza buttarla giu agli altri', () => {
+    expect(panel).toContain('link.leave()')
+    expect(panel).toContain('link.closeRoom()')
+    expect(panel).toContain('link.promote(person.uid)')
+    expect(panel).toContain('link.revoke(person.uid)')
   })
 
   it('separa strategia da inviare e MFD in macchina in due colonne', () => {
@@ -138,7 +157,6 @@ describe('Pitwall pressioni e sagoma vettura', () => {
 describe('Pitwall ordine reale e MFD onesto', () => {
   it('invia davvero solo i campi conosciuti dal runtime', () => {
     expect(panel).toContain('await link.sendPlan(planPayload())')
-    expect(panel).toContain('if (!link.selectedDriverUid.value) return')
     for (const field of ['fuelLiters', 'tyreSet', 'pressures', 'compound', 'changeTyres', 'repairBodywork', 'repairSuspension', 'driverId']) {
       expect(panel).toContain(`payload.${field}`)
     }
@@ -150,12 +168,21 @@ describe('Pitwall ordine reale e MFD onesto', () => {
     expect(panel).toContain('v-model="changeTyres"')
   })
 
-  it('usa dati macchina e equipaggio dalla presenza reale', () => {
-    expect(panel).toContain('link.selectedPilot.value?.session')
+  it('usa dati macchina e equipaggio da chi e al volante, non da un pilota scelto', () => {
+    // La fotografia della vettura la vede solo chi guida: prenderla da un
+    // "pilota assistito" fisso significherebbe mostrare dati di un PC spento.
+    expect(panel).toContain('link.carSnapshot.value')
     expect(panel).toContain('session.value?.strategy')
     expect(panel).toContain('session.value?.crew')
     expect(panel).not.toContain('MOCK_CAR')
     expect(carCard).not.toContain('Dati finti')
+  })
+
+  it('spegne l invio quando l ordine non potrebbe partire, e dice perche', () => {
+    expect(panel).toContain(':can-send="sendEnabled"')
+    expect(panel).toContain(':blocked-reason="blockedReason"')
+    expect(panel).toContain('hasChanges.value && link.canSend.value')
+    expect(orderBar).toContain('orderbar__blocked')
   })
 
   it('distingue LIVE, dati vecchi, ultimo ordine e non disponibile', () => {

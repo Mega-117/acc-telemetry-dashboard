@@ -1381,34 +1381,76 @@ describe('Pit Wall - sessione, segnalazione e ordini', () => {
 })
 
 // ============================================================================
-// Pit Wall PIP-362: la stanza e' la gara. Nessun codice da girare: chi e' in
-// quella vettura calcola l'identificativo da solo, e l'ingegnere entra perche'
-// un membro l'ha messo fra gli invitati.
+// Pit Wall PIP-362: la Race Room e' la gara.
+//
+// Qui si prova la cosa che il codice client non puo' provare: chi puo' vedere
+// la gara, chi puo' entrarci, chi puo' invitare, chi puo' prendere in carico un
+// ordine e chi puo' dichiararne l'esito. Se una di queste regole cede, cede
+// tutta la feature - e cede in silenzio, che e' il modo peggiore.
+//
+// La correzione centrale rispetto alla fondazione: l'impronta della vettura
+// (`vehicleFingerprint`) fa *ritrovare* la stanza e non apre niente. Il
+// `roomId` e' casuale e nemmeno lui e' una credenziale.
 // ============================================================================
 
-const ROOM_ID = 'stanza-qa-117'
+const ROOM_ID = 'gara-qa-117-abcdef012345'
+const VEHICLE_FINGERPRINT = 'a1b2c3d4e5f60718'
+const THIRD_UID = 'qa-terzo-pilota'
 
 function pitwallRoomPayload(overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     roomId: ROOM_ID,
     label: '#117 · Scuderia QA · Nurburgring',
     hostUid: DRIVER_UID,
+    managerUids: [DRIVER_UID],
     memberUids: [DRIVER_UID],
     allowedUids: [],
-    createdAt: '2026-08-31T15:00:00.000Z',
-    updatedAt: '2026-08-31T15:00:00.000Z',
+    vehicleFingerprint: VEHICLE_FINGERPRINT,
+    createdAt: '2026-09-01T15:00:00.000Z',
+    updatedAt: '2026-09-01T15:00:00.000Z',
     ...overrides
   }
 }
 
 function pitwallRoomMemberPayload(uid: string, overrides: Record<string, unknown> = {}) {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     uid,
     nickname: uid,
+    kind: 'driver',
     driving: false,
-    updatedAt: '2026-08-31T15:00:00.000Z',
+    runtimeSessionId: `rt-${uid}`,
+    // L'ora la mette il server: le regole rifiutano qualunque data scritta dal
+    // client, perche' e' quella che decide chi applica la strategia.
+    updatedAt: serverTimestamp(),
+    ...overrides
+  }
+}
+
+function pitwallRoomOrderPayload(orderId: string, senderId: string, overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 2,
+    orderId,
+    revision: 1,
+    senderId,
+    issuedAt: '2026-09-01T15:00:00.000Z',
+    // Deve nascere viva: le regole confrontano con l'ora del server.
+    expiresAtMs: Date.now() + 120_000,
+    status: 'pending',
+    plan: { fuelLiters: 60, tyreSet: 4 },
+    ...overrides
+  }
+}
+
+function pitwallRoomLockPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 2,
+    orderId: null,
+    claimedBy: null,
+    claimedAtMs: null,
+    leaseUntilMs: null,
+    updatedAt: serverTimestamp(),
     ...overrides
   }
 }
@@ -1419,38 +1461,80 @@ async function seedRoom(overrides: Record<string, unknown> = {}) {
   })
 }
 
-describe('Pit Wall - la stanza della gara', () => {
+async function seedRoomOrder(orderId: string, overrides: Record<string, unknown> = {}) {
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    await setDoc(
+      doc(context.firestore(), `pitwallRooms/${ROOM_ID}/orders/${orderId}`),
+      pitwallRoomOrderPayload(orderId, ENGINEER_UID, overrides)
+    )
+  })
+}
+
+describe('Pit Wall - la Race Room: chi entra e chi comanda', () => {
   beforeEach(seedPitwallProfiles)
 
-  it('il primo pilota apre la stanza ed entra da solo', async () => {
+  it('il primo pilota apre la gara, ci entra da solo ed e il manager', async () => {
     const db = testEnv.authenticatedContext(DRIVER_UID).firestore()
     await assertSucceeds(setDoc(doc(db, `pitwallRooms/${ROOM_ID}`), pitwallRoomPayload()))
   })
 
-  it('non si apre una stanza mettendoci dentro qualcun altro', async () => {
+  it('puo seminare gli invitati aprendo la gara, ma membro all inizio e solo lui', async () => {
+    // E' cosi' che la squadra gia' pre-autorizzata si ritrova dentro senza
+    // rifare niente: seminare *invitati* e' esattamente cio' che un manager
+    // potrebbe scrivere a mano, e non e' una scorciatoia sull accesso.
     const db = testEnv.authenticatedContext(DRIVER_UID).firestore()
-    await assertFails(setDoc(doc(db, `pitwallRooms/${ROOM_ID}`), pitwallRoomPayload({
-      memberUids: [DRIVER_UID, ENGINEER_UID]
+    await assertSucceeds(setDoc(doc(db, `pitwallRooms/${ROOM_ID}`), pitwallRoomPayload({
+      allowedUids: [ENGINEER_UID, THIRD_UID]
     })))
-    await assertFails(setDoc(doc(db, `pitwallRooms/${ROOM_ID}`), pitwallRoomPayload({
-      hostUid: ENGINEER_UID, memberUids: [ENGINEER_UID]
+    // Su una stanza *nuova*: aprirla mettendoci dentro qualcun altro e negato.
+    // Chi entra ci entra da se, su invito; un manager potra aggiungerlo dopo.
+    const altra = 'gara-qa-118-abcdef012345'
+    await assertFails(setDoc(doc(db, `pitwallRooms/${altra}`), pitwallRoomPayload({
+      roomId: altra, memberUids: [DRIVER_UID, ENGINEER_UID]
     })))
   })
 
-  it('un estraneo non vede nemmeno che la stanza esiste', async () => {
+  it('non si apre una gara a nome di qualcun altro', async () => {
+    const db = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertFails(setDoc(doc(db, `pitwallRooms/${ROOM_ID}`), pitwallRoomPayload({
+      hostUid: ENGINEER_UID, memberUids: [ENGINEER_UID], managerUids: [ENGINEER_UID]
+    })))
+  })
+
+  it('chi apre la gara non puo escludersi dal proprio ruolo', async () => {
+    // Senza questo, due manager potrebbero chiudersi fuori a vicenda e
+    // lasciare la stanza senza nessuno che possa invitare.
+    const db = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertFails(setDoc(doc(db, `pitwallRooms/${ROOM_ID}`), pitwallRoomPayload({
+      managerUids: []
+    })))
+  })
+
+  it('un estraneo non vede nemmeno che la gara esiste', async () => {
     await seedRoom()
     const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
     await assertFails(getDoc(doc(outsiderDb, `pitwallRooms/${ROOM_ID}`)))
   })
 
-  it('l invitato vede la stanza ed entra aggiungendo solo se stesso', async () => {
+  it('conoscere l impronta della vettura non fa entrare da nessuna parte', async () => {
+    // La correzione centrale: due PC che vedono gli stessi dati ACC dimostrano
+    // solo di vedere gli stessi dati, non di far parte della squadra.
+    await seedRoom()
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+    await assertFails(updateDoc(doc(outsiderDb, `pitwallRooms/${ROOM_ID}`), {
+      memberUids: [DRIVER_UID, OUTSIDER_UID],
+      updatedAt: '2026-09-01T16:00:00.000Z'
+    }))
+  })
+
+  it('l invitato vede la gara ed entra aggiungendo solo se stesso', async () => {
     await seedRoom({ allowedUids: [ENGINEER_UID] })
     const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
 
     await assertSucceeds(getDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}`)))
     await assertSucceeds(updateDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}`), {
       memberUids: [DRIVER_UID, ENGINEER_UID],
-      updatedAt: '2026-08-31T16:00:00.000Z'
+      updatedAt: '2026-09-01T16:00:00.000Z'
     }))
   })
 
@@ -1458,46 +1542,96 @@ describe('Pit Wall - la stanza della gara', () => {
     await seedRoom({ allowedUids: [ENGINEER_UID] })
     const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
 
-    // Entra lui e pure un terzo: negato.
     await assertFails(updateDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}`), {
       memberUids: [DRIVER_UID, ENGINEER_UID, OUTSIDER_UID],
-      updatedAt: '2026-08-31T16:00:00.000Z'
+      updatedAt: '2026-09-01T16:00:00.000Z'
     }))
-    // Si aggiunge un amico fra gli invitati mentre entra: negato.
     await assertFails(updateDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}`), {
       memberUids: [DRIVER_UID, ENGINEER_UID],
       allowedUids: [ENGINEER_UID, OUTSIDER_UID],
-      updatedAt: '2026-08-31T16:00:00.000Z'
+      updatedAt: '2026-09-01T16:00:00.000Z'
+    }))
+    // Entrare e promuoversi nello stesso gesto: negato.
+    await assertFails(updateDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}`), {
+      memberUids: [DRIVER_UID, ENGINEER_UID],
+      managerUids: [DRIVER_UID, ENGINEER_UID],
+      updatedAt: '2026-09-01T16:00:00.000Z'
     }))
   })
 
-  it('chi non e invitato non entra, nemmeno aggiungendo solo se stesso', async () => {
-    await seedRoom()
-    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
-    await assertFails(updateDoc(doc(outsiderDb, `pitwallRooms/${ROOM_ID}`), {
-      memberUids: [DRIVER_UID, OUTSIDER_UID],
-      updatedAt: '2026-08-31T16:00:00.000Z'
+  it('un membro semplice non si promuove e non tocca chi puo entrare', async () => {
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+
+    await assertFails(updateDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}`), {
+      managerUids: [DRIVER_UID, ENGINEER_UID],
+      updatedAt: '2026-09-01T16:00:00.000Z'
+    }))
+    await assertFails(updateDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}`), {
+      allowedUids: [OUTSIDER_UID],
+      updatedAt: '2026-09-01T16:00:00.000Z'
     }))
   })
 
-  it('chi ha fondato la stanza e quando non si riscrivono mai', async () => {
+  it('un membro semplice puo uscire, e solo togliere se stesso', async () => {
+    // Uscire non e' spegnere il PC: quello lo dice il battito, e chi si spegne
+    // resta membro per poter rientrare. Uscire e' proprio dire "non fate piu
+    // conto su di me", e non deve toccare nessun altro.
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID, THIRD_UID] })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+
+    await assertFails(updateDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}`), {
+      memberUids: [DRIVER_UID, ENGINEER_UID],
+      updatedAt: '2026-09-01T16:00:00.000Z'
+    }))
+    await assertSucceeds(updateDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}`), {
+      memberUids: [DRIVER_UID, THIRD_UID],
+      updatedAt: '2026-09-01T16:00:00.000Z'
+    }))
+  })
+
+  it('il manager invita, promuove e revoca', async () => {
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+
+    await assertSucceeds(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`), {
+      allowedUids: [THIRD_UID],
+      updatedAt: '2026-09-01T16:00:00.000Z'
+    }))
+    await assertSucceeds(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`), {
+      managerUids: [DRIVER_UID, ENGINEER_UID],
+      updatedAt: '2026-09-01T16:01:00.000Z'
+    }))
+    await assertSucceeds(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`), {
+      memberUids: [DRIVER_UID],
+      updatedAt: '2026-09-01T16:02:00.000Z'
+    }))
+  })
+
+  it('chi ha fondato la gara, quando, e quale vettura non si riscrivono mai', async () => {
     await seedRoom()
     const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
-    await assertFails(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`), {
-      hostUid: OUTSIDER_UID,
-      updatedAt: '2026-08-31T16:00:00.000Z'
-    }))
-    await assertFails(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`), {
-      createdAt: '2020-01-01T00:00:00.000Z',
-      updatedAt: '2026-08-31T16:00:00.000Z'
-    }))
+    for (const change of [
+      { hostUid: OUTSIDER_UID },
+      { createdAt: '2020-01-01T00:00:00.000Z' },
+      { vehicleFingerprint: 'ffffffffffffffff' }
+    ]) {
+      await assertFails(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`), {
+        ...change,
+        updatedAt: '2026-09-01T16:00:00.000Z'
+      }))
+    }
   })
 
-  it('la stanza non si cancella: e la memoria della gara', async () => {
+  it('la gara non si cancella: e la memoria della corsa', async () => {
     await seedRoom()
     const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
     await assertFails(deleteDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`)))
   })
+})
+
+describe('Pit Wall - la Race Room: il battito porta l ora del server', () => {
+  beforeEach(seedPitwallProfiles)
 
   it('il battito lo scrive solo il membro stesso, e solo se e dentro', async () => {
     await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
@@ -1506,12 +1640,10 @@ describe('Pit Wall - la stanza della gara', () => {
       doc(driverDb, `pitwallRooms/${ROOM_ID}/members/${DRIVER_UID}`),
       pitwallRoomMemberPayload(DRIVER_UID, { driving: true })
     ))
-    // Non si scrive il battito a nome di un altro.
     await assertFails(setDoc(
       doc(driverDb, `pitwallRooms/${ROOM_ID}/members/${ENGINEER_UID}`),
       pitwallRoomMemberPayload(ENGINEER_UID)
     ))
-    // Un estraneo non scrive niente qui dentro.
     const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
     await assertFails(setDoc(
       doc(outsiderDb, `pitwallRooms/${ROOM_ID}/members/${OUTSIDER_UID}`),
@@ -1519,48 +1651,240 @@ describe('Pit Wall - la stanza della gara', () => {
     ))
   })
 
+  it('una data scritta dal client viene rifiutata', async () => {
+    // Un orologio locale sbagliato decideva chi applica la strategia: avanti
+    // di un ora rendeva eterno un battito morto, indietro faceva sparire un
+    // pilota ancora in pista.
+    await seedRoom({ memberUids: [DRIVER_UID] })
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertFails(setDoc(
+      doc(driverDb, `pitwallRooms/${ROOM_ID}/members/${DRIVER_UID}`),
+      pitwallRoomMemberPayload(DRIVER_UID, { updatedAt: '2099-01-01T00:00:00.000Z' })
+    ))
+  })
+
+  it('chi se ne va si porta via il proprio battito, e solo il proprio', async () => {
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), `pitwallRooms/${ROOM_ID}/members/${DRIVER_UID}`),
+        { ...pitwallRoomMemberPayload(DRIVER_UID), updatedAt: new Date() }
+      )
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(deleteDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}/members/${DRIVER_UID}`)))
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(deleteDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/members/${DRIVER_UID}`)))
+  })
+})
+
+describe('Pit Wall - la Race Room: un solo ordine in volo', () => {
+  beforeEach(seedPitwallProfiles)
+
   it('l ordine alla vettura lo manda un membro, mai un estraneo', async () => {
     await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
     const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
     await assertSucceeds(setDoc(
       doc(engineerDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`),
-      pitwallOrderPayload('ordine-1', ENGINEER_UID)
+      pitwallRoomOrderPayload('ordine-1', ENGINEER_UID)
     ))
 
     const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
     await assertFails(setDoc(
       doc(outsiderDb, `pitwallRooms/${ROOM_ID}/orders/ordine-2`),
-      pitwallOrderPayload('ordine-2', OUTSIDER_UID)
+      pitwallRoomOrderPayload('ordine-2', OUTSIDER_UID)
     ))
   })
 
-  it('un ordine nella stanza non nasce gia applicato', async () => {
+  it('un ordine nasce vivo, con una scadenza, e mai gia applicato', async () => {
     await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
     const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
     await assertFails(setDoc(
       doc(engineerDb, `pitwallRooms/${ROOM_ID}/orders/ordine-3`),
-      pitwallOrderPayload('ordine-3', ENGINEER_UID, { status: 'applied' })
+      pitwallRoomOrderPayload('ordine-3', ENGINEER_UID, { status: 'applied' })
+    ))
+    // Gia' scaduto: sarebbe un ordine morto in archivio.
+    await assertFails(setDoc(
+      doc(engineerDb, `pitwallRooms/${ROOM_ID}/orders/ordine-4`),
+      pitwallRoomOrderPayload('ordine-4', ENGINEER_UID, { expiresAtMs: Date.now() - 1000 })
+    ))
+    // Eterno: sarebbe la coda indefinita che questa feature esiste per evitare.
+    await assertFails(setDoc(
+      doc(engineerDb, `pitwallRooms/${ROOM_ID}/orders/ordine-5`),
+      pitwallRoomOrderPayload('ordine-5', ENGINEER_UID, { expiresAtMs: Date.now() + 86_400_000 })
     ))
   })
 
-  it('l esito lo riscrive un membro, e solo nei campi dell esito', async () => {
+  it('una gara chiusa non accetta piu strategie', async () => {
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID], closedAt: '2026-09-01T18:00:00.000Z' })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(setDoc(
+      doc(engineerDb, `pitwallRooms/${ROOM_ID}/orders/ordine-6`),
+      pitwallRoomOrderPayload('ordine-6', ENGINEER_UID)
+    ))
+  })
+
+  it('prendere in carico un ordine significa firmarlo, e nessuno firma per altri', async () => {
     await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
-    await testEnv.withSecurityRulesDisabled(async (context) => {
-      await setDoc(
-        doc(context.firestore(), `pitwallRooms/${ROOM_ID}/orders/ordine-1`),
-        pitwallOrderPayload('ordine-1', ENGINEER_UID)
-      )
-    })
+    await seedRoomOrder('ordine-1')
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+
+    await assertFails(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`), {
+      status: 'applying', claimedBy: ENGINEER_UID, claimedAtMs: Date.now()
+    }))
+    await assertSucceeds(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`), {
+      status: 'applying', claimedBy: DRIVER_UID, claimedAtMs: Date.now()
+    }))
+  })
+
+  it('l esito lo dichiara solo chi ha preso l ordine', async () => {
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
+    await seedRoomOrder('ordine-1', { status: 'applying', claimedBy: DRIVER_UID, claimedAtMs: Date.now() })
+
+    // L'ingegnere e' un membro, ma non ha applicato niente: non puo' dichiarare
+    // com'e' andata. Un falso verde qui vale piu' di un errore.
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(updateDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`), {
+      status: 'applied', appliedAt: '2026-09-01T16:10:00.000Z', result: { reason: null, fields: {} }
+    }))
+
     const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
     await assertSucceeds(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`), {
-      status: 'applied',
-      appliedAt: '2026-08-31T16:10:00.000Z',
-      appliedBy: DRIVER_UID
+      status: 'applied', appliedAt: '2026-09-01T16:10:00.000Z', result: { reason: null, fields: {} }
     }))
-    // Il contenuto dell ordine resta la prova di cosa era stato chiesto.
+  })
+
+  it('il piano resta la prova di cosa era stato chiesto', async () => {
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
+    await seedRoomOrder('ordine-1', { status: 'applying', claimedBy: DRIVER_UID, claimedAtMs: Date.now() })
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
     await assertFails(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`), {
-      plan: { fuelLiters: 5 },
-      status: 'applied'
+      plan: { fuelLiters: 5 }, status: 'applied'
+    }))
+    await assertFails(deleteDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`)))
+  })
+
+  it('un ordine che nessuno puo applicare si chiude dicendolo', async () => {
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
+    await seedRoomOrder('ordine-1')
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`), {
+      status: 'rejected',
+      appliedAt: '2026-09-01T16:10:00.000Z',
+      result: { reason: 'Scaduto prima che qualcuno potesse applicarlo.', fields: {} }
+    }))
+  })
+
+  it('il lucchetto tiene un solo ordine in volo, e la presa non e eterna', async () => {
+    // "Prima accettata vince" non puo' vivere solo sul PC del pilota: in
+    // endurance i computer che ascoltano la stessa gara sono piu' di uno.
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(setDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/control/activeOrder`), pitwallRoomLockPayload({
+      orderId: 'ordine-1', claimedBy: DRIVER_UID, claimedAtMs: Date.now(), leaseUntilMs: Date.now() + 90_000
+    })))
+
+    // Un secondo PC prova a prendersi la stanza mentre la presa e' viva.
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(setDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}/control/activeOrder`), pitwallRoomLockPayload({
+      orderId: 'ordine-2', claimedBy: ENGINEER_UID, claimedAtMs: Date.now(), leaseUntilMs: Date.now() + 90_000
+    })))
+
+    // Nessuno blocca la gara a vita con un numero enorme.
+    await assertFails(setDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/control/activeOrder`), pitwallRoomLockPayload({
+      orderId: 'ordine-1', claimedBy: DRIVER_UID, claimedAtMs: Date.now(), leaseUntilMs: Date.now() + 86_400_000
+    })))
+    // E non si firma la presa a nome di un altro.
+    await assertFails(setDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/control/activeOrder`), pitwallRoomLockPayload({
+      orderId: 'ordine-1', claimedBy: ENGINEER_UID, claimedAtMs: Date.now(), leaseUntilMs: Date.now() + 60_000
+    })))
+  })
+
+  it('se il PC che aveva preso l ordine sparisce, la gara si sblocca', async () => {
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID] })
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallRooms/${ROOM_ID}/control/activeOrder`), {
+        ...pitwallRoomLockPayload({
+          orderId: 'ordine-1', claimedBy: DRIVER_UID, claimedAtMs: Date.now() - 200_000, leaseUntilMs: Date.now() - 1000
+        }),
+        updatedAt: new Date()
+      })
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertSucceeds(setDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}/control/activeOrder`), pitwallRoomLockPayload({
+      orderId: 'ordine-2', claimedBy: ENGINEER_UID, claimedAtMs: Date.now(), leaseUntilMs: Date.now() + 90_000
+    })))
+  })
+})
+
+describe('Pit Wall - il puntatore vettura non e una credenziale', () => {
+  beforeEach(seedPitwallProfiles)
+
+  it('chiunque sia autenticato puo leggerlo, ma leggerlo non apre niente', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallVehicles/${VEHICLE_FINGERPRINT}`), {
+        schemaVersion: 2,
+        fingerprint: VEHICLE_FINGERPRINT,
+        roomId: ROOM_ID,
+        createdBy: DRIVER_UID,
+        createdAt: '2026-09-01T15:00:00.000Z',
+        expiresAtMs: Date.now() + 3_600_000
+      })
+    })
+    await seedRoom()
+
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+    await assertSucceeds(getDoc(doc(outsiderDb, `pitwallVehicles/${VEHICLE_FINGERPRINT}`)))
+    // Sa dove bussare, e la porta resta chiusa.
+    await assertFails(getDoc(doc(outsiderDb, `pitwallRooms/${ROOM_ID}`)))
+  })
+
+  it('non si sfoglia l elenco delle gare in corso nel mondo', async () => {
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+    await assertFails(getDocs(query(collection(outsiderDb, 'pitwallVehicles'), limit(50))))
+  })
+
+  it('non si dirotta il puntatore di una gara in corso', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallVehicles/${VEHICLE_FINGERPRINT}`), {
+        schemaVersion: 2,
+        fingerprint: VEHICLE_FINGERPRINT,
+        roomId: ROOM_ID,
+        createdBy: DRIVER_UID,
+        createdAt: '2026-09-01T15:00:00.000Z',
+        expiresAtMs: Date.now() + 3_600_000
+      })
+    })
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+    await assertFails(setDoc(doc(outsiderDb, `pitwallVehicles/${VEHICLE_FINGERPRINT}`), {
+      schemaVersion: 2,
+      fingerprint: VEHICLE_FINGERPRINT,
+      roomId: 'gara-del-dirottatore',
+      createdBy: OUTSIDER_UID,
+      createdAt: '2026-09-01T15:30:00.000Z',
+      expiresAtMs: Date.now() + 3_600_000
+    }))
+  })
+
+  it('un puntatore scaduto si ripara da se all evento dopo', async () => {
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallVehicles/${VEHICLE_FINGERPRINT}`), {
+        schemaVersion: 2,
+        fingerprint: VEHICLE_FINGERPRINT,
+        roomId: 'gara-di-mesi-fa',
+        createdBy: OUTSIDER_UID,
+        createdAt: '2026-01-01T15:00:00.000Z',
+        expiresAtMs: Date.now() - 1000
+      })
+    })
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(setDoc(doc(driverDb, `pitwallVehicles/${VEHICLE_FINGERPRINT}`), {
+      schemaVersion: 2,
+      fingerprint: VEHICLE_FINGERPRINT,
+      roomId: ROOM_ID,
+      createdBy: DRIVER_UID,
+      createdAt: '2026-09-01T15:00:00.000Z',
+      expiresAtMs: Date.now() + 3_600_000
     }))
   })
 })

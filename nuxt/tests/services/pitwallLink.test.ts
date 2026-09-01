@@ -8,11 +8,9 @@ import {
   buildPitwallGrantRequest,
   buildPitwallOrderDocument,
   buildPitwallPreAuthorisation,
-  describePitwallExecutor,
   describePitwallGrantScope,
   describePitwallLinkError,
   describePitwallOrderStatus,
-  resolvePitwallExecutor,
   isPitwallGrantUsable,
   isPitwallOrderSettled,
   isPitwallSessionFresh,
@@ -288,61 +286,5 @@ describe('fotografia della vettura nella presenza', () => {
     expect(strategy?.pressures).toBeNull()
     expect(strategy?.compound).toBeNull()
     expect(strategy?.fuelToAdd).toBeNull()
-  })
-})
-
-describe('chi esegue l ordine dentro la stanza', () => {
-  const member = (uid: string, driving: boolean, ageMs = 0) => ({
-    uid,
-    nickname: uid.toUpperCase(),
-    driving,
-    updatedAt: new Date(NOW_MS - ageMs).toISOString()
-  })
-
-  it('con un solo pilota al volante lo indica senza esitare', () => {
-    const resolution = resolvePitwallExecutor(
-      [member('rico', true), member('popo', false)],
-      NOW_MS
-    )
-    expect(resolution.reason).toBe('ready')
-    expect(resolution.executor?.uid).toBe('rico')
-    expect(describePitwallExecutor(resolution)).toContain('RICO')
-  })
-
-  it('il cambio pilota si risolve da se: chi guida adesso esegue', () => {
-    // Rico scende, Pippo sale: nessuno tocca niente lato ingegnere.
-    const prima = resolvePitwallExecutor([member('rico', true), member('pippo', false)], NOW_MS)
-    const dopo = resolvePitwallExecutor([member('rico', false), member('pippo', true)], NOW_MS)
-    expect(prima.executor?.uid).toBe('rico')
-    expect(dopo.executor?.uid).toBe('pippo')
-  })
-
-  it('chi ha spento il PC resta nella stanza ma non esegue piu', () => {
-    // Battito vecchio di cinque minuti: c e', ma non e' al volante davvero.
-    const resolution = resolvePitwallExecutor([member('rico', true, 5 * 60_000)], NOW_MS)
-    expect(resolution.reason).toBe('nobody-driving')
-    expect(resolution.executor).toBeNull()
-  })
-
-  it('due che si dichiarano al volante fermano l ordine, senza indovinare', () => {
-    const resolution = resolvePitwallExecutor(
-      [member('rico', true), member('pippo', true)],
-      NOW_MS
-    )
-    expect(resolution.reason).toBe('multiple-driving')
-    expect(resolution.executor).toBeNull()
-    expect(resolution.conflicting.map(m => m.uid)).toEqual(['rico', 'pippo'])
-    expect(describePitwallExecutor(resolution)).toContain('RICO')
-  })
-
-  it('una stanza vuota si distingue da una stanza senza nessuno al volante', () => {
-    expect(resolvePitwallExecutor([], NOW_MS).reason).toBe('empty-room')
-    expect(resolvePitwallExecutor(null, NOW_MS).reason).toBe('empty-room')
-    expect(resolvePitwallExecutor([member('popo', false)], NOW_MS).reason).toBe('nobody-driving')
-  })
-
-  it('una data illeggibile non conta come presenza valida', () => {
-    const rotto = { uid: 'rico', nickname: 'RICO', driving: true, updatedAt: 'non-una-data' }
-    expect(resolvePitwallExecutor([rotto], NOW_MS).reason).toBe('nobody-driving')
   })
 })

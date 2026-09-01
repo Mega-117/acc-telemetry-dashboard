@@ -22,6 +22,7 @@ import {
   type Firestore,
   type Query,
   type QuerySnapshot,
+  type DocumentSnapshot,
   type SetOptions,
   type Transaction
 } from 'firebase/firestore'
@@ -543,6 +544,47 @@ export function trackedOnSnapshot(
         Date.now(),
         estimatedReads,
         `returned=${snapshot.docs.length}`,
+        scenario
+      )
+      onNext(snapshot)
+    },
+    onError
+  )
+}
+
+/**
+ * Ascolto di un singolo documento.
+ *
+ * Serve quando cio che si osserva e un documento e non una collezione - la
+ * stanza di una gara, un ordine mentre viene applicato - e contarlo come una
+ * query direbbe una bugia sul consumo: una lettura per aggiornamento, non una
+ * per documento restituito.
+ */
+export function trackedOnDocSnapshot(
+  ref: DocumentReference,
+  caller: string,
+  onNext: (snapshot: DocumentSnapshot) => void,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- allineato a trackedOnSnapshot
+  onError?: (error: any) => void
+) {
+  const activeScenario = getActiveScenario()
+  const scenario = activeScenario
+    ? { scenarioId: activeScenario.id, scenarioName: activeScenario.name }
+    : undefined
+  createOperationLogger('LISTEN_SUBSCRIBE', caller, ref, 0, 0, Date.now(), 0, undefined, scenario)
+
+  return fbOnSnapshot(
+    ref,
+    (snapshot) => {
+      createOperationLogger(
+        'LISTEN_SNAPSHOT',
+        caller,
+        ref,
+        1,
+        0,
+        Date.now(),
+        1,
+        `exists=${snapshot.exists()}`,
         scenario
       )
       onNext(snapshot)

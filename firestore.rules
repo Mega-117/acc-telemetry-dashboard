@@ -211,14 +211,24 @@ service cloud.firestore {
              && request.resource.data.plan.keys().size() <= 12;
     }
 
-    // === Pit Wall: la stanza e' la gara (PIP-362) ===
+    // === Pit Wall: la Race Room e' la gara (PIP-362) ===
     // Collegarsi a una *persona* non regge in endurance: i piloti si alternano
     // sulla stessa vettura e chi non guida spegne il PC. La stanza vive qui e
     // sopravvive a chiunque si spenga; l'ordine lo esegue chi guida adesso.
     //
-    // Chi puo' entrare non e' un segreto condiviso (niente codici da girare):
-    // e' un elenco di invitati che i membri stessi mantengono. Cosi' la regola
-    // resta una sola lettura di lista, senza `get()` a catena.
+    // Le due identita' che non vanno confuse:
+    //  - `vehicleFingerprint` dice quale vettura in quale gara. Lo calcola ogni
+    //    PC dai dati ACC, serve a ritrovarsi, e NON autorizza nessuno: due
+    //    computer con la stessa impronta dimostrano solo di vedere gli stessi
+    //    dati del gioco.
+    //  - `roomId` e' casuale ed e' l'identita' autorevole della gara. Nemmeno
+    //    lui e' una credenziale: chi entra lo decidono l'elenco degli invitati
+    //    e queste regole.
+    //
+    // Due soli livelli: il manager governa chi puo' entrare, il membro vede e
+    // manda strategie. Applicare non e' un livello: e' del pilota al volante in
+    // quel momento, e non si puo' dimostrare dal server - per questo l'ordine
+    // si prende con un lucchetto, e l'esito lo scrive solo chi l'ha preso.
 
     function pitwallRoomDoc(roomId) {
       return get(/databases/$(database)/documents/pitwallRooms/$(roomId)).data;
@@ -231,44 +241,85 @@ service cloud.firestore {
              && request.auth.uid in pitwallRoomDoc(roomId).memberUids;
     }
 
+    /** Manager: l'unico che tocca l'elenco di chi puo' entrare. */
+    function isPitwallRoomManager(roomId) {
+      return isSignedIn()
+             && exists(/databases/$(database)/documents/pitwallRooms/$(roomId))
+             && request.auth.uid in pitwallRoomDoc(roomId).managerUids;
+    }
+
+    /** La gara e' ancora aperta: una stanza chiusa resta memoria, non canale. */
+    function isPitwallRoomOpen(roomId) {
+      return pitwallRoomDoc(roomId).get('closedAt', null) == null;
+    }
+
     function validPitwallRoom(roomId) {
       return request.resource.data.keys().hasAll([
-               'schemaVersion', 'roomId', 'label', 'hostUid', 'memberUids', 'allowedUids', 'createdAt', 'updatedAt'
+               'schemaVersion', 'roomId', 'label', 'hostUid', 'managerUids', 'memberUids',
+               'allowedUids', 'vehicleFingerprint', 'createdAt', 'updatedAt'
              ])
              && request.resource.data.keys().hasOnly([
-               'schemaVersion', 'roomId', 'label', 'hostUid', 'memberUids', 'allowedUids',
-               'createdAt', 'updatedAt', 'track', 'raceNumber', 'teamName'
+               'schemaVersion', 'roomId', 'label', 'hostUid', 'managerUids', 'memberUids',
+               'allowedUids', 'vehicleFingerprint', 'createdAt', 'updatedAt',
+               'track', 'raceNumber', 'teamName', 'closedAt'
              ])
-             && request.resource.data.schemaVersion == 1
+             && request.resource.data.schemaVersion == 2
              && request.resource.data.roomId == roomId
              && roomId.size() <= 64
              && request.resource.data.label is string
              && request.resource.data.label.size() <= 120
              && request.resource.data.hostUid is string
+             && request.resource.data.managerUids is list
+             && request.resource.data.managerUids.size() <= 8
              && request.resource.data.memberUids is list
              && request.resource.data.memberUids.size() <= 16
              && request.resource.data.allowedUids is list
              && request.resource.data.allowedUids.size() <= 32
+             // L'impronta della vettura viaggia con la stanza per poterle
+             // confrontare, mai per aprirle: nessuna regola la usa per decidere.
+             && request.resource.data.vehicleFingerprint is string
+             && request.resource.data.vehicleFingerprint.size() <= 64
              && request.resource.data.createdAt is string
              && request.resource.data.createdAt.size() <= 40
              && request.resource.data.updatedAt is string
              && request.resource.data.updatedAt.size() <= 40
              && isBoundedNullableString(request.resource.data.get('track', null), 80)
              && isBoundedNullableString(request.resource.data.get('teamName', null), 80)
+             && isBoundedNullableString(request.resource.data.get('closedAt', null), 40)
              && (request.resource.data.get('raceNumber', null) == null
-                 || request.resource.data.raceNumber is int);
+                 || request.resource.data.raceNumber is int)
+             // Chi ha aperto la stanza non puo' essere degradato ne' espulso:
+             // e' l'unico modo di garantire che resti sempre qualcuno che puo'
+             // invitare, anche dopo una lite fra manager.
+             && request.resource.data.hostUid in request.resource.data.managerUids
+             && request.resource.data.hostUid in request.resource.data.memberUids;
     }
 
-    /** Chi ha fondato la stanza e quando non si riscrivono mai. */
+    /** Chi ha fondato la stanza, quando, e quale vettura non si riscrivono mai. */
     function pitwallRoomIdentityUnchanged() {
       return request.resource.data.roomId == resource.data.roomId
              && request.resource.data.hostUid == resource.data.hostUid
-             && request.resource.data.createdAt == resource.data.createdAt;
+             && request.resource.data.createdAt == resource.data.createdAt
+             && request.resource.data.vehicleFingerprint == resource.data.vehicleFingerprint;
     }
 
     /** Entrare significa aggiungere se stessi, e nessun altro, ai membri. */
     function pitwallRoomJoinsSelf() {
-      return request.resource.data.memberUids == resource.data.memberUids.concat([request.auth.uid]);
+      return request.resource.data.memberUids == resource.data.memberUids.concat([request.auth.uid])
+             && request.resource.data.allowedUids == resource.data.allowedUids
+             && request.resource.data.managerUids == resource.data.managerUids;
+    }
+
+    /**
+     * Un membro senza galloni non cambia chi puo' entrare: al massimo esce.
+     * Uscire non e' spegnere il PC - quello lo dice il battito - e' proprio
+     * dire "non fate piu' conto su di me", e non deve toccare nessun altro.
+     */
+    function pitwallRoomMemberSelfServiceOnly() {
+      return request.resource.data.allowedUids == resource.data.allowedUids
+             && request.resource.data.managerUids == resource.data.managerUids
+             && (request.resource.data.memberUids == resource.data.memberUids
+                 || request.resource.data.memberUids == resource.data.memberUids.removeAll([request.auth.uid]));
     }
 
     /**
@@ -279,22 +330,167 @@ service cloud.firestore {
      */
     function validPitwallRoomMember(roomId, memberUid) {
       return request.resource.data.keys().hasAll([
-               'schemaVersion', 'uid', 'nickname', 'driving', 'updatedAt'
+               'schemaVersion', 'uid', 'nickname', 'kind', 'driving', 'runtimeSessionId', 'updatedAt'
              ])
              && request.resource.data.keys().hasOnly([
-               'schemaVersion', 'uid', 'nickname', 'driving', 'updatedAt', 'crew', 'strategy'
+               'schemaVersion', 'uid', 'nickname', 'kind', 'driving', 'runtimeSessionId', 'updatedAt',
+               'crew', 'strategy'
              ])
-             && request.resource.data.schemaVersion == 1
+             && request.resource.data.schemaVersion == 2
              && request.resource.data.uid == memberUid
              && request.resource.data.nickname is string
              && request.resource.data.nickname.size() <= 60
+             && request.resource.data.kind in ['driver', 'engineer']
              && request.resource.data.driving is bool
-             && request.resource.data.updatedAt is string
-             && request.resource.data.updatedAt.size() <= 40
+             && request.resource.data.runtimeSessionId is string
+             && request.resource.data.runtimeSessionId.size() <= 80
+             // L'ora la mette il server. Con una stringa scritta dal client, un
+             // orologio avanti di un'ora faceva sembrare fresco per sempre un
+             // battito morto, e con l'orologio indietro spariva un pilota che
+             // era ancora in pista: entrambi decidono chi applica la strategia.
+             && request.resource.data.updatedAt == request.time
              && (request.resource.data.get('crew', null) == null
                  || (request.resource.data.crew is list && request.resource.data.crew.size() <= 16))
              && (request.resource.data.get('strategy', null) == null
                  || validPitwallStrategySnapshot(request.resource.data.strategy));
+    }
+
+    /**
+     * Ordine mandato alla vettura dentro la stanza.
+     * Due campi in piu' rispetto all'ordine uno-a-uno: una scadenza
+     * obbligatoria - nessuna coda indefinita, mai una strategia che parte da
+     * sola dieci minuti dopo - e chi l'ha preso in carico.
+     */
+    function validPitwallRoomOrder(orderId) {
+      return request.resource.data.keys().hasAll([
+               'schemaVersion', 'orderId', 'revision', 'senderId', 'issuedAt',
+               'expiresAtMs', 'status', 'plan'
+             ])
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'orderId', 'revision', 'senderId', 'issuedAt',
+               'expiresAtMs', 'status', 'plan', 'claimedBy', 'claimedAtMs', 'result', 'appliedAt'
+             ])
+             && request.resource.data.schemaVersion == 2
+             && request.resource.data.orderId == orderId
+             && request.resource.data.orderId.size() <= 80
+             && request.resource.data.revision is int
+             && request.resource.data.revision >= 0
+             && request.resource.data.senderId == request.auth.uid
+             && request.resource.data.issuedAt is string
+             && request.resource.data.issuedAt.size() <= 40
+             // Nasce viva e non eterna: una scadenza gia' passata sarebbe un
+             // ordine morto in archivio, una lontanissima sarebbe la coda che
+             // questa feature esiste per non avere.
+             && request.resource.data.expiresAtMs is number
+             && request.resource.data.expiresAtMs > request.time.toMillis()
+             && request.resource.data.expiresAtMs <= request.time.toMillis() + 600000
+             && request.resource.data.status == 'pending'
+             && request.resource.data.plan is map
+             && request.resource.data.plan.keys().size() <= 12;
+    }
+
+    /**
+     * Prendere in carico un ordine: si passa da `pending` ad `applying` e ci si
+     * firma. Il piano non si tocca, cosi' resta la prova di cosa era stato
+     * chiesto anche quando l'esito racconta altro.
+     */
+    function pitwallRoomOrderClaim() {
+      return resource.data.status == 'pending'
+             && request.resource.data.status == 'applying'
+             && request.resource.data.claimedBy == request.auth.uid
+             && request.resource.data.claimedAtMs is number
+             && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['status', 'claimedBy', 'claimedAtMs']);
+    }
+
+    /** L'esito lo scrive solo chi ha preso l'ordine: e' l'unico che ha applicato. */
+    function pitwallRoomOrderOutcome() {
+      return resource.data.get('claimedBy', null) == request.auth.uid
+             && resource.data.status == 'applying'
+             && request.resource.data.status in ['applied', 'partial', 'failed', 'rejected']
+             && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['status', 'result', 'appliedAt']);
+    }
+
+    /**
+     * Un ordine che nessuno puo' applicare si chiude dicendolo.
+     * Scaduto, in conflitto con un altro gia' in volo, o senza nessuno al
+     * volante: si rifiuta subito invece di lasciarlo in coda a tempo
+     * indeterminato, che e' il modo in cui una strategia parte a sorpresa.
+     */
+    function pitwallRoomOrderRejection() {
+      return resource.data.status == 'pending'
+             && request.resource.data.status == 'rejected'
+             && request.resource.data.diff(resource.data).affectedKeys()
+                  .hasOnly(['status', 'result', 'appliedAt']);
+    }
+
+    /**
+     * Il lucchetto della stanza: un solo ordine in applicazione alla volta.
+     * "Prima accettata vince" non puo' vivere solo sul PC del pilota, perche'
+     * in endurance i PC che ascoltano sono piu' di uno.
+     */
+    function validPitwallRoomLock() {
+      return request.resource.data.keys().hasAll([
+               'schemaVersion', 'orderId', 'claimedBy', 'claimedAtMs', 'leaseUntilMs', 'updatedAt'
+             ])
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'orderId', 'claimedBy', 'claimedAtMs', 'leaseUntilMs', 'updatedAt'
+             ])
+             && request.resource.data.schemaVersion == 2
+             && (request.resource.data.orderId == null
+                 || (request.resource.data.orderId is string && request.resource.data.orderId.size() <= 80))
+             && (request.resource.data.claimedBy == null
+                 || request.resource.data.claimedBy == request.auth.uid)
+             && (request.resource.data.claimedAtMs == null
+                 || request.resource.data.claimedAtMs is number)
+             // Una presa dura al massimo cinque minuti: nessuno blocca la
+             // stanza a vita, nemmeno per sbaglio con un numero enorme.
+             && (request.resource.data.leaseUntilMs == null
+                 || (request.resource.data.leaseUntilMs is number
+                     && request.resource.data.leaseUntilMs <= request.time.toMillis() + 300000))
+             && request.resource.data.updatedAt == request.time;
+    }
+
+    /**
+     * La presa e' libera adesso: nessun ordine in volo, oppure la presa
+     * precedente e' scaduta perche' il PC che l'aveva non c'e' piu'. Scaduta
+     * non vuol dire "riprova quell'ordine": vuol dire che la stanza accetta il
+     * prossimo.
+     */
+    function pitwallRoomLockAvailable() {
+      return resource == null
+             || resource.data.orderId == null
+             || resource.data.claimedBy == request.auth.uid
+             || resource.data.get('leaseUntilMs', null) == null
+             || resource.data.leaseUntilMs <= request.time.toMillis();
+    }
+
+    /**
+     * Il puntatore che fa ritrovare la stanza a chi vede la stessa vettura.
+     * Conoscerlo non fa entrare da nessuna parte: dice solo "quella gara sta
+     * in quella stanza", e la porta resta chiusa a chi non e' invitato.
+     */
+    function validPitwallVehiclePointer(fingerprint) {
+      return request.resource.data.keys().hasAll([
+               'schemaVersion', 'fingerprint', 'roomId', 'createdBy', 'createdAt', 'expiresAtMs'
+             ])
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'fingerprint', 'roomId', 'createdBy', 'createdAt', 'expiresAtMs'
+             ])
+             && request.resource.data.schemaVersion == 2
+             && request.resource.data.fingerprint == fingerprint
+             && fingerprint.size() <= 64
+             && request.resource.data.roomId is string
+             && request.resource.data.roomId.size() <= 64
+             && request.resource.data.createdBy == request.auth.uid
+             && request.resource.data.createdAt is string
+             && request.resource.data.createdAt.size() <= 40
+             // Vale un weekend di gara: la stessa vettura, in un evento futuro,
+             // apre una stanza nuova invece di riesumare membri e ordini vecchi.
+             && request.resource.data.expiresAtMs is number
+             && request.resource.data.expiresAtMs > request.time.toMillis()
+             && request.resource.data.expiresAtMs <= request.time.toMillis() + 172800000;
     }
 
     function isNullableString(value) {
@@ -782,11 +978,10 @@ service cloud.firestore {
     // La telemetria live NON passa da qui: viaggia diretta fra i due PC. Questo
     // ramo porta solo cio' che serve a farsi trovare e, come rete di sicurezza,
     // l'ordine di strategia, che e' raro e piccolo.
-    // === Pit Wall: le stanze (PIP-362) ===
-    // Una stanza per vettura in gara. L'identificativo lo calcola ogni PC dai
-    // dati della sessione ACC, quindi nessuno deve girare codici: chi e' in
-    // quella macchina ci arriva da solo. L'ingegnere al muretto entra perche'
-    // un membro l'ha messo fra gli invitati.
+    // === Pit Wall: le Race Room (PIP-362) ===
+    // Una stanza per vettura in una gara. Chi e' in quella macchina la ritrova
+    // da solo tramite l'impronta, ma non ci entra per quello: entra perche' un
+    // manager l'ha invitato. L'impronta fa ritrovare, l'invito fa entrare.
     match /pitwallRooms/{roomId} {
       // Vede la stanza chi c'e' dentro e chi e' stato invitato: senza questo
       // l'invitato non potrebbe nemmeno trovare la porta.
@@ -798,26 +993,32 @@ service cloud.firestore {
                   && (request.auth.uid in resource.data.memberUids
                       || request.auth.uid in resource.data.allowedUids);
 
-      // Il primo che arriva apre la stanza, e ci entra da solo.
+      // Il primo che arriva apre la stanza: ci entra da solo ed e' il manager.
+      // Gli invitati puo' seminarli subito - la squadra che si e' gia'
+      // pre-autorizzata una volta si ritrova dentro senza rifare niente - ma
+      // membro, all'inizio, e' soltanto lui.
       allow create: if isSignedIn()
                     && validPitwallRoom(roomId)
                     && request.resource.data.hostUid == request.auth.uid
-                    && request.resource.data.memberUids == [request.auth.uid];
+                    && request.resource.data.memberUids == [request.auth.uid]
+                    && request.resource.data.managerUids == [request.auth.uid];
 
-      // Due sole cose lecite: un membro aggiorna la stanza (etichetta,
-      // invitati); un invitato entra aggiungendo se stesso e nessun altro.
+      // Tre sole cose lecite, e sono i tre ruoli reali intorno alla stanza:
+      // il manager governa l'accesso, il membro semplice puo' solo uscire,
+      // l'invitato entra aggiungendo se stesso e nessun altro.
       allow update: if isSignedIn()
                     && validPitwallRoom(roomId)
                     && pitwallRoomIdentityUnchanged()
                     && (
-                      request.auth.uid in resource.data.memberUids
+                      request.auth.uid in resource.data.managerUids
+                      || (request.auth.uid in resource.data.memberUids
+                          && pitwallRoomMemberSelfServiceOnly())
                       || (request.auth.uid in resource.data.allowedUids
-                          && pitwallRoomJoinsSelf()
-                          && request.resource.data.allowedUids == resource.data.allowedUids)
+                          && pitwallRoomJoinsSelf())
                     );
 
-      // La stanza non si cancella: e' la memoria della gara. Si svuota da se'
-      // quando i battiti scadono.
+      // La stanza non si cancella: e' la memoria della gara. Si chiude con
+      // `closedAt`, e le presenze scadono da sole.
       allow delete: if false;
 
       // Chi c'e' adesso e chi e' al volante.
@@ -826,20 +1027,59 @@ service cloud.firestore {
         allow create, update: if isPitwallRoomMember(roomId)
                               && memberUid == request.auth.uid
                               && validPitwallRoomMember(roomId, memberUid);
+        // Andarsene e' proprio: chi spegne il PC non deve sparire dalla stanza
+        // per mano di nessun altro.
         allow delete: if isSignedIn() && memberUid == request.auth.uid;
       }
 
-      // L'ordine si manda alla vettura: lo scrive un membro, lo esegue chi
-      // guida. L'esito lo riscrive solo chi l'ha applicato davvero.
-      match /orders/{orderId} {
+      // Il lucchetto della gara: qui vive "prima accettata vince", perche' i
+      // PC che ascoltano possono essere piu' di uno e l'arbitraggio locale del
+      // singolo PC non basterebbe.
+      match /control/{controlId} {
         allow get, list: if isPitwallRoomMember(roomId);
-        allow create: if isPitwallRoomMember(roomId) && validPitwallOrder(orderId);
-        allow update: if isPitwallRoomMember(roomId)
-                      && request.resource.data.diff(resource.data).affectedKeys()
-                           .hasOnly(['status', 'result', 'appliedAt', 'appliedBy'])
-                      && request.resource.data.status in ['applying', 'applied', 'partial', 'failed', 'rejected'];
+        allow create, update: if isPitwallRoomMember(roomId)
+                              && controlId == 'activeOrder'
+                              && validPitwallRoomLock()
+                              && pitwallRoomLockAvailable();
         allow delete: if false;
       }
+
+      // L'ordine si manda alla vettura: lo scrive un membro, lo prende in
+      // carico chi guida, e l'esito lo riscrive solo chi l'ha preso davvero.
+      match /orders/{orderId} {
+        allow get, list: if isPitwallRoomMember(roomId);
+        allow create: if isPitwallRoomMember(roomId)
+                      && isPitwallRoomOpen(roomId)
+                      && validPitwallRoomOrder(orderId);
+        allow update: if isPitwallRoomMember(roomId)
+                      && (
+                        pitwallRoomOrderClaim()
+                        || pitwallRoomOrderOutcome()
+                        || pitwallRoomOrderRejection()
+                      );
+        // Un ordine concluso e' la prova di cosa era stato chiesto e com'e'
+        // andata: non si cancella, nemmeno da chi l'ha mandato.
+        allow delete: if false;
+      }
+    }
+
+    // === Pit Wall: quale vettura sta in quale stanza (PIP-362) ===
+    // Ogni PC nella stessa sessione ACC calcola la stessa impronta e trova la
+    // stessa stanza, senza codici da girarsi. Non e' una credenziale: leggerlo
+    // dice soltanto dove bussare, e la porta la aprono le regole della stanza.
+    match /pitwallVehicles/{fingerprint} {
+      allow get: if isSignedIn();
+      // Nessuno sfoglia l'elenco delle gare in corso nel mondo.
+      allow list: if false;
+      allow create: if isSignedIn() && validPitwallVehiclePointer(fingerprint);
+      // Si ripunta solo il proprio, o uno gia' scaduto: cosi' un puntatore
+      // vecchio si ripara da se' all'evento dopo, senza che nessuno possa
+      // dirottare la gara di qualcun altro mentre e' in corso.
+      allow update: if isSignedIn()
+                    && validPitwallVehiclePointer(fingerprint)
+                    && (resource.data.createdBy == request.auth.uid
+                        || resource.data.expiresAtMs <= request.time.toMillis());
+      allow delete: if false;
     }
 
     match /pitwallSessions/{driverUid} {
