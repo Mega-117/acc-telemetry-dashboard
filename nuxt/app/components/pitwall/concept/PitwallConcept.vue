@@ -8,7 +8,9 @@ import {
   PITWALL_CONCEPT_RECENTS,
   describePitwallConceptAccess,
   filterPitwallConceptPeople,
+  getPitwallConceptCrewMembers,
   stepPitwallConceptPressure,
+  type PitwallConceptCrew,
   type PitwallConceptLiveTab,
   type PitwallConceptScreen,
 } from "~/utils/pitwallConcept";
@@ -25,6 +27,7 @@ const crewDescription = ref("Endurance, campionato e allenamenti insieme");
 const crewImageId = ref("apex-red");
 const sent = ref(false);
 const accessMenu = ref<string | null>(null);
+const expandedCrewId = ref<string | null>(null);
 const DEFAULT_CREW_IMAGE = PITWALL_CONCEPT_CREW_IMAGES[0]!;
 const searchResults = computed(() =>
   submittedSearch.value
@@ -66,6 +69,7 @@ function go(next: PitwallConceptScreen) {
   sent.value = false;
   if (next === "home") {
     clearSearch();
+    expandedCrewId.value = null;
   }
   void nextTick(() => {
     const conceptRoot = document.querySelector<HTMLElement>(
@@ -104,6 +108,14 @@ function toggleAccessMenu(scope: "search" | "recent", personId: string) {
 
 function closeAccessMenu() {
   accessMenu.value = null;
+}
+
+function toggleCrew(crewId: string) {
+  expandedCrewId.value = expandedCrewId.value === crewId ? null : crewId;
+}
+
+function crewMembers(crew: PitwallConceptCrew) {
+  return getPitwallConceptCrewMembers(crew);
 }
 
 function stepPressure(wheel: keyof typeof pressures, direction: 1 | -1) {
@@ -216,24 +228,57 @@ function crewImage(imageId: string) {
                 + Crea
               </button>
             </header>
-            <button
+            <article
               v-for="crew in PITWALL_CONCEPT_CREWS"
               :key="crew.id"
-              class="pwc-crew-card"
+              class="pwc-crew-disclosure"
               :class="`is-${crew.tone}`"
-              @click="go('crew-detail')"
             >
-              <img
-                class="pwc-crew-image"
-                :src="crewImage(crew.imageId).src"
-                :alt="`Copertina ${crew.name}`"
-              />
-              <span>
-                <strong>{{ crew.name }}</strong>
-                <small>{{ crew.members }} membri</small>
-              </span>
-              <b aria-hidden="true">›</b>
-            </button>
+              <button
+                type="button"
+                class="pwc-crew-card"
+                :aria-expanded="expandedCrewId === crew.id"
+                :aria-controls="`crew-members-${crew.id}`"
+                @click="toggleCrew(crew.id)"
+              >
+                <img
+                  class="pwc-crew-image"
+                  :src="crewImage(crew.imageId).src"
+                  :alt="`Copertina ${crew.name}`"
+                />
+                <span>
+                  <strong>{{ crew.name }}</strong>
+                  <small>{{ crew.memberIds.length }} membri</small>
+                </span>
+                <b class="pwc-crew-chevron" aria-hidden="true">›</b>
+              </button>
+              <div
+                v-if="expandedCrewId === crew.id"
+                :id="`crew-members-${crew.id}`"
+                class="pwc-crew-members"
+              >
+                <div class="pwc-crew-member-list">
+                  <div
+                    v-for="person in crewMembers(crew)"
+                    :key="person.id"
+                    class="pwc-crew-member"
+                  >
+                    <span class="pwc-avatar">{{ person.initials }}</span>
+                    <strong>{{ person.handle.replace('@', '') }}</strong>
+                    <button
+                      type="button"
+                      class="pwc-btn is-primary"
+                      @click="go('live')"
+                    >Collegati</button>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="pwc-open-crew"
+                  @click="go('crew-detail')"
+                >Apri Crew <span aria-hidden="true">→</span></button>
+              </div>
+            </article>
           </section>
           <section class="pwc-recents">
             <header> <span class="pwc-eyebrow">Ultimi cinque</span> <h2>Recenti</h2> </header> <article
@@ -896,25 +941,49 @@ function crewImage(imageId: string) {
 
 .pwc-crews h2,
 .pwc-recents h2 { font-size: 22px; }
+.pwc-crew-disclosure {
+  margin-bottom: 12px;
+  border: 1px solid var(--pwc-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+  overflow: hidden;
+}
+
+.pwc-crew-disclosure:last-child { margin-bottom: 0; }
+.pwc-crew-disclosure.is-green {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.035);
+}
+.pwc-crew-disclosure.is-violet {
+  border-color: rgba(139, 92, 246, 0.35);
+  background: rgba(139, 92, 246, 0.035);
+}
 .pwc-crew-card {
   width: 100%;
   grid-template-columns: 82px minmax(0, 1fr) 18px;
-  margin: 0 0 12px;
+  margin: 0;
   padding: 15px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: #fff;
   text-align: left;
   cursor: pointer;
 }
 
-.pwc-crew-card:last-child { margin-bottom: 0; }
 .pwc-crew-card > span { min-width: 0; }
-.pwc-crew-card > b {
+.pwc-crew-chevron {
   color: $text-muted;
   font-size: 24px;
   font-weight: 400;
+  transition: transform 0.15s ease, color 0.15s ease;
 }
 
-.pwc-crew-card:hover { border-color: rgba(255, 107, 0, 0.42); }
+.pwc-crew-card:hover { background: rgba(255, 255, 255, 0.035); }
+.pwc-crew-card[aria-expanded="true"] .pwc-crew-chevron {
+  color: $racing-orange;
+  transform: rotate(90deg);
+}
 .pwc-crew-image {
   width: 82px;
   height: 54px;
@@ -922,6 +991,49 @@ function crewImage(imageId: string) {
   border-radius: 8px;
   object-fit: cover;
 }
+
+.pwc-crew-members {
+  padding: 0 14px 12px;
+  border-top: 1px solid var(--pwc-line-soft);
+}
+
+.pwc-crew-member-list {
+  max-height: 264px;
+  overflow-y: auto;
+}
+
+.pwc-crew-member {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--pwc-line-soft);
+}
+
+.pwc-crew-member .pwc-avatar { width: 34px; height: 34px; font-size: 11px; }
+.pwc-crew-member > strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.pwc-crew-member .pwc-btn { min-height: 32px; padding: 6px 10px; font-size: 11px; }
+.pwc-open-crew {
+  width: 100%;
+  padding: 11px 2px 0;
+  border: 0;
+  background: transparent;
+  color: $racing-orange;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.pwc-open-crew:hover { color: #fff; }
 
 .pwc-recents {
   position: relative;
@@ -1009,6 +1121,7 @@ function crewImage(imageId: string) {
   .pwc-crews,
   .pwc-recents { padding: 20px 16px; }
   .pwc-crew-card { grid-template-columns: 68px minmax(0, 1fr) auto; padding: 14px; }
+  .pwc-crew-members { padding-inline: 12px; }
   .pwc-crew-image { width: 68px; height: 48px; }
   .pwc-recent-person { grid-template-columns: 38px minmax(0, 1fr) auto; }
   .pwc-image-picker > div { grid-template-columns: repeat(2, 1fr); }

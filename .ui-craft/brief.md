@@ -27,6 +27,7 @@ Da Pit Wall l’utente individua chi può assistere e avvia il live entro 10 sec
 
 # Learned constraints
 
+- **2026-09-01** — Le card Crew nella Home sono disclosure inline: una sola si apre alla volta, mostra un roster compatto con `Collegati`, mentre `Apri Crew` resta separato per la gestione completa. La membership equivale ad accesso permanente e non richiede presenza online. *Perché:* consente di raggiungere un membro in due click senza aggiungere Firebase, menu o sottopagine intermedie.
 - **2026-09-01** — Directory e Recenti espongono soltanto `Accesso permanente`, `Accesso temporaneo` o nessuna etichetta; le richieste in attesa non appartengono ai Recenti. Chi ha accesso usa `Collegati`, gli altri un solo `Richiedi accesso` con scelta temporanea/permanente. *Perché:* una persona deve avere un solo stato leggibile e una sola azione contestuale.
 - **2026-09-01** — Il Concept deve essere più semplice del mockup iniziale: righe fisse, poche superfici e nessuna duplicazione tra strategia e MFD. *Perché:* durante la gara l’utente deve confrontare e agire, non interpretare il layout.
 - **2026-09-01** — Il desktop 16:9 è la superficie prioritaria e lo spazio laterale va usato, non riempito con colonne alte artificialmente. *Perché:* l’app è una control room, non una pagina mobile ingrandita.

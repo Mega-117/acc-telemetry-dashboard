@@ -16,7 +16,7 @@ export interface PitwallConceptPerson {
 export interface PitwallConceptCrew {
   id: string
   name: string
-  members: number
+  memberIds: string[]
   tone: 'green' | 'violet'
   imageId: string
 }
@@ -47,12 +47,13 @@ export const PITWALL_CONCEPT_PEOPLE: PitwallConceptPerson[] = [
   { id: 'gallo', name: 'Marco Gallo', initials: 'MG', handle: '@marcog', source: 'global', state: 'racing', access: 'none', detail: 'Nessun accesso attivo' },
   { id: 'martina', name: 'Martina Conti', initials: 'MC', handle: '@martinac', source: 'global', state: 'available', access: 'none', detail: 'Nessun accesso attivo' },
   { id: 'luca', name: 'Luca Bianchi', initials: 'LB', handle: '@lucab', source: 'crew', state: 'available', access: 'permanent', detail: 'Nessuna gara attiva' },
+  { id: 'enrico', name: 'Enrico Saiani', initials: 'ES', handle: '@enricos', source: 'crew', state: 'available', access: 'permanent', detail: 'Nessuna gara attiva' },
   { id: 'paolo', name: 'Paolo Verdi', initials: 'PV', handle: '@paolov', source: 'global', state: 'available', access: 'none', detail: 'Nessun accesso attivo' },
 ]
 
 export const PITWALL_CONCEPT_CREWS: PitwallConceptCrew[] = [
-  { id: 'apex', name: 'Apex One Racing', members: 4, tone: 'green', imageId: 'apex-red' },
-  { id: 'endurance-x', name: 'Endurance X', members: 3, tone: 'violet', imageId: 'night-violet' },
+  { id: 'apex', name: 'Apex One Racing', memberIds: ['mario', 'marco', 'luca', 'enrico'], tone: 'green', imageId: 'apex-red' },
+  { id: 'endurance-x', name: 'Endurance X', memberIds: ['marco', 'luca', 'enrico'], tone: 'violet', imageId: 'night-violet' },
 ]
 
 export const PITWALL_CONCEPT_RECENTS: PitwallConceptRecent[] = [
@@ -79,6 +80,17 @@ export function splitPitwallConceptSearch(query: string) {
 
 export function findPitwallConceptPerson(query: string, people = PITWALL_CONCEPT_PEOPLE): PitwallConceptPerson | null {
   return filterPitwallConceptPeople(query, people)[0] ?? null
+}
+
+export function getPitwallConceptCrewMembers(
+  crew: PitwallConceptCrew,
+  people = PITWALL_CONCEPT_PEOPLE,
+): PitwallConceptPerson[] {
+  const peopleById = new Map(people.map(person => [person.id, person]))
+  return crew.memberIds.flatMap(id => {
+    const person = peopleById.get(id)
+    return person ? [person] : []
+  })
 }
 
 export function describePitwallConceptAccess(access: PitwallConceptAccess): string | null {

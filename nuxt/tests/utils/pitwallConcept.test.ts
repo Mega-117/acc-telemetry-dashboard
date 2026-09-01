@@ -8,6 +8,7 @@ import {
   describePitwallConceptAccess,
   filterPitwallConceptPeople,
   findPitwallConceptPerson,
+  getPitwallConceptCrewMembers,
   splitPitwallConceptSearch,
   stepPitwallConceptPressure,
 } from '~/utils/pitwallConcept'
@@ -20,7 +21,7 @@ describe('Pitwall Concept mock model', () => {
   })
 
   it('returns every fixture for an empty query', () => {
-    expect(filterPitwallConceptPeople('')).toHaveLength(7)
+    expect(filterPitwallConceptPeople('')).toHaveLength(8)
   })
 
   it('returns mock directory results without making an external request', () => {
@@ -57,5 +58,13 @@ describe('Pitwall Concept mock model', () => {
     expect(new Set(PITWALL_CONCEPT_CREW_IMAGES.map(image => image.id)).size).toBe(6)
     expect(PITWALL_CONCEPT_CREW_IMAGES.every(image => image.src.startsWith('/images/pitwall-crews/'))).toBe(true)
     expect(PITWALL_CONCEPT_CREWS.every(crew => PITWALL_CONCEPT_CREW_IMAGES.some(image => image.id === crew.imageId))).toBe(true)
+  })
+
+  it('resolves each Crew roster from permanent local people without duplicating identity data', () => {
+    for (const crew of PITWALL_CONCEPT_CREWS) {
+      const members = getPitwallConceptCrewMembers(crew)
+      expect(members.map(person => person.id)).toEqual(crew.memberIds)
+      expect(members.every(person => person.access === 'permanent')).toBe(true)
+    }
   })
 })
