@@ -114,18 +114,11 @@ function crewImage(imageId: string) {
       <div class="pwc-home">
         <main class="pwc-home__main">
           <section class="pwc-find-panel">
-            <header> <span class="pwc-eyebrow">Collegati a un pilota</span> <h2>Trova una persona</h2> <p>Cerca una persona o un nickname per collegarti e assisterla dal Pit Wall.</p> </header> <form
+            <header><h2>Piloti</h2></header> <form
               class="pwc-find-form"
               @submit.prevent="submitSearch"
             >
-              <label class="pwc-search"> <svg
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              > <circle
-                cx="11"
-                cy="11"
-                r="7"
-              /> <path d="m20 20-4-4" /> </svg> <input
+              <label class="pwc-search"> <input
                 v-model="search"
                 placeholder="Cerca nome o nickname"
                 aria-label="Cerca nome o nickname"
@@ -135,10 +128,10 @@ function crewImage(imageId: string) {
                 aria-label="Cancella ricerca"
                 @click="clearSearch"
               >×</button> <button
-                class="pwc-search-submit"
                 type="submit"
+                class="pwc-search-submit"
                 aria-label="Cerca persone"
-              >⌕</button> </label>
+              > <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg> </button> </label>
             </form> <div
               v-if="submittedSearch"
               class="pwc-search-outcome"
@@ -166,11 +159,6 @@ function crewImage(imageId: string) {
               >
                 <span>?</span> <div> <strong>Nessun utente trovato</strong> <small>Controlla il nickname e riprova.</small> </div>
               </div>
-            </div> <div
-              v-else
-              class="pwc-find-idle"
-            >
-              <span>01</span> <p>Cerca nome o nickname e premi Invio.</p>
             </div>
           </section>
         </main> <aside class="pwc-home-sidebar">
@@ -733,8 +721,8 @@ function crewImage(imageId: string) {
 .pwc-find-panel {
   position: relative;
   width: min(100%, 820px);
-  min-height: 430px;
-  padding: clamp(26px, 3vw, 42px);
+  min-height: 0;
+  padding: clamp(22px, 2.5vw, 34px);
   border: 1px solid var(--pwc-line);
   border-radius: 16px;
   background: linear-gradient(145deg, rgba(18, 24, 34, 0.9), rgba(11, 15, 22, 0.72));
@@ -752,19 +740,10 @@ function crewImage(imageId: string) {
   content: "";
 }
 
-.pwc-find-panel > header h2 { font-size: clamp(25px, 2.2vw, 32px); }
-.pwc-find-panel > header p {
-  max-width: 590px;
-  margin: 10px 0 0;
-  color: $text-secondary;
-  line-height: 1.55;
-}
+.pwc-find-panel > header h2 { font-size: clamp(22px, 2vw, 28px); }
 
 .pwc-find-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  margin-top: 30px;
+  margin-top: 18px;
 }
 
 .pwc-find-form .pwc-search {
@@ -772,36 +751,9 @@ function crewImage(imageId: string) {
   margin: 0;
 }
 
-.pwc-find-form > .pwc-btn {
-  min-width: 108px;
-  min-height: 52px;
-}
-
-.pwc-find-form > .pwc-btn:disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
-}
-
-.pwc-find-idle {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  margin-top: 34px;
-  padding-top: 24px;
-  border-top: 1px solid var(--pwc-line-soft);
-  color: $text-secondary;
-}
-
-.pwc-find-idle > span {
-  color: rgba(255, 255, 255, 0.18);
-  font-family: $font-display;
-  font-size: 38px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.pwc-find-idle p { max-width: 460px; margin: 0; line-height: 1.5; }
-.pwc-search-outcome { margin-top: 28px; }
+.pwc-search-submit { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; }
+.pwc-search-submit svg { width: 21px; height: 21px; }
+.pwc-search-outcome { margin-top: 18px; }
 .pwc-search-person {
   display: grid;
   grid-template-columns: 50px minmax(0, 1fr) auto;
