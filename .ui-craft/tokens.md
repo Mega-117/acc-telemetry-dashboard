@@ -4,11 +4,12 @@
 
 - Content max width: `1480px`
 - Page gutters: `28–58px`
-- Major region gap: `28–44px`
+- Major region gap: `34–64px` nella Home, `28–44px` nelle viste operative
 - Operational panel gap: `20–28px`
 - Panel padding: `20–24px`; focused forms: `32px`
 - Data row height: `36–43px`; low-height desktop minimum: `30px`
-- Home action lane: `720px`; assistable person row: `78px`
+- Home directory panel: massimo `820px`, altezza minima `430px`
+- Home sidebar: minimo `380px`; recent connection row: `58px`
 - Crew thumbnail: `82 × 54px`; creation preset: `3 × 2` desktop grid
 
 ## Surfaces

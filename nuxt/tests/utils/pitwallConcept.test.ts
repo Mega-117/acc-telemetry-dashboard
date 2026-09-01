@@ -3,7 +3,9 @@ import {
   PITWALL_CONCEPT_CREWS,
   PITWALL_CONCEPT_CREW_IMAGES,
   PITWALL_CONCEPT_DEFAULT_PRESSURES,
+  PITWALL_CONCEPT_RECENTS,
   filterPitwallConceptPeople,
+  findPitwallConceptPerson,
   splitPitwallConceptSearch,
   stepPitwallConceptPressure,
 } from '~/utils/pitwallConcept'
@@ -17,6 +19,26 @@ describe('Pitwall Concept mock model', () => {
 
   it('returns every fixture for an empty query', () => {
     expect(filterPitwallConceptPeople('')).toHaveLength(7)
+  })
+
+  it('returns one neutral directory result with its access relationship', () => {
+    expect(findPitwallConceptPerson('@marcog')).toMatchObject({
+      handle: '@marcog',
+      state: 'racing',
+      access: 'none',
+    })
+    expect(findPitwallConceptPerson('utente che non esiste')).toBeNull()
+  })
+
+  it('keeps only five recent connections and orders immediate actions first', () => {
+    expect(PITWALL_CONCEPT_RECENTS).toHaveLength(5)
+    expect(PITWALL_CONCEPT_RECENTS.map(person => person.action)).toEqual([
+      'assist',
+      'assist',
+      'request',
+      'request',
+      'pending',
+    ])
   })
 
   it('keeps pressure controls deterministic and bounded', () => {
