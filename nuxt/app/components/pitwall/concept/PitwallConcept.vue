@@ -411,7 +411,7 @@ function crewImage(imageId: string) {
         >
           <div class="pwc-identity-grid">
             <section class="pwc-identity-fields">
-              <label><span class="pwc-field-label">Nome <em>*</em></span><input v-model="crewName" required /></label>
+              <label><span class="pwc-field-label">Nome Crew <em>*</em></span><input v-model="crewName" required /></label>
               <label><span class="pwc-field-label">Descrizione <small>opzionale</small></span><textarea v-model="crewDescription" rows="3"> </textarea></label>
             </section>
             <fieldset class="pwc-image-picker">
@@ -1348,6 +1348,7 @@ function crewImage(imageId: string) {
 .pwc-field-label small { display: inline; font-size: 12px; font-weight: 500; }
 .pwc-flow-card input { min-height: 44px; }
 .pwc-flow-card textarea { min-height: 82px; }
+.pwc-image-picker legend { margin-bottom: 7px; }
 .pwc-image-picker > div { gap: 8px; }
 .pwc-image-picker button { border-radius: 8px; }
 .pwc-image-picker img { height: 58px; }
@@ -1377,9 +1378,17 @@ function crewImage(imageId: string) {
   border: 0;
   border-bottom: 1px solid var(--pwc-line-soft);
 }
+.pwc-invite-row:last-of-type { border-bottom: 0; }
 .pwc-invite-row small { margin-top: 2px; font-size: 12px; }
 .pwc-invite-row .pwc-btn { min-height: 34px; padding-inline: 12px; font-size: 12px; }
-.pwc-invite-summary { min-width: 0; padding-left: 26px; border-left: 1px solid var(--pwc-line); }
+.pwc-invite-summary { position: relative; min-width: 0; padding-left: 26px; border-left: 0; }
+.pwc-invite-summary::before {
+  position: absolute;
+  inset: 0 auto 12px 0;
+  width: 1px;
+  background: var(--pwc-line);
+  content: "";
+}
 .pwc-invite-summary > header { padding-bottom: 12px; border-bottom: 1px solid var(--pwc-line-soft); }
 .pwc-invite-summary > header h3 { font-size: 18px; }
 .pwc-invite-summary > header small { margin-top: 3px; font-size: 11px; }
@@ -1411,6 +1420,7 @@ function crewImage(imageId: string) {
   .pwc-flow-card { height: auto; }
   .pwc-invite-directory { padding-right: 0; }
   .pwc-invite-summary { margin-top: 20px; padding: 18px 0 0; border-top: 1px solid var(--pwc-line); border-left: 0; }
+  .pwc-invite-summary::before { display: none; }
   .pwc-flow-card--people > footer { grid-column: 1; }
 }
 
