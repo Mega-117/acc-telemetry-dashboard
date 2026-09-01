@@ -281,6 +281,24 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('.pwc-pit-row { min-height: 30px; }')
   })
 
+  it('mantiene la Home Concept minimale e allinea ricerca e piloti', () => {
+    expect(concept).not.toContain('<span class="pwc-kicker">Pit Wall Concept</span>')
+    expect(concept).not.toContain('<h1>Pit Wall</h1>')
+    expect(concept).not.toContain('class="pwc-section-title">Adesso')
+    expect(concept).toContain('.pwc-driver-list,\n.pwc-search-results { width: min(100%, 720px); }')
+    expect(concept).toContain('grid-template-columns: 48px minmax(0, 1fr) auto')
+    expect(concept).not.toContain('<strong>P7</strong><small>Posizione</small>')
+    expect(concept).not.toContain('<strong>Giro 18</strong><small>32 minuti fa</small>')
+  })
+
+  it('usa sei copertine Crew locali e nessun upload', () => {
+    expect(concept).toContain('PITWALL_CONCEPT_CREW_IMAGES')
+    expect(concept).toContain('class="pwc-crew-image"')
+    expect(concept).toContain('class="pwc-image-picker"')
+    expect(concept).toContain('Scegli una delle sei copertine disponibili.')
+    expect(concept).not.toMatch(/type="file"|FileReader|upload/i)
+  })
+
   it('mostra la campanella mock globale solo nel Concept', () => {
     expect(topBar).toContain('<PitwallConceptBell v-if="pitwallConceptActive"')
     expect(conceptBell).toContain('Invito Crew')

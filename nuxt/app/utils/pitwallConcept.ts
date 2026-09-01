@@ -17,7 +17,23 @@ export interface PitwallConceptCrew {
   members: number
   live: number
   tone: 'green' | 'violet'
+  imageId: string
 }
+
+export interface PitwallConceptCrewImage {
+  id: string
+  label: string
+  src: string
+}
+
+export const PITWALL_CONCEPT_CREW_IMAGES: PitwallConceptCrewImage[] = [
+  { id: 'apex-red', label: 'Apex Red', src: '/images/pitwall-crews/apex-red.svg' },
+  { id: 'velocity-orange', label: 'Velocity', src: '/images/pitwall-crews/velocity-orange.svg' },
+  { id: 'endurance-blue', label: 'Endurance', src: '/images/pitwall-crews/endurance-blue.svg' },
+  { id: 'night-violet', label: 'Night Race', src: '/images/pitwall-crews/night-violet.svg' },
+  { id: 'heritage-gold', label: 'Heritage', src: '/images/pitwall-crews/heritage-gold.svg' },
+  { id: 'carbon-green', label: 'Carbon', src: '/images/pitwall-crews/carbon-green.svg' },
+]
 
 export const PITWALL_CONCEPT_PEOPLE: PitwallConceptPerson[] = [
   { id: 'mario', name: 'Mario Rossi', initials: 'MR', source: 'crew', state: 'racing', detail: 'Ferrari 296 GT3 · Monza · P7 · Giro 18' },
@@ -30,8 +46,8 @@ export const PITWALL_CONCEPT_PEOPLE: PitwallConceptPerson[] = [
 ]
 
 export const PITWALL_CONCEPT_CREWS: PitwallConceptCrew[] = [
-  { id: 'apex', name: 'Apex One Racing', members: 4, live: 1, tone: 'green' },
-  { id: 'endurance-x', name: 'Endurance X', members: 3, live: 0, tone: 'violet' },
+  { id: 'apex', name: 'Apex One Racing', members: 4, live: 1, tone: 'green', imageId: 'apex-red' },
+  { id: 'endurance-x', name: 'Endurance X', members: 3, live: 0, tone: 'violet', imageId: 'night-violet' },
 ]
 
 export function filterPitwallConceptPeople(query: string, people = PITWALL_CONCEPT_PEOPLE): PitwallConceptPerson[] {

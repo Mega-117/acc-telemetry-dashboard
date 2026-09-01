@@ -8,6 +8,8 @@
 - Operational panel gap: `20–28px`
 - Panel padding: `20–24px`; focused forms: `32px`
 - Data row height: `36–43px`; low-height desktop minimum: `30px`
+- Home action lane: `720px`; assistable person row: `78px`
+- Crew thumbnail: `82 × 54px`; creation preset: `3 × 2` desktop grid
 
 ## Surfaces
 
