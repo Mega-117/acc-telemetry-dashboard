@@ -16,6 +16,7 @@ export interface PitwallConceptPerson {
 export interface PitwallConceptCrew {
   id: string
   name: string
+  description: string
   memberIds: string[]
   tone: 'green' | 'violet'
   imageId: string
@@ -52,8 +53,8 @@ export const PITWALL_CONCEPT_PEOPLE: PitwallConceptPerson[] = [
 ]
 
 export const PITWALL_CONCEPT_CREWS: PitwallConceptCrew[] = [
-  { id: 'apex', name: 'Apex One Racing', memberIds: ['mario', 'marco', 'luca', 'enrico'], tone: 'green', imageId: 'apex-red' },
-  { id: 'endurance-x', name: 'Endurance X', memberIds: ['marco', 'luca', 'enrico'], tone: 'violet', imageId: 'night-violet' },
+  { id: 'apex', name: 'Apex One Racing', description: 'Endurance, campionato e allenamenti insieme', memberIds: ['mario', 'marco', 'luca', 'enrico'], tone: 'green', imageId: 'apex-red' },
+  { id: 'endurance-x', name: 'Endurance X', description: 'Strategia, gare endurance e lavoro di squadra', memberIds: ['marco', 'luca', 'enrico'], tone: 'violet', imageId: 'night-violet' },
 ]
 
 export const PITWALL_CONCEPT_RECENTS: PitwallConceptRecent[] = [

@@ -28,7 +28,14 @@ const crewImageId = ref("apex-red");
 const sent = ref(false);
 const accessMenu = ref<string | null>(null);
 const expandedCrewId = ref<string | null>(null);
+const selectedCrewId = ref("apex");
+const crewMemberSearch = ref("");
+const crewQueue = ref([
+  { id: "paolo", kind: "request" as const },
+  { id: "andrea", kind: "invite" as const },
+]);
 const DEFAULT_CREW_IMAGE = PITWALL_CONCEPT_CREW_IMAGES[0]!;
+const DEFAULT_CREW = PITWALL_CONCEPT_CREWS[0]!;
 const searchResults = computed(() =>
   submittedSearch.value
     ? filterPitwallConceptPeople(submittedSearch.value)
@@ -48,6 +55,23 @@ const invitationPeople = computed(() =>
   PITWALL_CONCEPT_PEOPLE.filter((person) =>
     ["mario", "luca", "paolo"].includes(person.id),
   ),
+);
+const activeCrew = computed(() =>
+  PITWALL_CONCEPT_CREWS.find((crew) => crew.id === selectedCrewId.value)
+    ?? DEFAULT_CREW,
+);
+const activeCrewMembers = computed(() =>
+  getPitwallConceptCrewMembers(activeCrew.value),
+);
+const filteredCrewMembers = computed(() =>
+  filterPitwallConceptPeople(crewMemberSearch.value, activeCrewMembers.value),
+);
+const activeCrewImage = computed(() => crewImage(activeCrew.value.imageId));
+const crewQueueItems = computed(() =>
+  crewQueue.value.flatMap((entry) => {
+    const person = PITWALL_CONCEPT_PEOPLE.find((item) => item.id === entry.id);
+    return person ? [{ ...entry, person }] : [];
+  }),
 );
 const pressures = reactive<Record<"FL" | "FR" | "RL" | "RR", number>>({
   ...PITWALL_CONCEPT_DEFAULT_PRESSURES,
@@ -69,6 +93,7 @@ function go(next: PitwallConceptScreen) {
   sent.value = false;
   if (next === "home") {
     clearSearch();
+    crewMemberSearch.value = "";
     expandedCrewId.value = null;
   }
   void nextTick(() => {
@@ -116,6 +141,16 @@ function toggleCrew(crewId: string) {
 
 function crewMembers(crew: PitwallConceptCrew) {
   return getPitwallConceptCrewMembers(crew);
+}
+
+function openCrew(crew: PitwallConceptCrew) {
+  selectedCrewId.value = crew.id;
+  crewMemberSearch.value = "";
+  go("crew-detail");
+}
+
+function dismissCrewQueueItem(personId: string) {
+  crewQueue.value = crewQueue.value.filter((entry) => entry.id !== personId);
 }
 
 function stepPressure(wheel: keyof typeof pressures, direction: 1 | -1) {
@@ -289,7 +324,7 @@ function crewImage(imageId: string) {
                     <button
                       type="button"
                       class="pwc-open-crew"
-                      @click="go('crew-detail')"
+                      @click="openCrew(crew)"
                     >Apri Crew <span aria-hidden="true">→</span></button>
                   </div>
                 </div>
@@ -343,30 +378,37 @@ function crewImage(imageId: string) {
       </div>
     </template> <template v-else-if=" screen === 'crew-create-identity' || screen === 'crew-create-people' ">
       <div class="pwc-flow">
-        <button
-          class="pwc-back"
-          @click="go('home')"
-        >
-          ← Torna al Pit Wall
-        </button> <h1>Crea una Crew</h1> <div class="pwc-steps">
-          <button :class="{ active: screen === 'crew-create-identity', done: screen === 'crew-create-people', }">
-            <b>1</b> Identità
-          </button> <i> </i> <button :class="{ active: screen === 'crew-create-people' }">
-            <b>2</b> Persone
-          </button>
-        </div> <form
+        <header class="pwc-flow-header">
+          <div>
+            <button class="pwc-back" @click="go('home')">← Torna al Pit Wall</button>
+            <h1>Crea una Crew</h1>
+          </div>
+          <ol class="pwc-steps" aria-label="Avanzamento creazione Crew">
+            <li :class="{ active: screen === 'crew-create-identity', done: screen === 'crew-create-people' }" :aria-current="screen === 'crew-create-identity' ? 'step' : undefined">
+              <b>1</b><span>Identità</span>
+            </li>
+            <li :class="{ active: screen === 'crew-create-people' }" :aria-current="screen === 'crew-create-people' ? 'step' : undefined">
+              <b>2</b><span>Persone</span>
+            </li>
+          </ol>
+        </header>
+        <form
           v-if="screen === 'crew-create-identity'"
-          class="pwc-flow-card"
+          class="pwc-flow-card pwc-flow-card--identity"
           @submit.prevent="go('crew-create-people')"
         >
-          <h2>Crea la tua Crew</h2> <label>Nome <em>*</em> <input
-            v-model="crewName"
-            required
-          /> </label> <label>Descrizione <small>opzionale</small> <textarea
-            v-model="crewDescription"
-            rows="4"
-          > </textarea> </label> <fieldset class="pwc-image-picker">
-            <legend>Immagine Crew</legend> <p>Scegli una delle sei copertine disponibili.</p> <div>
+          <header class="pwc-flow-card__intro">
+            <h2>Identità della Crew</h2>
+            <p>Definisci nome, descrizione e copertina.</p>
+          </header>
+          <div class="pwc-identity-grid">
+            <section class="pwc-identity-fields">
+              <label><span class="pwc-field-label">Nome <em>*</em></span><input v-model="crewName" required /></label>
+              <label><span class="pwc-field-label">Descrizione <small>opzionale</small></span><textarea v-model="crewDescription" rows="3"> </textarea></label>
+              <p class="pwc-info">I membri che accetteranno potranno assistersi reciprocamente durante le gare.</p>
+            </section>
+            <fieldset class="pwc-image-picker">
+              <legend>Copertina</legend> <p>Scegli una delle sei copertine disponibili.</p> <div>
               <button
                 v-for="image in PITWALL_CONCEPT_CREW_IMAGES"
                 :key="image.id"
@@ -375,15 +417,11 @@ function crewImage(imageId: string) {
                 :aria-pressed="crewImageId === image.id"
                 @click="crewImageId = image.id"
               >
-                <img
-                  :src="image.src"
-                  alt=""
-                /> <span>{{ image.label }}</span>
+                <img :src="image.src" alt="" /> <span>{{ image.label }}</span>
               </button>
             </div>
-          </fieldset> <p class="pwc-info">
-            ⓘ I membri che accetteranno potranno assistersi reciprocamente durante le gare.
-          </p> <footer>
+            </fieldset>
+          </div> <footer>
             <button
               type="button"
               class="pwc-btn"
@@ -396,42 +434,38 @@ function crewImage(imageId: string) {
           </footer>
         </form> <div
           v-else
-          class="pwc-flow-card is-wide"
+          class="pwc-flow-card pwc-flow-card--people"
         >
-          <section>
-            <h2>Chi vuoi invitare?</h2> <p>Puoi aggiungere altre persone anche dopo.</p> <label class="pwc-search is-small"> <input placeholder="Cerca nome o nickname…" /> </label> <article
-              v-for="person in invitationPeople"
-              :key="person.id"
-              class="pwc-invite-row"
-            >
-              <div> <strong>{{ person.name }}</strong> <small>{{ person.handle }}</small> </div> <button
-                class="pwc-btn"
-                :class="{ 'is-added': invitees.includes(person.id) }"
-                @click="toggleInvitee(person.id)"
-              >
-                {{ invitees.includes(person.id) ? "Aggiunto" : "Aggiungi" }}
-              </button>
-            </article>
-          </section> <aside>
-            <h3>Invitati · {{ invitees.length }}</h3> <article
-              v-for="id in invitees"
-              :key="id"
-            >
-              <strong>{{ PITWALL_CONCEPT_PEOPLE.find((item) => item.id === id)?.name }}</strong> <button @click="toggleInvitee(id)">
-                Rimuovi
-              </button>
-            </article>
+          <section class="pwc-invite-directory">
+            <header><h2>Invita persone</h2><p>È facoltativo: potrai farlo anche dopo.</p></header>
+            <label class="pwc-search is-small">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m16 16 4 4" /></svg>
+              <input placeholder="Cerca nome o nickname…" />
+            </label>
+            <div class="pwc-invite-list">
+              <article v-for="person in invitationPeople" :key="person.id" class="pwc-invite-row">
+                <div><strong>{{ person.name }}</strong><small>{{ person.handle }}</small></div>
+                <button class="pwc-btn" :class="{ 'is-added': invitees.includes(person.id) }" @click="toggleInvitee(person.id)">
+                  {{ invitees.includes(person.id) ? "Aggiunto" : "Aggiungi" }}
+                </button>
+              </article>
+            </div>
+          </section>
+          <aside class="pwc-invite-summary">
+            <header><div><h3>Invitati</h3><small>{{ invitees.length }} selezionati</small></div></header>
+            <div class="pwc-invite-summary__list">
+              <article v-for="id in invitees" :key="id">
+                <strong>{{ PITWALL_CONCEPT_PEOPLE.find((item) => item.id === id)?.name }}</strong>
+                <button @click="toggleInvitee(id)">Rimuovi</button>
+              </article>
+              <p v-if="invitees.length === 0" class="pwc-invite-empty">Nessuna persona selezionata.</p>
+            </div>
           </aside> <footer>
             <button
               class="pwc-btn"
               @click="go('crew-create-identity')"
             >
               Indietro
-            </button> <button
-              class="pwc-btn"
-              @click="go('crew-detail')"
-            >
-              Salta
             </button> <button
               class="pwc-btn is-primary"
               @click="go('crew-detail')"
@@ -451,52 +485,103 @@ function crewImage(imageId: string) {
         </button> <header>
           <img
             class="pwc-crew-page__image"
-            :src="selectedCrewImage.src"
-            :alt="`Copertina ${crewName || 'Crew'}`"
-          /> <div> <h1>{{ crewName || "Apex One Racing" }}</h1> <p>{{ crewDescription }}</p> </div> <div>
-            <span>4 membri</span> <button class="pwc-btn is-outline">
+            :src="activeCrewImage.src"
+            :alt="`Copertina ${activeCrew.name}`"
+          /> <div class="pwc-crew-page__identity">
+            <span class="pwc-eyebrow">Accesso permanente</span>
+            <h1>{{ activeCrew.name }}</h1>
+            <p>{{ activeCrew.description }}</p>
+          </div> <div class="pwc-crew-page__actions">
+            <span>{{ activeCrewMembers.length }} membri</span> <button class="pwc-btn is-outline">
               + Invita
             </button> <button class="pwc-btn">
               Impostazioni
             </button>
           </div>
         </header> <div class="pwc-crew-grid">
-          <main>
-            <h2>Attività della Crew</h2> <article class="pwc-race-card">
-              <header> <span class="pwc-tag is-green">Live</span> <h3>Ferrari 296 GT3 · Monza</h3> <small>Endurance</small> </header> <div class="pwc-race-stats">
-                <div> <b>P7</b> <small>Posizione</small> </div> <div> <b>18 / 42</b> <small>Giro</small> </div> <div> <b>31 min</b> <small>Stint attuale</small> </div> <div> <b>24–27</b> <small>Pit window</small> </div>
-              </div> <div class="pwc-race-people">
-                <p>
-                  <span>◉</span> <b>Mario Rossi</b> <small>Al volante</small> <button
-                    class="pwc-btn"
-                    @click="go('live')"
-                  >
-                    Assisti
-                  </button>
-                </p> <p> <span>○</span> <b>Luca Bianchi</b> <small>Disponibile</small> </p> <p> <span>◉</span> <b>Enrico Saiani</b> <small>Sta assistendo</small> </p>
+          <main class="pwc-crew-roster">
+            <header class="pwc-panel-heading">
+              <div>
+                <h2>Persone</h2>
+                <p>Seleziona chi è in gara e avvia subito l'assistenza.</p>
               </div>
-            </article> <h2>Attività recenti</h2> <article class="pwc-recent">
-              <b>Luca</b> <span>Spa</span> <span>terminata 1 ora fa</span> <button class="pwc-btn">
-                Riepilogo
-              </button>
-            </article>
-          </main> <aside>
-            <h2>Persone · 6</h2> <label class="pwc-search is-small"> <input placeholder="Cerca nella Crew…" /> </label> <div class="pwc-filters">
-              <button class="active">
-                Tutte
-              </button> <button>Online</button> <button>In attesa</button>
-            </div> <article
-              v-for="(row, index) in [ ['Mario Rossi', 'In gara', 'Al volante'], ['Enrico Saiani', 'Disponibile', 'Proprietario · Tu'], ['Luca Bianchi', 'Disponibile', 'Membro'], ['Sara Neri', 'Offline', 'Membro'], ['Paolo Verdi', 'Invito in attesa', '2 giorni'], ['Andrea Sala', 'Invito in attesa', 'oggi'], ]"
-              :key="row[0]"
-              class="pwc-roster-row"
-            >
-              <span :class="{ online: index < 3, waiting: index > 3 }"> </span> <strong>{{ row[0] }}</strong> <div> <b>{{ row[1] }}</b> <small>{{ row[2] }}</small> </div> <button
-                v-if="index > 3"
-                class="pwc-btn"
+              <span>{{ filteredCrewMembers.length }} di {{ activeCrewMembers.length }}</span>
+            </header>
+            <label class="pwc-crew-search">
+              <input
+                v-model="crewMemberSearch"
+                placeholder="Cerca nella Crew"
+                aria-label="Cerca nella Crew"
+              />
+              <button
+                v-if="crewMemberSearch"
+                type="button"
+                aria-label="Cancella ricerca"
+                @click="crewMemberSearch = ''"
+              >×</button>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m16.5 16.5 4 4" />
+              </svg>
+            </label>
+            <div v-if="filteredCrewMembers.length" class="pwc-crew-roster__list">
+              <article
+                v-for="person in filteredCrewMembers"
+                :key="person.id"
+                class="pwc-crew-person"
               >
-                Annulla
-              </button>
-            </article>
+                <span class="pwc-avatar">{{ person.initials }}</span>
+                <span class="pwc-person-copy">
+                  <strong>{{ person.handle.replace('@', '') }}</strong>
+                  <small>{{ person.name }}</small>
+                </span>
+                <span
+                  class="pwc-crew-person__state"
+                  :class="{ 'is-racing': person.state === 'racing' }"
+                >
+                  <b>{{ person.state === "racing" ? "In gara" : "Nessuna sessione" }}</b>
+                  <small>{{ person.state === "racing" ? "Disponibile ora" : "Non assistibile" }}</small>
+                </span>
+                <button
+                  v-if="person.state === 'racing'"
+                  class="pwc-btn is-primary"
+                  @click="go('live')"
+                >
+                  Assisti
+                </button>
+                <span v-else class="pwc-crew-person__unavailable">Non in gara</span>
+              </article>
+            </div>
+            <div v-else class="pwc-crew-roster__empty">
+              <strong>Nessun membro trovato</strong>
+              <small>Prova con un altro nome o nickname.</small>
+            </div>
+          </main> <aside class="pwc-crew-queue">
+            <header class="pwc-panel-heading">
+              <div>
+                <h2>Richieste e inviti</h2>
+                <p>Solo elementi che richiedono una decisione.</p>
+              </div>
+              <span>{{ crewQueueItems.length }}</span>
+            </header>
+            <div v-if="crewQueueItems.length" class="pwc-crew-queue__list">
+              <article v-for="item in crewQueueItems" :key="item.person.id">
+                <span class="pwc-avatar">{{ item.person.initials }}</span>
+                <span class="pwc-person-copy">
+                  <strong>{{ item.person.handle.replace('@', '') }}</strong>
+                  <small>{{ item.kind === "request" ? "Richiede di entrare" : "Invito inviato" }}</small>
+                </span>
+                <div v-if="item.kind === 'request'">
+                  <button class="pwc-btn" @click="dismissCrewQueueItem(item.person.id)">Rifiuta</button>
+                  <button class="pwc-btn is-primary" @click="dismissCrewQueueItem(item.person.id)">Accetta</button>
+                </div>
+                <button v-else class="pwc-btn" @click="dismissCrewQueueItem(item.person.id)">Annulla</button>
+              </article>
+            </div>
+            <div v-else class="pwc-crew-queue__empty">
+              <strong>Tutto in ordine</strong>
+              <small>Non ci sono richieste o inviti da gestire.</small>
+            </div>
           </aside>
         </div>
       </div>
@@ -1179,6 +1264,255 @@ function crewImage(imageId: string) {
 .pwc-image-picker span { display: block; padding: 8px 10px; text-align: left; font-size: 12px; font-weight: 700; }
 .pwc-crew-page__image { width: 112px; height: 72px; border: 1px solid var(--pwc-line); border-radius: 10px; object-fit: cover; }
 
+/* Crea Crew: due step compatti, una sola superficie e gerarchia stabile. */
+.pwc-flow { max-width: 1120px; }
+.pwc-flow-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  margin-bottom: 14px;
+}
+.pwc-flow-header > div { display: grid; gap: 8px; }
+.pwc-flow-header h1 { font-size: clamp(28px, 2.4vw, 36px); }
+.pwc-steps {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pwc-steps li {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 148px;
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--pwc-line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.018);
+  color: $text-muted;
+  font-weight: 700;
+}
+.pwc-steps li + li { margin-left: 28px; }
+.pwc-steps li + li::before {
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  width: 28px;
+  height: 1px;
+  background: var(--pwc-line);
+  content: "";
+}
+.pwc-steps li.active { border-color: $racing-orange; color: #fff; background: rgba(255, 107, 0, 0.055); }
+.pwc-steps li.done { color: $text-primary; }
+.pwc-steps b {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 12px;
+}
+.pwc-flow-card {
+  width: 100%;
+  margin: 0;
+  padding: 20px;
+  gap: 16px;
+}
+.pwc-flow-card__intro { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; }
+.pwc-flow-card__intro h2 { font-size: 22px; }
+.pwc-flow-card__intro p,
+.pwc-invite-directory > header p { margin: 0; color: $text-secondary; font-size: 13px; }
+.pwc-identity-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.88fr) minmax(430px, 1.12fr);
+  gap: 32px;
+  align-items: start;
+}
+.pwc-identity-fields { display: grid; gap: 17px; }
+.pwc-identity-fields label { display: grid; gap: 7px; font-weight: 600; }
+.pwc-field-label { display: flex; align-items: baseline; gap: 6px; }
+.pwc-field-label small { display: inline; font-size: 12px; font-weight: 500; }
+.pwc-flow-card input { min-height: 44px; }
+.pwc-flow-card textarea { min-height: 82px; }
+.pwc-info { padding: 10px 12px; border-left: 2px solid rgba(125, 211, 252, 0.52); border-radius: 5px; font-size: 12px; line-height: 1.45; }
+.pwc-image-picker > p { margin-bottom: 10px; }
+.pwc-image-picker > div { gap: 8px; }
+.pwc-image-picker button { border-radius: 8px; }
+.pwc-image-picker img { height: 58px; }
+.pwc-image-picker span { padding: 6px 8px; font-size: 11px; }
+.pwc-flow-card > footer { justify-content: space-between; padding-top: 10px; }
+.pwc-flow-card--people {
+  grid-template-columns: minmax(0, 1.18fr) minmax(290px, 0.82fr);
+  gap: 0;
+  width: 100%;
+}
+.pwc-invite-directory { min-width: 0; padding-right: 26px; }
+.pwc-invite-directory > header { display: flex; align-items: baseline; justify-content: space-between; gap: 18px; }
+.pwc-invite-directory .pwc-search { width: 100%; min-height: 42px; margin: 14px 0 8px; }
+.pwc-invite-directory .pwc-search svg { width: 19px; height: 19px; }
+.pwc-invite-directory .pwc-search input {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.pwc-invite-list { border-top: 1px solid var(--pwc-line-soft); }
+.pwc-invite-row {
+  min-height: 60px;
+  padding: 9px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--pwc-line-soft);
+}
+.pwc-invite-row small { margin-top: 2px; font-size: 12px; }
+.pwc-invite-row .pwc-btn { min-height: 34px; padding-inline: 12px; font-size: 12px; }
+.pwc-invite-summary { min-width: 0; padding-left: 26px; border-left: 1px solid var(--pwc-line); }
+.pwc-invite-summary > header { padding-bottom: 12px; border-bottom: 1px solid var(--pwc-line-soft); }
+.pwc-invite-summary > header h3 { font-size: 18px; }
+.pwc-invite-summary > header small { margin-top: 3px; font-size: 11px; }
+.pwc-invite-summary__list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  border-bottom: 1px solid var(--pwc-line-soft);
+}
+.pwc-invite-summary__list article button {
+  padding: 6px;
+  border: 0;
+  background: transparent;
+  color: $racing-orange;
+  font-size: 12px;
+  cursor: pointer;
+}
+.pwc-invite-empty { margin: 0; padding: 18px 0; color: $text-secondary; font-size: 13px; }
+.pwc-flow-card--people > footer { grid-column: 1 / -1; }
+
+@media (max-width: 900px) {
+  .pwc-flow-header { display: grid; gap: 18px; align-items: start; }
+  .pwc-steps { justify-content: flex-start; }
+  .pwc-steps li { min-width: 0; flex: 1; }
+  .pwc-identity-grid,
+  .pwc-flow-card--people { grid-template-columns: 1fr; }
+  .pwc-invite-directory { padding-right: 0; }
+  .pwc-invite-summary { margin-top: 20px; padding: 18px 0 0; border-top: 1px solid var(--pwc-line); border-left: 0; }
+  .pwc-flow-card--people > footer { grid-column: 1; }
+}
+
+/* Crew detail: roster dominante, coda decisionale compatta, nessun dato decorativo. */
+.pwc-crew-page > header {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+}
+
+.pwc-crew-page__identity { min-width: 0; }
+.pwc-crew-page__identity h1 { font-size: clamp(28px, 2.3vw, 36px); }
+.pwc-crew-page__identity p { margin: 6px 0 0; }
+.pwc-crew-page__actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.pwc-crew-page__actions > span { margin-right: 4px; color: $text-secondary; font-size: 13px; white-space: nowrap; }
+
+.pwc-crew-grid {
+  grid-template-columns: minmax(0, 1.7fr) minmax(310px, 0.72fr);
+  gap: clamp(22px, 2.4vw, 34px);
+  align-items: start;
+}
+
+.pwc-crew-grid > main,
+.pwc-crew-grid > aside { padding: clamp(20px, 2.2vw, 28px); }
+
+.pwc-panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.pwc-panel-heading h2 { margin: 0; font-size: 22px; }
+.pwc-panel-heading p { margin: 6px 0 0; color: $text-secondary; font-size: 13px; line-height: 1.45; }
+.pwc-panel-heading > span {
+  display: grid;
+  place-items: center;
+  min-width: 32px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--pwc-line);
+  border-radius: 99px;
+  color: $text-secondary;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pwc-crew-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 22px;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  margin: 20px 0 14px;
+  padding: 0 14px;
+  border: 1px solid var(--pwc-line);
+  border-radius: 9px;
+  background: rgba(8, 12, 18, 0.72);
+}
+
+.pwc-crew-search:focus-within { border-color: rgba(255, 107, 0, 0.7); }
+.pwc-crew-search input { min-width: 0; border: 0; outline: 0; background: transparent; color: #fff; }
+.pwc-crew-search button { padding: 0 4px; border: 0; background: transparent; color: $text-secondary; font-size: 20px; cursor: pointer; }
+.pwc-crew-search svg { width: 20px; height: 20px; fill: none; stroke: $text-secondary; stroke-width: 1.6; }
+
+.pwc-crew-roster__list { display: grid; gap: 8px; }
+.pwc-crew-person {
+  display: grid;
+  grid-template-columns: 42px minmax(150px, 1fr) minmax(130px, 0.55fr) 116px;
+  align-items: center;
+  gap: 14px;
+  min-height: 70px;
+  padding: 10px 12px;
+  border: 1px solid var(--pwc-line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.pwc-crew-person .pwc-avatar { width: 40px; height: 40px; font-size: 12px; }
+.pwc-crew-person__state b { display: block; color: $text-secondary; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+.pwc-crew-person__state small { margin-top: 4px; font-size: 11px; }
+.pwc-crew-person__state.is-racing b { color: #4ade80; }
+.pwc-crew-person > .pwc-btn,
+.pwc-crew-person__unavailable { width: 116px; justify-self: end; text-align: center; }
+.pwc-crew-person__unavailable { color: $text-muted; font-size: 12px; }
+
+.pwc-crew-roster__empty,
+.pwc-crew-queue__empty { display: grid; place-items: center; min-height: 150px; text-align: center; }
+.pwc-crew-roster__empty small,
+.pwc-crew-queue__empty small { margin-top: 6px; }
+
+.pwc-crew-queue__list { display: grid; gap: 8px; margin-top: 20px; }
+.pwc-crew-queue__list article {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--pwc-line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.pwc-crew-queue__list .pwc-avatar { width: 38px; height: 38px; font-size: 11px; }
+.pwc-crew-queue__list article > div,
+.pwc-crew-queue__list article > .pwc-btn { grid-column: 1 / -1; }
+.pwc-crew-queue__list article > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pwc-crew-queue__list article > .pwc-btn { width: 100%; }
+
+@media (max-width: 1180px) {
+  .pwc-crew-grid { grid-template-columns: 1fr; }
+  .pwc-crew-queue { width: 100%; }
+  .pwc-crew-queue__list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 @media (max-width: 760px) {
   .pwc-home { padding-top: 8px; }
   .pwc-find-panel { min-height: 0; padding: 24px 18px; }
@@ -1196,6 +1530,14 @@ function crewImage(imageId: string) {
   .pwc-crew-image { width: 68px; height: 48px; }
   .pwc-recent-person { grid-template-columns: 38px minmax(0, 1fr) auto; }
   .pwc-image-picker > div { grid-template-columns: repeat(2, 1fr); }
+  .pwc-crew-page > header { grid-template-columns: 82px minmax(0, 1fr); align-items: center; }
+  .pwc-crew-page__image { width: 82px; height: 58px; }
+  .pwc-crew-page__actions { grid-column: 1 / -1; width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  .pwc-crew-person { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  .pwc-crew-person__state { display: none; }
+  .pwc-crew-person > .pwc-btn,
+  .pwc-crew-person__unavailable { width: auto; min-width: 92px; }
+  .pwc-crew-queue__list { grid-template-columns: 1fr; }
 }
 
 @media (min-width: 1181px) and (max-height: 950px) {

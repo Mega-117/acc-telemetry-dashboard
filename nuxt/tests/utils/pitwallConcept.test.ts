@@ -63,8 +63,16 @@ describe('Pitwall Concept mock model', () => {
   it('resolves each Crew roster from permanent local people without duplicating identity data', () => {
     for (const crew of PITWALL_CONCEPT_CREWS) {
       const members = getPitwallConceptCrewMembers(crew)
+      expect(crew.description.length).toBeGreaterThan(0)
       expect(members.map(person => person.id)).toEqual(crew.memberIds)
       expect(members.every(person => person.access === 'permanent')).toBe(true)
     }
+  })
+
+  it('filters only inside the selected Crew roster', () => {
+    const apex = PITWALL_CONCEPT_CREWS.find(crew => crew.id === 'apex')!
+    const matches = filterPitwallConceptPeople('mario', getPitwallConceptCrewMembers(apex))
+    expect(matches.map(person => person.id)).toEqual(['mario'])
+    expect(matches.some(person => person.id === 'andrea')).toBe(false)
   })
 })

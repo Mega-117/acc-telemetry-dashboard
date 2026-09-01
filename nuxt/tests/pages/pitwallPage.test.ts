@@ -262,6 +262,17 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('Invia strategia')
   })
 
+  it('mantiene i due step Crea Crew compatti e senza azioni duplicate', () => {
+    expect(concept).toContain('class="pwc-flow-header"')
+    expect(concept).toContain('aria-label="Avanzamento creazione Crew"')
+    expect(concept).toContain('class="pwc-flow-card pwc-flow-card--identity"')
+    expect(concept).toContain('class="pwc-identity-grid"')
+    expect(concept).toContain('class="pwc-flow-card pwc-flow-card--people"')
+    expect(concept).toContain('class="pwc-invite-summary"')
+    expect(concept).toContain('grid-template-columns: minmax(0, 0.88fr) minmax(430px, 1.12fr)')
+    expect(concept).not.toContain('Salta')
+  })
+
   it('mantiene il Concept compatto e riparte sempre dall inizio della vista', () => {
     expect(concept).toContain("scrollParent.scrollTop = 0")
     expect(concept).toContain("document.documentElement.scrollTop = 0")
@@ -302,7 +313,7 @@ describe('Pitwall wiring', () => {
     expect(concept).not.toContain('aria-hidden="true">›</b>')
     expect(concept).toContain('getPitwallConceptCrewMembers')
     expect(concept).toContain('Apri Crew')
-    expect(concept).toContain("@click=\"go('crew-detail')\"")
+    expect(concept).toContain("@click=\"openCrew(crew)\"")
     expect(concept).toContain("@click=\"go('live')\"")
     expect(concept).toContain('Recenti')
     expect(concept).toContain('PITWALL_CONCEPT_RECENTS')
@@ -326,6 +337,19 @@ describe('Pitwall wiring', () => {
     expect(concept).not.toContain('crew.live')
     expect(concept).not.toContain('<strong>P7</strong><small>Posizione</small>')
     expect(concept).not.toContain('<strong>Giro 18</strong><small>32 minuti fa</small>')
+  })
+
+  it('rende la Crew una directory minimale con azioni contestuali', () => {
+    expect(concept).toContain('const crewMemberSearch = ref("")')
+    expect(concept).toContain('filteredCrewMembers')
+    expect(concept).toContain('class="pwc-crew-roster"')
+    expect(concept).toContain('class="pwc-crew-queue"')
+    expect(concept).toContain('Richieste e inviti')
+    expect(concept).toContain('person.state === \'racing\'')
+    expect(concept).toContain('Assisti')
+    expect(concept).not.toContain('Attività della Crew')
+    expect(concept).not.toContain('Attività recenti')
+    expect(concept).not.toContain('class="pwc-filters"')
   })
 
   it('usa sei copertine Crew locali e nessun upload', () => {
