@@ -754,7 +754,7 @@ function crewImage(imageId: string) {
 .pwc-search-submit { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; }
 .pwc-search-submit svg { width: 21px; height: 21px; }
 .pwc-search input:focus-visible { outline: none; box-shadow: none; }
-.pwc-search-outcome { margin-top: 18px; }
+.pwc-search-outcome { display: grid; gap: 10px; margin-top: 18px; }
 .pwc-search-person {
   display: grid;
   grid-template-columns: 50px minmax(0, 1fr) auto;
