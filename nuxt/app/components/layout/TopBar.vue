@@ -8,6 +8,8 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import { useDevTestMode } from '~/composables/useDevTestMode'
+import PitwallConceptBell from '~/components/pitwall/concept/PitwallConceptBell.vue'
+import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
 
 // Badge test-mode dev (PIP-106): indicatore di sola lettura sulla dashboard.
 const { init: initTestMode } = useDevTestMode()
@@ -28,6 +30,7 @@ const { canAccessDevTools } = useDevToolsAccess()
 const displayName = computed(() => props.userName ?? 'Utente')
 const showVoiceControls = false
 const showNotificationBell = false
+const { active: pitwallConceptActive } = usePitwallConceptMode()
 
 const goToCoachArea = () => {
   navigateTo(isAdmin.value ? '/admin/cockpit' : '/piloti')
@@ -233,6 +236,7 @@ onMounted(() => {
 
       <!-- User Dropdown -->
       <div class="topbar__user">
+        <PitwallConceptBell v-if="pitwallConceptActive" />
         <UiNotificationBell v-if="showNotificationBell" />
         <UiUserDropdown
           :user-name="displayName"

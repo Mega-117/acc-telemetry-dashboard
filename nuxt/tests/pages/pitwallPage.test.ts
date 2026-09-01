@@ -11,6 +11,9 @@ const carSvg = read('public/images/pitwall-car-top.svg')
 const page = read('app/pages/pitwall.vue')
 const tabsBar = read('app/components/layout/TabsBarRouter.vue')
 const dashboardLayout = read('app/layouts/dashboard.vue')
+const concept = read('app/components/pitwall/concept/PitwallConcept.vue')
+const conceptBell = read('app/components/pitwall/concept/PitwallConceptBell.vue')
+const topBar = read('app/components/layout/TopBar.vue')
 
 describe('Pitwall layout approvato', () => {
   it('usa la fascia gara a tre sezioni senza accordion', () => {
@@ -239,5 +242,31 @@ describe('Pitwall wiring', () => {
     expect(panel).toContain("import PitwallOrderBar from '~/components/pitwall/PitwallOrderBar.vue'")
     expect(panel).toContain("import PitwallValueField from '~/components/pitwall/PitwallValueField.vue'")
     expect(panel).toContain("from '~/utils/pitwallPresentation'")
+  })
+
+  it('mantiene la vista classica come default e isola il Concept', () => {
+    expect(page).toContain('PitwallPage v-if="!conceptActive"')
+    expect(page).toContain('<PitwallConcept v-else')
+    expect(page).toContain('Classica')
+    expect(page).toContain('Concept')
+    expect(page).toContain('onBeforeUnmount(() => setActive(false))')
+    expect(concept).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
+  })
+
+  it('rende navigabile l intero flusso mock approvato', () => {
+    for (const screen of ['home', 'crew-create-identity', 'crew-create-people', 'crew-detail', 'live']) {
+      expect(concept).toContain(screen)
+    }
+    expect(concept).toContain("liveTab='timing'")
+    expect(concept).toContain("liveTab='track'")
+    expect(concept).toContain('Invita un ospite al muretto')
+    expect(concept).toContain('Invia strategia')
+  })
+
+  it('mostra la campanella mock globale solo nel Concept', () => {
+    expect(topBar).toContain('<PitwallConceptBell v-if="pitwallConceptActive"')
+    expect(conceptBell).toContain('Invito Crew')
+    expect(conceptBell).toContain('Invito al muretto')
+    expect(conceptBell).not.toMatch(/useActivityFeed|useFirebase/)
   })
 })
