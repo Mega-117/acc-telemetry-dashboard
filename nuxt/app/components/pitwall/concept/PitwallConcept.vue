@@ -250,7 +250,13 @@ function crewImage(imageId: string) {
                   <strong>{{ crew.name }}</strong>
                   <small>{{ crew.memberIds.length }} membri</small>
                 </span>
-                <b class="pwc-crew-chevron" aria-hidden="true">›</b>
+                <svg
+                  class="pwc-crew-chevron"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path d="m9 18 6-6-6-6" />
+                </svg>
               </button>
               <div
                 v-if="expandedCrewId === crew.id"
@@ -973,9 +979,16 @@ function crewImage(imageId: string) {
 
 .pwc-crew-card > span { min-width: 0; }
 .pwc-crew-chevron {
+  display: block;
+  width: 18px;
+  height: 18px;
   color: $text-muted;
-  font-size: 24px;
-  font-weight: 400;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform-origin: center;
   transition: transform 0.15s ease, color 0.15s ease;
 }
 
