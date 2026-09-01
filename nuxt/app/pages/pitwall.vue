@@ -27,7 +27,12 @@ onBeforeUnmount(() => setActive(false))
 
 <style lang="scss" scoped>
 @use '@/assets/scss/variables' as *;
-.pitwall-route{position:relative}.pitwall-view-switch{position:relative;z-index:2;display:flex;align-items:center;gap:3px;width:max-content;height:36px;margin:10px 20px 0 auto;padding:3px;border:1px solid rgba(255,255,255,.12);border-radius:9px;background:rgba(10,10,15,.92);box-shadow:0 8px 24px rgba(0,0,0,.24)}.pitwall-view-switch span{padding:0 9px;color:$text-muted;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}.pitwall-view-switch button{height:28px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:$text-secondary;font-size:12px;font-weight:700;cursor:pointer}.pitwall-view-switch button.active{background:rgba($racing-orange,.16);color:#fff;box-shadow:inset 0 0 0 1px rgba($racing-orange,.55)}
-@media(max-width:1180px){.pitwall-view-switch{margin-right:16px}}
-@media(max-width:760px){.pitwall-view-switch{margin-right:10px}.pitwall-view-switch span{display:none}}
+.pitwall-route { position: relative; }
+.pitwall-view-switch { position: relative; z-index: 2; display: flex; align-items: center; gap: 3px; width: max-content; height: 34px; margin: 6px 20px 0 auto; padding: 3px; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; background: rgba(10,10,15,.92); box-shadow: 0 6px 18px rgba(0,0,0,.2); }
+.pitwall-view-switch span { padding: 0 9px; color: $text-muted; font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.pitwall-view-switch button { height: 26px; padding: 0 11px; border: 0; border-radius: 6px; background: transparent; color: $text-secondary; font-size: 12px; font-weight: 700; cursor: pointer; }
+.pitwall-view-switch button:focus-visible { outline: 2px solid $racing-orange; outline-offset: 2px; }
+.pitwall-view-switch button.active { background: rgba($racing-orange,.16); color: #fff; box-shadow: inset 0 0 0 1px rgba($racing-orange,.55); }
+@media(max-width:1180px) { .pitwall-view-switch { margin-right: 16px; } }
+@media(max-width:760px) { .pitwall-view-switch { margin-right: 10px; } .pitwall-view-switch span { display: none; } }
 </style>

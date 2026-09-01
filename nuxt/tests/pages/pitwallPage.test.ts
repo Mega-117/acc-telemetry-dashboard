@@ -257,10 +257,19 @@ describe('Pitwall wiring', () => {
     for (const screen of ['home', 'crew-create-identity', 'crew-create-people', 'crew-detail', 'live']) {
       expect(concept).toContain(screen)
     }
-    expect(concept).toContain("liveTab='timing'")
-    expect(concept).toContain("liveTab='track'")
+    expect(concept).toContain("liveTab = 'timing'")
+    expect(concept).toContain("liveTab = 'track'")
     expect(concept).toContain('Invita un ospite al muretto')
     expect(concept).toContain('Invia strategia')
+  })
+
+  it('mantiene il Concept compatto e riparte sempre dall inizio della vista', () => {
+    expect(concept).toContain("scrollParent.scrollTop = 0")
+    expect(concept).toContain("document.documentElement.scrollTop = 0")
+    expect(concept).toContain('window.scrollTo({ top: 0, behavior: "auto" })')
+    expect(concept).toContain('align-self: start')
+    expect(concept).toContain('.pwc button:focus-visible')
+    expect(concept).not.toContain('v-if="index===0" class="pwc-btn"')
   })
 
   it('mostra la campanella mock globale solo nel Concept', () => {
