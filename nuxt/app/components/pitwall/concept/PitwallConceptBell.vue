@@ -4,15 +4,16 @@ import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
 
 type MockNotice = {
   id: number
-  type: 'crew' | 'temporary'
+  type: 'always' | 'today'
   title: string
   body: string
 }
 
+// Stesse parole della pagina: "Sempre" e "Solo per oggi", mai il gergo interno.
 const { notificationsOpen, toggleNotifications } = usePitwallConceptMode()
 const notices = ref<MockNotice[]>([
-  { id: 1, type: 'crew', title: 'Invito alla Crew', body: 'Marco ti invita in Endurance X' },
-  { id: 2, type: 'temporary', title: 'Invito temporaneo', body: 'Luca ti invita ad assistere questa gara' },
+  { id: 1, type: 'always', title: 'Marco ti ha aggiunto', body: 'Puoi assistere le sue gare · Sempre' },
+  { id: 2, type: 'today', title: 'Luca ti invita come ospite', body: 'Solo per la gara di oggi · fino alle 23:40' },
 ])
 const pendingCount = computed(() => notices.value.length)
 
