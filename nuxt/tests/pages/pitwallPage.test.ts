@@ -230,11 +230,10 @@ describe('Pitwall wiring', () => {
     expect(dashboardLayout).toContain("if (path.startsWith('/pitwall')) return 'pitwall'")
   })
 
-  it('mantiene logo, navigazione e profilo sulla stessa riga nel Pitwall desktop', () => {
-    expect(dashboardLayout).toContain("route.path.startsWith('/pitwall')")
-    expect(dashboardLayout).toContain('dashboard-sticky-header--single-row')
-    expect(dashboardLayout).toContain(':deep(.topbar)')
-    expect(dashboardLayout).toContain(':deep(.tabsbar)')
+  it('usa anche nel Pitwall lo stesso header a due righe delle altre pagine dashboard', () => {
+    expect(dashboardLayout).toContain('<div class="dashboard-sticky-header">')
+    expect(dashboardLayout).not.toContain('dashboard-sticky-header--single-row')
+    expect(dashboardLayout).not.toContain("route.path.startsWith('/pitwall')")
   })
 
   it('riusa i mattoncini Pitwall senza duplicare la logica pura', () => {

@@ -11,8 +11,6 @@ const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 const route = useRoute()
 const router = useRouter()
 
-const useSingleRowHeader = computed(() => route.path.startsWith('/pitwall'))
-
 // Inject profile navigation from app.vue
 const goToProfile = inject<() => void>('goToProfile')
 
@@ -52,10 +50,7 @@ const handleGoToProfile = () => {
 <template>
   <div class="dashboard-layout">
     <!-- Sticky Header: TopBar + TabsBar -->
-    <div
-      class="dashboard-sticky-header"
-      :class="{ 'dashboard-sticky-header--single-row': useSingleRowHeader }"
-    >
+    <div class="dashboard-sticky-header">
       <LayoutTopBar
         :user-name="displayName"
         @logout="handleLogout"
@@ -84,64 +79,6 @@ const handleGoToProfile = () => {
   top: 0;
   z-index: 100;
   background: #0d0d12;
-}
-
-.dashboard-sticky-header--single-row {
-  display: grid;
-
-  :deep(.topbar),
-  :deep(.tabsbar) {
-    grid-area: 1 / 1;
-  }
-
-  :deep(.tabsbar) {
-    z-index: 1;
-    align-self: stretch;
-    display: flex;
-    align-items: stretch;
-    background: transparent;
-    pointer-events: none;
-  }
-
-  :deep(.tabsbar__inner) {
-    width: 100%;
-  }
-
-  :deep(.tab) {
-    display: flex;
-    align-items: center;
-    pointer-events: auto;
-  }
-
-  :deep(.topbar__brand),
-  :deep(.topbar__user),
-  :deep(.dev-button),
-  :deep(.coach-button),
-  :deep(.voice-group) {
-    position: relative;
-    z-index: 2;
-  }
-}
-
-@media (max-width: 900px) {
-  .dashboard-sticky-header--single-row {
-    display: block;
-
-    :deep(.topbar),
-    :deep(.tabsbar) {
-      display: block;
-    }
-
-    :deep(.tabsbar) {
-      overflow-x: auto;
-      pointer-events: auto;
-    }
-
-    :deep(.tabsbar__inner) {
-      width: max-content;
-      min-width: 100%;
-    }
-  }
 }
 
 .main-content {
