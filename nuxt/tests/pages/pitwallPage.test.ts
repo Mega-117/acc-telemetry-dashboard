@@ -64,7 +64,7 @@ describe('Pitwall layout approvato', () => {
   it('separa strategia da inviare e MFD in macchina in due colonne', () => {
     expect(panel).toContain('STRATEGIA DA INVIARE')
     expect(carCard).toContain('MFD IN MACCHINA')
-    expect(panel).toContain('grid-template-columns: minmax(650px,1.16fr) minmax(420px,.84fr)')
+    expect(panel).toContain('grid-template-columns: minmax(650px,760px) minmax(420px,520px)')
     expect(carCard).toContain('background: #0b1a2a')
   })
 
@@ -91,7 +91,7 @@ describe('Pitwall layout approvato', () => {
   })
 
   it('mantiene strategia e MFD affiancati sui laptop larghi', () => {
-    expect(panel).toContain('grid-template-columns: minmax(650px,1.16fr) minmax(420px,.84fr)')
+    expect(panel).toContain('grid-template-columns: minmax(650px,760px) minmax(420px,520px)')
     expect(panel).not.toContain('@media (max-width: 1180px) { .connections { grid-template-columns: 1fr 1fr; }.connection-cell--recent { grid-column: 1 / -1; }.workspace')
   })
 })
@@ -132,8 +132,8 @@ describe('Pitwall pressioni e sagoma vettura', () => {
   })
 
   it('mantiene il setup pneumatici leggibile e la mappa proporzionata al mockup', () => {
-    expect(panel).toContain('grid-template-columns: minmax(0,1fr) 155px')
-    expect(panel).toContain('width: 132px; height: 244px')
+    expect(panel).toContain('grid-template-columns: minmax(450px,1fr) 150px')
+    expect(panel).toContain('width: 116px; height: 220px')
     expect(panel).toContain('width: 140px')
     expect(panel).toContain('.tyre-settings :deep(.field--bare) { display: grid')
     expect(panel).toContain('.tyre-settings :deep(.field__head) { white-space: nowrap; }')

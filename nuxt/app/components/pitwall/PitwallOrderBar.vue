@@ -62,10 +62,10 @@ const emit = defineEmits<{ send: [] }>()
 <style lang="scss" scoped>
 .orderbar {
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) minmax(255px, 38%);
+  grid-template-columns: 178px minmax(250px, 1fr);
   align-items: center;
-  gap: 16px;
-  padding: 11px 16px;
+  gap: 20px;
+  padding: 10px 15px;
   border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.025);
@@ -77,11 +77,13 @@ const emit = defineEmits<{ send: [] }>()
 
 .orderbar__send {
   display: grid;
+  justify-items: end;
   gap: 6px;
   min-width: 0;
 }
 
 .orderbar__blocked {
+  max-width: 310px;
   margin: 0;
   color: #ffbd55;
   font-size: 11px;
@@ -121,13 +123,14 @@ const emit = defineEmits<{ send: [] }>()
 }
 
 .orderbar :deep(.base-button) {
-  min-height: 51px;
+  width: min(100%, 296px);
+  min-height: 46px;
   justify-content: center;
-  gap: 26px;
+  gap: 22px;
   border: 0;
   border-radius: 8px;
   background: linear-gradient(135deg, #7547e9, #8124f4);
-  box-shadow: 0 8px 24px rgba(111, 46, 232, 0.22);
+  box-shadow: 0 7px 20px rgba(111, 46, 232, 0.18);
   color: #fff;
   font-size: 12px;
   font-weight: 850;

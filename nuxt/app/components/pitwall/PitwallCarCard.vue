@@ -103,8 +103,8 @@ const sourceLabel: Record<MfdSource, string> = {
       pilota", che nel flusso a stanza non esiste piu.
     -->
     <p v-if="!session" class="mfd__empty">
-      Nessuno e al volante adesso: la strategia impostata in macchina si legge
-      quando un pilota della gara e in pista.
+      <span aria-hidden="true"></span>
+      Nessun pilota in pista · dati MFD non disponibili
     </p>
 
     <div class="mfd__rows">
@@ -141,10 +141,11 @@ const sourceLabel: Record<MfdSource, string> = {
 
 .mfd__head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 17px 20px 12px;
+  min-height: 53px;
+  padding: 13px 16px 10px;
 }
 
 .mfd__head h2 {
@@ -178,13 +179,25 @@ const sourceLabel: Record<MfdSource, string> = {
 .mfd__freshness.is-stale { color: #ffbd55; }
 
 .mfd__empty {
-  margin: 0 20px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px 10px;
   color: #8797a8;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.mfd__empty span {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: #687787;
 }
 
 .mfd__rows {
-  margin: 0 14px 14px;
+  margin: 0 12px 12px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.085);
   border-radius: 8px;
@@ -193,15 +206,18 @@ const sourceLabel: Record<MfdSource, string> = {
 
 .mfd__row {
   display: grid;
-  grid-template-columns: minmax(170px, 1fr) minmax(120px, .72fr) 104px;
+  grid-template-columns: minmax(160px, 1fr) minmax(104px, .66fr) 96px;
   align-items: center;
-  gap: 12px;
-  min-height: 41px;
-  padding: 7px 12px;
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.075);
 }
 
 .mfd__row:last-child { border-bottom: 0; }
+.mfd__row:nth-child(6),
+.mfd__row:nth-child(10),
+.mfd__row:nth-child(11) { border-top: 1px solid rgba(91, 133, 177, 0.18); }
 
 .mfd__label {
   color: #d7dee6;
@@ -220,7 +236,7 @@ const sourceLabel: Record<MfdSource, string> = {
 
 .mfd__source {
   justify-self: end;
-  padding: 3px 6px;
+  padding: 2px 5px;
   border: 1px solid currentColor;
   border-radius: 5px;
   font-size: 9px;
@@ -236,8 +252,7 @@ const sourceLabel: Record<MfdSource, string> = {
 .mfd__source--calculated { color: #788695; }
 
 .mfd__row--stop {
-  min-height: 52px;
-  margin-top: 2px;
+  min-height: 46px;
 }
 
 .mfd__value--time {
@@ -248,7 +263,7 @@ const sourceLabel: Record<MfdSource, string> = {
 }
 
 .mfd__order {
-  margin: 0 14px 14px;
+  margin: 0 12px 12px;
 }
 
 @media (max-width: 760px) {
