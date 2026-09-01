@@ -23,6 +23,7 @@ function getElectronApi(): PrimaryCloudOwnerApi | null {
 export function usePrimaryCloudOwner(options: {
   currentUser: Ref<{ uid: string } | null>
   canEnterApp: Ref<boolean>
+  cloudEnabled?: Ref<boolean>
 }) {
   const sync = useElectronSync()
   const leases = createCloudOwnerLeaseController()
@@ -37,18 +38,21 @@ export function usePrimaryCloudOwner(options: {
       && isRuntimeWindowOwner(api)
   })
   const currentUid = computed(() => options.currentUser.value?.uid || null)
+  const cloudEnabled = computed(() => options.cloudEnabled?.value ?? true)
 
   const jobsEnabled = computed(() => {
     const active = activeLease.value
     return !!active
       && readyGeneration.value === active.generation
       && isExactPrimaryOwner.value
+      && cloudEnabled.value
       && options.canEnterApp.value
       && options.currentUser.value?.uid === active.uid
       && sync.runtimeBootstrapState.value.phase === 'ready'
   })
 
   function isLeaseCurrent(uid: string): boolean {
+    if (!cloudEnabled.value) return false
     const api = getElectronApi()
     if (!api) return true // Preserve the existing browser branch.
     const active = activeLease.value
@@ -87,11 +91,11 @@ export function usePrimaryCloudOwner(options: {
   }
 
   const stopOwnerWatch = watch(
-    [currentUid, options.canEnterApp, isExactPrimaryOwner],
-    ([uid, canEnter, exactOwner]) => {
+    [currentUid, options.canEnterApp, isExactPrimaryOwner, cloudEnabled],
+    ([uid, canEnter, exactOwner, cloudAllowed]) => {
       const revision = ++transitionRevision
       revokeCurrentOwner()
-      if (!uid || !canEnter || !exactOwner) return
+      if (!uid || !canEnter || !exactOwner || !cloudAllowed) return
 
       void (async () => {
         await waitForOwnerJobsIdle()
@@ -100,10 +104,14 @@ export function usePrimaryCloudOwner(options: {
           || currentUid.value !== uid
           || !options.canEnterApp.value
           || !isExactPrimaryOwner.value
+          || !cloudEnabled.value
         ) return
 
         const lease = leases.start(uid)
         activeLease.value = lease
+        readyGeneration.value = sync.runtimeBootstrapState.value.phase === 'ready'
+          ? lease.generation
+          : null
         disposeSync = sync.setupAutoSync({
           lease,
           isLeaseCurrent: (candidate: CloudOwnerLease) => leases.isCurrent(candidate)

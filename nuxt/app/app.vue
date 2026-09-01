@@ -12,6 +12,7 @@ import { useActivityFeed } from '~/composables/useActivityFeed'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
 import { useClientDiagnostics } from '~/composables/useClientDiagnostics'
 import { usePrimaryCloudOwner } from '~/composables/usePrimaryCloudOwner'
+import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
 import { endFirebaseScenario, startFirebaseScenario, withFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
@@ -36,6 +37,11 @@ const refreshBrowserOverlayLocation = () => {
 }
 onBeforeMount(refreshBrowserOverlayLocation)
 const normalizedRoutePath = computed(() => route.path.replace(/\/+$/, '') || '/')
+const { active: pitwallConceptActive } = usePitwallConceptMode()
+const isPitwallConceptSandbox = computed(() => (
+  normalizedRoutePath.value === '/pitwall' && pitwallConceptActive.value
+))
+const cloudJobsAllowed = computed(() => !isPitwallConceptSandbox.value)
 const isTrainingOverlayRoute = computed(() => {
   return normalizedRoutePath.value === '/training-overlay' || browserOverlayPath.value === '/training-overlay'
 })
@@ -130,10 +136,14 @@ const {
 } = useFirebaseAuth()
 const primaryCloudOwner = usePrimaryCloudOwner({
   currentUser,
-  canEnterApp
+  canEnterApp,
+  cloudEnabled: cloudJobsAllowed
 })
 const clientDiagnostics = useClientDiagnostics({
-  captureEnabled: computed(() => isPrimaryClientRuntime.value || isRuntimeBootstrapRoute.value),
+  captureEnabled: computed(() => (
+    (isPrimaryClientRuntime.value || isRuntimeBootstrapRoute.value)
+    && cloudJobsAllowed.value
+  )),
   flushEnabled: primaryCloudOwner.jobsEnabled,
   isLeaseCurrent: primaryCloudOwner.isLeaseCurrent
 })
@@ -171,6 +181,7 @@ const browserMaintenanceError = ownerDataMaintenance.error
 const { listenToActivities, stopListening } = useActivityFeed()
 
 function listenToActivitiesTracked(userId: string) {
+  if (!cloudJobsAllowed.value) return
   const scenarioId = startFirebaseScenario('app.activityFeed.listen', { userId })
   try {
     listenToActivities(userId)
@@ -192,6 +203,20 @@ const showBrowserMaintenanceNotification = ref(false)
 const showDevFirebaseProbe = computed(() => {
   return !isTrainingOverlayIntent.value && !isHudOverlayRoute.value && !isStandaloneRuntimeRoute.value && !isStandaloneDevRoute.value && appState.value === 'dashboard' && canUseDevTools()
 })
+
+// Il Concept e' una sandbox locale: lo stesso switch che cambia la UI chiude
+// anche il listener globale. Tornando alla Classica lo riapre senza reload.
+watch(
+  [isPitwallConceptSandbox, appState, currentUser, canEnterApp],
+  ([sandbox, state, user, canEnter]) => {
+    if (sandbox || state !== 'dashboard' || !user || !canEnter) {
+      stopListening()
+      return
+    }
+    listenToActivitiesTracked(user.uid)
+  },
+  { flush: 'post' }
+)
 
 // === CONFIG ===
 const transitionName = 'dissolve-fade-zoom' // Fixed animation
@@ -277,7 +302,6 @@ const enterDashboard = (delayMs = 0) => {
     }
 
     appState.value = 'dashboard'
-    listenToActivitiesTracked(currentUser.value.uid)
     if (pendingSpaRedirectPath.value) {
       router.replace(pendingSpaRedirectPath.value)
       return

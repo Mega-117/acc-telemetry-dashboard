@@ -126,6 +126,41 @@ describe('usePrimaryCloudOwner', () => {
     vi.unstubAllGlobals()
   })
 
+  it('sospende i job cloud e li ripristina senza ricreare il composable', async () => {
+    vi.stubGlobal('window', {
+      electronAPI: { localIdentityRole: 'primary', runtimeBootstrapRole: 'owner' }
+    })
+    mocks.sync.runtimeBootstrapState.value = {
+      phase: 'ready', capabilities: {}, events: [], migrationProgress: null
+    }
+    const cloudEnabled = ref(true)
+    const scope = effectScope()
+    const owner = scope.run(() => usePrimaryCloudOwner({
+      currentUser: ref({ uid: 'uid-sandbox' }),
+      canEnterApp: ref(true),
+      cloudEnabled
+    }))!
+
+    await settle()
+    expect(mocks.sync.setupAutoSync).toHaveBeenCalledTimes(1)
+    expect(owner.jobsEnabled.value).toBe(true)
+
+    const disposeFirstLease = mocks.sync.setupAutoSync.mock.results[0].value
+    cloudEnabled.value = false
+    await settle()
+    expect(disposeFirstLease).toHaveBeenCalledTimes(1)
+    expect(owner.jobsEnabled.value).toBe(false)
+    expect(owner.isLeaseCurrent('uid-sandbox')).toBe(false)
+
+    cloudEnabled.value = true
+    await settle()
+    expect(mocks.sync.setupAutoSync).toHaveBeenCalledTimes(2)
+    expect(owner.jobsEnabled.value).toBe(true)
+
+    scope.stop()
+    vi.unstubAllGlobals()
+  })
+
   it.each([
     ['browser', undefined],
     ['owner senza identita primary', { runtimeBootstrapRole: 'owner' }],

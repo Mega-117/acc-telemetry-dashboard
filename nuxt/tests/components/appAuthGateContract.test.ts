@@ -119,4 +119,22 @@ describe('App protected runtime route contract', () => {
     expect(runtimePage).not.toContain('useClientHeartbeat')
     expect(runtimePage).not.toMatch(/firebase/i)
   })
+
+  it('sospende tutti i job cloud della shell mentre il Pit Wall Concept e attivo', () => {
+    const ownerSource = readFileSync(
+      fileURLToPath(new URL('../../app/composables/usePrimaryCloudOwner.ts', import.meta.url)),
+      'utf8',
+    )
+
+    expect(appSource).toContain("import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'")
+    expect(appSource).toContain("normalizedRoutePath.value === '/pitwall' && pitwallConceptActive.value")
+    expect(appSource).toContain('cloudEnabled: cloudJobsAllowed')
+    expect(appSource).toContain('&& cloudJobsAllowed.value')
+    expect(appSource).toContain('[isPitwallConceptSandbox, appState, currentUser, canEnterApp]')
+    expect(appSource).toContain("if (sandbox || state !== 'dashboard' || !user || !canEnter)")
+    expect(appSource).not.toContain("appState.value = 'dashboard'\n    listenToActivitiesTracked")
+    expect(ownerSource).toContain('const cloudEnabled = computed(() => options.cloudEnabled?.value ?? true)')
+    expect(ownerSource).toContain('if (!cloudEnabled.value) return false')
+    expect(ownerSource).toContain('[currentUid, options.canEnterApp, isExactPrimaryOwner, cloudEnabled]')
+  })
 })
