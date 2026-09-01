@@ -234,6 +234,8 @@ describe('Pitwall wiring', () => {
     expect(dashboardLayout).toContain('<div class="dashboard-sticky-header">')
     expect(dashboardLayout).not.toContain('dashboard-sticky-header--single-row')
     expect(dashboardLayout).not.toContain("route.path.startsWith('/pitwall')")
+    expect(conceptBell).toContain('width:39px;height:39px')
+    expect(conceptBell).not.toContain('width:42px;height:42px')
   })
 
   it('riusa i mattoncini Pitwall senza duplicare la logica pura', () => {
