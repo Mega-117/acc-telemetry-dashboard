@@ -71,6 +71,19 @@ export function filterPitwallConceptPeople(query: string, people = PITWALL_CONCE
   return people.filter(person => `${person.name} ${person.handle ?? ''}`.toLocaleLowerCase('it-IT').includes(needle))
 }
 
+export function pitwallConceptNickname(person: PitwallConceptPerson): string {
+  return person.handle.replace(/^@/, '')
+}
+
+export function filterPitwallConceptPeopleByNickname(
+  query: string,
+  people = PITWALL_CONCEPT_PEOPLE,
+): PitwallConceptPerson[] {
+  const needle = query.trim().replace(/^@/, '').toLocaleLowerCase('it-IT')
+  if (!needle) return people
+  return people.filter(person => pitwallConceptNickname(person).toLocaleLowerCase('it-IT').includes(needle))
+}
+
 export function splitPitwallConceptSearch(query: string) {
   const results = filterPitwallConceptPeople(query)
   return {

@@ -8,7 +8,9 @@ import {
   PITWALL_CONCEPT_RECENTS,
   describePitwallConceptAccess,
   filterPitwallConceptPeople,
+  filterPitwallConceptPeopleByNickname,
   getPitwallConceptCrewMembers,
+  pitwallConceptNickname,
   stepPitwallConceptPressure,
   type PitwallConceptCrew,
   type PitwallConceptLiveTab,
@@ -30,6 +32,7 @@ const accessMenu = ref<string | null>(null);
 const expandedCrewId = ref<string | null>(null);
 const selectedCrewId = ref("apex");
 const crewMemberSearch = ref("");
+const inviteSearch = ref("");
 const crewQueue = ref([
   { id: "paolo", kind: "request" as const },
   { id: "andrea", kind: "invite" as const },
@@ -55,6 +58,9 @@ const invitationPeople = computed(() =>
   PITWALL_CONCEPT_PEOPLE.filter((person) =>
     ["mario", "luca", "paolo"].includes(person.id),
   ),
+);
+const filteredInvitationPeople = computed(() =>
+  filterPitwallConceptPeopleByNickname(inviteSearch.value, invitationPeople.value),
 );
 const activeCrew = computed(() =>
   PITWALL_CONCEPT_CREWS.find((crew) => crew.id === selectedCrewId.value)
@@ -115,6 +121,11 @@ function toggleInvitee(id: string) {
   invitees.value = invitees.value.includes(id)
     ? invitees.value.filter((item) => item !== id)
     : [...invitees.value, id];
+}
+
+function inviteeNickname(id: string) {
+  const person = PITWALL_CONCEPT_PEOPLE.find((item) => item.id === id);
+  return person ? pitwallConceptNickname(person) : id;
 }
 
 function submitSearch() {
@@ -381,7 +392,8 @@ function crewImage(imageId: string) {
         <header class="pwc-flow-header">
           <div>
             <button class="pwc-back" @click="go('home')">← Torna al Pit Wall</button>
-            <h1>Crea una Crew</h1>
+            <h1>Crea Crew</h1>
+            <p class="pwc-flow-purpose">Una Crew permette ai membri di assistersi senza richiedere ogni volta l'accesso.</p>
           </div>
           <ol class="pwc-steps" aria-label="Avanzamento creazione Crew">
             <li :class="{ active: screen === 'crew-create-identity', done: screen === 'crew-create-people' }" :aria-current="screen === 'crew-create-identity' ? 'step' : undefined">
@@ -397,18 +409,13 @@ function crewImage(imageId: string) {
           class="pwc-flow-card pwc-flow-card--identity"
           @submit.prevent="go('crew-create-people')"
         >
-          <header class="pwc-flow-card__intro">
-            <h2>Identità della Crew</h2>
-            <p>Definisci nome, descrizione e copertina.</p>
-          </header>
           <div class="pwc-identity-grid">
             <section class="pwc-identity-fields">
               <label><span class="pwc-field-label">Nome <em>*</em></span><input v-model="crewName" required /></label>
               <label><span class="pwc-field-label">Descrizione <small>opzionale</small></span><textarea v-model="crewDescription" rows="3"> </textarea></label>
-              <p class="pwc-info">I membri che accetteranno potranno assistersi reciprocamente durante le gare.</p>
             </section>
             <fieldset class="pwc-image-picker">
-              <legend>Copertina</legend> <p>Scegli una delle sei copertine disponibili.</p> <div>
+              <legend>Copertina</legend> <div>
               <button
                 v-for="image in PITWALL_CONCEPT_CREW_IMAGES"
                 :key="image.id"
@@ -437,25 +444,26 @@ function crewImage(imageId: string) {
           class="pwc-flow-card pwc-flow-card--people"
         >
           <section class="pwc-invite-directory">
-            <header><h2>Invita persone</h2><p>È facoltativo: potrai farlo anche dopo.</p></header>
+            <header><h2>Invita persone</h2><p>Opzionale</p></header>
             <label class="pwc-search is-small">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m16 16 4 4" /></svg>
-              <input placeholder="Cerca nome o nickname…" />
+              <input v-model="inviteSearch" placeholder="Cerca nickname" aria-label="Cerca nickname" />
             </label>
             <div class="pwc-invite-list">
-              <article v-for="person in invitationPeople" :key="person.id" class="pwc-invite-row">
-                <div><strong>{{ person.name }}</strong><small>{{ person.handle }}</small></div>
+              <article v-for="person in filteredInvitationPeople" :key="person.id" class="pwc-invite-row">
+                <strong>{{ pitwallConceptNickname(person) }}</strong>
                 <button class="pwc-btn" :class="{ 'is-added': invitees.includes(person.id) }" @click="toggleInvitee(person.id)">
                   {{ invitees.includes(person.id) ? "Aggiunto" : "Aggiungi" }}
                 </button>
               </article>
+              <p v-if="filteredInvitationPeople.length === 0" class="pwc-invite-empty">Nessun nickname trovato.</p>
             </div>
           </section>
           <aside class="pwc-invite-summary">
             <header><div><h3>Invitati</h3><small>{{ invitees.length }} selezionati</small></div></header>
             <div class="pwc-invite-summary__list">
               <article v-for="id in invitees" :key="id">
-                <strong>{{ PITWALL_CONCEPT_PEOPLE.find((item) => item.id === id)?.name }}</strong>
+                <strong>{{ inviteeNickname(id) }}</strong>
                 <button @click="toggleInvitee(id)">Rimuovi</button>
               </article>
               <p v-if="invitees.length === 0" class="pwc-invite-empty">Nessuna persona selezionata.</p>
@@ -1275,6 +1283,7 @@ function crewImage(imageId: string) {
 }
 .pwc-flow-header > div { display: grid; gap: 8px; }
 .pwc-flow-header h1 { font-size: clamp(28px, 2.4vw, 36px); }
+.pwc-flow-purpose { max-width: 560px; margin: -2px 0 0; color: $text-secondary; font-size: 13px; line-height: 1.4; }
 .pwc-steps {
   display: flex;
   align-items: center;
@@ -1320,14 +1329,13 @@ function crewImage(imageId: string) {
 }
 .pwc-flow-card {
   width: 100%;
+  height: 380px;
   margin: 0;
   padding: 20px;
   gap: 16px;
 }
-.pwc-flow-card__intro { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; }
-.pwc-flow-card__intro h2 { font-size: 22px; }
-.pwc-flow-card__intro p,
 .pwc-invite-directory > header p { margin: 0; color: $text-secondary; font-size: 13px; }
+.pwc-flow-card--identity { grid-template-rows: minmax(0, 1fr) auto; }
 .pwc-identity-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.88fr) minmax(430px, 1.12fr);
@@ -1340,15 +1348,14 @@ function crewImage(imageId: string) {
 .pwc-field-label small { display: inline; font-size: 12px; font-weight: 500; }
 .pwc-flow-card input { min-height: 44px; }
 .pwc-flow-card textarea { min-height: 82px; }
-.pwc-info { padding: 10px 12px; border-left: 2px solid rgba(125, 211, 252, 0.52); border-radius: 5px; font-size: 12px; line-height: 1.45; }
-.pwc-image-picker > p { margin-bottom: 10px; }
 .pwc-image-picker > div { gap: 8px; }
 .pwc-image-picker button { border-radius: 8px; }
 .pwc-image-picker img { height: 58px; }
 .pwc-image-picker span { padding: 6px 8px; font-size: 11px; }
-.pwc-flow-card > footer { justify-content: space-between; padding-top: 10px; }
+.pwc-flow-card > footer { align-items: center; justify-content: space-between; padding-top: 10px; }
 .pwc-flow-card--people {
   grid-template-columns: minmax(0, 1.18fr) minmax(290px, 0.82fr);
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 0;
   width: 100%;
 }
@@ -1401,6 +1408,7 @@ function crewImage(imageId: string) {
   .pwc-steps li { min-width: 0; flex: 1; }
   .pwc-identity-grid,
   .pwc-flow-card--people { grid-template-columns: 1fr; }
+  .pwc-flow-card { height: auto; }
   .pwc-invite-directory { padding-right: 0; }
   .pwc-invite-summary { margin-top: 20px; padding: 18px 0 0; border-top: 1px solid var(--pwc-line); border-left: 0; }
   .pwc-flow-card--people > footer { grid-column: 1; }

@@ -7,8 +7,10 @@ import {
   PITWALL_CONCEPT_RECENTS,
   describePitwallConceptAccess,
   filterPitwallConceptPeople,
+  filterPitwallConceptPeopleByNickname,
   findPitwallConceptPerson,
   getPitwallConceptCrewMembers,
+  pitwallConceptNickname,
   splitPitwallConceptSearch,
   stepPitwallConceptPressure,
 } from '~/utils/pitwallConcept'
@@ -22,6 +24,13 @@ describe('Pitwall Concept mock model', () => {
 
   it('returns every fixture for an empty query', () => {
     expect(filterPitwallConceptPeople('')).toHaveLength(8)
+  })
+
+  it('filters invitations only by nickname and removes the display prefix', () => {
+    expect(filterPitwallConceptPeopleByNickname('mario').map(person => person.id)).toEqual(['mario'])
+    expect(filterPitwallConceptPeopleByNickname('@mario').map(person => person.id)).toEqual(['mario'])
+    expect(filterPitwallConceptPeopleByNickname('Mario Rossi')).toEqual([])
+    expect(pitwallConceptNickname(PITWALL_CONCEPT_PEOPLE[0]!)).toBe('mariorossi')
   })
 
   it('returns mock directory results without making an external request', () => {
