@@ -346,12 +346,13 @@ const roomStateLabel = computed(() => {
             <div v-for="person in link.crew.value" :key="person.uid" class="recent-row">
               <span
                 class="presence-dot"
-                :class="person.driving ? 'is-driving' : person.online ? 'is-online' : person.invited ? 'is-waiting' : ''"
+                :class="person.driving ? 'is-driving' : person.online ? 'is-online' : (person.invited || person.connecting) ? 'is-waiting' : ''"
               />
               <strong>{{ person.nickname }}{{ person.isSelf ? ' (tu)' : '' }}</strong>
               <span class="grant-pill" :class="{ 'is-permanent': person.driving }">
                 <template v-if="person.driving">AL VOLANTE</template>
                 <template v-else-if="person.invited">invitato · non ancora entrato</template>
+                <template v-else-if="person.connecting">in collegamento…</template>
                 <template v-else-if="person.online">{{ person.role === 'manager' ? 'gestisce la gara' : 'presente' }}</template>
                 <template v-else>{{ person.role === 'manager' ? 'gestisce la gara · offline' : 'offline' }}</template>
               </span>

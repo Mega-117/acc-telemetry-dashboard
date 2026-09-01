@@ -411,3 +411,59 @@ describe('prima accettata vince anche fra due ordini sullo stesso PC', () => {
     expect(fake.calls.rejections).toHaveLength(0)
   })
 })
+
+describe('un errore in mezzo non blocca la vettura per sempre', () => {
+  let handle: ReturnType<typeof startPitwallRoomDriver> | null = null
+
+  afterEach(() => { handle?.stop(); handle = null })
+
+  it('dopo un esito che esplode, il prossimo ordine viene comunque preso in carico', async () => {
+    // Senza il finally, il segnaposto "sto applicando" restava acceso e ogni
+    // ordine successivo veniva rifiutato con la motivazione sbagliata - "un
+    // altro ordine e gia in applicazione" - finche non si riavviava l app.
+    const fake = fakeService()
+    let esplodi = true
+    const bridge = electron()
+    const rotto = {
+      ...(fake.service as unknown as Record<string, unknown>),
+      publishOutcome: async (...args: unknown[]) => {
+        if (esplodi) { esplodi = false; throw new Error('rete caduta a meta') }
+        return (fake.service as never as { publishOutcome: (...a: unknown[]) => Promise<unknown> }).publishOutcome(...args)
+      },
+    }
+    handle = startPitwallRoomDriver({
+      db: {} as never,
+      uid: DRIVER,
+      nickname: 'RICO117',
+      runtimeSessionId: 'rt-1',
+      electronApi: bridge.api,
+      service: rotto as never,
+      readTrustedUids: async () => [],
+      readVehicle: async () => ({
+        fingerprint: 'ddf3278c2b7485a3',
+        label: '#1 · nurburgring',
+        track: 'nurburgring',
+        raceNumber: 1,
+        teamName: null,
+        driving: true,
+        crew: null,
+        strategy: null,
+      }),
+      log: { warn: () => {}, error: () => {} },
+    })
+    await settle(12)
+
+    fake.setMembers([member(DRIVER, true)])
+    fake.setOrders([order({ orderId: 'ordine-a' })])
+    await settle(24)
+
+    fake.setOrders([order({ orderId: 'ordine-b', revision: 2 })])
+    await settle(24)
+
+    // Il secondo e stato preso in carico, non rifiutato per conflitto.
+    expect(fake.calls.claims).toEqual(['ordine-a', 'ordine-b'])
+    expect(fake.calls.rejections).toHaveLength(0)
+    // E la presa e stata rilasciata anche sul giro esploso.
+    expect(fake.calls.released).toBe(2)
+  })
+})

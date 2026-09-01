@@ -235,38 +235,46 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
     handled.add(order.orderId)
     applyingOrderId = order.orderId
 
-    // 5. Ad ACC. L'autorizzazione l'hanno gia' imposta le regole Firestore;
-    //    qui si presenta la stanza perche' il processo main possa verificare
-    //    che l'ordine riguardi *questo* pilota e non un'altra macchina.
-    let outcome: { status: string, reason?: string | null, fields?: unknown }
+    // Da qui in poi la presa si rilascia **sempre**, qualunque cosa succeda.
+    // Senza il `finally`, un errore inatteso in mezzo lasciava il segnaposto
+    // acceso e la vettura rifiutava ogni ordine successivo per sempre, con la
+    // motivazione sbagliata ("un altro ordine e' gia' in applicazione") e senza
+    // che nessuno potesse sbloccarla se non riavviando l'app.
     try {
-      const result = await options.electronApi.pitwallSubmitRemoteOrder?.({
-        order: { ...order, schemaVersion: 2 } as never,
-        grant: null,
-        room: { roomId, memberUids: room?.memberUids ?? [] },
-      })
-      outcome = result
-        ? { status: result.status, reason: result.reason ?? null, fields: result.fields ?? {} }
-        : { status: 'failed', reason: 'Ponte Electron non disponibile.', fields: {} }
-    } catch (error) {
-      outcome = { status: 'failed', reason: (error as Error)?.message || String(error), fields: {} }
-    }
+      // 5. Ad ACC. L'autorizzazione l'hanno gia' imposta le regole Firestore;
+      //    qui si presenta la stanza perche' il processo main possa verificare
+      //    che l'ordine riguardi *questo* pilota e non un'altra macchina.
+      let outcome: { status: string, reason?: string | null, fields?: unknown }
+      try {
+        const result = await options.electronApi.pitwallSubmitRemoteOrder?.({
+          order: { ...order, schemaVersion: 2 } as never,
+          grant: null,
+          room: { roomId, memberUids: room?.memberUids ?? [] },
+        })
+        outcome = result
+          ? { status: result.status, reason: result.reason ?? null, fields: result.fields ?? {} }
+          : { status: 'failed', reason: 'Ponte Electron non disponibile.', fields: {} }
+      } catch (error) {
+        outcome = { status: 'failed', reason: (error as Error)?.message || String(error), fields: {} }
+      }
 
-    const terminal = (['applied', 'partial', 'failed', 'rejected'] as const)
-      .find(status => status === outcome.status) ?? 'failed'
-    const published = await rooms.publishOutcome(roomId, order.orderId, {
-      status: terminal,
-      reason: outcome.reason ?? null,
-      fields: outcome.fields ?? {},
-    })
-    if (!published.ok) {
-      // L'esito non e' arrivato al cloud, ma ACC e' gia' cambiato: si dice
-      // forte nei log invece di far finta di niente. La persistenza locale
-      // dell'esito e' lo step successivo (outbox), non questo.
-      log.error?.('[PITWALL] esito della stanza non pubblicato:', published.reason)
+      const terminal = (['applied', 'partial', 'failed', 'rejected'] as const)
+        .find(status => status === outcome.status) ?? 'failed'
+      const published = await rooms.publishOutcome(roomId, order.orderId, {
+        status: terminal,
+        reason: outcome.reason ?? null,
+        fields: outcome.fields ?? {},
+      })
+      if (!published.ok) {
+        // L'esito non e' arrivato al cloud, ma ACC e' gia' cambiato: si dice
+        // forte nei log invece di far finta di niente. La persistenza locale
+        // dell'esito e' lo step successivo (outbox), non questo.
+        log.error?.('[PITWALL] esito della stanza non pubblicato:', published.reason)
+      }
+    } finally {
+      applyingOrderId = null
+      await rooms.releaseClaim(roomId)
     }
-    applyingOrderId = null
-    await rooms.releaseClaim(roomId)
   }
 
   function enqueue(order: PitwallRoomOrder): void {

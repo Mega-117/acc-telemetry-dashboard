@@ -96,8 +96,15 @@ const sourceLabel: Record<MfdSource, string> = {
       </span>
     </header>
 
+    <!--
+      La strategia in macchina la vede solo chi e al volante: quando nessuno
+      guida non c e niente da leggere, e dirlo cosi evita che le righe vuote
+      qui sotto sembrino un guasto. Il vecchio testo chiedeva di "selezionare un
+      pilota", che nel flusso a stanza non esiste piu.
+    -->
     <p v-if="!session" class="mfd__empty">
-      Seleziona un pilota per leggere la strategia impostata nel suo Pit MFD.
+      Nessuno e al volante adesso: la strategia impostata in macchina si legge
+      quando un pilota della gara e in pista.
     </p>
 
     <div class="mfd__rows">

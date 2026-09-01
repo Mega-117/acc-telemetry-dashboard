@@ -52,6 +52,13 @@ export interface PitwallCrewRow {
   kind: 'driver' | 'engineer'
   /** Ha un battito recente: e' raggiungibile adesso. */
   online: boolean
+  /**
+   * Si e' annunciato ma il server non ha ancora datato il suo battito.
+   *
+   * Dura un istante e non e' "offline": mostrarlo come tale faceva sembrare
+   * scollegato proprio chi stava aprendo la pagina in quel momento.
+   */
+  connecting: boolean
   /** E' al volante adesso. */
   driving: boolean
   /** Invitato ma non ancora entrato. */
@@ -152,6 +159,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         role: current.managerUids.includes(uid) ? 'manager' : 'member',
         kind: presence?.kind ?? 'engineer',
         online: isPitwallMemberFresh(presence, nowTick.value),
+        connecting: presence != null && !isPitwallMemberFresh(presence, nowTick.value) && presence.updatedAtMs === 0,
         driving: executor.value.executor?.uid === uid
           || executor.value.conflicting.some(member => member.uid === uid),
         invited: false,
@@ -166,6 +174,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         role: 'member',
         kind: 'engineer',
         online: false,
+        connecting: false,
         driving: false,
         invited: true,
         isSelf: uid === myUid.value,
