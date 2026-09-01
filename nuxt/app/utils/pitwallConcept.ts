@@ -24,7 +24,6 @@ export interface PitwallConceptRecent {
   id: string
   handle: string
   initials: string
-  action: 'assist' | 'request' | 'pending'
 }
 
 export interface PitwallConceptCrewImage {
@@ -58,11 +57,11 @@ export const PITWALL_CONCEPT_CREWS: PitwallConceptCrew[] = [
 ]
 
 export const PITWALL_CONCEPT_RECENTS: PitwallConceptRecent[] = [
-  { id: 'andrea', handle: '@andreav', initials: 'AV', action: 'assist' },
-  { id: 'mario', handle: '@mariorossi', initials: 'MR', action: 'assist' },
-  { id: 'gallo', handle: '@marcog', initials: 'MG', action: 'request' },
-  { id: 'martina', handle: '@martinac', initials: 'MC', action: 'request' },
-  { id: 'paolo', handle: '@paolov', initials: 'PV', action: 'pending' },
+  { id: 'andrea', handle: 'andreav', initials: 'AV' },
+  { id: 'mario', handle: 'mariorossi', initials: 'MR' },
+  { id: 'gallo', handle: 'marcog', initials: 'MG' },
+  { id: 'martina', handle: 'martinac', initials: 'MC' },
+  { id: 'paolo', handle: 'paolov', initials: 'PV' },
 ]
 
 export function filterPitwallConceptPeople(query: string, people = PITWALL_CONCEPT_PEOPLE): PitwallConceptPerson[] {

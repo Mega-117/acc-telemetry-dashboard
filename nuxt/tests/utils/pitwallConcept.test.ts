@@ -21,8 +21,8 @@ describe('Pitwall Concept mock model', () => {
     expect(filterPitwallConceptPeople('')).toHaveLength(7)
   })
 
-  it('returns one neutral directory result with its access relationship', () => {
-    expect(findPitwallConceptPerson('@marcog')).toMatchObject({
+  it('returns mock directory results without making an external request', () => {
+    expect(findPitwallConceptPerson('marcog')).toMatchObject({
       handle: '@marcog',
       state: 'racing',
       access: 'none',
@@ -30,15 +30,10 @@ describe('Pitwall Concept mock model', () => {
     expect(findPitwallConceptPerson('utente che non esiste')).toBeNull()
   })
 
-  it('keeps only five recent connections and orders immediate actions first', () => {
+  it('keeps five recent connections as nickname-only entries without pending state', () => {
     expect(PITWALL_CONCEPT_RECENTS).toHaveLength(5)
-    expect(PITWALL_CONCEPT_RECENTS.map(person => person.action)).toEqual([
-      'assist',
-      'assist',
-      'request',
-      'request',
-      'pending',
-    ])
+    expect(PITWALL_CONCEPT_RECENTS.every(person => !person.handle.startsWith('@'))).toBe(true)
+    expect(PITWALL_CONCEPT_RECENTS.every(person => !('action' in person))).toBe(true)
   })
 
   it('keeps pressure controls deterministic and bounded', () => {
