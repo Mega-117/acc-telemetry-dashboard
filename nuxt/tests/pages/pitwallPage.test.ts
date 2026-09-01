@@ -272,6 +272,15 @@ describe('Pitwall wiring', () => {
     expect(concept).not.toContain('v-if="index===0" class="pwc-btn"')
   })
 
+  it('mantiene il contratto visuale racing senza comprimere le righe operative', () => {
+    expect(concept).toContain('--pwc-surface')
+    expect(concept).toContain('background-size: auto, 48px 48px, 48px 48px')
+    expect(concept).toContain('.pwc-command::before')
+    expect(concept).toContain('grid-template-columns: minmax(0, 1.82fr) minmax(360px, 0.82fr)')
+    expect(concept).toContain('.pwc-wall > div { display: grid; grid-template-columns: 92px minmax(0, 1fr)')
+    expect(concept).toContain('.pwc-pit-row { min-height: 30px; }')
+  })
+
   it('mostra la campanella mock globale solo nel Concept', () => {
     expect(topBar).toContain('<PitwallConceptBell v-if="pitwallConceptActive"')
     expect(conceptBell).toContain('Invito Crew')
