@@ -41,6 +41,15 @@ import type { PitwallDriverElectronApi } from './pitwallDriverLinkService'
  */
 export const PITWALL_ROOM_ORDER_RETRY_MS = 5_000
 
+/**
+ * Ogni quanto si rimette in pari l'elenco degli invitati.
+ *
+ * Lento apposta: la fiducia fra account cambia raramente, e ogni giro costa
+ * due query. Cinque minuti bastano perche' un compagno autorizzato a meta'
+ * weekend si ritrovi dentro senza che nessuno tocchi niente.
+ */
+export const PITWALL_ROOM_INVITE_SYNC_MS = 5 * 60_000
+
 export interface PitwallRoomDriverOptions {
   db: Firestore
   uid: string
@@ -106,25 +115,49 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
 
   let stopMembers: (() => void) | null = null
   let stopOrders: (() => void) | null = null
+  let stopRoom: (() => void) | null = null
   let heartbeatTimer: ReturnType<typeof setInterval> | null = null
   let retryTimer: ReturnType<typeof setInterval> | null = null
+  let inviteTimer: ReturnType<typeof setInterval> | null = null
 
   /** Ordini gia' presi in carico: la riconsegna dello stesso documento non li ripete. */
   const handled = new Set<string>()
   /** Un ordine alla volta anche in ingresso: due insieme non corrono in parallelo verso ACC. */
   let delivering: Promise<void> = Promise.resolve()
+  /**
+   * L'ordine che stiamo applicando adesso, se ce n'e' uno.
+   *
+   * Serve a far valere "prima accettata vince" anche fra due ordini arrivati
+   * sullo stesso computer. Metterli in fila sembrava innocuo - il secondo
+   * partiva dieci secondi dopo - ma vuol dire mandare al Pit MFD due strategie
+   * di seguito e dire a due ingegneri che sono andate a buon fine entrambe,
+   * mentre la macchina ha finito con quella del secondo.
+   */
+  let applyingOrderId: string | null = null
 
   function detachRoom(): void {
     stopMembers?.()
     stopOrders?.()
+    stopRoom?.()
     stopMembers = null
     stopOrders = null
+    stopRoom = null
     members = []
     pending = []
   }
 
   function attachRoom(roomId: string): void {
     detachRoom()
+    // La stanza si guarda in diretta, non si fotografa all'ingresso: chi entra
+    // dopo di noi deve poter mandare una strategia. Con una fotografia vecchia
+    // il suo ordine sarebbe arrivato fin qui e poi rifiutato dal processo main
+    // con "non fa parte di questa gara", che e' vero solo secondo una copia
+    // scaduta dell'elenco.
+    stopRoom = rooms.watchRoom(
+      roomId,
+      (next) => { if (next) room = next },
+      (error) => log.warn?.('[PITWALL] stanza non leggibile:', error?.message)
+    )
     stopMembers = rooms.watchMembers(
       roomId,
       (list) => { members = list },
@@ -200,6 +233,7 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
       return
     }
     handled.add(order.orderId)
+    applyingOrderId = order.orderId
 
     // 5. Ad ACC. L'autorizzazione l'hanno gia' imposta le regole Firestore;
     //    qui si presenta la stanza perche' il processo main possa verificare
@@ -231,11 +265,30 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
       // dell'esito e' lo step successivo (outbox), non questo.
       log.error?.('[PITWALL] esito della stanza non pubblicato:', published.reason)
     }
+    applyingOrderId = null
     await rooms.releaseClaim(roomId)
   }
 
   function enqueue(order: PitwallRoomOrder): void {
     if (handled.has(order.orderId)) return
+
+    // Se ne stiamo gia' applicando un altro si rifiuta subito, senza metterlo
+    // in coda. La decisione sta qui e non dentro `deliver`: la coda serializza,
+    // quindi li' dentro il secondo ordine arriverebbe a turno finito e non
+    // troverebbe piu' nessun conflitto da dichiarare - partirebbe dieci secondi
+    // dopo, a situazione gia' cambiata, dicendo a due ingegneri che sono andate
+    // a buon fine entrambe mentre la macchina ha finito con la seconda.
+    const roomId = room?.roomId
+    if (roomId && applyingOrderId && applyingOrderId !== order.orderId) {
+      handled.add(order.orderId)
+      void rooms.rejectOrder(
+        roomId,
+        order.orderId,
+        'Un altro ordine e gia in applicazione su questa vettura: questo e stato rifiutato, non unito.'
+      )
+      return
+    }
+
     delivering = delivering
       .then(() => deliver(order))
       .catch((error) => log.error?.('[PITWALL] consegna ordine stanza fallita:', (error as Error)?.message))
@@ -296,9 +349,33 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
       unavailableReason = null
       handled.clear()
       attachRoom(room.roomId)
+      void refreshInvites()
     }
 
     await heartbeat(vehicle.driving, vehicle.crew ?? null, vehicle.strategy ?? null)
+  }
+
+  /**
+   * Rimette in pari gli invitati con chi ci ha dato fiducia.
+   *
+   * Seminarli solo all'apertura della gara non basta: un permesso "solo per
+   * oggi" puo' scadere cinque minuti prima che la gara si apra, e chi lo
+   * rinnova dopo resterebbe fuori per tutto il weekend - il puntatore della
+   * vettura dura due giorni, quindi non nascera' una stanza nuova. L'unica
+   * alternativa sarebbe invitarlo a mano dal PC di chi guida, che e'
+   * esattamente cio' che il pilota non deve fare.
+   */
+  async function refreshInvites(): Promise<void> {
+    if (stopped || !room) return
+    let trusted: string[] = []
+    try {
+      trusted = await options.readTrustedUids?.() ?? []
+    } catch {
+      return
+    }
+    if (!trusted.length) return
+    const result = await rooms.syncInvites(room.roomId, trusted)
+    if (!result.ok) log.warn?.('[PITWALL] invitati non aggiornati:', result.reason)
   }
 
   async function heartbeat(driving: boolean, crew: unknown, strategy: unknown): Promise<void> {
@@ -321,6 +398,7 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
     if (stopped) return
     for (const order of pending) enqueue(order)
   }, PITWALL_ROOM_ORDER_RETRY_MS)
+  inviteTimer = setInterval(() => { void refreshInvites() }, PITWALL_ROOM_INVITE_SYNC_MS)
 
   return {
     roomId: () => room?.roomId ?? null,
@@ -333,8 +411,10 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
       stopped = true
       if (heartbeatTimer) clearInterval(heartbeatTimer)
       if (retryTimer) clearInterval(retryTimer)
+      if (inviteTimer) clearInterval(inviteTimer)
       heartbeatTimer = null
       retryTimer = null
+      inviteTimer = null
       detachRoom()
       room = null
       lastFingerprint = null

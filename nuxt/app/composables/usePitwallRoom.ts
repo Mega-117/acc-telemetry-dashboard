@@ -18,6 +18,7 @@ import {
   type PitwallRoomService,
 } from '~/services/pitwall/pitwallRoomService'
 import {
+  PITWALL_MEMBER_HEARTBEAT_MS,
   describePitwallRoomExecutor,
   isPitwallMemberFresh,
   isPitwallRoomInvited,
@@ -86,6 +87,9 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   let stopMembersWatch: (() => void) | null = null
   let stopOrderWatch: (() => void) | null = null
   let tickTimer: ReturnType<typeof setInterval> | null = null
+  let presenceTimer: ReturnType<typeof setInterval> | null = null
+  /** Identifica questa scheda: due schede aperte sono due presenze diverse. */
+  const runtimeSessionId = `pw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
   // Cio' che legge l'ingegnere e' la frase tradotta, non il gergo del servizio.
   const lastError = computed(() => describePitwallLinkError(rawError.value))
@@ -106,9 +110,16 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * vista. Un contatore che riparte da zero a ogni ricarica farebbe sembrare
    * vecchio il primo invio successivo; i secondi dall'epoca crescono sempre,
    * anche fra sessioni, dispositivi e ingegneri diversi.
+   *
+   * I secondi pero' non bastano da soli: due invii nello stesso secondo -
+   * facilissimo con due clic - avrebbero la stessa revisione, e il secondo
+   * verrebbe rifiutato come "superato", che e' un motivo falso e incomprensibile
+   * per chi lo legge. Qui la revisione non torna mai indietro e non si ripete.
    */
+  let lastRevision = 0
   function nextRevision(): number {
-    return Math.floor(Date.now() / 1000)
+    lastRevision = Math.max(lastRevision + 1, Math.floor(Date.now() / 1000))
+    return lastRevision
   }
 
   const myUid = computed(() => options.uid())
@@ -211,6 +222,35 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     }
   }
 
+  /**
+   * Annuncia chi c'e' al muretto.
+   *
+   * Senza, l'ingegnere che sta guardando la pagina si vedeva elencato
+   * `OFFLINE` fra i membri - vero alla lettera, perche' non batteva, e
+   * comunque il modo piu' rapido di far sembrare rotto un collegamento che
+   * funziona. Serve anche al pilota, che cosi' sa chi lo sta seguendo.
+   *
+   * `driving` resta falso e `kind` resta `engineer`: chi guarda dal browser non
+   * potra' mai essere eletto esecutore, e questo battito non lo rende
+   * candidato.
+   */
+  async function heartbeat(): Promise<void> {
+    const service_ = service()
+    const roomId = selectedRoomId.value
+    const uid = myUid.value
+    if (!service_ || !roomId || !uid || !amMember.value) return
+    // Il proprio nome si carica prima di annunciarsi: un battito scritto col
+    // solo identificativo lo fisserebbe li' per tutti gli altri, perche' il
+    // battito ha la precedenza sul profilo quando si compone l equipaggio.
+    await loadNickname(uid)
+    await service_.publishPresence(roomId, {
+      nickname: nicknames.value[uid] || uid,
+      kind: 'engineer',
+      driving: false,
+      runtimeSessionId,
+    })
+  }
+
   async function refreshRooms(): Promise<void> {
     const service_ = service()
     if (!service_) {
@@ -239,6 +279,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     stopMembersWatch?.()
     stopRoomWatch = null
     stopMembersWatch = null
+    if (presenceTimer) clearInterval(presenceTimer)
+    presenceTimer = null
     members.value = []
   }
 
@@ -302,6 +344,10 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       (list) => { members.value = list },
       (error) => { rawError.value = error?.message || 'Equipaggio non leggibile.' }
     )
+
+    void heartbeat()
+    if (presenceTimer) clearInterval(presenceTimer)
+    presenceTimer = setInterval(() => { void heartbeat() }, PITWALL_MEMBER_HEARTBEAT_MS)
   }
 
   /**
@@ -385,6 +431,13 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     else notice.value = 'Adesso puo invitare anche lui.'
   }
 
+  /** Sparisce dal muretto senza uscire dalla gara: e' solo la scheda che si chiude. */
+  async function clearPresence(): Promise<void> {
+    const service_ = service()
+    const roomId = selectedRoomId.value
+    if (service_ && roomId) await service_.clearPresence(roomId)
+  }
+
   async function leave(): Promise<void> {
     const service_ = service()
     const roomId = selectedRoomId.value
@@ -414,6 +467,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   }
 
   function stop(): void {
+    void clearPresence()
     detach()
     stopOrderWatch?.()
     stopOrderWatch = null

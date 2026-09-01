@@ -432,6 +432,43 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
     }
   }
 
+  /**
+   * Rimette in pari l'elenco degli invitati con chi ci ha dato fiducia.
+   *
+   * Serve perche' seminare gli inviti *solo* all'apertura della gara non basta
+   * nella vita vera: la fiducia si stabilisce anche dopo che la gara e' gia'
+   * aperta - un compagno ti autorizza a meta' weekend, oppure un permesso
+   * "solo per oggi" scade e viene rinnovato. Senza questo, l'unico modo di
+   * farlo entrare sarebbe invitarlo a mano dal PC di chi sta guidando, che e'
+   * esattamente la cosa che il pilota non deve fare mentre guida.
+   *
+   * Non allarga niente: e' un manager che scrive il proprio elenco di
+   * invitati, cioe' quello che potrebbe fare a mano. Chi non ha un permesso
+   * valido resta fuori. Se non c'e' nulla da aggiungere non scrive: una
+   * scrittura a vuoto ogni pochi minuti, per ogni pilota, e' proprio il tipo
+   * di costo che si accumula senza dire niente di nuovo.
+   */
+  async function syncInvites(roomId: string, trustedUids: string[]): Promise<PitwallRoomResult<number>> {
+    try {
+      const room = await readRoom(roomId)
+      if (!room) return { ok: false, reason: 'Questa gara non esiste piu.' }
+      if (!room.managerUids.includes(uid)) return { ok: true, value: 0 }
+
+      const known = new Set([...room.allowedUids, ...room.memberUids])
+      const missing = [...new Set(trustedUids)].filter(candidate => candidate && !known.has(candidate))
+      if (!missing.length) return { ok: true, value: 0 }
+
+      const allowedUids = [...room.allowedUids, ...missing].slice(0, PITWALL_MAX_ROOM_ALLOWED)
+      await trackedUpdateDoc(roomRef(roomId), {
+        allowedUids,
+        updatedAt: nowIso(now()),
+      }, 'pitwallRoom.syncInvites')
+      return { ok: true, value: missing.length }
+    } catch (error) {
+      return failure(error, 'Aggiornamento degli invitati rifiutato.')
+    }
+  }
+
   /** Promuove un membro a manager: da qui in poi potra' invitare anche lui. */
   async function promote(roomId: string, memberUid: string): Promise<PitwallRoomResult<true>> {
     try {
@@ -473,6 +510,7 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
     publishPresence,
     clearPresence,
     invite,
+    syncInvites,
     revoke,
     promote,
     closeRoom,

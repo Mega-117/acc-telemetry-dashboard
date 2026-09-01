@@ -206,7 +206,18 @@ const hasChanges = computed(() => Object.keys(planPayload()).length > 0)
 /** Spento anche quando ci sono modifiche, se l'ordine non potrebbe partire. */
 const sendEnabled = computed(() => hasChanges.value && link.canSend.value)
 const pendingRequests = computed(() => trust.pendingIncoming.value)
-const trustedEngineers = computed(() => trust.grantedIncoming.value)
+/**
+ * Chi ho autorizzato ad assistermi, tolti quelli che sono gia' nella gara.
+ *
+ * Sono due cose diverse - il permesso fra due account e l'equipaggio di questa
+ * corsa - ma vederle nella stessa lista con lo stesso nome due volte fa solo
+ * chiedere quale delle due righe conti. Chi e' gia' dentro si legge
+ * nell'equipaggio; qui resta chi non c'e' ancora.
+ */
+const trustedEngineers = computed(() => {
+  const inRoom = new Set(link.crew.value.map(person => person.uid))
+  return trust.grantedIncoming.value.filter(request => !inRoom.has(request.engineerUid))
+})
 
 function requesterName(request: { nickname: string | null, engineerUid: string }): string {
   return request.nickname || request.engineerUid
@@ -358,7 +369,7 @@ const roomStateLabel = computed(() => {
             <div v-for="request in trustedEngineers" :key="`trusted-${request.engineerUid}`" class="recent-row recent-row--incoming">
               <span class="presence-dot is-incoming" />
               <strong>{{ requesterName(request) }}</strong>
-              <span class="grant-pill">TI HA AUTORIZZATO · {{ scopeLabel(request) }}</span>
+              <span class="grant-pill">PUÒ ASSISTERTI · {{ scopeLabel(request) }}</span>
               <div class="recent-row__actions">
                 <button type="button" class="btn btn--ghost" @click="trust.decide(request.engineerUid, 'revoked')">Revoca</button>
               </div>
