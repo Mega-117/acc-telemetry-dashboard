@@ -177,7 +177,11 @@ function crewImage(imageId: string) {
                     :class="`is-${person.source}`"
                   >{{ person.initials }}</span> <span class="pwc-person-copy">
                     <strong>{{ person.handle.replace('@', '') }}</strong>
-                    <small v-if="describePitwallConceptAccess(person.access)">{{ describePitwallConceptAccess(person.access) }}</small>
+                    <small
+                      v-if="describePitwallConceptAccess(person.access)"
+                      class="pwc-access-label"
+                      :class="`is-${person.access}`"
+                    >{{ describePitwallConceptAccess(person.access) }}</small>
                   </span> <button
                     v-if="person.access !== 'none'"
                     type="button"
@@ -259,42 +263,53 @@ function crewImage(imageId: string) {
                 </svg>
               </button>
               <div
-                v-if="expandedCrewId === crew.id"
                 :id="`crew-members-${crew.id}`"
-                class="pwc-crew-members"
+                class="pwc-crew-expand"
+                :class="{ 'is-open': expandedCrewId === crew.id }"
+                :aria-hidden="expandedCrewId !== crew.id"
+                :inert="expandedCrewId !== crew.id"
               >
-                <div class="pwc-crew-member-list">
-                  <div
-                    v-for="person in crewMembers(crew)"
-                    :key="person.id"
-                    class="pwc-crew-member"
-                  >
-                    <span class="pwc-avatar">{{ person.initials }}</span>
-                    <strong>{{ person.handle.replace('@', '') }}</strong>
+                <div class="pwc-crew-expand__inner">
+                  <div class="pwc-crew-members">
+                    <div class="pwc-crew-member-list">
+                      <div
+                        v-for="person in crewMembers(crew)"
+                        :key="person.id"
+                        class="pwc-crew-member"
+                      >
+                        <span class="pwc-avatar">{{ person.initials }}</span>
+                        <strong>{{ person.handle.replace('@', '') }}</strong>
+                        <button
+                          type="button"
+                          class="pwc-btn is-primary"
+                          @click="go('live')"
+                        >Collegati</button>
+                      </div>
+                    </div>
                     <button
                       type="button"
-                      class="pwc-btn is-primary"
-                      @click="go('live')"
-                    >Collegati</button>
+                      class="pwc-open-crew"
+                      @click="go('crew-detail')"
+                    >Apri Crew <span aria-hidden="true">→</span></button>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  class="pwc-open-crew"
-                  @click="go('crew-detail')"
-                >Apri Crew <span aria-hidden="true">→</span></button>
               </div>
             </article>
           </section>
           <section class="pwc-recents">
-            <header> <span class="pwc-eyebrow">Ultimi cinque</span> <h2>Recenti</h2> </header> <article
-              v-for="person in recentPeople"
+            <header><h2>Recenti</h2></header> <article
+              v-for="(person, index) in recentPeople"
               :key="person.id"
               class="pwc-recent-person"
+              :class="{ 'is-request-start': person.access === 'none' && recentPeople[index - 1]?.access !== 'none' }"
             >
               <span class="pwc-avatar">{{ person.initials }}</span> <span class="pwc-person-copy">
                 <strong>{{ person.handle.replace('@', '') }}</strong>
-                <small v-if="describePitwallConceptAccess(person.access)">{{ describePitwallConceptAccess(person.access) }}</small>
+                <small
+                  v-if="describePitwallConceptAccess(person.access)"
+                  class="pwc-access-label"
+                  :class="`is-${person.access}`"
+                >{{ describePitwallConceptAccess(person.access) }}</small>
               </span> <button
                 v-if="person.access !== 'none'"
                 type="button"
@@ -939,10 +954,15 @@ function crewImage(imageId: string) {
 .pwc-crews > header,
 .pwc-recents > header {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 18px;
+}
+
+.pwc-crews > header > .pwc-btn {
+  min-height: 38px;
+  margin-bottom: 1px;
 }
 
 .pwc-crews h2,
@@ -989,7 +1009,7 @@ function crewImage(imageId: string) {
   stroke-linecap: round;
   stroke-linejoin: round;
   transform-origin: center;
-  transition: transform 0.15s ease, color 0.15s ease;
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1), color 120ms ease-out;
 }
 
 .pwc-crew-card:hover { background: rgba(255, 255, 255, 0.035); }
@@ -1008,6 +1028,24 @@ function crewImage(imageId: string) {
 .pwc-crew-members {
   padding: 0 14px 12px;
   border-top: 1px solid var(--pwc-line-soft);
+}
+
+.pwc-crew-expand {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 120ms ease-out;
+}
+
+.pwc-crew-expand.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+.pwc-crew-expand__inner {
+  min-height: 0;
+  overflow: hidden;
 }
 
 .pwc-crew-member-list {
@@ -1050,27 +1088,47 @@ function crewImage(imageId: string) {
 
 .pwc-recents {
   position: relative;
-  padding: 20px 24px 22px;
+  padding: 18px 24px 20px;
   border-top: 1px solid var(--pwc-line-soft);
 }
 
 .pwc-recents > header {
   display: block;
+  margin-bottom: 10px;
 }
 .pwc-recent-person {
   position: relative;
   display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-columns: 36px minmax(0, 1fr) 122px;
   align-items: center;
-  gap: 12px;
-  min-height: 52px;
-  padding: 8px 4px;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 4px;
 }
 
-.pwc-recent-person .pwc-avatar { width: 38px; height: 38px; font-size: 12px; }
-.pwc-recent-person .pwc-person-copy strong { font-size: 14px; }
-.pwc-recent-person .pwc-person-copy small { font-size: 10px; }
-.pwc-recent-person .pwc-btn { min-height: 34px; padding-inline: 12px; font-size: 12px; }
+.pwc-recent-person.is-request-start { margin-top: 10px; }
+.pwc-recent-person .pwc-avatar { width: 36px; height: 36px; font-size: 11px; }
+.pwc-recent-person .pwc-person-copy strong { font-size: 14px; line-height: 1.1; }
+.pwc-recent-person .pwc-person-copy small { font-size: 11px; line-height: 1.2; }
+.pwc-recent-person .pwc-btn { width: 122px; min-height: 34px; padding-inline: 10px; font-size: 12px; }
+.pwc-recent-person .pwc-access-request { width: 122px; }
+.pwc-access-label {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  width: max-content;
+}
+
+.pwc-access-label::before {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.pwc-access-label.is-permanent { color: #7dd3fc; }
+.pwc-access-label.is-temporary { color: #c4b5fd; }
 .pwc-request-menu {
   position: absolute;
   z-index: 3;
