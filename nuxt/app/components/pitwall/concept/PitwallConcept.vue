@@ -3,6 +3,7 @@ import { computed, nextTick, reactive, ref } from "vue";
 import {
   PITWALL_CONCEPT_CREWS,
   PITWALL_CONCEPT_CREW_IMAGES,
+  PITWALL_CONCEPT_CURRENT_USER_ID,
   PITWALL_CONCEPT_DEFAULT_PRESSURES,
   PITWALL_CONCEPT_PEOPLE,
   PITWALL_CONCEPT_RECENTS,
@@ -32,6 +33,9 @@ const accessMenu = ref<string | null>(null);
 const expandedCrewId = ref<string | null>(null);
 const selectedCrewId = ref("apex");
 const crewMemberSearch = ref("");
+const removedCrewMemberIds = ref<string[]>([]);
+const selectedCrewMemberId = ref<string | null>(null);
+const removalConfirmOpen = ref(false);
 const inviteSearch = ref("");
 const crewQueue = ref([
   { id: "paolo", kind: "request" as const },
@@ -67,12 +71,21 @@ const activeCrew = computed(() =>
     ?? DEFAULT_CREW,
 );
 const activeCrewMembers = computed(() =>
-  getPitwallConceptCrewMembers(activeCrew.value),
+  getPitwallConceptCrewMembers(activeCrew.value).filter(
+    (person) => !removedCrewMemberIds.value.includes(person.id),
+  ),
 );
 const filteredCrewMembers = computed(() =>
   filterPitwallConceptPeople(crewMemberSearch.value, activeCrewMembers.value),
 );
 const activeCrewImage = computed(() => crewImage(activeCrew.value.imageId));
+const isActiveCrewOwner = computed(() =>
+  activeCrew.value.ownerId === PITWALL_CONCEPT_CURRENT_USER_ID,
+);
+const selectedCrewMember = computed(() =>
+  activeCrewMembers.value.find((person) => person.id === selectedCrewMemberId.value)
+    ?? null,
+);
 const crewQueueItems = computed(() =>
   crewQueue.value.flatMap((entry) => {
     const person = PITWALL_CONCEPT_PEOPLE.find((item) => item.id === entry.id);
@@ -157,7 +170,32 @@ function crewMembers(crew: PitwallConceptCrew) {
 function openCrew(crew: PitwallConceptCrew) {
   selectedCrewId.value = crew.id;
   crewMemberSearch.value = "";
+  selectedCrewMemberId.value = null;
+  removalConfirmOpen.value = false;
   go("crew-detail");
+}
+
+function openCrewMember(personId: string) {
+  if (!isActiveCrewOwner.value || personId === activeCrew.value.ownerId) return;
+  selectedCrewMemberId.value = personId;
+  removalConfirmOpen.value = false;
+}
+
+function closeCrewMember() {
+  selectedCrewMemberId.value = null;
+  removalConfirmOpen.value = false;
+}
+
+function requestCrewMemberRemoval() {
+  if (!selectedCrewMember.value) return;
+  removalConfirmOpen.value = true;
+}
+
+function removeSelectedCrewMember() {
+  const personId = selectedCrewMember.value?.id;
+  if (!personId || personId === activeCrew.value.ownerId) return;
+  removedCrewMemberIds.value = [...removedCrewMemberIds.value, personId];
+  closeCrewMember();
 }
 
 function dismissCrewQueueItem(personId: string) {
@@ -502,8 +540,6 @@ function crewImage(imageId: string) {
           </div> <div class="pwc-crew-page__actions">
             <span>{{ activeCrewMembers.length }} membri</span> <button class="pwc-btn is-outline">
               + Invita
-            </button> <button class="pwc-btn">
-              Impostazioni
             </button>
           </div>
         </header> <div class="pwc-crew-grid">
@@ -537,26 +573,47 @@ function crewImage(imageId: string) {
                 v-for="person in filteredCrewMembers"
                 :key="person.id"
                 class="pwc-crew-person"
+                :class="{ 'is-selected': selectedCrewMemberId === person.id }"
               >
                 <span class="pwc-avatar">{{ person.initials }}</span>
-                <span class="pwc-person-copy">
-                  <strong>{{ person.handle.replace('@', '') }}</strong>
-                  <small>{{ person.name }}</small>
+                <span class="pwc-crew-person__identity">
+                  <span class="pwc-person-copy">
+                    <strong>{{ person.handle.replace('@', '') }}</strong>
+                    <small>{{ person.name }}</small>
+                  </span>
+                  <button
+                    v-if="isActiveCrewOwner && person.id !== activeCrew.ownerId"
+                    type="button"
+                    class="pwc-member-menu"
+                    :aria-label="`Gestisci ${person.handle.replace('@', '')}`"
+                    :title="`Gestisci ${person.handle.replace('@', '')}`"
+                    @click="openCrewMember(person.id)"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <circle cx="5" cy="12" r="1.5" />
+                      <circle cx="12" cy="12" r="1.5" />
+                      <circle cx="19" cy="12" r="1.5" />
+                    </svg>
+                  </button>
                 </span>
                 <span
                   class="pwc-crew-person__state"
-                  :class="{ 'is-racing': person.state === 'racing' }"
+                  :class="{
+                    'is-racing': person.state === 'racing',
+                    'is-owner': person.id === activeCrew.ownerId,
+                  }"
                 >
-                  <b>{{ person.state === "racing" ? "In gara" : "Nessuna sessione" }}</b>
-                  <small>{{ person.state === "racing" ? "Disponibile ora" : "Non assistibile" }}</small>
+                  <b>{{ person.id === activeCrew.ownerId ? "Proprietario" : person.state === "racing" ? "In gara" : "Nessuna sessione" }}</b>
+                  <small>{{ person.id === activeCrew.ownerId ? "Tu" : person.state === "racing" ? "Disponibile ora" : "Non assistibile" }}</small>
                 </span>
                 <button
-                  v-if="person.state === 'racing'"
+                  v-if="person.state === 'racing' && person.id !== activeCrew.ownerId"
                   class="pwc-btn is-primary"
                   @click="go('live')"
                 >
                   Assisti
                 </button>
+                <span v-else-if="person.id === activeCrew.ownerId" class="pwc-crew-person__unavailable">Il tuo profilo</span>
                 <span v-else class="pwc-crew-person__unavailable">Non in gara</span>
               </article>
             </div>
@@ -565,32 +622,76 @@ function crewImage(imageId: string) {
               <small>Prova con un altro nome o nickname.</small>
             </div>
           </main> <aside class="pwc-crew-queue">
-            <header class="pwc-panel-heading">
-              <div>
-                <h2>Richieste e inviti</h2>
-                <p>Solo elementi che richiedono una decisione.</p>
-              </div>
-              <span>{{ crewQueueItems.length }}</span>
-            </header>
-            <div v-if="crewQueueItems.length" class="pwc-crew-queue__list">
-              <article v-for="item in crewQueueItems" :key="item.person.id">
-                <span class="pwc-avatar">{{ item.person.initials }}</span>
-                <span class="pwc-person-copy">
-                  <strong>{{ item.person.handle.replace('@', '') }}</strong>
-                  <small>{{ item.kind === "request" ? "Richiede di entrare" : "Invito inviato" }}</small>
-                </span>
-                <div v-if="item.kind === 'request'">
-                  <button class="pwc-btn" @click="dismissCrewQueueItem(item.person.id)">Rifiuta</button>
-                  <button class="pwc-btn is-primary" @click="dismissCrewQueueItem(item.person.id)">Accetta</button>
+            <template v-if="selectedCrewMember">
+              <header class="pwc-panel-heading pwc-member-detail__heading">
+                <button
+                  type="button"
+                  class="pwc-member-detail__back"
+                  aria-label="Torna a richieste e inviti"
+                  @click="closeCrewMember"
+                >←</button>
+                <div>
+                  <span class="pwc-eyebrow">Gestione membro</span>
+                  <h2>{{ selectedCrewMember.handle.replace('@', '') }}</h2>
                 </div>
-                <button v-else class="pwc-btn" @click="dismissCrewQueueItem(item.person.id)">Annulla</button>
-              </article>
-            </div>
-            <div v-else class="pwc-crew-queue__empty">
-              <strong>Tutto in ordine</strong>
-              <small>Non ci sono richieste o inviti da gestire.</small>
-            </div>
+              </header>
+              <div class="pwc-member-detail">
+                <div class="pwc-member-detail__person">
+                  <span class="pwc-avatar">{{ selectedCrewMember.initials }}</span>
+                  <span class="pwc-person-copy">
+                    <strong>{{ selectedCrewMember.name }}</strong>
+                    <small>{{ selectedCrewMember.handle }}</small>
+                  </span>
+                </div>
+                <dl>
+                  <div><dt>Ruolo</dt><dd>Membro della Crew</dd></div>
+                  <div><dt>Accesso</dt><dd>Pre-autorizzato</dd></div>
+                </dl>
+                <p>La rimozione revoca l'accesso permanente ottenuto tramite questa Crew.</p>
+                <button type="button" class="pwc-btn is-danger-outline" @click="requestCrewMemberRemoval">
+                  Rimuovi dalla Crew
+                </button>
+              </div>
+            </template>
+            <template v-else>
+              <header class="pwc-panel-heading">
+                <div>
+                  <h2>Richieste e inviti</h2>
+                  <p>Solo elementi che richiedono una decisione.</p>
+                </div>
+                <span>{{ crewQueueItems.length }}</span>
+              </header>
+              <div v-if="crewQueueItems.length" class="pwc-crew-queue__list">
+                <article v-for="item in crewQueueItems" :key="item.person.id">
+                  <span class="pwc-avatar">{{ item.person.initials }}</span>
+                  <span class="pwc-person-copy">
+                    <strong>{{ item.person.handle.replace('@', '') }}</strong>
+                    <small>{{ item.kind === "request" ? "Richiede di entrare" : "Invito inviato" }}</small>
+                  </span>
+                  <div v-if="item.kind === 'request'">
+                    <button class="pwc-btn" @click="dismissCrewQueueItem(item.person.id)">Rifiuta</button>
+                    <button class="pwc-btn is-primary" @click="dismissCrewQueueItem(item.person.id)">Accetta</button>
+                  </div>
+                  <button v-else class="pwc-btn" @click="dismissCrewQueueItem(item.person.id)">Annulla</button>
+                </article>
+              </div>
+              <div v-else class="pwc-crew-queue__empty">
+                <strong>Tutto in ordine</strong>
+                <small>Non ci sono richieste o inviti da gestire.</small>
+              </div>
+            </template>
           </aside>
+        </div>
+        <div v-if="removalConfirmOpen && selectedCrewMember" class="pwc-confirm-backdrop" @click.self="removalConfirmOpen = false">
+          <section role="dialog" aria-modal="true" aria-labelledby="pwc-remove-member-title" class="pwc-confirm-dialog">
+            <span class="pwc-eyebrow">Conferma richiesta</span>
+            <h2 id="pwc-remove-member-title">Rimuovere {{ selectedCrewMember.handle.replace('@', '') }} dalla Crew?</h2>
+            <p>Perderà l'accesso permanente ottenuto tramite questa Crew.</p>
+            <div>
+              <button type="button" class="pwc-btn" @click="removalConfirmOpen = false">Annulla</button>
+              <button type="button" class="pwc-btn is-danger" @click="removeSelectedCrewMember">Rimuovi membro</button>
+            </div>
+          </section>
         </div>
       </div>
     </template> <template v-else>
@@ -1492,12 +1593,49 @@ function crewImage(imageId: string) {
   border: 1px solid var(--pwc-line-soft);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.018);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.pwc-crew-person.is-selected {
+  border-color: rgba(255, 107, 0, 0.42);
+  background: rgba(255, 107, 0, 0.045);
 }
 
 .pwc-crew-person .pwc-avatar { width: 40px; height: 40px; font-size: 12px; }
+.pwc-crew-person__identity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pwc-member-menu {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: $text-muted;
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease, background 150ms ease;
+}
+
+.pwc-member-menu:hover,
+.pwc-member-menu:focus-visible {
+  border-color: var(--pwc-line);
+  background: rgba(255, 255, 255, 0.045);
+  color: #fff;
+}
+
+.pwc-member-menu svg { width: 18px; height: 18px; fill: currentColor; }
 .pwc-crew-person__state b { display: block; color: $text-secondary; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
 .pwc-crew-person__state small { margin-top: 4px; font-size: 11px; }
 .pwc-crew-person__state.is-racing b { color: #4ade80; }
+.pwc-crew-person__state.is-owner b { color: $racing-orange; }
 .pwc-crew-person > .pwc-btn,
 .pwc-crew-person__unavailable { width: 116px; justify-self: end; text-align: center; }
 .pwc-crew-person__unavailable { color: $text-muted; font-size: 12px; }
@@ -1524,6 +1662,66 @@ function crewImage(imageId: string) {
 .pwc-crew-queue__list article > .pwc-btn { grid-column: 1 / -1; }
 .pwc-crew-queue__list article > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pwc-crew-queue__list article > .pwc-btn { width: 100%; }
+
+.pwc-member-detail__heading {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  justify-content: initial;
+}
+
+.pwc-member-detail__back {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--pwc-line);
+  border-radius: 8px;
+  background: transparent;
+  color: $text-secondary;
+  cursor: pointer;
+}
+
+.pwc-member-detail__back:hover { color: #fff; border-color: rgba(255, 107, 0, 0.55); }
+.pwc-member-detail__heading .pwc-eyebrow { margin-bottom: 3px; }
+.pwc-member-detail { display: grid; gap: 18px; margin-top: 22px; }
+.pwc-member-detail__person { display: grid; grid-template-columns: 48px minmax(0, 1fr); align-items: center; gap: 12px; }
+.pwc-member-detail__person .pwc-avatar { width: 46px; height: 46px; }
+.pwc-member-detail dl { display: grid; gap: 0; margin: 0; border-block: 1px solid var(--pwc-line-soft); }
+.pwc-member-detail dl div { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 12px; padding: 12px 0; }
+.pwc-member-detail dl div + div { border-top: 1px solid var(--pwc-line-soft); }
+.pwc-member-detail dt { color: $text-secondary; font-size: 12px; }
+.pwc-member-detail dd { margin: 0; color: #fff; font-size: 12px; text-align: right; }
+.pwc-member-detail > p { margin: 0; color: $text-secondary; font-size: 12px; line-height: 1.55; }
+.pwc-member-detail .is-danger-outline { width: 100%; margin-top: 4px; border-color: rgba(239, 68, 68, 0.52); background: transparent; color: #ff7777; }
+.pwc-member-detail .is-danger-outline:hover { border-color: #ef4444; background: rgba(239, 68, 68, 0.08); }
+
+.pwc-confirm-backdrop {
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(2, 5, 9, 0.76);
+  backdrop-filter: blur(5px);
+}
+
+.pwc-confirm-dialog {
+  width: min(440px, 100%);
+  padding: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 14px;
+  background: #111720;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.72);
+}
+
+.pwc-confirm-dialog h2 { margin-top: 6px; font-size: 22px; line-height: 1.25; }
+.pwc-confirm-dialog p { margin: 12px 0 22px; color: $text-secondary; font-size: 13px; line-height: 1.55; }
+.pwc-confirm-dialog > div { display: flex; justify-content: flex-end; gap: 10px; }
+.pwc-confirm-dialog .is-danger { border-color: #ef4444; background: #d92d20; }
+.pwc-confirm-dialog .is-danger:hover { border-color: #ff6b60; background: #ef3427; }
 
 @media (max-width: 1180px) {
   .pwc-crew-grid { grid-template-columns: 1fr; }

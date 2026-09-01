@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   PITWALL_CONCEPT_CREWS,
   PITWALL_CONCEPT_CREW_IMAGES,
+  PITWALL_CONCEPT_CURRENT_USER_ID,
   PITWALL_CONCEPT_DEFAULT_PRESSURES,
   PITWALL_CONCEPT_PEOPLE,
   PITWALL_CONCEPT_RECENTS,
@@ -73,6 +74,8 @@ describe('Pitwall Concept mock model', () => {
     for (const crew of PITWALL_CONCEPT_CREWS) {
       const members = getPitwallConceptCrewMembers(crew)
       expect(crew.description.length).toBeGreaterThan(0)
+      expect(crew.ownerId).toBe(PITWALL_CONCEPT_CURRENT_USER_ID)
+      expect(crew.memberIds).toContain(crew.ownerId)
       expect(members.map(person => person.id)).toEqual(crew.memberIds)
       expect(members.every(person => person.access === 'permanent')).toBe(true)
     }

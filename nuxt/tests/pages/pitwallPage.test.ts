@@ -293,6 +293,20 @@ describe('Pitwall wiring', () => {
     expect(concept).not.toContain('v-if="index===0" class="pwc-btn"')
   })
 
+  it('riserva la gestione Crew al proprietario senza indebolire Assisti', () => {
+    expect(concept).toContain('activeCrew.value.ownerId === PITWALL_CONCEPT_CURRENT_USER_ID')
+    expect(concept).toContain('v-if="isActiveCrewOwner && person.id !== activeCrew.ownerId"')
+    expect(concept).toContain(':aria-label="`Gestisci ${person.handle.replace(\'@\', \'\')}`"')
+    expect(concept).toContain('class="pwc-crew-person__identity"')
+    expect(concept).toContain('class="pwc-crew-person__state"')
+    expect(concept).toContain('class="pwc-btn is-primary"')
+    expect(concept).toContain('Rimuovi dalla Crew')
+    expect(concept).toContain('aria-label="Torna a richieste e inviti"')
+    expect(concept).toContain('Perderà l\'accesso permanente ottenuto tramite questa Crew.')
+    expect(concept).toContain('role="dialog" aria-modal="true"')
+    expect(concept).not.toContain('Impostazioni')
+  })
+
   it('mantiene il contratto visuale racing senza comprimere le righe operative', () => {
     expect(concept).toContain('--pwc-surface')
     expect(concept).toContain('background-size: auto, 48px 48px, 48px 48px')
