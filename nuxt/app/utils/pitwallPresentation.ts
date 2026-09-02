@@ -9,7 +9,11 @@ export const PITWALL_WHEELS = ['FL', 'FR', 'RL', 'RR'] as const
 export type PitwallWheel = (typeof PITWALL_WHEELS)[number]
 
 export const PITWALL_PRESSURE_STEP_PSI = 0.1
-export const PITWALL_PRESSURE_MIN_PSI = 20
+// 20,3 e' il fondo corsa vero del Pit MFD di ACC, non un 20 arrotondato: sotto
+// quella soglia le frecce del gioco non scendono. Lasciar comporre un valore
+// piu' basso vorrebbe dire mandare al pilota un ordine irraggiungibile, che
+// fallirebbe la verifica su un bersaglio che ACC non puo' raggiungere.
+export const PITWALL_PRESSURE_MIN_PSI = 20.3
 export const PITWALL_PRESSURE_MAX_PSI = 35
 
 export const PITWALL_FUEL_STEP_L = 1
