@@ -261,13 +261,74 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('screen === \'home\'')
     expect(concept).toContain('<PitwallConceptLive')
     expect(concept).toContain('@back="go(\'home\')"')
-    expect(conceptLive).toContain("liveTab = 'timing'")
-    expect(conceptLive).toContain("liveTab = 'track'")
     // Le Crew non esistono piu': collegarsi non passa dal fondare una squadra.
     expect(concept).not.toMatch(/crew/i)
     expect(conceptLive).not.toMatch(/crew/i)
     expect(concept).not.toContain('PITWALL_CONCEPT_CREW_IMAGES')
     expect(concept).not.toContain('Copertina')
+  })
+
+  it('lascia nella schermata di assistenza il solo pit stop, sotto il bottone indietro', () => {
+    // Via l'header di gara e via la colonna timing/pista: quelle informazioni
+    // il muretto le legge in ACC, qui resta la sola decisione da mandare.
+    expect(conceptLive).toContain('class="pwc-back pwc-live__back"')
+    expect(conceptLive).toContain('@click="$emit(\'back\')"')
+    expect(conceptLive).toContain('width: min(820px, 100%)')
+    for (const gone of [
+      'pwc-command',
+      'pwc-live-grid',
+      'pwc-table',
+      'pwc-track',
+      'pwc-metrics',
+      'liveTab',
+      'Timing',
+      'Pista',
+      'Autonomia',
+      'Ferrari 296 GT3',
+    ]) {
+      expect(conceptLive).not.toContain(gone)
+    }
+    // Intestazione e righe condividono la stessa griglia: i valori restano
+    // incolonnati sotto Campo / Strategia / In macchina.
+    expect(conceptLive.match(/grid-template-columns: minmax\(0, 1fr\) 180px 116px/g) ?? []).toHaveLength(1)
+  })
+
+  it('copre tutto il Pit MFD tranne il limitatore, nell ordine del gioco', () => {
+    // Le quindici voci misurate sul MFD reale meno il limitatore pits, che e' il
+    // limite dei 50 km/h e non una decisione del muretto.
+    const voci = [
+      'Preset strategia',
+      'Carburante',
+      'Cambio gomme',
+      'Set pneumatici',
+      'Mescola',
+      'Pressioni',
+      'Sostituisci freni',
+      'Prossimo pilota',
+      'Riparazioni',
+      'Sospensioni',
+      'Carrozzeria',
+      'Tempo stop stimato',
+    ]
+    let cursore = -1
+    for (const voce of voci) {
+      const trovato = conceptLive.indexOf(`<span>${voce}</span>`)
+      expect(trovato, voce).toBeGreaterThan(cursore)
+      cursore = trovato
+    }
+    expect(conceptLive).not.toContain('Limitatore')
+    // Il tempo non ha una seconda formula: e' la stessa della vista classica.
+    expect(conceptLive).toContain('estimatePitStop')
+    expect(conceptLive).toContain('formatStopDuration')
+  })
+
+  it('legge la colonna In macchina da una fonte sola invece che dal template', () => {
+    // Prima "25.0", "Dry" e "0 L" erano scritti a mano nelle celle: due copie
+    // dello stesso stato che potevano divergere.
+    expect(conceptLive).toContain('const car = Object.freeze({')
+    for (const cella of ['{{ car.preset }}', '{{ car.fuel }} L', '{{ car.tyreSet }}', '{{ car.compound }}', '{{ car.pressure.toFixed(1) }}', '{{ yesNo(car.suspension) }}', '{{ yesNo(car.bodywork) }}']) {
+      expect(conceptLive).toContain(cella)
+    }
   })
 
   it('apre la gara, non una persona, e dice perche ci sei dentro', () => {

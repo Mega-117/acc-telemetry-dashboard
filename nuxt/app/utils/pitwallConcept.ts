@@ -6,7 +6,6 @@
 // questo la home offre "Entra" su una gara e mai "collegati a una persona".
 
 export type PitwallConceptScreen = 'home' | 'live'
-export type PitwallConceptLiveTab = 'timing' | 'track'
 export type PitwallConceptDirection = 'assist' | 'assisted'
 export type PitwallConceptAccess = 'always' | 'today'
 
