@@ -6,11 +6,13 @@ import RegistrationSuccess from '~/components/auth/RegistrationSuccess.vue'
 
 const checkEmailVerified = vi.hoisted(() => vi.fn())
 const resendVerificationEmail = vi.hoisted(() => vi.fn())
+const changeVerificationEmail = vi.hoisted(() => vi.fn())
 
 vi.mock('~/composables/useFirebaseAuth', () => ({
   useFirebaseAuth: () => ({
     checkEmailVerified,
     resendVerificationEmail,
+    changeVerificationEmail,
   }),
 }))
 
@@ -21,6 +23,7 @@ describe('RegistrationSuccess verification reconciliation', () => {
     vi.clearAllMocks()
     checkEmailVerified.mockResolvedValue({ verified: false, error: null })
     resendVerificationEmail.mockResolvedValue({ success: true, alreadyVerified: false })
+    changeVerificationEmail.mockResolvedValue({ success: true })
   })
 
   function mountGate() {
@@ -93,6 +96,73 @@ describe('RegistrationSuccess verification reconciliation', () => {
     expect(resendVerificationEmail).toHaveBeenCalledOnce()
     expect(checkEmailVerified).toHaveBeenCalledOnce()
     resolveResend({ success: true, alreadyVerified: false })
+  })
+
+  // --- Correzione dell'indirizzo (PIP-372) ---
+  // Senza questa via d'uscita chi sbaglia il dominio resta chiuso fuori: la
+  // mail non arriva e non esiste modo di correggere senza un admin.
+
+  /**
+   * Apre l'editor solo quando la riconciliazione iniziale ha rilasciato il
+   * lock: finche' e' in corso l'azione e' volutamente disabilitata, come le
+   * altre di questa schermata.
+   */
+  async function openEmailEditor(wrapper: ReturnType<typeof mountGate>) {
+    await vi.waitFor(() => expect(checkEmailVerified).toHaveBeenCalledOnce())
+    await vi.waitFor(() => expect(wrapper.get('.email-fix__toggle').attributes('disabled')).toBeUndefined())
+    await wrapper.get('.email-fix__toggle').trigger('click')
+  }
+
+  it('offre la correzione dell’indirizzo e la inoltra al composable', async () => {
+    const wrapper = mountGate()
+    await openEmailEditor(wrapper)
+
+    await wrapper.get('.email-fix__input').setValue('corretta@gmail.com')
+    await wrapper.get('.email-fix__form').trigger('submit')
+    await vi.waitFor(() => expect(changeVerificationEmail).toHaveBeenCalledWith('corretta@gmail.com'))
+
+    // L'esito dice che l'indirizzo cambia solo dopo il click sul link, perche'
+    // e' esattamente cio' che fa verifyBeforeUpdateEmail.
+    await vi.waitFor(() => expect(wrapper.get('.email-fix__sent').text()).toContain('solo dopo'))
+  })
+
+  it('avverte sul dominio quasi giusto anche nella correzione', async () => {
+    const wrapper = mountGate()
+    await openEmailEditor(wrapper)
+
+    await wrapper.get('.email-fix__input').setValue('pilota@gmail.co')
+    await nextTick()
+
+    const hint = wrapper.get('.email-fix__hint').text()
+    expect(hint).toContain('@gmail.com')
+    expect(hint).not.toContain('pilota')
+  })
+
+  it('mostra l’errore e resta nel form se Firebase rifiuta', async () => {
+    changeVerificationEmail.mockResolvedValue({ success: false, error: 'Email gia registrata' })
+    const wrapper = mountGate()
+    await openEmailEditor(wrapper)
+
+    await wrapper.get('.email-fix__input').setValue('occupata@gmail.com')
+    await wrapper.get('.email-fix__form').trigger('submit')
+
+    await vi.waitFor(() => expect(wrapper.get('.error-message').text()).toBe('Email gia registrata'))
+    expect(wrapper.find('.email-fix__sent').exists()).toBe(false)
+    expect(wrapper.find('.email-fix__input').exists()).toBe(true)
+  })
+
+  it('non avvia due cambi email contemporanei', async () => {
+    let resolveChange!: (result: { success: boolean }) => void
+    changeVerificationEmail.mockReturnValueOnce(new Promise((resolve) => { resolveChange = resolve }))
+    const wrapper = mountGate()
+    await openEmailEditor(wrapper)
+
+    await wrapper.get('.email-fix__input').setValue('corretta@gmail.com')
+    await wrapper.get('.email-fix__form').trigger('submit')
+    await wrapper.get('.email-fix__form').trigger('submit')
+
+    expect(changeVerificationEmail).toHaveBeenCalledOnce()
+    resolveChange({ success: true })
   })
 
   it('rilascia il lock anche se il controllo rifiuta la promise', async () => {

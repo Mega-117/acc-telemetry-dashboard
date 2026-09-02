@@ -44,6 +44,7 @@ export default defineConfig({
         'app/components/session-detail/advanced/AdvancedDebriefHistory.vue',
         // ── Phase 1–2: services e utils ──────────────────────────────────
         'app/config/firebaseRuntimeTarget.ts',
+        'app/utils/emailDomainHint.ts',
         'app/services/auth/authService.ts',
         'app/services/auth/authSessionPolicy.ts',
         'app/services/auth/authSessionRecoveryCoordinator.ts',

@@ -3,7 +3,8 @@
 // ResetPasswordForm - Form recupero password
 // ============================================
 
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { emailDomainHintMessage } from '~/utils/emailDomainHint'
 
 withDefaults(defineProps<{
   loading?: boolean
@@ -14,6 +15,10 @@ withDefaults(defineProps<{
 const email = ref('')
 const error = ref('')
 const success = ref(false)
+
+// Un refuso nel dominio qui e' invisibile: la richiesta "riesce" comunque e la
+// mail non arriva mai. L'avviso e' l'unico segnale che l'utente puo' avere.
+const domainHint = computed(() => emailDomainHintMessage(email.value))
 
 const emit = defineEmits<{
   submit: [email: string]
@@ -52,8 +57,16 @@ defineExpose({
     <!-- Success State -->
     <div v-if="success" class="reset-success">
       <span class="reset-success__icon">✅</span>
+      <!--
+        Esito volutamente condizionale: per non rivelare quali indirizzi sono
+        registrati, Firebase risponde "ok" anche quando non spedisce nulla, e
+        l'app non ha modo di sapere quale dei due casi si sia verificato.
+        Dichiarare l'invio sarebbe una bugia proprio verso chi ha sbagliato a
+        digitare l'indirizzo, cioe' chi ha piu' bisogno di capire (PIP-297).
+      -->
       <p class="reset-success__text">
-        Email inviata! Controlla la tua casella di posta (anche spam).
+        Se l'indirizzo è registrato, riceverai il link tra pochi istanti.
+        Controlla anche la cartella spam.
       </p>
       <UiBaseButton variant="link" :disabled="loading" @click="emit('back')">
         ← Torna al login
@@ -75,7 +88,10 @@ defineExpose({
         autocomplete="email"
         @input="clearError"
       />
-      
+
+      <!-- Avviso, non blocco: un dominio raro ma valido deve poter passare. -->
+      <p v-if="domainHint" class="reset-form__domain-hint">{{ domainHint }}</p>
+
       <UiFormError :message="error" :visible="!!error" />
       
       <UiBaseButton 
@@ -118,6 +134,14 @@ defineExpose({
       color: var(--text-muted);
       font-size: $font-size-xs;
     }
+  }
+
+  // Avviso, non errore: tono attenuato perche' l'utente puo' ignorarlo.
+  &__domain-hint {
+    margin: -$spacing-xs 0 0 0;
+    font-size: $font-size-xs;
+    color: var(--text-secondary);
+    text-align: center;
   }
 }
 

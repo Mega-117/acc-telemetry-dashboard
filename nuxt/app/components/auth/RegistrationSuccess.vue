@@ -5,6 +5,7 @@
 
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { emailDomainHintMessage } from '~/utils/emailDomainHint'
 
 defineProps<{
   email: string
@@ -17,7 +18,7 @@ const emit = defineEmits<{
 }>()
 
 // Firebase Auth
-const { checkEmailVerified, resendVerificationEmail } = useFirebaseAuth()
+const { checkEmailVerified, resendVerificationEmail, changeVerificationEmail } = useFirebaseAuth()
 
 // State
 const RESEND_COOLDOWN_SECONDS = 60
@@ -29,6 +30,53 @@ const isChecking = ref(false)
 const verificationError = ref(false)
 const verificationMessage = ref('')
 let resendCooldownTimer: ReturnType<typeof setInterval> | null = null
+
+// --- Correzione dell'indirizzo (PIP-372) ---
+// Senza questa via d'uscita, chi ha sbagliato il dominio in registrazione resta
+// bloccato qui per sempre: non riceve la mail e non ha modo di correggere,
+// quindi l'unica soluzione e' un intervento manuale con l'Admin SDK.
+const isEditingEmail = ref(false)
+const newEmail = ref('')
+const isSubmittingEmail = ref(false)
+const emailChangeError = ref('')
+const emailChangeSent = ref(false)
+
+const newEmailDomainHint = computed(() => emailDomainHintMessage(newEmail.value))
+
+// Una sola azione auth alla volta, come per le altre di questa schermata.
+const isEmailChangeBusy = computed(() => (
+  isSubmittingEmail.value || isChecking.value || isResending.value
+))
+
+const toggleEmailEditor = () => {
+  isEditingEmail.value = !isEditingEmail.value
+  emailChangeError.value = ''
+
+  if (!isEditingEmail.value) newEmail.value = ''
+}
+
+const handleChangeEmail = async () => {
+  if (isEmailChangeBusy.value) return
+
+  isSubmittingEmail.value = true
+  emailChangeError.value = ''
+
+  try {
+    const result = await changeVerificationEmail(newEmail.value)
+
+    if (result.success) {
+      emailChangeSent.value = true
+      isEditingEmail.value = false
+      newEmail.value = ''
+    } else {
+      emailChangeError.value = result.error || 'Errore durante il cambio email'
+    }
+  } catch {
+    emailChangeError.value = 'Errore durante il cambio email'
+  } finally {
+    isSubmittingEmail.value = false
+  }
+}
 
 const isResendDisabled = computed(() => (
   isResending.value || resendSuccess.value || resendCooldown.value > 0
@@ -187,13 +235,61 @@ onMounted(() => {
     </button>
 
     <!-- Resend Link -->
-    <button 
+    <button
       class="resend-btn"
       :disabled="isResendDisabled"
       @click="handleResendEmail"
     >
       {{ resendButtonText }}
     </button>
+
+    <!-- Correzione indirizzo: l'uscita quando la posta non puo' arrivare -->
+    <div class="email-fix">
+      <p v-if="emailChangeSent" class="email-fix__sent">
+        Ti abbiamo inviato un link al nuovo indirizzo (controlla anche lo spam).
+        L'email dell'account cambierà solo dopo che avrai aperto quel link:
+        poi rientra con il nuovo indirizzo.
+      </p>
+
+      <template v-else>
+        <button
+          v-if="!isEditingEmail"
+          class="email-fix__toggle"
+          :disabled="isEmailChangeBusy"
+          @click="toggleEmailEditor"
+        >
+          Email sbagliata? Correggila
+        </button>
+
+        <form v-else class="email-fix__form" @submit.prevent="handleChangeEmail">
+          <input
+            v-model="newEmail"
+            class="email-fix__input"
+            type="email"
+            placeholder="Nuovo indirizzo email"
+            autocomplete="email"
+            :disabled="isSubmittingEmail"
+          >
+
+          <p v-if="newEmailDomainHint" class="email-fix__hint">{{ newEmailDomainHint }}</p>
+
+          <div v-if="emailChangeError" class="error-message">{{ emailChangeError }}</div>
+
+          <button class="email-fix__submit" type="submit" :disabled="isEmailChangeBusy">
+            {{ isSubmittingEmail ? 'Invio in corso...' : 'Invia il link al nuovo indirizzo' }}
+          </button>
+
+          <button
+            class="email-fix__toggle"
+            type="button"
+            :disabled="isSubmittingEmail"
+            @click="toggleEmailEditor"
+          >
+            Annulla
+          </button>
+        </form>
+      </template>
+    </div>
   </div>
 </template>
 
@@ -352,6 +448,100 @@ $gradient-racing: linear-gradient(135deg, $color-racing-red 0%, $color-racing-or
   &:disabled {
     color: rgba(255, 255, 255, 0.4);
     cursor: not-allowed;
+  }
+}
+
+// === EMAIL FIX ===
+.email-fix {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+  &__sent {
+    font-family: $font-family;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1.6;
+  }
+
+  &__toggle {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    background: none;
+    border: none;
+    font-family: $font-family;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    text-decoration: underline;
+    cursor: pointer;
+    transition: color 0.2s ease;
+
+    &:hover:not(:disabled) {
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    &:disabled {
+      color: rgba(255, 255, 255, 0.25);
+      cursor: not-allowed;
+    }
+  }
+
+  &__form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  &__input {
+    width: 100%;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    font-family: $font-family;
+    font-size: 14px;
+    color: #fff;
+
+    &::placeholder {
+      color: rgba(255, 255, 255, 0.35);
+    }
+
+    &:focus {
+      outline: none;
+      border-color: rgba($color-racing-red, 0.6);
+    }
+  }
+
+  // Avviso, non errore: l'utente puo' comunque proseguire.
+  &__hint {
+    font-family: $font-family;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    text-align: left;
+  }
+
+  &__submit {
+    width: 100%;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    font-family: $font-family;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover:not(:disabled) {
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
   }
 }
 

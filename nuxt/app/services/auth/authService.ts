@@ -5,19 +5,30 @@ import {
     sendEmailVerification,
     sendPasswordResetEmail,
     updateProfile,
+    verifyBeforeUpdateEmail,
     type User
 } from 'firebase/auth'
 import { auth } from '~/config/firebaseAuth'
 import { createInitialUserDocument } from './userProvisioningService'
+
+// Con la protezione anti-enumerazione attiva sul progetto - `accsuite117` la usa -
+// Firebase non distingue piu' "utente inesistente" da "password errata": nega
+// l'accesso senza rivelare quali indirizzi sono registrati, e i tre codici
+// storici arrivano tutti come `auth/invalid-credential`. Un messaggio unico e'
+// quindi l'unica risposta onesta, e resta corretta anche se la protezione
+// venisse disattivata: i codici tornerebbero distinti ma direbbero comunque
+// all'utente la sola cosa utile, ossia che cosa controllare.
+const INVALID_LOGIN_MESSAGE = 'Email o password non corretti. Controlla anche il dominio dell\'indirizzo.'
 
 export function translateAuthError(code: string): string {
     const messages: Record<string, string> = {
         'auth/email-already-in-use': 'Email gia registrata',
         'auth/weak-password': 'Password troppo debole (min. 6 caratteri)',
         'auth/invalid-email': 'Email non valida',
-        'auth/user-not-found': 'Utente non trovato',
-        'auth/wrong-password': 'Password errata',
-        'auth/invalid-credential': 'Credenziali non valide',
+        'auth/user-not-found': INVALID_LOGIN_MESSAGE,
+        'auth/wrong-password': INVALID_LOGIN_MESSAGE,
+        'auth/invalid-credential': INVALID_LOGIN_MESSAGE,
+        'auth/requires-recent-login': 'Per sicurezza esci e rientra, poi riprova',
         'auth/too-many-requests': 'Troppi tentativi, riprova piu tardi',
         'auth/network-request-failed': 'Errore di rete, controlla la connessione',
         'auth/operation-not-allowed': 'Il recupero password non è disponibile al momento',
@@ -95,6 +106,20 @@ export async function logoutCurrentUser() {
 
 export async function resendCurrentVerificationEmail(user: User) {
     await sendEmailVerification(user)
+}
+
+/**
+ * Corregge l'indirizzo di un account che non puo' ricevere posta, tipicamente
+ * per un refuso nel dominio scritto in registrazione.
+ *
+ * Usa `verifyBeforeUpdateEmail` e non `updateEmail` di proposito: l'indirizzo
+ * sull'account cambia **solo** dopo che l'utente ha aperto il link recapitato
+ * al nuovo indirizzo. Se anche il secondo tentativo fosse sbagliato, l'account
+ * resta esattamente com'era invece di finire su una casella ancora piu'
+ * irraggiungibile - la correzione non puo' peggiorare la situazione.
+ */
+export async function sendVerificationToUpdatedEmail(user: User, newEmail: string) {
+    await verifyBeforeUpdateEmail(user, newEmail)
 }
 
 export async function refreshEmailVerificationState(user: User | null) {

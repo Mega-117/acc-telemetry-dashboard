@@ -3,7 +3,8 @@
 // RegisterForm - Form di registrazione
 // ============================================
 
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import { emailDomainHintMessage } from '~/utils/emailDomainHint'
 
 withDefaults(defineProps<{
   loading?: boolean
@@ -22,6 +23,8 @@ const error = ref('')
 const emit = defineEmits<{
   submit: [data: { firstName: string; lastName: string; nickname: string; email: string; password: string }]
 }>()
+
+const domainHint = computed(() => emailDomainHintMessage(email.value))
 
 const handleSubmit = () => {
   // Reset error
@@ -128,7 +131,14 @@ defineExpose({
       autocomplete="email"
       @input="clearError"
     />
-    
+
+    <!--
+      Avviso, non blocco: e' il momento in cui un refuso nel dominio costa meno
+      da correggere. Dopo la registrazione lo stesso errore lascia l'account
+      irraggiungibile (PIP-372).
+    -->
+    <p v-if="domainHint" class="domain-hint">{{ domainHint }}</p>
+
     <UiBaseInput
       v-model="password"
       type="password"
@@ -171,6 +181,13 @@ defineExpose({
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: $spacing-sm;
+}
+
+// Avviso, non errore: tono attenuato perche' l'utente puo' ignorarlo.
+.domain-hint {
+  margin: -$spacing-xs 0 0 0;
+  font-size: $font-size-xs;
+  color: var(--text-secondary);
 }
 
 @keyframes authFadeIn {

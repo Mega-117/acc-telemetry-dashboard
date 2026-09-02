@@ -437,6 +437,46 @@ export function useFirebaseAuth() {
         }
     }
 
+    /**
+     * Corregge l'indirizzo dell'account quando l'utente e' fermo al gate di
+     * verifica perche' la posta non puo' arrivargli.
+     *
+     * Segue lo stesso contratto delle altre azioni auth (PIP-356): cattura la
+     * lease corrente e pubblica un esito solo se revisione e UID sono ancora
+     * quelli di partenza, cosi' un doppio click o un cambio utente a meta'
+     * strada non possono produrre un messaggio riferito a un'altra sessione.
+     */
+    const changeVerificationEmail = async (newEmail: string) => {
+        const lease = captureCurrentAuthLease()
+        const user = currentUser.value
+        if (!lease || !user) {
+            return { success: false, error: 'Utente non autenticato' }
+        }
+
+        const requestedEmail = newEmail.trim()
+        if (!requestedEmail) {
+            return { success: false, error: 'Inserisci il nuovo indirizzo email' }
+        }
+        if (requestedEmail.toLowerCase() === (user.email ?? '').toLowerCase()) {
+            return { success: false, error: 'Questo e’ gia’ l’indirizzo del tuo account' }
+        }
+
+        const { sendVerificationToUpdatedEmail, translateAuthError } = await getAuthDependencies()
+        try {
+            if (!isCurrentAuthLease(lease)) {
+                return { success: false, error: 'La sessione è cambiata. Riprova con l’utente corrente.' }
+            }
+            await sendVerificationToUpdatedEmail(user, requestedEmail)
+            // Nessun indirizzo nei log: vale qui come per il resto del flusso auth.
+            console.log('[AUTH] Verification email sent to updated address')
+            return { success: true }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Firebase Auth errors expose a runtime code
+        } catch (error: any) {
+            console.error('[AUTH] Change email error:', error?.code || 'unknown')
+            return { success: false, error: translateAuthError(error?.code) }
+        }
+    }
+
     const resetPassword = async (email: string) => {
         const { sendPasswordResetWithEmail, translateAuthError } = await getAuthDependencies()
         try {
@@ -515,6 +555,7 @@ export function useFirebaseAuth() {
         login,
         logout,
         resendVerificationEmail,
+        changeVerificationEmail,
         resetPassword,
         checkEmailVerified,
         retryRecoverableAuthSession,
