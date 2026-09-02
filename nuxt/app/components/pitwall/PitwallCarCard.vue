@@ -56,7 +56,13 @@ const rows = computed<MfdRow[]>(() => {
   const snapshot = strategy.value
   const source = snapshot ? observedSource.value : 'unavailable'
   return [
-    { label: 'Preset strategia', value: 'Spento', source: 'unavailable' },
+    // ACC non pubblica quale preset sia attivo: si puo' dire solo quale e'
+    // stato mandato, mai quale risulta in macchina.
+    {
+      label: 'Preset strategia',
+      value: props.displayPlan.pitStrategy == null ? '—' : String(props.displayPlan.pitStrategy),
+      source: props.displayPlan.pitStrategy == null ? 'unavailable' : 'order',
+    },
     { label: 'Carburante in uscita', value: snapshot?.fuelToAdd == null ? '—' : `${snapshot.fuelToAdd} L`, source },
     { label: 'Cambio gomme', value: yesNo(props.displayPlan.changeTyres), source: 'order' },
     { label: 'Set pneumatici', value: snapshot?.tyreSet == null ? '—' : String(snapshot.tyreSet), source },
@@ -65,7 +71,7 @@ const rows = computed<MfdRow[]>(() => {
     { label: 'Pressione FR', value: psi(snapshot?.pressures?.FR), source },
     { label: 'Pressione RL', value: psi(snapshot?.pressures?.RL), source },
     { label: 'Pressione RR', value: psi(snapshot?.pressures?.RR), source },
-    { label: 'Sostituisci freni', value: 'No', source: 'unavailable' },
+    { label: 'Sostituisci freni', value: yesNo(props.displayPlan.brakes), source: 'order' },
     { label: 'Pilota selezionato', value: selectedDriver.value, source: props.session?.crew?.length ? observedSource.value : 'order' },
     { label: 'Sospensioni', value: yesNo(props.displayPlan.repairSuspension), source: 'order' },
     { label: 'Carrozzeria', value: yesNo(props.displayPlan.repairBodywork), source: 'order' },

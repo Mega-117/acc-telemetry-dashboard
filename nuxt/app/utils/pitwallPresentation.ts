@@ -19,6 +19,15 @@ export const PITWALL_FUEL_MAX_L = 140
 export const PITWALL_TYRE_SET_MIN = 1
 export const PITWALL_TYRE_SET_MAX = 50
 
+/**
+ * Le strategie di sosta salvate nell'assetto.
+ *
+ * Il massimo non e' un limite di ACC: e' quanto in basso ha senso scendere per
+ * ritrovare la prima, visto che il gioco non pubblica su quale strategia sei.
+ */
+export const PITWALL_PIT_STRATEGY_MIN = 1
+export const PITWALL_PIT_STRATEGY_MAX = 10
+
 export const PITWALL_COMPOUNDS = ['dry', 'wet'] as const
 
 export type PitwallCompound = (typeof PITWALL_COMPOUNDS)[number]
@@ -30,12 +39,22 @@ export interface PitwallDriver {
 
 /** L'ordine che l'ingegnere sta componendo: cosa vorrebbe avere la macchina. */
 export interface PitwallPlan {
+  /**
+   * Il preset di strategia da selezionare, oppure null per non toccarlo.
+   *
+   * Sta in cima come nel Pit MFD, ed e' l'unico campo che riscrive tutti gli
+   * altri: sceglierlo significa accettare i valori del preset per carburante,
+   * gomme e pressioni.
+   */
+  pitStrategy: number | null
   pressures: Record<PitwallWheel, number>
   fuelLiters: number
   compound: PitwallCompound
   tyreSet: number
   changeTyres: boolean
   driverId: string | null
+  /** Sostituzione freni: una casella, come le riparazioni. */
+  brakes: boolean
   repairBodywork: boolean
   repairSuspension: boolean
 }

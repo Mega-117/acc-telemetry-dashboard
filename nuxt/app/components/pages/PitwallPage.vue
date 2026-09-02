@@ -24,6 +24,8 @@ import {
   PITWALL_COMPOUNDS,
   PITWALL_FUEL_MAX_L,
   PITWALL_FUEL_MIN_L,
+  PITWALL_PIT_STRATEGY_MAX,
+  PITWALL_PIT_STRATEGY_MIN,
   PITWALL_PRESSURE_MAX_PSI,
   PITWALL_PRESSURE_MIN_PSI,
   PITWALL_TYRE_SET_MAX,
@@ -100,6 +102,9 @@ const compoundTouched = ref(false)
 const tyreSet = ref(1)
 const changeTyres = ref(false)
 const driverId = ref<string | null>(null)
+/** null = non toccare la strategia. Sceglierla riscrive tutto il resto. */
+const pitStrategy = ref<number | null>(null)
+const brakes = ref(false)
 const repairBodywork = ref(false)
 const repairSuspension = ref(false)
 const sentPlan = ref<PitwallPlan | null>(null)
@@ -114,6 +119,9 @@ const car = computed<PitwallCarState>(() => {
     tyreSet: strategy?.tyreSet ?? tyreSet.value,
     changeTyres: false,
     driverId: current ? String(current.driverIndex) : driverId.value,
+    // ACC non pubblica quale strategia e' attiva: in macchina resta ignota.
+    pitStrategy: null,
+    brakes: brakes.value,
     repairBodywork: repairBodywork.value,
     repairSuspension: repairSuspension.value,
     inPitLane: false,
@@ -121,12 +129,14 @@ const car = computed<PitwallCarState>(() => {
 })
 
 const plan = computed<PitwallPlan>(() => ({
+  pitStrategy: pitStrategy.value,
   pressures: pressures.value,
   fuelLiters: fuelLiters.value,
   compound: compound.value,
   tyreSet: tyreSet.value,
   changeTyres: changeTyres.value,
   driverId: driverId.value,
+  brakes: brakes.value,
   repairBodywork: repairBodywork.value,
   repairSuspension: repairSuspension.value,
 }))
@@ -158,6 +168,25 @@ function setPressure(wheel: PitwallWheel, value: number) {
   pressures.value = { ...pressures.value, [wheel]: clampPressure(value) }
 }
 
+/**
+ * Off → 1 → 2 … e ritorno a Off scendendo sotto la prima.
+ *
+ * "Off" non e' la strategia zero: e' "non toccare la riga". Serve perche' il
+ * preset riscrive carburante, gomme e pressioni, quindi mandarlo per sbaglio
+ * cancellerebbe tutto il resto dell'ordine.
+ */
+function stepPitStrategy(direction: 1 | -1) {
+  const current = pitStrategy.value
+  if (current == null) {
+    pitStrategy.value = direction > 0 ? PITWALL_PIT_STRATEGY_MIN : null
+    return
+  }
+  const next = current + direction
+  pitStrategy.value = next < PITWALL_PIT_STRATEGY_MIN
+    ? null
+    : Math.min(PITWALL_PIT_STRATEGY_MAX, next)
+}
+
 function onCompoundChange(event: Event) {
   compound.value = clampCompound((event.target as HTMLSelectElement).value)
   compoundTouched.value = true
@@ -171,6 +200,10 @@ function resetToCar() {
   tyreSet.value = car.value.tyreSet
   changeTyres.value = false
   driverId.value = null
+  // La strategia non si "riporta a com'e'": non si sa com'e'. Torna a "non
+  // toccare", che e' l'unica posizione onesta.
+  pitStrategy.value = null
+  brakes.value = false
   repairBodywork.value = false
   repairSuspension.value = false
 }
@@ -195,7 +228,11 @@ function planPayload(): Record<string, unknown> {
     payload.pressures = { ...pressures.value }
   }
   if (compoundTouched.value || (strategy?.compound != null && strategy.compound !== compound.value)) payload.compound = compound.value
+  // La strategia parte solo se scelta esplicitamente: e' l'unico campo che
+  // riscrive tutti gli altri, quindi non deve mai finire nell'ordine per inerzia.
+  if (pitStrategy.value != null) payload.pitStrategy = pitStrategy.value
   if (changeTyres.value) payload.changeTyres = true
+  if (brakes.value) payload.brakes = true
   if (repairBodywork.value) payload.repairBodywork = true
   if (repairSuspension.value) payload.repairSuspension = true
   if (driverId.value != null) payload.driverId = driverId.value
@@ -251,7 +288,7 @@ async function sendToCar() {
 const FIELD_LABELS: Record<string, string> = {
   fuelLiters: 'Carburante', tyreSet: 'Set', compound: 'Mescola', pressureFL: 'FL', pressureFR: 'FR',
   pressureRL: 'RL', pressureRR: 'RR', changeTyres: 'Cambio gomme', repairBodywork: 'Carrozzeria',
-  repairSuspension: 'Sospensioni', driverId: 'Pilota',
+  repairSuspension: 'Sospensioni', driverId: 'Pilota', pitStrategy: 'Strategia', brakes: 'Freni',
 }
 const fieldOutcomes = computed(() => Object.entries(link.orderFields.value).map(([field, outcome]) => ({
   field,
@@ -387,9 +424,13 @@ const roomStateLabel = computed(() => {
           <h2 id="strategy-title" class="panel-title">STRATEGIA DA INVIARE</h2>
           <div class="strategy__body">
             <div class="strategy-topline">
-              <div class="static-control" title="Il preset ACC non è ancora disponibile nel contratto remoto">
+              <div class="static-control" title="Sceglie il preset di strategia dell'assetto. Attenzione: riscrive carburante, set e pressioni con i valori del preset.">
                 <span>Preset strategia</span>
-                <div class="static-stepper"><button type="button" disabled>−</button><strong>Off</strong><button type="button" disabled>+</button></div>
+                <div class="static-stepper">
+                  <button type="button" aria-label="Strategia precedente" @click="stepPitStrategy(-1)">−</button>
+                  <strong>{{ pitStrategy == null ? 'Off' : pitStrategy }}</strong>
+                  <button type="button" aria-label="Strategia successiva" @click="stepPitStrategy(1)">+</button>
+                </div>
               </div>
               <PitwallValueField title="Carburante in uscita" input-label="Carburante in uscita in litri" size="sm" bare unit="L" :value="fuelLiters" :min="PITWALL_FUEL_MIN_L" :max="PITWALL_FUEL_MAX_L" :echo="echo.fuel" @step="fuelLiters = stepFuel(fuelLiters, $event)" @update:value="fuelLiters = clampFuel($event)" />
             </div>
@@ -412,7 +453,7 @@ const roomStateLabel = computed(() => {
             <section class="pit-services" aria-label="Servizi al pit stop">
               <div class="service-row">
                 <label class="select-control select-control--driver"><span>Prossimo pilota</span><select v-model="driverId"><option v-for="option in driverOptions" :key="String(option.value)" :value="option.value">{{ option.label }}</option></select></label>
-                <label class="check-control check-control--disabled" title="Non disponibile nel contratto PitStrategyV1"><input type="checkbox" disabled><span>Sostituisci freni</span></label>
+                <label class="check-control"><input v-model="brakes" type="checkbox"><span>Sostituisci freni</span></label>
               </div>
               <fieldset class="repairs"><legend>Riparazioni</legend><label class="check-control"><input v-model="repairSuspension" type="checkbox"><span>Sospensioni</span></label><label class="check-control"><input v-model="repairBodywork" type="checkbox"><span>Carrozzeria</span></label></fieldset>
             </section>

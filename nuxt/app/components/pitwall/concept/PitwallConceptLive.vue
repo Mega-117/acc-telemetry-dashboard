@@ -57,6 +57,10 @@ function toPlan(
   wheels: Record<"FL" | "FR" | "RL" | "RR", number>,
 ): PitwallPlan {
   return {
+    // Il mock non simula preset e freni: restano fuori dalla stima della
+    // sosta, che e' l'unica cosa per cui questa forma serve qui.
+    pitStrategy: null,
+    brakes: false,
     pressures: { ...wheels },
     fuelLiters: source.fuel,
     compound: source.compound === "Wet" ? "wet" : "dry",
