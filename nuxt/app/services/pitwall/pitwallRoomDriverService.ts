@@ -30,7 +30,7 @@ import {
   type PitwallRoomOrder,
 } from './pitwallRoomContract'
 import { createPitwallRoomService, type PitwallRoomService } from './pitwallRoomService'
-import type { PitwallDriverElectronApi } from './pitwallDriverLinkService'
+import type { PitwallDriverElectronApi, PitwallPendingOutcome } from './pitwallDriverLinkService'
 
 /**
  * Ogni quanto si riguarda un ordine che non e' ancora partito.
@@ -265,11 +265,15 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
         reason: outcome.reason ?? null,
         fields: outcome.fields ?? {},
       })
-      if (!published.ok) {
-        // L'esito non e' arrivato al cloud, ma ACC e' gia' cambiato: si dice
-        // forte nei log invece di far finta di niente. La persistenza locale
-        // dell'esito e' lo step successivo (outbox), non questo.
-        log.error?.('[PITWALL] esito della stanza non pubblicato:', published.reason)
+      if (published.ok) {
+        // Il cloud lo sa: il processo main puo' dimenticarlo. Finche' questa
+        // conferma non arriva, il record resta su disco apposta.
+        await confirmOutcomes([order.orderId])
+      } else {
+        // L'esito non e' arrivato al cloud, ma ACC e' gia' cambiato. Non e'
+        // piu' perso: il processo main lo ha posato su disco prima di
+        // restituircelo, e il recupero lo ripubblichera' (PIP-367).
+        log.error?.('[PITWALL] esito della stanza non pubblicato, resta in attesa:', published.reason)
       }
     } finally {
       applyingOrderId = null
@@ -311,6 +315,12 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
    */
   async function sync(): Promise<void> {
     if (stopped) return
+
+    // Prima di tutto il resto, e senza aspettare ACC: un esito rimasto in
+    // sospeso riguarda una gara che potrebbe essere finita ieri, e il record
+    // si porta dietro la propria stanza. Non serve essere in pista per dire
+    // com'e' andata.
+    await drainPendingOutcomes()
 
     let vehicle: Awaited<ReturnType<typeof options.readVehicle>> = null
     try {
@@ -384,6 +394,64 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
     if (!trusted.length) return
     const result = await rooms.syncInvites(room.roomId, trusted)
     if (!result.ok) log.warn?.('[PITWALL] invitati non aggiornati:', result.reason)
+  }
+
+  /** Dice al processo main di dimenticare: si chiama solo a consegna avvenuta. */
+  async function confirmOutcomes(orderIds: string[]): Promise<void> {
+    if (!orderIds.length) return
+    try {
+      await options.electronApi.pitwallConfirmOutcomes?.(orderIds)
+    } catch (error) {
+      // Il record resta: al prossimo giro si scoprira' che l'ordine e' gia'
+      // terminale e si chiudera' li'. Meglio un tentativo di troppo che una
+      // verita' cancellata senza prova.
+      log.warn?.('[PITWALL] conferma esito non registrata:', (error as Error)?.message)
+    }
+  }
+
+  /**
+   * Pubblica gli esiti che ACC ha gia' applicato ma il cloud non ha mai saputo.
+   *
+   * Qui non si tocca ACC: si racconta soltanto cio' che e' gia' successo. E'
+   * la differenza fra recuperare una verita' e rifare una strategia a
+   * situazione cambiata, che sarebbe il peggior modo di fallire.
+   */
+  async function drainPendingOutcomes(): Promise<void> {
+    if (stopped || !options.electronApi.pitwallPendingOutcomes) return
+    let outcomes: PitwallPendingOutcome[] = []
+    try {
+      outcomes = await options.electronApi.pitwallPendingOutcomes() ?? []
+    } catch (error) {
+      log.warn?.('[PITWALL] esiti in attesa non leggibili:', (error as Error)?.message)
+      return
+    }
+
+    for (const outcome of outcomes) {
+      if (stopped) return
+      // Un esito applicato da un altro account su questo computer non e'
+      // nostro da pubblicare: le regole accettano l'esito solo da chi aveva
+      // preso in carico l'ordine.
+      if (outcome.driverUid && outcome.driverUid !== options.uid) continue
+
+      const published = await rooms.publishOutcome(outcome.roomId, outcome.orderId, {
+        status: outcome.status,
+        reason: outcome.reason,
+        fields: outcome.fields,
+      })
+      if (published.ok) {
+        await confirmOutcomes([outcome.orderId])
+        continue
+      }
+
+      // Rifiutato: o il cloud non risponde, o lassu' l'ordine e' gia'
+      // concluso - le regole accettano l'esito solo finche' e' `applying`.
+      // Le due cose si distinguono solo leggendo, e la differenza conta: nel
+      // secondo caso ritentare all'infinito qualcosa di gia' fatto.
+      const current = await rooms.readOrder(outcome.roomId, outcome.orderId)
+      if (!current.ok) continue
+      const stillOpen = current.value && (current.value.status === 'pending' || current.value.status === 'applying')
+      if (!stillOpen) await confirmOutcomes([outcome.orderId])
+    }
   }
 
   async function heartbeat(driving: boolean, crew: unknown, strategy: unknown): Promise<void> {

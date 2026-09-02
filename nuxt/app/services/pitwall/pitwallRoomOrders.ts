@@ -17,6 +17,7 @@ import { collection, doc, query, serverTimestamp, where, type Firestore } from '
 // Ogni lettura e scrittura passa dal tracker: la promessa "costo zero" regge
 // solo se il consumo Firebase resta misurabile, non stimato a occhio.
 import {
+  trackedGetDoc,
   trackedOnDocSnapshot,
   trackedOnSnapshot,
   trackedRunTransaction,
@@ -102,6 +103,27 @@ export function createPitwallRoomOrders(options: PitwallRoomOrdersOptions) {
       },
       () => onChange(null)
     )
+  }
+
+  /**
+   * Legge un ordine una volta sola, senza restare in ascolto.
+   *
+   * Serve solo al recupero degli esiti rimasti su disco: le regole accettano
+   * l'esito soltanto su un ordine ancora `applying`, quindi ripubblicare un
+   * esito che il cloud ha gia' ricevuto viene *negato*. Senza questa lettura
+   * non sapremmo distinguere "lassu' lo sanno gia'" da "il cloud non risponde",
+   * e ritenteremmo per sempre qualcosa di gia' fatto.
+   *
+   * `null` significa che l'ordine non esiste piu': non c'e' piu' niente da dire.
+   */
+  async function readOrder(roomId: string, orderId: string): Promise<PitwallRoomResult<PitwallRoomOrder | null>> {
+    try {
+      const snapshot = await trackedGetDoc(doc(ordersRef(roomId), orderId), 'pitwallRoom.readOrder')
+      if (!snapshot.exists()) return { ok: true, value: null }
+      return { ok: true, value: { ...(snapshot.data() as PitwallRoomOrder), orderId } }
+    } catch (error) {
+      return failure(error, 'Ordine non leggibile.')
+    }
   }
 
   /** Gli ordini ancora da applicare: quello che il PC del pilota deve guardare. */
@@ -247,6 +269,7 @@ export function createPitwallRoomOrders(options: PitwallRoomOrdersOptions) {
   return {
     sendOrder,
     watchOrder,
+    readOrder,
     watchPendingOrders,
     claimOrder,
     publishOutcome,

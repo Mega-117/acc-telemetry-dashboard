@@ -73,6 +73,23 @@ export const PITWALL_ORDER_RETRY_INTERVAL_MS = 8_000
  */
 export const PITWALL_ORDER_MAX_ATTEMPTS = 40
 
+/**
+ * Un esito applicato dentro ACC e in attesa che il cloud lo sappia.
+ *
+ * `driverUid` dice chi lo ha applicato: le regole della stanza accettano
+ * l'esito solo da chi aveva preso in carico l'ordine, quindi un record
+ * lasciato da un altro account su questo PC non e' pubblicabile da noi.
+ */
+export interface PitwallPendingOutcome {
+  orderId: string
+  roomId: string
+  driverUid: string | null
+  status: 'applied' | 'partial' | 'failed' | 'rejected'
+  reason: string | null
+  fields: unknown
+  appliedAt: string
+}
+
 export interface PitwallDriverElectronApi {
   pitwallSubmitRemoteOrder?: (payload: {
     order: PitwallOrderDocument
@@ -94,6 +111,16 @@ export interface PitwallDriverElectronApi {
     /** L'ordine non e' applicabile adesso ma lo sara': non va concluso. */
     retryable?: boolean
   }>
+  /**
+   * Esiti gia' applicati ad ACC che il cloud non ha ancora confermato.
+   *
+   * Vivono nel processo main, non qui: il renderer puo' chiudersi mentre
+   * l'ordine e' in volo, e chi ha premuto i tasti dentro ACC deve essere anche
+   * chi ricorda di averlo fatto (PIP-367).
+   */
+  pitwallPendingOutcomes?: (limit?: number) => Promise<PitwallPendingOutcome[]>
+  /** Da chiamare solo dopo che la scrittura su Firestore e' andata a buon fine. */
+  pitwallConfirmOutcomes?: (orderIds: string[]) => Promise<number>
   pitwallGetLinkStatus?: () => Promise<{
     trustedSender: boolean
     driverUid: string | null

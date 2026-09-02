@@ -55,6 +55,7 @@ function fakeService(initial: PitwallRoom = room()) {
     outcomes: [] as { orderId: string, status: string }[],
     rejections: [] as { orderId: string, reason: string }[],
     presence: [] as { driving: boolean }[],
+    reads: [] as string[],
     released: 0,
   }
   let pushRoom: ((next: PitwallRoom) => void) | null = null
@@ -62,6 +63,8 @@ function fakeService(initial: PitwallRoom = room()) {
   let pushOrders: ((list: PitwallRoomOrder[]) => void) | null = null
   let current = initial
   let claimOk = true
+  let outcomeOk = true
+  let storedOrder: PitwallRoomOrder | null = null
 
   const service = {
     uid: DRIVER,
@@ -105,7 +108,13 @@ function fakeService(initial: PitwallRoom = room()) {
     },
     publishOutcome: async (_roomId: string, orderId: string, outcome: { status: string }) => {
       calls.outcomes.push({ orderId, status: outcome.status })
-      return { ok: true as const, value: true as const }
+      return outcomeOk
+        ? { ok: true as const, value: true as const }
+        : { ok: false as const, reason: 'Rete assente.' }
+    },
+    readOrder: async (_roomId: string, orderId: string) => {
+      calls.reads.push(orderId)
+      return { ok: true as const, value: storedOrder }
     },
     rejectOrder: async (_roomId: string, orderId: string, reason: string) => {
       calls.rejections.push({ orderId, reason })
@@ -120,6 +129,8 @@ function fakeService(initial: PitwallRoom = room()) {
     setMembers: (list: PitwallRoomMember[]) => pushMembers?.(list),
     setOrders: (list: PitwallRoomOrder[]) => pushOrders?.(list),
     failClaim: () => { claimOk = false },
+    failOutcome: (value = true) => { outcomeOk = !value },
+    setStoredOrder: (next: PitwallRoomOrder | null) => { storedOrder = next },
   }
 }
 
@@ -465,5 +476,118 @@ describe('un errore in mezzo non blocca la vettura per sempre', () => {
     expect(fake.calls.rejections).toHaveLength(0)
     // E la presa e stata rilasciata anche sul giro esploso.
     expect(fake.calls.released).toBe(2)
+  })
+})
+
+/**
+ * Il caso che questi test coprono e' quello in cui ACC e' **gia'** cambiato:
+ * i click sono stati dati, la vettura ha la strategia nuova, e il cloud non lo
+ * sa. La rete non si stacca davvero: il fallimento si inietta nel publish, che
+ * e' l'unico punto dove quella verita' puo' sparire.
+ */
+describe('gli esiti che il cloud non ha ancora ricevuto', () => {
+  let handle: ReturnType<typeof startPitwallRoomDriver> | null = null
+
+  afterEach(() => { handle?.stop(); handle = null })
+
+  function pendingOutcome(overrides: Record<string, unknown> = {}) {
+    return {
+      orderId: 'ordine-perso',
+      roomId: ROOM_ID,
+      driverUid: DRIVER,
+      status: 'applied' as const,
+      reason: null,
+      fields: { fuelLiters: { requested: 50, verified: 50 } },
+      appliedAt: '2026-09-01T10:00:05.000Z',
+      ...overrides,
+    }
+  }
+
+  function bridgeWithOutbox(outcomes: ReturnType<typeof pendingOutcome>[]) {
+    const confirmed: string[] = []
+    const bridge = electron({
+      pitwallPendingOutcomes: async () => outcomes,
+      pitwallConfirmOutcomes: async (ids: string[]) => {
+        confirmed.push(...ids)
+        return ids.length
+      },
+    })
+    return { bridge, confirmed }
+  }
+
+  it('pubblica al primo avvio utile un esito rimasto su disco', async () => {
+    const fake = fakeService()
+    const { bridge, confirmed } = bridgeWithOutbox([pendingOutcome()])
+    handle = startDriver(fake, bridge)
+    await settle(12)
+
+    expect(fake.calls.outcomes).toContainEqual({ orderId: 'ordine-perso', status: 'applied' })
+    expect(confirmed).toEqual(['ordine-perso'])
+    // La cosa piu' importante di tutte: raccontare non e' rifare.
+    expect(bridge.submitted).toHaveLength(0)
+  })
+
+  it('se il cloud non risponde tiene il record, senza confermarlo', async () => {
+    const fake = fakeService()
+    fake.failOutcome()
+    // L'ordine lassu' e' ancora aperto: non e' "gia' saputo", e' irraggiungibile.
+    fake.setStoredOrder(order({ orderId: 'ordine-perso', status: 'applying' }))
+    const { bridge, confirmed } = bridgeWithOutbox([pendingOutcome()])
+    handle = startDriver(fake, bridge)
+    await settle(12)
+
+    expect(fake.calls.outcomes.length).toBeGreaterThan(0)
+    expect(confirmed).toEqual([])
+  })
+
+  it('se lassu\' l\'ordine e\' gia\' concluso chiude il record invece di ritentare per sempre', async () => {
+    // Le regole accettano l'esito solo finche' l'ordine e' `applying`: una
+    // ripubblicazione dopo un ack perso viene negata. Negata non vuol dire
+    // fallita - vuol dire che la verita' e' gia' arrivata.
+    const fake = fakeService()
+    fake.failOutcome()
+    fake.setStoredOrder(order({ orderId: 'ordine-perso', status: 'applied' }))
+    const { bridge, confirmed } = bridgeWithOutbox([pendingOutcome()])
+    handle = startDriver(fake, bridge)
+    await settle(12)
+
+    expect(fake.calls.reads).toContain('ordine-perso')
+    expect(confirmed).toEqual(['ordine-perso'])
+  })
+
+  it('se l\'ordine non esiste piu\' non resta niente da dire', async () => {
+    const fake = fakeService()
+    fake.failOutcome()
+    fake.setStoredOrder(null)
+    const { bridge, confirmed } = bridgeWithOutbox([pendingOutcome()])
+    handle = startDriver(fake, bridge)
+    await settle(12)
+
+    expect(confirmed).toEqual(['ordine-perso'])
+  })
+
+  it('non pubblica l\'esito applicato da un altro account su questo computer', async () => {
+    // Le regole lo rifiuterebbero comunque: l'esito lo scrive solo chi aveva
+    // preso in carico l'ordine. Meglio non chiedere affatto.
+    const fake = fakeService()
+    const { bridge, confirmed } = bridgeWithOutbox([pendingOutcome({ driverUid: LATE })])
+    handle = startDriver(fake, bridge)
+    await settle(12)
+
+    expect(fake.calls.outcomes).toHaveLength(0)
+    expect(confirmed).toEqual([])
+  })
+
+  it('conferma subito l\'esito appena pubblicato di un ordine appena applicato', async () => {
+    const fake = fakeService()
+    const { bridge, confirmed } = bridgeWithOutbox([])
+    handle = startDriver(fake, bridge)
+    await settle(12)
+    fake.setMembers([member(DRIVER, true)])
+    fake.setOrders([order()])
+    await settle(20)
+
+    expect(fake.calls.outcomes).toContainEqual({ orderId: 'ordine-1', status: 'applied' })
+    expect(confirmed).toEqual(['ordine-1'])
   })
 })
