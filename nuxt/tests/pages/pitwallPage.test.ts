@@ -167,10 +167,19 @@ describe('Pitwall ordine reale e MFD onesto', () => {
     }
   })
 
-  it('espone Cambio gomme nella singola fonte PitwallPlan', () => {
-    expect(panel).toContain('const changeTyres = ref(false)')
+  it('le caselle hanno tre stati: accendi, spegni, non toccare', () => {
+    // Con una casella booleana "vuoto" voleva dire "non toccare", quindi
+    // spegnere una riparazione era impossibile e cio' che l'ingegnere
+    // impostava non arrivava fedelmente in macchina.
+    expect(panel).toContain('const changeTyres = ref<boolean | null>(null)')
     expect(panel).toContain('changeTyres: changeTyres.value')
     expect(panel).toContain('v-model="changeTyres"')
+    // Anche lo spento viaggia nell'ordine: `false` e' una richiesta, `null` no.
+    expect(panel).toContain('if (changeTyres.value != null) payload.changeTyres = changeTyres.value')
+    for (const field of ['brakes', 'repairSuspension', 'repairBodywork']) {
+      expect(panel).toContain(`const ${field} = ref<boolean | null>(null)`)
+      expect(panel).toContain(`v-model="${field}"`)
+    }
   })
 
   it('usa dati macchina e equipaggio da chi e al volante, non da un pilota scelto', () => {

@@ -20,6 +20,7 @@ import {
   formatFuelDelta,
   formatPressure,
   formatRepairs,
+  formatToggle,
   formatStopDuration,
   formatTyreSet,
   pitwallChangedFields,
@@ -141,8 +142,18 @@ describe('formattazione', () => {
     expect(formatFuel(48)).toBe('48 L')
   })
 
+  it('distingue "spegni" da "non toccare"', () => {
+    // Sono due richieste diverse: `false` toglie la riparazione, `null` lascia
+    // la riga com'e'. Appiattirle su una frase sola era il difetto che
+    // impediva all'ingegnere di spegnere qualcosa.
+    expect(formatRepairs(null, null)).toBe('Non toccare')
+    expect(formatRepairs(false, false)).toBe('Riparazioni tolte')
+    expect(formatToggle(null)).toBe('—')
+    expect(formatToggle(true)).toBe('Sì')
+    expect(formatToggle(false)).toBe('No')
+  })
+
   it('copre le quattro combinazioni di riparazione', () => {
-    expect(formatRepairs(false, false)).toBe('Nessuna riparazione')
     expect(formatRepairs(true, false)).toBe('Solo carrozzeria')
     expect(formatRepairs(false, true)).toBe('Solo sospensioni')
     expect(formatRepairs(true, true)).toBe('Carrozzeria + sospensioni')
@@ -193,7 +204,7 @@ describe('pitwallFieldValue', () => {
     expect(pitwallFieldValue(fuori, 'tyreSet', drivers)).toBe(`Set ${PITWALL_TYRE_SET_MAX}`)
     expect(pitwallFieldValue(fuori, 'fuel', drivers)).toBe('0 L')
     expect(pitwallFieldValue(fuori, 'driver', drivers)).toBe('Nessun cambio pilota')
-    expect(pitwallFieldValue(fuori, 'repairs', drivers)).toBe('Nessuna riparazione')
+    expect(pitwallFieldValue(fuori, 'repairs', drivers)).toBe('Riparazioni tolte')
   })
 })
 

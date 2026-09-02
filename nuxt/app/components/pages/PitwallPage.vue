@@ -20,6 +20,7 @@ import { PITWALL_MEMBER_FRESH_MS } from '~/services/pitwall/pitwallRoomContract'
 import PitwallCarCard from '~/components/pitwall/PitwallCarCard.vue'
 import PitwallOrderBar from '~/components/pitwall/PitwallOrderBar.vue'
 import PitwallValueField from '~/components/pitwall/PitwallValueField.vue'
+import PitwallToggleField from '~/components/pitwall/PitwallToggleField.vue'
 import {
   PITWALL_COMPOUNDS,
   PITWALL_FUEL_MAX_L,
@@ -100,13 +101,16 @@ const fuelLiters = ref(0)
 const compound = ref<PitwallCompound>('dry')
 const compoundTouched = ref(false)
 const tyreSet = ref(1)
-const changeTyres = ref(false)
+// Tre stati, non due: true accendi, false spegni, null non toccare. Con una
+// semplice casella l'ingegnere non poteva spegnere niente, e quello che
+// impostava non arrivava fedelmente in macchina.
+const changeTyres = ref<boolean | null>(null)
 const driverId = ref<string | null>(null)
 /** null = non toccare la strategia. Sceglierla riscrive tutto il resto. */
 const pitStrategy = ref<number | null>(null)
-const brakes = ref(false)
-const repairBodywork = ref(false)
-const repairSuspension = ref(false)
+const brakes = ref<boolean | null>(null)
+const repairBodywork = ref<boolean | null>(null)
+const repairSuspension = ref<boolean | null>(null)
 const sentPlan = ref<PitwallPlan | null>(null)
 
 const car = computed<PitwallCarState>(() => {
@@ -117,13 +121,15 @@ const car = computed<PitwallCarState>(() => {
     fuelLiters: strategy?.fuelToAdd ?? fuelLiters.value,
     compound: (strategy?.compound as PitwallCompound | null | undefined) ?? compound.value,
     tyreSet: strategy?.tyreSet ?? tyreSet.value,
-    changeTyres: false,
+    // ACC non rilegge nessuna di queste caselle: in macchina restano ignote,
+    // e ignoto non e' "spento". Dirlo con null evita di mostrare all'ingegnere
+    // uno stato che nessuno ha verificato.
+    changeTyres: null,
     driverId: current ? String(current.driverIndex) : driverId.value,
-    // ACC non pubblica quale strategia e' attiva: in macchina resta ignota.
     pitStrategy: null,
-    brakes: brakes.value,
-    repairBodywork: repairBodywork.value,
-    repairSuspension: repairSuspension.value,
+    brakes: null,
+    repairBodywork: null,
+    repairSuspension: null,
     inPitLane: false,
   }
 })
@@ -198,14 +204,14 @@ function resetToCar() {
   compound.value = car.value.compound
   compoundTouched.value = false
   tyreSet.value = car.value.tyreSet
-  changeTyres.value = false
+  // Tutto cio' che ACC non rilegge torna a "non toccare": e' l'unica posizione
+  // onesta, perche' non sappiamo da dove si parte.
+  changeTyres.value = null
   driverId.value = null
-  // La strategia non si "riporta a com'e'": non si sa com'e'. Torna a "non
-  // toccare", che e' l'unica posizione onesta.
   pitStrategy.value = null
-  brakes.value = false
-  repairBodywork.value = false
-  repairSuspension.value = false
+  brakes.value = null
+  repairBodywork.value = null
+  repairSuspension.value = null
 }
 
 onMounted(() => {
@@ -231,10 +237,11 @@ function planPayload(): Record<string, unknown> {
   // La strategia parte solo se scelta esplicitamente: e' l'unico campo che
   // riscrive tutti gli altri, quindi non deve mai finire nell'ordine per inerzia.
   if (pitStrategy.value != null) payload.pitStrategy = pitStrategy.value
-  if (changeTyres.value) payload.changeTyres = true
-  if (brakes.value) payload.brakes = true
-  if (repairBodywork.value) payload.repairBodywork = true
-  if (repairSuspension.value) payload.repairSuspension = true
+  // Si manda anche lo spento: `false` e' una richiesta, `null` e' il silenzio.
+  if (changeTyres.value != null) payload.changeTyres = changeTyres.value
+  if (brakes.value != null) payload.brakes = brakes.value
+  if (repairBodywork.value != null) payload.repairBodywork = repairBodywork.value
+  if (repairSuspension.value != null) payload.repairSuspension = repairSuspension.value
   if (driverId.value != null) payload.driverId = driverId.value
   return payload
 }
@@ -445,7 +452,7 @@ const roomStateLabel = computed(() => {
                 <div class="tyre-settings">
                   <PitwallValueField title="Set pneumatici" size="sm" input-label="Numero set pneumatici" :value="tyreSet" :min="PITWALL_TYRE_SET_MIN" :max="PITWALL_TYRE_SET_MAX" bare :echo="echo.tyreSet" @step="tyreSet = stepTyreSet(tyreSet, $event)" @update:value="tyreSet = clampTyreSet($event)" />
                   <label class="select-control"><span>Mescola</span><select :value="compound" @change="onCompoundChange"><option v-for="option in compoundOptions" :key="option.value" :value="option.value">{{ option.value === 'dry' ? 'Dry' : option.label }}</option></select></label>
-                  <label class="check-control"><input v-model="changeTyres" type="checkbox"><span>Cambio gomme</span></label>
+                  <PitwallToggleField v-model="changeTyres" label="Cambio gomme" />
                 </div>
               </div>
             </section>
@@ -453,9 +460,13 @@ const roomStateLabel = computed(() => {
             <section class="pit-services" aria-label="Servizi al pit stop">
               <div class="service-row">
                 <label class="select-control select-control--driver"><span>Prossimo pilota</span><select v-model="driverId"><option v-for="option in driverOptions" :key="String(option.value)" :value="option.value">{{ option.label }}</option></select></label>
-                <label class="check-control"><input v-model="brakes" type="checkbox"><span>Sostituisci freni</span></label>
               </div>
-              <fieldset class="repairs"><legend>Riparazioni</legend><label class="check-control"><input v-model="repairSuspension" type="checkbox"><span>Sospensioni</span></label><label class="check-control"><input v-model="repairBodywork" type="checkbox"><span>Carrozzeria</span></label></fieldset>
+              <fieldset class="repairs">
+                <legend>Servizi e riparazioni</legend>
+                <PitwallToggleField v-model="brakes" label="Sostituisci freni" />
+                <PitwallToggleField v-model="repairSuspension" label="Sospensioni" />
+                <PitwallToggleField v-model="repairBodywork" label="Carrozzeria" />
+              </fieldset>
             </section>
           </div>
           <PitwallOrderBar :status="orderStatus" :chips="changeChips" :stop="stopEstimate" :can-send="sendEnabled" :blocked-reason="blockedReason" @send="sendToCar" />
@@ -500,7 +511,7 @@ const roomStateLabel = computed(() => {
 .strategy-topline { display: grid; grid-template-columns: max-content max-content; align-items: center; justify-content: start; gap: 48px; min-height: 56px; padding: 9px 16px; }.static-control { display: grid; grid-template-columns: 105px auto; align-items: center; gap: 14px; color: #d9e0e7; font-size: 12px; }.static-stepper { display: grid; grid-template-columns: 35px 78px 35px; align-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,.1); border-radius: 7px; }.static-stepper button,.static-stepper strong { display: grid; place-items: center; height: 34px; padding: 0; line-height: 1; }.static-stepper button { border: 0; background: rgba(255,255,255,.05); color: #66717c; }.static-stepper strong { font-size: 12px; font-variant-numeric: tabular-nums; }
 .tyres-card { padding: 13px 16px 12px; }.tyres-card h3 { margin: 0 0 8px; color: #dfe5eb; font-size: 12px; font-weight: 650; }.tyres-layout { display: grid; grid-template-columns: minmax(450px,1fr) 150px; min-height: 236px; }.pressure-map { position: relative; min-width: 0; border-right: 1px solid rgba(255,255,255,.13); }.car-silhouette { position: absolute; top: 0; left: 50%; width: 116px; height: 220px; object-fit: contain; transform: translateX(-50%); opacity: .92; user-select: none; -webkit-user-drag: none; }.tyre-control { position: absolute; z-index: 1; width: 140px; }.tyre-control--fl { top: 12px; left: 10px; }.tyre-control--fr { top: 12px; right: 10px; }.tyre-control--rl { bottom: 12px; left: 10px; }.tyre-control--rr { right: 10px; bottom: 12px; }
 .tyre-settings { display: flex; flex-direction: column; justify-content: center; gap: 17px; padding-left: 20px; }.tyre-settings :deep(.field--bare) { display: grid; justify-items: stretch; gap: 7px; }.tyre-settings :deep(.field__head) { white-space: nowrap; }.tyre-settings :deep(.stepper) { width: 132px; }.tyre-settings :deep(.value) { width: 62px; min-width: 62px; max-width: 62px; }.select-control { display: flex; flex-direction: column; gap: 7px; color: #dce3e9; font-size: 12px; }.select-control select { width: 100%; min-height: 36px; padding: 0 10px; border: 1px solid rgba(255,255,255,.12); border-radius: 7px; background: #0b1219; color: #fff; font: inherit; }.check-control { display: flex; align-items: center; gap: 9px; color: #dfe4e9; font-size: 12px; cursor: pointer; }.check-control input { width: 17px; height: 17px; margin: 0; accent-color: #35a9f2; }.check-control--disabled { opacity: .52; cursor: not-allowed; }
-.pit-services { display: grid; grid-template-columns: minmax(360px,1fr) auto; align-items: center; padding: 9px 15px; }.service-row { display: grid; grid-template-columns: minmax(285px,360px) auto; align-items: center; gap: 28px; padding-right: 24px; border-right: 1px solid rgba(255,255,255,.09); }.select-control--driver { display: grid; grid-template-columns: 98px minmax(170px,250px); align-items: center; }.repairs { display: grid; grid-template-columns: auto auto; align-items: center; gap: 16px; min-width: 0; margin: 0; padding: 0 0 0 24px; border: 0; }.repairs legend { grid-column: 1 / -1; padding: 0; margin-bottom: 4px; color: #85919d; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.pit-services { display: grid; grid-template-columns: minmax(360px,1fr) auto; align-items: center; padding: 9px 15px; }.service-row { display: grid; grid-template-columns: minmax(285px,360px) auto; align-items: center; gap: 28px; padding-right: 24px; border-right: 1px solid rgba(255,255,255,.09); }.select-control--driver { display: grid; grid-template-columns: 98px minmax(170px,250px); align-items: center; }.repairs { display: grid; grid-template-columns: 1fr; align-items: center; gap: 8px; min-width: 260px; margin: 0; padding: 0 0 0 24px; border: 0; }.repairs legend { grid-column: 1 / -1; padding: 0; margin-bottom: 4px; color: #85919d; font-size: 10px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .order-info { padding: 10px 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 7px; background: rgba(0,0,0,.12); }.order-info__head { display: flex; justify-content: space-between; gap: 12px; font-size: 11px; }.order-info__head span { color: #63d16f; }.order-info__head span.is-problem { color: #ffbd55; }.order-info p { margin: 7px 0 0; color: #9ba8b5; font-size: 11px; }.outcomes { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }.outcome { padding: 2px 6px; border: 1px solid rgba(255,255,255,.13); border-radius: 5px; color: #7d8995; font-size: 9px; }.outcome--verified { color: #63d16f; }.outcome--selected { color: #35a9f2; }
 :deep(.field--bare) { min-width: 0; }:deep(.field--bare .field__head strong) { color: #dce3e9; font-size: 12px; font-weight: 500; letter-spacing: 0; }:deep(.field--bare .stepper) { gap: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.1); border-radius: 7px; box-sizing: border-box; }:deep(.field--bare .stepper > button) { width: 35px; min-height: 34px; border: 0; border-radius: 0; background: rgba(255,255,255,.045); font-size: 16px; }:deep(.field--bare .value) { width: 70px; min-width: 70px; max-width: 70px; min-height: 34px; padding: 2px 7px; border-width: 0 1px; border-radius: 0; }:deep(.field--bare .value input) { font-size: 15px; font-weight: 800; text-align: center; }:deep(.field--bare .stepper__unit) { min-width: 25px; font-size: 10px; }:deep(.field--bare .echo) { display: none; }.strategy-topline :deep(.field--bare) { display: flex; flex-wrap: nowrap; align-items: center; justify-content: space-between; }.strategy-topline :deep(.field__head) { white-space: nowrap; }.tyre-control :deep(.field--bare) { display: grid; gap: 6px; }.tyre-control :deep(.stepper) { display: grid; grid-template-columns: 34px 70px 34px; }.tyre-control :deep(.stepper > button) { width: 34px; }.tyre-control :deep(.field__head) { justify-content: flex-start; }.tyre-control :deep(.field__head strong) { color: #f3f5f7; font-size: 11px; font-weight: 650; }
 @media (max-width: 1180px) { .connections { grid-template-columns: 1fr 1fr; }.connection-cell--recent { grid-column: 1 / -1; } }

@@ -6,6 +6,7 @@
 import { computed } from 'vue'
 import type { PitwallSession } from '~/services/pitwall/pitwallLink'
 import {
+  formatToggle,
   resolveDriverName,
   type PitwallDriver,
   type PitwallPlan,
@@ -36,10 +37,6 @@ function psi(value: number | undefined): string {
   return value == null ? '—' : `${value.toFixed(1).replace('.', ',')} PSI`
 }
 
-function yesNo(value: boolean): string {
-  return value ? 'Sì' : 'No'
-}
-
 function stopClock(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return '—'
   const minutes = Math.floor(seconds / 60)
@@ -64,17 +61,17 @@ const rows = computed<MfdRow[]>(() => {
       source: props.displayPlan.pitStrategy == null ? 'unavailable' : 'order',
     },
     { label: 'Carburante in uscita', value: snapshot?.fuelToAdd == null ? '—' : `${snapshot.fuelToAdd} L`, source },
-    { label: 'Cambio gomme', value: yesNo(props.displayPlan.changeTyres), source: 'order' },
+    { label: 'Cambio gomme', value: formatToggle(props.displayPlan.changeTyres), source: 'order' },
     { label: 'Set pneumatici', value: snapshot?.tyreSet == null ? '—' : String(snapshot.tyreSet), source },
     { label: 'Mescola', value: snapshot?.compound === 'wet' ? 'Wet' : snapshot?.compound === 'dry' ? 'Dry' : '—', source },
     { label: 'Pressione FL', value: psi(snapshot?.pressures?.FL), source },
     { label: 'Pressione FR', value: psi(snapshot?.pressures?.FR), source },
     { label: 'Pressione RL', value: psi(snapshot?.pressures?.RL), source },
     { label: 'Pressione RR', value: psi(snapshot?.pressures?.RR), source },
-    { label: 'Sostituisci freni', value: yesNo(props.displayPlan.brakes), source: 'order' },
+    { label: 'Sostituisci freni', value: formatToggle(props.displayPlan.brakes), source: 'order' },
     { label: 'Pilota selezionato', value: selectedDriver.value, source: props.session?.crew?.length ? observedSource.value : 'order' },
-    { label: 'Sospensioni', value: yesNo(props.displayPlan.repairSuspension), source: 'order' },
-    { label: 'Carrozzeria', value: yesNo(props.displayPlan.repairBodywork), source: 'order' },
+    { label: 'Sospensioni', value: formatToggle(props.displayPlan.repairSuspension), source: 'order' },
+    { label: 'Carrozzeria', value: formatToggle(props.displayPlan.repairBodywork), source: 'order' },
   ]
 })
 

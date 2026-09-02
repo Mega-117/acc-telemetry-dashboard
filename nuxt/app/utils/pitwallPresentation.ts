@@ -51,12 +51,19 @@ export interface PitwallPlan {
   fuelLiters: number
   compound: PitwallCompound
   tyreSet: number
-  changeTyres: boolean
+  /**
+   * Le caselle del Pit MFD hanno **tre** stati, non due.
+   *
+   * `true` accendi, `false` spegni, `null` non toccare. Prima erano booleane e
+   * una casella vuota voleva dire "non toccare": l'ingegnere non poteva quindi
+   * spegnere niente, e cio' che impostava non era mai riportato fedelmente.
+   */
+  changeTyres: boolean | null
   driverId: string | null
   /** Sostituzione freni: una casella, come le riparazioni. */
-  brakes: boolean
-  repairBodywork: boolean
-  repairSuspension: boolean
+  brakes: boolean | null
+  repairBodywork: boolean | null
+  repairSuspension: boolean | null
 }
 
 /**
@@ -186,11 +193,21 @@ export function formatTyreSet(value: number): string {
   return `Set ${clampTyreSet(value)}`
 }
 
-export function formatRepairs(bodywork: boolean, suspension: boolean): string {
-  if (bodywork && suspension) return 'Carrozzeria + sospensioni'
-  if (bodywork) return 'Solo carrozzeria'
-  if (suspension) return 'Solo sospensioni'
+export function formatRepairs(bodywork: boolean | null, suspension: boolean | null): string {
+  if (bodywork === true && suspension === true) return 'Carrozzeria + sospensioni'
+  if (bodywork === true) return 'Solo carrozzeria'
+  if (suspension === true) return 'Solo sospensioni'
+  // Spegnere e' una richiesta esplicita, e va detta: "nessuna riparazione"
+  // significherebbe la stessa cosa di "non toccare", che e' un'altra cosa.
+  if (bodywork === false || suspension === false) return 'Riparazioni tolte'
+  if (bodywork == null && suspension == null) return 'Non toccare'
   return 'Nessuna riparazione'
+}
+
+/** Le tre risposte possibili di una casella del Pit MFD. */
+export function formatToggle(value: boolean | null): string {
+  if (value == null) return '—'
+  return value ? 'Sì' : 'No'
 }
 
 export function resolveDriverName(driverId: string | null, drivers: PitwallDriver[]): string {
@@ -228,11 +245,13 @@ export function pitwallChangedFields(plan: PitwallPlan, car: PitwallPlan): Pitwa
     if (field === 'fuel') return clampFuel(plan.fuelLiters) !== clampFuel(car.fuelLiters)
     if (field === 'compound') return clampCompound(plan.compound) !== clampCompound(car.compound)
     if (field === 'tyreSet') return clampTyreSet(plan.tyreSet) !== clampTyreSet(car.tyreSet)
-    if (field === 'changeTyres') return plan.changeTyres !== car.changeTyres
+    // `null` vuol dire "non toccare": non e' una differenza dalla macchina.
+    if (field === 'changeTyres') return plan.changeTyres != null && plan.changeTyres !== car.changeTyres
     // Nessun pilota scelto significa "non cambiare": non e' una differenza
     // dalla macchina, e non deve accendere un chip ne' togliere l'Allineato.
     if (field === 'driver') return plan.driverId != null && plan.driverId !== car.driverId
-    return plan.repairBodywork !== car.repairBodywork || plan.repairSuspension !== car.repairSuspension
+    return (plan.repairBodywork != null && plan.repairBodywork !== car.repairBodywork)
+      || (plan.repairSuspension != null && plan.repairSuspension !== car.repairSuspension)
   })
 }
 
@@ -264,7 +283,7 @@ export function pitwallFieldValue(plan: PitwallPlan, field: PitwallField, driver
   if (field === 'fuel') return formatFuel(plan.fuelLiters)
   if (field === 'compound') return formatCompound(plan.compound)
   if (field === 'tyreSet') return formatTyreSet(plan.tyreSet)
-  if (field === 'changeTyres') return plan.changeTyres ? 'Sì' : 'No'
+  if (field === 'changeTyres') return plan.changeTyres == null ? '—' : (plan.changeTyres ? 'Sì' : 'No')
   if (field === 'driver') return resolveDriverName(plan.driverId, drivers)
   return formatRepairs(plan.repairBodywork, plan.repairSuspension)
 }
@@ -345,7 +364,7 @@ export function estimatePitStop(plan: PitwallPlan, car: PitwallPlan): PitwallSto
   const refuel = litresToAdd / PITWALL_STOP_TIMING.refuelLitresPerSecond
   if (refuel > 0) parts.push({ label: `Rifornimento ${Math.round(litresToAdd)} L`, seconds: refuel })
 
-  const tyresChanged = plan.changeTyres
+  const tyresChanged = plan.changeTyres === true
     || clampCompound(plan.compound) !== clampCompound(car.compound)
     || clampTyreSet(plan.tyreSet) !== clampTyreSet(car.tyreSet)
   const tyres = tyresChanged ? PITWALL_STOP_TIMING.tyreChangeSeconds : 0
@@ -359,11 +378,11 @@ export function estimatePitStop(plan: PitwallPlan, car: PitwallPlan): PitwallSto
   const service = Math.max(refuel, tyres, driverSwap)
 
   let repairs = 0
-  if (plan.repairBodywork) {
+  if (plan.repairBodywork === true) {
     repairs += PITWALL_STOP_TIMING.bodyworkSeconds
     parts.push({ label: 'Carrozzeria', seconds: PITWALL_STOP_TIMING.bodyworkSeconds })
   }
-  if (plan.repairSuspension) {
+  if (plan.repairSuspension === true) {
     repairs += PITWALL_STOP_TIMING.suspensionSeconds
     parts.push({ label: 'Sospensioni', seconds: PITWALL_STOP_TIMING.suspensionSeconds })
   }
