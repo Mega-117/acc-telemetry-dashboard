@@ -109,6 +109,7 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
   const orderStatus = ref<PitwallOrderStatus | null>(null)
   const orderReason = ref<string | null>(null)
   const fieldOutcomes = ref<PitwallFieldOutcomeRow[]>([])
+  const lastOrder = ref<PitwallStopHandle['lastOrder']['value']>(null)
   let settleTimer: ReturnType<typeof setTimeout> | null = null
 
   const car = computed<PitwallCarState>(() => ({
@@ -174,10 +175,18 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
     }))
     orderStatus.value = 'applying'
     orderReason.value = null
+    lastOrder.value = { ...plan.value, pressures: { ...pressures.value } }
     if (settleTimer) clearTimeout(settleTimer)
     settleTimer = setTimeout(() => {
       const everythingVerified = fieldOutcomes.value.every(entry => entry.outcome === 'verified')
       orderStatus.value = everythingVerified ? 'applied' : 'partial'
+      // Consegnate, le caselle tornano a "non toccare": come nel vero.
+      changeTyres.value = null
+      brakes.value = null
+      repairBodywork.value = null
+      repairSuspension.value = null
+      driverId.value = null
+      pitStrategy.value = null
     }, 1200)
     return true
   }
@@ -203,6 +212,7 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
     orderStatus,
     orderReason,
     fieldOutcomes,
+    lastOrder,
     adjustPressure: (wheel, direction) => {
       pressures.value = { ...pressures.value, [wheel]: stepPressure(pressures.value[wheel], direction) }
     },

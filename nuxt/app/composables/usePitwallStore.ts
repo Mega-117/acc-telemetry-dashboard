@@ -17,7 +17,7 @@ import type {
   PitwallConceptRace,
   PitwallConceptSearchResult,
 } from '~/utils/pitwallConcept'
-import type { PitwallCarState, PitwallCompound, PitwallDriver, PitwallStopEstimate, PitwallWheel } from '~/utils/pitwallPresentation'
+import type { PitwallCarState, PitwallCompound, PitwallDriver, PitwallPlan, PitwallStopEstimate, PitwallWheel } from '~/utils/pitwallPresentation'
 import type { PitwallOrderStatus } from '~/services/pitwall/pitwallLink'
 import type { PitwallFieldOutcomeRow } from '~/composables/usePitwallController'
 
@@ -53,6 +53,12 @@ export interface PitwallStopHandle {
   orderStatus: Ref<PitwallOrderStatus | null>
   orderReason: Ref<string | null>
   fieldOutcomes: Ref<PitwallFieldOutcomeRow[]>
+  /**
+   * L'ultimo ordine partito. ACC non rilegge le caselle (cambio gomme, freni,
+   * riparazioni): "in macchina" per loro e' cio' che abbiamo chiesto l'ultima
+   * volta, e va detto come tale.
+   */
+  lastOrder: Ref<PitwallPlan | null>
   adjustPressure: (wheel: PitwallWheel, direction: 1 | -1) => void
   setPressure: (wheel: PitwallWheel, value: number) => void
   stepPitStrategy: (direction: 1 | -1) => void

@@ -72,7 +72,7 @@ function mark(outcome: PitwallFieldOutcomeRow["outcome"]): string {
     <button
       type="button"
       class="pwc-send"
-      :class="{ 'is-sent': status === 'applied' }"
+      :class="{ 'is-sent': status === 'applied' && Boolean(blocked) }"
       :disabled="Boolean(blocked)"
       @click="$emit('send')"
     >

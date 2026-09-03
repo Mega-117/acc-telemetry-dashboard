@@ -35,12 +35,16 @@ const me = computed(() => props.meId ?? "");
 
 const invited = (race: PitwallConceptRace) => pitwallConceptAmInvited(race, me.value);
 
-/** Prima quelle vive con qualcuno al volante, poi gli inviti, poi le chiuse. */
+/**
+ * Prima quella viva con qualcuno al volante, poi le gare in cui sono gia'
+ * dentro, poi gli inviti, in fondo le chiuse. Le mie gare stanno sopra gli
+ * inviti perche' e' li' che torno: un invito vecchio non deve nasconderle.
+ */
 const ordered = computed(() => [...props.races].sort((left, right) => {
   const weight = (race: PitwallConceptRace) => {
     if (race.closed) return 3;
-    if (invited(race)) return 1;
-    return resolvePitwallConceptExecutor(race).state === "ready" ? 0 : 2;
+    if (invited(race)) return 2;
+    return resolvePitwallConceptExecutor(race).state === "ready" ? 0 : 1;
   };
   return weight(left) - weight(right);
 }));

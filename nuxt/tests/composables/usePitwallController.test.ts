@@ -56,6 +56,7 @@ function fakeLink() {
     canSend: ref(true),
     crew: ref<{ uid: string }[]>([]),
     orderFields: ref<Record<string, { outcome: 'verified' | 'selected' | 'not-verifiable' | null, reason: string | null } | null>>({}),
+    orderStatus: ref<string | null>(null),
     sendPlan: vi.fn(async () => true),
   }
 }
@@ -128,6 +129,42 @@ describe('la base dell ordine e la fotografia della vettura, solo se fresca', ()
     expect(Object.keys(controller.planPayload()).sort()).toEqual(['fuelLiters', 'pressures', 'tyreSet'])
   })
 
+  it('un campo non toccato segue la macchina: dopo Dry->Wet le pressioni riscritte da ACC non tornano indietro', async () => {
+    // Visto in pista (PIP-360): mandata la mescola Wet, ACC riscrive le
+    // pressioni; il piano teneva ancora quelle della Dry e un ordine di solo
+    // carburante le avrebbe riportate di nascosto.
+    const { link, controller } = build()
+    link.carSnapshot.value = snapshot(1_000)
+    await nextTick()
+    controller.setCompound('wet')
+    await controller.sendToCar()
+    expect(link.sendPlan).toHaveBeenLastCalledWith({ compound: 'wet' })
+
+    const WET = { FL: 27.5, FR: 27.5, RL: 27.4, RR: 27.4 }
+    link.carSnapshot.value = snapshot(1_000, { fuelToAdd: 10, tyreSet: 2, compound: 'wet', pressures: WET })
+    await nextTick()
+    expect(controller.pressures.value).toEqual(WET)
+    expect(controller.compound.value).toBe('wet')
+    expect(controller.planPayload()).toEqual({})
+
+    // Solo carburante: le pressioni non viaggiano. E i battiti successivi della
+    // macchina, che dice ancora 10, non riportano indietro il valore toccato.
+    controller.fuelLiters.value = 15
+    for (let beat = 0; beat < 3; beat += 1) {
+      link.carSnapshot.value = snapshot(1_000, { fuelToAdd: 10, tyreSet: 2, compound: 'wet', pressures: WET })
+      await nextTick()
+    }
+    expect(controller.fuelLiters.value).toBe(15)
+    expect(controller.planPayload()).toEqual({ fuelLiters: 15 })
+
+    // Un campo toccato invece resta dell'ingegnere anche se la macchina cambia.
+    controller.adjustPressure('FL', 1)
+    link.carSnapshot.value = snapshot(1_000, { fuelToAdd: 10, tyreSet: 2, compound: 'wet', pressures: { ...WET, FR: 28 } })
+    await nextTick()
+    expect(controller.pressures.value).toEqual({ FL: 27.6, FR: 28, RL: 27.4, RR: 27.4 })
+    expect(controller.fuelLiters.value).toBe(15)
+  })
+
   it('i piloti vengono dall equipaggio della fotografia, e chi guida e la base del cambio', async () => {
     const { link, controller } = build()
     link.carSnapshot.value = snapshot(1_000)
@@ -168,6 +205,30 @@ describe('il preset non parte mai per inerzia, e lo spento viaggia', () => {
     expect(payload.brakes).toBe(true)
     expect(payload).not.toHaveProperty('repairSuspension')
     expect(payload).not.toHaveProperty('repairBodywork')
+  })
+
+  it('consegnate, le caselle tornano a non toccare; se l ordine fallisce restano', async () => {
+    const { link, controller } = build()
+    controller.changeTyres.value = true
+    controller.brakes.value = false
+    controller.driverId.value = '1'
+    controller.pitStrategy.value = 2
+    await controller.sendToCar()
+    link.orderStatus.value = 'applying'
+    await nextTick()
+    expect(controller.changeTyres.value).toBe(true)
+    link.orderStatus.value = 'failed'
+    await nextTick()
+    expect(controller.changeTyres.value).toBe(true)
+    link.orderStatus.value = 'applied'
+    await nextTick()
+    expect([controller.changeTyres.value, controller.brakes.value, controller.driverId.value, controller.pitStrategy.value]).toEqual([null, null, null, null])
+    // L'ultimo ordine resta leggibile: e' cio' che "in macchina" mostra per le caselle.
+    expect(controller.sentPlan.value).toMatchObject({ changeTyres: true, brakes: false, driverId: '1', pitStrategy: 2 })
+    // Un ordine successivo che non le tocca non le cancella dalla memoria.
+    controller.repairSuspension.value = true
+    await controller.sendToCar()
+    expect(controller.sentPlan.value).toMatchObject({ changeTyres: true, brakes: false, driverId: '1', repairSuspension: true })
   })
 
   it('tornare alla macchina rimette tutto cio che ACC non rilegge a non toccare', async () => {

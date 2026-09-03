@@ -52,10 +52,15 @@ const freshness = computed(() => (
     : `Dati macchina di ${stop.presenceAgeSeconds.value}s fa`
 ));
 
-const yesNo = (value: boolean | null) => formatToggle(value);
+const yesNo = (value: boolean | null | undefined) => formatToggle(value ?? null);
+/** Le caselle che ACC non rilegge: in macchina c'e' cio' che abbiamo chiesto l'ultima volta. */
+const last = computed(() => stop.lastOrder.value);
 const stopTime = computed(() => formatStopDuration(stop.stopEstimate.value.seconds));
+/** L'ultimo pilota chiesto, per nome; senza un ordine non si inventa nulla. */
 const carDriver = computed(() => (
-  stop.drivers.value.find(driver => driver.id === stop.car.value.driverId)?.name ?? "Nessun cambio"
+  last.value?.driverId == null
+    ? "—"
+    : stop.drivers.value.find(driver => driver.id === last.value?.driverId)?.name ?? `Pilota ${last.value.driverId}`
 ));
 
 function stepAll(direction: 1 | -1) {
@@ -140,7 +145,7 @@ function stepAll(direction: 1 | -1) {
         hide-label
       />
       <span class="pwc-pit-car">
-        <b>{{ yesNo(stop.car.value.changeTyres) }}</b>
+        <b>{{ yesNo(last?.changeTyres) }}</b>
         <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
       </span>
     </div>
@@ -254,7 +259,7 @@ function stepAll(direction: 1 | -1) {
         hide-label
       />
       <span class="pwc-pit-car">
-        <b>{{ yesNo(stop.car.value.brakes) }}</b>
+        <b>{{ yesNo(last?.brakes) }}</b>
         <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
       </span>
     </div>
@@ -292,7 +297,7 @@ function stepAll(direction: 1 | -1) {
         hide-label
       />
       <span class="pwc-pit-car">
-        <b>{{ yesNo(stop.car.value.repairSuspension) }}</b>
+        <b>{{ yesNo(last?.repairSuspension) }}</b>
         <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
       </span>
     </div>
@@ -305,7 +310,7 @@ function stepAll(direction: 1 | -1) {
         hide-label
       />
       <span class="pwc-pit-car">
-        <b>{{ yesNo(stop.car.value.repairBodywork) }}</b>
+        <b>{{ yesNo(last?.repairBodywork) }}</b>
         <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
       </span>
     </div>

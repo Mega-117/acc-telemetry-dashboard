@@ -154,12 +154,63 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     ...drivers.value.map(driver => ({ value: driver.id, label: driver.name })),
   ])
 
+  /**
+   * L'ultimo valore copiato dalla macchina, campo per campo.
+   *
+   * Un campo che l'ingegnere non ha mosso da allora segue la macchina: ACC
+   * riscrive le pressioni quando cambia la mescola, e il preset riscrive tutto.
+   * Senza questo, dopo Dry→Wet un ordine di solo carburante riporterebbe di
+   * nascosto le pressioni della Dry, perche' il piano le teneva ancora
+   * (visto in pista, PIP-360).
+   */
+  let synced: { fuel: number, tyreSet: number, compound: PitwallCompound, pressures: Record<PitwallWheel, number> } | null = null
+  function rememberSynced(): void {
+    synced = { fuel: fuelLiters.value, tyreSet: tyreSet.value, compound: compound.value, pressures: { ...pressures.value } }
+  }
+  function followCar(next: PitwallCarState): void {
+    if (!synced) return
+    if (fuelLiters.value === synced.fuel) fuelLiters.value = next.fuelLiters
+    if (tyreSet.value === synced.tyreSet) tyreSet.value = next.tyreSet
+    if (!compoundTouched.value && compound.value === synced.compound) compound.value = next.compound
+    const followed = { ...pressures.value }
+    for (const wheel of PITWALL_WHEELS) {
+      if (Math.abs(pressures.value[wheel] - synced.pressures[wheel]) < 0.05) followed[wheel] = next.pressures[wheel]
+    }
+    pressures.value = followed
+    // La base e' cio' che la macchina ha detto, mai cio' che il piano contiene:
+    // altrimenti un valore appena toccato verrebbe scambiato per "sincronizzato"
+    // e riportato indietro al battito successivo (visto in pista).
+    synced = { fuel: next.fuelLiters, tyreSet: next.tyreSet, compound: next.compound, pressures: { ...next.pressures } }
+  }
+
+  /**
+   * Le caselle che ACC non rilegge sono richieste una tantum: consegnate,
+   * tornano a "non toccare". Se restassero, ogni ordine successivo le
+   * rimanderebbe e il bottone non direbbe mai "nessuna modifica". Restano
+   * invece quando l'ordine fallisce o e' rifiutato: si rimanda.
+   */
+  function clearOneShotFields(): void {
+    changeTyres.value = null
+    brakes.value = null
+    repairBodywork.value = null
+    repairSuspension.value = null
+    driverId.value = null
+    pitStrategy.value = null
+  }
+  watch(() => link.orderStatus.value, (status) => {
+    if (status === 'applied' || status === 'partial') clearOneShotFields()
+  })
+
   let planInitialised = false
-  watch(() => link.selectedRoomId.value, () => { planInitialised = false })
-  watch(car, () => {
-    if (planInitialised || !session.value?.strategy) return
-    planInitialised = true
-    resetToCar()
+  watch(() => link.selectedRoomId.value, () => { planInitialised = false; synced = null })
+  watch(car, (next) => {
+    if (!session.value?.strategy) return
+    if (!planInitialised) {
+      planInitialised = true
+      resetToCar()
+      return
+    }
+    followCar(next)
   })
 
   function adjustPressure(wheel: PitwallWheel, direction: 1 | -1) {
@@ -212,6 +263,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     brakes.value = null
     repairBodywork.value = null
     repairSuspension.value = null
+    rememberSynced()
   }
 
   /**
@@ -276,8 +328,25 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   })
 
   async function sendToCar(): Promise<boolean> {
-    sentPlan.value = { ...plan.value, pressures: { ...pressures.value } }
-    return link.sendPlan(planPayload())
+    // Le caselle non chieste stavolta restano quelle dell'ordine precedente:
+    // "in macchina" per loro e' l'ultima richiesta fatta, non l'ultimo ordine.
+    const previous = sentPlan.value
+    sentPlan.value = {
+      ...plan.value,
+      pressures: { ...pressures.value },
+      changeTyres: changeTyres.value ?? previous?.changeTyres ?? null,
+      brakes: brakes.value ?? previous?.brakes ?? null,
+      repairBodywork: repairBodywork.value ?? previous?.repairBodywork ?? null,
+      repairSuspension: repairSuspension.value ?? previous?.repairSuspension ?? null,
+      driverId: driverId.value ?? previous?.driverId ?? null,
+      pitStrategy: pitStrategy.value ?? previous?.pitStrategy ?? null,
+    }
+    const payload = planPayload()
+    // Cio' che e' partito e' la nuova base: da qui in poi, finche' l'ingegnere
+    // non lo tocca di nuovo, segue quello che la macchina rilegge.
+    compoundTouched.value = false
+    rememberSynced()
+    return link.sendPlan(payload)
   }
 
   const fieldOutcomes = computed<PitwallFieldOutcomeRow[]>(() => Object.entries(link.orderFields.value).map(([field, outcome]) => ({

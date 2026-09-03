@@ -176,7 +176,8 @@ describe('Pitwall pressioni e sagoma vettura', () => {
 
 describe('Pitwall ordine reale e MFD onesto', () => {
   it('invia davvero solo i campi conosciuti dal runtime', () => {
-    expect(controller).toContain('link.sendPlan(planPayload())')
+    expect(controller).toContain('const payload = planPayload()')
+    expect(controller).toContain('return link.sendPlan(payload)')
     for (const field of ['fuelLiters', 'tyreSet', 'pressures', 'compound', 'changeTyres', 'repairBodywork', 'repairSuspension', 'driverId']) {
       expect(controller).toContain(`payload.${field}`)
     }
@@ -379,11 +380,15 @@ describe('Pitwall wiring', () => {
       '{{ clampTyreSet(stop.car.value.tyreSet) }}',
       'stop.car.value.compound === "wet" ? "Wet" : "Dry"',
       '{{ stop.car.value.pressures[wheel].toFixed(1) }}',
-      '{{ yesNo(stop.car.value.repairSuspension) }}',
-      '{{ yesNo(stop.car.value.repairBodywork) }}',
     ]) {
       expect(conceptPitStop).toContain(cella)
     }
+    // Le caselle che ACC non rilegge: "in macchina" e' l'ultimo ordine, detto
+    // come tale, non un valore inventato dalla fotografia della vettura.
+    for (const cella of ['{{ yesNo(last?.changeTyres) }}', '{{ yesNo(last?.brakes) }}', '{{ yesNo(last?.repairSuspension) }}', '{{ yesNo(last?.repairBodywork) }}']) {
+      expect(conceptPitStop).toContain(cella)
+    }
+    expect(store).toContain('lastOrder: Ref<PitwallPlan | null>')
   })
 
   it('dice da dove viene ogni valore letto in macchina', () => {
