@@ -89,13 +89,17 @@ function scrollToTop() {
 }
 
 /**
- * Far entrare qualcuno nella propria gara non e' un'azione sulla stanza: e'
- * autorizzare una persona, che poi il PC aggiunge da solo. Il bottone porta
- * quindi dove quella cosa si fa, invece di aprire un secondo modo di farla.
+ * Il pilota apre la propria gara come un ingegnere apre quella di un altro:
+ * dentro trova l'equipaggio e, da manager, "+ Ospite", "Promuovi", "Togli" e
+ * "Chiudi". Prima il bottone scrollava al campo di ricerca e basta, e il
+ * pilota non aveva nessuna porta verso i comandi che gia' esistevano
+ * (visto da RICO117 il 2026-09-04).
  */
-function focusSearch() {
-  if (typeof document === "undefined") return;
-  document.querySelector(".pwc-home__add")?.scrollIntoView({ behavior: "smooth", block: "start" });
+function openMine() {
+  const mine = myRoom.value;
+  if (!mine) return;
+  state.enterRace(mine.id);
+  go("live");
 }
 
 /** Entrare e aprire sono lo stesso gesto: chi era invitato smette di esserlo. */
@@ -173,7 +177,7 @@ function ask(personId: string) {
           :room="myRoom"
           :people="people"
           :me-id="state.meId.value"
-          @invite="focusSearch"
+          @open="openMine"
         />
       </section>
 

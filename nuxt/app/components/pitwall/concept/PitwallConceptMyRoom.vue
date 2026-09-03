@@ -21,7 +21,8 @@ const props = defineProps<{
   people: PitwallConceptPerson[];
   meId: string | null;
 }>();
-defineEmits<{ invite: [] }>();
+/** Aprire la gara: dentro ci sono l'equipaggio e i comandi da manager. */
+defineEmits<{ open: [] }>();
 
 const nick = (id: string) => pitwallConceptNicknameById(id, props.people);
 const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
@@ -83,9 +84,9 @@ const driving = computed(() => {
       <button
         type="button"
         class="pwc-btn"
-        @click="$emit('invite')"
+        @click="$emit('open')"
       >
-        Fai entrare qualcuno
+        Apri la gara
       </button>
 
       <p class="pwc-race__why">

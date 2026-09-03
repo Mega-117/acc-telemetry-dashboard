@@ -498,6 +498,13 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('<PitwallConceptMyRoom')
     expect(concept).toContain('La tua gara')
     expect(concept).toContain('state.myRoom.value')
+    // Il pilota apre la propria gara come un ingegnere apre quella di un altro:
+    // e' l'unica porta verso "+ Ospite", "Promuovi", "Togli", "Chiudi". Prima
+    // il bottone scrollava al campo di ricerca e basta.
+    expect(concept).toContain('@open="openMine"')
+    expect(concept).toContain('state.enterRace(mine.id)')
+    expect(conceptMyRoom).toContain('Apri la gara')
+    expect(conceptMyRoom).not.toContain('Fai entrare qualcuno')
     // Sopra "In pista": chi guida apre la pagina per sapere se il muretto lo
     // vede, non per assistere qualcun altro.
     expect(concept.indexOf('pwc-home__mine')).toBeLessThan(concept.indexOf('pwc-home__races'))
