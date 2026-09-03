@@ -22,6 +22,7 @@ import {
   isPitwallOrderSettled,
   type PitwallGrantScope,
   type PitwallOrderStatus,
+  type PitwallSession,
 } from '~/services/pitwall/pitwallLink'
 
 /** Esito per campo dichiarato dal PC del pilota: mai appiattito in un "fatto". */
@@ -153,6 +154,47 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     if (!driverUid) return
     refreshSelectedPresence()
     presenceTimer = setInterval(refreshSelectedPresence, 30_000)
+  }
+
+  /**
+   * Chi e' in pista adesso, fra le persone che mi hanno autorizzato.
+   *
+   * La presenza di un pilota vive in un documento suo, che si rilegge al passo
+   * del suo battito. Prima si rileggeva solo quella del pilota selezionato, e
+   * l'elenco "chi posso assistere adesso" non poteva esistere: si sapeva chi
+   * era vivo soltanto dopo essere entrati da lui. Si leggono i soli
+   * collegamenti utilizzabili, e non piu' di dodici: oltre non sarebbe
+   * comunque un elenco che si guarda.
+   */
+  const PRESENCE_POLL_MS = 30_000
+  const MAX_WATCHED_PILOTS = 12
+  let pilotsPresenceTimer: ReturnType<typeof setInterval> | null = null
+
+  async function refreshPilotsPresence(): Promise<void> {
+    const engineer = service()
+    if (!engineer) return
+    const watched = outgoing.value.filter(link => link.usable).slice(0, MAX_WATCHED_PILOTS)
+    if (!watched.length) return
+    const seen = new Map<string, { session: PitwallSession | null, reachable: boolean }>()
+    await Promise.all(watched.map(async (link) => {
+      try {
+        seen.set(link.driverUid, await engineer.readPilotPresence(link.driverUid))
+      } catch {
+        // Una presenza non letta lascia l'ultima nota: sparirebbe da sola al
+        // battito successivo, e far lampeggiare l'elenco sarebbe peggio.
+      }
+    }))
+    if (!seen.size) return
+    outgoing.value = outgoing.value.map((link) => {
+      const fresh = seen.get(link.driverUid)
+      return fresh ? { ...link, session: fresh.session, reachable: fresh.reachable } : link
+    })
+  }
+
+  function watchPilotsPresence(): void {
+    if (pilotsPresenceTimer) clearInterval(pilotsPresenceTimer)
+    void refreshPilotsPresence()
+    pilotsPresenceTimer = setInterval(() => { void refreshPilotsPresence() }, PRESENCE_POLL_MS)
   }
 
   /**
@@ -384,6 +426,10 @@ export function usePitwallLink(options: PitwallLinkOptions) {
       },
       (error) => { rawError.value = error?.message || 'Elenco piloti non disponibile.' }
     )
+
+    // Chi e' in pista si vede solo se qualcuno lo guarda: e' questo battito a
+    // far comparire e sparire da sole le righe di "In pista".
+    watchPilotsPresence()
   }
 
   function stop(): void {
@@ -395,6 +441,8 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     stopGrantedWatch = null
     if (presenceTimer) clearInterval(presenceTimer)
     presenceTimer = null
+    if (pilotsPresenceTimer) clearInterval(pilotsPresenceTimer)
+    pilotsPresenceTimer = null
   }
 
   onScopeDispose(stop)

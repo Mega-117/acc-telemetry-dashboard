@@ -1,24 +1,22 @@
 <script setup lang="ts">
-// Le gare che ti compaiono senza aver fatto niente (PIP-369).
+// Chi e' in pista adesso (PIP-369, PIP-360).
 //
-// Tre stati, e si vedono dal bordo: ci sei dentro, sei solo invitato, oppure e'
-// chiusa. La riga sotto dice **perche'** ti compare, perche' ritrovarsi dentro
-// una gara senza capire il motivo e' esattamente il difetto che il prototipo
-// deve togliere.
+// Una riga per **persona**, non per stanza. Elencare le stanze rispondeva alla
+// domanda sbagliata: non si chiudono mai, quindi comparivano anche le sessioni
+// di giorni prima, con lo stesso nome e la stessa pista, e non c'era modo di
+// dire quale fosse viva. Qui c'e' solo chi sta guidando adesso: se smette, la
+// sua riga sparisce da sola.
 //
-// L'elenco vero arriva a sessanta gare - le stanze non si cancellano mai e
-// nessuno filtra le chiuse - quindi qui se ne mostrano tre: quelle in cui c'e'
-// davvero qualcuno al volante restano in cima, le chiuse in fondo.
+// "In pista" e' una parola sola e vale finche' e' lui il pilota di quella
+// vettura, che sia in curva, ai box o fermo nei menu.
 import { computed, ref } from "vue";
 import PitwallConceptMore from "~/components/pitwall/concept/PitwallConceptMore.vue";
 import {
   PITWALL_CONCEPT_LIST_LIMITS,
-  describePitwallConceptReason,
   describePitwallConceptWall,
   pitwallConceptAmInvited,
+  pitwallConceptInitialsById,
   pitwallConceptNicknameById,
-  pitwallConceptWallIds,
-  resolvePitwallConceptExecutor,
   splitPitwallConceptList,
 } from "~/utils/pitwallConcept";
 import type { PitwallConceptPerson, PitwallConceptRace } from "~/utils/pitwallConcept";
@@ -35,16 +33,12 @@ const me = computed(() => props.meId ?? "");
 
 const invited = (race: PitwallConceptRace) => pitwallConceptAmInvited(race, me.value);
 
-/**
- * Prima quella viva con qualcuno al volante, poi le gare in cui sono gia'
- * dentro, poi gli inviti, in fondo le chiuse. Le mie gare stanno sopra gli
- * inviti perche' e' li' che torno: un invito vecchio non deve nasconderle.
- */
+/** Prima chi si puo' assistere subito, poi chi ci sta ancora aggiungendo, in fondo le chiuse. */
 const ordered = computed(() => [...props.races].sort((left, right) => {
   const weight = (race: PitwallConceptRace) => {
     if (race.closed) return 3;
-    if (invited(race)) return 2;
-    return resolvePitwallConceptExecutor(race).state === "ready" ? 0 : 1;
+    if (race.joinable === false) return 2;
+    return invited(race) ? 1 : 0;
   };
   return weight(left) - weight(right);
 }));
@@ -54,24 +48,24 @@ const split = computed(() => splitPitwallConceptList(
   expanded.value ? ordered.value.length : PITWALL_CONCEPT_LIST_LIMITS.races,
 ));
 
+const nick = (id: string) => pitwallConceptNicknameById(id, props.people);
+const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
+
+/** Dove sta guidando: pista e vettura, quando le sappiamo. */
+function whereLabel(race: PitwallConceptRace): string {
+  const number = race.carNumber ? `#${race.carNumber}` : "";
+  return [race.track, race.carModel, number].filter(Boolean).join(" · ");
+}
+
 /**
- * Al volante c'e' uno solo, oppure va detto che non si sa chi applica. Senza
- * presenza in diretta non si dice "nessuno": non lo sappiamo.
+ * Chi altro sta al muretto con te. Il pilota e' la riga stessa, quindi non si
+ * conta: prima finiva fra gli assistenti e sembrava che si assistesse da solo.
  */
-function driverLabel(race: PitwallConceptRace): string {
-  if (race.live === false) return "—";
-  const executor = resolvePitwallConceptExecutor(race);
-  if (executor.state === "ready") return pitwallConceptNicknameById(executor.driverId!, props.people);
-  return executor.state === "multiple-driving" ? "in due" : "nessuno";
-}
-
-/** Sedici nickname uniti da virgole sono un paragrafo, non una riga di card. */
 function wallLabel(race: PitwallConceptRace): string {
-  return describePitwallConceptWall(pitwallConceptWallIds(race), undefined, props.people);
-}
-
-function reasonLabel(race: PitwallConceptRace): string {
-  return describePitwallConceptReason(race.reason, props.people);
+  const others = race.members
+    .filter(member => member.personId !== race.hostId && member.role !== "invited")
+    .map(member => member.personId);
+  return describePitwallConceptWall(others, undefined, props.people);
 }
 </script>
 
@@ -81,36 +75,39 @@ function reasonLabel(race: PitwallConceptRace): string {
       v-for="race in split.visible"
       :key="race.id"
       class="pwc-race"
-      :class="{ 'is-invited': invited(race), 'is-closed': race.closed }"
+      :class="{
+        'is-invited': invited(race),
+        'is-closed': race.closed,
+        'is-waiting': race.joinable === false,
+      }"
     >
-      <div class="pwc-race__car">
-        <span class="pwc-race__number">#{{ race.carNumber }}</span>
+      <div class="pwc-race__who">
+        <span class="pwc-avatar">{{ initials(race.hostId) }}</span>
         <span class="pwc-race__copy">
-          <strong>{{ race.carModel }}</strong>
-          <small>{{ race.track }} · {{ race.session }}</small>
+          <strong>{{ nick(race.hostId) }}</strong>
+          <small>{{ whereLabel(race) || race.session }}</small>
         </span>
       </div>
 
-      <div class="pwc-race__roles">
-        <span class="pwc-role">
-          <small>Al volante</small>
-          <b>{{ driverLabel(race) }}</b>
-        </span>
-        <span
-          v-if="wallLabel(race)"
-          class="pwc-role"
-        >
-          <small>Al muretto</small>
-          <b>{{ wallLabel(race) }}</b>
-        </span>
-      </div>
+      <span
+        v-if="wallLabel(race)"
+        class="pwc-role pwc-race__wall"
+      >
+        <small>Al muretto</small>
+        <b>{{ wallLabel(race) }}</b>
+      </span>
 
       <span
         v-if="race.closed"
         class="pwc-chip is-waiting"
       >Chiusa</span>
-      <button
+      <span
         v-else
+        class="pwc-chip is-always"
+      >In pista</span>
+
+      <button
+        v-if="!race.closed"
         type="button"
         class="pwc-btn is-primary"
         @click="$emit('enter', race)"
@@ -118,11 +115,17 @@ function reasonLabel(race: PitwallConceptRace): string {
         Entra
       </button>
 
-      <p class="pwc-race__why">
-        {{ reasonLabel(race) }}
-        <template v-if="invited(race)">
-          Non sei ancora entrato.
-        </template>
+      <p
+        v-if="race.joinable === false"
+        class="pwc-race__why"
+      >
+        Il suo PC ti sta aggiungendo alla gara. Ci mette un minuto.
+      </p>
+      <p
+        v-else-if="invited(race)"
+        class="pwc-race__why"
+      >
+        Ti ha invitato: entra per vedere la vettura e mandare la strategia.
       </p>
     </article>
 
@@ -130,14 +133,15 @@ function reasonLabel(race: PitwallConceptRace): string {
       v-if="!races.length"
       class="pwc-empty"
     >
-      Nessuna gara attiva fra le tue persone.
+      Nessuna delle tue persone è in pista adesso. Appena una entra in sessione
+      su ACC compare qui da sola.
     </p>
 
     <PitwallConceptMore
       :hidden="split.hidden"
       :expanded="expanded"
-      noun="gare"
-      noun-one="gara"
+      noun="persone"
+      noun-one="persona"
       @toggle="expanded = !expanded"
     />
   </div>
@@ -148,7 +152,7 @@ function reasonLabel(race: PitwallConceptRace): string {
 
 .pwc-race {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   align-items: center;
   gap: 24px;
   margin-top: var(--pwc-gap);
@@ -159,19 +163,16 @@ function reasonLabel(race: PitwallConceptRace): string {
 }
 /* Invitato e non ancora entrato: bordo d'attesa, non di gara in corso. */
 .pwc-race.is-invited { border-color: rgba(245, 158, 11, 0.45); }
+/* In pista, ma il suo PC non ci ha ancora aggiunti. */
+.pwc-race.is-waiting { border-color: var(--pwc-line); }
 .pwc-race.is-closed { border-color: var(--pwc-line); opacity: 0.72; }
-.pwc-race__car { display: flex; align-items: center; gap: 16px; min-width: 0; }
-.pwc-race__number {
-  flex: none;
-  font-family: $font-display;
-  font-size: 26px;
-  color: $racing-gold;
-  font-variant-numeric: tabular-nums;
-}
+
+.pwc-race__who { display: flex; align-items: center; gap: 16px; min-width: 0; }
 .pwc-race__copy { display: grid; gap: 4px; min-width: 0; }
-.pwc-race__copy strong { font-size: 17px; }
+.pwc-race__copy strong { font-size: 19px; overflow-wrap: anywhere; }
 .pwc-race__copy small { font-size: 13px; }
-.pwc-race__roles { display: flex; gap: 28px; }
+.pwc-race__wall { align-self: center; }
+
 .pwc-race__why {
   grid-column: 1 / -1;
   margin: 0;
@@ -180,16 +181,14 @@ function reasonLabel(race: PitwallConceptRace): string {
   color: $text-muted;
   font-size: 13px;
 }
-.pwc-race__why b { color: $text-secondary; font-weight: 700; }
 
 @media (max-width: 1180px) {
-  .pwc-race { grid-template-columns: minmax(0, 1fr) auto; }
-  .pwc-race__roles { grid-column: 1 / -1; }
-  /* Il bottone scende su una riga sua: resta della sua misura, non a tutta larghezza. */
-  .pwc-race > .pwc-btn { justify-self: start; }
+  .pwc-race { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .pwc-race__wall { grid-column: 1 / -1; }
 }
 
 @media (max-width: 760px) {
   .pwc-race { grid-template-columns: 1fr; }
+  .pwc-race > .pwc-btn { justify-self: start; }
 }
 </style>

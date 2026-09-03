@@ -199,29 +199,96 @@ describe('i permessi nelle quattro parole della pagina', () => {
 })
 
 describe('le gare e gli avvisi', () => {
-  it('una stanza a cui sono invitato e una gara con motivo, senza presenza finche non entro', () => {
+  it('una riga per persona in pista, con pista e vettura lette dalla sua presenza', () => {
     link.rooms.value = [room()]
+    trust.outgoing.value = [outgoing('pilota', 'granted', {
+      reachable: true,
+      session: { online: true, updatedAt: new Date(NOW).toISOString(), car: 'ferrari_296_gt3', track: 'nurburgring' },
+    })]
     const [race] = store.races.value
-    expect(race).toMatchObject({ id: 'r1', carNumber: 47, carModel: 'Ferrari 296 GT3', track: 'Monza', hostId: 'pilota', closed: false, live: false })
-    expect(race!.session).toBe('Entra per vedere chi guida')
-    expect(race!.reason).toEqual({ kind: 'invite', personId: 'pilota' })
-    expect(race!.members).toEqual([
-      { personId: 'pilota', role: 'manager', driving: false, online: false },
-      { personId: 'me', role: 'invited', driving: false, online: false },
-    ])
+    expect(race).toMatchObject({
+      id: 'r1',
+      hostId: 'pilota',
+      carNumber: 47,
+      carModel: 'Ferrari 296 GT3',
+      track: 'Nurburgring',
+      session: 'In pista',
+      closed: false,
+      live: true,
+      joinable: true,
+    })
+    // L'invito resta un avviso: e' una cosa da decidere, non una gara in pista.
     expect(store.notices.value).toEqual([{ id: 'inv:r1', kind: 'invite', personId: 'pilota', raceId: 'r1' }])
-    expect(store.pendingNoticeCount.value).toBe(1)
   })
 
-  it('rifiutare un invito e una memoria locale; entrare la cancella e apre la stanza', async () => {
+  it('chi non e in pista non compare, e chi smette sparisce da solo', () => {
     link.rooms.value = [room()]
-    store.rejectNotice('inv:r1')
+    // Autorizzato ma con ACC spento: la stanza esiste ancora, la riga no.
+    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: false })]
     expect(store.races.value).toEqual([])
+
+    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { online: true, updatedAt: new Date(NOW).toISOString() } })]
+    expect(store.races.value).toHaveLength(1)
+
+    // Spegne il gioco: il battito invecchia, reachable cade, la riga sparisce.
+    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: false })]
+    expect(store.races.value).toEqual([])
+  })
+
+  it('in pista ma non ancora invitati: si vede la persona e si dice che non si entra', () => {
+    // Il PC del pilota aggiunge gli autorizzati alla sua stanza a intervalli:
+    // in mezzo, la persona e' viva ma la sua stanza non e' nostra. Meglio
+    // dirlo che offrire un bottone che non porta da nessuna parte.
+    link.rooms.value = []
+    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { online: true, updatedAt: new Date(NOW).toISOString() } })]
+    const [race] = store.races.value
+    expect(race).toMatchObject({ id: 'driver:pilota', hostId: 'pilota', joinable: false, members: [] })
+
+    store.enterRace(race!.id)
+    expect(link.selectRoom).not.toHaveBeenCalled()
+    expect(link.notice.value).toContain('non ti ha ancora aggiunto')
+  })
+
+  it('due persone sulla stessa vettura sono una riga sola', async () => {
+    // Endurance: due piloti che si danno il cambio stanno nella stessa stanza.
+    // Due righe che portano allo stesso pit stop sarebbero solo un doppione.
+    link.rooms.value = [room({ memberUids: ['pilota', 'secondo'], allowedUids: ['pilota', 'secondo', 'me'] })]
+    const live = { online: true, updatedAt: new Date(NOW).toISOString() }
+    trust.outgoing.value = [
+      outgoing('pilota', 'granted', { reachable: true, session: live }),
+      outgoing('secondo', 'granted', { reachable: true, session: live }),
+    ]
+    expect(store.races.value.map(race => race.id)).toEqual(['r1'])
+    expect(store.races.value[0]!.hostId).toBe('pilota')
+
+    // Lo store e' un singleton: il permesso nuovo di `secondo` accende un
+    // avviso che altrimenti resterebbe acceso nei test successivi.
+    await nextTick()
+    for (const notice of store.notices.value.filter(entry => entry.kind === 'granted')) {
+      store.dismissNotice(notice.id)
+    }
+  })
+
+  it('di uno stesso pilota si apre la stanza aperta adesso, non quelle di ieri', () => {
+    // Le stanze non si chiudono mai: dello stesso pilota ne restano molte.
+    link.rooms.value = [
+      room({ roomId: 'vecchia', createdAt: '2026-09-01T08:00:00.000Z' }),
+      room({ roomId: 'oggi', createdAt: '2026-09-03T08:00:00.000Z' }),
+      room({ roomId: 'chiusa', createdAt: '2026-09-03T09:00:00.000Z', closedAt: '2026-09-03T10:00:00.000Z' }),
+    ]
+    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { online: true, updatedAt: new Date(NOW).toISOString() } })]
+    expect(store.races.value.map(race => race.id)).toEqual(['oggi'])
+  })
+
+  it('rifiutare un invito e una memoria locale; accettarlo apre la stanza', async () => {
+    link.rooms.value = [room()]
+    expect(store.notices.value).toHaveLength(1)
+    store.rejectNotice('inv:r1')
     expect(store.notices.value).toEqual([])
-    store.enterRace('r1')
+    store.acceptNotice('inv:r1')
     await settle()
     expect(link.selectRoom).toHaveBeenCalledWith('r1')
-    expect(store.races.value).toHaveLength(1)
+    expect(store.notices.value).toHaveLength(1)
   })
 
   it('la gara selezionata legge equipaggio e volante dalla presenza in diretta', () => {

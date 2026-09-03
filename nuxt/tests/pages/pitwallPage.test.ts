@@ -445,19 +445,30 @@ describe('Pitwall wiring', () => {
     expect(conceptModel).toContain('vince la sua, non si fondono')
   })
 
-  it('apre la gara, non una persona, e dice perche ci sei dentro', () => {
-    expect(concept).toContain('In gara adesso')
+  it('elenca chi sta guidando adesso, una riga per persona', () => {
+    // PIP-360, dopo la QA dal vivo: elencare le stanze rispondeva alla domanda
+    // sbagliata. Non si chiudono mai, quindi comparivano otto voci di sessioni
+    // di giorni prima, due con lo stesso nome, e non c'era modo di dire quale
+    // fosse viva. Qui c'e' solo chi guida adesso: chi smette sparisce da solo.
+    expect(concept).toContain('In pista')
+    expect(concept).not.toContain('In gara adesso')
     expect(concept).toContain('<PitwallConceptRaces')
     expect(concept).toContain('@enter="enter"')
+    expect(conceptRaces).toContain('nick(race.hostId)')
+    expect(conceptRaces).toContain('In pista')
     expect(conceptRaces).toContain('Entra')
-    expect(conceptRaces).toContain('class="pwc-race__why"')
-    expect(conceptRaces).toContain('describePitwallConceptReason(race.reason, props.people)')
-    expect(conceptModel).toContain('ti ha autorizzato.')
-    expect(conceptRaces).toContain('Al volante')
     expect(conceptRaces).toContain('Al muretto')
-    expect(conceptRaces).toContain('Nessuna gara attiva fra le tue persone.')
+    // Il pilota non sta al muretto di se stesso: prima ci finiva dentro.
+    expect(conceptRaces).toContain('member.personId !== race.hostId')
+    expect(conceptRaces).toContain('Nessuna delle tue persone è in pista adesso.')
     expect(concept).not.toContain('Collegati')
     expect(concept).not.toContain('Assisti')
+  })
+
+  it('la pastiglia "in pista" negli elenchi segue chi guida, non chi sta al muretto', () => {
+    expect(concept).toContain('races.value.filter(race => !race.closed).map(race => race.hostId)')
+    expect(conceptPeople).toContain('in pista')
+    expect(conceptPeople).not.toContain('in gara adesso')
   })
 
   it('distingue la gara in cui sei da quella in cui sei solo invitato', () => {
@@ -468,10 +479,15 @@ describe('Pitwall wiring', () => {
     expect(conceptRaces).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
     expect(conceptWall).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
     expect(conceptLive).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
-    expect(conceptRaces).toContain('Non sei ancora entrato.')
+    expect(conceptRaces).toContain('entra per vedere la vettura e mandare la strategia')
     expect(conceptRaces).toContain('.pwc-race.is-invited')
     expect(conceptRaces).toContain('.pwc-race.is-closed')
     expect(conceptRaces).toContain('Chiusa')
+    // In pista ma non ancora aggiunti dal suo PC: si dice, invece di offrire
+    // un bottone che non porta da nessuna parte.
+    expect(conceptRaces).toContain("race.joinable === false")
+    expect(conceptRaces).toContain('Il suo PC ti sta aggiungendo alla gara.')
+    expect(liveStore).toContain('joinable: room != null')
   })
 
   it('affianca i due versi invece di nasconderne meta dietro una scheda', () => {

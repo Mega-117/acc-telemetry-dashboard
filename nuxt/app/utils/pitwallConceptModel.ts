@@ -79,6 +79,12 @@ export interface PitwallConceptRace {
    * dice, si dice "entra per vedere".
    */
   live?: boolean
+  /**
+   * Si puo' entrare adesso. Falso quando la persona e' in pista ma il suo PC
+   * non ci ha ancora messi fra gli invitati: si dice, invece di offrire un
+   * bottone che non porta da nessuna parte.
+   */
+  joinable?: boolean
 }
 
 /** Qualcosa da decidere, o da sapere. */

@@ -209,7 +209,9 @@ export function describePitwallConceptOrderStatus(
  * tetto e' due metri di scroll prima di arrivare alla riga sotto.
  */
 export const PITWALL_CONCEPT_LIST_LIMITS = Object.freeze({
-  races: 3,
+  // "In pista" elenca persone che stanno guidando adesso, non stanze di
+  // sempre: sono poche e ognuna e' una cosa da fare, quindi il tetto e' alto.
+  races: 6,
   people: 8,
   crew: 8,
   search: 8,

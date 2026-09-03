@@ -55,15 +55,15 @@ const found = computed(() => state.found.value);
 const assistIds = computed(() => new Set(state.links.value.assist.map(link => link.personId)));
 const assistedIds = computed(() => new Set(state.links.value.assisted.map(link => link.personId)));
 
-/** Chi e' dentro una gara viva adesso: la pastiglia accanto al nickname. */
-const racingIds = computed(() => {
-  const ids = new Set<string>();
-  for (const race of races.value) {
-    if (race.closed) continue;
-    for (const member of race.members) if (member.role !== "invited") ids.add(member.personId);
-  }
-  return [...ids];
-});
+/**
+ * Chi sta guidando adesso: la pastiglia accanto al nickname negli elenchi.
+ *
+ * E' chi apre una riga di "In pista", non chiunque sia dentro la sua stanza:
+ * al muretto ci sono gli ingegneri, e dirli "in pista" era falso.
+ */
+const racingIds = computed(
+  () => races.value.filter(race => !race.closed).map(race => race.hostId),
+);
 
 /** Il primo avvio non deve essere tre riquadri vuoti senza un punto di partenza. */
 const isFirstRun = computed(
@@ -146,7 +146,7 @@ function ask(personId: string) {
       <section class="pwc-home__races">
         <header class="pwc-block__head">
           <h2 class="pwc-block__title">
-            In gara adesso
+            In pista
           </h2>
           <!-- Gli elenchi ai tetti veri del servizio. Serve a guardare gli edge
                case invece di descriverli, ed esiste solo nella demo. -->
@@ -462,7 +462,7 @@ function ask(personId: string) {
 .pwc-person.is-deciding { grid-template-columns: 36px minmax(0, 1fr) auto; }
 .pwc-person.is-deciding .pwc-person__actions { grid-column: 2 / -1; justify-self: start; }
 
-/* "In gara adesso" accanto al nickname: dice perche' vale la pena guardare
+/* "In pista" accanto al nickname: dice perche' vale la pena guardare
    quella persona proprio ora, senza aggiungere una colonna. */
 .pwc-live-dot {
   display: inline-flex;

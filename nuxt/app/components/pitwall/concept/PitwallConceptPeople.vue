@@ -177,7 +177,7 @@ function chipClass(link: PitwallConceptLink): string {
           <span
             v-if="racingIds.includes(link.personId)"
             class="pwc-live-dot"
-          >in gara adesso</span>
+          >in pista</span>
         </strong>
 
         <!-- La scadenza e' un bottone solo per chi la possiede: dall'altro

@@ -24,6 +24,7 @@ import { isPitwallRoomInvited, type PitwallRoom } from '~/services/pitwall/pitwa
 import { pitwallClockFromExpiry, pitwallExpiryFromClock } from '~/services/pitwall/pitwallLink'
 import type { PitwallIncomingRequest, PitwallOutgoingLink } from '~/services/pitwall/pitwallEngineerService'
 import { searchPitwallConceptDirectory } from '~/utils/pitwallConcept'
+import { formatCarName, formatTrackName } from '~/utils/telemetryFormat'
 import type {
   PitwallConceptDirection,
   PitwallConceptLink,
@@ -74,6 +75,9 @@ export function linkFromIncoming(request: PitwallIncomingRequest, nowMs: number)
 }
 
 export const NOTICE_PREFIX = { request: 'req:', invite: 'inv:', granted: 'grant:' } as const
+
+/** Riga di una persona in pista di cui non vediamo ancora la stanza. */
+export const DRIVER_ROW_PREFIX = 'driver:'
 
 function createLiveStore(): PitwallStore & { start: () => void, halt: () => void } {
   const { currentUser } = useFirebaseAuth()
@@ -174,9 +178,62 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   }
 
   const dismissedInvites = ref(loadSet(DISMISSED_INVITES_KEY))
-  const races = computed<PitwallConceptRace[]>(() => link.rooms.value
-    .filter(room => !dismissedInvites.value.has(room.roomId) || !isPitwallRoomInvited(room, uid()))
-    .map(toRace))
+
+  /**
+   * La gara aperta adesso da una persona, fra quelle che vedo.
+   *
+   * Le stanze non si chiudono mai: dello stesso pilota ne esistono tante,
+   * una per ogni sessione di sempre. Quella buona e' l'ultima aperta e non
+   * chiusa; le altre sono memoria, non un posto dove entrare.
+   */
+  function roomOfDriver(driverUid: string): PitwallRoom | null {
+    return link.rooms.value
+      .filter(room => !room.closedAt && (room.hostUid === driverUid || room.memberUids.includes(driverUid)))
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null
+  }
+
+  /**
+   * Chi e' in pista adesso: una riga per persona, non per stanza.
+   *
+   * Elencare le stanze rispondeva alla domanda sbagliata. Non si chiudono mai,
+   * quindi comparivano anche le sessioni di giorni prima, con lo stesso nome e
+   * la stessa pista; e di una stanza in cui non si e' entrati non si possono
+   * leggere i membri, percio' la viva e la morta si assomigliavano. La
+   * presenza di un pilota invece si legge sempre ed e' esattamente cio' che
+   * l'ingegnere cerca: chi posso assistere adesso. Chi smette sparisce da
+   * solo quando il suo battito invecchia.
+   */
+  const races = computed<PitwallConceptRace[]>(() => trust.outgoing.value
+    .filter(entry => entry.reachable)
+    .map((entry) => {
+      const room = roomOfDriver(entry.driverUid)
+      const selected = room != null && link.room.value?.roomId === room.roomId
+      const car = entry.session?.car ?? null
+      // La pista viene dalla presenza, non dalla stanza: la stanza porta
+      // quella del giorno in cui e' nata, la presenza quella di adesso.
+      const track = entry.session?.track ?? room?.track ?? null
+      return {
+        id: room?.roomId ?? `${DRIVER_ROW_PREFIX}${entry.driverUid}`,
+        carNumber: room?.raceNumber ?? 0,
+        carModel: car ? formatCarName(car) : room?.label ?? 'Vettura',
+        track: track ? formatTrackName(track) : '',
+        session: 'In pista',
+        hostId: entry.driverUid,
+        members: room ? membersOf(room, selected) : [],
+        reason: { kind: 'grant' as const, personId: entry.driverUid },
+        closed: false,
+        live: true,
+        // Senza stanza visibile non si entra: il PC del pilota non ci ha
+        // ancora aggiunti. Si dice, invece di offrire un bottone che fallisce.
+        joinable: room != null,
+      }
+    })
+    // Due persone che si dividono la stessa vettura sono una gara sola: la
+    // riga resta una, intestata a chi ospita la stanza. Due righe uguali che
+    // portano nello stesso pit stop sarebbero solo un doppione da capire.
+    .filter((race, index, all) => (
+      race.joinable === false || all.findIndex(other => other.id === race.id) === index
+    )))
   const selectedRace = computed<PitwallConceptRace | null>(() => (link.room.value ? toRace(link.room.value) : null))
 
   // ---- Avvisi ---------------------------------------------------------------
@@ -265,6 +322,12 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   }
   function selectRace(raceId: string): void { void link.selectRoom(raceId) }
   function enterRace(raceId: string): void {
+    if (raceId.startsWith(DRIVER_ROW_PREFIX)) {
+      // La persona e' in pista ma il suo PC non ci ha ancora messi fra gli
+      // invitati: dirlo e' meglio di un bottone che non porta da nessuna parte.
+      link.notice.value = 'È in pista, ma il suo PC non ti ha ancora aggiunto alla gara. Ci mette un minuto.'
+      return
+    }
     dismissedInvites.value.delete(raceId)
     saveSet(DISMISSED_INVITES_KEY, dismissedInvites.value)
     void link.selectRoom(raceId)
