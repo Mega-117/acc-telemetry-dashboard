@@ -244,18 +244,25 @@ describe('la gara del pilota, vista dal pilota', () => {
     expect(link.closedByService).toEqual(['vecchia'])
   })
 
+  it('la gara di un altro in cui sono entrato non e la mia: sono l ingegnere, non il pilota', () => {
+    // Visto da popo il 2026-09-04: membro della stanza di RICO117, si vedeva
+    // "La tua gara" con "il tuo PC l'ha gia' aggiunto".
+    link.rooms.value = [room({ hostUid: 'pilota', memberUids: ['pilota', 'me'] })]
+    expect(store.myRoom.value).toBeNull()
+  })
+
   it('senza una gara aperta si dice che non c e, invece di mostrare il nulla', () => {
     link.rooms.value = []
     expect(store.myRoom.value).toBeNull()
   })
 
   it('una gara chiusa non e piu la tua gara', () => {
-    link.rooms.value = [room({ memberUids: ['me'], closedAt: '2026-09-03T12:00:00.000Z' })]
+    link.rooms.value = [room({ hostUid: 'me', memberUids: ['me'], closedAt: '2026-09-03T12:00:00.000Z' })]
     expect(store.myRoom.value).toBeNull()
   })
 
   it('dopo due timbri persi si dice dormiente, invece di farla sembrare viva', () => {
-    const mia = room({ memberUids: ['me'], createdAt: '2026-09-01T09:00:00.000Z', updatedAt: '2026-09-01T09:00:00.000Z' })
+    const mia = room({ hostUid: 'me', memberUids: ['me'], createdAt: '2026-09-01T09:00:00.000Z', updatedAt: '2026-09-01T09:00:00.000Z' })
     link.rooms.value = [{ ...mia, lastLiveAtMs: NOW }]
     expect(store.myRoom.value?.state).toBe('live')
 
@@ -266,7 +273,7 @@ describe('la gara del pilota, vista dal pilota', () => {
   it('chi ha il volante lo si dice solo della gara che si sta guardando in diretta', () => {
     // Altrove sarebbe una deduzione da un elenco di identificativi: meglio non
     // dirlo che dirlo a caso.
-    const mia = room({ memberUids: ['me'], lastLiveAtMs: NOW })
+    const mia = room({ hostUid: 'me', memberUids: ['me'], lastLiveAtMs: NOW })
     link.rooms.value = [mia]
     link.executor.value = { executor: { uid: 'me' }, reason: 'ready', conflicting: [] }
     expect(store.myRoom.value?.drivingId).toBeNull()

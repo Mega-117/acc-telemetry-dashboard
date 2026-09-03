@@ -273,7 +273,13 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   const myRoom = computed<PitwallConceptMyRoom | null>(() => {
     const me = uid()
     if (!me) return null
-    const room = roomOfDriver(me)
+    // "La tua gara" e' quella della vettura che il **tuo** PC ha aperto: la
+    // stanza di cui sei host. Esserne membro non basta - un ingegnere entrato
+    // nella gara di un pilota se la vedeva presentata come sua, con tanto di
+    // "il tuo PC l'ha gia' aggiunto" (visto da popo il 2026-09-04).
+    const room = link.rooms.value
+      .filter(candidate => !candidate.closedAt && candidate.hostUid === me)
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null
     if (!room) return null
     const selected = link.room.value?.roomId === room.roomId
     return {
