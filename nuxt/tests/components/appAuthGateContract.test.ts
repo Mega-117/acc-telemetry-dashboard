@@ -120,18 +120,25 @@ describe('App protected runtime route contract', () => {
     expect(runtimePage).not.toMatch(/firebase/i)
   })
 
-  it('sospende tutti i job cloud della shell mentre il Pit Wall Concept e attivo', () => {
+  it('avvia e spegne gli ascolti globali (feed, Pit Wall) insieme alla dashboard di un utente che puo entrare', () => {
+    // PIP-360: la vista nuova del Pit Wall e' reale, non una sandbox: non
+    // esiste piu' uno stato che spegne i job cloud. Lo store del Pit Wall vive
+    // qui, parte con la dashboard e si ferma al logout, come il feed attivita'.
     const ownerSource = readFileSync(
       fileURLToPath(new URL('../../app/composables/usePrimaryCloudOwner.ts', import.meta.url)),
       'utf8',
     )
 
-    expect(appSource).toContain("import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'")
-    expect(appSource).toContain("normalizedRoutePath.value === '/pitwall' && pitwallConceptActive.value")
+    expect(appSource).not.toContain('usePitwallConceptMode')
+    expect(appSource).not.toContain('isPitwallConceptSandbox')
+    expect(appSource).toContain("import { usePitwallLiveStore } from '~/composables/usePitwallLiveStore'")
+    expect(appSource).toContain('providePitwallStore(pitwallStore)')
     expect(appSource).toContain('cloudEnabled: cloudJobsAllowed')
     expect(appSource).toContain('&& cloudJobsAllowed.value')
-    expect(appSource).toContain('[isPitwallConceptSandbox, appState, currentUser, canEnterApp]')
-    expect(appSource).toContain("if (sandbox || state !== 'dashboard' || !user || !canEnter)")
+    expect(appSource).toContain('[appState, currentUser, canEnterApp]')
+    expect(appSource).toContain("if (state !== 'dashboard' || !user || !canEnter)")
+    expect(appSource).toContain('pitwallStore.halt()')
+    expect(appSource).toContain('pitwallStore.start()')
     expect(appSource).not.toContain("appState.value = 'dashboard'\n    listenToActivitiesTracked")
     expect(ownerSource).toContain('const cloudEnabled = computed(() => options.cloudEnabled?.value ?? true)')
     expect(ownerSource).toContain('if (!cloudEnabled.value) return false')
