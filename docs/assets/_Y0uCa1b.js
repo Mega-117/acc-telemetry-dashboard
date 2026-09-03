@@ -1,1 +1,0 @@
-import{as as s,b8 as o,bI as r,z as u,b2 as a}from"./c3FtZBPy.js";const n=Symbol("pilotContext");function c(e){const t=o(e);return a(n,t),t}function i(){return s(n,o(null))}function p(){const{currentUser:e}=r(),t=i();return u(()=>t.value||e.value?.uid||null)}export{p as a,c as p,i as u};
