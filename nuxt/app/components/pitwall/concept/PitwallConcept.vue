@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Prototipo navigabile del Pit Wall (PIP-369). Solo stato locale e fixture:
-// nessun servizio reale, nessun Firebase, nessun IPC.
+// La Pit Wall (PIP-369, PIP-360). Legge lo store fornito dall'antenato: quello
+// vero dall'app, quello del prototipo nella demo. I componenti non sanno quale.
 //
 // Due sole schermate, perche' l'utente ha due sole domande:
 //   home -> "chi posso assistere adesso?"   live -> "cosa mando alla macchina?"
@@ -17,7 +17,7 @@ import PitwallConceptLive from "~/components/pitwall/concept/PitwallConceptLive.
 import PitwallConceptPeople from "~/components/pitwall/concept/PitwallConceptPeople.vue";
 import PitwallConceptRaces from "~/components/pitwall/concept/PitwallConceptRaces.vue";
 import PitwallConceptSearch from "~/components/pitwall/concept/PitwallConceptSearch.vue";
-import { usePitwallConceptState } from "~/composables/usePitwallConceptState";
+import { usePitwallStore } from "~/composables/usePitwallStore";
 import {
   PITWALL_CONCEPT_DEFAULT_EXPIRY,
   normalizePitwallConceptExpiry,
@@ -31,17 +31,21 @@ import type {
 /** I due versi, nell'ordine in cui si leggono. */
 const DIRECTIONS: PitwallConceptDirection[] = ["assist", "assisted"];
 
-const state = usePitwallConceptState();
+const state = usePitwallStore();
 
 const screen = ref<PitwallConceptScreen>("home");
-const search = ref("");
 
 // Autorizzare qualcuno chiede una cosa sola: per quanto vale. Prima le due
 // durate, e solo chi sceglie "solo per oggi" vede anche l'orario.
 const grant = ref<{ personId: string; step: "duration" | "time"; time: string } | null>(null);
 
 const races = computed(() => state.races.value);
-const found = computed(() => state.search(search.value));
+const people = computed(() => state.people.value);
+const search = computed({
+  get: () => state.searchQuery.value,
+  set: (value: string) => { state.searchQuery.value = value; },
+});
+const found = computed(() => state.found.value);
 
 /** Chi e' dentro una gara viva adesso: la pastiglia accanto al nickname. */
 const racingIds = computed(() => {
@@ -109,6 +113,23 @@ function ask(personId: string) {
     class="pwc"
     data-testid="pitwall-concept"
   >
+    <!-- I servizi parlano qui, in italiano: un errore di rete o una risposta
+         del server non restano muti. -->
+    <p
+      v-if="state.error.value"
+      class="pwc-flash is-error"
+      role="alert"
+    >
+      {{ state.error.value }}
+    </p>
+    <p
+      v-else-if="state.notice.value"
+      class="pwc-flash"
+      role="status"
+    >
+      {{ state.notice.value }}
+    </p>
+
     <!-- HOME: chi posso assistere adesso -->
     <div
       v-if="screen === 'home'"
@@ -120,8 +141,9 @@ function ask(personId: string) {
             In gara adesso
           </h2>
           <!-- Gli elenchi ai tetti veri del servizio. Serve a guardare gli edge
-               case invece di descriverli, e vive solo dentro il Concept. -->
+               case invece di descriverli, ed esiste solo nella demo. -->
           <button
+            v-if="state.demo"
             type="button"
             class="pwc-link-btn"
             :class="{ 'is-on': state.crowded.value }"
@@ -141,6 +163,8 @@ function ask(personId: string) {
 
         <PitwallConceptRaces
           :races="races"
+          :people="people"
+          :me-id="state.meId.value"
           @enter="enter"
         />
       </section>
@@ -223,7 +247,9 @@ function ask(personId: string) {
         :key="side"
         :direction="side"
         :links="state.links.value[side]"
+        :people="people"
         :racing-ids="racingIds"
+        :can-edit="state.canEditExpiry(side)"
         @remove="state.removeLink(side, $event)"
         @cancel="state.cancelRequest($event)"
         @decide="(personId, decision, until) => state.decideRequest(personId, decision, until)"
@@ -287,6 +313,18 @@ function ask(personId: string) {
   outline: 2px solid $racing-orange;
   outline-offset: 2px;
 }
+
+/* La riga dei servizi: sopra tutto, e sparisce da sola quando non c'e' niente. */
+.pwc-flash {
+  width: min(1180px, 100%);
+  margin: 0 auto 20px;
+  padding: 10px 14px;
+  border: 1px solid rgba(74, 222, 128, 0.45);
+  border-radius: 8px;
+  color: #4ade80;
+  font-size: 13px;
+}
+.pwc-flash.is-error { border-color: rgba(239, 68, 68, 0.5); color: #ff625c; }
 
 /* Elementi condivisi */
 .pwc-btn {

@@ -73,11 +73,17 @@ export interface PitwallConceptRace {
   reason: PitwallConceptReason
   /** Chiusa: resta leggibile, non accetta piu' strategie. */
   closed: boolean
+  /**
+   * Abbiamo la presenza in diretta di chi c'e' dentro. Senza, "nessuno al
+   * volante" sarebbe una deduzione da un elenco di soli identificativi: non si
+   * dice, si dice "entra per vedere".
+   */
+  live?: boolean
 }
 
 /** Qualcosa da decidere, o da sapere. */
 export interface PitwallConceptNotice {
-  id: number
+  id: string
   kind: PitwallConceptNoticeKind
   personId: string
   /** Solo per gli inviti: a quale gara. */
@@ -181,9 +187,9 @@ export const PITWALL_CONCEPT_RACES: PitwallConceptRace[] = [
  * rispondere da una parte deve chiudere anche l'altra.
  */
 export const PITWALL_CONCEPT_NOTICES: PitwallConceptNotice[] = [
-  { id: 1, kind: 'request', personId: 'paolo' },
-  { id: 2, kind: 'invite', personId: 'marco', raceId: 'race-12' },
-  { id: 3, kind: 'granted', personId: 'mario' },
+  { id: 'req:paolo', kind: 'request', personId: 'paolo' },
+  { id: 'inv:race-12', kind: 'invite', personId: 'marco', raceId: 'race-12' },
+  { id: 'grant:mario', kind: 'granted', personId: 'mario' },
 ]
 
 export interface PitwallConceptScenario {
@@ -267,7 +273,7 @@ export function buildPitwallConceptCrowd(
     notices: [
       ...PITWALL_CONCEPT_NOTICES,
       ...Array.from({ length: 9 }, (_unused, index) => ({
-        id: 100 + index,
+        id: `grant:${id(index + 40)}`,
         kind: 'granted' as PitwallConceptNoticeKind,
         personId: id(index + 40),
       })),

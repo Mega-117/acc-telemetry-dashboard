@@ -292,12 +292,13 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   async function decide(
     requesterUid: string,
     decision: 'granted' | 'revoked',
-    scope: PitwallGrantScope = 'always'
+    scope: PitwallGrantScope = 'always',
+    expiresAtMs: number | null = null
   ): Promise<void> {
     const engineer = service()
     if (!engineer) return
     try {
-      const result = await engineer.decideRequest(requesterUid, decision, scope)
+      const result = await engineer.decideRequest(requesterUid, decision, scope, expiresAtMs)
       if (!result.ok) {
         rawError.value = result.reason
         return
@@ -314,11 +315,15 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   }
 
   /** Autorizza qualcuno in anticipo, senza attendere che chieda. */
-  async function preAuthorise(uid: string, scope: PitwallGrantScope = 'always'): Promise<void> {
+  async function preAuthorise(
+    uid: string,
+    scope: PitwallGrantScope = 'always',
+    expiresAtMs: number | null = null
+  ): Promise<void> {
     const engineer = service()
     if (!engineer) return
     try {
-      const result = await engineer.preAuthorise(uid, scope)
+      const result = await engineer.preAuthorise(uid, scope, expiresAtMs)
       if (!result.ok) {
         rawError.value = result.reason
         return
@@ -329,6 +334,23 @@ export function usePitwallLink(options: PitwallLinkOptions) {
       if (!stopIncomingWatch) await refreshIncoming()
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Pre-autorizzazione non riuscita.'
+    }
+  }
+
+  /** Cambia l'orario di un "solo per oggi" gia' concesso: solo il pilota puo'. */
+  async function setExpiry(uid: string, expiresAtMs: number): Promise<void> {
+    const engineer = service()
+    if (!engineer) return
+    try {
+      const result = await engineer.updateGrantExpiry(uid, expiresAtMs)
+      if (!result.ok) {
+        rawError.value = result.reason
+        return
+      }
+      notice.value = 'Scadenza aggiornata.'
+      if (!stopIncomingWatch) await refreshIncoming()
+    } catch (error) {
+      rawError.value = (error as Error)?.message || 'Scadenza non aggiornata.'
     }
   }
 
@@ -410,5 +432,6 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     watchLive,
     decide,
     preAuthorise,
+    setExpiry,
   }
 }

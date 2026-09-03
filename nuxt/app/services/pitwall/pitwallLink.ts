@@ -123,6 +123,33 @@ export function isPitwallGrantUsable(
     && (grant!.expiresAtMs == null || grant!.expiresAtMs > nowMs)
 }
 
+/**
+ * "Fino alle 23:40" in millisecondi: oggi, o domani se l'orario e' gia'
+ * passato. `null` se non e' un orario.
+ *
+ * Esiste perche' l'utente sceglie un'ora, non una durata: "solo per oggi" con
+ * una scadenza fissa di dodici ore diceva una cosa a schermo e ne faceva
+ * un'altra nel database.
+ */
+export function pitwallExpiryFromClock(clock: string, nowMs: number = Date.now()): number | null {
+  const match = /^(\d{1,2}):(\d{2})$/.exec(clock.trim())
+  if (!match) return null
+  const hours = Number(match[1])
+  const minutes = Number(match[2])
+  if (hours > 23 || minutes > 59) return null
+  const at = new Date(nowMs)
+  at.setHours(hours, minutes, 0, 0)
+  if (at.getTime() <= nowMs) at.setDate(at.getDate() + 1)
+  return at.getTime()
+}
+
+/** L'orario locale "HH:MM" di una scadenza, per rimetterlo in un campo. */
+export function pitwallClockFromExpiry(expiresAtMs: number | null | undefined): string | null {
+  if (expiresAtMs == null || !Number.isFinite(expiresAtMs)) return null
+  const at = new Date(expiresAtMs)
+  return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
+}
+
 /** Come si racconta la portata di un permesso, senza gergo. */
 export function describePitwallGrantScope(grant: Pick<PitwallGrant, 'scope' | 'expiresAtMs'> | null | undefined): string {
   if (!grant) return ''

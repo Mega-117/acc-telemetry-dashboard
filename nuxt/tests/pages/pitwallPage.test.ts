@@ -25,6 +25,12 @@ const conceptState = read('app/composables/usePitwallConceptState.ts')
 const conceptModel = read('app/utils/pitwallConcept.ts')
 const conceptFixtures = read('app/utils/pitwallConceptModel.ts')
 const topBar = read('app/components/layout/TopBar.vue')
+// PIP-360: la logica dell'ordine vive nel controller, condiviso da Legacy e
+// Pit Wall; i componenti leggono la presa `PitwallStore`, fornita dall'app.
+const controller = read('app/composables/usePitwallController.ts')
+const store = read('app/composables/usePitwallStore.ts')
+const liveStore = read('app/composables/usePitwallLiveStore.ts')
+const appRoot = read('app/app.vue')
 
 describe('Pitwall layout approvato', () => {
   it('usa la fascia gara a tre sezioni senza accordion', () => {
@@ -160,8 +166,8 @@ describe('Pitwall pressioni e sagoma vettura', () => {
   })
 
   it('conserva limiti, incremento e accessibilità dei controlli', () => {
-    expect(panel).toContain('stepPressure(pressures.value[wheel], direction)')
-    expect(panel).toContain('clampPressure(value)')
+    expect(controller).toContain('stepPressure(pressures.value[wheel], direction)')
+    expect(controller).toContain('clampPressure(value)')
     expect(valueField).toContain(':aria-valuemin="min"')
     expect(valueField).toContain(':aria-valuemax="max"')
     expect(valueField).toContain(':aria-valuenow="value"')
@@ -170,23 +176,26 @@ describe('Pitwall pressioni e sagoma vettura', () => {
 
 describe('Pitwall ordine reale e MFD onesto', () => {
   it('invia davvero solo i campi conosciuti dal runtime', () => {
-    expect(panel).toContain('await link.sendPlan(planPayload())')
+    expect(controller).toContain('link.sendPlan(planPayload())')
     for (const field of ['fuelLiters', 'tyreSet', 'pressures', 'compound', 'changeTyres', 'repairBodywork', 'repairSuspension', 'driverId']) {
-      expect(panel).toContain(`payload.${field}`)
+      expect(controller).toContain(`payload.${field}`)
     }
+    // La Legacy non ha una seconda copia della logica: la importa.
+    expect(panel).toContain('usePitwallController(link, trust)')
+    expect(panel).not.toContain('function planPayload')
   })
 
   it('le caselle hanno tre stati: accendi, spegni, non toccare', () => {
     // Con una casella booleana "vuoto" voleva dire "non toccare", quindi
     // spegnere una riparazione era impossibile e cio' che l'ingegnere
     // impostava non arrivava fedelmente in macchina.
-    expect(panel).toContain('const changeTyres = ref<boolean | null>(null)')
-    expect(panel).toContain('changeTyres: changeTyres.value')
+    expect(controller).toContain('const changeTyres = ref<boolean | null>(null)')
+    expect(controller).toContain('changeTyres: changeTyres.value')
     expect(panel).toContain('v-model="changeTyres"')
     // Anche lo spento viaggia nell'ordine: `false` e' una richiesta, `null` no.
-    expect(panel).toContain('if (changeTyres.value != null) payload.changeTyres = changeTyres.value')
+    expect(controller).toContain('if (changeTyres.value != null) payload.changeTyres = changeTyres.value')
     for (const field of ['brakes', 'repairSuspension', 'repairBodywork']) {
-      expect(panel).toContain(`const ${field} = ref<boolean | null>(null)`)
+      expect(controller).toContain(`const ${field} = ref<boolean | null>(null)`)
       expect(panel).toContain(`v-model="${field}"`)
     }
   })
@@ -194,17 +203,18 @@ describe('Pitwall ordine reale e MFD onesto', () => {
   it('usa dati macchina e equipaggio da chi e al volante, non da un pilota scelto', () => {
     // La fotografia della vettura la vede solo chi guida: prenderla da un
     // "pilota assistito" fisso significherebbe mostrare dati di un PC spento.
-    expect(panel).toContain('link.carSnapshot.value')
-    expect(panel).toContain('session.value?.strategy')
-    expect(panel).toContain('session.value?.crew')
+    expect(controller).toContain('link.carSnapshot.value')
+    expect(controller).toContain('session.value?.strategy')
+    expect(controller).toContain('session.value?.crew')
     expect(panel).not.toContain('MOCK_CAR')
+    expect(controller).not.toContain('MOCK_CAR')
     expect(carCard).not.toContain('Dati finti')
   })
 
   it('spegne l invio quando l ordine non potrebbe partire, e dice perche', () => {
     expect(panel).toContain(':can-send="sendEnabled"')
     expect(panel).toContain(':blocked-reason="blockedReason"')
-    expect(panel).toContain('hasChanges.value && link.canSend.value')
+    expect(controller).toContain('hasChanges.value && link.canSend.value')
     expect(orderBar).toContain('orderbar__blocked')
   })
 
@@ -233,7 +243,7 @@ describe('Pitwall ordine reale e MFD onesto', () => {
     expect(orderBar).toContain('Tempo stop stimato')
     expect(orderBar).toContain('INVIA ALLA MACCHINA')
     expect(orderBar).toContain(':disabled="!canSend"')
-    expect(panel).toContain('estimatePitStop(plan.value, car.value)')
+    expect(controller).toContain('estimatePitStop(plan.value, car.value)')
   })
 
   it('non parla direttamente con Electron dal browser', () => {
@@ -265,14 +275,29 @@ describe('Pitwall wiring', () => {
     expect(panel).toContain("from '~/utils/pitwallPresentation'")
   })
 
-  it('mantiene la vista classica come default e isola il Concept', () => {
-    expect(page).toContain('PitwallPage v-if="!conceptActive"')
+  it('usa la vista nuova come default e tiene la vecchia in una scheda Legacy', () => {
+    // PIP-360: la Pit Wall e' la vista nuova, cablata allo store vero fornito
+    // dall'app. La pagina precedente resta intatta dietro "Legacy".
+    expect(page).toContain('<PitwallPage v-if="legacy"')
     expect(page).toContain('<PitwallConcept v-else')
-    expect(page).toContain('Classica')
-    expect(page).toContain('Concept')
-    expect(page).toContain('onBeforeUnmount(() => setActive(false))')
-    expect(concept).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
-    expect(conceptLive).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
+    expect(page).toContain('Pit Wall')
+    expect(page).toContain('Legacy')
+    expect(page).not.toContain('Classica')
+    // Le fixture del prototipo vivono solo dietro il cancello dev: nella build
+    // utente la vista nuova parla con Firestore e con il PC del pilota.
+    expect(page).toContain("route.query.demo === '1' && canUseDevTools()")
+    expect(page).toContain('if (demo.value) providePitwallStore(usePitwallConceptState())')
+    expect(appRoot).toContain('providePitwallStore(pitwallStore)')
+    expect(appRoot).toContain('pitwallStore.start()')
+    expect(appRoot).toContain('pitwallStore.halt()')
+    expect(appRoot).not.toContain('isPitwallConceptSandbox')
+    // I componenti non sanno quale presa hanno dietro: nessun servizio diretto.
+    for (const source of [concept, conceptLive, conceptPitStop, conceptBell, conceptPeople, conceptRaces, conceptWall]) {
+      expect(source).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|usePitwallConceptState|window\.electron|ipcRenderer|\$fetch|useFetch/)
+    }
+    expect(store).toContain('export interface PitwallStore')
+    expect(store).toContain('export function usePitwallStore(): PitwallStore')
+    expect(liveStore).toContain('usePitwallController(link, trust)')
   })
 
   it('riduce il Concept a due sole schermate: la home e la gara', () => {
@@ -336,16 +361,27 @@ describe('Pitwall wiring', () => {
       cursore = trovato
     }
     expect(conceptPitStop).not.toContain('Limitatore')
-    // Il tempo non ha una seconda formula: e' la stessa della vista classica.
-    expect(conceptPitStop).toContain('estimatePitStop')
+    // Il tempo non ha una seconda formula: e' quella del controller, la stessa
+    // della vista Legacy.
+    expect(conceptPitStop).toContain('stop.stopEstimate.value.seconds')
     expect(conceptPitStop).toContain('formatStopDuration')
+    expect(controller).toContain('estimatePitStop')
   })
 
   it('legge la colonna In macchina da una fonte sola invece che dal template', () => {
     // Prima "25.0", "Dry" e "0 L" erano scritti a mano nelle celle: due copie
-    // dello stesso stato che potevano divergere.
-    expect(conceptPitStop).toContain('const car = Object.freeze({')
-    for (const cella of ['{{ car.preset ?? "—" }}', '{{ car.fuel }} L', '{{ car.tyreSet }}', '{{ car.compound }}', '{{ car.pressure.toFixed(1) }}', '{{ yesNo(car.suspension) }}', '{{ yesNo(car.bodywork) }}']) {
+    // dello stesso stato che potevano divergere. Ora la fonte e' la fotografia
+    // della vettura nello store, e nient'altro.
+    expect(conceptPitStop).not.toContain('Object.freeze(')
+    for (const cella of [
+      '{{ stop.car.value.pitStrategy ?? "—" }}',
+      '{{ clampFuel(stop.car.value.fuelLiters) }} L',
+      '{{ clampTyreSet(stop.car.value.tyreSet) }}',
+      'stop.car.value.compound === "wet" ? "Wet" : "Dry"',
+      '{{ stop.car.value.pressures[wheel].toFixed(1) }}',
+      '{{ yesNo(stop.car.value.repairSuspension) }}',
+      '{{ yesNo(stop.car.value.repairBodywork) }}',
+    ]) {
       expect(conceptPitStop).toContain(cella)
     }
   })
@@ -364,9 +400,10 @@ describe('Pitwall wiring', () => {
       expect(conceptModel).toContain(parola)
       expect(carCard).toContain(parola)
     }
-    // La freschezza si puo' alternare: e' l'unico modo di guardare "dato vecchio".
+    // La freschezza viene dalla presenza vera del pilota, non da un interruttore.
     expect(conceptPitStop).toContain('pitwallConceptFreshness')
-    expect(conceptPitStop).toContain('carAgeSeconds')
+    expect(conceptPitStop).toContain('stop.presenceAgeSeconds.value')
+    expect(conceptPitStop).toContain('if (!stop.hasCarSnapshot.value) return "unavailable"')
   })
 
   it('usa le caselle a tre stati della Classica, non spunte booleane', () => {
@@ -378,20 +415,27 @@ describe('Pitwall wiring', () => {
     expect(conceptPitStop).not.toContain('type="checkbox"')
     expect(conceptPitStop).toContain('formatToggle')
     // Il preset parte da "Off": quella riga riscrive tutto in blocco e non si
-    // tocca per sbaglio.
-    expect(conceptPitStop).toContain('preset: null as number | null')
-    expect(conceptPitStop).toContain('strategy.preset ?? "Off"')
+    // tocca per sbaglio, e non parte mai per inerzia.
+    expect(controller).toContain('const pitStrategy = ref<number | null>(null)')
+    expect(conceptPitStop).toContain('stop.pitStrategy.value ?? "Off"')
+    expect(controller).toContain('if (pitStrategy.value != null) payload.pitStrategy = pitStrategy.value')
     // Un campo lasciato a "non toccare" non e' una differenza dalla macchina.
-    expect(conceptPitStop).toContain('strategy.tyres != null && strategy.tyres !== car.tyres')
+    expect(controller).toContain('if (changeTyres.value != null) payload.changeTyres = changeTyres.value')
   })
 
   it('non chiama esito il momento in cui hai premuto Invia', () => {
+    // Lo stato lo scrive il PC del pilota, non il bottone: la vista lo legge.
     expect(conceptOrder).toContain('describePitwallConceptOrderStatus')
-    expect(conceptPitStop).toContain("orderStatus.value = \"applying\"")
+    expect(conceptOrder).toContain('props.status === "pending" || props.status === "applying"')
+    expect(conceptPitStop).toContain(':status="stop.orderStatus.value"')
+    expect(conceptPitStop).not.toContain('orderStatus.value =')
     expect(conceptOrder).toContain('class="pwc-order"')
-    for (const stato of ['In corso…', 'Applicata in parte', 'Rifiutata', 'Scaduta']) {
+    // Gli stati sono i sei veri che il PC del pilota scrive: niente "Scaduta"
+    // inventata dal prototipo.
+    for (const stato of ['Inviata', 'In corso…', 'Applicata', 'Applicata in parte', 'Non riuscita', 'Rifiutata']) {
       expect(conceptModel).toContain(stato)
     }
+    expect(conceptModel).not.toContain('Scaduta')
     // "Prima accettata vince": due strategie non si fondono mai.
     expect(conceptModel).toContain('vince la sua, non si fondono')
   })
@@ -402,7 +446,7 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('@enter="enter"')
     expect(conceptRaces).toContain('Entra')
     expect(conceptRaces).toContain('class="pwc-race__why"')
-    expect(conceptRaces).toContain('describePitwallConceptReason(race.reason)')
+    expect(conceptRaces).toContain('describePitwallConceptReason(race.reason, props.people)')
     expect(conceptModel).toContain('ti ha autorizzato.')
     expect(conceptRaces).toContain('Al volante')
     expect(conceptRaces).toContain('Al muretto')
@@ -414,7 +458,11 @@ describe('Pitwall wiring', () => {
   it('distingue la gara in cui sei da quella in cui sei solo invitato', () => {
     // `amInvited` esisteva gia' nel dominio e non era usato da nessun template:
     // senza, l'unico stato visibile era "sei dentro" anche quando non lo eri.
-    expect(conceptRaces).toContain('pitwallConceptAmInvited(race)')
+    // Il punto di vista e' quello di chi guarda, non di un utente fisso.
+    expect(conceptRaces).toContain('pitwallConceptAmInvited(race, me.value)')
+    expect(conceptRaces).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
+    expect(conceptWall).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
+    expect(conceptLive).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
     expect(conceptRaces).toContain('Non sei ancora entrato.')
     expect(conceptRaces).toContain('.pwc-race.is-invited')
     expect(conceptRaces).toContain('.pwc-race.is-closed')
@@ -578,8 +626,8 @@ describe('Pitwall wiring', () => {
     // Chi ha aperto la gara non si tocca: senza di lui nessuno potrebbe gestirla.
     expect(conceptModel).toContain('function pitwallConceptCanRemove')
     expect(conceptModel).toContain('member.personId !== race?.hostId')
-    expect(conceptWall).toContain('pitwallConceptCanRemove(race, member)')
-    expect(conceptWall).toContain('pitwallConceptCanPromote(race, member)')
+    expect(conceptWall).toContain('pitwallConceptCanRemove(race, member, me)')
+    expect(conceptWall).toContain('pitwallConceptCanPromote(race, member, me)')
   })
 
   it('invita alla gara con la stessa ricerca, invece di due nomi scritti a mano', () => {
@@ -591,7 +639,11 @@ describe('Pitwall wiring', () => {
   })
 
   it('non finge di poter inviare: dice quale cosa lo blocca', () => {
-    expect(conceptPitStop).toContain('pitwallConceptSendBlock')
+    // Il motivo lo decide chi conosce lo stato: il mock con la sua regola, il
+    // vero con il gate del controller. La vista lo mostra e basta.
+    expect(conceptState).toContain('pitwallConceptSendBlock')
+    expect(controller).toContain('const blockedReason = computed')
+    expect(conceptPitStop).toContain(':blocked="stop.blockedReason.value"')
     expect(conceptOrder).toContain(':disabled="Boolean(blocked)"')
     expect(conceptOrder).toContain('class="pwc-blocked"')
     for (const reason of [
@@ -609,10 +661,13 @@ describe('Pitwall wiring', () => {
   it('tiene distinti i due esiti di campo invece di appiattirli in un fatto', () => {
     // ACC rilegge solo una parte dei campi: dichiarare gli altri "verificati"
     // sarebbe un falso verde, ed e' il principio che regge tutto il Pit Wall.
-    expect(conceptPitStop).toContain('const READ_BACK = new Set(')
+    expect(conceptState).toContain('const READ_BACK = new Set(')
     expect(conceptOrder).toContain('is-verified')
     expect(conceptOrder).toContain('is-selected')
-    expect(conceptPitStop).toContain('dati macchina di {{ carAgeSeconds }}s fa')
+    // L'esito per campo e' la stessa riga del controller, senza ricopiarla.
+    expect(conceptOrder).toContain('outcomes: PitwallFieldOutcomeRow[]')
+    expect(conceptPitStop).toContain(':outcomes="stop.fieldOutcomes.value"')
+    expect(conceptPitStop).toContain('`Dati macchina di ${stop.presenceAgeSeconds.value}s fa`')
   })
 
   it('tiene un solo foglio di stile con ritmo e allineamenti dichiarati', () => {
@@ -643,8 +698,12 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('document.documentElement.scrollTop = 0')
   })
 
-  it('mostra la campanella mock globale solo nel Concept', () => {
-    expect(topBar).toContain('<PitwallConceptBell v-if="pitwallConceptActive"')
+  it('monta la campanella sempre, e la scheda PITWALL conta le cose da decidere', () => {
+    // PIP-360: la campanella e' parte dell'interfaccia, non del prototipo.
+    expect(topBar).toContain('<PitwallConceptBell />')
+    expect(topBar).not.toContain('pitwallConceptActive')
+    expect(tabsBar).toContain('data-testid="pitwall-tab-badge"')
+    expect(tabsBar).toContain("tab.id === 'pitwall' && pitwallPending")
     expect(conceptBell).toContain('describePitwallConceptNotice')
     expect(conceptBell).toContain('is-accept')
     expect(conceptBell).toContain('is-reject')
@@ -657,7 +716,7 @@ describe('Pitwall wiring', () => {
   it('accettare dalla campanella fa la cosa promessa, non svuota una lista', () => {
     // Il difetto vecchio: accetta e rifiuta chiamavano entrambi `remove(id)`.
     // Ora gli avvisi vivono nello stesso stato degli elenchi e della gara.
-    expect(conceptBell).toContain('usePitwallConceptState')
+    expect(conceptBell).toContain('usePitwallStore()')
     expect(conceptBell).toContain('state.acceptNotice(notice.id')
     expect(conceptBell).toContain('state.rejectNotice(notice.id)')
     expect(conceptBell).not.toContain('function remove(')

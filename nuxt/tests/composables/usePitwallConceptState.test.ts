@@ -126,37 +126,43 @@ describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
     // rifiutare toglievano soltanto la riga dalla campanella.
     expect(state.pendingNoticeCount.value).toBe(3)
     expect(access(state, 'assisted', 'paolo')).toBe('incoming')
-    state.acceptNotice(1, 'always')
+    state.acceptNotice('req:paolo', 'always')
     expect(access(state, 'assisted', 'paolo')).toBe('always')
     expect(state.pendingNoticeCount.value).toBe(2)
 
-    state.acceptNotice(2)
+    state.acceptNotice('inv:race-12')
     expect(pitwallConceptAmMember(state.races.value[1]!)).toBe(true)
     expect(state.pendingNoticeCount.value).toBe(1)
 
-    state.dismissNotice(3)
+    state.dismissNotice('grant:mario')
     expect(state.pendingNoticeCount.value).toBe(0)
   })
 
   it('rifiutare una richiesta la toglie anche dall elenco, non solo dalla campanella', () => {
     // Campanella ed elenco sono due facce della stessa richiesta: rispondere da
     // una parte deve chiudere anche l'altra, altrimenti resta un fantasma.
-    state.rejectNotice(1)
+    state.rejectNotice('req:paolo')
     expect(access(state, 'assisted', 'paolo')).toBeNull()
-    expect(state.notices.value.some(notice => notice.id === 1)).toBe(false)
+    expect(state.notices.value.some(notice => notice.id === 'req:paolo')).toBe(false)
   })
 
   it('non ripropone nella ricerca chi e gia in un elenco', () => {
-    expect(state.search('mar').entries.map(person => person.id)).toEqual(['gallo', 'martina'])
+    // La ricerca e' la stessa presa dello store vero: si scrive la query, il
+    // risultato arriva quando c'e'. Nel mock arriva subito.
+    const search = (query: string) => {
+      state.searchQuery.value = query
+      return state.found.value
+    }
+    expect(search('mar').entries.map(person => person.id)).toEqual(['gallo', 'martina'])
     state.askToAssist('gallo')
-    const after = state.search('mar')
+    const after = search('mar')
     expect(after.entries.map(person => person.id)).toEqual(['martina'])
     // Chi e' appena stato aggiunto non sparisce: passa fra quelli che ho gia'.
     expect(after.linked.map(person => person.id)).toContain('gallo')
-    expect(state.search('').state).toBe('idle')
+    expect(search('').state).toBe('idle')
     // Me stesso non sono mai un risultato, ne' fra gli aggiungibili ne' fra i
     // collegati: non ci si autorizza da soli.
-    const self = state.search(PITWALL_CONCEPT_CURRENT_USER_ID)
+    const self = search(PITWALL_CONCEPT_CURRENT_USER_ID)
     expect(self.entries).toEqual([])
     expect(self.linked).toEqual([])
   })

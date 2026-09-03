@@ -27,12 +27,15 @@ import {
   sortPitwallConceptLinks,
   splitPitwallConceptList,
 } from "~/utils/pitwallConcept";
-import type { PitwallConceptDirection, PitwallConceptLink } from "~/utils/pitwallConcept";
+import type { PitwallConceptDirection, PitwallConceptLink, PitwallConceptPerson } from "~/utils/pitwallConcept";
 
 const props = defineProps<{
   direction: PitwallConceptDirection;
   links: PitwallConceptLink[];
+  people: PitwallConceptPerson[];
   racingIds: string[];
+  /** La scadenza si tocca solo sui permessi che si posseggono. */
+  canEdit: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -53,14 +56,17 @@ const title = computed(() => (
   props.direction === "assist" ? "Posso assistere" : "Possono assistermi"
 ));
 
+const nick = (id: string) => pitwallConceptNicknameById(id, props.people);
+const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
+
 /** Il filtro compare solo quando serve: sotto la decina e' un campo in piu'. */
 const showFilter = computed(() => props.links.length >= PITWALL_CONCEPT_FILTER_FROM);
 
 const filtered = computed(() => {
-  const sorted = sortPitwallConceptLinks(props.links, props.racingIds);
+  const sorted = sortPitwallConceptLinks(props.links, props.racingIds, props.people);
   const needle = filter.value.trim();
   if (!needle) return sorted;
-  const allowed = new Set(filterPitwallConceptPeople(needle).map(person => person.id));
+  const allowed = new Set(filterPitwallConceptPeople(needle, props.people).map(person => person.id));
   return sorted.filter(link => allowed.has(link.personId));
 });
 
@@ -99,7 +105,7 @@ function confirmRemove(personId: string) {
 
 /** L'effetto detto a parole, dalla parte giusta: chi perde cosa. */
 function removeWarning(personId: string): string {
-  const who = pitwallConceptNicknameById(personId);
+  const who = nick(personId);
   return props.direction === "assisted"
     ? `${who} non vedrà più le tue gare e non potrà mandarti strategie.`
     : `Non vedrai più le gare di ${who}.`;
@@ -165,20 +171,22 @@ function chipClass(link: PitwallConceptLink): string {
         class="pwc-person"
         :class="{ 'is-deciding': link.access === 'incoming' }"
       >
-        <span class="pwc-avatar">{{ pitwallConceptInitialsById(link.personId) }}</span>
+        <span class="pwc-avatar">{{ initials(link.personId) }}</span>
         <strong class="pwc-person__name">
-          {{ pitwallConceptNicknameById(link.personId) }}
+          {{ nick(link.personId) }}
           <span
             v-if="racingIds.includes(link.personId)"
             class="pwc-live-dot"
           >in gara adesso</span>
         </strong>
 
+        <!-- La scadenza e' un bottone solo per chi la possiede: dall'altro
+             lato si legge e basta. -->
         <button
-          v-if="link.access === 'today'"
+          v-if="link.access === 'today' && canEdit"
           type="button"
           class="pwc-chip is-today is-editable"
-          :aria-label="`Cambia scadenza di ${pitwallConceptNicknameById(link.personId)}`"
+          :aria-label="`Cambia scadenza di ${nick(link.personId)}`"
           @click="openExpiry(link.personId, 'edit', link.until)"
         >
           {{ describePitwallConceptAccess(link) }}
@@ -220,7 +228,7 @@ function chipClass(link: PitwallConceptLink): string {
             v-else-if="link.access === 'pending'"
             type="button"
             class="pwc-link-btn"
-            :aria-label="`Annulla la richiesta a ${pitwallConceptNicknameById(link.personId)}`"
+            :aria-label="`Annulla la richiesta a ${nick(link.personId)}`"
             @click="emit('cancel', link.personId)"
           >
             Annulla
@@ -229,7 +237,7 @@ function chipClass(link: PitwallConceptLink): string {
             v-else
             type="button"
             class="pwc-link-btn"
-            :aria-label="`Rimuovi ${pitwallConceptNicknameById(link.personId)}`"
+            :aria-label="`Rimuovi ${nick(link.personId)}`"
             @click="askRemove(link.personId)"
           >
             Rimuovi

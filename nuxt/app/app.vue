@@ -12,7 +12,8 @@ import { useActivityFeed } from '~/composables/useActivityFeed'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
 import { useClientDiagnostics } from '~/composables/useClientDiagnostics'
 import { usePrimaryCloudOwner } from '~/composables/usePrimaryCloudOwner'
-import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
+import { usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
+import { providePitwallStore } from '~/composables/usePitwallStore'
 import { endFirebaseScenario, startFirebaseScenario, withFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
@@ -37,11 +38,11 @@ const refreshBrowserOverlayLocation = () => {
 }
 onBeforeMount(refreshBrowserOverlayLocation)
 const normalizedRoutePath = computed(() => route.path.replace(/\/+$/, '') || '/')
-const { active: pitwallConceptActive } = usePitwallConceptMode()
-const isPitwallConceptSandbox = computed(() => (
-  normalizedRoutePath.value === '/pitwall' && pitwallConceptActive.value
-))
-const cloudJobsAllowed = computed(() => !isPitwallConceptSandbox.value)
+// Il Pit Wall e' reale ovunque: la campanella deve suonare anche fuori da
+// /pitwall, quindi lo store vive qui e parte con la dashboard (piu' sotto).
+const pitwallStore = usePitwallLiveStore()
+providePitwallStore(pitwallStore)
+const cloudJobsAllowed = computed(() => true)
 const isTrainingOverlayRoute = computed(() => {
   return normalizedRoutePath.value === '/training-overlay' || browserOverlayPath.value === '/training-overlay'
 })
@@ -204,16 +205,18 @@ const showDevFirebaseProbe = computed(() => {
   return !isTrainingOverlayIntent.value && !isHudOverlayRoute.value && !isStandaloneRuntimeRoute.value && !isStandaloneDevRoute.value && appState.value === 'dashboard' && canUseDevTools()
 })
 
-// Il Concept e' una sandbox locale: lo stesso switch che cambia la UI chiude
-// anche il listener globale. Tornando alla Classica lo riapre senza reload.
+// Gli ascolti globali (feed attivita', Pit Wall) vivono quanto la dashboard di
+// un utente che puo' entrare: al logout si spengono, al login ripartono.
 watch(
-  [isPitwallConceptSandbox, appState, currentUser, canEnterApp],
-  ([sandbox, state, user, canEnter]) => {
-    if (sandbox || state !== 'dashboard' || !user || !canEnter) {
+  [appState, currentUser, canEnterApp],
+  ([state, user, canEnter]) => {
+    if (state !== 'dashboard' || !user || !canEnter) {
       stopListening()
+      pitwallStore.halt()
       return
     }
     listenToActivitiesTracked(user.uid)
+    pitwallStore.start()
   },
   { flush: 'post' }
 )

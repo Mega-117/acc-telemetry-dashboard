@@ -16,13 +16,17 @@ import {
   pitwallConceptNicknameById,
   pitwallConceptRoomIsFull,
   splitPitwallConceptList,
-  PITWALL_CONCEPT_CURRENT_USER_ID,
   PITWALL_CONCEPT_LIST_LIMITS,
   PITWALL_CONCEPT_MAX_ROOM_PEOPLE,
 } from "~/utils/pitwallConcept";
-import type { PitwallConceptMember, PitwallConceptRace } from "~/utils/pitwallConcept";
+import type { PitwallConceptMember, PitwallConceptPerson, PitwallConceptRace } from "~/utils/pitwallConcept";
 
-const props = defineProps<{ race: PitwallConceptRace }>();
+const props = defineProps<{
+  race: PitwallConceptRace;
+  people: PitwallConceptPerson[];
+  /** Chi guarda: da lui dipende cosa puo' fare. */
+  meId: string | null;
+}>();
 
 const emit = defineEmits<{
   promote: [personId: string];
@@ -33,8 +37,9 @@ const emit = defineEmits<{
 
 const expanded = ref(false);
 
-const isManager = computed(() => pitwallConceptIsManager(props.race));
-const canLeave = computed(() => pitwallConceptCanLeave(props.race));
+const me = computed(() => props.meId ?? "");
+const isManager = computed(() => pitwallConceptIsManager(props.race, me.value));
+const canLeave = computed(() => pitwallConceptCanLeave(props.race, me.value));
 const isFull = computed(() => pitwallConceptRoomIsFull(props.race));
 
 /** Prima chi guida, poi chi gestisce, poi il resto: l'ordine di chi guarda. */
@@ -59,6 +64,9 @@ function pillClass(member: PitwallConceptMember): string {
   if (member.role === "invited") return "is-waiting";
   return member.online ? "is-online" : "";
 }
+
+const nick = (id: string) => pitwallConceptNicknameById(id, props.people);
+const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
 </script>
 
 <template>
@@ -83,10 +91,10 @@ function pillClass(member: PitwallConceptMember): string {
         class="pwc-dot"
         :class="pillClass(member)"
       ></span>
-      <span class="pwc-avatar is-small">{{ pitwallConceptInitialsById(member.personId) }}</span>
+      <span class="pwc-avatar is-small">{{ initials(member.personId) }}</span>
       <strong class="pwc-person__name">
-        {{ pitwallConceptNicknameById(member.personId) }}
-        <template v-if="member.personId === PITWALL_CONCEPT_CURRENT_USER_ID"> (tu)</template>
+        {{ nick(member.personId) }}
+        <template v-if="member.personId === me"> (tu)</template>
       </strong>
       <span
         class="pwc-chip"
@@ -96,7 +104,7 @@ function pillClass(member: PitwallConceptMember): string {
       </span>
       <span class="pwc-person__actions">
         <button
-          v-if="pitwallConceptCanPromote(race, member)"
+          v-if="pitwallConceptCanPromote(race, member, me)"
           type="button"
           class="pwc-link-btn"
           @click="emit('promote', member.personId)"
@@ -104,7 +112,7 @@ function pillClass(member: PitwallConceptMember): string {
           Promuovi
         </button>
         <button
-          v-if="pitwallConceptCanRemove(race, member)"
+          v-if="pitwallConceptCanRemove(race, member, me)"
           type="button"
           class="pwc-link-btn"
           @click="emit('remove', member.personId)"

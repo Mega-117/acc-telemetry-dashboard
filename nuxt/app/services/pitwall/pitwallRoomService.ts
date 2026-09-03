@@ -292,6 +292,36 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
     return [...found.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt))
   }
 
+  /**
+   * Le gare a cui ho accesso, in diretta.
+   *
+   * `listRooms` era una lettura sola: un invito arrivato mentre la pagina era
+   * aperta - o mentre si era da un'altra parte dell'app - si scopriva solo
+   * ricaricando. Sono le stesse due query, ascoltate; le regole le permettono
+   * gia' (`memberUids` e `allowedUids` filtrano sul proprio uid).
+   */
+  function watchRooms(
+    onChange: (rooms: PitwallRoom[]) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    const seen = new Map<string, Map<string, PitwallRoom>>()
+    const emit = () => {
+      const merged = new Map<string, PitwallRoom>()
+      for (const partial of seen.values()) for (const [id, room] of partial) merged.set(id, room)
+      onChange([...merged.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt)))
+    }
+    const stops = (['memberUids', 'allowedUids'] as const).map(field => trackedOnSnapshot(
+      query(collection(db, 'pitwallRooms'), where(field, 'array-contains', uid), limit(30)),
+      field === 'memberUids' ? 'pitwallRoom.watchJoined' : 'pitwallRoom.watchInvited',
+      (snapshot: { docs: { id: string, data: () => unknown }[] }) => {
+        seen.set(field, new Map(snapshot.docs.map(entry => [entry.id, entry.data() as PitwallRoom])))
+        emit()
+      },
+      (error: Error) => onError?.(error)
+    ))
+    return () => { for (const stop of stops) stop() }
+  }
+
   /** La stanza in diretta: entrate, uscite e inviti si vedono senza ricaricare. */
   function watchRoom(
     roomId: string,
@@ -503,6 +533,7 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
     readRoom,
     ensureRoomForVehicle,
     listRooms,
+    watchRooms,
     joinRoom,
     leaveRoom,
     watchRoom,

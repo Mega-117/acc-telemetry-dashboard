@@ -288,3 +288,40 @@ describe('fotografia della vettura nella presenza', () => {
     expect(strategy?.fuelToAdd).toBeNull()
   })
 })
+
+// PIP-360: la scadenza la sceglie l'utente come orario ("Fino alle 23:40"), il
+// servizio la vuole in millisecondi. Le due traduzioni devono combaciare.
+import { pitwallClockFromExpiry, pitwallExpiryFromClock } from '~/services/pitwall/pitwallLink'
+
+describe('scadenza scelta come orario', () => {
+  const noon = new Date(2026, 8, 3, 12, 0, 0, 0).getTime()
+
+  it('un orario ancora davanti vale oggi', () => {
+    const at = pitwallExpiryFromClock('23:40', noon)
+    expect(at).not.toBeNull()
+    const date = new Date(at!)
+    expect([date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds()]).toEqual([3, 23, 40, 0])
+    expect(pitwallClockFromExpiry(at)).toBe('23:40')
+  })
+
+  it('un orario gia passato vale domani, non un permesso gia scaduto', () => {
+    const at = pitwallExpiryFromClock('08:30', noon)
+    const date = new Date(at!)
+    expect([date.getDate(), date.getHours(), date.getMinutes()]).toEqual([4, 8, 30])
+    // Lo stesso minuto di adesso e' "passato": non si concede un permesso di zero secondi.
+    expect(new Date(pitwallExpiryFromClock('12:00', noon)!).getDate()).toBe(4)
+  })
+
+  it('un orario impossibile non diventa una scadenza a caso', () => {
+    expect(pitwallExpiryFromClock('24:00', noon)).toBeNull()
+    expect(pitwallExpiryFromClock('9:75', noon)).toBeNull()
+    expect(pitwallExpiryFromClock('domani', noon)).toBeNull()
+    expect(pitwallClockFromExpiry(null)).toBeNull()
+    expect(pitwallClockFromExpiry(Number.NaN)).toBeNull()
+  })
+
+  it('accetta anche l ora senza zero davanti e le ore piccole si leggono con lo zero', () => {
+    const at = pitwallExpiryFromClock('9:05', noon)
+    expect(pitwallClockFromExpiry(at)).toBe('09:05')
+  })
+})

@@ -1,14 +1,14 @@
 <script setup lang="ts">
-// La schermata di assistenza del prototipo (PIP-369): chi ha il volante, chi
-// sta al muretto, chi puo' entrare, e sotto la decisione da mandare. Niente
-// header di gara e niente seconda colonna: quelle il muretto le legge in ACC.
+// La schermata di assistenza (PIP-369, PIP-360): chi ha il volante, chi sta al
+// muretto, chi puo' entrare, e sotto la decisione da mandare. Niente header di
+// gara e niente seconda colonna: quelle il muretto le legge in ACC.
 //
-// Nessun servizio reale: solo lo stato locale del prototipo.
+// Legge lo store fornito dall'antenato: mock nella demo, vero altrove.
 import { computed, ref } from "vue";
 import PitwallConceptPitStop from "~/components/pitwall/concept/PitwallConceptPitStop.vue";
 import PitwallConceptSearch from "~/components/pitwall/concept/PitwallConceptSearch.vue";
 import PitwallConceptWall from "~/components/pitwall/concept/PitwallConceptWall.vue";
-import { usePitwallConceptState } from "~/composables/usePitwallConceptState";
+import { usePitwallStore } from "~/composables/usePitwallStore";
 import {
   searchPitwallConceptDirectory,
   pitwallConceptInitialsById,
@@ -22,36 +22,48 @@ import {
 
 const emit = defineEmits<{ back: [] }>();
 
-const state = usePitwallConceptState();
+const state = usePitwallStore();
 const race = computed(() => state.selectedRace.value);
+const people = computed(() => state.people.value);
+const me = computed(() => state.meId.value ?? "");
 
 const guestOpen = ref(false);
-const guestQuery = ref("");
+
+const nick = (id: string) => pitwallConceptNicknameById(id, people.value);
+const initials = (id: string) => pitwallConceptInitialsById(id, people.value);
 
 const executor = computed(() => resolvePitwallConceptExecutor(race.value));
-const driverName = computed(() =>
-  executor.value.driverId ? pitwallConceptNicknameById(executor.value.driverId) : null,
-);
+const driverName = computed(() => (executor.value.driverId ? nick(executor.value.driverId) : null));
 /** Sedici avatar in fila non si leggono: i primi cinque, poi un "+11". */
 const wall = computed(() => pitwallConceptWallSummary(pitwallConceptWallIds(race.value)));
-const isManager = computed(() => pitwallConceptIsManager(race.value));
+const isManager = computed(() => pitwallConceptIsManager(race.value, me.value));
 const isFull = computed(() => pitwallConceptRoomIsFull(race.value));
 
 /**
- * Per invitare si cerca fra chi non e' gia' dentro. Chi c'e' gia' compare
- * spento invece di sparire: e' la stessa regola della ricerca della home, e per
- * lo stesso motivo - sparire risponde "non esiste" a chi chiede "chi e'?".
+ * Per invitare si cerca fra chi non e' gia' dentro. La ricerca e' quella dello
+ * store - e' lei che interroga la directory - ma qui i "gia' collegati" sono i
+ * membri della gara, non i permessi. Chi c'e' gia' compare spento invece di
+ * sparire: sparire risponde "non esiste" a chi chiede "chi e'?".
  */
+const guestQuery = computed({
+  get: () => state.searchQuery.value,
+  set: (value: string) => { state.searchQuery.value = value; },
+});
 const guestFound = computed(() => searchPitwallConceptDirectory(
   guestQuery.value,
   (race.value?.members ?? []).map(member => member.personId),
+  people.value,
 ));
+
+function closeGuest() {
+  guestQuery.value = "";
+  guestOpen.value = false;
+}
 
 function invite(personId: string) {
   if (!race.value) return;
   state.inviteToRace(race.value.id, personId);
-  guestQuery.value = "";
-  guestOpen.value = false;
+  closeGuest();
 }
 
 /** Uscendo dalla gara non si resta su una schermata che non ci riguarda piu'. */
@@ -79,7 +91,7 @@ function leave() {
       <span class="pwc-role">
         <small>Al volante</small>
         <b v-if="driverName">
-          <span class="pwc-avatar is-small">{{ pitwallConceptInitialsById(executor.driverId!) }}</span>
+          <span class="pwc-avatar is-small">{{ initials(executor.driverId!) }}</span>
           {{ driverName }}
         </b>
         <b v-else>—</b>
@@ -97,8 +109,8 @@ function leave() {
             v-for="id in wall.shown"
             :key="id"
             class="pwc-avatar is-small"
-            :title="pitwallConceptNicknameById(id)"
-          >{{ pitwallConceptInitialsById(id) }}</span>
+            :title="nick(id)"
+          >{{ initials(id) }}</span>
           <span
             v-if="wall.extra"
             class="pwc-avatar is-small is-more"
@@ -123,6 +135,8 @@ function leave() {
     <PitwallConceptWall
       v-if="race"
       :race="race"
+      :people="people"
+      :me-id="state.meId.value"
       @promote="state.promoteInRace(race.id, $event)"
       @remove="state.removeFromRace(race.id, $event)"
       @leave="leave"
@@ -134,7 +148,7 @@ function leave() {
     <div
       v-if="guestOpen"
       class="pwc-modal"
-      @click.self="guestOpen = false"
+      @click.self="closeGuest"
     >
       <section
         class="pwc-dialog"
@@ -146,7 +160,7 @@ function leave() {
           type="button"
           class="pwc-close"
           aria-label="Chiudi"
-          @click="guestOpen = false"
+          @click="closeGuest"
         >
           ×
         </button>

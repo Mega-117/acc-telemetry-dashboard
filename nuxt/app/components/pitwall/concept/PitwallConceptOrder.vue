@@ -1,25 +1,37 @@
 <script setup lang="ts">
-// Com'e' andato l'ordine, e cosa si puo' fare adesso (PIP-369).
+// Com'e' andato l'ordine, e cosa si puo' fare adesso (PIP-369, PIP-360).
 //
-// Due principi che vengono dal Pit Wall reale e non si perdono nel prototipo:
-// l'invio non finge mai - se e' bloccato dice **quale** cosa lo blocca - e
-// l'esito resta distinto campo per campo, perche' ACC rilegge solo una parte
-// dei campi e appiattirli in un generico "fatto" sarebbe un falso verde.
+// Due principi che vengono dal Pit Wall reale: l'invio non finge mai - se e'
+// bloccato dice **quale** cosa lo blocca - e l'esito resta distinto campo per
+// campo, perche' ACC rilegge solo una parte dei campi e appiattirli in un
+// generico "fatto" sarebbe un falso verde. Gli stati sono quelli veri che il
+// PC del pilota scrive: inviata, in corso, applicata, in parte, non riuscita,
+// rifiutata.
 import { computed } from "vue";
 import { describePitwallConceptOrderStatus } from "~/utils/pitwallConcept";
-import type { PitwallConceptOrderStatus } from "~/utils/pitwallConcept";
+import type { PitwallOrderStatus } from "~/services/pitwall/pitwallLink";
+import type { PitwallFieldOutcomeRow } from "~/composables/usePitwallController";
 
 const props = defineProps<{
-  status: PitwallConceptOrderStatus;
+  status: PitwallOrderStatus | null;
+  /** Il motivo scritto da chi ha applicato, quando c'e'. */
+  reason: string | null;
   /** I campi dichiarati, e se ACC li ha riletti o li abbiamo solo premuti. */
-  outcome: { field: string; verified: boolean }[] | null;
+  outcomes: PitwallFieldOutcomeRow[];
   /** Il motivo per cui non si puo' inviare, oppure `null`. */
   blocked: string | null;
 }>();
 
 defineEmits<{ send: [] }>();
 
-const order = computed(() => describePitwallConceptOrderStatus(props.status));
+const order = computed(() => describePitwallConceptOrderStatus(props.status, props.reason));
+const busy = computed(() => props.status === "pending" || props.status === "applying");
+
+function mark(outcome: PitwallFieldOutcomeRow["outcome"]): string {
+  if (outcome === "verified") return "✓";
+  if (outcome === "selected") return "→";
+  return "—";
+}
 </script>
 
 <template>
@@ -27,7 +39,7 @@ const order = computed(() => describePitwallConceptOrderStatus(props.status));
     <!-- Inviare non e' finire: "in parte" e "rifiutata" sono esiti quanto
          "applicata", e vanno detti con lo stesso peso. -->
     <div
-      v-if="status !== 'idle'"
+      v-if="status"
       class="pwc-order"
       :class="`is-${order.tone}`"
     >
@@ -36,16 +48,17 @@ const order = computed(() => describePitwallConceptOrderStatus(props.status));
     </div>
 
     <div
-      v-if="outcome && status !== 'applying'"
+      v-if="outcomes.length && !busy"
       class="pwc-outcome"
     >
       <span
-        v-for="entry in outcome"
+        v-for="entry in outcomes"
         :key="entry.field"
         class="pwc-outcome__chip"
-        :class="entry.verified ? 'is-verified' : 'is-selected'"
+        :class="`is-${entry.outcome ?? 'none'}`"
+        :title="entry.reason ?? undefined"
       >
-        {{ entry.verified ? "✓" : "→" }} {{ entry.field }}
+        {{ mark(entry.outcome) }} {{ entry.label }}
       </span>
     </div>
 
@@ -63,7 +76,7 @@ const order = computed(() => describePitwallConceptOrderStatus(props.status));
       :disabled="Boolean(blocked)"
       @click="$emit('send')"
     >
-      {{ status === "applying" ? "Invia di nuovo" : "Invia strategia" }}
+      {{ busy ? "Invia di nuovo" : "Invia strategia" }}
     </button>
   </div>
 </template>
@@ -71,7 +84,7 @@ const order = computed(() => describePitwallConceptOrderStatus(props.status));
 <style lang="scss">
 @use "@/assets/scss/variables" as *;
 
-/* L'esito per campo: due segni diversi perche' sono due cose diverse. */
+/* L'esito per campo: segni diversi perche' sono cose diverse. */
 .pwc-outcome {
   display: flex;
   flex-wrap: wrap;
@@ -88,8 +101,9 @@ const order = computed(() => describePitwallConceptOrderStatus(props.status));
 }
 .pwc-outcome__chip.is-verified { border-color: rgba(74, 222, 128, 0.45); color: #4ade80; }
 .pwc-outcome__chip.is-selected { border-color: rgba(167, 139, 250, 0.45); color: #a78bfa; }
+.pwc-outcome__chip.is-not-verifiable { border-color: rgba(245, 158, 11, 0.45); color: #f59e0b; }
 
-/* Lo stato dell'ordine: quattro esiti, non "inviata" e basta. */
+/* Lo stato dell'ordine: sei esiti, non "inviata" e basta. */
 .pwc-order {
   display: grid;
   gap: 2px;

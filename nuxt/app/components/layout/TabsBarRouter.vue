@@ -5,6 +5,7 @@
 // ============================================
 
 import { useFeatureAccess } from '~/composables/useFeatureAccess'
+import { usePitwallStore } from '~/composables/usePitwallStore'
 import { markHudRoutePhase, startHudRouteTiming } from '~/utils/hudRoutePerformance'
 
 defineProps<{
@@ -14,6 +15,8 @@ defineProps<{
 const route = useRoute()
 const { canAccess } = useFeatureAccess()
 const canAccessHud = canAccess('hud')
+// Quante cose aspettano una decisione sul Pit Wall: si vede dalla scheda.
+const { pendingNoticeCount: pitwallPending } = usePitwallStore()
 
 const baseTabs = [
   { id: 'panoramica', label: 'PANORAMICA', to: '/panoramica' },
@@ -52,6 +55,11 @@ function onTabClick(tab: { id: string }) {
         @click="onTabClick(tab)"
       >
         {{ tab.label }}
+        <span
+          v-if="tab.id === 'pitwall' && pitwallPending"
+          class="tab__badge"
+          data-testid="pitwall-tab-badge"
+        >{{ pitwallPending > 9 ? '9+' : pitwallPending }}</span>
       </NuxtLink>
     </div>
   </nav>
@@ -91,6 +99,23 @@ function onTabClick(tab: { id: string }) {
 
   &:hover {
     color: rgba(255, 255, 255, 0.8);
+  }
+
+  &__badge {
+    position: absolute;
+    top: 8px;
+    right: 6px;
+    display: grid;
+    place-items: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: $accent-danger;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0;
   }
 
   &--section-start {

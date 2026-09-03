@@ -20,6 +20,7 @@ import {
 } from '~/utils/pitwallConceptModel'
 
 export * from '~/utils/pitwallConceptModel'
+import type { PitwallOrderStatus } from '~/services/pitwall/pitwallLink'
 
 
 export function getPitwallConceptPerson(
@@ -159,18 +160,20 @@ export function pitwallConceptFreshness(ageSeconds: number): 'live' | 'stale' {
  * ingegnere che puo' aver vinto la corsa, una scadenza che passa e la
  * possibilita' che solo una parte dei campi sia arrivata.
  */
-export type PitwallConceptOrderStatus =
-  | 'idle'
-  | 'applying'
-  | 'applied'
-  | 'partial'
-  | 'rejected'
-  | 'expired'
+/**
+ * Gli stati veri di un ordine (`PitwallOrderStatus`), piu' il "nessun ordine"
+ * come `null`. Sono quelli che il PC del pilota scrive davvero: il prototipo
+ * non ne inventa altri.
+ */
+export type PitwallConceptOrderStatus = PitwallOrderStatus | null
 
 export function describePitwallConceptOrderStatus(
   status: PitwallConceptOrderStatus,
+  reason: string | null = null,
 ): { label: string, detail: string, tone: 'neutral' | 'good' | 'warn' | 'bad' } {
   switch (status) {
+    case 'pending':
+      return { label: 'Inviata, in attesa del pilota', detail: 'Il suo PC la prende in carico appena la vede.', tone: 'neutral' }
     case 'applying':
       return { label: 'In corso…', detail: 'Il PC del pilota la sta applicando al Pit MFD.', tone: 'neutral' }
     case 'applied':
@@ -178,19 +181,15 @@ export function describePitwallConceptOrderStatus(
     case 'partial':
       return {
         label: 'Applicata in parte',
-        detail: 'Qualche campo non è arrivato: sotto c’è quale, uno per uno.',
+        detail: reason ?? 'Qualche campo non è arrivato: sotto c’è quale, uno per uno.',
         tone: 'warn',
       }
+    case 'failed':
+      return { label: 'Non riuscita', detail: reason ?? 'Il PC del pilota si è fermato prima di finire.', tone: 'bad' }
     case 'rejected':
       return {
         label: 'Rifiutata',
-        detail: 'Un altro membro del muretto ha inviato per primo: vince la sua, non si fondono.',
-        tone: 'bad',
-      }
-    case 'expired':
-      return {
-        label: 'Scaduta',
-        detail: 'Sono passati due minuti senza che nessuno la prendesse in carico.',
+        detail: reason ?? 'Un altro membro del muretto ha inviato per primo: vince la sua, non si fondono.',
         tone: 'bad',
       }
     default:
@@ -516,10 +515,10 @@ export function describePitwallConceptMember(member: PitwallConceptMember): stri
 }
 
 /** Perche' questa gara ti compare, detto senza nominare i permessi. */
-export function describePitwallConceptReason(reason: PitwallConceptReason): string {
+export function describePitwallConceptReason(reason: PitwallConceptReason, people = PITWALL_CONCEPT_PEOPLE): string {
   return reason.kind === 'grant'
-    ? `Sei dentro perché ${pitwallConceptNicknameById(reason.personId)} ti ha autorizzato.`
-    : `${pitwallConceptNicknameById(reason.personId)} ti ha invitato a questa gara.`
+    ? `Sei dentro perché ${pitwallConceptNicknameById(reason.personId, people)} ti ha autorizzato.`
+    : `${pitwallConceptNicknameById(reason.personId, people)} ti ha invitato a questa gara.`
 }
 
 /**
@@ -547,8 +546,9 @@ export function pitwallConceptSendBlock(
 export function describePitwallConceptNotice(
   notice: PitwallConceptNotice,
   races: PitwallConceptRace[] = PITWALL_CONCEPT_RACES,
+  people = PITWALL_CONCEPT_PEOPLE,
 ): { title: string, body: string } {
-  const who = pitwallConceptNicknameById(notice.personId)
+  const who = pitwallConceptNicknameById(notice.personId, people)
   if (notice.kind === 'request') {
     return { title: `${who} vuole assisterti`, body: 'Decidi per quanto vale l’accesso.' }
   }

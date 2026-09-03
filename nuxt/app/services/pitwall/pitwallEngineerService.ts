@@ -496,12 +496,13 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
   async function decideRequest(
     requesterUid: string,
     decision: 'granted' | 'revoked',
-    scope: PitwallGrantScope = 'always'
+    scope: PitwallGrantScope = 'always',
+    expiresAtMs: number | null = null
   ): Promise<{ ok: true } | { ok: false, reason: string }> {
     const grantFields = decision === 'granted'
       ? {
           scope,
-          expiresAtMs: scope === 'once' ? now() + PITWALL_GRANT_ONCE_DURATION_MS : null,
+          expiresAtMs: scope === 'once' ? grantExpiry(expiresAtMs) : null,
         }
       : {}
     try {
@@ -531,7 +532,8 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
    */
   async function preAuthorise(
     engineerToTrust: string,
-    scope: PitwallGrantScope = 'always'
+    scope: PitwallGrantScope = 'always',
+    expiresAtMs: number | null = null
   ): Promise<{ ok: true } | { ok: false, reason: string }> {
     const grant = buildPitwallPreAuthorisation(engineerUid, engineerToTrust, nowIso(now))
     if (!grant) return { ok: false, reason: 'Utente non valido.' }
@@ -539,7 +541,7 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
     // rifiutato, e `always` con una scadenza pure.
     const grantFields = {
       scope,
-      expiresAtMs: scope === 'once' ? now() + PITWALL_GRANT_ONCE_DURATION_MS : null,
+      expiresAtMs: scope === 'once' ? grantExpiry(expiresAtMs) : null,
     }
     const ref = doc(db, 'pitwallGrants', grant.id)
     try {
@@ -559,6 +561,41 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
     }
   }
 
+  /**
+   * Cambia l'orario di scadenza di un permesso "solo per oggi" gia' concesso.
+   *
+   * Solo il pilota puo' farlo, e solo su un permesso suo: e' lo stesso gesto
+   * della concessione, ripetuto con un'ora diversa. Un orario gia' passato non
+   * e' una scadenza, e' una revoca travestita: si rifiuta.
+   */
+  async function updateGrantExpiry(
+    engineerToTrust: string,
+    expiresAtMs: number
+  ): Promise<{ ok: true } | { ok: false, reason: string }> {
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs <= now()) {
+      return { ok: false, reason: 'La scadenza deve essere nel futuro.' }
+    }
+    try {
+      await trackedUpdateDoc(
+        doc(db, 'pitwallGrants', pitwallGrantId(engineerUid, engineerToTrust)),
+        { scope: 'once', expiresAtMs, updatedAt: nowIso(now) },
+        'pitwall.updateGrantExpiry'
+      )
+      return { ok: true }
+    } catch (error) {
+      return { ok: false, reason: (error as Error)?.message || 'Scadenza non aggiornata.' }
+    }
+  }
+
+  /**
+   * La scadenza di un "solo per oggi": quella scelta dall'utente se e' nel
+   * futuro, altrimenti la giornata di gara standard. Mai `Date.now()`.
+   */
+  function grantExpiry(requested: number | null): number {
+    if (requested != null && Number.isFinite(requested) && requested > now()) return requested
+    return now() + PITWALL_GRANT_ONCE_DURATION_MS
+  }
+
   return {
     requestLink,
     listOutgoingLinks,
@@ -573,5 +610,6 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
     watchGrantedPilots,
     decideRequest,
     preAuthorise,
+    updateGrantExpiry,
   }
 }

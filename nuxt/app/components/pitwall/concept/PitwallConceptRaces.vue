@@ -21,18 +21,25 @@ import {
   resolvePitwallConceptExecutor,
   splitPitwallConceptList,
 } from "~/utils/pitwallConcept";
-import type { PitwallConceptRace } from "~/utils/pitwallConcept";
+import type { PitwallConceptPerson, PitwallConceptRace } from "~/utils/pitwallConcept";
 
-const props = defineProps<{ races: PitwallConceptRace[] }>();
+const props = defineProps<{
+  races: PitwallConceptRace[];
+  people: PitwallConceptPerson[];
+  meId: string | null;
+}>();
 defineEmits<{ enter: [race: PitwallConceptRace] }>();
 
 const expanded = ref(false);
+const me = computed(() => props.meId ?? "");
+
+const invited = (race: PitwallConceptRace) => pitwallConceptAmInvited(race, me.value);
 
 /** Prima quelle vive con qualcuno al volante, poi gli inviti, poi le chiuse. */
 const ordered = computed(() => [...props.races].sort((left, right) => {
   const weight = (race: PitwallConceptRace) => {
     if (race.closed) return 3;
-    if (pitwallConceptAmInvited(race)) return 1;
+    if (invited(race)) return 1;
     return resolvePitwallConceptExecutor(race).state === "ready" ? 0 : 2;
   };
   return weight(left) - weight(right);
@@ -43,16 +50,24 @@ const split = computed(() => splitPitwallConceptList(
   expanded.value ? ordered.value.length : PITWALL_CONCEPT_LIST_LIMITS.races,
 ));
 
-/** Al volante c'e' uno solo, oppure va detto che non si sa chi applica. */
+/**
+ * Al volante c'e' uno solo, oppure va detto che non si sa chi applica. Senza
+ * presenza in diretta non si dice "nessuno": non lo sappiamo.
+ */
 function driverLabel(race: PitwallConceptRace): string {
+  if (race.live === false) return "—";
   const executor = resolvePitwallConceptExecutor(race);
-  if (executor.state === "ready") return pitwallConceptNicknameById(executor.driverId!);
+  if (executor.state === "ready") return pitwallConceptNicknameById(executor.driverId!, props.people);
   return executor.state === "multiple-driving" ? "in due" : "nessuno";
 }
 
 /** Sedici nickname uniti da virgole sono un paragrafo, non una riga di card. */
 function wallLabel(race: PitwallConceptRace): string {
-  return describePitwallConceptWall(pitwallConceptWallIds(race));
+  return describePitwallConceptWall(pitwallConceptWallIds(race), undefined, props.people);
+}
+
+function reasonLabel(race: PitwallConceptRace): string {
+  return describePitwallConceptReason(race.reason, props.people);
 }
 </script>
 
@@ -62,7 +77,7 @@ function wallLabel(race: PitwallConceptRace): string {
       v-for="race in split.visible"
       :key="race.id"
       class="pwc-race"
-      :class="{ 'is-invited': pitwallConceptAmInvited(race), 'is-closed': race.closed }"
+      :class="{ 'is-invited': invited(race), 'is-closed': race.closed }"
     >
       <div class="pwc-race__car">
         <span class="pwc-race__number">#{{ race.carNumber }}</span>
@@ -100,8 +115,8 @@ function wallLabel(race: PitwallConceptRace): string {
       </button>
 
       <p class="pwc-race__why">
-        {{ describePitwallConceptReason(race.reason) }}
-        <template v-if="pitwallConceptAmInvited(race)">
+        {{ reasonLabel(race) }}
+        <template v-if="invited(race)">
           Non sei ancora entrato.
         </template>
       </p>

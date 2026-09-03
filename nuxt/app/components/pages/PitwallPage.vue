@@ -10,46 +10,28 @@
 //  - il bottone Invia e' spento quando l'ordine non potrebbe partire, e la
 //    pagina dice perche' invece di accettarlo e farlo scadere in silenzio;
 //  - `READY` significa applicata e riletta, mai inviata.
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { usePitwallLink } from '~/composables/usePitwallLink'
+import { usePitwallController } from '~/composables/usePitwallController'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { describePitwallGrantScope } from '~/services/pitwall/pitwallLink'
-import type { PitwallSession } from '~/services/pitwall/pitwallLink'
-import { PITWALL_MEMBER_FRESH_MS } from '~/services/pitwall/pitwallRoomContract'
 import PitwallCarCard from '~/components/pitwall/PitwallCarCard.vue'
 import PitwallOrderBar from '~/components/pitwall/PitwallOrderBar.vue'
 import PitwallValueField from '~/components/pitwall/PitwallValueField.vue'
 import PitwallToggleField from '~/components/pitwall/PitwallToggleField.vue'
 import {
-  PITWALL_COMPOUNDS,
   PITWALL_FUEL_MAX_L,
   PITWALL_FUEL_MIN_L,
-  PITWALL_PIT_STRATEGY_MAX,
-  PITWALL_PIT_STRATEGY_MIN,
   PITWALL_PRESSURE_MAX_PSI,
   PITWALL_PRESSURE_MIN_PSI,
   PITWALL_TYRE_SET_MAX,
   PITWALL_TYRE_SET_MIN,
   PITWALL_WHEELS,
-  buildPitwallChangeChips,
-  buildPitwallEcho,
-  clampCompound,
   clampFuel,
-  clampPressure,
   clampTyreSet,
-  estimatePitStop,
-  formatCompound,
-  resolvePitwallOrderStatus,
   stepFuel,
-  stepPressure,
   stepTyreSet,
   wheelLabel,
-  type PitwallCarState,
-  type PitwallCompound,
-  type PitwallDriver,
-  type PitwallPlan,
-  type PitwallWheel,
 } from '~/utils/pitwallPresentation'
 
 const { currentUser } = useFirebaseAuth()
@@ -60,159 +42,49 @@ const link = usePitwallRoom({ uid: () => currentUser.value?.uid ?? null })
 // qui si concede o si toglie. Non e' un secondo canale per gli ordini.
 const trust = usePitwallLink({ engineerUid: () => currentUser.value?.uid ?? null })
 
+// La logica dell'ordine - base fresca, payload sparso, motivo del blocco,
+// esito per campo - vive in un posto solo e la usano entrambe le viste.
+const {
+  session,
+  presenceAgeSeconds,
+  carFresh,
+  drivers,
+  pressures,
+  fuelLiters,
+  compound,
+  tyreSet,
+  changeTyres,
+  driverId,
+  pitStrategy,
+  brakes,
+  repairBodywork,
+  repairSuspension,
+  car,
+  echo,
+  changeChips,
+  orderStatus,
+  stopEstimate,
+  mfdPlan,
+  compoundOptions,
+  driverOptions,
+  adjustPressure,
+  setPressure,
+  stepPitStrategy,
+  onCompoundChange,
+  resetToCar,
+  hasChanges,
+  sendEnabled,
+  pendingRequests,
+  trustedEngineers,
+  requesterName,
+  blockedReason,
+  sendToCar,
+  fieldOutcomes,
+  scopeLabel,
+  roomStateLabel,
+} = usePitwallController(link, trust)
+
 const nowTick = computed(() => link.nowTick.value)
-
-/**
- * La fotografia della vettura arriva da chi e' al volante, non da un "pilota
- * assistito": e' l'unico che la vede davvero. Si rimodella nella forma che la
- * scheda macchina conosce gia', invece di riscrivere la scheda.
- */
-const session = computed<PitwallSession | null>(() => {
-  const snapshot = link.carSnapshot.value
-  const room = link.room.value
-  if (!snapshot || !room) return null
-  return {
-    schemaVersion: 1,
-    driverUid: link.executor.value.executor?.uid ?? '',
-    sessionId: room.roomId,
-    online: true,
-    updatedAt: new Date(snapshot.updatedAtMs).toISOString(),
-    car: null,
-    track: room.track ?? null,
-    crew: snapshot.crew,
-    strategy: snapshot.strategy as PitwallSession['strategy'],
-  }
-})
-
-const presenceAgeSeconds = computed(() => {
-  const updatedAtMs = link.carSnapshot.value?.updatedAtMs
-  if (!updatedAtMs) return null
-  return Math.max(0, Math.round((nowTick.value - updatedAtMs) / 1000))
-})
-const carFresh = computed(() => (
-  presenceAgeSeconds.value != null && presenceAgeSeconds.value <= PITWALL_MEMBER_FRESH_MS / 1000
-))
-const drivers = computed<PitwallDriver[]>(() => (
-  (session.value?.crew ?? []).map(member => ({ id: String(member.driverIndex), name: member.name }))
-))
-
-const pressures = ref<Record<PitwallWheel, number>>({ FL: 25, FR: 25, RL: 25, RR: 25 })
-const fuelLiters = ref(0)
-const compound = ref<PitwallCompound>('dry')
-const compoundTouched = ref(false)
-const tyreSet = ref(1)
-// Tre stati, non due: true accendi, false spegni, null non toccare. Con una
-// semplice casella l'ingegnere non poteva spegnere niente, e quello che
-// impostava non arrivava fedelmente in macchina.
-const changeTyres = ref<boolean | null>(null)
-const driverId = ref<string | null>(null)
-/** null = non toccare la strategia. Sceglierla riscrive tutto il resto. */
-const pitStrategy = ref<number | null>(null)
-const brakes = ref<boolean | null>(null)
-const repairBodywork = ref<boolean | null>(null)
-const repairSuspension = ref<boolean | null>(null)
-const sentPlan = ref<PitwallPlan | null>(null)
-
-const car = computed<PitwallCarState>(() => {
-  const strategy = session.value?.strategy ?? null
-  const current = (session.value?.crew ?? []).find(member => member.current) ?? null
-  return {
-    pressures: strategy?.pressures ?? { ...pressures.value },
-    fuelLiters: strategy?.fuelToAdd ?? fuelLiters.value,
-    compound: (strategy?.compound as PitwallCompound | null | undefined) ?? compound.value,
-    tyreSet: strategy?.tyreSet ?? tyreSet.value,
-    // ACC non rilegge nessuna di queste caselle: in macchina restano ignote,
-    // e ignoto non e' "spento". Dirlo con null evita di mostrare all'ingegnere
-    // uno stato che nessuno ha verificato.
-    changeTyres: null,
-    driverId: current ? String(current.driverIndex) : driverId.value,
-    pitStrategy: null,
-    brakes: null,
-    repairBodywork: null,
-    repairSuspension: null,
-    inPitLane: false,
-  }
-})
-
-const plan = computed<PitwallPlan>(() => ({
-  pitStrategy: pitStrategy.value,
-  pressures: pressures.value,
-  fuelLiters: fuelLiters.value,
-  compound: compound.value,
-  tyreSet: tyreSet.value,
-  changeTyres: changeTyres.value,
-  driverId: driverId.value,
-  brakes: brakes.value,
-  repairBodywork: repairBodywork.value,
-  repairSuspension: repairSuspension.value,
-}))
-
-const echo = computed(() => buildPitwallEcho(plan.value, car.value, drivers.value))
-const changeChips = computed(() => buildPitwallChangeChips(plan.value, car.value, drivers.value))
-const orderStatus = computed(() => resolvePitwallOrderStatus({ plan: plan.value, car: car.value, sentPlan: sentPlan.value }))
-const stopEstimate = computed(() => estimatePitStop(plan.value, car.value))
-const mfdPlan = computed(() => sentPlan.value ?? plan.value)
-const compoundOptions = computed(() => PITWALL_COMPOUNDS.map(value => ({ value, label: formatCompound(value) })))
-const driverOptions = computed(() => [
-  { value: null, label: 'Nessun cambio' },
-  ...drivers.value.map(driver => ({ value: driver.id, label: driver.name })),
-])
-
-let planInitialised = false
-watch(() => link.selectedRoomId.value, () => { planInitialised = false })
-watch(car, () => {
-  if (planInitialised || !session.value?.strategy) return
-  planInitialised = true
-  resetToCar()
-})
-
-function adjustPressure(wheel: PitwallWheel, direction: 1 | -1) {
-  pressures.value = { ...pressures.value, [wheel]: stepPressure(pressures.value[wheel], direction) }
-}
-
-function setPressure(wheel: PitwallWheel, value: number) {
-  pressures.value = { ...pressures.value, [wheel]: clampPressure(value) }
-}
-
-/**
- * Off → 1 → 2 … e ritorno a Off scendendo sotto la prima.
- *
- * "Off" non e' la strategia zero: e' "non toccare la riga". Serve perche' il
- * preset riscrive carburante, gomme e pressioni, quindi mandarlo per sbaglio
- * cancellerebbe tutto il resto dell'ordine.
- */
-function stepPitStrategy(direction: 1 | -1) {
-  const current = pitStrategy.value
-  if (current == null) {
-    pitStrategy.value = direction > 0 ? PITWALL_PIT_STRATEGY_MIN : null
-    return
-  }
-  const next = current + direction
-  pitStrategy.value = next < PITWALL_PIT_STRATEGY_MIN
-    ? null
-    : Math.min(PITWALL_PIT_STRATEGY_MAX, next)
-}
-
-function onCompoundChange(event: Event) {
-  compound.value = clampCompound((event.target as HTMLSelectElement).value)
-  compoundTouched.value = true
-}
-
-function resetToCar() {
-  pressures.value = { ...car.value.pressures }
-  fuelLiters.value = car.value.fuelLiters
-  compound.value = car.value.compound
-  compoundTouched.value = false
-  tyreSet.value = car.value.tyreSet
-  // Tutto cio' che ACC non rilegge torna a "non toccare": e' l'unica posizione
-  // onesta, perche' non sappiamo da dove si parte.
-  changeTyres.value = null
-  driverId.value = null
-  pitStrategy.value = null
-  brakes.value = null
-  repairBodywork.value = null
-  repairSuspension.value = null
-}
 
 onMounted(() => {
   link.start()
@@ -225,95 +97,11 @@ onBeforeUnmount(() => {
   link.stop()
 })
 
-function planPayload(): Record<string, unknown> {
-  const strategy = carFresh.value ? session.value?.strategy ?? null : null
-  const payload: Record<string, unknown> = {}
-  if (strategy?.fuelToAdd == null || Math.abs(strategy.fuelToAdd - fuelLiters.value) >= 0.5) payload.fuelLiters = fuelLiters.value
-  if (strategy?.tyreSet == null || strategy.tyreSet !== tyreSet.value) payload.tyreSet = tyreSet.value
-  if (!strategy?.pressures || PITWALL_WHEELS.some(wheel => Math.abs((strategy.pressures?.[wheel] ?? Number.NaN) - pressures.value[wheel]) >= 0.05)) {
-    payload.pressures = { ...pressures.value }
-  }
-  if (compoundTouched.value || (strategy?.compound != null && strategy.compound !== compound.value)) payload.compound = compound.value
-  // La strategia parte solo se scelta esplicitamente: e' l'unico campo che
-  // riscrive tutti gli altri, quindi non deve mai finire nell'ordine per inerzia.
-  if (pitStrategy.value != null) payload.pitStrategy = pitStrategy.value
-  // Si manda anche lo spento: `false` e' una richiesta, `null` e' il silenzio.
-  if (changeTyres.value != null) payload.changeTyres = changeTyres.value
-  if (brakes.value != null) payload.brakes = brakes.value
-  if (repairBodywork.value != null) payload.repairBodywork = repairBodywork.value
-  if (repairSuspension.value != null) payload.repairSuspension = repairSuspension.value
-  if (driverId.value != null) payload.driverId = driverId.value
-  return payload
-}
-
-const hasChanges = computed(() => Object.keys(planPayload()).length > 0)
-/** Spento anche quando ci sono modifiche, se l'ordine non potrebbe partire. */
-const sendEnabled = computed(() => hasChanges.value && link.canSend.value)
-const pendingRequests = computed(() => trust.pendingIncoming.value)
-/**
- * Chi ho autorizzato ad assistermi, tolti quelli che sono gia' nella gara.
- *
- * Sono due cose diverse - il permesso fra due account e l'equipaggio di questa
- * corsa - ma vederle nella stessa lista con lo stesso nome due volte fa solo
- * chiedere quale delle due righe conti. Chi e' gia' dentro si legge
- * nell'equipaggio; qui resta chi non c'e' ancora.
- */
-const trustedEngineers = computed(() => {
-  const inRoom = new Set(link.crew.value.map(person => person.uid))
-  return trust.grantedIncoming.value.filter(request => !inRoom.has(request.engineerUid))
-})
-
-function requesterName(request: { nickname: string | null, engineerUid: string }): string {
-  return request.nickname || request.engineerUid
-}
-
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
   searchTimer = setTimeout(() => { void trust.search() }, 350)
 }
-
-/**
- * Perche' l'invio e' spento, detto in una frase utile.
- * "Non e' il momento" senza motivo e' il modo piu' rapido di far sembrare
- * rotto un collegamento che funziona.
- */
-const blockedReason = computed<string | null>(() => {
-  if (!link.room.value) return 'Nessuna gara selezionata.'
-  if (link.roomClosed.value) return 'Questa gara e chiusa: non accetta piu strategie.'
-  if (!link.amMember.value) return 'Non sei ancora entrato in questa gara.'
-  if (link.executor.value.reason !== 'ready') return link.executorLabel.value
-  if (!hasChanges.value) return 'Nessuna modifica da inviare.'
-  return null
-})
-
-async function sendToCar() {
-  sentPlan.value = { ...plan.value, pressures: { ...pressures.value } }
-  await link.sendPlan(planPayload())
-}
-
-const FIELD_LABELS: Record<string, string> = {
-  fuelLiters: 'Carburante', tyreSet: 'Set', compound: 'Mescola', pressureFL: 'FL', pressureFR: 'FR',
-  pressureRL: 'RL', pressureRR: 'RR', changeTyres: 'Cambio gomme', repairBodywork: 'Carrozzeria',
-  repairSuspension: 'Sospensioni', driverId: 'Pilota', pitStrategy: 'Strategia', brakes: 'Freni',
-}
-const fieldOutcomes = computed(() => Object.entries(link.orderFields.value).map(([field, outcome]) => ({
-  field,
-  label: FIELD_LABELS[field] ?? field,
-  outcome: outcome?.outcome ?? null,
-  reason: outcome?.reason ?? null,
-})))
-
-function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: number | null }): string {
-  return describePitwallGrantScope(request)
-}
-
-/** Etichetta di stato della gara, senza gergo e senza identificativi tecnici. */
-const roomStateLabel = computed(() => {
-  if (!link.room.value) return 'Nessuna gara'
-  if (link.roomClosed.value) return 'CHIUSA'
-  return link.executor.value.reason === 'ready' ? 'IN PISTA' : 'IN ATTESA'
-})
 </script>
 
 <template>

@@ -1,29 +1,29 @@
 <script setup lang="ts">
-// La campanella del prototipo (PIP-369): l'unico posto che si accende.
+// La campanella del Pit Wall (PIP-369, PIP-360): l'unico posto che si accende.
 //
-// Prima accettare e rifiutare facevano la stessa cosa - toglievano la riga -
-// perche' gli avvisi vivevano qui dentro e le liste da un'altra parte. Ora
-// stanno nello stesso stato, quindi accettare fa davvero la cosa promessa: una
-// richiesta diventa un permesso, un invito ti fa entrare nella gara.
+// Legge lo store fornito dall'app, non dalla pagina: deve suonare anche fuori
+// da /pitwall. Accettare fa davvero la cosa promessa - una richiesta diventa un
+// permesso, un invito ti porta nella gara - perche' avvisi ed elenchi sono lo
+// stesso stato.
 //
 // Stesse parole della pagina: "Sempre" e "Solo per oggi", mai il gergo interno.
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
-import { usePitwallConceptState } from '~/composables/usePitwallConceptState'
+import { usePitwallStore } from '~/composables/usePitwallStore'
 import {
   PITWALL_CONCEPT_DEFAULT_EXPIRY,
   describePitwallConceptNotice,
 } from '~/utils/pitwallConcept'
 import type { PitwallConceptNotice } from '~/utils/pitwallConcept'
 
-const { notificationsOpen, toggleNotifications } = usePitwallConceptMode()
-const state = usePitwallConceptState()
+const { notificationsOpen, toggleNotifications, closeNotifications } = usePitwallConceptMode()
+const state = usePitwallStore()
 
 const notices = computed(() => state.notices.value)
 const pendingCount = computed(() => state.pendingNoticeCount.value)
 
 function describe(notice: PitwallConceptNotice) {
-  return describePitwallConceptNotice(notice, state.races.value)
+  return describePitwallConceptNotice(notice, state.races.value, state.people.value)
 }
 
 /** L'etichetta dice cosa succede, non come si chiama il meccanismo. */
@@ -33,18 +33,30 @@ function acceptLabel(notice: PitwallConceptNotice): string {
 }
 
 function accept(notice: PitwallConceptNotice) {
-  if (notice.kind === 'granted') state.dismissNotice(notice.id)
-  else state.acceptNotice(notice.id, 'always')
+  if (notice.kind === 'granted') {
+    state.dismissNotice(notice.id)
+    return
+  }
+  state.acceptNotice(notice.id, 'always')
+  // Entrare in una gara vuol dire andarci: la campanella puo' suonare ovunque.
+  if (notice.kind === 'invite') {
+    closeNotifications()
+    navigateTo('/pitwall')
+  }
 }
 
 function acceptToday(notice: PitwallConceptNotice) {
   state.acceptNotice(notice.id, 'today', PITWALL_CONCEPT_DEFAULT_EXPIRY)
 }
+
+// Un clic fuori chiude: il bottone e il pannello fermano la propagazione.
+onMounted(() => document.addEventListener('click', closeNotifications))
+onBeforeUnmount(() => document.removeEventListener('click', closeNotifications))
 </script>
 
 <template>
   <div class="pwc-bell-wrap">
-    <button class="pwc-bell" :class="{ 'is-open': notificationsOpen }" aria-label="Notifiche Concept" @click.stop="toggleNotifications">
+    <button class="pwc-bell" :class="{ 'is-open': notificationsOpen }" aria-label="Notifiche Pit Wall" @click.stop="toggleNotifications">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
         <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.7 21a2 2 0 0 1-3.4 0" />
       </svg>

@@ -260,27 +260,39 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     })
   }
 
+  /**
+   * Un elenco nuovo di gare, da una lettura o dall'ascolto.
+   *
+   * Una sola gara accessibile: entrarci a mano sarebbe un clic che non decide
+   * niente. Il caso normale del pilota e' esattamente questo.
+   */
+  function applyRooms(list: PitwallRoom[]): void {
+    rooms.value = list
+    if (!selectedRoomId.value && list.length === 1) void selectRoom(list[0]!.roomId)
+  }
+
   async function refreshRooms(): Promise<void> {
     const service_ = service()
-    if (!service_) {
-      rooms.value = []
-      return
-    }
+    if (!service_) { rooms.value = []; return }
     loading.value = true
     rawError.value = null
-    try {
-      rooms.value = await service_.listRooms()
-      // Una sola gara accessibile: entrarci a mano sarebbe un clic che non
-      // decide niente. Il caso normale del pilota e' esattamente questo.
-      if (!selectedRoomId.value && rooms.value.length === 1) {
-        await selectRoom(rooms.value[0]!.roomId)
-      }
-    } catch (error) {
-      rawError.value = (error as Error)?.message || 'Gare non disponibili.'
-      rooms.value = []
-    } finally {
-      loading.value = false
-    }
+    try { applyRooms(await service_.listRooms()) }
+    catch (error) { rawError.value = (error as Error)?.message || 'Gare non disponibili.'; rooms.value = [] }
+    finally { loading.value = false }
+  }
+
+  let stopRoomsWatch: (() => void) | null = null
+
+  /**
+   * Le gare in diretta: un invito arrivato mentre si guarda altrove compare da
+   * solo. E' cio' che rende la campanella un avviso e non una cosa da
+   * ricaricare.
+   */
+  function watchRooms(): void {
+    const service_ = service()
+    if (!service_) return
+    stopRoomsWatch?.()
+    stopRoomsWatch = service_.watchRooms(applyRooms, (error) => { rawError.value = error?.message || 'Gare non disponibili.' })
   }
 
   function detach(): void {
@@ -471,8 +483,9 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   }
 
   function start(): void {
+    if (tickTimer) clearInterval(tickTimer)
     tickTimer = setInterval(() => { nowTick.value = Date.now() }, 5_000)
-    void refreshRooms()
+    watchRooms()
   }
 
   function stop(): void {
@@ -480,6 +493,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     detach()
     stopOrderWatch?.()
     stopOrderWatch = null
+    stopRoomsWatch?.()
+    stopRoomsWatch = null
     if (tickTimer) clearInterval(tickTimer)
     tickTimer = null
   }
@@ -512,6 +527,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     orderFields,
     orderProgress,
     refreshRooms,
+    watchRooms,
     selectRoom,
     sendPlan,
     invite,
