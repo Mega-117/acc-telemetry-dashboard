@@ -1678,6 +1678,87 @@ describe('Pit Wall - la Race Room: il battito porta l ora del server', () => {
   })
 })
 
+describe('Pit Wall - la Race Room: il ciclo di vita della gara', () => {
+  beforeEach(seedPitwallProfiles)
+
+  it('chiudere la gara e un atto di governo: la chiude il manager, non un membro qualunque', async () => {
+    // Il bottone e nascosto ai non-manager, ma un interfaccia non e un
+    // controllo: senza questa regola bastava una chiamata diretta per chiudere
+    // la gara agli altri mentre si corre.
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID], managerUids: [DRIVER_UID] })
+
+    const memberDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(updateDoc(doc(memberDb, `pitwallRooms/${ROOM_ID}`), {
+      closedAt: '2026-09-01T18:00:00.000Z',
+      updatedAt: '2026-09-01T18:00:00.000Z'
+    }))
+
+    const managerDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(updateDoc(doc(managerDb, `pitwallRooms/${ROOM_ID}`), {
+      closedAt: '2026-09-01T18:00:00.000Z',
+      updatedAt: '2026-09-01T18:00:00.000Z'
+    }))
+  })
+
+  it('nemmeno il nome della gara lo cambia un membro senza galloni', async () => {
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID], managerUids: [DRIVER_UID] })
+    const memberDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(updateDoc(doc(memberDb, `pitwallRooms/${ROOM_ID}`), {
+      label: 'gara mia adesso',
+      updatedAt: '2026-09-01T18:00:00.000Z'
+    }))
+  })
+
+  it('un invitato che entra non porta dentro anche una chiusura', async () => {
+    await seedRoom({ memberUids: [DRIVER_UID], allowedUids: [ENGINEER_UID] })
+    const invitedDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(updateDoc(doc(invitedDb, `pitwallRooms/${ROOM_ID}`), {
+      memberUids: [DRIVER_UID, ENGINEER_UID],
+      closedAt: '2026-09-01T18:00:00.000Z',
+      updatedAt: '2026-09-01T18:00:00.000Z'
+    }))
+    // Entrare e basta resta lecito.
+    await assertSucceeds(updateDoc(doc(invitedDb, `pitwallRooms/${ROOM_ID}`), {
+      memberUids: [DRIVER_UID, ENGINEER_UID],
+      updatedAt: '2026-09-01T18:00:00.000Z'
+    }))
+  })
+
+  it('il segno di vita porta l ora del server, come il battito', async () => {
+    // Con una stringa scritta dal client un orologio avanti avrebbe tenuto viva
+    // per sempre una gara finita, e la chiusura automatica non sarebbe mai
+    // scattata.
+    await seedRoom({ memberUids: [DRIVER_UID] })
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertFails(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`), {
+      lastLiveAt: '2099-01-01T00:00:00.000Z'
+    }))
+    await assertSucceeds(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`), {
+      lastLiveAt: serverTimestamp()
+    }))
+  })
+
+  it('chi non sta lasciando un segno di vita puo comunque riscrivere la gara', async () => {
+    // Senza questa via d uscita ogni invito avrebbe dovuto ritimbrare la
+    // stanza, e un manager non avrebbe piu potuto chiuderla.
+    await seedRoom({ memberUids: [DRIVER_UID] })
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), `pitwallRooms/${ROOM_ID}`), { lastLiveAt: new Date() })
+    })
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`), {
+      allowedUids: [ENGINEER_UID],
+      updatedAt: '2026-09-01T18:00:00.000Z'
+    }))
+  })
+
+  it('una gara chiusa resta memoria: non si cancella', async () => {
+    await seedRoom({ memberUids: [DRIVER_UID], closedAt: '2026-09-01T18:00:00.000Z' })
+    const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertFails(deleteDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`)))
+  })
+})
+
 describe('Pit Wall - la Race Room: un solo ordine in volo', () => {
   beforeEach(seedPitwallProfiles)
 

@@ -25,6 +25,7 @@ import {
   isPitwallRoomMember,
   pitwallRoomRoleOf,
   resolvePitwallRoomExecutor,
+  shouldClosePitwallDormantRoom,
   type PitwallRoom,
   type PitwallRoomMember,
   type PitwallRoomOrder,
@@ -269,6 +270,45 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   function applyRooms(list: PitwallRoom[]): void {
     rooms.value = list
     if (!selectedRoomId.value && list.length === 1) void selectRoom(list[0]!.roomId)
+    void closeDormantRooms(list)
+  }
+
+  /**
+   * Le gare che questo client ha gia' provato a chiudere.
+   *
+   * Ci restano anche quelle il cui tentativo e' fallito: l'elenco arriva in
+   * diretta e riprovare a ogni consegna vorrebbe dire una scrittura negata al
+   * secondo se le regole non sono ancora pubblicate. Si riprova alla prossima
+   * apertura dell'app, che e' abbastanza spesso per una gara di due giorni fa.
+   */
+  const closeAttempted = new Set<string>()
+
+  /**
+   * Chiude da sole le gare in cui non entra piu' nessuno.
+   *
+   * Le stanze non si cancellano - sono la memoria della corsa - ma finora non
+   * si chiudevano nemmeno: ogni sessione ACC ne lasciava una aperta per
+   * sempre, e chi apriva la Pit Wall trovava otto gare identiche di giorni
+   * diversi. Chiudere e' l'unico gesto disponibile, e lo fa il client che
+   * passa di li' invece di un lavoro schedulato: nessun server da tenere
+   * acceso, nessun costo fisso, e chi non ha gare vecchie non paga niente.
+   *
+   * Solo un manager puo' chiudere - le regole lo impongono, non solo la
+   * schermata - e la gara in corso non si tocca mai.
+   */
+  async function closeDormantRooms(list: PitwallRoom[]): Promise<void> {
+    const service_ = service()
+    if (!service_) return
+    const nowMs = Date.now()
+    for (const room of list) {
+      if (closeAttempted.has(room.roomId)) continue
+      if (!room.managerUids.includes(service_.uid)) continue
+      if (!shouldClosePitwallDormantRoom(room, nowMs, selectedRoomId.value)) continue
+      closeAttempted.add(room.roomId)
+      // Un rifiuto non e' un errore da mostrare a chi sta per guidare: la gara
+      // resta aperta e la si riguardera' alla prossima apertura dell'app.
+      await service_.closeRoom(room.roomId)
+    }
   }
 
   async function refreshRooms(): Promise<void> {

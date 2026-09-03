@@ -15,10 +15,13 @@ import {
   collection,
   doc,
   limit,
+  orderBy,
   query,
   serverTimestamp,
   where,
   type Firestore,
+  type Query,
+  type QueryConstraint,
   type Timestamp,
 } from 'firebase/firestore'
 // Ogni lettura e scrittura passa dal tracker: la promessa "costo zero" regge
@@ -101,6 +104,24 @@ export function normalisePitwallMember(raw: unknown): PitwallRoomMember | null {
   }
 }
 
+/**
+ * Da documento Firestore a stanza normalizzata.
+ *
+ * Serve per un campo solo, e per lo stesso motivo per cui esiste quella dei
+ * membri: `lastLiveAt` arriva come Timestamp del server, e da qui in avanti
+ * nessuno deve piu' sapere che esistono tipi Firestore. Un segno di vita
+ * appena scritto e non ancora confermato dal server non ha ancora un'ora: vale
+ * `null`, cioe' "non lo so", e chi decide se chiudere la stanza tratta il non
+ * saperlo come un motivo per non toccare niente.
+ */
+export function normalisePitwallRoom(raw: unknown): PitwallRoom {
+  const source = raw as (PitwallRoom & { lastLiveAt?: Timestamp | null }) | null
+  const stamp = source?.lastLiveAt
+  const lastLiveAtMs = typeof stamp?.toMillis === 'function' ? stamp.toMillis() : null
+  const { lastLiveAt: _ignored, ...rest } = (source ?? {}) as PitwallRoom & { lastLiveAt?: unknown }
+  return { ...rest, lastLiveAtMs } as PitwallRoom
+}
+
 export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
   const { db, uid } = options
   const now = options.now ?? (() => Date.now())
@@ -117,7 +138,23 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
 
   async function readRoom(roomId: string): Promise<PitwallRoom | null> {
     const snapshot = await trackedGetDoc(roomRef(roomId), 'pitwallRoom.readRoom')
-    return snapshot.exists() ? (snapshot.data() as PitwallRoom) : null
+    return snapshot.exists() ? normalisePitwallRoom(snapshot.data()) : null
+  }
+
+  /**
+   * Le due query delle mie gare, dalla piu' recente.
+   *
+   * L'ordine sta nella query e non dopo, perche' il tetto taglia *prima*: con
+   * trenta gare e nessun ordine, Firestore ne restituiva trenta a caso (per id,
+   * che qui e' casuale) e le piu' recenti potevano non essere fra quelle. E'
+   * l'unico posto dove serve un indice composito; se non e' ancora pubblicato,
+   * `listRooms` e `watchRooms` ripiegano sulla query senza ordine, che e'
+   * esattamente il comportamento di prima: si degrada, non si rompe.
+   */
+  function roomsQuery(field: 'memberUids' | 'allowedUids', ordered: boolean): Query {
+    const clauses: QueryConstraint[] = [where(field, 'array-contains', uid)]
+    if (ordered) clauses.push(orderBy('createdAt', 'desc'))
+    return query(collection(db, 'pitwallRooms'), ...clauses, limit(30))
   }
 
   /**
@@ -278,12 +315,16 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
       ['allowedUids', 'pitwallRoom.listInvited'],
     ] as const) {
       try {
-        const snapshot = await trackedGetDocs(query(
-          collection(db, 'pitwallRooms'),
-          where(field, 'array-contains', uid),
-          limit(30)
-        ), caller)
-        for (const entry of snapshot.docs) found.set(entry.id, entry.data() as PitwallRoom)
+        let snapshot
+        try {
+          snapshot = await trackedGetDocs(roomsQuery(field, true), caller)
+        } catch {
+          // Indice composito non ancora pubblicato: si torna alla query di
+          // prima, che risponde comunque, solo senza garanzia sulle piu'
+          // recenti quando le gare superano il tetto.
+          snapshot = await trackedGetDocs(roomsQuery(field, false), caller)
+        }
+        for (const entry of snapshot.docs) found.set(entry.id, normalisePitwallRoom(entry.data()))
       } catch {
         // Un elenco vuoto e' un esito legittimo; un permesso negato non deve
         // diventare un'eccezione che ferma la pagina.
@@ -310,15 +351,33 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
       for (const partial of seen.values()) for (const [id, room] of partial) merged.set(id, room)
       onChange([...merged.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt)))
     }
-    const stops = (['memberUids', 'allowedUids'] as const).map(field => trackedOnSnapshot(
-      query(collection(db, 'pitwallRooms'), where(field, 'array-contains', uid), limit(30)),
-      field === 'memberUids' ? 'pitwallRoom.watchJoined' : 'pitwallRoom.watchInvited',
-      (snapshot: { docs: { id: string, data: () => unknown }[] }) => {
-        seen.set(field, new Map(snapshot.docs.map(entry => [entry.id, entry.data() as PitwallRoom])))
-        emit()
-      },
-      (error: Error) => onError?.(error)
-    ))
+    const stops = (['memberUids', 'allowedUids'] as const).map((field) => {
+      const caller = field === 'memberUids' ? 'pitwallRoom.watchJoined' : 'pitwallRoom.watchInvited'
+      let stop: (() => void) | null = null
+      const attach = (ordered: boolean) => {
+        stop = trackedOnSnapshot(
+          roomsQuery(field, ordered),
+          caller,
+          (snapshot: { docs: { id: string, data: () => unknown }[] }) => {
+            seen.set(field, new Map(snapshot.docs.map(entry => [entry.id, normalisePitwallRoom(entry.data())])))
+            emit()
+          },
+          (error: Error) => {
+            // Un ascolto ordinato che cade perche' manca l'indice non deve
+            // lasciare la pagina senza gare: si riattacca senza ordine e si
+            // dice l'errore una volta sola, quando non c'e' piu' un piano B.
+            if (ordered) {
+              stop?.()
+              attach(false)
+              return
+            }
+            onError?.(error)
+          }
+        )
+      }
+      attach(true)
+      return () => stop?.()
+    })
     return () => { for (const stop of stops) stop() }
   }
 
@@ -332,7 +391,7 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
       roomRef(roomId),
       'pitwallRoom.watchRoom',
       (snapshot) => {
-        onChange(snapshot.exists() ? (snapshot.data() as PitwallRoom) : null)
+        onChange(snapshot.exists() ? normalisePitwallRoom(snapshot.data()) : null)
       },
       (error: Error) => onError?.(error)
     )
@@ -515,6 +574,31 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
     }
   }
 
+  /**
+   * Lascia un segno di vita sulla stanza.
+   *
+   * Il battito vero sta in `members/{uid}`, ma quel documento lo legge solo chi
+   * e' gia' dentro: da fuori una gara viva e una finita di mesi fa erano
+   * identiche, ed e' il motivo per cui l'elenco delle gare era diventato
+   * illeggibile. Questo campo risponde a quella domanda e a nessun'altra,
+   * quindi va molto piu' piano del battito.
+   *
+   * L'ora la mette il server. Se le regole non sono ancora pubblicate la
+   * scrittura viene negata: chi chiama lo tratta come "per adesso non si puo'",
+   * non come un errore da mostrare - la stanza funziona lo stesso, e' l'elenco
+   * che resta come prima.
+   */
+  async function stampRoomLive(roomId: string): Promise<PitwallRoomResult<true>> {
+    try {
+      await trackedUpdateDoc(roomRef(roomId), {
+        lastLiveAt: serverTimestamp(),
+      }, 'pitwallRoom.stampLive')
+      return { ok: true, value: true }
+    } catch (error) {
+      return failure(error, 'Segno di vita non scritto.')
+    }
+  }
+
   /** Chiude la gara: la stanza resta leggibile come memoria, ma non accetta piu' ordini. */
   async function closeRoom(roomId: string): Promise<PitwallRoomResult<true>> {
     try {
@@ -544,6 +628,7 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
     syncInvites,
     revoke,
     promote,
+    stampRoomLive,
     closeRoom,
   }
 }

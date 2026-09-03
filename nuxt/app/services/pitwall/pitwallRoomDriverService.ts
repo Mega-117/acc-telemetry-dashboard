@@ -25,6 +25,7 @@ import {
   PITWALL_MEMBER_IDLE_HEARTBEAT_MS,
   isPitwallRoomOrderExpired,
   resolvePitwallRoomExecutor,
+  shouldStampPitwallRoomLive,
   type PitwallRoom,
   type PitwallRoomMember,
   type PitwallRoomOrder,
@@ -75,6 +76,15 @@ export interface PitwallRoomDriverOptions {
   } | null>
   /** Chi si ritrova invitato senza chiederlo: la squadra che ci ha gia' dato fiducia. */
   readTrustedUids?: () => Promise<string[]>
+  /**
+   * Quante letture uguali servono prima di aprire o cambiare stanza.
+   *
+   * Due, perche' l'impronta contiene l'equipaggio e la EntryList non arriva
+   * tutta insieme: con un pilota ancora mancante l'impronta e' un'altra, e si
+   * aprirebbe una seconda stanza per la stessa gara. Iniettabile perche' un
+   * test che parla d'altro non debba simulare l'attesa.
+   */
+  vehicleConfirmations?: number
   now?: () => number
   log?: Pick<Console, 'warn' | 'error'>
   service?: PitwallRoomService
@@ -112,6 +122,21 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
   let pending: PitwallRoomOrder[] = []
   let lastPresenceAtMs = 0
   let lastFingerprint: string | null = null
+  /** Quando il battito ha lasciato l'ultimo segno di vita sulla stanza. */
+  let lastLiveStampAtMs = 0
+  /**
+   * Le regole pubblicate non conoscono ancora il segno di vita.
+   *
+   * Si smette di riprovare per questa sessione invece di bruciare una
+   * scrittura negata ogni dieci minuti: la stanza funziona lo stesso, e'
+   * soltanto il suo elenco che resta com'era prima.
+   */
+  let liveStampRefused = false
+  /** L'impronta in attesa di conferma, e quante volte di fila si e' vista. */
+  let confirmingFingerprint: string | null = null
+  let confirmedReadings = 0
+  let confirmTimer: ReturnType<typeof setTimeout> | null = null
+  const confirmationsNeeded = Math.max(1, options.vehicleConfirmations ?? 2)
 
   let stopMembers: (() => void) | null = null
   let stopOrders: (() => void) | null = null
@@ -341,6 +366,28 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
     }
 
     if (!room || lastFingerprint !== vehicle.fingerprint) {
+      // Prima di aprire o cambiare stanza si vuole la stessa impronta due
+      // volte di fila.
+      //
+      // L'impronta contiene l'equipaggio, e la EntryList non arriva tutta
+      // insieme: con un pilota ancora mancante l'impronta e' un'altra, il
+      // puntatore ne apre una seconda stanza per la stessa gara, e la prima
+      // resta aperta per sempre con dentro chi era gia' entrato. E' il modo
+      // peggiore di fallire - due equipaggi che si credono insieme e non lo
+      // sono - e costa cinque secondi evitarlo.
+      if (confirmingFingerprint !== vehicle.fingerprint) {
+        confirmingFingerprint = vehicle.fingerprint
+        confirmedReadings = 1
+      } else {
+        confirmedReadings += 1
+      }
+      if (confirmedReadings < confirmationsNeeded) {
+        unavailableReason = 'Sto riconoscendo la vettura: un momento.'
+        if (confirmTimer) clearTimeout(confirmTimer)
+        confirmTimer = setTimeout(() => { if (!stopped) void sync() }, PITWALL_ROOM_ORDER_RETRY_MS)
+        return
+      }
+
       // Vettura nuova (primo avvio, o cambio evento): si cerca o si apre la
       // sua stanza. Il puntatore fa convergere gli altri PC della stessa
       // macchina senza che nessuno si giri un codice.
@@ -363,6 +410,8 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
         return
       }
       lastFingerprint = vehicle.fingerprint
+      confirmingFingerprint = null
+      confirmedReadings = 0
       room = resolved.value
       unavailableReason = null
       handled.clear()
@@ -466,6 +515,31 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
     })
     if (published.ok) lastPresenceAtMs = now()
     else log.warn?.('[PITWALL] battito della stanza non pubblicato:', published.reason)
+    await stampLiveIfDue()
+  }
+
+  /**
+   * Ogni tanto il battito lascia un segno anche *sulla stanza*.
+   *
+   * Il battito dice "io ci sono" due volte al minuto, perche' da lui dipende
+   * chi applica la strategia. Questo dice "questa gara e' ancora di qualcuno",
+   * e non ha nessuna fretta: allo stesso passo sarebbero centoventi scritture
+   * l'ora per una risposta che cambia una volta al giorno.
+   *
+   * Senza, chi non e' dentro la stanza non ha modo di sapere se e' viva: le
+   * regole gli vietano di leggere i membri, ed e' esattamente il motivo per cui
+   * le gare si accumulavano tutte uguali e nessuno poteva chiuderle.
+   */
+  async function stampLiveIfDue(): Promise<void> {
+    if (!room || liveStampRefused) return
+    if (!shouldStampPitwallRoomLive(lastLiveStampAtMs, now())) return
+    const stamped = await rooms.stampRoomLive(room.roomId)
+    if (stamped.ok) {
+      lastLiveStampAtMs = now()
+      return
+    }
+    liveStampRefused = true
+    log.warn?.('[PITWALL] segno di vita della stanza rifiutato, non si riprova:', stamped.reason)
   }
 
   void sync()
@@ -488,12 +562,16 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
       if (heartbeatTimer) clearInterval(heartbeatTimer)
       if (retryTimer) clearInterval(retryTimer)
       if (inviteTimer) clearInterval(inviteTimer)
+      if (confirmTimer) clearTimeout(confirmTimer)
       heartbeatTimer = null
       retryTimer = null
       inviteTimer = null
+      confirmTimer = null
       detachRoom()
       room = null
       lastFingerprint = null
+      confirmingFingerprint = null
+      confirmedReadings = 0
       handled.clear()
     },
   }

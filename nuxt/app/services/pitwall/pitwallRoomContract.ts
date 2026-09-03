@@ -48,6 +48,29 @@ export const PITWALL_MAX_CLAIM_LEASE_MS = 300_000
 /** Quanto vale il puntatore impronta → stanza: un weekend di gara. */
 export const PITWALL_VEHICLE_POINTER_TTL_MS = 48 * 60 * 60 * 1000
 
+/**
+ * Ogni quanto il battito lascia un segno di vita *sulla stanza*.
+ *
+ * Il battito vero sta in `members/{uid}` e va a 30 secondi, ma quel documento
+ * lo legge soltanto chi e' gia' dentro: da fuori una gara viva e una finita
+ * erano indistinguibili. Il segno sulla stanza risponde a quella domanda, e
+ * dieci minuti bastano perche' la domanda e' "qualcuno c'e' stato oggi?". A 30
+ * secondi sarebbero 120 scritture l'ora per stanza per una risposta che cambia
+ * una volta al giorno.
+ */
+export const PITWALL_ROOM_LIVE_STAMP_MS = 10 * 60_000
+
+/**
+ * Dopo quanto una stanza senza nessuno si considera finita.
+ *
+ * La stessa finestra del puntatore vettura, e per la stessa ragione: un
+ * weekend di gara. Fra le prove del venerdi' e la gara della domenica il PC
+ * resta spento per ore, e una stanza chiusa nel mezzo obbligherebbe tutti a
+ * rientrare. Non e' una cancellazione: la gara resta, smette solo di
+ * presentarsi come viva.
+ */
+export const PITWALL_ROOM_DORMANT_MS = PITWALL_VEHICLE_POINTER_TTL_MS
+
 /** Il documento unico che fa da lucchetto: un solo ordine in volo per stanza. */
 export const PITWALL_ROOM_LOCK_DOCUMENT_ID = 'activeOrder'
 
@@ -84,6 +107,15 @@ export interface PitwallRoom {
   teamName?: string | null
   /** Gara chiusa: resta leggibile come memoria, non accetta piu' ordini. */
   closedAt?: string | null
+  /**
+   * Ultimo segno di vita, dall'orologio del server.
+   *
+   * Millisecondi gia' normalizzati da chi legge il documento: qui dentro non
+   * entrano tipi Firestore. Assente vuol dire "nessuno ha ancora lasciato un
+   * segno", non "morta": le stanze aperte prima di questo campo esistono e
+   * vanno giudicate da `updatedAt` o `createdAt`.
+   */
+  lastLiveAtMs?: number | null
 }
 
 /**
@@ -244,6 +276,71 @@ export function isPitwallMemberFresh(
   maxAgeMs: number = PITWALL_MEMBER_FRESH_MS
 ): boolean {
   return Number.isFinite(member?.updatedAtMs) && nowMs - member!.updatedAtMs <= maxAgeMs
+}
+
+/**
+ * L'ultimo momento in cui si sa che qualcuno era dentro questa stanza.
+ *
+ * Tre sorgenti in ordine di bonta': il segno di vita del battito, poi
+ * l'ultima modifica alla stanza, poi la sua nascita. La catena serve alle
+ * stanze aperte prima che il segno di vita esistesse: senza, sembrerebbero
+ * tutte vive dall'inizio dei tempi o tutte morte, e sono esattamente quelle
+ * accumulate finora.
+ */
+export function pitwallRoomLastSignOfLifeMs(
+  room: Pick<PitwallRoom, 'lastLiveAtMs' | 'updatedAt' | 'createdAt'> | null | undefined
+): number | null {
+  const stamped = Number(room?.lastLiveAtMs)
+  if (Number.isFinite(stamped) && stamped > 0) return stamped
+  const updated = Date.parse(String(room?.updatedAt ?? ''))
+  if (Number.isFinite(updated)) return updated
+  const created = Date.parse(String(room?.createdAt ?? ''))
+  return Number.isFinite(created) ? created : null
+}
+
+/**
+ * E' ora che il battito lasci di nuovo un segno di vita sulla stanza.
+ *
+ * Separata dal battito vero apposta: quello dice "io ci sono" trenta volte
+ * all'ora perche' da lui dipende chi applica la strategia, questo dice "questa
+ * gara e' ancora di qualcuno" e non ha nessuna fretta.
+ */
+export function shouldStampPitwallRoomLive(
+  lastStampMs: number | null | undefined,
+  nowMs: number,
+  everyMs: number = PITWALL_ROOM_LIVE_STAMP_MS
+): boolean {
+  const last = Number(lastStampMs)
+  if (!Number.isFinite(last) || last <= 0) return true
+  return nowMs - last >= everyMs
+}
+
+/**
+ * Questa stanza va chiusa da sola.
+ *
+ * Le stanze non si cancellano mai - sono la memoria della gara - ma nemmeno si
+ * chiudevano: ogni sessione ACC ne lasciava una aperta per sempre, e chi
+ * guardava l'elenco vedeva otto gare identiche di giorni diversi. Chiudere e'
+ * l'unico gesto disponibile, e lo fa il client che passa di li': niente
+ * server, niente job schedulato, nessun costo fisso.
+ *
+ * Tre cose la salvano dalla chiusura, e sono tre errori diversi da non fare:
+ * chiuderla due volte, chiudere quella in cui si sta correndo adesso, e
+ * chiudere una stanza di cui non si sa dire quando e' stata viva l'ultima
+ * volta - nel dubbio non si tocca.
+ */
+export function shouldClosePitwallDormantRoom(
+  room: Pick<PitwallRoom, 'roomId' | 'closedAt' | 'lastLiveAtMs' | 'updatedAt' | 'createdAt'> | null | undefined,
+  nowMs: number,
+  currentRoomId: string | null | undefined,
+  dormantMs: number = PITWALL_ROOM_DORMANT_MS
+): boolean {
+  if (room == null) return false
+  if (room.closedAt != null) return false
+  if (currentRoomId != null && room.roomId === currentRoomId) return false
+  const lastLife = pitwallRoomLastSignOfLifeMs(room)
+  if (lastLife == null) return false
+  return nowMs - lastLife > dormantMs
 }
 
 /** Un ordine della stanza e' scaduto: non parte piu', e non resta in coda. */

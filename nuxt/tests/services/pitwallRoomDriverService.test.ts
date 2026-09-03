@@ -57,6 +57,8 @@ function fakeService(initial: PitwallRoom = room()) {
     presence: [] as { driving: boolean }[],
     reads: [] as string[],
     released: 0,
+    liveStamps: [] as string[],
+    opened: [] as string[],
   }
   let pushRoom: ((next: PitwallRoom) => void) | null = null
   let pushMembers: ((list: PitwallRoomMember[]) => void) | null = null
@@ -69,7 +71,14 @@ function fakeService(initial: PitwallRoom = room()) {
   const service = {
     uid: DRIVER,
     readRoom: async () => current,
-    ensureRoomForVehicle: async () => ({ ok: true as const, value: current }),
+    ensureRoomForVehicle: async (input: { fingerprint: string }) => {
+      calls.opened.push(input.fingerprint)
+      return { ok: true as const, value: current }
+    },
+    stampRoomLive: async (roomId: string) => {
+      calls.liveStamps.push(roomId)
+      return { ok: true as const, value: true as const }
+    },
     listRooms: async () => [current],
     joinRoom: async () => ({ ok: true as const, value: current }),
     leaveRoom: async () => ({ ok: true as const, value: true as const }),
@@ -157,6 +166,9 @@ function startDriver(fake: ReturnType<typeof fakeService>, bridge: ReturnType<ty
     runtimeSessionId: 'rt-1',
     electronApi: bridge.api,
     service: fake.service,
+    // Questi test parlano d'altro. L'attesa della conferma dell'impronta ha i
+    // suoi test dedicati piu' sotto, e qui una lettura basta.
+    vehicleConfirmations: 1,
     readTrustedUids: async () => trusted,
     readVehicle: async () => ({
       fingerprint: 'ddf3278c2b7485a3',
@@ -449,6 +461,7 @@ describe('un errore in mezzo non blocca la vettura per sempre', () => {
       runtimeSessionId: 'rt-1',
       electronApi: bridge.api,
       service: rotto as never,
+      vehicleConfirmations: 1,
       readTrustedUids: async () => [],
       readVehicle: async () => ({
         fingerprint: 'ddf3278c2b7485a3',
@@ -589,5 +602,146 @@ describe('gli esiti che il cloud non ha ancora ricevuto', () => {
 
     expect(fake.calls.outcomes).toContainEqual({ orderId: 'ordine-1', status: 'applied' })
     expect(confirmed).toEqual(['ordine-1'])
+  })
+})
+
+/**
+ * L'impronta contiene l'equipaggio, e la EntryList di ACC non arriva tutta
+ * insieme: e' il modo in cui una gara sola diventava due stanze.
+ */
+describe('non si apre una stanza su un equipaggio ancora a meta', () => {
+  let handle: ReturnType<typeof startPitwallRoomDriver> | null = null
+
+  afterEach(() => { handle?.stop(); handle = null })
+
+  function startWithVehicles(fake: ReturnType<typeof fakeService>, fingerprints: string[]) {
+    let call = 0
+    return startPitwallRoomDriver({
+      db: {} as never,
+      uid: DRIVER,
+      nickname: 'RICO117',
+      runtimeSessionId: 'rt-1',
+      electronApi: electron().api,
+      service: fake.service,
+      readTrustedUids: async () => [],
+      readVehicle: async () => {
+        const fingerprint = fingerprints[Math.min(call, fingerprints.length - 1)]!
+        call += 1
+        return {
+          fingerprint,
+          label: '#1 · nurburgring',
+          track: 'nurburgring',
+          raceNumber: 1,
+          teamName: null,
+          driving: true,
+          crew: null,
+          strategy: null,
+        }
+      },
+      log: { warn: () => {}, error: () => {} },
+    })
+  }
+
+  it('aspetta la seconda lettura prima di aprire, e intanto lo dice', async () => {
+    const fake = fakeService()
+    handle = startWithVehicles(fake, ['impronta-completa'])
+    await settle(12)
+
+    // Alla prima lettura non si apre niente, e il motivo e' una frase per chi
+    // sta per guidare, non un errore.
+    expect(fake.calls.opened).toEqual([])
+    expect(handle.unavailableReason()).toBe('Sto riconoscendo la vettura: un momento.')
+
+    await handle.sync()
+    await settle(12)
+
+    expect(fake.calls.opened).toEqual(['impronta-completa'])
+    expect(handle.unavailableReason()).toBeNull()
+  })
+
+  it('un equipaggio che si completa fra due letture non lascia due gare aperte', async () => {
+    // Senza conferma, il primo giro apriva una stanza sulla firma incompleta:
+    // quella restava aperta per sempre, con dentro chi era gia' entrato, e la
+    // gara vera continuava in un'altra.
+    const fake = fakeService()
+    handle = startWithVehicles(fake, ['equipaggio-a-meta', 'equipaggio-completo'])
+    await settle(12)
+    await handle.sync()
+    await settle(12)
+
+    // Le due letture non coincidevano: nessuna stanza aperta.
+    expect(fake.calls.opened).toEqual([])
+
+    await handle.sync()
+    await settle(12)
+
+    // Confermata quella completa, si apre una gara sola e sulla firma giusta.
+    expect(fake.calls.opened).toEqual(['equipaggio-completo'])
+  })
+})
+
+describe('il segno di vita sulla stanza', () => {
+  let handle: ReturnType<typeof startPitwallRoomDriver> | null = null
+
+  afterEach(() => { handle?.stop(); handle = null })
+
+  it('si lascia di rado, non a ogni battito', async () => {
+    // Il battito va a trenta secondi perche' da lui dipende chi applica la
+    // strategia. Il segno di vita risponde a "questa gara e' ancora di
+    // qualcuno?", che cambia una volta al giorno: allo stesso passo sarebbero
+    // centoventi scritture l'ora per niente.
+    const fake = fakeService()
+    handle = startDriver(fake, electron())
+    await settle(12)
+
+    expect(fake.calls.liveStamps).toEqual([ROOM_ID])
+
+    await handle.sync()
+    await settle(12)
+    await handle.sync()
+    await settle(12)
+
+    expect(fake.calls.liveStamps).toEqual([ROOM_ID])
+  })
+
+  it('se le regole lo rifiutano non si riprova, e la gara funziona lo stesso', async () => {
+    // Finche' le regole non sono pubblicate la scrittura e' negata: ritentare
+    // ogni dieci minuti brucerebbe scritture per sempre senza cambiare niente.
+    const fake = fakeService()
+    const refusing = {
+      ...fake.service,
+      stampRoomLive: async () => {
+        fake.calls.liveStamps.push('rifiutato')
+        return { ok: false as const, reason: 'permission-denied' }
+      },
+    }
+    handle = startPitwallRoomDriver({
+      db: {} as never,
+      uid: DRIVER,
+      nickname: 'RICO117',
+      runtimeSessionId: 'rt-1',
+      electronApi: electron().api,
+      service: refusing as never,
+      vehicleConfirmations: 1,
+      readTrustedUids: async () => [],
+      readVehicle: async () => ({
+        fingerprint: 'ddf3278c2b7485a3',
+        label: '#1 · nurburgring',
+        track: 'nurburgring',
+        raceNumber: 1,
+        teamName: null,
+        driving: true,
+        crew: null,
+        strategy: null,
+      }),
+      log: { warn: () => {}, error: () => {} },
+    })
+    await settle(12)
+    await handle.sync()
+    await settle(12)
+
+    expect(fake.calls.liveStamps).toEqual(['rifiutato'])
+    // E il battito vero continua: e' quello che decide chi applica l'ordine.
+    expect(fake.calls.presence.length).toBeGreaterThan(0)
   })
 })

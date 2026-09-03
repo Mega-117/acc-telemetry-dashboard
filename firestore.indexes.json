@@ -165,6 +165,42 @@
       ]
     },
     {
+      "collectionGroup": "pitwallRooms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "memberUids",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "pitwallRooms",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "allowedUids",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "pilotDirectory",
       "queryScope": "COLLECTION",
       "fields": [

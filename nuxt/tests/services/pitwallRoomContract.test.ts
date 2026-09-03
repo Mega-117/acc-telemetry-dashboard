@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   PITWALL_MEMBER_FRESH_MS,
   PITWALL_ORDER_TTL_MS,
+  PITWALL_ROOM_DORMANT_MS,
+  PITWALL_ROOM_LIVE_STAMP_MS,
   PITWALL_ROOM_SCHEMA_VERSION,
   buildPitwallRoomOrder,
   describePitwallRoom,
@@ -11,8 +13,11 @@ import {
   isPitwallRoomInvited,
   isPitwallRoomMember,
   isPitwallRoomOrderExpired,
+  pitwallRoomLastSignOfLifeMs,
   pitwallRoomRoleOf,
   resolvePitwallRoomExecutor,
+  shouldClosePitwallDormantRoom,
+  shouldStampPitwallRoomLive,
   type PitwallRoomMember
 } from '~/services/pitwall/pitwallRoomContract'
 
@@ -165,6 +170,68 @@ describe('un solo ordine in volo per stanza', () => {
 
   it('se il PC che aveva preso l ordine sparisce, la stanza si sblocca', () => {
     expect(isPitwallClaimAvailable({ orderId: 'ordine-1', leaseUntilMs: NOW_MS - 1 }, 'ordine-2', NOW_MS)).toBe(true)
+  })
+})
+
+describe('quando una gara si considera finita', () => {
+  // Le stanze non si cancellano - sono la memoria della corsa - ma finora non
+  // si chiudevano nemmeno: ogni sessione ACC ne lasciava una aperta per
+  // sempre, e l'elenco diventava otto gare identiche di giorni diversi.
+  const vecchia = {
+    roomId: 'gara-di-luglio',
+    closedAt: null,
+    lastLiveAtMs: NOW_MS - PITWALL_ROOM_DORMANT_MS - 1,
+    updatedAt: '2026-07-01T10:00:00.000Z',
+    createdAt: '2026-07-01T09:00:00.000Z',
+  }
+
+  it('dopo il weekend senza nessuno si chiude da sola', () => {
+    expect(shouldClosePitwallDormantRoom(vecchia, NOW_MS, null)).toBe(true)
+  })
+
+  it('finche qualcuno c e stato dentro la finestra, resta aperta', () => {
+    const viva = { ...vecchia, lastLiveAtMs: NOW_MS - PITWALL_ROOM_DORMANT_MS + 1 }
+    expect(shouldClosePitwallDormantRoom(viva, NOW_MS, null)).toBe(false)
+  })
+
+  it('la gara in cui si sta correndo adesso non si tocca mai', () => {
+    // Il caso che fa danno davvero: chiudere sotto i piedi di chi guida.
+    expect(shouldClosePitwallDormantRoom(vecchia, NOW_MS, 'gara-di-luglio')).toBe(false)
+  })
+
+  it('una gara gia chiusa non si richiude', () => {
+    expect(shouldClosePitwallDormantRoom(
+      { ...vecchia, closedAt: '2026-07-02T10:00:00.000Z' }, NOW_MS, null
+    )).toBe(false)
+  })
+
+  it('se non si sa dire quando e stata viva, non si tocca', () => {
+    // Nel dubbio si lascia stare: chiudere la gara di qualcun altro per una
+    // data illeggibile e' peggio di una stanza in piu' nell'elenco.
+    expect(shouldClosePitwallDormantRoom(
+      { roomId: 'x', closedAt: null, lastLiveAtMs: null, updatedAt: 'boh', createdAt: 'boh' },
+      NOW_MS,
+      null
+    )).toBe(false)
+    expect(shouldClosePitwallDormantRoom(null, NOW_MS, null)).toBe(false)
+  })
+
+  it('le gare aperte prima del segno di vita si giudicano da quello che hanno', () => {
+    // Sono esattamente quelle accumulate finora: senza questa catena
+    // sembrerebbero tutte vive dall'inizio dei tempi.
+    expect(pitwallRoomLastSignOfLifeMs(vecchia)).toBe(vecchia.lastLiveAtMs)
+    expect(pitwallRoomLastSignOfLifeMs({ ...vecchia, lastLiveAtMs: null }))
+      .toBe(Date.parse(vecchia.updatedAt))
+    expect(pitwallRoomLastSignOfLifeMs({ ...vecchia, lastLiveAtMs: null, updatedAt: '' }))
+      .toBe(Date.parse(vecchia.createdAt))
+  })
+})
+
+describe('ogni quanto la stanza lascia un segno di vita', () => {
+  it('la prima volta subito, poi con calma', () => {
+    expect(shouldStampPitwallRoomLive(null, NOW_MS)).toBe(true)
+    expect(shouldStampPitwallRoomLive(NOW_MS - PITWALL_ROOM_LIVE_STAMP_MS + 1, NOW_MS)).toBe(false)
+    expect(shouldStampPitwallRoomLive(NOW_MS - PITWALL_ROOM_LIVE_STAMP_MS, NOW_MS)).toBe(true)
   })
 })
 

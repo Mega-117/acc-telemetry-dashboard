@@ -156,8 +156,18 @@ service cloud.firestore {
              && request.resource.data.sessionId is string
              && request.resource.data.sessionId.size() <= 80
              && request.resource.data.online is bool
-             && request.resource.data.updatedAt is string
-             && request.resource.data.updatedAt.size() <= 40
+             // Chi e' in pista adesso si decide da qui, e finche' l'ora la
+             // scriveva il client bastava un orologio avanti per tenere in
+             // pista per sempre un pilota che aveva spento il PC. E' lo stesso
+             // difetto gia' corretto per il battito dentro la stanza; qui
+             // arriva dopo, quindi la stringa resta ammessa: le presenze
+             // scritte da un'app non ancora aggiornata devono continuare a
+             // valere, non sparire tutte insieme il giorno in cui si
+             // pubblicano le regole. Chi legge preferisce l'ora del server
+             // quando c'e'.
+             && (request.resource.data.updatedAt == request.time
+                 || (request.resource.data.updatedAt is string
+                     && request.resource.data.updatedAt.size() <= 40))
              && isBoundedNullableString(request.resource.data.get('car', null), 80)
              && isBoundedNullableString(request.resource.data.get('track', null), 80)
              // Equipaggio della vettura: al massimo 16 voci, come la EntryList.
@@ -261,7 +271,7 @@ service cloud.firestore {
              && request.resource.data.keys().hasOnly([
                'schemaVersion', 'roomId', 'label', 'hostUid', 'managerUids', 'memberUids',
                'allowedUids', 'vehicleFingerprint', 'createdAt', 'updatedAt',
-               'track', 'raceNumber', 'teamName', 'closedAt'
+               'track', 'raceNumber', 'teamName', 'closedAt', 'lastLiveAt'
              ])
              && request.resource.data.schemaVersion == 2
              && request.resource.data.roomId == roomId
@@ -288,6 +298,16 @@ service cloud.firestore {
              && isBoundedNullableString(request.resource.data.get('closedAt', null), 40)
              && (request.resource.data.get('raceNumber', null) == null
                  || request.resource.data.raceNumber is int)
+             // Il segno di vita della stanza. Vive qui e non solo nei membri
+             // perche' `members` lo puo' leggere soltanto chi e' gia' dentro:
+             // da fuori, viva e morta erano indistinguibili. L'ora la mette il
+             // server, come per il battito - una stringa del client avrebbe
+             // tenuto viva per sempre una gara finita. Si riscrive con l'ora di
+             // adesso oppure si lascia esattamente com'era: nessun altro valore.
+             && (request.resource.data.get('lastLiveAt', null) == null
+                 || request.resource.data.lastLiveAt == request.time
+                 || (resource != null
+                     && request.resource.data.lastLiveAt == resource.data.get('lastLiveAt', null)))
              // Chi ha aperto la stanza non puo' essere degradato ne' espulso:
              // e' l'unico modo di garantire che resti sempre qualcuno che puo'
              // invitare, anche dopo una lite fra manager.
@@ -303,11 +323,29 @@ service cloud.firestore {
              && request.resource.data.vehicleFingerprint == resource.data.vehicleFingerprint;
     }
 
+    /**
+     * Chiudere la gara e darle un nome sono atti di governo, come invitare e
+     * promuovere: appartengono ai manager. Fino a qui il divieto viveva solo
+     * nell'interfaccia, che nasconde il bottone - e un'interfaccia non e' un
+     * controllo: bastava una chiamata diretta perche' un membro qualunque
+     * chiudesse la gara agli altri o le cambiasse nome mentre si corre. Il
+     * segno di vita resta fuori da qui apposta: dirlo e' un fatto, non un
+     * potere, e lo scrive chiunque stia davvero dentro la stanza.
+     */
+    function pitwallRoomGovernanceUnchanged() {
+      return request.resource.data.get('closedAt', null) == resource.data.get('closedAt', null)
+             && request.resource.data.label == resource.data.label
+             && request.resource.data.get('track', null) == resource.data.get('track', null)
+             && request.resource.data.get('raceNumber', null) == resource.data.get('raceNumber', null)
+             && request.resource.data.get('teamName', null) == resource.data.get('teamName', null);
+    }
+
     /** Entrare significa aggiungere se stessi, e nessun altro, ai membri. */
     function pitwallRoomJoinsSelf() {
       return request.resource.data.memberUids == resource.data.memberUids.concat([request.auth.uid])
              && request.resource.data.allowedUids == resource.data.allowedUids
-             && request.resource.data.managerUids == resource.data.managerUids;
+             && request.resource.data.managerUids == resource.data.managerUids
+             && pitwallRoomGovernanceUnchanged();
     }
 
     /**
@@ -319,7 +357,8 @@ service cloud.firestore {
       return request.resource.data.allowedUids == resource.data.allowedUids
              && request.resource.data.managerUids == resource.data.managerUids
              && (request.resource.data.memberUids == resource.data.memberUids
-                 || request.resource.data.memberUids == resource.data.memberUids.removeAll([request.auth.uid]));
+                 || request.resource.data.memberUids == resource.data.memberUids.removeAll([request.auth.uid]))
+             && pitwallRoomGovernanceUnchanged();
     }
 
     /**

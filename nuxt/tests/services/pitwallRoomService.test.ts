@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   errors: new Map<string, (error: Error) => void>(),
   stopped: [] as string[],
   wheres: [] as string[],
+  orderBys: [] as string[],
 }))
 
 vi.mock('firebase/firestore', () => ({
@@ -15,6 +16,7 @@ vi.mock('firebase/firestore', () => ({
   doc: (parent: unknown, ...segments: string[]) => ({ path: segments.join('/'), parent }),
   query: (ref: unknown) => ref,
   where: (field: string) => { mocks.wheres.push(field); return {} },
+  orderBy: (field: string) => { mocks.orderBys.push(field); return {} },
   limit: () => ({}),
   serverTimestamp: () => ({}),
 }))
@@ -52,6 +54,7 @@ beforeEach(() => {
   mocks.errors = new Map()
   mocks.stopped = []
   mocks.wheres = []
+  mocks.orderBys = []
 })
 
 describe('watchRooms', () => {
@@ -82,12 +85,45 @@ describe('watchRooms', () => {
     expect(mocks.stopped).toEqual(['pitwallRoom.watchJoined', 'pitwallRoom.watchInvited'])
   })
 
-  it('un errore di ascolto arriva a chi guarda, senza fermare l altro ascolto', () => {
+  it('chiede le gare dalla piu recente, perche il tetto taglia prima di ordinare', () => {
+    const service = createPitwallRoomService({ db: {} as never, uid: 'me' })
+    service.watchRooms(() => {})
+    // Senza ordine nella query, trenta gare su trentacinque le sceglieva
+    // Firestore per id - che qui e' casuale - e le piu' recenti potevano non
+    // esserci. Un ordine per verso, non uno solo.
+    expect(mocks.orderBys).toEqual(['createdAt', 'createdAt'])
+  })
+
+  it('senza l indice composito si riattacca senza ordine, invece di lasciare la pagina senza gare', () => {
+    const service = createPitwallRoomService({ db: {} as never, uid: 'me' })
+    const failures: string[] = []
+    const seen: string[][] = []
+    service.watchRooms(rooms => seen.push(rooms.map(room => room.roomId)), error => failures.push(error.message))
+
+    mocks.errors.get('pitwallRoom.watchInvited')!(new Error('The query requires an index'))
+
+    // L'ascolto ordinato viene chiuso e rifatto senza ordine: nessun errore
+    // mostrato, perche' c'era ancora un piano B.
+    expect(mocks.stopped).toEqual(['pitwallRoom.watchInvited'])
+    expect(failures).toEqual([])
+    expect(mocks.orderBys).toEqual(['createdAt', 'createdAt'])
+
+    // E le gare continuano ad arrivare.
+    mocks.listeners.get('pitwallRoom.watchInvited')!(snapshotOf([{ id: 'a', createdAt: '2026-09-01T00:00:00.000Z' }]))
+    expect(seen.at(-1)).toEqual(['a'])
+  })
+
+  it('quando non c e piu un piano B, l errore arriva a chi guarda senza fermare l altro ascolto', () => {
     const service = createPitwallRoomService({ db: {} as never, uid: 'me' })
     const failures: string[] = []
     service.watchRooms(() => {}, error => failures.push(error.message))
+
+    // Il primo errore fa ripiegare sulla query senza ordine; il secondo non ha
+    // piu' niente da provare e va detto.
     mocks.errors.get('pitwallRoom.watchInvited')!(new Error('permission-denied'))
+    mocks.errors.get('pitwallRoom.watchInvited')!(new Error('permission-denied'))
+
     expect(failures).toEqual(['permission-denied'])
-    expect(mocks.stopped).toEqual([])
+    expect(mocks.stopped).toEqual(['pitwallRoom.watchInvited'])
   })
 })
