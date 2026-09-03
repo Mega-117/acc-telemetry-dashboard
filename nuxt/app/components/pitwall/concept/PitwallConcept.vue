@@ -7,49 +7,60 @@
 // La gestione delle persone e' un gesto secondario dentro la home, non un
 // percorso a se': collegarsi non richiede prima di fondare una squadra.
 // Le persone si chiamano col nickname e basta: nome e cognome non compaiono.
-import { computed, reactive, ref } from "vue";
+//
+// I due versi non sono simmetrici, ed e' il punto: autorizzare qualcuno e' cosa
+// mia e vale subito, mentre poter assistere un altro me lo deve concedere lui.
+// Per questo la ricerca offre "Chiedi di assisterlo" accanto a "Può assistermi".
+import { computed, ref } from "vue";
 import PitwallConceptExpiry from "~/components/pitwall/concept/PitwallConceptExpiry.vue";
 import PitwallConceptLive from "~/components/pitwall/concept/PitwallConceptLive.vue";
+import PitwallConceptPeople from "~/components/pitwall/concept/PitwallConceptPeople.vue";
+import PitwallConceptRaces from "~/components/pitwall/concept/PitwallConceptRaces.vue";
+import PitwallConceptSearch from "~/components/pitwall/concept/PitwallConceptSearch.vue";
+import { usePitwallConceptState } from "~/composables/usePitwallConceptState";
 import {
   PITWALL_CONCEPT_DEFAULT_EXPIRY,
-  PITWALL_CONCEPT_RACES,
-  describePitwallConceptAccess,
-  getPitwallConceptLinks,
   normalizePitwallConceptExpiry,
-  pitwallConceptInitials,
-  pitwallConceptInitialsById,
-  pitwallConceptNickname,
-  pitwallConceptNicknameById,
-  searchPitwallConceptDirectory,
 } from "~/utils/pitwallConcept";
 import type {
   PitwallConceptDirection,
-  PitwallConceptLink,
+  PitwallConceptRace,
   PitwallConceptScreen,
 } from "~/utils/pitwallConcept";
+
+const state = usePitwallConceptState();
 
 const screen = ref<PitwallConceptScreen>("home");
 const direction = ref<PitwallConceptDirection>("assist");
 const search = ref("");
 
-// Copia locale dei due elenchi: aggiungere e rimuovere deve vedersi subito.
-const links = reactive<Record<PitwallConceptDirection, PitwallConceptLink[]>>({
-  assist: [...getPitwallConceptLinks("assist")],
-  assisted: [...getPitwallConceptLinks("assisted")],
+// Autorizzare qualcuno chiede una cosa sola: per quanto vale. Prima le due
+// durate, e solo chi sceglie "solo per oggi" vede anche l'orario.
+const grant = ref<{ personId: string; step: "duration" | "time"; time: string } | null>(null);
+
+const races = computed(() => state.races.value);
+const visibleLinks = computed(() => state.links.value[direction.value]);
+const searchResults = computed(() => state.search(search.value));
+
+/** Chi e' dentro una gara viva adesso: la pastiglia accanto al nickname. */
+const racingIds = computed(() => {
+  const ids = new Set<string>();
+  for (const race of races.value) {
+    if (race.closed) continue;
+    for (const member of race.members) if (member.role !== "invited") ids.add(member.personId);
+  }
+  return [...ids];
 });
 
-// L'orario di scadenza si sceglie qui: quando concedi l'accesso a tempo, e ogni
-// volta che vuoi cambiarlo dalla scheda della persona.
-const expiry = ref<{ personId: string; mode: "add" | "edit"; time: string } | null>(null);
-
-const races = ref([...PITWALL_CONCEPT_RACES]);
-const visibleLinks = computed(() => links[direction.value]);
-const searchResults = computed(() => searchPitwallConceptDirectory(search.value));
+/** Il primo avvio non deve essere tre riquadri vuoti senza un punto di partenza. */
+const isFirstRun = computed(
+  () => !state.links.value.assist.length && !state.links.value.assisted.length,
+);
 
 function go(next: PitwallConceptScreen) {
   screen.value = next;
   if (next === "home") search.value = "";
-  expiry.value = null;
+  grant.value = null;
   scrollToTop();
 }
 
@@ -61,43 +72,37 @@ function scrollToTop() {
   if (typeof document !== "undefined") document.documentElement.scrollTop = 0;
 }
 
-function openExpiry(personId: string, mode: "add" | "edit", current?: string) {
-  expiry.value = { personId, mode, time: current ?? PITWALL_CONCEPT_DEFAULT_EXPIRY };
+/** Entrare e aprire sono lo stesso gesto: chi era invitato smette di esserlo. */
+function enter(race: PitwallConceptRace) {
+  state.enterRace(race.id);
+  go("live");
 }
 
-function confirmExpiry() {
-  const pending = expiry.value;
+function openGrant(personId: string) {
+  grant.value = { personId, step: "duration", time: PITWALL_CONCEPT_DEFAULT_EXPIRY };
+}
+
+function grantAlways(personId: string) {
+  state.allowToAssistMe(personId, "always");
+  direction.value = "assisted";
+  search.value = "";
+  grant.value = null;
+}
+
+function confirmGrant() {
+  const pending = grant.value;
   if (!pending) return;
-  const until = normalizePitwallConceptExpiry(pending.time);
-  if (pending.mode === "add") {
-    addTodayLink(pending.personId, until);
-  } else {
-    const link = links[direction.value].find(item => item.personId === pending.personId);
-    if (link) link.until = until;
-  }
-  expiry.value = null;
+  state.allowToAssistMe(pending.personId, "today", normalizePitwallConceptExpiry(pending.time));
+  direction.value = "assisted";
+  search.value = "";
+  grant.value = null;
 }
 
-function addTodayLink(personId: string, until: string) {
-  if (links.assist.some(link => link.personId === personId)) return;
-  links.assist.push({ personId, access: "today", until });
+function ask(personId: string) {
+  state.askToAssist(personId);
   direction.value = "assist";
   search.value = "";
-}
-
-function addAlwaysLink(personId: string) {
-  if (links.assist.some(link => link.personId === personId)) return;
-  links.assist.push({ personId, access: "always" });
-  direction.value = "assist";
-  search.value = "";
-  expiry.value = null;
-}
-
-function removeLink(personId: string) {
-  const list = links[direction.value];
-  const index = list.findIndex(link => link.personId === personId);
-  if (index >= 0) list.splice(index, 1);
-  if (expiry.value?.personId === personId) expiry.value = null;
+  grant.value = null;
 }
 </script>
 
@@ -116,54 +121,18 @@ function removeLink(personId: string) {
           In gara adesso
         </h2>
 
-        <article
-          v-for="race in races"
-          :key="race.id"
-          class="pwc-race"
-        >
-          <div class="pwc-race__car">
-            <span class="pwc-race__number">#{{ race.carNumber }}</span>
-            <span class="pwc-race__copy">
-              <strong>{{ race.carModel }}</strong>
-              <small>{{ race.track }} · {{ race.session }}</small>
-            </span>
-          </div>
-
-          <div class="pwc-race__roles">
-            <span class="pwc-role">
-              <small>Al volante</small>
-              <b>{{ pitwallConceptNicknameById(race.driverId) }}</b>
-            </span>
-            <span
-              v-if="race.wallIds.length"
-              class="pwc-role"
-            >
-              <small>Al muretto</small>
-              <b>{{ race.wallIds.map(id => pitwallConceptNicknameById(id)).join(", ") }}</b>
-            </span>
-          </div>
-
-          <button
-            type="button"
-            class="pwc-btn is-primary"
-            @click="go('live')"
-          >
-            Entra
-          </button>
-
-          <p class="pwc-race__why">
-            Sei dentro perché
-            <b>{{ pitwallConceptNicknameById(race.reasonPersonId) }}</b>
-            ti ha autorizzato.
-          </p>
-        </article>
-
         <p
-          v-if="!races.length"
-          class="pwc-empty"
+          v-if="isFirstRun"
+          class="pwc-start"
         >
-          Nessuna gara attiva fra le tue persone.
+          Si comincia da una persona: cerca il suo nickname qui sotto. Se sei tu a
+          guidare, autorizzala ad assisterti; se vuoi assistere lei, chiediglielo.
         </p>
+
+        <PitwallConceptRaces
+          :races="races"
+          @enter="enter"
+        />
       </section>
 
       <section>
@@ -197,58 +166,15 @@ function removeLink(personId: string) {
           </div>
         </header>
 
-        <ul
-          v-if="visibleLinks.length"
-          class="pwc-people"
-        >
-          <li
-            v-for="link in visibleLinks"
-            :key="link.personId"
-            class="pwc-person"
-          >
-            <span class="pwc-avatar">{{ pitwallConceptInitialsById(link.personId) }}</span>
-            <strong class="pwc-person__name">{{ pitwallConceptNicknameById(link.personId) }}</strong>
-
-            <button
-              v-if="link.access === 'today'"
-              type="button"
-              class="pwc-chip is-today is-editable"
-              :aria-label="`Cambia scadenza di ${pitwallConceptNicknameById(link.personId)}`"
-              @click="openExpiry(link.personId, 'edit', link.until)"
-            >
-              {{ describePitwallConceptAccess(link) }}
-            </button>
-            <span
-              v-else
-              class="pwc-chip is-always"
-            >
-              {{ describePitwallConceptAccess(link) }}
-            </span>
-
-            <button
-              type="button"
-              class="pwc-link-btn"
-              :aria-label="`Rimuovi ${pitwallConceptNicknameById(link.personId)}`"
-              @click="removeLink(link.personId)"
-            >
-              Rimuovi
-            </button>
-
-            <PitwallConceptExpiry
-              v-if="expiry && expiry.mode === 'edit' && expiry.personId === link.personId"
-              v-model="expiry.time"
-              confirm-label="Salva"
-              @confirm="confirmExpiry"
-              @cancel="expiry = null"
-            />
-          </li>
-        </ul>
-        <p
-          v-else
-          class="pwc-empty"
-        >
-          Nessuna persona in questo elenco.
-        </p>
+        <PitwallConceptPeople
+          :direction="direction"
+          :links="visibleLinks"
+          :racing-ids="racingIds"
+          @remove="state.removeLink(direction, $event)"
+          @cancel="state.cancelRequest($event)"
+          @decide="(personId, decision, until) => state.decideRequest(personId, decision, until)"
+          @expiry="(personId, until) => state.setExpiry(direction, personId, until)"
+        />
       </section>
 
       <section class="pwc-home__add">
@@ -256,80 +182,67 @@ function removeLink(personId: string) {
           Aggiungi una persona
         </h2>
         <p class="pwc-block__hint">
-          Cerca il nickname e scegli per quanto vale l'accesso.
+          Cerca il nickname, poi scegli il verso: chiedere di assisterla, oppure
+          lasciare che assista te.
         </p>
 
-        <label class="pwc-search">
-          <svg
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <circle
-              cx="11"
-              cy="11"
-              r="7"
-            />
-            <path d="m16.5 16.5 4 4" />
-          </svg>
-          <input
-            v-model="search"
-            placeholder="Cerca nickname"
-            aria-label="Cerca nickname"
-          >
-          <button
-            v-if="search"
-            type="button"
-            aria-label="Cancella ricerca"
-            @click="search = ''"
-          >
-            ×
-          </button>
-        </label>
+        <PitwallConceptSearch v-model="search" :results="searchResults">
+          <template #actions="{ person }">
+            <button
+              type="button"
+              class="pwc-btn"
+              @click="ask(person.id)"
+            >
+              Chiedi di assisterlo
+            </button>
+            <button
+              type="button"
+              class="pwc-btn is-primary"
+              :class="{ 'is-active': grant?.personId === person.id }"
+              @click="openGrant(person.id)"
+            >
+              Può assistermi
+            </button>
+          </template>
 
-        <ul
-          v-if="search && searchResults.length"
-          class="pwc-people"
-        >
-          <li
-            v-for="found in searchResults"
-            :key="found.id"
-            class="pwc-person is-add"
-          >
-            <span class="pwc-avatar">{{ pitwallConceptInitials(found) }}</span>
-            <strong class="pwc-person__name">{{ pitwallConceptNickname(found) }}</strong>
-            <span class="pwc-add">
+          <template #after="{ person }">
+            <div
+              v-if="grant && grant.personId === person.id && grant.step === 'duration'"
+              class="pwc-duration"
+            >
+              <span>Per quanto?</span>
               <button
                 type="button"
                 class="pwc-btn"
-                :class="{ 'is-active': expiry?.personId === found.id }"
-                @click="openExpiry(found.id, 'add')"
+                @click="grant.step = 'time'"
               >
                 Solo per oggi
               </button>
               <button
                 type="button"
                 class="pwc-btn is-primary"
-                @click="addAlwaysLink(found.id)"
+                @click="grantAlways(person.id)"
               >
                 Sempre
               </button>
-            </span>
+              <button
+                type="button"
+                class="pwc-link-btn"
+                @click="grant = null"
+              >
+                Annulla
+              </button>
+            </div>
 
             <PitwallConceptExpiry
-              v-if="expiry && expiry.mode === 'add' && expiry.personId === found.id"
-              v-model="expiry.time"
-              confirm-label="Aggiungi"
-              @confirm="confirmExpiry"
-              @cancel="expiry = null"
+              v-if="grant && grant.personId === person.id && grant.step === 'time'"
+              v-model="grant.time"
+              confirm-label="Autorizza"
+              @confirm="confirmGrant"
+              @cancel="grant = null"
             />
-          </li>
-        </ul>
-        <p
-          v-else-if="search"
-          class="pwc-empty"
-        >
-          Nessuno con questo nickname.
-        </p>
+          </template>
+        </PitwallConceptSearch>
       </section>
     </div>
 
@@ -400,6 +313,9 @@ function removeLink(personId: string) {
 .pwc-btn.is-primary { border-color: #ff3d16; background: #e0210b; }
 .pwc-btn.is-primary:hover { background: #f5290f; }
 .pwc-btn.is-active { border-color: rgba(255, 107, 0, 0.8); background: rgba(255, 107, 0, 0.12); }
+/* Un solo gesto distruttivo nel prototipo, e si vede che lo e'. */
+.pwc-btn.is-danger { border-color: rgba(239, 68, 68, 0.6); background: rgba(239, 68, 68, 0.14); }
+.pwc-btn.is-danger:hover { border-color: #ef4444; background: rgba(239, 68, 68, 0.24); }
 
 .pwc-link-btn {
   padding: 0;
@@ -450,10 +366,23 @@ function removeLink(personId: string) {
 }
 .pwc-chip.is-always { border-color: rgba(74, 222, 128, 0.45); color: #4ade80; }
 .pwc-chip.is-today { border-color: rgba(167, 139, 250, 0.45); color: #a78bfa; }
+/* Le due facce della stessa richiesta: chi aspetta e' spento, chi deve
+   rispondere e' acceso, perche' e' l'unico dei due che puo' fare qualcosa. */
+.pwc-chip.is-waiting { border-color: var(--pwc-line); color: $text-muted; }
+.pwc-chip.is-asking { border-color: rgba(255, 107, 0, 0.55); color: $racing-orange; }
 .pwc-chip.is-editable { cursor: pointer; }
 .pwc-chip.is-editable:hover { border-color: #a78bfa; background: rgba(167, 139, 250, 0.1); }
 
 .pwc-empty { margin: 0; padding: 20px 0 4px; color: $text-muted; font-size: 14px; }
+.pwc-start {
+  margin: var(--pwc-gap) 0 0;
+  padding: 18px 20px;
+  border: 1px dashed var(--pwc-line);
+  border-radius: 12px;
+  color: $text-secondary;
+  font-size: 14px;
+  line-height: 1.5;
+}
 
 .pwc-tabs { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--pwc-line); border-radius: 10px; }
 .pwc-tabs button {
@@ -499,7 +428,60 @@ function removeLink(personId: string) {
 }
 .pwc-person__name { font-size: 15px; overflow-wrap: anywhere; }
 .pwc-person.is-add { grid-template-columns: 36px minmax(0, 1fr) auto; }
-.pwc-add { display: flex; gap: 8px; }
+.pwc-person__actions { display: flex; align-items: center; gap: 12px; }
+
+/* "In gara adesso" accanto al nickname: dice perche' vale la pena guardare
+   quella persona proprio ora, senza aggiungere una colonna. */
+.pwc-live-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  color: #4ade80;
+  font-family: $font-primary;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.pwc-live-dot::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* Togliere qualcuno dice cosa succede, e lo dice prima di farlo. */
+.pwc-confirm,
+.pwc-duration {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px solid var(--pwc-line);
+  color: $text-secondary;
+  font-size: 13px;
+}
+.pwc-confirm__actions { display: flex; align-items: center; gap: 16px; margin-left: auto; }
+
+/* Pannello: lo usano sia la tabella del pit stop sia l'equipaggio. */
+.pwc-panel {
+  border: 1px solid var(--pwc-line);
+  border-radius: 12px;
+  background: var(--pwc-raised);
+  overflow: hidden;
+}
+.pwc-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+}
 
 .pwc-role { display: grid; gap: 6px; }
 .pwc-role small { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -543,47 +525,7 @@ function removeLink(personId: string) {
 }
 .pwc-block__hint { margin: 6px 0 0; color: $text-muted; font-size: 13px; }
 
-.pwc-race {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 24px;
-  margin-top: var(--pwc-gap);
-  padding: 20px 24px;
-  border: 1px solid rgba(74, 222, 128, 0.3);
-  border-radius: 14px;
-  background: var(--pwc-raised);
-}
-.pwc-race__car { display: flex; align-items: center; gap: 16px; min-width: 0; }
-.pwc-race__number {
-  flex: none;
-  font-family: $font-display;
-  font-size: 26px;
-  color: $racing-gold;
-  font-variant-numeric: tabular-nums;
-}
-.pwc-race__copy { display: grid; gap: 4px; min-width: 0; }
-.pwc-race__copy strong { font-size: 17px; }
-.pwc-race__copy small { font-size: 13px; }
-.pwc-race__roles { display: flex; gap: 28px; }
-.pwc-race__why {
-  grid-column: 1 / -1;
-  margin: 0;
-  padding-top: 16px;
-  border-top: 1px solid var(--pwc-line);
-  color: $text-muted;
-  font-size: 13px;
-}
-.pwc-race__why b { color: $text-secondary; font-weight: 700; }
-
 /* Adattamento */
-@media (max-width: 1180px) {
-  .pwc-race { grid-template-columns: minmax(0, 1fr) auto; }
-  .pwc-race__roles { grid-column: 1 / -1; }
-  /* Il bottone scende su una riga sua: resta della sua misura, non a tutta larghezza. */
-  .pwc-race > .pwc-btn { justify-self: start; }
-}
-
 @media (max-width: 980px) {
   .pwc-home { grid-template-columns: 1fr; gap: 36px; }
   .pwc-home__races { grid-column: 1; }
@@ -592,12 +534,12 @@ function removeLink(personId: string) {
 @media (max-width: 760px) {
   .pwc { padding: 24px 16px 40px; }
   .pwc-home { gap: 32px; }
-  .pwc-race { grid-template-columns: 1fr; }
   .pwc-person,
   .pwc-person.is-add { grid-template-columns: 36px minmax(0, 1fr); row-gap: 12px; }
   .pwc-person .pwc-chip,
-  .pwc-person .pwc-link-btn,
-  .pwc-add { grid-column: 2; justify-self: start; }
+  .pwc-person__actions { grid-column: 2; justify-self: start; }
+  .pwc-person__actions { flex-wrap: wrap; }
+  .pwc-confirm__actions { margin-left: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {

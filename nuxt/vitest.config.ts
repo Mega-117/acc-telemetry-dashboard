@@ -144,6 +144,7 @@ export default defineConfig({
         'app/utils/raceCalendarCountdown.ts',
         'app/utils/pitwallPresentation.ts',
         'app/utils/pitwallConcept.ts',
+        'app/composables/usePitwallConceptState.ts',
         'server/utils/chatterboxRuntimeStatus.ts',
         'server/utils/chatterboxVoiceCatalog.ts',
         'shared/chatterboxProsody.ts',

@@ -1,24 +1,44 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+// La campanella del prototipo (PIP-369): l'unico posto che si accende.
+//
+// Prima accettare e rifiutare facevano la stessa cosa - toglievano la riga -
+// perche' gli avvisi vivevano qui dentro e le liste da un'altra parte. Ora
+// stanno nello stesso stato, quindi accettare fa davvero la cosa promessa: una
+// richiesta diventa un permesso, un invito ti fa entrare nella gara.
+//
+// Stesse parole della pagina: "Sempre" e "Solo per oggi", mai il gergo interno.
+import { computed } from 'vue'
 import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
+import { usePitwallConceptState } from '~/composables/usePitwallConceptState'
+import {
+  PITWALL_CONCEPT_DEFAULT_EXPIRY,
+  describePitwallConceptNotice,
+} from '~/utils/pitwallConcept'
+import type { PitwallConceptNotice } from '~/utils/pitwallConcept'
 
-type MockNotice = {
-  id: number
-  type: 'always' | 'today'
-  title: string
-  body: string
+const { notificationsOpen, toggleNotifications } = usePitwallConceptMode()
+const state = usePitwallConceptState()
+
+const notices = computed(() => state.notices.value)
+const pendingCount = computed(() => state.pendingNoticeCount.value)
+
+function describe(notice: PitwallConceptNotice) {
+  return describePitwallConceptNotice(notice, state.races.value)
 }
 
-// Stesse parole della pagina: "Sempre" e "Solo per oggi", mai il gergo interno.
-const { notificationsOpen, toggleNotifications } = usePitwallConceptMode()
-const notices = ref<MockNotice[]>([
-  { id: 1, type: 'always', title: 'Marco ti ha aggiunto', body: 'Puoi assistere le sue gare · Sempre' },
-  { id: 2, type: 'today', title: 'Luca ti invita come ospite', body: 'Solo per la gara di oggi · fino alle 23:40' },
-])
-const pendingCount = computed(() => notices.value.length)
+/** L'etichetta dice cosa succede, non come si chiama il meccanismo. */
+function acceptLabel(notice: PitwallConceptNotice): string {
+  if (notice.kind === 'request') return 'Sempre'
+  return notice.kind === 'invite' ? 'Entra' : 'Ok'
+}
 
-function remove(id: number) {
-  notices.value = notices.value.filter(item => item.id !== id)
+function accept(notice: PitwallConceptNotice) {
+  if (notice.kind === 'granted') state.dismissNotice(notice.id)
+  else state.acceptNotice(notice.id, 'always')
+}
+
+function acceptToday(notice: PitwallConceptNotice) {
+  state.acceptNotice(notice.id, 'today', PITWALL_CONCEPT_DEFAULT_EXPIRY)
 }
 </script>
 
@@ -36,23 +56,32 @@ function remove(id: number) {
       <div v-if="notices.length" class="pwc-notices__list">
         <article v-for="notice in notices" :key="notice.id" class="pwc-notice">
           <div class="pwc-notice__copy">
-            <strong>{{ notice.title }}</strong>
-            <p>{{ notice.body }}</p>
+            <strong>{{ describe(notice).title }}</strong>
+            <p>{{ describe(notice).body }}</p>
+            <button
+              v-if="notice.kind === 'request'"
+              type="button"
+              class="pwc-notice__today"
+              @click="acceptToday(notice)"
+            >
+              Solo per oggi
+            </button>
           </div>
           <div class="pwc-notice__actions">
             <button
               class="is-accept"
-              :aria-label="`Accetta ${notice.title.toLowerCase()}`"
-              :title="`Accetta ${notice.title.toLowerCase()}`"
-              @click="remove(notice.id)"
+              :aria-label="`Accetta ${describe(notice).title.toLowerCase()}`"
+              :title="acceptLabel(notice)"
+              @click="accept(notice)"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
             </button>
             <button
+              v-if="notice.kind !== 'granted'"
               class="is-reject"
-              :aria-label="`Rifiuta ${notice.title.toLowerCase()}`"
-              :title="`Rifiuta ${notice.title.toLowerCase()}`"
-              @click="remove(notice.id)"
+              :aria-label="`Rifiuta ${describe(notice).title.toLowerCase()}`"
+              title="Rifiuta"
+              @click="state.rejectNotice(notice.id)"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg>
             </button>
@@ -66,5 +95,5 @@ function remove(id: number) {
 
 <style lang="scss" scoped>
 @use '@/assets/scss/variables' as *;
-.pwc-bell-wrap{position:relative;margin-right:$spacing-sm}.pwc-bell{position:relative;display:grid;place-items:center;width:39px;height:39px;border:1px solid rgba(255,255,255,.12);border-radius:$radius-md;background:rgba(255,255,255,.04);color:$text-secondary;cursor:pointer}.pwc-bell:hover,.pwc-bell.is-open{color:#fff;border-color:rgba($racing-orange,.5);background:rgba($racing-orange,.08)}.pwc-bell__badge{position:absolute;right:-4px;top:-5px;display:grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:10px;background:$accent-danger;color:#fff;font:700 10px $font-primary;box-shadow:0 0 0 2px $bg-primary}.pwc-notices{position:absolute;z-index:1100;right:0;top:52px;width:min(340px,calc(100vw - 24px));border:1px solid rgba(255,255,255,.12);border-radius:12px;background:#11151d;box-shadow:0 22px 70px rgba(0,0,0,.65);overflow:hidden}.pwc-notices header{display:flex;align-items:center;min-height:52px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.08)}.pwc-notices header strong{font:700 17px $font-display}.pwc-notice{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:14px;min-height:76px;padding:13px 14px 13px 16px;border-bottom:1px solid rgba(255,255,255,.07)}.pwc-notice:last-child{border-bottom:0}.pwc-notice__copy{min-width:0}.pwc-notice strong{display:block;font-size:14px}.pwc-notice p{margin:4px 0 0;color:$text-secondary;font-size:12px;line-height:1.4}.pwc-notice__actions{display:flex;gap:7px}.pwc-notice__actions button{display:grid;place-items:center;width:34px;height:34px;padding:0;border:1px solid;border-radius:7px;background:transparent;cursor:pointer;transition:background-color .14s ease,border-color .14s ease,color .14s ease,transform .1s ease}.pwc-notice__actions button:active{transform:translateY(1px)}.pwc-notice__actions svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.pwc-notice__actions .is-accept{border-color:rgba($accent-success,.5);color:$accent-success;background:rgba($accent-success,.06)}.pwc-notice__actions .is-accept:hover{border-color:$accent-success;background:rgba($accent-success,.14)}.pwc-notice__actions .is-reject{border-color:rgba($accent-danger,.5);color:#ff625c;background:rgba($accent-danger,.05)}.pwc-notice__actions .is-reject:hover{border-color:$accent-danger;background:rgba($accent-danger,.14)}.pwc-notice__actions button:focus-visible{outline:2px solid $racing-orange;outline-offset:2px}.pwc-notices__empty{margin:0;padding:24px;text-align:center;color:$text-muted;font-size:13px}@media(prefers-reduced-motion:reduce){.pwc-notice__actions button{transition:none}}
+.pwc-bell-wrap{position:relative;margin-right:$spacing-sm}.pwc-bell{position:relative;display:grid;place-items:center;width:39px;height:39px;border:1px solid rgba(255,255,255,.12);border-radius:$radius-md;background:rgba(255,255,255,.04);color:$text-secondary;cursor:pointer}.pwc-bell:hover,.pwc-bell.is-open{color:#fff;border-color:rgba($racing-orange,.5);background:rgba($racing-orange,.08)}.pwc-bell__badge{position:absolute;right:-4px;top:-5px;display:grid;place-items:center;min-width:18px;height:18px;padding:0 4px;border-radius:10px;background:$accent-danger;color:#fff;font:700 10px $font-primary;box-shadow:0 0 0 2px $bg-primary}.pwc-notices{position:absolute;z-index:1100;right:0;top:52px;width:min(340px,calc(100vw - 24px));border:1px solid rgba(255,255,255,.12);border-radius:12px;background:#11151d;box-shadow:0 22px 70px rgba(0,0,0,.65);overflow:hidden}.pwc-notices header{display:flex;align-items:center;min-height:52px;padding:0 16px;border-bottom:1px solid rgba(255,255,255,.08)}.pwc-notices header strong{font:700 17px $font-display}.pwc-notice{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:14px;min-height:76px;padding:13px 14px 13px 16px;border-bottom:1px solid rgba(255,255,255,.07)}.pwc-notice:last-child{border-bottom:0}.pwc-notice__copy{min-width:0}.pwc-notice strong{display:block;font-size:14px}.pwc-notice p{margin:4px 0 0;color:$text-secondary;font-size:12px;line-height:1.4}.pwc-notice__today{margin:6px 0 0;padding:0;border:0;background:none;color:$racing-orange;font:700 12px $font-primary;cursor:pointer}.pwc-notice__today:hover{text-decoration:underline}.pwc-notice__actions{display:flex;gap:7px}.pwc-notice__actions button{display:grid;place-items:center;width:34px;height:34px;padding:0;border:1px solid;border-radius:7px;background:transparent;cursor:pointer;transition:background-color .14s ease,border-color .14s ease,color .14s ease,transform .1s ease}.pwc-notice__actions button:active{transform:translateY(1px)}.pwc-notice__actions svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.pwc-notice__actions .is-accept{border-color:rgba($accent-success,.5);color:$accent-success;background:rgba($accent-success,.06)}.pwc-notice__actions .is-accept:hover{border-color:$accent-success;background:rgba($accent-success,.14)}.pwc-notice__actions .is-reject{border-color:rgba($accent-danger,.5);color:#ff625c;background:rgba($accent-danger,.05)}.pwc-notice__actions .is-reject:hover{border-color:$accent-danger;background:rgba($accent-danger,.14)}.pwc-notice__actions button:focus-visible{outline:2px solid $racing-orange;outline-offset:2px}.pwc-notices__empty{margin:0;padding:24px;text-align:center;color:$text-muted;font-size:13px}@media(prefers-reduced-motion:reduce){.pwc-notice__actions button{transition:none}}
 </style>

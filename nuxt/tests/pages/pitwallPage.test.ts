@@ -15,6 +15,13 @@ const concept = read('app/components/pitwall/concept/PitwallConcept.vue')
 const conceptLive = read('app/components/pitwall/concept/PitwallConceptLive.vue')
 const conceptExpiry = read('app/components/pitwall/concept/PitwallConceptExpiry.vue')
 const conceptBell = read('app/components/pitwall/concept/PitwallConceptBell.vue')
+const conceptSearch = read('app/components/pitwall/concept/PitwallConceptSearch.vue')
+const conceptPeople = read('app/components/pitwall/concept/PitwallConceptPeople.vue')
+const conceptWall = read('app/components/pitwall/concept/PitwallConceptWall.vue')
+const conceptRaces = read('app/components/pitwall/concept/PitwallConceptRaces.vue')
+const conceptPitStop = read('app/components/pitwall/concept/PitwallConceptPitStop.vue')
+const conceptState = read('app/composables/usePitwallConceptState.ts')
+const conceptModel = read('app/utils/pitwallConcept.ts')
 const topBar = read('app/components/layout/TopBar.vue')
 
 describe('Pitwall layout approvato', () => {
@@ -283,6 +290,7 @@ describe('Pitwall wiring', () => {
     expect(conceptLive).toContain('class="pwc-back pwc-live__back"')
     expect(conceptLive).toContain('@click="$emit(\'back\')"')
     expect(conceptLive).toContain('width: min(820px, 100%)')
+    expect(conceptLive).toContain('<PitwallConceptPitStop')
     for (const gone of [
       'pwc-command',
       'pwc-live-grid',
@@ -299,7 +307,7 @@ describe('Pitwall wiring', () => {
     }
     // Intestazione e righe condividono la stessa griglia: i valori restano
     // incolonnati sotto Campo / Strategia / In macchina.
-    expect(conceptLive.match(/grid-template-columns: minmax\(0, 1fr\) 180px 116px/g) ?? []).toHaveLength(1)
+    expect(conceptPitStop.match(/grid-template-columns: minmax\(0, 1fr\) 180px 116px/g) ?? []).toHaveLength(1)
   })
 
   it('copre tutto il Pit MFD tranne il limitatore, nell ordine del gioco', () => {
@@ -321,56 +329,96 @@ describe('Pitwall wiring', () => {
     ]
     let cursore = -1
     for (const voce of voci) {
-      const trovato = conceptLive.indexOf(`<span>${voce}</span>`)
+      const trovato = conceptPitStop.indexOf(`<span>${voce}</span>`)
       expect(trovato, voce).toBeGreaterThan(cursore)
       cursore = trovato
     }
-    expect(conceptLive).not.toContain('Limitatore')
+    expect(conceptPitStop).not.toContain('Limitatore')
     // Il tempo non ha una seconda formula: e' la stessa della vista classica.
-    expect(conceptLive).toContain('estimatePitStop')
-    expect(conceptLive).toContain('formatStopDuration')
+    expect(conceptPitStop).toContain('estimatePitStop')
+    expect(conceptPitStop).toContain('formatStopDuration')
   })
 
   it('legge la colonna In macchina da una fonte sola invece che dal template', () => {
     // Prima "25.0", "Dry" e "0 L" erano scritti a mano nelle celle: due copie
     // dello stesso stato che potevano divergere.
-    expect(conceptLive).toContain('const car = Object.freeze({')
+    expect(conceptPitStop).toContain('const car = Object.freeze({')
     for (const cella of ['{{ car.preset }}', '{{ car.fuel }} L', '{{ car.tyreSet }}', '{{ car.compound }}', '{{ car.pressure.toFixed(1) }}', '{{ yesNo(car.suspension) }}', '{{ yesNo(car.bodywork) }}']) {
-      expect(conceptLive).toContain(cella)
+      expect(conceptPitStop).toContain(cella)
     }
   })
 
   it('apre la gara, non una persona, e dice perche ci sei dentro', () => {
     expect(concept).toContain('In gara adesso')
-    expect(concept).toContain('@click="go(\'live\')"')
-    expect(concept).toContain('Entra')
-    expect(concept).toContain('class="pwc-race__why"')
-    expect(concept).toContain('ti ha autorizzato.')
-    expect(concept).toContain('Al volante')
-    expect(concept).toContain('Al muretto')
+    expect(concept).toContain('<PitwallConceptRaces')
+    expect(concept).toContain('@enter="enter"')
+    expect(conceptRaces).toContain('Entra')
+    expect(conceptRaces).toContain('class="pwc-race__why"')
+    expect(conceptRaces).toContain('describePitwallConceptReason(race.reason)')
+    expect(conceptModel).toContain('ti ha autorizzato.')
+    expect(conceptRaces).toContain('Al volante')
+    expect(conceptRaces).toContain('Al muretto')
+    expect(conceptRaces).toContain('Nessuna gara attiva fra le tue persone.')
     expect(concept).not.toContain('Collegati')
     expect(concept).not.toContain('Assisti')
+  })
+
+  it('distingue la gara in cui sei da quella in cui sei solo invitato', () => {
+    // `amInvited` esisteva gia' nel dominio e non era usato da nessun template:
+    // senza, l'unico stato visibile era "sei dentro" anche quando non lo eri.
+    expect(conceptRaces).toContain('pitwallConceptAmInvited(race)')
+    expect(conceptRaces).toContain('Non sei ancora entrato.')
+    expect(conceptRaces).toContain('.pwc-race.is-invited')
+    expect(conceptRaces).toContain('.pwc-race.is-closed')
+    expect(conceptRaces).toContain('Chiusa')
   })
 
   it('gestisce le persone in una lista sola nei due versi', () => {
     expect(concept).toContain('Le mie persone')
     expect(concept).toContain('Posso assistere')
     expect(concept).toContain('Possono assistermi')
-    expect(concept).toContain('getPitwallConceptLinks')
-    expect(concept).toContain('removeLink(link.personId)')
-    expect(concept).toContain('Rimuovi')
+    expect(concept).toContain('<PitwallConceptPeople')
+    expect(conceptPeople).toContain('Rimuovi')
     expect(concept).not.toContain('Recenti')
     expect(concept).not.toContain('Richieste e inviti')
   })
 
+  it('ha i due versi nella ricerca, perche autorizzare e chiedere non sono lo stesso gesto', () => {
+    // Prima la ricerca aggiungeva la persona a "Posso assistere": era un
+    // auto-permesso, un gesto che il dominio non ha e non puo' avere.
+    expect(concept).toContain('Chiedi di assisterlo')
+    expect(concept).toContain('Può assistermi')
+    expect(concept).toContain('ask(person.id)')
+    expect(concept).toContain('openGrant(person.id)')
+    expect(concept).toContain('grantAlways(person.id)')
+    expect(conceptState).toContain('function askToAssist')
+    expect(conceptState).toContain('function allowToAssistMe')
+  })
+
+  it('mostra le due facce di una richiesta, e come si chiudono', () => {
+    expect(conceptPeople).toContain("link.access === 'pending'")
+    expect(conceptPeople).toContain("link.access === 'incoming'")
+    expect(conceptPeople).toContain('Annulla')
+    expect(conceptPeople).toContain('Rifiuta')
+    expect(conceptModel).toContain("return link.access === 'pending' ? 'In attesa' : 'Ti ha chiesto'")
+    expect(concept).toContain('.pwc-chip.is-waiting')
+    expect(concept).toContain('.pwc-chip.is-asking')
+  })
+
+  it('dice cosa succede prima di togliere una persona', () => {
+    expect(conceptPeople).toContain('function removeWarning')
+    expect(conceptPeople).toContain('non vedrà più le tue gare e non potrà mandarti strategie')
+    expect(conceptPeople).toContain('Non vedrai più le gare di ')
+    expect(conceptPeople).toContain('confirmRemove(link.personId)')
+  })
+
   it('usa parole di durata al posto del gergo dei permessi', () => {
-    expect(concept).toContain('describePitwallConceptAccess')
-    expect(concept).toContain('addAlwaysLink(found.id)')
-    expect(concept).toContain("openExpiry(found.id, 'add')")
+    expect(conceptPeople).toContain('describePitwallConceptAccess')
     expect(concept).toContain('Solo per oggi')
     expect(concept).toContain('.pwc-chip.is-always')
     expect(concept).toContain('.pwc-chip.is-today')
     expect(concept).not.toMatch(/Accesso permanente|Accesso temporaneo|Richiedi accesso|pre-?autorizz/i)
+    expect(conceptPeople).not.toMatch(/Accesso permanente|Accesso temporaneo|pre-?autorizz/i)
     expect(conceptLive).toContain('Ospite per oggi')
     expect(conceptLive).toContain('Scade a mezzanotte.')
   })
@@ -381,32 +429,95 @@ describe('Pitwall wiring', () => {
     expect(conceptExpiry).toContain('Scade alle')
     expect(conceptExpiry).toContain('type="time"')
     expect(conceptExpiry).toContain('aria-label="Orario di scadenza"')
+    // Un editor solo per tre usi: concedere, accettare per oggi, cambiare dopo.
     expect(concept).toContain('normalizePitwallConceptExpiry')
-    expect(concept).toContain('confirmExpiry')
-    // Un editor solo, usato sia per concedere sia per cambiare: due usi, una fonte.
-    expect(concept).toContain("openExpiry(found.id, 'add')")
-    expect(concept).toContain("openExpiry(link.personId, 'edit', link.until)")
-    expect(concept).toContain('Cambia scadenza di ')
-    expect(concept.match(/<PitwallConceptExpiry/g) ?? []).toHaveLength(2)
+    expect(concept).toContain('confirmGrant')
+    expect(conceptPeople).toContain('normalizePitwallConceptExpiry')
+    expect(conceptPeople).toContain("openExpiry(link.personId, 'edit', link.until)")
+    expect(conceptPeople).toContain("openExpiry(link.personId, 'accept')")
+    expect(conceptPeople).toContain('Cambia scadenza di ')
+    expect(concept.match(/<PitwallConceptExpiry/g) ?? []).toHaveLength(1)
+    expect(conceptPeople.match(/<PitwallConceptExpiry/g) ?? []).toHaveLength(1)
     expect(concept).not.toContain('.pwc-expiry {')
+    expect(conceptPeople).not.toContain('.pwc-expiry {')
   })
 
   it('chiama le persone col nickname e mai con nome e cognome', () => {
-    expect(concept).toContain('pitwallConceptNicknameById')
-    expect(concept).not.toContain('?.name')
-    expect(conceptLive).not.toContain('?.name')
+    for (const source of [conceptRaces, conceptPeople, conceptWall, conceptLive]) {
+      expect(source).toContain('pitwallConceptNicknameById')
+      expect(source).not.toContain('?.name')
+    }
     for (const fullName of ['Mario Rossi', 'Luca Bianchi', 'Enrico Saiani', 'Marco Gallo']) {
-      expect(concept).not.toContain(fullName)
-      expect(conceptLive).not.toContain(fullName)
+      for (const source of [concept, conceptLive, conceptRaces, conceptPeople, conceptWall, conceptModel]) {
+        expect(source).not.toContain(fullName)
+      }
     }
   })
 
   it('cerca solo per aggiungere, senza riproporre chi e gia collegato', () => {
-    expect(concept).toContain('searchPitwallConceptDirectory')
-    expect(concept).toContain('placeholder="Cerca nickname"')
+    // Una ricerca sola per tutto il prototipo: la home aggiunge persone, la
+    // gara invita. Chi la monta decide i bottoni, il campo resta uno.
+    expect(conceptState).toContain('searchPitwallConceptDirectory')
+    expect(conceptSearch).toContain('placeholder: "Cerca nickname"')
+    expect(conceptSearch).toContain('emptyLabel: "Nessuno con questo nickname."')
+    expect(concept).toContain('<PitwallConceptSearch')
+    expect(conceptLive).toContain('<PitwallConceptSearch')
     expect(concept).toContain('Aggiungi una persona')
-    expect(concept).toContain('Nessuno con questo nickname.')
     expect(concept).toContain('if (next === "home") search.value = "";')
+  })
+
+  it('dice da dove si comincia quando non c e ancora nessuno', () => {
+    expect(concept).toContain('isFirstRun')
+    expect(concept).toContain('class="pwc-start"')
+    expect(concept).toContain('Si comincia da una persona')
+  })
+
+  it('mostra ruoli e poteri dentro la gara, come la vista classica', () => {
+    expect(conceptLive).toContain('<PitwallConceptWall')
+    expect(conceptWall).toContain('Equipaggio')
+    expect(conceptWall).toContain('describePitwallConceptMember')
+    expect(conceptWall).toContain('Promuovi')
+    expect(conceptWall).toContain('Togli')
+    expect(conceptWall).toContain('Esci dalla gara')
+    expect(conceptWall).toContain('Chiudi gara')
+    // Chi ha aperto la gara non si tocca: senza di lui nessuno potrebbe gestirla.
+    expect(conceptModel).toContain('function pitwallConceptCanRemove')
+    expect(conceptModel).toContain('member.personId !== race?.hostId')
+    expect(conceptWall).toContain('pitwallConceptCanRemove(race, member)')
+    expect(conceptWall).toContain('pitwallConceptCanPromote(race, member)')
+  })
+
+  it('invita alla gara con la stessa ricerca, invece di due nomi scritti a mano', () => {
+    expect(conceptLive).toContain('+ Ospite')
+    expect(conceptLive).toContain('function invite')
+    expect(conceptLive).toContain('state.inviteToRace(race.value.id, personId)')
+    expect(conceptLive).not.toContain("['alessandro', 'martina']")
+    expect(conceptLive).toContain('Cerca chi invitare')
+  })
+
+  it('non finge di poter inviare: dice quale cosa lo blocca', () => {
+    expect(conceptPitStop).toContain('pitwallConceptSendBlock')
+    expect(conceptPitStop).toContain(':disabled="Boolean(blocked)"')
+    expect(conceptPitStop).toContain('class="pwc-blocked"')
+    for (const reason of [
+      'Nessuna gara selezionata.',
+      'Questa gara è chiusa: non accetta più strategie.',
+      'Non sei ancora entrato in questa gara.',
+      'Nessuno è al volante: nessun ordine parte.',
+      'Nessuna modifica da inviare.',
+    ]) {
+      expect(conceptModel).toContain(reason)
+    }
+    expect(conceptModel).toContain('nessun ordine parte finché non è chiaro chi guida')
+  })
+
+  it('tiene distinti i due esiti di campo invece di appiattirli in un fatto', () => {
+    // ACC rilegge solo una parte dei campi: dichiarare gli altri "verificati"
+    // sarebbe un falso verde, ed e' il principio che regge tutto il Pit Wall.
+    expect(conceptPitStop).toContain('const READ_BACK = new Set(')
+    expect(conceptPitStop).toContain('is-verified')
+    expect(conceptPitStop).toContain('is-selected')
+    expect(conceptPitStop).toContain('dati macchina di 4s fa')
   })
 
   it('tiene un solo foglio di stile con ritmo e allineamenti dichiarati', () => {
@@ -439,13 +550,36 @@ describe('Pitwall wiring', () => {
 
   it('mostra la campanella mock globale solo nel Concept', () => {
     expect(topBar).toContain('<PitwallConceptBell v-if="pitwallConceptActive"')
-    expect(conceptBell).toContain('Marco ti ha aggiunto')
-    expect(conceptBell).toContain('Luca ti invita come ospite')
+    expect(conceptBell).toContain('describePitwallConceptNotice')
     expect(conceptBell).toContain('is-accept')
     expect(conceptBell).toContain('is-reject')
-    expect(conceptBell).toContain('aria-label="`Accetta ${notice.title.toLowerCase()}`"')
-    expect(conceptBell).toContain('aria-label="`Rifiuta ${notice.title.toLowerCase()}`"')
+    expect(conceptBell).toContain('aria-label="`Accetta ${describe(notice).title.toLowerCase()}`"')
+    expect(conceptBell).toContain('aria-label="`Rifiuta ${describe(notice).title.toLowerCase()}`"')
     expect(conceptBell).not.toMatch(/crew/i)
     expect(conceptBell).not.toMatch(/useActivityFeed|useFirebase/)
+  })
+
+  it('accettare dalla campanella fa la cosa promessa, non svuota una lista', () => {
+    // Il difetto vecchio: accetta e rifiuta chiamavano entrambi `remove(id)`.
+    // Ora gli avvisi vivono nello stesso stato degli elenchi e della gara.
+    expect(conceptBell).toContain('usePitwallConceptState')
+    expect(conceptBell).toContain('state.acceptNotice(notice.id')
+    expect(conceptBell).toContain('state.rejectNotice(notice.id)')
+    expect(conceptBell).not.toContain('function remove(')
+    expect(conceptState).toContain('function acceptNotice')
+    expect(conceptState).toContain('enterRace(notice.raceId)')
+    // Tre tipi: due chiedono una decisione, uno informa e basta.
+    expect(conceptBell).toContain("notice.kind !== 'granted'")
+    expect(conceptModel).toContain("'request' | 'invite' | 'granted'")
+  })
+
+  it('tiene lo stato del prototipo in un posto solo, e senza servizi reali', () => {
+    expect(conceptState).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
+    expect(conceptPeople).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
+    expect(conceptWall).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
+    expect(conceptSearch).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
+    // Le fixture sono l'origine, non lo stato: si copiano prima di mutarle.
+    expect(conceptState).toContain('function initialStore')
+    expect(conceptState).toContain('JSON.parse(JSON.stringify(value))')
   })
 })
