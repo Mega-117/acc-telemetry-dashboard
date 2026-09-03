@@ -234,10 +234,12 @@ describe('Pitwall ordine reale e MFD onesto', () => {
     }
   })
 
-  it('mantiene l esito dell ordine distinto campo per campo', () => {
+  it('mantiene l esito dell ordine distinto campo per campo, con la stessa lettura della vista nuova', () => {
     expect(panel).toContain('fieldOutcomes')
-    expect(panel).toContain("item.outcome === 'verified'")
-    expect(panel).toContain("item.outcome === 'selected'")
+    // Segno, tono e frase di ogni chip vengono da una funzione sola: "confermato
+    // a schermo" e "tasto inviato" non hanno due traduzioni.
+    expect(panel).toContain('describePitwallFieldOutcome(item).mark')
+    expect(panel).toContain('describePitwallFieldOutcome(item).tone')
     expect(panel).toContain('item.reason')
   })
 
@@ -384,11 +386,15 @@ describe('Pitwall wiring', () => {
     ]) {
       expect(conceptPitStop).toContain(cella)
     }
-    // Le caselle che ACC non rilegge: "in macchina" e' l'ultimo ordine, detto
-    // come tale, non un valore inventato dalla fotografia della vettura.
-    for (const cella of ['{{ yesNo(last?.changeTyres) }}', '{{ yesNo(last?.brakes) }}', '{{ yesNo(last?.repairSuspension) }}', '{{ yesNo(last?.repairBodywork) }}']) {
+    // Le caselle che ACC non rilegge: "in macchina" e' cio' che il PC del
+    // pilota ha visto a schermo dopo l'ultimo ordine, se l'ha visto; altrimenti
+    // l'ultimo ordine, detto come tale. Mai un valore inventato dalla
+    // fotografia della vettura.
+    for (const cella of ['seenToggle("changeTyres", last?.changeTyres)', 'seenToggle("brakes", last?.brakes)', 'seenToggle("repairSuspension", last?.repairSuspension)', 'seenToggle("repairBodywork", last?.repairBodywork)']) {
       expect(conceptPitStop).toContain(cella)
     }
+    expect(conceptPitStop).toContain('entry.via === "screen"')
+    expect(conceptPitStop).toContain('PITWALL_CONCEPT_SOURCE_LABELS[sourceOf(')
     expect(store).toContain('lastOrder: Ref<PitwallPlan | null>')
   })
 
@@ -438,8 +444,8 @@ describe('Pitwall wiring', () => {
     expect(conceptPitStop).toContain('Freno posteriore')
     expect(conceptPitStop).toContain('stop.stepBrakeCompound(brake.which')
     expect(conceptPitStop).toContain('stop[brake.field].value ?? "Non toccare"')
-    // Il valore in macchina e' l'ultimo ordine: ACC non rilegge queste righe.
-    expect(conceptPitStop).toContain('last?.[brake.field]')
+    // Il valore in macchina e' quello visto a schermo, o l'ultimo ordine: ACC non rilegge queste righe.
+    expect(conceptPitStop).toContain('seenValue(brake.field, last?.[brake.field])')
     // La casella resta accesa dopo un ordine, quindi le righe restano visibili
     // anche quando la richiesta e' tornata a "non toccare".
     expect(conceptPitStop).toContain("stop.brakes.value == null && last.value?.brakes === true")

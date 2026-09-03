@@ -137,12 +137,15 @@ export function normalizePitwallConceptExpiry(value: string): string {
  * dedotto dall'ultimo ordine come se fosse letto adesso e' un falso verde con
  * un altro nome.
  */
-export type PitwallConceptSource = 'live' | 'stale' | 'order' | 'unavailable'
+export type PitwallConceptSource = 'live' | 'stale' | 'order' | 'screen' | 'unavailable'
 
 export const PITWALL_CONCEPT_SOURCE_LABELS: Record<PitwallConceptSource, string> = {
   live: 'LIVE',
   stale: 'DATI VECCHI',
   order: 'ULTIMO ORDINE',
+  // Il PC del pilota ha riletto il Pit MFD a schermo dopo l'ultimo ordine:
+  // e' cio' che c'e' davvero, non cio' che abbiamo chiesto.
+  screen: 'A SCHERMO',
   unavailable: 'N/D',
 }
 

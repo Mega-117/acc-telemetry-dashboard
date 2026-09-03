@@ -42,6 +42,10 @@ export interface PitwallFieldOutcome {
   requested: unknown
   observed: unknown
   reason: string | null
+  /** Da dove viene l'esito: l'occhio sullo schermo, la shared memory, o un tasto alla cieca. */
+  via?: 'screen' | 'memory' | 'blind' | null
+  /** Non chiesta: ACC l'ha cambiata insieme a un'altra riparazione. */
+  dragged?: boolean
 }
 
 /** Una riga dell'equipaggio, come la legge l'ingegnere. */

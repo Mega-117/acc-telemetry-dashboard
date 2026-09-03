@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { describePitwallFieldOutcome, formatPitwallObserved } from '~/utils/pitwallPresentation'
 import {
   PITWALL_PRESSURE_MAX_PSI,
   PITWALL_PRESSURE_MIN_PSI,
@@ -459,5 +460,31 @@ describe('resolvePitwallOrderStatus', () => {
 
     expect(status.state).toBe('failed')
     expect(status.detail).toBe('Auto non ferma nella pit lane.')
+  })
+})
+
+describe('l esito per campo si legge dal chip, con la provenienza accanto', () => {
+  it('distingue confermato a schermo, riletto dalla telemetria, inviato alla cieca e non applicabile', () => {
+    expect(describePitwallFieldOutcome({ outcome: 'verified', via: 'screen' })).toEqual(expect.objectContaining({ mark: '✓', tone: 'verified', title: 'Confermato a schermo', onScreen: true, detail: '' }))
+    expect(describePitwallFieldOutcome({ outcome: 'verified', via: 'memory' })).toEqual(expect.objectContaining({ mark: '✓', tone: 'verified', onScreen: false }))
+    expect(describePitwallFieldOutcome({ outcome: 'selected', via: 'blind' })).toEqual(expect.objectContaining({ mark: '→', tone: 'selected', title: 'Tasto inviato, non confermato a schermo' }))
+    expect(describePitwallFieldOutcome({ outcome: 'not-verifiable' })).toEqual(expect.objectContaining({ mark: '—', tone: 'not-verifiable' }))
+    expect(describePitwallFieldOutcome({ outcome: null })).toEqual(expect.objectContaining({ mark: '—', tone: 'none', title: '' }))
+  })
+
+  it('un disaccordo con lo schermo dice cosa c e davvero, e una casella trascinata lo dichiara', () => {
+    const mismatch = describePitwallFieldOutcome({ outcome: null, via: 'screen', requested: true, observed: false })
+    expect(mismatch).toEqual(expect.objectContaining({ mark: '✗', tone: 'mismatch', detail: 'a schermo spento' }))
+    const dragged = describePitwallFieldOutcome({ outcome: 'verified', via: 'screen', requested: null, observed: true, dragged: true })
+    expect(dragged).toEqual(expect.objectContaining({ mark: '↳', tone: 'dragged', detail: 'a schermo acceso' }))
+    expect(dragged.title).toMatch(/insieme/)
+  })
+
+  it('un valore osservato si dice in parole', () => {
+    expect(formatPitwallObserved(true)).toBe('acceso')
+    expect(formatPitwallObserved(false)).toBe('spento')
+    expect(formatPitwallObserved(3)).toBe('3')
+    expect(formatPitwallObserved('Gilles')).toBe('Gilles')
+    expect(formatPitwallObserved(null)).toBe('?')
   })
 })

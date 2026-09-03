@@ -181,11 +181,18 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
       return false
     }
     const fields = changedFields()
+    // Nel vero, i campi che ACC rilegge arrivano dalla shared memory e gli
+    // altri dall'occhio del PC del pilota sul Pit MFD: entrambi confermati,
+    // con la provenienza accanto.
     fieldOutcomes.value = fields.map(field => ({
       field,
       label: LABELS[field] ?? field,
-      outcome: READ_BACK.has(field) ? 'verified' : 'selected',
-      reason: null,
+      outcome: 'verified',
+      reason: READ_BACK.has(field) ? null : 'Confermato a schermo.',
+      via: READ_BACK.has(field) ? 'memory' : 'screen',
+      observed: null,
+      requested: null,
+      dragged: false,
     }))
     orderStatus.value = 'applying'
     orderReason.value = null

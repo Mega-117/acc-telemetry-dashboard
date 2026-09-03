@@ -9,6 +9,10 @@
 // rifiutata.
 import { computed } from "vue";
 import { describePitwallConceptOrderStatus } from "~/utils/pitwallConcept";
+// Il segno, il tono e la frase di ogni chip vengono da una funzione sola,
+// condivisa con la vista Legacy: "confermato a schermo" e "tasto inviato"
+// non possono avere due traduzioni.
+import { describePitwallFieldOutcome } from "~/utils/pitwallPresentation";
 import type { PitwallOrderStatus } from "~/services/pitwall/pitwallLink";
 import type { PitwallFieldOutcomeRow } from "~/composables/usePitwallController";
 
@@ -27,11 +31,15 @@ defineEmits<{ send: [] }>();
 const order = computed(() => describePitwallConceptOrderStatus(props.status, props.reason));
 const busy = computed(() => props.status === "pending" || props.status === "applying");
 
-function mark(outcome: PitwallFieldOutcomeRow["outcome"]): string {
-  if (outcome === "verified") return "✓";
-  if (outcome === "selected") return "→";
-  return "—";
-}
+/** Ogni chip con il suo segno: ✓ a schermo o dalla telemetria, → inviato, ✗ in disaccordo, ↳ trascinata. */
+const chips = computed(() => props.outcomes.map((entry) => {
+  const described = describePitwallFieldOutcome(entry);
+  return {
+    ...entry,
+    ...described,
+    title: [described.title, entry.reason].filter(Boolean).join(" · "),
+  };
+}));
 </script>
 
 <template>
@@ -52,13 +60,13 @@ function mark(outcome: PitwallFieldOutcomeRow["outcome"]): string {
       class="pwc-outcome"
     >
       <span
-        v-for="entry in outcomes"
-        :key="entry.field"
+        v-for="chip in chips"
+        :key="chip.field"
         class="pwc-outcome__chip"
-        :class="`is-${entry.outcome ?? 'none'}`"
-        :title="entry.reason ?? undefined"
+        :class="[`is-${chip.tone}`, { 'is-screen': chip.onScreen }]"
+        :title="chip.title || undefined"
       >
-        {{ mark(entry.outcome) }} {{ entry.label }}
+        {{ chip.mark }} {{ chip.label }}<small v-if="chip.detail"> · {{ chip.detail }}</small>
       </span>
     </div>
 
@@ -100,8 +108,13 @@ function mark(outcome: PitwallFieldOutcomeRow["outcome"]): string {
   font-weight: 700;
 }
 .pwc-outcome__chip.is-verified { border-color: rgba(74, 222, 128, 0.45); color: #4ade80; }
+/* Confermato guardando lo schermo: il bordo pieno lo distingue dalla memoria. */
+.pwc-outcome__chip.is-verified.is-screen { border-color: #4ade80; }
 .pwc-outcome__chip.is-selected { border-color: rgba(167, 139, 250, 0.45); color: #a78bfa; }
 .pwc-outcome__chip.is-not-verifiable { border-color: rgba(245, 158, 11, 0.45); color: #f59e0b; }
+.pwc-outcome__chip.is-mismatch { border-color: rgba(239, 68, 68, 0.6); color: #ff625c; }
+.pwc-outcome__chip.is-dragged { border-color: rgba(96, 165, 250, 0.45); color: #60a5fa; }
+.pwc-outcome__chip small { font-weight: 500; opacity: 0.85; }
 
 /* Lo stato dell'ordine: sei esiti, non "inviata" e basta. */
 .pwc-order {

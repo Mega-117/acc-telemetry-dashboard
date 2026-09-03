@@ -56,6 +56,13 @@ export interface PitwallFieldOutcomeRow {
   label: string
   outcome: 'verified' | 'selected' | 'not-verifiable' | null
   reason: string | null
+  /** Da dove viene l'esito: `screen` e' l'occhio del PC del pilota sul Pit MFD. */
+  via: 'screen' | 'memory' | 'blind' | null
+  /** Cio' che c'era davvero, quando il PC del pilota l'ha riletto. */
+  observed: unknown
+  requested: unknown
+  /** Non chiesta: ACC l'ha cambiata insieme a un'altra riparazione. */
+  dragged: boolean
 }
 
 export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrustHandle) {
@@ -400,6 +407,10 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     label: PITWALL_FIELD_LABELS[field] ?? field,
     outcome: outcome?.outcome ?? null,
     reason: outcome?.reason ?? null,
+    via: outcome?.via ?? null,
+    observed: outcome?.observed ?? null,
+    requested: outcome?.requested ?? null,
+    dragged: outcome?.dragged === true,
   })))
 
   function scopeLabel(request: { scope: 'once' | 'always' | null, expiresAtMs: number | null }): string {

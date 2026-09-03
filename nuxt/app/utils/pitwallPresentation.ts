@@ -328,6 +328,71 @@ export function buildPitwallEcho(
   }])) as Record<PitwallField, PitwallEchoCell>
 }
 
+// ============================================
+// L'esito per campo, come lo si legge sul chip.
+//
+// Da dove viene la conferma conta quanto la conferma: `screen` e' l'occhio
+// del PC del pilota che ha riletto il Pit MFD, `memory` e' la shared memory
+// di ACC, `blind` e' un tasto partito senza nessuna rilettura. Un campo con
+// esito nullo ma con un valore osservato e' un disaccordo con lo schermo, e
+// va detto con il valore accanto: e' la risposta a "quello che ha settato e'
+// giusto o no?".
+// ============================================
+
+export type PitwallOutcomeVia = 'screen' | 'memory' | 'blind'
+
+export interface PitwallFieldOutcomeLike {
+  outcome: 'verified' | 'selected' | 'not-verifiable' | null
+  via?: PitwallOutcomeVia | null
+  observed?: unknown
+  requested?: unknown
+  /** Non chiesta: ACC l'ha cambiata insieme a un'altra (le riparazioni sono legate). */
+  dragged?: boolean
+}
+
+export type PitwallFieldOutcomeTone = 'verified' | 'selected' | 'not-verifiable' | 'mismatch' | 'dragged' | 'none'
+
+export interface PitwallFieldOutcomeMark {
+  mark: string
+  tone: PitwallFieldOutcomeTone
+  /** La frase per il titolo del chip. */
+  title: string
+  /** Cosa c'e' davvero, quando serve dirlo accanto al nome. */
+  detail: string
+  /** Confermato guardando lo schermo, non solo dalla memoria. */
+  onScreen: boolean
+}
+
+/** Un valore osservato, in parole: le caselle sono accese o spente, il resto e' cio' che e'. */
+export function formatPitwallObserved(value: unknown): string {
+  if (value === true) return 'acceso'
+  if (value === false) return 'spento'
+  if (value == null || value === '') return '?'
+  return String(value)
+}
+
+export function describePitwallFieldOutcome(entry: PitwallFieldOutcomeLike): PitwallFieldOutcomeMark {
+  const onScreen = entry.via === 'screen'
+  if (entry.dragged) {
+    return { mark: '↳', tone: 'dragged', title: 'Non chiesta: ACC l\'ha cambiata insieme all\'altra riparazione', detail: `a schermo ${formatPitwallObserved(entry.observed)}`, onScreen }
+  }
+  if (entry.outcome === 'verified') {
+    return onScreen
+      ? { mark: '✓', tone: 'verified', title: 'Confermato a schermo', detail: '', onScreen }
+      : { mark: '✓', tone: 'verified', title: 'Riletto dalla telemetria di ACC', detail: '', onScreen }
+  }
+  if (entry.outcome === 'selected') {
+    return { mark: '→', tone: 'selected', title: 'Tasto inviato, non confermato a schermo', detail: '', onScreen }
+  }
+  if (entry.outcome === 'not-verifiable') {
+    return { mark: '—', tone: 'not-verifiable', title: 'Non applicabile su questa vettura adesso', detail: '', onScreen }
+  }
+  if (entry.observed != null) {
+    return { mark: '✗', tone: 'mismatch', title: 'A schermo non è come chiesto', detail: `a schermo ${formatPitwallObserved(entry.observed)}`, onScreen }
+  }
+  return { mark: '—', tone: 'none', title: '', detail: '', onScreen }
+}
+
 /** Le sole voci che cambiano: e' questo il riassunto utile in cima. */
 export function buildPitwallChangeChips(
   plan: PitwallPlan,

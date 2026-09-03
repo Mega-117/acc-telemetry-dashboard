@@ -319,16 +319,21 @@ describe('l esito resta campo per campo, con le parole del muretto', () => {
   it('traduce le chiavi del PC del pilota e non appiattisce gli esiti', () => {
     const { link, controller } = build()
     link.orderFields.value = {
-      fuelLiters: { outcome: 'verified', reason: null },
-      pressureFL: { outcome: 'selected', reason: 'Non riletto da ACC' },
+      fuelLiters: { outcome: 'verified', reason: null, via: 'memory' },
+      pressureFL: { outcome: 'selected', reason: 'Non riletto da ACC', via: 'blind' },
       brakes: null,
+      // L'occhio: confermato a schermo, con cio' che c'era davvero.
+      driverId: { outcome: 'verified', reason: 'A schermo la riga mostra Gilles.', via: 'screen', observed: 1, requested: 1 },
+      repairBodywork: { outcome: 'verified', reason: 'Non chiesta.', via: 'screen', observed: true, requested: null, dragged: true },
       sconosciuto: { outcome: 'not-verifiable', reason: null },
     }
     expect(controller.fieldOutcomes.value).toEqual([
-      { field: 'fuelLiters', label: 'Carburante', outcome: 'verified', reason: null },
-      { field: 'pressureFL', label: 'FL', outcome: 'selected', reason: 'Non riletto da ACC' },
-      { field: 'brakes', label: 'Freni', outcome: null, reason: null },
-      { field: 'sconosciuto', label: 'sconosciuto', outcome: 'not-verifiable', reason: null },
+      { field: 'fuelLiters', label: 'Carburante', outcome: 'verified', reason: null, via: 'memory', observed: null, requested: null, dragged: false },
+      { field: 'pressureFL', label: 'FL', outcome: 'selected', reason: 'Non riletto da ACC', via: 'blind', observed: null, requested: null, dragged: false },
+      { field: 'brakes', label: 'Freni', outcome: null, reason: null, via: null, observed: null, requested: null, dragged: false },
+      { field: 'driverId', label: 'Pilota', outcome: 'verified', reason: 'A schermo la riga mostra Gilles.', via: 'screen', observed: 1, requested: 1, dragged: false },
+      { field: 'repairBodywork', label: 'Carrozzeria', outcome: 'verified', reason: 'Non chiesta.', via: 'screen', observed: true, requested: null, dragged: true },
+      { field: 'sconosciuto', label: 'sconosciuto', outcome: 'not-verifiable', reason: null, via: null, observed: null, requested: null, dragged: false },
     ])
     expect(Object.keys(PITWALL_FIELD_LABELS)).toContain('pitStrategy')
   })

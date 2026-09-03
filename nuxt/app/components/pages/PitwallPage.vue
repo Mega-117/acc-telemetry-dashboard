@@ -29,6 +29,7 @@ import {
   PITWALL_WHEELS,
   clampFuel,
   clampTyreSet,
+  describePitwallFieldOutcome,
   stepFuel,
   stepTyreSet,
   wheelLabel,
@@ -266,7 +267,7 @@ function onSearchInput() {
             <section v-if="link.orderProgress.value.label || fieldOutcomes.length" class="order-info" aria-label="Stato dell'ultimo ordine">
               <div class="order-info__head"><strong>Ultimo ordine</strong><span :class="{ 'is-problem': link.orderProgress.value.problem }">{{ link.orderProgress.value.label || 'Nessun ordine' }}</span></div>
               <p v-if="link.orderReason.value">{{ link.orderReason.value }}</p>
-              <div v-if="fieldOutcomes.length" class="outcomes"><span v-for="item in fieldOutcomes" :key="item.field" :class="[`outcome`, `outcome--${item.outcome ?? 'none'}`]" :title="item.reason ?? ''">{{ item.label }} {{ item.outcome === 'verified' ? '✓' : item.outcome === 'selected' ? '→' : '—' }}</span></div>
+              <div v-if="fieldOutcomes.length" class="outcomes"><span v-for="item in fieldOutcomes" :key="item.field" :class="[`outcome`, `outcome--${describePitwallFieldOutcome(item).tone}`]" :title="[describePitwallFieldOutcome(item).title, item.reason].filter(Boolean).join(' · ')">{{ item.label }} {{ describePitwallFieldOutcome(item).mark }}<template v-if="describePitwallFieldOutcome(item).detail"> · {{ describePitwallFieldOutcome(item).detail }}</template></span></div>
             </section>
           </template>
         </PitwallCarCard>

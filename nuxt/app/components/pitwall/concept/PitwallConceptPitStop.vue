@@ -76,12 +76,39 @@ const yesNo = (value: boolean | null | undefined) => formatToggle(value ?? null)
 /** Le caselle che ACC non rilegge: in macchina c'e' cio' che abbiamo chiesto l'ultima volta. */
 const last = computed(() => stop.lastOrder.value);
 const stopTime = computed(() => formatStopDuration(stop.stopEstimate.value.seconds));
-/** L'ultimo pilota chiesto, per nome; senza un ordine non si inventa nulla. */
-const carDriver = computed(() => (
-  last.value?.driverId == null
-    ? "—"
-    : stop.drivers.value.find(driver => driver.id === last.value?.driverId)?.name ?? `Pilota ${last.value.driverId}`
-));
+
+/**
+ * Cio' che il PC del pilota ha **visto** sul Pit MFD dopo l'ultimo ordine.
+ *
+ * Per le righe che ACC non rilegge la colonna "In macchina" mostrava cio'
+ * che avevamo chiesto; quando l'esito porta `via: 'screen'` c'e' di meglio,
+ * il valore letto a schermo, e la pastiglia lo dice. Vale anche per una
+ * casella che ACC ha trascinato insieme a un'altra: e' quella la verita'.
+ */
+const seenOnScreen = computed(() => {
+  const seen = new Map<string, unknown>();
+  for (const entry of stop.fieldOutcomes.value) {
+    if (entry.via === "screen" && entry.observed != null && (entry.outcome === "verified" || entry.outcome === null)) {
+      seen.set(entry.field, entry.observed);
+    }
+  }
+  return seen;
+});
+const seen = (field: string) => seenOnScreen.value.has(field);
+const seenToggle = (field: string, fallback: boolean | null | undefined) => (
+  seen(field) ? yesNo(seenOnScreen.value.get(field) as boolean) : yesNo(fallback)
+);
+const seenValue = (field: string, fallback: unknown) => (
+  seen(field) ? String(seenOnScreen.value.get(field)) : (fallback ?? "—")
+);
+const sourceOf = (field: string): PitwallConceptSource => (seen(field) ? "screen" : "order");
+
+/** L'ultimo pilota, per nome: quello visto a schermo se c'e', altrimenti quello chiesto. */
+const carDriver = computed(() => {
+  const id = seen("driverId") ? String(seenOnScreen.value.get("driverId")) : (last.value?.driverId ?? null);
+  if (id == null) return "—";
+  return stop.drivers.value.find(driver => driver.id === String(id))?.name ?? `Pilota ${id}`;
+});
 
 function stepAll(direction: 1 | -1) {
   for (const wheel of PITWALL_WHEELS) stop.adjustPressure(wheel, direction);
@@ -165,8 +192,11 @@ function stepAll(direction: 1 | -1) {
         hide-label
       />
       <span class="pwc-pit-car">
-        <b>{{ yesNo(last?.changeTyres) }}</b>
-        <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+        <b>{{ seenToggle("changeTyres", last?.changeTyres) }}</b>
+        <em
+          class="pwc-src"
+          :class="`is-${sourceOf('changeTyres')}`"
+        >{{ PITWALL_CONCEPT_SOURCE_LABELS[sourceOf("changeTyres")] }}</em>
       </span>
     </div>
 
@@ -279,8 +309,11 @@ function stepAll(direction: 1 | -1) {
         hide-label
       />
       <span class="pwc-pit-car">
-        <b>{{ yesNo(last?.brakes) }}</b>
-        <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+        <b>{{ seenToggle("brakes", last?.brakes) }}</b>
+        <em
+          class="pwc-src"
+          :class="`is-${sourceOf('brakes')}`"
+        >{{ PITWALL_CONCEPT_SOURCE_LABELS[sourceOf("brakes")] }}</em>
       </span>
     </div>
 
@@ -313,8 +346,11 @@ function stepAll(direction: 1 | -1) {
           </button>
         </div>
         <span class="pwc-pit-car">
-          <b>{{ last?.[brake.field] ?? "—" }}</b>
-          <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+          <b>{{ seenValue(brake.field, last?.[brake.field]) }}</b>
+          <em
+            class="pwc-src"
+            :class="`is-${sourceOf(brake.field)}`"
+          >{{ PITWALL_CONCEPT_SOURCE_LABELS[sourceOf(brake.field)] }}</em>
         </span>
       </div>
     </template>
@@ -336,7 +372,10 @@ function stepAll(direction: 1 | -1) {
       </select>
       <span class="pwc-pit-car">
         <b>{{ carDriver }}</b>
-        <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+        <em
+          class="pwc-src"
+          :class="`is-${sourceOf('driverId')}`"
+        >{{ PITWALL_CONCEPT_SOURCE_LABELS[sourceOf("driverId")] }}</em>
       </span>
     </div>
 
@@ -352,8 +391,11 @@ function stepAll(direction: 1 | -1) {
         hide-label
       />
       <span class="pwc-pit-car">
-        <b>{{ yesNo(last?.repairSuspension) }}</b>
-        <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+        <b>{{ seenToggle("repairSuspension", last?.repairSuspension) }}</b>
+        <em
+          class="pwc-src"
+          :class="`is-${sourceOf('repairSuspension')}`"
+        >{{ PITWALL_CONCEPT_SOURCE_LABELS[sourceOf("repairSuspension")] }}</em>
       </span>
     </div>
 
@@ -365,8 +407,11 @@ function stepAll(direction: 1 | -1) {
         hide-label
       />
       <span class="pwc-pit-car">
-        <b>{{ yesNo(last?.repairBodywork) }}</b>
-        <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+        <b>{{ seenToggle("repairBodywork", last?.repairBodywork) }}</b>
+        <em
+          class="pwc-src"
+          :class="`is-${sourceOf('repairBodywork')}`"
+        >{{ PITWALL_CONCEPT_SOURCE_LABELS[sourceOf("repairBodywork")] }}</em>
       </span>
     </div>
 
@@ -495,6 +540,8 @@ function stepAll(direction: 1 | -1) {
 .pwc-src.is-live { border-color: rgba(74, 222, 128, 0.4); color: #4ade80; }
 .pwc-src.is-stale { border-color: rgba(245, 158, 11, 0.45); color: #f59e0b; }
 .pwc-src.is-order { border-color: rgba(96, 165, 250, 0.4); color: #60a5fa; }
+/* Riletto a schermo dal PC del pilota: verde come LIVE, perche' e' cio' che c'e'. */
+.pwc-src.is-screen { border-color: rgba(45, 212, 191, 0.5); color: #2dd4bf; }
 
 /* La freschezza si legge in cima, con lo stesso colore delle righe. */
 .pwc-fresh {
