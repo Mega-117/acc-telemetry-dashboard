@@ -372,6 +372,86 @@ function focusedUnavailable(
   }
 }
 
+/**
+ * Quanto si resta fail-closed dopo che il feed focused tace (PIP-305).
+ *
+ * Il TTL dell'envelope e' 5 s: entro quella finestra un buco e' un buco, non
+ * un cambio di inquadratura. Oltre, la decisione passa alla macchina del
+ * pilota (vedi `holdsRemoteFocus`).
+ */
+export const REMOTE_FOCUS_HOLD_MS = 5000
+
+export interface RemoteFocusLatch {
+  remote: boolean
+  unavailableSinceMs: number | null
+}
+
+export function emptyRemoteFocusLatch(): RemoteFocusLatch {
+  return { remote: false, unavailableSinceMs: null }
+}
+
+/**
+ * Aggiorna cosa sappiamo dell'inquadratura. Un envelope valido e' l'unica
+ * cosa che puo' dire "remoto" o "locale"; ogni altro esito conserva l'ultimo
+ * valore noto e ricorda da quando il feed tace.
+ */
+export function trackRemoteFocus(
+  previous: RemoteFocusLatch,
+  state: StandingsStateEnvelope | null | undefined,
+  nowMs: number,
+): RemoteFocusLatch {
+  if (state?.status === 'available' && state.snapshot) {
+    const localIndex = nonNegativeInteger(state.snapshot.session.local_car_index)
+    const focusedIndex = nonNegativeInteger(state.snapshot.session.focused_car_index)
+    if (localIndex !== null && focusedIndex !== null) {
+      return { remote: focusedIndex !== localIndex, unavailableSinceMs: null }
+    }
+  }
+  return {
+    remote: previous.remote,
+    unavailableSinceMs: previous.unavailableSinceMs ?? nowMs,
+  }
+}
+
+/**
+ * La pagina fisica dell'auto locale e' viva? Stessa idea del gate "in guida"
+ * del main process: nei menu ACC azzera i valori dell'auto, in macchina li
+ * popola. Basta che UNO sia vivo (degradazione graduale: chi guida senza FFB,
+ * o fermo ai box a motore spento, resta coperto).
+ */
+export function isLocalCarPhysicsAlive(local: FastOverlayState): boolean {
+  if (!local.isFresh || !local.isLive) return false
+  if (finiteNumber(local.maxRpm) !== null && (local.maxRpm as number) > 0) return true
+  if (finiteNumber(local.fuelL) !== null && (local.fuelL as number) > 0) return true
+  if (local.tyres.some(tyre => (finiteNumber(tyre.pressurePsi) ?? 0) > 0)) return true
+  return local.isEngineRunning === true
+}
+
+/**
+ * Si deve continuare a mascherare la telemetria come "auto osservata"?
+ *
+ * Il fail-closed di PIP-305 era permanente: acceso una volta, restava acceso
+ * finche' non tornava un envelope valido con entrambi gli indici. Ma
+ * `local_car_index` puo' restare nullo per tutta la sessione (playerCarID
+ * ancora -1 all'avvio), e allora quella condizione non si verifica mai: il
+ * pilota guidava e vedeva la grafica da spettatore.
+ *
+ * Ora il fail-closed ha una scadenza, e a deciderlo dopo e' la macchina: se
+ * la fisica locale e' viva il pilota e' al volante, quindi si torna alla
+ * telemetria locale. Se e' morta non sappiamo dove sia l'inquadratura, e si
+ * resta mascherati: nessun dato locale viene mai attribuito a un altro.
+ */
+export function holdsRemoteFocus(
+  latch: RemoteFocusLatch,
+  local: FastOverlayState,
+  nowMs: number,
+): boolean {
+  if (!latch.remote) return false
+  if (latch.unavailableSinceMs === null) return true
+  if (nowMs - latch.unavailableSinceMs < REMOTE_FOCUS_HOLD_MS) return true
+  return !isLocalCarPhysicsAlive(local)
+}
+
 export function routeOverlayTelemetry(
   local: FastOverlayState,
   focusedState: StandingsStateEnvelope | null | undefined,

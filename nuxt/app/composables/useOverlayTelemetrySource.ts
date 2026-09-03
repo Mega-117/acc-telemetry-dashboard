@@ -3,8 +3,11 @@ import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useStandingsState } from '~/composables/useStandingsState'
 import {
   emptyFocusedInfoDeltaAccumulator,
+  emptyRemoteFocusLatch,
+  holdsRemoteFocus,
   routeOverlayTelemetry,
   trackFocusedInfoDelta,
+  trackRemoteFocus,
 } from '~/services/overlay/spectatorTelemetry'
 
 const FOCUSED_BRIDGE = {
@@ -13,6 +16,10 @@ const FOCUSED_BRIDGE = {
 }
 
 export const FOCUSED_CAR_FEED_INTERVAL_MS = 250
+
+function now(): number {
+  return Date.now()
+}
 
 /**
  * Single telemetry source selector for data HUDs.
@@ -28,19 +35,20 @@ export function useOverlayTelemetrySource(
 ) {
   const local = useFastStatePoller(getApi)
   const focused = useStandingsState(getApi, focusedPollIntervalMs, FOCUSED_BRIDGE)
-  const focusWasRemote = ref(false)
+  const remoteFocus = ref(emptyRemoteFocusLatch())
 
   watch(focused.state, (value) => {
-    if (value.status !== 'available' || !value.snapshot) return
-    const localIndex = Number(value.snapshot.session.local_car_index)
-    const focusedIndex = Number(value.snapshot.session.focused_car_index)
-    if (!Number.isInteger(localIndex) || localIndex < 0
-      || !Number.isInteger(focusedIndex) || focusedIndex < 0) return
-    focusWasRemote.value = focusedIndex !== localIndex
+    remoteFocus.value = trackRemoteFocus(remoteFocus.value, value, now())
   }, { immediate: true })
 
+  // Il rientro si rivaluta anche quando il feed focused tace del tutto: lo
+  // stato locale continua ad arrivare, ed e' lui a dire se il pilota e' al
+  // volante. Senza questa dipendenza il fail-closed non scadrebbe mai.
   const routed = computed(() => routeOverlayTelemetry(
-    local.fastState.value, focused.state.value, focusWasRemote.value))
+    local.fastState.value,
+    focused.state.value,
+    holdsRemoteFocus(remoteFocus.value, local.fastState.value, now()),
+  ))
   const focusedDeltaAccumulator = ref(emptyFocusedInfoDeltaAccumulator())
   const focusedDelta = ref<ReturnType<typeof trackFocusedInfoDelta>['delta'] | null>(null)
 
@@ -83,6 +91,7 @@ export function useOverlayTelemetrySource(
     local.stopFastStatePolling()
     focusedDeltaAccumulator.value = emptyFocusedInfoDeltaAccumulator()
     focusedDelta.value = null
+    remoteFocus.value = emptyRemoteFocusLatch()
   }
 
   return {
