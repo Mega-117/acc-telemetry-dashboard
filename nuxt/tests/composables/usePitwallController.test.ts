@@ -195,6 +195,42 @@ describe('il preset non parte mai per inerzia, e lo spento viaggia', () => {
     expect(controller.planPayload()).not.toHaveProperty('pitStrategy')
   })
 
+  it('le mescole dei freni viaggiano solo con la sostituzione accesa', () => {
+    // Sono le due righe che quella casella apre nel Pit MFD: senza di lei non
+    // esistono, e premere li' vorrebbe dire finire sulle riparazioni.
+    const { controller } = build()
+    controller.stepBrakeCompound('front', 1)
+    controller.stepBrakeCompound('front', 1)
+    controller.stepBrakeCompound('rear', 1)
+    expect([controller.brakeFront.value, controller.brakeRear.value]).toEqual([2, 1])
+
+    // Se in questo stesso ordine i freni si stanno spegnendo, quelle righe
+    // spariscono: le mescole non partono.
+    controller.brakes.value = false
+    expect(controller.planPayload()).not.toHaveProperty('brakeFront')
+    expect(controller.planPayload()).not.toHaveProperty('brakeRear')
+
+    // Accesi adesso, oppure lasciati come stanno: partono, e a dire se si
+    // possono applicare e' il PC del pilota, che sonda la casella vera.
+    for (const brakes of [true, null]) {
+      controller.brakes.value = brakes
+      const payload = controller.planPayload()
+      expect(payload.brakeFront).toBe(2)
+      expect(payload.brakeRear).toBe(1)
+    }
+  })
+
+  it('la mescola dei freni gira fra non toccare e i quattro valori', () => {
+    const { controller } = build()
+    expect(controller.brakeFront.value).toBeNull()
+    controller.stepBrakeCompound('front', -1)
+    expect(controller.brakeFront.value).toBeNull()
+    for (let press = 0; press < 5; press += 1) controller.stepBrakeCompound('front', 1)
+    expect(controller.brakeFront.value).toBe(4)
+    for (let press = 0; press < 4; press += 1) controller.stepBrakeCompound('front', -1)
+    expect(controller.brakeFront.value).toBeNull()
+  })
+
   it('false e una richiesta, null e silenzio', () => {
     const { controller } = build()
     controller.changeTyres.value = false

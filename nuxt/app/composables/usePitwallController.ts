@@ -20,6 +20,8 @@ import type { PitwallSession } from '~/services/pitwall/pitwallLink'
 import { PITWALL_MEMBER_FRESH_MS } from '~/services/pitwall/pitwallRoomContract'
 import {
   PITWALL_COMPOUNDS,
+  PITWALL_BRAKE_COMPOUND_MAX,
+  PITWALL_BRAKE_COMPOUND_MIN,
   PITWALL_PIT_STRATEGY_MAX,
   PITWALL_PIT_STRATEGY_MIN,
   PITWALL_WHEELS,
@@ -46,6 +48,7 @@ export const PITWALL_FIELD_LABELS: Record<string, string> = {
   fuelLiters: 'Carburante', tyreSet: 'Set', compound: 'Mescola', pressureFL: 'FL', pressureFR: 'FR',
   pressureRL: 'RL', pressureRR: 'RR', changeTyres: 'Cambio gomme', repairBodywork: 'Carrozzeria',
   repairSuspension: 'Sospensioni', driverId: 'Pilota', pitStrategy: 'Strategia', brakes: 'Freni',
+  brakeFront: 'Freno ant.', brakeRear: 'Freno post.',
 }
 
 export interface PitwallFieldOutcomeRow {
@@ -105,6 +108,13 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   /** null = non toccare la strategia. Sceglierla riscrive tutto il resto. */
   const pitStrategy = ref<number | null>(null)
   const brakes = ref<boolean | null>(null)
+  /**
+   * Le mescole dei freni: hanno senso solo con la sostituzione accesa, perche'
+   * sono le due righe che quella casella apre nel Pit MFD. `null` = non
+   * toccare, come tutto il resto.
+   */
+  const brakeFront = ref<number | null>(null)
+  const brakeRear = ref<number | null>(null)
   const repairBodywork = ref<boolean | null>(null)
   const repairSuspension = ref<boolean | null>(null)
   const sentPlan = ref<PitwallPlan | null>(null)
@@ -124,6 +134,8 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
       driverId: current ? String(current.driverIndex) : driverId.value,
       pitStrategy: null,
       brakes: null,
+      brakeFront: null,
+      brakeRear: null,
       repairBodywork: null,
       repairSuspension: null,
       inPitLane: false,
@@ -139,6 +151,8 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     changeTyres: changeTyres.value,
     driverId: driverId.value,
     brakes: brakes.value,
+    brakeFront: brakeFront.value,
+    brakeRear: brakeRear.value,
     repairBodywork: repairBodywork.value,
     repairSuspension: repairSuspension.value,
   }))
@@ -192,6 +206,8 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   function clearOneShotFields(): void {
     changeTyres.value = null
     brakes.value = null
+    brakeFront.value = null
+    brakeRear.value = null
     repairBodywork.value = null
     repairSuspension.value = null
     driverId.value = null
@@ -261,9 +277,31 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     driverId.value = null
     pitStrategy.value = null
     brakes.value = null
+    brakeFront.value = null
+    brakeRear.value = null
     repairBodywork.value = null
     repairSuspension.value = null
     rememberSynced()
+  }
+
+  /**
+   * Su e giu' fra le quattro mescole, con un giro in tondo su "non toccare".
+   *
+   * Come il preset, la prima posizione e' l'assenza: se non si sceglie niente
+   * la riga non viene toccata, e senza la sostituzione freni accesa non
+   * potrebbe nemmeno esserlo.
+   */
+  function stepBrakeCompound(which: 'front' | 'rear', direction: 1 | -1) {
+    const field = which === 'front' ? brakeFront : brakeRear
+    const current = field.value
+    if (current == null) {
+      field.value = direction > 0 ? PITWALL_BRAKE_COMPOUND_MIN : null
+      return
+    }
+    const next = current + direction
+    field.value = next < PITWALL_BRAKE_COMPOUND_MIN
+      ? null
+      : Math.min(PITWALL_BRAKE_COMPOUND_MAX, next)
   }
 
   /**
@@ -286,6 +324,14 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     // Si manda anche lo spento: `false` e' una richiesta, `null` e' il silenzio.
     if (changeTyres.value != null) payload.changeTyres = changeTyres.value
     if (brakes.value != null) payload.brakes = brakes.value
+    // Le mescole non partono se in questo stesso ordine i freni si stanno
+    // **spegnendo**: quelle righe sparirebbero. In tutti gli altri casi
+    // viaggiano, e a decidere se si possono applicare e' il PC del pilota, che
+    // sonda la casella vera invece di fidarsi di cio' che crediamo noi.
+    if (brakes.value !== false) {
+      if (brakeFront.value != null) payload.brakeFront = brakeFront.value
+      if (brakeRear.value != null) payload.brakeRear = brakeRear.value
+    }
     if (repairBodywork.value != null) payload.repairBodywork = repairBodywork.value
     if (repairSuspension.value != null) payload.repairSuspension = repairSuspension.value
     if (driverId.value != null) payload.driverId = driverId.value
@@ -382,6 +428,9 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     driverId,
     pitStrategy,
     brakes,
+    brakeFront,
+    brakeRear,
+    stepBrakeCompound,
     repairBodywork,
     repairSuspension,
     sentPlan,

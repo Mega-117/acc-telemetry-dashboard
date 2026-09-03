@@ -37,6 +37,15 @@ export interface PitwallStopHandle {
   tyreSet: Ref<number>
   changeTyres: Ref<boolean | null>
   brakes: Ref<boolean | null>
+  /**
+   * Le mescole dei freni, da 1 a 4, oppure `null` per non toccarle.
+   *
+   * Si mostrano solo con la sostituzione freni accesa: sono le due righe che
+   * quella casella apre nel Pit MFD, e senza di lei non esistono.
+   */
+  brakeFront: Ref<number | null>
+  brakeRear: Ref<number | null>
+  stepBrakeCompound: (which: 'front' | 'rear', direction: 1 | -1) => void
   repairBodywork: Ref<boolean | null>
   repairSuspension: Ref<boolean | null>
   driverId: Ref<string | null>

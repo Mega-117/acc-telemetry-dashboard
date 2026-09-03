@@ -36,6 +36,15 @@ import {
 const { stop } = usePitwallStore();
 
 /**
+ * Le due righe che "Sostituisci freni" apre: davanti e dietro, da 1 a 4.
+ * Stanno in una lista sola perche' sono la stessa riga due volte.
+ */
+const BRAKE_ROWS = [
+  { field: "brakeFront", which: "front", label: "Freno anteriore" },
+  { field: "brakeRear", which: "rear", label: "Freno posteriore" },
+] as const;
+
+/**
  * Da dove viene ogni riga della colonna "In macchina".
  *
  * Non e' decorazione: ACC rilegge carburante, set, mescola e pressioni, e
@@ -50,6 +59,17 @@ const freshness = computed(() => (
   stop.presenceAgeSeconds.value == null
     ? "In attesa dei dati macchina"
     : `Dati macchina di ${stop.presenceAgeSeconds.value}s fa`
+));
+
+/**
+ * Le due righe delle mescole esistono nel menu finche' la casella e' accesa,
+ * e la casella resta accesa dopo un ordine: non e' una richiesta che si
+ * consuma. Quindi si mostrano anche quando la richiesta e' tornata a "non
+ * toccare", purche' l'ultimo ordine le avesse accese - altrimenti per
+ * ritoccare una mescola bisognerebbe rimandare i freni ogni volta.
+ */
+const brakeRowsVisible = computed(() => (
+  stop.brakes.value === true || (stop.brakes.value == null && last.value?.brakes === true)
 ));
 
 const yesNo = (value: boolean | null | undefined) => formatToggle(value ?? null);
@@ -263,6 +283,41 @@ function stepAll(direction: 1 | -1) {
         <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
       </span>
     </div>
+
+    <!-- Le due mescole dei freni compaiono solo con la sostituzione accesa:
+         sono le righe che quella casella apre nel Pit MFD, e senza di lei nel
+         menu non esistono. Mostrarle sempre inviterebbe a impostare una cosa
+         che non si puo' mandare. -->
+    <template v-if="brakeRowsVisible">
+      <div
+        v-for="brake in BRAKE_ROWS"
+        :key="brake.field"
+        class="pwc-pit-row is-sub"
+      >
+        <span>{{ brake.label }}</span>
+        <div class="pwc-step">
+          <button
+            type="button"
+            :aria-label="`${brake.label}: mescola precedente`"
+            @click="stop.stepBrakeCompound(brake.which, -1)"
+          >
+            −
+          </button>
+          <b>{{ stop[brake.field].value ?? "Non toccare" }}</b>
+          <button
+            type="button"
+            :aria-label="`${brake.label}: mescola successiva`"
+            @click="stop.stepBrakeCompound(brake.which, 1)"
+          >
+            +
+          </button>
+        </div>
+        <span class="pwc-pit-car">
+          <b>{{ last?.[brake.field] ?? "—" }}</b>
+          <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+        </span>
+      </div>
+    </template>
 
     <div class="pwc-pit-row">
       <span>Prossimo pilota</span>

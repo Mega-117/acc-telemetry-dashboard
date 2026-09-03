@@ -428,6 +428,25 @@ describe('Pitwall wiring', () => {
     expect(controller).toContain('if (changeTyres.value != null) payload.changeTyres = changeTyres.value')
   })
 
+  it('le mescole dei freni si vedono solo con la sostituzione accesa', () => {
+    // Accendere "Sostituisci freni" apre due righe nel Pit MFD, da 1 a 4:
+    // mostrarle sempre inviterebbe a impostare una cosa che non si puo'
+    // mandare, perche' senza quella casella quelle righe non esistono.
+    expect(conceptPitStop).toContain('v-if="brakeRowsVisible"')
+    expect(conceptPitStop).toContain('Freno anteriore')
+    expect(conceptPitStop).toContain('Freno posteriore')
+    expect(conceptPitStop).toContain('stop.stepBrakeCompound(brake.which')
+    expect(conceptPitStop).toContain('stop[brake.field].value ?? "Non toccare"')
+    // Il valore in macchina e' l'ultimo ordine: ACC non rilegge queste righe.
+    expect(conceptPitStop).toContain('last?.[brake.field]')
+    // La casella resta accesa dopo un ordine, quindi le righe restano visibili
+    // anche quando la richiesta e' tornata a "non toccare".
+    expect(conceptPitStop).toContain("stop.brakes.value == null && last.value?.brakes === true")
+    // Non partono solo se in quello stesso ordine i freni si stanno spegnendo.
+    expect(controller).toContain('if (brakes.value !== false) {')
+    expect(controller).toContain('payload.brakeFront = brakeFront.value')
+  })
+
   it('non chiama esito il momento in cui hai premuto Invia', () => {
     // Lo stato lo scrive il PC del pilota, non il bottone: la vista lo legge.
     expect(conceptOrder).toContain('describePitwallConceptOrderStatus')

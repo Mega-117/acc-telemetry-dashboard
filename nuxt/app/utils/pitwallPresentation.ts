@@ -32,6 +32,10 @@ export const PITWALL_TYRE_SET_MAX = 50
 export const PITWALL_PIT_STRATEGY_MIN = 1
 export const PITWALL_PIT_STRATEGY_MAX = 10
 
+/** Le mescole dei freni nel Pit MFD: quattro, davanti e dietro. */
+export const PITWALL_BRAKE_COMPOUND_MIN = 1
+export const PITWALL_BRAKE_COMPOUND_MAX = 4
+
 export const PITWALL_COMPOUNDS = ['dry', 'wet'] as const
 
 export type PitwallCompound = (typeof PITWALL_COMPOUNDS)[number]
@@ -66,6 +70,16 @@ export interface PitwallPlan {
   driverId: string | null
   /** Sostituzione freni: una casella, come le riparazioni. */
   brakes: boolean | null
+  /**
+   * Le mescole dei freni, davanti e dietro, da 1 a 4.
+   *
+   * Esistono solo con la sostituzione freni accesa: sono le due righe che
+   * quella casella apre nel Pit MFD. `null` vuol dire non toccare, come ogni
+   * altra voce; e senza la casella accesa non si possono nemmeno mandare,
+   * perche' quelle righe nel menu non ci sono.
+   */
+  brakeFront: number | null
+  brakeRear: number | null
   repairBodywork: boolean | null
   repairSuspension: boolean | null
 }

@@ -87,6 +87,7 @@ const LABELS: Record<string, string> = {
   fuelLiters: 'Carburante', tyreSet: 'Set', compound: 'Mescola', pressureFL: 'FL', pressureFR: 'FR',
   pressureRL: 'RL', pressureRR: 'RR', changeTyres: 'Cambio gomme', repairBodywork: 'Carrozzeria',
   repairSuspension: 'Sospensioni', driverId: 'Pilota', pitStrategy: 'Strategia', brakes: 'Freni',
+  brakeFront: 'Freno ant.', brakeRear: 'Freno post.',
 }
 
 /**
@@ -102,6 +103,8 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
   const tyreSet = ref(1)
   const changeTyres = ref<boolean | null>(null)
   const brakes = ref<boolean | null>(null)
+  const brakeFront = ref<number | null>(null)
+  const brakeRear = ref<number | null>(null)
   const repairBodywork = ref<boolean | null>(null)
   const repairSuspension = ref<boolean | null>(null)
   const driverId = ref<string | null>(null)
@@ -121,6 +124,8 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
     driverId: null,
     pitStrategy: null,
     brakes: null,
+    brakeFront: null,
+    brakeRear: null,
     repairBodywork: null,
     repairSuspension: null,
     inPitLane: false,
@@ -137,6 +142,9 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
       if (pressures.value[wheel] !== car.value.pressures[wheel]) fields.push(`pressure${wheel}`)
     }
     if (brakes.value != null) fields.push('brakes')
+    // Come nel vero: le mescole viaggiano solo con la casella accesa.
+    if (brakes.value === true && brakeFront.value != null) fields.push('brakeFront')
+    if (brakes.value === true && brakeRear.value != null) fields.push('brakeRear')
     if (driverId.value != null) fields.push('driverId')
     if (repairSuspension.value != null) fields.push('repairSuspension')
     if (repairBodywork.value != null) fields.push('repairBodywork')
@@ -152,6 +160,8 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
     changeTyres: changeTyres.value,
     driverId: driverId.value,
     brakes: brakes.value,
+    brakeFront: brakeFront.value,
+    brakeRear: brakeRear.value,
     repairBodywork: repairBodywork.value,
     repairSuspension: repairSuspension.value,
   }))
@@ -183,6 +193,8 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
       // Consegnate, le caselle tornano a "non toccare": come nel vero.
       changeTyres.value = null
       brakes.value = null
+      brakeFront.value = null
+      brakeRear.value = null
       repairBodywork.value = null
       repairSuspension.value = null
       driverId.value = null
@@ -198,6 +210,18 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
     tyreSet,
     changeTyres,
     brakes,
+    brakeFront,
+    brakeRear,
+    stepBrakeCompound: (which, direction) => {
+      const field = which === 'front' ? brakeFront : brakeRear
+      const current = field.value
+      if (current == null) {
+        field.value = direction > 0 ? 1 : null
+        return
+      }
+      const next = current + direction
+      field.value = next < 1 ? null : Math.min(4, next)
+    },
     repairBodywork,
     repairSuspension,
     driverId,
