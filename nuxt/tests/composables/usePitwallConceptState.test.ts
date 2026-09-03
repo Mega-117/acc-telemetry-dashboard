@@ -153,12 +153,19 @@ describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
       state.searchQuery.value = query
       return state.found.value
     }
-    expect(search('mar').entries.map(person => person.id)).toEqual(['gallo', 'martina'])
+    // mario e marco stanno in un verso solo: restano proponibili per l'altro.
+    const ids = (query: string) => search(query).entries.map(person => person.id).sort()
+    expect(ids('mar')).toEqual(['gallo', 'marco', 'mario', 'martina'])
     state.askToAssist('gallo')
     const after = search('mar')
-    expect(after.entries.map(person => person.id)).toEqual(['martina'])
-    // Chi e' appena stato aggiunto non sparisce: passa fra quelli che ho gia'.
-    expect(after.linked.map(person => person.id)).toContain('gallo')
+    // Un verso solo non basta a dire "ce l'hai gia'": gallo resta proponibile
+    // per l'altro verso (e' il bottone del verso gia' presente a sparire).
+    expect(ids('mar')).toEqual(['gallo', 'marco', 'mario', 'martina'])
+    expect(after.linked).toEqual([])
+    // Con entrambi i versi (luca sta in tutte e due le liste) passa fra quelli che ho gia'.
+    const both = search('luc')
+    expect(both.entries).toEqual([])
+    expect(both.linked.map(person => person.id)).toEqual(['luca'])
     expect(search('').state).toBe('idle')
     // Me stesso non sono mai un risultato, ne' fra gli aggiungibili ne' fra i
     // collegati: non ci si autorizza da soli.

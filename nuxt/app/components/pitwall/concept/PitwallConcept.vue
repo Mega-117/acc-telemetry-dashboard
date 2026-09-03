@@ -47,6 +47,14 @@ const search = computed({
 });
 const found = computed(() => state.found.value);
 
+/**
+ * I due versi sono indipendenti: chi gia' assisto puo' ancora essere
+ * autorizzato ad assistere me, e viceversa. Un verso gia' presente (anche solo
+ * chiesto) toglie il suo bottone, non l'altro.
+ */
+const assistIds = computed(() => new Set(state.links.value.assist.map(link => link.personId)));
+const assistedIds = computed(() => new Set(state.links.value.assisted.map(link => link.personId)));
+
 /** Chi e' dentro una gara viva adesso: la pastiglia accanto al nickname. */
 const racingIds = computed(() => {
   const ids = new Set<string>();
@@ -184,6 +192,7 @@ function ask(personId: string) {
         >
           <template #actions="{ person }">
             <button
+              v-if="!assistIds.has(person.id)"
               type="button"
               class="pwc-btn"
               @click="ask(person.id)"
@@ -191,6 +200,7 @@ function ask(personId: string) {
               Chiedi di assisterlo
             </button>
             <button
+              v-if="!assistedIds.has(person.id)"
               type="button"
               class="pwc-btn is-primary"
               :class="{ 'is-active': grant?.personId === person.id }"

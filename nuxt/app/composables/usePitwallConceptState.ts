@@ -253,11 +253,14 @@ export function usePitwallConceptState(): PitwallStore & { reset: () => void } {
   )
   const people = computed(() => PITWALL_CONCEPT_PEOPLE)
 
-  /** Chi e' gia' in un elenco non ricompare nella ricerca, in nessuno stato. */
-  const linkedIds = computed(() => [
-    ...store.value.links.assist.map(link => link.personId),
-    ...store.value.links.assisted.map(link => link.personId),
-  ])
+  /**
+   * "Ce l'hai gia'" solo con entrambi i versi: chi ho in un verso solo resta
+   * proponibile per l'altro. E' la stessa regola dello store vero.
+   */
+  const linkedIds = computed(() => {
+    const assisted = new Set(store.value.links.assisted.map(link => link.personId))
+    return store.value.links.assist.map(link => link.personId).filter(id => assisted.has(id))
+  })
 
   const searchQuery = ref('')
   const found = computed(() => searchPitwallConceptDirectory(searchQuery.value, linkedIds.value))

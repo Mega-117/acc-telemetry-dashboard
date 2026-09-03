@@ -117,10 +117,13 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
       .filter((entry): entry is PitwallConceptLink => entry != null),
   }))
 
-  const linkedIds = computed(() => [
-    ...links.value.assist.map(entry => entry.personId),
-    ...links.value.assisted.map(entry => entry.personId),
-  ])
+  // "Ce l'hai gia'" solo con entrambi i versi: chi ho in un verso solo resta
+  // proponibile per l'altro (visto dal vivo: il pilota che assisto non poteva
+  // essere autorizzato ad assistere me).
+  const linkedIds = computed(() => {
+    const assisted = new Set(links.value.assisted.map(entry => entry.personId))
+    return links.value.assist.map(entry => entry.personId).filter(id => assisted.has(id))
+  })
 
   // ---- Gare -----------------------------------------------------------------
   function membersOf(room: PitwallRoom, selected: boolean): PitwallConceptMember[] {

@@ -300,8 +300,11 @@ describe('la ricerca e le persone', () => {
     expect(trust.search).toHaveBeenCalledTimes(1)
     trust.searchResults.value = [{ uid: 'rico', nickname: 'RICO117' }]
     expect(store.found.value.entries).toEqual([{ id: 'rico', handle: '@RICO117' }])
-    // Chi e' gia' collegato resta visibile ma fra i collegati.
+    // Un verso solo non basta a dire "ce l'hai gia'": resta proponibile per l'altro.
     trust.outgoing.value = [outgoing('rico', 'granted')]
+    expect(store.found.value.entries.map(person => person.id)).toEqual(['rico'])
+    // Con entrambi i versi resta visibile, ma fra i collegati.
+    trust.incoming.value = [incoming('rico', 'granted')]
     expect(store.found.value.entries).toEqual([])
     expect(store.found.value.linked.map(person => person.id)).toEqual(['rico'])
     // Sotto i due caratteri la ricerca si spegne e svuota.
