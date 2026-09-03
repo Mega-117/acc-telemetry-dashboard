@@ -379,6 +379,7 @@ const roomStateLabel = computed(() => {
             <li v-for="found in trust.searchResults.value" :key="found.uid">
               <strong>{{ found.nickname }}</strong>
               <button v-if="link.isManager.value && link.room.value" type="button" class="btn btn--primary" @click="link.invite(found.uid)">Invita alla gara</button>
+              <button type="button" class="btn btn--ghost" @click="trust.preAuthorise(found.uid, 'once')">Autorizza per oggi</button>
               <button type="button" class="btn btn--ghost" @click="trust.preAuthorise(found.uid)">Autorizza sempre</button>
             </li>
           </ul>

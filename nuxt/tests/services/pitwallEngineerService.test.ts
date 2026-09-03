@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   listeners: new Map<string, (snapshot: unknown) => void>(),
   listenerErrors: new Map<string, (error: Error) => void>(),
   stopped: [] as string[],
+  /** Estremi di intervallo passati a Firestore, per provare la ricerca a prefisso. */
+  ranges: [] as Array<{ startAt?: string, endAt?: string }>,
   failWrites: null as string | null
 }))
 
@@ -27,8 +29,16 @@ vi.mock('firebase/firestore', () => ({
   where: () => ({}),
   limit: () => ({}),
   orderBy: () => ({}),
-  startAt: () => ({}),
-  endAt: () => ({})
+  // Questi due non sono neutralizzati come gli altri: registrano l'estremo che
+  // ricevono. E' l'unico modo di provare che la finestra sia un prefisso, e il
+  // carattere che la chiude e' invisibile a schermo.
+  startAt: (value: string) => { mocks.ranges.push({ startAt: value }); return {} },
+  endAt: (value: string) => {
+    const last = mocks.ranges[mocks.ranges.length - 1]
+    if (last && last.endAt === undefined) last.endAt = value
+    else mocks.ranges.push({ endAt: value })
+    return {}
+  }
 }))
 
 vi.mock('~/composables/useFirebaseTracker', () => ({
@@ -100,6 +110,7 @@ beforeEach(() => {
   mocks.listeners = new Map()
   mocks.listenerErrors = new Map()
   mocks.stopped = []
+  mocks.ranges = []
   mocks.failWrites = null
 })
 
@@ -341,6 +352,37 @@ describe('decidere e revocare', () => {
     expect(mocks.sets[0]?.data).toEqual(expect.objectContaining({ status: 'granted' }))
   })
 
+  it('senza indicazione la pre-autorizzazione vale per sempre, senza scadenza', async () => {
+    await build().preAuthorise('ingegnere-2')
+    expect(mocks.sets[0]?.data).toEqual(expect.objectContaining({ scope: 'always', expiresAtMs: null }))
+  })
+
+  it('si puo pre-autorizzare anche solo per oggi', async () => {
+    // Autorizzare in anticipo e rispondere a chi ha chiesto sono lo stesso
+    // gesto visto da due momenti: non ha senso che uno sappia dire "solo per
+    // oggi" e l'altro no. Prima questa portata non era esprimibile.
+    await build().preAuthorise('ingegnere-2', 'once')
+    const data = mocks.sets[0]?.data as { scope?: string, expiresAtMs?: number }
+    expect(data.scope).toBe('once')
+    expect(typeof data.expiresAtMs).toBe('number')
+    // Stesso vincolo di decideRequest: la scadenza viene dall'orologio del
+    // servizio, non da Date.now(), altrimenti il test scadrebbe da solo.
+    expect(data.expiresAtMs!).toBeGreaterThan(NOW())
+  })
+
+  it('la portata arriva anche quando il permesso esiste gia', async () => {
+    // Il ramo che aggiorna invece di creare: li' il documento non si riscrive
+    // intero, quindi portata e scadenza vanno passate a mano. Nessun test lo
+    // copriva, ed e' il ramo piu' probabile nell'uso reale.
+    mocks.docs.set(`pitwallGrants/${ENGINEER}__ingegnere-2`, grant('ingegnere-2', 'revoked'))
+    await build().preAuthorise('ingegnere-2', 'once')
+    const data = mocks.updates[0]?.data as { status?: string, scope?: string, expiresAtMs?: number }
+    expect(data.status).toBe('granted')
+    expect(data.scope).toBe('once')
+    expect(data.expiresAtMs!).toBeGreaterThan(NOW())
+    expect(mocks.sets).toHaveLength(0)
+  })
+
   it('una pre-autorizzazione senza destinatario non parte', async () => {
     const result = await build().preAuthorise('')
     expect(result).toEqual({ ok: false, reason: 'Utente non valido.' })
@@ -421,6 +463,21 @@ describe('cercare una persona per nome', () => {
     ])
     const found = await build().searchUsers('ric')
     expect(found.map(entry => entry.uid)).toEqual([DRIVER])
+  })
+
+  it('cerca un intervallo di prefissi, non un nome esatto', async () => {
+    // Il carattere che chiude l'intervallo e' U+F8FF, invisibile a schermo:
+    // leggendo il sorgente sembra che non ci sia, e la riga e' gia' stata
+    // scambiata per un difetto. Qui l'invariante e' scritta, non guardata.
+    // Senza quel carattere `startAt(x) + endAt(x)` sarebbe un'uguaglianza
+    // esatta, e cercare `ric` non troverebbe mai `RICO117`.
+    mocks.queryResults.push([{ id: DRIVER, data: { nickname: 'RICO117' } }])
+    await build().searchUsers('ric')
+    expect(mocks.ranges.length).toBeGreaterThan(0)
+    for (const range of mocks.ranges) {
+      expect(range.endAt).toBe(range.startAt + String.fromCharCode(0xf8ff))
+      expect(range.endAt!.codePointAt(range.endAt!.length - 1)).toBe(0xf8ff)
+    }
   })
 })
 

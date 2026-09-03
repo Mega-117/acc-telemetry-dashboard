@@ -314,16 +314,18 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   }
 
   /** Autorizza qualcuno in anticipo, senza attendere che chieda. */
-  async function preAuthorise(uid: string): Promise<void> {
+  async function preAuthorise(uid: string, scope: PitwallGrantScope = 'always'): Promise<void> {
     const engineer = service()
     if (!engineer) return
     try {
-      const result = await engineer.preAuthorise(uid)
+      const result = await engineer.preAuthorise(uid, scope)
       if (!result.ok) {
         rawError.value = result.reason
         return
       }
-      notice.value = 'Utente pre-autorizzato: potra collegarsi senza chiedere.'
+      notice.value = scope === 'once'
+        ? 'Autorizzato per oggi: potra collegarsi senza chiedere fino a stasera.'
+        : 'Utente pre-autorizzato: potra collegarsi senza chiedere.'
       if (!stopIncomingWatch) await refreshIncoming()
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Pre-autorizzazione non riuscita.'

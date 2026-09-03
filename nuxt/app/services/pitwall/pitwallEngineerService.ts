@@ -522,23 +522,37 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
    * Se il permesso esiste gia' (una vecchia richiesta, anche revocata) si
    * aggiorna solo lo stato: riscrivere l'intero documento cambierebbe
    * `createdBy` e le regole - giustamente - lo negherebbero.
+   *
+   * La portata si sceglie qui come in `decideRequest`: autorizzare qualcuno in
+   * anticipo e rispondere a chi ha chiesto sono lo stesso gesto visto da due
+   * momenti diversi, e non ha senso che uno dei due sappia dire "solo per oggi"
+   * e l'altro no. La scadenza si calcola dall'orologio iniettato, mai da
+   * `Date.now()`.
    */
-  async function preAuthorise(engineerToTrust: string): Promise<{ ok: true } | { ok: false, reason: string }> {
+  async function preAuthorise(
+    engineerToTrust: string,
+    scope: PitwallGrantScope = 'always'
+  ): Promise<{ ok: true } | { ok: false, reason: string }> {
     const grant = buildPitwallPreAuthorisation(engineerUid, engineerToTrust, nowIso(now))
     if (!grant) return { ok: false, reason: 'Utente non valido.' }
+    // Le regole pretendono la coppia coerente: `once` senza scadenza viene
+    // rifiutato, e `always` con una scadenza pure.
+    const grantFields = {
+      scope,
+      expiresAtMs: scope === 'once' ? now() + PITWALL_GRANT_ONCE_DURATION_MS : null,
+    }
     const ref = doc(db, 'pitwallGrants', grant.id)
     try {
       const existing = await trackedGetDoc(ref, 'pitwall.preAuthorise')
       if (existing.exists()) {
         await trackedUpdateDoc(ref, {
           status: 'granted',
-          scope: 'always',
-          expiresAtMs: null,
+          ...grantFields,
           updatedAt: nowIso(now),
         }, 'pitwall.preAuthorise')
         return { ok: true }
       }
-      await trackedSetDoc(ref, { ...grant.data, scope: 'always', expiresAtMs: null }, 'pitwall.preAuthorise')
+      await trackedSetDoc(ref, { ...grant.data, ...grantFields }, 'pitwall.preAuthorise')
       return { ok: true }
     } catch (error) {
       return { ok: false, reason: (error as Error)?.message || 'Pre-autorizzazione rifiutata.' }
