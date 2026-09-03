@@ -13,6 +13,7 @@ import type { Firestore } from 'firebase/firestore'
 import {
   trackedGetDoc,
   trackedGetDocs,
+  trackedOnDocSnapshot,
   trackedOnSnapshot,
   trackedSetDoc,
   trackedUpdateDoc,
@@ -256,11 +257,39 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
   }
 
   /**
-   * Rilegge la presenza di un pilota.
+   * Ascolta la presenza di un pilota: un documento solo, tenuto aperto.
    *
-   * Una lettura, non un ascolto: le regole permettono solo `get` su quel
-   * documento, e la presenza cambia lentamente (battito ogni 30 s). Un
-   * listener costerebbe di piu' senza dire nulla di piu'.
+   * Sostituisce la rilettura a tempo, e rivede la decisione del 2026-08-30
+   * ("la presenza si rilegge, non si ascolta") con i numeri davanti. Il
+   * polling costava dodici letture ogni trenta secondi - millequattrocento
+   * l'ora - anche a scheda nascosta e anche per chi era spento da giorni,
+   * perche' rileggeva tutti a prescindere. L'ascolto costa una lettura *per
+   * cambiamento vero*: quanto il polling per chi guida, quasi niente per tutti
+   * gli altri. E chi entra in pista compare subito, invece che al giro dopo.
+   *
+   * Le regole non cambiano: e' lo stesso `get` di prima, tenuto aperto.
+   */
+  function watchPilotPresence(
+    driverUid: string,
+    onChange: (state: { session: PitwallSession | null, reachable: boolean }) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    return trackedOnDocSnapshot(
+      doc(db, 'pitwallSessions', driverUid),
+      'pitwall.watchPilotPresence',
+      (snapshot) => {
+        const session = snapshot.exists() ? (snapshot.data() as PitwallSession) : null
+        onChange({ session, reachable: isPitwallSessionFresh(session, now()) })
+      },
+      (error: Error) => onError?.(error)
+    )
+  }
+
+  /**
+   * Rilegge la presenza di un pilota, una volta sola.
+   *
+   * Resta per i momenti puntuali - la fine di un ordine - in cui serve un
+   * valore adesso e non un ascolto che dura.
    */
   async function readPilotPresence(driverUid: string): Promise<{
     session: PitwallSession | null
@@ -602,6 +631,7 @@ export function createPitwallEngineerService(options: PitwallEngineerServiceOpti
     withdraw,
     listLinkedPilots,
     readPilotPresence,
+    watchPilotPresence,
     sendOrder,
     watchOrder,
     searchUsers,

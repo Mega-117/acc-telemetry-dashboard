@@ -97,6 +97,14 @@ export interface PitwallRoomDriverHandle {
   unavailableReason: () => string | null
   /** Un giro completo: identita' vettura, stanza, battito. */
   sync: () => Promise<void>
+  /**
+   * Rimette in pari gli invitati adesso, senza aspettare il giro a tempo.
+   *
+   * Si chiama quando arriva un permesso nuovo: e' la differenza fra un
+   * ingegnere che puo' entrare subito e uno che vede "il suo PC ti sta
+   * aggiungendo" per cinque minuti.
+   */
+  refreshInvites: () => Promise<void>
   /** Sparisce dalla presenza senza uscire dalla stanza. */
   goOffline: () => Promise<void>
   stop: () => void
@@ -554,6 +562,7 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
     roomId: () => room?.roomId ?? null,
     unavailableReason: () => unavailableReason,
     sync,
+    refreshInvites,
     goOffline: async () => {
       if (room) await rooms.clearPresence(room.roomId)
     },

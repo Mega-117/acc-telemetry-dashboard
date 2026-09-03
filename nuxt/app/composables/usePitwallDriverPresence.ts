@@ -16,7 +16,7 @@ import { collection, doc, limit, query, where } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 // Ogni lettura passa dal tracker: la promessa costo zero regge solo se il
 // consumo Firebase resta misurabile, non stimato a occhio.
-import { trackedGetDoc, trackedGetDocs } from '~/composables/useFirebaseTracker'
+import { trackedGetDoc, trackedGetDocs, trackedOnSnapshot } from '~/composables/useFirebaseTracker'
 import {
   startPitwallDriverLink,
   type PitwallDriverElectronApi,
@@ -60,8 +60,11 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
   let handle: PitwallDriverLinkHandle | null = null
   let roomHandle: PitwallRoomDriverHandle | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
+  let stopGrantsWatch: (() => void) | null = null
 
   function stop(): void {
+    stopGrantsWatch?.()
+    stopGrantsWatch = null
     if (roomHandle) {
       void roomHandle.goOffline()
       roomHandle.stop()
@@ -256,6 +259,20 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
         },
       })
       roomId.value = roomHandle.roomId()
+
+      // Un permesso nuovo rimette in pari gli invitati *adesso*.
+      //
+      // Il giro a tempo esiste ancora, ma cinque minuti sono la causa singola
+      // piu' grande del "il suo PC ti sta aggiungendo": chi autorizza qualcuno
+      // mentre e' gia' in pista lo vedeva restare fuori per tutto quel tempo.
+      // Il timer resta come rete di sicurezza, non come unico modo.
+      stopGrantsWatch?.()
+      stopGrantsWatch = trackedOnSnapshot(
+        query(collection(db, 'pitwallGrants'), where('driverUid', '==', uid), limit(50)),
+        'pitwallRoom.watchOwnGrants',
+        () => { void roomHandle?.refreshInvites() },
+        () => {}
+      )
     })()
 
     active.value = true

@@ -8,8 +8,9 @@
 // osserva, e si dice sempre la verita' su cosa e' successo.
 // ============================================
 
-import { computed, onScopeDispose, ref, shallowRef } from 'vue'
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { db } from '~/config/firebase'
+import { createPitwallPresenceWatch } from '~/composables/usePitwallPresenceWatch'
 import {
   createPitwallEngineerService,
   type PitwallDirectoryEntry,
@@ -22,7 +23,6 @@ import {
   isPitwallOrderSettled,
   type PitwallGrantScope,
   type PitwallOrderStatus,
-  type PitwallSession,
 } from '~/services/pitwall/pitwallLink'
 
 /** Esito per campo dichiarato dal PC del pilota: mai appiattito in un "fatto". */
@@ -159,43 +159,18 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   /**
    * Chi e' in pista adesso, fra le persone che mi hanno autorizzato.
    *
-   * La presenza di un pilota vive in un documento suo, che si rilegge al passo
-   * del suo battito. Prima si rileggeva solo quella del pilota selezionato, e
-   * l'elenco "chi posso assistere adesso" non poteva esistere: si sapeva chi
-   * era vivo soltanto dopo essere entrati da lui. Si leggono i soli
-   * collegamenti utilizzabili, e non piu' di dodici: oltre non sarebbe
-   * comunque un elenco che si guarda.
+   * Ascolti, decadimento e scheda nascosta sono una cosa sola e vivono nel
+   * loro modulo: qui resta l'elenco su cui scrivono.
    */
-  const PRESENCE_POLL_MS = 30_000
-  const MAX_WATCHED_PILOTS = 12
-  let pilotsPresenceTimer: ReturnType<typeof setInterval> | null = null
+  const presence = createPitwallPresenceWatch({ service, outgoing })
 
-  async function refreshPilotsPresence(): Promise<void> {
-    const engineer = service()
-    if (!engineer) return
-    const watched = outgoing.value.filter(link => link.usable).slice(0, MAX_WATCHED_PILOTS)
-    if (!watched.length) return
-    const seen = new Map<string, { session: PitwallSession | null, reachable: boolean }>()
-    await Promise.all(watched.map(async (link) => {
-      try {
-        seen.set(link.driverUid, await engineer.readPilotPresence(link.driverUid))
-      } catch {
-        // Una presenza non letta lascia l'ultima nota: sparirebbe da sola al
-        // battito successivo, e far lampeggiare l'elenco sarebbe peggio.
-      }
-    }))
-    if (!seen.size) return
-    outgoing.value = outgoing.value.map((link) => {
-      const fresh = seen.get(link.driverUid)
-      return fresh ? { ...link, session: fresh.session, reachable: fresh.reachable } : link
-    })
-  }
-
-  function watchPilotsPresence(): void {
-    if (pilotsPresenceTimer) clearInterval(pilotsPresenceTimer)
-    void refreshPilotsPresence()
-    pilotsPresenceTimer = setInterval(() => { void refreshPilotsPresence() }, PRESENCE_POLL_MS)
-  }
+  // Chi si autorizza adesso non deve aspettare il giro dopo per essere
+  // guardato: l'elenco cambia e gli ascolti lo seguono. Si confronta *chi*
+  // c'e', non l'oggetto, perche' ogni presenza che arriva riscrive l'elenco.
+  watch(
+    () => outgoing.value.filter(link => link.usable).map(link => link.driverUid).join('|'),
+    () => presence.sync()
+  )
 
   /**
    * Chiede il collegamento, dicendo cosa si chiede: "solo per oggi" o
@@ -427,9 +402,9 @@ export function usePitwallLink(options: PitwallLinkOptions) {
       (error) => { rawError.value = error?.message || 'Elenco piloti non disponibile.' }
     )
 
-    // Chi e' in pista si vede solo se qualcuno lo guarda: e' questo battito a
-    // far comparire e sparire da sole le righe di "In pista".
-    watchPilotsPresence()
+    // Chi e' in pista si vede solo se qualcuno lo guarda: sono questi ascolti
+    // a far comparire e sparire da sole le righe di "In pista".
+    presence.start()
   }
 
   function stop(): void {
@@ -441,8 +416,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     stopGrantedWatch = null
     if (presenceTimer) clearInterval(presenceTimer)
     presenceTimer = null
-    if (pilotsPresenceTimer) clearInterval(pilotsPresenceTimer)
-    pilotsPresenceTimer = null
+    presence.stop()
   }
 
   onScopeDispose(stop)

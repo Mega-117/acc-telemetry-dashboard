@@ -79,7 +79,12 @@ export interface PitwallSession {
   driverUid: string
   sessionId: string
   online: boolean
-  updatedAt: string
+  /**
+   * L'ora del server (Timestamp) sulle app aggiornate, la vecchia stringa ISO
+   * su quelle che non lo sono ancora. Si legge sempre con
+   * `pitwallSessionStampMs`, mai a mano.
+   */
+  updatedAt: unknown
   car?: string | null
   track?: string | null
   crew?: PitwallCrewMember[] | null
@@ -206,6 +211,24 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
   }
 }
 
+/**
+ * Quando e' stata scritta questa presenza, in millisecondi.
+ *
+ * Due forme, e non e' una svista: l'ora del server - un `Timestamp` Firestore,
+ * che e' quella giusta - e la vecchia stringa ISO scritta dal client, che resta
+ * accettata finche' in giro ci sono app non ancora aggiornate. Con la stringa
+ * un orologio avanti teneva "in pista" per sempre un pilota che aveva spento il
+ * PC, e uno indietro faceva sparire chi stava ancora guidando: e' lo stesso
+ * difetto gia' corretto per il battito dentro la stanza, e da questo campo
+ * dipende chi puo' ricevere una strategia.
+ */
+export function pitwallSessionStampMs(session: PitwallSession | null | undefined): number | null {
+  const stamp = session?.updatedAt as { toMillis?: () => number } | string | null | undefined
+  if (stamp && typeof stamp === 'object' && typeof stamp.toMillis === 'function') return stamp.toMillis()
+  const parsed = Date.parse(String(stamp ?? ''))
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 /** Un pilota e' raggiungibile se e' online e il suo stato non e' vecchio. */
 export function isPitwallSessionFresh(
   session: PitwallSession | null | undefined,
@@ -213,8 +236,8 @@ export function isPitwallSessionFresh(
   maxAgeMs = 90_000
 ): boolean {
   if (!session?.online) return false
-  const updatedAt = Date.parse(session.updatedAt)
-  return Number.isFinite(updatedAt) && nowMs - updatedAt <= maxAgeMs
+  const updatedAt = pitwallSessionStampMs(session)
+  return updatedAt != null && nowMs - updatedAt <= maxAgeMs
 }
 
 // Chi esegue l ordine dentro una stanza vive in `pitwallRoomContract.ts`,

@@ -12,7 +12,7 @@
 // La telemetria non passa da qui: viaggia diretta fra i due PC.
 // ============================================
 
-import { collection, doc, query, where } from 'firebase/firestore'
+import { collection, doc, query, serverTimestamp, where } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 // Ogni lettura e scrittura passa dal tracker: la promessa "costo zero" regge
 // solo se il consumo Firebase resta misurabile, non stimato a occhio.
@@ -230,6 +230,11 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
   // Quando si e' scritta l'ultima presenza: serve a rallentare il battito
   // quando ACC non e' vivo, senza perdere il primo annuncio.
   let lastPresenceAtMs = 0
+  /**
+   * Le regole pubblicate non accettano ancora l'ora del server sulla presenza.
+   * Da qui in poi si scrive la stringa, senza ritentare a ogni battito.
+   */
+  let serverStampRefused = false
 
   async function publishPresence(context: { car?: string | null, track?: string | null } = {}): Promise<void> {
     if (stopped) return
@@ -256,22 +261,49 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
     const live = carContext != null
     if (!live && now() - lastPresenceAtMs < PITWALL_PRESENCE_IDLE_INTERVAL_MS) return
 
+    const body = {
+      schemaVersion: PITWALL_LINK_SCHEMA_VERSION,
+      driverUid,
+      sessionId,
+      online: true,
+      ...(car == null ? {} : { car }),
+      ...(track == null ? {} : { track }),
+      ...(crew == null ? {} : { crew }),
+      ...(strategy == null ? {} : { strategy }),
+    }
     try {
-      await trackedSetDoc(sessionRef, {
-        schemaVersion: PITWALL_LINK_SCHEMA_VERSION,
-        driverUid,
-        sessionId,
-        online: true,
-        updatedAt: nowIso,
-        ...(car == null ? {} : { car }),
-        ...(track == null ? {} : { track }),
-        ...(crew == null ? {} : { crew }),
-        ...(strategy == null ? {} : { strategy }),
-      }, 'pitwall.publishPresence')
+      await trackedSetDoc(sessionRef, { ...body, updatedAt: presenceStamp(nowIso) }, 'pitwall.publishPresence')
       lastPresenceAtMs = now()
     } catch (error) {
-      log.warn?.('[PITWALL] presenza non pubblicata:', (error as Error)?.message)
+      if (serverStampRefused) {
+        log.warn?.('[PITWALL] presenza non pubblicata:', (error as Error)?.message)
+        return
+      }
+      // Le regole pubblicate non accettano ancora l'ora del server: si ripiega
+      // sulla stringa e non si riprova piu' con l'altra forma. Meglio una
+      // presenza con l'orologio del client che nessuna presenza - senza,
+      // sparirebbe dal muretto chiunque non abbia ancora pubblicato le regole.
+      serverStampRefused = true
+      log.warn?.('[PITWALL] ora del server rifiutata sulla presenza, si usa quella locale:', (error as Error)?.message)
+      try {
+        await trackedSetDoc(sessionRef, { ...body, updatedAt: nowIso }, 'pitwall.publishPresence')
+        lastPresenceAtMs = now()
+      } catch (fallbackError) {
+        log.warn?.('[PITWALL] presenza non pubblicata:', (fallbackError as Error)?.message)
+      }
     }
+  }
+
+  /**
+   * L'ora da mettere sulla presenza.
+   *
+   * Quella del server, che e' la sola che non si puo' sbagliare - finche' le
+   * regole pubblicate la accettano. Se l'hanno rifiutata una volta si smette di
+   * riprovare per questa sessione: sarebbe una scrittura negata ogni trenta
+   * secondi, e la presenza e' esattamente cio' che non deve mancare.
+   */
+  function presenceStamp(nowIso: string): unknown {
+    return serverStampRefused ? nowIso : serverTimestamp()
   }
 
   async function goOffline(): Promise<void> {
