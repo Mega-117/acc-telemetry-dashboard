@@ -33,6 +33,18 @@ function fastState() {
 }
 
 describe('Race HUD components', () => {
+  it('con la fisica dell auto osservata assente la griglia resta, coi valori a --', async () => {
+    // PIP-270: prima la pagina spegneva l'intera sezione e restava solo il
+    // pannello nero. Il Broadcasting UDP non espone la fisica ruota di un
+    // altro pilota, quindi i valori mancano: ma le quattro ruote si vedono.
+    const observed = { ...fastState(), dataSource: 'focused', tyres: [] }
+    const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: observed }))
+
+    for (const id of ['FL', 'FR', 'RL', 'RR']) expect(html).toContain(id)
+    expect(html).toContain('--')
+    expect(html).not.toContain('23.2')
+  })
+
   it('rende la gerarchia gomme specchiata con slip, loss e freni', async () => {
     const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: fastState() }))
     expect(html).toContain('23.2')

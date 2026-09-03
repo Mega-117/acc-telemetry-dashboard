@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
-import { tyreSlipBarStyle } from '~/utils/tyreSlipPresentation'
+import { resolveTyreHudStatus, tyreSlipBarStyle } from '~/utils/tyreSlipPresentation'
 import { tyreTemperatureColor } from '~/utils/tyreTemperaturePresentation'
 import {
   buildBrakeAxlePresentation,
@@ -54,12 +54,16 @@ const setLabel = computed(() => {
   return `${compound} ${set}`
 })
 
+const ADVANCED_STATUS_LABELS: Record<string, string> = {
+  'no-data': 'NO DATA',
+  'data-unavailable': 'DATA N/A',
+  'engine-off': 'ENGINE OFF',
+  'pit-limiter': 'PIT LIMITER',
+}
+
 const globalStatus = computed(() => {
-  if (!props.fastState.isLive) return 'NO DATA'
-  if (props.fastState.dataSource === 'focused') return 'DATA N/A'
-  if (!props.fastState.isEngineRunning) return 'ENGINE OFF'
-  if (props.fastState.pitLimiterOn) return 'PIT LIMITER'
-  return null
+  const status = resolveTyreHudStatus(props.fastState)
+  return status === null ? null : ADVANCED_STATUS_LABELS[status]
 })
 
 function format(value: number | null, digits = 0) {

@@ -39,8 +39,8 @@ describe('spectator HUD source contract', () => {
     expect(dashboard).toContain('.inputs--unavailable::after')
     expect(classicTyres).toContain('props.fastState.speedKmh !== null')
     expect(classicTyres).not.toContain('hasLiveTyres.value && props.fastState.speedKmh')
-    expect(advancedTyres).toContain("props.fastState.dataSource === 'focused'")
-    expect(advancedTyres).toContain("return 'DATA N/A'")
+    expect(advancedTyres).toContain('resolveTyreHudStatus(props.fastState)')
+    expect(advancedTyres).toContain("'data-unavailable': 'DATA N/A'")
     expect(dashboardPage).toContain('telemetry.focusedCar.value')
     expect(dashboard).toContain('v-if="model.spectator"')
     expect(dashboard).toContain('model.spectator.timings')
@@ -60,11 +60,19 @@ describe('spectator HUD source contract', () => {
     expect(standingsState).toContain('tickMs - lastPushAtMs >= safePollIntervalMs')
   })
 
-  it('Race mostra la telemetria locale anche parziale ma nasconde la fisica focused non supportata', () => {
+  it('Race dichiara la fisica focused mancante invece di spegnere il pannello', () => {
+    // PIP-270: spegnere l'intera sezione lasciava visibile il solo pannello
+    // opaco, cioe' il rettangolo nero visto dal pilota mentre guardava un
+    // altro. La griglia resta montata e la fascia dice perche' i valori
+    // sono `--`; la regola e' quella condivisa con l'Avanzato.
     const tyresPage = source('app/pages/tyres-overlay.vue')
+    const shared = source('app/utils/tyreSlipPresentation.ts')
 
-    expect(tyresPage).toContain('source: telemetrySource')
-    expect(tyresPage).toContain("telemetrySource.value !== 'focused'")
+    expect(tyresPage).toContain('resolveTyreHudStatus(fastState.value)')
+    expect(tyresPage).toContain("'data-unavailable': 'DATA N/A'")
+    expect(tyresPage).not.toContain('v-show="raceVisible"')
+    expect(tyresPage).not.toContain("telemetrySource.value !== 'focused'")
     expect(tyresPage).not.toContain('fastState.value.tyres.length === 4')
+    expect(shared).toContain("if (state.dataSource === 'focused') return 'data-unavailable'")
   })
 })

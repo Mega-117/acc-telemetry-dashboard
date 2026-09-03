@@ -14,6 +14,7 @@ import TyreRaceHud from '~/components/overlay/TyreRaceHud.vue'
 import DamageRaceHud from '~/components/overlay/DamageRaceHud.vue'
 import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 import { useRaceHudPage, type RaceHudPage } from '~/composables/useRaceHudPage'
+import { resolveTyreHudStatus } from '~/utils/tyreSlipPresentation'
 
 definePageMeta({ layout: 'hud-overlay' })
 
@@ -28,7 +29,7 @@ function getApi(): any | null {
 }
 
 const route = useRoute()
-const { fastState, source: telemetrySource, startFastStatePolling, stopFastStatePolling } = useOverlayTelemetrySource(getApi)
+const { fastState, startFastStatePolling, stopFastStatePolling } = useOverlayTelemetrySource(getApi)
 const overlay = useHudOverlay('tyres', getApi)
 const {
   isElectron,
@@ -48,15 +49,20 @@ const variant = computed<'classic' | 'advanced' | 'race'>(() => {
 })
 const racePager = useRaceHudPage(fastState)
 const { activePage: racePage, damageFlash: raceDamageFlash } = racePager
-const raceVisible = computed(() => (
-  fastState.value.isFresh
-  && fastState.value.isLive
-  && telemetrySource.value !== 'focused'
-))
+
+// PIP-270: la Race non si spegne piu'. Nascondere l'intera sezione lasciava
+// visibile il solo pannello opaco, cioe' il rettangolo nero segnalato dal
+// pilota quando passava alla visuale di un altro. Come Classico e Avanzato,
+// la griglia resta montata e una fascia dice perche' i valori sono `--`.
+const RACE_STATUS_LABELS: Record<string, string> = {
+  'no-data': 'NO DATA',
+  'data-unavailable': 'DATA N/A',
+  'engine-off': 'ENGINE OFF',
+  'pit-limiter': 'LIMITER ON',
+}
 const raceBanner = computed(() => {
-  if (!fastState.value.isEngineRunning) return 'ENGINE OFF'
-  if (fastState.value.pitLimiterOn) return 'LIMITER ON'
-  return null
+  const status = resolveTyreHudStatus(fastState.value)
+  return status === null ? null : RACE_STATUS_LABELS[status]
 })
 
 function selectRacePage(page: RaceHudPage) {
@@ -143,7 +149,6 @@ onBeforeUnmount(() => {
       </HudTimedPager>
       <section
         v-else-if="variant === 'race'"
-        v-show="raceVisible"
         class="race-hud"
         :class="{
           'race-hud--yellow': fastState.flag === 2,
