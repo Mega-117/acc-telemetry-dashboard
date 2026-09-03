@@ -147,12 +147,29 @@ describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
   })
 
   it('non ripropone nella ricerca chi e gia in un elenco', () => {
-    expect(state.search('mar').map(person => person.id)).toEqual(['gallo', 'martina'])
+    expect(state.search('mar').entries.map(person => person.id)).toEqual(['gallo', 'martina'])
     state.askToAssist('gallo')
-    expect(state.search('mar').map(person => person.id)).toEqual(['martina'])
-    expect(state.search('')).toEqual([])
-    // Me stesso non sono mai un risultato: non ci si autorizza da soli.
-    expect(state.search(PITWALL_CONCEPT_CURRENT_USER_ID)).toEqual([])
+    const after = state.search('mar')
+    expect(after.entries.map(person => person.id)).toEqual(['martina'])
+    // Chi e' appena stato aggiunto non sparisce: passa fra quelli che ho gia'.
+    expect(after.linked.map(person => person.id)).toContain('gallo')
+    expect(state.search('').state).toBe('idle')
+    // Me stesso non sono mai un risultato, ne' fra gli aggiungibili ne' fra i
+    // collegati: non ci si autorizza da soli.
+    const self = state.search(PITWALL_CONCEPT_CURRENT_USER_ID)
+    expect(self.entries).toEqual([])
+    expect(self.linked).toEqual([])
+  })
+
+  it('lo scenario affollato si accende e si spegne senza perdere il resto', () => {
+    expect(state.crowded.value).toBe(false)
+    state.toggleCrowded()
+    expect(state.crowded.value).toBe(true)
+    expect(state.links.value.assisted.length).toBeGreaterThan(8)
+    // Tornare indietro rimette lo scenario che racconta, non uno stato ibrido.
+    state.toggleCrowded()
+    expect(state.crowded.value).toBe(false)
+    expect(access(state, 'assisted', 'paolo')).toBe('incoming')
   })
 
   it('si riporta allo stato di partenza, per poterlo dimostrare due volte', () => {

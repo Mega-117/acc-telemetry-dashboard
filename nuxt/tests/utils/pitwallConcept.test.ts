@@ -1,13 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import {
+  PITWALL_CONCEPT_CORE_PEOPLE,
   PITWALL_CONCEPT_CURRENT_USER_ID,
   PITWALL_CONCEPT_DEFAULT_EXPIRY,
   PITWALL_CONCEPT_DEFAULT_PRESSURES,
   PITWALL_CONCEPT_EXPIRY_PRESETS,
+  PITWALL_CONCEPT_FILLER_PEOPLE,
   PITWALL_CONCEPT_LINKS_ASSIST,
   PITWALL_CONCEPT_LINKS_ASSISTED,
+  PITWALL_CONCEPT_LINKED_PREVIEW,
+  PITWALL_CONCEPT_LIST_LIMITS,
+  PITWALL_CONCEPT_MAX_ROOM_PEOPLE,
   PITWALL_CONCEPT_PEOPLE,
   PITWALL_CONCEPT_RACES,
+  buildPitwallConceptCrowd,
+  describePitwallConceptEmpty,
+  describePitwallConceptWall,
+  isPitwallConceptPinnedLink,
+  pitwallConceptRoomIsFull,
+  pitwallConceptWallSummary,
+  sortPitwallConceptLinks,
+  splitPitwallConceptList,
   describePitwallConceptAccess,
   describePitwallConceptMember,
   describePitwallConceptNotice,
@@ -34,6 +47,7 @@ import {
   searchPitwallConceptDirectory,
   stepPitwallConceptPressure,
 } from '~/utils/pitwallConcept'
+import type { PitwallConceptLink } from '~/utils/pitwallConcept'
 
 describe('Pitwall Concept mock model', () => {
   it('conosce le persone solo per nickname, mai per nome e cognome', () => {
@@ -54,8 +68,10 @@ describe('Pitwall Concept mock model', () => {
     // Un nickname di una lettera sola non deve produrre una sigla vuota.
     expect(pitwallConceptInitials({ id: 'x', handle: '@x' })).toBe('XX')
     expect(pitwallConceptInitials({ id: 'vuoto', handle: '@' })).toBe('??')
-    // Nessuna sigla ripetuta fra le persone del prototipo.
-    const initials = PITWALL_CONCEPT_PEOPLE.map(pitwallConceptInitials)
+    // Nessuna sigla ripetuta fra le persone che raccontano il prototipo. Il
+    // riempitivo (`pilota01`…) serve a stressare gli elenchi, non a essere
+    // riconosciuto a colpo d'occhio: li' le sigle possono ripetersi.
+    const initials = PITWALL_CONCEPT_CORE_PEOPLE.map(pitwallConceptInitials)
     expect(new Set(initials).size).toBe(initials.length)
   })
 
@@ -98,12 +114,15 @@ describe('Pitwall Concept mock model', () => {
   })
 
   it('propone solo persone non ancora collegate, e niente a query vuota', () => {
-    expect(searchPitwallConceptDirectory('')).toEqual([])
-    expect(searchPitwallConceptDirectory('  ')).toEqual([])
-    // "mariorossi" e' gia' fra chi posso assistere: non deve ricomparire come nuovo.
-    expect(searchPitwallConceptDirectory('mar').map(person => person.id)).toEqual(['gallo', 'martina'])
-    expect(searchPitwallConceptDirectory('enricos')).toEqual([])
-    expect(searchPitwallConceptDirectory('nessuno')).toEqual([])
+    expect(searchPitwallConceptDirectory('').state).toBe('idle')
+    expect(searchPitwallConceptDirectory('  ').state).toBe('idle')
+    // "mariorossi" e' gia' fra chi posso assistere: non deve ricomparire come
+    // aggiungibile, ma nemmeno sparire (vedi lo stato "ce l'hai gia'").
+    const found = searchPitwallConceptDirectory('mar')
+    expect(found.entries.map(person => person.id)).toEqual(['gallo', 'martina'])
+    expect(found.linked.map(person => person.id)).toEqual(['mario', 'marco'])
+    expect(searchPitwallConceptDirectory('enricos').entries).toEqual([])
+    expect(searchPitwallConceptDirectory('nessuno').state).toBe('none')
   })
 
   it('descrive gare vive con equipaggio preso dalla directory', () => {
@@ -137,14 +156,145 @@ describe('Pitwall Concept: le due facce di una richiesta', () => {
     expect(isPitwallConceptGranted({ personId: 'x', access: 'incoming' })).toBe(false)
   })
 
-  it('non ripropone nella ricerca chi e gia in un elenco, nemmeno in attesa', () => {
+  it('mostra chi e gia in un elenco invece di nasconderlo', () => {
     // "alessandro" e' una richiesta mandata, "paolo" una ricevuta: entrambi
     // hanno gia' una riga con la loro azione, quindi non sono da aggiungere.
-    expect(searchPitwallConceptDirectory('alessandro')).toEqual([])
-    expect(searchPitwallConceptDirectory('paolo')).toEqual([])
+    // Ma sparire risponderebbe "non esiste" a chi chiede "chi e'?", ed e' il
+    // difetto che questa forma chiude: si mostrano, spenti.
+    for (const term of ['alessandro', 'paolo']) {
+      const found = searchPitwallConceptDirectory(term)
+      expect(found.entries).toEqual([])
+      expect(found.linked.map(person => person.id)).toHaveLength(1)
+      expect(found.state).toBe('none')
+    }
     // Con un elenco esplicito la funzione resta pura e non guarda le fixture.
-    expect(searchPitwallConceptDirectory('mar', []).map(person => person.id))
+    expect(searchPitwallConceptDirectory('mar', []).entries.map(person => person.id))
       .toEqual(['mario', 'marco', 'gallo', 'martina'])
+  })
+
+  it('non cerca sotto due lettere, come il servizio reale', () => {
+    expect(searchPitwallConceptDirectory('m').state).toBe('too-short')
+    expect(searchPitwallConceptDirectory('@m').state).toBe('too-short')
+    expect(searchPitwallConceptDirectory('ma').state).not.toBe('too-short')
+  })
+
+  it('taglia anche l elenco di chi hai gia, che e contesto e non azioni', () => {
+    // Senza tetto erano quaranta righe grigie sotto i risultati veri: lo stesso
+    // difetto che questa schermata esiste per chiudere.
+    const linked = PITWALL_CONCEPT_FILLER_PEOPLE.map(person => person.id)
+    const found = searchPitwallConceptDirectory('pilota', linked)
+    expect(found.linked).toHaveLength(PITWALL_CONCEPT_LINKED_PREVIEW)
+    expect(found.linkedHidden).toBe(PITWALL_CONCEPT_FILLER_PEOPLE.length - PITWALL_CONCEPT_LINKED_PREVIEW)
+    expect(found.entries).toEqual([])
+    expect(found.state).toBe('none')
+  })
+
+  it('dichiara il taglio invece di troncare in silenzio', () => {
+    // Il riempitivo esiste per questo: una ricerca larga trova decine di voci,
+    // e il tetto va detto, non subito.
+    const found = searchPitwallConceptDirectory('pilota', [])
+    expect(found.state).toBe('capped')
+    expect(found.entries).toHaveLength(PITWALL_CONCEPT_LIST_LIMITS.search)
+    expect(found.hidden).toBeGreaterThan(0)
+    expect(found.entries.length + found.hidden).toBe(PITWALL_CONCEPT_FILLER_PEOPLE.length)
+  })
+})
+
+describe('Pitwall Concept: elenchi lunghi e vuoti', () => {
+  const rows = (count: number) => Array.from({ length: count }, (_unused, index) => index)
+
+  it('mostra le prime N e dice quante ne restano', () => {
+    expect(splitPitwallConceptList(rows(3), 8)).toEqual({ visible: [0, 1, 2], hidden: 0 })
+    expect(splitPitwallConceptList(rows(8), 8).hidden).toBe(0)
+    const split = splitPitwallConceptList(rows(50), 8)
+    expect(split.visible).toHaveLength(8)
+    expect(split.hidden).toBe(42)
+    expect(splitPitwallConceptList([], 8)).toEqual({ visible: [], hidden: 0 })
+  })
+
+  it('non nasconde mai una riga che chiede una decisione', () => {
+    // E' la regola che tiene insieme tutto: un limite che nasconde una
+    // richiesta e' lo stesso difetto dello scroll interno tolto dalla Classica.
+    const items = [...rows(20), 'decidi']
+    const split = splitPitwallConceptList(items, 3, item => item === 'decidi')
+    expect(split.visible).toContain('decidi')
+    expect(split.visible).toHaveLength(3)
+    expect(split.hidden).toBe(18)
+  })
+
+  it('con piu righe fissate del limite le tiene comunque tutte', () => {
+    const items = ['a', 'b', 'c', 'd', 1, 2, 3]
+    const split = splitPitwallConceptList(items, 2, item => typeof item === 'string')
+    expect(split.visible).toEqual(['a', 'b', 'c', 'd'])
+    expect(split.hidden).toBe(3)
+  })
+
+  it('mette in cima chi aspetta una risposta, poi chi e in gara', () => {
+    const links: PitwallConceptLink[] = [
+      { personId: 'martina', access: 'always' },
+      { personId: 'gallo', access: 'always' },
+      { personId: 'alessandro', access: 'pending' },
+      { personId: 'paolo', access: 'incoming' },
+    ]
+    expect(sortPitwallConceptLinks(links, ['martina']).map(link => link.personId))
+      .toEqual(['paolo', 'alessandro', 'martina', 'gallo'])
+    // A parita' di peso decide l'ordine alfabetico, non quello di arrivo.
+    expect(sortPitwallConceptLinks(links).map(link => link.personId))
+      .toEqual(['paolo', 'alessandro', 'marcog', 'martinac'].map(nickname =>
+        nickname === 'marcog' ? 'gallo' : nickname === 'martinac' ? 'martina' : nickname))
+  })
+
+  it('dice cose diverse ai due elenchi vuoti', () => {
+    // Un testo solo direbbe la cosa giusta a meta' delle persone: in un verso
+    // aspetti, nell'altro sei tu a dover fare qualcosa.
+    expect(describePitwallConceptEmpty('assist')).toContain('Nessuno ti ha ancora autorizzato')
+    expect(describePitwallConceptEmpty('assisted')).toContain('Non hai ancora autorizzato nessuno')
+    expect(describePitwallConceptEmpty('assist')).not.toBe(describePitwallConceptEmpty('assisted'))
+  })
+
+  it('riassume il muretto invece di stampare sedici nomi', () => {
+    expect(pitwallConceptWallSummary([], 5)).toEqual({ shown: [], extra: 0 })
+    expect(pitwallConceptWallSummary(['a'], 5)).toEqual({ shown: ['a'], extra: 0 })
+    const many = Array.from({ length: 16 }, (_unused, index) => `p${index}`)
+    expect(pitwallConceptWallSummary(many, 5)).toEqual({ shown: many.slice(0, 5), extra: 11 })
+    expect(describePitwallConceptWall(['mario', 'luca'], 5)).toBe('mariorossi, lucab')
+    expect(describePitwallConceptWall(['mario', 'luca', 'marco'], 2)).toBe('mariorossi, lucab e altri 1')
+  })
+
+  it('dice quando una gara e piena, con il tetto vero delle regole', () => {
+    const race = PITWALL_CONCEPT_RACES[0]!
+    expect(pitwallConceptRoomIsFull(race)).toBe(false)
+    expect(pitwallConceptRoomIsFull(null)).toBe(false)
+    const full = {
+      ...race,
+      members: Array.from({ length: PITWALL_CONCEPT_MAX_ROOM_PEOPLE }, (_unused, index) => ({
+        personId: `p${index}`, role: 'member' as const, driving: false, online: true,
+      })),
+    }
+    expect(pitwallConceptRoomIsFull(full)).toBe(true)
+  })
+
+  it('lo scenario affollato porta gli elenchi ai tetti veri', () => {
+    const crowd = buildPitwallConceptCrowd()
+    expect(crowd.links.assist.length).toBeGreaterThan(PITWALL_CONCEPT_LIST_LIMITS.people)
+    expect(crowd.links.assisted.length).toBeGreaterThan(PITWALL_CONCEPT_LIST_LIMITS.people)
+    expect(crowd.races.length).toBeGreaterThan(PITWALL_CONCEPT_LIST_LIMITS.races)
+    // Le due richieste stanno in fondo all'elenco: e' li' che si vede se il
+    // limite le nasconde.
+    const incoming = crowd.links.assisted.filter(link => link.access === 'incoming')
+    expect(incoming.length).toBeGreaterThanOrEqual(2)
+    const split = splitPitwallConceptList(
+      sortPitwallConceptLinks(crowd.links.assisted),
+      PITWALL_CONCEPT_LIST_LIMITS.people,
+      isPitwallConceptPinnedLink,
+    )
+    for (const link of incoming) expect(split.visible).toContain(link)
+    // Ogni persona citata esiste davvero nella directory.
+    for (const race of crowd.races) {
+      for (const member of race.members) {
+        expect(getPitwallConceptPerson(member.personId), member.personId).not.toBeNull()
+      }
+    }
   })
 })
 

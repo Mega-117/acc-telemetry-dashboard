@@ -16,6 +16,7 @@ import {
   PITWALL_CONCEPT_LINKS_ASSISTED,
   PITWALL_CONCEPT_NOTICES,
   PITWALL_CONCEPT_RACES,
+  buildPitwallConceptCrowd,
   searchPitwallConceptDirectory,
 } from '~/utils/pitwallConcept'
 import type {
@@ -33,23 +34,35 @@ interface PitwallConceptStore {
   races: PitwallConceptRace[]
   notices: PitwallConceptNotice[]
   selectedRaceId: string | null
+  crowded: boolean
 }
 
 /**
  * Le fixture sono l'origine, non lo stato: si copiano in profondita' perche'
  * ricaricare la pagina debba ripartire davvero da capo e perche' un test non
  * possa sporcare quello successivo.
+ *
+ * Con `crowded` gli elenchi partono ai tetti veri del servizio: e' l'unico modo
+ * di guardare gli edge case invece di descriverli.
  */
-function initialStore(): PitwallConceptStore {
+function initialStore(crowded = false): PitwallConceptStore {
   const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+  const scenario = crowded
+    ? buildPitwallConceptCrowd()
+    : {
+        links: { assist: PITWALL_CONCEPT_LINKS_ASSIST, assisted: PITWALL_CONCEPT_LINKS_ASSISTED },
+        races: PITWALL_CONCEPT_RACES,
+        notices: PITWALL_CONCEPT_NOTICES,
+      }
   return {
     links: {
-      assist: clone(PITWALL_CONCEPT_LINKS_ASSIST),
-      assisted: clone(PITWALL_CONCEPT_LINKS_ASSISTED),
+      assist: clone(scenario.links.assist),
+      assisted: clone(scenario.links.assisted),
     },
-    races: clone(PITWALL_CONCEPT_RACES),
-    notices: clone(PITWALL_CONCEPT_NOTICES),
-    selectedRaceId: PITWALL_CONCEPT_RACES[0]?.id ?? null,
+    races: clone(scenario.races),
+    notices: clone(scenario.notices),
+    selectedRaceId: scenario.races[0]?.id ?? null,
+    crowded,
   }
 }
 
@@ -211,7 +224,14 @@ export function usePitwallConceptState() {
 
   /** Riporta il prototipo allo stato di partenza: serve a dimostrarlo due volte. */
   function reset(): void {
-    store.value = initialStore()
+    store.value = initialStore(store.value.crowded)
+  }
+
+  const crowded = computed(() => store.value.crowded)
+
+  /** Passa fra lo scenario che racconta e quello che stressa il layout. */
+  function toggleCrowded(): void {
+    store.value = initialStore(!store.value.crowded)
   }
 
   return {
@@ -221,6 +241,8 @@ export function usePitwallConceptState() {
     selectedRace,
     linkedIds,
     pendingNoticeCount,
+    crowded,
+    toggleCrowded,
     search,
     askToAssist,
     cancelRequest,

@@ -5,18 +5,43 @@
 // chiusa. La riga sotto dice **perche'** ti compare, perche' ritrovarsi dentro
 // una gara senza capire il motivo e' esattamente il difetto che il prototipo
 // deve togliere.
+//
+// L'elenco vero arriva a sessanta gare - le stanze non si cancellano mai e
+// nessuno filtra le chiuse - quindi qui se ne mostrano tre: quelle in cui c'e'
+// davvero qualcuno al volante restano in cima, le chiuse in fondo.
+import { computed, ref } from "vue";
+import PitwallConceptMore from "~/components/pitwall/concept/PitwallConceptMore.vue";
 import {
+  PITWALL_CONCEPT_LIST_LIMITS,
   describePitwallConceptReason,
+  describePitwallConceptWall,
   pitwallConceptAmInvited,
   pitwallConceptNicknameById,
-  pitwallConceptNicknames,
   pitwallConceptWallIds,
   resolvePitwallConceptExecutor,
+  splitPitwallConceptList,
 } from "~/utils/pitwallConcept";
 import type { PitwallConceptRace } from "~/utils/pitwallConcept";
 
-defineProps<{ races: PitwallConceptRace[] }>();
+const props = defineProps<{ races: PitwallConceptRace[] }>();
 defineEmits<{ enter: [race: PitwallConceptRace] }>();
+
+const expanded = ref(false);
+
+/** Prima quelle vive con qualcuno al volante, poi gli inviti, poi le chiuse. */
+const ordered = computed(() => [...props.races].sort((left, right) => {
+  const weight = (race: PitwallConceptRace) => {
+    if (race.closed) return 3;
+    if (pitwallConceptAmInvited(race)) return 1;
+    return resolvePitwallConceptExecutor(race).state === "ready" ? 0 : 2;
+  };
+  return weight(left) - weight(right);
+}));
+
+const split = computed(() => splitPitwallConceptList(
+  ordered.value,
+  expanded.value ? ordered.value.length : PITWALL_CONCEPT_LIST_LIMITS.races,
+));
 
 /** Al volante c'e' uno solo, oppure va detto che non si sa chi applica. */
 function driverLabel(race: PitwallConceptRace): string {
@@ -25,15 +50,16 @@ function driverLabel(race: PitwallConceptRace): string {
   return executor.state === "multiple-driving" ? "in due" : "nessuno";
 }
 
+/** Sedici nickname uniti da virgole sono un paragrafo, non una riga di card. */
 function wallLabel(race: PitwallConceptRace): string {
-  return pitwallConceptNicknames(pitwallConceptWallIds(race)).join(", ");
+  return describePitwallConceptWall(pitwallConceptWallIds(race));
 }
 </script>
 
 <template>
   <div>
     <article
-      v-for="race in races"
+      v-for="race in split.visible"
       :key="race.id"
       class="pwc-race"
       :class="{ 'is-invited': pitwallConceptAmInvited(race), 'is-closed': race.closed }"
@@ -87,6 +113,14 @@ function wallLabel(race: PitwallConceptRace): string {
     >
       Nessuna gara attiva fra le tue persone.
     </p>
+
+    <PitwallConceptMore
+      :hidden="split.hidden"
+      :expanded="expanded"
+      noun="gare"
+      noun-one="gara"
+      @toggle="expanded = !expanded"
+    />
   </div>
 </template>
 

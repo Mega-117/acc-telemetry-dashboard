@@ -3,16 +3,22 @@
 //
 // Le parole delle pastiglie sono le stesse della vista classica: chi porta
 // questo layout sulla Classica traduce la forma, non il vocabolario.
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import PitwallConceptMore from "~/components/pitwall/concept/PitwallConceptMore.vue";
 import {
   describePitwallConceptMember,
+  isPitwallConceptPinnedMember,
   pitwallConceptCanLeave,
   pitwallConceptCanPromote,
   pitwallConceptCanRemove,
   pitwallConceptInitialsById,
   pitwallConceptIsManager,
   pitwallConceptNicknameById,
+  pitwallConceptRoomIsFull,
+  splitPitwallConceptList,
   PITWALL_CONCEPT_CURRENT_USER_ID,
+  PITWALL_CONCEPT_LIST_LIMITS,
+  PITWALL_CONCEPT_MAX_ROOM_PEOPLE,
 } from "~/utils/pitwallConcept";
 import type { PitwallConceptMember, PitwallConceptRace } from "~/utils/pitwallConcept";
 
@@ -25,8 +31,11 @@ const emit = defineEmits<{
   close: [];
 }>();
 
+const expanded = ref(false);
+
 const isManager = computed(() => pitwallConceptIsManager(props.race));
 const canLeave = computed(() => pitwallConceptCanLeave(props.race));
+const isFull = computed(() => pitwallConceptRoomIsFull(props.race));
 
 /** Prima chi guida, poi chi gestisce, poi il resto: l'ordine di chi guarda. */
 const ordered = computed(() => [...props.race.members].sort((left, right) => {
@@ -34,6 +43,16 @@ const ordered = computed(() => [...props.race.members].sort((left, right) => {
     member.driving ? 0 : member.role === "manager" ? 1 : member.role === "member" ? 2 : 3;
   return weight(left) - weight(right);
 }));
+
+/**
+ * Una stanza arriva a trentadue persone. Chi guida, chi gestisce e chi e'
+ * invitato restano sempre visibili: sono le righe su cui si decide qualcosa.
+ */
+const split = computed(() => splitPitwallConceptList(
+  ordered.value,
+  expanded.value ? ordered.value.length : PITWALL_CONCEPT_LIST_LIMITS.crew,
+  isPitwallConceptPinnedMember,
+));
 
 function pillClass(member: PitwallConceptMember): string {
   if (member.driving) return "is-driving";
@@ -45,12 +64,18 @@ function pillClass(member: PitwallConceptMember): string {
 <template>
   <section class="pwc-panel pwc-roster">
     <header class="pwc-panel__head">
-      <h2>Equipaggio</h2>
-      <small v-if="!isManager">Solo chi gestisce la gara può invitare o togliere.</small>
+      <h2>
+        Equipaggio
+        <span class="pwc-count">{{ race.members.length }}</span>
+      </h2>
+      <small v-if="isFull">
+        Questa gara è piena: {{ PITWALL_CONCEPT_MAX_ROOM_PEOPLE }} persone è il massimo.
+      </small>
+      <small v-else-if="!isManager">Solo chi gestisce la gara può invitare o togliere.</small>
     </header>
 
     <div
-      v-for="member in ordered"
+      v-for="member in split.visible"
       :key="member.personId"
       class="pwc-roster__row"
     >
@@ -88,6 +113,15 @@ function pillClass(member: PitwallConceptMember): string {
         </button>
       </span>
     </div>
+
+    <PitwallConceptMore
+      :hidden="split.hidden"
+      :expanded="expanded"
+      noun="persone"
+      noun-one="persona"
+      class="pwc-roster__more"
+      @toggle="expanded = !expanded"
+    />
 
     <footer
       v-if="canLeave || (isManager && !race.closed)"
@@ -136,6 +170,7 @@ function pillClass(member: PitwallConceptMember): string {
 .pwc-dot.is-driving { background: #4ade80; box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.16); }
 .pwc-dot.is-online { background: #60a5fa; }
 .pwc-dot.is-waiting { background: #f59e0b; }
+.pwc-roster__more { margin: 0; padding: 10px 18px; }
 .pwc-roster__foot {
   display: flex;
   justify-content: flex-end;

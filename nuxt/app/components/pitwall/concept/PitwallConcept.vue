@@ -28,10 +28,12 @@ import type {
   PitwallConceptScreen,
 } from "~/utils/pitwallConcept";
 
+/** I due versi, nell'ordine in cui si leggono. */
+const DIRECTIONS: PitwallConceptDirection[] = ["assist", "assisted"];
+
 const state = usePitwallConceptState();
 
 const screen = ref<PitwallConceptScreen>("home");
-const direction = ref<PitwallConceptDirection>("assist");
 const search = ref("");
 
 // Autorizzare qualcuno chiede una cosa sola: per quanto vale. Prima le due
@@ -39,8 +41,7 @@ const search = ref("");
 const grant = ref<{ personId: string; step: "duration" | "time"; time: string } | null>(null);
 
 const races = computed(() => state.races.value);
-const visibleLinks = computed(() => state.links.value[direction.value]);
-const searchResults = computed(() => state.search(search.value));
+const found = computed(() => state.search(search.value));
 
 /** Chi e' dentro una gara viva adesso: la pastiglia accanto al nickname. */
 const racingIds = computed(() => {
@@ -84,7 +85,6 @@ function openGrant(personId: string) {
 
 function grantAlways(personId: string) {
   state.allowToAssistMe(personId, "always");
-  direction.value = "assisted";
   search.value = "";
   grant.value = null;
 }
@@ -93,14 +93,12 @@ function confirmGrant() {
   const pending = grant.value;
   if (!pending) return;
   state.allowToAssistMe(pending.personId, "today", normalizePitwallConceptExpiry(pending.time));
-  direction.value = "assisted";
   search.value = "";
   grant.value = null;
 }
 
 function ask(personId: string) {
   state.askToAssist(personId);
-  direction.value = "assist";
   search.value = "";
   grant.value = null;
 }
@@ -117,9 +115,21 @@ function ask(personId: string) {
       class="pwc-home"
     >
       <section class="pwc-home__races">
-        <h2 class="pwc-block__title">
-          In gara adesso
-        </h2>
+        <header class="pwc-block__head">
+          <h2 class="pwc-block__title">
+            In gara adesso
+          </h2>
+          <!-- Gli elenchi ai tetti veri del servizio. Serve a guardare gli edge
+               case invece di descriverli, e vive solo dentro il Concept. -->
+          <button
+            type="button"
+            class="pwc-link-btn"
+            :class="{ 'is-on': state.crowded.value }"
+            @click="state.toggleCrowded()"
+          >
+            {{ state.crowded.value ? "Torna ai dati di esempio" : "Molti dati" }}
+          </button>
+        </header>
 
         <p
           v-if="isFirstRun"
@@ -135,48 +145,6 @@ function ask(personId: string) {
         />
       </section>
 
-      <section>
-        <header class="pwc-block__head">
-          <h2 class="pwc-block__title">
-            Le mie persone
-          </h2>
-          <div
-            class="pwc-tabs"
-            role="tablist"
-            aria-label="Verso dell'accesso"
-          >
-            <button
-              type="button"
-              role="tab"
-              :aria-selected="direction === 'assist'"
-              :class="{ 'is-active': direction === 'assist' }"
-              @click="direction = 'assist'"
-            >
-              Posso assistere
-            </button>
-            <button
-              type="button"
-              role="tab"
-              :aria-selected="direction === 'assisted'"
-              :class="{ 'is-active': direction === 'assisted' }"
-              @click="direction = 'assisted'"
-            >
-              Possono assistermi
-            </button>
-          </div>
-        </header>
-
-        <PitwallConceptPeople
-          :direction="direction"
-          :links="visibleLinks"
-          :racing-ids="racingIds"
-          @remove="state.removeLink(direction, $event)"
-          @cancel="state.cancelRequest($event)"
-          @decide="(personId, decision, until) => state.decideRequest(personId, decision, until)"
-          @expiry="(personId, until) => state.setExpiry(direction, personId, until)"
-        />
-      </section>
-
       <section class="pwc-home__add">
         <h2 class="pwc-block__title">
           Aggiungi una persona
@@ -186,7 +154,10 @@ function ask(personId: string) {
           lasciare che assista te.
         </p>
 
-        <PitwallConceptSearch v-model="search" :results="searchResults">
+        <PitwallConceptSearch
+          v-model="search"
+          :found="found"
+        >
           <template #actions="{ person }">
             <button
               type="button"
@@ -244,6 +215,20 @@ function ask(personId: string) {
           </template>
         </PitwallConceptSearch>
       </section>
+
+      <!-- I due versi affiancati: sono le due domande della pagina, e vederli
+           insieme toglie la scheda che nascondeva meta' della risposta. -->
+      <PitwallConceptPeople
+        v-for="side in DIRECTIONS"
+        :key="side"
+        :direction="side"
+        :links="state.links.value[side]"
+        :racing-ids="racingIds"
+        @remove="state.removeLink(side, $event)"
+        @cancel="state.cancelRequest($event)"
+        @decide="(personId, decision, until) => state.decideRequest(personId, decision, until)"
+        @expiry="(personId, until) => state.setExpiry(side, personId, until)"
+      />
     </div>
 
     <PitwallConceptLive
@@ -384,20 +369,6 @@ function ask(personId: string) {
   line-height: 1.5;
 }
 
-.pwc-tabs { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--pwc-line); border-radius: 10px; }
-.pwc-tabs button {
-  min-height: 32px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 7px;
-  background: none;
-  color: $text-secondary;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.pwc-tabs button.is-active { background: rgba(255, 255, 255, 0.08); color: #fff; }
-
 .pwc-search {
   display: flex;
   align-items: center;
@@ -430,6 +401,12 @@ function ask(personId: string) {
 .pwc-person.is-add { grid-template-columns: 36px minmax(0, 1fr) auto; }
 .pwc-person__actions { display: flex; align-items: center; gap: 12px; }
 
+/* Una riga che chiede una decisione ha tre bottoni, e in mezza pagina non ci
+   stanno accanto al nome: schiacciavano la colonna del nickname al punto da
+   impilare le lettere. Le azioni scendono su una riga loro. */
+.pwc-person.is-deciding { grid-template-columns: 36px minmax(0, 1fr) auto; }
+.pwc-person.is-deciding .pwc-person__actions { grid-column: 2 / -1; justify-self: start; }
+
 /* "In gara adesso" accanto al nickname: dice perche' vale la pena guardare
    quella persona proprio ora, senza aggiungere una colonna. */
 .pwc-live-dot {
@@ -437,6 +414,7 @@ function ask(personId: string) {
   align-items: center;
   gap: 6px;
   margin-left: 10px;
+  white-space: nowrap;
   color: #4ade80;
   font-family: $font-primary;
   font-size: 11px;
@@ -488,17 +466,20 @@ function ask(personId: string) {
 .pwc-role b { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .pwc-role em { color: $text-muted; font-size: 12px; font-style: normal; }
 
-/* Home: la gara occupa la fascia intera, sotto due colonne affiancate. */
+/* Home: gare e ricerca a fascia intera, sotto i due versi affiancati.
+   Le due colonne sono i due elenchi, non "roba" e "ricerca": cosi' crescono in
+   parallelo e non resta il vuoto che aveva la colonna della sola ricerca. */
 .pwc-home {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 40px 28px;
   width: min(1180px, 100%);
   margin: 0 auto;
 }
-.pwc-home__races { grid-column: 1 / -1; }
-/* La colonna di destra ha una superficie sua: senza, a ricerca vuota sembra
-   uno spazio dimenticato invece di un pannello che aspetta. */
+.pwc-home__races,
+.pwc-home__add { grid-column: 1 / -1; }
+/* La ricerca ha una superficie sua: senza, a campo vuoto sembra uno spazio
+   dimenticato invece di un pannello che aspetta. */
 .pwc-home__add {
   align-self: start;
   padding: 20px 22px 24px;
@@ -528,7 +509,8 @@ function ask(personId: string) {
 /* Adattamento */
 @media (max-width: 980px) {
   .pwc-home { grid-template-columns: 1fr; gap: 36px; }
-  .pwc-home__races { grid-column: 1; }
+  .pwc-home__races,
+  .pwc-home__add { grid-column: 1; }
 }
 
 @media (max-width: 760px) {

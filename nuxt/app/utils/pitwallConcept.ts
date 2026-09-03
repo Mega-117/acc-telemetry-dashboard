@@ -5,164 +5,22 @@
 // oppure "fino alle 23:40". La stanza-gara resta il posto in cui si entra, per
 // questo la home offre "Entra" su una gara e mai "collegati a una persona".
 //
-// Qui vive solo la logica pura: le fixture di partenza, le parole che l'utente
-// legge e le funzioni che derivano uno stato da un altro. Chi muta lo stato sta
-// in `usePitwallConceptState`.
+// Qui vive la logica pura: le parole che l'utente legge e le funzioni che
+// derivano uno stato da un altro. Tipi e dati di partenza stanno in
+// `pitwallConceptModel`, e chi muta lo stato in `usePitwallConceptState`.
+//
+// Il modello si ri-esporta da qui, cosi' chi consuma il prototipo ha un import
+// solo. La direzione resta una: la logica conosce il modello, mai il contrario.
+import {
+  PITWALL_CONCEPT_CURRENT_USER_ID,
+  PITWALL_CONCEPT_LINKS_ASSIST,
+  PITWALL_CONCEPT_LINKS_ASSISTED,
+  PITWALL_CONCEPT_PEOPLE,
+  PITWALL_CONCEPT_RACES,
+} from '~/utils/pitwallConceptModel'
 
-export type PitwallConceptScreen = 'home' | 'live'
-export type PitwallConceptDirection = 'assist' | 'assisted'
+export * from '~/utils/pitwallConceptModel'
 
-/**
- * Stato del collegamento con una persona, dal punto di vista di chi guarda.
- *
- * `always` e `today` sono permessi attivi. Gli altri due sono la stessa
- * richiesta vista dai due lati: chi l'ha mandata la vede `pending`, chi l'ha
- * ricevuta la vede `incoming`. Tenerli qui invece che in una terza lista e' il
- * motivo per cui la decisione si trova dove si sta gia' guardando.
- */
-export type PitwallConceptAccess = 'always' | 'today' | 'pending' | 'incoming'
-
-/** Cosa puo' fare una persona dentro una gara. */
-export type PitwallConceptRole = 'manager' | 'member' | 'invited'
-
-/** Chi applica la strategia: uno solo al volante, oppure non si indovina. */
-export type PitwallConceptExecutorState = 'ready' | 'nobody-driving' | 'multiple-driving'
-
-/** Le tre cose che possono arrivare: due chiedono una decisione, una informa. */
-export type PitwallConceptNoticeKind = 'request' | 'invite' | 'granted'
-
-/**
- * Una persona e' il suo nickname, e basta: nome e cognome non compaiono mai
- * nell'interfaccia, quindi non stanno nemmeno nel modello.
- */
-export interface PitwallConceptPerson {
-  id: string
-  handle: string
-}
-
-/** Un permesso fra due account, nel verso dichiarato da `direction`. */
-export interface PitwallConceptLink {
-  personId: string
-  access: PitwallConceptAccess
-  /** Ora di scadenza, presente solo quando l'accesso vale per oggi. */
-  until?: string
-}
-
-/** Una persona dentro una gara, con quello che ACC dice di lei. */
-export interface PitwallConceptMember {
-  personId: string
-  role: PitwallConceptRole
-  /** Ha il volante adesso: lo dice ACC, non un bottone. */
-  driving: boolean
-  online: boolean
-}
-
-/** Perche' questa gara ti compare senza che tu abbia fatto niente. */
-export interface PitwallConceptReason {
-  kind: 'grant' | 'invite'
-  personId: string
-}
-
-/** Una gara viva: si entra qui dentro, non su una persona. */
-export interface PitwallConceptRace {
-  id: string
-  carNumber: number
-  carModel: string
-  track: string
-  session: string
-  /** Chi ha aperto la gara: non si degrada e non si espelle. */
-  hostId: string
-  members: PitwallConceptMember[]
-  reason: PitwallConceptReason
-  /** Chiusa: resta leggibile, non accetta piu' strategie. */
-  closed: boolean
-}
-
-/** Qualcosa da decidere, o da sapere. */
-export interface PitwallConceptNotice {
-  id: number
-  kind: PitwallConceptNoticeKind
-  personId: string
-  /** Solo per gli inviti: a quale gara. */
-  raceId?: string
-}
-
-export const PITWALL_CONCEPT_CURRENT_USER_ID = 'enrico'
-
-export const PITWALL_CONCEPT_PEOPLE: PitwallConceptPerson[] = [
-  { id: 'enrico', handle: '@enricos' },
-  { id: 'mario', handle: '@mariorossi' },
-  { id: 'luca', handle: '@lucab' },
-  { id: 'andrea', handle: '@andreav' },
-  { id: 'marco', handle: '@marcom' },
-  { id: 'giulia', handle: '@giuliaf' },
-  { id: 'gallo', handle: '@marcog' },
-  { id: 'martina', handle: '@martinac' },
-  { id: 'paolo', handle: '@paolov' },
-  { id: 'alessandro', handle: '@alessandron' },
-]
-
-/** Chi mi ha autorizzato, piu' chi ho chiesto e sto aspettando. */
-export const PITWALL_CONCEPT_LINKS_ASSIST: PitwallConceptLink[] = [
-  { personId: 'mario', access: 'always' },
-  { personId: 'luca', access: 'always' },
-  { personId: 'andrea', access: 'today', until: '22:00' },
-  { personId: 'alessandro', access: 'pending' },
-]
-
-/** Chi ho autorizzato io, piu' chi mi ha chiesto e aspetta una risposta. */
-export const PITWALL_CONCEPT_LINKS_ASSISTED: PitwallConceptLink[] = [
-  { personId: 'marco', access: 'always' },
-  { personId: 'luca', access: 'always' },
-  { personId: 'giulia', access: 'today', until: '23:40' },
-  { personId: 'paolo', access: 'incoming' },
-]
-
-export const PITWALL_CONCEPT_RACES: PitwallConceptRace[] = [
-  {
-    id: 'race-47',
-    carNumber: 47,
-    carModel: 'Ferrari 296 GT3',
-    track: 'Nürburgring',
-    session: 'Gara · 67 giri',
-    hostId: 'mario',
-    members: [
-      { personId: 'mario', role: 'manager', driving: true, online: true },
-      { personId: 'enrico', role: 'manager', driving: false, online: true },
-      { personId: 'luca', role: 'member', driving: false, online: true },
-      { personId: 'andrea', role: 'invited', driving: false, online: false },
-    ],
-    reason: { kind: 'grant', personId: 'mario' },
-    closed: false,
-  },
-  {
-    // La seconda gara mostra i due stati che la prima non ha: sei invitato e
-    // non sei ancora entrato, e nessuno ha il volante.
-    id: 'race-12',
-    carNumber: 12,
-    carModel: 'Porsche 992 GT3 R',
-    track: 'Spa-Francorchamps',
-    session: 'Qualifica · 20 min',
-    hostId: 'marco',
-    members: [
-      { personId: 'marco', role: 'manager', driving: false, online: false },
-      { personId: 'enrico', role: 'invited', driving: false, online: true },
-    ],
-    reason: { kind: 'invite', personId: 'marco' },
-    closed: false,
-  },
-]
-
-/**
- * Gli avvisi sono l'altra faccia degli elenchi, non una terza lista: la
- * richiesta di `paolo` sta anche in `LINKS_ASSISTED` come `incoming`, e
- * rispondere da una parte deve chiudere anche l'altra.
- */
-export const PITWALL_CONCEPT_NOTICES: PitwallConceptNotice[] = [
-  { id: 1, kind: 'request', personId: 'paolo' },
-  { id: 2, kind: 'invite', personId: 'marco', raceId: 'race-12' },
-  { id: 3, kind: 'granted', personId: 'mario' },
-]
 
 export function getPitwallConceptPerson(
   personId: string,
@@ -266,10 +124,124 @@ export function normalizePitwallConceptExpiry(value: string): string {
   return `${String(hours).padStart(2, '0')}:${match[2]}`
 }
 
+// ============================================
+// Elenchi lunghi, elenchi vuoti, ricerca
+// ============================================
+
 /**
- * La ricerca serve solo ad **aggiungere** persone: chi e' gia' in un elenco,
- * anche solo in attesa, non ricompare. Cosi' la stessa persona non vive in due
- * posti e non si puo' chiedere due volte la stessa cosa.
+ * Quante righe si mostrano prima di offrire "mostra le altre".
+ *
+ * Non sono numeri di comodo: gli elenchi veri arrivano a 50 permessi per verso,
+ * 60 gare, 32 persone in una stanza e 80 risultati di ricerca. Un elenco senza
+ * tetto e' due metri di scroll prima di arrivare alla riga sotto.
+ */
+export const PITWALL_CONCEPT_LIST_LIMITS = Object.freeze({
+  races: 3,
+  people: 8,
+  crew: 8,
+  search: 8,
+  wallAvatars: 5,
+})
+
+/** Sotto questa soglia il filtro rapido dentro una colonna non serve a nulla. */
+export const PITWALL_CONCEPT_FILTER_FROM = 10
+
+/** Lunghezza minima per cercare, la stessa del servizio reale. */
+export const PITWALL_CONCEPT_SEARCH_MIN_CHARS = 2
+
+export interface PitwallConceptSplit<T> {
+  visible: T[]
+  hidden: number
+}
+
+/**
+ * Le prime N righe, piu' quelle che non si possono nascondere.
+ *
+ * Una riga "fissata" e' una che chiede una decisione. Tagliarla sarebbe lo
+ * stesso difetto dello scroll interno che la Classica ha gia' tolto: una
+ * richiesta arrivata dopo finirebbe fuori vista senza che nulla lo segnali.
+ * Per questo il tetto puo' essere superato, ma solo da righe fissate.
+ */
+export function splitPitwallConceptList<T>(
+  items: readonly T[],
+  limit: number,
+  isPinned: (item: T) => boolean = () => false,
+): PitwallConceptSplit<T> {
+  const pinned = items.filter(isPinned)
+  const room = Math.max(0, limit - pinned.length)
+  let taken = 0
+  const visible = items.filter((item) => {
+    if (isPinned(item)) return true
+    if (taken >= room) return false
+    taken += 1
+    return true
+  })
+  return { visible, hidden: items.length - visible.length }
+}
+
+/**
+ * L'ordine in cui si guarda un elenco di persone: prima chi aspetta una
+ * risposta da te, poi la richiesta che hai mandato tu, poi chi e' in gara
+ * adesso, poi il resto in ordine alfabetico.
+ */
+export function sortPitwallConceptLinks(
+  links: readonly PitwallConceptLink[],
+  racingIds: readonly string[] = [],
+  people = PITWALL_CONCEPT_PEOPLE,
+): PitwallConceptLink[] {
+  const racing = new Set(racingIds)
+  const weight = (link: PitwallConceptLink): number => {
+    if (link.access === 'incoming') return 0
+    if (link.access === 'pending') return 1
+    return racing.has(link.personId) ? 2 : 3
+  }
+  return [...links].sort((left, right) => (
+    weight(left) - weight(right)
+    || pitwallConceptNicknameById(left.personId, people)
+      .localeCompare(pitwallConceptNicknameById(right.personId, people), 'it-IT')
+  ))
+}
+
+/** Una riga che chiede una decisione non si nasconde mai dietro un limite. */
+export function isPitwallConceptPinnedLink(link: PitwallConceptLink): boolean {
+  return link.access === 'incoming'
+}
+
+export type PitwallConceptSearchState =
+  | 'idle'
+  | 'too-short'
+  | 'none'
+  | 'ready'
+  | 'capped'
+
+export interface PitwallConceptSearchResult {
+  /** Persone che si possono aggiungere, gia' tagliate al tetto. */
+  entries: PitwallConceptPerson[]
+  /** Persone trovate ma gia' in un elenco: si mostrano, non si nascondono. */
+  linked: PitwallConceptPerson[]
+  state: PitwallConceptSearchState
+  /** Quante aggiungibili sono state tolte dal taglio. */
+  hidden: number
+  /** Quante gia' collegate sono state tolte dal taglio. */
+  linkedHidden: number
+}
+
+/**
+ * Quante persone gia' collegate si mostrano sotto la ricerca.
+ *
+ * Sono contesto, non azioni: bastano poche righe per rispondere "ce l'hai
+ * gia'". Senza tetto diventavano quaranta righe grigie sotto i risultati veri -
+ * cioe' lo stesso difetto che questa schermata esiste per chiudere.
+ */
+export const PITWALL_CONCEPT_LINKED_PREVIEW = 3
+
+/**
+ * Cerca una persona da aggiungere.
+ *
+ * Chi e' gia' in un elenco viene **mostrato a parte**, non nascosto: prima
+ * spariva e basta, quindi cercare `mario` non dava risultati e la conclusione
+ * ovvia era "non e' iscritto" invece di "ce l'hai gia'". Nascondere una
+ * risposta e' peggio che darla scomoda.
  */
 export function searchPitwallConceptDirectory(
   query: string,
@@ -278,10 +250,75 @@ export function searchPitwallConceptDirectory(
     ...PITWALL_CONCEPT_LINKS_ASSISTED.map(link => link.personId),
   ],
   people = PITWALL_CONCEPT_PEOPLE,
-): PitwallConceptPerson[] {
-  if (!query.trim()) return []
+  limit = PITWALL_CONCEPT_LIST_LIMITS.search,
+): PitwallConceptSearchResult {
+  const needle = query.trim()
+  const empty = { entries: [], linked: [], hidden: 0, linkedHidden: 0 }
+  if (!needle) return { ...empty, state: 'idle' }
+  if (needle.replace(/^@/, '').length < PITWALL_CONCEPT_SEARCH_MIN_CHARS) {
+    return { ...empty, state: 'too-short' }
+  }
+
   const taken = new Set<string>([PITWALL_CONCEPT_CURRENT_USER_ID, ...linked])
-  return filterPitwallConceptPeople(query, people).filter(person => !taken.has(person.id))
+  const matches = filterPitwallConceptPeople(needle, people)
+  const addable = matches.filter(person => !taken.has(person.id))
+  const already = matches.filter(
+    person => person.id !== PITWALL_CONCEPT_CURRENT_USER_ID && taken.has(person.id),
+  )
+  const shownLinked = already.slice(0, PITWALL_CONCEPT_LINKED_PREVIEW)
+  const linkedHidden = already.length - shownLinked.length
+
+  if (!addable.length) {
+    return { entries: [], linked: shownLinked, hidden: 0, linkedHidden, state: 'none' }
+  }
+  return {
+    entries: addable.slice(0, limit),
+    linked: shownLinked,
+    hidden: Math.max(0, addable.length - limit),
+    linkedHidden,
+    state: addable.length > limit ? 'capped' : 'ready',
+  }
+}
+
+/**
+ * Cosa dire quando un elenco e' vuoto.
+ *
+ * I due versi non sono la stessa frase: in uno aspetti che qualcuno ti
+ * autorizzi, nell'altro sei tu a doverlo fare. Un testo solo per entrambi
+ * direbbe la cosa giusta a meta' delle persone.
+ */
+export function describePitwallConceptEmpty(direction: PitwallConceptDirection): string {
+  return direction === 'assist'
+    ? 'Nessuno ti ha ancora autorizzato. Cerca il suo nickname e chiedigli di poterlo assistere.'
+    : 'Non hai ancora autorizzato nessuno. Cerca il suo nickname e lascia che ti assista.'
+}
+
+export interface PitwallConceptWallSummary {
+  shown: string[]
+  extra: number
+}
+
+/** I primi volti, e quanti restano fuori: sedici avatar in fila non si leggono. */
+export function pitwallConceptWallSummary(
+  personIds: readonly string[],
+  max = PITWALL_CONCEPT_LIST_LIMITS.wallAvatars,
+): PitwallConceptWallSummary {
+  return {
+    shown: personIds.slice(0, max),
+    extra: Math.max(0, personIds.length - max),
+  }
+}
+
+/** Gli stessi nomi in una riga sola, senza diventare un paragrafo. */
+export function describePitwallConceptWall(
+  personIds: readonly string[],
+  max = PITWALL_CONCEPT_LIST_LIMITS.wallAvatars,
+  people = PITWALL_CONCEPT_PEOPLE,
+): string {
+  const summary = pitwallConceptWallSummary(personIds, max)
+  const names = pitwallConceptNicknames(summary.shown, people).join(', ')
+  if (!summary.extra) return names
+  return `${names} e altri ${summary.extra}`
 }
 
 // ============================================
@@ -374,6 +411,26 @@ export function pitwallConceptWallIds(race: PitwallConceptRace | null): string[]
   return (race?.members ?? [])
     .filter(member => member.role !== 'invited' && !member.driving)
     .map(member => member.personId)
+}
+
+/**
+ * Quante persone entrano in una gara. E' il tetto vero delle regole Firestore
+ * (`allowedUids <= 32`): superarlo non da' un errore comprensibile, quindi la
+ * pagina lo dice prima invece di lasciar fallire l'invito.
+ */
+export const PITWALL_CONCEPT_MAX_ROOM_PEOPLE = 32
+
+export function pitwallConceptRoomIsFull(race: PitwallConceptRace | null): boolean {
+  return (race?.members.length ?? 0) >= PITWALL_CONCEPT_MAX_ROOM_PEOPLE
+}
+
+/**
+ * Chi non si nasconde mai dietro il limite dell'equipaggio: chi ha il volante
+ * (applica lui la strategia), chi gestisce la gara e chi e' invitato e non e'
+ * ancora entrato, che e' una riga in attesa di una decisione.
+ */
+export function isPitwallConceptPinnedMember(member: PitwallConceptMember): boolean {
+  return member.driving || member.role === 'manager' || member.role === 'invited'
 }
 
 /** Le stesse parole della vista classica, cosi' il porting non le reinventa. */

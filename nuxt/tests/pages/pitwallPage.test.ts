@@ -22,6 +22,7 @@ const conceptRaces = read('app/components/pitwall/concept/PitwallConceptRaces.vu
 const conceptPitStop = read('app/components/pitwall/concept/PitwallConceptPitStop.vue')
 const conceptState = read('app/composables/usePitwallConceptState.ts')
 const conceptModel = read('app/utils/pitwallConcept.ts')
+const conceptFixtures = read('app/utils/pitwallConceptModel.ts')
 const topBar = read('app/components/layout/TopBar.vue')
 
 describe('Pitwall layout approvato', () => {
@@ -373,14 +374,61 @@ describe('Pitwall wiring', () => {
     expect(conceptRaces).toContain('Chiusa')
   })
 
-  it('gestisce le persone in una lista sola nei due versi', () => {
-    expect(concept).toContain('Le mie persone')
-    expect(concept).toContain('Posso assistere')
-    expect(concept).toContain('Possono assistermi')
-    expect(concept).toContain('<PitwallConceptPeople')
+  it('affianca i due versi invece di nasconderne meta dietro una scheda', () => {
+    // Le due domande della pagina sono "chi assisto" e "chi mi assiste": con le
+    // schede se ne vedeva una sola, e la colonna della sola ricerca restava
+    // mezza vuota. Adesso le colonne sono gli elenchi, e crescono insieme.
+    expect(conceptPeople).toContain('Posso assistere')
+    expect(conceptPeople).toContain('Possono assistermi')
+    expect(concept).toContain('v-for="side in DIRECTIONS"')
+    expect(concept).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)')
     expect(conceptPeople).toContain('Rimuovi')
+    expect(concept).not.toContain('pwc-tabs')
+    expect(concept).not.toContain('role="tablist"')
     expect(concept).not.toContain('Recenti')
-    expect(concept).not.toContain('Richieste e inviti')
+  })
+
+  it('non lascia crescere nessun elenco senza fondo', () => {
+    // Sei `v-for` senza tetto: con i numeri veri del servizio - 50 permessi per
+    // verso, 60 gare, 32 in una stanza - erano metri di scroll.
+    for (const source of [conceptPeople, conceptRaces, conceptWall]) {
+      expect(source).toContain('splitPitwallConceptList')
+      expect(source).toContain('<PitwallConceptMore')
+      expect(source).toContain('split.visible')
+    }
+    expect(conceptLive).toContain('pitwallConceptWallSummary')
+    // Lo scroll interno resta fuori dagli elenchi: la wiki di prodotto lo ha
+    // gia' tolto dalla Classica perche' nasconde le autorizzazioni arrivate
+    // dopo. La campanella e' un menu a tendina, li' e' atteso.
+    for (const source of [conceptPeople, conceptRaces, conceptWall, concept]) {
+      expect(source).not.toContain('overflow-y: auto')
+    }
+    expect(conceptBell).toContain('max-height:60vh;overflow-y:auto')
+  })
+
+  it('tiene in cima le righe su cui si deve decidere qualcosa', () => {
+    expect(conceptPeople).toContain('isPitwallConceptPinnedLink')
+    expect(conceptPeople).toContain('sortPitwallConceptLinks')
+    expect(conceptWall).toContain('isPitwallConceptPinnedMember')
+    expect(conceptModel).toContain('export function splitPitwallConceptList')
+  })
+
+  it('conta le righe e offre un filtro solo quando l elenco lo merita', () => {
+    expect(conceptPeople).toContain('PITWALL_CONCEPT_FILTER_FROM')
+    expect(conceptPeople).toContain('class="pwc-count"')
+    expect(conceptPeople).toContain('da decidere')
+    expect(conceptWall).toContain('class="pwc-count"')
+  })
+
+  it('permette di guardare gli edge case, non solo di descriverli', () => {
+    expect(concept).toContain('Molti dati')
+    expect(concept).toContain('state.toggleCrowded()')
+    expect(conceptState).toContain('buildPitwallConceptCrowd')
+    expect(conceptFixtures).toContain('export function buildPitwallConceptCrowd')
+    // I dati stanno in un file loro: qui si cambia cosa racconta il prototipo,
+    // di la' come si comporta.
+    expect(conceptModel).toContain("export * from '~/utils/pitwallConceptModel'")
+    expect(conceptFixtures).not.toContain('export function split')
   })
 
   it('ha i due versi nella ricerca, perche autorizzare e chiedere non sono lo stesso gesto', () => {
@@ -526,9 +574,9 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('--pwc-raised')
     expect(concept).toContain('.pwc-home {')
     expect(concept).toContain('width: min(1180px, 100%)')
-    // Due colonne sotto la fascia gara, che invece resta a tutta larghezza.
-    expect(concept).toContain('grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr)')
-    expect(concept).toContain('.pwc-home__races { grid-column: 1 / -1; }')
+    // Gare e ricerca a fascia intera, sotto i due versi affiancati.
+    expect(concept).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)')
+    expect(concept).toContain('.pwc-home__add { grid-column: 1 / -1; }')
     expect(concept).toContain('grid-template-columns: 36px minmax(0, 1fr) auto auto')
     expect(concept).toContain('@media (max-width: 980px)')
     expect(concept).toContain('@media (max-width: 760px)')
@@ -570,7 +618,7 @@ describe('Pitwall wiring', () => {
     expect(conceptState).toContain('enterRace(notice.raceId)')
     // Tre tipi: due chiedono una decisione, uno informa e basta.
     expect(conceptBell).toContain("notice.kind !== 'granted'")
-    expect(conceptModel).toContain("'request' | 'invite' | 'granted'")
+    expect(conceptFixtures).toContain("'request' | 'invite' | 'granted'")
   })
 
   it('tiene lo stato del prototipo in un posto solo, e senza servizi reali', () => {

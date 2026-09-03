@@ -10,12 +10,13 @@ import PitwallConceptSearch from "~/components/pitwall/concept/PitwallConceptSea
 import PitwallConceptWall from "~/components/pitwall/concept/PitwallConceptWall.vue";
 import { usePitwallConceptState } from "~/composables/usePitwallConceptState";
 import {
-  PITWALL_CONCEPT_CURRENT_USER_ID,
-  filterPitwallConceptPeople,
+  searchPitwallConceptDirectory,
   pitwallConceptInitialsById,
   pitwallConceptIsManager,
   pitwallConceptNicknameById,
+  pitwallConceptRoomIsFull,
   pitwallConceptWallIds,
+  pitwallConceptWallSummary,
   resolvePitwallConceptExecutor,
 } from "~/utils/pitwallConcept";
 
@@ -31,18 +32,20 @@ const executor = computed(() => resolvePitwallConceptExecutor(race.value));
 const driverName = computed(() =>
   executor.value.driverId ? pitwallConceptNicknameById(executor.value.driverId) : null,
 );
-const wallIds = computed(() => pitwallConceptWallIds(race.value));
+/** Sedici avatar in fila non si leggono: i primi cinque, poi un "+11". */
+const wall = computed(() => pitwallConceptWallSummary(pitwallConceptWallIds(race.value)));
 const isManager = computed(() => pitwallConceptIsManager(race.value));
+const isFull = computed(() => pitwallConceptRoomIsFull(race.value));
 
-/** Per invitare si cerca fra chi non e' gia' dentro: il resto e' rumore. */
-const guestResults = computed(() => {
-  if (!guestQuery.value.trim()) return [];
-  const inside = new Set([
-    PITWALL_CONCEPT_CURRENT_USER_ID,
-    ...(race.value?.members ?? []).map(member => member.personId),
-  ]);
-  return filterPitwallConceptPeople(guestQuery.value).filter(person => !inside.has(person.id));
-});
+/**
+ * Per invitare si cerca fra chi non e' gia' dentro. Chi c'e' gia' compare
+ * spento invece di sparire: e' la stessa regola della ricerca della home, e per
+ * lo stesso motivo - sparire risponde "non esiste" a chi chiede "chi e'?".
+ */
+const guestFound = computed(() => searchPitwallConceptDirectory(
+  guestQuery.value,
+  (race.value?.members ?? []).map(member => member.personId),
+));
 
 function invite(personId: string) {
   if (!race.value) return;
@@ -85,27 +88,36 @@ function leave() {
         <em v-else>nessuno al volante: nessun ordine parte</em>
       </span>
       <span
-        v-if="wallIds.length"
+        v-if="wall.shown.length"
         class="pwc-role"
       >
         <small>Al muretto</small>
         <b>
           <span
-            v-for="id in wallIds"
+            v-for="id in wall.shown"
             :key="id"
             class="pwc-avatar is-small"
             :title="pitwallConceptNicknameById(id)"
           >{{ pitwallConceptInitialsById(id) }}</span>
+          <span
+            v-if="wall.extra"
+            class="pwc-avatar is-small is-more"
+            :title="`e altri ${wall.extra}`"
+          >+{{ wall.extra }}</span>
         </b>
       </span>
       <button
-        v-if="isManager"
+        v-if="isManager && !isFull"
         type="button"
         class="pwc-btn"
         @click="guestOpen = true"
       >
         + Ospite
       </button>
+      <span
+        v-else-if="isManager"
+        class="pwc-chip is-waiting pwc-wall__full"
+      >Gara piena</span>
     </section>
 
     <PitwallConceptWall
@@ -145,9 +157,10 @@ function leave() {
 
         <PitwallConceptSearch
           v-model="guestQuery"
-          :results="guestResults"
+          :found="guestFound"
           placeholder="Cerca chi invitare"
-          empty-label="Nessuno con questo nickname, o è già dentro."
+          linked-label="Già dentro"
+          empty-label="Nessuno con questo nickname."
         >
           <template #actions="{ person }">
             <button
@@ -192,6 +205,8 @@ function leave() {
    quando sotto al volante c'e' una frase in piu'. */
 .pwc-wall .pwc-role { align-self: start; }
 .pwc-wall .pwc-btn { margin-left: auto; }
+.pwc-wall__full { margin-left: auto; }
+.pwc-avatar.is-more { border-style: dashed; color: $text-secondary; font-size: 9px; }
 
 .pwc-modal {
   position: fixed;
