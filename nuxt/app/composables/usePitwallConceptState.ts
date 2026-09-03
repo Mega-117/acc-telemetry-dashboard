@@ -15,6 +15,7 @@ import {
   PITWALL_CONCEPT_LINKS_ASSIST,
   PITWALL_CONCEPT_LINKS_ASSISTED,
   PITWALL_CONCEPT_NOTICES,
+  PITWALL_CONCEPT_MY_ROOM,
   PITWALL_CONCEPT_PEOPLE,
   PITWALL_CONCEPT_RACES,
   buildPitwallConceptCrowd,
@@ -24,6 +25,7 @@ import {
 import type {
   PitwallConceptDirection,
   PitwallConceptLink,
+  PitwallConceptMyRoom,
   PitwallConceptNotice,
   PitwallConceptRace,
 } from '~/utils/pitwallConcept'
@@ -47,6 +49,7 @@ export type PitwallConceptDuration = PitwallDuration
 interface PitwallConceptStore {
   links: Record<PitwallConceptDirection, PitwallConceptLink[]>
   races: PitwallConceptRace[]
+  myRoom: PitwallConceptMyRoom | null
   notices: PitwallConceptNotice[]
   selectedRaceId: string | null
   crowded: boolean
@@ -75,6 +78,7 @@ function initialStore(crowded = false): PitwallConceptStore {
       assisted: clone(scenario.links.assisted),
     },
     races: clone(scenario.races),
+    myRoom: clone(PITWALL_CONCEPT_MY_ROOM),
     notices: clone(scenario.notices),
     selectedRaceId: scenario.races[0]?.id ?? null,
     crowded,
@@ -271,6 +275,11 @@ export function usePitwallConceptState(): PitwallStore & { reset: () => void } {
 
   const links = computed(() => store.value.links)
   const races = computed(() => store.value.races)
+  /**
+   * Nel prototipo la gara del pilota c'e' sempre, cosi' la card si puo'
+   * guardare senza ACC aperto. Nel vero e' `null` quasi sempre.
+   */
+  const myRoom = computed(() => store.value.myRoom)
   const notices = computed(() => store.value.notices)
   const selectedRace = computed<PitwallConceptRace | null>(
     () => store.value.races.find(race => race.id === store.value.selectedRaceId) ?? null,
@@ -443,6 +452,7 @@ export function usePitwallConceptState(): PitwallStore & { reset: () => void } {
     people,
     links,
     races,
+    myRoom,
     notices,
     selectedRace,
     pendingNoticeCount,

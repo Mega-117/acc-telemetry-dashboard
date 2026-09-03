@@ -87,6 +87,36 @@ export interface PitwallConceptRace {
   joinable?: boolean
 }
 
+/**
+ * La gara del pilota, vista dal pilota.
+ *
+ * "In pista" elenca le persone che ti hanno autorizzato, quindi per costruzione
+ * non contiene te stesso: chi guida apriva la Pit Wall e non vedeva niente,
+ * nemmeno la gara che il suo stesso computer aveva appena aperto - non sapeva
+ * che esistesse, come si chiamasse, ne' chi ci potesse entrare.
+ *
+ * Non e' una `PitwallConceptRace` con un flag in piu': quella risponde a "posso
+ * assistere questa persona?", questa a "la mia gara e' in piedi, e chi ci puo'
+ * entrare?". Due domande diverse, due forme diverse.
+ */
+export interface PitwallConceptMyRoom {
+  id: string
+  label: string
+  track: string | null
+  carNumber: number | null
+  /**
+   * `live` = qualcuno c'e' adesso; `dormant` = aperta ma senza nessuno da un
+   * po'; `closed` = finita, e resta come memoria della corsa.
+   */
+  state: 'live' | 'dormant' | 'closed'
+  /** Chi ha il volante adesso, quando lo si sa dire. */
+  drivingId?: string | null
+  /** Chi e' dentro la gara, te compreso. */
+  members: PitwallConceptMember[]
+  /** Autorizzati non ancora entrati: e' cio' che manca perche' ti assistano. */
+  invitedIds: string[]
+}
+
 /** Qualcosa da decidere, o da sapere. */
 export interface PitwallConceptNotice {
   id: string
@@ -151,6 +181,27 @@ export const PITWALL_CONCEPT_LINKS_ASSISTED: PitwallConceptLink[] = [
   { personId: 'giulia', access: 'today', until: '23:40' },
   { personId: 'paolo', access: 'incoming' },
 ]
+
+/**
+ * La gara di chi guarda, per il prototipo.
+ *
+ * Nel mock c'e' sempre: serve a poter guardare la card senza avere ACC aperto.
+ * Nello store vero e' `null` quasi sempre - il pilota ha una gara solo mentre
+ * guida - e chi la mostra deve saper dire cosa manca.
+ */
+export const PITWALL_CONCEPT_MY_ROOM: PitwallConceptMyRoom = {
+  id: 'race-117',
+  label: '#117 · Scuderia QA · Nürburgring',
+  track: 'Nürburgring',
+  carNumber: 117,
+  state: 'live',
+  drivingId: PITWALL_CONCEPT_CURRENT_USER_ID,
+  members: [
+    { personId: PITWALL_CONCEPT_CURRENT_USER_ID, role: 'manager', driving: true, online: true },
+    { personId: 'mario', role: 'member', driving: false, online: true },
+  ],
+  invitedIds: ['luca'],
+}
 
 export const PITWALL_CONCEPT_RACES: PitwallConceptRace[] = [
   {

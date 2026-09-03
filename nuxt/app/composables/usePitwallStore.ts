@@ -12,6 +12,7 @@ import { inject, provide, type InjectionKey, type Ref } from 'vue'
 import type {
   PitwallConceptDirection,
   PitwallConceptLink,
+  PitwallConceptMyRoom,
   PitwallConceptNotice,
   PitwallConceptPerson,
   PitwallConceptRace,
@@ -81,6 +82,15 @@ export interface PitwallStore {
   people: Ref<PitwallConceptPerson[]>
   links: Ref<Record<PitwallConceptDirection, PitwallConceptLink[]>>
   races: Ref<PitwallConceptRace[]>
+  /**
+   * La gara di chi guarda, quando e' lui a guidare.
+   *
+   * Sta fuori da `races` di proposito: quell'elenco risponde a "chi posso
+   * assistere adesso" e per costruzione non contiene me stesso - ed e' il
+   * motivo per cui il pilota apriva la Pit Wall e non trovava la propria gara.
+   * `null` quando non ce n'e' una; chi la mostra spiega cosa manca.
+   */
+  myRoom: Ref<PitwallConceptMyRoom | null>
   notices: Ref<PitwallConceptNotice[]>
   selectedRace: Ref<PitwallConceptRace | null>
   pendingNoticeCount: Ref<number>

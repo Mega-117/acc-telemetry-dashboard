@@ -61,6 +61,8 @@ export default defineConfig({
         // ── Pit Wall: contratto del collegamento fra pilota e ingegnere ──
         'app/services/pitwall/pitwallLink.ts',
         'app/services/pitwall/pitwallRoomContract.ts',
+        'app/services/pitwall/pitwallRoomService.ts',
+        'app/services/pitwall/pitwallRoomDocuments.ts',
         'app/services/pitwall/pitwallRoomDriverService.ts',
         'app/services/pitwall/pitwallDriverLinkService.ts',
         'app/services/pitwall/pitwallEngineerService.ts',

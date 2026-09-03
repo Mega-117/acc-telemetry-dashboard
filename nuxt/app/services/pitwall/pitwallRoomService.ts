@@ -22,7 +22,6 @@ import {
   type Firestore,
   type Query,
   type QueryConstraint,
-  type Timestamp,
 } from 'firebase/firestore'
 // Ogni lettura e scrittura passa dal tracker: la promessa "costo zero" regge
 // solo se il consumo Firebase resta misurabile, non stimato a occhio.
@@ -43,14 +42,17 @@ import {
   type PitwallMemberKind,
   type PitwallRoom,
   type PitwallRoomMember,
-  type PitwallRoomMemberDocument,
   type PitwallVehiclePointer,
 } from './pitwallRoomContract'
+// Dove i tipi Firestore smettono di esistere: oltre quel confine si ragiona in
+// millisecondi, e la logica pura non ha modo di dipendere da un `Timestamp`.
+import { normalisePitwallMember, normalisePitwallRoom } from './pitwallRoomDocuments'
 import { boundPitwallCrew, boundPitwallStrategy } from './pitwallLink'
 // Gli ordini sono l'altra meta' della stanza e cambiano per motivi diversi:
 // vivono in un modulo loro e si compongono qui, cosi' chi usa il servizio
 // continua a vedere una presa sola (Principio 1).
 import { createPitwallRoomOrders } from './pitwallRoomOrders'
+import { createPitwallRoomLifecycle } from './pitwallRoomLifecycle'
 import type { PitwallRoomResult } from './pitwallRoomOrders'
 
 export interface PitwallRoomServiceOptions {
@@ -79,54 +81,12 @@ function randomRoomId(): string {
   return [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('')
 }
 
-/**
- * Da documento Firestore a membro normalizzato.
- *
- * `updatedAt` arriva come Timestamp *del server*: qui diventa millisecondi, e
- * da qui in poi nessuno deve piu' sapere che esiste un tipo Firestore. Un
- * battito ancora in volo (`serverTimestamp()` appena scritto localmente) non
- * ha ancora un'ora: vale zero, cioe' "non fresco", che e' la risposta prudente.
- */
-export function normalisePitwallMember(raw: unknown): PitwallRoomMember | null {
-  const source = raw as PitwallRoomMemberDocument | null
-  if (!source || typeof source.uid !== 'string' || !source.uid) return null
-  const stamp = source.updatedAt as Timestamp | null | undefined
-  const updatedAtMs = typeof stamp?.toMillis === 'function' ? stamp.toMillis() : 0
-  return {
-    uid: source.uid,
-    nickname: String(source.nickname ?? source.uid),
-    kind: (source.kind === 'engineer' ? 'engineer' : 'driver') as PitwallMemberKind,
-    driving: source.driving === true,
-    runtimeSessionId: String(source.runtimeSessionId ?? ''),
-    updatedAtMs,
-    crew: source.crew ?? null,
-    strategy: source.strategy ?? null,
-  }
-}
-
-/**
- * Da documento Firestore a stanza normalizzata.
- *
- * Serve per un campo solo, e per lo stesso motivo per cui esiste quella dei
- * membri: `lastLiveAt` arriva come Timestamp del server, e da qui in avanti
- * nessuno deve piu' sapere che esistono tipi Firestore. Un segno di vita
- * appena scritto e non ancora confermato dal server non ha ancora un'ora: vale
- * `null`, cioe' "non lo so", e chi decide se chiudere la stanza tratta il non
- * saperlo come un motivo per non toccare niente.
- */
-export function normalisePitwallRoom(raw: unknown): PitwallRoom {
-  const source = raw as (PitwallRoom & { lastLiveAt?: Timestamp | null }) | null
-  const stamp = source?.lastLiveAt
-  const lastLiveAtMs = typeof stamp?.toMillis === 'function' ? stamp.toMillis() : null
-  const { lastLiveAt: _ignored, ...rest } = (source ?? {}) as PitwallRoom & { lastLiveAt?: unknown }
-  return { ...rest, lastLiveAtMs } as PitwallRoom
-}
-
 export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
   const { db, uid } = options
   const now = options.now ?? (() => Date.now())
   const mintRoomId = options.newRoomId ?? randomRoomId
   const orders = createPitwallRoomOrders({ db, uid, now })
+  const lifecycle = createPitwallRoomLifecycle({ db, now })
 
   const roomRef = (roomId: string) => doc(db, 'pitwallRooms', roomId)
   const membersRef = (roomId: string) => collection(db, 'pitwallRooms', roomId, 'members')
@@ -574,46 +534,13 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
     }
   }
 
-  /**
-   * Lascia un segno di vita sulla stanza.
-   *
-   * Il battito vero sta in `members/{uid}`, ma quel documento lo legge solo chi
-   * e' gia' dentro: da fuori una gara viva e una finita di mesi fa erano
-   * identiche, ed e' il motivo per cui l'elenco delle gare era diventato
-   * illeggibile. Questo campo risponde a quella domanda e a nessun'altra,
-   * quindi va molto piu' piano del battito.
-   *
-   * L'ora la mette il server. Se le regole non sono ancora pubblicate la
-   * scrittura viene negata: chi chiama lo tratta come "per adesso non si puo'",
-   * non come un errore da mostrare - la stanza funziona lo stesso, e' l'elenco
-   * che resta come prima.
-   */
-  async function stampRoomLive(roomId: string): Promise<PitwallRoomResult<true>> {
-    try {
-      await trackedUpdateDoc(roomRef(roomId), {
-        lastLiveAt: serverTimestamp(),
-      }, 'pitwallRoom.stampLive')
-      return { ok: true, value: true }
-    } catch (error) {
-      return failure(error, 'Segno di vita non scritto.')
-    }
-  }
-
-  /** Chiude la gara: la stanza resta leggibile come memoria, ma non accetta piu' ordini. */
-  async function closeRoom(roomId: string): Promise<PitwallRoomResult<true>> {
-    try {
-      await trackedUpdateDoc(roomRef(roomId), {
-        closedAt: nowIso(now()),
-        updatedAt: nowIso(now()),
-      }, 'pitwallRoom.close')
-      return { ok: true, value: true }
-    } catch (error) {
-      return failure(error, 'Chiusura rifiutata.')
-    }
-  }
   return {
     uid,
     ...orders,
+    // Il ciclo di vita cambia per un motivo suo - quando una gara e' viva e
+    // quando finisce - quindi vive in un modulo suo e si compone qui: chi usa
+    // il servizio continua a vedere una presa sola (Principio 1).
+    ...lifecycle,
     readRoom,
     ensureRoomForVehicle,
     listRooms,
@@ -628,8 +555,6 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
     syncInvites,
     revoke,
     promote,
-    stampRoomLive,
-    closeRoom,
   }
 }
 

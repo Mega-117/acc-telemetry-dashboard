@@ -56,7 +56,17 @@ function incoming(engineerUid: string, status: string, extra: Record<string, unk
 function makeLink() {
   const roomRef = ref<PitwallRoom | null>(null)
   const executor = ref({ executor: null as { uid: string } | null, reason: 'nobody-driving', conflicting: [] })
+  /** Le gare che la pulizia automatica ha chiuso: e' una scrittura, si guarda. */
+  const closedByService: string[] = []
   return {
+    closedByService,
+    service: () => ({
+      uid: 'me',
+      closeRoom: async (roomId: string) => {
+        closedByService.push(roomId)
+        return { ok: true as const, value: true as const }
+      },
+    }),
     nowTick: ref(NOW),
     rooms: ref<PitwallRoom[]>([]),
     room: roomRef,
@@ -195,6 +205,74 @@ describe('i permessi nelle quattro parole della pagina', () => {
     expect(trust.decide).toHaveBeenLastCalledWith('popo', 'revoked')
     store.removeLink('assist', 'pilota')
     expect(trust.withdrawRequest).toHaveBeenLastCalledWith('pilota')
+  })
+})
+
+describe('la gara del pilota, vista dal pilota', () => {
+  // "In pista" nasce da "le persone che mi hanno autorizzato": per costruzione
+  // non contiene me. Chi guidava apriva la pagina e non vedeva la gara che il
+  // suo stesso computer aveva appena aperto.
+  it('non compare fra le persone in pista, ma c e', () => {
+    link.rooms.value = [room({ hostUid: 'me', managerUids: ['me'], memberUids: ['me'], allowedUids: ['popo'] })]
+    expect(store.races.value).toEqual([])
+    expect(store.myRoom.value).toMatchObject({
+      id: 'r1',
+      label: 'Ferrari 296 GT3',
+      track: 'Monza',
+      carNumber: 47,
+      invitedIds: ['popo'],
+    })
+  })
+
+  it('le gare in cui non entra piu nessuno si chiudono da sole, quella in corso no', async () => {
+    // Le stanze non si cancellano - sono la memoria della corsa - ma finora non
+    // finivano nemmeno: l'elenco diventava otto gare identiche di giorni diversi.
+    const vecchia = room({
+      roomId: 'vecchia', managerUids: ['me'], memberUids: ['me'],
+      createdAt: '2026-08-01T09:00:00.000Z', updatedAt: '2026-08-01T09:00:00.000Z',
+    })
+    const corrente = room({ roomId: 'corrente', managerUids: ['me'], memberUids: ['me'], lastLiveAtMs: NOW })
+    link.room.value = corrente
+    link.rooms.value = [vecchia, corrente]
+    await nextTick()
+
+    expect(link.closedByService).toEqual(['vecchia'])
+
+    // Non si riprova su una gara gia' trattata: l'elenco arriva in diretta.
+    link.rooms.value = [vecchia, corrente]
+    await nextTick()
+    expect(link.closedByService).toEqual(['vecchia'])
+  })
+
+  it('senza una gara aperta si dice che non c e, invece di mostrare il nulla', () => {
+    link.rooms.value = []
+    expect(store.myRoom.value).toBeNull()
+  })
+
+  it('una gara chiusa non e piu la tua gara', () => {
+    link.rooms.value = [room({ memberUids: ['me'], closedAt: '2026-09-03T12:00:00.000Z' })]
+    expect(store.myRoom.value).toBeNull()
+  })
+
+  it('dopo due timbri persi si dice dormiente, invece di farla sembrare viva', () => {
+    const mia = room({ memberUids: ['me'], createdAt: '2026-09-01T09:00:00.000Z', updatedAt: '2026-09-01T09:00:00.000Z' })
+    link.rooms.value = [{ ...mia, lastLiveAtMs: NOW }]
+    expect(store.myRoom.value?.state).toBe('live')
+
+    link.rooms.value = [{ ...mia, lastLiveAtMs: NOW - 60 * 60_000 }]
+    expect(store.myRoom.value?.state).toBe('dormant')
+  })
+
+  it('chi ha il volante lo si dice solo della gara che si sta guardando in diretta', () => {
+    // Altrove sarebbe una deduzione da un elenco di identificativi: meglio non
+    // dirlo che dirlo a caso.
+    const mia = room({ memberUids: ['me'], lastLiveAtMs: NOW })
+    link.rooms.value = [mia]
+    link.executor.value = { executor: { uid: 'me' }, reason: 'ready', conflicting: [] }
+    expect(store.myRoom.value?.drivingId).toBeNull()
+
+    link.room.value = mia
+    expect(store.myRoom.value?.drivingId).toBe('me')
   })
 })
 

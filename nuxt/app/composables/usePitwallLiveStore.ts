@@ -20,7 +20,12 @@ import { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { usePitwallLink } from '~/composables/usePitwallLink'
 import { usePitwallController } from '~/composables/usePitwallController'
 import type { PitwallDuration, PitwallStopHandle, PitwallStore } from '~/composables/usePitwallStore'
-import { isPitwallRoomInvited, type PitwallRoom } from '~/services/pitwall/pitwallRoomContract'
+import {
+  describePitwallRoomOccupancy,
+  isPitwallRoomInvited,
+  type PitwallRoom,
+} from '~/services/pitwall/pitwallRoomContract'
+import { closeDormantPitwallRooms } from '~/services/pitwall/pitwallRoomLifecycle'
 import { pitwallClockFromExpiry, pitwallExpiryFromClock } from '~/services/pitwall/pitwallLink'
 import type { PitwallIncomingRequest, PitwallOutgoingLink } from '~/services/pitwall/pitwallEngineerService'
 import { searchPitwallConceptDirectory } from '~/utils/pitwallConcept'
@@ -29,6 +34,7 @@ import type {
   PitwallConceptDirection,
   PitwallConceptLink,
   PitwallConceptMember,
+  PitwallConceptMyRoom,
   PitwallConceptNotice,
   PitwallConceptPerson,
   PitwallConceptRace,
@@ -177,6 +183,22 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     }
   }
 
+  /**
+   * Le gare in cui non entra piu' nessuno si chiudono da sole.
+   *
+   * Le stanze non si cancellano - sono la memoria della corsa - ma finora non
+   * finivano nemmeno: ogni sessione ACC ne lasciava una aperta per sempre, e
+   * l'elenco diventava otto gare identiche di giorni diversi. La pulizia la fa
+   * il client che apre la pagina, non un lavoro schedulato: nessun server da
+   * tenere acceso, nessun costo fisso, e chi non ha gare vecchie non paga
+   * niente. Quali chiudere lo decide una funzione pura; solo un manager puo',
+   * e la gara in corso non si tocca mai.
+   */
+  const closeAttempted = new Set<string>()
+  watch(() => link.rooms.value, (list) => {
+    void closeDormantPitwallRooms(link.service(), list, link.room.value?.roomId ?? null, closeAttempted)
+  })
+
   const dismissedInvites = ref(loadSet(DISMISSED_INVITES_KEY))
 
   /**
@@ -235,6 +257,41 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
       race.joinable === false || all.findIndex(other => other.id === race.id) === index
     )))
   const selectedRace = computed<PitwallConceptRace | null>(() => (link.room.value ? toRace(link.room.value) : null))
+
+  /**
+   * La gara di chi sta guardando, quando e' lui a guidare.
+   *
+   * `races` nasce da "le persone che mi hanno autorizzato": per costruzione
+   * non contiene me, ed e' il motivo per cui il pilota apriva questa pagina e
+   * non vedeva la gara che il suo stesso PC aveva appena aperto. Qui si guarda
+   * la stessa stanza dall'altro capo - non chi posso assistere, ma chi puo'
+   * assistere me.
+   *
+   * Si legge da `link.rooms`, che gia' arriva in diretta: nessuna lettura in
+   * piu' per una cosa che il PC del pilota sapeva gia'.
+   */
+  const myRoom = computed<PitwallConceptMyRoom | null>(() => {
+    const me = uid()
+    if (!me) return null
+    const room = roomOfDriver(me)
+    if (!room) return null
+    const selected = link.room.value?.roomId === room.roomId
+    return {
+      id: room.roomId,
+      label: room.label,
+      track: room.track ?? null,
+      carNumber: room.raceNumber ?? null,
+      state: describePitwallRoomOccupancy(room, link.nowTick.value),
+      // Chi guida lo si sa solo dalla stanza che si sta guardando in diretta:
+      // altrove sarebbe una deduzione da un elenco di identificativi, e si
+      // preferisce non dirlo che dirlo a caso.
+      drivingId: selected && link.executor.value.reason === 'ready'
+        ? link.executor.value.executor?.uid ?? null
+        : null,
+      members: membersOf(room, selected),
+      invitedIds: room.allowedUids.filter(person => !room.memberUids.includes(person)),
+    }
+  })
 
   // ---- Avvisi ---------------------------------------------------------------
   const seenGrants = ref(loadSet(SEEN_GRANTS_KEY))
@@ -416,6 +473,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     people,
     links,
     races,
+    myRoom,
     notices,
     selectedRace,
     pendingNoticeCount,

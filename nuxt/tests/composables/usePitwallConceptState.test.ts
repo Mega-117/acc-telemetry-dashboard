@@ -193,4 +193,17 @@ describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
     expect(state.races.value[0]!.closed).toBe(false)
     expect(state.pendingNoticeCount.value).toBe(3)
   })
+
+  it('espone anche la gara di chi guarda, che negli altri elenchi non c e', () => {
+    // La presa e' una sola: se il mock non implementasse `myRoom`, la card
+    // esisterebbe solo con dati veri e i test dei componenti - che girano sul
+    // mock - non la vedrebbero mai.
+    const mine = state.myRoom.value
+    expect(mine).not.toBeNull()
+    expect(mine!.state).toBe('live')
+    // Chi guarda e' dentro la propria gara, e quella gara non compare fra le
+    // persone in pista: quelle sono per definizione le altre.
+    expect(mine!.members.some(member => member.personId === state.meId.value)).toBe(true)
+    expect(state.races.value.some(race => race.id === mine!.id)).toBe(false)
+  })
 })

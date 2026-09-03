@@ -19,6 +19,7 @@ const conceptSearch = read('app/components/pitwall/concept/PitwallConceptSearch.
 const conceptPeople = read('app/components/pitwall/concept/PitwallConceptPeople.vue')
 const conceptWall = read('app/components/pitwall/concept/PitwallConceptWall.vue')
 const conceptRaces = read('app/components/pitwall/concept/PitwallConceptRaces.vue')
+const conceptMyRoom = read('app/components/pitwall/concept/PitwallConceptMyRoom.vue')
 const conceptPitStop = read('app/components/pitwall/concept/PitwallConceptPitStop.vue')
 const conceptOrder = read('app/components/pitwall/concept/PitwallConceptOrder.vue')
 const conceptState = read('app/composables/usePitwallConceptState.ts')
@@ -482,6 +483,26 @@ describe('Pitwall wiring', () => {
     expect(conceptRaces).toContain('Nessuna delle tue persone è in pista adesso.')
     expect(concept).not.toContain('Collegati')
     expect(concept).not.toContain('Assisti')
+  })
+
+  it('il pilota vede la propria gara, che in "In pista" non ci puo stare', () => {
+    // "In pista" elenca le persone che ti hanno autorizzato: per costruzione
+    // non contiene te stesso, quindi chi guidava apriva questa pagina e non
+    // trovava la gara che il suo stesso computer aveva appena aperto.
+    expect(concept).toContain('<PitwallConceptMyRoom')
+    expect(concept).toContain('La tua gara')
+    expect(concept).toContain('state.myRoom.value')
+    // Sopra "In pista": chi guida apre la pagina per sapere se il muretto lo
+    // vede, non per assistere qualcun altro.
+    expect(concept.indexOf('pwc-home__mine')).toBeLessThan(concept.indexOf('pwc-home__races'))
+    // Cosa deve dire: dove si corre, chi ha il volante, chi e collegato, chi
+    // puo ancora entrare, e cosa manca quando non c'e' niente.
+    expect(conceptMyRoom).toContain('Sei tu al volante')
+    expect(conceptMyRoom).toContain('Al muretto con te adesso')
+    expect(conceptMyRoom).toContain('Nessuna gara aperta su questo computer.')
+    expect(conceptMyRoom).toContain("Nessuno da un po'")
+    // Il punto di vista e' di chi guarda, mai un utente fisso del prototipo.
+    expect(conceptMyRoom).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
   })
 
   it('la pastiglia "in pista" negli elenchi segue chi guida, non chi sta al muretto', () => {

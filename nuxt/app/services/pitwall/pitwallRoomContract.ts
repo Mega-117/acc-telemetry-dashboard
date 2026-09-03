@@ -315,6 +315,30 @@ export function shouldStampPitwallRoomLive(
   return nowMs - last >= everyMs
 }
 
+/** In che stato di occupazione si trova una gara, senza entrarci. */
+export type PitwallRoomOccupancy = 'live' | 'dormant' | 'closed'
+
+/**
+ * Viva, dormiente o finita: la domanda a cui da fuori non si sapeva rispondere.
+ *
+ * Si guarda il segno di vita e si concede il doppio del suo passo prima di
+ * dire "dormiente": un timbro ogni dieci minuti vuol dire che a venti minuti
+ * ne sono stati persi due, e due di fila non sono una connessione lenta. E'
+ * la stessa aritmetica dei tre battiti persi per un membro, su una scala
+ * diversa perche' diversa e' la domanda.
+ */
+export function describePitwallRoomOccupancy(
+  room: Pick<PitwallRoom, 'closedAt' | 'lastLiveAtMs' | 'updatedAt' | 'createdAt'> | null | undefined,
+  nowMs: number,
+  quietMs: number = PITWALL_ROOM_LIVE_STAMP_MS * 2
+): PitwallRoomOccupancy {
+  if (room == null) return 'closed'
+  if (room.closedAt != null) return 'closed'
+  const lastLife = pitwallRoomLastSignOfLifeMs(room)
+  if (lastLife == null) return 'dormant'
+  return nowMs - lastLife <= quietMs ? 'live' : 'dormant'
+}
+
 /**
  * Questa stanza va chiusa da sola.
  *
@@ -341,6 +365,32 @@ export function shouldClosePitwallDormantRoom(
   const lastLife = pitwallRoomLastSignOfLifeMs(room)
   if (lastLife == null) return false
   return nowMs - lastLife > dormantMs
+}
+
+/**
+ * Quali gare, fra quelle che vedo, tocca a me chiudere adesso.
+ *
+ * Chiudere e' un atto di governo: lo fa un manager, e le regole lo impongono -
+ * non solo la schermata. Chi ha gia' provato non riprova: l'elenco arriva in
+ * diretta, e ritentare a ogni consegna vorrebbe dire una scrittura negata al
+ * secondo se le regole non sono ancora pubblicate.
+ *
+ * Funzione pura apposta: decidere quali gare finiscono e' la parte che va
+ * provata a rami, e non deve dipendere da Firestore per poterlo essere.
+ */
+export function collectPitwallRoomsToClose(
+  rooms: readonly PitwallRoom[] | null | undefined,
+  uid: string | null | undefined,
+  currentRoomId: string | null | undefined,
+  nowMs: number,
+  alreadyTried: ReadonlySet<string> = new Set()
+): string[] {
+  if (!uid) return []
+  return (rooms ?? [])
+    .filter(room => !alreadyTried.has(room.roomId))
+    .filter(room => room.managerUids.includes(uid))
+    .filter(room => shouldClosePitwallDormantRoom(room, nowMs, currentRoomId))
+    .map(room => room.roomId)
 }
 
 /** Un ordine della stanza e' scaduto: non parte piu', e non resta in coda. */

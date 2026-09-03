@@ -7,6 +7,7 @@ import {
   PITWALL_ROOM_SCHEMA_VERSION,
   buildPitwallRoomOrder,
   describePitwallRoom,
+  describePitwallRoomOccupancy,
   describePitwallRoomExecutor,
   isPitwallClaimAvailable,
   isPitwallMemberFresh,
@@ -224,6 +225,32 @@ describe('quando una gara si considera finita', () => {
       .toBe(Date.parse(vecchia.updatedAt))
     expect(pitwallRoomLastSignOfLifeMs({ ...vecchia, lastLiveAtMs: null, updatedAt: '' }))
       .toBe(Date.parse(vecchia.createdAt))
+  })
+})
+
+describe('viva, dormiente o finita, senza entrarci', () => {
+  // La domanda a cui da fuori non si sapeva rispondere: il battito sta nei
+  // membri, e quelli li legge solo chi e gia dentro.
+  const base = {
+    closedAt: null,
+    lastLiveAtMs: NOW_MS,
+    updatedAt: '2026-09-01T15:00:00.000Z',
+    createdAt: '2026-09-01T14:00:00.000Z',
+  }
+
+  it('un timbro fresco vuol dire che qualcuno c e', () => {
+    expect(describePitwallRoomOccupancy(base, NOW_MS)).toBe('live')
+  })
+
+  it('due timbri persi di fila non sono una connessione lenta', () => {
+    const dueTimbri = PITWALL_ROOM_LIVE_STAMP_MS * 2
+    expect(describePitwallRoomOccupancy({ ...base, lastLiveAtMs: NOW_MS - dueTimbri }, NOW_MS)).toBe('live')
+    expect(describePitwallRoomOccupancy({ ...base, lastLiveAtMs: NOW_MS - dueTimbri - 1 }, NOW_MS)).toBe('dormant')
+  })
+
+  it('chiusa vince su tutto: e memoria, non un posto dove entrare', () => {
+    expect(describePitwallRoomOccupancy({ ...base, closedAt: '2026-09-01T16:00:00.000Z' }, NOW_MS)).toBe('closed')
+    expect(describePitwallRoomOccupancy(null, NOW_MS)).toBe('closed')
   })
 })
 

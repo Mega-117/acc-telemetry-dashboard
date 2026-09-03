@@ -14,6 +14,7 @@
 import { computed, ref } from "vue";
 import PitwallConceptExpiry from "~/components/pitwall/concept/PitwallConceptExpiry.vue";
 import PitwallConceptLive from "~/components/pitwall/concept/PitwallConceptLive.vue";
+import PitwallConceptMyRoom from "~/components/pitwall/concept/PitwallConceptMyRoom.vue";
 import PitwallConceptPeople from "~/components/pitwall/concept/PitwallConceptPeople.vue";
 import PitwallConceptRaces from "~/components/pitwall/concept/PitwallConceptRaces.vue";
 import PitwallConceptSearch from "~/components/pitwall/concept/PitwallConceptSearch.vue";
@@ -40,6 +41,8 @@ const screen = ref<PitwallConceptScreen>("home");
 const grant = ref<{ personId: string; step: "duration" | "time"; time: string } | null>(null);
 
 const races = computed(() => state.races.value);
+/** La gara di chi guarda: `races` non la contiene mai, per costruzione. */
+const myRoom = computed(() => state.myRoom.value);
 const people = computed(() => state.people.value);
 const search = computed({
   get: () => state.searchQuery.value,
@@ -83,6 +86,16 @@ function scrollToTop() {
   if (typeof window === "undefined") return;
   window.scrollTo({ top: 0, behavior: "auto" });
   if (typeof document !== "undefined") document.documentElement.scrollTop = 0;
+}
+
+/**
+ * Far entrare qualcuno nella propria gara non e' un'azione sulla stanza: e'
+ * autorizzare una persona, che poi il PC aggiunge da solo. Il bottone porta
+ * quindi dove quella cosa si fa, invece di aprire un secondo modo di farla.
+ */
+function focusSearch() {
+  if (typeof document === "undefined") return;
+  document.querySelector(".pwc-home__add")?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /** Entrare e aprire sono lo stesso gesto: chi era invitato smette di esserlo. */
@@ -143,6 +156,27 @@ function ask(personId: string) {
       v-if="screen === 'home'"
       class="pwc-home"
     >
+      <!-- La tua gara, quando sei tu a guidare. Sta sopra "In pista" perche'
+           chi guida apre questa pagina per sapere se il muretto lo vede, non
+           per assistere qualcun altro. -->
+      <section
+        v-if="myRoom"
+        class="pwc-home__mine"
+      >
+        <header class="pwc-block__head">
+          <h2 class="pwc-block__title">
+            La tua gara
+          </h2>
+        </header>
+
+        <PitwallConceptMyRoom
+          :room="myRoom"
+          :people="people"
+          :me-id="state.meId.value"
+          @invite="focusSearch"
+        />
+      </section>
+
       <section class="pwc-home__races">
         <header class="pwc-block__head">
           <h2 class="pwc-block__title">
@@ -531,6 +565,7 @@ function ask(personId: string) {
   width: min(1180px, 100%);
   margin: 0 auto;
 }
+.pwc-home__mine,
 .pwc-home__races,
 .pwc-home__add { grid-column: 1 / -1; }
 /* La ricerca ha una superficie sua: senza, a campo vuoto sembra uno spazio
@@ -564,6 +599,7 @@ function ask(personId: string) {
 /* Adattamento */
 @media (max-width: 980px) {
   .pwc-home { grid-template-columns: 1fr; gap: 36px; }
+  .pwc-home__mine,
   .pwc-home__races,
   .pwc-home__add { grid-column: 1; }
 }
