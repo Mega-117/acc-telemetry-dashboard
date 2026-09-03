@@ -15,6 +15,13 @@ defineProps<{
   modelValue: boolean | null
   /** Cosa risulta adesso in macchina, se lo sappiamo: mostrato come eco. */
   carValue?: boolean | null
+  /**
+   * Nasconde l'etichetta a schermo, lasciandola a chi legge con lo schermo
+   * (il gruppo la porta gia' come `aria-label`). Serve dove il nome della voce
+   * e' gia' scritto accanto - una tabella con una colonna "Campo" - e
+   * ripeterlo sarebbe rumore.
+   */
+  hideLabel?: boolean
 }>()
 
 defineEmits<{ 'update:modelValue': [value: boolean | null] }>()
@@ -28,7 +35,10 @@ const OPTIONS: { value: boolean | null, label: string, title: string }[] = [
 
 <template>
   <div class="toggle-field" role="group" :aria-label="label">
-    <span class="toggle-field__label">{{ label }}</span>
+    <span
+      v-if="!hideLabel"
+      class="toggle-field__label"
+    >{{ label }}</span>
     <div class="toggle-field__options">
       <button
         v-for="option in OPTIONS"

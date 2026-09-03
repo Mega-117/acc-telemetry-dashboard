@@ -125,6 +125,80 @@ export function normalizePitwallConceptExpiry(value: string): string {
 }
 
 // ============================================
+// Cosa c'e' in macchina, e com'e' andato l'ordine
+// ============================================
+
+/**
+ * Da dove viene un valore della colonna "In macchina".
+ *
+ * Sono le stesse quattro parole della vista classica (`PitwallCarCard`), e non
+ * sono un dettaglio: ACC rilegge solo una parte dei campi. Mostrare un valore
+ * dedotto dall'ultimo ordine come se fosse letto adesso e' un falso verde con
+ * un altro nome.
+ */
+export type PitwallConceptSource = 'live' | 'stale' | 'order' | 'unavailable'
+
+export const PITWALL_CONCEPT_SOURCE_LABELS: Record<PitwallConceptSource, string> = {
+  live: 'LIVE',
+  stale: 'DATI VECCHI',
+  order: 'ULTIMO ORDINE',
+  unavailable: 'N/D',
+}
+
+/** Oltre questi secondi il dato non si chiama piu' "adesso". */
+export const PITWALL_CONCEPT_FRESH_MAX_S = 90
+
+export function pitwallConceptFreshness(ageSeconds: number): 'live' | 'stale' {
+  return ageSeconds <= PITWALL_CONCEPT_FRESH_MAX_S ? 'live' : 'stale'
+}
+
+/**
+ * Gli stati che un ordine attraversa davvero.
+ *
+ * "Inviata" non e' un esito: fra il click e la macchina ci sono un altro
+ * ingegnere che puo' aver vinto la corsa, una scadenza che passa e la
+ * possibilita' che solo una parte dei campi sia arrivata.
+ */
+export type PitwallConceptOrderStatus =
+  | 'idle'
+  | 'applying'
+  | 'applied'
+  | 'partial'
+  | 'rejected'
+  | 'expired'
+
+export function describePitwallConceptOrderStatus(
+  status: PitwallConceptOrderStatus,
+): { label: string, detail: string, tone: 'neutral' | 'good' | 'warn' | 'bad' } {
+  switch (status) {
+    case 'applying':
+      return { label: 'In corso…', detail: 'Il PC del pilota la sta applicando al Pit MFD.', tone: 'neutral' }
+    case 'applied':
+      return { label: 'Applicata', detail: 'Ogni campo chiesto è arrivato in macchina.', tone: 'good' }
+    case 'partial':
+      return {
+        label: 'Applicata in parte',
+        detail: 'Qualche campo non è arrivato: sotto c’è quale, uno per uno.',
+        tone: 'warn',
+      }
+    case 'rejected':
+      return {
+        label: 'Rifiutata',
+        detail: 'Un altro membro del muretto ha inviato per primo: vince la sua, non si fondono.',
+        tone: 'bad',
+      }
+    case 'expired':
+      return {
+        label: 'Scaduta',
+        detail: 'Sono passati due minuti senza che nessuno la prendesse in carico.',
+        tone: 'bad',
+      }
+    default:
+      return { label: '', detail: '', tone: 'neutral' }
+  }
+}
+
+// ============================================
 // Elenchi lunghi, elenchi vuoti, ricerca
 // ============================================
 

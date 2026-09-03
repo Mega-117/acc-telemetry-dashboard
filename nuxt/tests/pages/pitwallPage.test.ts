@@ -20,6 +20,7 @@ const conceptPeople = read('app/components/pitwall/concept/PitwallConceptPeople.
 const conceptWall = read('app/components/pitwall/concept/PitwallConceptWall.vue')
 const conceptRaces = read('app/components/pitwall/concept/PitwallConceptRaces.vue')
 const conceptPitStop = read('app/components/pitwall/concept/PitwallConceptPitStop.vue')
+const conceptOrder = read('app/components/pitwall/concept/PitwallConceptOrder.vue')
 const conceptState = read('app/composables/usePitwallConceptState.ts')
 const conceptModel = read('app/utils/pitwallConcept.ts')
 const conceptFixtures = read('app/utils/pitwallConceptModel.ts')
@@ -308,7 +309,7 @@ describe('Pitwall wiring', () => {
     }
     // Intestazione e righe condividono la stessa griglia: i valori restano
     // incolonnati sotto Campo / Strategia / In macchina.
-    expect(conceptPitStop.match(/grid-template-columns: minmax\(0, 1fr\) 180px 116px/g) ?? []).toHaveLength(1)
+    expect(conceptPitStop.match(/grid-template-columns: minmax\(0, 1fr\) 180px 150px/g) ?? []).toHaveLength(1)
   })
 
   it('copre tutto il Pit MFD tranne il limitatore, nell ordine del gioco', () => {
@@ -344,9 +345,55 @@ describe('Pitwall wiring', () => {
     // Prima "25.0", "Dry" e "0 L" erano scritti a mano nelle celle: due copie
     // dello stesso stato che potevano divergere.
     expect(conceptPitStop).toContain('const car = Object.freeze({')
-    for (const cella of ['{{ car.preset }}', '{{ car.fuel }} L', '{{ car.tyreSet }}', '{{ car.compound }}', '{{ car.pressure.toFixed(1) }}', '{{ yesNo(car.suspension) }}', '{{ yesNo(car.bodywork) }}']) {
+    for (const cella of ['{{ car.preset ?? "—" }}', '{{ car.fuel }} L', '{{ car.tyreSet }}', '{{ car.compound }}', '{{ car.pressure.toFixed(1) }}', '{{ yesNo(car.suspension) }}', '{{ yesNo(car.bodywork) }}']) {
       expect(conceptPitStop).toContain(cella)
     }
+  })
+
+  it('dice da dove viene ogni valore letto in macchina', () => {
+    // ACC rilegge carburante, set, mescola e pressioni: basta. Il resto lo
+    // sappiamo solo perche' l'abbiamo chiesto noi, e il preset non lo sappiamo
+    // affatto. Mostrarli tutti allo stesso modo sarebbe un falso verde.
+    expect(conceptPitStop).toContain('PITWALL_CONCEPT_SOURCE_LABELS')
+    expect(conceptPitStop).toContain('class="pwc-pit-car"')
+    expect(conceptPitStop).toContain('is-unavailable')
+    expect(conceptPitStop).toContain('is-order')
+    expect(conceptPitStop).toContain('is-calculated')
+    // Le stesse quattro parole della vista classica.
+    for (const parola of ['LIVE', 'DATI VECCHI', 'ULTIMO ORDINE', 'N/D']) {
+      expect(conceptModel).toContain(parola)
+      expect(carCard).toContain(parola)
+    }
+    // La freschezza si puo' alternare: e' l'unico modo di guardare "dato vecchio".
+    expect(conceptPitStop).toContain('pitwallConceptFreshness')
+    expect(conceptPitStop).toContain('carAgeSeconds')
+  })
+
+  it('usa le caselle a tre stati della Classica, non spunte booleane', () => {
+    // Con una spunta, "vuoto" significava non toccare e non c'era modo di
+    // **spegnere** una riparazione gia' attiva. Il controllo e' quello vero
+    // della Classica: averne due copie vorrebbe dire vederle divergere.
+    expect(conceptPitStop).toContain("import PitwallToggleField from '~/components/pitwall/PitwallToggleField.vue'".replace(/'/g, '"'))
+    expect(conceptPitStop.match(/<PitwallToggleField/g) ?? []).toHaveLength(4)
+    expect(conceptPitStop).not.toContain('type="checkbox"')
+    expect(conceptPitStop).toContain('formatToggle')
+    // Il preset parte da "Off": quella riga riscrive tutto in blocco e non si
+    // tocca per sbaglio.
+    expect(conceptPitStop).toContain('preset: null as number | null')
+    expect(conceptPitStop).toContain('strategy.preset ?? "Off"')
+    // Un campo lasciato a "non toccare" non e' una differenza dalla macchina.
+    expect(conceptPitStop).toContain('strategy.tyres != null && strategy.tyres !== car.tyres')
+  })
+
+  it('non chiama esito il momento in cui hai premuto Invia', () => {
+    expect(conceptOrder).toContain('describePitwallConceptOrderStatus')
+    expect(conceptPitStop).toContain("orderStatus.value = \"applying\"")
+    expect(conceptOrder).toContain('class="pwc-order"')
+    for (const stato of ['In corso…', 'Applicata in parte', 'Rifiutata', 'Scaduta']) {
+      expect(conceptModel).toContain(stato)
+    }
+    // "Prima accettata vince": due strategie non si fondono mai.
+    expect(conceptModel).toContain('vince la sua, non si fondono')
   })
 
   it('apre la gara, non una persona, e dice perche ci sei dentro', () => {
@@ -545,8 +592,8 @@ describe('Pitwall wiring', () => {
 
   it('non finge di poter inviare: dice quale cosa lo blocca', () => {
     expect(conceptPitStop).toContain('pitwallConceptSendBlock')
-    expect(conceptPitStop).toContain(':disabled="Boolean(blocked)"')
-    expect(conceptPitStop).toContain('class="pwc-blocked"')
+    expect(conceptOrder).toContain(':disabled="Boolean(blocked)"')
+    expect(conceptOrder).toContain('class="pwc-blocked"')
     for (const reason of [
       'Nessuna gara selezionata.',
       'Questa gara è chiusa: non accetta più strategie.',
@@ -563,9 +610,9 @@ describe('Pitwall wiring', () => {
     // ACC rilegge solo una parte dei campi: dichiarare gli altri "verificati"
     // sarebbe un falso verde, ed e' il principio che regge tutto il Pit Wall.
     expect(conceptPitStop).toContain('const READ_BACK = new Set(')
-    expect(conceptPitStop).toContain('is-verified')
-    expect(conceptPitStop).toContain('is-selected')
-    expect(conceptPitStop).toContain('dati macchina di 4s fa')
+    expect(conceptOrder).toContain('is-verified')
+    expect(conceptOrder).toContain('is-selected')
+    expect(conceptPitStop).toContain('dati macchina di {{ carAgeSeconds }}s fa')
   })
 
   it('tiene un solo foglio di stile con ritmo e allineamenti dichiarati', () => {

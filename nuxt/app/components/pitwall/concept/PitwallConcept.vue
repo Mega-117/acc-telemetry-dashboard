@@ -250,6 +250,13 @@ function ask(personId: string) {
   --pwc-raised: #161d28;
   --pwc-gap: 16px;
 
+  /* Il controllo a tre stati arriva dalla Classica e legge questi nomi: qui si
+     veste con la palette del Concept invece di essere duplicato per il colore. */
+  --pitwall-accent: #e0210b;
+  --pitwall-border: rgba(255, 255, 255, 0.12);
+  --pitwall-text: #fff;
+  --pitwall-text-muted: #{$text-secondary};
+
   min-height: calc(100vh - 72px);
   padding: 32px clamp(20px, 4vw, 56px) 56px;
   background: #0a0d13;

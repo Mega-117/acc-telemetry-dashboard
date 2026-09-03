@@ -6,39 +6,64 @@
 // l'invio non finge mai (se e' bloccato, dice **quale** cosa lo blocca) e
 // l'esito resta distinto campo per campo, perche' ACC rilegge solo una parte
 // dei campi e appiattirli sarebbe un falso verde.
-import { computed, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, reactive, ref } from "vue";
+// Il controllo a tre stati e' quello vero della Classica, non una copia: la
+// distinzione fra "spegni" e "non toccare" e' logica di prodotto, e averla in
+// due posti vorrebbe dire vederla divergere.
+import PitwallToggleField from "~/components/pitwall/PitwallToggleField.vue";
+import PitwallConceptOrder from "~/components/pitwall/concept/PitwallConceptOrder.vue";
 import {
   PITWALL_CONCEPT_DEFAULT_PRESSURES,
+  PITWALL_CONCEPT_SOURCE_LABELS,
+  pitwallConceptFreshness,
   pitwallConceptSendBlock,
   stepPitwallConceptPressure,
 } from "~/utils/pitwallConcept";
-import type { PitwallConceptRace } from "~/utils/pitwallConcept";
+import type {
+  PitwallConceptOrderStatus,
+  PitwallConceptRace,
+  PitwallConceptSource,
+} from "~/utils/pitwallConcept";
 // Il tempo della sosta non si ricalcola qui: e' la stessa funzione pura della
-// vista classica. Resta senza I/O, quindi il prototipo non tocca servizi reali.
-import { estimatePitStop, formatStopDuration, type PitwallPlan } from "~/utils/pitwallPresentation";
+// vista classica, e `formatToggle` e' la stessa che scrive le tre risposte di
+// una casella. Restano senza I/O: il prototipo non tocca servizi reali.
+import {
+  estimatePitStop,
+  formatStopDuration,
+  formatToggle,
+  type PitwallPlan,
+} from "~/utils/pitwallPresentation";
 
 const props = defineProps<{ race: PitwallConceptRace | null }>();
-
-const sent = ref(false);
 
 const pressures = reactive<Record<"FL" | "FR" | "RL" | "RR", number>>({
   ...PITWALL_CONCEPT_DEFAULT_PRESSURES,
 });
+
+/**
+ * `null` vuol dire **non toccare**, ed e' un terzo stato, non un "no".
+ *
+ * Con una casella booleana, vuota significava "non toccare" e non esisteva
+ * nessun modo di **spegnere** una riparazione gia' attiva: cio' che l'ingegnere
+ * impostava non era riportato fedelmente in macchina. Vale anche per il preset
+ * di strategia, che parte da "Off" perche' quella riga riscrive carburante,
+ * gomme e pressioni in blocco e non si tocca per sbaglio.
+ */
 const strategy = reactive({
-  preset: 1,
+  preset: null as number | null,
   fuel: 0,
-  tyres: false,
+  tyres: null as boolean | null,
   tyreSet: 1,
   compound: "Dry",
-  brakes: false,
+  brakes: null as boolean | null,
   driver: "Nessun cambio",
-  suspension: false,
-  bodywork: false,
+  suspension: null as boolean | null,
+  bodywork: null as boolean | null,
 });
 
 /** Com'e' messa la macchina adesso: una fonte sola per la colonna "In macchina". */
 const car = Object.freeze({
-  preset: 1,
+  preset: null as number | null,
   fuel: 0,
   tyres: false,
   tyreSet: 1,
@@ -50,26 +75,37 @@ const car = Object.freeze({
   bodywork: false,
 });
 
-const yesNo = (value: boolean) => (value ? "Sì" : "No");
+/**
+ * Da dove viene ogni riga della colonna "In macchina".
+ *
+ * Non e' decorazione: ACC rilegge carburante, set, mescola e pressioni, e
+ * basta. Tutto il resto lo sappiamo solo perche' l'abbiamo chiesto noi, e il
+ * preset non lo sappiamo affatto. Le stesse quattro parole della Classica.
+ */
+const carAgeSeconds = ref(4);
+const observed = computed<PitwallConceptSource>(() => pitwallConceptFreshness(carAgeSeconds.value));
+
+const yesNo = (value: boolean | null) => formatToggle(value);
 
 /**
  * Cosa e' stato cambiato rispetto alla macchina: e' anche l'elenco dei campi
- * che l'ordine dichiarera' uno per uno. Un campo non toccato non si dichiara.
+ * che l'ordine dichiarera' uno per uno. Un campo lasciato a "non toccare" non
+ * e' una differenza, quindi non si dichiara.
  */
 const changed = computed(() => {
   const fields: string[] = [];
-  if (strategy.preset !== car.preset) fields.push("Strategia");
+  if (strategy.preset != null) fields.push("Strategia");
   if (strategy.fuel !== car.fuel) fields.push("Carburante");
-  if (strategy.tyres !== car.tyres) fields.push("Cambio gomme");
+  if (strategy.tyres != null && strategy.tyres !== car.tyres) fields.push("Cambio gomme");
   if (strategy.tyreSet !== car.tyreSet) fields.push("Set");
   if (strategy.compound !== car.compound) fields.push("Mescola");
   for (const wheel of ["FL", "FR", "RL", "RR"] as const) {
     if (pressures[wheel] !== car.pressure) fields.push(wheel);
   }
-  if (strategy.brakes !== car.brakes) fields.push("Freni");
+  if (strategy.brakes != null && strategy.brakes !== car.brakes) fields.push("Freni");
   if (strategy.driver !== car.driver) fields.push("Pilota");
-  if (strategy.suspension !== car.suspension) fields.push("Sospensioni");
-  if (strategy.bodywork !== car.bodywork) fields.push("Carrozzeria");
+  if (strategy.suspension != null && strategy.suspension !== car.suspension) fields.push("Sospensioni");
+  if (strategy.bodywork != null && strategy.bodywork !== car.bodywork) fields.push("Carrozzeria");
   return fields;
 });
 
@@ -78,11 +114,33 @@ const blocked = computed(() => pitwallConceptSendBlock(props.race, changed.value
 /** I campi che ACC rilegge: solo questi possono dirsi verificati. */
 const READ_BACK = new Set(["Carburante", "Set", "Mescola", "FL", "FR", "RL", "RR"]);
 const outcome = ref<{ field: string; verified: boolean }[] | null>(null);
+const orderStatus = ref<PitwallConceptOrderStatus>("idle");
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
+onBeforeUnmount(() => { if (settleTimer) clearTimeout(settleTimer); });
+
+/**
+ * Inviare non e' finire.
+ *
+ * L'ordine passa da "in corso", e da li' puo' finire applicato, applicato in
+ * parte, oppure rifiutato perche' un altro membro del muretto ha vinto la
+ * corsa - "prima accettata vince", e le due strategie non si fondono mai.
+ * Premere di nuovo mentre e' in corso e' esattamente quel caso.
+ */
 function send() {
   if (blocked.value) return;
+  if (orderStatus.value === "applying") {
+    orderStatus.value = "rejected";
+    return;
+  }
   outcome.value = changed.value.map(field => ({ field, verified: READ_BACK.has(field) }));
-  sent.value = true;
+  orderStatus.value = "applying";
+  settleTimer = setTimeout(() => {
+    // Se qualcosa che ACC non rilegge era nell'ordine, l'esito onesto e'
+    // "in parte": l'abbiamo premuto, non l'abbiamo visto arrivare.
+    const everythingVerified = outcome.value?.every(entry => entry.verified) ?? true;
+    orderStatus.value = everythingVerified ? "applied" : "partial";
+  }, 1200);
 }
 
 /** Lo stato mock nella forma che la logica pura della sosta si aspetta. */
@@ -91,10 +149,10 @@ function toPlan(
   wheels: Record<"FL" | "FR" | "RL" | "RR", number>,
 ): PitwallPlan {
   return {
-    // Il mock non simula preset e freni: restano fuori dalla stima della
-    // sosta, che e' l'unica cosa per cui questa forma serve qui.
+    // Il preset resta fuori dalla stima della sosta: carica valori altrui, e
+    // quanto durera' la sosta lo dicono i campi che si vedono qui sotto.
     pitStrategy: null,
-    brakes: false,
+    brakes: source.brakes,
     pressures: { ...wheels },
     fuelLiters: source.fuel,
     compound: source.compound === "Wet" ? "wet" : "dry",
@@ -124,7 +182,18 @@ function stepAll(step: 1 | -1) {
   <section class="pwc-panel">
     <header class="pwc-panel__head">
       <h2>Pit stop</h2>
-      <small>Finestra giri 45–49 · dati macchina di 4s fa</small>
+      <!-- La freschezza non e' un dettaglio estetico: un valore vecchio
+           mostrato come attuale e' un falso verde con un altro nome. Qui si
+           puo' alternare, perche' e' l'unico modo di vedere lo stato "vecchio". -->
+      <button
+        type="button"
+        class="pwc-fresh"
+        :class="`is-${observed}`"
+        title="Prototipo: alterna dato fresco e dato vecchio"
+        @click="carAgeSeconds = carAgeSeconds > 90 ? 4 : 140"
+      >
+        Finestra giri 45–49 · dati macchina di {{ carAgeSeconds }}s fa
+      </button>
     </header>
 
     <div class="pwc-pit-head">
@@ -137,20 +206,23 @@ function stepAll(step: 1 | -1) {
         <button
           type="button"
           aria-label="Preset precedente"
-          @click="strategy.preset = Math.max(1, strategy.preset - 1)"
+          @click="strategy.preset = strategy.preset && strategy.preset > 1 ? strategy.preset - 1 : null"
         >
           −
         </button>
-        <b>{{ strategy.preset }}</b>
+        <b>{{ strategy.preset ?? "Off" }}</b>
         <button
           type="button"
           aria-label="Preset successivo"
-          @click="strategy.preset++"
+          @click="strategy.preset = (strategy.preset ?? 0) + 1"
         >
           +
         </button>
       </div>
-      <b>{{ car.preset }}</b>
+      <span class="pwc-pit-car">
+        <b>{{ car.preset ?? "—" }}</b>
+        <em class="pwc-src is-unavailable">{{ PITWALL_CONCEPT_SOURCE_LABELS.unavailable }}</em>
+      </span>
     </div>
 
     <div class="pwc-pit-row">
@@ -172,18 +244,26 @@ function stepAll(step: 1 | -1) {
           +
         </button>
       </div>
-      <b>{{ car.fuel }} L</b>
+      <span class="pwc-pit-car">
+        <b>{{ car.fuel }} L</b>
+        <em
+          class="pwc-src"
+          :class="`is-${observed}`"
+        >{{ PITWALL_CONCEPT_SOURCE_LABELS[observed] }}</em>
+      </span>
     </div>
 
     <div class="pwc-pit-row">
       <span>Cambio gomme</span>
-      <label>
-        <input
-          v-model="strategy.tyres"
-          type="checkbox"
-        />{{ yesNo(strategy.tyres) }}
-      </label>
-      <b>{{ yesNo(car.tyres) }}</b>
+      <PitwallToggleField
+        v-model="strategy.tyres"
+        label="Cambio gomme"
+        hide-label
+      />
+      <span class="pwc-pit-car">
+        <b>{{ yesNo(car.tyres) }}</b>
+        <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+      </span>
     </div>
 
     <div class="pwc-pit-row">
@@ -205,7 +285,13 @@ function stepAll(step: 1 | -1) {
           +
         </button>
       </div>
-      <b>{{ car.tyreSet }}</b>
+      <span class="pwc-pit-car">
+        <b>{{ car.tyreSet }}</b>
+        <em
+          class="pwc-src"
+          :class="`is-${observed}`"
+        >{{ PITWALL_CONCEPT_SOURCE_LABELS[observed] }}</em>
+      </span>
     </div>
 
     <div class="pwc-pit-row">
@@ -217,7 +303,13 @@ function stepAll(step: 1 | -1) {
         <option>Dry</option>
         <option>Wet</option>
       </select>
-      <b>{{ car.compound }}</b>
+      <span class="pwc-pit-car">
+        <b>{{ car.compound }}</b>
+        <em
+          class="pwc-src"
+          :class="`is-${observed}`"
+        >{{ PITWALL_CONCEPT_SOURCE_LABELS[observed] }}</em>
+      </span>
     </div>
 
     <div class="pwc-pit-row">
@@ -265,18 +357,26 @@ function stepAll(step: 1 | -1) {
           +
         </button>
       </div>
-      <b>{{ car.pressure.toFixed(1) }}</b>
+      <span class="pwc-pit-car">
+        <b>{{ car.pressure.toFixed(1) }}</b>
+        <em
+          class="pwc-src"
+          :class="`is-${observed}`"
+        >{{ PITWALL_CONCEPT_SOURCE_LABELS[observed] }}</em>
+      </span>
     </div>
 
     <div class="pwc-pit-row">
       <span>Sostituisci freni</span>
-      <label>
-        <input
-          v-model="strategy.brakes"
-          type="checkbox"
-        />{{ yesNo(strategy.brakes) }}
-      </label>
-      <b>{{ yesNo(car.brakes) }}</b>
+      <PitwallToggleField
+        v-model="strategy.brakes"
+        label="Sostituisci freni"
+        hide-label
+      />
+      <span class="pwc-pit-car">
+        <b>{{ yesNo(car.brakes) }}</b>
+        <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+      </span>
     </div>
 
     <div class="pwc-pit-row">
@@ -288,7 +388,10 @@ function stepAll(step: 1 | -1) {
         <option>Nessun cambio</option>
         <option>lucab</option>
       </select>
-      <b>{{ car.driver }}</b>
+      <span class="pwc-pit-car">
+        <b>{{ car.driver }}</b>
+        <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+      </span>
     </div>
 
     <div class="pwc-pit-row is-group">
@@ -297,64 +400,45 @@ function stepAll(step: 1 | -1) {
 
     <div class="pwc-pit-row is-sub">
       <span>Sospensioni</span>
-      <label>
-        <input
-          v-model="strategy.suspension"
-          type="checkbox"
-        />{{ yesNo(strategy.suspension) }}
-      </label>
-      <b>{{ yesNo(car.suspension) }}</b>
+      <PitwallToggleField
+        v-model="strategy.suspension"
+        label="Sospensioni"
+        hide-label
+      />
+      <span class="pwc-pit-car">
+        <b>{{ yesNo(car.suspension) }}</b>
+        <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+      </span>
     </div>
 
     <div class="pwc-pit-row is-sub">
       <span>Carrozzeria</span>
-      <label>
-        <input
-          v-model="strategy.bodywork"
-          type="checkbox"
-        />{{ yesNo(strategy.bodywork) }}
-      </label>
-      <b>{{ yesNo(car.bodywork) }}</b>
+      <PitwallToggleField
+        v-model="strategy.bodywork"
+        label="Carrozzeria"
+        hide-label
+      />
+      <span class="pwc-pit-car">
+        <b>{{ yesNo(car.bodywork) }}</b>
+        <em class="pwc-src is-order">{{ PITWALL_CONCEPT_SOURCE_LABELS.order }}</em>
+      </span>
     </div>
 
     <div class="pwc-pit-row is-total">
       <span>Tempo stop stimato</span>
       <b>{{ stopTime }}</b>
-      <b>—</b>
-    </div>
-
-    <!-- L'esito arriva campo per campo: quello che ACC rilegge e' verificato,
-         il resto e' solo selezionato. -->
-    <div
-      v-if="outcome"
-      class="pwc-outcome"
-    >
-      <span
-        v-for="entry in outcome"
-        :key="entry.field"
-        class="pwc-outcome__chip"
-        :class="entry.verified ? 'is-verified' : 'is-selected'"
-      >
-        {{ entry.verified ? "✓" : "→" }} {{ entry.field }}
+      <span class="pwc-pit-car">
+        <b>—</b>
+        <em class="pwc-src is-calculated">CALCOLATO</em>
       </span>
     </div>
 
-    <p
-      v-if="blocked"
-      class="pwc-blocked"
-    >
-      {{ blocked }}
-    </p>
-
-    <button
-      type="button"
-      class="pwc-send"
-      :class="{ 'is-sent': sent }"
-      :disabled="Boolean(blocked)"
-      @click="send()"
-    >
-      {{ sent ? "Strategia inviata" : "Invia strategia" }}
-    </button>
+    <PitwallConceptOrder
+      :status="orderStatus"
+      :outcome="outcome"
+      :blocked="blocked"
+      @send="send()"
+    />
   </section>
 </template>
 
@@ -366,7 +450,7 @@ function stepAll(step: 1 | -1) {
 .pwc-pit-head,
 .pwc-pit-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px 116px;
+  grid-template-columns: minmax(0, 1fr) 180px 150px;
   align-items: center;
   gap: 16px;
   min-height: 42px;
@@ -405,7 +489,49 @@ function stepAll(step: 1 | -1) {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.pwc-pit-row select,
+
+/* La colonna "In macchina" porta il valore e da dove viene. Senza la seconda
+   riga, un dato dedotto dall'ultimo ordine si legge come se fosse letto
+   adesso, che e' la bugia che questa colonna esiste per non dire. */
+.pwc-pit-car {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  text-align: right;
+}
+.pwc-pit-car > b {
+  color: $text-secondary;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.pwc-src {
+  padding: 1px 6px;
+  border: 1px solid var(--pwc-line);
+  border-radius: 4px;
+  color: $text-muted;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.pwc-src.is-live { border-color: rgba(74, 222, 128, 0.4); color: #4ade80; }
+.pwc-src.is-stale { border-color: rgba(245, 158, 11, 0.45); color: #f59e0b; }
+.pwc-src.is-order { border-color: rgba(96, 165, 250, 0.4); color: #60a5fa; }
+
+/* La freschezza si legge in cima e si puo' alternare: e' l'unico modo di
+   guardare lo stato "dato vecchio" in un prototipo senza telemetria. */
+.pwc-fresh {
+  padding: 2px 8px;
+  border: 1px solid var(--pwc-line);
+  border-radius: 6px;
+  background: none;
+  color: $text-secondary;
+  font-size: 12px;
+  cursor: pointer;
+}
+.pwc-fresh.is-stale { border-color: rgba(245, 158, 11, 0.45); color: #f59e0b; }
+
 .pwc-pit-row label {
   display: flex;
   align-items: center;
@@ -436,58 +562,13 @@ function stepAll(step: 1 | -1) {
   font-variant-numeric: tabular-nums;
 }
 
-/* L'esito per campo: due segni diversi perche' sono due cose diverse. */
-.pwc-outcome {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 16px 20px 0;
-}
-.pwc-outcome__chip {
-  padding: 4px 10px;
-  border: 1px solid var(--pwc-line);
-  border-radius: 99px;
-  color: $text-secondary;
-  font-size: 12px;
-  font-weight: 700;
-}
-.pwc-outcome__chip.is-verified { border-color: rgba(74, 222, 128, 0.45); color: #4ade80; }
-.pwc-outcome__chip.is-selected { border-color: rgba(167, 139, 250, 0.45); color: #a78bfa; }
-
-.pwc-blocked {
-  margin: 16px 20px 0;
-  padding: 10px 14px;
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  border-radius: 8px;
-  color: #f59e0b;
-  font-size: 13px;
-}
-
-.pwc-send {
-  width: calc(100% - 40px);
-  min-height: 48px;
-  margin: 20px;
-  border: 0;
-  border-radius: 8px;
-  background: #e0210b;
-  color: #fff;
-  font-family: $font-display;
-  font-size: 14px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-.pwc-send:hover { background: #f5290f; }
-.pwc-send:disabled { background: rgba(255, 255, 255, 0.06); color: $text-muted; cursor: not-allowed; }
-.pwc-send.is-sent { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
 
 @media (max-width: 760px) {
   .pwc-pit-head,
   .pwc-pit-row {
-    grid-template-columns: minmax(0, 1fr) 132px 72px;
+    grid-template-columns: minmax(0, 1fr) 132px 92px;
     gap: 10px;
     padding: 0 14px;
   }
-  .pwc-send { width: calc(100% - 28px); margin: 14px; }
 }
 </style>
