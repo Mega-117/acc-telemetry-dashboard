@@ -26,7 +26,9 @@ import {
   startPitwallRoomDriver,
   type PitwallRoomDriverHandle,
 } from '~/services/pitwall/pitwallRoomDriverService'
-import { isPitwallGrantUsable, type PitwallGrant } from '~/services/pitwall/pitwallLink'
+import type { PitwallGrant } from '~/services/pitwall/pitwallLink'
+import { friendUidsFromGrants } from '~/services/pitwall/pitwallFriends'
+import { registerPitwallIntentControls, setPitwallIntentStatus } from '~/composables/usePitwallIntent'
 
 interface PitwallElectronBridge extends PitwallDriverElectronApi {
   localIdentityRole?: string
@@ -60,13 +62,23 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
   let handle: PitwallDriverLinkHandle | null = null
   let roomHandle: PitwallRoomDriverHandle | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
-  let stopGrantsWatch: (() => void) | null = null
+  const stopGrantsWatches: (() => void)[] = []
+  /**
+   * Gli amici letti l'ultima volta. Li consulta il cancello sugli ordini
+   * legacy senza rileggere Firestore a ogni ordine; si aggiorna a ogni
+   * permesso che cambia.
+   */
+  const friendSet = new Set<string>()
+  let friendsReady: Promise<unknown> = Promise.resolve()
 
   function stop(): void {
-    stopGrantsWatch?.()
-    stopGrantsWatch = null
+    while (stopGrantsWatches.length) stopGrantsWatches.pop()?.()
+    registerPitwallIntentControls(null)
     if (roomHandle) {
-      void roomHandle.goOffline()
+      // Se il Pitwall era aperto si chiude per bene: altrimenti gli amici lo
+      // vedrebbero aperto per venti minuti dopo che la suite e' stata chiusa.
+      if (roomHandle.status().state !== 'off') void roomHandle.closePitwall()
+      else void roomHandle.goOffline()
       roomHandle.stop()
       roomHandle = null
       roomId.value = null
@@ -94,41 +106,49 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
   }
 
   /**
-   * Chi si ritrova invitato nella gara senza doverlo chiedere.
+   * Chi si ritrova invitato nella gara senza doverlo chiedere: gli amici.
    *
-   * Sono gli account che hanno gia' un permesso valido con questo pilota, nei
-   * due sensi: l'ingegnere che assiste e il compagno che ci ha autorizzati.
-   * E' il riuso del mattoncino che esiste gia' (PIP-359) invece di un secondo
-   * elenco parallelo da tenere allineato: la squadra si pre-autorizza una
-   * volta, e a ogni gara si ritrova dentro da sola.
+   * Amici, non "chiunque abbia un permesso in un verso": un permesso a un
+   * verso solo e' una richiesta di amicizia ancora aperta, e una richiesta non
+   * e' un posto al muretto. E' il riuso del mattoncino che esiste gia'
+   * (PIP-359) invece di un secondo elenco: gli amici si fanno una volta, e a
+   * ogni gara si ritrovano dentro da soli.
    *
    * Nessuna scorciatoia sull'accesso: questo semina soltanto gli *invitati*,
-   * che e' esattamente cio' che un manager potrebbe scrivere a mano. Chi non
-   * ha un permesso resta fuori finche' qualcuno non lo invita.
+   * che e' esattamente cio' che un manager potrebbe scrivere a mano.
    */
   async function readTrustedUids(uid: string): Promise<string[]> {
-    const trusted = new Set<string>()
     const nowMs = Date.now()
-    for (const [field, mine] of [['driverUid', 'engineerUid'], ['engineerUid', 'driverUid']] as const) {
-      try {
-        const snapshot = await trackedGetDocs(query(
-          collection(db, 'pitwallGrants'),
-          where(field, '==', uid),
-          where('status', '==', 'granted'),
-          limit(50)
-        ), 'pitwallRoom.trustedUids')
-        for (const entry of snapshot.docs) {
-          const grant = entry.data() as PitwallGrant
-          if (!isPitwallGrantUsable(grant, grant.driverUid, grant.engineerUid, nowMs)) continue
-          const other = grant[mine]
-          if (other && other !== uid) trusted.add(other)
+    let failed = false
+    const [asDriver, asEngineer] = await Promise.all(
+      (['driverUid', 'engineerUid'] as const).map(async (field): Promise<PitwallGrant[]> => {
+        try {
+          const snapshot = await trackedGetDocs(query(
+            collection(db, 'pitwallGrants'),
+            where(field, '==', uid),
+            where('status', '==', 'granted'),
+            limit(50)
+          ), 'pitwallRoom.trustedUids')
+          return snapshot.docs.map(entry => entry.data() as PitwallGrant)
+        } catch {
+          failed = true
+          return []
         }
-      } catch {
-        // Elenco non leggibile: si apre la stanza senza inviti preseminati.
-        // Gli inviti manuali restano sempre possibili.
-      }
-    }
-    return [...trusted]
+      })
+    )
+    // Un elenco non leggibile non svuota gli amici: si tiene l'ultima lettura
+    // buona, cosi' un amico non viene rifiutato per un errore di rete.
+    if (failed) return [...friendSet]
+    const friends = friendUidsFromGrants(asDriver, asEngineer, uid, nowMs)
+    friendSet.clear()
+    for (const friend of friends) friendSet.add(friend)
+    return friends
+  }
+
+  /** Il cancello sugli ordini legacy: solo un amico manda strategie alla macchina. */
+  async function acceptOrderFrom(senderId: string): Promise<boolean> {
+    await friendsReady
+    return friendSet.has(senderId)
   }
 
   async function sync(): Promise<void> {
@@ -169,11 +189,13 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
     stop()
     driverUid.value = status.driverUid
     unavailableReason.value = null
+    friendsReady = readTrustedUids(status.driverUid).catch(() => {})
     handle = startPitwallDriverLink({
       db,
       driverUid: status.driverUid,
       sessionId: newSessionId(),
       electronApi: bridge,
+      acceptOrderFrom,
       // Fotografia reale della vettura per l'ingegnere: equipaggio dalla
       // EntryList e strategia dal Pit MFD. Solo con ACC vivo: dati vecchi non
       // si pubblicano come attuali.
@@ -221,6 +243,10 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
         runtimeSessionId: newSessionId(),
         electronApi: bridge,
         readTrustedUids: () => readTrustedUids(uid),
+        onStatus: (next) => {
+          roomId.value = next.roomId
+          setPitwallIntentStatus(next)
+        },
         readVehicle: async () => {
           try {
             const state = await bridge.pitwallGetStrategyState?.()
@@ -259,20 +285,34 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
         },
       })
       roomId.value = roomHandle.roomId()
+      const started = roomHandle
+      // Da qui la card del pilota e il pannello rapido possono aprire e
+      // chiudere il Pitwall: la stanza non nasce piu' da sola.
+      registerPitwallIntentControls({
+        open: () => started.openPitwall(),
+        close: () => started.closePitwall(),
+      })
+      setPitwallIntentStatus(started.status())
 
-      // Un permesso nuovo rimette in pari gli invitati *adesso*.
+      // Un permesso che cambia aggiorna gli amici *adesso*, nei due versi.
       //
       // Il giro a tempo esiste ancora, ma cinque minuti sono la causa singola
-      // piu' grande del "il suo PC ti sta aggiungendo": chi autorizza qualcuno
-      // mentre e' gia' in pista lo vedeva restare fuori per tutto quel tempo.
-      // Il timer resta come rete di sicurezza, non come unico modo.
-      stopGrantsWatch?.()
-      stopGrantsWatch = trackedOnSnapshot(
-        query(collection(db, 'pitwallGrants'), where('driverUid', '==', uid), limit(50)),
-        'pitwallRoom.watchOwnGrants',
-        () => { void roomHandle?.refreshInvites() },
-        () => {}
-      )
+      // piu' grande del "il suo PC ti sta aggiungendo": chi accetta un'amicizia
+      // mentre l'altro e' gia' in pista lo vedeva restare fuori per tutto quel
+      // tempo. Il timer resta come rete di sicurezza, non come unico modo.
+      while (stopGrantsWatches.length) stopGrantsWatches.pop()?.()
+      for (const field of ['driverUid', 'engineerUid'] as const) {
+        stopGrantsWatches.push(trackedOnSnapshot(
+          query(collection(db, 'pitwallGrants'), where(field, '==', uid), limit(50)),
+          field === 'driverUid' ? 'pitwallRoom.watchOwnGrants' : 'pitwallRoom.watchFriendGrants',
+          () => {
+            friendsReady = readTrustedUids(uid)
+              .then(() => { if (roomHandle?.roomId()) void roomHandle.refreshInvites() })
+              .catch(() => {})
+          },
+          () => {}
+        ))
+      }
     })()
 
     active.value = true

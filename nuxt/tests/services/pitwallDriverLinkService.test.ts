@@ -436,3 +436,49 @@ describe('quando il pilota non sta guidando', () => {
     handle.stop()
   })
 })
+
+describe('solo un amico manda strategie alla macchina', () => {
+  function startGated(accept: (senderId: string) => Promise<boolean>) {
+    return startPitwallDriverLink({
+      db: {} as never,
+      driverUid: DRIVER,
+      sessionId: 's-1',
+      electronApi: {
+        pitwallSubmitRemoteOrder: async (payload) => {
+          mocks.submitted.push(payload)
+          return mocks.submitResult as never
+        },
+        pitwallGetLinkStatus: async () => ({ trustedSender: true, driverUid: DRIVER, applying: false, accReady: true, accReason: null })
+      },
+      acceptOrderFrom: accept,
+      now: () => Date.parse('2026-08-30T15:00:00.000Z'),
+      log: { warn: () => {}, error: () => {} }
+    })
+  }
+
+  it('un ordine da chi non e amico viene rifiutato prima di toccare ACC, e il motivo lo dice', async () => {
+    // Il permesso a un verso solo - una richiesta di amicizia non ancora
+    // accettata - apre gia' la porta degli ordini legacy lato regole: qui la
+    // si chiude, prima che parta un solo tasto.
+    const handle = startGated(async () => false)
+    await settle()
+    mocks.orderListener?.(orderSnapshot([{ id: 'ordine-1' }]))
+    await settle()
+
+    expect(mocks.submitted).toHaveLength(0)
+    const written = mocks.updates.filter(entry => entry.path.endsWith('orders/ordine-1'))
+    expect(written).toHaveLength(1)
+    expect(written[0]?.data).toMatchObject({ status: 'rejected', result: { reason: 'Solo un amico puo mandare strategie a questa vettura.' } })
+    handle.stop()
+  })
+
+  it('un amico passa come prima', async () => {
+    const handle = startGated(async senderId => senderId === ENGINEER)
+    await settle()
+    mocks.orderListener?.(orderSnapshot([{ id: 'ordine-1' }]))
+    await settle()
+
+    expect(mocks.submitted).toHaveLength(1)
+    handle.stop()
+  })
+})

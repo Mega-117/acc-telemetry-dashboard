@@ -31,7 +31,8 @@ import {
   type PitwallRoomOrder,
 } from './pitwallRoomContract'
 import { createPitwallRoomService, type PitwallRoomService } from './pitwallRoomService'
-import type { PitwallDriverElectronApi, PitwallPendingOutcome } from './pitwallDriverLinkService'
+import { createPitwallRoomOutcomeRecovery } from './pitwallRoomOutcomeRecovery'
+import type { PitwallDriverElectronApi } from './pitwallDriverLinkService'
 
 /**
  * Ogni quanto si riguarda un ordine che non e' ancora partito.
@@ -150,6 +151,13 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
   const rooms = options.service ?? createPitwallRoomService({ db: options.db, uid: options.uid, now })
 
   let stopped = false
+  const { confirmOutcomes, drainPendingOutcomes } = createPitwallRoomOutcomeRecovery({
+    uid: options.uid,
+    electronApi: options.electronApi,
+    rooms,
+    log,
+    isStopped: () => stopped,
+  })
   let room: PitwallRoom | null = null
   let unavailableReason: string | null = null
   let members: PitwallRoomMember[] = []
@@ -194,13 +202,9 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
    */
   let applyingOrderId: string | null = null
 
-  /**
-   * Il pilota ha chiesto il Pitwall.
-   *
-   * E' l'unica cosa che decide se una stanza nasce: la vettura riconosciuta da
-   * sola non basta piu'. Non si allena da soli con il muretto aperto, e nessuna
-   * scrittura verso il cloud parte senza che qualcuno l'abbia voluta.
-   */
+  // Il pilota ha chiesto il Pitwall: e' l'unica cosa che fa nascere una stanza.
+  // La vettura riconosciuta da sola non basta piu' - chi si allena da solo non
+  // deve ritrovarsi un muretto aperto senza averlo voluto.
   let wanted = false
   /** Il giro in corso: un secondo `sync` mentre il primo sta aprendo la stanza ne aprirebbe due. */
   let syncing: Promise<void> | null = null
@@ -461,9 +465,8 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
         return
       }
 
-      // Cambio di vettura con una gara ancora aperta: quella vecchia si lascia
-      // per bene, altrimenti resterebbe aperta per sempre col nostro battito
-      // dentro. Se e' nostra si chiude, se e' di un altro si esce e basta.
+      // Cambio di vettura con una gara ancora aperta: la vecchia si lascia per
+      // bene (chiusa se nostra), altrimenti resterebbe aperta col nostro battito.
       if (room) await leaveCurrentRoom(room.hostUid === options.uid)
 
       // Vettura nuova (primo avvio, o cambio evento): si cerca o si apre la
@@ -519,21 +522,19 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
     confirmedReadings = 0
     lastLiveStampAtMs = 0
     handled.clear()
-    if (confirmTimer) clearTimeout(confirmTimer)
-    confirmTimer = null
+    if (confirmTimer) { clearTimeout(confirmTimer); confirmTimer = null }
     if (!current) return
+    await attempt(() => rooms.clearPresence(current.roomId), 'battito non tolto dalla stanza')
+    if (close) await attempt(() => rooms.closeRoom(current.roomId), 'gara non chiusa')
+  }
+
+  /** Una scrittura di congedo che fallisce si segnala, non ferma l'uscita. */
+  async function attempt(run: () => Promise<{ ok: boolean, reason?: string } | void>, what: string): Promise<void> {
     try {
-      const cleared = await rooms.clearPresence(current.roomId)
-      if (cleared?.ok === false) log.warn?.('[PITWALL] battito non tolto dalla stanza:', cleared.reason)
+      const result = await run()
+      if (result && result.ok === false) log.warn?.(`[PITWALL] ${what}:`, result.reason)
     } catch (error) {
-      log.warn?.('[PITWALL] battito non tolto dalla stanza:', (error as Error)?.message)
-    }
-    if (!close) return
-    try {
-      const closed = await rooms.closeRoom(current.roomId)
-      if (closed?.ok === false) log.warn?.('[PITWALL] gara non chiusa:', closed.reason)
-    } catch (error) {
-      log.warn?.('[PITWALL] gara non chiusa:', (error as Error)?.message)
+      log.warn?.(`[PITWALL] ${what}:`, (error as Error)?.message)
     }
   }
 
@@ -548,9 +549,7 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
   async function closePitwall(): Promise<void> {
     if (!wanted) return
     wanted = false
-    // Un giro in corso finisce da solo e non adotta la stanza (vedi runSync).
     await leaveCurrentRoom(room?.hostUid === options.uid)
-    unavailableReason = null
     emitStatus()
   }
 
@@ -575,64 +574,6 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
     if (!trusted.length) return
     const result = await rooms.syncInvites(room.roomId, trusted)
     if (!result.ok) log.warn?.('[PITWALL] invitati non aggiornati:', result.reason)
-  }
-
-  /** Dice al processo main di dimenticare: si chiama solo a consegna avvenuta. */
-  async function confirmOutcomes(orderIds: string[]): Promise<void> {
-    if (!orderIds.length) return
-    try {
-      await options.electronApi.pitwallConfirmOutcomes?.(orderIds)
-    } catch (error) {
-      // Il record resta: al prossimo giro si scoprira' che l'ordine e' gia'
-      // terminale e si chiudera' li'. Meglio un tentativo di troppo che una
-      // verita' cancellata senza prova.
-      log.warn?.('[PITWALL] conferma esito non registrata:', (error as Error)?.message)
-    }
-  }
-
-  /**
-   * Pubblica gli esiti che ACC ha gia' applicato ma il cloud non ha mai saputo.
-   *
-   * Qui non si tocca ACC: si racconta soltanto cio' che e' gia' successo. E'
-   * la differenza fra recuperare una verita' e rifare una strategia a
-   * situazione cambiata, che sarebbe il peggior modo di fallire.
-   */
-  async function drainPendingOutcomes(): Promise<void> {
-    if (stopped || !options.electronApi.pitwallPendingOutcomes) return
-    let outcomes: PitwallPendingOutcome[] = []
-    try {
-      outcomes = await options.electronApi.pitwallPendingOutcomes() ?? []
-    } catch (error) {
-      log.warn?.('[PITWALL] esiti in attesa non leggibili:', (error as Error)?.message)
-      return
-    }
-
-    for (const outcome of outcomes) {
-      if (stopped) return
-      // Un esito applicato da un altro account su questo computer non e'
-      // nostro da pubblicare: le regole accettano l'esito solo da chi aveva
-      // preso in carico l'ordine.
-      if (outcome.driverUid && outcome.driverUid !== options.uid) continue
-
-      const published = await rooms.publishOutcome(outcome.roomId, outcome.orderId, {
-        status: outcome.status,
-        reason: outcome.reason,
-        fields: outcome.fields,
-      })
-      if (published.ok) {
-        await confirmOutcomes([outcome.orderId])
-        continue
-      }
-
-      // Rifiutato: o il cloud non risponde, o lassu' l'ordine e' gia'
-      // concluso - le regole accettano l'esito solo finche' e' `applying`.
-      // Le due cose si distinguono solo leggendo, e la differenza conta: nel
-      // secondo caso ritentare all'infinito qualcosa di gia' fatto.
-      const current = await rooms.readOrder(outcome.roomId, outcome.orderId)
-      if (!current.ok) continue
-      const stillOpen = current.value && (current.value.status === 'pending' || current.value.status === 'applying')
-      if (!stillOpen) await confirmOutcomes([outcome.orderId])
-    }
   }
 
   async function heartbeat(driving: boolean, crew: unknown, strategy: unknown): Promise<void> {

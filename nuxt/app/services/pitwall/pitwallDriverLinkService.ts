@@ -166,6 +166,9 @@ export interface PitwallDriverElectronApi {
   }>
 }
 
+/** Con cui un ordine legacy viene chiuso quando il mittente non e' un amico. */
+export const PITWALL_ORDER_NOT_FRIEND_REASON = 'Solo un amico puo mandare strategie a questa vettura.'
+
 export interface PitwallDriverLinkOptions {
   db: Firestore
   driverUid: string
@@ -173,6 +176,16 @@ export interface PitwallDriverLinkOptions {
   electronApi: PitwallDriverElectronApi
   now?: () => number
   log?: Pick<Console, 'warn' | 'error'>
+  /**
+   * Il cancello sul mittente, prima di qualunque tasto verso ACC.
+   *
+   * Le regole lasciano scrivere un ordine a chiunque abbia un permesso da
+   * questo pilota, e un permesso a un verso solo e' una richiesta di amicizia
+   * non ancora accettata: senza questo cancello chi ha *chiesto* di essere
+   * amico potrebbe gia' mandare una strategia alla macchina. Senza l'opzione
+   * si accetta come prima (percorso Legacy).
+   */
+  acceptOrderFrom?: (senderId: string) => boolean | Promise<boolean>
   /**
    * Fotografia piccola e lenta della vettura da allegare alla presenza:
    * equipaggio reale e strategia nel Pit MFD. Viaggia dentro la stessa
@@ -326,8 +339,39 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
     return snapshot.exists() ? (snapshot.data() as PitwallGrant) : null
   }
 
+  /** Chiude un ordine senza applicarlo, dicendo perche'. */
+  async function rejectOrder(orderId: string, reason: string): Promise<void> {
+    handled.add(orderId)
+    waiting.delete(orderId)
+    waitingReason = null
+    try {
+      await trackedUpdateDoc(doc(ordersRef, orderId), {
+        status: 'rejected',
+        appliedAt: new Date(now()).toISOString(),
+        result: { reason, fields: {} },
+      }, 'pitwall.publishOutcome')
+    } catch (error) {
+      log.error?.('[PITWALL] rifiuto non scritto sull ordine:', (error as Error)?.message)
+    }
+  }
+
   async function deliver(order: PitwallOrderDocument): Promise<void> {
     if (stopped || handled.has(order.orderId)) return
+
+    // Prima di tutto: chi lo manda e' un amico? La domanda non tocca ACC e
+    // non costa una lettura. Un no e' definitivo, non si aspetta.
+    if (options.acceptOrderFrom) {
+      let accepted = false
+      try {
+        accepted = await options.acceptOrderFrom(order.senderId)
+      } catch {
+        accepted = false
+      }
+      if (!accepted) {
+        await rejectOrder(order.orderId, PITWALL_ORDER_NOT_FRIEND_REASON)
+        return
+      }
+    }
 
     // Si chiede prima se e' il momento, e la domanda non tocca ACC: nessun
     // input, nessun overlay sospeso. Solo quando la risposta e' si' si va
@@ -355,18 +399,7 @@ export function startPitwallDriverLink(options: PitwallDriverLinkOptions): Pitwa
       return
     }
     if (notReady) {
-      handled.add(order.orderId)
-      waiting.delete(order.orderId)
-      waitingReason = null
-      try {
-        await trackedUpdateDoc(doc(ordersRef, order.orderId), {
-          status: 'rejected',
-          appliedAt: new Date(now()).toISOString(),
-          result: { reason: notReady.reason, fields: {} },
-        }, 'pitwall.publishOutcome')
-      } catch (error) {
-        log.error?.('[PITWALL] rifiuto non scritto sull ordine:', (error as Error)?.message)
-      }
+      await rejectOrder(order.orderId, notReady.reason)
       return
     }
 
