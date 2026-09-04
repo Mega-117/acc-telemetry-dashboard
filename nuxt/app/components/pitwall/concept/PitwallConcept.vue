@@ -1,48 +1,32 @@
 <script setup lang="ts">
-// La Pit Wall (PIP-369, PIP-360). Legge lo store fornito dall'antenato: quello
-// vero dall'app, quello del prototipo nella demo. I componenti non sanno quale.
+// La Pit Wall (PIP-369, PIP-360, PIP-362). Legge lo store fornito
+// dall'antenato: quello vero dall'app, quello del prototipo nella demo. I
+// componenti non sanno quale.
 //
 // Due sole schermate, perche' l'utente ha due sole domande:
-//   home -> "chi posso assistere adesso?"   live -> "cosa mando alla macchina?"
-// La gestione delle persone e' un gesto secondario dentro la home, non un
-// percorso a se': collegarsi non richiede prima di fondare una squadra.
+//   home -> "il mio Pitwall, e chi ha aperto il suo?"   live -> "cosa mando alla macchina?"
+// Una sola relazione da capire: siamo amici. Aggiungi, accetta, apri il
+// Pitwall, entra. Niente versi, niente scadenze, niente codici da girarsi.
 // Le persone si chiamano col nickname e basta: nome e cognome non compaiono.
-//
-// I due versi non sono simmetrici, ed e' il punto: autorizzare qualcuno e' cosa
-// mia e vale subito, mentre poter assistere un altro me lo deve concedere lui.
-// Per questo la ricerca offre "Chiedi di assisterlo" accanto a "Può assistermi".
 import { computed, ref } from "vue";
-import PitwallConceptExpiry from "~/components/pitwall/concept/PitwallConceptExpiry.vue";
+import PitwallConceptFriends from "~/components/pitwall/concept/PitwallConceptFriends.vue";
 import PitwallConceptLive from "~/components/pitwall/concept/PitwallConceptLive.vue";
 import PitwallConceptMyRoom from "~/components/pitwall/concept/PitwallConceptMyRoom.vue";
-import PitwallConceptPeople from "~/components/pitwall/concept/PitwallConceptPeople.vue";
 import PitwallConceptRaces from "~/components/pitwall/concept/PitwallConceptRaces.vue";
 import PitwallConceptSearch from "~/components/pitwall/concept/PitwallConceptSearch.vue";
 import { usePitwallStore } from "~/composables/usePitwallStore";
-import {
-  PITWALL_CONCEPT_DEFAULT_EXPIRY,
-  normalizePitwallConceptExpiry,
-} from "~/utils/pitwallConcept";
-import type {
-  PitwallConceptDirection,
-  PitwallConceptRace,
-  PitwallConceptScreen,
-} from "~/utils/pitwallConcept";
-
-/** I due versi, nell'ordine in cui si leggono. */
-const DIRECTIONS: PitwallConceptDirection[] = ["assist", "assisted"];
+import type { PitwallConceptRace, PitwallConceptScreen } from "~/utils/pitwallConcept";
 
 const state = usePitwallStore();
 
 const screen = ref<PitwallConceptScreen>("home");
 
-// Autorizzare qualcuno chiede una cosa sola: per quanto vale. Prima le due
-// durate, e solo chi sceglie "solo per oggi" vede anche l'orario.
-const grant = ref<{ personId: string; step: "duration" | "time"; time: string } | null>(null);
-
+/** Solo gli amici che hanno aperto il Pitwall: ci si entra con un clic. */
 const races = computed(() => state.races.value);
-/** La gara di chi guarda: `races` non la contiene mai, per costruzione. */
+/** Il mio Pitwall: `races` non lo contiene mai, per costruzione. */
 const myRoom = computed(() => state.myRoom.value);
+const pitwall = computed(() => state.pitwall.value);
+const friends = computed(() => state.friends.value);
 const people = computed(() => state.people.value);
 const search = computed({
   get: () => state.searchQuery.value,
@@ -50,33 +34,12 @@ const search = computed({
 });
 const found = computed(() => state.found.value);
 
-/**
- * I due versi sono indipendenti: chi gia' assisto puo' ancora essere
- * autorizzato ad assistere me, e viceversa. Un verso gia' presente (anche solo
- * chiesto) toglie il suo bottone, non l'altro.
- */
-const assistIds = computed(() => new Set(state.links.value.assist.map(link => link.personId)));
-const assistedIds = computed(() => new Set(state.links.value.assisted.map(link => link.personId)));
-
-/**
- * Chi sta guidando adesso: la pastiglia accanto al nickname negli elenchi.
- *
- * E' chi apre una riga di "In pista", non chiunque sia dentro la sua stanza:
- * al muretto ci sono gli ingegneri, e dirli "in pista" era falso.
- */
-const racingIds = computed(
-  () => races.value.filter(race => !race.closed).map(race => race.hostId),
-);
-
 /** Il primo avvio non deve essere tre riquadri vuoti senza un punto di partenza. */
-const isFirstRun = computed(
-  () => !state.links.value.assist.length && !state.links.value.assisted.length,
-);
+const isFirstRun = computed(() => !friends.value.length);
 
 function go(next: PitwallConceptScreen) {
   screen.value = next;
   if (next === "home") search.value = "";
-  grant.value = null;
   scrollToTop();
 }
 
@@ -91,9 +54,7 @@ function scrollToTop() {
 /**
  * Il pilota apre la propria gara come un ingegnere apre quella di un altro:
  * dentro trova l'equipaggio e, da manager, "+ Ospite", "Promuovi", "Togli" e
- * "Chiudi". Prima il bottone scrollava al campo di ricerca e basta, e il
- * pilota non aveva nessuna porta verso i comandi che gia' esistevano
- * (visto da RICO117 il 2026-09-04).
+ * "Chiudi". E' l'unica porta verso i comandi che gia' esistevano.
  */
 function openMine() {
   const mine = myRoom.value;
@@ -104,32 +65,18 @@ function openMine() {
 
 /** Entrare e aprire sono lo stesso gesto: chi era invitato smette di esserlo. */
 function enter(race: PitwallConceptRace) {
-  state.enterRace(race.id);
+  enterById(race.id);
+}
+
+function enterById(raceId: string) {
+  state.enterRace(raceId);
   go("live");
 }
 
-function openGrant(personId: string) {
-  grant.value = { personId, step: "duration", time: PITWALL_CONCEPT_DEFAULT_EXPIRY };
-}
-
-function grantAlways(personId: string) {
-  state.allowToAssistMe(personId, "always");
+/** Aggiungere e' chiedere: quando accetta, siete amici. */
+function add(personId: string) {
+  state.befriend(personId);
   search.value = "";
-  grant.value = null;
-}
-
-function confirmGrant() {
-  const pending = grant.value;
-  if (!pending) return;
-  state.allowToAssistMe(pending.personId, "today", normalizePitwallConceptExpiry(pending.time));
-  search.value = "";
-  grant.value = null;
-}
-
-function ask(personId: string) {
-  state.askToAssist(personId);
-  search.value = "";
-  grant.value = null;
 }
 </script>
 
@@ -155,28 +102,27 @@ function ask(personId: string) {
       {{ state.notice.value }}
     </p>
 
-    <!-- HOME: chi posso assistere adesso -->
+    <!-- HOME: il mio Pitwall, chi ha aperto il suo, gli amici -->
     <div
       v-if="screen === 'home'"
       class="pwc-home"
     >
-      <!-- La tua gara, quando sei tu a guidare. Sta sopra "In pista" perche'
-           chi guida apre questa pagina per sapere se il muretto lo vede, non
-           per assistere qualcun altro. -->
-      <section
-        v-if="myRoom"
-        class="pwc-home__mine"
-      >
+      <!-- Il tuo Pitwall sta in cima: chi guida apre questa pagina per
+           aprirlo o per sapere se il muretto lo vede, non per assistere. -->
+      <section class="pwc-home__mine">
         <header class="pwc-block__head">
           <h2 class="pwc-block__title">
-            La tua gara
+            Il tuo Pitwall
           </h2>
         </header>
 
         <PitwallConceptMyRoom
           :room="myRoom"
+          :pitwall="pitwall"
           :people="people"
           :me-id="state.meId.value"
+          @start="state.startPitwall()"
+          @close="state.closePitwall()"
           @open="openMine"
         />
       </section>
@@ -184,7 +130,7 @@ function ask(personId: string) {
       <section class="pwc-home__races">
         <header class="pwc-block__head">
           <h2 class="pwc-block__title">
-            In pista
+            Pitwall aperti
           </h2>
           <!-- Gli elenchi ai tetti veri del servizio. Serve a guardare gli edge
                case invece di descriverli, ed esiste solo nella demo. -->
@@ -203,8 +149,8 @@ function ask(personId: string) {
           v-if="isFirstRun"
           class="pwc-start"
         >
-          Si comincia da una persona: cerca il suo nickname qui sotto. Se sei tu a
-          guidare, autorizzala ad assisterti; se vuoi assistere lei, chiediglielo.
+          Si comincia da un amico: cerca il suo nickname qui sotto e aggiungilo.
+          Quando accetta, vedrai il suo Pitwall appena lo apre, e lui il tuo.
         </p>
 
         <PitwallConceptRaces
@@ -215,94 +161,41 @@ function ask(personId: string) {
         />
       </section>
 
+      <!-- Gli amici e la ricerca affiancati: sono le due meta' dello stesso
+           gesto, e vederle insieme toglie la scheda che ne nascondeva una. -->
+      <PitwallConceptFriends
+        class="pwc-home__friends"
+        :friends="friends"
+        :people="people"
+        @accept="state.befriend($event)"
+        @remove="state.unfriend($event)"
+        @enter="enterById"
+      />
+
       <section class="pwc-home__add">
         <h2 class="pwc-block__title">
-          Aggiungi una persona
+          Aggiungi un amico
         </h2>
         <p class="pwc-block__hint">
-          Cerca il nickname, poi scegli il verso: chiedere di assisterla, oppure
-          lasciare che assista te.
+          Cerca il nickname e aggiungilo: quando accetta, siete amici.
         </p>
 
         <PitwallConceptSearch
           v-model="search"
           :found="found"
+          linked-label="Già fra gli amici"
         >
           <template #actions="{ person }">
             <button
-              v-if="!assistIds.has(person.id)"
-              type="button"
-              class="pwc-btn"
-              @click="ask(person.id)"
-            >
-              Chiedi di assisterlo
-            </button>
-            <button
-              v-if="!assistedIds.has(person.id)"
               type="button"
               class="pwc-btn is-primary"
-              :class="{ 'is-active': grant?.personId === person.id }"
-              @click="openGrant(person.id)"
+              @click="add(person.id)"
             >
-              Può assistermi
+              Aggiungi
             </button>
-          </template>
-
-          <template #after="{ person }">
-            <div
-              v-if="grant && grant.personId === person.id && grant.step === 'duration'"
-              class="pwc-duration"
-            >
-              <span>Per quanto?</span>
-              <button
-                type="button"
-                class="pwc-btn"
-                @click="grant.step = 'time'"
-              >
-                Solo per oggi
-              </button>
-              <button
-                type="button"
-                class="pwc-btn is-primary"
-                @click="grantAlways(person.id)"
-              >
-                Sempre
-              </button>
-              <button
-                type="button"
-                class="pwc-link-btn"
-                @click="grant = null"
-              >
-                Annulla
-              </button>
-            </div>
-
-            <PitwallConceptExpiry
-              v-if="grant && grant.personId === person.id && grant.step === 'time'"
-              v-model="grant.time"
-              confirm-label="Autorizza"
-              @confirm="confirmGrant"
-              @cancel="grant = null"
-            />
           </template>
         </PitwallConceptSearch>
       </section>
-
-      <!-- I due versi affiancati: sono le due domande della pagina, e vederli
-           insieme toglie la scheda che nascondeva meta' della risposta. -->
-      <PitwallConceptPeople
-        v-for="side in DIRECTIONS"
-        :key="side"
-        :direction="side"
-        :links="state.links.value[side]"
-        :people="people"
-        :racing-ids="racingIds"
-        :can-edit="state.canEditExpiry(side)"
-        @remove="state.removeLink(side, $event)"
-        @cancel="state.cancelRequest($event)"
-        @decide="(personId, decision, until) => state.decideRequest(personId, decision, until)"
-        @expiry="(personId, until) => state.setExpiry(side, personId, until)"
-      />
     </div>
 
     <PitwallConceptLive
@@ -443,13 +336,10 @@ function ask(personId: string) {
   white-space: nowrap;
 }
 .pwc-chip.is-always { border-color: rgba(74, 222, 128, 0.45); color: #4ade80; }
-.pwc-chip.is-today { border-color: rgba(167, 139, 250, 0.45); color: #a78bfa; }
 /* Le due facce della stessa richiesta: chi aspetta e' spento, chi deve
    rispondere e' acceso, perche' e' l'unico dei due che puo' fare qualcosa. */
 .pwc-chip.is-waiting { border-color: var(--pwc-line); color: $text-muted; }
 .pwc-chip.is-asking { border-color: rgba(255, 107, 0, 0.55); color: $racing-orange; }
-.pwc-chip.is-editable { cursor: pointer; }
-.pwc-chip.is-editable:hover { border-color: #a78bfa; background: rgba(167, 139, 250, 0.1); }
 
 .pwc-empty { margin: 0; padding: 20px 0 4px; color: $text-muted; font-size: 14px; }
 .pwc-start {
@@ -524,8 +414,7 @@ function ask(personId: string) {
 }
 
 /* Togliere qualcuno dice cosa succede, e lo dice prima di farlo. */
-.pwc-confirm,
-.pwc-duration {
+.pwc-confirm {
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
@@ -559,9 +448,8 @@ function ask(personId: string) {
 .pwc-role b { display: flex; align-items: center; gap: 8px; font-size: 15px; }
 .pwc-role em { color: $text-muted; font-size: 12px; font-style: normal; }
 
-/* Home: gare e ricerca a fascia intera, sotto i due versi affiancati.
-   Le due colonne sono i due elenchi, non "roba" e "ricerca": cosi' crescono in
-   parallelo e non resta il vuoto che aveva la colonna della sola ricerca. */
+/* Home: il mio Pitwall e i Pitwall aperti a fascia intera; sotto, amici e
+   ricerca affiancati: sono le due meta' dello stesso gesto e crescono insieme. */
 .pwc-home {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -570,8 +458,7 @@ function ask(personId: string) {
   margin: 0 auto;
 }
 .pwc-home__mine,
-.pwc-home__races,
-.pwc-home__add { grid-column: 1 / -1; }
+.pwc-home__races { grid-column: 1 / -1; }
 /* La ricerca ha una superficie sua: senza, a campo vuoto sembra uno spazio
    dimenticato invece di un pannello che aspetta. */
 .pwc-home__add {
@@ -605,6 +492,7 @@ function ask(personId: string) {
   .pwc-home { grid-template-columns: 1fr; gap: 36px; }
   .pwc-home__mine,
   .pwc-home__races,
+  .pwc-home__friends,
   .pwc-home__add { grid-column: 1; }
 }
 

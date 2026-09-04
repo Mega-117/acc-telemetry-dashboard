@@ -1,14 +1,11 @@
 <script setup lang="ts">
-// Chi e' in pista adesso (PIP-369, PIP-360).
+// I Pitwall aperti adesso (PIP-369, PIP-360, PIP-362).
 //
-// Una riga per **persona**, non per stanza. Elencare le stanze rispondeva alla
-// domanda sbagliata: non si chiudono mai, quindi comparivano anche le sessioni
-// di giorni prima, con lo stesso nome e la stessa pista, e non c'era modo di
-// dire quale fosse viva. Qui c'e' solo chi sta guidando adesso: se smette, la
-// sua riga sparisce da sola.
-//
-// "In pista" e' una parola sola e vale finche' e' lui il pilota di quella
-// vettura, che sia in curva, ai box o fermo nei menu.
+// Una riga per **amico che ha aperto il suo Pitwall**, non per stanza e non
+// per chiunque sia in pista. Elencare le stanze rispondeva alla domanda
+// sbagliata (non si chiudono mai); elencare chi era in pista rispondeva a
+// meta' (in pista si sta anche senza volere nessuno al muretto). Qui c'e' chi
+// ha detto "vieni": se chiude o spegne, la sua riga sparisce da sola.
 import { computed, ref } from "vue";
 import PitwallConceptMore from "~/components/pitwall/concept/PitwallConceptMore.vue";
 import {
@@ -33,11 +30,10 @@ const me = computed(() => props.meId ?? "");
 
 const invited = (race: PitwallConceptRace) => pitwallConceptAmInvited(race, me.value);
 
-/** Prima chi si puo' assistere subito, poi chi ci sta ancora aggiungendo, in fondo le chiuse. */
+/** Prima quelli in cui sei gia' dentro, poi gli inviti, in fondo le chiuse. */
 const ordered = computed(() => [...props.races].sort((left, right) => {
   const weight = (race: PitwallConceptRace) => {
-    if (race.closed) return 3;
-    if (race.joinable === false) return 2;
+    if (race.closed) return 2;
     return invited(race) ? 1 : 0;
   };
   return weight(left) - weight(right);
@@ -78,7 +74,6 @@ function wallLabel(race: PitwallConceptRace): string {
       :class="{
         'is-invited': invited(race),
         'is-closed': race.closed,
-        'is-waiting': race.joinable === false,
       }"
     >
       <div class="pwc-race__who">
@@ -104,7 +99,7 @@ function wallLabel(race: PitwallConceptRace): string {
       <span
         v-else
         class="pwc-chip is-always"
-      >In pista</span>
+      >Pitwall aperto</span>
 
       <button
         v-if="!race.closed"
@@ -116,16 +111,10 @@ function wallLabel(race: PitwallConceptRace): string {
       </button>
 
       <p
-        v-if="race.joinable === false"
+        v-if="invited(race)"
         class="pwc-race__why"
       >
-        Il suo PC ti sta aggiungendo alla gara. Ci mette un minuto.
-      </p>
-      <p
-        v-else-if="invited(race)"
-        class="pwc-race__why"
-      >
-        Ti ha invitato: entra per vedere la vettura e mandare la strategia.
+        Entra per vedere la vettura e mandare la strategia.
       </p>
     </article>
 
@@ -133,15 +122,15 @@ function wallLabel(race: PitwallConceptRace): string {
       v-if="!races.length"
       class="pwc-empty"
     >
-      Nessuna delle tue persone è in pista adesso. Appena una entra in sessione
-      su ACC compare qui da sola.
+      Nessun amico ha il Pitwall aperto adesso. Quando uno lo apre compare qui
+      da solo, e ci entri con un clic.
     </p>
 
     <PitwallConceptMore
       :hidden="split.hidden"
       :expanded="expanded"
-      noun="persone"
-      noun-one="persona"
+      noun="Pitwall"
+      noun-one="Pitwall"
       @toggle="expanded = !expanded"
     />
   </div>
@@ -163,8 +152,6 @@ function wallLabel(race: PitwallConceptRace): string {
 }
 /* Invitato e non ancora entrato: bordo d'attesa, non di gara in corso. */
 .pwc-race.is-invited { border-color: rgba(245, 158, 11, 0.45); }
-/* In pista, ma il suo PC non ci ha ancora aggiunti. */
-.pwc-race.is-waiting { border-color: var(--pwc-line); }
 .pwc-race.is-closed { border-color: var(--pwc-line); opacity: 0.72; }
 
 .pwc-race__who { display: flex; align-items: center; gap: 16px; min-width: 0; }

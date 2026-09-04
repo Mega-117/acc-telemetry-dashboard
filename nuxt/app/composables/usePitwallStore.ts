@@ -10,9 +10,7 @@
 
 import { inject, provide, type InjectionKey, type Ref } from 'vue'
 import type {
-  PitwallConceptDirection,
   PitwallConceptFriend,
-  PitwallConceptLink,
   PitwallConceptMyRoom,
   PitwallConceptNotice,
   PitwallConceptPerson,
@@ -23,8 +21,6 @@ import type { PitwallCarState, PitwallCompound, PitwallDriver, PitwallPlan, Pitw
 import type { PitwallOrderStatus } from '~/services/pitwall/pitwallLink'
 import type { PitwallFieldOutcomeRow } from '~/composables/usePitwallController'
 import type { PitwallIntentStatus } from '~/composables/usePitwallIntent'
-
-export type PitwallDuration = 'always' | 'today'
 
 /**
  * La decisione da mandare alla macchina, e com'e' andata.
@@ -82,7 +78,6 @@ export interface PitwallStopHandle {
 export interface PitwallStore {
   /** Chi conosciamo per nome: e' la directory da passare agli helper dei nickname. */
   people: Ref<PitwallConceptPerson[]>
-  links: Ref<Record<PitwallConceptDirection, PitwallConceptLink[]>>
   /**
    * Gli amici, in un elenco solo: chi lo e', chi ho chiesto, chi mi ha chiesto.
    * E' la sola relazione che l'utente legge (due permessi, uno per verso, sotto).
@@ -120,17 +115,9 @@ export interface PitwallStore {
   /** Lo scenario affollato: solo il mock sa farlo; il vero lo ignora. */
   crowded: Ref<boolean>
   toggleCrowded: () => void
-  /** La scadenza si cambia solo sui permessi che si posseggono. */
-  canEditExpiry: (direction: PitwallConceptDirection) => boolean
   /** La ricerca: chi la monta scrive la query, il risultato arriva quando c'e'. */
   searchQuery: Ref<string>
   found: Ref<PitwallConceptSearchResult>
-  askToAssist: (personId: string) => void
-  cancelRequest: (personId: string) => void
-  allowToAssistMe: (personId: string, duration: PitwallDuration, until?: string) => void
-  decideRequest: (personId: string, decision: PitwallDuration | 'reject', until?: string) => void
-  removeLink: (direction: PitwallConceptDirection, personId: string) => void
-  setExpiry: (direction: PitwallConceptDirection, personId: string, until: string) => void
   selectRace: (raceId: string) => void
   enterRace: (raceId: string) => void
   leaveRace: (raceId: string) => void
@@ -138,7 +125,8 @@ export interface PitwallStore {
   promoteInRace: (raceId: string, personId: string) => void
   removeFromRace: (raceId: string, personId: string) => void
   closeRace: (raceId: string) => void
-  acceptNotice: (id: string, duration?: PitwallDuration, until?: string) => void
+  /** Accettare fa la cosa che l'avviso promette: una richiesta diventa amicizia, un invito ti fa entrare. */
+  acceptNotice: (id: string) => void
   rejectNotice: (id: string) => void
   dismissNotice: (id: string) => void
   /** Il pit stop della gara selezionata. */

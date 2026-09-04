@@ -1,9 +1,9 @@
 // Modello mock del Pit Wall Concept: solo dati locali, nessun servizio reale.
 //
-// Vocabolario deliberato (PIP-369): l'utente non legge mai "grant", "scope" o
-// "pre-autorizzazione". Vede persone, e per ognuna se l'accesso vale "Sempre"
-// oppure "fino alle 23:40". La stanza-gara resta il posto in cui si entra, per
-// questo la home offre "Entra" su una gara e mai "collegati a una persona".
+// Vocabolario deliberato (PIP-369, PIP-362): l'utente non legge mai "grant",
+// "scope" o "pre-autorizzazione". Vede amici, e per ognuno se ha il Pitwall
+// aperto. La stanza-gara resta il posto in cui si entra, per questo la home
+// offre "Entra" su un Pitwall aperto e mai "collegati a una persona".
 //
 // Qui vive la logica pura: le parole che l'utente legge e le funzioni che
 // derivano uno stato da un altro. Tipi e dati di partenza stanno in
@@ -13,8 +13,7 @@
 // solo. La direzione resta una: la logica conosce il modello, mai il contrario.
 import {
   PITWALL_CONCEPT_CURRENT_USER_ID,
-  PITWALL_CONCEPT_LINKS_ASSIST,
-  PITWALL_CONCEPT_LINKS_ASSISTED,
+  PITWALL_CONCEPT_FRIENDS,
   PITWALL_CONCEPT_PEOPLE,
   PITWALL_CONCEPT_RACES,
 } from '~/utils/pitwallConceptModel'
@@ -78,25 +77,6 @@ export function pitwallConceptNicknames(
   return personIds.map(personId => pitwallConceptNicknameById(personId, people))
 }
 
-/**
- * Le quattro parole di stato, e mai il gergo del database.
- * "In attesa" e "Ti ha chiesto" sono la stessa richiesta vista dai due lati.
- */
-export function describePitwallConceptAccess(link: PitwallConceptLink): string {
-  if (link.access === 'always') return 'Sempre'
-  if (link.access === 'today') return `Fino alle ${link.until ?? '00:00'}`
-  return link.access === 'pending' ? 'In attesa' : 'Ti ha chiesto'
-}
-
-/** Un permesso attivo si distingue da una richiesta ancora aperta. */
-export function isPitwallConceptGranted(link: PitwallConceptLink): boolean {
-  return link.access === 'always' || link.access === 'today'
-}
-
-export function getPitwallConceptLinks(direction: PitwallConceptDirection): PitwallConceptLink[] {
-  return direction === 'assist' ? PITWALL_CONCEPT_LINKS_ASSIST : PITWALL_CONCEPT_LINKS_ASSISTED
-}
-
 export function filterPitwallConceptPeople(
   query: string,
   people = PITWALL_CONCEPT_PEOPLE,
@@ -106,23 +86,6 @@ export function filterPitwallConceptPeople(
   return people.filter(person =>
     pitwallConceptNickname(person).toLocaleLowerCase('it-IT').includes(needle),
   )
-}
-
-/** Orari proposti quando si concede un accesso a tempo. */
-export const PITWALL_CONCEPT_EXPIRY_PRESETS = ['20:00', '23:40', '00:00']
-export const PITWALL_CONCEPT_DEFAULT_EXPIRY = '23:40'
-
-/**
- * Un orario scritto a mano non deve poter produrre "Fino alle 99:99": quello che
- * non e' un orario valido ricade sulla proposta predefinita.
- */
-export function normalizePitwallConceptExpiry(value: string): string {
-  const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim())
-  if (!match) return PITWALL_CONCEPT_DEFAULT_EXPIRY
-  const hours = Number(match[1])
-  const minutes = Number(match[2])
-  if (hours > 23 || minutes > 59) return PITWALL_CONCEPT_DEFAULT_EXPIRY
-  return `${String(hours).padStart(2, '0')}:${match[2]}`
 }
 
 // ============================================
@@ -257,34 +220,6 @@ export function splitPitwallConceptList<T>(
   return { visible, hidden: items.length - visible.length }
 }
 
-/**
- * L'ordine in cui si guarda un elenco di persone: prima chi aspetta una
- * risposta da te, poi la richiesta che hai mandato tu, poi chi e' in gara
- * adesso, poi il resto in ordine alfabetico.
- */
-export function sortPitwallConceptLinks(
-  links: readonly PitwallConceptLink[],
-  racingIds: readonly string[] = [],
-  people = PITWALL_CONCEPT_PEOPLE,
-): PitwallConceptLink[] {
-  const racing = new Set(racingIds)
-  const weight = (link: PitwallConceptLink): number => {
-    if (link.access === 'incoming') return 0
-    if (link.access === 'pending') return 1
-    return racing.has(link.personId) ? 2 : 3
-  }
-  return [...links].sort((left, right) => (
-    weight(left) - weight(right)
-    || pitwallConceptNicknameById(left.personId, people)
-      .localeCompare(pitwallConceptNicknameById(right.personId, people), 'it-IT')
-  ))
-}
-
-/** Una riga che chiede una decisione non si nasconde mai dietro un limite. */
-export function isPitwallConceptPinnedLink(link: PitwallConceptLink): boolean {
-  return link.access === 'incoming'
-}
-
 export type PitwallConceptSearchState =
   | 'idle'
   | 'too-short'
@@ -323,10 +258,7 @@ export const PITWALL_CONCEPT_LINKED_PREVIEW = 3
  */
 export function searchPitwallConceptDirectory(
   query: string,
-  linked: Iterable<string> = [
-    ...PITWALL_CONCEPT_LINKS_ASSIST.map(link => link.personId),
-    ...PITWALL_CONCEPT_LINKS_ASSISTED.map(link => link.personId),
-  ],
+  linked: Iterable<string> = PITWALL_CONCEPT_FRIENDS.map(friend => friend.personId),
   people = PITWALL_CONCEPT_PEOPLE,
   limit = PITWALL_CONCEPT_LIST_LIMITS.search,
 ): PitwallConceptSearchResult {
@@ -356,19 +288,6 @@ export function searchPitwallConceptDirectory(
     linkedHidden,
     state: addable.length > limit ? 'capped' : 'ready',
   }
-}
-
-/**
- * Cosa dire quando un elenco e' vuoto.
- *
- * I due versi non sono la stessa frase: in uno aspetti che qualcuno ti
- * autorizzi, nell'altro sei tu a doverlo fare. Un testo solo per entrambi
- * direbbe la cosa giusta a meta' delle persone.
- */
-export function describePitwallConceptEmpty(direction: PitwallConceptDirection): string {
-  return direction === 'assist'
-    ? 'Nessuno ti ha ancora autorizzato. Cerca il suo nickname e chiedigli di poterlo assistere.'
-    : 'Non hai ancora autorizzato nessuno. Cerca il suo nickname e lascia che ti assista.'
 }
 
 export interface PitwallConceptWallSummary {
@@ -555,7 +474,7 @@ export function describePitwallConceptNotice(
 ): { title: string, body: string } {
   const who = pitwallConceptNicknameById(notice.personId, people)
   if (notice.kind === 'request') {
-    return { title: `${who} vuole assisterti`, body: 'Decidi per quanto vale l’accesso.' }
+    return { title: `${who} vuole essere tuo amico`, body: 'Accetta e vi vedrete i Pitwall a vicenda.' }
   }
   if (notice.kind === 'invite') {
     const race = races.find(entry => entry.id === notice.raceId)
@@ -564,7 +483,7 @@ export function describePitwallConceptNotice(
       body: race ? `#${race.carNumber} · ${race.track} · ${race.session}` : 'Gara non più disponibile.',
     }
   }
-  return { title: `${who} ti ha autorizzato`, body: 'Le sue gare ti compaiono da sole.' }
+  return { title: `${who} ha accettato`, body: 'Adesso siete amici: il suo Pitwall ti compare quando lo apre.' }
 }
 
 export const PITWALL_CONCEPT_DEFAULT_PRESSURES = Object.freeze({ FL: 25, FR: 25, RL: 25, RR: 25 })

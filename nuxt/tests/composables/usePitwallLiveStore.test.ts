@@ -21,7 +21,7 @@ vi.mock('~/composables/useFirebaseAuth', async () => {
 vi.mock('~/composables/usePitwallRoom', () => ({ usePitwallRoom: () => fakes.link }))
 vi.mock('~/composables/usePitwallLink', () => ({ usePitwallLink: () => fakes.trust }))
 
-import { NOTICE_PREFIX, linkFromIncoming, linkFromOutgoing, usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
+import { NOTICE_PREFIX, usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
 import { registerPitwallIntentControls, resetPitwallIntentForTests, setPitwallIntentStatus } from '~/composables/usePitwallIntent'
 import type { PitwallRoom } from '~/services/pitwall/pitwallRoomContract'
 
@@ -164,66 +164,13 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('i permessi nelle quattro parole della pagina', () => {
-  it('traduce ogni stato del servizio, e tace su quelli che non si mostrano', () => {
-    const until = new Date(2026, 8, 3, 23, 40).getTime()
-    expect(linkFromOutgoing(outgoing('a', 'granted') as never)).toEqual({ personId: 'a', access: 'always' })
-    expect(linkFromOutgoing(outgoing('b', 'granted', { scope: 'once', expiresAtMs: until }) as never)).toEqual({ personId: 'b', access: 'today', until: '23:40' })
-    expect(linkFromOutgoing(outgoing('c', 'pending') as never)).toEqual({ personId: 'c', access: 'pending' })
-    expect(linkFromOutgoing(outgoing('d', 'revoked') as never)).toBeNull()
-    // Concesso ma scaduto: il servizio lo dice con `usable`, e non si mostra.
-    expect(linkFromOutgoing(outgoing('e', 'granted', { usable: false }) as never)).toBeNull()
-
-    expect(linkFromIncoming(incoming('f', 'pending') as never, NOW)).toEqual({ personId: 'f', access: 'incoming' })
-    expect(linkFromIncoming(incoming('g', 'granted') as never, NOW)).toEqual({ personId: 'g', access: 'always' })
-    expect(linkFromIncoming(incoming('h', 'granted', { scope: 'once', expiresAtMs: until }) as never, NOW)).toEqual({ personId: 'h', access: 'today', until: '23:40' })
-    expect(linkFromIncoming(incoming('i', 'granted', { scope: 'once', expiresAtMs: NOW - 1 }) as never, NOW)).toBeNull()
-    expect(linkFromIncoming(incoming('j', 'revoked') as never, NOW)).toBeNull()
-  })
-
-  it('i due versi vengono dai due elenchi del servizio', async () => {
+describe('la prima lettura non e una notizia', () => {
+  it('semina le amicizie che c erano gia senza avvisare', async () => {
+    // "X ha accettato" per un'amicizia di due mesi fa non e' una notizia.
     trust.outgoing.value = [outgoing('pilota', 'granted'), outgoing('altro', 'pending')]
-    trust.incoming.value = [incoming('popo', 'pending'), incoming('ing2', 'granted')]
-    expect(store.links.value.assist).toEqual([{ personId: 'pilota', access: 'always' }, { personId: 'altro', access: 'pending' }])
-    expect(store.links.value.assisted).toEqual([{ personId: 'popo', access: 'incoming' }, { personId: 'ing2', access: 'always' }])
-    // La prima lettura semina i permessi che c'erano gia', senza avvisare:
-    // "X ti ha autorizzato" per un permesso vecchio non e' una notizia.
+    trust.incoming.value = [incoming('pilota', 'granted'), incoming('popo', 'pending')]
     await nextTick()
     expect(store.notices.value.filter(notice => notice.kind === 'granted')).toEqual([])
-  })
-
-  it('la scadenza si cambia solo sui permessi che si posseggono', () => {
-    expect(store.canEditExpiry('assisted')).toBe(true)
-    expect(store.canEditExpiry('assist')).toBe(false)
-    store.setExpiry('assist', 'pilota', '23:40')
-    expect(trust.setExpiry).not.toHaveBeenCalled()
-    store.setExpiry('assisted', 'popo', '23:40')
-    expect(trust.setExpiry).toHaveBeenCalledTimes(1)
-    const [uid, expiresAtMs] = trust.setExpiry.mock.calls[0] as [string, number]
-    expect(uid).toBe('popo')
-    expect(expiresAtMs).toBeGreaterThan(Date.now())
-  })
-
-  it('autorizzare, decidere, annullare e rimuovere finiscono sul servizio giusto', () => {
-    store.askToAssist('pilota')
-    expect(trust.requestLink).toHaveBeenCalledWith('pilota', 'always')
-    store.cancelRequest('pilota')
-    expect(trust.withdrawRequest).toHaveBeenCalledWith('pilota')
-    store.allowToAssistMe('popo', 'always')
-    expect(trust.preAuthorise).toHaveBeenCalledWith('popo', 'always', null)
-    store.allowToAssistMe('popo', 'today', '23:40')
-    const [, scope, expiresAtMs] = trust.preAuthorise.mock.calls[1] as [string, string, number]
-    expect(scope).toBe('once')
-    expect(expiresAtMs).toBeGreaterThan(Date.now())
-    store.decideRequest('popo', 'reject')
-    expect(trust.decide).toHaveBeenCalledWith('popo', 'revoked')
-    store.decideRequest('popo', 'always')
-    expect(trust.decide).toHaveBeenCalledWith('popo', 'granted', 'always', null)
-    // Rimuovere e' revocare nel verso che possiedo, ritirare nell'altro.
-    store.removeLink('assisted', 'popo')
-    expect(trust.decide).toHaveBeenLastCalledWith('popo', 'revoked')
-    store.removeLink('assist', 'pilota')
-    expect(trust.withdrawRequest).toHaveBeenLastCalledWith('pilota')
   })
 })
 

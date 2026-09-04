@@ -13,10 +13,9 @@ const tabsBar = read('app/components/layout/TabsBarRouter.vue')
 const dashboardLayout = read('app/layouts/dashboard.vue')
 const concept = read('app/components/pitwall/concept/PitwallConcept.vue')
 const conceptLive = read('app/components/pitwall/concept/PitwallConceptLive.vue')
-const conceptExpiry = read('app/components/pitwall/concept/PitwallConceptExpiry.vue')
 const conceptBell = read('app/components/pitwall/concept/PitwallConceptBell.vue')
 const conceptSearch = read('app/components/pitwall/concept/PitwallConceptSearch.vue')
-const conceptPeople = read('app/components/pitwall/concept/PitwallConceptPeople.vue')
+const conceptFriends = read('app/components/pitwall/concept/PitwallConceptFriends.vue')
 const conceptWall = read('app/components/pitwall/concept/PitwallConceptWall.vue')
 const conceptRaces = read('app/components/pitwall/concept/PitwallConceptRaces.vue')
 const conceptMyRoom = read('app/components/pitwall/concept/PitwallConceptMyRoom.vue')
@@ -296,7 +295,7 @@ describe('Pitwall wiring', () => {
     expect(appRoot).toContain('pitwallStore.halt()')
     expect(appRoot).not.toContain('isPitwallConceptSandbox')
     // I componenti non sanno quale presa hanno dietro: nessun servizio diretto.
-    for (const source of [concept, conceptLive, conceptPitStop, conceptBell, conceptPeople, conceptRaces, conceptWall]) {
+    for (const source of [concept, conceptLive, conceptPitStop, conceptBell, conceptFriends, conceptRaces, conceptWall]) {
       expect(source).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|usePitwallConceptState|window\.electron|ipcRenderer|\$fetch|useFetch/)
     }
     expect(store).toContain('export interface PitwallStore')
@@ -471,57 +470,66 @@ describe('Pitwall wiring', () => {
     expect(conceptModel).toContain('vince la sua, non si fondono')
   })
 
-  it('elenca chi sta guidando adesso, una riga per persona', () => {
-    // PIP-360, dopo la QA dal vivo: elencare le stanze rispondeva alla domanda
-    // sbagliata. Non si chiudono mai, quindi comparivano otto voci di sessioni
-    // di giorni prima, due con lo stesso nome, e non c'era modo di dire quale
-    // fosse viva. Qui c'e' solo chi guida adesso: chi smette sparisce da solo.
-    expect(concept).toContain('In pista')
+  it('elenca i Pitwall aperti dagli amici, una riga per amico', () => {
+    // PIP-362: elencare le stanze rispondeva alla domanda sbagliata (non si
+    // chiudono mai); elencare chi era in pista rispondeva a meta' (in pista
+    // si sta anche senza volere nessuno al muretto). Qui c'e' chi ha aperto
+    // il suo Pitwall: se chiude o spegne, la sua riga sparisce da sola.
+    expect(concept).toContain('Pitwall aperti')
     expect(concept).not.toContain('In gara adesso')
     expect(concept).toContain('<PitwallConceptRaces')
     expect(concept).toContain('@enter="enter"')
     expect(conceptRaces).toContain('nick(race.hostId)')
-    expect(conceptRaces).toContain('In pista')
+    expect(conceptRaces).toContain('Pitwall aperto')
     expect(conceptRaces).toContain('Entra')
     expect(conceptRaces).toContain('Al muretto')
     // Il pilota non sta al muretto di se stesso: prima ci finiva dentro.
     expect(conceptRaces).toContain('member.personId !== race.hostId')
-    expect(conceptRaces).toContain('Nessuna delle tue persone è in pista adesso.')
+    expect(conceptRaces).toContain('Nessun amico ha il Pitwall aperto adesso.')
+    // Niente righe "in pista ma non ancora invitato": o e' aperto, o non c'e'.
+    expect(conceptRaces).not.toContain('joinable')
+    expect(liveStore).toContain('.filter(friend => friend.pitwallOpen && friend.raceId)')
     expect(concept).not.toContain('Collegati')
     expect(concept).not.toContain('Assisti')
   })
 
-  it('il pilota vede la propria gara, che in "In pista" non ci puo stare', () => {
-    // "In pista" elenca le persone che ti hanno autorizzato: per costruzione
-    // non contiene te stesso, quindi chi guidava apriva questa pagina e non
-    // trovava la gara che il suo stesso computer aveva appena aperto.
+  it('il pilota apre il proprio Pitwall, e la gara non nasce piu da sola', () => {
+    // PIP-362: la stanza si apriva da sola appena ACC era in sessione, e chi si
+    // allenava da solo si ritrovava un muretto aperto. Ora la apre il pilota.
     expect(concept).toContain('<PitwallConceptMyRoom')
-    expect(concept).toContain('La tua gara')
+    expect(concept).toContain('Il tuo Pitwall')
     expect(concept).toContain('state.myRoom.value')
+    expect(concept).toContain(':pitwall="pitwall"')
+    expect(concept).toContain('@start="state.startPitwall()"')
+    expect(concept).toContain('@close="state.closePitwall()"')
+    expect(conceptMyRoom).toContain('Apri il Pitwall')
+    expect(conceptMyRoom).toContain('Chiudi il Pitwall')
+    expect(conceptMyRoom).toContain("pitwall.state === 'arming'")
+    expect(conceptMyRoom).toContain('Si apre appena ACC è in sessione.')
+    // Da un browser normale non c'e' nessun PC del pilota: si dice.
+    expect(conceptMyRoom).toContain('!pitwall.available')
+    expect(conceptMyRoom).toContain("Si apre dall'app desktop del pilota")
+    expect(conceptMyRoom).not.toContain('ne nasce una da sola')
     // Il pilota apre la propria gara come un ingegnere apre quella di un altro:
-    // e' l'unica porta verso "+ Ospite", "Promuovi", "Togli", "Chiudi". Prima
-    // il bottone scrollava al campo di ricerca e basta.
+    // e' l'unica porta verso "+ Ospite", "Promuovi", "Togli", "Chiudi".
     expect(concept).toContain('@open="openMine"')
     expect(concept).toContain('state.enterRace(mine.id)')
     expect(conceptMyRoom).toContain('Apri la gara')
-    expect(conceptMyRoom).not.toContain('Fai entrare qualcuno')
-    // Sopra "In pista": chi guida apre la pagina per sapere se il muretto lo
-    // vede, non per assistere qualcun altro.
+    // In cima: chi guida apre la pagina per aprire il Pitwall o per sapere se
+    // il muretto lo vede, non per assistere qualcun altro.
     expect(concept.indexOf('pwc-home__mine')).toBeLessThan(concept.indexOf('pwc-home__races'))
-    // Cosa deve dire: dove si corre, chi ha il volante, chi e collegato, chi
-    // puo ancora entrare, e cosa manca quando non c'e' niente.
     expect(conceptMyRoom).toContain('Sei tu al volante')
     expect(conceptMyRoom).toContain('Al muretto con te adesso')
-    expect(conceptMyRoom).toContain('Nessuna gara aperta su questo computer.')
-    expect(conceptMyRoom).toContain("Nessuno da un po'")
     // Il punto di vista e' di chi guarda, mai un utente fisso del prototipo.
     expect(conceptMyRoom).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
+    // Il runtime del pilota non apre piu' la stanza senza l'intento.
+    expect(read('app/services/pitwall/pitwallRoomDriverService.ts')).toContain('if (!wanted) {')
   })
 
   it('la pastiglia "in pista" negli elenchi segue chi guida, non chi sta al muretto', () => {
-    expect(concept).toContain('races.value.filter(race => !race.closed).map(race => race.hostId)')
-    expect(conceptPeople).toContain('in pista')
-    expect(conceptPeople).not.toContain('in gara adesso')
+    expect(conceptFriends).toContain('v-if="friend.racing"')
+    expect(conceptFriends).toContain('in pista')
+    expect(conceptFriends).not.toContain('in gara adesso')
   })
 
   it('distingue la gara in cui sei da quella in cui sei solo invitato', () => {
@@ -532,26 +540,33 @@ describe('Pitwall wiring', () => {
     expect(conceptRaces).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
     expect(conceptWall).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
     expect(conceptLive).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
-    expect(conceptRaces).toContain('entra per vedere la vettura e mandare la strategia')
+    expect(conceptRaces).toContain('Entra per vedere la vettura e mandare la strategia')
     expect(conceptRaces).toContain('.pwc-race.is-invited')
     expect(conceptRaces).toContain('.pwc-race.is-closed')
     expect(conceptRaces).toContain('Chiusa')
-    // In pista ma non ancora aggiunti dal suo PC: si dice, invece di offrire
-    // un bottone che non porta da nessuna parte.
-    expect(conceptRaces).toContain("race.joinable === false")
-    expect(conceptRaces).toContain('Il suo PC ti sta aggiungendo alla gara.')
-    expect(liveStore).toContain('joinable: room != null')
   })
 
-  it('affianca i due versi invece di nasconderne meta dietro una scheda', () => {
-    // Le due domande della pagina sono "chi assisto" e "chi mi assiste": con le
-    // schede se ne vedeva una sola, e la colonna della sola ricerca restava
-    // mezza vuota. Adesso le colonne sono gli elenchi, e crescono insieme.
-    expect(conceptPeople).toContain('Posso assistere')
-    expect(conceptPeople).toContain('Possono assistermi')
-    expect(concept).toContain('v-for="side in DIRECTIONS"')
+  it('una lista di amici sola, al posto dei due versi', () => {
+    // PIP-362: "Posso assistere" e "Possono assistermi" erano il modello del
+    // database messo a schermo. L'utente legge una relazione sola: amici.
+    expect(conceptFriends).toContain('Amici')
+    expect(conceptFriends).toContain("friend.state === 'received'")
+    expect(conceptFriends).toContain("friend.state === 'sent'")
+    expect(conceptFriends).toContain('Ti ha chiesto')
+    expect(conceptFriends).toContain('In attesa')
+    expect(conceptFriends).toContain('Accetta')
+    expect(conceptFriends).toContain('Rifiuta')
+    expect(conceptFriends).toContain('Annulla')
+    expect(conceptFriends).toContain('Rimuovi')
+    expect(conceptFriends).toContain('Pitwall aperto')
+    expect(concept).toContain('<PitwallConceptFriends')
+    expect(concept).toContain('@accept="state.befriend($event)"')
+    expect(concept).toContain('@remove="state.unfriend($event)"')
     expect(concept).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)')
-    expect(conceptPeople).toContain('Rimuovi')
+    for (const source of [concept, conceptFriends, conceptBell, conceptMyRoom, conceptRaces]) {
+      expect(source).not.toMatch(/Posso assistere|Possono assistermi|assist(erlo|ermi)|DIRECTIONS|PitwallConceptPeople\.vue|PitwallConceptExpiry\.vue/)
+    }
+    expect(store).not.toMatch(/links:|canEditExpiry|askToAssist|allowToAssistMe|decideRequest|removeLink|setExpiry|PitwallDuration/)
     expect(concept).not.toContain('pwc-tabs')
     expect(concept).not.toContain('role="tablist"')
     expect(concept).not.toContain('Recenti')
@@ -560,7 +575,7 @@ describe('Pitwall wiring', () => {
   it('non lascia crescere nessun elenco senza fondo', () => {
     // Sei `v-for` senza tetto: con i numeri veri del servizio - 50 permessi per
     // verso, 60 gare, 32 in una stanza - erano metri di scroll.
-    for (const source of [conceptPeople, conceptRaces, conceptWall]) {
+    for (const source of [conceptFriends, conceptRaces, conceptWall]) {
       expect(source).toContain('splitPitwallConceptList')
       expect(source).toContain('<PitwallConceptMore')
       expect(source).toContain('split.visible')
@@ -569,23 +584,25 @@ describe('Pitwall wiring', () => {
     // Lo scroll interno resta fuori dagli elenchi: la wiki di prodotto lo ha
     // gia' tolto dalla Classica perche' nasconde le autorizzazioni arrivate
     // dopo. La campanella e' un menu a tendina, li' e' atteso.
-    for (const source of [conceptPeople, conceptRaces, conceptWall, concept]) {
+    for (const source of [conceptFriends, conceptRaces, conceptWall, concept]) {
       expect(source).not.toContain('overflow-y: auto')
     }
     expect(conceptBell).toContain('max-height:60vh;overflow-y:auto')
   })
 
   it('tiene in cima le righe su cui si deve decidere qualcosa', () => {
-    expect(conceptPeople).toContain('isPitwallConceptPinnedLink')
-    expect(conceptPeople).toContain('sortPitwallConceptLinks')
+    expect(conceptFriends).toContain("const isPinned = (friend: PitwallConceptFriend) => friend.state === \"received\"")
+    // L'ordine lo decide una funzione sola, condivisa dalle due prese.
+    expect(liveStore).toContain('sortPitwallFriends(')
+    expect(read('app/services/pitwall/pitwallFriends.ts')).toContain('{ received: 0, sent: 1, friends: 2 }')
     expect(conceptWall).toContain('isPitwallConceptPinnedMember')
     expect(conceptModel).toContain('export function splitPitwallConceptList')
   })
 
   it('conta le righe e offre un filtro solo quando l elenco lo merita', () => {
-    expect(conceptPeople).toContain('PITWALL_CONCEPT_FILTER_FROM')
-    expect(conceptPeople).toContain('class="pwc-count"')
-    expect(conceptPeople).toContain('da decidere')
+    expect(conceptFriends).toContain('PITWALL_CONCEPT_FILTER_FROM')
+    expect(conceptFriends).toContain('class="pwc-count"')
+    expect(conceptFriends).toContain('da decidere')
     expect(conceptWall).toContain('class="pwc-count"')
   })
 
@@ -600,93 +617,68 @@ describe('Pitwall wiring', () => {
     expect(conceptFixtures).not.toContain('export function split')
   })
 
-  it('ha i due versi nella ricerca, perche autorizzare e chiedere non sono lo stesso gesto', () => {
-    // Prima la ricerca aggiungeva la persona a "Posso assistere": era un
-    // auto-permesso, un gesto che il dominio non ha e non puo' avere.
-    expect(concept).toContain('Chiedi di assisterlo')
-    expect(concept).toContain('Può assistermi')
-    expect(concept).toContain('ask(person.id)')
-    expect(concept).toContain('openGrant(person.id)')
-    expect(concept).toContain('grantAlways(person.id)')
-    expect(conceptState).toContain('function askToAssist')
-    expect(conceptState).toContain('function allowToAssistMe')
+  it('un gesto solo nella ricerca: aggiungere, che e chiedere', () => {
+    // Prima la ricerca offriva due bottoni per i due versi. Ora "Aggiungi"
+    // autorizza me e chiede a lui: quando accetta, siamo amici.
+    expect(concept).toContain('Aggiungi')
+    expect(concept).toContain('add(person.id)')
+    expect(concept).toContain('state.befriend(personId)')
+    expect(concept).not.toMatch(/Chiedi di assisterlo|Può assistermi|openGrant|grantAlways/)
+    expect(conceptState).toContain('function befriend')
+    expect(conceptState).toContain('function unfriend')
+    // Chiedere e accettare sono la stessa scrittura, nei due versi.
+    expect(liveStore).toContain("await trust.preAuthorise(personId, 'always', null)")
+    expect(liveStore).toContain("await trust.requestLink(personId, 'always')")
   })
 
-  it('mostra le due facce di una richiesta, e come si chiudono', () => {
-    expect(conceptPeople).toContain("link.access === 'pending'")
-    expect(conceptPeople).toContain("link.access === 'incoming'")
-    expect(conceptPeople).toContain('Annulla')
-    expect(conceptPeople).toContain('Rifiuta')
-    expect(conceptModel).toContain("return link.access === 'pending' ? 'In attesa' : 'Ti ha chiesto'")
-    expect(concept).toContain('.pwc-chip.is-waiting')
-    expect(concept).toContain('.pwc-chip.is-asking')
+  it('dice cosa succede prima di togliere un amico', () => {
+    expect(conceptFriends).toContain('function removeWarning')
+    expect(conceptFriends).toContain('non vedrà più il tuo Pitwall, e tu non vedrai il suo')
+    expect(conceptFriends).toContain('confirmRemove(friend.personId)')
+    // Togliere un amico lo toglie anche dalle mie gare aperte.
+    expect(liveStore).toContain('await service.revoke(room.roomId, personId)')
   })
 
-  it('dice cosa succede prima di togliere una persona', () => {
-    expect(conceptPeople).toContain('function removeWarning')
-    expect(conceptPeople).toContain('non vedrà più le tue gare e non potrà mandarti strategie')
-    expect(conceptPeople).toContain('Non vedrai più le gare di ')
-    expect(conceptPeople).toContain('confirmRemove(link.personId)')
-  })
-
-  it('usa parole di durata al posto del gergo dei permessi', () => {
-    expect(conceptPeople).toContain('describePitwallConceptAccess')
-    expect(concept).toContain('Solo per oggi')
+  it('niente scadenze e niente durate: un amico lo e finche non lo togli', () => {
+    for (const source of [concept, conceptFriends, conceptBell, conceptMyRoom]) {
+      expect(source).not.toMatch(/Solo per oggi|Fino alle|Sempre|is-today|Expiry|acceptToday/)
+    }
     expect(concept).toContain('.pwc-chip.is-always')
-    expect(concept).toContain('.pwc-chip.is-today')
     expect(concept).not.toMatch(/Accesso permanente|Accesso temporaneo|Richiedi accesso|pre-?autorizz/i)
-    expect(conceptPeople).not.toMatch(/Accesso permanente|Accesso temporaneo|pre-?autorizz/i)
+    expect(conceptFriends).not.toMatch(/Accesso permanente|Accesso temporaneo|pre-?autorizz/i)
     expect(conceptLive).toContain('Ospite per oggi')
     expect(conceptLive).toContain('Scade a mezzanotte.')
   })
 
-  it('dice dove si sceglie e si cambia la scadenza di un accesso a tempo', () => {
-    expect(conceptExpiry).toContain('PITWALL_CONCEPT_EXPIRY_PRESETS')
-    expect(conceptExpiry).toContain('class="pwc-expiry"')
-    expect(conceptExpiry).toContain('Scade alle')
-    expect(conceptExpiry).toContain('type="time"')
-    expect(conceptExpiry).toContain('aria-label="Orario di scadenza"')
-    // Un editor solo per tre usi: concedere, accettare per oggi, cambiare dopo.
-    expect(concept).toContain('normalizePitwallConceptExpiry')
-    expect(concept).toContain('confirmGrant')
-    expect(conceptPeople).toContain('normalizePitwallConceptExpiry')
-    expect(conceptPeople).toContain("openExpiry(link.personId, 'edit', link.until)")
-    expect(conceptPeople).toContain("openExpiry(link.personId, 'accept')")
-    expect(conceptPeople).toContain('Cambia scadenza di ')
-    expect(concept.match(/<PitwallConceptExpiry/g) ?? []).toHaveLength(1)
-    expect(conceptPeople.match(/<PitwallConceptExpiry/g) ?? []).toHaveLength(1)
-    expect(concept).not.toContain('.pwc-expiry {')
-    expect(conceptPeople).not.toContain('.pwc-expiry {')
-  })
-
   it('chiama le persone col nickname e mai con nome e cognome', () => {
-    for (const source of [conceptRaces, conceptPeople, conceptWall, conceptLive]) {
+    for (const source of [conceptRaces, conceptFriends, conceptWall, conceptLive]) {
       expect(source).toContain('pitwallConceptNicknameById')
       expect(source).not.toContain('?.name')
     }
     for (const fullName of ['Mario Rossi', 'Luca Bianchi', 'Enrico Saiani', 'Marco Gallo']) {
-      for (const source of [concept, conceptLive, conceptRaces, conceptPeople, conceptWall, conceptModel]) {
+      for (const source of [concept, conceptLive, conceptRaces, conceptFriends, conceptWall, conceptModel]) {
         expect(source).not.toContain(fullName)
       }
     }
   })
 
   it('cerca solo per aggiungere, senza riproporre chi e gia collegato', () => {
-    // Una ricerca sola per tutto il prototipo: la home aggiunge persone, la
+    // Una ricerca sola per tutto il prototipo: la home aggiunge amici, la
     // gara invita. Chi la monta decide i bottoni, il campo resta uno.
     expect(conceptState).toContain('searchPitwallConceptDirectory')
     expect(conceptSearch).toContain('placeholder: "Cerca nickname"')
     expect(conceptSearch).toContain('emptyLabel: "Nessuno con questo nickname."')
     expect(concept).toContain('<PitwallConceptSearch')
     expect(conceptLive).toContain('<PitwallConceptSearch')
-    expect(concept).toContain('Aggiungi una persona')
+    expect(concept).toContain('Aggiungi un amico')
+    expect(concept).toContain('linked-label="Già fra gli amici"')
     expect(concept).toContain('if (next === "home") search.value = "";')
   })
 
   it('dice da dove si comincia quando non c e ancora nessuno', () => {
     expect(concept).toContain('isFirstRun')
     expect(concept).toContain('class="pwc-start"')
-    expect(concept).toContain('Si comincia da una persona')
+    expect(concept).toContain('Si comincia da un amico')
   })
 
   it('mostra ruoli e poteri dentro la gara, come la vista classica', () => {
@@ -750,9 +742,10 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('--pwc-raised')
     expect(concept).toContain('.pwc-home {')
     expect(concept).toContain('width: min(1180px, 100%)')
-    // Gare e ricerca a fascia intera, sotto i due versi affiancati.
+    // Il mio Pitwall e i Pitwall aperti a fascia intera; amici e ricerca affiancati.
     expect(concept).toContain('grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)')
-    expect(concept).toContain('.pwc-home__add { grid-column: 1 / -1; }')
+    expect(concept).toContain('.pwc-home__races { grid-column: 1 / -1; }')
+    expect(concept).not.toContain('.pwc-home__add { grid-column: 1 / -1; }')
     expect(concept).toContain('grid-template-columns: 36px minmax(0, 1fr) auto auto')
     expect(concept).toContain('@media (max-width: 980px)')
     expect(concept).toContain('@media (max-width: 760px)')
@@ -803,7 +796,8 @@ describe('Pitwall wiring', () => {
 
   it('tiene lo stato del prototipo in un posto solo, e senza servizi reali', () => {
     expect(conceptState).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
-    expect(conceptPeople).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
+    expect(conceptFriends).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
+    expect(conceptMyRoom).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|usePitwallIntent\(|window\.electron|ipcRenderer|\$fetch|useFetch/)
     expect(conceptWall).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
     expect(conceptSearch).not.toMatch(/useFirebase|usePitwallRoom|usePitwallLink|window\.electron|ipcRenderer|\$fetch|useFetch/)
     // Le fixture sono l'origine, non lo stato: si copiano prima di mutarle.

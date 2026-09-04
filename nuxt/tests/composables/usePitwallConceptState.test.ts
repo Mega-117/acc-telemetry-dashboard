@@ -17,8 +17,8 @@ import {
   pitwallConceptAmMember,
 } from '~/utils/pitwallConcept'
 
-function access(state: ReturnType<typeof usePitwallConceptState>, direction: 'assist' | 'assisted', personId: string) {
-  return state.links.value[direction].find(link => link.personId === personId)?.access ?? null
+function friendState(state: ReturnType<typeof usePitwallConceptState>, personId: string) {
+  return state.friends.value.find(friend => friend.personId === personId)?.state ?? null
 }
 
 describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
@@ -32,51 +32,13 @@ describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
   it('parte dalle fixture senza condividerne gli oggetti', () => {
     // Le fixture sono l'origine, non lo stato: mutare la copia non deve
     // sporcare il modulo, altrimenti il secondo test ripartirebbe storto.
-    expect(access(state, 'assist', 'mario')).toBe('always')
-    state.removeLink('assist', 'mario')
-    expect(access(state, 'assist', 'mario')).toBeNull()
+    expect(friendState(state, 'mario')).toBe('friends')
+    state.unfriend('mario')
+    expect(friendState(state, 'mario')).toBeNull()
 
     states.clear()
     const fresh = usePitwallConceptState()
-    expect(access(fresh, 'assist', 'mario')).toBe('always')
-  })
-
-  it('chiede, aspetta, e ritira senza lasciare tracce', () => {
-    state.askToAssist('gallo')
-    expect(access(state, 'assist', 'gallo')).toBe('pending')
-    // Chiedere due volte non produce due righe.
-    state.askToAssist('gallo')
-    expect(state.links.value.assist.filter(link => link.personId === 'gallo')).toHaveLength(1)
-    state.cancelRequest('gallo')
-    expect(access(state, 'assist', 'gallo')).toBeNull()
-  })
-
-  it('risponde a chi ha chiesto, e la richiesta diventa un permesso vero', () => {
-    expect(access(state, 'assisted', 'paolo')).toBe('incoming')
-    state.decideRequest('paolo', 'today', '23:40')
-    expect(access(state, 'assisted', 'paolo')).toBe('today')
-    expect(state.links.value.assisted.find(link => link.personId === 'paolo')?.until).toBe('23:40')
-    // A una richiesta si risponde una volta sola: da qui in poi quella riga e'
-    // un permesso, e si cambia con gli strumenti dei permessi.
-    state.decideRequest('paolo', 'always')
-    expect(access(state, 'assisted', 'paolo')).toBe('today')
-  })
-
-  it('rifiutare toglie la riga, non la lascia in sospeso', () => {
-    state.decideRequest('paolo', 'reject')
-    expect(access(state, 'assisted', 'paolo')).toBeNull()
-  })
-
-  it('autorizza in anticipo, con o senza scadenza', () => {
-    state.allowToAssistMe('gallo', 'always')
-    expect(access(state, 'assisted', 'gallo')).toBe('always')
-    state.allowToAssistMe('martina', 'today', '20:00')
-    expect(state.links.value.assisted.find(link => link.personId === 'martina')?.until).toBe('20:00')
-    state.setExpiry('assisted', 'martina', '23:40')
-    expect(state.links.value.assisted.find(link => link.personId === 'martina')?.until).toBe('23:40')
-    // Una scadenza non si appiccica a un permesso che vale sempre.
-    state.setExpiry('assisted', 'gallo', '20:00')
-    expect(state.links.value.assisted.find(link => link.personId === 'gallo')?.until).toBeUndefined()
+    expect(friendState(fresh, 'mario')).toBe('friends')
   })
 
   it('entrare in una gara smette di essere invitati', () => {
@@ -125,9 +87,9 @@ describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
     // E' il difetto che questo store esiste per chiudere: prima accettare e
     // rifiutare toglievano soltanto la riga dalla campanella.
     expect(state.pendingNoticeCount.value).toBe(3)
-    expect(access(state, 'assisted', 'paolo')).toBe('incoming')
+    expect(friendState(state, 'paolo')).toBe('received')
     state.acceptNotice('req:paolo')
-    expect(access(state, 'assisted', 'paolo')).toBe('always')
+    expect(friendState(state, 'paolo')).toBe('friends')
     expect(state.pendingNoticeCount.value).toBe(2)
 
     state.acceptNotice('inv:race-12')
@@ -142,7 +104,7 @@ describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
     // Campanella ed elenco sono due facce della stessa richiesta: rispondere da
     // una parte deve chiudere anche l'altra, altrimenti resta un fantasma.
     state.rejectNotice('req:paolo')
-    expect(access(state, 'assisted', 'paolo')).toBeNull()
+    expect(friendState(state, 'paolo')).toBeNull()
     expect(state.notices.value.some(notice => notice.id === 'req:paolo')).toBe(false)
   })
 
@@ -173,18 +135,18 @@ describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
     expect(state.crowded.value).toBe(false)
     state.toggleCrowded()
     expect(state.crowded.value).toBe(true)
-    expect(state.links.value.assisted.length).toBeGreaterThan(8)
+    expect(state.friends.value.length).toBeGreaterThan(8)
     // Tornare indietro rimette lo scenario che racconta, non uno stato ibrido.
     state.toggleCrowded()
     expect(state.crowded.value).toBe(false)
-    expect(access(state, 'assisted', 'paolo')).toBe('incoming')
+    expect(friendState(state, 'paolo')).toBe('received')
   })
 
   it('si riporta allo stato di partenza, per poterlo dimostrare due volte', () => {
-    state.removeLink('assist', 'mario')
+    state.unfriend('mario')
     state.closeRace('race-47')
     state.reset()
-    expect(access(state, 'assist', 'mario')).toBe('always')
+    expect(friendState(state, 'mario')).toBe('friends')
     expect(state.races.value[0]!.closed).toBe(false)
     expect(state.pendingNoticeCount.value).toBe(3)
   })

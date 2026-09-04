@@ -7,17 +7,6 @@
 // colto il test di architettura, ed e' il motivo di questa forma.
 
 export type PitwallConceptScreen = 'home' | 'live'
-export type PitwallConceptDirection = 'assist' | 'assisted'
-
-/**
- * Stato del collegamento con una persona, dal punto di vista di chi guarda.
- *
- * `always` e `today` sono permessi attivi. Gli altri due sono la stessa
- * richiesta vista dai due lati: chi l'ha mandata la vede `pending`, chi l'ha
- * ricevuta la vede `incoming`. Tenerli qui invece che in una terza lista e' il
- * motivo per cui la decisione si trova dove si sta gia' guardando.
- */
-export type PitwallConceptAccess = 'always' | 'today' | 'pending' | 'incoming'
 
 /** Cosa puo' fare una persona dentro una gara. */
 export type PitwallConceptRole = 'manager' | 'member' | 'invited'
@@ -35,14 +24,6 @@ export type PitwallConceptNoticeKind = 'request' | 'invite' | 'granted'
 export interface PitwallConceptPerson {
   id: string
   handle: string
-}
-
-/** Un permesso fra due account, nel verso dichiarato da `direction`. */
-export interface PitwallConceptLink {
-  personId: string
-  access: PitwallConceptAccess
-  /** Ora di scadenza, presente solo quando l'accesso vale per oggi. */
-  until?: string
 }
 
 /**
@@ -184,22 +165,6 @@ export const PITWALL_CONCEPT_PEOPLE: PitwallConceptPerson[] = [
   ...PITWALL_CONCEPT_FILLER_PEOPLE,
 ]
 
-/** Chi mi ha autorizzato, piu' chi ho chiesto e sto aspettando. */
-export const PITWALL_CONCEPT_LINKS_ASSIST: PitwallConceptLink[] = [
-  { personId: 'mario', access: 'always' },
-  { personId: 'luca', access: 'always' },
-  { personId: 'andrea', access: 'today', until: '22:00' },
-  { personId: 'alessandro', access: 'pending' },
-]
-
-/** Chi ho autorizzato io, piu' chi mi ha chiesto e aspetta una risposta. */
-export const PITWALL_CONCEPT_LINKS_ASSISTED: PitwallConceptLink[] = [
-  { personId: 'marco', access: 'always' },
-  { personId: 'luca', access: 'always' },
-  { personId: 'giulia', access: 'today', until: '23:40' },
-  { personId: 'paolo', access: 'incoming' },
-]
-
 /**
  * Gli amici del prototipo: uno con il Pitwall aperto, uno in pista senza,
  * uno spento, una richiesta inviata e una ricevuta (la stessa di `req:paolo`).
@@ -273,8 +238,8 @@ export const PITWALL_CONCEPT_RACES: PitwallConceptRace[] = [
 
 /**
  * Gli avvisi sono l'altra faccia degli elenchi, non una terza lista: la
- * richiesta di `paolo` sta anche in `LINKS_ASSISTED` come `incoming`, e
- * rispondere da una parte deve chiudere anche l'altra.
+ * richiesta di `paolo` sta anche in `FRIENDS` come `received`, e rispondere
+ * da una parte deve chiudere anche l'altra.
  */
 export const PITWALL_CONCEPT_NOTICES: PitwallConceptNotice[] = [
   { id: 'req:paolo', kind: 'request', personId: 'paolo' },
@@ -283,7 +248,6 @@ export const PITWALL_CONCEPT_NOTICES: PitwallConceptNotice[] = [
 ]
 
 export interface PitwallConceptScenario {
-  links: Record<PitwallConceptDirection, PitwallConceptLink[]>
   friends: PitwallConceptFriend[]
   races: PitwallConceptRace[]
   notices: PitwallConceptNotice[]
@@ -293,33 +257,14 @@ export interface PitwallConceptScenario {
  * Lo scenario affollato: gli elenchi ai tetti veri del servizio.
  *
  * Non e' una demo di comodo. Il Concept e' nato su quattro persone e una gara,
- * dove nessun limite si vede; qui ci sono venti permessi per verso, otto gare e
- * una stanza da ventotto persone, che e' l'ordine di grandezza in cui il layout
- * o regge o no. Senza un modo di **vederlo**, gli edge case restano un'opinione.
+ * dove nessun limite si vede; qui ci sono venticinque amici, otto gare e una
+ * stanza da ventotto persone, che e' l'ordine di grandezza in cui il layout o
+ * regge o no. Senza un modo di **vederlo**, gli edge case restano un'opinione.
  */
 export function buildPitwallConceptCrowd(
   filler = PITWALL_CONCEPT_FILLER_PEOPLE,
 ): PitwallConceptScenario {
   const id = (index: number) => filler[index % filler.length]!.id
-  const assist: PitwallConceptLink[] = [
-    ...PITWALL_CONCEPT_LINKS_ASSIST,
-    ...Array.from({ length: 18 }, (_unused, index) => ({
-      personId: id(index),
-      access: (index % 7 === 0 ? 'today' : 'always') as PitwallConceptAccess,
-      ...(index % 7 === 0 ? { until: '22:30' } : {}),
-    })),
-  ]
-  const assisted: PitwallConceptLink[] = [
-    ...PITWALL_CONCEPT_LINKS_ASSISTED,
-    // Due richieste in fondo all'elenco: sono la prova che il limite non le
-    // nasconde mai, per quanto in basso arrivino.
-    { personId: id(20), access: 'incoming' },
-    { personId: id(21), access: 'incoming' },
-    ...Array.from({ length: 22 }, (_unused, index) => ({
-      personId: id(index + 22),
-      access: 'always' as PitwallConceptAccess,
-    })),
-  ]
 
   const crowdedRace: PitwallConceptRace = {
     id: 'race-99',
@@ -374,7 +319,6 @@ export function buildPitwallConceptCrowd(
   ]
 
   return {
-    links: { assist, assisted },
     friends,
     races: [...PITWALL_CONCEPT_RACES, crowdedRace, ...extraRaces],
     notices: [

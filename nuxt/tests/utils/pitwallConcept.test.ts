@@ -2,34 +2,24 @@ import { describe, expect, it } from 'vitest'
 import {
   PITWALL_CONCEPT_CORE_PEOPLE,
   PITWALL_CONCEPT_CURRENT_USER_ID,
-  PITWALL_CONCEPT_DEFAULT_EXPIRY,
   PITWALL_CONCEPT_DEFAULT_PRESSURES,
-  PITWALL_CONCEPT_EXPIRY_PRESETS,
   PITWALL_CONCEPT_FILLER_PEOPLE,
-  PITWALL_CONCEPT_LINKS_ASSIST,
-  PITWALL_CONCEPT_LINKS_ASSISTED,
+  PITWALL_CONCEPT_FRIENDS,
   PITWALL_CONCEPT_LINKED_PREVIEW,
   PITWALL_CONCEPT_LIST_LIMITS,
   PITWALL_CONCEPT_MAX_ROOM_PEOPLE,
   PITWALL_CONCEPT_PEOPLE,
   PITWALL_CONCEPT_RACES,
   buildPitwallConceptCrowd,
-  describePitwallConceptEmpty,
   describePitwallConceptWall,
-  isPitwallConceptPinnedLink,
   pitwallConceptRoomIsFull,
   pitwallConceptWallSummary,
-  sortPitwallConceptLinks,
   splitPitwallConceptList,
-  describePitwallConceptAccess,
   describePitwallConceptMember,
   describePitwallConceptNotice,
   describePitwallConceptReason,
   filterPitwallConceptPeople,
-  getPitwallConceptLinks,
   getPitwallConceptPerson,
-  isPitwallConceptGranted,
-  normalizePitwallConceptExpiry,
   pitwallConceptAmInvited,
   pitwallConceptAmMember,
   pitwallConceptCanLeave,
@@ -47,7 +37,6 @@ import {
   searchPitwallConceptDirectory,
   stepPitwallConceptPressure,
 } from '~/utils/pitwallConcept'
-import type { PitwallConceptLink } from '~/utils/pitwallConcept'
 
 describe('Pitwall Concept mock model', () => {
   it('conosce le persone solo per nickname, mai per nome e cognome', () => {
@@ -75,35 +64,13 @@ describe('Pitwall Concept mock model', () => {
     expect(new Set(initials).size).toBe(initials.length)
   })
 
-  it('parla di durata e mai del gergo interno del permesso', () => {
-    expect(describePitwallConceptAccess({ personId: 'mario', access: 'always' })).toBe('Sempre')
-    expect(describePitwallConceptAccess({ personId: 'andrea', access: 'today', until: '23:40' }))
-      .toBe('Fino alle 23:40')
-    // Una scadenza mancante non deve produrre "Fino alle undefined".
-    expect(describePitwallConceptAccess({ personId: 'andrea', access: 'today' })).toBe('Fino alle 00:00')
-  })
-
-  it('accetta solo orari di scadenza validi', () => {
-    expect(normalizePitwallConceptExpiry('9:05')).toBe('09:05')
-    expect(normalizePitwallConceptExpiry(' 23:40 ')).toBe('23:40')
-    expect(normalizePitwallConceptExpiry('00:00')).toBe('00:00')
-    expect(normalizePitwallConceptExpiry('25:00')).toBe(PITWALL_CONCEPT_DEFAULT_EXPIRY)
-    expect(normalizePitwallConceptExpiry('12:75')).toBe(PITWALL_CONCEPT_DEFAULT_EXPIRY)
-    expect(normalizePitwallConceptExpiry('mezzanotte')).toBe(PITWALL_CONCEPT_DEFAULT_EXPIRY)
-    expect(normalizePitwallConceptExpiry('')).toBe(PITWALL_CONCEPT_DEFAULT_EXPIRY)
-    // Le proposte rapide devono essere orari che il normalizzatore accetta.
-    for (const preset of PITWALL_CONCEPT_EXPIRY_PRESETS) {
-      expect(normalizePitwallConceptExpiry(preset)).toBe(preset)
+  it('gli amici del prototipo esistono nella directory e coprono i tre stati', () => {
+    for (const friend of PITWALL_CONCEPT_FRIENDS) {
+      expect(getPitwallConceptPerson(friend.personId)).not.toBeNull()
+      // Un Pitwall aperto punta a una gara che esiste davvero.
+      if (friend.pitwallOpen) expect(PITWALL_CONCEPT_RACES.some(race => race.id === friend.raceId)).toBe(true)
     }
-  })
-
-  it('tiene i due versi separati e coerenti con la directory', () => {
-    expect(getPitwallConceptLinks('assist')).toBe(PITWALL_CONCEPT_LINKS_ASSIST)
-    expect(getPitwallConceptLinks('assisted')).toBe(PITWALL_CONCEPT_LINKS_ASSISTED)
-    for (const link of [...PITWALL_CONCEPT_LINKS_ASSIST, ...PITWALL_CONCEPT_LINKS_ASSISTED]) {
-      expect(getPitwallConceptPerson(link.personId)).not.toBeNull()
-      if (link.access === 'today') expect(normalizePitwallConceptExpiry(link.until ?? '')).toBe(link.until)
-    }
+    expect(new Set(PITWALL_CONCEPT_FRIENDS.map(friend => friend.state))).toEqual(new Set(['friends', 'sent', 'received']))
   })
 
   it('filtra per nickname, con o senza chiocciola', () => {
@@ -144,18 +111,7 @@ describe('Pitwall Concept mock model', () => {
   })
 })
 
-describe('Pitwall Concept: le due facce di una richiesta', () => {
-  it('dice la stessa richiesta con due parole diverse ai due lati', () => {
-    // Chi ha chiesto aspetta; chi ha ricevuto deve rispondere. La parola cambia
-    // perche' cambia chi puo' fare qualcosa.
-    expect(describePitwallConceptAccess({ personId: 'x', access: 'pending' })).toBe('In attesa')
-    expect(describePitwallConceptAccess({ personId: 'x', access: 'incoming' })).toBe('Ti ha chiesto')
-    expect(isPitwallConceptGranted({ personId: 'x', access: 'always' })).toBe(true)
-    expect(isPitwallConceptGranted({ personId: 'x', access: 'today', until: '22:00' })).toBe(true)
-    expect(isPitwallConceptGranted({ personId: 'x', access: 'pending' })).toBe(false)
-    expect(isPitwallConceptGranted({ personId: 'x', access: 'incoming' })).toBe(false)
-  })
-
+describe('Pitwall Concept: la ricerca e chi c e gia', () => {
   it('mostra chi e gia in un elenco invece di nasconderlo', () => {
     // "alessandro" e' una richiesta mandata, "paolo" una ricevuta: entrambi
     // hanno gia' una riga con la loro azione, quindi non sono da aggiungere.
@@ -229,29 +185,6 @@ describe('Pitwall Concept: elenchi lunghi e vuoti', () => {
     expect(split.hidden).toBe(3)
   })
 
-  it('mette in cima chi aspetta una risposta, poi chi e in gara', () => {
-    const links: PitwallConceptLink[] = [
-      { personId: 'martina', access: 'always' },
-      { personId: 'gallo', access: 'always' },
-      { personId: 'alessandro', access: 'pending' },
-      { personId: 'paolo', access: 'incoming' },
-    ]
-    expect(sortPitwallConceptLinks(links, ['martina']).map(link => link.personId))
-      .toEqual(['paolo', 'alessandro', 'martina', 'gallo'])
-    // A parita' di peso decide l'ordine alfabetico, non quello di arrivo.
-    expect(sortPitwallConceptLinks(links).map(link => link.personId))
-      .toEqual(['paolo', 'alessandro', 'marcog', 'martinac'].map(nickname =>
-        nickname === 'marcog' ? 'gallo' : nickname === 'martinac' ? 'martina' : nickname))
-  })
-
-  it('dice cose diverse ai due elenchi vuoti', () => {
-    // Un testo solo direbbe la cosa giusta a meta' delle persone: in un verso
-    // aspetti, nell'altro sei tu a dover fare qualcosa.
-    expect(describePitwallConceptEmpty('assist')).toContain('Nessuno ti ha ancora autorizzato')
-    expect(describePitwallConceptEmpty('assisted')).toContain('Non hai ancora autorizzato nessuno')
-    expect(describePitwallConceptEmpty('assist')).not.toBe(describePitwallConceptEmpty('assisted'))
-  })
-
   it('riassume il muretto invece di stampare sedici nomi', () => {
     expect(pitwallConceptWallSummary([], 5)).toEqual({ shown: [], extra: 0 })
     expect(pitwallConceptWallSummary(['a'], 5)).toEqual({ shown: ['a'], extra: 0 })
@@ -276,19 +209,18 @@ describe('Pitwall Concept: elenchi lunghi e vuoti', () => {
 
   it('lo scenario affollato porta gli elenchi ai tetti veri', () => {
     const crowd = buildPitwallConceptCrowd()
-    expect(crowd.links.assist.length).toBeGreaterThan(PITWALL_CONCEPT_LIST_LIMITS.people)
-    expect(crowd.links.assisted.length).toBeGreaterThan(PITWALL_CONCEPT_LIST_LIMITS.people)
+    expect(crowd.friends.length).toBeGreaterThan(PITWALL_CONCEPT_LIST_LIMITS.people)
     expect(crowd.races.length).toBeGreaterThan(PITWALL_CONCEPT_LIST_LIMITS.races)
-    // Le due richieste stanno in fondo all'elenco: e' li' che si vede se il
-    // limite le nasconde.
-    const incoming = crowd.links.assisted.filter(link => link.access === 'incoming')
-    expect(incoming.length).toBeGreaterThanOrEqual(2)
+    // Le richieste ricevute stanno in fondo all'elenco: e' li' che si vede se
+    // il limite le nasconde.
+    const received = crowd.friends.filter(friend => friend.state === 'received')
+    expect(received.length).toBeGreaterThanOrEqual(2)
     const split = splitPitwallConceptList(
-      sortPitwallConceptLinks(crowd.links.assisted),
+      crowd.friends,
       PITWALL_CONCEPT_LIST_LIMITS.people,
-      isPitwallConceptPinnedLink,
+      friend => friend.state === 'received',
     )
-    for (const link of incoming) expect(split.visible).toContain(link)
+    for (const friend of received) expect(split.visible).toContain(friend)
     // Ogni persona citata esiste davvero nella directory.
     for (const race of crowd.races) {
       for (const member of race.members) {
@@ -391,13 +323,13 @@ describe('Pitwall Concept: la gara, i ruoli e chi applica', () => {
 
   it('scrive gli avvisi con le parole della pagina', () => {
     expect(describePitwallConceptNotice({ id: 1, kind: 'request', personId: 'paolo' }).title)
-      .toBe('paolov vuole assisterti')
+      .toBe('paolov vuole essere tuo amico')
     expect(describePitwallConceptNotice({ id: 2, kind: 'invite', personId: 'marco', raceId: 'race-12' }))
       .toEqual({ title: 'marcom ti invita a una gara', body: '#12 · Spa-Francorchamps · Qualifica · 20 min' })
     // Un invito a una gara sparita non deve stampare "undefined".
     expect(describePitwallConceptNotice({ id: 3, kind: 'invite', personId: 'marco', raceId: 'boh' }).body)
       .toBe('Gara non più disponibile.')
     expect(describePitwallConceptNotice({ id: 4, kind: 'granted', personId: 'mario' }).title)
-      .toBe('mariorossi ti ha autorizzato')
+      .toBe('mariorossi ha accettato')
   })
 })

@@ -19,23 +19,19 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { usePitwallLink } from '~/composables/usePitwallLink'
 import { usePitwallController } from '~/composables/usePitwallController'
-import type { PitwallDuration, PitwallStopHandle, PitwallStore } from '~/composables/usePitwallStore'
+import type { PitwallStopHandle, PitwallStore } from '~/composables/usePitwallStore'
 import {
   describePitwallRoomOccupancy,
   isPitwallRoomInvited,
   type PitwallRoom,
 } from '~/services/pitwall/pitwallRoomContract'
 import { closeDormantPitwallRooms } from '~/services/pitwall/pitwallRoomLifecycle'
-import { pitwallClockFromExpiry, pitwallExpiryFromClock } from '~/services/pitwall/pitwallLink'
 import { derivePitwallFriends, pitwallFriendActions, sortPitwallFriends } from '~/services/pitwall/pitwallFriends'
 import { requestPitwallClose, requestPitwallOpen, usePitwallIntent, type PitwallIntentStatus } from '~/composables/usePitwallIntent'
-import type { PitwallIncomingRequest, PitwallOutgoingLink } from '~/services/pitwall/pitwallEngineerService'
 import { searchPitwallConceptDirectory } from '~/utils/pitwallConcept'
 import { formatCarName, formatTrackName } from '~/utils/telemetryFormat'
 import type {
-  PitwallConceptDirection,
   PitwallConceptFriend,
-  PitwallConceptLink,
   PitwallConceptMember,
   PitwallConceptMyRoom,
   PitwallConceptNotice,
@@ -65,28 +61,7 @@ function saveSet(key: string, value: Set<string>): void {
   }
 }
 
-/** Un permesso vero nelle quattro parole della pagina. `null` = non si mostra. */
-export function linkFromOutgoing(link: PitwallOutgoingLink): PitwallConceptLink | null {
-  if (link.status === 'pending') return { personId: link.driverUid, access: 'pending' }
-  if (link.status !== 'granted' || !link.usable) return null
-  return link.scope === 'once' && link.expiresAtMs != null
-    ? { personId: link.driverUid, access: 'today', until: pitwallClockFromExpiry(link.expiresAtMs) ?? undefined }
-    : { personId: link.driverUid, access: 'always' }
-}
-
-export function linkFromIncoming(request: PitwallIncomingRequest, nowMs: number): PitwallConceptLink | null {
-  if (request.status === 'pending') return { personId: request.engineerUid, access: 'incoming' }
-  if (request.status !== 'granted') return null
-  if (request.expiresAtMs != null && request.expiresAtMs <= nowMs) return null
-  return request.scope === 'once' && request.expiresAtMs != null
-    ? { personId: request.engineerUid, access: 'today', until: pitwallClockFromExpiry(request.expiresAtMs) ?? undefined }
-    : { personId: request.engineerUid, access: 'always' }
-}
-
 export const NOTICE_PREFIX = { request: 'req:', invite: 'inv:', granted: 'grant:' } as const
-
-/** Riga di una persona in pista di cui non vediamo ancora la stanza. */
-export const DRIVER_ROW_PREFIX = 'driver:'
 
 function createLiveStore(): PitwallStore & { start: () => void, halt: () => void } {
   const { currentUser } = useFirebaseAuth()
@@ -121,14 +96,6 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     }
     return [...known.entries()].map(([id, nickname]) => ({ id, handle: `@${nickname}` }))
   })
-
-  // ---- Permessi -------------------------------------------------------------
-  const links = computed<Record<PitwallConceptDirection, PitwallConceptLink[]>>(() => ({
-    assist: trust.outgoing.value.map(linkFromOutgoing).filter((entry): entry is PitwallConceptLink => entry != null),
-    assisted: trust.incoming.value
-      .map(request => linkFromIncoming(request, link.nowTick.value))
-      .filter((entry): entry is PitwallConceptLink => entry != null),
-  }))
 
   // ---- Amici ----------------------------------------------------------------
   // L'amicizia e' la coppia dei due permessi, uno per verso: la logica che li
@@ -376,29 +343,6 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     trust.searchResults.value.map(entry => ({ id: entry.uid, handle: `@${entry.nickname}` })),
   ))
 
-  // ---- Azioni sui permessi --------------------------------------------------
-  const expiryOf = (until?: string) => (until ? pitwallExpiryFromClock(until, Date.now()) : null)
-
-  function askToAssist(personId: string): void { void trust.requestLink(personId, 'always') }
-  function cancelRequest(personId: string): void { void trust.withdrawRequest(personId) }
-  function allowToAssistMe(personId: string, duration: PitwallDuration, until?: string): void {
-    void trust.preAuthorise(personId, duration === 'today' ? 'once' : 'always', expiryOf(until))
-  }
-  function decideRequest(personId: string, decision: PitwallDuration | 'reject', until?: string): void {
-    if (decision === 'reject') { void trust.decide(personId, 'revoked'); return }
-    void trust.decide(personId, 'granted', decision === 'today' ? 'once' : 'always', expiryOf(until))
-  }
-  function removeLink(direction: PitwallConceptDirection, personId: string): void {
-    if (direction === 'assisted') void trust.decide(personId, 'revoked')
-    else void trust.withdrawRequest(personId)
-  }
-  function setExpiry(direction: PitwallConceptDirection, personId: string, until: string): void {
-    if (direction !== 'assisted') return
-    const expiresAtMs = expiryOf(until)
-    if (expiresAtMs != null) void trust.setExpiry(personId, expiresAtMs)
-  }
-  const canEditExpiry = (direction: PitwallConceptDirection) => direction === 'assisted'
-
   // ---- Amici: chiedere, accettare, togliere ---------------------------------
   /**
    * Chiedere e accettare sono la stessa scrittura: autorizzo io (`me__X`) e
@@ -535,7 +479,6 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
 
   return {
     people,
-    links,
     friends,
     pitwall: pitwallIntent as Ref<PitwallIntentStatus>,
     startPitwall,
@@ -553,15 +496,8 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     meId: computed(() => uid()),
     crowded: ref(false) as Ref<boolean>,
     toggleCrowded: () => {},
-    canEditExpiry,
     searchQuery,
     found,
-    askToAssist,
-    cancelRequest,
-    allowToAssistMe,
-    decideRequest,
-    removeLink,
-    setExpiry,
     selectRace,
     enterRace,
     leaveRace,
