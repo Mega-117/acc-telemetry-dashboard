@@ -102,15 +102,19 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   // legge e' una e sta in `pitwallFriends`. Qui si aggiungono solo presenza e
   // Pitwall aperto, che vengono dagli altri due mattoncini.
   const friendViews = computed(() => derivePitwallFriends(trust.incoming.value, trust.outgoing.value, link.nowTick.value))
-  const reachableIds = computed(() => new Set(trust.outgoing.value.filter(entry => entry.reachable).map(entry => entry.driverUid)))
+  const reachable = computed(() => new Map(trust.outgoing.value.filter(entry => entry.reachable).map(entry => [entry.driverUid, entry.session])))
+  const reachableIds = computed(() => new Set(reachable.value.keys()))
   const friends = computed<PitwallConceptFriend[]>(() => sortPitwallFriends(
     friendViews.value.map((view) => {
       const racing = reachableIds.value.has(view.personId)
-      // "Pitwall aperto" = ha una gara non chiusa **e** e' in pista adesso. La
-      // presenza (90 s) dice la verita' anche dopo un crash; il segno di vita
-      // della stanza non si pretende, perche' finche' le Rules non lo accettano
-      // resta nullo e farebbe sparire un Pitwall aperto dopo venti minuti.
-      const room = view.state === 'friends' && racing ? roomOfDriver(view.personId) : null
+      // "Pitwall aperto" = ha una gara non chiusa **della sessione in cui e'
+      // adesso** e la sua presenza e' fresca. La presenza (90 s) dice la
+      // verita' anche dopo un crash. Il segno di vita della stanza non si
+      // pretende (finche' le Rules non lo accettano resta nullo), ma le stanze
+      // di ieri restano aperte per giorni: la pista della presenza dice quale
+      // e' quella di oggi. Visto dal vivo: chiuso il Pitwall di oggi, popo
+      // vedeva "aperto" quello di Monza di due giorni prima.
+      const room = view.state === 'friends' && racing ? roomOfDriver(view.personId, reachable.value.get(view.personId)?.track) : null
       const open = room != null
       return {
         personId: view.personId,
@@ -200,9 +204,12 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
    * una per ogni sessione di sempre. Quella buona e' l'ultima aperta e non
    * chiusa; le altre sono memoria, non un posto dove entrare.
    */
-  function roomOfDriver(driverUid: string): PitwallRoom | null {
+  function roomOfDriver(driverUid: string, track?: string | null): PitwallRoom | null {
+    const wanted = track ? track.trim().toLowerCase() : null
     return link.rooms.value
       .filter(room => !room.closedAt && (room.hostUid === driverUid || room.memberUids.includes(driverUid)))
+      // La gara di oggi e' su questa pista: una stanza di un'altra pista e' memoria.
+      .filter(room => !wanted || !room.track || room.track.trim().toLowerCase() === wanted)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null
   }
 
@@ -219,8 +226,8 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   const races = computed<PitwallConceptRace[]>(() => friends.value
     .filter(friend => friend.pitwallOpen && friend.raceId)
     .map((friend) => {
-      const room = roomOfDriver(friend.personId)!
       const entry = trust.outgoing.value.find(candidate => candidate.driverUid === friend.personId)
+      const room = link.rooms.value.find(candidate => candidate.roomId === friend.raceId)!
       const selected = link.room.value?.roomId === room.roomId
       const car = entry?.session?.car ?? null
       // La pista viene dalla presenza, non dalla stanza: la stanza porta

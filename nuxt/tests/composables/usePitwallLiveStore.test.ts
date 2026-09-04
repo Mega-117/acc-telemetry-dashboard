@@ -332,7 +332,7 @@ describe('gli amici, in un elenco solo', () => {
 
 describe('i Pitwall aperti e gli avvisi', () => {
   it('una riga per amico con il Pitwall aperto, con pista e vettura lette dalla sua presenza', () => {
-    link.rooms.value = [room()]
+    link.rooms.value = [room({ track: 'nurburgring' })]
     befriended('pilota', { reachable: true, session: { ...LIVE_SESSION, car: 'ferrari_296_gt3', track: 'nurburgring' } })
     const [race] = store.races.value
     expect(race).toMatchObject({
@@ -366,9 +366,16 @@ describe('i Pitwall aperti e gli avvisi', () => {
     link.rooms.value = [room({ lastLiveAtMs: null })]
     expect(store.races.value).toHaveLength(1)
 
-    // Chiusa dal pilota: sparisce subito.
-    link.rooms.value = [room({ closedAt: '2026-09-03T09:59:00.000Z' })]
+    // Chiusa dal pilota: sparisce subito, e la gara di Monza di due giorni
+    // prima - ancora aperta, come tutte quelle vecchie - non la sostituisce:
+    // la presenza dice che oggi si corre altrove.
+    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { ...LIVE_SESSION, track: 'nurburgring' } })]
+    link.rooms.value = [
+      room({ closedAt: '2026-09-03T09:59:00.000Z', track: 'nurburgring' }),
+      room({ roomId: 'monza', track: 'monza', createdAt: '2026-09-01T08:00:00.000Z' }),
+    ]
     expect(store.races.value).toEqual([])
+    expect(store.friends.value[0]).toMatchObject({ pitwallOpen: false })
 
     // Spegne il gioco: il battito invecchia, reachable cade, la riga sparisce.
     link.rooms.value = [room()]
