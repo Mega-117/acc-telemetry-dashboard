@@ -78,6 +78,10 @@ function makeLink() {
         revokedByService.push({ roomId, uid })
         return { ok: true as const, value: true as const }
       },
+      leaveRoom: async (roomId: string) => {
+        revokedByService.push({ roomId, uid: 'me' })
+        return { ok: true as const, value: true as const }
+      },
     }),
     nowTick: ref(NOW),
     rooms: ref<PitwallRoom[]>([]),
@@ -296,12 +300,14 @@ describe('gli amici, in un elenco solo', () => {
       room({ roomId: 'mia', hostUid: 'me', managerUids: ['me'], memberUids: ['me', 'ex'], allowedUids: ['ex'] }),
       room({ roomId: 'chiusa', hostUid: 'me', managerUids: ['me'], memberUids: ['me', 'ex'], allowedUids: ['ex'], closedAt: '2026-09-02T00:00:00.000Z' }),
       room({ roomId: 'altrui', hostUid: 'pilota', memberUids: ['pilota', 'me', 'ex'], allowedUids: ['ex'] }),
+      // La gara dell'ex amico: da li' esco io, gli altri restano affar suo.
+      room({ roomId: 'sua', hostUid: 'ex', memberUids: ['ex', 'me'], allowedUids: ['me'] }),
     ]
     store.unfriend('ex')
     await settle()
     expect(trust.decide).toHaveBeenCalledWith('ex', 'revoked')
     expect(trust.withdrawRequest).toHaveBeenCalledWith('ex')
-    expect(link.revokedByService).toEqual([{ roomId: 'mia', uid: 'ex' }])
+    expect(link.revokedByService).toEqual([{ roomId: 'mia', uid: 'ex' }, { roomId: 'sua', uid: 'me' }])
 
     // Solo la mia parte esisteva: si revoca quella e basta.
     vi.clearAllMocks()

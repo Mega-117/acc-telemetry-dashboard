@@ -379,9 +379,14 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     const service = link.service()
     if (!me || !service) return
     for (const room of link.rooms.value) {
-      if (room.closedAt || room.hostUid !== me) continue
-      if (!room.allowedUids.includes(personId) && !room.memberUids.includes(personId)) continue
-      await service.revoke(room.roomId, personId)
+      if (room.closedAt) continue
+      if (room.hostUid === me) {
+        if (room.allowedUids.includes(personId) || room.memberUids.includes(personId)) await service.revoke(room.roomId, personId)
+      } else if (room.hostUid === personId && room.memberUids.includes(me)) {
+        // Dalla sua gara esco io: le regole non mi lasciano togliermi dagli
+        // invitati, ma un ex amico non resta al muretto di chi ha lasciato.
+        await service.leaveRoom(room.roomId)
+      }
     }
   }
 
