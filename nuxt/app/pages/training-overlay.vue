@@ -941,17 +941,17 @@ onBeforeUnmount(() => {
                     >
                       {{ qaBotView.label }}
                     </button>
-                    <PitwallOverlayButton
-                      :api="getOverlayApi()"
-                      :selected="launcherToolIndex === 5"
-                      @focus="launcherToolIndex = 5"
-                    />
                     <p class="launcher-hint" role="status" aria-live="polite">
                       Bot: {{ qaBotView.stateLabel }} · {{ qaBotView.reason }}
                       <template v-if="qaBotState.state === 'ACTIVE'">
                         · {{ qaBotState.speedKmh ?? 0 }} km/h · giri validi {{ qaBotState.lapsValid }}/{{ qaBotState.lapsCompleted }}
                       </template>
                     </p>
+                    <PitwallOverlayButton
+                      :api="getOverlayApi()"
+                      :selected="launcherToolIndex === 5"
+                      @focus="launcherToolIndex = 5"
+                    />
                     <button v-if="dryPressureState.qaAvailable" type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Genera raccomandazione TEST</button>
                     <p v-if="dryPressureState.qaAvailable" class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
                     <button v-if="dryPressureState.qaActive" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Rimuovi raccomandazione TEST</button>
