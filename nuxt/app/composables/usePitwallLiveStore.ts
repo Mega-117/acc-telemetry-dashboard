@@ -107,15 +107,15 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   const friends = computed<PitwallConceptFriend[]>(() => sortPitwallFriends(
     friendViews.value.map((view) => {
       const racing = reachableIds.value.has(view.personId)
-      // "Pitwall aperto" = ha una gara non chiusa **della sessione in cui e'
-      // adesso** e la sua presenza e' fresca. La presenza (90 s) dice la
-      // verita' anche dopo un crash. Il segno di vita della stanza non si
-      // pretende (finche' le Rules non lo accettano resta nullo), ma le stanze
-      // di ieri restano aperte per giorni: la pista della presenza dice quale
-      // e' quella di oggi. Visto dal vivo: chiuso il Pitwall di oggi, popo
-      // vedeva "aperto" quello di Monza di due giorni prima.
+      // "Pitwall aperto" = la sua gara e' **viva** (segno di vita entro venti
+      // minuti, o appena nata), e' sulla pista dove corre adesso, e la sua
+      // presenza e' fresca. Tutte e tre: le stanze vecchie restano aperte per
+      // giorni, e visto dal vivo, chiuso il Pitwall di oggi, popo vedeva
+      // "aperto" quello di Monza di due giorni prima e poi quello di
+      // Nurburgring del primo settembre. Il segno di vita lo scrive il PC del
+      // pilota ogni dieci minuti (Rules pubblicate il 2026-09-04).
       const room = view.state === 'friends' && racing ? roomOfDriver(view.personId, reachable.value.get(view.personId)?.track) : null
-      const open = room != null
+      const open = room != null && describePitwallRoomOccupancy(room, link.nowTick.value) === 'live'
       return {
         personId: view.personId,
         state: view.state,
@@ -320,12 +320,22 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     saveSet(SEEN_GRANTS_KEY, seenGrants.value)
   })
 
+  /**
+   * Un invito e' un avviso solo se porta da qualche parte: il Pitwall aperto
+   * di un amico, oppure la gara di chi non e' mio amico e mi ha invitato a
+   * mano (+ Ospite). Gli inviti di un amico alle sue gare di ieri - le stanze
+   * non si chiudono da sole, e il suo PC mi semina in ognuna - non sono una
+   * notizia: visto dal vivo, sei campanelle "Gara non piu' disponibile".
+   */
+  const openRaceIds = computed(() => new Set(races.value.map(race => race.id)))
+  const friendIds = computed(() => new Set(friendViews.value.filter(view => view.state === 'friends').map(view => view.personId)))
   const notices = computed<PitwallConceptNotice[]>(() => [
     ...trust.pendingIncoming.value.map(request => ({
       id: `${NOTICE_PREFIX.request}${request.engineerUid}`, kind: 'request' as const, personId: request.engineerUid,
     })),
     ...link.rooms.value
       .filter(room => isPitwallRoomInvited(room, uid()) && !room.closedAt && !dismissedInvites.value.has(room.roomId))
+      .filter(room => openRaceIds.value.has(room.roomId) || !friendIds.value.has(room.hostUid))
       .map(room => ({
         id: `${NOTICE_PREFIX.invite}${room.roomId}`, kind: 'invite' as const, personId: room.hostUid, raceId: room.roomId,
       })),
@@ -372,9 +382,12 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
    * senza questo un ex amico resterebbe al muretto fino alla chiusura.
    */
   async function unfriend(personId: string): Promise<void> {
-    const actions = pitwallFriendActions(friendViews.value.find(view => view.personId === personId))
+    const before = friendViews.value.find(view => view.personId === personId)
+    const actions = pitwallFriendActions(before)
     if (actions.revokeMine) await trust.decide(personId, 'revoked')
     if (actions.withdrawTheirs) await trust.withdrawRequest(personId)
+    // I servizi parlano di permessi; l'utente ha tolto un amico o una richiesta.
+    link.notice.value = before?.state === 'friends' ? 'Non siete più amici.' : 'Richiesta annullata.'
     const me = uid()
     const service = link.service()
     if (!me || !service) return

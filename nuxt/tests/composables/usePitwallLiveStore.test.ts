@@ -367,9 +367,13 @@ describe('i Pitwall aperti e gli avvisi', () => {
     trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: LIVE_SESSION })]
     expect(store.races.value).toHaveLength(1)
 
-    // Senza segno di vita sulla stanza (Rules non ancora pubblicate) resta
-    // aperto: e' la presenza a dire la verita', e muore in novanta secondi.
-    link.rooms.value = [room({ lastLiveAtMs: null })]
+    // Una stanza senza segno di vita da un'ora e' dormiente: anche se il
+    // pilota e' in pista, non e' il Pitwall di oggi (la stanza di Nurburgring
+    // del primo settembre, vista dal vivo).
+    link.rooms.value = [room({ lastLiveAtMs: NOW - 60 * 60_000 })]
+    expect(store.races.value).toEqual([])
+    // Appena nata, senza ancora un segno di vita, vale: e' viva per creazione.
+    link.rooms.value = [room({ lastLiveAtMs: null, createdAt: new Date(NOW - 60_000).toISOString(), updatedAt: new Date(NOW - 60_000).toISOString() })]
     expect(store.races.value).toHaveLength(1)
 
     // Chiusa dal pilota: sparisce subito, e la gara di Monza di due giorni
@@ -424,6 +428,21 @@ describe('i Pitwall aperti e gli avvisi', () => {
     ]
     befriended('pilota', { reachable: true, session: LIVE_SESSION })
     expect(store.races.value.map(race => race.id)).toEqual(['oggi'])
+  })
+
+  it('gli inviti di un amico alle gare di ieri non sono una notizia; quelli di chi non e amico si', () => {
+    // Le stanze non si chiudono da sole e il PC dell'amico mi semina in ognuna:
+    // visto dal vivo, sei campanelle "Gara non piu' disponibile".
+    befriended('pilota', { reachable: false })
+    link.rooms.value = [
+      room({ roomId: 'ieri', track: 'monza', createdAt: '2026-09-01T08:00:00.000Z' }),
+      room({ roomId: 'ospite', hostUid: 'sconosciuto', memberUids: ['sconosciuto'], allowedUids: ['me'] }),
+    ]
+    expect(store.notices.value.filter(notice => notice.kind === 'invite').map(notice => notice.raceId)).toEqual(['ospite'])
+
+    // Appena l'amico apre il Pitwall (in pista, gara di oggi), l'invito conta.
+    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { ...LIVE_SESSION, track: 'monza' } })]
+    expect(store.notices.value.filter(notice => notice.kind === 'invite').map(notice => notice.raceId)).toEqual(['ieri', 'ospite'])
   })
 
   it('rifiutare un invito e una memoria locale; accettarlo apre la stanza', async () => {
