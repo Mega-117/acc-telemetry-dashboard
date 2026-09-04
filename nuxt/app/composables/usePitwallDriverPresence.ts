@@ -24,6 +24,7 @@ import {
 } from '~/services/pitwall/pitwallDriverLinkService'
 import {
   startPitwallRoomDriver,
+  type PitwallDriverStatus,
   type PitwallRoomDriverHandle,
 } from '~/services/pitwall/pitwallRoomDriverService'
 import type { PitwallGrant } from '~/services/pitwall/pitwallLink'
@@ -32,6 +33,10 @@ import { registerPitwallIntentControls, setPitwallIntentStatus } from '~/composa
 
 interface PitwallElectronBridge extends PitwallDriverElectronApi {
   localIdentityRole?: string
+  /** Lo stato del Pitwall verso il main, che lo gira al pannello rapido Ctrl+K. */
+  pitwallReportIntentState?: (status: PitwallDriverStatus & { available: boolean }) => Promise<unknown>
+  /** "Apri"/"chiudi" dal pannello rapido, girati dal main a questa finestra. */
+  onPitwallIntentRequest?: (callback: (request: { open: boolean } | null) => void) => () => void
 }
 
 function electronBridge(): PitwallElectronBridge | null {
@@ -70,10 +75,14 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
    */
   const friendSet = new Set<string>()
   let friendsReady: Promise<unknown> = Promise.resolve()
+  let stopIntentRequests: (() => void) | null = null
 
   function stop(): void {
     while (stopGrantsWatches.length) stopGrantsWatches.pop()?.()
+    stopIntentRequests?.()
+    stopIntentRequests = null
     registerPitwallIntentControls(null)
+    void electronBridge()?.pitwallReportIntentState?.({ state: 'off', roomId: null, reason: null, available: false })
     if (roomHandle) {
       // Se il Pitwall era aperto si chiude per bene: altrimenti gli amici lo
       // vedrebbero aperto per venti minuti dopo che la suite e' stata chiusa.
@@ -245,6 +254,9 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
         onStatus: (next) => {
           roomId.value = next.roomId
           setPitwallIntentStatus(next)
+          // Il pannello rapido Ctrl+K vive in un'altra finestra: lo stato gli
+          // arriva attraverso il processo main, per la stessa strada della richiesta.
+          void bridge.pitwallReportIntentState?.({ ...next, available: true })
         },
         readVehicle: async () => {
           try {
@@ -292,6 +304,13 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
         close: () => started.closePitwall(),
       })
       setPitwallIntentStatus(started.status())
+      void bridge.pitwallReportIntentState?.({ ...started.status(), available: true })
+      // Dal pannello rapido: il main ci gira "apri" o "chiudi", noi eseguiamo.
+      stopIntentRequests?.()
+      stopIntentRequests = bridge.onPitwallIntentRequest?.((request) => {
+        if (roomHandle !== started) return
+        void (request?.open ? started.openPitwall() : started.closePitwall())
+      }) ?? null
 
       // Un permesso che cambia aggiorna gli amici *adesso*, nei due versi.
       //

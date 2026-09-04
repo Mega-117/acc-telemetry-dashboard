@@ -32,6 +32,7 @@ import OverlayHud from '~/components/overlay/OverlayHud.vue'
 import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
+import PitwallOverlayButton from '~/components/pitwall/PitwallOverlayButton.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
 import {
   normalizeQaBotSnapshot,
@@ -940,6 +941,11 @@ onBeforeUnmount(() => {
                     >
                       {{ qaBotView.label }}
                     </button>
+                    <PitwallOverlayButton
+                      :api="getOverlayApi()"
+                      :selected="launcherToolIndex === 5"
+                      @focus="launcherToolIndex = 5"
+                    />
                     <p class="launcher-hint" role="status" aria-live="polite">
                       Bot: {{ qaBotView.stateLabel }} · {{ qaBotView.reason }}
                       <template v-if="qaBotState.state === 'ACTIVE'">
