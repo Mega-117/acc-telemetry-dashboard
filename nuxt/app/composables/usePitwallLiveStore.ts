@@ -207,7 +207,10 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   function roomOfDriver(driverUid: string, track?: string | null): PitwallRoom | null {
     const wanted = track ? track.trim().toLowerCase() : null
     return link.rooms.value
-      .filter(room => !room.closedAt && (room.hostUid === driverUid || room.memberUids.includes(driverUid)))
+      // Il Pitwall di un amico e' la gara che **lui** ha aperto. Una in cui e'
+      // solo entrato appartiene a un altro: visto dal vivo, a popo restava
+      // "aperto" un Nurburgring del primo settembre tenuto vivo da un terzo.
+      .filter(room => !room.closedAt && room.hostUid === driverUid)
       // La gara di oggi e' su questa pista: una stanza di un'altra pista e' memoria.
       .filter(room => !wanted || !room.track || room.track.trim().toLowerCase() === wanted)
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null

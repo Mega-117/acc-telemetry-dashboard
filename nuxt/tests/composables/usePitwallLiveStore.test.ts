@@ -402,9 +402,9 @@ describe('i Pitwall aperti e gli avvisi', () => {
     expect(store.friends.value[0]).toMatchObject({ personId: 'pilota', state: 'received', racing: true, pitwallOpen: false })
   })
 
-  it('due amici sulla stessa vettura sono una riga sola', async () => {
+  it('due amici sulla stessa vettura sono una riga sola: quella di chi ha aperto', async () => {
     // Endurance: due piloti che si danno il cambio stanno nella stessa stanza.
-    // Due righe che portano allo stesso pit stop sarebbero solo un doppione.
+    // Il Pitwall e' di chi l'ha aperto; il compagno entrato non ne ha uno suo.
     link.rooms.value = [room({ memberUids: ['pilota', 'secondo'], allowedUids: ['pilota', 'secondo', 'me'] })]
     befriended('pilota', { reachable: true, session: LIVE_SESSION })
     befriended('secondo', { reachable: true, session: LIVE_SESSION })
