@@ -21,6 +21,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   logout: []
   goToProfile: []
+  goToSettings: []
 }>()
 
 const { isCoach, isAdmin } = useFirebaseAuth()
@@ -241,6 +242,7 @@ onMounted(() => {
           :user-name="displayName"
           @logout="emit('logout')"
           @go-to-profile="emit('goToProfile')"
+          @go-to-settings="emit('goToSettings')"
         />
       </div>
     </div>

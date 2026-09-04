@@ -34,6 +34,7 @@ import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import PitwallOverlayButton from '~/components/pitwall/PitwallOverlayButton.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
+import { nextOverlayActionId, resolveOverlayActivation } from '~/services/overlay/overlayActionNavigation'
 import {
   normalizeQaBotSnapshot,
   qaBotPresentation,
@@ -115,10 +116,44 @@ const canUseSpotterControls = computed(() => resolveLocalRuntimeCapability({
   isLocalRuntimeAttested: isLocalRuntimeAttested.value,
   canEnterApp: canEnterApp.value,
 }))
-// Solo evidenziazione visiva del focus mouse/tab: nessun effetto sui comandi
-// globali (PIP-96), Ctrl+N nel launcher avvia sempre l'allenamento.
-const launcherToolIndex = ref(0)
+// La selezione volante usa ID semantici e ricalcola il DOM a ogni comando.
+const selectedWheelActionId = ref<string | null>(null)
 const overlayRoot = ref<HTMLElement | null>(null)
+const WHEEL_ACTION_SELECTOR = '[data-overlay-wheel-action]'
+
+function availableWheelActions(): HTMLButtonElement[] {
+  if (phase.value !== 'launcher' || isTargetSetupOpen.value || !overlayRoot.value) return []
+  return Array.from(overlayRoot.value.querySelectorAll<HTMLButtonElement>(WHEEL_ACTION_SELECTOR))
+    .filter(element => !element.disabled && element.getAttribute('aria-disabled') !== 'true')
+    .filter(element => !element.hidden && element.getClientRects().length > 0)
+}
+
+function selectWheelAction(actionId: string | null) {
+  selectedWheelActionId.value = actionId
+  if (!actionId) return
+  availableWheelActions()
+    .find(element => element.dataset.overlayWheelAction === actionId)
+    ?.focus({ preventScroll: true })
+}
+
+function selectFirstWheelAction() {
+  selectWheelAction(availableWheelActions()[0]?.dataset.overlayWheelAction || null)
+}
+
+function selectNextWheelAction() {
+  const actions = availableWheelActions()
+  const ids = actions.map(element => element.dataset.overlayWheelAction).filter(Boolean) as string[]
+  selectWheelAction(nextOverlayActionId(selectedWheelActionId.value, ids))
+}
+
+function activateSelectedWheelAction() {
+  const actions = availableWheelActions()
+  const ids = actions.map(element => element.dataset.overlayWheelAction).filter(Boolean) as string[]
+  const decision = resolveOverlayActivation(selectedWheelActionId.value, ids)
+  selectWheelAction(decision.selectedId)
+  if (!decision.activateId) return
+  actions.find(element => element.dataset.overlayWheelAction === decision.activateId)?.click()
+}
 const isPointerOnOverlaySurface = ref(false)
 const isTargetSetupOpen = ref(false)
 const infoTargetActive = ref(false)
@@ -492,7 +527,7 @@ function openInfoTargetSetup() {
     }
   }
   isTargetSetupOpen.value = true
-  launcherToolIndex.value = 3
+  selectedWheelActionId.value = 'target'
   scheduleOverlaySizeSync()
 }
 
@@ -655,6 +690,8 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   const command = typeof payload === 'string' ? payload : payload?.command
   setDebugEvent(`comando overlay: ${command || 'vuoto'}`)
   if (command === 'primary') executePrimaryAction()
+  if (command === 'next-action') selectNextWheelAction()
+  if (command === 'activate-action') activateSelectedWheelAction()
   if (command === 'back') runBackAction()
   if (command === 'mute') runMuteAction()
   if (command === 'stop') handleGlobalStop()
@@ -703,6 +740,8 @@ onMounted(async () => {
   originCorner.value = resolveOverlayOriginCorner(settings?.originCorner)
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000
   phase.value = settings?.hasConfiguredPosition || !api ? 'launcher' : 'placement'
+  await nextTick()
+  selectFirstWheelAction()
   loadSpotterVoiceSettings()
   startLiveStatePolling()
   startFastStatePolling()
@@ -883,10 +922,11 @@ onBeforeUnmount(() => {
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training"
-                      :class="{ 'is-selected': launcherToolIndex === 0 }"
+                      :class="{ 'is-selected': selectedWheelActionId === 'training' }"
+                      data-overlay-wheel-action="training"
                       :aria-label="primaryActionLabel"
-                      :aria-current="launcherToolIndex === 0 ? 'true' : undefined"
-                      @focus="launcherToolIndex = 0"
+                      :aria-current="selectedWheelActionId === 'training' ? 'true' : undefined"
+                      @focus="selectedWheelActionId = 'training'"
                       @click="executePrimaryAction"
                     >
                       Avvia allenamento
@@ -894,12 +934,13 @@ onBeforeUnmount(() => {
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--spotter"
-                      :class="{ 'is-active': spotterEnabled, 'is-selected': launcherToolIndex === 1 }"
+                      :class="{ 'is-active': spotterEnabled, 'is-selected': selectedWheelActionId === 'coach' }"
+                      data-overlay-wheel-action="coach"
                       :aria-pressed="spotterEnabled"
-                      :aria-current="launcherToolIndex === 1 ? 'true' : undefined"
+                      :aria-current="selectedWheelActionId === 'coach' ? 'true' : undefined"
                       :aria-label="coachAudioToggleLabel"
                       :disabled="!canUseSpotterControls"
-                      @focus="launcherToolIndex = 1"
+                      @focus="selectedWheelActionId = 'coach'"
                       @click="toggleCoachAudio"
                     >
                       {{ coachAudioToggleLabel }}
@@ -907,12 +948,13 @@ onBeforeUnmount(() => {
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--references"
-                      :class="{ 'is-active': trackVoiceReferencesEnabled, 'is-selected': launcherToolIndex === 2 }"
+                      :class="{ 'is-active': trackVoiceReferencesEnabled, 'is-selected': selectedWheelActionId === 'references' }"
+                      data-overlay-wheel-action="references"
                       :aria-pressed="trackVoiceReferencesEnabled"
-                      :aria-current="launcherToolIndex === 2 ? 'true' : undefined"
+                      :aria-current="selectedWheelActionId === 'references' ? 'true' : undefined"
                       :aria-label="referenceAudioToggleLabel"
                       :disabled="!canUseSpotterControls"
-                      @focus="launcherToolIndex = 2"
+                      @focus="selectedWheelActionId = 'references'"
                       @click="toggleTrackVoiceReferences"
                     >
                       {{ referenceAudioToggleLabel }}
@@ -920,11 +962,12 @@ onBeforeUnmount(() => {
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--target"
-                      :class="{ 'is-active': infoTargetActive, 'is-selected': launcherToolIndex === 3 }"
+                      :class="{ 'is-active': infoTargetActive, 'is-selected': selectedWheelActionId === 'target' }"
+                      data-overlay-wheel-action="target"
                       :aria-pressed="infoTargetActive"
-                      :aria-current="launcherToolIndex === 3 ? 'true' : undefined"
+                      :aria-current="selectedWheelActionId === 'target' ? 'true' : undefined"
                       aria-label="Configura Target giro HUD Info"
-                      @focus="launcherToolIndex = 3"
+                      @focus="selectedWheelActionId = 'target'"
                       @click="openInfoTargetSetup"
                     >
                       Target giro
@@ -932,11 +975,9 @@ onBeforeUnmount(() => {
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training"
-                      :class="{ 'is-active': qaBotView.active, 'is-selected': launcherToolIndex === 4 }"
+                      :class="{ 'is-active': qaBotView.active }"
                       :aria-pressed="qaBotView.active"
-                      :aria-current="launcherToolIndex === 4 ? 'true' : undefined"
                       :disabled="qaBotView.pending"
-                      @focus="launcherToolIndex = 4"
                       @click="toggleQaBot"
                     >
                       {{ qaBotView.label }}
@@ -949,8 +990,9 @@ onBeforeUnmount(() => {
                     </p>
                     <PitwallOverlayButton
                       :api="getOverlayApi()"
-                      :selected="launcherToolIndex === 5"
-                      @focus="launcherToolIndex = 5"
+                      :selected="selectedWheelActionId === 'pitwall'"
+                      data-overlay-wheel-action="pitwall"
+                      @focus="selectedWheelActionId = 'pitwall'"
                     />
                     <button v-if="dryPressureState.qaAvailable" type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Genera raccomandazione TEST</button>
                     <p v-if="dryPressureState.qaAvailable" class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
@@ -970,7 +1012,9 @@ onBeforeUnmount(() => {
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training launcher-tool-button--pressure"
-                      :class="{ 'is-ready': dryPressureState.state === 'ready' }"
+                      :class="{ 'is-ready': dryPressureState.state === 'ready', 'is-selected': selectedWheelActionId === 'pressure' }"
+                      data-overlay-wheel-action="pressure"
+                      @focus="selectedWheelActionId = 'pressure'"
                       :aria-label="dryPressurePresentation.ariaLabel"
                       aria-describedby="pressure-action-status"
                       :disabled="dryPressureState.state !== 'ready'"

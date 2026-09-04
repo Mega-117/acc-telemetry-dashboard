@@ -13,6 +13,7 @@ const router = useRouter()
 
 // Inject profile navigation from app.vue
 const goToProfile = inject<() => void>('goToProfile')
+const goToSettings = inject<() => void>('goToSettings')
 
 // Determine active tab from route path
 const activeTab = computed(() => {
@@ -41,9 +42,11 @@ const handleLogout = async () => {
 }
 
 const handleGoToProfile = () => {
-  if (goToProfile) {
-    goToProfile()
-  }
+  if (goToProfile) goToProfile()
+}
+
+const handleGoToSettings = () => {
+  if (goToSettings) goToSettings()
 }
 </script>
 
@@ -55,6 +58,7 @@ const handleGoToProfile = () => {
         :user-name="displayName"
         @logout="handleLogout"
         @go-to-profile="handleGoToProfile"
+        @go-to-settings="handleGoToSettings"
       />
 
       <!-- TabsBar with NuxtLink navigation -->

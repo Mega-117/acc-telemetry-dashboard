@@ -17,6 +17,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   logout: []
   back: []
+  goToSettings: []
 }>()
 
 type ProfileTab = 'account'
@@ -314,6 +315,7 @@ watch(
             :user-name="displayName"
             @logout="emit('logout')"
             @go-to-profile="activeTab = 'account'"
+            @go-to-settings="emit('goToSettings')"
           />
         </div>
       </div>

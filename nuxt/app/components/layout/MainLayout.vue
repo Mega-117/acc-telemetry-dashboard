@@ -11,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   logout: []
   goToProfile: []
+  goToSettings: []
   navigate: [tab: string]
 }>()
 </script>
@@ -22,6 +23,7 @@ const emit = defineEmits<{
       :user-name="userName"
       @logout="emit('logout')"
       @go-to-profile="emit('goToProfile')"
+      @go-to-settings="emit('goToSettings')"
     />
 
     <!-- TabsBar -->

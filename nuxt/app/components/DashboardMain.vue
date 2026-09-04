@@ -13,6 +13,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   logout: []
   goToProfile: []
+  goToSettings: []
 }>()
 
 // Tab state
@@ -71,6 +72,7 @@ const displayName = computed(() => {
     :active-tab="activeTab"
     @logout="emit('logout')"
     @go-to-profile="emit('goToProfile')"
+    @go-to-settings="emit('goToSettings')"
     @navigate="handleNavigate"
   >
     <!-- Tab Content -->

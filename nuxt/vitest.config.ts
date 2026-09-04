@@ -114,6 +114,8 @@ export default defineConfig({
         'app/services/overlay/standingsPresentation.ts',
         'app/services/overlay/spectatorTelemetry.ts',
         'app/services/overlay/qaBotPresentation.ts',
+        'app/services/overlay/overlayActionNavigation.ts',
+        'app/services/controls/wheelBindingModel.ts',
         'app/services/overlay/standingsHighlightTracker.ts',
         'app/services/audio/audioPlayback.ts',
         'app/services/audio/voicePlaybackQueue.ts',

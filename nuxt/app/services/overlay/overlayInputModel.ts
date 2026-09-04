@@ -8,6 +8,8 @@ export type OverlayInputCommand =
   | 'back'
   | 'mute'
   | 'stop'
+  | 'next-action'
+  | 'activate-action'
 
 export interface OverlayKeyboardLike {
   key: string

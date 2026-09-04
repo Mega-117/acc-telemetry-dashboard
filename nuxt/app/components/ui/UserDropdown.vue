@@ -3,7 +3,7 @@
 // UserDropdown - User menu dropdown component
 // ============================================
 
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 
 const props = defineProps<{
   userName: string
@@ -12,9 +12,18 @@ const props = defineProps<{
 const emit = defineEmits<{
   logout: []
   goToProfile: []
+  goToSettings: []
 }>()
 
 const isOpen = ref(false)
+const showSettings = ref(false)
+
+onMounted(() => {
+  const api = (window as Window & {
+    electronAPI?: { localIdentityRole?: string; controlsGetState?: () => Promise<unknown> }
+  }).electronAPI
+  showSettings.value = api?.localIdentityRole === 'primary' && !!api.controlsGetState
+})
 
 const toggleDropdown = () => {
   isOpen.value = !isOpen.value
@@ -27,6 +36,11 @@ const closeDropdown = () => {
 const handleProfile = () => {
   closeDropdown()
   emit('goToProfile')
+}
+
+const handleSettings = () => {
+  closeDropdown()
+  emit('goToSettings')
 }
 
 const handleLogout = () => {
@@ -68,7 +82,7 @@ const handleLogout = () => {
           </svg>
           Profilo
         </button>
-        <button class="dropdown-item dropdown-item--disabled" disabled>
+        <button v-if="showSettings" class="dropdown-item" @click="handleSettings">
           <svg class="item-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
             <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
             <path d="M8 5v3l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>

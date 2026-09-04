@@ -63,6 +63,10 @@ const handleLogout = async () => {
   })
 }
 
+const handleSettings = async () => {
+  await navigateTo('/impostazioni')
+}
+
 const handleBack = async () => {
   if (isLeaving.value) return
   isLeaving.value = true
@@ -91,6 +95,7 @@ const handleBack = async () => {
       :user-role="(userRole as 'pilot' | 'coach' | 'admin')"
       @logout="handleLogout"
       @back="handleBack"
+      @go-to-settings="handleSettings"
     />
   </div>
 </template>

@@ -3,7 +3,7 @@
 // App.vue - Main Application with Auth Flow
 // ============================================
 
-import { ref, computed, onMounted, onBeforeMount, watch, provide } from 'vue'
+import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { usePitwallDriverPresence } from '~/composables/usePitwallDriverPresence'
 import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
@@ -20,6 +20,7 @@ import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
 import { canUseDevTools } from '~/utils/devToolsAccess'
 import { toAuthStartupOutcome, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
 import { publishAuthStartupOutcome } from '~/services/auth/localIdentityBridge'
+import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 
 // === NUXT ROUTER ===
 const route = useRoute()
@@ -82,6 +83,16 @@ const isPrimaryClientRuntime = computed(() => {
     && !isStandaloneRuntimeRoute.value
     && !isStandaloneDevRoute.value
 })
+const wheelInputBridge = useWheelInputBridge()
+onMounted(() => {
+  const api = (window as Window & {
+    electronAPI?: { localIdentityRole?: string }
+  }).electronAPI
+  if (isPrimaryClientRuntime.value && api?.localIdentityRole === 'primary') {
+    void wheelInputBridge.start()
+  }
+})
+onBeforeUnmount(() => wheelInputBridge.stop())
 watch(normalizedRoutePath, (path, previousPath) => {
   if (path === '/dev-voice-lab') {
     kokoroVoiceLabLifecycle.enterVoiceLab()
@@ -234,6 +245,7 @@ const dashboardRoutePrefixes = [
   '/hud',
   '/test-hud',
   '/profilo',
+  '/impostazioni',
   '/preparazione',
   '/piloti',
   '/admin',
@@ -407,8 +419,25 @@ const handleGoToProfile = () => {
   router.push('/profilo')
 }
 
+const handleGoToSettings = () => {
+  if (!canEnterApp.value) {
+    showEmailVerificationGate()
+    return
+  }
+  const api = typeof window === 'undefined'
+    ? null
+    : (window as Window & { electronAPI?: { localIdentityRole?: string } }).electronAPI
+  if (api?.localIdentityRole !== 'primary') {
+    router.push('/panoramica')
+    return
+  }
+  appState.value = 'dashboard'
+  router.push('/impostazioni')
+}
+
 // Provide navigation functions to child components (layouts)
 provide('goToProfile', handleGoToProfile)
+provide('goToSettings', handleGoToSettings)
 </script>
 
 <template>

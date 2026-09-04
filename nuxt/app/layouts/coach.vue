@@ -44,6 +44,10 @@ const goToProfile = () => {
   navigateTo('/profilo')
 }
 
+const goToSettings = () => {
+  navigateTo('/impostazioni')
+}
+
 // Dynamic badge and title based on role
 const areaBadge = computed(() => isAdmin.value ? 'ADMIN' : 'COACH')
 const areaTitle = computed(() => isAdmin.value ? 'Cockpit amministratore' : 'Area piloti')
@@ -89,6 +93,7 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
           :user-name="userDisplayName"
           @logout="handleLogout"
           @go-to-profile="goToProfile"
+          @go-to-settings="goToSettings"
         />
       </div>
     </header>
