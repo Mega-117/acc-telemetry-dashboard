@@ -125,6 +125,13 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   const repairBodywork = ref<boolean | null>(null)
   const repairSuspension = ref<boolean | null>(null)
   const sentPlan = ref<PitwallPlan | null>(null)
+  /**
+   * Cio' che l'occhio del PC del pilota ha visto sul Pit MFD, campo per campo,
+   * all'ultimo ordine che ha guardato quella riga. Sopravvive agli ordini
+   * successivi: una riga muta non cambia da sola, e "In macchina" deve
+   * continuare a dire il numero visto, non tornare a cio' che era stato chiesto.
+   */
+  const seenOnScreen = ref<Record<string, unknown>>({})
 
   const car = computed<PitwallCarState>(() => {
     const strategy = session.value?.strategy ?? null
@@ -220,9 +227,33 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     driverId.value = null
     pitStrategy.value = null
   }
-  watch(() => link.orderStatus.value, (status) => {
+  /**
+   * A ordine concluso, cio' che l'occhio ha letto resta: e un campo che a
+   * schermo non e' come chiesto (il preset oltre le strategie del setup, per
+   * dirne uno) riscrive anche "ultimo ordine" con cio' che c'e' davvero.
+   * Altrimenti l'ordine dopo, che non lo tocca, farebbe ricomparire il numero
+   * rifiutato come se fosse in macchina (visto in pista il 2026-09-04).
+   */
+  function rememberSeen(): void {
+    const seen = { ...seenOnScreen.value }
+    let sent = sentPlan.value
+    for (const [field, outcome] of Object.entries(link.orderFields.value)) {
+      if (outcome?.via !== 'screen' || outcome.observed == null) continue
+      if (outcome.outcome !== 'verified' && outcome.outcome !== null) continue
+      seen[field] = outcome.observed
+      if (outcome.outcome === null && sent && field in sent) sent = { ...sent, [field]: outcome.observed } as PitwallPlan
+    }
+    seenOnScreen.value = seen
+    sentPlan.value = sent
+  }
+  // Lo stato arriva prima degli esiti: si guardano entrambi, e si ricorda
+  // solo a ordine concluso.
+  watch(() => [link.orderStatus.value, link.orderFields.value] as const, ([status], previous) => {
+    const settled = Boolean(status) && status !== 'pending' && status !== 'applying'
+    if (settled) rememberSeen()
+    if (status === previous?.[0]) return
     if (status === 'applied' || status === 'partial') clearOneShotFields()
-    if (status && status !== 'pending' && status !== 'applying') {
+    if (settled) {
       // A ordine concluso la base torna a essere la macchina: i campi che
       // coincidono la seguono, quelli in disaccordo restano cio' che era stato
       // chiesto, cosi' richiesto e "In macchina" restano confrontabili.
@@ -235,7 +266,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   }, { flush: 'sync' })
 
   let planInitialised = false
-  watch(() => link.selectedRoomId.value, () => { planInitialised = false; synced = null })
+  watch(() => link.selectedRoomId.value, () => { planInitialised = false; synced = null; seenOnScreen.value = {} })
   watch(car, (next) => {
     if (!session.value?.strategy) return
     if (!planInitialised) {
@@ -484,6 +515,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     blockedReason,
     sendToCar,
     fieldOutcomes,
+    seenOnScreen,
     scopeLabel,
     roomStateLabel,
   }

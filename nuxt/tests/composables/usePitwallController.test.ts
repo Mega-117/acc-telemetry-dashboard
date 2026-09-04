@@ -377,3 +377,51 @@ describe('mentre l ordine e in volo la colonna Strategia non si muove', () => {
     expect(controller.tyreSet.value).toBe(2)
   })
 })
+
+describe('cio che l occhio ha visto resta, anche dopo l ordine successivo', () => {
+  it('un preset rifiutato dal setup non ricompare come in macchina all ordine dopo', async () => {
+    // Visto in pista il 2026-09-04: chiesto 11 con un setup a una strategia,
+    // l'occhio ha letto 1; l'ordine dopo (solo il set gomme) faceva tornare
+    // "11 - ultimo ordine" nella colonna In macchina.
+    const { link, controller } = build()
+    link.carSnapshot.value = snapshot(1_000)
+    await nextTick()
+    controller.pitStrategy.value = 11
+    await controller.sendToCar()
+    link.orderStatus.value = 'partial'
+    link.orderFields.value = {
+      pitStrategy: { outcome: null, reason: 'Il setup in macchina ha 1 strategia: il preset 11 non esiste, resta 1.', via: 'screen', observed: 1, requested: 11 },
+    }
+    await nextTick()
+    expect(controller.seenOnScreen.value).toEqual({ pitStrategy: 1 })
+    expect(controller.sentPlan.value?.pitStrategy).toBe(1)
+
+    controller.tyreSet.value = 5
+    await controller.sendToCar()
+    link.orderStatus.value = 'applied'
+    link.orderFields.value = { tyreSet: { outcome: 'verified', reason: null } }
+    await nextTick()
+    expect(controller.seenOnScreen.value).toEqual({ pitStrategy: 1 })
+    expect(controller.sentPlan.value?.pitStrategy).toBe(1)
+  })
+
+  it('un campo confermato a schermo resta visto; cambiando gara la memoria si azzera', async () => {
+    const { link, controller } = build()
+    link.carSnapshot.value = snapshot(1_000)
+    await nextTick()
+    controller.brakes.value = true
+    await controller.sendToCar()
+    link.orderStatus.value = 'applied'
+    link.orderFields.value = { brakes: { outcome: 'verified', reason: null, via: 'screen', observed: true, requested: true } }
+    await nextTick()
+    expect(controller.seenOnScreen.value).toEqual({ brakes: true })
+    // Un esito non visto (alla cieca, o solo dichiarato) non entra nella memoria.
+    link.orderFields.value = { brakes: { outcome: 'selected', reason: null, via: 'blind', observed: null, requested: false } }
+    await nextTick()
+    expect(controller.seenOnScreen.value).toEqual({ brakes: true })
+
+    link.room.value = { roomId: 'room-2', track: 'Monza', closedAt: null }
+    await nextTick()
+    expect(controller.seenOnScreen.value).toEqual({})
+  })
+})

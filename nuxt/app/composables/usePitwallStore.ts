@@ -61,6 +61,8 @@ export interface PitwallStopHandle {
   orderStatus: Ref<PitwallOrderStatus | null>
   orderReason: Ref<string | null>
   fieldOutcomes: Ref<PitwallFieldOutcomeRow[]>
+  /** Cio' che l'occhio ha visto sul Pit MFD, campo per campo, e non ha piu' smentito. */
+  seenOnScreen: Ref<Record<string, unknown>>
   /**
    * L'ultimo ordine partito. ACC non rilegge le caselle (cambio gomme, freni,
    * riparazioni): "in macchina" per loro e' cio' che abbiamo chiesto l'ultima

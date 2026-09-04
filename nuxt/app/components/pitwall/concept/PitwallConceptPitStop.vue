@@ -84,9 +84,12 @@ const stopTime = computed(() => formatStopDuration(stop.stopEstimate.value.secon
  * che avevamo chiesto; quando l'esito porta `via: 'screen'` c'e' di meglio,
  * il valore letto a schermo, e la pastiglia lo dice. Vale anche per una
  * casella che ACC ha trascinato insieme a un'altra: e' quella la verita'.
+ *
+ * La memoria degli ordini passati sta nello store (`seenOnScreen`); qui sopra
+ * si aggiunge l'ordine in corso, i cui esiti arrivano campo per campo.
  */
 const seenOnScreen = computed(() => {
-  const seen = new Map<string, unknown>();
+  const seen = new Map<string, unknown>(Object.entries(stop.seenOnScreen.value));
   for (const entry of stop.fieldOutcomes.value) {
     if (entry.via === "screen" && entry.observed != null && (entry.outcome === "verified" || entry.outcome === null)) {
       seen.set(entry.field, entry.observed);

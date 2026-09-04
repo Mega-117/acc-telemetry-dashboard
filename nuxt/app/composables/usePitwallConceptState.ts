@@ -113,6 +113,7 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
   const orderStatus = ref<PitwallOrderStatus | null>(null)
   const orderReason = ref<string | null>(null)
   const fieldOutcomes = ref<PitwallFieldOutcomeRow[]>([])
+  const seenOnScreen = ref<Record<string, unknown>>({})
   const lastOrder = ref<PitwallStopHandle['lastOrder']['value']>(null)
   let settleTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -244,6 +245,7 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
     orderStatus,
     orderReason,
     fieldOutcomes,
+    seenOnScreen,
     lastOrder,
     adjustPressure: (wheel, direction) => {
       pressures.value = { ...pressures.value, [wheel]: stepPressure(pressures.value[wheel], direction) }

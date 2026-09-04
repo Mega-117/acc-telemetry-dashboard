@@ -461,6 +461,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     orderStatus: link.orderStatus,
     orderReason: link.orderReason,
     fieldOutcomes: controller.fieldOutcomes,
+    seenOnScreen: controller.seenOnScreen,
     lastOrder: controller.sentPlan,
     adjustPressure: controller.adjustPressure,
     setPressure: controller.setPressure,
