@@ -150,9 +150,14 @@ function stepAll(direction: 1 | -1) {
           +
         </button>
       </div>
+      <!-- ACC non pubblica il preset: "in macchina" e' quello visto a schermo
+           dopo l'ultimo ordine, o l'ultima richiesta fatta. Mai un valore inventato. -->
       <span class="pwc-pit-car">
-        <b>{{ stop.car.value.pitStrategy ?? "—" }}</b>
-        <em class="pwc-src is-unavailable">{{ PITWALL_CONCEPT_SOURCE_LABELS.unavailable }}</em>
+        <b>{{ seenValue("pitStrategy", last?.pitStrategy) }}</b>
+        <em
+          class="pwc-src"
+          :class="`is-${sourceOf('pitStrategy')}`"
+        >{{ PITWALL_CONCEPT_SOURCE_LABELS[sourceOf("pitStrategy")] }}</em>
       </span>
     </div>
 

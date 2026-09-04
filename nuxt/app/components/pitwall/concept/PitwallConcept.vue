@@ -8,7 +8,7 @@
 // Una sola relazione da capire: siamo amici. Aggiungi, accetta, apri il
 // Pitwall, entra. Niente versi, niente scadenze, niente codici da girarsi.
 // Le persone si chiamano col nickname e basta: nome e cognome non compaiono.
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import PitwallConceptFriends from "~/components/pitwall/concept/PitwallConceptFriends.vue";
 import PitwallConceptLive from "~/components/pitwall/concept/PitwallConceptLive.vue";
 import PitwallConceptMyRoom from "~/components/pitwall/concept/PitwallConceptMyRoom.vue";
@@ -36,6 +36,13 @@ const found = computed(() => state.found.value);
 
 /** Il primo avvio non deve essere tre riquadri vuoti senza un punto di partenza. */
 const isFirstRun = computed(() => !friends.value.length);
+
+// La gara che si stava guardando non c'e' piu' (chiusa dal pilota, o non ne
+// facciamo piu' parte): si torna alla home, invece di restare in una schermata
+// che sembra una gara guasta.
+watch(() => state.selectedRace.value, (race) => {
+  if (!race && screen.value === "live") go("home");
+});
 
 function go(next: PitwallConceptScreen) {
   screen.value = next;

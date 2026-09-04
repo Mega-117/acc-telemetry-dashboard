@@ -31,6 +31,23 @@ defineEmits<{ send: [] }>();
 const order = computed(() => describePitwallConceptOrderStatus(props.status, props.reason));
 const busy = computed(() => props.status === "pending" || props.status === "applying");
 
+/**
+ * Una riga di conto a esito concluso: quanti campi confermati (e quanti a
+ * schermo), quanti in disaccordo. Si legge in un colpo d'occhio, senza aprire
+ * le chip; il colore da solo non basta.
+ */
+const summary = computed(() => {
+  const rows = props.outcomes;
+  if (!rows.length) return "";
+  const verified = rows.filter(entry => entry.outcome === "verified").length;
+  const onScreen = rows.filter(entry => entry.outcome === "verified" && entry.via === "screen").length;
+  const mismatch = rows.filter(entry => entry.outcome === null && entry.observed != null).length;
+  const parts = [`${verified}/${rows.length} confermati`];
+  if (onScreen) parts.push(`${onScreen} a schermo`);
+  if (mismatch) parts.push(`${mismatch} in disaccordo`);
+  return parts.join(" · ");
+});
+
 /** Ogni chip con il suo segno: ✓ a schermo o dalla telemetria, → inviato, ✗ in disaccordo, ↳ trascinata. */
 const chips = computed(() => props.outcomes.map((entry) => {
   const described = describePitwallFieldOutcome(entry);
@@ -49,10 +66,20 @@ const chips = computed(() => props.outcomes.map((entry) => {
     <div
       v-if="status"
       class="pwc-order"
-      :class="`is-${order.tone}`"
+      :class="[`is-${order.tone}`, { 'is-busy': busy }]"
+      role="status"
+      aria-live="polite"
     >
+      <span
+        class="pwc-order__mark"
+        aria-hidden="true"
+      >{{ busy ? "…" : order.tone === "good" ? "✓" : order.tone === "warn" ? "!" : order.tone === "bad" ? "✗" : "" }}</span>
       <strong>{{ order.label }}</strong>
-      <span>{{ order.detail }}</span>
+      <span class="pwc-order__detail">{{ order.detail }}</span>
+      <small
+        v-if="!busy && summary"
+        class="pwc-order__summary"
+      >{{ summary }}</small>
     </div>
 
     <div
@@ -117,22 +144,44 @@ const chips = computed(() => props.outcomes.map((entry) => {
 .pwc-outcome__chip small { font-weight: 500; opacity: 0.85; }
 
 /* Lo stato dell'ordine: sei esiti, non "inviata" e basta. */
+/* L'esito si capisce in due secondi senza aprire i log: segno grande a
+   sinistra, etichetta in evidenza, fondo tinto del tono, riga di conto sotto. */
 .pwc-order {
   display: grid;
-  gap: 2px;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 14px;
+  row-gap: 2px;
+  align-items: center;
   margin: 16px 20px 0;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border: 1px solid var(--pwc-line);
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 13px;
 }
-.pwc-order > span { color: $text-secondary; }
-.pwc-order.is-good { border-color: rgba(74, 222, 128, 0.45); }
-.pwc-order.is-good > strong { color: #4ade80; }
-.pwc-order.is-warn { border-color: rgba(245, 158, 11, 0.45); }
-.pwc-order.is-warn > strong { color: #f59e0b; }
-.pwc-order.is-bad { border-color: rgba(239, 68, 68, 0.5); }
-.pwc-order.is-bad > strong { color: #ff625c; }
+.pwc-order__mark {
+  grid-row: 1 / span 3;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  font-family: $font-display;
+  font-size: 18px;
+}
+.pwc-order > strong { font-size: 16px; letter-spacing: 0.02em; text-transform: uppercase; }
+.pwc-order__detail { color: $text-secondary; }
+.pwc-order__summary { color: $text-muted; font-size: 12px; }
+.pwc-order.is-busy .pwc-order__mark { animation: pwc-order-pulse 1.2s ease-in-out infinite; }
+.pwc-order.is-good { border-color: rgba(74, 222, 128, 0.6); background: rgba(74, 222, 128, 0.08); }
+.pwc-order.is-good > strong, .pwc-order.is-good .pwc-order__mark { color: #4ade80; }
+.pwc-order.is-warn { border-color: rgba(245, 158, 11, 0.6); background: rgba(245, 158, 11, 0.08); }
+.pwc-order.is-warn > strong, .pwc-order.is-warn .pwc-order__mark { color: #f59e0b; }
+.pwc-order.is-bad { border-color: rgba(239, 68, 68, 0.65); background: rgba(239, 68, 68, 0.1); }
+.pwc-order.is-bad > strong, .pwc-order.is-bad .pwc-order__mark { color: #ff625c; }
+.pwc-order.is-neutral .pwc-order__mark { color: $text-secondary; }
+@keyframes pwc-order-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .pwc-order.is-busy .pwc-order__mark { animation: none; } }
 
 .pwc-blocked {
   margin: 16px 20px 0;

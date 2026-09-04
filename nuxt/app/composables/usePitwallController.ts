@@ -222,7 +222,17 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   }
   watch(() => link.orderStatus.value, (status) => {
     if (status === 'applied' || status === 'partial') clearOneShotFields()
-  })
+    if (status && status !== 'pending' && status !== 'applying') {
+      // A ordine concluso la base torna a essere la macchina: i campi che
+      // coincidono la seguono, quelli in disaccordo restano cio' che era stato
+      // chiesto, cosi' richiesto e "In macchina" restano confrontabili.
+      const next = car.value
+      synced = { fuel: next.fuelLiters, tyreSet: next.tyreSet, compound: next.compound, pressures: { ...next.pressures } }
+    }
+  // Sincrono: deve valere prima che il battito della macchina arrivato nello
+  // stesso giro venga seguito, altrimenti la vecchia base farebbe passare in
+  // macchina un campo in disaccordo.
+  }, { flush: 'sync' })
 
   let planInitialised = false
   watch(() => link.selectedRoomId.value, () => { planInitialised = false; synced = null })
@@ -233,6 +243,11 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
       resetToCar()
       return
     }
+    // Mentre l'ordine e' in volo la colonna Strategia non si muove: e' la
+    // fotografia di cio' che e' partito. I valori intermedi che il preset e
+    // le correzioni scrivono in macchina vanno solo in "In macchina". Visto
+    // dal vivo: i campi appena inviati saltellavano a ogni battito.
+    if (link.orderStatus.value === 'pending' || link.orderStatus.value === 'applying') return
     followCar(next)
   })
 

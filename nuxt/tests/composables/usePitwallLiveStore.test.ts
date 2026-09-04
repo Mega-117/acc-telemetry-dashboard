@@ -560,3 +560,29 @@ describe('la ricerca e le persone', () => {
     expect(trust.stop).toHaveBeenCalled()
   })
 })
+
+describe('la gara chiusa mentre si e dentro', () => {
+  it('si esce e lo si dice, invece di restare in una schermata che sembra guasta', async () => {
+    // Un membro gia' dentro restava nella gara chiusa con l'invio bloccato e
+    // un errore generico (segnalato dall'utente il 2026-09-04).
+    const open = room({ hostUid: 'pilota', memberUids: ['pilota', 'me'] })
+    link.rooms.value = [open]
+    link.room.value = open
+    trust.outgoing.value = [outgoing('pilota', 'granted')]
+    await nextTick()
+
+    link.room.value = { ...open, closedAt: '2026-09-03T10:30:00.000Z' }
+    await nextTick()
+    expect(link.selectRoom).toHaveBeenCalledWith(null)
+    expect(link.notice.value).toBe('pilota ha chiuso il Pitwall.')
+
+    // Chiusa gia' da prima (si apre una gara chiusa): nessun avviso, nessuna uscita.
+    vi.clearAllMocks()
+    link.notice.value = null
+    link.room.value = { ...open, roomId: 'altra', closedAt: '2026-09-01T10:30:00.000Z' }
+    await nextTick()
+    link.room.value = { ...open, roomId: 'altra', closedAt: '2026-09-01T10:30:00.000Z', label: 'x' }
+    await nextTick()
+    expect(link.selectRoom).not.toHaveBeenCalled()
+  })
+})

@@ -26,11 +26,11 @@ export const PITWALL_TYRE_SET_MAX = 50
 /**
  * Le strategie di sosta salvate nell'assetto.
  *
- * Il massimo non e' un limite di ACC: e' quanto in basso ha senso scendere per
- * ritrovare la prima, visto che il gioco non pubblica su quale strategia sei.
+ * Trenta e' quante strategie contiene davvero un setup di ACC (misurato sui
+ * file Setups il 2026-09-04): rispecchia `PIT_STRATEGY` del contratto desktop.
  */
 export const PITWALL_PIT_STRATEGY_MIN = 1
-export const PITWALL_PIT_STRATEGY_MAX = 10
+export const PITWALL_PIT_STRATEGY_MAX = 30
 
 /** Le mescole dei freni nel Pit MFD: quattro, davanti e dietro. */
 export const PITWALL_BRAKE_COMPOUND_MIN = 1

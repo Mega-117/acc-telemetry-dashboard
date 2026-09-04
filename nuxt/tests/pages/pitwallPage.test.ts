@@ -30,6 +30,7 @@ const topBar = read('app/components/layout/TopBar.vue')
 const controller = read('app/composables/usePitwallController.ts')
 const store = read('app/composables/usePitwallStore.ts')
 const liveStore = read('app/composables/usePitwallLiveStore.ts')
+const friendActions = read('app/composables/usePitwallFriendActions.ts')
 const appRoot = read('app/app.vue')
 
 describe('Pitwall layout approvato', () => {
@@ -377,7 +378,7 @@ describe('Pitwall wiring', () => {
     // della vettura nello store, e nient'altro.
     expect(conceptPitStop).not.toContain('Object.freeze(')
     for (const cella of [
-      '{{ stop.car.value.pitStrategy ?? "—" }}',
+      '{{ seenValue("pitStrategy", last?.pitStrategy) }}',
       '{{ clampFuel(stop.car.value.fuelLiters) }} L',
       '{{ clampTyreSet(stop.car.value.tyreSet) }}',
       'stop.car.value.compound === "wet" ? "Wet" : "Dry"',
@@ -403,7 +404,7 @@ describe('Pitwall wiring', () => {
     // affatto. Mostrarli tutti allo stesso modo sarebbe un falso verde.
     expect(conceptPitStop).toContain('PITWALL_CONCEPT_SOURCE_LABELS')
     expect(conceptPitStop).toContain('class="pwc-pit-car"')
-    expect(conceptPitStop).toContain('is-unavailable')
+    expect(conceptPitStop).toContain('sourceOf("pitStrategy")')
     expect(conceptPitStop).toContain('is-order')
     expect(conceptPitStop).toContain('is-calculated')
     // Le stesse quattro parole della vista classica.
@@ -627,8 +628,8 @@ describe('Pitwall wiring', () => {
     expect(conceptState).toContain('function befriend')
     expect(conceptState).toContain('function unfriend')
     // Chiedere e accettare sono la stessa scrittura, nei due versi.
-    expect(liveStore).toContain("await trust.preAuthorise(personId, 'always', null)")
-    expect(liveStore).toContain("await trust.requestLink(personId, 'always')")
+    expect(friendActions).toContain("await trust.preAuthorise(personId, 'always', null)")
+    expect(friendActions).toContain("await trust.requestLink(personId, 'always')")
   })
 
   it('dice cosa succede prima di togliere un amico', () => {
@@ -636,7 +637,7 @@ describe('Pitwall wiring', () => {
     expect(conceptFriends).toContain('non vedrà più il tuo Pitwall, e tu non vedrai il suo')
     expect(conceptFriends).toContain('confirmRemove(friend.personId)')
     // Togliere un amico lo toglie anche dalle mie gare aperte.
-    expect(liveStore).toContain('await service.revoke(room.roomId, personId)')
+    expect(friendActions).toContain('await service.revoke(room.roomId, personId)')
   })
 
   it('niente scadenze e niente durate: un amico lo e finche non lo togli', () => {

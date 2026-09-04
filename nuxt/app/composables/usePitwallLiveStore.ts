@@ -26,7 +26,8 @@ import {
   type PitwallRoom,
 } from '~/services/pitwall/pitwallRoomContract'
 import { closeDormantPitwallRooms } from '~/services/pitwall/pitwallRoomLifecycle'
-import { derivePitwallFriends, pitwallFriendActions, sortPitwallFriends } from '~/services/pitwall/pitwallFriends'
+import { derivePitwallFriends, sortPitwallFriends } from '~/services/pitwall/pitwallFriends'
+import { createPitwallFriendActions } from '~/composables/usePitwallFriendActions'
 import { requestPitwallClose, requestPitwallOpen, usePitwallIntent, type PitwallIntentStatus } from '~/composables/usePitwallIntent'
 import { searchPitwallConceptDirectory } from '~/utils/pitwallConcept'
 import { formatCarName, formatTrackName } from '~/utils/telemetryFormat'
@@ -198,6 +199,24 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     void closeDormantPitwallRooms(link.service(), list, link.room.value?.roomId ?? null, closeAttempted)
   })
 
+  /**
+   * Chiusura esplicita mentre si e' dentro: si esce, dicendolo.
+   *
+   * Un membro gia' dentro restava nella schermata della gara con l'invio
+   * bloccato e un errore generico: sembrava una stanza guasta, non chiusa.
+   * La perdita di connessione del pilota non passa di qui - la gara resta
+   * aperta e la telemetria invecchia - solo `closedAt`, che scrive un manager.
+   */
+  watch(() => ({ id: link.room.value?.roomId ?? null, closedAt: link.room.value?.closedAt ?? null }), (now, before) => {
+    // Solo la **stessa** gara che passa da aperta a chiusa: aprire dalla
+    // cronologia una gara gia' chiusa non e' una chiusura.
+    if (!now.closedAt || !before || before.id !== now.id || before.closedAt) return
+    const host = link.room.value?.hostUid ?? null
+    const who = host && host !== uid() ? people.value.find(person => person.id === host)?.handle.replace(/^@/, '') ?? null : null
+    link.notice.value = who ? `${who} ha chiuso il Pitwall.` : 'Il Pitwall è stato chiuso.'
+    void link.selectRoom(null)
+  })
+
   const dismissedInvites = ref(loadSet(DISMISSED_INVITES_KEY))
 
   /**
@@ -367,47 +386,8 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     trust.searchResults.value.map(entry => ({ id: entry.uid, handle: `@${entry.nickname}` })),
   ))
 
-  // ---- Amici: chiedere, accettare, togliere ---------------------------------
-  /**
-   * Chiedere e accettare sono la stessa scrittura: autorizzo io (`me__X`) e
-   * chiedo a lui (`X__me`). Se lui aveva gia' autorizzato me, siamo amici
-   * adesso; altrimenti la sua parte arriva quando accetta.
-   */
-  async function befriend(personId: string): Promise<void> {
-    const before = friendViews.value.find(view => view.personId === personId) ?? null
-    await trust.preAuthorise(personId, 'always', null)
-    if (!before?.theyAllow) await trust.requestLink(personId, 'always')
-    link.notice.value = before?.theyAllow
-      ? 'Adesso siete amici.'
-      : 'Richiesta inviata: quando accetta, siete amici.'
-  }
-
-  /**
-   * Sciogliere la relazione tocca solo i documenti che esistono, e toglie la
-   * persona anche dalle mie gare aperte: `syncInvites` aggiunge soltanto, e
-   * senza questo un ex amico resterebbe al muretto fino alla chiusura.
-   */
-  async function unfriend(personId: string): Promise<void> {
-    const before = friendViews.value.find(view => view.personId === personId)
-    const actions = pitwallFriendActions(before)
-    if (actions.revokeMine) await trust.decide(personId, 'revoked')
-    if (actions.withdrawTheirs) await trust.withdrawRequest(personId)
-    // I servizi parlano di permessi; l'utente ha tolto un amico o una richiesta.
-    link.notice.value = before?.state === 'friends' ? 'Non siete più amici.' : 'Richiesta annullata.'
-    const me = uid()
-    const service = link.service()
-    if (!me || !service) return
-    for (const room of link.rooms.value) {
-      if (room.closedAt) continue
-      if (room.hostUid === me) {
-        if (room.allowedUids.includes(personId) || room.memberUids.includes(personId)) await service.revoke(room.roomId, personId)
-      } else if (room.hostUid === personId && room.memberUids.includes(me)) {
-        // Dalla sua gara esco io: le regole non mi lasciano togliermi dagli
-        // invitati, ma un ex amico non resta al muretto di chi ha lasciato.
-        await service.leaveRoom(room.roomId)
-      }
-    }
-  }
+  // ---- Amici: chiedere, accettare, togliere (usePitwallFriendActions) --------
+  const { befriend, unfriend } = createPitwallFriendActions({ uid, friendViews, trust, link })
 
   // ---- Il mio Pitwall -------------------------------------------------------
   const { pitwallIntent } = usePitwallIntent()

@@ -158,6 +158,7 @@ export default defineConfig({
         'app/composables/usePitwallLink.ts',
         'app/composables/usePitwallPresenceWatch.ts',
         'app/composables/usePitwallIntent.ts',
+        'app/composables/usePitwallFriendActions.ts',
         'server/utils/chatterboxRuntimeStatus.ts',
         'server/utils/chatterboxVoiceCatalog.ts',
         'shared/chatterboxProsody.ts',

@@ -345,3 +345,35 @@ describe('l esito resta campo per campo, con le parole del muretto', () => {
     expect(controller.trustedEngineers.value.map(entry => entry.engineerUid)).toEqual(['altro'])
   })
 })
+
+describe('mentre l ordine e in volo la colonna Strategia non si muove', () => {
+  it('i valori intermedi che il preset scrive in macchina non entrano nel piano; a esito concluso la base torna la macchina', async () => {
+    // Visto dal vivo (2026-09-04): i campi appena inviati seguivano i valori
+    // intermedi della macchina durante l'applicazione e saltellavano.
+    const { link, controller } = build()
+    link.carSnapshot.value = snapshot(1_000)
+    await nextTick()
+    controller.fuelLiters.value = 60
+    await controller.sendToCar()
+    link.orderStatus.value = 'applying'
+
+    // Il preset riscrive tutto: la macchina dice 45 per un attimo.
+    link.carSnapshot.value = snapshot(1_000, { fuelToAdd: 45, tyreSet: 7, compound: 'dry', pressures: { ...BASELINE } })
+    await nextTick()
+    expect(controller.fuelLiters.value).toBe(60)
+    expect(controller.tyreSet.value).toBe(2)
+
+    // Concluso: il carburante e' arrivato a 60, il set e' rimasto a 7 (in disaccordo).
+    link.carSnapshot.value = snapshot(1_000, { fuelToAdd: 60, tyreSet: 7, compound: 'dry', pressures: { ...BASELINE } })
+    link.orderStatus.value = 'partial'
+    await nextTick()
+    // Il campo in disaccordo resta quello chiesto: richiesto e "in macchina" restano confrontabili.
+    expect(controller.tyreSet.value).toBe(2)
+    expect(controller.fuelLiters.value).toBe(60)
+    // Da qui la macchina si segue di nuovo sui campi che coincidono.
+    link.carSnapshot.value = snapshot(1_000, { fuelToAdd: 58, tyreSet: 7, compound: 'dry', pressures: { ...BASELINE } })
+    await nextTick()
+    expect(controller.fuelLiters.value).toBe(58)
+    expect(controller.tyreSet.value).toBe(2)
+  })
+})
