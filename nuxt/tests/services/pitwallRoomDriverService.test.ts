@@ -59,6 +59,8 @@ function fakeService(initial: PitwallRoom = room()) {
     released: 0,
     liveStamps: [] as string[],
     opened: [] as string[],
+    cleared: [] as string[],
+    closed: [] as string[],
   }
   let pushRoom: ((next: PitwallRoom) => void) | null = null
   let pushMembers: ((list: PitwallRoomMember[]) => void) | null = null
@@ -94,11 +96,17 @@ function fakeService(initial: PitwallRoom = room()) {
       calls.presence.push({ driving: input.driving })
       return { ok: true as const, value: true as const }
     },
-    clearPresence: async () => {},
+    clearPresence: async (roomId: string) => {
+      calls.cleared.push(roomId)
+      return { ok: true as const, value: true as const }
+    },
     invite: async () => ({ ok: true as const, value: true as const }),
     revoke: async () => ({ ok: true as const, value: true as const }),
     promote: async () => ({ ok: true as const, value: true as const }),
-    closeRoom: async () => ({ ok: true as const, value: true as const }),
+    closeRoom: async (roomId: string) => {
+      calls.closed.push(roomId)
+      return { ok: true as const, value: true as const }
+    },
     syncInvites: async (roomId: string, trusted: string[]) => {
       calls.invites.push({ roomId, trusted })
       return { ok: true as const, value: trusted.length }
@@ -159,7 +167,7 @@ function electron(overrides: Record<string, unknown> = {}) {
 }
 
 function startDriver(fake: ReturnType<typeof fakeService>, bridge: ReturnType<typeof electron>, trusted: string[] = []) {
-  return startPitwallRoomDriver({
+  const handle = startPitwallRoomDriver({
     db: {} as never,
     uid: DRIVER,
     nickname: 'RICO117',
@@ -182,6 +190,9 @@ function startDriver(fake: ReturnType<typeof fakeService>, bridge: ReturnType<ty
     }),
     log: { warn: () => {}, error: () => {} },
   })
+  // Questi test parlano della gara, non dell'intento: il pilota l'ha chiesta.
+  void handle.openPitwall()
+  return handle
 }
 
 /** Lascia girare le promise in sospeso senza dipendere da un timer reale. */
@@ -475,6 +486,7 @@ describe('un errore in mezzo non blocca la vettura per sempre', () => {
       }),
       log: { warn: () => {}, error: () => {} },
     })
+    void handle.openPitwall()
     await settle(12)
 
     fake.setMembers([member(DRIVER, true)])
@@ -616,7 +628,7 @@ describe('non si apre una stanza su un equipaggio ancora a meta', () => {
 
   function startWithVehicles(fake: ReturnType<typeof fakeService>, fingerprints: string[]) {
     let call = 0
-    return startPitwallRoomDriver({
+    const started = startPitwallRoomDriver({
       db: {} as never,
       uid: DRIVER,
       nickname: 'RICO117',
@@ -640,6 +652,8 @@ describe('non si apre una stanza su un equipaggio ancora a meta', () => {
       },
       log: { warn: () => {}, error: () => {} },
     })
+    void started.openPitwall()
+    return started
   }
 
   it('aspetta la seconda lettura prima di aprire, e intanto lo dice', async () => {
@@ -736,6 +750,7 @@ describe('il segno di vita sulla stanza', () => {
       }),
       log: { warn: () => {}, error: () => {} },
     })
+    void handle.openPitwall()
     await settle(12)
     await handle.sync()
     await settle(12)
@@ -743,5 +758,111 @@ describe('il segno di vita sulla stanza', () => {
     expect(fake.calls.liveStamps).toEqual(['rifiutato'])
     // E il battito vero continua: e' quello che decide chi applica l'ordine.
     expect(fake.calls.presence.length).toBeGreaterThan(0)
+  })
+})
+
+describe('il Pitwall si apre solo se il pilota lo chiede', () => {
+  let handle: ReturnType<typeof startPitwallRoomDriver> | null = null
+
+  afterEach(() => { handle?.stop(); handle = null })
+
+  function startSilent(fake: ReturnType<typeof fakeService>, options: { vehicle?: boolean, onStatus?: (s: { state: string }) => void } = {}) {
+    return startPitwallRoomDriver({
+      db: {} as never,
+      uid: DRIVER,
+      nickname: 'RICO117',
+      runtimeSessionId: 'rt-1',
+      electronApi: electron().api,
+      service: fake.service,
+      vehicleConfirmations: 1,
+      readTrustedUids: async () => [ENGINEER],
+      onStatus: options.onStatus,
+      readVehicle: async () => options.vehicle === false
+        ? null
+        : { fingerprint: 'ddf3278c2b7485a3', label: '#1 · nurburgring', track: 'nurburgring', raceNumber: 1, teamName: null, driving: true, crew: null, strategy: null },
+      log: { warn: () => {}, error: () => {} },
+    })
+  }
+
+  it('con la vettura riconosciuta ma senza la richiesta, non nasce nessuna gara e non parte nessun battito', async () => {
+    // Prima la stanza nasceva da sola appena ACC era in sessione: chi si
+    // allenava da solo si ritrovava un muretto aperto senza averlo chiesto.
+    const fake = fakeService()
+    handle = startSilent(fake)
+    await settle(12)
+    await handle.sync()
+    await settle(12)
+
+    expect(fake.calls.opened).toEqual([])
+    expect(fake.calls.presence).toEqual([])
+    expect(handle.status()).toEqual({ state: 'off', roomId: null, reason: null })
+  })
+
+  it('chiesto senza ACC, si arma e dice che si aprira da se', async () => {
+    const fake = fakeService()
+    handle = startSilent(fake, { vehicle: false })
+    await handle.openPitwall()
+    await settle(12)
+
+    expect(fake.calls.opened).toEqual([])
+    expect(handle.status()).toEqual({ state: 'arming', roomId: null, reason: 'Si apre appena ACC e in sessione.' })
+  })
+
+  it('chiesto con ACC in sessione apre una gara sola, anche se il giro di avvio e ancora in corso', async () => {
+    const seen: string[] = []
+    const fake = fakeService()
+    handle = startSilent(fake, { onStatus: status => seen.push(status.state) })
+    // Il giro di avvio e' ancora dentro il primo await: la richiesta non deve
+    // farne partire un secondo che apra un'altra stanza.
+    void handle.openPitwall()
+    await settle(12)
+
+    expect(fake.calls.opened).toEqual(['ddf3278c2b7485a3'])
+    expect(handle.status()).toEqual({ state: 'open', roomId: ROOM_ID, reason: null })
+    expect(fake.calls.invites[0]!.trusted).toEqual([ENGINEER])
+    expect(seen).toEqual(['arming', 'open'])
+  })
+
+  it('chiudere chiude la gara, toglie il battito, e i giri dopo non pubblicano piu niente', async () => {
+    const seen: string[] = []
+    const fake = fakeService()
+    handle = startSilent(fake, { onStatus: status => seen.push(status.state) })
+    await handle.openPitwall()
+    await settle(12)
+    const beats = fake.calls.presence.length
+
+    await handle.closePitwall()
+    await handle.sync()
+    await settle(12)
+
+    expect(fake.calls.closed).toEqual([ROOM_ID])
+    expect(fake.calls.cleared).toEqual([ROOM_ID])
+    expect(fake.calls.presence).toHaveLength(beats)
+    expect(handle.status()).toEqual({ state: 'off', roomId: null, reason: null })
+    expect(seen).toEqual(['arming', 'open', 'off'])
+  })
+
+  it('riaprire dopo aver chiuso cerca di nuovo la gara, invece di rientrare in quella chiusa', async () => {
+    const fake = fakeService()
+    handle = startSilent(fake)
+    await handle.openPitwall()
+    await settle(12)
+    await handle.closePitwall()
+    await handle.openPitwall()
+    await settle(12)
+
+    expect(fake.calls.opened).toEqual(['ddf3278c2b7485a3', 'ddf3278c2b7485a3'])
+    expect(handle.status().state).toBe('open')
+  })
+
+  it('una gara di un altro non si chiude: si esce e basta', async () => {
+    const fake = fakeService(room({ hostUid: ENGINEER, managerUids: [ENGINEER], memberUids: [ENGINEER, DRIVER] }))
+    handle = startSilent(fake)
+    await handle.openPitwall()
+    await settle(12)
+    await handle.closePitwall()
+
+    expect(fake.calls.cleared).toEqual([ROOM_ID])
+    expect(fake.calls.closed).toEqual([])
   })
 })

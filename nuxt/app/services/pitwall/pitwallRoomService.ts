@@ -202,7 +202,10 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
     if (pointerUsable) {
       try {
         const room = await readRoom(pointer!.roomId)
-        if (room) {
+        // Una gara chiusa e' memoria, non una porta: chi riapre il Pitwall
+        // dopo averlo chiuso vuole una gara nuova, non rientrare in quella
+        // archiviata. Si cade nella creazione e il puntatore si riscrive.
+        if (room && room.closedAt == null) {
           if (isPitwallRoomMember(room, uid)) return { ok: true, value: room }
           return joinRoom(pointer!.roomId)
         }

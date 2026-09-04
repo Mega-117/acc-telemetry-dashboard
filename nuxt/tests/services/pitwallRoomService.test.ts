@@ -9,6 +9,10 @@ const mocks = vi.hoisted(() => ({
   stopped: [] as string[],
   wheres: [] as string[],
   orderBys: [] as string[],
+  /** Documenti letti per path: cio' che `trackedGetDoc` trova. */
+  docs: new Map<string, Record<string, unknown>>(),
+  sets: [] as { path: string, data: Record<string, unknown> }[],
+  updates: [] as { path: string, data: Record<string, unknown> }[],
 }))
 
 vi.mock('firebase/firestore', () => ({
@@ -22,7 +26,10 @@ vi.mock('firebase/firestore', () => ({
 }))
 
 vi.mock('~/composables/useFirebaseTracker', () => ({
-  trackedGetDoc: async () => ({ exists: () => false, data: () => undefined }),
+  trackedGetDoc: async (ref: { path: string }) => {
+    const data = mocks.docs.get(ref.path)
+    return { exists: () => data != null, data: () => data }
+  },
   trackedGetDocs: async () => ({ docs: [] }),
   trackedOnDocSnapshot: () => () => {},
   trackedOnSnapshot: (
@@ -37,8 +44,8 @@ vi.mock('~/composables/useFirebaseTracker', () => ({
     return () => { mocks.stopped.push(caller) }
   },
   trackedRunTransaction: async () => {},
-  trackedSetDoc: async () => {},
-  trackedUpdateDoc: async () => {},
+  trackedSetDoc: async (ref: { path: string }, data: Record<string, unknown>) => { mocks.sets.push({ path: ref.path, data }) },
+  trackedUpdateDoc: async (ref: { path: string }, data: Record<string, unknown>) => { mocks.updates.push({ path: ref.path, data }) },
   trackedDeleteDoc: async () => {},
 }))
 
@@ -55,6 +62,47 @@ beforeEach(() => {
   mocks.stopped = []
   mocks.wheres = []
   mocks.orderBys = []
+  mocks.docs = new Map()
+  mocks.sets = []
+  mocks.updates = []
+})
+
+describe('ensureRoomForVehicle: il puntatore della vettura', () => {
+  const NOW = Date.parse('2026-09-04T10:00:00.000Z')
+  const FP = 'impronta-1'
+
+  function pointer(roomId: string) {
+    mocks.docs.set(`pitwallVehicles/${FP}`, { fingerprint: FP, roomId, createdBy: 'me', expiresAtMs: NOW + 60_000 })
+  }
+
+  function storedRoom(roomId: string, overrides: Record<string, unknown> = {}) {
+    mocks.docs.set(`pitwallRooms/${roomId}`, {
+      schemaVersion: 2, roomId, label: '#1', hostUid: 'me', managerUids: ['me'], memberUids: ['me'], allowedUids: [],
+      vehicleFingerprint: FP, createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-01T00:00:00.000Z', ...overrides,
+    })
+  }
+
+  it('una gara aperta a cui appartengo si ritrova, senza scrivere niente', async () => {
+    pointer('vecchia')
+    storedRoom('vecchia')
+    const service = createPitwallRoomService({ db: {} as never, uid: 'me', now: () => NOW, newRoomId: () => 'nuova' })
+    const result = await service.ensureRoomForVehicle({ fingerprint: FP, label: '#1' })
+    expect(result.ok && result.value.roomId).toBe('vecchia')
+    expect(mocks.sets).toEqual([])
+  })
+
+  it('una gara chiusa e memoria, non una porta: si conia una stanza nuova e il puntatore si riscrive', async () => {
+    // Chi riapre il Pitwall dopo averlo chiuso vuole una gara nuova: rientrare
+    // in quella archiviata la farebbe sembrare viva a chi la guarda da fuori.
+    pointer('chiusa')
+    storedRoom('chiusa', { closedAt: '2026-09-03T00:00:00.000Z' })
+    const service = createPitwallRoomService({ db: {} as never, uid: 'me', now: () => NOW, newRoomId: () => 'nuova' })
+    const result = await service.ensureRoomForVehicle({ fingerprint: FP, label: '#1', seedAllowedUids: ['popo', 'me'] })
+    expect(result.ok && result.value.roomId).toBe('nuova')
+    expect(mocks.sets.map(set => set.path)).toEqual(['pitwallRooms/nuova', `pitwallVehicles/${FP}`])
+    expect(mocks.sets[0]!.data).toMatchObject({ hostUid: 'me', memberUids: ['me'], managerUids: ['me'], allowedUids: ['popo'] })
+    expect(mocks.sets[1]!.data).toMatchObject({ roomId: 'nuova', createdBy: 'me' })
+  })
 })
 
 describe('watchRooms', () => {

@@ -51,6 +51,22 @@ export const PITWALL_ROOM_ORDER_RETRY_MS = 5_000
  */
 export const PITWALL_ROOM_INVITE_SYNC_MS = 5 * 60_000
 
+/**
+ * Lo stato del Pitwall del pilota, come lo legge la sua card.
+ *
+ * `off`: non lo vuole; `arming`: lo ha chiesto ma la vettura non c'e' ancora
+ * (ACC fuori sessione, o impronta da confermare); `open`: la gara esiste e il
+ * battito e' acceso.
+ */
+export type PitwallDriverState = 'off' | 'arming' | 'open'
+
+export interface PitwallDriverStatus {
+  state: PitwallDriverState
+  roomId: string | null
+  /** Perche' non e' ancora aperto, quando e' `arming`. */
+  reason: string | null
+}
+
 export interface PitwallRoomDriverOptions {
   db: Firestore
   uid: string
@@ -74,8 +90,10 @@ export interface PitwallRoomDriverOptions {
     crew?: unknown
     strategy?: unknown
   } | null>
-  /** Chi si ritrova invitato senza chiederlo: la squadra che ci ha gia' dato fiducia. */
+  /** Chi si ritrova invitato senza chiederlo: gli amici. */
   readTrustedUids?: () => Promise<string[]>
+  /** Cambi di stato del Pitwall: li ascoltano la card del pilota e il pannello rapido. */
+  onStatus?: (status: PitwallDriverStatus) => void
   /**
    * Quante letture uguali servono prima di aprire o cambiare stanza.
    *
@@ -107,6 +125,14 @@ export interface PitwallRoomDriverHandle {
   refreshInvites: () => Promise<void>
   /** Sparisce dalla presenza senza uscire dalla stanza. */
   goOffline: () => Promise<void>
+  /**
+   * Il pilota vuole il Pitwall: da qui in poi la gara si apre appena ACC e'
+   * in sessione, e resta aperta finche' non la chiude lui.
+   */
+  openPitwall: () => Promise<void>
+  /** Chiude la gara (se e' la sua), toglie il battito e smette di cercare la vettura. */
+  closePitwall: () => Promise<void>
+  status: () => PitwallDriverStatus
   stop: () => void
 }
 
@@ -167,6 +193,33 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
    * mentre la macchina ha finito con quella del secondo.
    */
   let applyingOrderId: string | null = null
+
+  /**
+   * Il pilota ha chiesto il Pitwall.
+   *
+   * E' l'unica cosa che decide se una stanza nasce: la vettura riconosciuta da
+   * sola non basta piu'. Non si allena da soli con il muretto aperto, e nessuna
+   * scrittura verso il cloud parte senza che qualcuno l'abbia voluta.
+   */
+  let wanted = false
+  /** Il giro in corso: un secondo `sync` mentre il primo sta aprendo la stanza ne aprirebbe due. */
+  let syncing: Promise<void> | null = null
+  let lastStatusKey = ''
+
+  function status(): PitwallDriverStatus {
+    if (!wanted) return { state: 'off', roomId: null, reason: null }
+    if (room) return { state: 'open', roomId: room.roomId, reason: null }
+    return { state: 'arming', roomId: null, reason: unavailableReason }
+  }
+
+  /** Dice lo stato solo quando cambia: chi ascolta non deve filtrare doppioni. */
+  function emitStatus(): void {
+    const next = status()
+    const key = `${next.state}|${next.roomId ?? ''}|${next.reason ?? ''}`
+    if (key === lastStatusKey) return
+    lastStatusKey = key
+    options.onStatus?.(next)
+  }
 
   function detachRoom(): void {
     stopMembers?.()
@@ -346,14 +399,24 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
    * Si richiama a ogni battito perche' tutto puo' cambiare mentre si guida: il
    * pilota entra in pista, cambia sessione, o passa il volante.
    */
-  async function sync(): Promise<void> {
-    if (stopped) return
+  function sync(): Promise<void> {
+    if (stopped) return Promise.resolve()
+    if (syncing) return syncing
+    syncing = runSync().finally(() => { syncing = null })
+    return syncing
+  }
 
-    // Prima di tutto il resto, e senza aspettare ACC: un esito rimasto in
-    // sospeso riguarda una gara che potrebbe essere finita ieri, e il record
-    // si porta dietro la propria stanza. Non serve essere in pista per dire
-    // com'e' andata.
+  async function runSync(): Promise<void> {
+    // Prima di tutto il resto, e senza aspettare ACC ne' il pilota: un esito
+    // rimasto in sospeso riguarda una gara che potrebbe essere finita ieri, e
+    // il record si porta dietro la propria stanza. Non serve essere in pista
+    // per dire com'e' andata.
     await drainPendingOutcomes()
+
+    if (!wanted) {
+      emitStatus()
+      return
+    }
 
     let vehicle: Awaited<ReturnType<typeof options.readVehicle>> = null
     try {
@@ -366,10 +429,11 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
       // ACC non e' vivo: non si inventa una stanza. Se ce n'era una si resta
       // membri - il punto della feature e' proprio poter rientrare - ma il
       // battito rallenta, perche' non c'e' niente di nuovo da dire.
-      unavailableReason = 'ACC non e in sessione: la gara comparira da sola.'
+      unavailableReason = 'Si apre appena ACC e in sessione.'
       if (room && now() - lastPresenceAtMs >= PITWALL_MEMBER_IDLE_HEARTBEAT_MS) {
         await heartbeat(false, null, null)
       }
+      emitStatus()
       return
     }
 
@@ -393,8 +457,14 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
         unavailableReason = 'Sto riconoscendo la vettura: un momento.'
         if (confirmTimer) clearTimeout(confirmTimer)
         confirmTimer = setTimeout(() => { if (!stopped) void sync() }, PITWALL_ROOM_ORDER_RETRY_MS)
+        emitStatus()
         return
       }
+
+      // Cambio di vettura con una gara ancora aperta: quella vecchia si lascia
+      // per bene, altrimenti resterebbe aperta per sempre col nostro battito
+      // dentro. Se e' nostra si chiude, se e' di un altro si esce e basta.
+      if (room) await leaveCurrentRoom(room.hostUid === options.uid)
 
       // Vettura nuova (primo avvio, o cambio evento): si cerca o si apre la
       // sua stanza. Il puntatore fa convergere gli altri PC della stessa
@@ -413,8 +483,12 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
         teamName: vehicle.teamName ?? null,
         seedAllowedUids: trusted,
       })
+      // Nel frattempo il pilota puo' aver chiuso: una stanza nata adesso non
+      // si adotta. Restera' dormiente e il ciclo di vita la archiviera'.
+      if (!wanted || stopped) return
       if (!resolved.ok) {
         unavailableReason = resolved.reason
+        emitStatus()
         return
       }
       lastFingerprint = vehicle.fingerprint
@@ -428,6 +502,56 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
     }
 
     await heartbeat(vehicle.driving, vehicle.crew ?? null, vehicle.strategy ?? null)
+    emitStatus()
+  }
+
+  /**
+   * Lascia la stanza in cui siamo: battito via, ascolti staccati, memoria
+   * azzerata. Con `close` la gara viene anche chiusa - solo se e' nostra, le
+   * regole non lasciano chiudere quella di un altro.
+   */
+  async function leaveCurrentRoom(close: boolean): Promise<void> {
+    const current = room
+    detachRoom()
+    room = null
+    lastFingerprint = null
+    confirmingFingerprint = null
+    confirmedReadings = 0
+    lastLiveStampAtMs = 0
+    handled.clear()
+    if (confirmTimer) clearTimeout(confirmTimer)
+    confirmTimer = null
+    if (!current) return
+    try {
+      const cleared = await rooms.clearPresence(current.roomId)
+      if (cleared?.ok === false) log.warn?.('[PITWALL] battito non tolto dalla stanza:', cleared.reason)
+    } catch (error) {
+      log.warn?.('[PITWALL] battito non tolto dalla stanza:', (error as Error)?.message)
+    }
+    if (!close) return
+    try {
+      const closed = await rooms.closeRoom(current.roomId)
+      if (closed?.ok === false) log.warn?.('[PITWALL] gara non chiusa:', closed.reason)
+    } catch (error) {
+      log.warn?.('[PITWALL] gara non chiusa:', (error as Error)?.message)
+    }
+  }
+
+  async function openPitwall(): Promise<void> {
+    if (stopped || wanted) return
+    wanted = true
+    unavailableReason = null
+    emitStatus()
+    await sync()
+  }
+
+  async function closePitwall(): Promise<void> {
+    if (!wanted) return
+    wanted = false
+    // Un giro in corso finisce da solo e non adotta la stanza (vedi runSync).
+    await leaveCurrentRoom(room?.hostUid === options.uid)
+    unavailableReason = null
+    emitStatus()
   }
 
   /**
@@ -566,6 +690,9 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
     goOffline: async () => {
       if (room) await rooms.clearPresence(room.roomId)
     },
+    openPitwall,
+    closePitwall,
+    status,
     stop: () => {
       stopped = true
       if (heartbeatTimer) clearInterval(heartbeatTimer)
