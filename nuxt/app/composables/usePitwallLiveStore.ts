@@ -106,11 +106,12 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   const friends = computed<PitwallConceptFriend[]>(() => sortPitwallFriends(
     friendViews.value.map((view) => {
       const racing = reachableIds.value.has(view.personId)
-      // "Pitwall aperto" = la sua gara e' viva **e** lui e' in pista adesso: la
-      // presenza muore in 90 s, il segno di vita della stanza in 20 minuti, e
-      // dopo un crash e' la prima a dire la verita'.
+      // "Pitwall aperto" = ha una gara non chiusa **e** e' in pista adesso. La
+      // presenza (90 s) dice la verita' anche dopo un crash; il segno di vita
+      // della stanza non si pretende, perche' finche' le Rules non lo accettano
+      // resta nullo e farebbe sparire un Pitwall aperto dopo venti minuti.
       const room = view.state === 'friends' && racing ? roomOfDriver(view.personId) : null
-      const open = room != null && describePitwallRoomOccupancy(room, link.nowTick.value) === 'live'
+      const open = room != null
       return {
         personId: view.personId,
         state: view.state,

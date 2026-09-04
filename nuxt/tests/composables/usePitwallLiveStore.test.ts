@@ -351,7 +351,7 @@ describe('i Pitwall aperti e gli avvisi', () => {
     expect(store.notices.value.filter(notice => notice.kind === 'invite')).toEqual([{ id: 'inv:r1', kind: 'invite', personId: 'pilota', raceId: 'r1' }])
   })
 
-  it('un Pitwall e aperto solo se la gara e viva e l amico e in pista: chi spegne sparisce da solo', () => {
+  it('un Pitwall e aperto se la gara non e chiusa e l amico e in pista: chi spegne sparisce da solo', () => {
     // Amico con ACC spento: la stanza esiste ancora, la riga no.
     link.rooms.value = [room()]
     befriended('pilota', { reachable: false })
@@ -361,8 +361,13 @@ describe('i Pitwall aperti e gli avvisi', () => {
     trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: LIVE_SESSION })]
     expect(store.races.value).toHaveLength(1)
 
-    // Gara dormiente (nessun segno di vita da un'ora): non e' aperta.
-    link.rooms.value = [room({ lastLiveAtMs: NOW - 60 * 60_000 })]
+    // Senza segno di vita sulla stanza (Rules non ancora pubblicate) resta
+    // aperto: e' la presenza a dire la verita', e muore in novanta secondi.
+    link.rooms.value = [room({ lastLiveAtMs: null })]
+    expect(store.races.value).toHaveLength(1)
+
+    // Chiusa dal pilota: sparisce subito.
+    link.rooms.value = [room({ closedAt: '2026-09-03T09:59:00.000Z' })]
     expect(store.races.value).toEqual([])
 
     // Spegne il gioco: il battito invecchia, reachable cade, la riga sparisce.
