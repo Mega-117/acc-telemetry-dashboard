@@ -17,6 +17,7 @@ import {
   createPitwallRoomService,
   type PitwallRoomService,
 } from '~/services/pitwall/pitwallRoomService'
+import { createPitwallRevisionClock } from '~/services/pitwall/pitwallRoomRevision'
 import {
   PITWALL_MEMBER_HEARTBEAT_MS,
   describePitwallRoomExecutor,
@@ -25,6 +26,8 @@ import {
   isPitwallRoomMember,
   pitwallRoomRoleOf,
   resolvePitwallRoomExecutor,
+  type PitwallCrewRow,
+  type PitwallFieldOutcome,
   type PitwallRoom,
   type PitwallRoomMember,
   type PitwallRoomOrder,
@@ -36,39 +39,8 @@ import {
   type PitwallOrderStatus,
 } from '~/services/pitwall/pitwallLink'
 
-/** Esito per campo dichiarato dal PC che ha applicato: mai appiattito in un "fatto". */
-export interface PitwallFieldOutcome {
-  outcome: 'verified' | 'selected' | 'not-verifiable' | null
-  requested: unknown
-  observed: unknown
-  reason: string | null
-  /** Da dove viene l'esito: l'occhio sullo schermo, la shared memory, o un tasto alla cieca. */
-  via?: 'screen' | 'memory' | 'blind' | null
-  /** Non chiesta: ACC l'ha cambiata insieme a un'altra riparazione. */
-  dragged?: boolean
-}
-
-/** Una riga dell'equipaggio, come la legge l'ingegnere. */
-export interface PitwallCrewRow {
-  uid: string
-  nickname: string
-  role: 'manager' | 'member'
-  kind: 'driver' | 'engineer'
-  /** Ha un battito recente: e' raggiungibile adesso. */
-  online: boolean
-  /**
-   * Si e' annunciato ma il server non ha ancora datato il suo battito.
-   *
-   * Dura un istante e non e' "offline": mostrarlo come tale faceva sembrare
-   * scollegato proprio chi stava aprendo la pagina in quel momento.
-   */
-  connecting: boolean
-  /** E' al volante adesso. */
-  driving: boolean
-  /** Invitato ma non ancora entrato. */
-  invited: boolean
-  isSelf: boolean
-}
+// Le forme di vista (esito per campo, riga dell'equipaggio) vivono nel contratto.
+export type { PitwallCrewRow, PitwallFieldOutcome } from '~/services/pitwall/pitwallRoomContract'
 
 export interface PitwallRoomOptions {
   /** Uid dell'utente collegato. Null finche' non e' autenticato. */
@@ -114,24 +86,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     return serviceRef.value
   }
 
-  /**
-   * Numero d'ordine crescente, ricavato dal tempo.
-   *
-   * Il PC che applica scarta un ordine con revisione non successiva all'ultima
-   * vista. Un contatore che riparte da zero a ogni ricarica farebbe sembrare
-   * vecchio il primo invio successivo; i secondi dall'epoca crescono sempre,
-   * anche fra sessioni, dispositivi e ingegneri diversi.
-   *
-   * I secondi pero' non bastano da soli: due invii nello stesso secondo -
-   * facilissimo con due clic - avrebbero la stessa revisione, e il secondo
-   * verrebbe rifiutato come "superato", che e' un motivo falso e incomprensibile
-   * per chi lo legge. Qui la revisione non torna mai indietro e non si ripete.
-   */
-  let lastRevision = 0
-  function nextRevision(): number {
-    lastRevision = Math.max(lastRevision + 1, Math.floor(Date.now() / 1000))
-    return lastRevision
-  }
+  // Numero d'ordine crescente, mai ripetuto: il perche' sta nel modulo.
+  const nextRevision = createPitwallRevisionClock()
 
   const myUid = computed(() => options.uid())
   const myRole = computed(() => pitwallRoomRoleOf(room.value, myUid.value))
@@ -246,12 +202,24 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * `driving` resta falso e `kind` resta `engineer`: chi guarda dal browser non
    * potra' mai essere eletto esecutore, e questo battito non lo rende
    * candidato.
+   *
+   * Il documento membro e' uno per persona. Se il mio PC pilota sta gia'
+   * battendo in questa gara (stesso uid, `kind: 'driver'`, fresco), qui si
+   * tace: un battito da ingegnere sopra il suo lo toglierebbe dal volante.
+   * Visto il 2026-09-04: RICO117 che apre la gara dal browser spegneva
+   * RICO117 al volante, e nessun ordine partiva piu'.
    */
+  function pilotBeatsForMe(uid: string): boolean {
+    const mine = members.value.find(member => member.uid === uid)
+    return mine?.kind === 'driver' && isPitwallMemberFresh(mine, Date.now())
+  }
+
   async function heartbeat(): Promise<void> {
     const service_ = service()
     const roomId = selectedRoomId.value
     const uid = myUid.value
     if (!service_ || !roomId || !uid || !amMember.value) return
+    if (pilotBeatsForMe(uid)) return
     // Il proprio nome si carica prima di annunciarsi: un battito scritto col
     // solo identificativo lo fisserebbe li' per tutti gli altri, perche' il
     // battito ha la precedenza sul profilo quando si compone l equipaggio.
@@ -364,13 +332,21 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       },
       (error) => { rawError.value = error?.message || 'Gara non raggiungibile.' }
     )
+    // Il primo battito aspetta l'equipaggio: prima di sapere se il mio PC
+    // pilota e' gia' qui, annunciarsi lo sovrascriverebbe (vedi `heartbeat`).
+    let announced = false
     stopMembersWatch = service_.watchMembers(
       roomId,
-      (list) => { members.value = list },
+      (list) => {
+        members.value = list
+        if (!announced) {
+          announced = true
+          void heartbeat()
+        }
+      },
       (error) => { rawError.value = error?.message || 'Equipaggio non leggibile.' }
     )
 
-    void heartbeat()
     if (presenceTimer) clearInterval(presenceTimer)
     presenceTimer = setInterval(() => { void heartbeat() }, PITWALL_MEMBER_HEARTBEAT_MS)
   }

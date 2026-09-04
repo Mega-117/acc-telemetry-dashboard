@@ -459,3 +459,39 @@ export function describePitwallRoom(room: Pick<PitwallRoom, 'label' | 'closedAt'
   if (!room) return ''
   return room.closedAt ? `${room.label} (gara chiusa)` : room.label
 }
+
+// --- Le forme di vista che il composable espone all'interfaccia ------------
+
+/** Esito per campo dichiarato dal PC che ha applicato: mai appiattito in un "fatto". */
+export interface PitwallFieldOutcome {
+  outcome: 'verified' | 'selected' | 'not-verifiable' | null
+  requested: unknown
+  observed: unknown
+  reason: string | null
+  /** Da dove viene l'esito: l'occhio sullo schermo, la shared memory, o un tasto alla cieca. */
+  via?: 'screen' | 'memory' | 'blind' | null
+  /** Non chiesta: ACC l'ha cambiata insieme a un'altra riparazione. */
+  dragged?: boolean
+}
+
+/** Una riga dell'equipaggio, come la legge l'ingegnere. */
+export interface PitwallCrewRow {
+  uid: string
+  nickname: string
+  role: 'manager' | 'member'
+  kind: 'driver' | 'engineer'
+  /** Ha un battito recente: e' raggiungibile adesso. */
+  online: boolean
+  /**
+   * Si e' annunciato ma il server non ha ancora datato il suo battito.
+   *
+   * Dura un istante e non e' "offline": mostrarlo come tale faceva sembrare
+   * scollegato proprio chi stava aprendo la pagina in quel momento.
+   */
+  connecting: boolean
+  /** E' al volante adesso. */
+  driving: boolean
+  /** Invitato ma non ancora entrato. */
+  invited: boolean
+  isSelf: boolean
+}
