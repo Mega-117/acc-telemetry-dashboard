@@ -372,9 +372,10 @@ describe('i Pitwall aperti e gli avvisi', () => {
     // del primo settembre, vista dal vivo).
     link.rooms.value = [room({ lastLiveAtMs: NOW - 60 * 60_000 })]
     expect(store.races.value).toEqual([])
-    // Appena nata, senza ancora un segno di vita, vale: e' viva per creazione.
-    link.rooms.value = [room({ lastLiveAtMs: null, createdAt: new Date(NOW - 60_000).toISOString(), updatedAt: new Date(NOW - 60_000).toISOString() })]
-    expect(store.races.value).toHaveLength(1)
+    // Senza un segno di vita scritto dal suo PC non e' aperta, anche se
+    // `updatedAt` e' di adesso: quello lo muove chiunque entri o esca.
+    link.rooms.value = [room({ lastLiveAtMs: null, updatedAt: new Date(NOW - 1_000).toISOString() })]
+    expect(store.races.value).toEqual([])
 
     // Chiusa dal pilota: sparisce subito, e la gara di Monza di due giorni
     // prima - ancora aperta, come tutte quelle vecchie - non la sostituisce:

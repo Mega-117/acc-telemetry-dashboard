@@ -114,8 +114,11 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
       // "aperto" quello di Monza di due giorni prima e poi quello di
       // Nurburgring del primo settembre. Il segno di vita lo scrive il PC del
       // pilota ogni dieci minuti (Rules pubblicate il 2026-09-04).
+      // Senza un segno di vita scritto dal suo PC non e' aperto: `updatedAt`
+      // lo muove chiunque entri o esca (visto dal vivo: un "Rimuovi" di popo
+      // ha reso "vivo" un Nurburgring del primo settembre).
       const room = view.state === 'friends' && racing ? roomOfDriver(view.personId, reachable.value.get(view.personId)?.track) : null
-      const open = room != null && describePitwallRoomOccupancy(room, link.nowTick.value) === 'live'
+      const open = room != null && room.lastLiveAtMs != null && describePitwallRoomOccupancy(room, link.nowTick.value) === 'live'
       return {
         personId: view.personId,
         state: view.state,
