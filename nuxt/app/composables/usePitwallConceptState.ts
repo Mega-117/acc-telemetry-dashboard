@@ -12,6 +12,7 @@ import { computed, ref } from 'vue'
 import type { PitwallDuration, PitwallStopHandle, PitwallStore } from '~/composables/usePitwallStore'
 import {
   PITWALL_CONCEPT_CURRENT_USER_ID,
+  PITWALL_CONCEPT_FRIENDS,
   PITWALL_CONCEPT_LINKS_ASSIST,
   PITWALL_CONCEPT_LINKS_ASSISTED,
   PITWALL_CONCEPT_NOTICES,
@@ -24,11 +25,13 @@ import {
 } from '~/utils/pitwallConcept'
 import type {
   PitwallConceptDirection,
+  PitwallConceptFriend,
   PitwallConceptLink,
   PitwallConceptMyRoom,
   PitwallConceptNotice,
   PitwallConceptRace,
 } from '~/utils/pitwallConcept'
+import type { PitwallIntentStatus } from '~/composables/usePitwallIntent'
 import {
   PITWALL_PIT_STRATEGY_MAX,
   PITWALL_PIT_STRATEGY_MIN,
@@ -48,8 +51,11 @@ export type PitwallConceptDuration = PitwallDuration
 
 interface PitwallConceptStore {
   links: Record<PitwallConceptDirection, PitwallConceptLink[]>
+  friends: PitwallConceptFriend[]
   races: PitwallConceptRace[]
   myRoom: PitwallConceptMyRoom | null
+  /** Nel prototipo il Pitwall parte aperto: la card si guarda senza ACC. */
+  pitwall: PitwallIntentStatus
   notices: PitwallConceptNotice[]
   selectedRaceId: string | null
   crowded: boolean
@@ -69,6 +75,7 @@ function initialStore(crowded = false): PitwallConceptStore {
     ? buildPitwallConceptCrowd()
     : {
         links: { assist: PITWALL_CONCEPT_LINKS_ASSIST, assisted: PITWALL_CONCEPT_LINKS_ASSISTED },
+        friends: PITWALL_CONCEPT_FRIENDS,
         races: PITWALL_CONCEPT_RACES,
         notices: PITWALL_CONCEPT_NOTICES,
       }
@@ -77,8 +84,10 @@ function initialStore(crowded = false): PitwallConceptStore {
       assist: clone(scenario.links.assist),
       assisted: clone(scenario.links.assisted),
     },
+    friends: clone(scenario.friends),
     races: clone(scenario.races),
     myRoom: clone(PITWALL_CONCEPT_MY_ROOM),
+    pitwall: { state: 'open', roomId: PITWALL_CONCEPT_MY_ROOM.id, reason: null, available: true },
     notices: clone(scenario.notices),
     selectedRaceId: scenario.races[0]?.id ?? null,
     crowded,
@@ -281,7 +290,13 @@ export function usePitwallConceptState(): PitwallStore & { reset: () => void } {
   const store = useState<PitwallConceptStore>('pitwall-concept-store', initialStore)
 
   const links = computed(() => store.value.links)
-  const races = computed(() => store.value.races)
+  const friends = computed(() => store.value.friends)
+  const pitwall = computed(() => store.value.pitwall)
+  /** Solo gli amici con il Pitwall aperto, come nel vero. */
+  const races = computed(() => {
+    const open = new Set(store.value.friends.filter(friend => friend.pitwallOpen).map(friend => friend.raceId))
+    return store.value.races.filter(race => open.has(race.id))
+  })
   /**
    * Nel prototipo la gara del pilota c'e' sempre, cosi' la card si puo'
    * guardare senza ACC aperto. Nel vero e' `null` quasi sempre.
@@ -293,14 +308,8 @@ export function usePitwallConceptState(): PitwallStore & { reset: () => void } {
   )
   const people = computed(() => PITWALL_CONCEPT_PEOPLE)
 
-  /**
-   * "Ce l'hai gia'" solo con entrambi i versi: chi ho in un verso solo resta
-   * proponibile per l'altro. E' la stessa regola dello store vero.
-   */
-  const linkedIds = computed(() => {
-    const assisted = new Set(store.value.links.assisted.map(link => link.personId))
-    return store.value.links.assist.map(link => link.personId).filter(id => assisted.has(id))
-  })
+  /** "Ce l'hai gia'" per chiunque sia gia' nella lista Amici, in qualunque stato. */
+  const linkedIds = computed(() => store.value.friends.map(friend => friend.personId))
 
   const searchQuery = ref('')
   const found = computed(() => searchPitwallConceptDirectory(searchQuery.value, linkedIds.value))
@@ -311,6 +320,36 @@ export function usePitwallConceptState(): PitwallStore & { reset: () => void } {
 
   function has(direction: PitwallConceptDirection, personId: string): boolean {
     return store.value.links[direction].some(link => link.personId === personId)
+  }
+
+  // ---- Amici -------------------------------------------------------------
+
+  /** Chiedere e accettare sono lo stesso gesto: una richiesta ricevuta diventa amicizia, altrimenti parte la mia. */
+  function befriend(personId: string): void {
+    const existing = store.value.friends.find(friend => friend.personId === personId)
+    if (existing) {
+      if (existing.state === 'received') existing.state = 'friends'
+    } else {
+      store.value.friends.push({ personId, state: 'sent', racing: false, pitwallOpen: false })
+    }
+    searchQuery.value = ''
+  }
+
+  /** Rifiutare, annullare, togliere: la riga sparisce, da qualunque stato. */
+  function unfriend(personId: string): void {
+    store.value.friends = store.value.friends.filter(friend => friend.personId !== personId)
+  }
+
+  // ---- Il mio Pitwall ------------------------------------------------------
+
+  function startPitwall(): void {
+    store.value.myRoom = { ...(store.value.myRoom ?? PITWALL_CONCEPT_MY_ROOM), state: 'live' }
+    store.value.pitwall = { state: 'open', roomId: store.value.myRoom.id, reason: null, available: true }
+  }
+
+  function closePitwall(): void {
+    if (store.value.myRoom) store.value.myRoom.state = 'closed'
+    store.value.pitwall = { state: 'off', roomId: null, reason: null, available: true }
   }
 
   // ---- Persone -----------------------------------------------------------
@@ -424,12 +463,14 @@ export function usePitwallConceptState(): PitwallStore & { reset: () => void } {
    * un permesso, un invito ti fa entrare nella gara. Senza questo la campanella
    * sarebbe un elenco che si svuota e basta.
    */
-  function acceptNotice(id: string, duration: PitwallDuration = 'always', until?: string): void {
+  function acceptNotice(id: string): void {
     const notice = store.value.notices.find(entry => entry.id === id)
     if (!notice) return
     if (notice.kind === 'request') {
-      if (has('assisted', notice.personId)) decideRequest(notice.personId, duration, until)
-      else allowToAssistMe(notice.personId, duration, until)
+      befriend(notice.personId)
+      // Il vecchio elenco direzionale segue, finche' esiste.
+      if (has('assisted', notice.personId)) decideRequest(notice.personId, 'always')
+      else allowToAssistMe(notice.personId, 'always')
     } else if (notice.kind === 'invite' && notice.raceId) {
       enterRace(notice.raceId)
     }
@@ -439,7 +480,10 @@ export function usePitwallConceptState(): PitwallStore & { reset: () => void } {
   function rejectNotice(id: string): void {
     const notice = store.value.notices.find(entry => entry.id === id)
     if (!notice) return
-    if (notice.kind === 'request') decideRequest(notice.personId, 'reject')
+    if (notice.kind === 'request') {
+      unfriend(notice.personId)
+      decideRequest(notice.personId, 'reject')
+    }
     dismissNotice(id)
   }
 
@@ -458,6 +502,12 @@ export function usePitwallConceptState(): PitwallStore & { reset: () => void } {
   return {
     people,
     links,
+    friends,
+    pitwall,
+    startPitwall,
+    closePitwall,
+    befriend,
+    unfriend,
     races,
     myRoom,
     notices,

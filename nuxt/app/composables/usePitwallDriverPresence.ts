@@ -120,22 +120,21 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
   async function readTrustedUids(uid: string): Promise<string[]> {
     const nowMs = Date.now()
     let failed = false
-    const [asDriver, asEngineer] = await Promise.all(
-      (['driverUid', 'engineerUid'] as const).map(async (field): Promise<PitwallGrant[]> => {
-        try {
-          const snapshot = await trackedGetDocs(query(
-            collection(db, 'pitwallGrants'),
-            where(field, '==', uid),
-            where('status', '==', 'granted'),
-            limit(50)
-          ), 'pitwallRoom.trustedUids')
-          return snapshot.docs.map(entry => entry.data() as PitwallGrant)
-        } catch {
-          failed = true
-          return []
-        }
-      })
-    )
+    async function readGrants(field: 'driverUid' | 'engineerUid'): Promise<PitwallGrant[]> {
+      try {
+        const snapshot = await trackedGetDocs(query(
+          collection(db, 'pitwallGrants'),
+          where(field, '==', uid),
+          where('status', '==', 'granted'),
+          limit(50)
+        ), 'pitwallRoom.trustedUids')
+        return snapshot.docs.map(entry => entry.data() as PitwallGrant)
+      } catch {
+        failed = true
+        return []
+      }
+    }
+    const [asDriver, asEngineer] = await Promise.all([readGrants('driverUid'), readGrants('engineerUid')])
     // Un elenco non leggibile non svuota gli amici: si tiene l'ultima lettura
     // buona, cosi' un amico non viene rifiutato per un errore di rete.
     if (failed) return [...friendSet]

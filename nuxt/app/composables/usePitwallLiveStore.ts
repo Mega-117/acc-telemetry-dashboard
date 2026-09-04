@@ -27,11 +27,14 @@ import {
 } from '~/services/pitwall/pitwallRoomContract'
 import { closeDormantPitwallRooms } from '~/services/pitwall/pitwallRoomLifecycle'
 import { pitwallClockFromExpiry, pitwallExpiryFromClock } from '~/services/pitwall/pitwallLink'
+import { derivePitwallFriends, pitwallFriendActions, sortPitwallFriends } from '~/services/pitwall/pitwallFriends'
+import { requestPitwallClose, requestPitwallOpen, usePitwallIntent, type PitwallIntentStatus } from '~/composables/usePitwallIntent'
 import type { PitwallIncomingRequest, PitwallOutgoingLink } from '~/services/pitwall/pitwallEngineerService'
 import { searchPitwallConceptDirectory } from '~/utils/pitwallConcept'
 import { formatCarName, formatTrackName } from '~/utils/telemetryFormat'
 import type {
   PitwallConceptDirection,
+  PitwallConceptFriend,
   PitwallConceptLink,
   PitwallConceptMember,
   PitwallConceptMyRoom,
@@ -127,13 +130,34 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
       .filter((entry): entry is PitwallConceptLink => entry != null),
   }))
 
-  // "Ce l'hai gia'" solo con entrambi i versi: chi ho in un verso solo resta
-  // proponibile per l'altro (visto dal vivo: il pilota che assisto non poteva
-  // essere autorizzato ad assistere me).
-  const linkedIds = computed(() => {
-    const assisted = new Set(links.value.assisted.map(entry => entry.personId))
-    return links.value.assist.map(entry => entry.personId).filter(id => assisted.has(id))
-  })
+  // ---- Amici ----------------------------------------------------------------
+  // L'amicizia e' la coppia dei due permessi, uno per verso: la logica che li
+  // legge e' una e sta in `pitwallFriends`. Qui si aggiungono solo presenza e
+  // Pitwall aperto, che vengono dagli altri due mattoncini.
+  const friendViews = computed(() => derivePitwallFriends(trust.incoming.value, trust.outgoing.value, link.nowTick.value))
+  const reachableIds = computed(() => new Set(trust.outgoing.value.filter(entry => entry.reachable).map(entry => entry.driverUid)))
+  const friends = computed<PitwallConceptFriend[]>(() => sortPitwallFriends(
+    friendViews.value.map((view) => {
+      const racing = reachableIds.value.has(view.personId)
+      // "Pitwall aperto" = la sua gara e' viva **e** lui e' in pista adesso: la
+      // presenza muore in 90 s, il segno di vita della stanza in 20 minuti, e
+      // dopo un crash e' la prima a dire la verita'.
+      const room = view.state === 'friends' && racing ? roomOfDriver(view.personId) : null
+      const open = room != null && describePitwallRoomOccupancy(room, link.nowTick.value) === 'live'
+      return {
+        personId: view.personId,
+        state: view.state,
+        racing,
+        pitwallOpen: open,
+        ...(open ? { raceId: room.roomId } : {}),
+      }
+    }),
+    id => reachableIds.value.has(id),
+  ))
+
+  // "Ce l'hai gia'" per chiunque sia gia' in un rapporto con me, in qualunque
+  // stato: una richiesta in sospeso non si rimanda dalla ricerca.
+  const linkedIds = computed(() => friendViews.value.map(view => view.personId))
 
   // ---- Gare -----------------------------------------------------------------
   function membersOf(room: PitwallRoom, selected: boolean): PitwallConceptMember[] {
@@ -215,47 +239,43 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   }
 
   /**
-   * Chi e' in pista adesso: una riga per persona, non per stanza.
+   * I Pitwall aperti adesso: una riga per amico che ha aperto il suo.
    *
-   * Elencare le stanze rispondeva alla domanda sbagliata. Non si chiudono mai,
-   * quindi comparivano anche le sessioni di giorni prima, con lo stesso nome e
-   * la stessa pista; e di una stanza in cui non si e' entrati non si possono
-   * leggere i membri, percio' la viva e la morta si assomigliavano. La
-   * presenza di un pilota invece si legge sempre ed e' esattamente cio' che
-   * l'ingegnere cerca: chi posso assistere adesso. Chi smette sparisce da
-   * solo quando il suo battito invecchia.
+   * Elencare le stanze rispondeva alla domanda sbagliata: non si chiudono
+   * mai, quindi comparivano le sessioni di giorni prima. Elencare chi era in
+   * pista rispondeva a meta': in pista si puo' stare anche senza voler
+   * nessuno al muretto. La riga c'e' quando l'amico ha **aperto** il Pitwall
+   * - la sua gara e' viva e lui e' in pista - e sparisce da sola quando lo
+   * chiude o spegne.
    */
-  const races = computed<PitwallConceptRace[]>(() => trust.outgoing.value
-    .filter(entry => entry.reachable)
-    .map((entry) => {
-      const room = roomOfDriver(entry.driverUid)
-      const selected = room != null && link.room.value?.roomId === room.roomId
-      const car = entry.session?.car ?? null
+  const races = computed<PitwallConceptRace[]>(() => friends.value
+    .filter(friend => friend.pitwallOpen && friend.raceId)
+    .map((friend) => {
+      const room = roomOfDriver(friend.personId)!
+      const entry = trust.outgoing.value.find(candidate => candidate.driverUid === friend.personId)
+      const selected = link.room.value?.roomId === room.roomId
+      const car = entry?.session?.car ?? null
       // La pista viene dalla presenza, non dalla stanza: la stanza porta
       // quella del giorno in cui e' nata, la presenza quella di adesso.
-      const track = entry.session?.track ?? room?.track ?? null
+      const track = entry?.session?.track ?? room.track ?? null
       return {
-        id: room?.roomId ?? `${DRIVER_ROW_PREFIX}${entry.driverUid}`,
-        carNumber: room?.raceNumber ?? 0,
-        carModel: car ? formatCarName(car) : room?.label ?? 'Vettura',
+        id: room.roomId,
+        carNumber: room.raceNumber ?? 0,
+        carModel: car ? formatCarName(car) : room.label,
         track: track ? formatTrackName(track) : '',
-        session: 'In pista',
-        hostId: entry.driverUid,
-        members: room ? membersOf(room, selected) : [],
-        reason: { kind: 'grant' as const, personId: entry.driverUid },
+        session: 'Pitwall aperto',
+        hostId: friend.personId,
+        members: membersOf(room, selected),
+        reason: { kind: 'grant' as const, personId: friend.personId },
         closed: false,
         live: true,
-        // Senza stanza visibile non si entra: il PC del pilota non ci ha
-        // ancora aggiunti. Si dice, invece di offrire un bottone che fallisce.
-        joinable: room != null,
+        joinable: true,
       }
     })
-    // Due persone che si dividono la stessa vettura sono una gara sola: la
-    // riga resta una, intestata a chi ospita la stanza. Due righe uguali che
-    // portano nello stesso pit stop sarebbero solo un doppione da capire.
-    .filter((race, index, all) => (
-      race.joinable === false || all.findIndex(other => other.id === race.id) === index
-    )))
+    // Due amici che si dividono la stessa vettura sono una gara sola: la riga
+    // resta una. Due righe che portano nello stesso pit stop sarebbero solo un
+    // doppione da capire.
+    .filter((race, index, all) => all.findIndex(other => other.id === race.id) === index))
   const selectedRace = computed<PitwallConceptRace | null>(() => (link.room.value ? toRace(link.room.value) : null))
 
   /**
@@ -303,22 +323,23 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   const seenGrants = ref(loadSet(SEEN_GRANTS_KEY))
   const grantNotices = ref<PitwallConceptNotice[]>([])
   let grantsSeeded = false
-  // La prima lettura semina cio' che c'e' gia' senza avvisare: "X ti ha
-  // autorizzato" per un permesso di due mesi fa non e' una notizia.
-  watch(() => trust.outgoing.value, (list) => {
-    const granted = list.filter(entry => entry.status === 'granted' && entry.usable)
+  // "X ha accettato": e' una notizia solo quando l'amicizia si completa
+  // durante la sessione. La prima lettura semina gli amici che c'erano gia'
+  // senza avvisare - un'amicizia di due mesi fa non e' una notizia.
+  watch(friendViews, (views) => {
+    const complete = views.filter(view => view.state === 'friends')
     if (!grantsSeeded) {
-      if (!list.length) return
+      if (!views.length) return
       grantsSeeded = true
-      for (const entry of granted) seenGrants.value.add(entry.driverUid)
+      for (const view of complete) seenGrants.value.add(view.personId)
       saveSet(SEEN_GRANTS_KEY, seenGrants.value)
       return
     }
-    for (const entry of granted) {
-      if (seenGrants.value.has(entry.driverUid)) continue
-      seenGrants.value.add(entry.driverUid)
+    for (const view of complete) {
+      if (seenGrants.value.has(view.personId)) continue
+      seenGrants.value.add(view.personId)
       grantNotices.value = [...grantNotices.value, {
-        id: `${NOTICE_PREFIX.granted}${entry.driverUid}`, kind: 'granted', personId: entry.driverUid,
+        id: `${NOTICE_PREFIX.granted}${view.personId}`, kind: 'granted', personId: view.personId,
       }]
     }
     saveSet(SEEN_GRANTS_KEY, seenGrants.value)
@@ -378,6 +399,49 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   }
   const canEditExpiry = (direction: PitwallConceptDirection) => direction === 'assisted'
 
+  // ---- Amici: chiedere, accettare, togliere ---------------------------------
+  /**
+   * Chiedere e accettare sono la stessa scrittura: autorizzo io (`me__X`) e
+   * chiedo a lui (`X__me`). Se lui aveva gia' autorizzato me, siamo amici
+   * adesso; altrimenti la sua parte arriva quando accetta.
+   */
+  async function befriend(personId: string): Promise<void> {
+    const before = friendViews.value.find(view => view.personId === personId) ?? null
+    await trust.preAuthorise(personId, 'always', null)
+    if (!before?.theyAllow) await trust.requestLink(personId, 'always')
+    link.notice.value = before?.theyAllow
+      ? 'Adesso siete amici.'
+      : 'Richiesta inviata: quando accetta, siete amici.'
+  }
+
+  /**
+   * Sciogliere la relazione tocca solo i documenti che esistono, e toglie la
+   * persona anche dalle mie gare aperte: `syncInvites` aggiunge soltanto, e
+   * senza questo un ex amico resterebbe al muretto fino alla chiusura.
+   */
+  async function unfriend(personId: string): Promise<void> {
+    const actions = pitwallFriendActions(friendViews.value.find(view => view.personId === personId))
+    if (actions.revokeMine) await trust.decide(personId, 'revoked')
+    if (actions.withdrawTheirs) await trust.withdrawRequest(personId)
+    const me = uid()
+    const service = link.service()
+    if (!me || !service) return
+    for (const room of link.rooms.value) {
+      if (room.closedAt || room.hostUid !== me) continue
+      if (!room.allowedUids.includes(personId) && !room.memberUids.includes(personId)) continue
+      await service.revoke(room.roomId, personId)
+    }
+  }
+
+  // ---- Il mio Pitwall -------------------------------------------------------
+  const { pitwallIntent } = usePitwallIntent()
+  function startPitwall(): void {
+    void requestPitwallOpen().then((result) => { if (!result.ok) link.notice.value = result.reason })
+  }
+  function closePitwall(): void {
+    void requestPitwallClose().then((result) => { if (!result.ok) link.notice.value = result.reason })
+  }
+
   // ---- Azioni sulla gara ----------------------------------------------------
   async function inRoom(raceId: string, action: () => Promise<void>): Promise<void> {
     if (link.selectedRoomId.value !== raceId) await link.selectRoom(raceId)
@@ -385,12 +449,6 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   }
   function selectRace(raceId: string): void { void link.selectRoom(raceId) }
   function enterRace(raceId: string): void {
-    if (raceId.startsWith(DRIVER_ROW_PREFIX)) {
-      // La persona e' in pista ma il suo PC non ci ha ancora messi fra gli
-      // invitati: dirlo e' meglio di un bottone che non porta da nessuna parte.
-      link.notice.value = 'È in pista, ma il suo PC non ti ha ancora aggiunto alla gara. Ci mette un minuto.'
-      return
-    }
     dismissedInvites.value.delete(raceId)
     saveSet(DISMISSED_INVITES_KEY, dismissedInvites.value)
     void link.selectRoom(raceId)
@@ -412,13 +470,13 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
       saveSet(DISMISSED_INVITES_KEY, dismissedInvites.value)
     }
   }
-  function acceptNotice(id: string, duration: PitwallDuration = 'always', until?: string): void {
-    if (id.startsWith(NOTICE_PREFIX.request)) decideRequest(id.slice(NOTICE_PREFIX.request.length), duration, until)
+  function acceptNotice(id: string): void {
+    if (id.startsWith(NOTICE_PREFIX.request)) void befriend(id.slice(NOTICE_PREFIX.request.length))
     else if (id.startsWith(NOTICE_PREFIX.invite)) enterRace(id.slice(NOTICE_PREFIX.invite.length))
     else dismissNotice(id)
   }
   function rejectNotice(id: string): void {
-    if (id.startsWith(NOTICE_PREFIX.request)) decideRequest(id.slice(NOTICE_PREFIX.request.length), 'reject')
+    if (id.startsWith(NOTICE_PREFIX.request)) void unfriend(id.slice(NOTICE_PREFIX.request.length))
     else dismissNotice(id)
   }
 
@@ -478,6 +536,12 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   return {
     people,
     links,
+    friends,
+    pitwall: pitwallIntent as Ref<PitwallIntentStatus>,
+    startPitwall,
+    closePitwall,
+    befriend: (personId: string) => { void befriend(personId) },
+    unfriend: (personId: string) => { void unfriend(personId) },
     races,
     myRoom,
     notices,

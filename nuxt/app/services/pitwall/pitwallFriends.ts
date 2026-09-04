@@ -124,7 +124,7 @@ export function pitwallFriendActions(view: PitwallFriendView | null | undefined)
 /** Ordine di lettura: prima cio' che aspetta una mia decisione, poi le mie richieste, poi gli amici. */
 const STATE_RANK: Record<PitwallFriendState, number> = { received: 0, sent: 1, friends: 2 }
 
-export function sortPitwallFriends<T extends { state: PitwallFriendState, nickname: string | null, personId: string }>(
+export function sortPitwallFriends<T extends { state: PitwallFriendState, personId: string, nickname?: string | null }>(
   views: readonly T[],
   isRacing: (personId: string) => boolean = () => false
 ): T[] {

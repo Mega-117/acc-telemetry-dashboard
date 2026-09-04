@@ -22,9 +22,12 @@ vi.mock('~/composables/usePitwallRoom', () => ({ usePitwallRoom: () => fakes.lin
 vi.mock('~/composables/usePitwallLink', () => ({ usePitwallLink: () => fakes.trust }))
 
 import { NOTICE_PREFIX, linkFromIncoming, linkFromOutgoing, usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
+import { registerPitwallIntentControls, resetPitwallIntentForTests, setPitwallIntentStatus } from '~/composables/usePitwallIntent'
 import type { PitwallRoom } from '~/services/pitwall/pitwallRoomContract'
 
 const NOW = Date.parse('2026-09-03T10:00:00.000Z')
+/** Una presenza fresca: la persona e' in pista adesso. */
+const LIVE_SESSION = { online: true, updatedAt: new Date(NOW).toISOString() }
 
 function room(overrides: Partial<PitwallRoom> = {}): PitwallRoom {
   return {
@@ -41,6 +44,9 @@ function room(overrides: Partial<PitwallRoom> = {}): PitwallRoom {
     track: 'Monza',
     raceNumber: 47,
     closedAt: null,
+    // Viva adesso: senza il segno di vita la gara sarebbe dormiente, e un
+    // Pitwall dormiente non e' aperto.
+    lastLiveAtMs: NOW,
     ...overrides,
   }
 }
@@ -58,12 +64,18 @@ function makeLink() {
   const executor = ref({ executor: null as { uid: string } | null, reason: 'nobody-driving', conflicting: [] })
   /** Le gare che la pulizia automatica ha chiuso: e' una scrittura, si guarda. */
   const closedByService: string[] = []
+  const revokedByService: { roomId: string, uid: string }[] = []
   return {
     closedByService,
+    revokedByService,
     service: () => ({
       uid: 'me',
       closeRoom: async (roomId: string) => {
         closedByService.push(roomId)
+        return { ok: true as const, value: true as const }
+      },
+      revoke: async (roomId: string, uid: string) => {
+        revokedByService.push({ roomId, uid })
         return { ok: true as const, value: true as const }
       },
     }),
@@ -131,14 +143,21 @@ async function settle() {
   await nextTick()
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   link.rooms.value = []
   link.room.value = null
   link.crew.value = []
+  link.notice.value = null
+  link.revokedByService.length = 0
   trust.incoming.value = []
   trust.outgoing.value = []
   trust.searchResults.value = []
+  resetPitwallIntentForTests()
   vi.clearAllMocks()
+  // Lo store e' un singleton: un "X ha accettato" acceso da un test resterebbe
+  // acceso in quello dopo.
+  await nextTick()
+  for (const notice of store.notices.value.filter(entry => entry.kind === 'granted')) store.dismissNotice(notice.id)
 })
 
 afterEach(() => {
@@ -230,6 +249,7 @@ describe('la gara del pilota, vista dal pilota', () => {
     const vecchia = room({
       roomId: 'vecchia', managerUids: ['me'], memberUids: ['me'],
       createdAt: '2026-08-01T09:00:00.000Z', updatedAt: '2026-08-01T09:00:00.000Z',
+      lastLiveAtMs: Date.parse('2026-08-01T09:00:00.000Z'),
     })
     const corrente = room({ roomId: 'corrente', managerUids: ['me'], memberUids: ['me'], lastLiveAtMs: NOW })
     link.room.value = corrente
@@ -283,13 +303,90 @@ describe('la gara del pilota, vista dal pilota', () => {
   })
 })
 
-describe('le gare e gli avvisi', () => {
-  it('una riga per persona in pista, con pista e vettura lette dalla sua presenza', () => {
+/** Un amico: entrambi i versi concessi. */
+function befriended(uid: string, extra: Record<string, unknown> = {}) {
+  trust.incoming.value = [...trust.incoming.value, incoming(uid, 'granted')]
+  trust.outgoing.value = [...trust.outgoing.value, outgoing(uid, 'granted', extra)]
+}
+
+describe('gli amici, in un elenco solo', () => {
+  it('amici, richiesta inviata, richiesta ricevuta: tre stati da due permessi, ordinati per cosa aspetta me', () => {
+    trust.incoming.value = [incoming('amico', 'granted'), incoming('chiesto', 'granted'), incoming('chiede', 'pending')]
+    trust.outgoing.value = [outgoing('amico', 'granted', { reachable: true, session: LIVE_SESSION }), outgoing('vecchio', 'granted')]
+    expect(store.friends.value.map(friend => [friend.personId, friend.state, friend.racing])).toEqual([
+      ['chiede', 'received', false],
+      ['vecchio', 'received', false],
+      ['chiesto', 'sent', false],
+      ['amico', 'friends', true],
+    ])
+    // Chiunque sia gia' in un rapporto con me non si ripropone nella ricerca.
+    trust.searchResults.value = [{ uid: 'chiesto', nickname: 'nuovochiesto' }, { uid: 'nuovo', nickname: 'nuovo' }]
+    store.searchQuery.value = 'nuovo'
+    expect(store.found.value.entries.map(person => person.id)).toEqual(['nuovo'])
+    expect(store.found.value.linked.map(person => person.id)).toEqual(['chiesto'])
+  })
+
+  it('chiedere e accettare sono la stessa scrittura: autorizzo io e chiedo a lui', async () => {
+    store.befriend('nuovo')
+    await settle()
+    expect(trust.preAuthorise).toHaveBeenCalledWith('nuovo', 'always', null)
+    expect(trust.requestLink).toHaveBeenCalledWith('nuovo', 'always')
+    expect(link.notice.value).toContain('Richiesta inviata')
+
+    // Lui mi aveva gia' autorizzato: basta la mia parte, e siamo amici adesso.
+    trust.outgoing.value = [outgoing('pronto', 'granted')]
+    vi.clearAllMocks()
+    store.befriend('pronto')
+    await settle()
+    expect(trust.preAuthorise).toHaveBeenCalledWith('pronto', 'always', null)
+    expect(trust.requestLink).not.toHaveBeenCalled()
+    expect(link.notice.value).toBe('Adesso siete amici.')
+  })
+
+  it('togliere un amico tocca solo i documenti che esistono, e lo toglie dalle mie gare aperte', async () => {
+    befriended('ex')
+    link.rooms.value = [
+      room({ roomId: 'mia', hostUid: 'me', managerUids: ['me'], memberUids: ['me', 'ex'], allowedUids: ['ex'] }),
+      room({ roomId: 'chiusa', hostUid: 'me', managerUids: ['me'], memberUids: ['me', 'ex'], allowedUids: ['ex'], closedAt: '2026-09-02T00:00:00.000Z' }),
+      room({ roomId: 'altrui', hostUid: 'pilota', memberUids: ['pilota', 'me', 'ex'], allowedUids: ['ex'] }),
+    ]
+    store.unfriend('ex')
+    await settle()
+    expect(trust.decide).toHaveBeenCalledWith('ex', 'revoked')
+    expect(trust.withdrawRequest).toHaveBeenCalledWith('ex')
+    expect(link.revokedByService).toEqual([{ roomId: 'mia', uid: 'ex' }])
+
+    // Solo la mia parte esisteva: si revoca quella e basta.
+    vi.clearAllMocks()
+    trust.incoming.value = [incoming('meta', 'granted')]
+    trust.outgoing.value = []
+    store.unfriend('meta')
+    await settle()
+    expect(trust.decide).toHaveBeenCalledWith('meta', 'revoked')
+    expect(trust.withdrawRequest).not.toHaveBeenCalled()
+  })
+
+  it('il mio Pitwall: senza il lato pilota lo dice, con il lato pilota apre e chiude', async () => {
+    expect(store.pitwall.value.available).toBe(false)
+    store.startPitwall()
+    await settle()
+    expect(link.notice.value).toContain('app desktop')
+
+    const calls: string[] = []
+    registerPitwallIntentControls({ open: async () => { calls.push('open') }, close: async () => { calls.push('close') } })
+    setPitwallIntentStatus({ state: 'arming', roomId: null, reason: 'Si apre appena ACC e in sessione.' })
+    expect(store.pitwall.value).toMatchObject({ state: 'arming', available: true })
+    store.startPitwall()
+    store.closePitwall()
+    await settle()
+    expect(calls).toEqual(['open', 'close'])
+  })
+})
+
+describe('i Pitwall aperti e gli avvisi', () => {
+  it('una riga per amico con il Pitwall aperto, con pista e vettura lette dalla sua presenza', () => {
     link.rooms.value = [room()]
-    trust.outgoing.value = [outgoing('pilota', 'granted', {
-      reachable: true,
-      session: { online: true, updatedAt: new Date(NOW).toISOString(), car: 'ferrari_296_gt3', track: 'nurburgring' },
-    })]
+    befriended('pilota', { reachable: true, session: { ...LIVE_SESSION, car: 'ferrari_296_gt3', track: 'nurburgring' } })
     const [race] = store.races.value
     expect(race).toMatchObject({
       id: 'r1',
@@ -297,56 +394,55 @@ describe('le gare e gli avvisi', () => {
       carNumber: 47,
       carModel: 'Ferrari 296 GT3',
       track: 'Nurburgring',
-      session: 'In pista',
+      session: 'Pitwall aperto',
       closed: false,
       live: true,
       joinable: true,
     })
+    expect(store.friends.value[0]).toMatchObject({ personId: 'pilota', pitwallOpen: true, raceId: 'r1' })
     // L'invito resta un avviso: e' una cosa da decidere, non una gara in pista.
-    expect(store.notices.value).toEqual([{ id: 'inv:r1', kind: 'invite', personId: 'pilota', raceId: 'r1' }])
+    expect(store.notices.value.filter(notice => notice.kind === 'invite')).toEqual([{ id: 'inv:r1', kind: 'invite', personId: 'pilota', raceId: 'r1' }])
   })
 
-  it('chi non e in pista non compare, e chi smette sparisce da solo', () => {
+  it('un Pitwall e aperto solo se la gara e viva e l amico e in pista: chi spegne sparisce da solo', () => {
+    // Amico con ACC spento: la stanza esiste ancora, la riga no.
     link.rooms.value = [room()]
-    // Autorizzato ma con ACC spento: la stanza esiste ancora, la riga no.
-    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: false })]
+    befriended('pilota', { reachable: false })
     expect(store.races.value).toEqual([])
+    expect(store.friends.value[0]).toMatchObject({ personId: 'pilota', racing: false, pitwallOpen: false })
 
-    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { online: true, updatedAt: new Date(NOW).toISOString() } })]
+    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: LIVE_SESSION })]
     expect(store.races.value).toHaveLength(1)
 
+    // Gara dormiente (nessun segno di vita da un'ora): non e' aperta.
+    link.rooms.value = [room({ lastLiveAtMs: NOW - 60 * 60_000 })]
+    expect(store.races.value).toEqual([])
+
     // Spegne il gioco: il battito invecchia, reachable cade, la riga sparisce.
+    link.rooms.value = [room()]
     trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: false })]
     expect(store.races.value).toEqual([])
   })
 
-  it('in pista ma non ancora invitati: si vede la persona e si dice che non si entra', () => {
-    // Il PC del pilota aggiunge gli autorizzati alla sua stanza a intervalli:
-    // in mezzo, la persona e' viva ma la sua stanza non e' nostra. Meglio
-    // dirlo che offrire un bottone che non porta da nessuna parte.
-    link.rooms.value = []
-    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { online: true, updatedAt: new Date(NOW).toISOString() } })]
-    const [race] = store.races.value
-    expect(race).toMatchObject({ id: 'driver:pilota', hostId: 'pilota', joinable: false, members: [] })
-
-    store.enterRace(race!.id)
-    expect(link.selectRoom).not.toHaveBeenCalled()
-    expect(link.notice.value).toContain('non ti ha ancora aggiunto')
+  it('un permesso a un verso solo non e un Pitwall aperto: e una richiesta', () => {
+    // Prima "In pista" nasceva da chi mi aveva autorizzato, e bastava un
+    // verso. Adesso serve l'amicizia: chi mi ha solo chiesto non e' al muretto.
+    link.rooms.value = [room()]
+    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: LIVE_SESSION })]
+    expect(store.races.value).toEqual([])
+    expect(store.friends.value[0]).toMatchObject({ personId: 'pilota', state: 'received', racing: true, pitwallOpen: false })
   })
 
-  it('due persone sulla stessa vettura sono una riga sola', async () => {
+  it('due amici sulla stessa vettura sono una riga sola', async () => {
     // Endurance: due piloti che si danno il cambio stanno nella stessa stanza.
     // Due righe che portano allo stesso pit stop sarebbero solo un doppione.
     link.rooms.value = [room({ memberUids: ['pilota', 'secondo'], allowedUids: ['pilota', 'secondo', 'me'] })]
-    const live = { online: true, updatedAt: new Date(NOW).toISOString() }
-    trust.outgoing.value = [
-      outgoing('pilota', 'granted', { reachable: true, session: live }),
-      outgoing('secondo', 'granted', { reachable: true, session: live }),
-    ]
+    befriended('pilota', { reachable: true, session: LIVE_SESSION })
+    befriended('secondo', { reachable: true, session: LIVE_SESSION })
     expect(store.races.value.map(race => race.id)).toEqual(['r1'])
     expect(store.races.value[0]!.hostId).toBe('pilota')
 
-    // Lo store e' un singleton: il permesso nuovo di `secondo` accende un
+    // Lo store e' un singleton: l'amicizia nuova di `secondo` accende un
     // avviso che altrimenti resterebbe acceso nei test successivi.
     await nextTick()
     for (const notice of store.notices.value.filter(entry => entry.kind === 'granted')) {
@@ -354,14 +450,14 @@ describe('le gare e gli avvisi', () => {
     }
   })
 
-  it('di uno stesso pilota si apre la stanza aperta adesso, non quelle di ieri', () => {
+  it('di uno stesso amico si apre la stanza aperta adesso, non quelle di ieri', () => {
     // Le stanze non si chiudono mai: dello stesso pilota ne restano molte.
     link.rooms.value = [
       room({ roomId: 'vecchia', createdAt: '2026-09-01T08:00:00.000Z' }),
       room({ roomId: 'oggi', createdAt: '2026-09-03T08:00:00.000Z' }),
       room({ roomId: 'chiusa', createdAt: '2026-09-03T09:00:00.000Z', closedAt: '2026-09-03T10:00:00.000Z' }),
     ]
-    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { online: true, updatedAt: new Date(NOW).toISOString() } })]
+    befriended('pilota', { reachable: true, session: LIVE_SESSION })
     expect(store.races.value.map(race => race.id)).toEqual(['oggi'])
   })
 
@@ -396,24 +492,28 @@ describe('le gare e gli avvisi', () => {
     expect(store.people.value.find(person => person.id === 'pilota')?.handle).toBe('@RICO117')
   })
 
-  it('una richiesta in arrivo e un avviso; accettarla per oggi passa l orario al servizio', () => {
+  it('una richiesta in arrivo e un avviso; accettarla fa l amicizia, rifiutarla la scioglie', async () => {
     trust.incoming.value = [incoming('popo', 'pending')]
     expect(store.notices.value).toEqual([{ id: 'req:popo', kind: 'request', personId: 'popo' }])
-    store.acceptNotice('req:popo', 'today', '23:40')
-    const [uid, decision, scope, expiresAtMs] = trust.decide.mock.calls[0] as [string, string, string, number]
-    expect([uid, decision, scope]).toEqual(['popo', 'granted', 'once'])
-    expect(expiresAtMs).toBeGreaterThan(Date.now())
+    store.acceptNotice('req:popo')
+    await settle()
+    expect(trust.preAuthorise).toHaveBeenCalledWith('popo', 'always', null)
+    expect(trust.requestLink).toHaveBeenCalledWith('popo', 'always')
     store.rejectNotice('req:popo')
+    await settle()
     expect(trust.decide).toHaveBeenLastCalledWith('popo', 'revoked')
   })
 
-  it('un permesso arrivato durante la sessione avvisa una volta sola', async () => {
-    // Lo store e' gia' stato seminato dal test dei due versi: da qui in poi un
-    // permesso nuovo e' una notizia. Ripetere l'elenco non la ripete.
-    trust.outgoing.value = [outgoing('pilota', 'granted'), outgoing('nuovo', 'granted')]
+  it('un amicizia completata durante la sessione avvisa una volta sola', async () => {
+    // Lo store e' gia' stato seminato: da qui in poi un'amicizia nuova e' una
+    // notizia ("X ha accettato"). Ripetere l'elenco non la ripete, e un verso
+    // solo non basta.
+    trust.outgoing.value = [outgoing('meta', 'granted')]
+    await nextTick()
+    expect(store.notices.value.filter(notice => notice.kind === 'granted')).toEqual([])
+    befriended('nuovo')
     await nextTick()
     expect(store.notices.value).toContainEqual({ id: `${NOTICE_PREFIX.granted}nuovo`, kind: 'granted', personId: 'nuovo' })
-    expect(store.notices.value.filter(notice => notice.personId === 'pilota')).toEqual([])
     store.dismissNotice('grant:nuovo')
     expect(store.notices.value.filter(notice => notice.kind === 'granted')).toEqual([])
     trust.outgoing.value = [outgoing('nuovo', 'granted')]
@@ -452,11 +552,8 @@ describe('la ricerca e le persone', () => {
     expect(trust.search).toHaveBeenCalledTimes(1)
     trust.searchResults.value = [{ uid: 'rico', nickname: 'RICO117' }]
     expect(store.found.value.entries).toEqual([{ id: 'rico', handle: '@RICO117' }])
-    // Un verso solo non basta a dire "ce l'hai gia'": resta proponibile per l'altro.
+    // Gia' in un rapporto con me (anche solo una richiesta): fra quelli che ho gia'.
     trust.outgoing.value = [outgoing('rico', 'granted')]
-    expect(store.found.value.entries.map(person => person.id)).toEqual(['rico'])
-    // Con entrambi i versi resta visibile, ma fra i collegati.
-    trust.incoming.value = [incoming('rico', 'granted')]
     expect(store.found.value.entries).toEqual([])
     expect(store.found.value.linked.map(person => person.id)).toEqual(['rico'])
     // Sotto i due caratteri la ricerca si spegne e svuota.

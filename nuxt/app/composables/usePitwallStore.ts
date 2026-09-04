@@ -11,6 +11,7 @@
 import { inject, provide, type InjectionKey, type Ref } from 'vue'
 import type {
   PitwallConceptDirection,
+  PitwallConceptFriend,
   PitwallConceptLink,
   PitwallConceptMyRoom,
   PitwallConceptNotice,
@@ -21,6 +22,7 @@ import type {
 import type { PitwallCarState, PitwallCompound, PitwallDriver, PitwallPlan, PitwallStopEstimate, PitwallWheel } from '~/utils/pitwallPresentation'
 import type { PitwallOrderStatus } from '~/services/pitwall/pitwallLink'
 import type { PitwallFieldOutcomeRow } from '~/composables/usePitwallController'
+import type { PitwallIntentStatus } from '~/composables/usePitwallIntent'
 
 export type PitwallDuration = 'always' | 'today'
 
@@ -81,6 +83,20 @@ export interface PitwallStore {
   /** Chi conosciamo per nome: e' la directory da passare agli helper dei nickname. */
   people: Ref<PitwallConceptPerson[]>
   links: Ref<Record<PitwallConceptDirection, PitwallConceptLink[]>>
+  /**
+   * Gli amici, in un elenco solo: chi lo e', chi ho chiesto, chi mi ha chiesto.
+   * E' la sola relazione che l'utente legge (due permessi, uno per verso, sotto).
+   */
+  friends: Ref<PitwallConceptFriend[]>
+  /** Il mio Pitwall: spento, in attesa di ACC, aperto - e se questo PC puo' aprirlo. */
+  pitwall: Ref<PitwallIntentStatus>
+  startPitwall: () => void
+  closePitwall: () => void
+  /** Una sola azione per chiedere e per accettare: autorizzo io, e chiedo a lui. */
+  befriend: (personId: string) => void
+  /** Rifiutare, annullare, togliere: la stessa cosa vista da tre lati. */
+  unfriend: (personId: string) => void
+  /** Solo gli amici con il Pitwall aperto: ci si entra con un clic. */
   races: Ref<PitwallConceptRace[]>
   /**
    * La gara di chi guarda, quando e' lui a guidare.

@@ -45,6 +45,24 @@ export interface PitwallConceptLink {
   until?: string
 }
 
+/**
+ * L'unico stato che l'utente legge fra due persone, piu' i due passaggi per
+ * arrivarci: la richiesta che ho mandato, quella che ho ricevuto.
+ */
+export type PitwallConceptFriendState = 'friends' | 'sent' | 'received'
+
+/** Una persona nella lista Amici, con cio' che serve a decidere e a entrare. */
+export interface PitwallConceptFriend {
+  personId: string
+  state: PitwallConceptFriendState
+  /** E' in pista adesso (presenza fresca). */
+  racing: boolean
+  /** Ha il Pitwall aperto e ci si puo' entrare. */
+  pitwallOpen: boolean
+  /** La gara in cui entrare, quando il Pitwall e' aperto. */
+  raceId?: string
+}
+
 /** Una persona dentro una gara, con quello che ACC dice di lei. */
 export interface PitwallConceptMember {
   personId: string
@@ -183,6 +201,21 @@ export const PITWALL_CONCEPT_LINKS_ASSISTED: PitwallConceptLink[] = [
 ]
 
 /**
+ * Gli amici del prototipo: uno con il Pitwall aperto, uno in pista senza,
+ * uno spento, una richiesta inviata e una ricevuta (la stessa di `req:paolo`).
+ */
+export const PITWALL_CONCEPT_FRIENDS: PitwallConceptFriend[] = [
+  { personId: 'paolo', state: 'received', racing: false, pitwallOpen: false },
+  { personId: 'andrea', state: 'sent', racing: false, pitwallOpen: false },
+  { personId: 'alessandro', state: 'sent', racing: false, pitwallOpen: false },
+  { personId: 'mario', state: 'friends', racing: true, pitwallOpen: true, raceId: 'race-47' },
+  { personId: 'luca', state: 'friends', racing: true, pitwallOpen: false },
+  // Il Pitwall di marco e' aperto e ci sono invitato: e' la gara che mostra
+  // "entra" senza essere ancora dentro.
+  { personId: 'marco', state: 'friends', racing: true, pitwallOpen: true, raceId: 'race-12' },
+]
+
+/**
  * La gara di chi guarda, per il prototipo.
  *
  * Nel mock c'e' sempre: serve a poter guardare la card senza avere ACC aperto.
@@ -251,6 +284,7 @@ export const PITWALL_CONCEPT_NOTICES: PitwallConceptNotice[] = [
 
 export interface PitwallConceptScenario {
   links: Record<PitwallConceptDirection, PitwallConceptLink[]>
+  friends: PitwallConceptFriend[]
   races: PitwallConceptRace[]
   notices: PitwallConceptNotice[]
 }
@@ -324,8 +358,24 @@ export function buildPitwallConceptCrowd(
     closed: index === 4,
   }))
 
+  // Venti amici oltre a quelli che raccontano, con due richieste in fondo:
+  // la prova che il limite non le nasconde mai.
+  const friends: PitwallConceptFriend[] = [
+    ...PITWALL_CONCEPT_FRIENDS,
+    ...Array.from({ length: 18 }, (_unused, index) => ({
+      personId: id(index),
+      state: 'friends' as PitwallConceptFriendState,
+      racing: index % 4 === 0,
+      pitwallOpen: index === 0,
+      ...(index === 0 ? { raceId: 'race-99' } : {}),
+    })),
+    { personId: id(20), state: 'received', racing: false, pitwallOpen: false },
+    { personId: id(21), state: 'received', racing: false, pitwallOpen: false },
+  ]
+
   return {
     links: { assist, assisted },
+    friends,
     races: [...PITWALL_CONCEPT_RACES, crowdedRace, ...extraRaces],
     notices: [
       ...PITWALL_CONCEPT_NOTICES,

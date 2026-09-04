@@ -126,7 +126,7 @@ describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
     // rifiutare toglievano soltanto la riga dalla campanella.
     expect(state.pendingNoticeCount.value).toBe(3)
     expect(access(state, 'assisted', 'paolo')).toBe('incoming')
-    state.acceptNotice('req:paolo', 'always')
+    state.acceptNotice('req:paolo')
     expect(access(state, 'assisted', 'paolo')).toBe('always')
     expect(state.pendingNoticeCount.value).toBe(2)
 
@@ -153,16 +153,11 @@ describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
       state.searchQuery.value = query
       return state.found.value
     }
-    // mario e marco stanno in un verso solo: restano proponibili per l'altro.
+    // mario e marco sono amici: stanno fra quelli che ho gia'.
     const ids = (query: string) => search(query).entries.map(person => person.id).sort()
-    expect(ids('mar')).toEqual(['gallo', 'marco', 'mario', 'martina'])
-    state.askToAssist('gallo')
-    const after = search('mar')
-    // Un verso solo non basta a dire "ce l'hai gia'": gallo resta proponibile
-    // per l'altro verso (e' il bottone del verso gia' presente a sparire).
-    expect(ids('mar')).toEqual(['gallo', 'marco', 'mario', 'martina'])
-    expect(after.linked).toEqual([])
-    // Con entrambi i versi (luca sta in tutte e due le liste) passa fra quelli che ho gia'.
+    expect(ids('mar')).toEqual(['gallo', 'martina'])
+    expect(search('mar').linked.map(person => person.id).sort()).toEqual(['marco', 'mario'])
+    // Un amico (luca) passa fra quelli che ho gia'.
     const both = search('luc')
     expect(both.entries).toEqual([])
     expect(both.linked.map(person => person.id)).toEqual(['luca'])
@@ -205,5 +200,63 @@ describe('Pit Wall Concept: lo stato condiviso del prototipo', () => {
     // persone in pista: quelle sono per definizione le altre.
     expect(mine!.members.some(member => member.personId === state.meId.value)).toBe(true)
     expect(state.races.value.some(race => race.id === mine!.id)).toBe(false)
+  })
+})
+
+describe('Pit Wall Concept: amici e il mio Pitwall', () => {
+  let state: ReturnType<typeof usePitwallConceptState>
+
+  beforeEach(() => {
+    states.clear()
+    state = usePitwallConceptState()
+  })
+
+  const stateOf = (id: string) => state.friends.value.find(friend => friend.personId === id)?.state ?? null
+
+  it('parte con amici, una richiesta inviata e una ricevuta, e i Pitwall aperti sono solo quelli degli amici', () => {
+    expect(stateOf('mario')).toBe('friends')
+    expect(stateOf('andrea')).toBe('sent')
+    expect(stateOf('paolo')).toBe('received')
+    expect(state.races.value.map(race => race.id)).toEqual(['race-47', 'race-12'])
+    expect(state.pitwall.value).toMatchObject({ state: 'open', available: true })
+    // luca e' in pista ma non ha aperto il Pitwall: nessuna riga per lui.
+    expect(state.friends.value.find(friend => friend.personId === 'luca')).toMatchObject({ racing: true, pitwallOpen: false })
+  })
+
+  it('accettare una richiesta ricevuta fa l amicizia; chiedere a uno nuovo la manda', () => {
+    state.befriend('paolo')
+    expect(stateOf('paolo')).toBe('friends')
+    state.befriend('gallo')
+    expect(stateOf('gallo')).toBe('sent')
+    // Chiedere due volte non produce due righe.
+    state.befriend('gallo')
+    expect(state.friends.value.filter(friend => friend.personId === 'gallo')).toHaveLength(1)
+  })
+
+  it('togliere toglie da qualunque stato, e la campanella segue', () => {
+    state.unfriend('mario')
+    expect(stateOf('mario')).toBeNull()
+    state.rejectNotice('req:paolo')
+    expect(stateOf('paolo')).toBeNull()
+    expect(state.notices.value.some(notice => notice.id === 'req:paolo')).toBe(false)
+    states.clear()
+    const fresh = usePitwallConceptState()
+    fresh.acceptNotice('req:paolo')
+    expect(fresh.friends.value.find(friend => friend.personId === 'paolo')?.state).toBe('friends')
+  })
+
+  it('chiudere e riaprire il mio Pitwall', () => {
+    state.closePitwall()
+    expect(state.pitwall.value.state).toBe('off')
+    expect(state.myRoom.value?.state).toBe('closed')
+    state.startPitwall()
+    expect(state.pitwall.value.state).toBe('open')
+    expect(state.myRoom.value?.state).toBe('live')
+  })
+
+  it('chi e gia amico non si ripropone nella ricerca', () => {
+    state.searchQuery.value = 'mar'
+    expect(state.found.value.entries.map(person => person.id).sort()).toEqual(['gallo', 'martina'])
+    expect(state.found.value.linked.map(person => person.id).sort()).toEqual(['marco', 'mario'])
   })
 })
