@@ -927,13 +927,30 @@
   letter-spacing: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: border-color 120ms ease-out, background 120ms ease-out,
+    box-shadow 120ms ease-out, color 120ms ease-out, transform 120ms ease-out;
 }
 
 .launcher-tool-button:hover,
-.launcher-tool-button:focus-visible,
-.launcher-tool-button.is-selected {
+.launcher-tool-button:focus-visible {
   border-color: rgba(var(--overlay-accent-rgb), 0.74);
   background: rgba(var(--overlay-accent-rgb), 0.2);
+}
+
+// Il giallo corsa indica il cursore del volante, mentre i colori del singolo
+// strumento continuano a descriverne lo stato. Le due informazioni non si
+// confondono anche quando il tema corrente usa un accento verde.
+.launcher-tool-button[data-overlay-wheel-action].is-selected {
+  border-color: #ffe27a;
+  background: linear-gradient(105deg, rgba(104, 70, 9, 0.96), rgba(41, 31, 15, 0.98));
+  box-shadow:
+    inset 5px 0 0 #ffd34e,
+    inset 0 1px 0 rgba(255, 248, 214, 0.22),
+    0 0 0 2px rgba(255, 211, 78, 0.38),
+    0 8px 18px rgba(0, 0, 0, 0.34);
+  color: #fffdf4;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.44);
+  transform: translateY(-1px);
 }
 
 .launcher-tool-button--training {
