@@ -68,6 +68,7 @@ export default defineConfig({
         'app/services/pitwall/pitwallEngineerService.ts',
         'app/services/pitwall/pitwallFriends.ts',
         'app/services/pitwall/pitwallRoomOutcomeRecovery.ts',
+        'app/services/pitwall/pitwallServerClock.ts',
         'app/services/gateway/activityProjectionBuilders.ts',
         'app/services/gateway/bestTimesBuilders.ts',
         'app/services/gateway/trackDetailProjectionBuilder.ts',

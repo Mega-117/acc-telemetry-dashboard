@@ -512,6 +512,9 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     pendingNoticeCount,
     notice: computed(() => link.notice.value ?? trust.notice.value ?? null),
     error: computed(() => link.lastError.value ?? trust.lastError.value ?? null),
+    // Non si mescola con `error`: un orologio sbagliato non passa da solo, e va
+    // detto anche quando tutto il resto funziona (PIP-382).
+    clockWarning: link.clockSkewNotice,
     demo: false,
     meId: computed(() => uid()),
     crowded: ref(false) as Ref<boolean>,

@@ -53,6 +53,11 @@ import { boundPitwallCrew, boundPitwallStrategy } from './pitwallLink'
 // continua a vedere una presa sola (Principio 1).
 import { createPitwallRoomOrders } from './pitwallRoomOrders'
 import { createPitwallRoomLifecycle } from './pitwallRoomLifecycle'
+// L'orologio comune. Scadenze e freschezza si misurano in ora del server:
+// due PC con due orologi diversi non possono giudicare la stessa scadenza
+// (PIP-382). La misura la fa questo file, che un `serverTimestamp` lo scrive
+// gia' a ogni battito - quindi non costa una lettura in piu'.
+import { createPitwallServerClock } from './pitwallServerClock'
 import type { PitwallRoomResult } from './pitwallRoomOrders'
 
 export interface PitwallRoomServiceOptions {
@@ -85,8 +90,13 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
   const { db, uid } = options
   const now = options.now ?? (() => Date.now())
   const mintRoomId = options.newRoomId ?? randomRoomId
-  const orders = createPitwallRoomOrders({ db, uid, now })
-  const lifecycle = createPitwallRoomLifecycle({ db, now })
+  // L'orologio di questo PC serve ancora, ma solo per misurare tempo passato
+  // *qui* (ogni quanto ribattere, ogni quanto riprovare). Tutto cio' che va
+  // confrontato con un'ora scritta da qualcun altro passa da `serverNow`.
+  const clock = createPitwallServerClock({ now })
+  const serverNow = () => clock.serverNow()
+  const orders = createPitwallRoomOrders({ db, uid, now: serverNow })
+  const lifecycle = createPitwallRoomLifecycle({ db, now: serverNow })
 
   const roomRef = (roomId: string) => doc(db, 'pitwallRooms', roomId)
   const membersRef = (roomId: string) => collection(db, 'pitwallRooms', roomId, 'members')
@@ -376,12 +386,38 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
       membersRef(roomId),
       'pitwallRoom.watchMembers',
       (snapshot: { docs: { data: () => unknown }[] }) => {
-        onChange(snapshot.docs
+        const members = snapshot.docs
           .map(entry => normalisePitwallMember(entry.data()))
-          .filter((member): member is PitwallRoomMember => member != null))
+          .filter((member): member is PitwallRoomMember => member != null)
+        // Il proprio battito che torna indietro datato dal server e' la misura
+        // dell'orologio: e' gia' qui, gratis, e non serve altro.
+        observeOwnHeartbeat(members)
+        onChange(members)
       },
       (error: Error) => onError?.(error)
     )
+  }
+
+  /**
+   * La finestra dell'ultimo battito scritto: partito e confermato, ora locale.
+   *
+   * Si consuma alla prima eco che porta una data del server piu' recente di
+   * quella gia' vista - cioe' quella di *questa* scrittura, perche' di battiti
+   * in volo ce n'e' uno alla volta. Cosi' la misura accoppia sempre la finestra
+   * giusta con la data giusta, invece di sottrarre due istanti scollegati.
+   */
+  let pendingClockSample: { sentMs: number, ackedMs: number } | null = null
+  let lastOwnHeartbeatMs = 0
+
+  function observeOwnHeartbeat(members: PitwallRoomMember[]): void {
+    const mine = members.find(member => member.uid === uid)
+    // `updatedAtMs` vale 0 finche' il server non ha datato la scrittura: quella
+    // e' l'eco locale, e misurarci sopra vorrebbe dire misurare se stessi.
+    if (!mine || !(mine.updatedAtMs > lastOwnHeartbeatMs)) return
+    lastOwnHeartbeatMs = mine.updatedAtMs
+    const sample = pendingClockSample
+    pendingClockSample = null
+    if (sample) clock.observe(sample.sentMs, sample.ackedMs, mine.updatedAtMs)
   }
 
   /**
@@ -390,6 +426,11 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
    * `driving` non e' un bottone: lo deriva chi chiama dallo stato reale di ACC.
    * L'ora la mette il server, e le regole lo impongono: un orologio locale
    * sbagliato non deve poter decidere chi applica la strategia.
+   *
+   * E' anche il punto in cui si misura lo scarto fra i due orologi: si segna
+   * quando la scrittura parte e quando il server la conferma, e l'eco del
+   * battito - che arriva comunque, dall'ascolto dei membri - porta la data del
+   * server che chiude la misura.
    */
   async function publishPresence(roomId: string, input: {
     nickname: string
@@ -400,7 +441,10 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
     strategy?: unknown
   }): Promise<PitwallRoomResult<true>> {
     const crew = boundPitwallCrew(input.crew)
-    const strategy = boundPitwallStrategy(input.strategy, nowIso(now()))
+    // La fotografia della vettura la data l'ora del server: e' un dato che
+    // legge un altro computer, non un cronometro interno.
+    const strategy = boundPitwallStrategy(input.strategy, nowIso(serverNow()))
+    const sentMs = now()
     try {
       await trackedSetDoc(doc(membersRef(roomId), uid), {
         schemaVersion: PITWALL_ROOM_SCHEMA_VERSION,
@@ -413,6 +457,7 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
         ...(crew == null ? {} : { crew }),
         ...(strategy == null ? {} : { strategy }),
       }, 'pitwallRoom.publishPresence')
+      pendingClockSample = { sentMs, ackedMs: now() }
       return { ok: true, value: true }
     } catch (error) {
       return failure(error, 'Presenza non pubblicata.')
@@ -539,6 +584,14 @@ export function createPitwallRoomService(options: PitwallRoomServiceOptions) {
 
   return {
     uid,
+    // L'orologio comune, esposto perche' chi decide - la pagina e il PC del
+    // pilota - deve poter chiedere "adesso" nella stessa ora in cui sono
+    // scritte le scadenze, e poter dire all'utente che il suo orologio e'
+    // sbagliato (PIP-382).
+    serverNow,
+    toLocalMs: clock.toLocalMs,
+    clockOffsetMs: clock.offsetMs,
+    clockOutOfSync: clock.outOfSync,
     ...orders,
     // Il ciclo di vita cambia per un motivo suo - quando una gara e' viva e
     // quando finisce - quindi vive in un modulo suo e si compone qui: chi usa

@@ -109,6 +109,18 @@ function add(personId: string) {
       {{ state.notice.value }}
     </p>
 
+    <!-- L'orologio sbagliato non e' un errore dell'app e non passa da solo:
+         sta accanto agli altri messaggi, non al posto loro, e resta finche'
+         l'utente non lo sistema. -->
+    <p
+      v-if="state.clockWarning.value"
+      class="pwc-flash is-warn"
+      data-testid="pitwall-clock-warning"
+      role="alert"
+    >
+      {{ state.clockWarning.value }}
+    </p>
+
     <!-- HOME: il mio Pitwall, chi ha aperto il suo, gli amici -->
     <div
       v-if="screen === 'home'"
@@ -273,6 +285,8 @@ function add(personId: string) {
   font-size: 13px;
 }
 .pwc-flash.is-error { border-color: rgba(239, 68, 68, 0.5); color: #ff625c; }
+/* Ambra e non rosso: non e' rotto niente, c'e' da sistemare una cosa fuori. */
+.pwc-flash.is-warn { border-color: rgba(245, 158, 11, 0.55); color: #f59e0b; }
 
 /* Elementi condivisi */
 .pwc-btn {

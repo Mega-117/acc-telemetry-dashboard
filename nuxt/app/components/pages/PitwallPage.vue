@@ -153,6 +153,9 @@ function onSearchInput() {
             </p>
           </template>
           <p v-if="link.lastError.value" class="cell-error">{{ link.lastError.value }}</p>
+          <!-- Un orologio sbagliato basta a far sembrare scaduta ogni strategia:
+               si dice qui, dove l'ingegnere guarda prima di inviare (PIP-382). -->
+          <p v-if="link.clockSkewNotice.value" class="cell-warn" data-testid="pitwall-clock-warning">{{ link.clockSkewNotice.value }}</p>
           <p v-if="link.notice.value" class="cell-notice">{{ link.notice.value }}</p>
         </article>
 
@@ -289,7 +292,7 @@ function onSearchInput() {
 .status-pill,.grant-pill { padding: 3px 8px; border: 1px solid rgba(255,255,255,.18); border-radius: 5px; color: #a9b4bf; font-size: 9px; font-weight: 850; letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
 .status-pill.is-online,.grant-pill.is-permanent { border-color: rgba(74,198,91,.42); color: #62d26d; }.status-pill.is-offline { color: #818b95; }
 .active-pilot__meta { display: flex; align-items: center; gap: 9px; margin: 10px 0; color: #e2e7ec; font-size: 12px; }.check { color: #53c866; font-weight: 900; }.clock { color: #77838e; font-size: 18px; }
-.active-pilot__disconnect { float: right; margin-top: -36px; }.cell-note { margin: 16px 0 0; color: #a7b0ba; font-size: 12px; line-height: 1.55; }.cell-error { color: #ffbd55; font-size: 11px; }.cell-notice { color: #54b9f5; font-size: 11px; }
+.active-pilot__disconnect { float: right; margin-top: -36px; }.cell-note { margin: 16px 0 0; color: #a7b0ba; font-size: 12px; line-height: 1.55; }.cell-error { color: #ffbd55; font-size: 11px; }.cell-warn { color: #f59e0b; font-size: 11px; font-weight: 600; }.cell-notice { color: #54b9f5; font-size: 11px; }
 .search-input { width: 100%; min-height: 42px; padding: 0 14px; border: 1px solid rgba(255,255,255,.16); border-radius: 8px; outline: 0; background: #0b1219; color: #fff; font: inherit; }.search-input:focus { border-color: rgba(53,169,242,.75); box-shadow: 0 0 0 3px rgba(53,169,242,.1); }.search-input::placeholder { color: #818b96; }
 .search-results { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }.search-results li { display: flex; align-items: center; gap: 6px; }.search-results strong { flex: 1; font-size: 12px; }
 .recent-list { display: grid; max-height: 142px; overflow-y: auto; }.recent-row { display: grid; grid-template-columns: 10px minmax(76px,.55fr) minmax(150px,1.15fr) minmax(120px,auto); align-items: center; gap: 9px; min-height: 39px; border-bottom: 1px solid rgba(255,255,255,.08); }.recent-row:last-child { border-bottom: 0; }.recent-row strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }.recent-row__detail { color: #9ca6b0; font-size: 11px; }.recent-row .btn { justify-self: end; width: 120px; }.recent-row--incoming .grant-pill { color: #b89ae9; }

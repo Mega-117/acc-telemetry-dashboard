@@ -34,11 +34,19 @@ const fakes = vi.hoisted(() => ({
   calls: [] as string[],
   roomDoc: null as Record<string, unknown> | null,
   sendOk: true,
+  /** Scarto fra orologio del server e orologio di questo PC (PIP-382). */
+  clockOffsetMs: 0,
 }))
 
 vi.mock('~/services/pitwall/pitwallRoomService', () => ({
   createPitwallRoomService: ({ uid }: { uid: string }) => ({
     uid,
+    // L'orologio comune del servizio vero (PIP-382). Qui i due orologi sono
+    // allineati: lo scarto ha i suoi test dedicati, questi parlano d'altro.
+    serverNow: () => Date.now(),
+    toLocalMs: (serverMs: number) => serverMs,
+    clockOffsetMs: () => fakes.clockOffsetMs,
+    clockOutOfSync: () => Math.abs(fakes.clockOffsetMs ?? 0) > 30_000,
     readRoom: async () => fakes.roomDoc,
     joinRoom: async () => { fakes.calls.push('join'); return { ok: true, value: { ...fakes.roomDoc, memberUids: [...(fakes.roomDoc!.memberUids as string[]), uid] } } },
     // Staccare l'ascolto lo spegne davvero: chi chiude la gara non deve
@@ -116,6 +124,7 @@ beforeEach(() => {
   fakes.pushOrder = null
   fakes.roomDoc = room()
   fakes.sendOk = true
+  fakes.clockOffsetMs = 0
   scope = effectScope()
 })
 
@@ -328,5 +337,23 @@ describe('le azioni da manager, uscire e chiudere', () => {
     expect(names.rotto).toBe('rotto')
     expect(names.sconosciuto).toBe('sconosciuto')
     expect(names.me).toBe('RICO117')
+  })
+})
+
+describe('l orologio sbagliato si dice, invece di far sembrare rotto il muretto', () => {
+  it('tace quando i due orologi sono allineati', async () => {
+    const link = await open([member()])
+    expect(link.clockSkewNotice.value).toBeNull()
+  })
+
+  it('col PC avanti di quattro minuti lo dice, col verso e col numero', async () => {
+    // E' la causa vera del 2026-09-05: senza questa riga a schermo, l ingegnere
+    // leggeva solo "strategia scaduta" e nessuno dei due poteva capirlo.
+    fakes.clockOffsetMs = -240_000
+    const link = await open([member()])
+    vi.advanceTimersByTime(5_000)
+    await settle()
+    expect(link.clockSkewNotice.value).toContain('avanti')
+    expect(link.clockSkewNotice.value).toContain('4 minuti')
   })
 })

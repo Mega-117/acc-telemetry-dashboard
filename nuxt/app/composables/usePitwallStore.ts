@@ -110,6 +110,14 @@ export interface PitwallStore {
   /** Messaggi dei servizi, gia' in italiano. */
   notice: Ref<string | null>
   error: Ref<string | null>
+  /**
+   * L'orologio di questo computer e' sbagliato, e basta a rompere il muretto.
+   *
+   * Sta fuori da `error` perche' non e' un fallimento del programma e non passa
+   * da solo: resta finche' l'utente non sincronizza l'orologio, ed e' l'unico
+   * avviso qui dentro che chiede di fare qualcosa *fuori* dall'app (PIP-382).
+   */
+  clockWarning: Ref<string | null>
   /** Dati finti: la demo del prototipo. Il vero e' `false`. */
   demo: boolean
   /** Chi guarda: gli helper di gara ragionano dal suo punto di vista. */

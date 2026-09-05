@@ -69,9 +69,18 @@ function fakeService(initial: PitwallRoom = room()) {
   let claimOk = true
   let outcomeOk = true
   let storedOrder: PitwallRoomOrder | null = null
+  /** Scarto fra i due orologi: server meno locale. Zero = orologi allineati. */
+  let clockOffsetMs = 0
+  /** L'orologio di questo PC, sostituibile quando il test lo vuole sbagliato. */
+  let localNow: () => number = () => Date.now()
 
   const service = {
     uid: DRIVER,
+    // L'orologio comune, come lo espone il servizio vero (PIP-382).
+    serverNow: () => localNow() + clockOffsetMs,
+    toLocalMs: (serverMs: number) => serverMs - clockOffsetMs,
+    clockOffsetMs: () => clockOffsetMs,
+    clockOutOfSync: () => Math.abs(clockOffsetMs) > 30_000,
     readRoom: async () => current,
     ensureRoomForVehicle: async (input: { fingerprint: string }) => {
       calls.opened.push(input.fingerprint)
@@ -145,6 +154,11 @@ function fakeService(initial: PitwallRoom = room()) {
     setRoom: (next: PitwallRoom) => { current = next; pushRoom?.(next) },
     setMembers: (list: PitwallRoomMember[]) => pushMembers?.(list),
     setOrders: (list: PitwallRoomOrder[]) => pushOrders?.(list),
+    /** Questo PC ha l'orologio sbagliato: `offsetMs` e' server meno locale. */
+    setClock: (input: { localNow: () => number, offsetMs: number }) => {
+      localNow = input.localNow
+      clockOffsetMs = input.offsetMs
+    },
     failClaim: () => { claimOk = false },
     failOutcome: (value = true) => { outcomeOk = !value },
     setStoredOrder: (next: PitwallRoomOrder | null) => { storedOrder = next },
@@ -166,7 +180,14 @@ function electron(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function startDriver(fake: ReturnType<typeof fakeService>, bridge: ReturnType<typeof electron>, trusted: string[] = []) {
+function startDriver(
+  fake: ReturnType<typeof fakeService>,
+  bridge: ReturnType<typeof electron>,
+  trusted: string[] = [],
+  // Solo i test dell'orologio la usano, per dare a questo PC un "adesso"
+  // sbagliato: gli altri non hanno motivo di sapere che si puo' iniettare.
+  extra: Record<string, unknown> = {}
+) {
   const handle = startPitwallRoomDriver({
     db: {} as never,
     uid: DRIVER,
@@ -189,6 +210,7 @@ function startDriver(fake: ReturnType<typeof fakeService>, bridge: ReturnType<ty
       strategy: null,
     }),
     log: { warn: () => {}, error: () => {} },
+    ...extra,
   })
   // Questi test parlano della gara, non dell'intento: il pilota l'ha chiesta.
   void handle.openPitwall()
@@ -320,6 +342,51 @@ describe('il lato pilota applica solo quando tocca a lui', () => {
 
     expect(fake.calls.claims).toHaveLength(0)
     expect(bridge.submitted).toHaveLength(0)
+  })
+
+  it('con l orologio di questo PC avanti di quattro minuti, l ordine parte lo stesso', async () => {
+    // Il caso vero del 2026-09-05 (PIP-382): il PC del pilota era avanti di
+    // quattro minuti, l'ordine viveva due, e ogni strategia veniva rifiutata
+    // "scaduta" un secondo dopo essere partita. La scadenza la scrive un altro
+    // computer in ora del server, e in ora del server va letta.
+    const SKEW_MS = 240_000
+    const serverNowMs = Date.parse('2026-09-05T16:27:38.000Z')
+    const fake = fakeService()
+    fake.setClock({ localNow: () => serverNowMs + SKEW_MS, offsetMs: -SKEW_MS })
+    const bridge = electron()
+    handle = startDriver(fake, bridge, [], { now: () => serverNowMs + SKEW_MS })
+    await settle(12)
+
+    fake.setMembers([{ ...member(DRIVER, true), updatedAtMs: serverNowMs - 5_000 }])
+    // Due minuti di vita in ora del server: gia' passati sull'orologio locale.
+    fake.setOrders([order({ expiresAtMs: serverNowMs + 120_000 })])
+    await settle(20)
+
+    expect(fake.calls.rejections).toHaveLength(0)
+    expect(fake.calls.claims).toEqual(['ordine-1'])
+    expect(bridge.submitted).toHaveLength(1)
+  })
+
+  it('la scadenza passa il confine con Electron tradotta nell orologio locale', async () => {
+    // Di la' dal ponte (processo main, applicatore) si confronta con
+    // `Date.now()` locale e non si sa niente dell'ora del server: la
+    // traduzione avviene qui, una volta sola, altrimenti l'ordine verrebbe
+    // scartato *dopo* essere stato accettato dalla stanza.
+    const SKEW_MS = 240_000
+    const serverNowMs = Date.parse('2026-09-05T16:27:38.000Z')
+    const expiresAtMs = serverNowMs + 120_000
+    const fake = fakeService()
+    fake.setClock({ localNow: () => serverNowMs + SKEW_MS, offsetMs: -SKEW_MS })
+    const bridge = electron()
+    handle = startDriver(fake, bridge, [], { now: () => serverNowMs + SKEW_MS })
+    await settle(12)
+
+    fake.setMembers([{ ...member(DRIVER, true), updatedAtMs: serverNowMs - 5_000 }])
+    fake.setOrders([order({ expiresAtMs })])
+    await settle(20)
+
+    const payload = bridge.submitted[0] as { order: { expiresAtMs: number } }
+    expect(payload.order.expiresAtMs).toBe(expiresAtMs + SKEW_MS)
   })
 
   it('un ordine scaduto si chiude dicendolo, invece di restare pendente', async () => {

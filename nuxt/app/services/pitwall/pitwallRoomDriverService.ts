@@ -149,6 +149,16 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
   const now = options.now ?? (() => Date.now())
   const log = options.log ?? console
   const rooms = options.service ?? createPitwallRoomService({ db: options.db, uid: options.uid, now })
+  /**
+   * Adesso, sull'orologio del server.
+   *
+   * Serve ovunque si giudichi un'ora scritta da qualcun altro - la scadenza di
+   * un ordine, la freschezza dei battiti - perche' con l'orologio di questo PC
+   * sbagliato di qualche minuto ogni strategia arriva "gia' scaduta" e nessuno
+   * risulta al volante (PIP-382). Il tempo trascorso *qui* continua a
+   * misurarsi con `now()`: per quello l'orologio locale va benissimo.
+   */
+  const serverNow = () => rooms.serverNow?.() ?? now()
 
   let stopped = false
   const { confirmOutcomes, drainPendingOutcomes } = createPitwallRoomOutcomeRecovery({
@@ -279,12 +289,30 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
    * "e' il momento?" provando davvero significava rubare il primo piano al
    * pilota a ogni tentativo.
    */
+  /**
+   * La scadenza dell'ordine, riscritta nell'orologio di questo computer.
+   *
+   * Serve solo al confine con Electron: il processo main e l'applicatore
+   * confrontano con `Date.now()` locale, e non hanno modo di sapere che l'ora
+   * del server e' un'altra. Senza traduzione, un orologio avanti di quattro
+   * minuti faceva scartare l'ordine *dopo* che la stanza lo aveva accettato -
+   * lo stesso errore di prima, un passo piu' avanti.
+   */
+  function toLocalExpiry(order: PitwallRoomOrder): number {
+    const expiresAtMs = Number(order.expiresAtMs)
+    if (!Number.isFinite(expiresAtMs)) return expiresAtMs
+    return rooms.toLocalMs?.(expiresAtMs) ?? expiresAtMs
+  }
+
   async function deliver(order: PitwallRoomOrder): Promise<void> {
     const roomId = room?.roomId
     if (stopped || !roomId || handled.has(order.orderId)) return
 
     // 1. Scaduto: si chiude dicendolo, invece di lasciarlo pendente in eterno.
-    if (isPitwallRoomOrderExpired(order, now())) {
+    //    La scadenza l'ha scritta un altro computer in ora del server, e in ora
+    //    del server va letta: col nostro orologio ogni ordine sarebbe scaduto
+    //    appena arrivato, o vivo molto oltre il dovuto.
+    if (isPitwallRoomOrderExpired(order, serverNow())) {
       handled.add(order.orderId)
       await rooms.rejectOrder(roomId, order.orderId, 'Scaduto prima che qualcuno potesse applicarlo.')
       return
@@ -292,7 +320,8 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
 
     // 2. Tocca a noi? Con nessuno o due al volante non si indovina: non si
     //    prende in carico, e l'ordine scade da solo. L'ingegnere lo vede.
-    const resolution = resolvePitwallRoomExecutor(members, now())
+    //    Anche qui l'ora e' quella del server: i battiti li data il server.
+    const resolution = resolvePitwallRoomExecutor(members, serverNow())
     if (resolution.executor?.uid !== options.uid) return
 
     // 3. ACC e' pronto adesso? Domanda a costo zero: nessun input, nessun
@@ -344,7 +373,12 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
       let outcome: { status: string, reason?: string | null, fields?: unknown }
       try {
         const result = await options.electronApi.pitwallSubmitRemoteOrder?.({
-          order: { ...order, schemaVersion: 2 } as never,
+          // La scadenza si traduce nell'orologio di questo PC prima di passare
+          // il confine: di la' (processo main, applicatore) si ragiona con
+          // `Date.now()` locale, ed e' giusto cosi' - quel codice non ha modo
+          // di conoscere l'ora del server. Tradurre qui, una volta sola, e' il
+          // motivo per cui un orologio sbagliato non ferma piu' niente.
+          order: { ...order, expiresAtMs: toLocalExpiry(order), schemaVersion: 2 } as never,
           grant: null,
           room: { roomId, memberUids: room?.memberUids ?? [] },
         })

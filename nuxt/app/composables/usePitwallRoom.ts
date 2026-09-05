@@ -38,6 +38,7 @@ import {
   isPitwallOrderSettled,
   type PitwallOrderStatus,
 } from '~/services/pitwall/pitwallLink'
+import { describePitwallClockSkew } from '~/services/pitwall/pitwallServerClock'
 
 // Le forme di vista (esito per campo, riga dell'equipaggio) vivono nel contratto.
 export type { PitwallCrewRow, PitwallFieldOutcome } from '~/services/pitwall/pitwallRoomContract'
@@ -56,7 +57,14 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const sending = ref(false)
   const rawError = ref<string | null>(null)
   const notice = ref<string | null>(null)
-  /** Batte ogni 5 s: freschezza e conflitti devono invecchiare da soli a schermo. */
+  /**
+   * Batte ogni 5 s: freschezza e conflitti devono invecchiare da soli a schermo.
+   *
+   * E' l'ora del *server*, non quella di questa macchina: si confronta con
+   * battiti e scadenze che datano gli altri computer, e un orologio locale
+   * sbagliato di qualche minuto faceva sembrare offline tutta la stanza
+   * (PIP-382).
+   */
   const nowTick = ref(Date.now())
 
   const orderId = ref<string | null>(null)
@@ -85,6 +93,29 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     }
     return serviceRef.value
   }
+
+  /**
+   * Adesso, in ora del server.
+   *
+   * Finche' non c'e' un servizio (nessun account collegato) vale l'orologio
+   * locale: non c'e' ancora niente da confrontare, e restare senza un "adesso"
+   * sarebbe peggio (Principio 5).
+   */
+  function serverNowMs(): number {
+    return serviceRef.value?.serverNow() ?? Date.now()
+  }
+
+  /**
+   * L'orologio di questo computer e' sbagliato abbastanza da rompere il muretto.
+   *
+   * Si mostra perche' e' l'unica cosa che l'utente puo' sistemare da solo, ed e'
+   * la causa che il 2026-09-05 ha reso ogni strategia "scaduta" senza che
+   * nessuno dei due capisse perche'.
+   */
+  const clockSkewNotice = computed(() => {
+    void nowTick.value
+    return describePitwallClockSkew(serviceRef.value?.clockOffsetMs() ?? null)
+  })
 
   // Numero d'ordine crescente, mai ripetuto: il perche' sta nel modulo.
   const nextRevision = createPitwallRevisionClock()
@@ -211,7 +242,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    */
   function pilotBeatsForMe(uid: string): boolean {
     const mine = members.value.find(member => member.uid === uid)
-    return mine?.kind === 'driver' && isPitwallMemberFresh(mine, Date.now())
+    return mine?.kind === 'driver' && isPitwallMemberFresh(mine, serverNowMs())
   }
 
   async function heartbeat(): Promise<void> {
@@ -500,7 +531,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
 
   function start(): void {
     if (tickTimer) clearInterval(tickTimer)
-    tickTimer = setInterval(() => { nowTick.value = Date.now() }, 5_000)
+    tickTimer = setInterval(() => { nowTick.value = serverNowMs() }, 5_000)
     watchRooms()
   }
 
@@ -536,6 +567,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     canSend,
     lastError,
     notice,
+    clockSkewNotice,
     nowTick,
     orderId,
     orderStatus,

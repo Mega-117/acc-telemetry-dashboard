@@ -436,6 +436,8 @@ export function usePitwallConceptState(): PitwallStore & { reset: () => void } {
     pendingNoticeCount,
     notice: ref(null),
     error: ref(null),
+    // Le fixture non hanno un orologio da confrontare con nessuno.
+    clockWarning: ref(null),
     demo: true,
     meId: ref<string | null>(PITWALL_CONCEPT_CURRENT_USER_ID),
     crowded,
