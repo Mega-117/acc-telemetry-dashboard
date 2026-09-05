@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const nuxtRoot = path.resolve(scriptDir, '..')
 const appVue = fs.readFileSync(path.join(nuxtRoot, 'app/app.vue'), 'utf8')
+const maintenance = fs.readFileSync(path.join(nuxtRoot, 'app/composables/useOwnerDataMaintenance.ts'), 'utf8')
 const overviewPage = fs.readFileSync(path.join(nuxtRoot, 'app/components/pages/PanoramicaPage.vue'), 'utf8')
 const forbiddenSecondarySnapshotFiles = [
   'app/components/ui/SessionPickerModal.vue',
@@ -28,10 +29,11 @@ assert.ok(
 )
 
 assert.match(
-  appVue,
+  maintenance,
   /app\.dashboard\.maintenanceGate/,
-  'app.vue should keep only the lightweight dashboard maintenance gate scenario'
+  'the browser maintenance adapter must retain the lightweight dashboard maintenance scenario'
 )
+assert.match(appVue, /ownerDataMaintenance\.runBrowserGate\(uid\)/)
 
 assert.doesNotMatch(
   overviewPage,

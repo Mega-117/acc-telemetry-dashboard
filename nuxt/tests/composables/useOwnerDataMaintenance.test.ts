@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('~/services/sync/ownerDataMaintenanceService', () => ({
   runOwnerDataMaintenanceGate: mocks.runGate,
+  describeOwnerMaintenanceError: () => ({ reason: 'quota_exceeded', message: 'Limite temporaneo, riprova più tardi.' }),
   completeOwnerDataMaintenanceAfterLocalSync: mocks.completeAfterSync
 }))
 
@@ -16,6 +17,7 @@ describe('useOwnerDataMaintenance lease wiring', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     useOwnerDataMaintenance().resetMaintenanceState()
+    useOwnerDataMaintenance().setBrowserOwner(null)
     mocks.runGate.mockResolvedValue({ status: 'completed' })
     mocks.completeAfterSync.mockResolvedValue({ status: 'completed' })
   })
@@ -86,5 +88,39 @@ describe('useOwnerDataMaintenance lease wiring', () => {
     expect(maintenance.phase.value).toBe('completed')
     expect(maintenance.progress.value).toBe(100)
     expect(onProgress).toHaveBeenCalledTimes(2)
+  })
+
+  it('contiene il rifiuto browser, condivide il tentativo e consente riprova dopo errore', async () => {
+    const maintenance = useOwnerDataMaintenance()
+    maintenance.setBrowserOwner('uid-a')
+    mocks.runGate.mockRejectedValueOnce(new Error('Quota exceeded.'))
+    const first = maintenance.runBrowserGate('uid-a')
+    expect(maintenance.runBrowserGate('uid-a')).toBe(first)
+    await expect(first).resolves.toBeNull()
+    expect(mocks.runGate).toHaveBeenCalledOnce()
+    expect(maintenance.status.value).toBe('failed')
+    expect(maintenance.report.value).toBeNull()
+    await expect(maintenance.runBrowserGate('uid-a')).resolves.toMatchObject({ status: 'completed' })
+    expect(mocks.runGate).toHaveBeenCalledTimes(2)
+  })
+
+  it('invalida il vecchio owner e ignora progresso e fallimenti tardivi dopo logout/relogin', async () => {
+    const maintenance = useOwnerDataMaintenance()
+    maintenance.setBrowserOwner('uid-a')
+    let rejectOld!: (reason: unknown) => void
+    mocks.runGate.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectOld = reject }))
+    const old = maintenance.runBrowserGate('uid-a')
+    await Promise.resolve()
+    const oldOptions = mocks.runGate.mock.calls[0][0]
+    maintenance.setBrowserOwner(null)
+    maintenance.setBrowserOwner('uid-a')
+    expect(() => oldOptions.assertActive()).toThrow('cloud_owner_lease_stale')
+    expect(() => oldOptions.onProgress({ status: 'completed', progress: 100 })).toThrow('cloud_owner_lease_stale')
+    rejectOld(new Error('old failure'))
+    await old
+    expect(maintenance.status.value).toBe('idle')
+    await maintenance.runBrowserGate('uid-a')
+    expect(mocks.runGate).toHaveBeenCalledTimes(2)
+    await expect(maintenance.runBrowserGate('uid-other')).resolves.toBeNull()
   })
 })

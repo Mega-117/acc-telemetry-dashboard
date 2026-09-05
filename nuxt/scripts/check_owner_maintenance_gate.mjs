@@ -64,7 +64,14 @@ assert.ok(!directAutoReprocessPattern.test(sync), 'useElectronSync must not call
 
 assert.match(app, /useOwnerDataMaintenance/)
 assert.match(app, /!\(window as any\)\.electronAPI/)
-assert.match(app, /ownerDataMaintenance\.runGate/)
+assert.match(app, /ownerDataMaintenance\.runBrowserGate/)
+assert.doesNotMatch(app, /ownerDataMaintenance\.runGate\(/)
+assert.match(app, /ownerDataMaintenance\.setBrowserOwner\(owner\)/)
+assert.match(app, /@retry="retryBrowserMaintenance"/)
+assert.match(composable, /function runBrowserGate/)
+assert.match(composable, /browserFlight === attempt/)
+assert.match(service, /readInitialState\(uid, assertActive\)/)
+assert.match(service, /OWNER_MAINTENANCE_INITIAL_READ_TIMEOUT_MS = 15_000/)
 assert.match(app, /ElectronDataMaintenanceNotification/)
 
 assert.match(titlebar, /dataMaintenance/)

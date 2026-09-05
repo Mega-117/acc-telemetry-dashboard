@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const getDocMock = vi.hoisted(() => vi.fn())
 const setDocMock = vi.hoisted(() => vi.fn())
@@ -38,7 +38,8 @@ vi.mock('~/services/sync/canonicalMigrationCheckpoint', () => ({
   advanceCanonicalMigrationCheckpoint: advanceCheckpointMock
 }))
 
-vi.mock('~/services/sync/firebaseStructureHealthService', () => ({
+vi.mock('~/services/sync/firebaseStructureHealthService', async (importOriginal) => ({
+  ...await importOriginal<typeof import('~/services/sync/firebaseStructureHealthService')>(),
   createFirebaseStructureLeaseId: () => 'lease-1',
   inspectFirebaseStructureState: inspectFirebaseStructureStateMock,
   claimFirebaseStructureLease: claimFirebaseStructureLeaseMock,
@@ -46,7 +47,6 @@ vi.mock('~/services/sync/firebaseStructureHealthService', () => ({
   publishFirebaseStructureHealth: publishFirebaseStructureHealthMock,
   classifyFirebaseStructureOutcome: classifyFirebaseStructureOutcomeMock,
   classifyFirebaseStructureError: classifyFirebaseStructureErrorMock,
-  withFirebaseStructureRetry: (operation: () => Promise<unknown>) => operation()
 }))
 
 vi.mock('~/services/sync/ownerDataRepairService', () => ({
@@ -108,6 +108,7 @@ function cleanAudit() {
 }
 
 describe('runOwnerDataMaintenanceGate', () => {
+  afterEach(() => vi.useRealTimers())
   beforeEach(() => {
     vi.clearAllMocks()
     setDocMock.mockResolvedValue(undefined)
@@ -268,6 +269,77 @@ describe('runOwnerDataMaintenanceGate', () => {
     expect(rebuildOwnerProjectionsMock).toHaveBeenCalledWith('uid-1', {
       assertActive: expect.any(Function)
     })
+  })
+
+  it.each(['quota_exceeded', 'permission_denied', 'network_transient', 'unknown_error'])('notifica %s senza write né dettagli privati', async (reason) => {
+    classifyFirebaseStructureErrorMock.mockReturnValue(reason)
+    const failure = new Error('private backend details')
+    getDocMock.mockRejectedValueOnce(failure)
+    const onProgress = vi.fn()
+    const { runOwnerDataMaintenanceGate } = await import('~/services/sync/ownerDataMaintenanceService')
+    await expect(runOwnerDataMaintenanceGate({ uid: 'uid-1', onProgress })).rejects.toBe(failure)
+    expect(onProgress).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'failed', progress: 0, reason }))
+    expect(JSON.stringify(onProgress.mock.calls)).not.toContain('private backend details')
+    expect(claimFirebaseStructureLeaseMock).not.toHaveBeenCalled()
+    expect(publishFirebaseStructureHealthMock).not.toHaveBeenCalled()
+    expect(advanceCheckpointMock).not.toHaveBeenCalled()
+  })
+
+  it.each(['resolve', 'reject'])('scade a 15s e ignora read tardivo %s senza migrare', async (settlement) => {
+    const { runOwnerDataMaintenanceGate } = await import('~/services/sync/ownerDataMaintenanceService')
+    vi.useFakeTimers()
+    let resolveRead!: (value: unknown) => void
+    let rejectRead!: (error: unknown) => void
+    getDocMock.mockImplementationOnce(() => new Promise((resolve, reject) => { resolveRead = resolve; rejectRead = reject }))
+    const onProgress = vi.fn()
+    const attempt = runOwnerDataMaintenanceGate({ uid: 'uid-1', onProgress })
+    const rejected = expect(attempt).rejects.toMatchObject({ code: 'maintenance_read_timeout' })
+    await vi.advanceTimersByTimeAsync(14_999)
+    expect(onProgress).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(1)
+    await rejected
+    if (settlement === 'resolve') resolveRead({ exists: () => false })
+    else rejectRead({ code: 'firestore/unavailable' })
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(onProgress).toHaveBeenCalledTimes(2)
+    expect(claimFirebaseStructureLeaseMock).not.toHaveBeenCalled()
+    expect(publishFirebaseStructureHealthMock).not.toHaveBeenCalled()
+    expect(advanceCheckpointMock).not.toHaveBeenCalled()
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('integra gate reale e adapter browser: quota contenuta, nessun healthy, retry riuscito', async () => {
+    const { useOwnerDataMaintenance } = await import('~/composables/useOwnerDataMaintenance')
+    const maintenance = useOwnerDataMaintenance()
+    maintenance.setBrowserOwner('qa-integration')
+    classifyFirebaseStructureErrorMock.mockReturnValue('quota_exceeded')
+    getDocMock.mockRejectedValueOnce({ code: 'firestore/resource-exhausted', message: 'Quota exceeded.' })
+    await expect(maintenance.runBrowserGate('qa-integration')).resolves.toBeNull()
+    expect(maintenance.status.value).toBe('failed')
+    expect(getDocMock).toHaveBeenCalledOnce()
+    expect(publishFirebaseStructureHealthMock).not.toHaveBeenCalled()
+    expect(claimFirebaseStructureLeaseMock).not.toHaveBeenCalled()
+    getDocMock.mockResolvedValueOnce({ exists: () => true, data: () => ({ maintenance: { canonicalDataMigration: migration } }) })
+    inspectFirebaseStructureStateMock.mockReturnValue({ action: 'skip_healthy' })
+    await expect(maintenance.runBrowserGate('qa-integration')).resolves.toMatchObject({ status: 'skipped' })
+    expect(maintenance.status.value).toBe('skipped')
+    expect(maintenance.error.value).toBeNull()
+    maintenance.setBrowserOwner(null)
+  })
+
+  it('il timeout iniziale non interrompe una verifica già avviata sotto lease', async () => {
+    const { runOwnerDataMaintenanceGate } = await import('~/services/sync/ownerDataMaintenanceService')
+    vi.useFakeTimers()
+    getDocMock.mockResolvedValueOnce({ exists: () => true, data: () => ({ maintenance: { canonicalDataMigration: migration } }) })
+    inspectFirebaseStructureStateMock.mockReturnValue({ action: 'verify_current' })
+    let finishVerification!: (result: unknown) => void
+    verifyOwnerMigrationLightweightMock.mockImplementationOnce(() => new Promise(resolve => { finishVerification = resolve }))
+    const attempt = runOwnerDataMaintenanceGate({ uid: 'uid-1' })
+    await vi.advanceTimersByTimeAsync(30_000)
+    expect(claimFirebaseStructureLeaseMock).toHaveBeenCalledOnce()
+    finishVerification({ ok: true, issues: [] })
+    await expect(attempt).resolves.toMatchObject({ status: 'skipped' })
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('interrompe il vecchio owner dopo revoke senza checkpoint blocked o write successive', async () => {

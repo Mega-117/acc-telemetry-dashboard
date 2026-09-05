@@ -1,6 +1,8 @@
 import { computed, ref } from 'vue'
+import { withFirebaseScenario } from '~/composables/useFirebaseTracker'
 import {
   completeOwnerDataMaintenanceAfterLocalSync,
+  describeOwnerMaintenanceError,
   runOwnerDataMaintenanceGate,
   type OwnerDataMaintenancePhase,
   type OwnerDataMaintenanceProgress,
@@ -14,6 +16,17 @@ const progress = ref(0)
 const message = ref('')
 const error = ref<string | null>(null)
 const report = ref<OwnerDataMaintenanceReport | null>(null)
+let browserOwner: string | null = null
+let browserGeneration = 0
+let browserFlight: Promise<OwnerDataMaintenanceReport | null> | null = null
+
+function setBrowserOwner(uid: string | null) {
+  if (browserOwner === uid) return
+  browserOwner = uid
+  browserGeneration++
+  browserFlight = null
+  resetMaintenanceState()
+}
 
 export function shouldProjectMaintenanceProgress(
   presentationMode: 'foreground' | 'background',
@@ -51,6 +64,7 @@ export function useOwnerDataMaintenance() {
       force: options.force,
       assertActive: options.assertActive,
       onProgress: (next) => {
+        options.assertActive?.()
         if (shouldProjectMaintenanceProgress(options.presentationMode || 'foreground', next.status)) {
           status.value = next.status
           phase.value = next.phase
@@ -62,6 +76,36 @@ export function useOwnerDataMaintenance() {
         options.onProgress?.(next)
       }
     })
+  }
+
+  // Browser entry/retry owns error containment. Electron keeps its rejecting
+  // gate contract so failed maintenance cannot be mistaken for a sync permit.
+  function runBrowserGate(uid: string): Promise<OwnerDataMaintenanceReport | null> {
+    if (uid !== browserOwner) return Promise.resolve(null)
+    if (browserFlight) return browserFlight
+    const generation = browserGeneration
+    const isActive = () => generation === browserGeneration && uid === browserOwner
+    const assertActive = () => {
+      if (!isActive()) throw new Error('cloud_owner_lease_stale')
+    }
+    const attempt = Promise.resolve().then(() => {
+      assertActive()
+      return withFirebaseScenario('app.dashboard.maintenanceGate', { userId: uid }, () => runGate(uid, { assertActive }))
+    }).catch((failure: unknown) => {
+      if (isActive()) {
+        status.value = 'failed'
+        phase.value = 'failed'
+        progress.value = 0
+        error.value = describeOwnerMaintenanceError(failure).message
+        message.value = error.value
+        report.value = null
+      }
+      return null
+    }).finally(() => {
+      if (browserFlight === attempt) browserFlight = null
+    })
+    browserFlight = attempt
+    return attempt
   }
 
   async function completeAfterLocalSync(uid: string, options: { assertActive?: () => void } = {}) {
@@ -89,6 +133,8 @@ export function useOwnerDataMaintenance() {
     isRunning,
     blocksSync,
     runGate,
+    runBrowserGate,
+    setBrowserOwner,
     completeAfterLocalSync,
     resetMaintenanceState
   }

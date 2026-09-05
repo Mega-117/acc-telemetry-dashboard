@@ -8,10 +8,12 @@ const props = defineProps<{
   progress: number
   message: string
   error?: string | null
+  canRetry?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
+  retry: []
 }>()
 
 const canClose = computed(() => props.status === 'completed' || props.status === 'failed' || props.status === 'skipped')
@@ -31,14 +33,15 @@ function close() {
   <Transition name="slide">
     <div v-if="visible" :class="['maintenance-notification', bannerType]" @click="close">
       <div class="notification-header">
-        <span class="notification-title">Aggiornamento dati</span>
-        <button v-if="canClose" class="notification-close" @click.stop="close">x</button>
+        <span class="notification-title">{{ status === 'failed' ? 'Controllo dati non completato' : 'Aggiornamento dati' }}</span>
+        <button v-if="canClose" class="notification-close" aria-label="Chiudi notifica" @click.stop="close">x</button>
       </div>
       <p class="notification-message">{{ error || message || 'Operazione in corso...' }}</p>
-      <div class="progress-bar">
+      <button v-if="status === 'failed' && canRetry" class="notification-retry" @click.stop="emit('retry')">Riprova</button>
+      <div v-if="status !== 'failed'" class="progress-bar">
         <div class="progress-fill" :style="{ width: `${normalizedProgress}%` }"></div>
       </div>
-      <span class="progress-label">{{ normalizedProgress }}%</span>
+      <span v-if="status !== 'failed'" class="progress-label">{{ normalizedProgress }}%</span>
     </div>
   </Transition>
 </template>
@@ -103,6 +106,17 @@ function close() {
   color: rgba(255, 255, 255, 0.8);
   font-size: 16px;
   line-height: 1;
+  cursor: pointer;
+}
+
+.notification-retry {
+  min-height: 44px;
+  padding: 8px 16px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  font-weight: 600;
   cursor: pointer;
 }
 

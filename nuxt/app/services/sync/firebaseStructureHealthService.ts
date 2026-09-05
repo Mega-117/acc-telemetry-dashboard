@@ -394,11 +394,12 @@ export async function publishFirebaseStructureHealth(input: {
 export function classifyFirebaseStructureError(error: unknown): string {
   const code = String((error as any)?.code || '').toLowerCase()
   const message = String((error as any)?.message || '').toLowerCase()
+  if (code.includes('resource-exhausted') || message.includes('quota exceeded')) return 'quota_exceeded'
+  if (code === 'maintenance_read_timeout') return 'maintenance_read_timeout'
   if (code.includes('permission-denied') || message.includes('permission')) return 'permission_denied'
   if (
     code.includes('unavailable')
     || code.includes('deadline-exceeded')
-    || code.includes('resource-exhausted')
     || code.includes('aborted')
     || code.includes('internal')
     || code.includes('cancelled')

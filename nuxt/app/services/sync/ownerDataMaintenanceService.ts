@@ -40,6 +40,7 @@ import {
 
 const CALLER = 'OwnerDataMaintenance'
 export const OWNER_DATA_MIGRATION_VERSION = 5
+export const OWNER_MAINTENANCE_INITIAL_READ_TIMEOUT_MS = 15_000
 const SESSION_LIST_ONLY_MIGRATION_VERSION = 2
 
 export type OwnerDataMaintenanceStatus =
@@ -111,6 +112,7 @@ export interface OwnerDataMaintenanceProgress {
   report?: OwnerDataMaintenanceReport | null
   error?: string | null
   resumedFrom?: string | null
+  reason?: string
 }
 
 export interface OwnerDataMaintenanceRunOptions {
@@ -245,6 +247,45 @@ async function persistMigrationCheckpoint(input: {
     throw new Error('Regressione checkpoint migration rifiutata.')
   }
   return checkpoint
+}
+
+export function describeOwnerMaintenanceError(error: unknown) {
+  const reason = classifyFirebaseStructureError(error)
+  const messages: Record<string, string> = {
+    quota_exceeded: 'Il servizio dati ha raggiunto un limite temporaneo. Riprova più tardi.',
+    maintenance_read_timeout: 'Il servizio dati non ha risposto in tempo. Controlla la connessione e riprova.',
+    network_transient: 'Connessione al servizio dati non disponibile. Controlla la rete e riprova.',
+    permission_denied: 'Il controllo dati non è autorizzato. Se il problema persiste, contatta l’assistenza.'
+  }
+  return { reason, message: messages[reason] || 'Non è stato possibile completare il controllo dati. Riprova più tardi.' }
+}
+
+// Bound only the initial read, before any lease or mutation. Firestore reads
+// cannot be cancelled: the guard also prevents retries after a late result.
+async function readInitialState(uid: string, assertActive: () => void) {
+  let expired = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeoutError = Object.assign(new Error('maintenance_read_timeout'), { code: 'maintenance_read_timeout' })
+  const assertReading = () => {
+    assertActive()
+    if (expired) throw timeoutError
+  }
+  try {
+    return await Promise.race([
+      withFirebaseStructureRetry(async () => {
+        assertReading()
+        const state = await readStoredState(uid)
+        assertReading()
+        return state
+      }),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => { expired = true; reject(timeoutError) }, OWNER_MAINTENANCE_INITIAL_READ_TIMEOUT_MS)
+      })
+    ])
+  } finally {
+    expired = true
+    clearTimeout(timer)
+  }
 }
 
 function emit(
@@ -491,7 +532,8 @@ export async function runOwnerDataMaintenanceGate(
       message: 'Controllo struttura dati pilota...'
     })
 
-    const stored = await retryActive(() => readStoredState(uid))
+    const stored = await readInitialState(uid, assertActive)
+    assertActive()
     const storedState = stored.migration
     checkpointAttempt = nextCanonicalMigrationAttempt(storedState?.checkpoint)
     resumedFrom = storedState?.checkpoint?.phase || null
@@ -845,8 +887,9 @@ export async function runOwnerDataMaintenanceGate(
     })
     return report
   }).catch(async (error: any) => {
+    assertActive()
     if (error?.message === 'cloud_owner_lease_stale') throw error
-    const message = error?.message || 'Migrazione dati owner fallita.'
+    const { reason, message } = describeOwnerMaintenanceError(error)
     if (leaseAcquired) {
       try {
         await ensureActiveLease(uid, leaseId, assertActive)
@@ -873,9 +916,10 @@ export async function runOwnerDataMaintenanceGate(
     emit(onProgress, {
       status: 'failed',
       phase: 'failed',
-      progress: 100,
+      progress: 0,
       message,
-      error: message
+      error: message,
+      reason
     })
     throw error
   })

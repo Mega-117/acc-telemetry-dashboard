@@ -14,7 +14,7 @@ import { useClientDiagnostics } from '~/composables/useClientDiagnostics'
 import { usePrimaryCloudOwner } from '~/composables/usePrimaryCloudOwner'
 import { usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
 import { providePitwallStore } from '~/composables/usePitwallStore'
-import { endFirebaseScenario, startFirebaseScenario, withFirebaseScenario } from '~/composables/useFirebaseTracker'
+import { endFirebaseScenario, startFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
 import { canUseDevTools } from '~/utils/devToolsAccess'
@@ -182,7 +182,7 @@ const canMountProtectedRuntime = computed(() => (
 
 // === TELEMETRY DATA GATEWAY (single source of truth) ===
 const telemetryGateway = useTelemetryGateway()
-const hasPrefetched = ref(false)
+let maintenanceEntryUid: string | null = null
 const ownerDataMaintenance = useOwnerDataMaintenance()
 const browserMaintenanceStatus = ownerDataMaintenance.status
 const browserMaintenanceProgress = ownerDataMaintenance.progress
@@ -276,20 +276,24 @@ function closeBrowserMaintenanceNotification() {
 }
 
 // === DASHBOARD ENTRY MAINTENANCE ===
-watch(appState, async (newState) => {
+function retryBrowserMaintenance() {
+  const uid = currentUser.value?.uid
+  if (!uid || !canEnterApp.value || !isBrowserOnlyRuntime.value || appState.value !== 'dashboard') return
+  // The browser adapter always contains failures; no rejection reaches Nuxt.
+  void ownerDataMaintenance.runBrowserGate(uid)
+}
+
+watch([appState, () => currentUser.value?.uid, canEnterApp], ([newState, uid, allowed]) => {
   if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneRuntimeRoute.value || isStandaloneDevRoute.value) return
-  if (newState === 'dashboard' && !hasPrefetched.value && currentUser.value && canEnterApp.value) {
-    hasPrefetched.value = true
-    
-    await withFirebaseScenario('app.dashboard.maintenanceGate', {
-      userId: currentUser.value.uid
-    }, async () => {
-      if (typeof window !== 'undefined' && !(window as any).electronAPI) {
-        await ownerDataMaintenance.runGate(currentUser.value!.uid)
-      }
-    })
+  if (!isBrowserOnlyRuntime.value) return
+  const owner = allowed && uid ? uid : null
+  ownerDataMaintenance.setBrowserOwner(owner)
+  if (!owner) maintenanceEntryUid = null
+  if (newState === 'dashboard' && owner && owner !== maintenanceEntryUid) {
+    maintenanceEntryUid = owner
+    retryBrowserMaintenance()
   }
-})
+}, { immediate: true, flush: 'sync' })
 
 const showEmailVerificationGate = () => {
   appState.value = 'auth'
@@ -503,6 +507,8 @@ provide('goToSettings', handleGoToSettings)
         :progress="browserMaintenanceProgress"
         :message="browserMaintenanceMessage"
         :error="browserMaintenanceError"
+        :can-retry="true"
+        @retry="retryBrowserMaintenance"
         @close="closeBrowserMaintenanceNotification"
       />
       

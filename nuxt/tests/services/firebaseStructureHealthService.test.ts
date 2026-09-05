@@ -380,7 +380,7 @@ describe('firebase structure transient retry', () => {
   it('ripete con backoff gli errori transitori e poi restituisce il risultato', async () => {
     const operation = vi.fn()
       .mockRejectedValueOnce({ code: 'firestore/unavailable' })
-      .mockRejectedValueOnce({ code: 'firestore/resource-exhausted' })
+      .mockRejectedValueOnce({ code: 'firestore/deadline-exceeded' })
       .mockResolvedValueOnce('ok')
     const sleep = vi.fn().mockResolvedValue(undefined)
 
@@ -406,10 +406,19 @@ describe('firebase structure transient retry', () => {
     expect(sleep).not.toHaveBeenCalled()
   })
 
-  it('classifica quota e concorrenza come transitori, permessi come permanenti', () => {
+  it.each(['firestore/resource-exhausted', 'maintenance_read_timeout'])('non ripete %s', async (code) => {
+    const operation = vi.fn().mockRejectedValue({ code })
+    const sleep = vi.fn()
+    await expect(withFirebaseStructureRetry(operation, { sleep })).rejects.toMatchObject({ code })
+    expect(operation).toHaveBeenCalledOnce()
+    expect(sleep).not.toHaveBeenCalled()
+  })
+
+  it('distingue quota, concorrenza transitoria e permessi', () => {
     expect(classifyFirebaseStructureError({
       code: 'firestore/resource-exhausted'
-    })).toBe('network_transient')
+    })).toBe('quota_exceeded')
+    expect(classifyFirebaseStructureError(new Error('Quota exceeded.'))).toBe('quota_exceeded')
     expect(classifyFirebaseStructureError({
       code: 'firestore/aborted'
     })).toBe('network_transient')
