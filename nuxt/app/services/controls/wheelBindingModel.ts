@@ -16,6 +16,7 @@ export interface WheelDeviceSnapshot {
 export interface WheelInputSnapshot {
   mode: 'active' | 'test'
   devices: WheelDeviceSnapshot[]
+  sampledAtMs?: number
 }
 
 export interface WheelControlsState {

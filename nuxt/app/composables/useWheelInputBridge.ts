@@ -18,7 +18,9 @@ interface WheelControlsApi {
   onControlsState: (callback: (state: WheelControlsState) => void) => () => void
 }
 
-let animationFrame: number | null = null
+const WHEEL_POLL_INTERVAL_MS = 8
+
+let pollTimer: number | null = null
 let removeStateListener: (() => void) | null = null
 let lastSignature = ''
 
@@ -48,34 +50,35 @@ export function useWheelInputBridge() {
 
   // The renderer stays a mute sensor: it forwards whatever the pads report and lets the
   // main process decide what counts as a press, so that rule lives in exactly one place.
-  // The loop always reschedules itself, so a momentarily missing bridge cannot kill it.
+  // A dedicated timer is independent from paint frames, which may stall while ACC is foreground.
   const poll = () => {
     const api = controlsApi()
     if (api && typeof navigator.getGamepads === 'function') {
       const snapshot = createGamepadSnapshot(navigator.getGamepads(), testMode.value ? 'test' : 'active')
+      const sampledAtMs = Date.now()
       currentSnapshot.value = snapshot
       const signature = wheelSnapshotSignature(snapshot)
       if (signature !== lastSignature) {
         lastSignature = signature
-        void api.controlsReportSnapshot(snapshot).then(applyState)
+        void api.controlsReportSnapshot({ ...snapshot, sampledAtMs }).then(applyState)
       }
     }
-    animationFrame = window.requestAnimationFrame(poll)
   }
 
   const start = async () => {
     const api = controlsApi()
-    if (!api || animationFrame !== null) return false
+    if (!api || pollTimer !== null) return false
     applyState(await api.controlsGetState())
     removeStateListener = api.onControlsState(applyState)
     lastSignature = ''
-    animationFrame = window.requestAnimationFrame(poll)
+    poll()
+    pollTimer = window.setInterval(poll, WHEEL_POLL_INTERVAL_MS)
     return true
   }
 
   const stop = () => {
-    if (animationFrame !== null) window.cancelAnimationFrame(animationFrame)
-    animationFrame = null
+    if (pollTimer !== null) window.clearInterval(pollTimer)
+    pollTimer = null
     removeStateListener?.()
     removeStateListener = null
     lastSignature = ''
