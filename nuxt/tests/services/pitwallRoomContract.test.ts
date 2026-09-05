@@ -17,8 +17,10 @@ import {
   pitwallRoomLastSignOfLifeMs,
   pitwallRoomRoleOf,
   resolvePitwallRoomExecutor,
+  collectPitwallRoomsToClose,
   shouldClosePitwallDormantRoom,
   shouldStampPitwallRoomLive,
+  type PitwallRoom,
   type PitwallRoomMember
 } from '~/services/pitwall/pitwallRoomContract'
 
@@ -215,6 +217,26 @@ describe('quando una gara si considera finita', () => {
       null
     )).toBe(false)
     expect(shouldClosePitwallDormantRoom(null, NOW_MS, null)).toBe(false)
+  })
+
+  it('tocca a me chiudere le mie dormienti e i residui closedAt del ripiego, non le gare altrui ne quella in corso', () => {
+    // PIP-379: chiudere e' cancellare. Una gara segnata `closedAt` da un
+    // client che non poteva ancora cancellare e' un residuo: sparisce alla
+    // prima consegna dell'elenco, per mano di un suo manager.
+    const base = {
+      schemaVersion: 2, label: '#1', hostUid: 'rico', managerUids: ['rico'], memberUids: ['rico'], allowedUids: [],
+      vehicleFingerprint: 'fp', updatedAt: '2026-07-01T10:00:00.000Z', createdAt: '2026-07-01T09:00:00.000Z', lastLiveAtMs: null,
+    }
+    const rooms: PitwallRoom[] = [
+      { ...base, roomId: 'dormiente', closedAt: null, lastLiveAtMs: NOW_MS - PITWALL_ROOM_DORMANT_MS - 1 },
+      { ...base, roomId: 'residuo', closedAt: '2026-09-05T15:00:00.000Z', lastLiveAtMs: NOW_MS },
+      { ...base, roomId: 'viva', closedAt: null, lastLiveAtMs: NOW_MS },
+      { ...base, roomId: 'in-corso', closedAt: null, lastLiveAtMs: NOW_MS - PITWALL_ROOM_DORMANT_MS - 1 },
+      { ...base, roomId: 'altrui', managerUids: ['popo'], closedAt: '2026-09-05T15:00:00.000Z', lastLiveAtMs: null },
+    ] as PitwallRoom[]
+    expect(collectPitwallRoomsToClose(rooms, 'rico', 'in-corso', NOW_MS)).toEqual(['dormiente', 'residuo'])
+    expect(collectPitwallRoomsToClose(rooms, 'rico', 'in-corso', NOW_MS, new Set(['residuo']))).toEqual(['dormiente'])
+    expect(collectPitwallRoomsToClose(rooms, null, null, NOW_MS)).toEqual([])
   })
 
   it('le gare aperte prima del segno di vita si giudicano da quello che hanno', () => {

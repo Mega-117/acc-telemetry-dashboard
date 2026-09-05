@@ -374,6 +374,10 @@ export function shouldClosePitwallDormantRoom(
  * diretta, e ritentare a ogni consegna vorrebbe dire una scrittura negata al
  * secondo se le regole non sono ancora pubblicate.
  *
+ * Tocca a me anche una gara gia' segnata `closedAt`: e' il residuo del
+ * ripiego (un client che non poteva ancora cancellare), e chiudere vuol dire
+ * cancellare (PIP-379). Sparisce alla prima consegna dell'elenco.
+ *
  * Funzione pura apposta: decidere quali gare finiscono e' la parte che va
  * provata a rami, e non deve dipendere da Firestore per poterlo essere.
  */
@@ -388,7 +392,7 @@ export function collectPitwallRoomsToClose(
   return (rooms ?? [])
     .filter(room => !alreadyTried.has(room.roomId))
     .filter(room => room.managerUids.includes(uid))
-    .filter(room => shouldClosePitwallDormantRoom(room, nowMs, currentRoomId))
+    .filter(room => room.closedAt != null || shouldClosePitwallDormantRoom(room, nowMs, currentRoomId))
     .map(room => room.roomId)
 }
 
