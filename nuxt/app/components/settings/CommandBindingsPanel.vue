@@ -15,7 +15,6 @@ const actions: Array<{ id: WheelControlAction; title: string; description: strin
 const {
   state,
   testMode,
-  selectedDeviceId,
   testedActions,
   beginCapture,
   cancelCapture,
@@ -23,25 +22,19 @@ const {
   setTestMode,
 } = useWheelInputBridge()
 
-const selectedDevice = computed(() => state.value.devices.find(
-  device => device.deviceId === selectedDeviceId.value,
-))
 const statusText = computed(() => {
   if (!state.value.available) return 'Runtime comandi non disponibile'
   if (!state.value.devices.length) return 'Volante non rilevato. Premi un pulsante per attivare il Gamepad API.'
-  return `Collegato: ${selectedDevice.value?.deviceLabel || state.value.devices[0]?.deviceLabel}`
+  return `Collegato: ${state.value.devices.map(device => device.deviceLabel).join(' · ')}`
 })
 const errorText = computed(() => {
   const reason = state.value.operation?.reason || state.value.lastError
   if (!reason) return ''
   return ({
-    binding_conflict: 'Questa combinazione coincide o si sovrappone a un altro comando.',
-    too_many_buttons: 'Usa al massimo due pulsanti.',
-    ambiguous_input: 'Sono attivi più dispositivi: rilascia tutto e riprova.',
-    wrong_device: 'Il pulsante appartiene a un dispositivo diverso da quello selezionato.',
-    device_disconnected: 'Il dispositivo è stato scollegato durante la cattura.',
+    binding_conflict: 'Questo pulsante è già assegnato a un altro comando.',
     settings_corrupt: 'Le impostazioni locali non erano valide: sono stati caricati binding vuoti.',
-  } as Record<string, string>)[reason] || 'Comando non salvato. Rilascia i pulsanti e riprova.'
+    settings_write_failed: 'Il comando non è stato salvato su disco. Riprova.',
+  } as Record<string, string>)[reason] || 'Comando non salvato. Riprova.'
 })
 
 onBeforeUnmount(() => setTestMode(false))
@@ -53,7 +46,7 @@ onBeforeUnmount(() => setTestMode(false))
       <div>
         <p class="eyebrow">INPUT VOLANTE</p>
         <h2 id="commands-title">Comandi</h2>
-        <p>Assegna uno o due pulsanti. La pressione lunga vale sempre come un solo comando.</p>
+        <p>Assegna un pulsante per comando. La pressione lunga vale sempre come un solo comando.</p>
       </div>
       <button
         type="button"
@@ -67,21 +60,12 @@ onBeforeUnmount(() => setTestMode(false))
     </header>
 
     <div class="device-row">
-      <label for="wheel-device">Dispositivo</label>
-      <select id="wheel-device" v-model="selectedDeviceId" :disabled="!state.devices.length || !!state.capture">
-        <option v-if="!state.devices.length" value="">Nessun dispositivo</option>
-        <option v-for="device in state.devices" :key="device.deviceId" :value="device.deviceId">
-          {{ device.deviceLabel }}
-        </option>
-      </select>
       <span :class="['device-status', { 'is-connected': !!state.devices.length }]">{{ statusText }}</span>
     </div>
 
     <p v-if="errorText" class="command-error" role="alert">{{ errorText }}</p>
     <p v-if="state.capture" class="capture-hint" role="status">
-      {{ state.capture.stage === 'waiting-release'
-        ? 'Rilascia tutti i pulsanti…'
-        : 'Premi uno o due pulsanti e rilasciali per salvare.' }}
+      Premi il pulsante da assegnare.
     </p>
 
     <div class="command-list">
@@ -103,7 +87,7 @@ onBeforeUnmount(() => setTestMode(false))
           <button
             v-if="state.capture?.action !== action.id"
             type="button"
-            :disabled="!state.available || !selectedDeviceId || !!state.capture || testMode"
+            :disabled="!state.available || !state.devices.length || !!state.capture || testMode"
             @click="beginCapture(action.id)"
           >
             Assegna
@@ -131,8 +115,7 @@ h2 { margin: 4px 0 8px; font-size: 26px; } p { margin: 0; color: #9c9ca8; }
 .test-button, .command-row button { border: 1px solid rgba(255,255,255,.14); background: #24242d; color: #fff; border-radius: 9px; padding: 9px 13px; cursor: pointer; }
 .test-button.is-active { color: #65e6bd; border-color: rgba(101,230,189,.55); background: rgba(101,230,189,.1); }
 button:disabled { opacity: .38; cursor: not-allowed; }
-.device-row { display: grid; grid-template-columns: 110px minmax(220px, 1fr) minmax(260px, 1fr); gap: 14px; align-items: center; padding: 22px 0; }
-.device-row label { font-weight: 700; } select { background: #0f0f15; color: #fff; border: 1px solid rgba(255,255,255,.12); border-radius: 9px; padding: 10px; }
+.device-row { display: flex; align-items: center; padding: 22px 0; }
 .device-status { color: #efb35b; font-size: 13px; } .device-status.is-connected { color: #65e6bd; }
 .command-error { padding: 12px 14px; background: rgba(255,77,61,.12); border: 1px solid rgba(255,77,61,.35); border-radius: 9px; color: #ff8c81; }
 .capture-hint { padding: 12px 14px; background: rgba(91,157,255,.1); border-radius: 9px; color: #8eb8ff; }
@@ -142,5 +125,5 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .command-row__copy { display: grid; gap: 5px; } .command-row__copy span { color: #858592; font-size: 13px; }
 .command-row code { color: #d6d6df; font-family: inherit; font-size: 13px; }
 .command-row__actions { display: flex; gap: 8px; } .command-row .remove-button { color: #ff8c81; }
-@media (max-width: 900px) { .device-row, .command-row { grid-template-columns: 1fr; } .commands-panel__header { flex-direction: column; } }
+@media (max-width: 900px) { .command-row { grid-template-columns: 1fr; } .commands-panel__header { flex-direction: column; } }
 </style>

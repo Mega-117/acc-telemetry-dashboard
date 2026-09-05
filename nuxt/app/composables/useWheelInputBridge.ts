@@ -11,7 +11,7 @@ import {
 
 interface WheelControlsApi {
   controlsGetState: () => Promise<WheelControlsState>
-  controlsBeginCapture: (action: WheelControlAction, deviceId?: string) => Promise<WheelControlsState>
+  controlsBeginCapture: (action: WheelControlAction) => Promise<WheelControlsState>
   controlsCancelCapture: () => Promise<WheelControlsState>
   controlsClearBinding: (action: WheelControlAction) => Promise<WheelControlsState>
   controlsReportSnapshot: (snapshot: WheelInputSnapshot) => Promise<WheelControlsState>
@@ -37,29 +37,28 @@ export function useWheelInputBridge() {
     lastError: null,
   }))
   const testMode = useState<boolean>('wheel-controls-test-mode', () => false)
-  const selectedDeviceId = useState<string>('wheel-controls-device', () => '')
   const currentSnapshot = useState<WheelInputSnapshot>('wheel-controls-snapshot', () => ({
     mode: 'active',
     devices: [],
   }))
 
   const applyState = (next: WheelControlsState | null | undefined) => {
-    if (!next) return
-    state.value = next
-    if (!selectedDeviceId.value && next.devices[0]) {
-      selectedDeviceId.value = next.devices[0].deviceId
-    }
+    if (next) state.value = next
   }
 
+  // The renderer stays a mute sensor: it forwards whatever the pads report and lets the
+  // main process decide what counts as a press, so that rule lives in exactly one place.
+  // The loop always reschedules itself, so a momentarily missing bridge cannot kill it.
   const poll = () => {
     const api = controlsApi()
-    if (!api || typeof navigator.getGamepads !== 'function') return
-    const snapshot = createGamepadSnapshot(navigator.getGamepads(), testMode.value ? 'test' : 'active')
-    currentSnapshot.value = snapshot
-    const signature = wheelSnapshotSignature(snapshot)
-    if (signature !== lastSignature) {
-      lastSignature = signature
-      void api.controlsReportSnapshot(snapshot).then(applyState)
+    if (api && typeof navigator.getGamepads === 'function') {
+      const snapshot = createGamepadSnapshot(navigator.getGamepads(), testMode.value ? 'test' : 'active')
+      currentSnapshot.value = snapshot
+      const signature = wheelSnapshotSignature(snapshot)
+      if (signature !== lastSignature) {
+        lastSignature = signature
+        void api.controlsReportSnapshot(snapshot).then(applyState)
+      }
     }
     animationFrame = window.requestAnimationFrame(poll)
   }
@@ -86,8 +85,7 @@ export function useWheelInputBridge() {
     const api = controlsApi()
     if (!api) return
     testMode.value = false
-    lastSignature = ''
-    applyState(await api.controlsBeginCapture(action, selectedDeviceId.value || undefined))
+    applyState(await api.controlsBeginCapture(action))
   }
 
   const cancelCapture = async () => {
@@ -114,7 +112,6 @@ export function useWheelInputBridge() {
   return {
     state: readonly(state),
     testMode: readonly(testMode),
-    selectedDeviceId,
     testedActions,
     start,
     stop,
