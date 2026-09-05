@@ -1056,9 +1056,11 @@ service cloud.firestore {
                           && pitwallRoomJoinsSelf())
                     );
 
-      // La stanza non si cancella: e' la memoria della gara. Si chiude con
-      // `closedAt`, e le presenze scadono da sole.
-      allow delete: if false;
+      // Una gara finita sparisce (PIP-379): la cancella un manager, insieme a
+      // membri, ordini e lucchetto. Niente resta su Firebase - la memoria della
+      // corsa e' l'audit sul PC del pilota. `closedAt` resta il ripiego dei
+      // client che non possono ancora cancellare.
+      allow delete: if isSignedIn() && request.auth.uid in resource.data.managerUids;
 
       // Chi c'e' adesso e chi e' al volante.
       match /members/{memberUid} {
@@ -1067,8 +1069,10 @@ service cloud.firestore {
                               && memberUid == request.auth.uid
                               && validPitwallRoomMember(roomId, memberUid);
         // Andarsene e' proprio: chi spegne il PC non deve sparire dalla stanza
-        // per mano di nessun altro.
-        allow delete: if isSignedIn() && memberUid == request.auth.uid;
+        // per mano di nessun altro. L'eccezione e' la fine della gara: il
+        // manager che la cancella porta via anche i battiti rimasti.
+        allow delete: if isSignedIn()
+                      && (memberUid == request.auth.uid || isPitwallRoomManager(roomId));
       }
 
       // Il lucchetto della gara: qui vive "prima accettata vince", perche' i
@@ -1080,7 +1084,8 @@ service cloud.firestore {
                               && controlId == 'activeOrder'
                               && validPitwallRoomLock()
                               && pitwallRoomLockAvailable();
-        allow delete: if false;
+        // Il lucchetto se ne va con la gara, e solo con lei.
+        allow delete: if isPitwallRoomManager(roomId);
       }
 
       // L'ordine si manda alla vettura: lo scrive un membro, lo prende in
@@ -1097,8 +1102,9 @@ service cloud.firestore {
                         || pitwallRoomOrderRejection()
                       );
         // Un ordine concluso e' la prova di cosa era stato chiesto e com'e'
-        // andata: non si cancella, nemmeno da chi l'ha mandato.
-        allow delete: if false;
+        // andata: non lo cancella chi l'ha mandato. Se ne va soltanto con la
+        // gara, per mano del manager che la chiude (PIP-379).
+        allow delete: if isPitwallRoomManager(roomId);
       }
     }
 
@@ -1118,7 +1124,12 @@ service cloud.firestore {
                     && validPitwallVehiclePointer(fingerprint)
                     && (resource.data.createdBy == request.auth.uid
                         || resource.data.expiresAtMs <= request.time.toMillis());
-      allow delete: if false;
+      // Con la gara sparisce anche il suo puntatore (PIP-379): lo toglie chi
+      // l'ha scritto, o chiunque se e' gia' scaduto. Nessuno puo' cancellare
+      // il puntatore vivo di un'altra squadra.
+      allow delete: if isSignedIn()
+                    && (resource.data.createdBy == request.auth.uid
+                        || resource.data.expiresAtMs <= request.time.toMillis());
     }
 
     match /pitwallSessions/{driverUid} {

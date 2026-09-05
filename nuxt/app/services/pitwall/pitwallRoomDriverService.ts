@@ -245,7 +245,14 @@ export function startPitwallRoomDriver(options: PitwallRoomDriverOptions): Pitwa
     // scaduta dell'elenco.
     stopRoom = rooms.watchRoom(
       roomId,
-      (next) => { if (next) room = next },
+      (next) => {
+        if (next) { room = next; return }
+        // La gara e' stata cancellata da un altro manager (PIP-379): senza
+        // stanza il battito verrebbe negato a ogni giro. Si lascia subito; se
+        // il pilota vuole ancora il Pitwall, il giro dopo ne apre una nuova.
+        log.warn?.('[PITWALL] la gara e stata chiusa da un altro manager')
+        void leaveCurrentRoom(false).then(emitStatus)
+      },
       (error) => log.warn?.('[PITWALL] stanza non leggibile:', error?.message)
     )
     stopMembers = rooms.watchMembers(

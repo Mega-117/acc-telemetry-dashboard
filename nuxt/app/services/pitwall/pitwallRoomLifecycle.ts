@@ -1,20 +1,26 @@
 // ============================================
 // Il ciclo di vita di una gara: quando e' viva, e quando finisce.
 //
-// Le stanze non si cancellano mai - sono la memoria della corsa - ma finora non
-// finivano nemmeno: ogni sessione ACC ne lasciava una aperta per sempre, e chi
-// apriva la Pit Wall trovava otto gare identiche di giorni diversi. Peggio, da
-// fuori non si poteva dire quale fosse viva, perche' il battito sta in
-// `members/{uid}` e quel documento lo legge solo chi e' gia' dentro.
+// Una gara finita sparisce (PIP-379). Prima le stanze non si cancellavano mai -
+// "la memoria della corsa" - e ogni sessione ACC ne lasciava una su Firebase
+// per sempre; l'utente le vedeva ricomparire nell'elenco e non le voleva ne'
+// a schermo ne' come traccia. La memoria della corsa e' l'audit sul PC del
+// pilota, non un documento remoto.
 //
-// Due sole scritture, per due domande diverse: "qualcuno c'e' ancora?" (il
-// segno di vita, di rado) e "questa gara e' finita" (la chiusura, una volta).
-// La decisione su *quali* gare chiudere e' logica pura e vive nel contratto:
-// qui c'e' solo chi la mette per iscritto.
+// Due scritture, per due domande diverse: "qualcuno c'e' ancora?" (il segno di
+// vita, di rado) e "questa gara e' finita" (la cancellazione, una volta). La
+// decisione su *quali* gare finiscono e' logica pura e vive nel contratto: qui
+// c'e' solo chi la mette in atto.
 // ============================================
 
-import { doc, serverTimestamp, type Firestore } from 'firebase/firestore'
-import { trackedUpdateDoc } from '~/composables/useFirebaseTracker'
+import { collection, doc, serverTimestamp, type Firestore } from 'firebase/firestore'
+import {
+  trackedDeleteDoc,
+  trackedGetDoc,
+  trackedGetDocs,
+  trackedUpdateDoc,
+  trackedWriteBatch,
+} from '~/composables/useFirebaseTracker'
 import { collectPitwallRoomsToClose, type PitwallRoom } from './pitwallRoomContract'
 import type { PitwallRoomResult } from './pitwallRoomOrders'
 
@@ -23,9 +29,22 @@ export interface PitwallRoomLifecycleOptions {
   now?: () => number
 }
 
+/** Le raccolte figlie di una stanza: se ne vanno con lei, prima di lei. */
+export const PITWALL_ROOM_CHILD_COLLECTIONS = ['members', 'orders', 'control'] as const
+
+/** Sotto il tetto di Firestore per un batch (500), con margine. */
+const DELETE_BATCH_SIZE = 400
+
+function isPermissionDenied(error: unknown): boolean {
+  const code = String((error as { code?: string })?.code ?? '')
+  const message = String((error as Error)?.message ?? '')
+  return /permission-denied|insufficient permissions/i.test(`${code} ${message}`)
+}
+
 export function createPitwallRoomLifecycle(options: PitwallRoomLifecycleOptions) {
   const now = options.now ?? (() => Date.now())
   const roomRef = (roomId: string) => doc(options.db, 'pitwallRooms', roomId)
+  const vehicleRef = (fingerprint: string) => doc(options.db, 'pitwallVehicles', fingerprint)
 
   function failure(error: unknown, fallback: string): { ok: false, reason: string } {
     return { ok: false, reason: (error as Error)?.message || fallback }
@@ -51,8 +70,8 @@ export function createPitwallRoomLifecycle(options: PitwallRoomLifecycleOptions)
     }
   }
 
-  /** Chiude la gara: resta leggibile come memoria, ma non accetta piu' ordini. */
-  async function closeRoom(roomId: string): Promise<PitwallRoomResult<true>> {
+  /** Il ripiego di prima: la gara resta, chiusa. Solo finche' le regole non lasciano cancellare. */
+  async function markClosed(roomId: string): Promise<PitwallRoomResult<true>> {
     const stamp = new Date(now()).toISOString()
     try {
       await trackedUpdateDoc(roomRef(roomId), { closedAt: stamp, updatedAt: stamp }, 'pitwallRoom.close')
@@ -60,6 +79,76 @@ export function createPitwallRoomLifecycle(options: PitwallRoomLifecycleOptions)
     } catch (error) {
       return failure(error, 'Chiusura rifiutata.')
     }
+  }
+
+  /**
+   * I figli si cancellano prima del padre, e a pacchetti: le regole dei figli
+   * guardano la stanza (`exists`, manager), e senza padre nessuno potrebbe
+   * piu' toccarli - resterebbero orfani per sempre, che e' proprio la traccia
+   * da non lasciare.
+   */
+  async function deleteChildren(roomId: string): Promise<void> {
+    for (const name of PITWALL_ROOM_CHILD_COLLECTIONS) {
+      const snapshot = await trackedGetDocs(collection(options.db, 'pitwallRooms', roomId, name), 'pitwallRoom.listChildren')
+      const refs = snapshot.docs.map(entry => entry.ref)
+      for (let start = 0; start < refs.length; start += DELETE_BATCH_SIZE) {
+        const batch = trackedWriteBatch(options.db, 'pitwallRoom.deleteChildren')
+        for (const ref of refs.slice(start, start + DELETE_BATCH_SIZE)) batch.delete(ref)
+        await batch.commit()
+      }
+    }
+  }
+
+  /**
+   * Il puntatore della vettura va via con la gara, se e' ancora il suo.
+   * Un puntatore gia' ripuntato a un'altra stanza non si tocca: sarebbe la
+   * gara di qualcun altro.
+   */
+  async function deletePointer(fingerprint: string | null | undefined, roomId: string): Promise<void> {
+    if (!fingerprint) return
+    try {
+      const snapshot = await trackedGetDoc(vehicleRef(fingerprint), 'pitwallRoom.readVehiclePointer')
+      const pointer = snapshot.exists() ? (snapshot.data() as { roomId?: string }) : null
+      if (pointer?.roomId === roomId) await trackedDeleteDoc(vehicleRef(fingerprint), 'pitwallRoom.deleteVehiclePointer')
+    } catch {
+      // Il puntatore scade da solo entro due giorni: un residuo breve, non una
+      // gara che resta. Non si trasforma una chiusura riuscita in un errore.
+    }
+  }
+
+  /**
+   * Chiude la gara: la cancella, con membri, ordini, lucchetto e puntatore.
+   *
+   * Il nome resta `closeRoom` perche' e' la presa che tutti usano - il pilota
+   * che preme Chiudi, l'ingegnere manager, la chiusura delle dormienti - e per
+   * loro il gesto e' lo stesso di prima: la gara finisce. Cambia cosa resta:
+   * niente.
+   *
+   * Se le regole pubblicate non lasciano ancora cancellare, si scrive
+   * `closedAt` come prima: la gara sparisce dagli elenchi lo stesso, e la
+   * cancellazione arrivera' con le regole nuove. Una stanza gia' sparita e'
+   * una chiusura riuscita, non un errore.
+   */
+  async function closeRoom(roomId: string): Promise<PitwallRoomResult<true>> {
+    let fingerprint: string | null = null
+    try {
+      const snapshot = await trackedGetDoc(roomRef(roomId), 'pitwallRoom.readRoom')
+      if (!snapshot.exists()) return { ok: true, value: true }
+      fingerprint = String((snapshot.data() as Partial<PitwallRoom>).vehicleFingerprint ?? '') || null
+    } catch (error) {
+      return failure(error, 'Gara non leggibile.')
+    }
+
+    try {
+      await deleteChildren(roomId)
+      await trackedDeleteDoc(roomRef(roomId), 'pitwallRoom.delete')
+    } catch (error) {
+      if (isPermissionDenied(error)) return markClosed(roomId)
+      return failure(error, 'Chiusura rifiutata.')
+    }
+
+    await deletePointer(fingerprint, roomId)
+    return { ok: true, value: true }
   }
 
   return { stampRoomLive, closeRoom }

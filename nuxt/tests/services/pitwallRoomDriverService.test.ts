@@ -237,6 +237,23 @@ describe('il lato pilota guarda la stanza in diretta', () => {
 
   afterEach(() => { handle?.stop(); handle = null })
 
+  it('se un altro manager cancella la gara, il pilota la lascia subito e resta in attesa di una nuova', async () => {
+    // PIP-379: senza stanza il battito verrebbe negato a ogni giro. Si lascia
+    // senza chiudere (non c'e' piu' niente da chiudere) e, volendo ancora il
+    // Pitwall, il giro dopo se ne apre una nuova.
+    const fake = fakeService()
+    handle = startDriver(fake, electron(), [])
+    await settle(12)
+    expect(handle.status().state).toBe('open')
+
+    fake.setRoom(null as never)
+    await settle(12)
+
+    expect(handle.status().state).toBe('arming')
+    expect(fake.calls.cleared).toEqual([ROOM_ID])
+    expect(fake.calls.closed).toEqual([])
+  })
+
   it('chi entra dopo di noi puo mandare una strategia', async () => {
     // Con una fotografia vecchia dell equipaggio, l ordine di chi e entrato
     // dopo sarebbe arrivato fino al processo main e li rifiutato con "non fa

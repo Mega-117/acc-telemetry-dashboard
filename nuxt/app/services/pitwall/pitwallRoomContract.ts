@@ -66,8 +66,8 @@ export const PITWALL_ROOM_LIVE_STAMP_MS = 10 * 60_000
  * La stessa finestra del puntatore vettura, e per la stessa ragione: un
  * weekend di gara. Fra le prove del venerdi' e la gara della domenica il PC
  * resta spento per ore, e una stanza chiusa nel mezzo obbligherebbe tutti a
- * rientrare. Non e' una cancellazione: la gara resta, smette solo di
- * presentarsi come viva.
+ * rientrare. Passata la finestra, la gara finisce davvero: si cancella
+ * (PIP-379), non resta come memoria.
  */
 export const PITWALL_ROOM_DORMANT_MS = PITWALL_VEHICLE_POINTER_TTL_MS
 
@@ -342,10 +342,9 @@ export function describePitwallRoomOccupancy(
 /**
  * Questa stanza va chiusa da sola.
  *
- * Le stanze non si cancellano mai - sono la memoria della gara - ma nemmeno si
- * chiudevano: ogni sessione ACC ne lasciava una aperta per sempre, e chi
- * guardava l'elenco vedeva otto gare identiche di giorni diversi. Chiudere e'
- * l'unico gesto disponibile, e lo fa il client che passa di li': niente
+ * Ogni sessione ACC lasciava una stanza aperta per sempre, e chi guardava
+ * l'elenco vedeva otto gare identiche di giorni diversi. Chiuderle - cioe'
+ * cancellarle, dal PIP-379 - lo fa il client che passa di li': niente
  * server, niente job schedulato, nessun costo fisso.
  *
  * Tre cose la salvano dalla chiusura, e sono tre errori diversi da non fare:

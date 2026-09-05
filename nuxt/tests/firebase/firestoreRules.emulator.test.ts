@@ -1623,10 +1623,56 @@ describe('Pit Wall - la Race Room: chi entra e chi comanda', () => {
     }
   })
 
-  it('la gara non si cancella: e la memoria della corsa', async () => {
-    await seedRoom()
+  it('una gara finita sparisce: la cancella un manager con membri, ordini e lucchetto, non un membro qualunque', async () => {
+    // PIP-379: niente resta su Firebase. I figli si cancellano prima del
+    // padre, perche' le loro regole guardano la stanza.
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID], managerUids: [DRIVER_UID] })
+    await seedRoomOrder('ordine-1')
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(
+        doc(context.firestore(), `pitwallRooms/${ROOM_ID}/members/${ENGINEER_UID}`),
+        { ...pitwallRoomMemberPayload(ENGINEER_UID), updatedAt: new Date() }
+      )
+      await setDoc(doc(context.firestore(), `pitwallRooms/${ROOM_ID}/control/activeOrder`), {
+        ...pitwallRoomLockPayload(), updatedAt: new Date()
+      })
+    })
+
+    const memberDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(deleteDoc(doc(memberDb, `pitwallRooms/${ROOM_ID}`)))
+    await assertFails(deleteDoc(doc(memberDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`)))
+    await assertFails(deleteDoc(doc(memberDb, `pitwallRooms/${ROOM_ID}/control/activeOrder`)))
+    const outsiderDb = testEnv.authenticatedContext(OUTSIDER_UID).firestore()
+    await assertFails(deleteDoc(doc(outsiderDb, `pitwallRooms/${ROOM_ID}`)))
+
+    const managerDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
+    await assertSucceeds(deleteDoc(doc(managerDb, `pitwallRooms/${ROOM_ID}/members/${ENGINEER_UID}`)))
+    await assertSucceeds(deleteDoc(doc(managerDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`)))
+    await assertSucceeds(deleteDoc(doc(managerDb, `pitwallRooms/${ROOM_ID}/control/activeOrder`)))
+    await assertSucceeds(deleteDoc(doc(managerDb, `pitwallRooms/${ROOM_ID}`)))
+  })
+
+  it('il puntatore della vettura lo cancella chi l ha scritto, o chiunque se e scaduto', async () => {
+    const fingerprint = 'impronta-qa-1'
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallVehicles/${fingerprint}`), {
+        schemaVersion: 2, fingerprint, roomId: ROOM_ID, createdBy: DRIVER_UID,
+        createdAt: '2026-09-01T10:00:00.000Z', expiresAtMs: Date.now() + 60_000
+      })
+    })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(deleteDoc(doc(engineerDb, `pitwallVehicles/${fingerprint}`)))
     const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
-    await assertFails(deleteDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`)))
+    await assertSucceeds(deleteDoc(doc(driverDb, `pitwallVehicles/${fingerprint}`)))
+
+    // Scaduto: chiunque puo' toglierlo, e' un puntatore a una gara finita da un pezzo.
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), `pitwallVehicles/${fingerprint}`), {
+        schemaVersion: 2, fingerprint, roomId: ROOM_ID, createdBy: DRIVER_UID,
+        createdAt: '2026-09-01T10:00:00.000Z', expiresAtMs: Date.now() - 60_000
+      })
+    })
+    await assertSucceeds(deleteDoc(doc(engineerDb, `pitwallVehicles/${fingerprint}`)))
   })
 })
 
@@ -1752,10 +1798,14 @@ describe('Pit Wall - la Race Room: il ciclo di vita della gara', () => {
     }))
   })
 
-  it('una gara chiusa resta memoria: non si cancella', async () => {
-    await seedRoom({ memberUids: [DRIVER_UID], closedAt: '2026-09-01T18:00:00.000Z' })
+  it('una gara chiusa col ripiego closedAt la cancella lo stesso il manager, non un altro', async () => {
+    // PIP-379: `closedAt` e' solo il ripiego dei client che non potevano
+    // ancora cancellare; la pulizia vera arriva con le regole nuove.
+    await seedRoom({ memberUids: [DRIVER_UID, ENGINEER_UID], managerUids: [DRIVER_UID], closedAt: '2026-09-01T18:00:00.000Z' })
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(deleteDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}`)))
     const driverDb = testEnv.authenticatedContext(DRIVER_UID).firestore()
-    await assertFails(deleteDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`)))
+    await assertSucceeds(deleteDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}`)))
   })
 })
 
@@ -1842,7 +1892,10 @@ describe('Pit Wall - la Race Room: un solo ordine in volo', () => {
     await assertFails(updateDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`), {
       plan: { fuelLiters: 5 }, status: 'applied'
     }))
-    await assertFails(deleteDoc(doc(driverDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`)))
+    // Nemmeno chi l'ha mandato lo cancella: l'ordine se ne va solo con la
+    // gara, per mano di un manager (PIP-379).
+    const engineerDb = testEnv.authenticatedContext(ENGINEER_UID).firestore()
+    await assertFails(deleteDoc(doc(engineerDb, `pitwallRooms/${ROOM_ID}/orders/ordine-1`)))
   })
 
   it('un ordine che nessuno puo applicare si chiude dicendolo', async () => {

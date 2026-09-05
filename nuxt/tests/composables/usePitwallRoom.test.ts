@@ -41,8 +41,10 @@ vi.mock('~/services/pitwall/pitwallRoomService', () => ({
     uid,
     readRoom: async () => fakes.roomDoc,
     joinRoom: async () => { fakes.calls.push('join'); return { ok: true, value: { ...fakes.roomDoc, memberUids: [...(fakes.roomDoc!.memberUids as string[]), uid] } } },
-    watchRoom: (_id: string, onRoom: (room: unknown) => void) => { fakes.pushRoom = onRoom; return () => {} },
-    watchMembers: (_id: string, onList: (list: unknown[]) => void) => { fakes.pushMembers = onList; return () => {} },
+    // Staccare l'ascolto lo spegne davvero: chi chiude la gara non deve
+    // ricevere la propria cancellazione come un avviso.
+    watchRoom: (_id: string, onRoom: (room: unknown) => void) => { fakes.pushRoom = onRoom; return () => { if (fakes.pushRoom === onRoom) fakes.pushRoom = null } },
+    watchMembers: (_id: string, onList: (list: unknown[]) => void) => { fakes.pushMembers = onList; return () => { if (fakes.pushMembers === onList) fakes.pushMembers = null } },
     publishPresence: async (_id: string, input: { kind: string, driving: boolean }) => {
       fakes.presence.push({ kind: input.kind, driving: input.driving })
       return { ok: true, value: true }
@@ -283,10 +285,8 @@ describe('le azioni da manager, uscire e chiudere', () => {
     expect(fakes.calls).toContain('promote:popo')
   })
 
-  it('uscire lascia la gara e torna all elenco; chiudere la lascia consultabile', async () => {
+  it('uscire lascia la gara e torna all elenco', async () => {
     const link = await open([member()])
-    await link.closeRoom()
-    expect(link.notice.value).toContain('Gara chiusa')
     await link.leave()
     expect(fakes.calls).toContain('leave')
     expect(link.selectedRoomId.value).toBeNull()
@@ -294,7 +294,31 @@ describe('le azioni da manager, uscire e chiudere', () => {
     // Senza gara selezionata le azioni non fanno niente.
     await link.invite('popo')
     await link.closeRoom()
-    expect(fakes.calls.filter(call => call === 'close')).toHaveLength(1)
+    expect(fakes.calls.filter(call => call === 'close')).toHaveLength(0)
+  })
+
+  it('chiudere fa sparire la gara anche a chi la chiude, senza l avviso di qualcun altro', async () => {
+    // PIP-379: chiudere e' cancellare. Chi preme Chiudi torna all'elenco con
+    // "Gara chiusa", non con "qualcuno ha chiuso il Pitwall".
+    const link = await open([member()])
+    await link.closeRoom()
+    expect(fakes.calls).toContain('close')
+    expect(link.selectedRoomId.value).toBeNull()
+    expect(link.room.value).toBeNull()
+    expect(link.notice.value).toBe('Gara chiusa.')
+    fakes.pushRoom?.(null)
+    expect(link.notice.value).toBe('Gara chiusa.')
+  })
+
+  it('se la gara sparisce da sotto, si torna all elenco dicendo chi l ha chiusa', async () => {
+    fakes.roomDoc = room({ hostUid: 'popo', managerUids: ['popo'], memberUids: ['popo', 'me'] })
+    const link = await open([member({ uid: 'popo', nickname: 'popo' }), member()])
+    expect(link.selectedRoomId.value).toBe('r1')
+    fakes.pushRoom?.(null)
+    expect(link.selectedRoomId.value).toBeNull()
+    expect(link.room.value).toBeNull()
+    expect(link.notice.value).toBe('popo ha chiuso il Pitwall.')
+    expect(link.lastError.value).toBeNull()
   })
 
   it('un profilo illeggibile lascia l identificativo, che e brutto ma vero', async () => {

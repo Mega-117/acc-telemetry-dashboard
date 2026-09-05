@@ -316,10 +316,27 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     stopRoomWatch = service_.watchRoom(
       roomId,
       (next) => {
+        // La gara e' sparita da sotto: un manager l'ha chiusa, e chiudere
+        // vuol dire cancellare (PIP-379). Si torna all'elenco dicendolo,
+        // prima che l'ascolto dei membri - che senza stanza le regole negano -
+        // dipinga un errore su una schermata che non esiste piu'.
+        if (!next) {
+          const previous = room.value
+          const crew = members.value
+          detach()
+          selectedRoomId.value = null
+          room.value = null
+          const host = previous?.hostUid ?? null
+          const who = host && host !== myUid.value
+            ? crew.find(entry => entry.uid === host)?.nickname ?? nicknames.value[host] ?? null
+            : null
+          notice.value = who ? `${who} ha chiuso il Pitwall.` : 'Il Pitwall è stato chiuso.'
+          return
+        }
         room.value = next
         // Revoca mentre la pagina e' aperta: si dice, non si lascia una
         // schermata che sembra funzionare e non funziona piu'.
-        if (next && !isPitwallRoomMember(next, myUid.value) && !isPitwallRoomInvited(next, myUid.value)) {
+        if (!isPitwallRoomMember(next, myUid.value) && !isPitwallRoomInvited(next, myUid.value)) {
           rawError.value = 'Non fai piu parte di questa gara.'
           detach()
           selectedRoomId.value = null
@@ -344,7 +361,12 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
           void heartbeat()
         }
       },
-      (error) => { rawError.value = error?.message || 'Equipaggio non leggibile.' }
+      (error) => {
+        // Se intanto la gara e' sparita, l'ascolto negato e' la conseguenza,
+        // non un errore da mostrare.
+        if (selectedRoomId.value !== roomId) return
+        rawError.value = error?.message || 'Equipaggio non leggibile.'
+      }
     )
 
     if (presenceTimer) clearInterval(presenceTimer)
@@ -455,13 +477,25 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     notice.value = 'Sei uscito dalla gara.'
   }
 
+  /**
+   * Chiude la gara: sparisce per tutti, anche per chi la chiude (PIP-379).
+   * Gli ascolti si staccano prima della scrittura: chi cancella non deve
+   * ricevere la propria cancellazione come "qualcuno ha chiuso il Pitwall".
+   */
   async function closeRoom(): Promise<void> {
     const service_ = service()
     const roomId = selectedRoomId.value
     if (!service_ || !roomId) return
+    detach()
     const result = await service_.closeRoom(roomId)
-    if (!result.ok) rawError.value = result.reason
-    else notice.value = 'Gara chiusa: resta consultabile, non accetta piu strategie.'
+    if (!result.ok) {
+      rawError.value = result.reason
+      await selectRoom(roomId)
+      return
+    }
+    selectedRoomId.value = null
+    room.value = null
+    notice.value = 'Gara chiusa.'
   }
 
   function start(): void {

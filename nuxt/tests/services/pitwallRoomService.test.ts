@@ -13,6 +13,11 @@ const mocks = vi.hoisted(() => ({
   docs: new Map<string, Record<string, unknown>>(),
   sets: [] as { path: string, data: Record<string, unknown> }[],
   updates: [] as { path: string, data: Record<string, unknown> }[],
+  /** Figli per raccolta (path della raccolta -> id dei documenti), per `trackedGetDocs`. */
+  children: new Map<string, string[]>(),
+  deletes: [] as string[],
+  /** Path la cui cancellazione viene negata dalle regole. */
+  denyDelete: new Set<string>(),
 }))
 
 vi.mock('firebase/firestore', () => ({
@@ -30,7 +35,21 @@ vi.mock('~/composables/useFirebaseTracker', () => ({
     const data = mocks.docs.get(ref.path)
     return { exists: () => data != null, data: () => data }
   },
-  trackedGetDocs: async () => ({ docs: [] }),
+  trackedGetDocs: async (ref: { path?: string }) => ({
+    docs: (mocks.children.get(String(ref?.path ?? '')) ?? []).map(id => ({ id, ref: { path: `${ref.path}/${id}` }, data: () => ({}) })),
+  }),
+  trackedWriteBatch: () => {
+    const queued: string[] = []
+    return {
+      delete: (ref: { path: string }) => { queued.push(ref.path) },
+      commit: async () => {
+        for (const path of queued) {
+          if (mocks.denyDelete.has(path)) throw Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' })
+          mocks.deletes.push(path)
+        }
+      },
+    }
+  },
   trackedOnDocSnapshot: () => () => {},
   trackedOnSnapshot: (
     _query: unknown,
@@ -46,7 +65,10 @@ vi.mock('~/composables/useFirebaseTracker', () => ({
   trackedRunTransaction: async () => {},
   trackedSetDoc: async (ref: { path: string }, data: Record<string, unknown>) => { mocks.sets.push({ path: ref.path, data }) },
   trackedUpdateDoc: async (ref: { path: string }, data: Record<string, unknown>) => { mocks.updates.push({ path: ref.path, data }) },
-  trackedDeleteDoc: async () => {},
+  trackedDeleteDoc: async (ref: { path: string }) => {
+    if (mocks.denyDelete.has(ref.path)) throw Object.assign(new Error('Missing or insufficient permissions.'), { code: 'permission-denied' })
+    mocks.deletes.push(ref.path)
+  },
 }))
 
 import { createPitwallRoomService } from '~/services/pitwall/pitwallRoomService'
@@ -65,6 +87,66 @@ beforeEach(() => {
   mocks.docs = new Map()
   mocks.sets = []
   mocks.updates = []
+  mocks.children = new Map()
+  mocks.deletes = []
+  mocks.denyDelete = new Set()
+})
+
+describe('closeRoom: una gara finita sparisce (PIP-379)', () => {
+  const NOW = Date.parse('2026-09-05T15:00:00.000Z')
+  const FP = 'impronta-1'
+
+  function storedRoom(roomId: string, overrides: Record<string, unknown> = {}) {
+    mocks.docs.set(`pitwallRooms/${roomId}`, {
+      schemaVersion: 2, roomId, label: '#1', hostUid: 'me', managerUids: ['me'], memberUids: ['me', 'popo'], allowedUids: ['popo'],
+      vehicleFingerprint: FP, createdAt: '2026-09-05T10:00:00.000Z', updatedAt: '2026-09-05T10:00:00.000Z', ...overrides,
+    })
+  }
+
+  it('cancella membri, ordini e lucchetto prima della stanza, poi il puntatore se e ancora il suo', async () => {
+    storedRoom('gara')
+    mocks.children.set('pitwallRooms/gara/members', ['me', 'popo'])
+    mocks.children.set('pitwallRooms/gara/orders', ['o1'])
+    mocks.children.set('pitwallRooms/gara/control', ['activeOrder'])
+    mocks.docs.set(`pitwallVehicles/${FP}`, { fingerprint: FP, roomId: 'gara', createdBy: 'me', expiresAtMs: NOW + 60_000 })
+    const service = createPitwallRoomService({ db: {} as never, uid: 'me', now: () => NOW })
+    const result = await service.closeRoom('gara')
+    expect(result.ok).toBe(true)
+    expect(mocks.deletes).toEqual([
+      'pitwallRooms/gara/members/me', 'pitwallRooms/gara/members/popo',
+      'pitwallRooms/gara/orders/o1',
+      'pitwallRooms/gara/control/activeOrder',
+      'pitwallRooms/gara',
+      `pitwallVehicles/${FP}`,
+    ])
+    // Niente `closedAt`: la gara non resta, sparisce.
+    expect(mocks.updates).toEqual([])
+  })
+
+  it('un puntatore gia ripuntato a un altra gara non si tocca', async () => {
+    storedRoom('gara')
+    mocks.docs.set(`pitwallVehicles/${FP}`, { fingerprint: FP, roomId: 'altra', createdBy: 'me', expiresAtMs: NOW + 60_000 })
+    const service = createPitwallRoomService({ db: {} as never, uid: 'me', now: () => NOW })
+    await service.closeRoom('gara')
+    expect(mocks.deletes).toEqual(['pitwallRooms/gara'])
+  })
+
+  it('con le regole vecchie che negano la cancellazione si torna a scrivere closedAt', async () => {
+    storedRoom('gara')
+    mocks.denyDelete.add('pitwallRooms/gara')
+    const service = createPitwallRoomService({ db: {} as never, uid: 'me', now: () => NOW })
+    const result = await service.closeRoom('gara')
+    expect(result.ok).toBe(true)
+    expect(mocks.updates).toEqual([{ path: 'pitwallRooms/gara', data: { closedAt: '2026-09-05T15:00:00.000Z', updatedAt: '2026-09-05T15:00:00.000Z' } }])
+  })
+
+  it('una gara gia sparita e una chiusura riuscita, non un errore', async () => {
+    const service = createPitwallRoomService({ db: {} as never, uid: 'me', now: () => NOW })
+    const result = await service.closeRoom('fantasma')
+    expect(result.ok).toBe(true)
+    expect(mocks.deletes).toEqual([])
+    expect(mocks.updates).toEqual([])
+  })
 })
 
 describe('ensureRoomForVehicle: il puntatore della vettura', () => {
