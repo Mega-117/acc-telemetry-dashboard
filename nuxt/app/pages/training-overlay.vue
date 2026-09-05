@@ -692,6 +692,7 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   if (command === 'primary') executePrimaryAction()
   if (command === 'next-action') selectNextWheelAction()
   if (command === 'activate-action') activateSelectedWheelAction()
+  if (command === 'reset-action-selection') selectFirstWheelAction()
   if (command === 'back') runBackAction()
   if (command === 'mute') runMuteAction()
   if (command === 'stop') handleGlobalStop()

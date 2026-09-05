@@ -10,6 +10,7 @@ export type OverlayInputCommand =
   | 'stop'
   | 'next-action'
   | 'activate-action'
+  | 'reset-action-selection'
 
 export interface OverlayKeyboardLike {
   key: string
