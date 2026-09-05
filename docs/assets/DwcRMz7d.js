@@ -1,1 +1,0 @@
-import{cH as o}from"./B3cY5rYZ.js";function s(){const e=o("pitwall-legacy-active",()=>!1),t=o("pitwall-notifications-open",()=>!1);function a(c){e.value=c}function i(){t.value=!t.value}function n(){t.value=!1}return{legacy:e,notificationsOpen:t,setLegacy:a,toggleNotifications:i,closeNotifications:n}}export{s as u};

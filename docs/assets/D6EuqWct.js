@@ -1,1 +1,0 @@
-import{cG as c}from"./B3cY5rYZ.js";function r(){const n=c();function s(t){if(/^(https?:|data:|blob:|file:|acc-voice:)/i.test(t))return t;const i=t.startsWith("/")?t.slice(1):t,e=n.app.baseURL||"/";return(e.endsWith("/")?e:e+"/")+i}return{getPublicPath:s}}export{r as u};
