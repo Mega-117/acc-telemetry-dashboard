@@ -524,6 +524,22 @@ describe('i Pitwall aperti e gli avvisi', () => {
     // Gia' selezionata: nessuna seconda selezione.
     expect(link.selectRoom).toHaveBeenCalledTimes(1)
   })
+
+  it('entrare nella gara gia selezionata non la riseleziona: la vista la vedrebbe sparire per un istante', async () => {
+    // Con una sola gara il collegamento la sceglie da solo al caricamento;
+    // "Apri la gara" non deve azzerarla e riaprirla (visto il 2026-09-05).
+    link.rooms.value = [room()]
+    link.selectedRoomId.value = 'r1'
+    link.room.value = link.rooms.value[0]!
+    store.enterRace('r1')
+    await settle()
+    expect(link.selectRoom).not.toHaveBeenCalled()
+    // Selezionata ma non ancora letta: si rientra davvero.
+    link.room.value = null
+    store.enterRace('r1')
+    await settle()
+    expect(link.selectRoom).toHaveBeenCalledWith('r1')
+  })
 })
 
 describe('la ricerca e le persone', () => {

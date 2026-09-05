@@ -196,7 +196,9 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
    */
   const closeAttempted = new Set<string>()
   watch(() => link.rooms.value, (list) => {
-    void closeDormantPitwallRooms(link.service(), list, link.room.value?.roomId ?? null, closeAttempted)
+    // L'ora e' quella del collegamento, la stessa con cui si dice "viva" o
+    // "dormiente": con l'ora vera i test a orologio fisso invecchiavano da soli.
+    void closeDormantPitwallRooms(link.service(), list, link.room.value?.roomId ?? null, closeAttempted, link.nowTick.value)
   })
 
   /**
@@ -407,6 +409,11 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   function enterRace(raceId: string): void {
     dismissedInvites.value.delete(raceId)
     saveSet(DISMISSED_INVITES_KEY, dismissedInvites.value)
+    // Con una sola gara accessibile il collegamento l'ha gia' scelta da solo:
+    // riselezionarla la azzera per un istante, e la vista che la guardava
+    // tornava alla home credendola sparita (visto il 2026-09-05, appena le
+    // stanze vecchie sono state tolte e ne e' rimasta una).
+    if (link.selectedRoomId.value === raceId && link.room.value) return
     void link.selectRoom(raceId)
   }
   function leaveRace(raceId: string): void { void inRoom(raceId, () => link.leave()) }
