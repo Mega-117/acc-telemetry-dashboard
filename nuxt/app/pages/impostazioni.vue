@@ -8,6 +8,8 @@ const router = useRouter()
 const ready = ref(false)
 const bridge = useWheelInputBridge()
 
+onBeforeRouteLeave(async () => { await bridge.finishConfiguration() })
+
 onMounted(async () => {
   const api = (window as Window & {
     electronAPI?: { localIdentityRole?: string; controlsGetState?: () => Promise<unknown> }

@@ -35,6 +35,8 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/composables/useWheelInputBridge.ts',
+        'app/components/settings/CommandBindingsPanel.vue',
         'app/components/session-detail/SessionDetailPanelMode.vue',
         'app/components/session-detail/SessionAdvancedDebrief.vue',
         'app/components/session-detail/advanced/AdvancedDebriefContext.vue',

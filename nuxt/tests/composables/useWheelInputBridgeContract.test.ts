@@ -8,6 +8,11 @@ const source = fs.readFileSync(
 )
 
 describe('wheel input bridge timing contract', () => {
+  test('settings waits for configuration cleanup before leaving the route', () => {
+    const page = fs.readFileSync(path.resolve(process.cwd(), 'app/pages/impostazioni.vue'), 'utf8')
+    expect(page).toContain('onBeforeRouteLeave(async () => { await bridge.finishConfiguration() })')
+  })
+
   test('polls independently from paint frames at the declared cadence', () => {
     expect(source).toContain('const WHEEL_POLL_INTERVAL_MS = 8')
     expect(source).toContain('window.setInterval(poll, WHEEL_POLL_INTERVAL_MS)')

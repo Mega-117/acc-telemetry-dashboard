@@ -9,6 +9,16 @@ import {
 } from '../../app/services/controls/wheelBindingModel'
 
 describe('wheelBindingModel', () => {
+  it('does not highlight ambiguous devices while other devices still match', () => {
+    const binding = { deviceId: 'Wheel', deviceLabel: 'Wheel', button: 3 }
+    expect(matchingWheelActions({ togglePalette: binding, nextAction: { ...binding, deviceId: 'Box' }, activateAction: null }, {
+      mode: 'test', devices: [
+        { deviceId: 'Wheel', deviceLabel: 'Wheel', buttons: [3] },
+        { deviceId: 'Wheel', deviceLabel: 'Wheel', buttons: [] },
+        { deviceId: 'Box', deviceLabel: 'Box', buttons: [3] },
+      ],
+    })).toEqual(['nextAction'])
+  })
   it('normalizes a single button and rejects anything else', () => {
     expect(normalizeWheelBinding({ deviceId: ' wheel ', button: 4 }))
       .toEqual({ deviceId: 'wheel', deviceLabel: 'wheel', button: 4 })

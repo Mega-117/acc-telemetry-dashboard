@@ -25,6 +25,7 @@ export interface WheelControlsState {
   devices: WheelDeviceSnapshot[]
   capture: null | { action: WheelControlAction }
   lastError: string | null
+  ambiguousDeviceIds: string[]
   operation?: { ok: boolean; reason?: string; conflictingAction?: WheelControlAction; saved?: boolean }
   testMatches?: WheelControlAction[]
 }
@@ -52,8 +53,8 @@ export function wheelBindingsCollide(left: WheelBinding | null, right: WheelBind
 /**
  * A device keeps its identity across replugs: the slot index is deliberately left out of
  * the id, so a binding saved today still matches after a restart or a different power-on
- * order. Two rigs sharing one product name merge into one id on purpose - pressing that
- * button on either of them means the same thing to the driver.
+ * order. Identical IDs are retained separately so the runtime can detect ambiguity
+ * and suspend them instead of merging unrelated physical devices.
  */
 export function createGamepadSnapshot(
   gamepads: ArrayLike<Gamepad | null>,
@@ -82,13 +83,15 @@ export function matchingWheelActions(
   bindings: Record<WheelControlAction, WheelBinding | null>,
   snapshot: WheelInputSnapshot,
 ): WheelControlAction[] {
+  const ids = snapshot.devices.map(device => device.deviceId)
   const pressedByDevice = new Map(snapshot.devices.map(device => [
     device.deviceId,
     new Set(device.buttons),
   ]))
   return WHEEL_CONTROL_ACTIONS.filter((action) => {
     const binding = bindings[action]
-    return !!binding && !!pressedByDevice.get(binding.deviceId)?.has(binding.button)
+    return !!binding && ids.filter(id => id === binding.deviceId).length === 1
+      && !!pressedByDevice.get(binding.deviceId)?.has(binding.button)
   })
 }
 

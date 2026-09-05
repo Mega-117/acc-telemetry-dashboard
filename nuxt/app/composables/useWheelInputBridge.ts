@@ -2,7 +2,6 @@ import { computed, readonly } from 'vue'
 import {
   createGamepadSnapshot,
   EMPTY_WHEEL_BINDINGS,
-  matchingWheelActions,
   wheelSnapshotSignature,
   type WheelControlAction,
   type WheelControlsState,
@@ -23,6 +22,10 @@ const WHEEL_POLL_INTERVAL_MS = 8
 let pollTimer: number | null = null
 let removeStateListener: (() => void) | null = null
 let lastSignature = ''
+// All composable consumers share the same IPC owner and configuration queue.
+let configurationQueue: Promise<void> = Promise.resolve()
+let cleanupPromise: Promise<void> | null = null
+let stateEpoch = 0
 
 function controlsApi(): WheelControlsApi | null {
   if (typeof window === 'undefined') return null
@@ -37,6 +40,7 @@ export function useWheelInputBridge() {
     devices: [],
     capture: null,
     lastError: null,
+    ambiguousDeviceIds: [],
   }))
   const testMode = useState<boolean>('wheel-controls-test-mode', () => false)
   const currentSnapshot = useState<WheelInputSnapshot>('wheel-controls-snapshot', () => ({
@@ -46,6 +50,23 @@ export function useWheelInputBridge() {
 
   const applyState = (next: WheelControlsState | null | undefined) => {
     if (next) state.value = next
+  }
+
+  const reportError = () => {
+    state.value = { ...state.value, lastError: 'controls_unavailable', operation: { ok: false, reason: 'controls_unavailable' } }
+  }
+
+  const enqueueConfiguration = (operation: () => Promise<WheelControlsState>) => {
+    const epoch = stateEpoch
+    configurationQueue = configurationQueue.then(async () => {
+      try {
+        const result = await operation()
+        if (epoch === stateEpoch) applyState(result)
+      } catch {
+        reportError()
+      }
+    })
+    return configurationQueue
   }
 
   // The renderer stays a mute sensor: it forwards whatever the pads report and lets the
@@ -60,7 +81,9 @@ export function useWheelInputBridge() {
       const signature = wheelSnapshotSignature(snapshot)
       if (signature !== lastSignature) {
         lastSignature = signature
-        void api.controlsReportSnapshot({ ...snapshot, sampledAtMs }).then(applyState)
+        // onControlsState is the canonical stream. Late invoke responses must not
+        // resurrect a capture that has already been cancelled.
+        void api.controlsReportSnapshot({ ...snapshot, sampledAtMs }).catch(reportError)
       }
     }
   }
@@ -88,19 +111,19 @@ export function useWheelInputBridge() {
     const api = controlsApi()
     if (!api) return
     testMode.value = false
-    applyState(await api.controlsBeginCapture(action))
+    await enqueueConfiguration(() => api.controlsBeginCapture(action))
   }
 
   const cancelCapture = async () => {
     const api = controlsApi()
     if (!api) return
-    applyState(await api.controlsCancelCapture())
+    await enqueueConfiguration(() => api.controlsCancelCapture())
   }
 
   const clearBinding = async (action: WheelControlAction) => {
     const api = controlsApi()
     if (!api) return
-    applyState(await api.controlsClearBinding(action))
+    await enqueueConfiguration(() => api.controlsClearBinding(action))
   }
 
   const setTestMode = (enabled: boolean) => {
@@ -108,8 +131,20 @@ export function useWheelInputBridge() {
     lastSignature = ''
   }
 
+  const finishConfiguration = (): Promise<void> => {
+    setTestMode(false)
+    if (cleanupPromise) return cleanupPromise
+    stateEpoch++
+    const api = controlsApi()
+    if (!api) return Promise.resolve()
+    // This is queued after any pending beginCapture, even if its response is slow.
+    cleanupPromise = enqueueConfiguration(() => api.controlsCancelCapture())
+      .finally(() => { cleanupPromise = null })
+    return cleanupPromise
+  }
+
   const testedActions = computed(() => testMode.value
-    ? matchingWheelActions(state.value.bindings, currentSnapshot.value)
+    ? state.value.testMatches ?? []
     : [])
 
   return {
@@ -122,5 +157,6 @@ export function useWheelInputBridge() {
     cancelCapture,
     clearBinding,
     setTestMode,
+    finishConfiguration,
   }
 }

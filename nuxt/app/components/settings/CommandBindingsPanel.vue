@@ -20,6 +20,7 @@ const {
   cancelCapture,
   clearBinding,
   setTestMode,
+  finishConfiguration,
 } = useWheelInputBridge()
 
 const statusText = computed(() => {
@@ -34,10 +35,12 @@ const errorText = computed(() => {
     binding_conflict: 'Questo pulsante è già assegnato a un altro comando.',
     settings_corrupt: 'Le impostazioni locali non erano valide: sono stati caricati binding vuoti.',
     settings_write_failed: 'Il comando non è stato salvato su disco. Riprova.',
+    capture_ambiguous: 'Sono stati premuti più pulsanti insieme. Premi Assegna e riprova con un solo pulsante.',
+    controls_unavailable: 'Collegamento ai comandi non disponibile. Riprova.',
   } as Record<string, string>)[reason] || 'Comando non salvato. Riprova.'
 })
 
-onBeforeUnmount(() => setTestMode(false))
+onBeforeUnmount(() => { void finishConfiguration() })
 </script>
 
 <template>
@@ -64,6 +67,10 @@ onBeforeUnmount(() => setTestMode(false))
     </div>
 
     <p v-if="errorText" class="command-error" role="alert">{{ errorText }}</p>
+    <p v-if="state.ambiguousDeviceIds?.length" class="command-error" role="alert">
+      Più periferiche hanno lo stesso identificativo: {{ state.ambiguousDeviceIds.join(', ') }}.
+      I loro comandi sono sospesi. Scollegane una per utilizzarli; le altre periferiche restano disponibili.
+    </p>
     <p v-if="state.capture" class="capture-hint" role="status">
       Premi il pulsante da assegnare.
     </p>
