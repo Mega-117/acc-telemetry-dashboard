@@ -2,12 +2,28 @@ import { describe, expect, it } from 'vitest'
 import {
   buildDiagnosticDateRange,
   diagnosticsViewState,
+  diagnosticUsers,
   formatItalianDiagnosticDate,
   paginationTokens,
   resolveDiagnosticNickname
 } from '~/utils/diagnosticsPresentation'
 
 describe('diagnosticsPresentation', () => {
+  it('conta identita distinte, conserva omonimi ed esclude eventi senza utente', () => {
+    expect(diagnosticUsers([
+      { userId: 'a', pilotNickname: 'Nico' },
+      { userId: 'a', pilotNickname: 'Nico' },
+      { userId: 'b', pilotNickname: 'Nico' },
+      { userId: 'c', pilotNickname: '' },
+      { userId: '', pilotNickname: 'Sistema' },
+      { userId: undefined, pilotNickname: 'Ignorato' }
+    ])).toEqual([
+      { id: 'a', nickname: 'Nico' },
+      { id: 'b', nickname: 'Nico' },
+      { id: 'c', nickname: 'Utente non disponibile' }
+    ])
+    expect(diagnosticUsers([])).toEqual([])
+  })
   it('costruisce il default 7 giorni inclusivo in ora italiana', () => {
     const range = buildDiagnosticDateRange('7d', '', '', new Date('2026-08-02T12:00:00.000Z'))
     expect(range).toEqual({

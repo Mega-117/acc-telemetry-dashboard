@@ -117,6 +117,16 @@ export function resolveDiagnosticNickname(userId: unknown, nickname: unknown): s
   return 'Utente non disponibile'
 }
 
+export function diagnosticUsers(events: readonly { userId?: unknown, pilotNickname?: unknown }[]) {
+  const users = new Map<string, { id: string, nickname: string }>()
+  for (const event of events) {
+    const id = typeof event.userId === 'string' ? event.userId.trim() : ''
+    if (!id || users.has(id)) continue
+    users.set(id, { id, nickname: resolveDiagnosticNickname(id, event.pilotNickname) })
+  }
+  return [...users.values()]
+}
+
 export function diagnosticsViewState(params: {
   pending: boolean
   hasEvents: boolean

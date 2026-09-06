@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import DiagnosticUsersSummary from '~/components/admin/DiagnosticUsersSummary.vue'
 import {
   CLIENT_DIAGNOSTIC_COMPONENT_OPTIONS,
   CLIENT_DIAGNOSTICS_CLEANUP_BATCH_SIZE,
@@ -390,6 +391,8 @@ onMounted(() => resetAndLoad())
         <small v-if="totalIsCapped">(conteggio limitato a {{ CLIENT_DIAGNOSTICS_MAX_COUNT }})</small>
       </span>
     </section>
+
+    <DiagnosticUsersSummary v-if="!isPending && !errorMessage" :events="events" />
 
     <p v-if="errorMessage" class="error-banner" role="alert">
       <span>{{ errorMessage }}</span>

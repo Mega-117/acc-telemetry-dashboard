@@ -36,6 +36,7 @@ export default defineConfig({
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
         'app/components/electron/DataMaintenanceNotification.vue',
+        'app/components/admin/DiagnosticUsersSummary.vue',
         'app/composables/useWheelInputBridge.ts',
         'app/components/settings/CommandBindingsPanel.vue',
         'app/components/session-detail/SessionDetailPanelMode.vue',
