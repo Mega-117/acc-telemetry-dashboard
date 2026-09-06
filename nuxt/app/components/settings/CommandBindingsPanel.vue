@@ -10,6 +10,7 @@ const actions: Array<{ id: WheelControlAction; title: string; description: strin
   { id: 'togglePalette', title: 'Apri / chiudi Control K', description: 'Mostra o nasconde il pannello comandi.' },
   { id: 'nextAction', title: 'Voce successiva', description: 'Avanza tra le azioni disponibili e riparte dalla prima.' },
   { id: 'activateAction', title: 'Conferma', description: 'Esegue il normale click della voce evidenziata.' },
+  { id: 'mainMenu', title: 'Menu principale', description: 'Facoltativo: torna al menu dalla selezione allenamento. Inattivo durante i timer.' },
 ]
 
 const {

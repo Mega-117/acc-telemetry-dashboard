@@ -1,4 +1,4 @@
-export const WHEEL_CONTROL_ACTIONS = ['togglePalette', 'nextAction', 'activateAction'] as const
+export const WHEEL_CONTROL_ACTIONS = ['togglePalette', 'nextAction', 'activateAction', 'mainMenu'] as const
 export type WheelControlAction = typeof WHEEL_CONTROL_ACTIONS[number]
 
 export interface WheelBinding {
@@ -34,6 +34,7 @@ export const EMPTY_WHEEL_BINDINGS: Record<WheelControlAction, null> = {
   togglePalette: null,
   nextAction: null,
   activateAction: null,
+  mainMenu: null,
 }
 
 export function normalizeWheelBinding(binding: unknown): WheelBinding | null {

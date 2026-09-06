@@ -38,6 +38,7 @@ export default defineConfig({
         'app/components/electron/DataMaintenanceNotification.vue',
         'app/components/admin/DiagnosticUsersSummary.vue',
         'app/composables/useWheelInputBridge.ts',
+        'app/composables/useOverlayActionSelection.ts',
         'app/components/settings/CommandBindingsPanel.vue',
         'app/components/session-detail/SessionDetailPanelMode.vue',
         'app/components/session-detail/SessionAdvancedDebrief.vue',

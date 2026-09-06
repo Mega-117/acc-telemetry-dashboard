@@ -11,7 +11,7 @@ import {
 describe('wheelBindingModel', () => {
   it('does not highlight ambiguous devices while other devices still match', () => {
     const binding = { deviceId: 'Wheel', deviceLabel: 'Wheel', button: 3 }
-    expect(matchingWheelActions({ togglePalette: binding, nextAction: { ...binding, deviceId: 'Box' }, activateAction: null }, {
+    expect(matchingWheelActions({ togglePalette: binding, nextAction: { ...binding, deviceId: 'Box' }, mainMenu: null, activateAction: null }, {
       mode: 'test', devices: [
         { deviceId: 'Wheel', deviceLabel: 'Wheel', buttons: [3] },
         { deviceId: 'Wheel', deviceLabel: 'Wheel', buttons: [] },
@@ -65,7 +65,7 @@ describe('wheelBindingModel', () => {
     expect(matchingWheelActions({
       togglePalette: binding,
       nextAction: null,
-      activateAction: null,
+      mainMenu: null, activateAction: null,
     }, {
       mode: 'test',
       devices: [{ deviceId: 'Wheel', deviceLabel: 'Wheel', buttons: [3, 9] }],

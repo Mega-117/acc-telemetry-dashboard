@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
 
 export interface OverlayPointerState {
+  movementRevision?: number
   overlayKey: string
   cursorVisible: boolean
   surfaceHovered: boolean

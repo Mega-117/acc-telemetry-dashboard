@@ -78,6 +78,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
             <button
                 type="button"
                 class="training-current"
+                        data-overlay-wheel-action="training-picker"
                 :aria-expanded="isTrainingPickerOpen"
                 aria-label="Apri selezione tipo allenamento"
                 @click="emit('toggle-training-picker')"
@@ -97,6 +98,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                     <button
                         v-for="training in trainingOverlayTrainingList"
                         :key="training.id"
+                        :data-overlay-wheel-action="`training-${training.id}`"
                         type="button"
                         :class="[
                             'training-option',
@@ -121,6 +123,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                 <button
                     v-for="mode in selectedModeList"
                     :key="mode.id"
+                        :data-overlay-wheel-action="`duration-${mode.id}`"
                     type="button"
                     :class="{ 'is-active': selectedModeId === mode.id }"
                     :aria-label="`Durata ${mode.title}`"
@@ -165,6 +168,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
             <button
                 type="button"
                 class="settings-toggle"
+                        data-overlay-wheel-action="settings"
                 :aria-expanded="isSettingsOpen"
                 aria-label="Apri pannello impostazioni"
                 @click="emit('toggle-settings')"
@@ -187,6 +191,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                                 class="setting-row setting-row--button"
                                 :aria-label="`Audio ${soundEnabled ? 'attivo' : 'disattivo'} — clicca per cambiare`"
                                 :aria-pressed="soundEnabled"
+                                data-overlay-wheel-action="sound"
                                 @click="emit('toggle-sound')"
                             >
                                 <span>Audio</span>
@@ -201,6 +206,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                                 :aria-label="`Opacita ridotta in guida ${autoDimDuringRun ? 'attiva' : 'disattiva'} — clicca per cambiare`"
                                 :aria-pressed="autoDimDuringRun"
                                 @click="emit('toggle-auto-dim')"
+                        data-overlay-wheel-action="auto-dim"
                             >
                                 <span>Opacit&agrave; ridotta in guida</span>
                                 <strong :class="{ 'is-active': autoDimDuringRun }">
@@ -214,6 +220,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                                 :aria-label="`Avanzamento automatico a fine step ${autoAdvanceStep ? 'attivo' : 'disattivo'} — clicca per cambiare`"
                                 :aria-pressed="autoAdvanceStep"
                                 @click="emit('toggle-auto-advance')"
+                        data-overlay-wheel-action="auto-advance"
                             >
                                 <span>Avanza da solo a fine step</span>
                                 <strong :class="{ 'is-active': autoAdvanceStep }">
@@ -231,6 +238,7 @@ function trainingOptionStyle(training: TrainingOverlayTraining) {
                                     <button
                                         v-for="s in autoAdvanceSecondsOptions"
                                         :key="s"
+                        :data-overlay-wheel-action="`countdown-${s}`"
                                         type="button"
                                         :class="{ 'is-active': autoAdvanceSeconds === s }"
                                         :aria-label="`Countdown ${s} secondi`"

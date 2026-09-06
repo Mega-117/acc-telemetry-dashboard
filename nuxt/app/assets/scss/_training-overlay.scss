@@ -931,8 +931,8 @@
     box-shadow 120ms ease-out, color 120ms ease-out, transform 120ms ease-out;
 }
 
-.launcher-tool-button:hover,
-.launcher-tool-button:focus-visible {
+.launcher-tool-button:not([data-overlay-wheel-action]):hover,
+.launcher-tool-button:not([data-overlay-wheel-action]):focus-visible {
   border-color: rgba(var(--overlay-accent-rgb), 0.74);
   background: rgba(var(--overlay-accent-rgb), 0.2);
 }
@@ -940,7 +940,7 @@
 // Il giallo corsa indica il cursore del volante, mentre i colori del singolo
 // strumento continuano a descriverne lo stato. Le due informazioni non si
 // confondono anche quando il tema corrente usa un accento verde.
-.launcher-tool-button[data-overlay-wheel-action].is-selected {
+.training-overlay button[data-overlay-wheel-action][data-overlay-selected] {
   border-color: #ffe27a;
   background: linear-gradient(105deg, rgba(104, 70, 9, 0.96), rgba(41, 31, 15, 0.98));
   box-shadow:
@@ -1228,8 +1228,8 @@
   line-height: 1;
 }
 
-.overlay-close-btn:hover,
-.overlay-close-btn:focus-visible {
+.overlay-close-btn:not([data-overlay-wheel-action]):hover,
+.overlay-close-btn:not([data-overlay-wheel-action]):focus-visible {
   border-color: rgba(var(--overlay-accent-rgb), 0.55);
   background: rgba(var(--overlay-accent-rgb), 0.18);
   color: #fff;
@@ -1469,8 +1469,8 @@ button[aria-expanded='true'] .accordion-chevron::before {
   transform: translateY(2px) rotate(225deg);
 }
 
-button:hover .accordion-chevron::before,
-button:focus-visible .accordion-chevron::before {
+button:not([data-overlay-wheel-action]):hover .accordion-chevron::before,
+button:not([data-overlay-wheel-action]):focus-visible .accordion-chevron::before {
   border-color: rgba(248, 252, 255, 0.96);
 }
 
@@ -1852,8 +1852,8 @@ button:focus-visible .accordion-chevron::before {
   text-align: center;
 }
 
-.voice-choice button:hover,
-.voice-choice button:focus-visible {
+.voice-choice button:not([data-overlay-wheel-action]):hover,
+.voice-choice button:not([data-overlay-wheel-action]):focus-visible {
   border-color: rgba(255, 255, 255, 0.2);
   color: rgba(248, 252, 255, 0.92);
 }
@@ -1864,8 +1864,8 @@ button:focus-visible .accordion-chevron::before {
   color: var(--overlay-accent-contrast);
 }
 
-.setting-row:hover,
-.setting-row:focus-visible {
+.setting-row:not([data-overlay-wheel-action]):hover,
+.setting-row:not([data-overlay-wheel-action]):focus-visible {
   border-color: transparent;
   color: rgba(248, 252, 255, 0.92);
 }
@@ -1933,8 +1933,8 @@ button {
   -webkit-app-region: no-drag;
 }
 
-button:hover,
-button:focus-visible {
+button:not([data-overlay-wheel-action]):hover,
+button:not([data-overlay-wheel-action]):focus-visible {
   border-color: rgba(var(--overlay-accent-rgb), 0.5);
 }
 
@@ -2031,8 +2031,8 @@ button.is-active {
   font-size: 10px;
 }
 
-.skip-step-action:hover,
-.skip-step-action:focus-visible {
+.skip-step-action:not([data-overlay-wheel-action]):hover,
+.skip-step-action:not([data-overlay-wheel-action]):focus-visible {
   border-color: rgba(var(--overlay-accent-rgb), 0.5);
   color: rgba(248, 252, 255, 0.95);
 }
@@ -2158,8 +2158,8 @@ button.is-active {
   text-align: center;
 }
 
-.auto-advance-chip:hover,
-.auto-advance-chip:focus-visible {
+.auto-advance-chip:not([data-overlay-wheel-action]):hover,
+.auto-advance-chip:not([data-overlay-wheel-action]):focus-visible {
   border-color: rgba(255, 255, 255, 0.4);
   color: #fff;
 }
@@ -2205,3 +2205,10 @@ button.is-active {
 }
 
 
+
+.training-overlay--preparing *,
+.training-overlay--preparing *::before,
+.training-overlay--preparing *::after { transition: none !important; animation: none !important; }
+
+.training-overlay button[data-overlay-wheel-action] { outline: none; }
+.overlay-menu-back { margin-bottom: 10px; }

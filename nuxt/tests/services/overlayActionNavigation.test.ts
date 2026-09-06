@@ -3,9 +3,16 @@ import {
   firstOverlayActionId,
   nextOverlayActionId,
   resolveOverlayActivation,
+  resetsOverlayMenuOnHide,
 } from '../../app/services/overlay/overlayActionNavigation'
 
 describe('overlayActionNavigation', () => {
+  it.each(['launcher', 'select'])('resets only menu phases: %s', phase => {
+    expect(resetsOverlayMenuOnHide(phase)).toBe(true)
+  })
+  it.each(['running', 'paused', 'expired', 'completed', 'placement', 'loading'])('preserves session and setup phase %s', phase => {
+    expect(resetsOverlayMenuOnHide(phase)).toBe(false)
+  })
   const visibleEnabled = ['training', 'coach', 'target']
 
   it('starts from the first visible enabled action and wraps', () => {

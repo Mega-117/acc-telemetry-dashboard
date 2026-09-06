@@ -80,12 +80,13 @@ export function useOverlaySize(
     }, OVERLAY_MORPH_COMMIT_MS)
   }
 
-  async function applyOverlaySize(preset: OverlaySizePreset = getCurrentPreset()) {
+  async function applyOverlaySize(preset: OverlaySizePreset = getCurrentPreset(), immediate = false) {
     await nextTick()
     const size = measureOverlaySize(preset)
     if (!size) return
     const req = { preset, width: size.width, height: size.height }
-    if (shouldSkip(req)) return
+    const skip = shouldSkip(req)
+    if (skip && !immediate) return
     // La card riceve la dimensione target (finestra meno padding work area) e
     // la transiziona; in placement resta il riempimento pieno via CSS.
     cardSize.value = preset === 'placement'
@@ -94,8 +95,12 @@ export function useOverlaySize(
           width: size.width - OVERLAY_SURFACE_PADDING * 2,
           height: size.height - OVERLAY_SURFACE_PADDING * 2,
         }
-    await getApi()?.trainingOverlaySetSize?.(req)
-    scheduleMorphCommit()
+    if (!skip) await getApi()?.trainingOverlaySetSize?.(req)
+    if (immediate) {
+      if (morphCommitTimer) clearTimeout(morphCommitTimer)
+      morphCommitTimer = null
+      await getApi()?.trainingOverlayCommitSize?.()
+    } else scheduleMorphCommit()
   }
 
   function scheduleOverlaySizeSync(retries = 4) {

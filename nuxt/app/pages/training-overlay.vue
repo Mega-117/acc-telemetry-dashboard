@@ -34,7 +34,8 @@ import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import PitwallOverlayButton from '~/components/pitwall/PitwallOverlayButton.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
-import { nextOverlayActionId, resolveOverlayActivation } from '~/services/overlay/overlayActionNavigation'
+import { resetsOverlayMenuOnHide } from '~/services/overlay/overlayActionNavigation'
+import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
 import {
   normalizeQaBotSnapshot,
   qaBotPresentation,
@@ -117,43 +118,13 @@ const canUseSpotterControls = computed(() => resolveLocalRuntimeCapability({
   canEnterApp: canEnterApp.value,
 }))
 // La selezione volante usa ID semantici e ricalcola il DOM a ogni comando.
-const selectedWheelActionId = ref<string | null>(null)
 const overlayRoot = ref<HTMLElement | null>(null)
-const WHEEL_ACTION_SELECTOR = '[data-overlay-wheel-action]'
-
-function availableWheelActions(): HTMLButtonElement[] {
-  if (phase.value !== 'launcher' || isTargetSetupOpen.value || !overlayRoot.value) return []
-  return Array.from(overlayRoot.value.querySelectorAll<HTMLButtonElement>(WHEEL_ACTION_SELECTOR))
-    .filter(element => !element.disabled && element.getAttribute('aria-disabled') !== 'true')
-    .filter(element => !element.hidden && element.getClientRects().length > 0)
-}
-
-function selectWheelAction(actionId: string | null) {
-  selectedWheelActionId.value = actionId
-  if (!actionId) return
-  availableWheelActions()
-    .find(element => element.dataset.overlayWheelAction === actionId)
-    ?.focus({ preventScroll: true })
-}
-
-function selectFirstWheelAction() {
-  selectWheelAction(availableWheelActions()[0]?.dataset.overlayWheelAction || null)
-}
-
-function selectNextWheelAction() {
-  const actions = availableWheelActions()
-  const ids = actions.map(element => element.dataset.overlayWheelAction).filter(Boolean) as string[]
-  selectWheelAction(nextOverlayActionId(selectedWheelActionId.value, ids))
-}
-
-function activateSelectedWheelAction() {
-  const actions = availableWheelActions()
-  const ids = actions.map(element => element.dataset.overlayWheelAction).filter(Boolean) as string[]
-  const decision = resolveOverlayActivation(selectedWheelActionId.value, ids)
-  selectWheelAction(decision.selectedId)
-  if (!decision.activateId) return
-  actions.find(element => element.dataset.overlayWheelAction === decision.activateId)?.click()
-}
+const actionSelection = useOverlayActionSelection(overlayRoot, () =>
+  (phase.value === 'launcher' && !isTargetSetupOpen.value) || phase.value === 'select',
+)
+const { selectedId: selectedWheelActionId, first: selectFirstWheelAction,
+  next: selectNextWheelAction, activate: activateSelectedWheelAction } = actionSelection
+const preparingReopen = ref(false)
 const isPointerOnOverlaySurface = ref(false)
 const isTargetSetupOpen = ref(false)
 const infoTargetActive = ref(false)
@@ -166,6 +137,7 @@ const showDevControls = computed(() => {
   if (typeof window === 'undefined') return false
   return ['localhost', '127.0.0.1', '::1', ''].includes(window.location.hostname)
 })
+let savedInfoTargetSettings: InfoTargetSettings | null = null
 const isSaving = ref(false)
 const voicePointRecorderEnabled = ref(false)
 
@@ -509,6 +481,7 @@ async function confirmPlacement() {
 async function closeOverlay() { await getOverlayApi()?.trainingOverlayClose?.() }
 function applyInfoTargetSettings(settings: InfoTargetSettings | null | undefined) {
   if (!settings) return
+  savedInfoTargetSettings = { ...settings }
   infoTargetActive.value = settings.active === true
   if (typeof settings.targetTimeMs === 'number' && settings.targetTimeMs >= 1_000) {
     infoTargetTimeMs.value = settings.targetTimeMs
@@ -532,6 +505,7 @@ function openInfoTargetSetup() {
 }
 
 function cancelInfoTargetSetup() {
+  applyInfoTargetSettings(savedInfoTargetSettings)
   isTargetSetupOpen.value = false
   scheduleOverlaySizeSync()
 }
@@ -561,6 +535,44 @@ function toggleCoachAudio() {
   setDebugEvent(enabled ? 'avvisi giro attivati' : 'avvisi giro disattivati')
 }
 
+function returnToMainMenu() {
+  if (phase.value !== 'select') return
+  closeShortcutStopConfirm()
+  isTrainingPickerOpen.value = false
+  isSettingsOpen.value = false
+  phase.value = 'launcher'
+  void nextTick(() => { selectFirstWheelAction(); scheduleOverlaySizeSync() })
+}
+
+async function prepareOverlayReopen(revision?: number) {
+  preparingReopen.value = true
+  await nextTick()
+  actionSelection.resetPointer()
+  if (resetsOverlayMenuOnHide(phase.value)) {
+    cancelInfoTargetSetup()
+    isTrainingPickerOpen.value = false
+    isSettingsOpen.value = false
+    closeShortcutStopConfirm()
+    phase.value = 'launcher'
+  }
+  await nextTick()
+  // A previous out-in leave may still be pending when hide arrives mid-transition.
+  // Never acknowledge an empty/old content node, even with CSS animations disabled.
+  const deadline = Date.now() + 1000
+  while (!overlayRoot.value?.querySelector(`.overlay-content--${overlaySizePreset.value}`)
+    && phase.value !== 'placement') {
+    if (Date.now() >= deadline) { preparingReopen.value = false; return }
+    await new Promise(resolve => setTimeout(resolve, 16))
+  }
+  selectFirstWheelAction()
+  await overlaySizeComp.applyOverlaySize(overlaySizePreset.value, true)
+  await nextTick()
+  // Settle the hidden card without its normal morph animation before acknowledging.
+  void overlayRoot.value?.offsetHeight
+  await getOverlayApi()?.trainingOverlayPrepared?.(revision)
+  preparingReopen.value = false
+}
+
 function runBackAction() {
   if (isTargetSetupOpen.value) { cancelInfoTargetSetup(); return }
   if (isShortcutStopConfirmOpen.value) { closeShortcutStopConfirm(); return }
@@ -570,7 +582,7 @@ function runBackAction() {
     if (isTrainingPickerOpen.value || isSettingsOpen.value) {
       isTrainingPickerOpen.value = false; isSettingsOpen.value = false; scheduleOverlaySizeSync(); return
     }
-    phase.value = 'launcher'; scheduleOverlaySizeSync(); return
+    returnToMainMenu(); return
   }
   if (phase.value === 'completed') { resetCompleted(); return }
 }
@@ -613,6 +625,7 @@ const interactionContract = useOverlayInteractionContract({
   isForcedCapture: () => phase.value === 'placement',
 })
 const { pointerState } = interactionContract
+watch(() => [pointerState.movementRevision, pointerState.surfaceHovered, pointerState.x, pointerState.y], () => { actionSelection.syntheticPointer(pointerState) }, { flush: 'post' })
 watch(() => pointerState.surfaceHovered, (hovered) => {
   isPointerOnOverlaySurface.value = hovered
 })
@@ -686,9 +699,11 @@ async function recordVoicePointFromCurrentPosition() {
     showVoicePointNotice(error?.message || 'Riferimento non salvato.', 'error')
   }
 }
-function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayCommand }) {
+function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayCommand; revision?: number }) {
   const command = typeof payload === 'string' ? payload : payload?.command
   setDebugEvent(`comando overlay: ${command || 'vuoto'}`)
+  if (command === 'prepare-reopen') { void prepareOverlayReopen(typeof payload === 'string' ? undefined : payload.revision); return }
+  if (command === 'main-menu') { returnToMainMenu(); return }
   if (command === 'primary') executePrimaryAction()
   if (command === 'next-action') selectNextWheelAction()
   if (command === 'activate-action') activateSelectedWheelAction()
@@ -777,7 +792,7 @@ watch(canUseSpotterControls, (canUse) => {
 watch(
   [phase, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
     spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, liveHudResizeKey],
-  () => scheduleOverlaySizeSync(),
+  () => { scheduleOverlaySizeSync(); actionSelection.refresh() },
   { flush: 'post' }
 )
 
@@ -810,6 +825,8 @@ onBeforeUnmount(() => {
 <template>
   <main
     ref="overlayRoot"
+    @pointermove="actionSelection.pointerMove"
+    @focusin="actionSelection.focus($event.target)"
     class="training-overlay"
     :style="overlayThemeStyle"
     :class="[
@@ -818,6 +835,7 @@ onBeforeUnmount(() => {
       `training-overlay--origin-${originCorner}`,
       {
         'training-overlay--drag': phase === 'placement',
+        'training-overlay--preparing': preparingReopen,
         'training-overlay--web': !isElectronRuntime,
         'training-overlay--voice-points': voicePointRecorderEnabled,
       }
@@ -898,7 +916,7 @@ onBeforeUnmount(() => {
         <!-- Contenitore unico persistente (PIP-93): il morphing e' l'animazione
              di resize della finestra; dentro, il contenuto si avvicenda in cross-fade. -->
         <section v-else-if="phase !== 'loading'" key="card" class="overlay-card">
-          <Transition name="content-swap" mode="out-in">
+          <Transition name="content-swap" :css="!preparingReopen" :mode="preparingReopen ? undefined : 'out-in'" @after-enter="actionSelection.refresh()">
             <div
               :key="contentKey"
               :class="[
@@ -1079,6 +1097,7 @@ onBeforeUnmount(() => {
               </template>
 
               <template v-else-if="phase === 'select'">
+                <button type="button" class="utility-action overlay-menu-back" data-overlay-wheel-action="main-menu" @click="returnToMainMenu">← Menu principale</button>
                 <div class="overlay-main">
                   <div v-if="!soundEnabled" class="overlay-topline">
                     <div class="overlay-topline-actions">
@@ -1112,7 +1131,7 @@ onBeforeUnmount(() => {
                   />
                 </div>
                 <div class="overlay-actions">
-                  <button type="button" class="primary" :aria-label="primaryActionLabel" @click="executePrimaryAction">
+                  <button type="button" class="primary" data-overlay-wheel-action="start-training" :aria-label="primaryActionLabel" @click="executePrimaryAction">
                     {{ primaryActionLabel }}
                     <span class="key-hint" aria-hidden="true">Ctrl+N</span>
                   </button>
@@ -1120,6 +1139,7 @@ onBeforeUnmount(() => {
                     v-if="showPlacementControl"
                     type="button"
                     class="utility-action"
+                    data-overlay-wheel-action="placement"
                     aria-label="Sposta l'overlay sullo schermo"
                     @click="enterPlacementMode"
                   >
@@ -1243,5 +1263,4 @@ onBeforeUnmount(() => {
 .pressure-plan__clicks { color: #86efac; font-weight: 950; }
 .pressure-plan__note, .pressure-plan__empty { margin: 0; color: rgba(226, 238, 247, 0.52); font-size: 8px; line-height: 1.2; text-align: left; }
 </style>
-
 

@@ -3,6 +3,10 @@ export interface OverlayActivationDecision {
   activateId: string | null
 }
 
+export function resetsOverlayMenuOnHide(phase: string): boolean {
+  return phase === 'launcher' || phase === 'select'
+}
+
 export function firstOverlayActionId(availableIds: string[]): string | null {
   return availableIds[0] ?? null
 }
