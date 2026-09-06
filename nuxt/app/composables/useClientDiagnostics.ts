@@ -8,11 +8,11 @@ import {
   buildDiagnosticDocument,
   createLocalDiagnostic,
   flushDiagnosticOutbox,
-  shouldCaptureDiagnostic,
   type DiagnosticSuiteContext,
   type LocalClientDiagnostic
 } from '~/services/monitoring/clientDiagnosticsService'
 import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTracker'
+import { createBrowserDiagnosticStore } from '~/services/monitoring/browserDiagnosticStore'
 
 const CALLER = 'ClientDiagnostics'
 
@@ -20,6 +20,8 @@ type ElectronDiagnosticsApi = {
   captureDiagnostic?: (event: LocalClientDiagnostic) => Promise<unknown>
   listDiagnostics?: (limit?: number) => Promise<LocalClientDiagnostic[]>
   acknowledgeDiagnostics?: (eventIds: string[]) => Promise<number>
+  reserveDiagnostic?: (eventId: string) => Promise<LocalClientDiagnostic | null>
+  failDiagnostic?: (eventId: string, quota: boolean) => Promise<unknown>
   getSuiteVersion?: () => Promise<DiagnosticSuiteContext | null>
 }
 
@@ -51,7 +53,8 @@ export function useClientDiagnostics(options: {
   const { currentUser, canEnterApp } = useFirebaseAuth()
   const nuxtApp = useNuxtApp()
   const route = useRoute()
-  const lastCapturedByFingerprint = new Map<string, number>()
+  let browserStore: ReturnType<typeof createBrowserDiagnosticStore> | null = null
+  const getBrowserStore = () => browserStore || (browserStore = createBrowserDiagnosticStore())
   let intervalId: number | null = null
   let isFlushing = false
   let flushQueued = false
@@ -63,28 +66,17 @@ export function useClientDiagnostics(options: {
     try {
       if (!canCapture()) return false
       const event = createLocalDiagnostic(input)
-      const now = Date.now()
-      if (!shouldCaptureDiagnostic(lastCapturedByFingerprint.get(event.fingerprint), now)) {
-        return false
-      }
-      lastCapturedByFingerprint.set(event.fingerprint, now)
-
       const electronAPI = getElectronApi()
       if (electronAPI?.captureDiagnostic) {
         await electronAPI.captureDiagnostic(event)
         return true
       }
 
-      const uid = currentUser.value?.uid
-      if (!uid || !canEnterApp.value) return false
-      const suite = electronAPI?.getSuiteVersion ? await electronAPI.getSuiteVersion() : null
-      if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
-      const payload = buildDiagnosticDocument(event, uid, suite)
-      await trackedSetDoc(
-        doc(db, `users/${uid}/diagnostics/${payload.eventId}`),
-        toFirestoreDiagnostic(payload),
-        CALLER
-      )
+      // A secondary Electron renderer must never create a browser cloud path.
+      if (electronAPI) return false
+      const uid = currentUser.value?.uid || null
+      const buildId = nuxtApp.$config?.app?.buildId
+      await getBrowserStore().capture({ ...event, suite: typeof buildId === 'string' ? `web:${buildId}`.slice(0, 80) : null }, uid)
       return true
     } catch {
       // Diagnostics must never become a second application failure.
@@ -99,8 +91,7 @@ export function useClientDiagnostics(options: {
       !canFlush()
       || !uid
       || !canEnterApp.value
-      || !electronAPI?.listDiagnostics
-      || !electronAPI?.acknowledgeDiagnostics
+      || (electronAPI && (!electronAPI.listDiagnostics || !electronAPI.acknowledgeDiagnostics))
     ) {
       return 0
     }
@@ -114,14 +105,20 @@ export function useClientDiagnostics(options: {
     isFlushing = true
     try {
       const [events, suite] = await Promise.all([
-        electronAPI.listDiagnostics(50),
-        electronAPI.getSuiteVersion ? electronAPI.getSuiteVersion() : Promise.resolve(null)
+        electronAPI ? electronAPI.listDiagnostics!(50) : getBrowserStore().list(uid),
+        electronAPI?.getSuiteVersion ? electronAPI.getSuiteVersion() : Promise.resolve(null)
       ])
       if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return 0
       const result = await flushDiagnosticOutbox({
         events: events || [],
         uid,
         suite,
+        reserve: (id) => electronAPI
+          ? (electronAPI.reserveDiagnostic?.(id) || Promise.resolve(null))
+          : getBrowserStore().reserve(id, uid),
+        failed: (id, quota) => electronAPI
+          ? (electronAPI.failDiagnostic?.(id, quota) || Promise.resolve())
+          : getBrowserStore().failed(id, uid, quota),
         isUploaded: async (eventId) => {
           const snapshot = await trackedGetDoc(
             doc(db, `users/${uid}/diagnostics/${eventId}`),
@@ -134,8 +131,9 @@ export function useClientDiagnostics(options: {
           toFirestoreDiagnostic(payload),
           CALLER
         ),
-        acknowledge: (eventId) => electronAPI.acknowledgeDiagnostics!([eventId]),
-        isCurrent: options.isLeaseCurrent ? () => options.isLeaseCurrent!(uid) : undefined
+        acknowledge: (eventId) => electronAPI ? electronAPI.acknowledgeDiagnostics!([eventId]) : getBrowserStore().acknowledge(eventId, uid),
+        isCurrent: () => currentUser.value?.uid === uid && canFlush() && canEnterApp.value
+          && (!options.isLeaseCurrent || options.isLeaseCurrent(uid))
       })
       return result.acknowledged
     } catch (error) {

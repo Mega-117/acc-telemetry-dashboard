@@ -79,6 +79,7 @@ export default defineConfig({
         'app/services/monitoring/clientHeartbeatService.ts',
         'app/services/monitoring/clientRuntimeReportingService.ts',
         'app/services/monitoring/clientDiagnosticsService.ts',
+        'app/services/monitoring/browserDiagnosticStore.ts',
         'app/repositories/adminCockpitRepository.ts',
         'app/repositories/clientDiagnosticsRepository.ts',
         'app/services/projections/trackBestProjectionGuard.ts',

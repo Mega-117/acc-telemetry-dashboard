@@ -8,6 +8,9 @@ const MAX_STACK_CHARS = 8000
 export type ClientDiagnosticSeverity = 'warning' | 'error' | 'fatal'
 
 export interface LocalClientDiagnostic {
+  owner?: string | null
+  suite?: string | null
+  channel?: string | null
   schemaVersion?: number
   eventId?: string
   fingerprint?: string
@@ -53,6 +56,8 @@ export interface DiagnosticOutboxFlushInput {
   upload: (payload: ClientDiagnosticUpload) => Promise<void>
   acknowledge: (eventId: string) => Promise<unknown>
   isCurrent?: () => boolean
+  reserve?: (eventId: string) => Promise<LocalClientDiagnostic | null>
+  failed?: (eventId: string, quota: boolean) => Promise<unknown>
 }
 
 export interface DiagnosticOutboxFlushResult {
@@ -121,7 +126,7 @@ export function buildDiagnosticFingerprint(component: string, code: string, mess
   return stableHash(`${component}|${code}|${stableMessage}`)
 }
 
-export function createLocalDiagnostic(input: LocalClientDiagnostic): Required<LocalClientDiagnostic> {
+export function createLocalDiagnostic(input: LocalClientDiagnostic): Required<Omit<LocalClientDiagnostic, 'owner' | 'suite' | 'channel'>> {
   const component = String(input.component || 'frontend')
     .toLowerCase()
     .replace(/[^a-z0-9_.-]/g, '_')
@@ -174,8 +179,8 @@ export function buildDiagnosticDocument(
     stack: event.stack,
     context: event.context as Record<string, string | number | boolean | null>,
     occurredAt: event.occurredAt,
-    suiteVersion: suite?.suite || null,
-    channel: suite?.channel || null
+    suiteVersion: input.suite !== undefined ? input.suite : suite?.suite || null,
+    channel: input.channel !== undefined ? input.channel : suite?.channel || null
   }
 }
 
@@ -203,7 +208,12 @@ export async function flushDiagnosticOutbox(
 
   for (const event of input.events) {
     assertCurrent()
-    const payload = buildDiagnosticDocument(event, input.uid, input.suite)
+    if (event.owner !== undefined && event.owner !== input.uid) continue
+    const reserved = input.reserve ? await input.reserve(event.eventId!) : event
+    if (!reserved) continue
+    assertCurrent()
+    const payload = buildDiagnosticDocument(reserved, input.uid, input.suite)
+    try {
     const exists = await input.isUploaded(payload.eventId)
     assertCurrent()
 
@@ -221,6 +231,11 @@ export async function flushDiagnosticOutbox(
     await input.acknowledge(payload.eventId)
     assertCurrent()
     acknowledged += 1
+    } catch (error) {
+      const code = String((error as { code?: string })?.code || '')
+      await input.failed?.(payload.eventId, code.endsWith('resource-exhausted'))
+      throw error
+    }
   }
 
   return { uploaded, acknowledged, alreadyUploaded }

@@ -1,5 +1,13 @@
 export const ITALIAN_TIME_ZONE = 'Europe/Rome'
 
+export function diagnosticOccurrences(event: { context?: Record<string, unknown>, occurredAt: string }): string {
+  const context = event.context || {}
+  if (context._aggVersion !== 1 || !Number.isSafeInteger(context._aggCount) || Number(context._aggCount) < 1) return '1 occorrenza'
+  const first = String(context._aggFirst || event.occurredAt)
+  const last = String(context._aggLast || event.occurredAt)
+  return `${context._aggCount} ${context._aggCount === 1 ? 'occorrenza' : 'occorrenze'} · ${formatItalianDiagnosticDate(first)} – ${formatItalianDiagnosticDate(last)}`
+}
+
 export type DiagnosticPeriodPreset = 'today' | '7d' | '30d' | 'custom'
 export type DiagnosticsViewState = 'loading' | 'refreshing' | 'error' | 'empty' | 'ready'
 export type PaginationToken = number | 'ellipsis'

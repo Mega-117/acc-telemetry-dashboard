@@ -22,6 +22,7 @@ import type { ClientDiagnosticSeverity } from '~/services/monitoring/clientDiagn
 import {
   buildDiagnosticDateRange,
   diagnosticsViewState,
+  diagnosticOccurrences,
   formatItalianDiagnosticDate,
   paginationTokens,
   type DiagnosticPeriodPreset
@@ -418,6 +419,7 @@ onMounted(() => resetAndLoad())
         <span class="event-main">
           <strong>{{ event.component }} · {{ event.code }}</strong>
           <span>{{ event.message }}</span>
+          <small>{{ diagnosticOccurrences(event) }}</small>
           <small>
             {{ formatItalianDiagnosticDate(event.occurredAt) }} · v{{ event.suiteVersion || '?' }}
             · {{ event.channel || 'canale sconosciuto' }}
@@ -453,6 +455,7 @@ onMounted(() => resetAndLoad())
         <dl>
           <dt>Pilota</dt><dd>{{ selected.pilotNickname }}</dd>
           <dt>Data e ora</dt><dd>{{ formatItalianDiagnosticDate(selected.occurredAt) }}</dd>
+          <dt>Ricorrenze</dt><dd>{{ diagnosticOccurrences(selected) }}</dd>
           <dt>Versione</dt><dd>{{ selected.suiteVersion || 'sconosciuta' }}</dd>
           <dt>Ricevuto</dt><dd>{{ formatItalianDiagnosticDate(selected.receivedAt) }}</dd>
         </dl>
