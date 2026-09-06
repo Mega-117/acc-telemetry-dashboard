@@ -99,7 +99,13 @@ const cleanupActionBudget = estimateDiagnosticsCleanup(
   CLIENT_DIAGNOSTICS_CLEANUP_BATCH_SIZE
 )
 
-function friendlyLoadError(): string {
+function friendlyLoadError(error?: unknown): string {
+  const code = (error as { code?: string })?.code
+  if (code === 'failed-precondition') {
+    return 'La diagnostica richiede una configurazione Firebase non ancora disponibile. Gli eventi non sono stati cancellati.'
+  }
+  if (code === 'permission-denied') return 'Accesso alla diagnostica negato. Verifica i permessi amministratore.'
+  if (code === 'resource-exhausted') return 'Quota Firebase esaurita. Riprova dopo il ripristino della quota.'
   return 'Impossibile caricare la diagnostica. Controlla la connessione e riprova.'
 }
 
@@ -168,8 +174,10 @@ async function loadPage(
     if (selected.value && !events.value.some(event => event.eventId === selected.value?.eventId)) {
       selected.value = null
     }
-  } catch {
-    if (version === requestVersion) errorMessage.value = friendlyLoadError()
+  } catch (error) {
+    // Keep load failures local: the diagnostic reader must not feed its own uploader.
+    console.warn('[Admin diagnostics] Load failed', error)
+    if (version === requestVersion) errorMessage.value = friendlyLoadError(error)
   } finally {
     if (version === requestVersion) isPending.value = false
   }
@@ -394,7 +402,7 @@ onMounted(() => resetAndLoad())
 
     <section v-else-if="viewState === 'error'" class="empty-state">
       <h2>Diagnostica non disponibile</h2>
-      <p>Riprova quando la connessione è stabile.</p>
+      <p>Consulta il messaggio sopra per il motivo del mancato caricamento.</p>
       <button @click="loadPage(1)">Riprova</button>
     </section>
 

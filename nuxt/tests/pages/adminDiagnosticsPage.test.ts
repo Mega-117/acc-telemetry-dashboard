@@ -79,6 +79,20 @@ describe('admin diagnostics cleanup flow', () => {
     })
   })
 
+  it.each([
+    ['failed-precondition', 'configurazione Firebase non ancora disponibile'],
+    ['permission-denied', 'Accesso alla diagnostica negato'],
+    ['resource-exhausted', 'Quota Firebase esaurita'],
+    ['unavailable', 'Controlla la connessione']
+  ])('distingue il fallimento %s da una lista vuota', async (code, message) => {
+    repositoryMocks.loadClientDiagnosticsPage.mockRejectedValueOnce({ code })
+    const wrapper = await mountReadyPage()
+    expect(wrapper.text()).toContain(message)
+    expect(wrapper.text()).not.toContain('Nessun errore nei filtri selezionati')
+    expect(repositoryMocks.deleteExpiredClientDiagnostics).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('richiede conferma al momento dell’azione e annulla con zero write', async () => {
     const wrapper = await mountReadyPage()
     await openCleanupDialog(wrapper)
