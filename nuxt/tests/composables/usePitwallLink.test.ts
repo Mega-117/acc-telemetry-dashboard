@@ -25,8 +25,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('~/config/firebase', () => ({ db: {} }))
 
-vi.mock('~/services/pitwall/pitwallEngineerService', () => ({
-  createPitwallEngineerService: () => ({
+vi.mock('~/services/pitwall/pitwallRealtimeEngineerService', () => ({
+  createPitwallRealtimeEngineerService: () => ({
     listOutgoingLinks: async () => mocks.outgoing,
     listIncomingRequests: async () => mocks.incoming,
     requestLink: async (...args: unknown[]) => {
@@ -69,7 +69,7 @@ vi.mock('~/services/pitwall/pitwallEngineerService', () => ({
         : { ok: true as const, orderId: 'ordine-1' }
     },
     watchIncomingRequests: () => () => {},
-    watchGrantedPilots: () => () => {},
+    watchOutgoingLinks: (callback: (rows: unknown[]) => void) => { callback(mocks.outgoing); return () => {} },
     watchOrder: (_driverUid: string, _orderId: string, onChange: (doc: unknown) => void) => {
       mocks.orderWatch = onChange
       return () => { mocks.orderWatch = null }
@@ -86,7 +86,7 @@ function outgoing(driverUid: string, usable = true) {
 }
 
 function sessionAt(ms: number) {
-  return { schemaVersion: 1, driverUid: 'x', sessionId: 's', online: true, updatedAt: new Date(ms).toISOString() }
+  return { protocolVersion: 3, schemaVersion: 1, driverUid: 'x', sessionId: 's', online: true, updatedAt: new Date(ms).toISOString() }
 }
 
 function start() {
@@ -264,55 +264,34 @@ describe('la strategia non si dice riuscita finche il PC del pilota non lo confe
   })
 })
 
-describe('chi smette sparisce da solo, anche senza notizie', () => {
-  it('la riga si spegne al maturare dei novanta secondi, e senza leggere niente', async () => {
-    // Un PC che muore non manda nessun evento: senza il decadimento locale
-    // l'ultima presenza ricevuta resterebbe "in pista" per sempre.
+describe('presenza RTDB e navigazione', () => {
+  it('non invecchia mentre connesso; offline arriva dal cambio di stato, senza letture periodiche', async () => {
     mocks.outgoing = [outgoing('pilota')]
     const link = start()
-    await link.refreshPilots()
     link.watchLive()
     mocks.watches.get('pilota')!({ session: sessionAt(NOW), reachable: true })
+    await vi.advanceTimersByTimeAsync(2 * 60 * 60_000)
     expect(link.pilots.value[0]!.reachable).toBe(true)
-
-    // Un battito perso due volte non e' una morte: dentro i novanta secondi
-    // la riga resta.
-    vi.setSystemTime(NOW + 80_000)
-    vi.advanceTimersToNextTimer()
-    expect(link.pilots.value[0]!.reachable).toBe(true)
-
-    vi.setSystemTime(NOW + 95_000)
-    vi.advanceTimersToNextTimer()
+    mocks.watches.get('pilota')!({ session: null, reachable: false })
     expect(link.pilots.value[0]!.reachable).toBe(false)
     expect(mocks.reads).toEqual([])
     link.stop()
   })
-})
-
-describe('a scheda nascosta non si guarda niente', () => {
-  it('stacca quando si guarda altrove e riattacca al rientro', async () => {
-    // Prima non esisteva nessuna gestione della visibilita in tutto il
-    // frontend: le letture giravano identiche per una schermata che nessuno
-    // stava leggendo.
+  it('conserva gli ascolti a scheda nascosta, al ritorno e quando si seleziona lo stesso pilota', async () => {
     mocks.outgoing = [outgoing('pilota')]
     const link = start()
-    await link.refreshPilots()
     link.watchLive()
+    for (let navigation = 0; navigation < 10; navigation++) {
+      link.selectPilot('pilota')
+      Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+      Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
+      document.dispatchEvent(new Event('visibilitychange'))
+      link.watchLive()
+    }
     expect(mocks.attached).toEqual(['pilota'])
-
-    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
-    document.dispatchEvent(new Event('visibilitychange'))
-    expect(mocks.watches.size).toBe(0)
-    expect(mocks.detached).toContain('pilota')
-
-    const attachedWhileHidden = mocks.attached.length
-    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
-    document.dispatchEvent(new Event('visibilitychange'))
-    // Riattacca, e la prima consegna dell'ascolto porta lo stato di adesso:
-    // il rientro in focus e' anche l'aggiornamento immediato.
-    expect(mocks.watches.size).toBe(1)
-    expect(mocks.attached.length).toBeGreaterThan(attachedWhileHidden)
-
+    expect(mocks.detached).toEqual([])
+    expect(mocks.reads).toEqual([])
     link.stop()
   })
 })

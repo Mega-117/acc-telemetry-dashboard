@@ -10,10 +10,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const fakes = vi.hoisted(() => ({ link: null as unknown, trust: null as unknown }))
 
 vi.mock('~/config/firebase', () => ({ db: {} }))
-vi.mock('firebase/firestore', () => ({ doc: () => ({ path: 'publicProfiles/me' }) }))
-vi.mock('~/composables/useFirebaseTracker', () => ({
-  trackedGetDoc: async () => ({ exists: () => true, data: () => ({ nickname: 'enricos' }) }),
+vi.mock('~/services/pitwall/pitwallRealtimeEngineerService', () => ({
+  createPitwallRealtimeEngineerService: () => ({ nicknameOf: async () => 'enricos' }),
+  stopPitwallRealtimeEngineerAccount: vi.fn(),
 }))
+vi.mock('~/services/pitwall/pitwallRealtimeRoomService', () => ({ stopPitwallRealtimeAccount: async () => {} }))
 vi.mock('~/composables/useFirebaseAuth', async () => {
   const { ref: makeRef } = await import('vue')
   return { useFirebaseAuth: () => ({ currentUser: makeRef({ uid: 'me' }) }) }
@@ -27,7 +28,7 @@ import type { PitwallRoom } from '~/services/pitwall/pitwallRoomContract'
 
 const NOW = Date.parse('2026-09-03T10:00:00.000Z')
 /** Una presenza fresca: la persona e' in pista adesso. */
-const LIVE_SESSION = { online: true, updatedAt: new Date(NOW).toISOString() }
+const LIVE_SESSION = { protocolVersion: 3, roomId: 'r1', online: true, updatedAt: new Date(NOW).toISOString() }
 
 function room(overrides: Partial<PitwallRoom> = {}): PitwallRoom {
   return {
@@ -67,9 +68,11 @@ function makeLink() {
   const revokedByService: { roomId: string, uid: string }[] = []
   return {
     closedByService,
+    cleanupCalls: [] as unknown[],
     revokedByService,
     service: () => ({
       uid: 'me',
+      closeDormantRooms: vi.fn(),
       closeRoom: async (roomId: string) => {
         closedByService.push(roomId)
         return { ok: true as const, value: true as const }
@@ -86,6 +89,7 @@ function makeLink() {
     nowTick: ref(NOW),
     rooms: ref<PitwallRoom[]>([]),
     room: roomRef,
+    members: ref<{ connected: boolean }[]>([]),
     crew: ref<{ uid: string, nickname: string, role: 'manager' | 'member', invited: boolean, driving: boolean, online: boolean, connecting: boolean }[]>([]),
     executor,
     executorLabel: computed(() => (executor.value.reason === 'ready' ? 'al volante' : 'Nessuno al volante')),
@@ -194,25 +198,10 @@ describe('la gara del pilota, vista dal pilota', () => {
     })
   })
 
-  it('le gare in cui non entra piu nessuno si chiudono da sole, quella in corso no', async () => {
-    // Le stanze non si cancellano - sono la memoria della corsa - ma finora non
-    // finivano nemmeno: l'elenco diventava otto gare identiche di giorni diversi.
-    const vecchia = room({
-      roomId: 'vecchia', managerUids: ['me'], memberUids: ['me'],
-      createdAt: '2026-08-01T09:00:00.000Z', updatedAt: '2026-08-01T09:00:00.000Z',
-      lastLiveAtMs: Date.parse('2026-08-01T09:00:00.000Z'),
-    })
-    const corrente = room({ roomId: 'corrente', managerUids: ['me'], memberUids: ['me'], lastLiveAtMs: NOW })
-    link.room.value = corrente
-    link.rooms.value = [vecchia, corrente]
+  it('la pulizia passa dal servizio RTDB, non dalla data di un vecchio battito', async () => {
+    link.rooms.value = [room({ lastLiveAtMs: NOW - 90_000_000 })]
     await nextTick()
-
-    expect(link.closedByService).toEqual(['vecchia'])
-
-    // Non si riprova su una gara gia' trattata: l'elenco arriva in diretta.
-    link.rooms.value = [vecchia, corrente]
-    await nextTick()
-    expect(link.closedByService).toEqual(['vecchia'])
+    expect(link.closedByService).toEqual([])
   })
 
   it('la gara di un altro in cui sono entrato non e la mia: sono l ingegnere, non il pilota', () => {
@@ -232,12 +221,13 @@ describe('la gara del pilota, vista dal pilota', () => {
     expect(store.myRoom.value).toBeNull()
   })
 
-  it('dopo due timbri persi si dice dormiente, invece di farla sembrare viva', () => {
-    const mia = room({ hostUid: 'me', memberUids: ['me'], createdAt: '2026-09-01T09:00:00.000Z', updatedAt: '2026-09-01T09:00:00.000Z' })
-    link.rooms.value = [{ ...mia, lastLiveAtMs: NOW }]
+  it('la presenza della gara segue le connessioni, senza scadere per eta del battito', () => {
+    const mia = room({ hostUid: 'me', memberUids: ['me'], lastLiveAtMs: NOW - 90_000_000 })
+    link.rooms.value = [mia]
+    link.room.value = mia
+    link.members.value = [{ connected: true }]
     expect(store.myRoom.value?.state).toBe('live')
-
-    link.rooms.value = [{ ...mia, lastLiveAtMs: NOW - 60 * 60_000 }]
+    link.members.value = []
     expect(store.myRoom.value?.state).toBe('dormant')
   })
 
@@ -367,14 +357,10 @@ describe('i Pitwall aperti e gli avvisi', () => {
     trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: LIVE_SESSION })]
     expect(store.races.value).toHaveLength(1)
 
-    // Una stanza senza segno di vita da un'ora e' dormiente: anche se il
-    // pilota e' in pista, non e' il Pitwall di oggi (la stanza di Nurburgring
-    // del primo settembre, vista dal vivo).
-    link.rooms.value = [room({ lastLiveAtMs: NOW - 60 * 60_000 })]
-    expect(store.races.value).toEqual([])
-    // Senza un segno di vita scritto dal suo PC non e' aperta, anche se
-    // `updatedAt` e' di adesso: quello lo muove chiunque entri o esca.
-    link.rooms.value = [room({ lastLiveAtMs: null, updatedAt: new Date(NOW - 1_000).toISOString() })]
+    // The current connection names the room; old timestamps do not close it.
+    link.rooms.value = [room({ lastLiveAtMs: null })]
+    expect(store.races.value).toHaveLength(1)
+    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { ...LIVE_SESSION, roomId: null } })]
     expect(store.races.value).toEqual([])
 
     // Chiusa dal pilota: sparisce subito, e la gara di Monza di due giorni
@@ -427,7 +413,7 @@ describe('i Pitwall aperti e gli avvisi', () => {
       room({ roomId: 'oggi', createdAt: '2026-09-03T08:00:00.000Z' }),
       room({ roomId: 'chiusa', createdAt: '2026-09-03T09:00:00.000Z', closedAt: '2026-09-03T10:00:00.000Z' }),
     ]
-    befriended('pilota', { reachable: true, session: LIVE_SESSION })
+    befriended('pilota', { reachable: true, session: { ...LIVE_SESSION, roomId: 'oggi' } })
     expect(store.races.value.map(race => race.id)).toEqual(['oggi'])
   })
 
@@ -442,7 +428,7 @@ describe('i Pitwall aperti e gli avvisi', () => {
     expect(store.notices.value.filter(notice => notice.kind === 'invite').map(notice => notice.raceId)).toEqual(['ospite'])
 
     // Appena l'amico apre il Pitwall (in pista, gara di oggi), l'invito conta.
-    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { ...LIVE_SESSION, track: 'monza' } })]
+    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { ...LIVE_SESSION, roomId: 'ieri', track: 'monza' } })]
     expect(store.notices.value.filter(notice => notice.kind === 'invite').map(notice => notice.raceId)).toEqual(['ieri', 'ospite'])
   })
 

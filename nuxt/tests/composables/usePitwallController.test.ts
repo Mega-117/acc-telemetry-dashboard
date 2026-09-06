@@ -18,6 +18,8 @@ const NOW = Date.parse('2026-09-03T10:00:00.000Z')
 const BASELINE = { FL: 24.4, FR: 26.1, RL: 24.8, RR: 25.9 }
 
 type Snapshot = {
+  protocolVersion?: 3
+  connected?: boolean
   updatedAtMs: number
   nickname: string
   crew: { driverIndex: number, name: string, current: boolean }[] | null
@@ -76,6 +78,16 @@ function build() {
 }
 
 describe('la base dell ordine e la fotografia della vettura, solo se fresca', () => {
+  it('keeps unchanged event-driven MFD valid for two hours and invalidates it on disconnect', async () => {
+    const { link, controller } = build()
+    link.carSnapshot.value = { ...snapshot(7_200_000), protocolVersion: 3, connected: true }
+    await nextTick()
+    expect(controller.carFresh.value).toBe(true)
+    expect(controller.planPayload()).toEqual({})
+    link.carSnapshot.value.connected = false
+    await nextTick()
+    expect(controller.carFresh.value).toBe(false)
+  })
   it('senza fotografia non c e una base: l ordine porta tutto quello che sa', () => {
     const { controller } = build()
     expect(controller.carFresh.value).toBe(false)

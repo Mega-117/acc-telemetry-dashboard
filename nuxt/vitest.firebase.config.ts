@@ -16,6 +16,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
-    include: ['tests/firebase/**/*.test.ts']
+    include: ['tests/firebase/**/*.test.ts'],
+    exclude: ['tests/firebase/pitwallRealtime.*.test.ts']
   }
 })

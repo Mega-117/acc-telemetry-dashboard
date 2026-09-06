@@ -1,0 +1,20 @@
+import { expect, it, vi } from 'vitest'
+const state = vi.hoisted(() => ({ listeners: [] as Array<{ uid: string, next: (v: unknown) => void, error: () => void, stop: ReturnType<typeof vi.fn> }> }))
+vi.mock('firebase/firestore', () => ({ doc: (_db: unknown, _collection: string, uid: string) => uid }))
+vi.mock('~/composables/useFirebaseTracker', () => ({ trackedOnDocSnapshot: (uid: string, _caller: string, next: (v: unknown) => void, error: () => void) => { const stop = vi.fn(); state.listeners.push({ uid, next, error, stop }); return stop } }))
+import { createPitwallProfileCache } from '~/services/pitwall/pitwallProfileCache'
+it('shares the first snapshot, receives profile edits and isolates accounts through logout', async () => {
+  const cache = createPitwallProfileCache({} as never); const changed = vi.fn(); const stop = cache.onChange(changed)
+  const first = cache.read('pilot'); const duplicate = cache.read('pilot')
+  expect(state.listeners).toHaveLength(1)
+  state.listeners[0]!.next({ exists: () => true, data: () => ({ nickname: 'Rico' }) })
+  expect(await first).toBe('Rico'); expect(await duplicate).toBe('Rico')
+  state.listeners[0]!.next({ exists: () => true, data: () => ({ nickname: 'New' }) })
+  expect(await cache.read('pilot')).toBe('New')
+  const pending = cache.read('pending'); stop(); cache.stop()
+  expect(await pending).toBe('pending'); expect(await cache.read('other')).toBe('other')
+  expect(state.listeners.every(item => item.stop.mock.calls.length === 1)).toBe(true)
+  const next = createPitwallProfileCache({} as never); const missing = next.read('pilot')
+  state.listeners.at(-1)!.next({ exists: () => false })
+  expect(await missing).toBe('pilot'); next.stop()
+})

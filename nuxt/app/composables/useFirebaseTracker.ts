@@ -7,6 +7,7 @@
 // - debug expensive flows and optimize them over time
 
 import { computed, ref } from 'vue'
+import { estimateFirestoreSnapshot } from '~/services/pitwall/firestoreSnapshotEstimate'
 import {
   addDoc as fbAddDoc,
   deleteDoc as fbDeleteDoc,
@@ -40,6 +41,7 @@ type FirebaseOperationType =
   | 'LISTEN_SUBSCRIBE'
   | 'LISTEN_SNAPSHOT'
   | 'BATCH_COMMIT'
+  | 'ERROR'
 
 export interface FirebaseOperation {
   id: number
@@ -69,6 +71,7 @@ interface FirebaseCallerStats {
   deleteOps: number
   listenerSnapshots: number
   batchCommits: number
+  failedOps: number
   estimatedReads: number
   estimatedWrites: number
   lastSeenAt: number
@@ -115,6 +118,7 @@ const totalsState = ref({
   listenerSubscriptions: 0,
   listenerSnapshots: 0,
   batchCommits: 0,
+  failedOps: 0,
   estimatedReads: 0,
   estimatedWrites: 0
 })
@@ -192,6 +196,7 @@ function ensureCaller(caller: string): FirebaseCallerStats {
     deleteOps: 0,
     listenerSnapshots: 0,
     batchCommits: 0,
+  failedOps: 0,
     estimatedReads: 0,
     estimatedWrites: 0,
     lastSeenAt: 0
@@ -297,6 +302,9 @@ function recordOperation(input: Omit<FirebaseOperation, 'id' | 'pathBucket'>) {
   nextTotals.estimatedWrites += entry.estimatedWrites
 
   switch (entry.type) {
+    case 'ERROR':
+      nextTotals.failedOps += 1
+      break
     case 'READ':
       nextTotals.readOps += 1
       break
@@ -335,6 +343,7 @@ function recordOperation(input: Omit<FirebaseOperation, 'id' | 'pathBucket'>) {
   totalsState.value = nextTotals
 
   const caller = ensureCaller(entry.caller)
+  if (entry.type === 'ERROR') caller.failedOps += 1
   caller.operations += 1
   caller.estimatedReads += entry.estimatedReads
   caller.estimatedWrites += entry.estimatedWrites
@@ -408,24 +417,32 @@ function createOperationLogger(
   })
 }
 
+async function observedFirebaseRequest<T>(request: Promise<T>, caller: string, target: unknown, startedAt: number, operation: string): Promise<T> {
+  try { return await request }
+  catch (error) {
+    createOperationLogger('ERROR', caller, target, 0, 0, startedAt, 0, `operation=${operation}, failed=true; billed usage unknown`)
+    throw error
+  }
+}
+
 export async function trackedGetDoc(ref: DocumentReference, caller: string) {
   const startedAt = Date.now()
-  const result = await fbGetDoc(ref)
-  createOperationLogger('READ', caller, ref, 1, 0, startedAt, 1)
+  const result = await observedFirebaseRequest(fbGetDoc(ref), caller, ref, startedAt, 'READ')
+  createOperationLogger('READ', caller, ref, result.metadata?.fromCache ? 0 : 1, 0, startedAt, 1, result.metadata?.fromCache ? 'cache' : 'server-estimate')
   return result
 }
 
 export async function trackedGetDocs(q: Query, caller: string) {
   const startedAt = Date.now()
-  const result = await fbGetDocs(q)
-  const estimatedReads = Math.max(result.docs.length, 1)
+  const result = await observedFirebaseRequest(fbGetDocs(q), caller, q, startedAt, 'QUERY')
+  const estimatedReads = result.metadata?.fromCache ? 0 : Math.max(result.docs.length, 1)
   createOperationLogger('QUERY', caller, q, estimatedReads, 0, startedAt, estimatedReads, `returned=${result.docs.length}`)
   return result
 }
 
 export async function trackedGetCountFromServer(q: Query, caller: string) {
   const startedAt = Date.now()
-  const result = await fbGetCountFromServer(q)
+  const result = await observedFirebaseRequest(fbGetCountFromServer(q), caller, q, startedAt, 'COUNT')
   const returnedCount = Number(result.data().count || 0)
   const estimatedReads = Math.max(1, Math.ceil(returnedCount / 1000))
   createOperationLogger(
@@ -465,9 +482,9 @@ export async function trackedSetDoc(
 
   const sanitizedData = sanitizeForFirestore(data)
   if (options) {
-    await fbSetDoc(ref, sanitizedData, options)
+    await observedFirebaseRequest(fbSetDoc(ref, sanitizedData, options), caller, ref, startedAt, 'WRITE')
   } else {
-    await fbSetDoc(ref, sanitizedData)
+    await observedFirebaseRequest(fbSetDoc(ref, sanitizedData), caller, ref, startedAt, 'WRITE')
   }
 
   createOperationLogger('WRITE', caller, ref, 0, 1, startedAt, 1)
@@ -476,21 +493,21 @@ export async function trackedSetDoc(
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 export async function trackedAddDoc(ref: any, data: any, caller: string) {
   const startedAt = Date.now()
-  const created = await fbAddDoc(ref, sanitizeForFirestore(data))
+  const created = await observedFirebaseRequest(fbAddDoc(ref, sanitizeForFirestore(data)), caller, ref, startedAt, 'ADD')
   createOperationLogger('ADD', caller, created, 0, 1, startedAt, 1)
   return created
 }
 
 export async function trackedDeleteDoc(ref: DocumentReference, caller: string) {
   const startedAt = Date.now()
-  await fbDeleteDoc(ref)
-  createOperationLogger('DELETE', caller, ref, 0, 1, startedAt, 1)
+  await observedFirebaseRequest(fbDeleteDoc(ref), caller, ref, startedAt, 'DELETE')
+  createOperationLogger('DELETE', caller, ref, 0, 0, startedAt, 1)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 export async function trackedUpdateDoc(ref: DocumentReference, data: any, caller: string) {
   const startedAt = Date.now()
-  await fbUpdateDoc(ref, sanitizeForFirestore(data))
+  await observedFirebaseRequest(fbUpdateDoc(ref, sanitizeForFirestore(data)), caller, ref, startedAt, 'UPDATE')
   createOperationLogger('UPDATE', caller, ref, 0, 1, startedAt, 1)
 }
 
@@ -499,23 +516,43 @@ export async function trackedRunTransaction<T>(
   caller: string,
   target: DocumentReference,
   updateFunction: (transaction: Transaction) => Promise<T>,
-  estimates: { reads?: number; writes?: number } = {}
+  _estimates: { reads?: number; writes?: number } = {}
 ): Promise<T> {
   const startedAt = Date.now()
-  const result = await fbRunTransaction(db, updateFunction)
-  const estimatedReads = Math.max(0, Number(estimates.reads || 0))
-  const estimatedWrites = Math.max(0, Number(estimates.writes || 0))
-  createOperationLogger(
-    'WRITE',
-    caller,
-    target,
-    estimatedReads,
-    estimatedWrites,
-    startedAt,
-    estimatedReads + estimatedWrites,
-    `transaction=true, estimatedReads=${estimatedReads}, estimatedWrites=${estimatedWrites}`
-  )
-  return result
+  let attempts = 0
+  let reads = 0
+  let writes = 0
+  let deletes = 0
+  try {
+    const result = await fbRunTransaction(db, transaction => {
+      attempts++
+      writes = 0; deletes = 0
+      const observed = new Proxy(transaction, {
+        get(target, property) {
+          if (property === 'get') return (document: DocumentReference) => { reads++; return target.get(document) }
+          if (property === 'set' || property === 'update' || property === 'delete') {
+            return (...args: unknown[]) => {
+              if (property === 'delete') deletes++; else writes++
+              const method = Reflect.get(target, property) as (...values: unknown[]) => unknown
+              method.apply(target, args)
+              return observed
+            }
+          }
+          const value = Reflect.get(target, property)
+          return typeof value === 'function' ? value.bind(target) : value
+        },
+      })
+      return updateFunction(observed)
+    })
+    recordOperation({ type: 'BATCH_COMMIT', caller, path: extractFirestorePath(target),
+      estimatedReads: reads, estimatedWrites: writes, writeDocs: writes, deleteDocs: deletes,
+      startedAt, durationMs: Date.now() - startedAt, docsCount: reads + writes + deletes,
+      note: `transaction=true, attempts=${attempts}, reads=${reads}, writes=${writes}, deletes=${deletes}; excludes Rules` })
+    return result
+  } catch (error) {
+    createOperationLogger('ERROR', caller, target, reads, 0, startedAt, reads, `transaction=true, attempts=${attempts}, failed=true`)
+    throw error
+  }
 }
 
 export function trackedOnSnapshot(
@@ -531,10 +568,14 @@ export function trackedOnSnapshot(
     : undefined
   createOperationLogger('LISTEN_SUBSCRIBE', caller, q, 0, 0, Date.now(), 0, undefined, scenario)
 
+  let serverSeen = false
   return fbOnSnapshot(
     q,
+    { includeMetadataChanges: true },
     (snapshot) => {
-      const estimatedReads = Math.max(snapshot.docs.length, 1)
+      const estimate = estimateFirestoreSnapshot(snapshot, !serverSeen)
+      if (estimate.serverSeen) serverSeen = true
+      const estimatedReads = estimate.reads
       createOperationLogger(
         'LISTEN_SNAPSHOT',
         caller,
@@ -543,7 +584,7 @@ export function trackedOnSnapshot(
         0,
         Date.now(),
         estimatedReads,
-        `returned=${snapshot.docs.length}`,
+        `returned=${snapshot.docs.length}; source=${estimate.source}; changed-estimate=${estimatedReads}`,
         scenario
       )
       onNext(snapshot)
@@ -575,16 +616,18 @@ export function trackedOnDocSnapshot(
 
   return fbOnSnapshot(
     ref,
+    { includeMetadataChanges: true },
     (snapshot) => {
+      const estimate = estimateFirestoreSnapshot(snapshot, true)
       createOperationLogger(
         'LISTEN_SNAPSHOT',
         caller,
         ref,
-        1,
+        estimate.reads,
         0,
         Date.now(),
         1,
-        `exists=${snapshot.exists()}`,
+        `exists=${snapshot.exists()}; source=${estimate.source}`,
         scenario
       )
       onNext(snapshot)
@@ -619,7 +662,7 @@ export function trackedWriteBatch(db: Firestore, caller: string) {
     },
     async commit() {
       const startedAt = Date.now()
-      await rawBatch.commit()
+      await observedFirebaseRequest(rawBatch.commit(), caller, 'batch', startedAt, 'BATCH_COMMIT')
 
       const writes = queuedOps.filter((op) => op.type !== 'delete').length
       const deletes = queuedOps.filter((op) => op.type === 'delete').length
@@ -630,7 +673,7 @@ export function trackedWriteBatch(db: Firestore, caller: string) {
         caller,
         path: touchedBuckets.join(', ') || 'batch',
         estimatedReads: 0,
-        estimatedWrites: writes + deletes,
+        estimatedWrites: writes,
         writeDocs: writes,
         deleteDocs: deletes,
         startedAt,
@@ -653,7 +696,7 @@ export function getFirebaseTotals() {
       totalsState.value.deleteOps +
       totalsState.value.listenerSubscriptions +
       totalsState.value.listenerSnapshots +
-      totalsState.value.batchCommits,
+      totalsState.value.batchCommits + totalsState.value.failedOps,
     sessionDurationMs: Date.now() - sessionStart.value,
     byCaller: { ...callerStats.value },
     byPath: { ...pathStats.value }
@@ -759,6 +802,7 @@ export function resetFirebaseTracker() {
     listenerSubscriptions: 0,
     listenerSnapshots: 0,
     batchCommits: 0,
+    failedOps: 0,
     estimatedReads: 0,
     estimatedWrites: 0
   }

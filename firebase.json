@@ -1,22 +1,11 @@
 {
-  "firestore": {
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
+  "database": { "rules": "database.rules.json" },
   "emulators": {
-    "auth": {
-      "host": "127.0.0.1",
-      "port": 9099
-    },
-    "firestore": {
-      "host": "127.0.0.1",
-      "port": 8080
-    },
-    "ui": {
-      "enabled": true,
-      "host": "127.0.0.1",
-      "port": 4000
-    },
+    "auth": { "host": "127.0.0.1", "port": 9099 },
+    "firestore": { "host": "127.0.0.1", "port": 8080 },
+    "database": { "host": "127.0.0.1", "port": 9000 },
+    "ui": { "enabled": true, "host": "127.0.0.1", "port": 4000 },
     "singleProjectMode": true
   }
 }

@@ -12,20 +12,18 @@
 // ============================================
 
 import { computed, effectScope, ref, watch, type Ref } from 'vue'
-import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
-import { trackedGetDoc } from '~/composables/useFirebaseTracker'
+import { createPitwallRealtimeEngineerService, stopPitwallRealtimeEngineerAccount } from '~/services/pitwall/pitwallRealtimeEngineerService'
+import { stopPitwallRealtimeAccount } from '~/services/pitwall/pitwallRealtimeRoomService'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { usePitwallLink } from '~/composables/usePitwallLink'
 import { usePitwallController } from '~/composables/usePitwallController'
 import type { PitwallStopHandle, PitwallStore } from '~/composables/usePitwallStore'
 import {
-  describePitwallRoomOccupancy,
   isPitwallRoomInvited,
   type PitwallRoom,
 } from '~/services/pitwall/pitwallRoomContract'
-import { closeDormantPitwallRooms } from '~/services/pitwall/pitwallRoomLifecycle'
 import { derivePitwallFriends, sortPitwallFriends } from '~/services/pitwall/pitwallFriends'
 import { createPitwallFriendActions } from '~/composables/usePitwallFriendActions'
 import { requestPitwallClose, requestPitwallOpen, usePitwallIntent, type PitwallIntentStatus } from '~/composables/usePitwallIntent'
@@ -77,8 +75,8 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     const me = uid()
     if (!me || ownNickname.value) return
     try {
-      const profile = await trackedGetDoc(doc(db, 'publicProfiles', me), 'pitwall.selfProfile')
-      ownNickname.value = profile.exists() ? String((profile.data() as { nickname?: string }).nickname ?? '') || me : me
+      const nickname = await createPitwallRealtimeEngineerService({ db, engineerUid: me }).nicknameOf(me)
+      if (uid() === me) ownNickname.value = nickname
     } catch {
       ownNickname.value = me
     }
@@ -108,18 +106,11 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   const friends = computed<PitwallConceptFriend[]>(() => sortPitwallFriends(
     friendViews.value.map((view) => {
       const racing = reachableIds.value.has(view.personId)
-      // "Pitwall aperto" = la sua gara e' **viva** (segno di vita entro venti
-      // minuti, o appena nata), e' sulla pista dove corre adesso, e la sua
-      // presenza e' fresca. Tutte e tre: le stanze vecchie restano aperte per
-      // giorni, e visto dal vivo, chiuso il Pitwall di oggi, popo vedeva
-      // "aperto" quello di Monza di due giorni prima e poi quello di
-      // Nurburgring del primo settembre. Il segno di vita lo scrive il PC del
-      // pilota ogni dieci minuti (Rules pubblicate il 2026-09-04).
-      // Senza un segno di vita scritto dal suo PC non e' aperto: `updatedAt`
-      // lo muove chiunque entri o esca (visto dal vivo: un "Rimuovi" di popo
-      // ha reso "vivo" un Nurburgring del primo settembre).
-      const room = view.state === 'friends' && racing ? roomOfDriver(view.personId, reachable.value.get(view.personId)?.track) : null
-      const open = room != null && room.lastLiveAtMs != null && describePitwallRoomOccupancy(room, link.nowTick.value) === 'live'
+      const connection = reachable.value.get(view.personId)
+      const room = view.state === 'friends' && racing && connection?.roomId
+        ? link.rooms.value.find(room => room.roomId === connection.roomId && !room.closedAt) ?? null
+        : null
+      const open = room != null
       return {
         personId: view.personId,
         state: view.state,
@@ -183,22 +174,10 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     }
   }
 
-  /**
-   * Le gare in cui non entra piu' nessuno si chiudono da sole.
-   *
-   * Le stanze non si cancellano - sono la memoria della corsa - ma finora non
-   * finivano nemmeno: ogni sessione ACC ne lasciava una aperta per sempre, e
-   * l'elenco diventava otto gare identiche di giorni diversi. La pulizia la fa
-   * il client che apre la pagina, non un lavoro schedulato: nessun server da
-   * tenere acceso, nessun costo fisso, e chi non ha gare vecchie non paga
-   * niente. Quali chiudere lo decide una funzione pura; solo un manager puo',
-   * e la gara in corso non si tocca mai.
-   */
+  // Cleanup runs on discovery events and checks RTDB presence, never an old heartbeat.
   const closeAttempted = new Set<string>()
   watch(() => link.rooms.value, (list) => {
-    // L'ora e' quella del collegamento, la stessa con cui si dice "viva" o
-    // "dormiente": con l'ora vera i test a orologio fisso invecchiavano da soli.
-    void closeDormantPitwallRooms(link.service(), list, link.room.value?.roomId ?? null, closeAttempted, link.nowTick.value)
+    void link.service()?.closeDormantRooms(list, link.room.value?.roomId ?? null, closeAttempted)
   })
 
   /**
@@ -228,18 +207,6 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
    * una per ogni sessione di sempre. Quella buona e' l'ultima aperta e non
    * chiusa; le altre sono memoria, non un posto dove entrare.
    */
-  function roomOfDriver(driverUid: string, track?: string | null): PitwallRoom | null {
-    const wanted = track ? track.trim().toLowerCase() : null
-    return link.rooms.value
-      // Il Pitwall di un amico e' la gara che **lui** ha aperto. Una in cui e'
-      // solo entrato appartiene a un altro: visto dal vivo, a popo restava
-      // "aperto" un Nurburgring del primo settembre tenuto vivo da un terzo.
-      .filter(room => !room.closedAt && room.hostUid === driverUid)
-      // La gara di oggi e' su questa pista: una stanza di un'altra pista e' memoria.
-      .filter(room => !wanted || !room.track || room.track.trim().toLowerCase() === wanted)
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null
-  }
-
   /**
    * I Pitwall aperti adesso: una riga per amico che ha aperto il suo.
    *
@@ -309,7 +276,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
       label: room.label,
       track: room.track ?? null,
       carNumber: room.raceNumber ?? null,
-      state: describePitwallRoomOccupancy(room, link.nowTick.value),
+      state: selected && link.members.value.some(member => member.connected) ? 'live' : 'dormant',
       // Chi guida lo si sa solo dalla stanza che si sta guardando in diretta:
       // altrove sarebbe una deduzione da un elenco di identificativi, e si
       // preferisce non dirlo che dirlo a caso.
@@ -480,13 +447,13 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
 
   // ---- Ciclo di vita --------------------------------------------------------
   let started = false
+  let accountUid: string | null = null
   function start(): void {
     if (started || !uid()) return
     started = true
+    accountUid = uid()
     void loadOwnNickname()
     link.start()
-    void trust.refreshIncoming()
-    void trust.refreshPilots()
     trust.watchLive()
   }
   function halt(): void {
@@ -494,6 +461,12 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     started = false
     link.stop()
     trust.stop()
+    if (accountUid) {
+      stopPitwallRealtimeEngineerAccount(accountUid)
+      void stopPitwallRealtimeAccount(accountUid)
+    }
+    accountUid = null
+    ownNickname.value = null
     if (searchTimer) clearTimeout(searchTimer)
   }
 

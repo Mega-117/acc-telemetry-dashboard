@@ -18,7 +18,6 @@ import PitwallConceptOrder from "~/components/pitwall/concept/PitwallConceptOrde
 import { usePitwallStore } from "~/composables/usePitwallStore";
 import {
   PITWALL_CONCEPT_SOURCE_LABELS,
-  pitwallConceptFreshness,
 } from "~/utils/pitwallConcept";
 import type { PitwallConceptSource } from "~/utils/pitwallConcept";
 // Le stesse funzioni pure della vista Legacy: il tempo della sosta e le tre
@@ -53,10 +52,12 @@ const BRAKE_ROWS = [
  */
 const observed = computed<PitwallConceptSource>(() => {
   if (!stop.hasCarSnapshot.value) return "unavailable";
-  return pitwallConceptFreshness(stop.presenceAgeSeconds.value ?? Number.POSITIVE_INFINITY);
+  return stop.carFresh.value ? "live" : "stale";
 });
 const freshness = computed(() => (
-  stop.presenceAgeSeconds.value == null
+  stop.carFresh.value
+    ? "Dati macchina collegati"
+    : stop.presenceAgeSeconds.value == null
     ? "In attesa dei dati macchina"
     : `Dati macchina di ${stop.presenceAgeSeconds.value}s fa`
 ));

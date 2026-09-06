@@ -3,6 +3,7 @@ import vue from '@vitejs/plugin-vue'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { fileURLToPath } from 'node:url'
 import { resolve } from 'node:path'
+import { readdirSync } from 'node:fs'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
 
@@ -21,7 +22,11 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['tests/**/*.test.ts', 'tests/**/*.spec.ts'],
-    exclude: ['tests/firebase/**'],
+    // Coverage includes the real RTDB adapter exercised against the emulator.
+    // Other Firebase suites and the 500-client load run retain their own isolated gates.
+    exclude: process.env.FIREBASE_DATABASE_EMULATOR_HOST
+      ? readdirSync(resolve(root, 'tests/firebase')).filter(name => name !== 'pitwallRealtime.emulator.test.ts').map(name => `tests/firebase/${name}`)
+      : ['tests/firebase/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
@@ -35,6 +40,17 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/services/pitwall/pitwallIoMetrics.ts',
+        'app/services/pitwall/pitwallRealtimeProtocol.ts',
+        'app/services/pitwall/pitwallRealtimeSession.ts',
+        'app/services/pitwall/pitwallRealtimeTransport.ts',
+        'app/services/pitwall/pitwallRealtimeOrders.ts',
+        'app/services/pitwall/pitwallRealtimeRoomService.ts',
+        'app/services/pitwall/pitwallRealtimeEngineerService.ts',
+        'app/services/pitwall/pitwallRealtimeDriver.ts',
+        'app/services/pitwall/pitwallProfileCache.ts',
+        'app/services/pitwall/pitwallChangePublisher.ts',
+        'app/services/pitwall/firestoreSnapshotEstimate.ts',
         'app/components/electron/DataMaintenanceNotification.vue',
         'app/components/admin/DiagnosticUsersSummary.vue',
         'app/composables/useWheelInputBridge.ts',

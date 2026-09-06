@@ -19,7 +19,8 @@ import type { PitwallConceptRace, PitwallConceptScreen } from "~/utils/pitwallCo
 
 const state = usePitwallStore();
 
-const screen = ref<PitwallConceptScreen>("home");
+// La stanza resta nello store globale anche quando la pagina viene smontata.
+const screen = ref<PitwallConceptScreen>(state.selectedRace.value ? "live" : "home");
 
 /** Solo gli amici che hanno aperto il Pitwall: ci si entra con un clic. */
 const races = computed(() => state.races.value);

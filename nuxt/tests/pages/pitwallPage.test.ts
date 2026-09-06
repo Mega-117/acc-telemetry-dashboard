@@ -413,7 +413,7 @@ describe('Pitwall wiring', () => {
       expect(carCard).toContain(parola)
     }
     // La freschezza viene dalla presenza vera del pilota, non da un interruttore.
-    expect(conceptPitStop).toContain('pitwallConceptFreshness')
+    expect(conceptPitStop).toContain('stop.carFresh.value')
     expect(conceptPitStop).toContain('stop.presenceAgeSeconds.value')
     expect(conceptPitStop).toContain('if (!stop.hasCarSnapshot.value) return "unavailable"')
   })

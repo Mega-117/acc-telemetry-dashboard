@@ -1,0 +1,173 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "pitwallV3": {
+      "grants": {
+        "$driver": {
+          ".read": "auth != null && auth.uid == $driver",
+          "$engineer": {
+            ".read": "auth != null && (auth.uid == $driver || auth.uid == $engineer)",
+            ".write": "auth != null && $driver != $engineer && (auth.uid == $driver || (auth.uid == $engineer && ((newData.child('status').val() == 'pending' && (!data.exists() || data.child('status').val() == 'revoked' || (data.child('scope').val() == 'once' && data.child('expiresAtMs').val() <= now))) || (data.exists() && newData.child('status').val() == 'revoked'))))",
+            ".validate": "newData.hasChildren(['schemaVersion','driverUid','engineerUid','status','createdBy','createdAt','updatedAt']) && newData.child('schemaVersion').val() == 1 && newData.child('driverUid').val() == $driver && newData.child('engineerUid').val() == $engineer && (newData.child('status').val() == 'pending' || newData.child('status').val() == 'granted' || newData.child('status').val() == 'revoked') && (newData.child('status').val() != 'granted' || (newData.child('scope').val() == 'always' && !newData.child('expiresAtMs').exists()) || (newData.child('scope').val() == 'once' && newData.child('expiresAtMs').isNumber() && newData.child('expiresAtMs').val() > now)) && (!newData.child('note').exists() || (newData.child('note').isString() && newData.child('note').val().length <= 200))"
+          }
+        }
+      },
+      "outgoing": {
+        "$engineer": {
+          ".read": "auth != null && auth.uid == $engineer",
+          "$driver": {
+            ".write": "auth != null && (auth.uid == $engineer || auth.uid == $driver)",
+            ".validate": "newData.val() == true && newData.parent().parent().parent().parent().child('pitwallV3').child('grants').child($driver).child($engineer).exists()"
+          }
+        }
+      },
+      "roomIndex": {
+        "$uid": {
+          ".read": "auth != null && auth.uid == $uid",
+          "$room": {
+            ".write": "auth != null && (auth.uid == $uid || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || (!root.child('pitwallV3').child('rooms').child($room).exists() && newData.parent().parent().parent().parent().child('pitwallV3').child('rooms').child($room).child('meta/hostUid').val() == auth.uid))",
+            ".validate": "newData.val() == true && newData.parent().parent().parent().parent().child('pitwallV3').child('rooms').child($room).child('access').child($uid).exists()"
+          }
+        }
+      },
+      "connections": {
+        "$uid": {
+          ".read": "auth != null && (auth.uid == $uid || ((root.child('pitwallV3').child('grants').child($uid).child(auth.uid).child('status').val() == 'granted' && (root.child('pitwallV3').child('grants').child($uid).child(auth.uid).child('scope').val() == 'always' || root.child('pitwallV3').child('grants').child($uid).child(auth.uid).child('expiresAtMs').val() > now)) && (root.child('pitwallV3').child('grants').child(auth.uid).child($uid).child('status').val() == 'granted' && (root.child('pitwallV3').child('grants').child(auth.uid).child($uid).child('scope').val() == 'always' || root.child('pitwallV3').child('grants').child(auth.uid).child($uid).child('expiresAtMs').val() > now))))",
+          "$connection": {
+            ".read": "auth != null && data.child('roomId').isString() && (root.child('pitwallV3').child('rooms').child(data.child('roomId').val()).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child(data.child('roomId').val()).child('access').child(auth.uid).val() == 'member')",
+            ".write": "auth != null && auth.uid == $uid",
+            ".validate": "newData.hasChildren(['uid','connectionId','protocolVersion','runtimeSessionId','nickname','kind','driving','sourceValid','updatedAt']) && newData.child('uid').val() == $uid && newData.child('connectionId').val() == $connection && newData.child('protocolVersion').val() == 3 && newData.child('nickname').isString() && newData.child('nickname').val().length <= 60 && newData.child('runtimeSessionId').isString() && newData.child('runtimeSessionId').val().length <= 80 && (newData.child('kind').val() == 'driver' || newData.child('kind').val() == 'engineer') && newData.child('driving').isBoolean() && newData.child('sourceValid').isBoolean() && newData.child('updatedAt').val() == now && (!newData.child('roomId').exists() || root.child('pitwallV3').child('rooms').child(newData.child('roomId').val()).child('access').child(auth.uid).val() == 'member' || root.child('pitwallV3').child('rooms').child(newData.child('roomId').val()).child('access').child(auth.uid).val() == 'manager')"
+          }
+        }
+      },
+      "vehicles": {
+        "$fingerprint": {
+          ".read": "auth != null",
+          ".write": "auth != null && ((!newData.exists() && (data.child('createdBy').val() == auth.uid || !root.child('pitwallV3').child('rooms').child(data.child('roomId').val()).exists())) || (newData.exists() && (!data.exists() || data.child('expiresAtMs').val() <= now) && root.child('pitwallV3').child('rooms').child(newData.child('roomId').val()).child('meta/hostUid').val() == auth.uid))",
+          ".validate": "newData.child('fingerprint').val() == $fingerprint && newData.child('createdBy').val() == auth.uid && newData.child('roomId').isString() && newData.child('expiresAtMs').isNumber() && newData.child('expiresAtMs').val() > now && newData.child('expiresAtMs').val() <= now + 172805000"
+        }
+      },
+      "rooms": {
+        "$room": {
+          ".write": "auth != null && ((!data.exists() && !newData.child('control').exists() && !newData.child('orders').exists() && !newData.child('pending').exists() && !newData.child('presence').exists() && !newData.child('mfd').exists() && newData.child('meta/hostUid').val() == auth.uid && newData.child('access').child(auth.uid).val() == 'manager') || (!newData.exists() && root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' && (!data.child('control/claim').exists() || data.child('control/claim/leaseUntilMs').val() <= now)))",
+          "meta": {
+            ".read": "auth != null && root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).exists()",
+            ".validate": "newData.hasChildren(['roomId','hostUid','label','vehicleFingerprint','createdAt','updatedAt']) && newData.child('roomId').val() == $room && newData.child('label').isString() && newData.child('label').val().length <= 120 && newData.child('vehicleFingerprint').isString() && newData.child('vehicleFingerprint').val().length == 16"
+          },
+          "access": {
+            ".read": "auth != null && root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).exists()",
+            "$uid": {
+              ".write": "auth != null && root.child('pitwallV3').child('rooms').child($room).child('meta/hostUid').val() != $uid && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || (auth.uid == $uid && ((data.val() == 'invited' && newData.val() == 'member') || !newData.exists())))",
+              ".validate": "(newData.val() == 'manager' || newData.val() == 'member' || newData.val() == 'invited') && (!root.child('pitwallV3').child('rooms').child($room).exists() ? (($uid == auth.uid && newData.val() == 'manager') || ($uid != auth.uid && newData.val() == 'invited')) : true) && (newData.val() != 'manager' || !data.exists() || data.val() == 'member' || data.val() == 'manager')"
+            }
+          },
+          "presence": {
+            ".read": "auth != null && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member')",
+            "$uid": {
+              ".write": "auth != null && !newData.exists() && (auth.uid == $uid || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager')",
+              "$connection": {
+                ".write": "auth != null && auth.uid == $uid && (!newData.exists() || (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member'))",
+                ".validate": "newData.val() == true && newData.parent().parent().parent().parent().parent().parent().child('pitwallV3').child('connections').child($uid).child($connection).child('roomId').val() == $room"
+              }
+            }
+          },
+          "mfd": {
+            ".read": "auth != null && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member')",
+            ".write": "auth != null && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member') && newData.child('uid').val() == auth.uid && root.child('pitwallV3').child('connections').child(auth.uid).child(newData.child('connectionId').val()).child('roomId').val() == $room && root.child('pitwallV3').child('connections').child(auth.uid).child(newData.child('connectionId').val()).child('kind').val() == 'driver' && root.child('pitwallV3').child('connections').child(auth.uid).child(newData.child('connectionId').val()).child('sourceValid').val() == true",
+            ".validate": "newData.hasChildren(['uid','connectionId','updatedAt']) && newData.child('updatedAt').val() == now"
+          },
+          "pending": {
+            ".read": "auth != null && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member')",
+            "$order": {
+              ".write": "auth != null && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member') && (newData.exists() ? newData.parent().parent().parent().parent().parent().child('pitwallV3').child('rooms').child($room).child('orders').child($order).child('senderId').val() == auth.uid : newData.parent().parent().parent().parent().parent().child('pitwallV3').child('rooms').child($room).child('orders').child($order).child('status').val() != 'pending')",
+              ".validate": "newData.val() == true && newData.parent().parent().parent().parent().parent().child('pitwallV3').child('rooms').child($room).child('orders').child($order).child('status').val() == 'pending'"
+            }
+          },
+          "orders": {
+            ".read": "auth != null && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member')",
+            "$order": {
+              ".write": "auth != null && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member') && newData.exists() && ((!data.exists() && newData.child('status').val() == 'pending' && newData.child('senderId').val() == auth.uid && root.child('pitwallV3').child('connections').child(auth.uid).child(newData.child('senderConnectionId').val()).child('roomId').val() == $room && root.child('pitwallV3').child('connections').child(newData.child('targetUid').val()).child(newData.child('targetConnectionId').val()).child('roomId').val() == $room && root.child('pitwallV3').child('connections').child(newData.child('targetUid').val()).child(newData.child('targetConnectionId').val()).child('kind').val() == 'driver' && root.child('pitwallV3').child('connections').child(newData.child('targetUid').val()).child(newData.child('targetConnectionId').val()).child('driving').val() == true && root.child('pitwallV3').child('connections').child(newData.child('targetUid').val()).child(newData.child('targetConnectionId').val()).child('sourceValid').val() == true && (!root.child('pitwallV3').child('rooms').child($room).child('control/claim').exists() || root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('leaseUntilMs').val() <= now)) || (data.exists() && ((data.child('status').val() == 'pending' && newData.child('status').val() == 'applying' && newData.child('claimedBy').val() == auth.uid && root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('orderId').val() == $order && root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('uid').val() == auth.uid && root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('connectionId').val() == data.child('targetConnectionId').val() && newData.child('leaseUntilMs').val() == root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('leaseUntilMs').val() && root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('leaseUntilMs').val() > now) || (data.child('status').val() == 'applying' && data.child('claimedBy').val() == auth.uid && (newData.child('status').val() == 'applied' || newData.child('status').val() == 'partial' || newData.child('status').val() == 'failed' || newData.child('status').val() == 'rejected')) || (data.child('status').val() == 'pending' && newData.child('status').val() == 'rejected' && (data.child('targetUid').val() == auth.uid || data.child('senderId').val() == auth.uid) && (root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('orderId').val() != $order || root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('leaseUntilMs').val() <= now)))))",
+              ".validate": "newData.hasChildren(['schemaVersion','protocolVersion','orderId','revision','senderId','issuedAt','expiresAtMs','plan','status','targetUid','targetConnectionId','senderConnectionId']) && newData.child('schemaVersion').val() == 2 && newData.child('protocolVersion').val() == 3 && newData.child('orderId').val() == $order && (data.exists() ? (newData.child('schemaVersion').val() == data.child('schemaVersion').val() && newData.child('protocolVersion').val() == data.child('protocolVersion').val() && newData.child('orderId').val() == data.child('orderId').val() && newData.child('revision').val() == data.child('revision').val() && newData.child('senderId').val() == data.child('senderId').val() && newData.child('issuedAt').val() == data.child('issuedAt').val() && newData.child('expiresAtMs').val() == data.child('expiresAtMs').val() && newData.child('plan/fuelLiters').val() == data.child('plan/fuelLiters').val() && newData.child('plan/tyreSet').val() == data.child('plan/tyreSet').val() && newData.child('plan/compound').val() == data.child('plan/compound').val() && newData.child('plan/pitStrategy').val() == data.child('plan/pitStrategy').val() && newData.child('plan/changeTyres').val() == data.child('plan/changeTyres').val() && newData.child('plan/brakes').val() == data.child('plan/brakes').val() && newData.child('plan/brakeFront').val() == data.child('plan/brakeFront').val() && newData.child('plan/brakeRear').val() == data.child('plan/brakeRear').val() && newData.child('plan/repairBodywork').val() == data.child('plan/repairBodywork').val() && newData.child('plan/repairSuspension').val() == data.child('plan/repairSuspension').val() && newData.child('plan/driverId').val() == data.child('plan/driverId').val() && newData.child('plan/pressures/FL').val() == data.child('plan/pressures/FL').val() && newData.child('plan/pressures/FR').val() == data.child('plan/pressures/FR').val() && newData.child('plan/pressures/RL').val() == data.child('plan/pressures/RL').val() && newData.child('plan/pressures/RR').val() == data.child('plan/pressures/RR').val() && newData.child('targetUid').val() == data.child('targetUid').val() && newData.child('targetConnectionId').val() == data.child('targetConnectionId').val() && newData.child('senderConnectionId').val() == data.child('senderConnectionId').val()) : (newData.child('expiresAtMs').isNumber() && newData.child('expiresAtMs').val() > now && newData.child('expiresAtMs').val() <= now + 125000))",
+              "plan": {
+                "$other": {
+                  ".validate": false
+                },
+                "pressures": {
+                  "$other": {
+                    ".validate": false
+                  },
+                  "FL": {
+                    ".validate": "newData.isNumber() && newData.val() >= 20.3 && newData.val() <= 35"
+                  },
+                  "FR": {
+                    ".validate": "newData.isNumber() && newData.val() >= 20.3 && newData.val() <= 35"
+                  },
+                  "RL": {
+                    ".validate": "newData.isNumber() && newData.val() >= 20.3 && newData.val() <= 35"
+                  },
+                  "RR": {
+                    ".validate": "newData.isNumber() && newData.val() >= 20.3 && newData.val() <= 35"
+                  }
+                },
+                "fuelLiters": {
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 140"
+                },
+                "tyreSet": {
+                  ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 50"
+                },
+                "pitStrategy": {
+                  ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 30"
+                },
+                "brakeFront": {
+                  ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4"
+                },
+                "brakeRear": {
+                  ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 4"
+                },
+                "changeTyres": {
+                  ".validate": "newData.isBoolean()"
+                },
+                "brakes": {
+                  ".validate": "newData.isBoolean()"
+                },
+                "repairBodywork": {
+                  ".validate": "newData.isBoolean()"
+                },
+                "repairSuspension": {
+                  ".validate": "newData.isBoolean()"
+                },
+                "compound": {
+                  ".validate": "newData.val() == 'dry' || newData.val() == 'wet'"
+                },
+                "driverId": {
+                  ".validate": "newData.isString() && newData.val().length <= 80"
+                }
+              },
+              "claimedBy": {
+                ".validate": "(!data.exists() || newData.val() == data.val()) && newData.parent().child('status').val() != 'pending'"
+              },
+              "claimedAtMs": {
+                ".validate": "(!data.exists() || newData.val() == data.val()) && newData.parent().child('status').val() != 'pending' && (data.exists() || newData.val() == root.child('pitwallV3/rooms').child($room).child('control/claim/claimedAtMs').val())"
+              },
+              "leaseUntilMs": {
+                ".validate": "(!data.exists() || newData.val() == data.val()) && newData.parent().child('status').val() != 'pending'"
+              }
+            }
+          },
+          "control": {
+            ".read": "auth != null && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member')",
+            "claim": {
+              ".write": "auth != null && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member') && (newData.exists() ? ((!data.exists() || data.child('leaseUntilMs').val() <= now) && newData.child('uid').val() == auth.uid && root.child('pitwallV3').child('rooms').child($room).child('orders').child(newData.child('orderId').val()).child('status').val() == 'pending' && root.child('pitwallV3').child('rooms').child($room).child('orders').child(newData.child('orderId').val()).child('targetUid').val() == auth.uid && root.child('pitwallV3').child('rooms').child($room).child('orders').child(newData.child('orderId').val()).child('targetConnectionId').val() == newData.child('connectionId').val() && root.child('pitwallV3').child('rooms').child($room).child('orders').child(newData.child('orderId').val()).child('expiresAtMs').val() > now && root.child('pitwallV3').child('connections').child(auth.uid).child(newData.child('connectionId').val()).child('roomId').val() == $room && root.child('pitwallV3').child('connections').child(auth.uid).child(newData.child('connectionId').val()).child('driving').val() == true && root.child('pitwallV3').child('connections').child(auth.uid).child(newData.child('connectionId').val()).child('sourceValid').val() == true) : (data.child('uid').val() == auth.uid && (newData.parent().parent().parent().parent().parent().child('pitwallV3').child('rooms').child($room).child('orders').child(data.child('orderId').val()).child('status').val() == 'applied' || newData.parent().parent().parent().parent().parent().child('pitwallV3').child('rooms').child($room).child('orders').child(data.child('orderId').val()).child('status').val() == 'partial' || newData.parent().parent().parent().parent().parent().child('pitwallV3').child('rooms').child($room).child('orders').child(data.child('orderId').val()).child('status').val() == 'failed' || newData.parent().parent().parent().parent().parent().child('pitwallV3').child('rooms').child($room).child('orders').child(data.child('orderId').val()).child('status').val() == 'rejected')))",
+              ".validate": "newData.hasChildren(['protocolVersion','orderId','uid','connectionId','claimedAtMs','leaseUntilMs']) && newData.child('protocolVersion').val() == 3 && newData.child('claimedAtMs').isNumber() && newData.child('claimedAtMs').val() >= now - 5000 && newData.child('claimedAtMs').val() <= now + 5000 && newData.child('leaseUntilMs').val() == newData.child('claimedAtMs').val() + 90000"
+            }
+          },
+          "$other": {
+            ".validate": false
+          },
+          ".read": "auth != null && data.child('access').child(auth.uid).val() == 'manager'"
+        }
+      }
+    }
+  }
+}

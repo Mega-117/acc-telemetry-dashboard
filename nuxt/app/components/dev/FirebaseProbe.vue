@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, watch } from 'vue'
+import { readPitwallRealtimeMetrics } from '~/config/pitwallRealtime'
 import { useFirebaseMonitor } from '~/composables/useFirebaseTracker'
 
 const {
@@ -18,6 +19,8 @@ const topPaths = computed(() => pathBreakdown.value.slice(0, 5))
 const recentOps = computed(() => recentOperations.value.slice(0, 8))
 const recentScenarioRows = computed(() => recentScenarios.value.slice(0, 6))
 const isExpanded = ref(false)
+const pitwallMetrics = ref(readPitwallRealtimeMetrics())
+function refreshPitwallMetrics() { pitwallMetrics.value = readPitwallRealtimeMetrics() }
 
 const totalReadOps = computed(() => (
   totals.value.readOps +
@@ -41,6 +44,7 @@ watch(isExpanded, (value) => {
 })
 
 function toggleProbe() {
+  refreshPitwallMetrics()
   isExpanded.value = !isExpanded.value
 }
 
@@ -91,6 +95,16 @@ function formatMetadata(metadata: Record<string, unknown> | undefined) {
       <span>Realtime</span>
       <strong data-testid="firebase-probe-realtime">{{ totals.listenerSnapshots }}</strong>
     </div>
+
+    <details>
+      <summary>Pitwall RTDB — operazioni logiche</summary>
+      <button type="button" @click="refreshPitwallMetrics">Aggiorna contatori RTDB</button>
+      <p>Snapshot locale: nessuna richiesta al database. Byte JSON, esclusi protocollo e TLS.</p>
+      <dl v-if="pitwallMetrics" data-testid="pitwall-rtdb-metrics">
+        <template v-for="(value, name) in pitwallMetrics" :key="name"><dt>{{ name }}</dt><dd>{{ value }}</dd></template>
+      </dl>
+      <p v-else>Pitwall non avviato.</p>
+    </details>
 
     <details open>
       <summary>Scenarios</summary>

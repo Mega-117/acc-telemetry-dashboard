@@ -11,15 +11,13 @@
 
 import { computed, onScopeDispose, ref, shallowRef } from 'vue'
 import { db } from '~/config/firebase'
-import { trackedGetDoc } from '~/composables/useFirebaseTracker'
-import { doc } from 'firebase/firestore'
+import { createPitwallRealtimeEngineerService } from '~/services/pitwall/pitwallRealtimeEngineerService'
 import {
-  createPitwallRoomService,
-  type PitwallRoomService,
-} from '~/services/pitwall/pitwallRoomService'
+  createPitwallRealtimeRoomService as createPitwallRoomService,
+  type PitwallRealtimeRoomService as PitwallRoomService,
+} from '~/services/pitwall/pitwallRealtimeRoomService'
 import { createPitwallRevisionClock } from '~/services/pitwall/pitwallRoomRevision'
 import {
-  PITWALL_MEMBER_HEARTBEAT_MS,
   describePitwallRoomExecutor,
   isPitwallMemberFresh,
   isPitwallRoomInvited,
@@ -78,7 +76,6 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   let stopMembersWatch: (() => void) | null = null
   let stopOrderWatch: (() => void) | null = null
   let tickTimer: ReturnType<typeof setInterval> | null = null
-  let presenceTimer: ReturnType<typeof setInterval> | null = null
   /** Identifica questa scheda: due schede aperte sono due presenze diverse. */
   const runtimeSessionId = `pw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
@@ -89,7 +86,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const uid = options.uid()
     if (!uid) return null
     if (!serviceRef.value || serviceRef.value.uid !== uid) {
-      serviceRef.value = createPitwallRoomService({ db, uid })
+      try { serviceRef.value = createPitwallRoomService({ uid }) }
+      catch (error) { rawError.value = (error as Error).message; return null }
     }
     return serviceRef.value
   }
@@ -141,7 +139,10 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const crew = computed<PitwallCrewRow[]>(() => {
     const current = room.value
     if (!current) return []
-    const byUid = new Map(members.value.map(member => [member.uid, member]))
+    const byUid = new Map<string, PitwallRoomMember>()
+    for (const member of members.value) {
+      if (!byUid.has(member.uid) || member.kind === 'driver') byUid.set(member.uid, member)
+    }
     const rows: PitwallCrewRow[] = current.memberUids.map((uid) => {
       const presence = byUid.get(uid)
       return {
@@ -189,6 +190,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       strategy: (at.strategy ?? null) as Record<string, unknown> | null,
       updatedAtMs: at.updatedAtMs,
       nickname: at.nickname,
+      protocolVersion: at.protocolVersion,
+      connected: at.connected,
     }
   })
 
@@ -208,58 +211,25 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
 
   const orderProgress = computed(() => describePitwallOrderStatus(orderStatus.value))
 
-  /** Il soprannome di chi e' invitato ma non ha ancora un battito nella stanza. */
   async function loadNickname(uid: string): Promise<void> {
-    if (nicknames.value[uid]) return
+    const account = options.uid()
+    if (!account) return
     try {
-      const profile = await trackedGetDoc(doc(db, 'publicProfiles', uid), 'pitwallRoom.memberProfile')
-      nicknames.value = {
-        ...nicknames.value,
-        [uid]: profile.exists() ? String((profile.data() as { nickname?: string }).nickname ?? '') || uid : uid,
-      }
-    } catch {
-      // Profilo non leggibile: resta l'identificativo, brutto ma vero.
-    }
+      const name = await createPitwallRealtimeEngineerService({ db, engineerUid: account }).nicknameOf(uid)
+      if (account === options.uid()) nicknames.value = { ...nicknames.value, [uid]: name }
+    } catch { /* The identifier remains visible when the profile is unavailable. */ }
   }
 
-  /**
-   * Annuncia chi c'e' al muretto.
-   *
-   * Senza, l'ingegnere che sta guardando la pagina si vedeva elencato
-   * `OFFLINE` fra i membri - vero alla lettera, perche' non batteva, e
-   * comunque il modo piu' rapido di far sembrare rotto un collegamento che
-   * funziona. Serve anche al pilota, che cosi' sa chi lo sta seguendo.
-   *
-   * `driving` resta falso e `kind` resta `engineer`: chi guarda dal browser non
-   * potra' mai essere eletto esecutore, e questo battito non lo rende
-   * candidato.
-   *
-   * Il documento membro e' uno per persona. Se il mio PC pilota sta gia'
-   * battendo in questa gara (stesso uid, `kind: 'driver'`, fresco), qui si
-   * tace: un battito da ingegnere sopra il suo lo toglierebbe dal volante.
-   * Visto il 2026-09-04: RICO117 che apre la gara dal browser spegneva
-   * RICO117 al volante, e nessun ordine partiva piu'.
-   */
-  function pilotBeatsForMe(uid: string): boolean {
-    const mine = members.value.find(member => member.uid === uid)
-    return mine?.kind === 'driver' && isPitwallMemberFresh(mine, serverNowMs())
-  }
-
-  async function heartbeat(): Promise<void> {
+  /** One browser connection, published on entry; RTDB handles disconnects. */
+  async function publishMyPresence(): Promise<void> {
     const service_ = service()
     const roomId = selectedRoomId.value
     const uid = myUid.value
     if (!service_ || !roomId || !uid || !amMember.value) return
-    if (pilotBeatsForMe(uid)) return
-    // Il proprio nome si carica prima di annunciarsi: un battito scritto col
-    // solo identificativo lo fisserebbe li' per tutti gli altri, perche' il
-    // battito ha la precedenza sul profilo quando si compone l equipaggio.
     await loadNickname(uid)
+    if (roomId !== selectedRoomId.value) return
     await service_.publishPresence(roomId, {
-      nickname: nicknames.value[uid] || uid,
-      kind: 'engineer',
-      driving: false,
-      runtimeSessionId,
+      nickname: nicknames.value[uid] || uid, kind: 'engineer', driving: false, runtimeSessionId,
     })
   }
 
@@ -294,7 +264,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   function watchRooms(): void {
     const service_ = service()
     if (!service_) return
-    stopRoomsWatch?.()
+    if (stopRoomsWatch) return
     stopRoomsWatch = service_.watchRooms(applyRooms, (error) => { rawError.value = error?.message || 'Gare non disponibili.' })
   }
 
@@ -303,8 +273,6 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     stopMembersWatch?.()
     stopRoomWatch = null
     stopMembersWatch = null
-    if (presenceTimer) clearInterval(presenceTimer)
-    presenceTimer = null
     members.value = []
   }
 
@@ -316,6 +284,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * senza scelta.
    */
   async function selectRoom(roomId: string | null): Promise<void> {
+    if (roomId === selectedRoomId.value && (stopRoomWatch || loading.value)) return
     detach()
     selectedRoomId.value = roomId
     room.value = null
@@ -323,6 +292,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const service_ = service()
     if (!service_) return
 
+    rawError.value = null
     try {
       const current = await service_.readRoom(roomId)
       if (!current) {
@@ -380,8 +350,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       },
       (error) => { rawError.value = error?.message || 'Gara non raggiungibile.' }
     )
-    // Il primo battito aspetta l'equipaggio: prima di sapere se il mio PC
-    // pilota e' gia' qui, annunciarsi lo sovrascriverebbe (vedi `heartbeat`).
+    // The first membership snapshot confirms access before announcing this connection.
     let announced = false
     stopMembersWatch = service_.watchMembers(
       roomId,
@@ -389,7 +358,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         members.value = list
         if (!announced) {
           announced = true
-          void heartbeat()
+          void publishMyPresence()
         }
       },
       (error) => {
@@ -400,8 +369,6 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       }
     )
 
-    if (presenceTimer) clearInterval(presenceTimer)
-    presenceTimer = setInterval(() => { void heartbeat() }, PITWALL_MEMBER_HEARTBEAT_MS)
   }
 
   /**
@@ -544,6 +511,11 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     stopRoomsWatch = null
     if (tickTimer) clearInterval(tickTimer)
     tickTimer = null
+    serviceRef.value = null
+    selectedRoomId.value = null
+    room.value = null
+    rooms.value = []
+    nicknames.value = {}
   }
 
   onScopeDispose(stop)

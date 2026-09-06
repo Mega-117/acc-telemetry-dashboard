@@ -40,6 +40,7 @@ interface PresenceService {
 export interface PitwallPresenceWatchOptions {
   service: () => PresenceService | null
   outgoing: Ref<PitwallOutgoingLink[]>
+  eventDriven?: boolean
   maxWatched?: number
   decayTickMs?: number
 }
@@ -113,7 +114,7 @@ export function createPitwallPresenceWatch(options: PitwallPresenceWatchOptions)
   }
 
   function startDecay(): void {
-    if (decayTimer) return
+    if (options.eventDriven || decayTimer) return
     decayTimer = setInterval(decay, decayTickMs)
   }
 
@@ -132,7 +133,7 @@ export function createPitwallPresenceWatch(options: PitwallPresenceWatchOptions)
    * anche l'aggiornamento immediato.
    */
   function installVisibility(): void {
-    if (removeVisibility || typeof document === 'undefined') return
+    if (options.eventDriven || removeVisibility || typeof document === 'undefined') return
     const onVisibility = () => {
       if (!live) return
       if (document.visibilityState === 'hidden') {

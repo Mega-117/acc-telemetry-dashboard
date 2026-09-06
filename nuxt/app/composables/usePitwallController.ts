@@ -79,6 +79,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     if (!snapshot || !room) return null
     return {
       schemaVersion: 1,
+      protocolVersion: snapshot.protocolVersion,
       driverUid: link.executor.value.executor?.uid ?? '',
       sessionId: room.roomId,
       online: true,
@@ -96,7 +97,9 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     return Math.max(0, Math.round((nowTick.value - updatedAtMs) / 1000))
   })
   const carFresh = computed(() => (
-    presenceAgeSeconds.value != null && presenceAgeSeconds.value <= PITWALL_MEMBER_FRESH_MS / 1000
+    link.carSnapshot.value?.protocolVersion === 3
+      ? link.carSnapshot.value.connected === true
+      : presenceAgeSeconds.value != null && presenceAgeSeconds.value <= PITWALL_MEMBER_FRESH_MS / 1000
   ))
   const drivers = computed<PitwallDriver[]>(() => (
     (session.value?.crew ?? []).map(member => ({ id: String(member.driverIndex), name: member.name }))
@@ -132,6 +135,10 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
    * continuare a dire il numero visto, non tornare a cio' che era stato chiesto.
    */
   const seenOnScreen = ref<Record<string, unknown>>({})
+  watch(() => session.value?.strategy?.verifiedFields, (fields) => {
+    // Shared last observations also reach other pitwall members who did not send the order.
+    seenOnScreen.value = Object.fromEntries(Object.entries(fields ?? {}).map(([field, value]) => [field, value.observed]))
+  }, { immediate: true })
 
   const car = computed<PitwallCarState>(() => {
     const strategy = session.value?.strategy ?? null

@@ -10,9 +10,9 @@
 
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { db } from '~/config/firebase'
+import { createPitwallRealtimeEngineerService as createPitwallEngineerService } from '~/services/pitwall/pitwallRealtimeEngineerService'
 import { createPitwallPresenceWatch } from '~/composables/usePitwallPresenceWatch'
 import {
-  createPitwallEngineerService,
   type PitwallDirectoryEntry,
   type PitwallIncomingRequest,
   type PitwallOutgoingLink,
@@ -85,10 +85,15 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   let stopIncomingWatch: (() => void) | null = null
   let stopGrantedWatch: (() => void) | null = null
 
+  let serviceUid: string | null = null
   function service() {
     const uid = options.engineerUid()
     if (!uid) return null
-    if (!serviceRef.value) serviceRef.value = createPitwallEngineerService({ db, engineerUid: uid })
+    if (!serviceRef.value || serviceUid !== uid) {
+      serviceUid = uid
+      try { serviceRef.value = createPitwallEngineerService({ db, engineerUid: uid }) }
+      catch (error) { rawError.value = (error as Error).message; return null }
+    }
     return serviceRef.value
   }
 
@@ -130,34 +135,8 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     }
   }
 
-  /**
-   * Sceglie il pilota da assistere e ne rilegge subito la presenza, poi la
-   * tiene aggiornata al passo del suo battito (30 s).
-   *
-   * La presenza si rilegge invece di ascoltarla: cambia lentamente e un
-   * listener costerebbe di piu' senza dire nulla di piu'. Due letture al
-   * minuto, contate dal tracker, solo mentre un pilota e' selezionato.
-   */
-  let presenceTimer: ReturnType<typeof setInterval> | null = null
-
-  function refreshSelectedPresence(): void {
-    const driverUid = selectedDriverUid.value
-    const engineer = service()
-    if (!driverUid || !engineer) return
-    void engineer.readPilotPresence(driverUid).then(({ session, reachable }) => {
-      outgoing.value = outgoing.value.map(link => (
-        link.driverUid === driverUid ? { ...link, session, reachable } : link
-      ))
-    })
-  }
-
   function selectPilot(driverUid: string | null): void {
     selectedDriverUid.value = driverUid
-    if (presenceTimer) clearInterval(presenceTimer)
-    presenceTimer = null
-    if (!driverUid) return
-    refreshSelectedPresence()
-    presenceTimer = setInterval(refreshSelectedPresence, 30_000)
   }
 
   /**
@@ -166,7 +145,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
    * Ascolti, decadimento e scheda nascosta sono una cosa sola e vivono nel
    * loro modulo: qui resta l'elenco su cui scrivono.
    */
-  const presence = createPitwallPresenceWatch({ service, outgoing })
+  const presence = createPitwallPresenceWatch({ service, outgoing, eventDriven: true })
 
   // Chi si autorizza adesso non deve aspettare il giro dopo per essere
   // guardato: l'elenco cambia e gli ascolti lo seguono. Si confronta *chi*
@@ -198,7 +177,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
         : (scope === 'always'
             ? 'Richiesta inviata: hai chiesto il collegamento permanente.'
             : 'Richiesta inviata: hai chiesto il collegamento per oggi.')
-      await refreshPilots()
+      if (!stopGrantedWatch) await refreshPilots()
       return true
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Richiesta non riuscita.'
@@ -217,7 +196,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
         return
       }
       notice.value = 'Richiesta ritirata.'
-      await refreshPilots()
+      if (!stopGrantedWatch) await refreshPilots()
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Ritiro non riuscito.'
     }
@@ -263,9 +242,6 @@ export function usePitwallLink(options: PitwallLinkOptions) {
         if (isPitwallOrderSettled(document.status)) {
           stopOrderWatch?.()
           stopOrderWatch = null
-          // L'ordine e' concluso: la macchina e' cambiata, si rilegge subito
-          // invece di aspettare il prossimo battito.
-          refreshSelectedPresence()
         }
       })
       return true
@@ -386,22 +362,20 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     const engineer = service()
     if (!engineer) return
 
-    stopIncomingWatch?.()
+    if (stopIncomingWatch) return
     stopIncomingWatch = engineer.watchIncomingRequests(
       (requests) => { incoming.value = requests },
       (error) => { rawError.value = error?.message || 'Richieste non disponibili.' }
     )
 
-    stopGrantedWatch?.()
-    let knownPilots = ''
-    stopGrantedWatch = engineer.watchGrantedPilots(
-      (driverUids) => {
-        // Si ricarica l'elenco solo se e' davvero cambiato *chi* c'e': un
-        // aggiornamento qualsiasi non deve far ripartire nome e presenza.
-        const signature = [...driverUids].sort().join('|')
-        if (signature === knownPilots) return
-        knownPilots = signature
-        void refreshPilots()
+    stopGrantedWatch = engineer.watchOutgoingLinks(
+      (links) => {
+        const previous = new Map(outgoing.value.map(link => [link.driverUid, link]))
+        outgoing.value = links.map(link => {
+          const cached = previous.get(link.driverUid)
+          return cached && link.usable ? { ...link, session: cached.session, reachable: cached.reachable } : link
+        })
+        if (selectedDriverUid.value && !pilots.value.some(link => link.driverUid === selectedDriverUid.value)) selectPilot(null)
       },
       (error) => { rawError.value = error?.message || 'Elenco piloti non disponibile.' }
     )
@@ -418,9 +392,12 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     stopOrderWatch = null
     stopIncomingWatch = null
     stopGrantedWatch = null
-    if (presenceTimer) clearInterval(presenceTimer)
-    presenceTimer = null
     presence.stop()
+    serviceRef.value = null
+    serviceUid = null
+    outgoing.value = []
+    incoming.value = []
+    selectedDriverUid.value = null
   }
 
   onScopeDispose(stop)

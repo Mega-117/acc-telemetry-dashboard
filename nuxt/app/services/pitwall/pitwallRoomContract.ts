@@ -141,6 +141,9 @@ export interface PitwallRoomMemberDocument {
 
 /** Lo stesso membro, normalizzato per la logica pura: niente tipi Firestore. */
 export interface PitwallRoomMember {
+  protocolVersion?: 3
+  connected?: boolean
+  connectionId?: string
   uid: string
   nickname: string
   kind: PitwallMemberKind
@@ -246,8 +249,7 @@ export function resolvePitwallRoomExecutor(
 
   const atTheWheel = list.filter(member => (
     member?.driving === true
-    && Number.isFinite(member?.updatedAtMs)
-    && nowMs - member.updatedAtMs <= maxAgeMs
+    && isPitwallMemberFresh(member, nowMs, maxAgeMs)
   ))
 
   if (!atTheWheel.length) return { executor: null, reason: 'nobody-driving', conflicting: [] }
@@ -271,10 +273,12 @@ export function describePitwallRoomExecutor(resolution: PitwallExecutorResolutio
 
 /** Un membro e' raggiungibile adesso (indipendentemente da chi guida). */
 export function isPitwallMemberFresh(
-  member: Pick<PitwallRoomMember, 'updatedAtMs'> | null | undefined,
+  member: Pick<PitwallRoomMember, 'updatedAtMs' | 'protocolVersion' | 'connected'> | null | undefined,
   nowMs: number,
   maxAgeMs: number = PITWALL_MEMBER_FRESH_MS
 ): boolean {
+  if (member?.protocolVersion === 3) return member.connected === true
+
   return Number.isFinite(member?.updatedAtMs) && nowMs - member!.updatedAtMs <= maxAgeMs
 }
 

@@ -15,13 +15,11 @@ import { effectScope } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('~/config/firebase', () => ({ db: {} }))
-vi.mock('firebase/firestore', () => ({ doc: (_db: unknown, _col: string, uid: string) => ({ path: `publicProfiles/${uid}` }) }))
-vi.mock('~/composables/useFirebaseTracker', () => ({
-  trackedGetDoc: async (ref: { path: string }) => {
-    if (ref.path.endsWith('/rotto')) throw new Error('profilo non leggibile')
-    const uid = ref.path.split('/').pop()
-    return { exists: () => uid !== 'sconosciuto', data: () => ({ nickname: fakes.nicknames[uid ?? ''] ?? '' }) }
-  },
+vi.mock('~/services/pitwall/pitwallRealtimeEngineerService', () => ({
+  createPitwallRealtimeEngineerService: () => ({ nicknameOf: async (uid: string) => {
+    if (uid === 'rotto') throw new Error('profilo non leggibile')
+    return fakes.nicknames[uid] || uid
+  } }),
 }))
 
 const fakes = vi.hoisted(() => ({
@@ -38,8 +36,8 @@ const fakes = vi.hoisted(() => ({
   clockOffsetMs: 0,
 }))
 
-vi.mock('~/services/pitwall/pitwallRoomService', () => ({
-  createPitwallRoomService: ({ uid }: { uid: string }) => ({
+vi.mock('~/services/pitwall/pitwallRealtimeRoomService', () => ({
+  createPitwallRealtimeRoomService: ({ uid }: { uid: string }) => ({
     uid,
     // L'orologio comune del servizio vero (PIP-382). Qui i due orologi sono
     // allineati: lo scarto ha i suoi test dedicati, questi parlano d'altro.
@@ -146,10 +144,10 @@ async function open(members: PitwallRoomMember[], uid = 'me') {
   return link
 }
 
-describe('il battito dell ingegnere accanto al pilota', () => {
-  it('tace se il mio PC pilota sta gia battendo in questa gara', async () => {
+describe('la connessione browser distinta dal runtime pilota', () => {
+  it('annuncia il browser con identita distinta anche se il runtime dello stesso utente guida', async () => {
     await open([member()])
-    expect(fakes.presence).toEqual([])
+    expect(fakes.presence).toEqual([{ kind: 'engineer', driving: false }])
   })
 
   it('si annuncia come ingegnere quando nessun pilota batte per me', async () => {
@@ -157,7 +155,7 @@ describe('il battito dell ingegnere accanto al pilota', () => {
     expect(fakes.presence).toEqual([{ kind: 'engineer', driving: false }])
   })
 
-  it('riprende a battere quando il battito del pilota e vecchio', async () => {
+  it('la pubblicazione browser non dipende dall eta del vecchio battito pilota', async () => {
     const link = await open([member({ updatedAtMs: NOW - 10 * 60_000 })])
     expect(fakes.presence).toEqual([{ kind: 'engineer', driving: false }])
     expect(link.members.value).toHaveLength(1)
@@ -170,11 +168,14 @@ describe('il battito dell ingegnere accanto al pilota', () => {
     expect(fakes.presence).toEqual([])
   })
 
-  it('a ogni battito ricontrolla: appena il pilota compare, il browser tace', async () => {
-    await open([])
+  it('in due ore non ripubblica la presenza e riaprire la stessa stanza conserva gli ascolti', async () => {
+    const link = await open([])
     expect(fakes.presence).toHaveLength(1)
     fakes.pushMembers?.([member()])
-    await vi.advanceTimersByTimeAsync(31_000)
+    const watch = fakes.pushMembers
+    await link.selectRoom('r1')
+    expect(fakes.pushMembers).toBe(watch)
+    await vi.advanceTimersByTimeAsync(2 * 60 * 60_000)
     expect(fakes.presence).toHaveLength(1)
   })
 })
@@ -275,6 +276,16 @@ describe('l ordine alla vettura', () => {
   it('senza gara selezionata non parte niente', async () => {
     const link = build()
     expect(await link.sendPlan({ tyreSet: 4 })).toBe(false)
+  })
+
+  it('un ingresso riuscito elimina l errore della gara precedente', async () => {
+    const link = await open([member()])
+    fakes.sendOk = false
+    expect(await link.sendPlan({ tyreSet: 4 })).toBe(false)
+    expect(link.lastError.value).toBeTruthy()
+    await link.selectRoom(null)
+    await link.selectRoom('r1')
+    expect(link.lastError.value).toBeNull()
   })
 })
 

@@ -71,10 +71,13 @@ export interface PitwallStrategySnapshot {
   pressures: Record<'FL' | 'FR' | 'RL' | 'RR', number> | null
   /** Nota solo dopo che l'applicatore l'ha osservata: null = sconosciuta. */
   compound: 'dry' | 'wet' | null
+  verifiedFields?: Record<string, { observed: string | number | boolean, via: 'screen', observedAt: string | null }>
   updatedAt: string
 }
 
 export interface PitwallSession {
+  protocolVersion?: 3
+  roomId?: string | null
   schemaVersion: 1
   driverUid: string
   sessionId: string
@@ -189,6 +192,7 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
     tyreSet?: unknown
     pressures?: Record<string, unknown> | null
     compound?: unknown
+    verifiedFields?: unknown
   }
   const wheels = ['FL', 'FR', 'RL', 'RR'] as const
   // `Number(null)` vale 0: un valore assente non deve diventare un numero.
@@ -207,8 +211,23 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
       ? pressures as PitwallStrategySnapshot['pressures']
       : null,
     compound: source.compound === 'dry' || source.compound === 'wet' ? source.compound : null,
+    ...(source.verifiedFields ? { verifiedFields: boundPitwallVerifiedFields(source.verifiedFields) } : {}),
     updatedAt: nowIso,
   }
+}
+
+export function boundPitwallVerifiedFields(value: unknown): NonNullable<PitwallStrategySnapshot['verifiedFields']> {
+  if (!value || typeof value !== 'object') return {}
+  const result: NonNullable<PitwallStrategySnapshot['verifiedFields']> = {}
+  const fields = ['pitStrategy', 'compound', 'changeTyres', 'driverId', 'brakes', 'brakeFront', 'brakeRear', 'repairBodywork', 'repairSuspension']
+  for (const [field, entry] of Object.entries(value)) {
+    if (!fields.includes(field) || !entry || entry.via !== 'screen' || entry.observed == null
+      || !['string', 'number', 'boolean'].includes(typeof entry.observed)) continue
+    if (typeof entry.observed === 'string' && entry.observed.length > 80) continue
+    if (typeof entry.observed === 'number' && !Number.isFinite(entry.observed)) continue
+    result[field] = { observed: entry.observed, via: 'screen', observedAt: typeof entry.observedAt === 'string' ? entry.observedAt.slice(0, 40) : null }
+  }
+  return result
 }
 
 /**
@@ -236,6 +255,7 @@ export function isPitwallSessionFresh(
   maxAgeMs = 90_000
 ): boolean {
   if (!session?.online) return false
+  if (session.protocolVersion === 3) return true
   const updatedAt = pitwallSessionStampMs(session)
   return updatedAt != null && nowMs - updatedAt <= maxAgeMs
 }
@@ -355,6 +375,9 @@ export function describePitwallOrderStatus(status: PitwallOrderStatus | null | u
 export function describePitwallLinkError(raw: string | null | undefined): string | null {
   if (!raw) return null
   const message = String(raw)
+  if (/permission_denied/i.test(message)) {
+    return 'Il Pitwall non è più accessibile: potrebbe essere stato chiuso o il tuo accesso revocato.'
+  }
   if (/insufficient permissions|permission-denied/i.test(message)) {
     return 'Permesso negato: il pilota non ti ha autorizzato, oppure le regole di sicurezza non sono aggiornate.'
   }

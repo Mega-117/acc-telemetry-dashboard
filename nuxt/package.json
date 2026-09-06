@@ -44,7 +44,7 @@
     "lint:fix": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "firebase emulators:exec --only database --project demo-pitwall-audit --config ../firebase.json \"vitest run --coverage --maxWorkers=1\""
   },
   "dependencies": {
     "@lucide/vue": "^1.27.0",
