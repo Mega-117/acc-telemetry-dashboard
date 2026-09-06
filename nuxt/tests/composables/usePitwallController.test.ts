@@ -93,7 +93,7 @@ describe('la base dell ordine e la fotografia della vettura, solo se fresca', ()
     expect(controller.carFresh.value).toBe(false)
     expect(controller.drivers.value).toEqual([])
     const payload = controller.planPayload()
-    expect(Object.keys(payload).sort()).toEqual(['fuelLiters', 'pressures', 'tyreSet'])
+    expect(Object.keys(payload).sort()).toEqual(['fuelLiters', 'pressures'])
     // Mescola non toccata, preset e caselle a "non toccare": silenzio.
     expect(payload).not.toHaveProperty('compound')
     expect(payload).not.toHaveProperty('pitStrategy')
@@ -108,7 +108,7 @@ describe('la base dell ordine e la fotografia della vettura, solo se fresca', ()
     expect(controller.carFresh.value).toBe(true)
     expect(controller.presenceAgeSeconds.value).toBe(2)
     expect(controller.fuelLiters.value).toBe(10)
-    expect(controller.tyreSet.value).toBe(2)
+    expect(controller.tyreSet.value).toBe(3)
     expect(controller.pressures.value).toEqual(BASELINE)
     expect(controller.planPayload()).toEqual({})
     expect(controller.hasChanges.value).toBe(false)
@@ -320,10 +320,10 @@ describe('l invio spento dice quale cosa lo blocca, nell ordine in cui conta', (
     const { link, controller } = build()
     link.carSnapshot.value = snapshot(1_000)
     await nextTick()
-    controller.tyreSet.value = 3
+    controller.tyreSet.value = 4
     await expect(controller.sendToCar()).resolves.toBe(true)
-    expect(link.sendPlan).toHaveBeenCalledWith({ tyreSet: 3 })
-    expect(controller.sentPlan.value?.tyreSet).toBe(3)
+    expect(link.sendPlan).toHaveBeenCalledWith({ tyreSet: 4 })
+    expect(controller.sentPlan.value?.tyreSet).toBe(4)
   })
 })
 
@@ -373,20 +373,20 @@ describe('mentre l ordine e in volo la colonna Strategia non si muove', () => {
     link.carSnapshot.value = snapshot(1_000, { fuelToAdd: 45, tyreSet: 7, compound: 'dry', pressures: { ...BASELINE } })
     await nextTick()
     expect(controller.fuelLiters.value).toBe(60)
-    expect(controller.tyreSet.value).toBe(2)
+    expect(controller.tyreSet.value).toBe(3)
 
     // Concluso: il carburante e' arrivato a 60, il set e' rimasto a 7 (in disaccordo).
     link.carSnapshot.value = snapshot(1_000, { fuelToAdd: 60, tyreSet: 7, compound: 'dry', pressures: { ...BASELINE } })
     link.orderStatus.value = 'partial'
     await nextTick()
     // Il campo in disaccordo resta quello chiesto: richiesto e "in macchina" restano confrontabili.
-    expect(controller.tyreSet.value).toBe(2)
+    expect(controller.tyreSet.value).toBe(3)
     expect(controller.fuelLiters.value).toBe(60)
     // Da qui la macchina si segue di nuovo sui campi che coincidono.
     link.carSnapshot.value = snapshot(1_000, { fuelToAdd: 58, tyreSet: 7, compound: 'dry', pressures: { ...BASELINE } })
     await nextTick()
     expect(controller.fuelLiters.value).toBe(58)
-    expect(controller.tyreSet.value).toBe(2)
+    expect(controller.tyreSet.value).toBe(3)
   })
 })
 
@@ -435,5 +435,52 @@ describe('cio che l occhio ha visto resta, anche dopo l ordine successivo', () =
     link.room.value = { roomId: 'room-2', track: 'Monza', closedAt: null }
     await nextTick()
     expect(controller.seenOnScreen.value).toEqual({})
+  })
+})
+
+
+describe('PIP-389: numero pubblico e aggiornamento atomico riparazioni', () => {
+  it('set 3 nel payload e LIVE 3 dall indice ACC 2; nessuna pubblicazione su edit locale', async () => {
+    const { link, controller } = build()
+    link.carSnapshot.value = snapshot(1000, { fuelToAdd: 10, tyreSet: 3, compound: 'dry', pressures: BASELINE })
+    await nextTick()
+    controller.tyreSet.value = 3
+    expect(controller.planPayload()).toEqual({ tyreSet: 3 })
+    expect(link.sendPlan).not.toHaveBeenCalled()
+    await controller.sendToCar()
+    expect(link.sendPlan).toHaveBeenCalledWith({ tyreSet: 3 })
+    link.carSnapshot.value = snapshot(1000)
+    await nextTick()
+    expect(controller.car.value.tyreSet).toBe(3)
+    expect(controller.tyreSet.value).toBe(3)
+    expect(controller.planPayload()).toEqual({})
+  })
+  it.each([null, undefined, -1, 50, NaN])('set osservato invalido %s resta sconosciuto', async tyreSet => {
+    const { link, controller } = build()
+    link.carSnapshot.value = snapshot(1000, { fuelToAdd: 10, tyreSet, compound: 'dry', pressures: BASELINE })
+    await nextTick()
+    expect(controller.car.value.tyreSet).toBeNull()
+    expect(controller.tyreSet.value).toBeNull()
+    expect(controller.planPayload()).not.toHaveProperty('tyreSet')
+  })
+  it('le due viste usano gli stessi setter atomici e null cancella soltanto la coppia', async () => {
+    const { link, controller: c } = build()
+    link.carSnapshot.value = snapshot(1000)
+    await nextTick()
+    c.fuelLiters.value = 30
+    c.repairSuspension.value = true
+    expect(c.planPayload()).toMatchObject({ repairSuspension: true, repairBodywork: true })
+    c.repairSuspension.value = false
+    expect(c.planPayload()).toMatchObject({ repairSuspension: false, repairBodywork: true })
+    c.repairBodywork.value = false
+    expect(c.planPayload()).toMatchObject({ repairSuspension: false, repairBodywork: false })
+    c.repairBodywork.value = true
+    expect(c.planPayload()).toMatchObject({ repairSuspension: false, repairBodywork: true })
+    for (const field of ['repairSuspension', 'repairBodywork'] as const) {
+      c.repairSuspension.value = true
+      c[field].value = null
+      expect(c.planPayload()).toEqual({ fuelLiters: 30 })
+    }
+    expect(link.sendPlan).not.toHaveBeenCalled()
   })
 })

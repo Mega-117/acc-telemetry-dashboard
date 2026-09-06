@@ -33,7 +33,7 @@ export interface PitwallStopHandle {
   pressures: Ref<Record<PitwallWheel, number>>
   fuelLiters: Ref<number>
   compound: Ref<PitwallCompound>
-  tyreSet: Ref<number>
+  tyreSet: Ref<number | null>
   changeTyres: Ref<boolean | null>
   brakes: Ref<boolean | null>
   /**

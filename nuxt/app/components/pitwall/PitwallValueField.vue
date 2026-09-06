@@ -12,7 +12,7 @@ import type { PitwallEchoCell } from '~/utils/pitwallPresentation'
 const props = withDefaults(defineProps<{
   title?: string
   inputLabel: string
-  value: number
+  value: number | null
   min: number
   max: number
   step?: number
@@ -37,7 +37,7 @@ const emit = defineEmits<{
   'update:value': [value: number]
 }>()
 
-const displayValue = computed(() => props.value.toFixed(props.decimals).replace('.', ','))
+const displayValue = computed(() => props.value == null ? '—' : props.value.toFixed(props.decimals).replace('.', ','))
 
 function onInput(event: Event) {
   const parsed = Number((event.target as HTMLInputElement).value.replace(',', '.'))
@@ -61,7 +61,7 @@ function onInput(event: Event) {
       <button
         type="button"
         :aria-label="`Diminuisci ${inputLabel}`"
-        :disabled="value <= min"
+        :disabled="value != null && value <= min"
         @click="emit('step', -1)"
       >
         −
@@ -75,7 +75,7 @@ function onInput(event: Event) {
           role="spinbutton"
           :aria-valuemin="min"
           :aria-valuemax="max"
-          :aria-valuenow="value"
+          :aria-valuenow="value ?? undefined"
           :value="displayValue"
           @change="onInput"
         />
@@ -90,7 +90,7 @@ function onInput(event: Event) {
       <button
         type="button"
         :aria-label="`Aumenta ${inputLabel}`"
-        :disabled="value >= max"
+        :disabled="value != null && value >= max"
         @click="emit('step', 1)"
       >
         +

@@ -33,6 +33,10 @@ import {
   formatCompound,
   resolvePitwallOrderStatus,
   stepPressure,
+  tyreSetIndexToNumber,
+  updatePitwallRepairs,
+  pitwallRepairsCompatible,
+  type PitwallRepairs,
   type PitwallCarState,
   type PitwallCompound,
   type PitwallDriver,
@@ -109,7 +113,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   const fuelLiters = ref(0)
   const compound = ref<PitwallCompound>('dry')
   const compoundTouched = ref(false)
-  const tyreSet = ref(1)
+  const tyreSet = ref<number | null>(null)
   // Tre stati, non due: true accendi, false spegni, null non toccare. Con una
   // semplice casella l'ingegnere non poteva spegnere niente, e quello che
   // impostava non arrivava fedelmente in macchina.
@@ -125,8 +129,15 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
    */
   const brakeFront = ref<number | null>(null)
   const brakeRear = ref<number | null>(null)
-  const repairBodywork = ref<boolean | null>(null)
-  const repairSuspension = ref<boolean | null>(null)
+  const repairs = ref<PitwallRepairs>({ repairBodywork: null, repairSuspension: null })
+  const repairBodywork = computed({
+    get: () => repairs.value.repairBodywork,
+    set: (value: boolean | null) => { repairs.value = updatePitwallRepairs(repairs.value, 'repairBodywork', value) },
+  })
+  const repairSuspension = computed({
+    get: () => repairs.value.repairSuspension,
+    set: (value: boolean | null) => { repairs.value = updatePitwallRepairs(repairs.value, 'repairSuspension', value) },
+  })
   const sentPlan = ref<PitwallPlan | null>(null)
   /**
    * Cio' che l'occhio del PC del pilota ha visto sul Pit MFD, campo per campo,
@@ -147,7 +158,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
       pressures: strategy?.pressures ?? { ...pressures.value },
       fuelLiters: strategy?.fuelToAdd ?? fuelLiters.value,
       compound: (strategy?.compound as PitwallCompound | null | undefined) ?? compound.value,
-      tyreSet: strategy?.tyreSet ?? tyreSet.value,
+      tyreSet: tyreSetIndexToNumber(strategy?.tyreSet),
       // ACC non rilegge nessuna di queste caselle: in macchina restano ignote,
       // e ignoto non e' "spento". Dirlo con null evita di mostrare all'ingegnere
       // uno stato che nessuno ha verificato.
@@ -198,7 +209,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
    * nascosto le pressioni della Dry, perche' il piano le teneva ancora
    * (visto in pista, PIP-360).
    */
-  let synced: { fuel: number, tyreSet: number, compound: PitwallCompound, pressures: Record<PitwallWheel, number> } | null = null
+  let synced: { fuel: number, tyreSet: number | null, compound: PitwallCompound, pressures: Record<PitwallWheel, number> } | null = null
   function rememberSynced(): void {
     synced = { fuel: fuelLiters.value, tyreSet: tyreSet.value, compound: compound.value, pressures: { ...pressures.value } }
   }
@@ -229,8 +240,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     brakes.value = null
     brakeFront.value = null
     brakeRear.value = null
-    repairBodywork.value = null
-    repairSuspension.value = null
+    repairs.value = { repairBodywork: null, repairSuspension: null }
     driverId.value = null
     pitStrategy.value = null
   }
@@ -339,8 +349,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     brakes.value = null
     brakeFront.value = null
     brakeRear.value = null
-    repairBodywork.value = null
-    repairSuspension.value = null
+    repairs.value = { repairBodywork: null, repairSuspension: null }
     rememberSynced()
   }
 
@@ -373,7 +382,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     const strategy = carFresh.value ? session.value?.strategy ?? null : null
     const payload: Record<string, unknown> = {}
     if (strategy?.fuelToAdd == null || Math.abs(strategy.fuelToAdd - fuelLiters.value) >= 0.5) payload.fuelLiters = fuelLiters.value
-    if (strategy?.tyreSet == null || strategy.tyreSet !== tyreSet.value) payload.tyreSet = tyreSet.value
+    if (tyreSet.value != null && tyreSetIndexToNumber(strategy?.tyreSet) !== tyreSet.value) payload.tyreSet = tyreSet.value
     if (!strategy?.pressures || PITWALL_WHEELS.some(wheel => Math.abs((strategy.pressures?.[wheel] ?? Number.NaN) - pressures.value[wheel]) >= 0.05)) {
       payload.pressures = { ...pressures.value }
     }
@@ -400,7 +409,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
 
   const hasChanges = computed(() => Object.keys(planPayload()).length > 0)
   /** Spento anche quando ci sono modifiche, se l'ordine non potrebbe partire. */
-  const sendEnabled = computed(() => hasChanges.value && link.canSend.value)
+  const sendEnabled = computed(() => hasChanges.value && link.canSend.value && pitwallRepairsCompatible(repairs.value))
   const pendingRequests = computed(() => trust.pendingIncoming.value)
   /**
    * Chi ho autorizzato ad assistermi, tolti quelli che sono gia' nella gara.
@@ -429,11 +438,13 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     if (link.roomClosed.value) return 'Questa gara e chiusa: non accetta piu strategie.'
     if (!link.amMember.value) return 'Non sei ancora entrato in questa gara.'
     if (link.executor.value.reason !== 'ready') return link.executorLabel.value
+    if (!pitwallRepairsCompatible(repairs.value)) return 'Le sospensioni richiedono anche la riparazione della carrozzeria.'
     if (!hasChanges.value) return 'Nessuna modifica da inviare.'
     return null
   })
 
   async function sendToCar(): Promise<boolean> {
+    if (!pitwallRepairsCompatible(repairs.value)) return false
     // Le caselle non chieste stavolta restano quelle dell'ordine precedente:
     // "in macchina" per loro e' l'ultima richiesta fatta, non l'ultimo ordine.
     const previous = sentPlan.value

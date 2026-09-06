@@ -171,7 +171,7 @@ describe('Pitwall pressioni e sagoma vettura', () => {
     expect(controller).toContain('clampPressure(value)')
     expect(valueField).toContain(':aria-valuemin="min"')
     expect(valueField).toContain(':aria-valuemax="max"')
-    expect(valueField).toContain(':aria-valuenow="value"')
+    expect(valueField).toContain(':aria-valuenow="value ?? undefined"')
   })
 })
 
@@ -197,7 +197,7 @@ describe('Pitwall ordine reale e MFD onesto', () => {
     // Anche lo spento viaggia nell'ordine: `false` e' una richiesta, `null` no.
     expect(controller).toContain('if (changeTyres.value != null) payload.changeTyres = changeTyres.value')
     for (const field of ['brakes', 'repairSuspension', 'repairBodywork']) {
-      expect(controller).toContain(`const ${field} = ref<boolean | null>(null)`)
+      expect(controller).toContain(field.startsWith('repair') ? `const ${field} = computed({` : `const ${field} = ref<boolean | null>(null)` )
       expect(panel).toContain(`v-model="${field}"`)
     }
   })
@@ -380,7 +380,7 @@ describe('Pitwall wiring', () => {
     for (const cella of [
       '{{ seenValue("pitStrategy", last?.pitStrategy) }}',
       '{{ clampFuel(stop.car.value.fuelLiters) }} L',
-      '{{ clampTyreSet(stop.car.value.tyreSet) }}',
+      "{{ stop.car.value.tyreSet ?? '—' }}",
       'stop.car.value.compound === "wet" ? "Wet" : "Dry"',
       '{{ stop.car.value.pressures[wheel].toFixed(1) }}',
     ]) {

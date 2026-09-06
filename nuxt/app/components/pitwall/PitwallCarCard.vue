@@ -7,6 +7,7 @@ import { computed } from 'vue'
 import type { PitwallSession } from '~/services/pitwall/pitwallLink'
 import {
   formatToggle,
+  tyreSetIndexToNumber,
   resolveDriverName,
   type PitwallDriver,
   type PitwallPlan,
@@ -62,7 +63,7 @@ const rows = computed<MfdRow[]>(() => {
     },
     { label: 'Carburante in uscita', value: snapshot?.fuelToAdd == null ? '—' : `${snapshot.fuelToAdd} L`, source },
     { label: 'Cambio gomme', value: formatToggle(props.displayPlan.changeTyres), source: 'order' },
-    { label: 'Set pneumatici', value: snapshot?.tyreSet == null ? '—' : String(snapshot.tyreSet), source },
+    { label: 'Set pneumatici', value: String(tyreSetIndexToNumber(snapshot?.tyreSet) ?? '—'), source: tyreSetIndexToNumber(snapshot?.tyreSet) == null ? 'unavailable' : source },
     { label: 'Mescola', value: snapshot?.compound === 'wet' ? 'Wet' : snapshot?.compound === 'dry' ? 'Dry' : '—', source },
     { label: 'Pressione FL', value: psi(snapshot?.pressures?.FL), source },
     { label: 'Pressione FR', value: psi(snapshot?.pressures?.FR), source },

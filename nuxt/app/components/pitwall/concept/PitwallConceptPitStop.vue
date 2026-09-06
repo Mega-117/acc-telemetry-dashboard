@@ -25,7 +25,6 @@ import type { PitwallConceptSource } from "~/utils/pitwallConcept";
 import {
   PITWALL_WHEELS,
   clampFuel,
-  clampTyreSet,
   formatStopDuration,
   formatToggle,
   stepFuel,
@@ -219,7 +218,7 @@ function stepAll(direction: 1 | -1) {
         >
           −
         </button>
-        <b>{{ stop.tyreSet.value }}</b>
+        <b>{{ stop.tyreSet.value ?? '—' }}</b>
         <button
           type="button"
           aria-label="Set successivo"
@@ -229,7 +228,7 @@ function stepAll(direction: 1 | -1) {
         </button>
       </div>
       <span class="pwc-pit-car">
-        <b>{{ clampTyreSet(stop.car.value.tyreSet) }}</b>
+        <b>{{ stop.car.value.tyreSet ?? '—' }}</b>
         <em
           class="pwc-src"
           :class="`is-${observed}`"
@@ -388,6 +387,7 @@ function stepAll(direction: 1 | -1) {
       </span>
     </div>
 
+    <p class="pwc-repair-note">Le sospensioni richiedono anche la riparazione della carrozzeria</p>
     <div class="pwc-pit-row is-group">
       <span>Riparazioni</span>
     </div>
@@ -471,6 +471,7 @@ function stepAll(direction: 1 | -1) {
 .pwc-pit-row.is-sub > span { padding-left: 20px; color: $text-secondary; }
 /* "Riparazioni" e' solo il cappello delle due righe sotto: stessa griglia, ma
    letto come intestazione e non come campo da impostare. */
+.pwc-repair-note { margin: 0; padding: 10px 20px; color: $text-secondary; font-size: 12px; }
 .pwc-pit-row.is-group {
   min-height: 30px;
   color: $text-secondary;

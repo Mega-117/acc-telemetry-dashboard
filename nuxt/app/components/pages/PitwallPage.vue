@@ -257,7 +257,8 @@ function onSearchInput() {
               <fieldset class="repairs">
                 <legend>Servizi e riparazioni</legend>
                 <PitwallToggleField v-model="brakes" label="Sostituisci freni" />
-                <PitwallToggleField v-model="repairSuspension" label="Sospensioni" />
+                <p>Le sospensioni richiedono anche la riparazione della carrozzeria</p>
+                  <PitwallToggleField v-model="repairSuspension" label="Sospensioni" />
                 <PitwallToggleField v-model="repairBodywork" label="Carrozzeria" />
               </fieldset>
             </section>

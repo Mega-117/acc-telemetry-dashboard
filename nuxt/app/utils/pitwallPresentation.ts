@@ -58,7 +58,7 @@ export interface PitwallPlan {
   pressures: Record<PitwallWheel, number>
   fuelLiters: number
   compound: PitwallCompound
-  tyreSet: number
+  tyreSet: number | null
   /**
    * Le caselle del Pit MFD hanno **tre** stati, non due.
    *
@@ -133,8 +133,32 @@ export function clampTyreSet(value: number): number {
   return Math.round(clampToRange(value, PITWALL_TYRE_SET_MIN, PITWALL_TYRE_SET_MAX, PITWALL_TYRE_SET_MIN))
 }
 
+/** Convert only an observed ACC index; absent/invalid telemetry stays unknown. */
+export function tyreSetIndexToNumber(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < PITWALL_TYRE_SET_MAX ? value + 1 : null
+}
+
+export function tyreSetNumberToIndex(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= PITWALL_TYRE_SET_MIN && value <= PITWALL_TYRE_SET_MAX ? value - 1 : null
+}
+
+export type PitwallRepairs = Pick<PitwallPlan, 'repairSuspension' | 'repairBodywork'>
+
+/** Atomic user action, shared by both layouts; null cancels the pair. */
+export function updatePitwallRepairs(current: PitwallRepairs, field: keyof PitwallRepairs, value: boolean | null): PitwallRepairs {
+  if (value == null) return { repairSuspension: null, repairBodywork: null }
+  if (field === 'repairSuspension' && value) return { repairSuspension: true, repairBodywork: true }
+  if (field === 'repairBodywork' && !value) return { repairSuspension: false, repairBodywork: false }
+  return { ...current, [field]: value }
+}
+
+export function pitwallRepairsCompatible(value: PitwallRepairs): boolean {
+  return !(value.repairSuspension === true && value.repairBodywork === false)
+}
+
 /** Un click di freccia sul set gomme: +/- 1, senza uscire dai limiti. */
-export function stepTyreSet(value: number, direction: 1 | -1): number {
+export function stepTyreSet(value: number | null, direction: 1 | -1): number {
+  if (value == null) return PITWALL_TYRE_SET_MIN
   return clampTyreSet(clampTyreSet(value) + direction)
 }
 
@@ -207,7 +231,8 @@ export function formatCompound(value: PitwallCompound): string {
   return COMPOUND_LABELS[clampCompound(value)]
 }
 
-export function formatTyreSet(value: number): string {
+export function formatTyreSet(value: number | null): string {
+  if (value == null) return '—'
   return `Set ${clampTyreSet(value)}`
 }
 
@@ -262,7 +287,7 @@ export function pitwallChangedFields(plan: PitwallPlan, car: PitwallPlan): Pitwa
     if (isWheelField(field)) return pressureDelta(plan.pressures[field], car.pressures[field]) !== 0
     if (field === 'fuel') return clampFuel(plan.fuelLiters) !== clampFuel(car.fuelLiters)
     if (field === 'compound') return clampCompound(plan.compound) !== clampCompound(car.compound)
-    if (field === 'tyreSet') return clampTyreSet(plan.tyreSet) !== clampTyreSet(car.tyreSet)
+    if (field === 'tyreSet') return (plan.tyreSet != null && plan.tyreSet !== car.tyreSet)
     // `null` vuol dire "non toccare": non e' una differenza dalla macchina.
     if (field === 'changeTyres') return plan.changeTyres != null && plan.changeTyres !== car.changeTyres
     // Nessun pilota scelto significa "non cambiare": non e' una differenza
@@ -449,7 +474,7 @@ export function estimatePitStop(plan: PitwallPlan, car: PitwallPlan): PitwallSto
 
   const tyresChanged = plan.changeTyres === true
     || clampCompound(plan.compound) !== clampCompound(car.compound)
-    || clampTyreSet(plan.tyreSet) !== clampTyreSet(car.tyreSet)
+    || (plan.tyreSet != null && plan.tyreSet !== car.tyreSet)
   const tyres = tyresChanged ? PITWALL_STOP_TIMING.tyreChangeSeconds : 0
   if (tyres > 0) parts.push({ label: 'Cambio gomme', seconds: tyres })
 
