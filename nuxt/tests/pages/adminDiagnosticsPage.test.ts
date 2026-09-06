@@ -91,7 +91,8 @@ describe('admin diagnostics cleanup flow', () => {
     expect(summary.text()).toContain('10 utenti con errori')
     expect(summary.findAll('.diagnostic-users__name')).toHaveLength(3)
     expect(summary.get('summary').text()).toBe('+7 altri')
-    expect(summary.findAll('li')).toHaveLength(7)
+    expect(summary.findAll('ul li')).toHaveLength(7)
+    expect(summary.findAll('.diagnostic-users__name')[0]!.text()).toMatch(/Pilota 0\s*· 2 errori/)
     expect(summary.text()).not.toContain('private-id')
     await summary.get('summary').trigger('click')
     expect(repositoryMocks.loadClientDiagnosticsPage).toHaveBeenCalledTimes(1)
@@ -102,6 +103,32 @@ describe('admin diagnostics cleanup flow', () => {
     expect(wrapper.get('[aria-label="Utenti negli errori di questa pagina"]').text()).toContain('0 utenti con errori')
     expect(wrapper.find('details').exists()).toBe(false)
     expect(repositoryMocks.loadClientDiagnosticsPage).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('recaps error types per user and opens loaded details without cloud calls', async () => {
+    const base = { userId: 'a', pilotNickname: 'Rico', component: 'electron', severity: 'error',
+      code: 'HUD', message: 'HUD failed', stack: 'at hud()', occurredAt: '2026-09-06T09:00:00Z' }
+    repositoryMocks.loadClientDiagnosticsPage.mockResolvedValueOnce({ events: [
+      { ...base, eventId: 'one', context: { _aggVersion: 1, _aggCount: 15000 } },
+      { ...base, eventId: 'two' },
+      { ...base, eventId: 'three', userId: 'b', pilotNickname: 'Nico' },
+      ...Array.from({ length: 4 }, (_, i) => ({ ...base, eventId: `other-${i}`, code: `OTHER-${i}` }))
+    ], nextCursor: null })
+    const wrapper = await mountReadyPage()
+    const recap = wrapper.get('[aria-label="Riepilogo errori di questa pagina"]')
+    expect(recap.text()).toContain('5 tipi di errore')
+    expect(recap.findAll('.diagnostic-recap__item')).toHaveLength(3)
+    expect(recap.findAll('.diagnostic-recap__item')[0]!.text()).toContain('Rico: 15001 volte')
+    expect(recap.findAll('.diagnostic-recap__item')[0]!.text()).toContain('Nico: 1 volta')
+    await recap.get('.diagnostic-recap__toggle').trigger('click')
+    expect(recap.findAll('.diagnostic-recap__item')).toHaveLength(5)
+    await recap.findAll('.diagnostic-recap__open')[0]!.trigger('click')
+    expect(wrapper.find('.detail-backdrop').exists()).toBe(true)
+    expect(repositoryMocks.loadClientDiagnosticsPage).toHaveBeenCalledTimes(1)
+    expect(repositoryMocks.countClientDiagnostics).toHaveBeenCalledTimes(1)
+    expect(repositoryMocks.countExpiredClientDiagnostics).not.toHaveBeenCalled()
+    expect(repositoryMocks.deleteExpiredClientDiagnostics).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 

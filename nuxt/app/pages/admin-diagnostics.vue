@@ -392,7 +392,7 @@ onMounted(() => resetAndLoad())
       </span>
     </section>
 
-    <DiagnosticUsersSummary v-if="!isPending && !errorMessage" :events="events" />
+    <DiagnosticUsersSummary v-if="!isPending && !errorMessage" :events="events" @select="selected = $event" />
 
     <p v-if="errorMessage" class="error-banner" role="alert">
       <span>{{ errorMessage }}</span>

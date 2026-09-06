@@ -3,6 +3,9 @@ import {
   buildDiagnosticDateRange,
   diagnosticsViewState,
   diagnosticUsers,
+  diagnosticErrorGroups,
+  diagnosticOccurrenceCount,
+  diagnosticOccurrences,
   formatItalianDiagnosticDate,
   paginationTokens,
   resolveDiagnosticNickname
@@ -18,11 +21,51 @@ describe('diagnosticsPresentation', () => {
       { userId: '', pilotNickname: 'Sistema' },
       { userId: undefined, pilotNickname: 'Ignorato' }
     ])).toEqual([
-      { id: 'a', nickname: 'Nico' },
-      { id: 'b', nickname: 'Nico' },
-      { id: 'c', nickname: 'Utente non disponibile' }
+      { id: 'a', nickname: 'Nico', count: 2 },
+      { id: 'b', nickname: 'Nico', count: 1 },
+      { id: 'c', nickname: 'Utente non disponibile', count: 1 }
     ])
     expect(diagnosticUsers([])).toEqual([])
+  })
+  it.each([undefined, {}, { _aggVersion: 2, _aggCount: 1 }, { _aggVersion: 1, _aggCount: 0 },
+    { _aggVersion: 1, _aggCount: -1 }, { _aggVersion: 1, _aggCount: 1.5 },
+    { _aggVersion: 1, _aggCount: '4' }, { _aggVersion: 1, _aggCount: Infinity }])('treats invalid or legacy aggregation as one: %j', (context) => {
+    expect(diagnosticOccurrenceCount({ context })).toBe(1)
+    expect(diagnosticOccurrences({ context, occurredAt: '2026-09-06T09:00:00Z' })).toBe('1 occorrenza')
+  })
+  it('groups error types across users and sums aggregates plus legacy reports without mutating inputs', () => {
+    const common = { component: 'electron', code: 'HUD', message: 'HUD failed', stack: 'at hud()', suiteVersion: '1' }
+    const rows = [
+      { ...common, userId: 'a', pilotNickname: 'Nico', context: { _aggVersion: 1, _aggCount: 15000 } },
+      { ...common, userId: 'a', pilotNickname: 'Nico' },
+      { ...common, userId: 'b', pilotNickname: 'Nico' },
+      { ...common, userId: '' },
+      { ...common, userId: 'a', message: 'Connection failed' },
+      { ...common, userId: 'a', stack: 'at other()' },
+      { ...common, userId: 'a', suiteVersion: '2' },
+      { ...common, userId: 'a', code: 'OTHER' },
+      { ...common, userId: 'a', component: 'frontend' }
+    ]
+    const snapshot = JSON.stringify(rows)
+    const groups = diagnosticErrorGroups(rows)
+    expect(groups).toHaveLength(6)
+    expect(groups[0]).toMatchObject({ count: 15003, unknownCount: 1, users: [
+      { id: 'a', nickname: 'Nico', count: 15001 }, { id: 'b', nickname: 'Nico', count: 1 }
+    ] })
+    expect(groups[0]!.sample).toBe(rows[0])
+    expect(diagnosticUsers(rows).find(user => user.id === 'a')!.count).toBe(15006)
+    expect(JSON.stringify(rows)).toBe(snapshot)
+    expect(diagnosticErrorGroups([])).toEqual([])
+  })
+  it('unifies old sanitized path variants without merging different function call sites', () => {
+    const base = { userId: 'a', component: 'electron', code: 'HUD', message: 'HUD failed' }
+    const groups = diagnosticErrorGroups([
+      { ...base, stack: 'TypeError: HUD failed\n    at evaluateDrivingState (<path>)\n    at Timeout._onTimeout (<path>)' },
+      { ...base, stack: 'TypeError: HUD failed\n    at evaluateDrivingState (<path>)\\desktop-app\\main.js:2357:33)\n    at Timeout._onTimeout (<path>)\\desktop-app\\main.js:2401:46)' },
+      { ...base, stack: 'TypeError: HUD failed\n    at otherFunction (<path>)' }
+    ])
+    expect(groups).toHaveLength(2)
+    expect(groups[0]!.count).toBe(2)
   })
   it('costruisce il default 7 giorni inclusivo in ora italiana', () => {
     const range = buildDiagnosticDateRange('7d', '', '', new Date('2026-08-02T12:00:00.000Z'))

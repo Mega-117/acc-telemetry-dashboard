@@ -1,8 +1,16 @@
+import { sanitizeDiagnosticText } from '~/services/monitoring/clientDiagnosticsService'
+
 export const ITALIAN_TIME_ZONE = 'Europe/Rome'
+
+export function diagnosticOccurrenceCount(event: { context?: Record<string, unknown> }): number {
+  const context = event.context || {}
+  return context._aggVersion === 1 && Number.isSafeInteger(context._aggCount) && Number(context._aggCount) > 0
+    ? Number(context._aggCount) : 1
+}
 
 export function diagnosticOccurrences(event: { context?: Record<string, unknown>, occurredAt: string }): string {
   const context = event.context || {}
-  if (context._aggVersion !== 1 || !Number.isSafeInteger(context._aggCount) || Number(context._aggCount) < 1) return '1 occorrenza'
+  if (context._aggVersion !== 1 || diagnosticOccurrenceCount(event) !== context._aggCount) return '1 occorrenza'
   const first = String(context._aggFirst || event.occurredAt)
   const last = String(context._aggLast || event.occurredAt)
   return `${context._aggCount} ${context._aggCount === 1 ? 'occorrenza' : 'occorrenze'} · ${formatItalianDiagnosticDate(first)} – ${formatItalianDiagnosticDate(last)}`
@@ -117,14 +125,50 @@ export function resolveDiagnosticNickname(userId: unknown, nickname: unknown): s
   return 'Utente non disponibile'
 }
 
-export function diagnosticUsers(events: readonly { userId?: unknown, pilotNickname?: unknown }[]) {
-  const users = new Map<string, { id: string, nickname: string }>()
+export interface DiagnosticRecapEvent {
+  userId?: unknown
+  pilotNickname?: unknown
+  context?: Record<string, unknown>
+  component?: string
+  code?: string
+  message?: string
+  stack?: string
+  suiteVersion?: string | null
+}
+
+export function diagnosticUsers(events: readonly DiagnosticRecapEvent[]) {
+  const users = new Map<string, { id: string, nickname: string, count: number }>()
   for (const event of events) {
     const id = typeof event.userId === 'string' ? event.userId.trim() : ''
-    if (!id || users.has(id)) continue
-    users.set(id, { id, nickname: resolveDiagnosticNickname(id, event.pilotNickname) })
+    if (!id) continue
+    const user = users.get(id) || { id, nickname: resolveDiagnosticNickname(id, event.pilotNickname), count: 0 }
+    user.count += diagnosticOccurrenceCount(event)
+    users.set(id, user)
   }
   return [...users.values()]
+}
+
+export function diagnosticErrorGroups<T extends DiagnosticRecapEvent>(events: readonly T[]) {
+  const groups = new Map<string, { key: string, sample: T, message: string, events: T[], count: number, unknownCount: number }>()
+  for (const event of events) {
+    const message = sanitizeDiagnosticText(event.message)
+    // Keep call sites, not machine paths/line numbers: legacy sanitizers left
+    // different path suffixes for the same failure. Distinct functions stay distinct.
+    const stack = sanitizeDiagnosticText(event.stack, 8000).split('\n')
+      .map(line => line.trim().replace(/\s+\(.*\)$/, '')).join('\n')
+    // Conservative presentation grouping: do not merge different functions or versions.
+    // Cloud fingerprints can differ across producers and are not a global error identity.
+    const key = JSON.stringify([event.component || '', event.code || '', message,
+      stack, event.suiteVersion || ''])
+    const group = groups.get(key) || { key, sample: event, message, events: [], count: 0, unknownCount: 0 }
+    const count = diagnosticOccurrenceCount(event)
+    group.events.push(event)
+    group.count += count
+    if (typeof event.userId !== 'string' || !event.userId.trim()) group.unknownCount += count
+    groups.set(key, group)
+  }
+  return [...groups.values()].map(({ events: rows, ...group }) => ({ ...group, users: diagnosticUsers(rows) }))
+    .sort((a, b) => b.count - a.count)
 }
 
 export function diagnosticsViewState(params: {
