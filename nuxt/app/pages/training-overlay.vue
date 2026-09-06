@@ -110,6 +110,8 @@ const {
   load: loadSpotterVoiceSettings,
   setReferencesEnabled,
   setCoachEnabled,
+  pressureWarningsEnabled,
+  togglePressureWarnings,
 } = useSpotterVoiceSettings()
 const { canEnterApp, isSecondaryLocalRuntime, isLocalRuntimeAttested } = useFirebaseAuth()
 const canUseSpotterControls = computed(() => resolveLocalRuntimeCapability({
@@ -354,6 +356,7 @@ const activeTask = computed(() => {
 })
 const coachAudioToggleLabel = computed(() => spotterEnabled.value ? 'Disattiva avvisi giro' : 'Attiva avvisi giro')
 const referenceAudioToggleLabel = computed(() => trackVoiceReferencesEnabled.value ? 'Disattiva riferimenti' : 'Attiva riferimenti')
+const pressureAudioToggleLabel = computed(() => pressureWarningsEnabled.value ? 'Disattiva avvisi pressioni' : 'Attiva avvisi pressioni')
 const launcherVoiceStatus = computed(() => {
   if (!canUseSpotterControls.value) return 'Login richiesto'
   if (!soundEnabled.value) return 'Audio disattivato'
@@ -521,6 +524,11 @@ async function confirmInfoTarget() {
   await getOverlayApi()?.trainingOverlayClose?.()
 }
 
+
+function togglePressureAudio() {
+  if (!canUseSpotterControls.value) return
+  togglePressureWarnings()
+}
 
 function toggleCoachAudio() {
   if (!canUseSpotterControls.value) {
@@ -980,6 +988,20 @@ onBeforeUnmount(() => {
                     </button>
                     <button
                       type="button"
+                      class="launcher-tool-button launcher-tool-button--coach"
+                      :class="{ 'is-active': pressureWarningsEnabled, 'is-selected': selectedWheelActionId === 'pressure-audio' }"
+                      data-overlay-wheel-action="pressure-audio"
+                      :aria-pressed="pressureWarningsEnabled"
+                      :aria-current="selectedWheelActionId === 'pressure-audio' ? 'true' : undefined"
+                      :aria-label="pressureAudioToggleLabel"
+                      :disabled="!canUseSpotterControls"
+                      @focus="selectedWheelActionId = 'pressure-audio'"
+                      @click="togglePressureAudio"
+                    >
+                      {{ pressureAudioToggleLabel }}
+                    </button>
+                    <button
+                      type="button"
                       class="launcher-tool-button launcher-tool-button--target"
                       :class="{ 'is-active': infoTargetActive, 'is-selected': selectedWheelActionId === 'target' }"
                       data-overlay-wheel-action="target"
@@ -1263,4 +1285,3 @@ onBeforeUnmount(() => {
 .pressure-plan__clicks { color: #86efac; font-weight: 950; }
 .pressure-plan__note, .pressure-plan__empty { margin: 0; color: rgba(226, 238, 247, 0.52); font-size: 8px; line-height: 1.2; text-align: left; }
 </style>
-

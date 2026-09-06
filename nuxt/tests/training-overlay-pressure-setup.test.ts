@@ -6,6 +6,14 @@ const source = readFileSync(fileURLToPath(new URL('../app/pages/training-overlay
 const styles = readFileSync(fileURLToPath(new URL('../app/assets/scss/_training-overlay.scss', import.meta.url)), 'utf8')
 
 describe('training overlay Setup pressure contract', () => {
+  it('offers an accessible independent audio action on the existing wheel navigation', () => {
+    expect(source).toContain('data-overlay-wheel-action="pressure-audio"')
+    expect(source).toContain(':aria-pressed="pressureWarningsEnabled"')
+    expect(source).toContain('@click="togglePressureAudio"')
+    expect(source).toContain("'Disattiva avvisi pressioni' : 'Attiva avvisi pressioni'")
+    expect(source).toMatch(/function togglePressureAudio\(\) \{\s*if \(!canUseSpotterControls.value\) return\s*togglePressureWarnings\(\)/)
+    expect(source).toContain(':disabled="dryPressureState.state !== \'ready\'"')
+  })
   it('presents the neutral product action without the retired popup', () => {
     expect(source).toContain('Regola pressioni')
     expect(source).toContain('dryPressureState.qaActive')

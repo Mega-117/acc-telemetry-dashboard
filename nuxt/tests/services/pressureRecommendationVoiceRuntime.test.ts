@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createVoicePlaybackQueue } from '~/services/audio/voicePlaybackQueue'
 import type { PressureRecommendationViewModel } from '~/services/overlay/tyreSetupViewModel'
 import { createPressureRecommendationVoiceRuntime } from '~/services/spotter/pressureRecommendationVoiceRuntime'
+import { isSpotterFeatureAllowed, type SpotterSessionMode } from '~/services/spotter/spotterSessionPolicy'
 
 function recommendation(
   completedLaps: number,
@@ -19,6 +20,47 @@ function recommendation(
 }
 
 describe('pressureRecommendationVoiceRuntime deterministic replay', () => {
+  for (const enabled of [true, false]) {
+    for (const selected of ['practice', 'qualify', 'race'] as SpotterSessionMode[]) {
+      it(`filters pressure cues for master=${enabled}, selection=${selected}`, () => {
+        for (const [session, mode] of [[0, 'practice'], [3, 'practice'], [4, 'practice'], [7, 'practice'], [1, 'qualify'], [8, 'qualify'], [2, 'race'], [null, null], [99, null]] as const) {
+          const queued: string[] = []
+          const runtime = createPressureRecommendationVoiceRuntime({
+            getVoice: () => 'if_sara',
+            canAnnounce: () => isSpotterFeatureAllowed(enabled, [selected], session),
+            enqueue: cue => { queued.push(cue.id); return true },
+          })
+          runtime.recordRecommendation(recommendation(2))
+          runtime.recordFinishCrossing(3)
+          runtime.recordRecommendation(recommendation(3))
+          expect(queued).toHaveLength(enabled && mode === selected ? 1 : 0)
+        }
+      })
+    }
+  }
+
+  it('checks the current filter on delayed recommendations and never replays a muted lap', () => {
+    let allowed = true
+    const queued: string[] = []
+    const runtime = createPressureRecommendationVoiceRuntime({
+      getVoice: () => 'if_sara',
+      canAnnounce: () => allowed,
+      enqueue: cue => { queued.push(cue.id); return true },
+    })
+    runtime.recordRecommendation(recommendation(2))
+    runtime.recordFinishCrossing(3)
+    allowed = false
+    runtime.recordRecommendation(recommendation(3))
+    allowed = true
+    runtime.recordRecommendation(recommendation(3))
+    expect(queued).toEqual([])
+    runtime.recordFinishCrossing(4)
+    runtime.recordRecommendation(recommendation(4))
+    runtime.recordRecommendation(recommendation(4))
+    expect(queued).toHaveLength(1)
+    expect(queued[0]).toContain('lap-4')
+  })
+
   it('accoda la pressione dopo il tempo giro senza Control K e con correlazione completa', async () => {
     const trace: string[] = []
     const queue = createVoicePlaybackQueue({

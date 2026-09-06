@@ -26,6 +26,34 @@ afterEach(() => {
 })
 
 describe('useSpotterVoiceSettings session modes', () => {
+  it('defaults pressure warnings to enabled in all sessions without changing other defaults', () => {
+    const settings = useSpotterVoiceSettings()
+    settings.load()
+    expect(settings.pressureWarningsEnabled.value).toBe(true)
+    expect(settings.pressureWarningSessionModes.value).toEqual(['practice', 'qualify', 'race'])
+    expect(settings.lapTimeSessionModes.value).toEqual(['practice'])
+  })
+
+  it('persists the pressure master separately and reloads changes from another window', () => {
+    const settings = useSpotterVoiceSettings()
+    settings.load()
+    settings.setPressureWarningSessionModes(['qualify', 'race'])
+    settings.togglePressureWarnings()
+    expect(storage.get('acc.spotter.pressureWarnings.enabled')).toBe('0')
+    expect(storage.get('acc.spotter.pressureWarnings.sessionModes')).toBe('qualify,race')
+    settings.load()
+    expect(settings.pressureWarningsEnabled.value).toBe(false)
+    expect(settings.pressureWarningSessionModes.value).toEqual(['qualify', 'race'])
+    storage.set('acc.spotter.pressureWarnings.enabled', '1')
+    storage.set('acc.spotter.pressureWarnings.sessionModes', 'race')
+    settings.load()
+    expect(settings.pressureWarningsEnabled.value).toBe(true)
+    expect(settings.pressureWarningSessionModes.value).toEqual(['race'])
+    settings.setPressureWarningSessionModes([])
+    expect(settings.pressureWarningSessionModes.value.length).toBeGreaterThan(0)
+    expect(window.dispatchEvent).toHaveBeenCalled()
+  })
+
   it('defaults both existing installations and new installs to practice only', () => {
     const settings = useSpotterVoiceSettings()
     settings.load()

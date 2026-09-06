@@ -33,6 +33,7 @@ function pressureCorrelationId(completedLaps: number): string {
 
 export function createPressureRecommendationVoiceRuntime(options: {
   getVoice: () => string
+  canAnnounce?: () => boolean
   enqueue: (cue: VoiceCue) => boolean
   onEvent?: (event: PressureVoiceRuntimeEvent) => void
 }): PressureRecommendationVoiceRuntime {
@@ -43,6 +44,8 @@ export function createPressureRecommendationVoiceRuntime(options: {
   function applyOutcome(outcome: PressureRecommendationVoiceOutcome) {
     state = outcome.state
     if (!outcome.announce) return
+    // Resolve the lap even while muted: enabling must not replay old advice.
+    if (options.canAnnounce && !options.canAnnounce()) return
     const completedLaps = state.latestRecommendation?.completedLaps
     if (!Number.isFinite(completedLaps)) return
     const lap = Number(completedLaps)

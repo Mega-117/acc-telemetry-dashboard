@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   DEFAULT_SPOTTER_SESSION_MODES,
+  SPOTTER_SESSION_MODES,
   normalizeSpotterSessionModes,
   serializeSpotterSessionModes,
   toggleSpotterSessionMode,
@@ -16,6 +17,8 @@ export const spotterVoiceOptions: Array<{ id: SpotterVoiceId; label: string }> =
 
 const STORAGE_KEYS = {
   voice: 'acc.spotter.voice',
+  pressureWarningsEnabled: 'acc.spotter.pressureWarnings.enabled',
+  pressureWarningSessionModes: 'acc.spotter.pressureWarnings.sessionModes',
   referencesEnabled: 'acc.trackVoiceReferences.enabled',
   coachEnabled: 'acc.spotter.trainingCoach.enabled',
   referenceSessionModes: 'acc.trackVoiceReferences.sessionModes',
@@ -40,6 +43,8 @@ const adaptiveCoachEnabled = ref(false)
 const adaptiveCoachSessionModes = ref<SpotterSessionMode[]>([...DEFAULT_SPOTTER_SESSION_MODES])
 const adaptiveCoachMode = ref<AdaptiveCoachMode>('focus')
 const loaded = ref(false)
+const pressureWarningsEnabled = ref(true)
+const pressureWarningSessionModes = ref<SpotterSessionMode[]>([...SPOTTER_SESSION_MODES])
 
 function resolveVoiceId(value: unknown): SpotterVoiceId {
   return value === 'im_nicola' ? 'im_nicola' : 'if_sara'
@@ -52,6 +57,13 @@ function canUseStorage() {
 function readSettings() {
   if (!canUseStorage()) return
   selectedVoice.value = resolveVoiceId(window.localStorage.getItem(STORAGE_KEYS.voice))
+  const pressureRaw = window.localStorage.getItem(STORAGE_KEYS.pressureWarningsEnabled)
+  pressureWarningsEnabled.value = pressureRaw === null ? true : pressureRaw === '1'
+  const pressureModesRaw = window.localStorage.getItem(STORAGE_KEYS.pressureWarningSessionModes)
+  // Existing installations announced pressures in every supported session.
+  pressureWarningSessionModes.value = pressureModesRaw === null
+    ? [...SPOTTER_SESSION_MODES]
+    : normalizeSpotterSessionModes(pressureModesRaw)
   const referencesRaw = window.localStorage.getItem(STORAGE_KEYS.referencesEnabled)
   const coachRaw = window.localStorage.getItem(STORAGE_KEYS.coachEnabled)
   referencesEnabled.value = referencesRaw === null ? true : referencesRaw === '1'
@@ -140,6 +152,20 @@ function toggleLapTimeSessionMode(mode: SpotterSessionMode) {
   setLapTimeSessionModes(toggleSpotterSessionMode(lapTimeSessionModes.value, mode))
 }
 
+function setPressureWarningsEnabled(enabled: boolean) {
+  pressureWarningsEnabled.value = enabled
+  writeSetting(STORAGE_KEYS.pressureWarningsEnabled, enabled ? '1' : '0')
+}
+
+function togglePressureWarnings() {
+  setPressureWarningsEnabled(!pressureWarningsEnabled.value)
+}
+
+function setPressureWarningSessionModes(modes: SpotterSessionMode[]) {
+  pressureWarningSessionModes.value = normalizeSpotterSessionModes(modes)
+  writeSetting(STORAGE_KEYS.pressureWarningSessionModes, serializeSpotterSessionModes(pressureWarningSessionModes.value))
+}
+
 export function useSpotterVoiceSettings() {
   const voiceLabel = computed(() => spotterVoiceOptions.find(voice => voice.id === selectedVoice.value)?.label || 'Sara')
 
@@ -162,6 +188,11 @@ export function useSpotterVoiceSettings() {
   })
 
   return {
+    pressureWarningsEnabled,
+    pressureWarningSessionModes,
+    setPressureWarningsEnabled,
+    togglePressureWarnings,
+    setPressureWarningSessionModes,
     loaded,
     selectedVoice,
     voiceLabel,

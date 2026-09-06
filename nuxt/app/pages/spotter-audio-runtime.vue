@@ -50,6 +50,8 @@ useHead({
 const { getPublicPath } = usePublicPath()
 const {
   selectedVoice,
+  pressureWarningsEnabled,
+  pressureWarningSessionModes,
   referencesEnabled,
   coachEnabled: lapTimeAnnouncementsEnabled,
   referenceSessionModes,
@@ -88,6 +90,11 @@ const voiceQueue = createVoicePlaybackQueue({
 
 const pressureVoiceRuntime = createPressureRecommendationVoiceRuntime({
   getVoice: () => selectedVoice.value,
+  canAnnounce: () => canRunSpotterAudio.value && isSpotterFeatureAllowed(
+    pressureWarningsEnabled.value,
+    pressureWarningSessionModes.value,
+    fastState.value.sessionType,
+  ),
   enqueue: cue => voiceQueue.enqueue(cue),
   onEvent: event => voiceRuntimeDiagnostics.record({
     kind: event.kind,

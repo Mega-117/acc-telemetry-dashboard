@@ -35,6 +35,10 @@ const { isAdmin } = useFirebaseAuth()
 const voiceLabRuntime = useVoiceLabRuntime()
 const {
   selectedVoice,
+  pressureWarningsEnabled,
+  pressureWarningSessionModes,
+  togglePressureWarnings,
+  setPressureWarningSessionModes,
   voiceLabel,
   referencesEnabled,
   coachEnabled,
@@ -193,6 +197,19 @@ onMounted(() => {
                 :model-value="lapTimeSessionModes"
                 label="Sessioni abilitate per gli avvisi giro"
                 @update:model-value="setLapTimeSessionModes"
+              />
+            </article>
+
+            <article class="setting-block">
+              <span>Avvisi pressioni</span>
+              <strong>{{ pressureWarningsEnabled ? 'Attivo' : 'Disattivo' }}</strong>
+              <button type="button" class="toggle-button" :class="{ 'is-active': pressureWarningsEnabled }" :aria-pressed="pressureWarningsEnabled" @click="togglePressureWarnings">
+                {{ pressureWarningsEnabled ? 'Disattiva avvisi pressioni' : 'Attiva avvisi pressioni' }}
+              </button>
+              <SessionModePicker
+                :model-value="pressureWarningSessionModes"
+                label="Sessioni abilitate per gli avvisi pressioni"
+                @update:model-value="setPressureWarningSessionModes"
               />
             </article>
           </div>
