@@ -13,6 +13,7 @@ interface WheelControlsApi {
   controlsBeginCapture: (action: WheelControlAction, deviceId?: string) => Promise<WheelControlsState>
   controlsSetContext?: (context: { testMode: boolean; keyboardEditing: boolean }) => Promise<WheelControlsState>
   controlsCaptureKey?: (key: number) => Promise<WheelControlsState>
+  controlsRetrySource?: (source: 'keyboard' | 'controller') => Promise<WheelControlsState>
   controlsCancelCapture: () => Promise<WheelControlsState>
   controlsClearBinding: (action: WheelControlAction) => Promise<WheelControlsState>
   controlsReportSnapshot: (snapshot: WheelInputSnapshot) => Promise<WheelControlsState>
@@ -133,6 +134,8 @@ export function useWheelInputBridge() {
   const cancelCapture = async () => {
     const api = controlsApi()
     if (!api) return
+    // Cancel an in-flight native validation now, then also cancel any queued begin.
+    void api.controlsCancelCapture().catch(reportError)
     await enqueueConfiguration(() => api.controlsCancelCapture())
   }
 
@@ -158,6 +161,10 @@ export function useWheelInputBridge() {
     const api = controlsApi()
     if (api?.controlsCaptureKey) await enqueueConfiguration(() => api.controlsCaptureKey!(key))
   }
+  const retrySource = async (source: 'keyboard' | 'controller') => {
+    const api = controlsApi()
+    if (api?.controlsRetrySource) await enqueueConfiguration(() => api.controlsRetrySource!(source))
+  }
 
   const finishConfiguration = (): Promise<void> => {
     setTestMode(false)
@@ -165,6 +172,7 @@ export function useWheelInputBridge() {
     stateEpoch++
     const api = controlsApi()
     if (!api) return Promise.resolve()
+    void api.controlsCancelCapture().catch(reportError)
     // This is queued after any pending beginCapture, even if its response is slow.
     cleanupPromise = enqueueConfiguration(() => api.controlsCancelCapture())
       .finally(() => { cleanupPromise = null })
@@ -187,5 +195,6 @@ export function useWheelInputBridge() {
     setTestMode,
     finishConfiguration,
     captureKey,
+    retrySource,
   }
 }

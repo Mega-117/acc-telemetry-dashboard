@@ -34,6 +34,7 @@ export interface WheelControlsState {
   testMatches?: WheelControlAction[]
   inputBackend?: 'native' | 'gamepad'
   inputStatus?: 'starting' | 'ready' | 'unavailable'
+  sources?: Record<'keyboard' | 'controller', { status: 'starting' | 'ready' | 'unavailable'; reason: string | null }>
   disconnectedActions?: WheelControlAction[]
   unavailableKeys?: number[]
 }

@@ -43,11 +43,11 @@ describe('wheel configuration lifecycle', () => {
     const unmount = panel.finishConfiguration()
     expect(leave).toBe(unmount)
     expect(page.testMode.value).toBe(false)
-    expect(api.controlsCancelCapture).not.toHaveBeenCalled()
+    expect(api.controlsCancelCapture).toHaveBeenCalledTimes(1)
     pending.resolve({ ...initial(), capture: { action: 'togglePalette' } })
     await begin
     await leave
-    expect(api.controlsCancelCapture).toHaveBeenCalledTimes(1)
+    expect(api.controlsCancelCapture).toHaveBeenCalledTimes(2)
     expect(panel.state.value.capture).toBeNull()
   })
 

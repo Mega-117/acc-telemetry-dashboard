@@ -24,6 +24,7 @@ const {
   setTestMode,
   finishConfiguration,
   captureKey,
+  retrySource,
 } = useWheelInputBridge()
 
 const selectedDevice = ref('')
@@ -51,6 +52,13 @@ const onKeyUp = (event: KeyboardEvent) => {
   if (keyboardButton(event) === pendingKey) { void captureKey(pendingKey); pendingKey = null; keyHint.value = '' }
 }
 const onBlur = () => { pendingKey = null }
+const selectedSource = computed(() => selectedDevice.value === 'keyboard:system' ? 'keyboard' : selectedDevice.value ? 'controller' : null)
+const sourceReady = computed(() => {
+  if (!state.value.sources) return state.value.inputStatus !== 'unavailable' && state.value.inputStatus !== 'starting'
+  const source = selectedSource.value
+  return source ? state.value.sources[source].status === 'ready' : Object.values(state.value.sources).some(s => s.status === 'ready')
+})
+const failedSources = computed(() => (['keyboard', 'controller'] as const).filter(source => state.value.sources?.[source].status === 'unavailable'))
 onMounted(() => {
   window.addEventListener('keydown', onKeyDown, true)
   window.addEventListener('keyup', onKeyUp, true)
@@ -59,6 +67,11 @@ onMounted(() => {
 
 const statusText = computed(() => {
   if (!state.value.available) return 'Runtime comandi non disponibile'
+  if (state.value.sources && selectedSource.value) {
+    const source = state.value.sources[selectedSource.value]
+    if (source.status === 'starting') return 'Avvio lettore…'
+    if (source.status === 'unavailable') return selectedSource.value === 'keyboard' ? 'Lettore tastiera non disponibile.' : 'Lettore controller non disponibile.'
+  }
   if (state.value.inputStatus === 'starting') return 'Ricerca delle periferiche…'
   if (state.value.inputStatus === 'unavailable') return 'Lettura dei comandi non disponibile. Riavvia la Suite per riprovare.'
   if (!state.value.devices.length) return 'Nessun controller collegato. Puoi usare la tastiera.'
@@ -73,6 +86,8 @@ const errorText = computed(() => {
     settings_write_failed: 'Il comando non è stato salvato su disco. Riprova.',
     capture_ambiguous: 'Sono arrivati più pulsanti o ingressi insieme. Scegli il dispositivo nella tendina e premi nuovamente Assegna.',
     controls_unavailable: 'Collegamento ai comandi non disponibile. Riprova.',
+    source_unavailable: 'Il lettore del dispositivo scelto non è disponibile.',
+    key_unavailable: 'Questo tasto non è disponibile. Scegline un altro: il comando precedente è stato conservato.',
     device_disconnected: 'La periferica è stata scollegata. Ricollegala e premi Assegna.',
   } as Record<string, string>)[reason] || 'Comando non salvato. Riprova.'
 })
@@ -108,11 +123,16 @@ onBeforeUnmount(() => {
       <label for="command-device">Dispositivo</label>
       <select id="command-device" v-model="selectedDevice" :disabled="testMode">
         <option value="">Rileva automaticamente</option>
-        <option v-if="state.inputBackend === 'native'" value="keyboard:system">Tastiera</option>
+        <option v-if="state.inputBackend === 'native'" value="keyboard:system">Tastiera / tastierino / button box</option>
         <option v-for="device in devices" :key="device.id" :value="device.id">{{ device.label }}</option>
         <option v-if="selectedDevice && selectedDevice !== 'keyboard:system' && !devices.some(d => d.id === selectedDevice)" :value="selectedDevice">Dispositivo scollegato</option>
       </select>
       <span :class="['device-status', { 'is-connected': !!state.devices.length }]">{{ statusText }}</span>
+      <div v-for="source in failedSources" :key="source" role="status">
+        {{ source === 'keyboard' ? 'Lettore tastiera non avviato.' : 'Lettore controller non avviato.' }}
+        <button type="button" class="test-button" :disabled="!state.available || !!state.capture" @click="retrySource(source)">Riprova {{ source === 'keyboard' ? 'tastiera' : 'controller' }}</button>
+      </div>
+      <span v-if="state.inputBackend === 'native' && !state.sources" class="device-status">La separazione dei lettori richiede l’aggiornamento della Suite desktop.</span>
     </div>
 
     <p v-if="errorText" class="command-error" role="alert">{{ errorText }}</p>
@@ -149,7 +169,7 @@ onBeforeUnmount(() => {
           <button
             v-if="state.capture?.action !== action.id"
             type="button"
-            :disabled="!state.available || state.inputStatus === 'unavailable' || state.inputStatus === 'starting' || (!state.devices.length && state.inputBackend !== 'native') || !!state.capture || testMode"
+            :disabled="!state.available || !sourceReady || (!state.devices.length && state.inputBackend !== 'native') || !!state.capture || testMode"
             @click="beginCapture(action.id, selectedDevice)"
           >
             Assegna

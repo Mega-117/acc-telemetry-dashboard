@@ -16,6 +16,26 @@ beforeEach(() => {
 })
 
 describe('CommandBindingsPanel', () => {
+  it('keeps keyboard assign enabled when controller failed and retries only that source', async () => {
+    Object.assign(mock.bridge.state.value, { inputBackend: 'native', inputStatus: 'ready', devices: [], sources: { keyboard: { status: 'ready', reason: null }, controller: { status: 'unavailable', reason: 'spawn_failed' } } })
+    mock.bridge.retrySource = vi.fn()
+    const wrapper = mount(CommandBindingsPanel)
+    await wrapper.get('select').setValue('keyboard:system')
+    expect(wrapper.findAll('button').find(b => b.text() === 'Assegna')!.attributes('disabled')).toBeUndefined()
+    await wrapper.findAll('button').find(b => b.text() === 'Riprova controller')!.trigger('click')
+    expect(mock.bridge.retrySource).toHaveBeenCalledWith('controller')
+    mock.bridge.state.value.sources.keyboard.status = 'unavailable'
+    await wrapper.vm.$nextTick()
+    expect(wrapper.findAll('button').find(b => b.text() === 'Assegna')!.attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
+  it('explains the legacy runtime limitation and preserves its failure gate', () => {
+    Object.assign(mock.bridge.state.value, { inputBackend: 'native', inputStatus: 'unavailable' })
+    const wrapper = mount(CommandBindingsPanel)
+    expect(wrapper.text()).toContain('richiede l’aggiornamento')
+    expect(wrapper.findAll('button').find(b => b.text() === 'Assegna')!.attributes('disabled')).toBeDefined()
+    wrapper.unmount()
+  })
   it('warns about ambiguous devices without hiding existing bindings', () => {
     mock.bridge.state.value.ambiguousDeviceIds = ['Wheel']
     const wrapper = mount(CommandBindingsPanel)
@@ -53,7 +73,7 @@ describe('CommandBindingsPanel', () => {
     ]
     mock.bridge.captureKey = vi.fn()
     const wrapper = mount(CommandBindingsPanel)
-    expect(wrapper.findAll('option').map(o => o.text())).toEqual(['Rileva automaticamente', 'Tastiera', 'FANATEC · 63 pulsanti', 'FANATEC · 108 pulsanti'])
+    expect(wrapper.findAll('option').map(o => o.text())).toEqual(['Rileva automaticamente', 'Tastiera / tastierino / button box', 'FANATEC · 63 pulsanti', 'FANATEC · 108 pulsanti'])
     await wrapper.get('select').setValue('raw:b')
     await wrapper.findAll('button').find(b => b.text() === 'Assegna')!.trigger('click')
     expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith('togglePalette', 'raw:b')
