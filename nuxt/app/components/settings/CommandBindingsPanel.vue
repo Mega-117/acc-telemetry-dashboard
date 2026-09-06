@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 import {
   formatWheelBinding,
+  keyboardButton,
   type WheelControlAction,
 } from '~/services/controls/wheelBindingModel'
 
@@ -22,12 +23,46 @@ const {
   clearBinding,
   setTestMode,
   finishConfiguration,
+  captureKey,
 } = useWheelInputBridge()
+
+const selectedDevice = ref('')
+const keyHint = ref('')
+let pendingKey: number | null = null
+const devices = computed(() => state.value.devices.map((device, index) => ({
+  id: device.deviceId,
+  label: `${device.deviceLabel}${device.buttonCount ? ` · ${device.buttonCount} pulsanti` : ''}${state.value.devices.filter(d => d.deviceLabel === device.deviceLabel && d.buttonCount === device.buttonCount).length > 1 ? ` · ${index + 1}` : ''}`,
+})))
+watch(selectedDevice, () => { pendingKey = null; keyHint.value = ''; if (state.value.capture) void cancelCapture() })
+const onKeyDown = (event: KeyboardEvent) => {
+  if (!state.value.capture) return
+  if (event.key === 'Escape') { event.preventDefault(); event.stopImmediatePropagation(); void cancelCapture(); pendingKey = null; return }
+  if (state.value.capture.deviceId && state.value.capture.deviceId !== 'keyboard:system') return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  if (event.repeat) return
+  pendingKey = keyboardButton(event)
+  keyHint.value = pendingKey === null ? 'Usa un solo tasto: una lettera, un numero, F1–F24 o una freccia.' : 'Rilascia il tasto per salvarlo.'
+}
+const onKeyUp = (event: KeyboardEvent) => {
+  if (pendingKey === null || !state.value.capture) return
+  event.preventDefault()
+  event.stopImmediatePropagation()
+  if (keyboardButton(event) === pendingKey) { void captureKey(pendingKey); pendingKey = null; keyHint.value = '' }
+}
+const onBlur = () => { pendingKey = null }
+onMounted(() => {
+  window.addEventListener('keydown', onKeyDown, true)
+  window.addEventListener('keyup', onKeyUp, true)
+  window.addEventListener('blur', onBlur)
+})
 
 const statusText = computed(() => {
   if (!state.value.available) return 'Runtime comandi non disponibile'
-  if (!state.value.devices.length) return 'Volante non rilevato. Premi un pulsante per attivare il Gamepad API.'
-  return `Collegato: ${state.value.devices.map(device => device.deviceLabel).join(' · ')}`
+  if (state.value.inputStatus === 'starting') return 'Ricerca delle periferiche…'
+  if (state.value.inputStatus === 'unavailable') return 'Lettura dei comandi non disponibile. Riavvia la Suite per riprovare.'
+  if (!state.value.devices.length) return 'Nessun controller collegato. Puoi usare la tastiera.'
+  return `${state.value.devices.length} periferiche rilevate. Scegli un comando e premi Assegna.`
 })
 const errorText = computed(() => {
   const reason = state.value.operation?.reason || state.value.lastError
@@ -36,21 +71,27 @@ const errorText = computed(() => {
     binding_conflict: 'Questo pulsante è già assegnato a un altro comando.',
     settings_corrupt: 'Le impostazioni locali non erano valide: sono stati caricati binding vuoti.',
     settings_write_failed: 'Il comando non è stato salvato su disco. Riprova.',
-    capture_ambiguous: 'Sono stati premuti più pulsanti insieme. Premi Assegna e riprova con un solo pulsante.',
+    capture_ambiguous: 'Sono arrivati più pulsanti o ingressi insieme. Scegli il dispositivo nella tendina e premi nuovamente Assegna.',
     controls_unavailable: 'Collegamento ai comandi non disponibile. Riprova.',
+    device_disconnected: 'La periferica è stata scollegata. Ricollegala e premi Assegna.',
   } as Record<string, string>)[reason] || 'Comando non salvato. Riprova.'
 })
 
-onBeforeUnmount(() => { void finishConfiguration() })
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeyDown, true)
+  window.removeEventListener('keyup', onKeyUp, true)
+  window.removeEventListener('blur', onBlur)
+  void finishConfiguration()
+})
 </script>
 
 <template>
   <section class="commands-panel" aria-labelledby="commands-title">
     <header class="commands-panel__header">
       <div>
-        <p class="eyebrow">INPUT VOLANTE</p>
+        <p class="eyebrow">VOLANTE, TASTIERA E BUTTON BOX</p>
         <h2 id="commands-title">Comandi</h2>
-        <p>Assegna un pulsante per comando. La pressione lunga vale sempre come un solo comando.</p>
+        <p>Premi Assegna, poi il pulsante o il tasto che vuoi usare. Una pressione, un comando.</p>
       </div>
       <button
         type="button"
@@ -64,17 +105,27 @@ onBeforeUnmount(() => { void finishConfiguration() })
     </header>
 
     <div class="device-row">
+      <label for="command-device">Dispositivo</label>
+      <select id="command-device" v-model="selectedDevice" :disabled="testMode">
+        <option value="">Rileva automaticamente</option>
+        <option v-if="state.inputBackend === 'native'" value="keyboard:system">Tastiera</option>
+        <option v-for="device in devices" :key="device.id" :value="device.id">{{ device.label }}</option>
+        <option v-if="selectedDevice && selectedDevice !== 'keyboard:system' && !devices.some(d => d.id === selectedDevice)" :value="selectedDevice">Dispositivo scollegato</option>
+      </select>
       <span :class="['device-status', { 'is-connected': !!state.devices.length }]">{{ statusText }}</span>
     </div>
 
     <p v-if="errorText" class="command-error" role="alert">{{ errorText }}</p>
     <p v-if="state.ambiguousDeviceIds?.length" class="command-error" role="alert">
       Più periferiche hanno lo stesso identificativo: {{ state.ambiguousDeviceIds.join(', ') }}.
-      I loro comandi sono sospesi. Scollegane una per utilizzarli; le altre periferiche restano disponibili.
+      Seleziona il dispositivo e assegna nuovamente il pulsante.
     </p>
+    <p v-if="state.unavailableKeys?.length" class="command-error" role="alert">Un tasto assegnato non è disponibile per la Suite. Premi Assegna e scegli un altro tasto.</p>
     <p v-if="state.capture" class="capture-hint" role="status">
-      Premi il pulsante da assegnare.
+      {{ keyHint || 'Premi il pulsante o il tasto da assegnare. Esc per annullare.' }}
     </p>
+    <p v-if="testMode" class="capture-hint" role="status">Premi i comandi: si illumineranno qui senza azionare il pannello.</p>
+    <p v-if="selectedDevice === 'keyboard:system' || Object.values(state.bindings).some(b => b?.deviceId === 'keyboard:system')" class="keyboard-note">Scegli un tasto libero: mentre la Suite è attiva viene riservato al comando. Le button box che inviano tasti usano questa voce.</p>
 
     <div class="command-list">
       <article
@@ -90,13 +141,16 @@ onBeforeUnmount(() => { void finishConfiguration() })
           <strong>{{ action.title }}</strong>
           <span>{{ action.description }}</span>
         </div>
-        <code>{{ formatWheelBinding(state.bindings[action.id]) }}</code>
+        <div class="binding-copy">
+          <code>{{ formatWheelBinding(state.bindings[action.id]) }}</code>
+          <span v-if="state.disconnectedActions?.includes(action.id)">{{ state.bindings[action.id]?.deviceId.startsWith('raw:') ? 'Dispositivo scollegato. Ricollegalo oppure premi Assegna.' : 'Premi Assegna per confermare la periferica di questo comando.' }}</span>
+        </div>
         <div class="command-row__actions">
           <button
             v-if="state.capture?.action !== action.id"
             type="button"
-            :disabled="!state.available || !state.devices.length || !!state.capture || testMode"
-            @click="beginCapture(action.id)"
+            :disabled="!state.available || state.inputStatus === 'unavailable' || state.inputStatus === 'starting' || (!state.devices.length && state.inputBackend !== 'native') || !!state.capture || testMode"
+            @click="beginCapture(action.id, selectedDevice)"
           >
             Assegna
           </button>
@@ -123,7 +177,11 @@ h2 { margin: 4px 0 8px; font-size: 26px; } p { margin: 0; color: #9c9ca8; }
 .test-button, .command-row button { border: 1px solid rgba(255,255,255,.14); background: #24242d; color: #fff; border-radius: 9px; padding: 9px 13px; cursor: pointer; }
 .test-button.is-active { color: #65e6bd; border-color: rgba(101,230,189,.55); background: rgba(101,230,189,.1); }
 button:disabled { opacity: .38; cursor: not-allowed; }
-.device-row { display: flex; align-items: center; padding: 22px 0; }
+.device-row { display: grid; gap: 9px; padding: 22px 0; }
+.device-row label { font-size: 13px; font-weight: 700; }
+.device-row select { max-width: 460px; width: 100%; color: #f5f5f7; background: #24242d; border: 1px solid rgba(255,255,255,.2); padding: 11px; border-radius: 9px; }
+.binding-copy { display: grid; gap: 6px; } .binding-copy span { font-size: 12px; color: #efb35b; }
+.keyboard-note { font-size: 13px; margin: 10px 0; }
 .device-status { color: #efb35b; font-size: 13px; } .device-status.is-connected { color: #65e6bd; }
 .command-error { padding: 12px 14px; background: rgba(255,77,61,.12); border: 1px solid rgba(255,77,61,.35); border-radius: 9px; color: #ff8c81; }
 .capture-hint { padding: 12px 14px; background: rgba(91,157,255,.1); border-radius: 9px; color: #8eb8ff; }

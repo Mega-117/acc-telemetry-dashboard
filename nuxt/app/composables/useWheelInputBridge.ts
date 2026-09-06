@@ -10,7 +10,9 @@ import {
 
 interface WheelControlsApi {
   controlsGetState: () => Promise<WheelControlsState>
-  controlsBeginCapture: (action: WheelControlAction) => Promise<WheelControlsState>
+  controlsBeginCapture: (action: WheelControlAction, deviceId?: string) => Promise<WheelControlsState>
+  controlsSetContext?: (context: { testMode: boolean; keyboardEditing: boolean }) => Promise<WheelControlsState>
+  controlsCaptureKey?: (key: number) => Promise<WheelControlsState>
   controlsCancelCapture: () => Promise<WheelControlsState>
   controlsClearBinding: (action: WheelControlAction) => Promise<WheelControlsState>
   controlsReportSnapshot: (snapshot: WheelInputSnapshot) => Promise<WheelControlsState>
@@ -26,6 +28,7 @@ let lastSignature = ''
 let configurationQueue: Promise<void> = Promise.resolve()
 let cleanupPromise: Promise<void> | null = null
 let stateEpoch = 0
+let removeFocusListeners: (() => void) | null = null
 
 function controlsApi(): WheelControlsApi | null {
   if (typeof window === 'undefined') return null
@@ -74,7 +77,7 @@ export function useWheelInputBridge() {
   // A dedicated timer is independent from paint frames, which may stall while ACC is foreground.
   const poll = () => {
     const api = controlsApi()
-    if (api && typeof navigator.getGamepads === 'function') {
+    if (api && state.value.inputBackend !== 'native' && typeof navigator.getGamepads === 'function') {
       const snapshot = createGamepadSnapshot(navigator.getGamepads(), testMode.value ? 'test' : 'active')
       const sampledAtMs = Date.now()
       currentSnapshot.value = snapshot
@@ -96,6 +99,17 @@ export function useWheelInputBridge() {
     lastSignature = ''
     poll()
     pollTimer = window.setInterval(poll, WHEEL_POLL_INTERVAL_MS)
+    const onFocus = () => { queueMicrotask(() => { void sendContext() }) }
+    document.addEventListener('focusin', onFocus)
+    document.addEventListener('focusout', onFocus)
+    window.addEventListener('focus', onFocus)
+    window.addEventListener('blur', onFocus)
+    removeFocusListeners = () => {
+      document.removeEventListener('focusin', onFocus)
+      document.removeEventListener('focusout', onFocus)
+      window.removeEventListener('focus', onFocus)
+      window.removeEventListener('blur', onFocus)
+    }
     return true
   }
 
@@ -104,14 +118,16 @@ export function useWheelInputBridge() {
     pollTimer = null
     removeStateListener?.()
     removeStateListener = null
+    removeFocusListeners?.()
+    removeFocusListeners = null
     lastSignature = ''
   }
 
-  const beginCapture = async (action: WheelControlAction) => {
+  const beginCapture = async (action: WheelControlAction, deviceId?: string) => {
     const api = controlsApi()
     if (!api) return
     testMode.value = false
-    await enqueueConfiguration(() => api.controlsBeginCapture(action))
+    await enqueueConfiguration(() => deviceId ? api.controlsBeginCapture(action, deviceId) : api.controlsBeginCapture(action))
   }
 
   const cancelCapture = async () => {
@@ -129,6 +145,18 @@ export function useWheelInputBridge() {
   const setTestMode = (enabled: boolean) => {
     testMode.value = enabled
     lastSignature = ''
+    void sendContext()
+  }
+
+  const sendContext = () => {
+    const api = controlsApi()
+    if (!api?.controlsSetContext) return Promise.resolve()
+    const keyboardEditing = document.hasFocus() && !!document.activeElement?.closest('input, textarea, [contenteditable="true"]')
+    return enqueueConfiguration(() => api.controlsSetContext!({ testMode: testMode.value, keyboardEditing }))
+  }
+  const captureKey = async (key: number) => {
+    const api = controlsApi()
+    if (api?.controlsCaptureKey) await enqueueConfiguration(() => api.controlsCaptureKey!(key))
   }
 
   const finishConfiguration = (): Promise<void> => {
@@ -158,5 +186,6 @@ export function useWheelInputBridge() {
     clearBinding,
     setTestMode,
     finishConfiguration,
+    captureKey,
   }
 }

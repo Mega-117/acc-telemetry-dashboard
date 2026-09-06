@@ -19,7 +19,7 @@ describe('CommandBindingsPanel', () => {
   it('warns about ambiguous devices without hiding existing bindings', () => {
     mock.bridge.state.value.ambiguousDeviceIds = ['Wheel']
     const wrapper = mount(CommandBindingsPanel)
-    expect(wrapper.get('[role="alert"]').text()).toContain('Scollegane una')
+    expect(wrapper.get('[role="alert"]').text()).toContain('Seleziona il dispositivo')
     expect(wrapper.text()).toContain('Wheel · Pulsante 4')
     expect(wrapper.findAll('.is-tested')).toHaveLength(0)
     wrapper.unmount()
@@ -34,7 +34,7 @@ describe('CommandBindingsPanel', () => {
     await wrapper.findAll('button').find(button => button.text() === 'Rimuovi')!.trigger('click')
     expect(mock.bridge.clearBinding).toHaveBeenCalledWith('togglePalette')
     await wrapper.findAll('button').find(button => button.text() === 'Assegna')!.trigger('click')
-    expect(mock.bridge.beginCapture).toHaveBeenCalledWith('togglePalette')
+    expect(mock.bridge.beginCapture).toHaveBeenCalledWith('togglePalette', '')
     mock.bridge.state.value.lastError = 'capture_ambiguous'
     await wrapper.vm.$nextTick()
     expect(wrapper.get('[role="alert"]').text()).toContain('più pulsanti')
@@ -43,5 +43,33 @@ describe('CommandBindingsPanel', () => {
     await wrapper.findAll('button').find(button => button.text() === 'Annulla')!.trigger('click')
     expect(mock.bridge.cancelCapture).toHaveBeenCalled()
     wrapper.unmount()
+  })
+
+  it('distinguishes names by capabilities and captures only one local key on release', async () => {
+    mock.bridge.state.value.inputBackend = 'native'
+    mock.bridge.state.value.devices = [
+      { deviceId: 'raw:a', deviceLabel: 'FANATEC', buttonCount: 63 },
+      { deviceId: 'raw:b', deviceLabel: 'FANATEC', buttonCount: 108 },
+    ]
+    mock.bridge.captureKey = vi.fn()
+    const wrapper = mount(CommandBindingsPanel)
+    expect(wrapper.findAll('option').map(o => o.text())).toEqual(['Rileva automaticamente', 'Tastiera', 'FANATEC · 63 pulsanti', 'FANATEC · 108 pulsanti'])
+    await wrapper.get('select').setValue('raw:b')
+    await wrapper.findAll('button').find(b => b.text() === 'Assegna')!.trigger('click')
+    expect(mock.bridge.beginCapture).toHaveBeenLastCalledWith('togglePalette', 'raw:b')
+    mock.bridge.state.value.capture = { action: 'togglePalette', deviceId: 'keyboard:system' }
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F8' }))
+    expect(mock.bridge.captureKey).not.toHaveBeenCalled()
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'F8' }))
+    expect(mock.bridge.captureKey).toHaveBeenCalledWith(119)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'K', ctrlKey: true }))
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'K', ctrlKey: true }))
+    expect(mock.bridge.captureKey).toHaveBeenCalledTimes(1)
+    await wrapper.get('select').setValue('keyboard:system')
+    expect(mock.bridge.cancelCapture).toHaveBeenCalled()
+    wrapper.unmount()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'F8' }))
+    window.dispatchEvent(new KeyboardEvent('keyup', { key: 'F8' }))
+    expect(mock.bridge.captureKey).toHaveBeenCalledTimes(1)
   })
 })

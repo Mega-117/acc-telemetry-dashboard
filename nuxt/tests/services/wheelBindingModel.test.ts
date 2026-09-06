@@ -6,9 +6,21 @@ import {
   normalizeWheelBinding,
   wheelBindingsCollide,
   wheelSnapshotSignature,
+  keyboardButton,
 } from '../../app/services/controls/wheelBindingModel'
 
 describe('wheelBindingModel', () => {
+  it('accepts single keys, distinguishes numpad and rejects combinations/repeat/unsupported keys', () => {
+    const event = { key: '1', code: 'Digit1', ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, repeat: false }
+    expect(keyboardButton(event)).toBe(49)
+    expect(keyboardButton({ ...event, code: 'Numpad1' })).toBe(97)
+    expect(keyboardButton({ ...event, key: 'Insert', code: 'Numpad0' })).toBe(45)
+    expect(keyboardButton({ ...event, key: '+', code: 'NumpadAdd' })).toBe(107)
+    expect(keyboardButton({ ...event, key: 'F24' })).toBe(135)
+    expect(keyboardButton({ ...event, key: 'Shift' })).toBeNull()
+    expect(keyboardButton({ ...event, ctrlKey: true })).toBeNull()
+    expect(keyboardButton({ ...event, repeat: true })).toBeNull()
+  })
   it('does not highlight ambiguous devices while other devices still match', () => {
     const binding = { deviceId: 'Wheel', deviceLabel: 'Wheel', button: 3 }
     expect(matchingWheelActions({ togglePalette: binding, nextAction: { ...binding, deviceId: 'Box' }, mainMenu: null, activateAction: null }, {
