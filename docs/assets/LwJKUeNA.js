@@ -1,1 +1,0 @@
-import{af as a,bo as o,a7 as t,bS as n,A as s}from"./BB4LVW4s.js";const _={class:"page-container"},r=a({__name:"PageContainer",setup(c){return(e,p)=>(o(),t("div",_,[n(e.$slots,"default",{},void 0,!0)]))}}),d=Object.assign(s(r,[["__scopeId","data-v-71e40101"]]),{__name:"LayoutPageContainer"});export{d as _};

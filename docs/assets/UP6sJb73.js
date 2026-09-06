@@ -1,0 +1,1 @@
+import{aU as u,bQ as o,cu as r,a1 as s,bI as a}from"./BVXIiQ8x.js";const n=Symbol("pilotContext");function c(e){const t=o(e);return a(n,t),t}function i(){return u(n,o(null))}function p(){const{currentUser:e}=r(),t=i();return s(()=>t.value||e.value?.uid||null)}export{p as a,c as p,i as u};
