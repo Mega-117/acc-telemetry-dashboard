@@ -28,7 +28,7 @@ const props = defineProps<{
 
 defineEmits<{ send: [] }>();
 
-const order = computed(() => describePitwallConceptOrderStatus(props.status, props.reason));
+const order = computed(() => describePitwallConceptOrderStatus(props.status, props.reason, props.outcomes));
 const busy = computed(() => props.status === "pending" || props.status === "applying");
 
 /**

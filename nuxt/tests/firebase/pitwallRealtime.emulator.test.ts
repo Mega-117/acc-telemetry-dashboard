@@ -40,7 +40,7 @@ async function openRoom() {
   const roomId = result.value.roomId
   const joined = await engineer.joinRoom(roomId)
   expect(joined.ok, JSON.stringify(joined)).toBe(true)
-  expect((await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'runtime', strategy: { fuelToAdd: 25, tyreSet: 2, pressures: { FL: 26, FR: 26, RL: 26, RR: 26 } } })).ok).toBe(true)
+  expect((await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'runtime', strategy: { fuelToAdd: 25, tyreSet: 2, fittedTyreSet: 2, pressures: { FL: 26, FR: 26, RL: 26, RR: 26 } } })).ok).toBe(true)
   expect((await engineer.publishPresence(roomId, { nickname: 'Engineer', kind: 'engineer', driving: false, runtimeSessionId: 'browser' })).ok).toBe(true)
   for (const service of [driver, engineer]) disposers.push(service.watchMembers(roomId, () => {}))
   await vi.waitFor(async () => expect((await get(ref(driver.io.database, `pitwallV3/rooms/${roomId}/mfd`))).exists()).toBe(true))
@@ -187,6 +187,7 @@ describe('Pitwall RTDB rules and integrated services', () => {
     await assertFails(set(ref(db('stranger'), `pitwallV3/rooms/${roomId}/access/stranger`), 'manager'))
     const current = (await get(ref(driver.io.database, `pitwallV3/rooms/${roomId}/mfd`))).val()
     expect(current.strategy.fuelToAdd).toBe(25)
+    expect(current.strategy.fittedTyreSet).toBe(2)
   })
   it('claims once, persists an outcome and releases only its own claim atomically', async () => {
     const { driver, engineer, roomId } = await openRoom()
@@ -248,15 +249,17 @@ describe('Pitwall RTDB rules and integrated services', () => {
   })
   it('publishes no repeated MFD or presence and coalesces a multi-field change', async () => {
     const { driver, roomId } = await openRoom()
-    const state = { nickname: 'Driver', kind: 'driver' as const, driving: true, runtimeSessionId: 'runtime', strategy: { fuelToAdd: 25, tyreSet: 2, pressures: { FL: 26, FR: 26, RL: 26, RR: 26 } } }
+    const state = { nickname: 'Driver', kind: 'driver' as const, driving: true, runtimeSessionId: 'runtime', strategy: { fuelToAdd: 25, tyreSet: 2, fittedTyreSet: 2, pressures: { FL: 26, FR: 26, RL: 26, RR: 26 } } }
     await new Promise(resolve => setTimeout(resolve, 150))
     const before = driver.io.metrics.snapshot().writes
     for (let i = 0; i < 50; i++) await driver.publishPresence(roomId, state)
     await new Promise(resolve => setTimeout(resolve, 150))
     expect(driver.io.metrics.snapshot().writes).toBe(before)
     await driver.publishPresence(roomId, { ...state, strategy: { ...state.strategy, fuelToAdd: 30 } })
-    await driver.publishPresence(roomId, { ...state, strategy: { ...state.strategy, fuelToAdd: 30, tyreSet: 3 } })
+    await driver.publishPresence(roomId, { ...state, strategy: { ...state.strategy, fuelToAdd: 30, tyreSet: 3, fittedTyreSet: 4 } })
     await vi.waitFor(() => expect(driver.io.metrics.snapshot().writes).toBe(before + 1))
+    const changed = (await get(ref(driver.io.database, `pitwallV3/rooms/${roomId}/mfd`))).val()
+    expect(changed.strategy.fittedTyreSet).toBe(4)
   })
   it('requires a new manual order after ACC was unavailable', async () => {
     const { driver, engineer, roomId } = await openRoom()

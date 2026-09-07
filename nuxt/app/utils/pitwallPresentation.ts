@@ -157,9 +157,12 @@ export function pitwallRepairsCompatible(value: PitwallRepairs): boolean {
 }
 
 /** Un click di freccia sul set gomme: +/- 1, senza uscire dai limiti. */
-export function stepTyreSet(value: number | null, direction: 1 | -1): number {
-  if (value == null) return PITWALL_TYRE_SET_MIN
-  return clampTyreSet(clampTyreSet(value) + direction)
+export function stepTyreSet(value: number | null, direction: 1 | -1, fitted: number | null = null): number {
+  const mounted = tyreSetNumberToIndex(fitted) != null ? fitted : null
+  let next = value == null ? PITWALL_TYRE_SET_MIN : clampTyreSet(value) + direction
+  if (next === mounted) next += value == null ? 1 : direction
+  if (next < PITWALL_TYRE_SET_MIN || next > PITWALL_TYRE_SET_MAX) return value == null ? PITWALL_TYRE_SET_MIN : clampTyreSet(value)
+  return next
 }
 
 /** Riporta una mescola sconosciuta su "dry", che e' il caso normale. */

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { describePitwallConceptOrderStatus } from '~/utils/pitwallConcept'
 // La pagina del muretto, dal punto di vista di chi ci sta seduto.
 //
 // Non si assiste piu' una *persona*: si entra nella gara di una vettura. E' la
@@ -28,10 +29,8 @@ import {
   PITWALL_TYRE_SET_MIN,
   PITWALL_WHEELS,
   clampFuel,
-  clampTyreSet,
   describePitwallFieldOutcome,
   stepFuel,
-  stepTyreSet,
   wheelLabel,
 } from '~/utils/pitwallPresentation'
 
@@ -54,6 +53,9 @@ const {
   fuelLiters,
   compound,
   tyreSet,
+  tyreSetNotice,
+  adjustTyreSet,
+  setTyreSet,
   changeTyres,
   driverId,
   pitStrategy,
@@ -243,7 +245,8 @@ function onSearchInput() {
                   <img class="car-silhouette" src="/images/pitwall-car-top.svg?v=6" alt="Sagoma della vettura vista dall’alto">
                 </div>
                 <div class="tyre-settings">
-                  <PitwallValueField title="Set pneumatici" size="sm" input-label="Numero set pneumatici" :value="tyreSet" :min="PITWALL_TYRE_SET_MIN" :max="PITWALL_TYRE_SET_MAX" bare :echo="echo.tyreSet" @step="tyreSet = stepTyreSet(tyreSet, $event)" @update:value="tyreSet = clampTyreSet($event)" />
+                  <PitwallValueField title="Set pneumatici" size="sm" input-label="Numero set pneumatici" :value="tyreSet" :min="PITWALL_TYRE_SET_MIN" :max="PITWALL_TYRE_SET_MAX" bare :echo="echo.tyreSet" @step="adjustTyreSet" @update:value="setTyreSet" />
+                  <p v-if="tyreSetNotice" class="tyreset-note">{{ tyreSetNotice }}</p>
                   <label class="select-control"><span>Mescola</span><select :value="compound" @change="onCompoundChange"><option v-for="option in compoundOptions" :key="option.value" :value="option.value">{{ option.value === 'dry' ? 'Dry' : option.label }}</option></select></label>
                   <PitwallToggleField v-model="changeTyres" label="Cambio gomme" />
                 </div>
@@ -269,8 +272,8 @@ function onSearchInput() {
         <PitwallCarCard :session="session" :fresh="carFresh" :age-seconds="presenceAgeSeconds" :display-plan="mfdPlan" :drivers="drivers" :stop="stopEstimate">
           <template #order>
             <section v-if="link.orderProgress.value.label || fieldOutcomes.length" class="order-info" aria-label="Stato dell'ultimo ordine">
-              <div class="order-info__head"><strong>Ultimo ordine</strong><span :class="{ 'is-problem': link.orderProgress.value.problem }">{{ link.orderProgress.value.label || 'Nessun ordine' }}</span></div>
-              <p v-if="link.orderReason.value">{{ link.orderReason.value }}</p>
+              <div class="order-info__head"><strong>Ultimo ordine</strong><span :class="{ 'is-problem': link.orderProgress.value.problem }">{{ describePitwallConceptOrderStatus(link.orderStatus.value, link.orderReason.value, fieldOutcomes).label || 'Nessun ordine' }}</span></div>
+              <p v-if="link.orderReason.value">{{ describePitwallConceptOrderStatus(link.orderStatus.value, link.orderReason.value, fieldOutcomes).detail }}</p>
               <div v-if="fieldOutcomes.length" class="outcomes"><span v-for="item in fieldOutcomes" :key="item.field" :class="[`outcome`, `outcome--${describePitwallFieldOutcome(item).tone}`]" :title="[describePitwallFieldOutcome(item).title, item.reason].filter(Boolean).join(' · ')">{{ item.label }} {{ describePitwallFieldOutcome(item).mark }}<template v-if="describePitwallFieldOutcome(item).detail"> · {{ describePitwallFieldOutcome(item).detail }}</template></span></div>
             </section>
           </template>
@@ -313,4 +316,5 @@ function onSearchInput() {
 @media (max-width: 1120px) { .workspace { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .pitwall-page { padding-inline: 10px; }.connections { grid-template-columns: 1fr; }.connection-cell--recent { grid-column: auto; }.recent-list { max-height: none; overflow-y: visible; }.strategy-topline,.pit-services,.service-row { grid-template-columns: 1fr; }.strategy-topline { gap: 14px; }.tyres-layout { grid-template-columns: 1fr; }.pressure-map { min-height: 280px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.13); }.tyre-settings { padding: 18px 0 0; }.service-row { gap: 12px; padding: 0 0 12px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.09); }.repairs { padding: 12px 0 0; }.recent-row { grid-template-columns: 10px 1fr; padding: 7px 0; }.recent-row > :nth-child(n+3) { grid-column: 2; }.recent-row .btn { justify-self: start; } }
 @media (max-width: 480px) { .pressure-map { min-height: 348px; }.car-silhouette { top: 79px; width: 101px; height: 187px; }.tyre-control { width: 140px; }.tyre-control--fl { top: 8px; left: 0; }.tyre-control--fr { top: 8px; right: 0; }.tyre-control--rl { bottom: 10px; left: 0; }.tyre-control--rr { right: 0; bottom: 10px; }.tyre-control :deep(.stepper) { grid-template-columns: 44px 52px 44px; }.tyre-control :deep(.stepper > button) { width: 44px; min-height: 44px; }.tyre-control :deep(.value) { width: 52px; min-width: 52px; max-width: 52px; min-height: 44px; } }
+.tyreset-note { margin: 4px 0 10px; font-size: 12px; color: #e7ba68; }
 </style>

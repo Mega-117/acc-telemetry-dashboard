@@ -82,7 +82,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
             name: `${member.firstName} ${member.lastName}`.trim() || member.shortName,
             current: member.driverIndex === state.crew?.currentDriverIndex })) : null
           return { fingerprint: vehicle.fingerprint, label: vehicle.label ?? 'Gara in corso', track: vehicle.trackName ?? state.identity?.track,
-            raceNumber: vehicle.raceNumber, teamName: vehicle.teamName, driving: state.driverState === 'driving', crew, strategy: state.car }
+            raceNumber: vehicle.raceNumber, teamName: vehicle.teamName, driving: state.driverState === 'driving', crew, strategy: state.car ? { ...state.car, fittedTyreSet: state.identity?.fittedTyreSet ?? null } : null }
         },
         onStatus: value => { roomId.value = value.roomId; unavailableReason.value = value.reason; setPitwallIntentStatus(value); void bridge.pitwallReportIntentState?.({ ...value, available: true }) },
       })

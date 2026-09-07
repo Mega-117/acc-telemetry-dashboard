@@ -68,6 +68,8 @@ export interface PitwallCrewMember {
 export interface PitwallStrategySnapshot {
   fuelToAdd: number | null
   tyreSet: number | null
+  /** Numero 1–50 del treno montato, distinto dal candidato MFD in base zero. */
+  fittedTyreSet?: number | null
   pressures: Record<'FL' | 'FR' | 'RL' | 'RR', number> | null
   /** Nota solo dopo che l'applicatore l'ha osservata: null = sconosciuta. */
   compound: 'dry' | 'wet' | null
@@ -190,6 +192,7 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
   const source = strategy as {
     fuelToAdd?: unknown
     tyreSet?: unknown
+    fittedTyreSet?: unknown
     pressures?: Record<string, unknown> | null
     compound?: unknown
     verifiedFields?: unknown
@@ -207,6 +210,8 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
   return {
     fuelToAdd: finiteOrNull(source.fuelToAdd),
     tyreSet: finiteOrNull(source.tyreSet),
+    ...(typeof source.fittedTyreSet === 'number' && Number.isInteger(source.fittedTyreSet) && source.fittedTyreSet >= 1 && source.fittedTyreSet <= 50
+      ? { fittedTyreSet: source.fittedTyreSet } : {}),
     pressures: pressures && Object.keys(pressures).length === wheels.length
       ? pressures as PitwallStrategySnapshot['pressures']
       : null,

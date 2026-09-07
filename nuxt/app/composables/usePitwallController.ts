@@ -34,6 +34,9 @@ import {
   resolvePitwallOrderStatus,
   stepPressure,
   tyreSetIndexToNumber,
+  tyreSetNumberToIndex,
+  stepTyreSet,
+  clampTyreSet,
   updatePitwallRepairs,
   pitwallRepairsCompatible,
   type PitwallRepairs,
@@ -114,6 +117,16 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   const compound = ref<PitwallCompound>('dry')
   const compoundTouched = ref(false)
   const tyreSet = ref<number | null>(null)
+  const fittedTyreSet = computed(() => {
+    const value = carFresh.value ? session.value?.strategy?.fittedTyreSet : null
+    return tyreSetNumberToIndex(value) == null ? null : value ?? null
+  })
+  const tyreSetNotice = computed(() => fittedTyreSet.value == null ? null
+    : `Set ${fittedTyreSet.value} già montato: scegli un altro treno per la sosta.`)
+  function adjustTyreSet(direction: 1 | -1) {
+    tyreSet.value = stepTyreSet(tyreSet.value, direction, fittedTyreSet.value)
+  }
+  function setTyreSet(value: number) { tyreSet.value = clampTyreSet(value) }
   // Tre stati, non due: true accendi, false spegni, null non toccare. Con una
   // semplice casella l'ingegnere non poteva spegnere niente, e quello che
   // impostava non arrivava fedelmente in macchina.
@@ -222,7 +235,8 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     for (const wheel of PITWALL_WHEELS) {
       if (Math.abs(pressures.value[wheel] - synced.pressures[wheel]) < 0.05) followed[wheel] = next.pressures[wheel]
     }
-    pressures.value = followed
+    // Missing telemetry uses the local draft: do not retrigger its watcher with an identical copy.
+    if (PITWALL_WHEELS.some(wheel => pressures.value[wheel] !== followed[wheel])) pressures.value = followed
     // La base e' cio' che la macchina ha detto, mai cio' che il piano contiene:
     // altrimenti un valore appena toccato verrebbe scambiato per "sincronizzato"
     // e riportato indietro al battito successivo (visto in pista).
@@ -407,9 +421,10 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     return payload
   }
 
+  const tyreSetBlocked = computed(() => fittedTyreSet.value != null && planPayload().tyreSet === fittedTyreSet.value)
   const hasChanges = computed(() => Object.keys(planPayload()).length > 0)
   /** Spento anche quando ci sono modifiche, se l'ordine non potrebbe partire. */
-  const sendEnabled = computed(() => hasChanges.value && link.canSend.value && pitwallRepairsCompatible(repairs.value))
+  const sendEnabled = computed(() => hasChanges.value && link.canSend.value && !tyreSetBlocked.value && pitwallRepairsCompatible(repairs.value))
   const pendingRequests = computed(() => trust.pendingIncoming.value)
   /**
    * Chi ho autorizzato ad assistermi, tolti quelli che sono gia' nella gara.
@@ -439,12 +454,13 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     if (!link.amMember.value) return 'Non sei ancora entrato in questa gara.'
     if (link.executor.value.reason !== 'ready') return link.executorLabel.value
     if (!pitwallRepairsCompatible(repairs.value)) return 'Le sospensioni richiedono anche la riparazione della carrozzeria.'
+    if (tyreSetBlocked.value) return tyreSetNotice.value
     if (!hasChanges.value) return 'Nessuna modifica da inviare.'
     return null
   })
 
   async function sendToCar(): Promise<boolean> {
-    if (!pitwallRepairsCompatible(repairs.value)) return false
+    if (tyreSetBlocked.value || !pitwallRepairsCompatible(repairs.value)) return false
     // Le caselle non chieste stavolta restano quelle dell'ordine precedente:
     // "in macchina" per loro e' l'ultima richiesta fatta, non l'ultimo ordine.
     const previous = sentPlan.value
@@ -499,6 +515,10 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     compound,
     compoundTouched,
     tyreSet,
+    fittedTyreSet,
+    tyreSetNotice,
+    adjustTyreSet,
+    setTyreSet,
     changeTyres,
     driverId,
     pitStrategy,

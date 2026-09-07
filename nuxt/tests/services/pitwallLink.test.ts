@@ -325,3 +325,12 @@ describe('scadenza scelta come orario', () => {
     expect(pitwallClockFromExpiry(at)).toBe('09:05')
   })
 })
+
+describe('set montato distinto dall indice MFD', () => {
+  it.each([1, 2, 50])('trasmette il montato %s senza conversione', fittedTyreSet => {
+    expect(boundPitwallStrategy({ tyreSet: 0, fittedTyreSet }, NOW_ISO)).toMatchObject({ tyreSet: 0, fittedTyreSet })
+  })
+  it.each([null, undefined, 0, 51, 1.5, '2', NaN])('non inventa montato da %s', fittedTyreSet => {
+    expect(boundPitwallStrategy({ tyreSet: 0, fittedTyreSet }, NOW_ISO)).not.toHaveProperty('fittedTyreSet')
+  })
+})

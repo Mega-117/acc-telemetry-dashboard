@@ -488,3 +488,12 @@ describe('l esito per campo si legge dal chip, con la provenienza accanto', () =
     expect(formatPitwallObserved(null)).toBe('?')
   })
 })
+
+describe('set montato escluso dallo scorrimento', () => {
+  it.each([[1, 1, 2, 3], [3, -1, 2, 1], [2, -1, 1, 2], [49, 1, 50, 49], [null, 1, 1, 2], [null, -1, 1, 2], [1, -1, 2, 1], [50, 1, 2, 50]])('da %s verso %s con montato %s propone %s', (value, direction, fitted, expected) => {
+    expect(stepTyreSet(value, direction as 1 | -1, fitted)).toBe(expected)
+  })
+  it('assenza o dato invalido non inventa un set montato', () => {
+    for (const fitted of [null, 0, 51, 1.5, NaN]) expect(stepTyreSet(1, 1, fitted)).toBe(2)
+  })
+})

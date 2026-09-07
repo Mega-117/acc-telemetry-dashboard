@@ -34,6 +34,9 @@ export interface PitwallStopHandle {
   fuelLiters: Ref<number>
   compound: Ref<PitwallCompound>
   tyreSet: Ref<number | null>
+  fittedTyreSet: Ref<number | null>
+  tyreSetNotice: Ref<string | null>
+  adjustTyreSet: (direction: 1 | -1) => void
   changeTyres: Ref<boolean | null>
   brakes: Ref<boolean | null>
   /**

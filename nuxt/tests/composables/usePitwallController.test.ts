@@ -484,3 +484,45 @@ describe('PIP-389: numero pubblico e aggiornamento atomico riparazioni', () => {
     expect(link.sendPlan).not.toHaveBeenCalled()
   })
 })
+
+describe('il set montato non viene inviato', () => {
+  it('salta nei due versi e blocca digitazione esplicita senza cloud', async () => {
+    const { link, controller } = build()
+    link.carSnapshot.value = snapshot(0, { fuelToAdd: 10, tyreSet: 0, fittedTyreSet: 2, compound: 'dry', pressures: BASELINE })
+    await nextTick()
+    expect(controller.fittedTyreSet.value).toBe(2)
+    expect(controller.tyreSetNotice.value).toContain('Set 2 già montato')
+    controller.adjustTyreSet(1)
+    expect(controller.tyreSet.value).toBe(3)
+    controller.adjustTyreSet(-1)
+    expect(controller.tyreSet.value).toBe(1)
+    controller.setTyreSet(2)
+    controller.fuelLiters.value = 20
+    expect(controller.sendEnabled.value).toBe(false)
+    expect(controller.blockedReason.value).toContain('Set 2 già montato')
+    expect(await controller.sendToCar()).toBe(false)
+    expect(link.sendPlan).not.toHaveBeenCalled()
+    expect(controller.tyreSet.value).toBe(2)
+    expect(controller.fuelLiters.value).toBe(20)
+  })
+  it('un cambio montato dopo il draft blocca senza cambiare il bersaglio', async () => {
+    const { link, controller } = build()
+    link.carSnapshot.value = snapshot(0, { fuelToAdd: 10, tyreSet: 0, fittedTyreSet: 2, compound: 'dry', pressures: BASELINE })
+    await nextTick()
+    controller.adjustTyreSet(1)
+    link.carSnapshot.value.strategy!.fittedTyreSet = 3
+    await nextTick()
+    expect(controller.tyreSet.value).toBe(3)
+    expect(await controller.sendToCar()).toBe(false)
+    expect(link.sendPlan).not.toHaveBeenCalled()
+  })
+  it('montato assente o snapshot disconnesso resta sconosciuto', async () => {
+    const { link, controller } = build()
+    link.carSnapshot.value = { ...snapshot(0, { tyreSet: 0, fittedTyreSet: 2 }), protocolVersion: 3, connected: false }
+    await nextTick()
+    expect(controller.fittedTyreSet.value).toBeNull()
+    expect(controller.tyreSetNotice.value).toBeNull()
+    controller.adjustTyreSet(1)
+    expect(controller.tyreSet.value).toBe(2)
+  })
+})

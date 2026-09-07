@@ -28,7 +28,6 @@ import {
   formatStopDuration,
   formatToggle,
   stepFuel,
-  stepTyreSet,
 } from "~/utils/pitwallPresentation";
 
 const { stop } = usePitwallStore();
@@ -214,7 +213,7 @@ function stepAll(direction: 1 | -1) {
         <button
           type="button"
           aria-label="Set precedente"
-          @click="stop.tyreSet.value = stepTyreSet(stop.tyreSet.value, -1)"
+          @click="stop.adjustTyreSet(-1)"
         >
           −
         </button>
@@ -222,7 +221,7 @@ function stepAll(direction: 1 | -1) {
         <button
           type="button"
           aria-label="Set successivo"
-          @click="stop.tyreSet.value = stepTyreSet(stop.tyreSet.value, 1)"
+          @click="stop.adjustTyreSet(1)"
         >
           +
         </button>
@@ -235,6 +234,7 @@ function stepAll(direction: 1 | -1) {
         >{{ PITWALL_CONCEPT_SOURCE_LABELS[observed] }}</em>
       </span>
     </div>
+    <p v-if="stop.tyreSetNotice.value" class="pwc-tyreset-note">{{ stop.tyreSetNotice.value }}</p>
 
     <div class="pwc-pit-row">
       <span>Mescola</span>
@@ -572,4 +572,5 @@ function stepAll(direction: 1 | -1) {
     padding: 0 14px;
   }
 }
+.pwc-tyreset-note { margin: 4px 0 10px; font-size: 12px; color: #e7ba68; }
 </style>

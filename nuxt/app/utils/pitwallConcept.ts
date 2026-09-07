@@ -136,6 +136,7 @@ export type PitwallConceptOrderStatus = PitwallOrderStatus | null
 export function describePitwallConceptOrderStatus(
   status: PitwallConceptOrderStatus,
   reason: string | null = null,
+  outcomes: ReadonlyArray<{ outcome: string | null, reason?: string | null, dragged?: boolean }> = [],
 ): { label: string, detail: string, tone: 'neutral' | 'good' | 'warn' | 'bad' } {
   switch (status) {
     case 'pending':
@@ -144,12 +145,19 @@ export function describePitwallConceptOrderStatus(
       return { label: 'In corso…', detail: 'Il PC del pilota la sta applicando al Pit MFD.', tone: 'neutral' }
     case 'applied':
       return { label: 'Applicata', detail: 'Ogni campo chiesto è arrivato in macchina.', tone: 'good' }
-    case 'partial':
+    case 'partial': {
+      const requested = outcomes.filter(field => !field.dragged)
+      if (requested.length && requested.every(field => field.outcome !== 'verified')) {
+        return { label: 'Nessun campo confermato',
+          detail: requested.length === 1 && requested[0]?.reason ? requested[0].reason : reason ?? 'Verifica gli esiti dei singoli campi prima di inviare un nuovo ordine.',
+          tone: 'warn' }
+      }
       return {
         label: 'Applicata in parte',
         detail: reason ?? 'Qualche campo non è arrivato: sotto c’è quale, uno per uno.',
         tone: 'warn',
       }
+    }
     case 'failed':
       return { label: 'Non riuscita', detail: reason ?? 'Il PC del pilota si è fermato prima di finire.', tone: 'bad' }
     case 'rejected':

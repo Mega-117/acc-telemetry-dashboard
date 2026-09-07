@@ -1,3 +1,4 @@
+import { describePitwallConceptOrderStatus } from '~/utils/pitwallConcept'
 import { describe, expect, it } from 'vitest'
 import {
   PITWALL_CONCEPT_CORE_PEOPLE,
@@ -331,5 +332,21 @@ describe('Pitwall Concept: la gara, i ruoli e chi applica', () => {
       .toBe('Gara non più disponibile.')
     expect(describePitwallConceptNotice({ id: 4, kind: 'granted', personId: 'mario' }).title)
       .toBe('mariorossi ha accettato')
+  })
+})
+
+describe('nessuna falsa applicazione parziale', () => {
+  it('espone il motivo del solo set non applicabile', () => {
+    const result = describePitwallConceptOrderStatus('partial', '0 campi', [{ outcome: 'not-verifiable', reason: 'Set 2 già montato' }])
+    expect(result.label).toBe('Nessun campo confermato')
+    expect(result.detail).toBe('Set 2 già montato')
+  })
+  it('non dichiara nessun input se il risultato e incerto', () => {
+    const result = describePitwallConceptOrderStatus('partial', 'Tasto inviato, lettura persa', [{ outcome: 'selected' }])
+    expect(result.label).toBe('Nessun campo confermato')
+    expect(result.detail).toBe('Tasto inviato, lettura persa')
+  })
+  it('mantiene parziale quando qualche campo e verificato', () => {
+    expect(describePitwallConceptOrderStatus('partial', null, [{ outcome: 'verified' }, { outcome: 'not-verifiable' }]).label).toBe('Applicata in parte')
   })
 })

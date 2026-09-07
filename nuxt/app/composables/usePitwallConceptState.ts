@@ -1,3 +1,4 @@
+import { stepTyreSet } from '~/utils/pitwallPresentation'
 // Lo stato del prototipo Pit Wall, in un posto solo: la presa "finta".
 //
 // E' la stessa forma dello store vero (`PitwallStore`), riempita con fixture
@@ -217,6 +218,9 @@ function createMockStop(race: () => PitwallConceptRace | null): PitwallStopHandl
     fuelLiters,
     compound,
     tyreSet,
+    fittedTyreSet: ref(null),
+    tyreSetNotice: ref(null),
+    adjustTyreSet: direction => { tyreSet.value = stepTyreSet(tyreSet.value, direction) },
     changeTyres,
     brakes,
     brakeFront,

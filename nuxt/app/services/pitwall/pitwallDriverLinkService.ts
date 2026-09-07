@@ -148,7 +148,7 @@ export interface PitwallDriverElectronApi {
       drivers: { driverIndex: number, firstName: string, lastName: string, shortName: string }[]
       currentDriverIndex: number | null
     }
-    identity?: { car?: string | null, track?: string | null } | null
+    identity?: { car?: string | null, track?: string | null, fittedTyreSet?: number | null } | null
     /**
      * Quale vettura, in quale gara: l impronta che ogni PC calcola da solo dai
      * dati ACC. Serve a ritrovare la Race Room senza girarsi codici, e non
