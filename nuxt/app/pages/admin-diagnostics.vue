@@ -24,6 +24,7 @@ import {
   buildDiagnosticDateRange,
   diagnosticsViewState,
   diagnosticOccurrences,
+  windowOpeningDiagnosticExplanation,
   formatItalianDiagnosticDate,
   paginationTokens,
   type DiagnosticPeriodPreset
@@ -462,6 +463,7 @@ onMounted(() => resetAndLoad())
         <button class="detail-close" aria-label="Chiudi dettagli" @click="selected = null">×</button>
         <p class="eyebrow">{{ selected.component }} · {{ selected.severity }}</p>
         <h2>{{ selected.code }}</h2>
+        <p v-if="windowOpeningDiagnosticExplanation(selected.code)">{{ windowOpeningDiagnosticExplanation(selected.code) }}</p>
         <p>{{ selected.message }}</p>
         <dl>
           <dt>Pilota</dt><dd>{{ selected.pilotNickname }}</dd>

@@ -2,6 +2,23 @@ import { sanitizeDiagnosticText } from '~/services/monitoring/clientDiagnosticsS
 
 export const ITALIAN_TIME_ZONE = 'Europe/Rome'
 
+export function windowOpeningDiagnosticExplanation(code: string): string | null {
+  const descriptions: Record<string, string> = {
+    show_failed: 'Electron ha ricevuto la richiesta, ma l’operazione di apertura ha generato un errore.',
+    window_missing: 'La richiesta è arrivata a Electron, ma la finestra non esiste.',
+    window_hidden: 'La finestra risulta nascosta o minimizzata dopo la richiesta.',
+    window_offscreen: 'La finestra non interseca nessuno dei monitor rilevati.',
+    page_load_failed: 'Il caricamento della pagina principale è fallito. Consultare il codice di errore.',
+    loading_timeout: 'La pagina è ancora in caricamento dopo 30 secondi. Non è una diagnosi di guasto GPU.',
+    app_no_response: 'Il frontend supporta la verifica ma non ha risposto entro il controllo previsto.',
+    renderer_gone: 'Il processo della pagina è terminato. Consultare motivo e codice di uscita.',
+    renderer_unresponsive: 'Electron ha segnalato che la finestra non risponde.',
+    gpu_process_gone: 'Il processo GPU è terminato; questo evento da solo non dimostra la causa della finestra invisibile.',
+    inspection_failed: 'Il controllo dello stato della finestra non è riuscito.',
+  }
+  return code.startsWith('window_open_') ? descriptions[code.slice('window_open_'.length)] || null : null
+}
+
 export function diagnosticOccurrenceCount(event: { context?: Record<string, unknown> }): number {
   const context = event.context || {}
   return context._aggVersion === 1 && Number.isSafeInteger(context._aggCount) && Number(context._aggCount) > 0
