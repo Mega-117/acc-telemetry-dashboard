@@ -4,6 +4,8 @@
 // ============================================
 
 import { computed, ref } from 'vue'
+import AuthField from './AuthField.vue'
+import AuthIcon from './AuthIcon.vue'
 import { emailDomainHintMessage } from '~/utils/emailDomainHint'
 
 withDefaults(defineProps<{
@@ -27,12 +29,12 @@ const emit = defineEmits<{
 
 const handleSubmit = () => {
   error.value = ''
-  
+
   if (!email.value.trim()) {
     error.value = 'Inserisci la tua email.'
     return
   }
-  
+
   emit('submit', email.value.trim())
 }
 
@@ -56,7 +58,8 @@ defineExpose({
   <div class="reset-form">
     <!-- Success State -->
     <div v-if="success" class="reset-success">
-      <span class="reset-success__icon">✅</span>
+      <AuthIcon name="check" class="reset-success__icon" />
+      <h2 class="reset-success__title">Controlla la posta</h2>
       <!--
         Esito volutamente condizionale: per non rivelare quali indirizzi sono
         registrati, Firebase risponde "ok" anche quando non spedisce nulla, e
@@ -66,25 +69,29 @@ defineExpose({
       -->
       <p class="reset-success__text">
         Se l'indirizzo è registrato, riceverai il link tra pochi istanti.
-        Controlla anche la cartella spam.
       </p>
-      <UiBaseButton variant="link" :disabled="loading" @click="emit('back')">
-        ← Torna al login
+      <p class="reset-success__hint">Controlla anche la cartella spam.</p>
+      <UiBaseButton variant="primary" :disabled="loading" @click="emit('back')">
+        <span>Torna al login</span><AuthIcon name="arrow" />
       </UiBaseButton>
     </div>
-    
+
     <!-- Form State -->
-    <form v-else class="auth-form" @submit.prevent="handleSubmit">
+    <template v-else>
+      <UiBaseButton variant="link" class="auth-back" :disabled="loading" @click="emit('back')">
+        <AuthIcon name="back" /> Torna al login
+      </UiBaseButton>
+      <form class="auth-form" @submit.prevent="handleSubmit">
       <h3 class="reset-form__title">Recupera Password</h3>
       <p class="reset-form__description">
-        Inserisci la tua email. Ti invieremo un link per reimpostare la password.
-        <br><small>Controlla anche la cartella spam.</small>
+        Ricevi il link per reimpostare la password.
       </p>
-      
-      <UiBaseInput
+
+      <AuthField
         v-model="email"
+        label="Email"
         type="email"
-        placeholder="Email"
+        placeholder="nome@esempio.it"
         autocomplete="email"
         @input="clearError"
       />
@@ -93,92 +100,16 @@ defineExpose({
       <p v-if="domainHint" class="reset-form__domain-hint">{{ domainHint }}</p>
 
       <UiFormError :message="error" :visible="!!error" />
-      
-      <UiBaseButton 
-        type="submit" 
+
+      <UiBaseButton
+        type="submit"
         variant="primary"
         :loading="loading"
       >
-        INVIA LINK
+        <span>INVIA LINK</span><AuthIcon name="arrow" />
       </UiBaseButton>
-      
-      <UiBaseButton variant="link" :disabled="loading" @click="emit('back')">
-        ← Torna al login
-      </UiBaseButton>
-    </form>
+
+      </form>
+    </template>
   </div>
 </template>
-
-<style lang="scss" scoped>
-@use '~/assets/scss/variables' as *;
-
-.reset-form {
-  animation: authFadeIn 0.3s ease forwards;
-  
-  &__title {
-    font-size: $font-size-xl;
-    font-weight: $font-weight-semibold;
-    color: var(--text-primary);
-    margin: 0 0 $spacing-sm 0;
-    text-align: center;
-  }
-  
-  &__description {
-    font-size: $font-size-sm;
-    color: var(--text-secondary);
-    text-align: center;
-    margin: 0 0 $spacing-md 0;
-    line-height: 1.5;
-    
-    small {
-      color: var(--text-muted);
-      font-size: $font-size-xs;
-    }
-  }
-
-  // Avviso, non errore: tono attenuato perche' l'utente puo' ignorarlo.
-  &__domain-hint {
-    margin: -$spacing-xs 0 0 0;
-    font-size: $font-size-xs;
-    color: var(--text-secondary);
-    text-align: center;
-  }
-}
-
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-md;
-}
-
-.reset-success {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: $spacing-md;
-  text-align: center;
-  padding: $spacing-md 0;
-  
-  &__icon {
-    font-size: 3rem;
-    animation: successPop 0.5s ease forwards;
-  }
-  
-  &__text {
-    color: var(--text-secondary);
-    font-size: $font-size-sm;
-    line-height: 1.5;
-  }
-}
-
-@keyframes authFadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes successPop {
-  0% { transform: scale(0); opacity: 0; }
-  50% { transform: scale(1.2); }
-  100% { transform: scale(1); opacity: 1; }
-}
-</style>

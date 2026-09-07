@@ -1,0 +1,2 @@
+# Preserve the supplied SVG master bytes, including embedded image data.
+nuxt/public/branding/auth/*.svg -text

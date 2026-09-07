@@ -485,7 +485,7 @@ provide('goToSettings', handleGoToSettings)
     </template>
 
     <template v-else-if="isStandaloneDevRoute">
-      <ElectronTitlebar />
+      <ElectronTitlebar :auth-branding="appState === 'auth'" />
       <ElectronRuntimeCapabilityBanner v-if="canEnterApp" />
       <NuxtRouteAnnouncer />
       <div class="dashboard-wrapper">
@@ -497,7 +497,7 @@ provide('goToSettings', handleGoToSettings)
 
     <template v-else>
       <!-- Electron Titlebar (only visible in Electron) -->
-      <ElectronTitlebar />
+      <ElectronTitlebar :auth-branding="appState === 'auth'" />
       <ElectronRuntimeCapabilityBanner v-if="canEnterApp" />
 
       <ElectronDataMaintenanceNotification
@@ -532,20 +532,17 @@ provide('goToSettings', handleGoToSettings)
         />
 
         <!-- Registration Success -->
-        <div 
-          v-else-if="appState === 'auth' && authState === 'register-success'" 
+        <AuthScene
+          v-else-if="appState === 'auth' && authState === 'register-success'"
           key="register-success"
-          class="auth-wrapper"
         >
-          <div class="auth-card-standalone">
             <AuthRegistrationSuccess
               :email="userEmail"
               :require-email-verification="AUTH_EMAIL_VERIFICATION_REQUIRED"
               @go-to-dashboard="handleGoToDashboard"
               @resend-email="handleResendEmail"
             />
-          </div>
-        </div>
+        </AuthScene>
 
         <!-- Loading Screen -->
         <div v-else-if="appState === 'loading'" key="loading" class="loading-screen">

@@ -95,6 +95,7 @@ describe('AuthOverlay password reset', () => {
     return mount(AuthOverlay, {
       global: {
         stubs: {
+          AuthScene: { template: '<div><slot /></div>' },
           AuthLoginForm: LoginStub,
           AuthRegisterForm: RegisterStub,
           AuthResetPasswordForm: ResetStub

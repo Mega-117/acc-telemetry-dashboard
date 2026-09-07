@@ -40,6 +40,8 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/components/auth/*.vue',
+        'app/components/electron/ElectronTitlebar.vue',
         'app/services/pitwall/pitwallIoMetrics.ts',
         'app/services/pitwall/pitwallRealtimeProtocol.ts',
         'app/services/pitwall/pitwallRealtimeSession.ts',

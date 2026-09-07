@@ -4,6 +4,8 @@
 // ============================================
 
 import { ref } from 'vue'
+import AuthField from './AuthField.vue'
+import AuthIcon from './AuthIcon.vue'
 
 withDefaults(defineProps<{
   loading?: boolean
@@ -23,7 +25,7 @@ const emit = defineEmits<{
 const handleSubmit = () => {
   // Reset error
   error.value = ''
-  
+
   // Validazione client-side
   if (!email.value.trim()) {
     error.value = 'Inserisci la tua email.'
@@ -33,7 +35,7 @@ const handleSubmit = () => {
     error.value = 'Inserisci la password.'
     return
   }
-  
+
   emit('submit', {
     email: email.value.trim(),
     password: password.value
@@ -57,62 +59,43 @@ defineExpose({
 
 <template>
   <form class="auth-form" @submit.prevent="handleSubmit">
-    <UiBaseInput
+    <AuthField
       v-model="email"
+      label="Email"
       type="email"
-      placeholder="Email"
+      placeholder="nome@esempio.it"
       autocomplete="email"
       :error="!!error && error.includes('email')"
       @input="clearError"
     />
-    
-    <UiBaseInput
+
+    <AuthField
       v-model="password"
+      label="Password"
       type="password"
       placeholder="Password"
       autocomplete="current-password"
       :error="!!error && error.includes('password')"
       @input="clearError"
     />
-    
+
     <UiFormError :message="error" :visible="!!error" />
-    
-    <UiBaseButton 
-      type="submit" 
-      variant="primary"
-      :loading="loading"
-    >
-      ACCEDI
-    </UiBaseButton>
-    
-    <UiBaseButton 
-      variant="link"
+
+    <UiBaseButton
+      variant="link" class="auth-forgot"
       :disabled="loading"
       @click="emit('forgotPassword')"
     >
       Password dimenticata?
     </UiBaseButton>
+    <UiBaseButton
+      type="submit"
+      variant="primary"
+      :loading="loading"
+    >
+      <span>ACCEDI</span><AuthIcon name="arrow" />
+    </UiBaseButton>
+
+
   </form>
 </template>
-
-<style lang="scss" scoped>
-@use '~/assets/scss/variables' as *;
-
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-md;
-  animation: authFadeIn 0.3s ease forwards;
-}
-
-@keyframes authFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-</style>

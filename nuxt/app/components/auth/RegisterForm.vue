@@ -4,6 +4,8 @@
 // ============================================
 
 import { computed, ref } from 'vue'
+import AuthField from './AuthField.vue'
+import AuthIcon from './AuthIcon.vue'
 import { emailDomainHintMessage } from '~/utils/emailDomainHint'
 
 withDefaults(defineProps<{
@@ -29,7 +31,7 @@ const domainHint = computed(() => emailDomainHintMessage(email.value))
 const handleSubmit = () => {
   // Reset error
   error.value = ''
-  
+
   // Validazione client-side
   if (!firstName.value.trim()) {
     error.value = 'Inserisci il tuo nome.'
@@ -67,7 +69,7 @@ const handleSubmit = () => {
     error.value = 'Le password non coincidono.'
     return
   }
-  
+
   emit('submit', {
     firstName: firstName.value.trim(),
     lastName: lastName.value.trim(),
@@ -99,35 +101,39 @@ defineExpose({
 <template>
   <form class="auth-form" @submit.prevent="handleSubmit">
     <div class="name-row">
-      <UiBaseInput
+      <AuthField
         v-model="firstName"
+        label="Nome"
         type="text"
         placeholder="Nome"
         autocomplete="given-name"
         @input="clearError"
       />
-      <UiBaseInput
+      <AuthField
         v-model="lastName"
+        label="Cognome"
         type="text"
         placeholder="Cognome"
         autocomplete="family-name"
         @input="clearError"
       />
     </div>
-    
-    <UiBaseInput
+
+    <AuthField
       v-model="nickname"
+      label="Nickname"
       type="text"
-      placeholder="Nickname (visibile agli altri)"
+      placeholder="Visibile agli altri"
       autocomplete="username"
       :maxlength="20"
       @input="clearError"
     />
-    
-    <UiBaseInput
+
+    <AuthField
       v-model="email"
+      label="Email"
       type="email"
-      placeholder="Email"
+      placeholder="nome@esempio.it"
       autocomplete="email"
       @input="clearError"
     />
@@ -139,65 +145,32 @@ defineExpose({
     -->
     <p v-if="domainHint" class="domain-hint">{{ domainHint }}</p>
 
-    <UiBaseInput
+    <AuthField
       v-model="password"
+      label="Password"
       type="password"
-      placeholder="Password (min. 6 caratteri)"
+      placeholder="Almeno 6 caratteri"
       autocomplete="new-password"
       @input="clearError"
     />
-    
-    <UiBaseInput
+
+    <AuthField
       v-model="confirmPassword"
+      label="Conferma password"
       type="password"
       placeholder="Conferma Password"
       autocomplete="new-password"
       @input="clearError"
     />
-    
+
     <UiFormError :message="error" :visible="!!error" />
-    
-    <UiBaseButton 
-      type="submit" 
+
+    <UiBaseButton
+      type="submit"
       variant="primary"
       :loading="loading"
     >
-      REGISTRATI
+      <span>REGISTRATI</span><AuthIcon name="arrow" />
     </UiBaseButton>
   </form>
 </template>
-
-<style lang="scss" scoped>
-@use '~/assets/scss/variables' as *;
-
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: $spacing-md;
-  animation: authFadeIn 0.3s ease forwards;
-}
-
-.name-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: $spacing-sm;
-}
-
-// Avviso, non errore: tono attenuato perche' l'utente puo' ignorarlo.
-.domain-hint {
-  margin: -$spacing-xs 0 0 0;
-  font-size: $font-size-xs;
-  color: var(--text-secondary);
-}
-
-@keyframes authFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-</style>

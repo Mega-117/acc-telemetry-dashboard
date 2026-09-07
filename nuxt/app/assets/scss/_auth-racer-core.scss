@@ -1,0 +1,157 @@
+@font-face {
+  font-family: 'Racer Auth Display';
+  src: url('../fonts/ChakraPetch-BoldItalic.ttf') format('truetype');
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+.racer-auth {
+  --auth-red: #f40028;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable both-edges;
+  background: #020202;
+  color: #fff;
+  font-family: Inter, 'Segoe UI', sans-serif;
+  font-size: 18px;
+  isolation: isolate;
+  :deep(*) { box-sizing: border-box; }
+  :deep(button), :deep(input) { font: inherit; }
+  :deep(button:disabled) { opacity: .5; cursor: default; }
+  :deep(button:focus-visible), :deep(a:focus-visible) { outline: 2px solid #fff; outline-offset: 5px; }
+  :deep(p), :deep(h2), :deep(h3) { margin: 0; }
+}
+:global(body:has(.electron-titlebar) .racer-auth) { top: 36px; }
+.racer-auth__background {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  overflow: hidden;
+  background: repeating-linear-gradient(135deg, transparent 0 148px, #ffffff04 149px, transparent 150px),
+    radial-gradient(ellipse at 92% 95%, #62001677, #27000833 36%, transparent 68%), #020202;
+}
+.racer-auth__particle {
+  position: absolute;
+  width: 3px; height: 3px; border-radius: 50%;
+  background: #ff7188;
+  box-shadow: 0 0 5px #f4002870;
+  animation: racer-particle 18s linear infinite;
+  will-change: transform, opacity;
+}
+@keyframes racer-particle {
+  0% { transform: translate3d(110px,-110px,0); opacity: 0; }
+  20%,70% { opacity: .7; }
+  100% { transform: translate3d(-350px,350px,0); opacity: 0; }
+}
+.racer-auth__column { width: min(512px, calc(100% - 48px)); margin: 124px auto 64px; }
+.racer-auth__column--wide { width: min(584px, calc(100% - 48px)); }
+.racer-auth__brand { height: 194px; display: flex; justify-content: center; }
+.racer-auth__logo-viewport {
+  position: relative; width: 360px; max-width: 100%; height: 145px; overflow: hidden;
+  img { position: absolute; width: 146.5%; max-width: none; height: auto; left: -22.6%; top: -41.5%; }
+}
+.racer-auth__height { transition: height 240ms cubic-bezier(.2,.7,.2,1); }
+// Auth can also be the root of app.vue's page transition: keep its logo unscaled.
+.racer-auth.dissolve-fade-zoom-enter-active,
+.racer-auth.dissolve-fade-zoom-leave-active { transition: opacity 120ms ease; }
+.racer-auth.dissolve-fade-zoom-enter-from,
+.racer-auth.dissolve-fade-zoom-leave-to { transform: none; filter: none; }
+.racer-auth__content { display: flow-root; }
+.racer-auth :deep(.auth-nav) {
+  display: flex; justify-content: center; gap: 40px; margin-bottom: 40px; height: 44px;
+  button { border: 0; border-bottom: 3px solid transparent; background: none; padding: 0 24px 12px; color: #aaa; font-size: 20px; cursor: pointer; }
+  button.is-active { color: #fff; border-bottom-color: var(--auth-red); }
+}
+.racer-auth :deep(.auth-form) { display: flex; flex-direction: column; gap: 24px; }
+.racer-auth :deep(.name-row) { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.racer-auth :deep(.auth-field) {
+  min-width: 0;
+  label { display: block; font-size: 14px; line-height: 20px; color: #c4c4c4; text-transform: uppercase; margin-bottom: 8px; }
+}
+.racer-auth :deep(.auth-field__control) { position: relative; }
+.racer-auth :deep(.form-input), .racer-auth :deep(.email-fix__input) {
+  width: 100%; height: 62px; padding: 0 20px; border: 1px solid #353535; border-radius: 0;
+  background: #ffffff03; color: #fff; box-shadow: none; font-size: 18px;
+  &::placeholder { color: #969696; opacity: 1; }
+  &:focus { outline: 1px solid #ddd; outline-offset: 1px; border-color: #999; box-shadow: none; background: #ffffff05; }
+  &.form-input--error { border-color: #ff7188; }
+}
+.racer-auth :deep(.auth-field__control--password .form-input) { padding-right: 56px; }
+.racer-auth :deep(.auth-field__eye) {
+  position: absolute; right: 4px; top: 4px; height: calc(100% - 8px); width: 44px;
+  display: grid; place-items: center; border: 0; background: none; color: #fff; cursor: pointer;
+  .auth-icon { width: 27px; height: 27px; }
+}
+.racer-auth :deep(.btn--primary), .racer-auth :deep(.verify-btn), .racer-auth :deep(.email-fix__submit) {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  width: 100%; min-height: 74px; padding: 18px 32px; margin-top: 4px;
+  border: 0; border-radius: 0; background: linear-gradient(110deg,#f40028,#e90019); color: #fff;
+  clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% 100%, 0 100%);
+  font-family: 'Racer Auth Display', sans-serif; font-style: italic; font-weight: 700; font-size: 26px;
+  line-height: 1.3; text-transform: uppercase; text-align: left; cursor: pointer; box-shadow: none;
+  &:hover:not(:disabled) { background: #ff1739; transform: none; box-shadow: none; }
+  .auth-icon { width: 34px; height: 34px; flex-shrink: 0; }
+  &:focus-visible { outline: none; box-shadow: inset 0 0 0 3px #fff; }
+}
+.racer-auth :deep(.btn--link), .racer-auth :deep(.resend-btn), .racer-auth :deep(.email-fix__toggle) {
+  border: 0; border-radius: 0; background: none; color: #eee; padding: 0; min-height: 28px;
+  box-shadow: none; cursor: pointer; font-size: 16px;
+  &:hover:not(:disabled) { color: #fff; text-decoration: underline; transform: none; background: none; }
+}
+.racer-auth :deep(.auth-forgot) { align-self: flex-end; margin-top: -10px; margin-bottom: 8px; }
+.racer-auth :deep(.auth-back) {
+  display: flex; gap: 10px; align-items: center; justify-content: center;
+  height: 44px; margin: 0 auto 40px; font-family: 'Racer Auth Display', sans-serif; font-style: italic; text-transform: uppercase;
+  .auth-icon { width: 28px; height: 28px; }
+}
+.racer-auth :deep(.reset-form__title), .racer-auth :deep(.verify-title), .racer-auth :deep(.reset-success__title) {
+  font-family: 'Racer Auth Display', sans-serif; font-weight: 700; font-style: italic;
+  font-size: 28px; line-height: 1.25; text-transform: uppercase; color: #fff;
+}
+.racer-auth :deep(.reset-form__description) { margin-top: -14px; margin-bottom: 14px; line-height: 1.5; }
+.racer-auth :deep(.reset-success) { display: flex; flex-direction: column; align-items: flex-start; gap: 30px; padding-top: 10px; }
+.racer-auth :deep(.reset-success__icon) { width: 80px; height: 80px; }
+.racer-auth :deep(.reset-success__text) { line-height: 1.6; }
+.racer-auth :deep(.reset-success__hint), .racer-auth :deep(.verify-hint) { color: #b1b1b1; line-height: 1.5; }
+.racer-auth :deep(.reset-success .btn--primary) { margin-top: 12px; }
+.racer-auth :deep(.email-verification) { display: flex; flex-direction: column; align-items: center; gap: 28px; text-align: center; }
+.racer-auth :deep(.verify-icon) { width: 82px; height: 82px; }
+.racer-auth :deep(.verify-email) { font-size: 24px; overflow-wrap: anywhere; max-width: 100%; }
+.racer-auth :deep(.verify-box) { display: grid; gap: 18px; line-height: 1.5; }
+.racer-auth :deep(.verify-btn) { font-size: 24px; margin-top: 10px; }
+.racer-auth :deep(.resend-btn) { color: #ff4962; }
+.racer-auth :deep(.email-fix) { width: 100%; border-top: 1px solid #555; padding-top: 26px; }
+.racer-auth :deep(.email-fix__toggle) { text-decoration: underline; }
+.racer-auth :deep(.email-fix__form) { display: grid; gap: 18px; }
+.racer-auth :deep(.email-fix__submit) { font-size: 19px; min-height: 58px; }
+.racer-auth :deep(.email-fix__sent) { line-height: 1.5; }
+.racer-auth :deep(.error-message), .racer-auth :deep(.form-error) { color: #ff8c9d; line-height: 1.5; font-size: 15px; }
+.racer-auth :deep(.domain-hint), .racer-auth :deep(.reset-form__domain-hint), .racer-auth :deep(.email-fix__hint) { color: #c9b9bc; font-size: 14px; line-height: 1.5; }
+.racer-auth :deep(.spinner) { width: 20px; height: 20px; border: 2px solid #ffffff55; border-top-color: white; border-radius: 50%; animation: racer-spin .8s linear infinite; }
+@keyframes racer-spin { to { transform: rotate(360deg); } }
+.racer-auth :deep(.racer-enter-active), .racer-auth :deep(.racer-leave-active) { transition: opacity 120ms ease; }
+.racer-auth :deep(.racer-enter-from), .racer-auth :deep(.racer-leave-to) { opacity: 0; }
+.racer-auth__column--wide :deep(.auth-form) { gap: 16px; }
+.racer-auth__column--wide :deep(.form-input) { height: 56px; }
+@media (max-width: 600px) {
+  .racer-auth { font-size: 16px; scrollbar-gutter: auto; }
+  .racer-auth__column { margin-top: 64px; }
+  .racer-auth__brand { height: 158px; }
+  .racer-auth__logo-viewport { width: 280px; height: 113px; }
+  .racer-auth :deep(.auth-nav) { gap: 8px; button { font-size: 17px; padding-inline: 16px; } }
+  .racer-auth :deep(.form-input), .racer-auth :deep(.email-fix__input) { font-size: 16px; height: 52px; padding-left: 14px; }
+  .racer-auth :deep(.btn--primary), .racer-auth :deep(.verify-btn) { font-size: 20px; min-height: 62px; padding: 14px 20px; }
+  .racer-auth :deep(.reset-form__title), .racer-auth :deep(.verify-title), .racer-auth :deep(.reset-success__title) { font-size: 24px; }
+}
+@media (max-width: 420px) { .racer-auth :deep(.name-row) { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) {
+  .racer-auth.dissolve-fade-zoom-enter-active,
+  .racer-auth.dissolve-fade-zoom-leave-active { transition: none; }
+  .racer-auth__particle, .racer-auth :deep(.spinner) { animation: none; }
+  .racer-auth__height, .racer-auth :deep(.racer-enter-active), .racer-auth :deep(.racer-leave-active) { transition: none; }
+}
