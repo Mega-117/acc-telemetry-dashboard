@@ -515,7 +515,7 @@ provide('goToSettings', handleGoToSettings)
       <NuxtRouteAnnouncer />
 
       <!-- Main Content with Transitions -->
-      <Transition :name="transitionName" mode="out-in">
+      <Transition :name="transitionName" :mode="appState === 'auth' ? undefined : 'out-in'">
         <!-- Initializing - waiting for Firebase auth check -->
         <div v-if="appState === 'initializing'" key="initializing" class="initializing-screen">
           <div class="initializing-content">

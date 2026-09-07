@@ -10,6 +10,7 @@ import { emailDomainHintMessage } from '~/utils/emailDomainHint'
 
 withDefaults(defineProps<{
   loading?: boolean
+  hideBack?: boolean
 }>(), {
   loading: false
 })
@@ -56,8 +57,9 @@ defineExpose({
 
 <template>
   <div class="reset-form">
+    <Transition name="racer" @before-leave="el => el.setAttribute('inert', '')">
     <!-- Success State -->
-    <div v-if="success" class="reset-success">
+    <div v-if="success" key="success" class="reset-success">
       <AuthIcon name="check" class="reset-success__icon" />
       <h2 class="reset-success__title">Controlla la posta</h2>
       <!--
@@ -77,8 +79,8 @@ defineExpose({
     </div>
 
     <!-- Form State -->
-    <template v-else>
-      <UiBaseButton variant="link" class="auth-back" :disabled="loading" @click="emit('back')">
+    <div v-else key="request">
+      <UiBaseButton v-if="!hideBack" variant="link" class="auth-back" :disabled="loading" @click="emit('back')">
         <AuthIcon name="back" /> Torna al login
       </UiBaseButton>
       <form class="auth-form" @submit.prevent="handleSubmit">
@@ -110,6 +112,7 @@ defineExpose({
       </UiBaseButton>
 
       </form>
-    </template>
+    </div>
+    </Transition>
   </div>
 </template>

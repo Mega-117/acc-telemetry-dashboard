@@ -48,35 +48,35 @@
   20%,70% { opacity: .7; }
   100% { transform: translate3d(-350px,350px,0); opacity: 0; }
 }
-.racer-auth__column { width: min(512px, calc(100% - 48px)); margin: 124px auto 64px; }
+.racer-auth__column { width: min(512px, calc(100% - 48px)); margin: 96px auto 32px; }
 .racer-auth__column--wide { width: min(584px, calc(100% - 48px)); }
-.racer-auth__brand { height: 194px; display: flex; justify-content: center; }
+.racer-auth__brand { height: 174px; display: flex; justify-content: center; }
 .racer-auth__logo-viewport {
   position: relative; width: 360px; max-width: 100%; height: 145px; overflow: hidden;
   img { position: absolute; width: 146.5%; max-width: none; height: auto; left: -22.6%; top: -41.5%; }
 }
-.racer-auth__height { transition: height 240ms cubic-bezier(.2,.7,.2,1); }
+.racer-auth__height { transition: height 280ms cubic-bezier(.2,.7,.2,1); }
 // Auth can also be the root of app.vue's page transition: keep its logo unscaled.
 .racer-auth.dissolve-fade-zoom-enter-active,
-.racer-auth.dissolve-fade-zoom-leave-active { transition: opacity 120ms ease; }
+.racer-auth.dissolve-fade-zoom-leave-active { transition: opacity 280ms ease; }
 .racer-auth.dissolve-fade-zoom-enter-from,
 .racer-auth.dissolve-fade-zoom-leave-to { transform: none; filter: none; }
 .racer-auth__content { display: flow-root; }
 .racer-auth :deep(.auth-nav) {
-  display: flex; justify-content: center; gap: 40px; margin-bottom: 40px; height: 44px;
-  button { border: 0; border-bottom: 3px solid transparent; background: none; padding: 0 24px 12px; color: #aaa; font-size: 20px; cursor: pointer; }
+  display: flex; justify-content: center; gap: 40px; margin-bottom: 24px; height: 40px;
+  button { border: 0; border-bottom: 3px solid transparent; background: none; padding: 0 24px 12px; color: #aaa; font-size: 18px; cursor: pointer; }
   button.is-active { color: #fff; border-bottom-color: var(--auth-red); }
 }
-.racer-auth :deep(.auth-form) { display: flex; flex-direction: column; gap: 24px; }
+.racer-auth :deep(.auth-form) { display: flex; flex-direction: column; gap: 18px; }
 .racer-auth :deep(.name-row) { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .racer-auth :deep(.auth-field) {
   min-width: 0;
-  label { display: block; font-size: 14px; line-height: 20px; color: #c4c4c4; text-transform: uppercase; margin-bottom: 8px; }
+  label { display: block; font-size: 14px; line-height: 20px; color: #c4c4c4; text-transform: uppercase; margin-bottom: 6px; }
 }
 .racer-auth :deep(.auth-field__control) { position: relative; }
 .racer-auth :deep(.form-input), .racer-auth :deep(.email-fix__input) {
-  width: 100%; height: 62px; padding: 0 20px; border: 1px solid #353535; border-radius: 0;
-  background: #ffffff03; color: #fff; box-shadow: none; font-size: 18px;
+  width: 100%; height: 48px; padding: 0 16px; border: 1px solid #353535; border-radius: 0;
+  background: #ffffff03; color: #fff; box-shadow: none; font-size: 16px;
   &::placeholder { color: #969696; opacity: 1; }
   &:focus { outline: 1px solid #ddd; outline-offset: 1px; border-color: #999; box-shadow: none; background: #ffffff05; }
   &.form-input--error { border-color: #ff7188; }
@@ -89,10 +89,10 @@
 }
 .racer-auth :deep(.btn--primary), .racer-auth :deep(.verify-btn), .racer-auth :deep(.email-fix__submit) {
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  width: 100%; min-height: 74px; padding: 18px 32px; margin-top: 4px;
+  width: 100%; min-height: 56px; padding: 12px 26px; margin-top: 4px;
   border: 0; border-radius: 0; background: linear-gradient(110deg,#f40028,#e90019); color: #fff;
   clip-path: polygon(0 0, calc(100% - 24px) 0, 100% 24px, 100% 100%, 0 100%);
-  font-family: 'Racer Auth Display', sans-serif; font-style: italic; font-weight: 700; font-size: 26px;
+  font-family: 'Racer Auth Display', sans-serif; font-style: italic; font-weight: 700; font-size: 22px;
   line-height: 1.3; text-transform: uppercase; text-align: left; cursor: pointer; box-shadow: none;
   &:hover:not(:disabled) { background: #ff1739; transform: none; box-shadow: none; }
   .auth-icon { width: 34px; height: 34px; flex-shrink: 0; }
@@ -103,10 +103,10 @@
   box-shadow: none; cursor: pointer; font-size: 16px;
   &:hover:not(:disabled) { color: #fff; text-decoration: underline; transform: none; background: none; }
 }
-.racer-auth :deep(.auth-forgot) { align-self: flex-end; margin-top: -10px; margin-bottom: 8px; }
+.racer-auth :deep(.auth-forgot) { align-self: flex-end; margin-top: -10px; margin-bottom: 6px; }
 .racer-auth :deep(.auth-back) {
   display: flex; gap: 10px; align-items: center; justify-content: center;
-  height: 44px; margin: 0 auto 40px; font-family: 'Racer Auth Display', sans-serif; font-style: italic; text-transform: uppercase;
+  height: 40px; margin: 0 auto 24px; font-family: 'Racer Auth Display', sans-serif; font-style: italic; text-transform: uppercase;
   .auth-icon { width: 28px; height: 28px; }
 }
 .racer-auth :deep(.reset-form__title), .racer-auth :deep(.verify-title), .racer-auth :deep(.reset-success__title) {
@@ -134,19 +134,35 @@
 .racer-auth :deep(.domain-hint), .racer-auth :deep(.reset-form__domain-hint), .racer-auth :deep(.email-fix__hint) { color: #c9b9bc; font-size: 14px; line-height: 1.5; }
 .racer-auth :deep(.spinner) { width: 20px; height: 20px; border: 2px solid #ffffff55; border-top-color: white; border-radius: 50%; animation: racer-spin .8s linear infinite; }
 @keyframes racer-spin { to { transform: rotate(360deg); } }
-.racer-auth :deep(.racer-enter-active), .racer-auth :deep(.racer-leave-active) { transition: opacity 120ms ease; }
-.racer-auth :deep(.racer-enter-from), .racer-auth :deep(.racer-leave-to) { opacity: 0; }
-.racer-auth__column--wide :deep(.auth-form) { gap: 16px; }
-.racer-auth__column--wide :deep(.form-input) { height: 56px; }
+.racer-auth :deep(.racer-enter-active), .racer-auth :deep(.racer-leave-active) { transition: opacity 280ms ease, transform 280ms ease; }
+.racer-auth :deep(.racer-enter-from) { opacity: 0; transform: translateY(6px); }
+.racer-auth :deep(.racer-leave-to) { opacity: 0; transform: translateY(-4px); }
+.racer-auth :deep(.auth-form-container), .racer-auth :deep(.reset-form) { position: relative; }
+.racer-auth :deep(.racer-leave-active) { position: absolute; inset: 0 0 auto; pointer-events: none; }
+.racer-auth :deep(.auth-nav .auth-back) { margin: 0; padding: 0; color: #fff; font-size: 16px; }
+.racer-auth__column--wide :deep(.auth-form) { gap: 12px; }
+.racer-auth__column--wide :deep(.form-input) { height: 48px; }
 @media (max-width: 600px) {
   .racer-auth { font-size: 16px; scrollbar-gutter: auto; }
   .racer-auth__column { margin-top: 64px; }
   .racer-auth__brand { height: 158px; }
   .racer-auth__logo-viewport { width: 280px; height: 113px; }
   .racer-auth :deep(.auth-nav) { gap: 8px; button { font-size: 17px; padding-inline: 16px; } }
-  .racer-auth :deep(.form-input), .racer-auth :deep(.email-fix__input) { font-size: 16px; height: 52px; padding-left: 14px; }
+  .racer-auth :deep(.form-input), .racer-auth :deep(.email-fix__input) { font-size: 16px; height: 48px; padding-left: 14px; }
   .racer-auth :deep(.btn--primary), .racer-auth :deep(.verify-btn) { font-size: 20px; min-height: 62px; padding: 14px 20px; }
   .racer-auth :deep(.reset-form__title), .racer-auth :deep(.verify-title), .racer-auth :deep(.reset-success__title) { font-size: 24px; }
+}
+// A short desktop window uses the same compact anchor for every auth view.
+@media (max-height: 820px) and (min-width: 601px) {
+  .racer-auth__column { margin-top: 28px; margin-bottom: 24px; }
+  .racer-auth__brand { height: 132px; }
+  .racer-auth__logo-viewport { width: 280px; height: 113px; }
+  .racer-auth :deep(.auth-nav) { margin-bottom: 18px; height: 36px; }
+  .racer-auth :deep(.auth-field label) { line-height: 18px; margin-bottom: 4px; }
+  .racer-auth :deep(.form-input), .racer-auth :deep(.email-fix__input) { height: 44px; }
+  .racer-auth__column--wide :deep(.auth-form) { gap: 10px; }
+  .racer-auth :deep(.email-verification) { gap: 18px; }
+  .racer-auth :deep(.verify-icon) { width: 60px; height: 60px; }
 }
 @media (max-width: 420px) { .racer-auth :deep(.name-row) { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) {

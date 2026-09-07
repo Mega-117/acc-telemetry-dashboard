@@ -5,6 +5,7 @@
 
 import { ref } from 'vue'
 import AuthScene from './AuthScene.vue'
+import AuthIcon from './AuthIcon.vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 
 type AuthView = 'login' | 'register' | 'reset'
@@ -102,15 +103,20 @@ const handleResetPassword = async (email: string) => {
 
 <template>
   <AuthScene :wide="currentView === 'register'">
-    <nav v-if="currentView !== 'reset'" class="auth-nav" aria-label="Accesso o registrazione">
+    <nav class="auth-nav" aria-label="Accesso o registrazione">
+      <button v-if="currentView === 'reset'" class="auth-back" :disabled="isSubmitting" @click="backToLogin">
+        <AuthIcon name="back" /> Torna al login
+      </button>
+      <template v-else>
       <button class="auth-nav__item" :class="{ 'is-active': currentTab === 'login' }" :aria-current="currentTab === 'login' ? 'page' : undefined"
         :disabled="isSubmitting" @click="handleTabChange('login')">ACCEDI</button>
       <button class="auth-nav__item" :class="{ 'is-active': currentTab === 'register' }" :aria-current="currentTab === 'register' ? 'page' : undefined"
         :disabled="isSubmitting" @click="handleTabChange('register')">REGISTRATI</button>
+      </template>
     </nav>
         <!-- Forms with Transition -->
         <div class="auth-form-container">
-          <Transition name="racer" mode="out-in">
+          <Transition name="racer" @before-leave="el => el.setAttribute('inert', '')">
             <AuthLoginForm 
               v-if="currentView === 'login'"
               key="login"
@@ -132,6 +138,7 @@ const handleResetPassword = async (email: string) => {
               v-else
               key="reset"
               ref="resetFormRef"
+              hide-back
               :loading="isSubmitting"
               @submit="handleResetPassword"
               @back="backToLogin"
