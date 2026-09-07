@@ -10,7 +10,6 @@ import { useElectronSync } from '~/composables/useElectronSync'
 import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
-withDefaults(defineProps<{ authBranding?: boolean }>(), { authBranding: false })
 const brandBase = useRuntimeConfig().app.baseURL
 
 const route = useRoute()
@@ -159,10 +158,9 @@ const closeMaintenanceNotification = () => {
 <template>
   <div v-if="isElectronVisible" class="electron-titlebar">
     <div class="titlebar-drag-region">
-      <span v-if="authBranding" class="titlebar-title titlebar-title--racer">
+      <span class="titlebar-title titlebar-title--racer">
         <img :src="`${brandBase}branding/auth/racercore-rc.svg`" alt="" width="40" height="16" /> RACER CORE
       </span>
-      <span v-else class="titlebar-title">ACC Telemetry Dashboard</span>
     </div>
     
     <!-- Left buttons: Refresh & Sync -->

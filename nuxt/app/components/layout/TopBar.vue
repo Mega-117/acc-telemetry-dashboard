@@ -10,6 +10,8 @@ import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import { useDevTestMode } from '~/composables/useDevTestMode'
 import PitwallConceptBell from '~/components/pitwall/concept/PitwallConceptBell.vue'
 
+const brandBase = useRuntimeConfig().app.baseURL
+
 // Badge test-mode dev (PIP-106): indicatore di sola lettura sulla dashboard.
 const { init: initTestMode } = useDevTestMode()
 onMounted(() => initTestMode())
@@ -157,8 +159,7 @@ onMounted(() => {
     <div class="topbar__inner">
       <!-- Logo -->
       <div class="topbar__brand">
-        <span class="brand-badge">ACC</span>
-        <span class="brand-name">TELEMETRY</span>
+        <img class="brand-logo" :src="`${brandBase}branding/racercore-horizontal-v1.svg`" alt="Racer Core" width="240" height="36" />
       </div>
 
       <TestModeBadge />
@@ -271,22 +272,10 @@ onMounted(() => {
   gap: 10px;
 }
 
-.brand-badge {
-  font-family: $font-display;
-  font-size: $font-size-base;
-  font-weight: $font-weight-bold;
-  color: $racing-red;
-  padding: 5px 8px;
-  border: 2px solid $racing-red;
-  border-radius: $radius-sm;
-}
-
-.brand-name {
-  font-family: $font-display;
-  font-size: $font-size-lg;
-  font-weight: $font-weight-bold;
-  letter-spacing: 2px;
-  color: $text-primary;
+.brand-logo {
+  display: block;
+  width: clamp(160px, 24vw, 240px);
+  height: auto;
 }
 
 .topbar__spacer {

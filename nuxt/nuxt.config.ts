@@ -63,7 +63,7 @@ export default defineNuxtConfig({
 
     // Meta tags e font
     head: {
-      title: 'ACC Telemetry Dashboard',
+      title: 'Racer Core',
       htmlAttrs: {
         lang: 'it'
       },

@@ -16,7 +16,7 @@ vi.mock('~/services/cache/telemetryCacheInvalidationService', () => ({ invalidat
 
 afterEach(() => { vi.unstubAllGlobals(); delete window.electronAPI })
 
-it('switches auth-only branding while preserving every window control and restoring default branding', async () => {
+it('uses the login Racer Core branding everywhere while preserving every window control', async () => {
   vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL: '/suite/' } }))
   vi.stubGlobal('useRoute', () => ({ params: {}, fullPath: '/' }))
   vi.stubGlobal('useRouter', () => ({ replace: vi.fn() }))
@@ -30,9 +30,8 @@ it('switches auth-only branding while preserving every window control and restor
   } } })
   try {
     await flushPromises()
-    expect(w.get('.titlebar-title').text()).toBe('ACC Telemetry Dashboard')
     const controls = w.findAll('button').map(button => button.attributes('title'))
-    await w.setProps({ authBranding: true })
+    expect(controls).toHaveLength(5)
     expect(w.get('.titlebar-title').text()).toBe('RACER CORE')
     expect(w.get('.titlebar-title img').attributes('src')).toBe('/suite/branding/auth/racercore-rc.svg')
     expect(w.findAll('button').map(button => button.attributes('title'))).toEqual(controls)
@@ -44,8 +43,7 @@ it('switches auth-only branding while preserving every window control and restor
     expect(api.windowMaximize).toHaveBeenCalledOnce()
     expect(api.windowClose).toHaveBeenCalledOnce()
     expect(api.pageRefresh).toHaveBeenCalledOnce()
-    await w.setProps({ authBranding: false })
-    expect(w.get('.titlebar-title').text()).toBe('ACC Telemetry Dashboard')
-    expect(w.find('.titlebar-title img').exists()).toBe(false)
+    expect(w.get('.titlebar-title').text()).toBe('RACER CORE')
+    expect(w.find('.titlebar-title img').exists()).toBe(true)
   } finally { w.unmount() }
 })

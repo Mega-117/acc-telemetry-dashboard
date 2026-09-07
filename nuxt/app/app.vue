@@ -485,7 +485,7 @@ provide('goToSettings', handleGoToSettings)
     </template>
 
     <template v-else-if="isStandaloneDevRoute">
-      <ElectronTitlebar :auth-branding="appState === 'auth'" />
+      <ElectronTitlebar />
       <ElectronRuntimeCapabilityBanner v-if="canEnterApp" />
       <NuxtRouteAnnouncer />
       <div class="dashboard-wrapper">
@@ -497,7 +497,7 @@ provide('goToSettings', handleGoToSettings)
 
     <template v-else>
       <!-- Electron Titlebar (only visible in Electron) -->
-      <ElectronTitlebar :auth-branding="appState === 'auth'" />
+      <ElectronTitlebar />
       <ElectronRuntimeCapabilityBanner v-if="canEnterApp" />
 
       <ElectronDataMaintenanceNotification
