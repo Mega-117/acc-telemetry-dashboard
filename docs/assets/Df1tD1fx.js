@@ -1,1 +1,0 @@
-import{ag as d,cu as r,as as o,bd as u}from"./Dww5KFBn.js";import{w as c,g as m}from"./CdGZoAzb.js";const f=d(async()=>{let e,t;const{isAuthenticated:i,isAdmin:s,isLoading:n}=r();[e,t]=o(()=>c(n)),await e,t();const a=m({isAuthenticated:i.value,isAdmin:s.value});if(a)return u(a)});export{f as default};
