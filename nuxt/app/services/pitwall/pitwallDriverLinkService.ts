@@ -87,6 +87,7 @@ export interface PitwallPendingOutcome {
   status: 'applied' | 'partial' | 'failed' | 'rejected'
   reason: string | null
   fields: unknown
+  tyreSetCondition?: unknown
   appliedAt: string
 }
 
@@ -108,6 +109,7 @@ export interface PitwallDriverElectronApi {
     reason?: string | null
     orderId?: string | null
     fields?: unknown
+    tyreSetCondition?: unknown
     /** L'ordine non e' applicabile adesso ma lo sara': non va concluso. */
     retryable?: boolean
   }>

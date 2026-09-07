@@ -90,6 +90,7 @@ export interface PitwallPlan {
  * che decide se l'ordine puo' essere applicato.
  */
 export interface PitwallCarState extends PitwallPlan {
+  tyreSetCondition?: import('~/services/pitwall/pitwallLink').PitwallTyreCondition | null
   inPitLane: boolean
 }
 

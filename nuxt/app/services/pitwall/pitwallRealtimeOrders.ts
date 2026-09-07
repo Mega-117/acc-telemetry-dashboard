@@ -1,3 +1,4 @@
+import { boundPitwallTyreCondition } from './pitwallLink'
 import type { PitwallRealtimeTransport } from './pitwallRealtimeTransport'
 import type { PitwallRealtimeSession } from './pitwallRealtimeSession'
 import { activeDriver, canClaimRealtimeOrder, type RealtimeConnection, type RealtimeOrder } from './pitwallRealtimeProtocol'
@@ -12,7 +13,7 @@ export interface RealtimeClaim {
   claimedAtMs: number
   leaseUntilMs: number
 }
-type Outcome = { status: 'applied' | 'partial' | 'failed' | 'rejected', reason?: string | null, fields?: unknown }
+type Outcome = { status: 'applied' | 'partial' | 'failed' | 'rejected', reason?: string | null, fields?: unknown, tyreSetCondition?: unknown }
 const terminal = (order: RealtimeOrder) => ['applied', 'partial', 'failed', 'rejected'].includes(order.status)
 const fail = (error: unknown): { ok: false, reason: string } => ({ ok: false, reason: error instanceof Error ? error.message : String(error) })
 
@@ -128,7 +129,7 @@ export function createPitwallRealtimeOrders(options: {
       if (!order) throw new Error('Ordine non disponibile: conservare il registro locale.')
       if (terminal(order)) return { ok: true, value: true }
       if (order.status !== 'applying' || order.claimedBy !== uid) throw new Error('Esito non appartenente a questo esecutore.')
-      const completed = { ...order, status: outcome.status, appliedAt: new Date(io.serverNow()).toISOString(), result: { reason: outcome.reason ?? null, fields: outcome.fields ?? {} } }
+      const completed = { ...order, status: outcome.status, appliedAt: new Date(io.serverNow()).toISOString(), result: { reason: outcome.reason ?? null, fields: outcome.fields ?? {}, ...(boundPitwallTyreCondition(outcome.tyreSetCondition) ? { tyreSetCondition: boundPitwallTyreCondition(outcome.tyreSetCondition) } : {}) } }
       const claim = await io.read<RealtimeClaim>(controlPath(roomId))
       const changes: Record<string, unknown> = { [`orders/${orderId}`]: completed }
       if (claim?.orderId === orderId && claim.uid === uid && claim.connectionId === order.targetConnectionId) changes['control/claim'] = null

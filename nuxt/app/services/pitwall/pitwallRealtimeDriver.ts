@@ -61,7 +61,7 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
       await bindMain()
       const acknowledged = rooms.acknowledgedOrder(roomId, order.orderId)
       const current = await options.electronApi.pitwallGetLinkStatus?.()
-      let outcome: { status: string, reason?: string | null, fields?: unknown }
+      let outcome: { status: string, reason?: string | null, fields?: unknown, tyreSetCondition?: unknown }
       if (!acknowledged || stopped || room?.roomId !== roomId || !current?.accReady || current.driverUid !== options.uid
         || resolvePitwallRoomExecutor(members, rooms.serverNow()).executor?.connectionId !== rooms.session.connectionId()) {
         outcome = { status: 'rejected', reason: 'Stato cambiato dopo la presa in carico: nessun input inviato. Invia di nuovo quando pronto.' }
@@ -81,7 +81,7 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
       }
       const terminal = (['applied', 'partial', 'failed', 'rejected'] as const).find(value => value === outcome.status) ?? 'rejected'
       const result = await rooms.publishOutcome(roomId, order.orderId, { status: terminal,
-        reason: outcome.reason ?? (outcome.status === 'waiting' ? 'Impedimento rilevato: occorre un nuovo invio manuale.' : null), fields: outcome.fields })
+        reason: outcome.reason ?? (outcome.status === 'waiting' ? 'Impedimento rilevato: occorre un nuovo invio manuale.' : null), fields: outcome.fields, tyreSetCondition: outcome.tyreSetCondition })
       if (result.ok) await confirmOutcomes([order.orderId])
       else console.warn('[PITWALL] Esito conservato localmente:', result.reason)
     } finally { applying = null }

@@ -4,6 +4,7 @@
 // dichiarati come ultimo ordine o non disponibili, mai spacciati per LIVE.
 
 import { computed } from 'vue'
+import PitwallTyreCondition from './PitwallTyreCondition.vue'
 import type { PitwallSession } from '~/services/pitwall/pitwallLink'
 import {
   formatToggle,
@@ -114,8 +115,9 @@ const sourceLabel: Record<MfdSource, string> = {
     <div class="mfd__rows">
       <div v-for="row in rows" :key="row.label" class="mfd__row">
         <span class="mfd__label">{{ row.label }}</span>
-        <strong class="mfd__value">{{ row.value }}</strong>
-        <span class="mfd__source" :class="`mfd__source--${row.source}`">
+        <PitwallTyreCondition v-if="row.label === 'Set pneumatici'" class="mfd__value" :tyre-set="tyreSetIndexToNumber(strategy?.tyreSet)" :condition="strategy?.tyreSetCondition" :fresh="fresh" />
+        <strong v-else class="mfd__value">{{ row.value }}</strong>
+        <span v-if="row.label !== 'Set pneumatici'" class="mfd__source" :class="`mfd__source--${row.source}`">
           {{ sourceLabel[row.source] }}
         </span>
       </div>

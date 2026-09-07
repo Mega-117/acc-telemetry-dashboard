@@ -172,6 +172,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
       fuelLiters: strategy?.fuelToAdd ?? fuelLiters.value,
       compound: (strategy?.compound as PitwallCompound | null | undefined) ?? compound.value,
       tyreSet: tyreSetIndexToNumber(strategy?.tyreSet),
+      tyreSetCondition: carFresh.value ? strategy?.tyreSetCondition ?? null : null,
       // ACC non rilegge nessuna di queste caselle: in macchina restano ignote,
       // e ignoto non e' "spento". Dirlo con null evita di mostrare all'ingegnere
       // uno stato che nessuno ha verificato.

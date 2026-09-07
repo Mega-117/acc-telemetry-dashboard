@@ -216,6 +216,7 @@ export function createPitwallRoomOrders(options: PitwallRoomOrdersOptions) {
     status: 'applied' | 'partial' | 'failed' | 'rejected'
     reason?: string | null
     fields?: unknown
+    tyreSetCondition?: unknown
   }): Promise<PitwallRoomResult<true>> {
     try {
       await trackedUpdateDoc(doc(ordersRef(roomId), orderId), {

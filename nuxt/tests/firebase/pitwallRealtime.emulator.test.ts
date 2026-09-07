@@ -289,3 +289,35 @@ describe('Pitwall RTDB rules and integrated services', () => {
     expect(submit.mock.calls[0]?.[0]).toMatchObject({ order: { protocolVersion: 3, orderId: manual } })
   })
 })
+
+describe('PIP-393 condition metadata across real RTDB SDK boundaries', () => {
+  it('deduplicates, invalidates on reconnect and preserves outcome metadata separately', async () => {
+    const { driver, engineer, roomId } = await openRoom()
+    const condition = { tyreSet: 11, compound: 'dry', state: 'new', via: 'screen', observedAt: '2026-09-07T11:53:55Z' }
+    const state = { nickname: 'Driver', kind: 'driver' as const, driving: true, runtimeSessionId: 'runtime',
+      strategy: { fuelToAdd: 25, tyreSet: 10, fittedTyreSet: 3, compound: 'dry', tyreSetCondition: condition } }
+    const mfd = ref(driver.io.database, `pitwallV3/rooms/${roomId}/mfd`)
+    await driver.publishPresence(roomId, state)
+    await vi.waitFor(async () => expect((await get(mfd)).val().strategy.tyreSetCondition).toEqual(condition))
+    // RTDB exposes local events before the write acknowledgement increments metrics.
+    await new Promise(resolve => setTimeout(resolve, 150))
+    const writes = driver.io.metrics.snapshot().writes
+    for (let i = 0; i < 10; i++) await driver.publishPresence(roomId, state)
+    await new Promise(resolve => setTimeout(resolve, 150))
+    expect(driver.io.metrics.snapshot().writes).toBe(writes)
+    goOffline(driver.io.database)
+    await vi.waitFor(() => expect(driver.io.online()).toBe(false))
+    goOnline(driver.io.database)
+    await vi.waitFor(() => expect(driver.session.roomId()).toBe(roomId))
+    await driver.publishPresence(roomId, state)
+    await vi.waitFor(async () => expect((await get(mfd)).val().strategy.tyreSetCondition ?? null).toBeNull())
+    const freshCondition = { ...condition, observedAt: '2026-09-07T12:00:00Z' }
+    await driver.publishPresence(roomId, { ...state, strategy: { ...state.strategy, tyreSetCondition: freshCondition } })
+    await vi.waitFor(async () => expect((await get(mfd)).val().strategy.tyreSetCondition).toEqual(freshCondition))
+    const orderId = await send(engineer, roomId)
+    expect((await driver.claimOrder(roomId, orderId)).ok).toBe(true)
+    expect((await driver.publishOutcome(roomId, orderId, { status: 'applied', fields: { tyreSet: { observed: 11 } }, tyreSetCondition: freshCondition })).ok).toBe(true)
+    const completed = await driver.readOrder(roomId, orderId)
+    expect(completed.ok && completed.value?.result).toMatchObject({ fields: { tyreSet: { observed: 11 } }, tyreSetCondition: freshCondition })
+  })
+})

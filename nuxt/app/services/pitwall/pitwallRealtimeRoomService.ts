@@ -40,10 +40,23 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
       strategy: snapshot.strategy ? { ...snapshot.strategy, updatedAt: new Date(io.serverNow()).toISOString() } : null,
       updatedAt: io.serverTimestamp() } })
   }, error => { lastError = new Error(failure(error).reason) })
+  let invalidatedConditionAt: unknown = null
+  function discardInvalidatedCondition() {
+    const condition = mfdWanted?.strategy?.tyreSetCondition as { observedAt?: unknown } | null
+    if (condition && condition.observedAt === invalidatedConditionAt && mfdWanted?.strategy) {
+      mfdWanted = { ...mfdWanted, strategy: { ...mfdWanted.strategy, tyreSetCondition: null } }
+    }
+  }
   let lastConnectionId = ''
   const stopReady = session.onReady(() => {
     const id = `${session.connectionId()}/${session.roomId() ?? ''}`
-    if (id !== lastConnectionId) { lastConnectionId = id; mfdPublisher.reset() }
+    if (id !== lastConnectionId) {
+      lastConnectionId = id
+      const condition = mfdWanted?.strategy?.tyreSetCondition as { observedAt?: unknown } | null
+      invalidatedConditionAt = condition?.observedAt ?? invalidatedConditionAt
+      discardInvalidatedCondition()
+      mfdPublisher.reset()
+    }
     if (mfdWanted && session.roomId()) mfdPublisher.offer(mfdWanted)
   })
   const orders = createPitwallRealtimeOrders({ io, session, connections: roomId => members.get(roomId) ?? [] })
@@ -139,6 +152,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
         if (bounded) { const { updatedAt, ...strategy } = bounded; void updatedAt; mfdWanted = { strategy, crew: boundPitwallCrew(input.crew) } }
         else mfdWanted = { strategy: null, crew: boundPitwallCrew(input.crew) }
       }
+      discardInvalidatedCondition()
       await session.update(localPresence)
       if (mfdWanted && input.kind === 'driver') mfdPublisher.offer(mfdWanted)
       return success()

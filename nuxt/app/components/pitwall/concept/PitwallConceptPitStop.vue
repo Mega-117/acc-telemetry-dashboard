@@ -10,6 +10,7 @@
 // attiva. Il preset parte da "Off" perche' quella riga riscrive carburante,
 // gomme e pressioni in blocco.
 import { computed } from "vue";
+import PitwallTyreCondition from "~/components/pitwall/PitwallTyreCondition.vue";
 // Il controllo a tre stati e' quello vero della Classica, non una copia: la
 // distinzione fra "spegni" e "non toccare" e' logica di prodotto, e averla in
 // due posti vorrebbe dire vederla divergere.
@@ -227,11 +228,7 @@ function stepAll(direction: 1 | -1) {
         </button>
       </div>
       <span class="pwc-pit-car">
-        <b>{{ stop.car.value.tyreSet ?? '—' }}</b>
-        <em
-          class="pwc-src"
-          :class="`is-${observed}`"
-        >{{ PITWALL_CONCEPT_SOURCE_LABELS[observed] }}</em>
+        <PitwallTyreCondition :tyre-set="stop.car.value.tyreSet" :condition="stop.car.value.tyreSetCondition" :fresh="stop.carFresh.value" />
       </span>
     </div>
     <p v-if="stop.tyreSetNotice.value" class="pwc-tyreset-note">{{ stop.tyreSetNotice.value }}</p>

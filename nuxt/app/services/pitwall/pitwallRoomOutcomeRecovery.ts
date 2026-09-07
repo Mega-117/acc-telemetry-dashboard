@@ -66,6 +66,7 @@ export function createPitwallRoomOutcomeRecovery(options: PitwallRoomOutcomeReco
         status: outcome.status,
         reason: outcome.reason,
         fields: outcome.fields,
+        ...(outcome.tyreSetCondition ? { tyreSetCondition: outcome.tyreSetCondition } : {}),
       })
       if (published.ok) {
         await confirmOutcomes([outcome.orderId])

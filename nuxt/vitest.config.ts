@@ -83,6 +83,7 @@ export default defineConfig({
         'app/config/optimalShiftRpm.ts',
         // ── Pit Wall: contratto del collegamento fra pilota e ingegnere ──
         'app/services/pitwall/pitwallLink.ts',
+        'app/components/pitwall/PitwallTyreCondition.vue',
         'app/services/pitwall/pitwallRoomContract.ts',
         'app/services/pitwall/pitwallRoomService.ts',
         'app/services/pitwall/pitwallRoomDocuments.ts',

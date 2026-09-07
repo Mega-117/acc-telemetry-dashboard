@@ -65,11 +65,29 @@ export interface PitwallCrewMember {
  * Fotografia della strategia nel Pit MFD del pilota.
  * Piccola e lenta: viaggia dentro il battito di presenza, non e' telemetria.
  */
+export interface PitwallTyreCondition {
+  tyreSet: number
+  compound: 'dry'
+  state: 'new' | 'used' | 'unknown'
+  via: 'screen'
+  observedAt: string
+}
+
+export function boundPitwallTyreCondition(value: unknown): PitwallTyreCondition | null {
+  if (!value || typeof value !== 'object') return null
+  const item = value as Partial<PitwallTyreCondition>
+  if (typeof item.tyreSet !== 'number' || !Number.isInteger(item.tyreSet) || item.tyreSet < 1 || item.tyreSet > 50
+    || item.compound !== 'dry' || item.via !== 'screen' || !['new', 'used', 'unknown'].includes(item.state ?? '')
+    || typeof item.observedAt !== 'string' || item.observedAt.length > 40 || !Number.isFinite(Date.parse(item.observedAt))) return null
+  return { tyreSet: item.tyreSet, compound: 'dry', state: item.state!, via: 'screen', observedAt: item.observedAt }
+}
+
 export interface PitwallStrategySnapshot {
   fuelToAdd: number | null
   tyreSet: number | null
   /** Numero 1–50 del treno montato, distinto dal candidato MFD in base zero. */
   fittedTyreSet?: number | null
+  tyreSetCondition?: PitwallTyreCondition | null
   pressures: Record<'FL' | 'FR' | 'RL' | 'RR', number> | null
   /** Nota solo dopo che l'applicatore l'ha osservata: null = sconosciuta. */
   compound: 'dry' | 'wet' | null
@@ -193,6 +211,7 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
     fuelToAdd?: unknown
     tyreSet?: unknown
     fittedTyreSet?: unknown
+    tyreSetCondition?: unknown
     pressures?: Record<string, unknown> | null
     compound?: unknown
     verifiedFields?: unknown
@@ -210,6 +229,7 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
   return {
     fuelToAdd: finiteOrNull(source.fuelToAdd),
     tyreSet: finiteOrNull(source.tyreSet),
+    ...(source.tyreSetCondition ? { tyreSetCondition: boundPitwallTyreCondition(source.tyreSetCondition) } : {}),
     ...(typeof source.fittedTyreSet === 'number' && Number.isInteger(source.fittedTyreSet) && source.fittedTyreSet >= 1 && source.fittedTyreSet <= 50
       ? { fittedTyreSet: source.fittedTyreSet } : {}),
     pressures: pressures && Object.keys(pressures).length === wheels.length

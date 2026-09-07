@@ -380,7 +380,7 @@ describe('Pitwall wiring', () => {
     for (const cella of [
       '{{ seenValue("pitStrategy", last?.pitStrategy) }}',
       '{{ clampFuel(stop.car.value.fuelLiters) }} L',
-      "{{ stop.car.value.tyreSet ?? '—' }}",
+      ':tyre-set="stop.car.value.tyreSet"',
       'stop.car.value.compound === "wet" ? "Wet" : "Dry"',
       '{{ stop.car.value.pressures[wheel].toFixed(1) }}',
     ]) {
