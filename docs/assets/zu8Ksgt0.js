@@ -1,0 +1,1 @@
+import{ae as a,bo as o,a6 as t,bR as n,A as s}from"./BDjDnGv3.js";const _={class:"page-container"},r=a({__name:"PageContainer",setup(c){return(e,p)=>(o(),t("div",_,[n(e.$slots,"default",{},void 0,!0)]))}}),d=Object.assign(s(r,[["__scopeId","data-v-71e40101"]]),{__name:"LayoutPageContainer"});export{d as _};
