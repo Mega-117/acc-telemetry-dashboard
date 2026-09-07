@@ -8,6 +8,8 @@ import { trackedUpdateDoc } from '~/composables/useFirebaseTracker'
 import { db } from '~/config/firebase'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
+const brandBase = useRuntimeConfig().app.baseURL
+
 const props = defineProps<{
   userEmail?: string
   userNickname?: string
@@ -306,8 +308,7 @@ watch(
         </button>
 
         <div class="header-brand">
-          <span class="brand-badge">ACC</span>
-          <span class="brand-name">TELEMETRY</span>
+          <img class="brand-logo" :src="`${brandBase}branding/racercore-horizontal-v1.svg`" alt="Racer Core" width="240" height="36" />
         </div>
 
         <div class="header-user">
@@ -612,21 +613,10 @@ $max-width: 1400px;
   justify-self: end;
 }
 
-.brand-badge {
-  padding: 5px 8px;
-  border: 2px solid $racing-red;
-  border-radius: 5px;
-  color: $racing-red;
-  font-family: $font-display;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.brand-name {
-  font-family: $font-display;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 2px;
+.brand-logo {
+  display: block;
+  width: clamp(160px, 24vw, 240px);
+  height: auto;
 }
 
 .back-btn {
