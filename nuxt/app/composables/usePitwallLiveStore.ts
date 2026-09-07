@@ -133,7 +133,8 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
         personId: row.uid,
         role: row.invited ? 'invited' : row.role,
         driving: row.driving,
-        online: row.online || row.connecting,
+        online: row.online,
+        connecting: row.connecting,
       }))
     }
     return [

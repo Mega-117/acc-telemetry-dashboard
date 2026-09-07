@@ -55,6 +55,19 @@ async function send(engineer: PitwallRealtimeRoomService, roomId: string) {
 }
 
 describe('Pitwall RTDB rules and integrated services', () => {
+  it('desktop engineer without ACC survives driver startup and sends once to the remote pilot', async () => {
+    const { driver, engineer, roomId } = await openRoom()
+    await engineer.publishPresence(null, { nickname: 'Engineer', kind: 'driver', driving: false, runtimeSessionId: 'idle-desktop' })
+    await vi.waitFor(() => expect(engineer.sendReadiness(roomId).ready).toBe(true))
+    const sent = await engineer.sendOrder(roomId, { plan, revision: 1 })
+    expect(sent.ok).toBe(true)
+    if (!sent.ok) throw new Error(sent.reason)
+    expect((await driver.claimOrder(roomId, sent.value)).ok).toBe(true)
+    expect((await driver.claimOrder(roomId, sent.value)).ok).toBe(false)
+    expect((await driver.publishOutcome(roomId, sent.value, { status: 'applied' })).ok).toBe(true)
+    const result = await engineer.readOrder(roomId, sent.value)
+    expect(result.ok && result.value?.status).toBe('applied')
+  })
   it('joins a newly discovered invitation while the room listeners are already active', async () => {
     const driver = await participant('driver')
     const engineer = await participant('engineer')

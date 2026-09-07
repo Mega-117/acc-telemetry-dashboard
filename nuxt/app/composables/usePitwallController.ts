@@ -454,6 +454,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     if (link.roomClosed.value) return 'Questa gara e chiusa: non accetta piu strategie.'
     if (!link.amMember.value) return 'Non sei ancora entrato in questa gara.'
     if (link.executor.value.reason !== 'ready') return link.executorLabel.value
+    if (!link.sendReadiness.value.ready) return link.sendReadiness.value.reason
     if (!pitwallRepairsCompatible(repairs.value)) return 'Le sospensioni richiedono anche la riparazione della carrozzeria.'
     if (tyreSetBlocked.value) return tyreSetNotice.value
     if (!hasChanges.value) return 'Nessuna modifica da inviare.'

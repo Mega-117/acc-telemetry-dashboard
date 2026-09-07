@@ -455,8 +455,8 @@ describe('i Pitwall aperti e gli avvisi', () => {
     expect(race.live).toBe(true)
     expect(race.session).toBe('In pista')
     expect(race.members).toEqual([
-      { personId: 'pilota', role: 'manager', driving: true, online: true },
-      { personId: 'me', role: 'member', driving: false, online: true },
+      { personId: 'pilota', role: 'manager', driving: true, online: true, connecting: false },
+      { personId: 'me', role: 'member', driving: false, online: false, connecting: true },
     ])
     expect(race.reason.kind).toBe('grant')
     // Le persone hanno il nickname che la presenza porta con se'.

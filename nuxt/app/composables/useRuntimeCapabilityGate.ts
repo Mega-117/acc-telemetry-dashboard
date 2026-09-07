@@ -33,7 +33,8 @@ export function createRuntimeCapabilityStore() {
     if (isElectronConsumer && !connectedApi) {
       connectedApi = api
       unsubscribe = api.onRuntimeBootstrapState?.(applySnapshot) || null
-      void api.getRuntimeBootstrapState?.()
+      // The primary publishes this state after auth; consume its canonical stream.
+      if (api.runtimeBootstrapRole !== 'owner') void api.getRuntimeBootstrapState?.()
         .then(applySnapshot)
         .catch(() => {
           snapshot.value = null

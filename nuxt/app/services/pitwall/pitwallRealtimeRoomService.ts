@@ -29,6 +29,8 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
   const memberReaders = new Map<string, number>()
   const roomCache = new Map<string, PitwallRoom | null>()
   let localPresence: Parameters<typeof session.update>[0] | null = null
+  let engineerPresence: Parameters<typeof session.update>[0] | null = null
+  let driverPresence: Parameters<typeof session.update>[0] | null = null
   let mfdWanted: { strategy: Record<string, unknown> | null, crew: unknown } | null = null
   let stopped = false
   let lastError: Error | null = null
@@ -142,34 +144,48 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
   async function publishPresence(roomId: string | null, input: { nickname: string, kind: 'driver' | 'engineer', driving: boolean, runtimeSessionId: string, crew?: unknown, strategy?: unknown, car?: string | null, track?: string | null }): Promise<PitwallRoomResult<true>> {
     try {
       if (stopped) throw new Error('Sessione Pitwall terminata.')
-      // The desktop room UI shares its runtime's connection; it must not overwrite the driver role.
-      if (input.kind === 'engineer' && localPresence?.kind === 'driver') return success()
-      localPresence = { roomId, nickname: input.nickname.slice(0, 60), kind: input.kind, driving: input.driving,
+      const presence = { roomId, nickname: input.nickname.slice(0, 60), kind: input.kind, driving: input.driving,
         sourceValid: input.kind === 'driver' && input.strategy != null, runtimeSessionId: input.runtimeSessionId,
         car: input.car ?? null, track: input.track ?? null }
+      if (input.kind === 'driver') driverPresence = presence
+      else engineerPresence = presence
       if (input.kind === 'driver') {
         const bounded = boundPitwallStrategy(input.strategy, '')
         if (bounded) { const { updatedAt, ...strategy } = bounded; void updatedAt; mfdWanted = { strategy, crew: boundPitwallCrew(input.crew) } }
         else mfdWanted = { strategy: null, crew: boundPitwallCrew(input.crew) }
       }
       discardInvalidatedCondition()
-      await session.update(localPresence)
+      await publishEffectivePresence()
       if (mfdWanted && input.kind === 'driver') mfdPublisher.offer(mfdWanted)
       return success()
     } catch (error) { return failure(error) }
   }
 
+  async function publishEffectivePresence() {
+    // The page owns membership; only a valid active driver may take execution priority.
+    const driverActive = driverPresence?.roomId && driverPresence.driving && driverPresence.sourceValid
+    const fallback = engineerPresence ?? driverPresence
+    localPresence = driverActive ? driverPresence : fallback
+      ? { ...fallback, kind: 'engineer', driving: false, sourceValid: false } : null
+    if (localPresence) await session.update(localPresence)
+  }
+
   async function clearPresence(roomId: string) {
-    if (localPresence?.roomId !== roomId) return
-    localPresence = { ...localPresence, roomId: null, driving: false, sourceValid: false }
+    if (engineerPresence?.roomId === roomId) engineerPresence = { ...engineerPresence, roomId: null }
+    if (driverPresence?.roomId === roomId) driverPresence = { ...driverPresence, roomId: null, driving: false, sourceValid: false }
     mfdPublisher.reset(); mfdWanted = null
-    await session.update(localPresence)
+    await publishEffectivePresence()
   }
   async function deactivateDriver() {
-    if (localPresence?.kind !== 'driver') return
-    localPresence = { ...localPresence, kind: 'engineer', roomId: null, driving: false, sourceValid: false }
+    if (!driverPresence) return
+    driverPresence = { ...driverPresence, kind: 'engineer', roomId: null, driving: false, sourceValid: false }
     mfdPublisher.reset(); mfdWanted = null
-    await session.update(localPresence)
+    await publishEffectivePresence()
+  }
+  async function clearEngineerPresence(roomId: string) {
+    if (engineerPresence?.roomId !== roomId) return
+    engineerPresence = { ...engineerPresence, roomId: null }
+    await publishEffectivePresence()
   }
 
   async function joinRoom(roomId: string): Promise<PitwallRoomResult<PitwallRoom>> {
@@ -285,7 +301,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
     }
   }
   async function dispose() { stopped = true; mfdPublisher.stop(); stopReady(); await session.stop(); members.clear(); roomCache.clear() }
-  return { uid, io, session, ...orders, readRoom, watchRoom, watchRooms, watchMembers, publishPresence, clearPresence, deactivateDriver,
+  return { uid, io, session, ...orders, readRoom, watchRoom, watchRooms, watchMembers, publishPresence, clearPresence, clearEngineerPresence, deactivateDriver,
     ensureRoomForVehicle, joinRoom, leaveRoom, closeRoom, closeDormantRooms, listRooms, invite, syncInvites, revoke, promote, dispose,
     serverNow: io.serverNow, toLocalMs: (serverMs: number) => serverMs - io.clockOffsetMs(), clockOffsetMs: io.clockOffsetMs,
     clockOutOfSync: () => Math.abs(io.clockOffsetMs()) > 30_000, lastError: () => lastError }

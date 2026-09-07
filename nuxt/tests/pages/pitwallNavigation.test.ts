@@ -6,6 +6,8 @@ import PitwallConcept from '~/components/pitwall/concept/PitwallConcept.vue'
 
 const fake = vi.hoisted(() => ({ store: null as any }))
 vi.mock('~/composables/usePitwallStore', () => ({ usePitwallStore: () => fake.store }))
+const homeRequest = ref(0)
+vi.mock('~/composables/usePitwallConceptMode', () => ({ usePitwallConceptMode: () => ({ homeRequest }) }))
 
 beforeEach(() => {
   fake.store = {
@@ -24,13 +26,14 @@ describe('Pitwall navigation with the existing global store', () => {
     page.unmount()
   })
 
-  it('restores the selected room after a page remount without joining again', () => {
+  it('opens home on remount while preserving room membership without joining again', () => {
     fake.store.selectedRace.value = { id: 'room' }
     const first = shallowMount(PitwallConcept)
-    expect(first.findComponent({ name: 'PitwallConceptLive' }).exists()).toBe(true)
+    expect(first.find('.pwc-home').exists()).toBe(true)
     first.unmount()
     const returned = shallowMount(PitwallConcept)
-    expect(returned.findComponent({ name: 'PitwallConceptLive' }).exists()).toBe(true)
+    expect(returned.find('.pwc-home').exists()).toBe(true)
+    expect(fake.store.selectedRace.value.id).toBe('room')
     expect(fake.store.enterRace).not.toHaveBeenCalled()
     returned.unmount()
   })
@@ -39,10 +42,28 @@ describe('Pitwall navigation with the existing global store', () => {
     vi.stubGlobal('scrollTo', vi.fn())
     fake.store.selectedRace.value = { id: 'room' }
     const page = shallowMount(PitwallConcept)
+    page.findComponent({ name: 'PitwallConceptRaces' }).vm.$emit('enter', { id: 'room' })
+    await nextTick()
+    expect(page.findComponent({ name: 'PitwallConceptLive' }).exists()).toBe(true)
     fake.store.selectedRace.value = null
     await nextTick()
     expect(page.find('.pwc-home').exists()).toBe(true)
     page.unmount()
     vi.unstubAllGlobals()
+  })
+
+  it('a repeated navbar request returns home without leaving the room or sending an order', async () => {
+    vi.stubGlobal('scrollTo', vi.fn())
+    fake.store.selectedRace.value = { id: 'room' }
+    const page = shallowMount(PitwallConcept)
+    page.findComponent({ name: 'PitwallConceptRaces' }).vm.$emit('enter', { id: 'room' })
+    await nextTick()
+    expect(page.findComponent({ name: 'PitwallConceptLive' }).exists()).toBe(true)
+    homeRequest.value++
+    await nextTick()
+    expect(page.find('.pwc-home').exists()).toBe(true)
+    expect(fake.store.selectedRace.value.id).toBe('room')
+    expect(fake.store.enterRace).toHaveBeenCalledTimes(1)
+    page.unmount(); vi.unstubAllGlobals()
   })
 })

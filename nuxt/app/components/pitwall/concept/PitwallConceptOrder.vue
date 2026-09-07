@@ -13,7 +13,7 @@ import { describePitwallConceptOrderStatus } from "~/utils/pitwallConcept";
 // condivisa con la vista Legacy: "confermato a schermo" e "tasto inviato"
 // non possono avere due traduzioni.
 import { describePitwallFieldOutcome } from "~/utils/pitwallPresentation";
-import type { PitwallOrderStatus } from "~/services/pitwall/pitwallLink";
+import type { PitwallDisplayOrderStatus as PitwallOrderStatus } from "~/services/pitwall/pitwallLink";
 import type { PitwallFieldOutcomeRow } from "~/composables/usePitwallController";
 
 const props = defineProps<{

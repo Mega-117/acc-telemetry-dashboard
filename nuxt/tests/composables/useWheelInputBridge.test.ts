@@ -51,6 +51,19 @@ describe('wheel configuration lifecycle', () => {
     expect(panel.state.value.capture).toBeNull()
   })
 
+  it('does not restart polling when logout happens during startup', async () => {
+    const { useWheelInputBridge } = await import('../../app/composables/useWheelInputBridge')
+    const pending = deferred<any>()
+    api.controlsGetState.mockReturnValue(pending.promise)
+    const bridge = useWheelInputBridge()
+    const start = bridge.start()
+    bridge.stop()
+    pending.resolve(initial())
+    expect(await start).toBe(false)
+    expect(api.onControlsState).not.toHaveBeenCalled()
+    expect(api.controlsReportSnapshot).not.toHaveBeenCalled()
+  })
+
   it('handles begin rejection and still cancels; cleanup rejection does not escape', async () => {
     const { useWheelInputBridge } = await import('../../app/composables/useWheelInputBridge')
     const bridge = useWheelInputBridge()

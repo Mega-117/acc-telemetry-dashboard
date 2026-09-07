@@ -9,6 +9,8 @@
 export function usePitwallConceptMode() {
   const legacy = useState<boolean>('pitwall-legacy-active', () => false)
   const notificationsOpen = useState<boolean>('pitwall-notifications-open', () => false)
+  const homeRequest = useState<number>('pitwall-home-request', () => 0)
+  function openHome() { legacy.value = false; homeRequest.value++ }
 
   function setLegacy(next: boolean) {
     legacy.value = next
@@ -22,5 +24,5 @@ export function usePitwallConceptMode() {
     notificationsOpen.value = false
   }
 
-  return { legacy, notificationsOpen, setLegacy, toggleNotifications, closeNotifications }
+  return { legacy, notificationsOpen, homeRequest, openHome, setLegacy, toggleNotifications, closeNotifications }
 }

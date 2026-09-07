@@ -18,7 +18,7 @@ import type {
   PitwallConceptSearchResult,
 } from '~/utils/pitwallConcept'
 import type { PitwallCarState, PitwallCompound, PitwallDriver, PitwallPlan, PitwallStopEstimate, PitwallWheel } from '~/utils/pitwallPresentation'
-import type { PitwallOrderStatus } from '~/services/pitwall/pitwallLink'
+import type { PitwallDisplayOrderStatus as PitwallOrderStatus } from '~/services/pitwall/pitwallLink'
 import type { PitwallFieldOutcomeRow } from '~/composables/usePitwallController'
 import type { PitwallIntentStatus } from '~/composables/usePitwallIntent'
 

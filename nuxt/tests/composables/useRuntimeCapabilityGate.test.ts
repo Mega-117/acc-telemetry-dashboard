@@ -13,6 +13,21 @@ const readySnapshot = {
 }
 
 describe('useRuntimeCapabilityGate store', () => {
+  it('the primary waits for the canonical snapshot without calling protected IPC before login', () => {
+    const api = {
+      runtimeBootstrapRole: 'owner' as const,
+      getRuntimeBootstrapState: vi.fn(),
+      onRuntimeBootstrapState: vi.fn((callback: (value: typeof readySnapshot) => void) => {
+        callback(readySnapshot)
+        return () => {}
+      }),
+    }
+    const store = createRuntimeCapabilityStore()
+    const release = store.connect(api)
+    expect(api.getRuntimeBootstrapState).not.toHaveBeenCalled()
+    expect(store.gate('sync').value.allowed).toBe(true)
+    release()
+  })
   it('condivide una sola subscription e la pulisce all’ultimo consumer', async () => {
     let listener: ((value: typeof readySnapshot) => void) | null = null
     const unsubscribe = vi.fn()

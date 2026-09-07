@@ -1,6 +1,8 @@
 import { describe, it, expect, vi } from 'vitest'
 import { createPitwallRealtimeSession } from '~/services/pitwall/pitwallRealtimeSession'
 import type { PitwallRealtimeTransport } from '~/services/pitwall/pitwallRealtimeTransport'
+vi.mock('~/config/pitwallRealtime', () => ({ getPitwallRealtime: vi.fn() }))
+import { createPitwallRealtimeRoomService } from '~/services/pitwall/pitwallRealtimeRoomService'
 
 function fixture() {
   let online = true
@@ -19,6 +21,37 @@ function fixture() {
 }
 
 describe('event-driven RTDB presence', () => {
+  it('does not let an idle desktop driver erase engineer membership; restores it after driving', async () => {
+    const f = fixture()
+    const service = createPitwallRealtimeRoomService({ uid: 'engineer', io: f.io as unknown as PitwallRealtimeTransport })
+    const driver = { nickname: 'Driver', kind: 'driver' as const, driving: false, runtimeSessionId: 'desktop' }
+    const engineer = { nickname: 'Engineer', kind: 'engineer' as const, driving: false, runtimeSessionId: 'page' }
+    await service.publishPresence(null, driver)
+    expect((await service.publishPresence('remote', engineer)).ok).toBe(true)
+    expect(service.session.isReady('remote')).toBe(true)
+    await service.publishPresence(null, driver)
+    expect(service.session.isReady('remote')).toBe(true)
+    await service.publishPresence('own', { ...driver, driving: true, strategy: {} })
+    expect(service.session.isReady('own')).toBe(true)
+    await service.publishPresence('remote', engineer)
+    expect(service.session.isReady('own')).toBe(true)
+    await service.deactivateDriver()
+    expect(service.session.isReady('remote')).toBe(true)
+    await service.clearEngineerPresence('remote')
+    expect(service.session.isReady('remote')).toBe(false)
+    await service.dispose(); await f.session.stop()
+  })
+  it('reports publication failures and never declares unacknowledged membership ready', async () => {
+    const f = fixture()
+    f.io.write.mockRejectedValueOnce(new Error('permission denied'))
+    await expect(f.session.update(f.state)).rejects.toThrow('permission denied')
+    expect(f.session.isReady('room')).toBe(false)
+    await f.session.update(f.state)
+    expect(f.session.isReady('room')).toBe(true)
+    f.connect(false)
+    expect(f.session.isReady('room')).toBe(false)
+    await f.session.stop()
+  })
   it('registers disconnect before publishing and writes only state changes', async () => {
     const f = fixture()
     await f.session.update(f.state)

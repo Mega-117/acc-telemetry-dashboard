@@ -46,19 +46,26 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
     signature = nextSignature
     for (const listener of connectionListeners) listener()
   }
-  function enqueue() { busy = busy.then(publish).catch(error => { for (const listener of errors) listener(error) }); return busy }
+  function enqueue() {
+    const publication = busy.then(publish)
+    // Keep the queue usable, but let the caller observe a refused publication.
+    busy = publication.catch(error => { for (const listener of errors) listener(error) })
+    return publication
+  }
   const stopConnection = io.onConnection(online => {
     generation++
     signature = ''
     connectionId = ''
     currentRoom = null
     for (const listener of connectionListeners) listener()
-    if (online) void enqueue()
+    if (online && wanted) void enqueue().catch(() => {})
   })
   return {
     uid, io,
     connectionId: () => connectionId,
     roomId: () => currentRoom,
+    isReady: (roomId: string) => io.online() && !!connectionId && currentRoom === roomId
+      && !!wanted && signature === stablePitwallValue(wanted),
     update(value: NonNullable<typeof wanted>) { wanted = value; return enqueue() },
     onReady(callback: () => void) { connectionListeners.add(callback); return () => { connectionListeners.delete(callback) } },
     onError(callback: (error: unknown) => void) { errors.add(callback); return () => { errors.delete(callback) } },

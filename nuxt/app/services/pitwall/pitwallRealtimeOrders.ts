@@ -28,25 +28,43 @@ export function createPitwallRealtimeOrders(options: {
   const orderPath = (room: string, order: string) => `rooms/${room}/orders/${order}`
   const controlPath = (room: string) => `rooms/${room}/control/claim`
   const acknowledged = new Map<string, RealtimeOrder>()
+  const diagnostic = (event: string, attemptId: string, reason?: string) => {
+    console.info('[PITWALL_DIAGNOSTIC] ' + JSON.stringify({ at: new Date().toISOString(), event, attemptId, orderId: attemptId, reason: reason?.slice(0, 500) }))
+  }
+
+  function sendReadiness(roomId: string): { ready: boolean, reason: string | null } {
+    const reason = !io.online() ? 'Il tuo collegamento è offline.'
+      : !session.isReady(roomId) ? 'Il tuo ingresso nella gara non è ancora confermato.'
+      : !activeDriver(connections(roomId)) ? 'Nessun pilota disponibile per applicare la strategia.' : null
+    return { ready: reason === null, reason }
+  }
 
   async function sendOrder(roomId: string, input: { plan: Record<string, unknown>, revision: number, orderId?: string, ttlMs?: number }): Promise<PitwallRoomResult<string>> {
+    const orderId = input.orderId || crypto.randomUUID()
+    diagnostic('send_attempt', orderId)
     try {
       const target = activeDriver(connections(roomId))
       const senderConnectionId = session.connectionId()
-      if (!io.online() || session.roomId() !== roomId || !senderConnectionId || !target) throw new Error('Il collegamento o il pilota non sono pronti. La strategia non viene messa in attesa.')
-      const orderId = input.orderId || crypto.randomUUID()
+      const readiness = sendReadiness(roomId)
+      if (!readiness.ready || !target) throw new Error(readiness.reason || 'Pilota non disponibile.')
       const base = buildPitwallRoomOrder({ orderId, revision: input.revision, senderId: uid, plan: input.plan,
         nowMs: io.serverNow(), ttlMs: Math.min(input.ttlMs ?? PITWALL_ORDER_TTL_MS, PITWALL_ORDER_TTL_MS) })
       if (!base) throw new Error('Strategia non valida da inviare.')
       const order: RealtimeOrder = { ...base, protocolVersion: 3, targetUid: target.uid,
         targetConnectionId: target.connectionId, senderConnectionId }
       await io.write(`rooms/${roomId}`, { [`orders/${orderId}`]: order, [`pending/${orderId}`]: true })
+      diagnostic('send_confirmed', orderId)
       return { ok: true, value: orderId }
-    } catch (error) { return fail(error) }
+    } catch (error) { const result = fail(error); diagnostic('send_failed', orderId, result.reason); return result }
   }
 
   function watchOrder(roomId: string, orderId: string, callback: (order: PitwallRoomOrder | null) => void) {
-    return io.watch(orderPath(roomId, orderId), value => callback(value as RealtimeOrder | null), () => callback(null))
+    let status = ''
+    return io.watch(orderPath(roomId, orderId), value => {
+      const order = value as RealtimeOrder | null
+      if (order && status !== order.status) { status = order.status; diagnostic('order_' + status, orderId, (order.result as { reason?: string } | undefined)?.reason) }
+      callback(order)
+    }, () => callback(null))
   }
   async function readOrder(roomId: string, orderId: string): Promise<PitwallRoomResult<PitwallRoomOrder | null>> {
     try { return { ok: true, value: await io.read<RealtimeOrder>(orderPath(roomId, orderId)) } }
@@ -148,5 +166,5 @@ export function createPitwallRealtimeOrders(options: {
 
   // Outcomes own release atomically. Compatibility callers must not blindly unlock in finally.
   async function releaseClaim(_roomId: string): Promise<void> {}
-  return { sendOrder, watchOrder, readOrder, watchPendingOrders, claimOrder, acknowledgedOrder, publishOutcome, rejectOrder, releaseClaim }
+  return { sendReadiness, sendOrder, watchOrder, readOrder, watchPendingOrders, claimOrder, acknowledgedOrder, publishOutcome, rejectOrder, releaseClaim }
 }

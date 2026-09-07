@@ -84,14 +84,6 @@ const isPrimaryClientRuntime = computed(() => {
     && !isStandaloneDevRoute.value
 })
 const wheelInputBridge = useWheelInputBridge()
-onMounted(() => {
-  const api = (window as Window & {
-    electronAPI?: { localIdentityRole?: string }
-  }).electronAPI
-  if (isPrimaryClientRuntime.value && api?.localIdentityRole === 'primary') {
-    void wheelInputBridge.start()
-  }
-})
 onBeforeUnmount(() => wheelInputBridge.stop())
 watch(normalizedRoutePath, (path, previousPath) => {
   if (path === '/dev-voice-lab') {
@@ -151,6 +143,12 @@ const primaryCloudOwner = usePrimaryCloudOwner({
   canEnterApp,
   cloudEnabled: cloudJobsAllowed
 })
+watch(primaryCloudOwner.jobsEnabled, (enabled) => {
+  const api = typeof window === 'undefined' ? null : (window as Window & { electronAPI?: { localIdentityRole?: string } }).electronAPI
+  if (enabled && isPrimaryClientRuntime.value && api?.localIdentityRole === 'primary') {
+    void wheelInputBridge.start().catch(() => wheelInputBridge.stop())
+  } else wheelInputBridge.stop()
+}, { immediate: true })
 const clientDiagnostics = useClientDiagnostics({
   captureEnabled: computed(() => (
     (isPrimaryClientRuntime.value || isRuntimeBootstrapRoute.value)

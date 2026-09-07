@@ -131,7 +131,7 @@ export function pitwallConceptFreshness(ageSeconds: number): 'live' | 'stale' {
  * come `null`. Sono quelli che il PC del pilota scrive davvero: il prototipo
  * non ne inventa altri.
  */
-export type PitwallConceptOrderStatus = PitwallOrderStatus | null
+export type PitwallConceptOrderStatus = PitwallOrderStatus | 'not_sent' | null
 
 export function describePitwallConceptOrderStatus(
   status: PitwallConceptOrderStatus,
@@ -139,6 +139,8 @@ export function describePitwallConceptOrderStatus(
   outcomes: ReadonlyArray<{ outcome: string | null, reason?: string | null, dragged?: boolean }> = [],
 ): { label: string, detail: string, tone: 'neutral' | 'good' | 'warn' | 'bad' } {
   switch (status) {
+    case 'not_sent':
+      return { label: 'Non inviata', detail: reason ?? 'Invio non disponibile. Verifica il collegamento.', tone: 'bad' }
     case 'pending':
       return { label: 'Inviata, in attesa del pilota', detail: 'Il suo PC la prende in carico appena la vede.', tone: 'neutral' }
     case 'applying':
@@ -163,7 +165,7 @@ export function describePitwallConceptOrderStatus(
     case 'rejected':
       return {
         label: 'Rifiutata',
-        detail: reason ?? 'Un altro membro del muretto ha inviato per primo: vince la sua, non si fondono.',
+        detail: reason ?? 'Il pilota ha rifiutato la strategia. Motivo non disponibile.',
         tone: 'bad',
       }
     default:
@@ -440,6 +442,7 @@ export function isPitwallConceptPinnedMember(member: PitwallConceptMember): bool
 
 /** Le stesse parole della vista classica, cosi' il porting non le reinventa. */
 export function describePitwallConceptMember(member: PitwallConceptMember): string {
+  if (member.connecting) return 'collegamento in corso'
   if (member.driving) return 'AL VOLANTE'
   if (member.role === 'invited') return 'invitato · non ancora entrato'
   if (member.role === 'manager') return member.online ? 'gestisce la gara' : 'gestisce la gara · offline'

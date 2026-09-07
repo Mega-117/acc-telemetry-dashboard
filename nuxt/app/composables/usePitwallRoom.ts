@@ -35,6 +35,7 @@ import {
   describePitwallOrderStatus,
   isPitwallOrderSettled,
   type PitwallOrderStatus,
+  type PitwallDisplayOrderStatus,
 } from '~/services/pitwall/pitwallLink'
 import { describePitwallClockSkew } from '~/services/pitwall/pitwallServerClock'
 
@@ -51,6 +52,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const selectedRoomId = ref<string | null>(null)
   const room = ref<PitwallRoom | null>(null)
   const members = ref<PitwallRoomMember[]>([])
+  const membersLoaded = ref(false)
   const loading = ref(false)
   const sending = ref(false)
   const rawError = ref<string | null>(null)
@@ -66,7 +68,9 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const nowTick = ref(Date.now())
 
   const orderId = ref<string | null>(null)
-  const orderStatus = ref<PitwallOrderStatus | null>(null)
+  const orderStatus = ref<PitwallDisplayOrderStatus | null>(null)
+  const readinessRevision = ref(0)
+  let stopReadiness: (() => void) | null = null
   const orderReason = ref<string | null>(null)
   const orderFields = ref<Record<string, PitwallFieldOutcome>>({})
 
@@ -86,7 +90,11 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const uid = options.uid()
     if (!uid) return null
     if (!serviceRef.value || serviceRef.value.uid !== uid) {
-      try { serviceRef.value = createPitwallRoomService({ uid }) }
+      try {
+        stopReadiness?.()
+        serviceRef.value = createPitwallRoomService({ uid })
+        stopReadiness = serviceRef.value.session.onReady(() => { readinessRevision.value++ })
+      }
       catch (error) { rawError.value = (error as Error).message; return null }
     }
     return serviceRef.value
@@ -151,7 +159,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         role: current.managerUids.includes(uid) ? 'manager' : 'member',
         kind: presence?.kind ?? 'engineer',
         online: isPitwallMemberFresh(presence, nowTick.value),
-        connecting: presence != null && !isPitwallMemberFresh(presence, nowTick.value) && presence.updatedAtMs === 0,
+        connecting: !membersLoaded.value || (presence != null && !isPitwallMemberFresh(presence, nowTick.value) && presence.updatedAtMs === 0),
         driving: executor.value.executor?.uid === uid
           || executor.value.conflicting.some(member => member.uid === uid),
         invited: false,
@@ -207,7 +215,15 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     && !roomClosed.value
     && executor.value.reason === 'ready'
     && !sending.value
+    && sendReadiness.value.ready
+    && orderStatus.value !== 'pending' && orderStatus.value !== 'applying'
   ))
+  const sendReadiness = computed(() => {
+    void readinessRevision.value; void members.value; void nowTick.value
+    return selectedRoomId.value && serviceRef.value
+      ? serviceRef.value.sendReadiness(selectedRoomId.value)
+      : { ready: false, reason: 'Entra in una gara per inviare.' }
+  })
 
   const orderProgress = computed(() => describePitwallOrderStatus(orderStatus.value))
 
@@ -228,9 +244,11 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     if (!service_ || !roomId || !uid || !amMember.value) return
     await loadNickname(uid)
     if (roomId !== selectedRoomId.value) return
-    await service_.publishPresence(roomId, {
+    const result = await service_.publishPresence(roomId, {
       nickname: nicknames.value[uid] || uid, kind: 'engineer', driving: false, runtimeSessionId,
     })
+    readinessRevision.value++
+    if (!result.ok) rawError.value = result.reason
   }
 
   /**
@@ -241,7 +259,6 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    */
   function applyRooms(list: PitwallRoom[]): void {
     rooms.value = list
-    if (!selectedRoomId.value && list.length === 1) void selectRoom(list[0]!.roomId)
   }
 
   async function refreshRooms(): Promise<void> {
@@ -274,6 +291,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     stopRoomWatch = null
     stopMembersWatch = null
     members.value = []
+    membersLoaded.value = false
   }
 
   /**
@@ -284,7 +302,10 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * senza scelta.
    */
   async function selectRoom(roomId: string | null): Promise<void> {
-    if (roomId === selectedRoomId.value && (stopRoomWatch || loading.value)) return
+    if (roomId === selectedRoomId.value && (stopRoomWatch || loading.value)) {
+      if (roomId && !serviceRef.value?.sendReadiness(roomId).ready) await publishMyPresence()
+      return
+    }
     detach()
     selectedRoomId.value = roomId
     room.value = null
@@ -356,6 +377,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       roomId,
       (list) => {
         members.value = list
+        membersLoaded.value = true
         if (!announced) {
           announced = true
           void publishMyPresence()
@@ -377,6 +399,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * applicato.
    */
   async function sendPlan(plan: Record<string, unknown>): Promise<boolean> {
+    if (sending.value) return false
     const service_ = service()
     const roomId = selectedRoomId.value
     if (!service_ || !roomId) {
@@ -387,6 +410,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       rawError.value = executorLabel.value
       return false
     }
+    if (orderStatus.value === 'pending' || orderStatus.value === 'applying') return false
 
     sending.value = true
     rawError.value = null
@@ -396,7 +420,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       const sent = await service_.sendOrder(roomId, { plan, revision: nextRevision() })
       if (!sent.ok) {
         rawError.value = sent.reason
-        orderStatus.value = 'rejected'
+        orderReason.value = sent.reason
+        orderStatus.value = 'not_sent'
         return false
       }
 
@@ -456,7 +481,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   async function clearPresence(): Promise<void> {
     const service_ = service()
     const roomId = selectedRoomId.value
-    if (service_ && roomId) await service_.clearPresence(roomId)
+    if (service_ && roomId) await service_.clearEngineerPresence(roomId)
   }
 
   async function leave(): Promise<void> {
@@ -512,6 +537,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     if (tickTimer) clearInterval(tickTimer)
     tickTimer = null
     serviceRef.value = null
+    stopReadiness?.(); stopReadiness = null
     selectedRoomId.value = null
     room.value = null
     rooms.value = []
@@ -537,6 +563,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     loading,
     sending,
     canSend,
+    sendReadiness,
     lastError,
     notice,
     clockSkewNotice,

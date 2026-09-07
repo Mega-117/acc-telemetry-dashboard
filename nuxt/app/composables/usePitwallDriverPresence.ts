@@ -42,7 +42,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
     active.value = false; driverUid.value = null; roomId.value = null
     registerPitwallIntentControls(null)
     setPitwallIntentStatus({ state: 'off', roomId: null, reason: null })
-    void bridgeOf()?.pitwallReportIntentState?.({ state: 'off', roomId: null, reason: null, available: false })
+    // Main already clears runtime state on logout; no protected IPC after auth ends.
   }
   async function runSync() {
     const bridge = bridgeOf()
@@ -51,6 +51,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
       unavailableReason.value = 'Aggiorna e riavvia ACC Suite per usare il nuovo Pitwall.'; stop(); return
     }
     const identity = await bridge.pitwallGetLinkStatus()
+    if (disposed || !options.jobsEnabled.value) return
     if (!identity.trustedSender || !identity.driverUid) { stop(); return }
     if (handle && driverUid.value === identity.driverUid) return
     stop()
@@ -65,6 +66,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
       stops.push(bridge.onPitwallStrategyState(value => { local = value; frameRevision++; void handle?.sync() }))
       const initialRevision = frameRevision
       const initial = await bridge.pitwallGetStrategyState?.()
+      if (token !== generation || disposed || !options.jobsEnabled.value) return
       if (frameRevision === initialRevision) local = initial as LocalState ?? null
       let readyFriends!: () => void
       const firstFriends = new Promise<void>(resolve => { readyFriends = resolve })
@@ -72,7 +74,8 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
       const nickname = await links.nicknameOf(uid)
       if (token !== generation || disposed) return
       handle = startPitwallRealtimeDriver({ uid, nickname, runtimeSessionId: crypto.randomUUID(), service,
-        electronApi: bridge, bindMain: value => bridge.pitwallSetRealtimeConnection!(value),
+        electronApi: bridge, bindMain: value => options.jobsEnabled.value
+          ? bridge.pitwallSetRealtimeConnection!(value) : Promise.resolve(),
         readTrustedUids: async () => { await firstFriends; return friends },
         readVehicle: async () => {
           const state = local
@@ -84,7 +87,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
           return { fingerprint: vehicle.fingerprint, label: vehicle.label ?? 'Gara in corso', track: vehicle.trackName ?? state.identity?.track,
             raceNumber: vehicle.raceNumber, teamName: vehicle.teamName, driving: state.driverState === 'driving', crew, strategy: state.car ? { ...state.car, fittedTyreSet: state.identity?.fittedTyreSet ?? null } : null }
         },
-        onStatus: value => { roomId.value = value.roomId; unavailableReason.value = value.reason; setPitwallIntentStatus(value); void bridge.pitwallReportIntentState?.({ ...value, available: true }) },
+        onStatus: value => { roomId.value = value.roomId; unavailableReason.value = value.reason; setPitwallIntentStatus(value); if (options.jobsEnabled.value) void bridge.pitwallReportIntentState?.({ ...value, available: true }).catch(() => {}) },
       })
       const current = handle
       registerPitwallIntentControls({ open: () => current.openPitwall(), close: () => current.closePitwall() })
@@ -102,7 +105,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
     return syncing
   }
   const stopAuth = bridgeOf()?.onLocalRuntimeAuthChanged?.(() => { void sync() })
-  watch(options.jobsEnabled, () => { void sync() })
+  watch(options.jobsEnabled, enabled => { if (!enabled) stop(); void sync() }, { flush: 'sync' })
   void sync()
   onScopeDispose(() => { disposed = true; stopAuth?.(); stop() })
   return { active, driverUid, unavailableReason, roomId, roomUnavailableReason: () => handle?.unavailableReason() ?? null, stop }

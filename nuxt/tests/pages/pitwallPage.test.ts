@@ -468,7 +468,8 @@ describe('Pitwall wiring', () => {
     }
     expect(conceptModel).not.toContain('Scaduta')
     // "Prima accettata vince": due strategie non si fondono mai.
-    expect(conceptModel).toContain('vince la sua, non si fondono')
+    expect(conceptModel).not.toContain('vince la sua, non si fondono')
+    expect(conceptModel).toContain("case 'not_sent'")
   })
 
   it('elenca i Pitwall aperti dagli amici, una riga per amico', () => {

@@ -32,6 +32,8 @@ export const PITWALL_ORDER_STATUSES = [
   'pending', 'applying', 'applied', 'partial', 'failed', 'rejected',
 ] as const
 export type PitwallOrderStatus = (typeof PITWALL_ORDER_STATUSES)[number]
+/** Local presentation only: never serialized as a cloud order status. */
+export type PitwallDisplayOrderStatus = PitwallOrderStatus | 'not_sent'
 
 /** Stati oltre i quali un ordine non cambia piu'. */
 export const PITWALL_TERMINAL_ORDER_STATUSES: readonly PitwallOrderStatus[] = [
@@ -378,8 +380,9 @@ export interface PitwallOrderProgress {
 }
 
 /** Come si racconta all'ingegnere lo stato del suo ordine. */
-export function describePitwallOrderStatus(status: PitwallOrderStatus | null | undefined): PitwallOrderProgress {
+export function describePitwallOrderStatus(status: PitwallDisplayOrderStatus | null | undefined): PitwallOrderProgress {
   switch (status) {
+    case 'not_sent': return { label: 'Non inviata', busy: false, problem: true }
     case 'pending': return { label: 'Inviato, in attesa del pilota', busy: true, problem: false }
     case 'applying': return { label: 'Il pilota la sta impostando', busy: true, problem: false }
     case 'applied': return { label: 'Impostata e confermata', busy: false, problem: false }

@@ -6,6 +6,7 @@
 
 import { useFeatureAccess } from '~/composables/useFeatureAccess'
 import { usePitwallStore } from '~/composables/usePitwallStore'
+import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
 import { markHudRoutePhase, startHudRouteTiming } from '~/utils/hudRoutePerformance'
 
 defineProps<{
@@ -13,6 +14,7 @@ defineProps<{
 }>()
 
 const route = useRoute()
+const { openHome: openPitwallHome } = usePitwallConceptMode()
 const { canAccess } = useFeatureAccess()
 const canAccessHud = canAccess('hud')
 // Quante cose aspettano una decisione sul Pit Wall: si vede dalla scheda.
@@ -37,6 +39,7 @@ const isActive = (tabTo: string) => {
 }
 
 function onTabClick(tab: { id: string }) {
+  if (tab.id === 'pitwall') openPitwallHome()
   if (tab.id !== 'hud') return
   startHudRouteTiming('hud-tab-click', import.meta.dev ? 'development' : 'packaged')
   markHudRoutePhase('click')

@@ -23,6 +23,8 @@ interface WheelControlsApi {
 const WHEEL_POLL_INTERVAL_MS = 8
 
 let pollTimer: number | null = null
+let startGeneration = 0
+let starting = false
 let removeStateListener: (() => void) | null = null
 let lastSignature = ''
 // All composable consumers share the same IPC owner and configuration queue.
@@ -94,8 +96,14 @@ export function useWheelInputBridge() {
 
   const start = async () => {
     const api = controlsApi()
-    if (!api || pollTimer !== null) return false
-    applyState(await api.controlsGetState())
+    if (!api || pollTimer !== null || starting) return false
+    const generation = ++startGeneration
+    starting = true
+    let initial: WheelControlsState
+    try { initial = await api.controlsGetState() }
+    finally { if (generation === startGeneration) starting = false }
+    if (generation !== startGeneration) return false
+    applyState(initial)
     removeStateListener = api.onControlsState(applyState)
     lastSignature = ''
     poll()
@@ -115,6 +123,7 @@ export function useWheelInputBridge() {
   }
 
   const stop = () => {
+    startGeneration++; starting = false
     if (pollTimer !== null) window.clearInterval(pollTimer)
     pollTimer = null
     removeStateListener?.()

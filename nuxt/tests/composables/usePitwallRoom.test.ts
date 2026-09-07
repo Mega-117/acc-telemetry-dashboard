@@ -39,6 +39,8 @@ const fakes = vi.hoisted(() => ({
 vi.mock('~/services/pitwall/pitwallRealtimeRoomService', () => ({
   createPitwallRealtimeRoomService: ({ uid }: { uid: string }) => ({
     uid,
+    session: { onReady: () => () => {} },
+    sendReadiness: () => ({ ready: true, reason: null }),
     // L'orologio comune del servizio vero (PIP-382). Qui i due orologi sono
     // allineati: lo scarto ha i suoi test dedicati, questi parlano d'altro.
     serverNow: () => Date.now(),
@@ -65,6 +67,7 @@ vi.mock('~/services/pitwall/pitwallRealtimeRoomService', () => ({
     leaveRoom: async () => { fakes.calls.push('leave'); return { ok: true, value: true } },
     closeRoom: async () => { fakes.calls.push('close'); return { ok: true, value: true } },
     clearPresence: async () => { fakes.calls.push('clearPresence') },
+    clearEngineerPresence: async () => { fakes.calls.push('clearPresence') },
   }),
 }))
 
@@ -229,17 +232,17 @@ describe('entrare e leggere la gara', () => {
     expect(link.lastError.value).toBeTruthy()
   })
 
-  it('con una sola gara in elenco ci si entra da soli', async () => {
+  it('con una sola gara in elenco attende comunque un ingresso esplicito', async () => {
     const link = build()
     link.start()
     await settle()
     fakes.pushRooms?.([room()])
     await settle()
-    expect(link.selectedRoomId.value).toBe('r1')
+    expect(link.selectedRoomId.value).toBeNull()
     await link.refreshRooms()
     expect(link.rooms.value).toHaveLength(1)
     link.stop()
-    expect(fakes.calls).toContain('clearPresence')
+    expect(fakes.calls).not.toContain('clearPresence')
   })
 })
 
@@ -269,7 +272,8 @@ describe('l ordine alla vettura', () => {
     const link = await open([member()])
     fakes.sendOk = false
     expect(await link.sendPlan({ tyreSet: 4 })).toBe(false)
-    expect(link.orderStatus.value).toBe('rejected')
+    expect(link.orderStatus.value).toBe('not_sent')
+    expect(link.orderReason.value).toBe('Gara chiusa.')
     expect(link.lastError.value).toBeTruthy()
   })
 

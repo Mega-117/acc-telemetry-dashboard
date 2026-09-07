@@ -15,12 +15,15 @@ import PitwallConceptMyRoom from "~/components/pitwall/concept/PitwallConceptMyR
 import PitwallConceptRaces from "~/components/pitwall/concept/PitwallConceptRaces.vue";
 import PitwallConceptSearch from "~/components/pitwall/concept/PitwallConceptSearch.vue";
 import { usePitwallStore } from "~/composables/usePitwallStore";
+import { usePitwallConceptMode } from "~/composables/usePitwallConceptMode";
 import type { PitwallConceptRace, PitwallConceptScreen } from "~/utils/pitwallConcept";
 
 const state = usePitwallStore();
 
 // La stanza resta nello store globale anche quando la pagina viene smontata.
-const screen = ref<PitwallConceptScreen>(state.selectedRace.value ? "live" : "home");
+const screen = ref<PitwallConceptScreen>("home");
+const { homeRequest } = usePitwallConceptMode();
+watch(homeRequest, () => go("home"));
 
 /** Solo gli amici che hanno aperto il Pitwall: ci si entra con un clic. */
 const races = computed(() => state.races.value);

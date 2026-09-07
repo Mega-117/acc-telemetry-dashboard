@@ -56,6 +56,7 @@ function fakeLink() {
     roomClosed: computed(() => Boolean(room.value?.closedAt)),
     amMember: ref(true),
     canSend: ref(true),
+    sendReadiness: ref<{ ready: boolean, reason: string | null }>({ ready: true, reason: null }),
     crew: ref<{ uid: string }[]>([]),
     orderFields: ref<Record<string, { outcome: 'verified' | 'selected' | 'not-verifiable' | null, reason: string | null } | null>>({}),
     orderStatus: ref<string | null>(null),

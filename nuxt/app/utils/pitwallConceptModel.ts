@@ -46,6 +46,7 @@ export interface PitwallConceptFriend {
 
 /** Una persona dentro una gara, con quello che ACC dice di lei. */
 export interface PitwallConceptMember {
+  connecting?: boolean
   personId: string
   role: PitwallConceptRole
   /** Ha il volante adesso: lo dice ACC, non un bottone. */
