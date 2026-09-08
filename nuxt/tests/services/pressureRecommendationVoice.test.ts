@@ -1,101 +1,84 @@
 import { describe, expect, it } from 'vitest'
-import {
-  createPressureRecommendationVoiceState,
-  pressureWarningVoicePath,
-  recordPressureFinishCrossing,
-  recordPressureRecommendation,
-} from '~/services/spotter/pressureRecommendationVoice'
+import { createPressureRecommendationVoiceState, pressureWarningVoicePath, recordPressureFinishCrossing, recordPressureRecommendation } from '~/services/spotter/pressureRecommendationVoice'
 import type { PressureRecommendationViewModel } from '~/services/overlay/tyreSetupViewModel'
 
-function recommendation(
-  completedLaps: number,
-  overrides: Partial<PressureRecommendationViewModel> = {},
-): PressureRecommendationViewModel {
-  return {
-    status: 'ready',
-    eligible: true,
-    needsAdjustment: true,
-    completedLaps,
-    requiredCompletedLaps: 3,
-    planId: `plan-${completedLaps}`,
-    ...overrides,
-  }
+function rec(lap: number, stint = 1, source = lap, extra: Partial<PressureRecommendationViewModel> = {}): PressureRecommendationViewModel {
+  return { status: 'ready', eligible: true, needsAdjustment: true, completedLaps: lap,
+    requiredCompletedLaps: 3, planId: `plan-${source}`, sessionId: 'session-a', stintNumber: stint,
+    sourceCompletedLaps: source, ...extra }
 }
 
-describe('pressureRecommendationVoice', () => {
-  it('accoda dopo il traguardo quando la raccomandazione arriva prima', () => {
-    let state = createPressureRecommendationVoiceState()
-    state = recordPressureRecommendation(state, recommendation(2, {
-      status: 'waiting_for_laps',
-      eligible: false,
-      needsAdjustment: false,
-      planId: null,
-    })).state
-    state = recordPressureRecommendation(state, recommendation(3)).state
-    const outcome = recordPressureFinishCrossing(state)
-    expect(outcome.announce).toBe(true)
-    expect(outcome.state.resolvedLaps).toEqual([2, 3])
-  })
-
-  it('accoda quando la raccomandazione arriva dopo il traguardo', () => {
-    let state = recordPressureFinishCrossing(createPressureRecommendationVoiceState()).state
-    const outcome = recordPressureRecommendation(state, recommendation(3))
-    expect(outcome.announce).toBe(true)
-  })
-
-  it('parla una volta sola per ciascuno dei giri 3, 4 e 5', () => {
-    let state = recordPressureRecommendation(
-      createPressureRecommendationVoiceState(),
-      recommendation(2, { status: 'waiting_for_laps', eligible: false, needsAdjustment: false }),
-    ).state
-    for (const lap of [3, 4, 5]) {
-      state = recordPressureRecommendation(state, recommendation(lap)).state
-      const first = recordPressureFinishCrossing(state)
-      expect(first.announce).toBe(true)
-      state = first.state
+describe('pressure voice physical stint cycle', () => {
+  it('warns once at stint 1 lap 3, once at stint 2 lap 5, never in stint 3, irrespective of applications', () => {
+    let state = recordPressureRecommendation(createPressureRecommendationVoiceState(), rec(0)).state
+    const heard: string[] = []
+    let source = 0
+    for (const stint of [1, 2, 3]) {
+      state = recordPressureRecommendation(state, rec(0, stint, source)).state
+      for (let lap = 1; lap <= 20; lap++) {
+        source++
+        state = recordPressureFinishCrossing(state, source).state
+        const result = recordPressureRecommendation(state, rec(lap, stint, source))
+        state = result.state
+        if (result.announce) heard.push(`${stint}:${lap}`)
+        expect(recordPressureFinishCrossing(state, source).announce).toBe(false)
+      }
     }
-    const duplicate = recordPressureRecommendation(state, recommendation(5))
-    expect(recordPressureFinishCrossing(duplicate.state).announce).toBe(false)
+    expect(heard).toEqual(['1:3', '2:5'])
   })
 
-  it('consuma silenziosamente un giro entro tolleranza o non eleggibile', () => {
-    let state = recordPressureFinishCrossing(recordPressureRecommendation(
-      createPressureRecommendationVoiceState(),
-      recommendation(2, { status: 'waiting_for_laps', eligible: false, needsAdjustment: false }),
-    ).state).state
-    const within = recordPressureRecommendation(
-      state,
-      recommendation(3, { status: 'within_tolerance', needsAdjustment: false }),
-    )
-    expect(within.announce).toBe(false)
-    expect(within.state.resolvedLaps).toEqual([2, 3])
-
-    state = recordPressureRecommendation(within.state, recommendation(4, { eligible: false })).state
-    expect(recordPressureFinishCrossing(state).announce).toBe(false)
+  it('waits for the matching lap in either arrival order, never the previous recommendation', () => {
+    for (const first of ['finish', 'plan']) {
+      let state = recordPressureRecommendation(createPressureRecommendationVoiceState(), rec(2)).state
+      if (first === 'finish') {
+        const pending = recordPressureFinishCrossing(state, 3)
+        expect(pending.announce).toBe(false)
+        expect(recordPressureRecommendation(pending.state, rec(3)).announce).toBe(true)
+      } else {
+        state = recordPressureRecommendation(state, rec(3)).state
+        expect(recordPressureFinishCrossing(state, 3).announce).toBe(true)
+      }
+    }
   })
 
-  it('ignora piani stale all’avvio e giri fuori dalla finestra 3-5', () => {
-    let state = recordPressureRecommendation(createPressureRecommendationVoiceState(), recommendation(5)).state
-    expect(state.resolvedLaps).toEqual([5])
-    state = recordPressureRecommendation(state, recommendation(6)).state
-    expect(recordPressureFinishCrossing(state).announce).toBe(false)
+  it('defers unstable data and remains available after a within-tolerance lap', () => {
+    let state = recordPressureRecommendation(createPressureRecommendationVoiceState(), rec(2)).state
+    for (const [lap, status] of [[3, 'waiting_for_stable_pressure'], [4, 'within_tolerance'], [5, 'ready']] as const) {
+      state = recordPressureFinishCrossing(state, lap).state
+      const result = recordPressureRecommendation(state, rec(lap, 1, lap, { status, needsAdjustment: status !== 'within_tolerance', eligible: status !== 'waiting_for_stable_pressure' }))
+      expect(result.announce).toBe(lap === 5)
+      state = result.state
+    }
   })
 
-  it('azzera deduplica e crediti quando parte un nuovo stint', () => {
-    let state = recordPressureRecommendation(createPressureRecommendationVoiceState(), recommendation(2)).state
-    state = recordPressureRecommendation(state, recommendation(3)).state
-    state = recordPressureFinishCrossing(state).state
-    const reset = recordPressureRecommendation(state, recommendation(0, {
-      status: 'waiting_for_laps',
-      eligible: false,
-      needsAdjustment: false,
-      planId: null,
-    }))
-    expect(reset.state.resolvedLaps).toEqual([0])
-    expect(reset.state.pendingFinishCrossings).toBe(0)
+  it('resets for an explicit new session even with the same session type and lap counts', () => {
+    let state = recordPressureRecommendation(createPressureRecommendationVoiceState(), rec(2)).state
+    state = recordPressureFinishCrossing(state, 3).state
+    state = recordPressureRecommendation(state, rec(3)).state
+    state = recordPressureRecommendation(state, rec(2, 1, 2, { sessionId: 'session-b' })).state
+    state = recordPressureFinishCrossing(state, 3).state
+    expect(recordPressureRecommendation(state, rec(3, 1, 3, { sessionId: 'session-b' })).announce).toBe(true)
   })
 
-  it('costruisce il percorso fisso per entrambe le voci', () => {
+  it('does not reset the cycle when stint laps reset after a tyre change', () => {
+    let state = recordPressureRecommendation(createPressureRecommendationVoiceState(), rec(2)).state
+    state = recordPressureFinishCrossing(state, 3).state
+    state = recordPressureRecommendation(state, rec(3)).state
+    state = recordPressureRecommendation(state, rec(0, 1, 3)).state
+    state = recordPressureFinishCrossing(state, 6).state
+    expect(recordPressureRecommendation(state, rec(3, 1, 6)).announce).toBe(false)
+  })
+
+  it('ignores stale startup, missing identity and invalid finish inputs', () => {
+    let state = recordPressureRecommendation(createPressureRecommendationVoiceState(), rec(20)).state
+    expect(recordPressureFinishCrossing(state, 20).announce).toBe(false)
+    expect(recordPressureFinishCrossing(state, NaN).announce).toBe(false)
+    state = recordPressureFinishCrossing(state, 21).state
+    expect(recordPressureRecommendation(state, rec(21, 1, 21, { sessionId: null })).announce).toBe(false)
+    expect(recordPressureRecommendation(state, null).announce).toBe(false)
+  })
+
+  it('retains the existing voice assets', () => {
     expect(pressureWarningVoicePath('if_sara')).toBe('/voice/qualifying/pressureAdjustmentNeeded-if_sara.wav')
     expect(pressureWarningVoicePath('im_nicola')).toBe('/voice/qualifying/pressureAdjustmentNeeded-im_nicola.wav')
   })

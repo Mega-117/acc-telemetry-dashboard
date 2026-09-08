@@ -14,12 +14,31 @@ function recommendation(
     needsAdjustment: true,
     completedLaps,
     requiredCompletedLaps: 3,
+    sessionId: 'session-a',
+    stintNumber: 1,
+    sourceCompletedLaps: completedLaps,
     planId: `plan-${completedLaps}`,
     ...overrides,
   }
 }
 
 describe('pressureRecommendationVoiceRuntime deterministic replay', () => {
+  it('does not rearm a consumed stint after an audio reconnect', () => {
+    const queued: string[] = []
+    const runtime = createPressureRecommendationVoiceRuntime({
+      getVoice: () => 'if_sara',
+      enqueue: cue => { queued.push(cue.id); return true },
+    })
+    runtime.recordRecommendation(recommendation(2))
+    runtime.recordFinishCrossing(3)
+    runtime.recordRecommendation(recommendation(3))
+    runtime.reset()
+    runtime.recordRecommendation(recommendation(3))
+    runtime.recordFinishCrossing(4)
+    runtime.recordRecommendation(recommendation(4))
+    expect(queued).toHaveLength(1)
+  })
+
   for (const enabled of [true, false]) {
     for (const selected of ['practice', 'qualify', 'race'] as SpotterSessionMode[]) {
       it(`filters pressure cues for master=${enabled}, selection=${selected}`, () => {
@@ -57,8 +76,7 @@ describe('pressureRecommendationVoiceRuntime deterministic replay', () => {
     runtime.recordFinishCrossing(4)
     runtime.recordRecommendation(recommendation(4))
     runtime.recordRecommendation(recommendation(4))
-    expect(queued).toHaveLength(1)
-    expect(queued[0]).toContain('lap-4')
+    expect(queued).toHaveLength(0) // Muted opportunity is consumed, not replayed later.
   })
 
   it('accoda la pressione dopo il tempo giro senza Control K e con correlazione completa', async () => {
@@ -96,13 +114,13 @@ describe('pressureRecommendationVoiceRuntime deterministic replay', () => {
     await queue.drain()
 
     expect(trace.indexOf('queued:lap-time-3')).toBeLessThan(
-      trace.indexOf('queued:pressureAdjustmentNeeded-stint-0-lap-3'),
+      trace.indexOf('queued:pressureAdjustmentNeeded-session-session-a-stint-1-lap-3'),
     )
     expect(trace).toContain('recommendation_received:pressure-lap-3')
     expect(trace).toContain('finish_crossing_received:pressure-lap-3')
     expect(trace).toContain('cue_created:pressure-lap-3')
     expect(trace).toContain('played:/voice/qualifying/pressureAdjustmentNeeded-if_sara.wav')
-    expect(trace).toContain('playback_ended:pressureAdjustmentNeeded-stint-0-lap-3')
+    expect(trace).toContain('playback_ended:pressureAdjustmentNeeded-session-session-a-stint-1-lap-3')
   })
 
   it('non crea cue per dati entro tolleranza e resetta lo stint', () => {
@@ -133,14 +151,15 @@ describe('pressureRecommendationVoiceRuntime deterministic replay', () => {
         status: 'waiting_for_laps',
         eligible: false,
         needsAdjustment: false,
+        sessionId: stint === 0 ? 'session-a' : 'session-b',
       }))
       runtime.recordFinishCrossing(3)
-      runtime.recordRecommendation(recommendation(3))
+      runtime.recordRecommendation(recommendation(3, { sessionId: stint === 0 ? 'session-a' : 'session-b' }))
       runtime.reset()
     }
     expect(queued).toEqual([
-      'pressureAdjustmentNeeded-stint-0-lap-3',
-      'pressureAdjustmentNeeded-stint-1-lap-3',
+      'pressureAdjustmentNeeded-session-session-a-stint-1-lap-3',
+      'pressureAdjustmentNeeded-session-session-b-stint-1-lap-3',
     ])
   })
 })

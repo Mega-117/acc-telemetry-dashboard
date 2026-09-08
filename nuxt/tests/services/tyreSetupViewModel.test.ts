@@ -56,6 +56,9 @@ describe('tyreSetupViewModel', () => {
         completed_laps: 3,
         required_completed_laps: 3,
         plan_id: 'plan-3',
+        session_id: 'session-a',
+        stint_number: 2,
+        source_completed_laps: 8,
       },
     })
 
@@ -76,6 +79,9 @@ describe('tyreSetupViewModel', () => {
       completedLaps: 3,
       requiredCompletedLaps: 3,
       planId: 'plan-3',
+      sessionId: 'session-a',
+      stintNumber: 2,
+      sourceCompletedLaps: 8,
     })
   })
 

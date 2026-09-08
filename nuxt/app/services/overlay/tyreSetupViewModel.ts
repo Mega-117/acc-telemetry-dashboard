@@ -15,6 +15,9 @@ export interface PressureRecommendationViewModel {
   completedLaps: number
   requiredCompletedLaps: number
   planId: string | null
+  sessionId?: string | null
+  stintNumber?: number | null
+  sourceCompletedLaps?: number | null
 }
 
 export interface TyreSetupViewModel {
@@ -109,6 +112,9 @@ function normalizePressureRecommendation(raw: any): PressureRecommendationViewMo
     completedLaps,
     requiredCompletedLaps,
     planId: typeof raw.plan_id === 'string' && raw.plan_id ? raw.plan_id : null,
+    sessionId: typeof raw.session_id === 'string' && raw.session_id ? raw.session_id : null,
+    stintNumber: toNumber(raw.stint_number),
+    sourceCompletedLaps: toNumber(raw.source_completed_laps),
   }
 }
 

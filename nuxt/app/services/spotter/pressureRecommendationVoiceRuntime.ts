@@ -38,7 +38,6 @@ export function createPressureRecommendationVoiceRuntime(options: {
   onEvent?: (event: PressureVoiceRuntimeEvent) => void
 }): PressureRecommendationVoiceRuntime {
   let state = createPressureRecommendationVoiceState()
-  let stintGeneration = 0
   const publish = options.onEvent ?? (() => {})
 
   function applyOutcome(outcome: PressureRecommendationVoiceOutcome) {
@@ -51,7 +50,7 @@ export function createPressureRecommendationVoiceRuntime(options: {
     const lap = Number(completedLaps)
     const correlationId = pressureCorrelationId(lap)
     const cue: VoiceCue = {
-      id: `${PRESSURE_WARNING_SCENARIO_ID}-stint-${stintGeneration}-lap-${lap}`,
+      id: `${PRESSURE_WARNING_SCENARIO_ID}-session-${state.sessionId}-stint-${state.latestRecommendation?.stintNumber}-lap-${lap}`,
       path: pressureWarningVoicePath(options.getVoice()),
       source: 'pressure-warning',
       correlationId,
@@ -69,16 +68,9 @@ export function createPressureRecommendationVoiceRuntime(options: {
         correlationId: pressureCorrelationId(lap),
         completedLaps: lap,
       })
-      applyOutcome(recordPressureFinishCrossing(state))
+      applyOutcome(recordPressureFinishCrossing(state, lap))
     },
     recordRecommendation(recommendation) {
-      if (
-        recommendation
-        && state.lastCompletedLaps !== null
-        && recommendation.completedLaps < state.lastCompletedLaps
-      ) {
-        stintGeneration += 1
-      }
       if (recommendation) {
         publish({
           kind: 'recommendation_received',
@@ -89,8 +81,9 @@ export function createPressureRecommendationVoiceRuntime(options: {
       applyOutcome(recordPressureRecommendation(state, recommendation))
     },
     reset() {
-      state = createPressureRecommendationVoiceState()
-      stintGeneration += 1
+      // Auth/audio reconnects clear pending input, not warnings already consumed.
+      // The producer's session identity is the authoritative cycle reset.
+      state = { ...state, pendingFinishLaps: [], latestRecommendation: null, initialized: false }
     },
   }
 }
