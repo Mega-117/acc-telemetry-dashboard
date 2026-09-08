@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { pressureActionPresentation } from '~/services/overlay/pressureActionPresentation'
 
 describe('pressureActionPresentation', () => {
+  it('does not mention lap validity when the producer disables that requirement', () => {
+    expect(pressureActionPresentation({
+      state: 'unavailable',
+      recommendation: { status: 'waiting_for_laps', completed_laps: 2,
+        required_completed_laps: 3, valid_laps: 0, required_valid_laps: 0 },
+    }).guidance).toBe('Completa 3 giri (2/3).')
+  })
+
   it('invita all unica azione quando la correzione e pronta', () => {
     expect(pressureActionPresentation({ state: 'ready' })).toEqual({
       stateLabel: 'Pronto',

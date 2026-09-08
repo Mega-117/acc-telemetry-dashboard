@@ -1070,7 +1070,7 @@ onBeforeUnmount(() => {
                   <div class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <div class="pressure-plan__meta">
                       <span>{{ dryPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>
-                      <span>{{ dryPressureState.recommendation?.valid_laps || 0 }}/1 valido</span>
+                      <span v-if="(dryPressureState.recommendation?.required_valid_laps ?? 1) > 0">{{ dryPressureState.recommendation?.valid_laps || 0 }}/{{ dryPressureState.recommendation?.required_valid_laps ?? 1 }} valido</span>
                       <strong>{{ dryPressureState.recommendation?.compound || '—' }}</strong>
                     </div>
                     <table v-if="dryPressureState.recommendation?.wheels" class="pressure-plan__table">

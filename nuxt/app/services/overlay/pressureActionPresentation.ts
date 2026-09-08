@@ -62,6 +62,7 @@ function unavailableGuidance(input: PressureActionInput): string {
   const required = finiteCount(recommendation?.required_completed_laps, 3)
   const valid = finiteCount(recommendation?.valid_laps, 0)
   const requiredValid = finiteCount(recommendation?.required_valid_laps, 1)
+  if (requiredValid === 0) return `Completa ${required} giri (${completed}/${required}).`
   return `Completa ${required} giri, di cui almeno ${requiredValid} valido (${completed}/${required}, validi ${valid}/${requiredValid}).`
 }
 
