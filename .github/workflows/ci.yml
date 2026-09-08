@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: ["main", "test-claude"]
     tags: ["v*.*.*"]
@@ -33,6 +34,14 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Typecheck
+        run: npm run typecheck
 
       - name: FE pipeline
         shell: pwsh
@@ -99,6 +108,16 @@ jobs:
           fi
           exit "$pytest_status"
         working-directory: .
+
+  pages:
+    name: Pages — verified commit
+    needs: [fe-test, python-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/static.yml
 
   # ─────────────────────────────────────────────
   # Release — triggered on version tags v*.*.*
