@@ -55,6 +55,27 @@ async function send(engineer: PitwallRealtimeRoomService, roomId: string) {
 }
 
 describe('Pitwall RTDB rules and integrated services', () => {
+  it('requires ACC Drive capability and freezes its full payload after dispatch', async () => {
+    const { driver, engineer, roomId } = await openRoom()
+    await vi.waitFor(() => expect(engineer.sendReadiness(roomId).ready).toBe(true))
+    const dedicated = { method: 'acc-drive-7.8.1', accDrive: { fuel: 15, changeTyre: true, compound: 'Wet', tyreSet: 4,
+      pressures: { FL: 26.6, FR: 26.6, RL: 26.6, RR: 26.6 }, driverId: 1, changeBodywork: true, changeSuspension: false, mfdKeyCycleSpeed: 60, mfdOffset: 0 } }
+    expect((await engineer.sendOrder(roomId, { plan: dedicated, revision: 1 })).ok).toBe(false)
+    await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'runtime', strategy: { fuelToAdd: 25, applicationMethods: ['standard', 'acc-drive-7.8.1'] } })
+    const path = `pitwallV3/rooms/${roomId}`
+    await vi.waitFor(async () => expect((await get(ref(driver.io.database, `${path}/mfd/strategy/applicationMethods`))).val()).toContain('acc-drive-7.8.1'))
+    const sent = await engineer.sendOrder(roomId, { plan: dedicated, revision: 2 })
+    if (!sent.ok) throw new Error(sent.reason)
+    expect((await driver.claimOrder(roomId, sent.value)).ok).toBe(true)
+    const orderRef = ref(driver.io.database, `${path}/orders/${sent.value}`)
+    const original = (await get(orderRef)).val()
+    await assertFails(set(orderRef, { ...original, status: 'applied', plan: { ...dedicated, method: 'standard' } }))
+    await assertFails(set(orderRef, { ...original, status: 'applied', plan: { ...dedicated, accDrive: { ...dedicated.accDrive, fuel: 16 } } }))
+    await assertFails(set(orderRef, { ...original, status: 'applied', plan: {} }))
+    expect((await driver.publishOutcome(roomId, sent.value, { status: 'applied', method: 'acc-drive-7.8.1', sourceStatus: 'Completed', selectedDriverId: 1, events: [{ status: 'Completed' }] })).ok).toBe(true)
+    expect((await get(orderRef)).val().result.sourceStatus).toBe('Completed')
+    expect((await get(orderRef)).val().result.selectedDriverId).toBe(1)
+  })
   it('desktop engineer without ACC survives driver startup and sends once to the remote pilot', async () => {
     const { driver, engineer, roomId } = await openRoom()
     await engineer.publishPresence(null, { nickname: 'Engineer', kind: 'driver', driving: false, runtimeSessionId: 'idle-desktop' })

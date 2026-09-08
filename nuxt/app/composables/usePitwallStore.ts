@@ -30,6 +30,7 @@ import type { PitwallIntentStatus } from '~/composables/usePitwallIntent'
  * due versioni.
  */
 export interface PitwallStopHandle {
+  application?: ReturnType<typeof import('./usePitwallRoom').usePitwallRoom>
   pressures: Ref<Record<PitwallWheel, number>>
   fuelLiters: Ref<number>
   compound: Ref<PitwallCompound>

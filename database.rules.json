@@ -88,7 +88,7 @@
             ".read": "auth != null && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member')",
             "$order": {
               ".write": "auth != null && (root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'manager' || root.child('pitwallV3').child('rooms').child($room).child('access').child(auth.uid).val() == 'member') && newData.exists() && ((!data.exists() && newData.child('status').val() == 'pending' && newData.child('senderId').val() == auth.uid && root.child('pitwallV3').child('connections').child(auth.uid).child(newData.child('senderConnectionId').val()).child('roomId').val() == $room && root.child('pitwallV3').child('connections').child(newData.child('targetUid').val()).child(newData.child('targetConnectionId').val()).child('roomId').val() == $room && root.child('pitwallV3').child('connections').child(newData.child('targetUid').val()).child(newData.child('targetConnectionId').val()).child('kind').val() == 'driver' && root.child('pitwallV3').child('connections').child(newData.child('targetUid').val()).child(newData.child('targetConnectionId').val()).child('driving').val() == true && root.child('pitwallV3').child('connections').child(newData.child('targetUid').val()).child(newData.child('targetConnectionId').val()).child('sourceValid').val() == true && (!root.child('pitwallV3').child('rooms').child($room).child('control/claim').exists() || root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('leaseUntilMs').val() <= now)) || (data.exists() && ((data.child('status').val() == 'pending' && newData.child('status').val() == 'applying' && newData.child('claimedBy').val() == auth.uid && root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('orderId').val() == $order && root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('uid').val() == auth.uid && root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('connectionId').val() == data.child('targetConnectionId').val() && newData.child('leaseUntilMs').val() == root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('leaseUntilMs').val() && root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('leaseUntilMs').val() > now) || (data.child('status').val() == 'applying' && data.child('claimedBy').val() == auth.uid && (newData.child('status').val() == 'applied' || newData.child('status').val() == 'partial' || newData.child('status').val() == 'failed' || newData.child('status').val() == 'rejected')) || (data.child('status').val() == 'pending' && newData.child('status').val() == 'rejected' && (data.child('targetUid').val() == auth.uid || data.child('senderId').val() == auth.uid) && (root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('orderId').val() != $order || root.child('pitwallV3').child('rooms').child($room).child('control/claim').child('leaseUntilMs').val() <= now)))))",
-              ".validate": "newData.hasChildren(['schemaVersion','protocolVersion','orderId','revision','senderId','issuedAt','expiresAtMs','plan','status','targetUid','targetConnectionId','senderConnectionId']) && newData.child('schemaVersion').val() == 2 && newData.child('protocolVersion').val() == 3 && newData.child('orderId').val() == $order && (data.exists() ? (newData.child('schemaVersion').val() == data.child('schemaVersion').val() && newData.child('protocolVersion').val() == data.child('protocolVersion').val() && newData.child('orderId').val() == data.child('orderId').val() && newData.child('revision').val() == data.child('revision').val() && newData.child('senderId').val() == data.child('senderId').val() && newData.child('issuedAt').val() == data.child('issuedAt').val() && newData.child('expiresAtMs').val() == data.child('expiresAtMs').val() && newData.child('plan/fuelLiters').val() == data.child('plan/fuelLiters').val() && newData.child('plan/tyreSet').val() == data.child('plan/tyreSet').val() && newData.child('plan/compound').val() == data.child('plan/compound').val() && newData.child('plan/pitStrategy').val() == data.child('plan/pitStrategy').val() && newData.child('plan/changeTyres').val() == data.child('plan/changeTyres').val() && newData.child('plan/brakes').val() == data.child('plan/brakes').val() && newData.child('plan/brakeFront').val() == data.child('plan/brakeFront').val() && newData.child('plan/brakeRear').val() == data.child('plan/brakeRear').val() && newData.child('plan/repairBodywork').val() == data.child('plan/repairBodywork').val() && newData.child('plan/repairSuspension').val() == data.child('plan/repairSuspension').val() && newData.child('plan/driverId').val() == data.child('plan/driverId').val() && newData.child('plan/pressures/FL').val() == data.child('plan/pressures/FL').val() && newData.child('plan/pressures/FR').val() == data.child('plan/pressures/FR').val() && newData.child('plan/pressures/RL').val() == data.child('plan/pressures/RL').val() && newData.child('plan/pressures/RR').val() == data.child('plan/pressures/RR').val() && newData.child('targetUid').val() == data.child('targetUid').val() && newData.child('targetConnectionId').val() == data.child('targetConnectionId').val() && newData.child('senderConnectionId').val() == data.child('senderConnectionId').val()) : (newData.child('expiresAtMs').isNumber() && newData.child('expiresAtMs').val() > now && newData.child('expiresAtMs').val() <= now + 125000))",
+              ".validate": "newData.hasChildren(['schemaVersion','protocolVersion','orderId','revision','senderId','issuedAt','expiresAtMs','plan','status','targetUid','targetConnectionId','senderConnectionId']) && newData.child('schemaVersion').val() == 2 && newData.child('protocolVersion').val() == 3 && newData.child('orderId').val() == $order && (data.exists() ? (newData.child('schemaVersion').val() == data.child('schemaVersion').val() && newData.child('protocolVersion').val() == data.child('protocolVersion').val() && newData.child('orderId').val() == data.child('orderId').val() && newData.child('revision').val() == data.child('revision').val() && newData.child('senderId').val() == data.child('senderId').val() && newData.child('issuedAt').val() == data.child('issuedAt').val() && newData.child('expiresAtMs').val() == data.child('expiresAtMs').val() && newData.child('plan/fuelLiters').val() == data.child('plan/fuelLiters').val() && newData.child('plan/tyreSet').val() == data.child('plan/tyreSet').val() && newData.child('plan/compound').val() == data.child('plan/compound').val() && newData.child('plan/pitStrategy').val() == data.child('plan/pitStrategy').val() && newData.child('plan/changeTyres').val() == data.child('plan/changeTyres').val() && newData.child('plan/brakes').val() == data.child('plan/brakes').val() && newData.child('plan/brakeFront').val() == data.child('plan/brakeFront').val() && newData.child('plan/brakeRear').val() == data.child('plan/brakeRear').val() && newData.child('plan/repairBodywork').val() == data.child('plan/repairBodywork').val() && newData.child('plan/repairSuspension').val() == data.child('plan/repairSuspension').val() && newData.child('plan/driverId').val() == data.child('plan/driverId').val() && newData.child('plan/pressures/FL').val() == data.child('plan/pressures/FL').val() && newData.child('plan/pressures/FR').val() == data.child('plan/pressures/FR').val() && newData.child('plan/pressures/RL').val() == data.child('plan/pressures/RL').val() && newData.child('plan/pressures/RR').val() == data.child('plan/pressures/RR').val() && newData.child('targetUid').val() == data.child('targetUid').val() && newData.child('targetConnectionId').val() == data.child('targetConnectionId').val() && newData.child('senderConnectionId').val() == data.child('senderConnectionId').val()) : (newData.child('expiresAtMs').isNumber() && newData.child('expiresAtMs').val() > now && newData.child('expiresAtMs').val() <= now + 125000)) && (!data.exists() || (newData.child('plan/method').val() == data.child('plan/method').val() && newData.child('plan/accDrive/fuel').val() == data.child('plan/accDrive/fuel').val() && newData.child('plan/accDrive/tyreSet').val() == data.child('plan/accDrive/tyreSet').val() && newData.child('plan/accDrive/compound').val() == data.child('plan/accDrive/compound').val() && newData.child('plan/accDrive/driverId').val() == data.child('plan/accDrive/driverId').val() && newData.child('plan/accDrive/changeTyre').val() == data.child('plan/accDrive/changeTyre').val() && newData.child('plan/accDrive/changeBodywork').val() == data.child('plan/accDrive/changeBodywork').val() && newData.child('plan/accDrive/changeSuspension').val() == data.child('plan/accDrive/changeSuspension').val() && newData.child('plan/accDrive/mfdKeyCycleSpeed').val() == data.child('plan/accDrive/mfdKeyCycleSpeed').val() && newData.child('plan/accDrive/mfdOffset').val() == data.child('plan/accDrive/mfdOffset').val() && newData.child('plan/accDrive/pressures/FL').val() == data.child('plan/accDrive/pressures/FL').val() && newData.child('plan/accDrive/pressures/FR').val() == data.child('plan/accDrive/pressures/FR').val() && newData.child('plan/accDrive/pressures/RL').val() == data.child('plan/accDrive/pressures/RL').val() && newData.child('plan/accDrive/pressures/RR').val() == data.child('plan/accDrive/pressures/RR').val()))",
               "plan": {
                 "$other": {
                   ".validate": false
@@ -142,6 +142,61 @@
                 },
                 "driverId": {
                   ".validate": "newData.isString() && newData.val().length <= 80"
+                },
+                ".validate": "(newData.child('method').val() == 'acc-drive-7.8.1' ? newData.hasChildren(['method','accDrive']) : !newData.child('accDrive').exists())",
+                "method": {
+                  ".validate": "newData.val() == 'standard' || newData.val() == 'acc-drive-7.8.1'"
+                },
+                "accDrive": {
+                  ".validate": "newData.hasChildren(['fuel','tyreSet','compound','driverId','changeTyre','changeBodywork','changeSuspension','pressures','mfdKeyCycleSpeed','mfdOffset'])",
+                  "$other": {
+                    ".validate": false
+                  },
+                  "fuel": {
+                    ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 150 && newData.val() % 1 == 0"
+                  },
+                  "tyreSet": {
+                    ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 50 && newData.val() % 1 == 0"
+                  },
+                  "driverId": {
+                    ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 255 && newData.val() % 1 == 0"
+                  },
+                  "mfdKeyCycleSpeed": {
+                    ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 5000 && newData.val() % 1 == 0"
+                  },
+                  "mfdOffset": {
+                    ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20 && newData.val() % 1 == 0"
+                  },
+                  "changeTyre": {
+                    ".validate": "newData.isBoolean()"
+                  },
+                  "changeBodywork": {
+                    ".validate": "newData.isBoolean()"
+                  },
+                  "changeSuspension": {
+                    ".validate": "newData.isBoolean()"
+                  },
+                  "compound": {
+                    ".validate": "newData.val() == 'Dry' || newData.val() == 'Wet'"
+                  },
+                  "pressures": {
+                    ".validate": "newData.hasChildren(['FL','FR','RL','RR'])",
+                    "$other": {
+                      ".validate": false
+                    },
+                    "FL": {
+                      ".validate": "newData.isNumber() && newData.val() >= 20.3 && newData.val() <= 35"
+                    },
+                    "FR": {
+                      ".validate": "newData.isNumber() && newData.val() >= 20.3 && newData.val() <= 35"
+                    },
+                    "RL": {
+                      ".validate": "newData.isNumber() && newData.val() >= 20.3 && newData.val() <= 35"
+                    },
+                    "RR": {
+                      ".validate": "newData.isNumber() && newData.val() >= 20.3 && newData.val() <= 35"
+                    }
+                  }
                 }
               },
               "claimedBy": {

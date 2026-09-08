@@ -62,7 +62,7 @@ function saveSet(key: string, value: Set<string>): void {
 
 export const NOTICE_PREFIX = { request: 'req:', invite: 'inv:', granted: 'grant:' } as const
 
-function createLiveStore(): PitwallStore & { start: () => void, halt: () => void } {
+function createLiveStore(): PitwallStore & { start: () => void, halt: () => void, standardController: ReturnType<typeof usePitwallController> } {
   const { currentUser } = useFirebaseAuth()
   const uid = () => currentUser.value?.uid ?? null
   const link = usePitwallRoom({ uid })
@@ -437,6 +437,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     stopEstimate: controller.stopEstimate,
     blockedReason: controller.blockedReason,
     orderStatus: link.orderStatus,
+    application: link,
     orderReason: link.orderReason,
     fieldOutcomes: controller.fieldOutcomes,
     seenOnScreen: controller.seenOnScreen,
@@ -509,6 +510,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     rejectNotice,
     dismissNotice,
     stop,
+    standardController: controller,
     start,
     halt,
   }

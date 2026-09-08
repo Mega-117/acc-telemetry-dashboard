@@ -281,6 +281,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   // Lo stato arriva prima degli esiti: si guardano entrambi, e si ricorda
   // solo a ordine concluso.
   watch(() => [link.orderStatus.value, link.orderFields.value] as const, ([status], previous) => {
+    if (link.orderMethod?.value === 'acc-drive-7.8.1') return
     const settled = Boolean(status) && status !== 'pending' && status !== 'applying'
     if (settled) rememberSeen()
     if (status === previous?.[0]) return
@@ -300,6 +301,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   let planInitialised = false
   watch(() => link.selectedRoomId.value, () => { planInitialised = false; synced = null; seenOnScreen.value = {} })
   watch(car, (next) => {
+    if (link.draftSuspended?.value) return
     if (!session.value?.strategy) return
     if (!planInitialised) {
       planInitialised = true

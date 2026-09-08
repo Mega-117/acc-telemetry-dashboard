@@ -183,7 +183,7 @@ describe('Pitwall ordine reale e MFD onesto', () => {
       expect(controller).toContain(`payload.${field}`)
     }
     // La Legacy non ha una seconda copia della logica: la importa.
-    expect(panel).toContain('usePitwallController(link, trust)')
+    expect(panel).toContain('liveStore.standardController')
     expect(panel).not.toContain('function planPayload')
   })
 
@@ -458,7 +458,7 @@ describe('Pitwall wiring', () => {
     // Lo stato lo scrive il PC del pilota, non il bottone: la vista lo legge.
     expect(conceptOrder).toContain('describePitwallConceptOrderStatus')
     expect(conceptOrder).toContain('props.status === "pending" || props.status === "applying"')
-    expect(conceptPitStop).toContain(':status="stop.orderStatus.value"')
+    expect(conceptPitStop).toContain(':status="stop.application?.orderMethod.value === \'acc-drive-7.8.1\' ? null : stop.orderStatus.value"')
     expect(conceptPitStop).not.toContain('orderStatus.value =')
     expect(conceptOrder).toContain('class="pwc-order"')
     // Gli stati sono i sei veri che il PC del pilota scrive: niente "Scaduta"

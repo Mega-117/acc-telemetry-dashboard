@@ -68,6 +68,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const nowTick = ref(Date.now())
 
   const orderId = ref<string | null>(null)
+  const orderMethod = ref('standard')
+  const draftSuspended = ref(false)
   const orderStatus = ref<PitwallDisplayOrderStatus | null>(null)
   const readinessRevision = ref(0)
   let stopReadiness: (() => void) | null = null
@@ -413,6 +415,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     if (orderStatus.value === 'pending' || orderStatus.value === 'applying') return false
 
     sending.value = true
+    orderMethod.value = typeof plan.method === 'string' ? plan.method : 'standard'
     rawError.value = null
     orderReason.value = null
     orderFields.value = {}
@@ -569,6 +572,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     clockSkewNotice,
     nowTick,
     orderId,
+    orderMethod,
+    draftSuspended,
     orderStatus,
     orderReason,
     orderFields,

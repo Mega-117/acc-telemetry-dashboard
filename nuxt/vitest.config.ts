@@ -40,6 +40,8 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/composables/usePitwallApplicationMethod.ts',
+        'app/components/pitwall/PitwallApplicationPanel.vue',
         'app/services/monitoring/windowOpeningProbe.ts',
         'app/components/auth/*.vue',
         'app/components/electron/ElectronTitlebar.vue',

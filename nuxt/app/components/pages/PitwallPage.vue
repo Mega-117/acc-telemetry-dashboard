@@ -12,9 +12,10 @@ import { describePitwallConceptOrderStatus } from '~/utils/pitwallConcept'
 //    pagina dice perche' invece di accettarlo e farlo scadere in silenzio;
 //  - `READY` significa applicata e riletta, mai inviata.
 import { computed, onBeforeUnmount, onMounted } from 'vue'
-import { usePitwallRoom } from '~/composables/usePitwallRoom'
+import { usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
+import { usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
+import PitwallApplicationPanel from '~/components/pitwall/PitwallApplicationPanel.vue'
 import { usePitwallLink } from '~/composables/usePitwallLink'
-import { usePitwallController } from '~/composables/usePitwallController'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import PitwallCarCard from '~/components/pitwall/PitwallCarCard.vue'
 import PitwallOrderBar from '~/components/pitwall/PitwallOrderBar.vue'
@@ -36,7 +37,9 @@ import {
 
 const { currentUser } = useFirebaseAuth()
 // La gara: chi c'e', chi guida, dove va l'ordine.
-const link = usePitwallRoom({ uid: () => currentUser.value?.uid ?? null })
+const liveStore = usePitwallLiveStore()
+const link = liveStore.stop.application!
+const { method } = usePitwallApplicationMethod()
 // I permessi fra account restano il mattoncino della fiducia: chi mi ha
 // autorizzato una volta si ritrova invitato alle gare senza richiederlo, e da
 // qui si concede o si toglie. Non e' un secondo canale per gli ordini.
@@ -85,19 +88,18 @@ const {
   fieldOutcomes,
   scopeLabel,
   roomStateLabel,
-} = usePitwallController(link, trust)
+} = liveStore.standardController
 
 const nowTick = computed(() => link.nowTick.value)
 
 onMounted(() => {
-  link.start()
+  liveStore.start()
   void trust.refreshIncoming()
   trust.watchLive()
 })
 
 onBeforeUnmount(() => {
   if (searchTimer) clearTimeout(searchTimer)
-  link.stop()
 })
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -224,7 +226,8 @@ function onSearchInput() {
       <div class="workspace">
         <section class="strategy" aria-labelledby="strategy-title">
           <h2 id="strategy-title" class="panel-title">STRATEGIA DA INVIARE</h2>
-          <div class="strategy__body">
+          <PitwallApplicationPanel :port="link" />
+          <div v-show="method === 'standard'" class="strategy__body">
             <div class="strategy-topline">
               <div class="static-control" title="Sceglie il preset di strategia dell'assetto. Attenzione: riscrive carburante, set e pressioni con i valori del preset.">
                 <span>Preset strategia</span>
@@ -266,12 +269,12 @@ function onSearchInput() {
               </fieldset>
             </section>
           </div>
-          <PitwallOrderBar :status="orderStatus" :chips="changeChips" :stop="stopEstimate" :can-send="sendEnabled" :blocked-reason="blockedReason" @send="sendToCar" />
+          <PitwallOrderBar v-if="method === 'standard'" :status="orderStatus" :chips="changeChips" :stop="stopEstimate" :can-send="sendEnabled" :blocked-reason="blockedReason" @send="sendToCar" />
         </section>
 
         <PitwallCarCard :session="session" :fresh="carFresh" :age-seconds="presenceAgeSeconds" :display-plan="mfdPlan" :drivers="drivers" :stop="stopEstimate">
           <template #order>
-            <section v-if="link.orderProgress.value.label || fieldOutcomes.length" class="order-info" aria-label="Stato dell'ultimo ordine">
+            <section v-if="link.orderMethod.value === 'standard' && (link.orderProgress.value.label || fieldOutcomes.length)" class="order-info" aria-label="Stato dell'ultimo ordine">
               <div class="order-info__head"><strong>Ultimo ordine</strong><span :class="{ 'is-problem': link.orderProgress.value.problem }">{{ describePitwallConceptOrderStatus(link.orderStatus.value, link.orderReason.value, fieldOutcomes).label || 'Nessun ordine' }}</span></div>
               <p v-if="link.orderReason.value">{{ describePitwallConceptOrderStatus(link.orderStatus.value, link.orderReason.value, fieldOutcomes).detail }}</p>
               <div v-if="fieldOutcomes.length" class="outcomes"><span v-for="item in fieldOutcomes" :key="item.field" :class="[`outcome`, `outcome--${describePitwallFieldOutcome(item).tone}`]" :title="[describePitwallFieldOutcome(item).title, item.reason].filter(Boolean).join(' · ')">{{ item.label }} {{ describePitwallFieldOutcome(item).mark }}<template v-if="describePitwallFieldOutcome(item).detail"> · {{ describePitwallFieldOutcome(item).detail }}</template></span></div>
