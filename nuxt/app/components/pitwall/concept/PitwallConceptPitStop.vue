@@ -436,8 +436,8 @@ function stepAll(direction: 1 | -1) {
     </div>
 
     <PitwallConceptOrder
-      :status="stop.application?.orderMethod.value === 'acc-drive-7.8.1' ? null : stop.orderStatus.value"
-      :reason="stop.application?.orderMethod.value === 'acc-drive-7.8.1' ? null : stop.orderReason.value"
+      :status="['acc-drive-7.8.1', 'mfd-v2'].includes(stop.application?.orderMethod.value ?? '') ? null : stop.orderStatus.value"
+      :reason="['acc-drive-7.8.1', 'mfd-v2'].includes(stop.application?.orderMethod.value ?? '') ? null : stop.orderReason.value"
       :outcomes="stop.fieldOutcomes.value"
       :blocked="stop.blockedReason.value"
       @send="stop.sendToCar()"

@@ -458,7 +458,7 @@ describe('Pitwall wiring', () => {
     // Lo stato lo scrive il PC del pilota, non il bottone: la vista lo legge.
     expect(conceptOrder).toContain('describePitwallConceptOrderStatus')
     expect(conceptOrder).toContain('props.status === "pending" || props.status === "applying"')
-    expect(conceptPitStop).toContain(':status="stop.application?.orderMethod.value === \'acc-drive-7.8.1\' ? null : stop.orderStatus.value"')
+    expect(conceptPitStop).toContain(':status="[\'acc-drive-7.8.1\', \'mfd-v2\'].includes(stop.application?.orderMethod.value ?? \'\') ? null : stop.orderStatus.value"')
     expect(conceptPitStop).not.toContain('orderStatus.value =')
     expect(conceptOrder).toContain('class="pwc-order"')
     // Gli stati sono i sei veri che il PC del pilota scrive: niente "Scaduta"

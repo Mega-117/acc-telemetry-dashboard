@@ -86,7 +86,7 @@ export function boundPitwallTyreCondition(value: unknown): PitwallTyreCondition 
 
 export interface PitwallStrategySnapshot {
   applicationMethods?: string[]
-  accDriveProgress?: { orderId: string, sourceStatus: string, message: string | null }
+  mfdV2?: { ready: boolean, reason: string | null, driverCount: number }
   fuelToAdd: number | null
   tyreSet: number | null
   /** Numero 1–50 del treno montato, distinto dal candidato MFD in base zero. */
@@ -220,7 +220,7 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
     compound?: unknown
     verifiedFields?: unknown
     applicationMethods?: unknown
-    accDriveProgress?: PitwallStrategySnapshot['accDriveProgress']
+    mfdV2?: PitwallStrategySnapshot['mfdV2']
   }
   const wheels = ['FL', 'FR', 'RL', 'RR'] as const
   // `Number(null)` vale 0: un valore assente non deve diventare un numero.
@@ -234,9 +234,8 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
     : null
   return {
     fuelToAdd: finiteOrNull(source.fuelToAdd),
-    ...(Array.isArray(source.applicationMethods) && source.applicationMethods.includes('acc-drive-7.8.1') ? { applicationMethods: ['standard', 'acc-drive-7.8.1'] } : {}),
-    ...(source.accDriveProgress && typeof source.accDriveProgress.orderId === 'string' && typeof source.accDriveProgress.sourceStatus === 'string'
-      ? { accDriveProgress: { orderId: source.accDriveProgress.orderId.slice(0, 100), sourceStatus: source.accDriveProgress.sourceStatus.slice(0, 40), message: source.accDriveProgress.message?.slice(0, 200) ?? null } } : {}),
+    ...(Array.isArray(source.applicationMethods) && source.applicationMethods.includes('mfd-v2') ? { applicationMethods: ['standard', 'mfd-v2'] } : {}),
+    ...(source.mfdV2 ? { mfdV2: { ready: source.mfdV2.ready === true, reason: typeof source.mfdV2.reason === 'string' ? source.mfdV2.reason.slice(0, 200) : null, driverCount: Number.isInteger(source.mfdV2.driverCount) ? Math.max(0, Math.min(16, source.mfdV2.driverCount)) : 0 } } : {}),
     tyreSet: finiteOrNull(source.tyreSet),
     ...(source.tyreSetCondition ? { tyreSetCondition: boundPitwallTyreCondition(source.tyreSetCondition) } : {}),
     ...(typeof source.fittedTyreSet === 'number' && Number.isInteger(source.fittedTyreSet) && source.fittedTyreSet >= 1 && source.fittedTyreSet <= 50

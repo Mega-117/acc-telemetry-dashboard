@@ -189,6 +189,7 @@ export default defineConfig({
         'app/composables/usePitwallIntent.ts',
         'app/composables/usePitwallFriendActions.ts',
         'app/composables/usePitwallRoom.ts',
+        'app/components/pitwall/PitwallV2Panel.vue',
         'app/services/pitwall/pitwallRoomRevision.ts',
         'server/utils/chatterboxRuntimeStatus.ts',
         'server/utils/chatterboxVoiceCatalog.ts',

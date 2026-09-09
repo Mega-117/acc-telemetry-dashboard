@@ -1,12 +1,12 @@
 import { inject, provide, reactive, ref, type InjectionKey } from 'vue'
-export const ACC_DRIVE_METHOD = 'acc-drive-7.8.1'
+export const MFD_V2_METHOD = 'mfd-v2'
 export function createPitwallApplicationMethod() {
   return { method: ref('standard'), initialized: ref(false), draft: reactive({
-    fuel: null as number | null, changeTyre: null as boolean | null,
-    compound: null as 'Dry' | 'Wet' | null, tyreSet: null as number | null,
+    fuelLiters: null as number | null, changeTyres: null as boolean | null,
+    compound: null as 'dry' | 'wet' | null, tyreSet: null as number | null,
     pressures: { FL: null, FR: null, RL: null, RR: null } as Record<'FL' | 'FR' | 'RL' | 'RR', number | null>,
-    driverId: null as number | null, changeBodywork: null as boolean | null, changeSuspension: null as boolean | null,
-    mfdKeyCycleSpeed: 60, mfdOffset: 0,
+    driverId: null as number | null, repairBodywork: null as boolean | null, repairSuspension: null as boolean | null,
+    brakes: null as boolean | null, brakeFront: null as number | null, brakeRear: null as number | null, pitStrategy: 1,
   }) }
 }
 type State = ReturnType<typeof createPitwallApplicationMethod>
