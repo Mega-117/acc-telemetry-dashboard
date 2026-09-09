@@ -1,31 +1,28 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { MFD_V2_METHOD, usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
+import { MFD_V3_METHOD, usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
 import type { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { canUseDevTools } from '~/utils/devToolsAccess'
 import { boundPitwallStrategy } from '~/services/pitwall/pitwallLink'
-import V2Choice from './PitwallV2Choice.vue'
+import V3Choice from './PitwallV3Choice.vue'
 const props = defineProps<{ port?: ReturnType<typeof usePitwallRoom> }>()
 const { method, draft, initialized } = usePitwallApplicationMethod()
 const { isAdmin } = useFirebaseAuth()
 const visible = computed(() => canUseDevTools() || isAdmin.value)
 const snapshot = computed(() => { const raw = props.port?.carSnapshot.value; return raw ? { ...raw, strategy: boundPitwallStrategy(raw.strategy, '') } : null })
-const capable = computed(() => snapshot.value?.strategy?.applicationMethods?.includes(MFD_V2_METHOD) === true)
-const ready = computed(() => capable.value && snapshot.value?.strategy?.mfdV2?.ready === true)
+const capable = computed(() => snapshot.value?.strategy?.applicationMethods?.includes(MFD_V3_METHOD) === true)
+const ready = computed(() => capable.value && snapshot.value?.strategy?.mfdV3?.ready === true)
 const busy = computed(() => props.port?.sending.value || ['pending', 'applying'].includes(props.port?.orderStatus.value ?? ''))
 const wheels = ['FL', 'FR', 'RL', 'RR'] as const
 const switches = [{ key: 'changeTyres', label: 'Cambio gomme' }, { key: 'brakes', label: 'Sostituisci freni' }, { key: 'repairBodywork', label: 'Riparazione carrozzeria' }, { key: 'repairSuspension', label: 'Riparazione sospensioni' }] as const
 const integer = (v: unknown, min: number, max: number) => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max
-const driverRequired = computed(() => (snapshot.value?.strategy?.mfdV2?.driverCount ?? 0) > 0)
-const validDriver = computed(() => !driverRequired.value || snapshot.value?.crew?.some(d => d.driverIndex === draft.driverId))
 const mounted = computed(() => draft.changeTyres && draft.compound === 'dry' && draft.tyreSet === snapshot.value?.strategy?.fittedTyreSet)
 const missing = computed(() => {
   const fields: string[] = []
   if (!integer(draft.fuelLiters, 0, 140)) fields.push('carburante (0–140 L)')
   for (const f of switches) if (typeof draft[f.key] !== 'boolean') fields.push(f.label.toLowerCase())
   if (draft.repairSuspension && !draft.repairBodywork) fields.push('carrozzeria richiesta con le sospensioni')
-  if (!validDriver.value) fields.push('pilota dell’equipaggio')
   if (mounted.value) fields.push('un set diverso da quello montato')
   if (draft.brakes) for (const k of ['brakeFront', 'brakeRear'] as const) {
     if (!integer(draft[k], 1, 4)) fields.push(k === 'brakeFront' ? 'pastiglie anteriori (1–4)' : 'pastiglie posteriori (1–4)')
@@ -44,8 +41,8 @@ const transportBlock = computed(() => {
   if (busy.value) return 'Ordine in corso: attendi l’esito prima di inviarne un altro.'
   if (calibrating.value) return 'Calibrazione locale in corso.'
   if (!props.port?.canSend.value) return props.port?.sendReadiness?.value.reason || props.port?.executorLabel?.value || 'Seleziona una gara con un solo pilota connesso e disponibile.'
-  if (!capable.value) return 'Il PC del pilota non annuncia V2: avvia il runtime della Suite aggiornato sul suo PC.'
-  if (!ready.value) return snapshot.value?.strategy?.mfdV2?.reason || 'Calibrazione V2 richiesta sul PC del pilota.'
+  if (!capable.value) return 'Il PC del pilota non annuncia V3: avvia il runtime della Suite aggiornato sul suo PC.'
+  if (!ready.value) return snapshot.value?.strategy?.mfdV3?.reason || 'Calibrazione V3 richiesta sul PC del pilota.'
   return null
 })
 const sendBlock = computed(() => transportBlock.value || (missing.value.length ? `Completa: ${missing.value.join(', ')}.` : null))
@@ -56,7 +53,7 @@ function loadLive() {
   draft.fuelLiters = car.fuelToAdd
   draft.tyreSet = car.tyreSet == null ? null : car.tyreSet + 1
   draft.compound = car.compound
-  for (const w of wheels) draft.pressures[w] = car.pressures?.[w] ?? null
+  for (const w of wheels) { const value = car.pressures?.[w]; draft.pressures[w] = typeof value === 'number' && Number.isFinite(value) ? Math.round(value * 10) / 10 : null }
   for (const f of switches) { const v = car.verifiedFields?.[f.key]?.observed; draft[f.key] = typeof v === 'boolean' ? v : null }
   for (const k of ['brakeFront', 'brakeRear'] as const) { const v = car.verifiedFields?.[k]?.observed; draft[k] = typeof v === 'number' ? v : null }
   const driver = car.verifiedFields?.driverId?.observed
@@ -65,8 +62,8 @@ function loadLive() {
 watch([method, snapshot], () => {
   // The port exposes shared composable refs as its control API; the prop itself is never replaced.
   // eslint-disable-next-line vue/no-mutating-props
-  if (props.port) props.port.draftSuspended.value = method.value === MFD_V2_METHOD
-  if (method.value === MFD_V2_METHOD && !initialized.value && snapshot.value?.strategy) { loadLive(); initialized.value = true }
+  if (props.port) props.port.draftSuspended.value = method.value === MFD_V3_METHOD
+  if (method.value === MFD_V3_METHOD && !initialized.value && snapshot.value?.strategy) { loadLive(); initialized.value = true }
 }, { immediate: true })
 function setSwitch(key: typeof switches[number]['key'], value: boolean) {
   draft[key] = value
@@ -80,36 +77,41 @@ async function send(preset = false) {
   const p: Record<string, unknown> = preset ? { operation: 'preset', pitStrategy: draft.pitStrategy } : {
     operation: 'strategy', fuelLiters: draft.fuelLiters, changeTyres: draft.changeTyres, brakes: draft.brakes,
     repairBodywork: draft.repairBodywork, repairSuspension: draft.repairSuspension,
-    ...(driverRequired.value ? { driverId: draft.driverId } : {}),
     ...(draft.brakes ? { brakeFront: draft.brakeFront, brakeRear: draft.brakeRear } : {}),
     ...(draft.changeTyres ? { compound: draft.compound, pressures: { ...draft.pressures }, ...(draft.compound === 'dry' ? { tyreSet: draft.tyreSet } : {}) } : {}),
   }
   try {
-    const sent = await props.port.sendPlan({ method: MFD_V2_METHOD, mfdV2: p })
+    const sent = await props.port.sendPlan({ method: MFD_V3_METHOD, mfdV3: p })
     if (!sent) sendMessage.value = props.port.orderReason.value || props.port.lastError?.value || 'Strategia non inviata. Controlla il collegamento con il pilota e riprova manualmente.'
   } catch (error) {
     sendMessage.value = error instanceof Error ? error.message : 'Invio non riuscito. Riprova manualmente.'
   }
 }
-type Sample = { id: string, text: string, glyph: number[] }
-type CalibrationResult = { ok?: boolean, ready?: boolean, reason?: string, unmapped?: Sample[], crew?: { driverIndex: number, name: string }[] }
-const localApi = typeof window === 'undefined' ? null : (window as unknown as { electronAPI?: { pitwallV2Calibration?: (v: unknown) => Promise<CalibrationResult> } }).electronAPI
-const calibrating = ref(false), calibrationMessage = ref(''), samples = ref<Sample[]>([]), associations = ref<Record<string, number>>({})
-const localCrew = ref<{ driverIndex: number, name: string }[]>([])
-async function calibrate(action: 'calibrate' | 'associate' | 'status') {
-  if (busy.value || calibrating.value || !localApi?.pitwallV2Calibration) return
+type CalibrationResult = { ok?: boolean, ready?: boolean, reason?: string }
+const localApi = typeof window === 'undefined' ? null : (window as unknown as { electronAPI?: { pitwallV3Calibration?: (v: unknown) => Promise<CalibrationResult> } }).electronAPI
+const calibrating = ref(false), calibrationMessage = ref('')
+async function calibrate(action: 'calibrate' | 'status') {
+  if (busy.value || calibrating.value || !localApi?.pitwallV3Calibration) return
   calibrating.value = true
   try {
-    const r = await localApi.pitwallV2Calibration({ action, assignments: Object.entries(associations.value).map(([id, driverId]) => ({ id, driverId })) })
-    samples.value = r.unmapped ?? []; localCrew.value = r.crew ?? []; calibrationMessage.value = r.reason || (r.ready ? 'Calibrazione pronta.' : 'Associa i nomi non riconosciuti.');
+    const r = await localApi.pitwallV3Calibration({ action })
+    calibrationMessage.value = r.reason || (r.ready ? 'Calibrazione pronta e salvata su questo PC.' : 'Calibrazione richiesta.')
   } catch { calibrationMessage.value = 'Calibrazione non riuscita.' } finally { calibrating.value = false }
 }
-const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ? props.port.orderReason.value : null)
+const outcome = computed(() => props.port?.orderMethod.value === MFD_V3_METHOD ? props.port.orderReason.value : null)
+const fieldLabels: Record<string, string> = { fuelLiters: 'Carburante (L)', changeTyres: 'Cambio gomme', compound: 'Mescola', tyreSet: 'Set pneumatici', brakes: 'Sostituisci freni', brakeFront: 'Pastiglie anteriori', brakeRear: 'Pastiglie posteriori', repairBodywork: 'Carrozzeria', repairSuspension: 'Sospensioni', pitStrategy: 'Preset' }
+const outcomeLabels: Record<string, string> = { verified: 'Verificato', 'not-verifiable': 'Non verificato' }
+function fieldValue(key: string, value: unknown) {
+  if (value == null) return 'Sconosciuto'
+  if (typeof value === 'boolean') return value ? 'Sì' : 'No'
+  if (wheels.some(w => w === key) && typeof value === 'number') return value.toFixed(1)
+  return value === 'dry' ? 'Dry' : value === 'wet' ? 'Wet' : value
+}
 </script>
 <template>
   <section
     v-if="visible"
-    class="v2-panel"
+    class="v3-panel"
   >
     <div
       role="group"
@@ -126,15 +128,15 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
       <button
         type="button"
         :disabled="busy || calibrating"
-        :aria-pressed="method === MFD_V2_METHOD"
-        @click="method = MFD_V2_METHOD"
+        :aria-pressed="method === MFD_V3_METHOD"
+        @click="method = MFD_V3_METHOD"
       >
-        V2 sperimentale
+        V3 sperimentale
       </button>
     </div>
-    <template v-if="method === MFD_V2_METHOD">
+    <template v-if="method === MFD_V3_METHOD">
       <p role="status">
-        {{ ready ? 'PC del pilota pronto per V2.' : snapshot?.strategy?.mfdV2?.reason || 'Supporto V2 del PC del pilota non confermato.' }}
+        {{ ready ? 'PC del pilota pronto per V3.' : snapshot?.strategy?.mfdV3?.reason || 'Supporto V3 del PC del pilota non confermato.' }}
       </p>
       <div class="preset">
         <label>Preset<input
@@ -153,7 +155,7 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
       </div>
       <form @submit.prevent="send()">
         <fieldset :disabled="busy || calibrating">
-          <legend>Strategia completa V2</legend>
+          <legend>Strategia completa V3</legend>
           <p>Ogni invio imposta tutte le voci abilitate. I valori sconosciuti vanno completati.</p>
           <button
             type="button"
@@ -171,7 +173,7 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
             max="140"
             step="1"
           /></label>
-          <V2Choice
+          <V3Choice
             label="Cambio gomme"
             :model-value="draft.changeTyres"
             @update:model-value="setSwitch('changeTyres', $event)"
@@ -207,7 +209,7 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
             step="0.1"
             :disabled="draft.changeTyres !== true"
           /></label>
-          <V2Choice
+          <V3Choice
             label="Sostituisci freni"
             :model-value="draft.brakes"
             @update:model-value="setSwitch('brakes', $event)"
@@ -232,23 +234,13 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
           <p class="source">
             ↳ Ultimo riscontro a schermo: {{ snapshot?.strategy?.verifiedFields?.brakeRear?.observed ?? 'Sconosciuto' }}
           </p>
-          <label>Pilota<select
-            v-model="draft.driverId"
-            :disabled="!driverRequired"
-          ><option
-            :value="null"
-            disabled
-          >{{ driverRequired ? 'Scegli…' : 'Non applicabile' }}</option><option
-            v-for="d in snapshot?.crew ?? []"
-            :key="d.driverIndex"
-            :value="d.driverIndex"
-          >{{ d.name }}</option></select></label>
-          <V2Choice
+          <p>Pilota: {{ snapshot?.crew?.[0]?.name || 'Non disponibile' }}. Il cambio pilota non è disponibile in V3.</p>
+          <V3Choice
             label="Riparazione sospensioni"
             :model-value="draft.repairSuspension"
             @update:model-value="setSwitch('repairSuspension', $event)"
           />
-          <V2Choice
+          <V3Choice
             label="Riparazione carrozzeria"
             :model-value="draft.repairBodywork"
             @update:model-value="setSwitch('repairBodywork', $event)"
@@ -256,7 +248,7 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
         </fieldset>
         <p
           v-if="sendBlock"
-          id="v2-send-block"
+          id="v3-send-block"
           role="status"
         >
           {{ sendBlock }}
@@ -264,9 +256,9 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
         <button
           type="submit"
           :disabled="!!sendBlock"
-          aria-describedby="v2-send-block"
+          aria-describedby="v3-send-block"
         >
-          Invia strategia V2
+          Invia strategia V3
         </button>
       </form>
       <p
@@ -281,23 +273,23 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
       >
         {{ outcome }}
       </p>
-      <table v-if="port?.orderMethod.value === MFD_V2_METHOD && Object.keys(port.orderFields.value).length">
+      <table v-if="port?.orderMethod.value === MFD_V3_METHOD && Object.keys(port.orderFields.value).length">
         <thead><tr><th>Campo</th><th>Richiesto</th><th>Osservato</th><th>Esito</th></tr></thead><tbody>
           <tr
             v-for="(field, key) in port.orderFields.value"
             :key="key"
           >
-            <td>{{ key }}</td><td>{{ field.requested }}</td><td>{{ field.observed ?? 'Sconosciuto' }}</td><td>{{ field.outcome }}</td>
+            <td>{{ fieldLabels[key] || key }}</td><td>{{ fieldValue(key, field.requested) }}</td><td>{{ fieldValue(key, field.observed) }}</td><td>{{ field.outcome ? outcomeLabels[field.outcome] || field.outcome : 'Non verificato' }}</td>
           </tr>
         </tbody>
       </table>
-      <details v-if="localApi?.pitwallV2Calibration">
-        <summary>Calibrazione sul mio PC</summary><p>Da eseguire sul PC con ACC, a vettura ferma. Il menu viene navigato per apprendere cifre e nomi.</p><button
+      <details v-if="localApi?.pitwallV3Calibration">
+        <summary>Calibrazione sul mio PC</summary><p>Da eseguire sul PC con ACC, a vettura ferma. Apprende geometria e cifre e le salva su questo PC. Non serve ripeterla a ogni invio; il cambio pilota non viene toccato.</p><button
           type="button"
           :disabled="busy || calibrating"
           @click="calibrate('calibrate')"
         >
-          Calibra V2
+          Calibra V3
         </button><button
           type="button"
           :disabled="busy || calibrating"
@@ -305,39 +297,10 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
         >
           Leggi stato locale
         </button><p>{{ calibrationMessage }}</p>
-        <label
-          v-for="sample in samples"
-          :key="sample.id"
-        >{{ sample.text || 'Nome non riconosciuto' }}<svg
-          viewBox="0 0 16 20"
-          width="48"
-          height="60"
-          aria-label="Sagoma nome pilota"
-        ><rect
-          v-for="(pixel, i) in sample.glyph"
-          :key="i"
-          :x="i % 16"
-          :y="Math.floor(i / 16)"
-          width="1"
-          height="1"
-          :fill="pixel ? 'white' : 'black'"
-        /></svg><select v-model.number="associations[sample.id]"><option
-          v-for="d in localCrew"
-          :key="d.driverIndex"
-          :value="d.driverIndex"
-        >{{ d.name }}</option></select></label>
-        <button
-          v-if="samples.length"
-          type="button"
-          :disabled="busy || calibrating || samples.some(s => associations[s.id] == null)"
-          @click="calibrate('associate')"
-        >
-          Conferma associazioni locali
-        </button>
       </details>
     </template>
   </section>
 </template>
 <style scoped>
-.v2-panel { padding: 14px; color: #e3e9ee; } fieldset { display: grid; gap: 10px; border: 0; padding: 12px 0; } label { display: flex; align-items: center; justify-content: space-between; gap: 12px; } input, select { width: 150px; } button, input, select { color: inherit; background: #101820; border: 1px solid #3b4752; border-radius: 6px; padding: 8px; } button { cursor: pointer; } button[aria-pressed="true"] { border-color: #ee5b22; } :disabled { opacity: .45; } .source { color: #9eaebd; font-size: 12px; } .preset, details { border-top: 1px solid #3b4752; margin-top: 14px; padding-top: 14px; }
+.v3-panel { padding: 14px; color: #e3e9ee; } fieldset { display: grid; gap: 10px; border: 0; padding: 12px 0; } label { display: flex; align-items: center; justify-content: space-between; gap: 12px; } input, select { width: 150px; } button, input, select { color: inherit; background: #101820; border: 1px solid #3b4752; border-radius: 6px; padding: 8px; } button { cursor: pointer; } button[aria-pressed="true"] { border-color: #ee5b22; } :disabled { opacity: .45; } .source { color: #9eaebd; font-size: 12px; } .preset, details { border-top: 1px solid #3b4752; margin-top: 14px; padding-top: 14px; }
 </style>

@@ -55,51 +55,53 @@ async function send(engineer: PitwallRealtimeRoomService, roomId: string) {
 }
 
 describe('Pitwall RTDB rules and integrated services', () => {
-  it('rejects malformed V2 operations and retired orders even when bypassing the sender', async () => {
+  it('rejects malformed V3 operations and retired orders even when bypassing the sender', async () => {
     const { driver, engineer, roomId } = await openRoom()
     const id = await send(engineer, roomId)
     const path = `pitwallV3/rooms/${roomId}`
     const base = (await get(ref(driver.io.database, `${path}/orders/${id}`))).val()
-    await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'runtime', strategy: { applicationMethods: ['standard', 'mfd-v2'], mfdV2: { ready: true, reason: null, driverCount: 0 } } })
+    await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'runtime', strategy: { applicationMethods: ['standard', 'mfd-v3'], mfdV3: { ready: true, reason: null, driverCount: 1 } } })
     const valid = { operation: 'strategy', fuelLiters: 15, changeTyres: false, brakes: false, repairBodywork: false, repairSuspension: false }
-    await vi.waitFor(async () => expect((await engineer.io.read<any>(`rooms/${roomId}/mfd`))?.strategy?.mfdV2?.ready).toBe(true))
+    await vi.waitFor(async () => expect((await engineer.io.read<any>(`rooms/${roomId}/mfd`))?.strategy?.mfdV3?.ready).toBe(true))
     const invalid = [
-      { method: 'mfd-v2', mfdV2: { ...valid, fuelLiters: 141 } },
-      { method: 'mfd-v2', mfdV2: { ...valid, repairSuspension: true } },
-      { method: 'mfd-v2', mfdV2: { ...valid, brakes: true } },
-      { method: 'mfd-v2', mfdV2: { ...valid, changeTyres: true } },
-      { method: 'mfd-v2', mfdV2: valid, fuelLiters: 15 },
-      { method: 'mfd-v2', mfdV2: { operation: 'preset', pitStrategy: 31 } },
-      { method: 'mfd-v2', mfdV2: { operation: 'preset', pitStrategy: 1, fuelLiters: 15 } },
-      { mfdV2: valid },
+      { method: 'mfd-v2', mfdV2: valid },
+      { method: 'mfd-v3', mfdV3: { ...valid, driverId: 0 } },
+      { method: 'mfd-v3', mfdV3: { ...valid, fuelLiters: 141 } },
+      { method: 'mfd-v3', mfdV3: { ...valid, repairSuspension: true } },
+      { method: 'mfd-v3', mfdV3: { ...valid, brakes: true } },
+      { method: 'mfd-v3', mfdV3: { ...valid, changeTyres: true } },
+      { method: 'mfd-v3', mfdV3: valid, fuelLiters: 15 },
+      { method: 'mfd-v3', mfdV3: { operation: 'preset', pitStrategy: 31 } },
+      { method: 'mfd-v3', mfdV3: { operation: 'preset', pitStrategy: 1, fuelLiters: 15 } },
+      { mfdV3: valid },
       { method: 'acc-drive-7.8.1', accDrive: {} },
     ]
     for (const [i, malformed] of invalid.entries()) await assertFails(set(ref(engineer.io.database, `${path}/orders/bad-${i}`), { ...base, orderId: `bad-${i}`, plan: malformed }))
-    await assertSucceeds(set(ref(engineer.io.database, `${path}/orders/preset`), { ...base, orderId: 'preset', plan: { method: 'mfd-v2', mfdV2: { operation: 'preset', pitStrategy: 30 } } }))
-    await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'runtime', strategy: { applicationMethods: ['standard', 'mfd-v2'], mfdV2: { ready: false, reason: 'calibrate', driverCount: 0 } } })
-    await vi.waitFor(async () => expect((await engineer.io.read<any>(`rooms/${roomId}/mfd`))?.strategy?.mfdV2?.ready).toBe(false))
-    await assertFails(set(ref(engineer.io.database, `${path}/orders/unready`), { ...base, orderId: 'unready', plan: { method: 'mfd-v2', mfdV2: valid } }))
+    await assertSucceeds(set(ref(engineer.io.database, `${path}/orders/preset`), { ...base, orderId: 'preset', plan: { method: 'mfd-v3', mfdV3: { operation: 'preset', pitStrategy: 30 } } }))
+    await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'runtime', strategy: { applicationMethods: ['standard', 'mfd-v3'], mfdV3: { ready: false, reason: 'calibrate', driverCount: 1 } } })
+    await vi.waitFor(async () => expect((await engineer.io.read<any>(`rooms/${roomId}/mfd`))?.strategy?.mfdV3?.ready).toBe(false))
+    await assertFails(set(ref(engineer.io.database, `${path}/orders/unready`), { ...base, orderId: 'unready', plan: { method: 'mfd-v3', mfdV3: valid } }))
   })
-  it('requires V2 capability and freezes its full payload after dispatch', async () => {
+  it('requires V3 capability and freezes its full payload after dispatch', async () => {
     const { driver, engineer, roomId } = await openRoom()
     await vi.waitFor(() => expect(engineer.sendReadiness(roomId).ready).toBe(true))
-    const dedicated = { method: 'mfd-v2', mfdV2: { operation: 'strategy', fuelLiters: 15, changeTyres: true, compound: 'dry', tyreSet: 4,
-      pressures: { FL: 26.6, FR: 26.6, RL: 26.6, RR: 26.6 }, driverId: 1, repairBodywork: true, repairSuspension: false, brakes: false } }
+    const dedicated = { method: 'mfd-v3', mfdV3: { operation: 'strategy', fuelLiters: 15, changeTyres: true, compound: 'dry', tyreSet: 4,
+      pressures: { FL: 26.6, FR: 26.6, RL: 26.6, RR: 26.6 },  repairBodywork: true, repairSuspension: false, brakes: false } }
     expect((await engineer.sendOrder(roomId, { plan: dedicated, revision: 1 })).ok).toBe(false)
-    await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'runtime', strategy: { fuelToAdd: 25, applicationMethods: ['standard', 'mfd-v2'], mfdV2: { ready: true, reason: null, driverCount: 2 } } })
+    await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'runtime', strategy: { fuelToAdd: 25, applicationMethods: ['standard', 'mfd-v3'], mfdV3: { ready: true, reason: null, driverCount: 1 } } })
     const path = `pitwallV3/rooms/${roomId}`
-    await vi.waitFor(async () => expect((await get(ref(driver.io.database, `${path}/mfd/strategy/applicationMethods`))).val()).toContain('mfd-v2'))
-    await vi.waitFor(async () => expect((await engineer.io.read<any>(`rooms/${roomId}/mfd`))?.strategy?.mfdV2?.ready).toBe(true))
+    await vi.waitFor(async () => expect((await get(ref(driver.io.database, `${path}/mfd/strategy/applicationMethods`))).val()).toContain('mfd-v3'))
+    await vi.waitFor(async () => expect((await engineer.io.read<any>(`rooms/${roomId}/mfd`))?.strategy?.mfdV3?.ready).toBe(true))
     const sent = await engineer.sendOrder(roomId, { plan: dedicated, revision: 2 })
     if (!sent.ok) throw new Error(sent.reason)
     expect((await driver.claimOrder(roomId, sent.value)).ok).toBe(true)
     const orderRef = ref(driver.io.database, `${path}/orders/${sent.value}`)
     const original = (await get(orderRef)).val()
     await assertFails(set(orderRef, { ...original, status: 'applied', plan: { ...dedicated, method: 'standard' } }))
-    await assertFails(set(orderRef, { ...original, status: 'applied', plan: { ...dedicated, mfdV2: { ...dedicated.mfdV2, fuelLiters: 16 } } }))
+    await assertFails(set(orderRef, { ...original, status: 'applied', plan: { ...dedicated, mfdV3: { ...dedicated.mfdV3, fuelLiters: 16 } } }))
     await assertFails(set(orderRef, { ...original, status: 'applied', plan: {} }))
-    expect((await driver.publishOutcome(roomId, sent.value, { status: 'applied', method: 'mfd-v2' })).ok).toBe(true)
-    expect((await get(orderRef)).val().result.method).toBe('mfd-v2')
+    expect((await driver.publishOutcome(roomId, sent.value, { status: 'applied', method: 'mfd-v3' })).ok).toBe(true)
+    expect((await get(orderRef)).val().result.method).toBe('mfd-v3')
   })
   it('desktop engineer without ACC survives driver startup and sends once to the remote pilot', async () => {
     const { driver, engineer, roomId } = await openRoom()

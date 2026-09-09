@@ -86,7 +86,7 @@ export function boundPitwallTyreCondition(value: unknown): PitwallTyreCondition 
 
 export interface PitwallStrategySnapshot {
   applicationMethods?: string[]
-  mfdV2?: { ready: boolean, reason: string | null, driverCount: number }
+  mfdV3?: { ready: boolean, reason: string | null, driverCount: number }
   fuelToAdd: number | null
   tyreSet: number | null
   /** Numero 1–50 del treno montato, distinto dal candidato MFD in base zero. */
@@ -220,7 +220,7 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
     compound?: unknown
     verifiedFields?: unknown
     applicationMethods?: unknown
-    mfdV2?: PitwallStrategySnapshot['mfdV2']
+    mfdV3?: PitwallStrategySnapshot['mfdV3']
   }
   const wheels = ['FL', 'FR', 'RL', 'RR'] as const
   // `Number(null)` vale 0: un valore assente non deve diventare un numero.
@@ -234,8 +234,8 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
     : null
   return {
     fuelToAdd: finiteOrNull(source.fuelToAdd),
-    ...(Array.isArray(source.applicationMethods) && source.applicationMethods.includes('mfd-v2') ? { applicationMethods: ['standard', 'mfd-v2'] } : {}),
-    ...(source.mfdV2 ? { mfdV2: { ready: source.mfdV2.ready === true, reason: typeof source.mfdV2.reason === 'string' ? source.mfdV2.reason.slice(0, 200) : null, driverCount: Number.isInteger(source.mfdV2.driverCount) ? Math.max(0, Math.min(16, source.mfdV2.driverCount)) : 0 } } : {}),
+    ...(Array.isArray(source.applicationMethods) && source.applicationMethods.includes('mfd-v3') ? { applicationMethods: ['standard', 'mfd-v3'] } : {}),
+    ...(source.mfdV3 ? { mfdV3: { ready: source.mfdV3.ready === true, reason: typeof source.mfdV3.reason === 'string' ? source.mfdV3.reason.slice(0, 200) : null, driverCount: Number.isInteger(source.mfdV3.driverCount) ? Math.max(0, Math.min(16, source.mfdV3.driverCount)) : 0 } } : {}),
     tyreSet: finiteOrNull(source.tyreSet),
     ...(source.tyreSetCondition ? { tyreSetCondition: boundPitwallTyreCondition(source.tyreSetCondition) } : {}),
     ...(typeof source.fittedTyreSet === 'number' && Number.isInteger(source.fittedTyreSet) && source.fittedTyreSet >= 1 && source.fittedTyreSet <= 50

@@ -47,11 +47,11 @@ export function createPitwallRealtimeOrders(options: {
       const senderConnectionId = session.connectionId()
       const readiness = sendReadiness(roomId)
       if (!readiness.ready || !target) throw new Error(readiness.reason || 'Pilota non disponibile.')
-      if (input.plan.method === 'acc-drive-7.8.1') throw new Error('Metodo ACC Drive dismesso.')
-      if (input.plan.method === 'mfd-v2') {
-        const mfd = await io.read<{ uid: string, connectionId: string, strategy?: { applicationMethods?: string[], mfdV2?: { ready: boolean } } }>(`rooms/${roomId}/mfd`)
-        if (mfd?.uid !== target.uid || mfd.connectionId !== target.connectionId || !mfd.strategy?.applicationMethods?.includes('mfd-v2') || mfd.strategy?.mfdV2?.ready !== true) {
-          throw new Error('Il PC del pilota non ha confermato la disponibilità V2.')
+      if (['acc-drive-7.8.1', 'mfd-v2'].includes(String(input.plan.method))) throw new Error('Metodo ACC Drive dismesso.')
+      if (input.plan.method === 'mfd-v3') {
+        const mfd = await io.read<{ uid: string, connectionId: string, strategy?: { applicationMethods?: string[], mfdV3?: { ready: boolean } } }>(`rooms/${roomId}/mfd`)
+        if (mfd?.uid !== target.uid || mfd.connectionId !== target.connectionId || !mfd.strategy?.applicationMethods?.includes('mfd-v3') || mfd.strategy?.mfdV3?.ready !== true) {
+          throw new Error('Il PC del pilota non ha confermato la disponibilità V3.')
         }
       }
       const base = buildPitwallRoomOrder({ orderId, revision: input.revision, senderId: uid, plan: input.plan,
@@ -155,7 +155,7 @@ export function createPitwallRealtimeOrders(options: {
       if (terminal(order)) return { ok: true, value: true }
       if (order.status !== 'applying' || order.claimedBy !== uid) throw new Error('Esito non appartenente a questo esecutore.')
       const completed = { ...order, status: outcome.status, appliedAt: new Date(io.serverNow()).toISOString(), result: { reason: outcome.reason ?? null, fields: outcome.fields ?? {}, ...(boundPitwallTyreCondition(outcome.tyreSetCondition) ? { tyreSetCondition: boundPitwallTyreCondition(outcome.tyreSetCondition) } : {}),
-        ...(outcome.method === 'mfd-v2' ? { method: outcome.method } : {}),
+        ...(['mfd-v2', 'mfd-v3'].includes(outcome.method ?? '') ? { method: outcome.method } : {}),
         ...(outcome.method === 'acc-drive-7.8.1' ? { method: outcome.method, sourceStatus: outcome.sourceStatus ?? null, events: outcome.events ?? [], selectedDriverId: outcome.selectedDriverId ?? null } : {}) } }
       const claim = await io.read<RealtimeClaim>(controlPath(roomId))
       const changes: Record<string, unknown> = { [`orders/${orderId}`]: completed }

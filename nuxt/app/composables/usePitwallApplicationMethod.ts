@@ -1,5 +1,5 @@
 import { inject, provide, reactive, ref, type InjectionKey } from 'vue'
-export const MFD_V2_METHOD = 'mfd-v2'
+export const MFD_V3_METHOD = 'mfd-v3'
 export function createPitwallApplicationMethod() {
   return { method: ref('standard'), initialized: ref(false), draft: reactive({
     fuelLiters: null as number | null, changeTyres: null as boolean | null,

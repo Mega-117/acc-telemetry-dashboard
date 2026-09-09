@@ -3,7 +3,7 @@ defineProps<{ label: string, modelValue: boolean | null }>()
 defineEmits<{ 'update:modelValue': [value: boolean] }>()
 </script>
 <template>
-  <label class="v2-choice">
+  <label class="v3-choice">
     <span>{{ label }}</span>
     <span class="choice-control">
       <span
@@ -26,7 +26,7 @@ defineEmits<{ 'update:modelValue': [value: boolean] }>()
   </label>
 </template>
 <style scoped>
-.v2-choice, .choice-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.v3-choice, .choice-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .choice-control { min-width: 150px; justify-content: flex-end; }
 input { accent-color: #ee5b22; }
 button { color: inherit; background: #101820; border: 1px solid #3b4752; border-radius: 6px; padding: 4px 10px; }
