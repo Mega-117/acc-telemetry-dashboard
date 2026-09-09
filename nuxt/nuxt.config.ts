@@ -1,9 +1,15 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 
 // Determina baseURL: '/' per dev locale, path completo per produzione
 const isDev = process.env.NODE_ENV === 'development'
 const baseURL = isDev ? '/' : '/acc-telemetry-dashboard/docs/'
+// The source ICO is mirrored from the suite root; its hash invalidates browser caches.
+const iconRevision = createHash('sha256')
+  .update(readFileSync(new URL('./public/favicon.ico', import.meta.url)))
+  .digest('hex').slice(0, 12)
 // In dev usa _nuxt default, in production usa assets
 const buildAssetsDir = isDev ? '/_nuxt/' : '/assets/'
 const ignoredRuntimePaths = ['**/.tmp_edge_profile/**', '**/.tmp_edge_profile', '**/dist/**', '**/dist']
@@ -105,6 +111,7 @@ export default defineNuxtConfig({
         }
       ],
       link: [
+        { rel: 'icon', type: 'image/x-icon', href: `${baseURL}favicon.ico?v=${iconRevision}` },
         // Google Fonts: Inter + Outfit
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
