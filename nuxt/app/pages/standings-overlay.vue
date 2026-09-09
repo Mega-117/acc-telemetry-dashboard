@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted } from 'vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import StandingsHud from '~/components/overlay/StandingsHud.vue'
 import { useHudOverlay } from '~/composables/useHudOverlay'
@@ -75,14 +75,11 @@ const canvasStyle = computed(() => ({
 
 onMounted(async () => {
   overlay.start(route.query.scale)
-  const firstFastState = fastState.startFastStatePolling()
+  void fastState.startFastStatePolling()
   overlay.startInteractionSurface()
   await overlay.loadSettings()
   standings.start()
-  await firstFastState
-  await nextTick()
-  await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
-  await getApi()?.hudOverlayContentReady?.('standings')
+  await overlay.notifyContentReady()
 })
 onUnmounted(() => {
   standingsHighlights.stop()
@@ -99,6 +96,9 @@ onUnmounted(() => {
       class="overlay-canvas"
       :style="canvasStyle"
     >
+      <div v-if="!model.visible" class="standings-empty" role="status">
+        In attesa dei dati della sessione
+      </div>
       <StandingsHud
         :model="model"
         :background-opacity="backgroundOpacity"
@@ -107,6 +107,7 @@ onUnmounted(() => {
   </main>
 </template>
 <style scoped>
+.standings-empty{margin:0 8px 0 0;padding:16px;border-radius:8px;background:rgba(12,16,22,.85);color:#b9c5d6;font-size:14px;text-align:center}
 :global(html),:global(body),:global(#__nuxt){margin:0;width:100%;height:100%;overflow:hidden;background:transparent!important}
 .overlay-root{position:relative;width:100%;height:100%;overflow:hidden;background:transparent;-webkit-app-region:drag;user-select:none}
 .overlay-canvas{position:absolute;left:0;top:0;transform-origin:top left;-webkit-app-region:drag}

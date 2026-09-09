@@ -74,7 +74,7 @@ describe('App protected runtime route contract', () => {
     )
 
     expect(appSource).toContain('watch([authLoading, authSessionStatus]')
-    expect(appSource).toContain('applyAuthSessionToShell(status, initial)')
+    expect(appSource).toContain('applyAuthSessionToShell(status)')
     expect(appSource).toContain('publishAuthStartupOutcome(outcome)')
     expect(appSource).not.toContain('handleLoginSuccess = (email: string, emailVerified: boolean)')
     expect(overlaySource).not.toContain('!!result.user?.emailVerified')

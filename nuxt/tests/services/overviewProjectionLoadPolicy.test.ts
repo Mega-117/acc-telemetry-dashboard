@@ -32,8 +32,10 @@ describe('PanoramicaPage cloud boundary', () => {
       'utf8'
     )
 
-    expect(source).toContain('loadOverviewProjectionRecoverably')
-    expect(source).toContain("result.status === 'ready'")
+    expect(source).toContain('useOverviewProjection')
+    const loader = readFileSync(fileURLToPath(new URL('../../app/composables/useOverviewProjection.ts', import.meta.url)), 'utf8')
+    expect(loader).toContain('loadOverviewProjectionRecoverably')
+    expect(loader).toContain("result.status === 'ready'")
     expect(source).not.toContain(
       'const projection = await telemetryGateway.getOverviewProjection'
     )

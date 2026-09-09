@@ -102,11 +102,12 @@ watch(variant, (nextVariant) => {
   }
 })
 
-onMounted(() => {
+onMounted(async () => {
   startFastStatePolling()
   start(route.query.scale)
   startInteractionSurface()
-  loadSettings()
+  await loadSettings()
+  await overlay.notifyContentReady()
 })
 
 onBeforeUnmount(() => {

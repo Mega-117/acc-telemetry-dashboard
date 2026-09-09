@@ -13,7 +13,9 @@ const transports: PitwallRealtimeTransport[] = []
 function db(uid: string) { return env.authenticatedContext(uid).database() as unknown as Database }
 beforeAll(async () => {
   if (!process.env.FIREBASE_DATABASE_EMULATOR_HOST) throw new Error('Run only through firebase emulators:exec --only database --project demo-pitwall-audit')
-  env = await initializeTestEnvironment({ projectId: PROJECT, database: { host: '127.0.0.1', port: 9000,
+  const emulator = new URL('http://' + process.env.FIREBASE_DATABASE_EMULATOR_HOST)
+  if (!['127.0.0.1', 'localhost'].includes(emulator.hostname)) throw new Error('Local emulator only')
+  env = await initializeTestEnvironment({ projectId: PROJECT, database: { host: emulator.hostname, port: Number(emulator.port),
     rules: readFileSync(new URL('../../../database.rules.json', import.meta.url), 'utf8') } })
 })
 beforeEach(async () => { await env.clearDatabase() })

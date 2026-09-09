@@ -62,6 +62,7 @@ const {
   scale,
   settings,
   loadSettings,
+  notifyContentReady,
   start,
   stop,
   startInteractionSurface,
@@ -226,6 +227,7 @@ onMounted(async () => {
       returnToLive()
     }
   }
+  await notifyContentReady()
 })
 
 onBeforeUnmount(() => {

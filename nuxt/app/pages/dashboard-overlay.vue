@@ -42,6 +42,7 @@ onMounted(async () => {
   overlay.startInteractionSurface()
   await overlay.loadSettings()
   telemetry.startFastStatePolling()
+  await overlay.notifyContentReady()
 })
 onUnmounted(() => {
   telemetry.stopFastStatePolling()

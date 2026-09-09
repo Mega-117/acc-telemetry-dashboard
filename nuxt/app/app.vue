@@ -311,7 +311,7 @@ watch(authSessionStatus, (status) => {
   })
 }, { immediate: true })
 
-const enterDashboard = (delayMs = 0) => {
+const enterDashboard = () => {
   const startDashboard = () => {
     if (!canEnterApp.value || !currentUser.value) {
       showEmailVerificationGate()
@@ -329,16 +329,10 @@ const enterDashboard = (delayMs = 0) => {
     }
   }
 
-  if (delayMs > 0) {
-    appState.value = 'loading'
-    setTimeout(startDashboard, delayMs)
-    return
-  }
-
   startDashboard()
 }
 
-const applyAuthSessionToShell = (status: AuthSessionStatus, initial: boolean) => {
+const applyAuthSessionToShell = (status: AuthSessionStatus) => {
   if (status === 'initializing' || status === 'recoverable') {
     appState.value = 'loading'
     stopListening()
@@ -364,7 +358,7 @@ const applyAuthSessionToShell = (status: AuthSessionStatus, initial: boolean) =>
     return
   }
 
-  enterDashboard(initial ? 0 : 1000)
+  enterDashboard()
 }
 
 // A single canonical auth status owns initial bootstrap and later transitions.
@@ -375,9 +369,8 @@ watch([authLoading, authSessionStatus], ([loading, status]) => {
   }
 
   if (loading) return
-  const initial = !hasInitialized.value
   hasInitialized.value = true
-  applyAuthSessionToShell(status, initial)
+  applyAuthSessionToShell(status)
 }, { immediate: true })
 
 // === HANDLERS ===
@@ -392,12 +385,12 @@ const handleRegisterSuccess = (email: string) => {
     return
   }
 
-  enterDashboard(1500)
+  enterDashboard()
 }
 
 const handleGoToDashboard = () => {
   // Called when user clicks "Ho confermato l'email" and verification passed
-  enterDashboard(1500)
+  enterDashboard()
 }
 
 const handleResendEmail = () => {

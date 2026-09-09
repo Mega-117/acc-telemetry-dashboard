@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
   classifyPersistedAuthError,
+  refreshUserCredentials,
   refreshPersistedAuthSession,
   toAuthStartupOutcome,
 } from '~/services/auth/authSessionPolicy'
@@ -87,4 +88,28 @@ describe('auth session policy', () => {
     expect(toAuthStartupOutcome('signed-out')).toBe('login-required')
     expect(toAuthStartupOutcome('unverified')).toBe('verification-required')
   })
+})
+
+it('condivide reload/token concorrenti ma non conserva un successo', async () => {
+  let finish!: () => void
+  const persisted = user({ reload: vi.fn(() => new Promise<void>(resolve => { finish = resolve })) })
+  const a = refreshUserCredentials(persisted)
+  const b = refreshUserCredentials(persisted)
+  expect(a).toBe(b)
+  finish()
+  await a
+  expect(persisted.reload).toHaveBeenCalledTimes(1)
+  expect(persisted.getIdToken).toHaveBeenCalledTimes(1)
+  const c = refreshUserCredentials(persisted)
+  finish()
+  await c
+  expect(persisted.reload).toHaveBeenCalledTimes(2)
+})
+
+it('una vecchia sessione invalida non esegue signOut della nuova, anche a stesso UID', async () => {
+  const oldUser = user({ reload: vi.fn().mockRejectedValue({ code: 'auth/invalid-user-token' }) })
+  const newUser = user()
+  const signOut = vi.fn()
+  await refreshPersistedAuthSession(oldUser, { getCurrentUser: () => newUser, signOut })
+  expect(signOut).not.toHaveBeenCalled()
 })

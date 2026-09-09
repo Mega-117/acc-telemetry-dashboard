@@ -9,6 +9,7 @@ import {
     type User
 } from 'firebase/auth'
 import { auth } from '~/config/firebaseAuth'
+import { refreshUserCredentials } from './authSessionPolicy'
 import { createInitialUserDocument } from './userProvisioningService'
 
 // Con la protezione anti-enumerazione attiva sul progetto - `accsuite117` la usa -
@@ -91,8 +92,7 @@ export async function loginWithEmail(email: string, password: string) {
     // emailVerified reflect a verification completed in another session.
     // Refresh the canonical Auth user before the UI decides which surface to
     // expose, otherwise a verified user can remain trapped in the email gate.
-    await userCredential.user.reload()
-    await userCredential.user.getIdToken(true)
+    await refreshUserCredentials(userCredential.user)
     return { user: auth.currentUser ?? userCredential.user }
 }
 

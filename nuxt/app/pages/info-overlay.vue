@@ -65,6 +65,7 @@ onMounted(async () => {
     resizeObserver.observe(canvasElement.value)
   }
   await syncInfoViewport()
+  await overlay.notifyContentReady()
 })
 
 onUnmounted(() => {

@@ -74,6 +74,8 @@ export default defineConfig({
         'app/utils/emailDomainHint.ts',
         'app/services/auth/authService.ts',
         'app/services/auth/authSessionPolicy.ts',
+        'app/services/auth/authTransitionQueue.ts',
+        'app/composables/useOverviewProjection.ts',
         'app/services/auth/authSessionRecoveryCoordinator.ts',
         'app/services/auth/authRevisionLease.ts',
         'app/services/auth/retryableSingleFlightLoader.ts',
