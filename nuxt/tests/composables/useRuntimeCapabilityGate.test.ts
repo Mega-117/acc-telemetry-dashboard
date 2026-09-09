@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest'
-import { createRuntimeCapabilityStore } from '~/composables/useRuntimeCapabilityGate'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createRuntimeCapabilityStore, useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
 
 const readySnapshot = {
   schemaVersion: 1 as const,
@@ -58,5 +58,53 @@ describe('useRuntimeCapabilityGate store', () => {
     expect(unsubscribe).not.toHaveBeenCalled()
     releaseB()
     expect(unsubscribe).toHaveBeenCalledTimes(1)
+  })
+})
+
+
+describe('runtime bridge used by a hosted frontend', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('uses the injected Electron API and releases the shared subscription', async () => {
+    const unsubscribe = vi.fn()
+    const api = {
+      runtimeBootstrapRole: 'consumer' as const,
+      getRuntimeBootstrapState: vi.fn().mockResolvedValue(readySnapshot),
+      onRuntimeBootstrapState: vi.fn(() => unsubscribe),
+    }
+    vi.stubGlobal('window', { electronAPI: api })
+    const runtime = useRuntimeCapabilityGate()
+    const release = runtime.connect()
+    try {
+      await Promise.resolve()
+      expect(runtime.source.value).toBe('electron')
+      expect(runtime.gate('sync').value.allowed).toBe(true)
+      expect(api.getRuntimeBootstrapState).toHaveBeenCalledOnce()
+    } finally { release() }
+    expect(unsubscribe).toHaveBeenCalledOnce()
+    expect(runtime.snapshot.value).toBeNull()
+  })
+
+  it('clears a consumer snapshot when its initial bridge request fails', async () => {
+    const store = createRuntimeCapabilityStore()
+    const release = store.connect({
+      runtimeBootstrapRole: 'consumer',
+      getRuntimeBootstrapState: vi.fn().mockRejectedValue(new Error('IPC unavailable')),
+      onRuntimeBootstrapState: callback => { callback(readySnapshot); return () => {} },
+    })
+    try {
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(store.source.value).toBe('electron')
+      expect(store.snapshot.value).toBeNull()
+      expect(store.gate('sync').value.allowed).toBe(false)
+    } finally { release() }
+  })
+
+  it('loads as a browser consumer without requiring an Electron bridge', () => {
+    vi.stubGlobal('window', {})
+    const runtime = useRuntimeCapabilityGate()
+    const release = runtime.connect()
+    try { expect(runtime.source.value).toBe('browser') } finally { release() }
   })
 })

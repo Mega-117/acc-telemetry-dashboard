@@ -70,6 +70,8 @@ describe('useOverlayTelemetrySource', () => {
     await Promise.resolve()
     await Promise.resolve()
 
+    expect(telemetry.focusedCar.value).toMatchObject({ car_index: 1024, kmh: 181 })
+    expect(telemetry.sectorHud.value).toMatchObject({ version: 1, mode: 'running', lap: 2 })
     expect(api.getFastState).toHaveBeenCalledOnce()
     expect(api.getFocusedCarState).toHaveBeenCalledOnce()
     expect(telemetry.source.value).toBe('focused')
