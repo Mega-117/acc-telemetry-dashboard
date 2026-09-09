@@ -1,1 +1,0 @@
-import{aV as r,bQ as o,cv as s,a2 as u,bI as a}from"./nf-zhLWt.js";const n=Symbol("pilotContext");function c(e){const t=o(e);return a(n,t),t}function i(){return r(n,o(null))}function p(){const{currentUser:e}=s(),t=i();return u(()=>t.value||e.value?.uid||null)}export{p as a,c as p,i as u};

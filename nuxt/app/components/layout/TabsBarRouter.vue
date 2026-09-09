@@ -21,7 +21,7 @@ const canAccessHud = canAccess('hud')
 const { pendingNoticeCount: pitwallPending } = usePitwallStore()
 
 const baseTabs = [
-  { id: 'panoramica', label: 'PANORAMICA', to: '/panoramica' },
+  { id: 'panoramica', label: 'PANORAMICA pippo', to: '/panoramica' },
   { id: 'sessioni', label: 'SESSIONI', to: '/sessioni' },
   { id: 'piste', label: 'PISTE', to: '/piste' },
   { id: 'pitwall', label: 'PITWALL', to: '/pitwall' },
