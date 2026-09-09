@@ -1,0 +1,1 @@
+import{ah as c,cv as l,at as m,be as i}from"./nf-zhLWt.js";const h=c(async()=>{let e,a;const{isAuthenticated:o,userRole:r,isLoading:n}=l();let t=0;for(;n.value&&t<100;)[e,a]=m(()=>new Promise(u=>setTimeout(u,50))),await e,a(),t++;if(!o.value)return i("/");const s=r.value;if(s!=="coach"&&s!=="admin")return i("/panoramica")});export{h as default};

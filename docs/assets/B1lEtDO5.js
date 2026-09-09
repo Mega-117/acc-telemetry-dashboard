@@ -1,1 +1,0 @@
-import{af as a,cG as o,bl as t,bp as n,a7 as r,a3 as c,A as _}from"./CvofYMNx.js";const p={class:"redirect-screen"},d=a({__name:"[...slug]",setup(l){const s=o();return t(()=>{s.replace("/panoramica")}),(u,e)=>(n(),r("div",p,[...e[0]||(e[0]=[c("p",null,"Reindirizzamento...",-1)])]))}}),m=_(d,[["__scopeId","data-v-d9cd5707"]]);export{m as default};
