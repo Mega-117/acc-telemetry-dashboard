@@ -6,8 +6,28 @@ import { parse } from 'yaml'
 const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.meta.url)), 'utf8')
 const ci = parse(read('../../../.github/workflows/ci.yml'))
 const pages = parse(read('../../../.github/workflows/static.yml'))
+const cloudflare = parse(read('../../../.github/workflows/cloudflare.yml'))
 
 describe('CI publication contract', () => {
+  it('routes only verified develop pushes to Cloudflare without running generate', () => {
+    expect(ci.on.push.branches).toContain('develop')
+    expect(ci.on.pull_request.branches).toContain('develop')
+    expect(ci.jobs.cloudflare.needs).toEqual(['fe-test', 'python-test'])
+    expect(ci.jobs.cloudflare.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/develop'")
+    expect(ci.jobs.cloudflare.uses).toBe('./.github/workflows/cloudflare.yml')
+    expect(Object.keys(cloudflare.on)).toEqual(['workflow_call'])
+    expect(cloudflare.jobs.deploy.if).toBe(ci.jobs.cloudflare.if)
+    expect(cloudflare.jobs.deploy.steps[0].with.ref).toBe('${{ github.sha }}')
+    expect(cloudflare.concurrency).toEqual({ group: 'cloudflare-develop', 'cancel-in-progress': false })
+    expect(ci.concurrency['cancel-in-progress']).toBe(false)
+    const commands = cloudflare.jobs.deploy.steps.map((s: { run?: string }) => s.run ?? '').join('\n')
+    expect(commands).toContain('cloudflare-package.mjs')
+    expect(commands).toContain('wrangler@4.130.0 pages deploy')
+    expect(commands).toContain('--branch develop --commit-hash "$GITHUB_SHA"')
+    expect(commands).not.toMatch(/npm run (generate|build)|nuxt generate/)
+    expect(cloudflare.jobs.deploy['continue-on-error']).toBeUndefined()
+    for (const step of cloudflare.jobs.deploy.steps) expect(step['continue-on-error']).toBeUndefined()
+  })
   it('installs the pinned emulator CLI with npm ci and provisions its Java prerequisite', () => {
     const pkg = JSON.parse(read('../../package.json'))
     const lock = JSON.parse(read('../../package-lock.json'))
