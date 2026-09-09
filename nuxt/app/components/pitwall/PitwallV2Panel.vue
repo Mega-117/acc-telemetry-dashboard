@@ -5,6 +5,7 @@ import { MFD_V2_METHOD, usePitwallApplicationMethod } from '~/composables/usePit
 import type { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { canUseDevTools } from '~/utils/devToolsAccess'
 import { boundPitwallStrategy } from '~/services/pitwall/pitwallLink'
+import V2Choice from './PitwallV2Choice.vue'
 const props = defineProps<{ port?: ReturnType<typeof usePitwallRoom> }>()
 const { method, draft, initialized } = usePitwallApplicationMethod()
 const { isAdmin } = useFirebaseAuth()
@@ -19,11 +20,36 @@ const integer = (v: unknown, min: number, max: number) => typeof v === 'number' 
 const driverRequired = computed(() => (snapshot.value?.strategy?.mfdV2?.driverCount ?? 0) > 0)
 const validDriver = computed(() => !driverRequired.value || snapshot.value?.crew?.some(d => d.driverIndex === draft.driverId))
 const mounted = computed(() => draft.changeTyres && draft.compound === 'dry' && draft.tyreSet === snapshot.value?.strategy?.fittedTyreSet)
-const complete = computed(() => integer(draft.fuelLiters, 0, 140) && switches.every(f => typeof draft[f.key] === 'boolean')
-  && !(draft.repairSuspension && !draft.repairBodywork) && validDriver.value && !mounted.value
-  && (!draft.brakes || integer(draft.brakeFront, 1, 4) && integer(draft.brakeRear, 1, 4))
-  && (!draft.changeTyres || ['dry', 'wet'].includes(draft.compound ?? '') && (draft.compound === 'wet' || integer(draft.tyreSet, 1, 50))
-    && wheels.every(w => typeof draft.pressures[w] === 'number' && draft.pressures[w]! >= 20.3 && draft.pressures[w]! <= 35)))
+const missing = computed(() => {
+  const fields: string[] = []
+  if (!integer(draft.fuelLiters, 0, 140)) fields.push('carburante (0–140 L)')
+  for (const f of switches) if (typeof draft[f.key] !== 'boolean') fields.push(f.label.toLowerCase())
+  if (draft.repairSuspension && !draft.repairBodywork) fields.push('carrozzeria richiesta con le sospensioni')
+  if (!validDriver.value) fields.push('pilota dell’equipaggio')
+  if (mounted.value) fields.push('un set diverso da quello montato')
+  if (draft.brakes) for (const k of ['brakeFront', 'brakeRear'] as const) {
+    if (!integer(draft[k], 1, 4)) fields.push(k === 'brakeFront' ? 'pastiglie anteriori (1–4)' : 'pastiglie posteriori (1–4)')
+  }
+  if (draft.changeTyres) {
+    if (!['dry', 'wet'].includes(draft.compound ?? '')) fields.push('mescola')
+    if (draft.compound === 'dry' && !integer(draft.tyreSet, 1, 50)) fields.push('set pneumatici (1–50)')
+    for (const w of wheels) {
+      const v = draft.pressures[w]
+      if (typeof v !== 'number' || v < 20.3 || v > 35 || !Number.isFinite(v) || Math.abs(v * 10 - Math.round(v * 10)) > 1e-6) fields.push(`pressione ${w} (20,3–35 PSI, passi di 0,1)`)
+    }
+  }
+  return fields
+})
+const transportBlock = computed(() => {
+  if (busy.value) return 'Ordine in corso: attendi l’esito prima di inviarne un altro.'
+  if (calibrating.value) return 'Calibrazione locale in corso.'
+  if (!props.port?.canSend.value) return props.port?.sendReadiness?.value.reason || props.port?.executorLabel?.value || 'Seleziona una gara con un solo pilota connesso e disponibile.'
+  if (!capable.value) return 'Il PC del pilota non annuncia V2: avvia il runtime della Suite aggiornato sul suo PC.'
+  if (!ready.value) return snapshot.value?.strategy?.mfdV2?.reason || 'Calibrazione V2 richiesta sul PC del pilota.'
+  return null
+})
+const sendBlock = computed(() => transportBlock.value || (missing.value.length ? `Completa: ${missing.value.join(', ')}.` : null))
+const sendMessage = ref<string | null>(null)
 function loadLive() {
   const car = snapshot.value?.strategy
   if (!car) return
@@ -42,15 +68,15 @@ watch([method, snapshot], () => {
   if (props.port) props.port.draftSuspended.value = method.value === MFD_V2_METHOD
   if (method.value === MFD_V2_METHOD && !initialized.value && snapshot.value?.strategy) { loadLive(); initialized.value = true }
 }, { immediate: true })
-function setSwitch(key: typeof switches[number]['key'], event: Event) {
-  const raw = (event.target as HTMLSelectElement).value
-  const value = raw === '' ? null : raw === 'true'
+function setSwitch(key: typeof switches[number]['key'], value: boolean) {
   draft[key] = value
   if (key === 'repairSuspension' && value === true) draft.repairBodywork = true
   if (key === 'repairBodywork' && value === false) draft.repairSuspension = false
 }
 async function send(preset = false) {
-  if (!ready.value || busy.value || !props.port?.canSend.value || (preset ? !integer(draft.pitStrategy, 1, 30) : !complete.value)) return
+  const blocked = preset ? transportBlock.value || (!integer(draft.pitStrategy, 1, 30) ? 'Scegli un preset da 1 a 30.' : null) : sendBlock.value
+  if (blocked || !props.port) { sendMessage.value = blocked; return }
+  sendMessage.value = null
   const p: Record<string, unknown> = preset ? { operation: 'preset', pitStrategy: draft.pitStrategy } : {
     operation: 'strategy', fuelLiters: draft.fuelLiters, changeTyres: draft.changeTyres, brakes: draft.brakes,
     repairBodywork: draft.repairBodywork, repairSuspension: draft.repairSuspension,
@@ -58,7 +84,12 @@ async function send(preset = false) {
     ...(draft.brakes ? { brakeFront: draft.brakeFront, brakeRear: draft.brakeRear } : {}),
     ...(draft.changeTyres ? { compound: draft.compound, pressures: { ...draft.pressures }, ...(draft.compound === 'dry' ? { tyreSet: draft.tyreSet } : {}) } : {}),
   }
-  await props.port.sendPlan({ method: MFD_V2_METHOD, mfdV2: p })
+  try {
+    const sent = await props.port.sendPlan({ method: MFD_V2_METHOD, mfdV2: p })
+    if (!sent) sendMessage.value = props.port.orderReason.value || props.port.lastError?.value || 'Strategia non inviata. Controlla il collegamento con il pilota e riprova manualmente.'
+  } catch (error) {
+    sendMessage.value = error instanceof Error ? error.message : 'Invio non riuscito. Riprova manualmente.'
+  }
 }
 type Sample = { id: string, text: string, glyph: number[] }
 type CalibrationResult = { ok?: boolean, ready?: boolean, reason?: string, unmapped?: Sample[], crew?: { driverIndex: number, name: string }[] }
@@ -105,6 +136,21 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
       <p role="status">
         {{ ready ? 'PC del pilota pronto per V2.' : snapshot?.strategy?.mfdV2?.reason || 'Supporto V2 del PC del pilota non confermato.' }}
       </p>
+      <div class="preset">
+        <label>Preset<input
+          v-model.number="draft.pitStrategy"
+          type="number"
+          min="1"
+          max="30"
+          :disabled="busy || calibrating"
+        /></label><p>Caricare un preset modifica in blocco il MFD. La bozza sottostante rimane invariata.</p><button
+          type="button"
+          :disabled="!!transportBlock || !integer(draft.pitStrategy, 1, 30)"
+          @click="send(true)"
+        >
+          Carica preset
+        </button>
+      </div>
       <form @submit.prevent="send()">
         <fieldset :disabled="busy || calibrating">
           <legend>Strategia completa V2</legend>
@@ -125,16 +171,11 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
             max="140"
             step="1"
           /></label>
-          <label
-            v-for="f in switches"
-            :key="f.key"
-          >{{ f.label }}<select
-            :value="draft[f.key] == null ? '' : String(draft[f.key])"
-            @change="setSwitch(f.key, $event)"
-          ><option
-            value=""
-            disabled
-          >Scegli…</option><option value="true">Sì</option><option value="false">No</option></select></label>
+          <V2Choice
+            label="Cambio gomme"
+            :model-value="draft.changeTyres"
+            @update:model-value="setSwitch('changeTyres', $event)"
+          />
           <label>Mescola<select
             v-model="draft.compound"
             :disabled="draft.changeTyres !== true"
@@ -166,6 +207,11 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
             step="0.1"
             :disabled="draft.changeTyres !== true"
           /></label>
+          <V2Choice
+            label="Sostituisci freni"
+            :model-value="draft.brakes"
+            @update:model-value="setSwitch('brakes', $event)"
+          />
           <label>Pastiglie anteriori<input
             v-model.number="draft.brakeFront"
             type="number"
@@ -173,6 +219,9 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
             max="4"
             :disabled="draft.brakes !== true"
           /></label>
+          <p class="source">
+            ↳ Ultimo riscontro a schermo: {{ snapshot?.strategy?.verifiedFields?.brakeFront?.observed ?? 'Sconosciuto' }}
+          </p>
           <label>Pastiglie posteriori<input
             v-model.number="draft.brakeRear"
             type="number"
@@ -180,6 +229,9 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
             max="4"
             :disabled="draft.brakes !== true"
           /></label>
+          <p class="source">
+            ↳ Ultimo riscontro a schermo: {{ snapshot?.strategy?.verifiedFields?.brakeRear?.observed ?? 'Sconosciuto' }}
+          </p>
           <label>Pilota<select
             v-model="draft.driverId"
             :disabled="!driverRequired"
@@ -191,29 +243,38 @@ const outcome = computed(() => props.port?.orderMethod.value === MFD_V2_METHOD ?
             :key="d.driverIndex"
             :value="d.driverIndex"
           >{{ d.name }}</option></select></label>
+          <V2Choice
+            label="Riparazione sospensioni"
+            :model-value="draft.repairSuspension"
+            @update:model-value="setSwitch('repairSuspension', $event)"
+          />
+          <V2Choice
+            label="Riparazione carrozzeria"
+            :model-value="draft.repairBodywork"
+            @update:model-value="setSwitch('repairBodywork', $event)"
+          />
         </fieldset>
+        <p
+          v-if="sendBlock"
+          id="v2-send-block"
+          role="status"
+        >
+          {{ sendBlock }}
+        </p>
         <button
           type="submit"
-          :disabled="!ready || !complete || busy || calibrating || !port?.canSend.value"
+          :disabled="!!sendBlock"
+          aria-describedby="v2-send-block"
         >
           Invia strategia V2
         </button>
       </form>
-      <div class="preset">
-        <label>Preset<input
-          v-model.number="draft.pitStrategy"
-          type="number"
-          min="1"
-          max="30"
-          :disabled="busy || calibrating"
-        /></label><p>Caricare un preset modifica in blocco il MFD. La bozza qui sopra rimane invariata.</p><button
-          type="button"
-          :disabled="!ready || busy || calibrating || !integer(draft.pitStrategy, 1, 30) || !port?.canSend.value"
-          @click="send(true)"
-        >
-          Carica preset
-        </button>
-      </div>
+      <p
+        v-if="sendMessage"
+        role="alert"
+      >
+        {{ sendMessage }}
+      </p>
       <p
         v-if="outcome"
         role="status"
