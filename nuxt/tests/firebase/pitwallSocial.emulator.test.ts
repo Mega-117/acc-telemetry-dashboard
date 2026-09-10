@@ -83,10 +83,11 @@ describe('social rooms with real Firebase rules', () => {
     })
     expect((await B.leaveRoom(id)).ok).toBe(true)
     await vi.waitFor(() => expect(members).toEqual(['A', 'C']))
-    expect(await C.readRoom(id)).toMatchObject({ label: 'Stable party', memberUids: ['A', 'C'] })
+    // Membership and occupancy arrive on separate SDK subscriptions; await this projection too.
+    await vi.waitFor(async () => expect(await C.readRoom(id)).toMatchObject({ label: 'Stable party', memberUids: ['A', 'C'] }))
     expect((await C.leaveRoom(id)).ok).toBe(true)
     expect((await C.joinRoom(id)).ok).toBe(false)
-    expect(await A.readRoom(id)).toMatchObject({ memberUids: ['A'] })
+    await vi.waitFor(async () => expect(await A.readRoom(id)).toMatchObject({ memberUids: ['A'] }))
   })
 
   it('rediscovers the room through B after A logs out with a stale own directory', async () => {
