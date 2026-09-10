@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref } from 'vue'
+import { serialize } from 'node:v8'
 import { expect, it, vi } from 'vitest'
 import Panel from '~/components/pitwall/PitwallV4OnlinePanel.vue'
 import Application from '~/components/pitwall/PitwallApplicationPanel.vue'
@@ -47,6 +48,27 @@ it('Standard stays default and the method switch suspends its draft', async () =
   await w.findAll('button')[1]!.trigger('click'); expect(p.draftSuspended.value).toBe(true)
   p.sending.value = true; await flushPromises(); expect(w.findAll('button')[0]!.attributes('disabled')).toBeDefined()
   w.unmount()
+})
+it('publishes cloneable room, crew and draft data across the iframe boundary', async () => {
+  const p = port()
+  const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
+  const target = (w.get('iframe').element as HTMLIFrameElement).contentWindow!
+  // jsdom postMessage skips the browser structured-clone check. V8 serialization
+  // rejects nested proxies too, so the test exercises that real boundary constraint.
+  const post = vi.spyOn(target, 'postMessage').mockImplementation((value) => { serialize(value) })
+  try {
+    message(w, 'draft', { fuel: 0, tyres: false })
+    message(w, 'ready', null)
+    const snapshot = post.mock.calls.at(-1)![0].value
+    expect(snapshot.crew).toEqual(p.carSnapshot.value.crew)
+    expect(snapshot.draft).toEqual({ fuel: 0, tyres: false })
+    expect(snapshot.strategy.fuelToAdd).toBe(0)
+    p.carSnapshot.value.crew[0]!.name = 'Updated driver'
+    p.carSnapshot.value = { ...p.carSnapshot.value }
+    await flushPromises()
+    expect(post.mock.calls.at(-1)![0].value.crew[0].name).toBe('Updated driver')
+    expect(snapshot.crew[0].name).toBe('Enrico Saiani')
+  } finally { w.unmount() }
 })
 it('associates the local identity only after an explicit crew choice', async () => {
   const api = vi.fn(async () => ({ ok: true, key: 'crew-key', drivers: [{ driverIndex: 2, firstName: 'Enrico', lastName: 'Saiani' }] }))

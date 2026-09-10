@@ -28,11 +28,14 @@ const outcome = computed(() => props.port?.orderMethod.value === 'mfd-v4'
   ? [props.port.orderDiary?.value, props.port.orderReason.value, ...Object.entries(props.port.orderFields.value).map(([key, value]) => `${key}: ${JSON.stringify(value)}`)].filter(Boolean).join('\n') : '')
 function publish() {
   if (!frameReady.value) return
-  frame.value?.contentWindow?.postMessage({ channel: 'mfd-v4-online', type: 'snapshot', value: {
+  // The room and draft contain nested Vue proxies, which postMessage cannot clone.
+  // This boundary carries JSON data only, like the remote strategy contract.
+  const snapshot = { channel: 'mfd-v4-online', type: 'snapshot', value: {
     ready: !reason.value, reason: error.value || reason.value, busy: !!busy.value,
     contextId: car.value?.mfdV4?.contextId, strategy: car.value,
     crew: props.port?.carSnapshot.value?.crew || [], draft: v4Draft.value, outcome: outcome.value,
-  } }, '*')
+  } }
+  frame.value?.contentWindow?.postMessage(JSON.parse(JSON.stringify(snapshot)), '*')
 }
 async function message(event: MessageEvent) {
   if (!frame.value?.contentWindow || event.source !== frame.value.contentWindow || event.data?.channel !== 'mfd-v4-online') return
