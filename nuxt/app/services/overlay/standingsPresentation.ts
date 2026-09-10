@@ -421,7 +421,7 @@ export function selectFreshLocalClassCars(
     .sort((left, right) => Number(left.position) - Number(right.position) || left.car_index - right.car_index)
 }
 
-/** Build only the V2 cells backed by authoritative ACC Suite providers. */
+/** Build only the V2 cells backed by authoritative application providers. */
 export function buildStandingsPresentation(
   state: StandingsStateEnvelope | null | undefined,
   optionsInput: Partial<StandingsPresentationOptions> = {},

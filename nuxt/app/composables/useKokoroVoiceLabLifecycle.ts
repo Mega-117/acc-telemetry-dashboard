@@ -1,4 +1,5 @@
 import { useAppNotifications } from './useAppNotifications'
+import { PRODUCT } from '../../shared/productIdentity'
 import { useVoiceLabRuntime } from './useVoiceLabRuntime'
 
 const VOICE_LAB_PATH = '/dev-voice-lab'
@@ -50,7 +51,7 @@ export function useKokoroVoiceLabLifecycle() {
           return
         }
         if (result.status === 'skipped') {
-          push(result.message || 'Kokoro non spento: processo non gestito da ACC Suite.', 'info')
+          push(result.message || `Kokoro non spento: processo non gestito da ${PRODUCT.displayName}.`, 'info')
         }
       } catch (error: any) {
         push(`Spegnimento Kokoro non riuscito: ${error?.data?.statusMessage || error?.message || 'errore'}`, 'error')

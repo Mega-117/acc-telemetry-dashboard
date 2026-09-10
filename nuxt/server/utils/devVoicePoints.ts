@@ -1,5 +1,6 @@
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
+import { PRODUCT } from '../../shared/productIdentity'
 import defaultVoicePointStore from '../data/track-voice-points.defaults.json'
 import {
   mergeTrackVoicePointStores,
@@ -21,9 +22,9 @@ async function exists(path: string) {
 
 async function resolveSuiteRoot() {
   const candidates = [
-    process.env.ACC_SUITE_ROOT,
-    process.env.ACC_LOCAL_SUITE_ROOT,
-    process.env.ACC_WORKSPACE_ROOT,
+    process.env[PRODUCT.env('ROOT')],
+    process.env[PRODUCT.env('LOCAL_ROOT')],
+    process.env[PRODUCT.env('WORKSPACE_ROOT')],
     LOCAL_WORKSPACE_ROOT,
     resolve(process.cwd(), '..', '..'),
     resolve(process.cwd(), '..', '..', '..'),

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // ============================================
-// SplashLogo - Logo ACC Telemetry
+// SplashLogo - Product logo
 // ============================================
 </script>
 

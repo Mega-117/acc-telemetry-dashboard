@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PRODUCT } from '../../../shared/productIdentity'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 
 withDefaults(defineProps<{ wide?: boolean }>(), { wide: false })
@@ -22,14 +23,14 @@ const particles = Array.from({ length: 16 }, (_, i) => ({
 </script>
 
 <template>
-  <section class="racer-auth" aria-label="Autenticazione Racer Core">
+  <section class="racer-auth" :aria-label="`Autenticazione ${PRODUCT.displayName}`">
     <div class="racer-auth__background" aria-hidden="true">
       <i v-for="(particle, i) in particles" :key="i" class="racer-auth__particle" :style="particle" />
     </div>
     <div class="racer-auth__column" :class="{ 'racer-auth__column--wide': wide }">
       <header class="racer-auth__brand">
         <div class="racer-auth__logo-viewport">
-          <img :src="`${base}branding/auth/racer_core_exact.svg`" alt="Racer Core — Sim Racing Software" width="1774" height="887" />
+          <img :src="`${base}branding/auth/racer_core_exact.svg`" :alt="`${PRODUCT.displayName} — Sim Racing Software`" width="1774" height="887" />
         </div>
       </header>
       <div class="racer-auth__height" :style="height !== undefined ? { height: `${height}px` } : undefined">

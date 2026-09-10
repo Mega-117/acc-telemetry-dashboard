@@ -216,7 +216,7 @@ class ChatterboxHandler(BaseHTTPRequestHandler):
 def main() -> None:
     configure_runtime_dirs()
     parser = argparse.ArgumentParser(
-        description="Chatterbox Multilingual V3 server for ACC Suite Voice Lab."
+        description="Chatterbox Multilingual V3 server for the local Voice Lab."
     )
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default=5121, type=int)

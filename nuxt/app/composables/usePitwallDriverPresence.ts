@@ -1,4 +1,5 @@
 import { onScopeDispose, ref, watch, type Ref } from 'vue'
+import { PRODUCT } from '../../shared/productIdentity'
 import { db } from '~/config/firebase'
 import { createPitwallRealtimeRoomService, type PitwallRealtimeRoomService } from '~/services/pitwall/pitwallRealtimeRoomService'
 import { createPitwallRealtimeEngineerService } from '~/services/pitwall/pitwallRealtimeEngineerService'
@@ -48,7 +49,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
     const bridge = bridgeOf()
     if (disposed || !options.jobsEnabled.value || bridge?.localIdentityRole !== 'primary' || !bridge.pitwallGetLinkStatus) { stop(); return }
     if (!bridge.onPitwallStrategyState || !bridge.pitwallSetRealtimeConnection) {
-      unavailableReason.value = 'Aggiorna e riavvia ACC Suite per usare il nuovo Pitwall.'; stop(); return
+      unavailableReason.value = `Aggiorna e riavvia ${PRODUCT.displayName} per usare il nuovo Pitwall.`; stop(); return
     }
     const identity = await bridge.pitwallGetLinkStatus()
     if (disposed || !options.jobsEnabled.value) return

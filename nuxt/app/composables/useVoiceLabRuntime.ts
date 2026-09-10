@@ -1,3 +1,5 @@
+import { PRODUCT } from '../../shared/productIdentity'
+
 type KokoroState = 'online' | 'starting' | 'offline' | 'error'
 
 interface DesktopSpeakResponse {
@@ -9,7 +11,7 @@ interface DesktopSpeakResponse {
 }
 
 const LOCAL_VOICE_LAB_BRIDGE = 'http://127.0.0.1:5112'
-const LOCAL_PROGRAM_UNAVAILABLE = 'Programma locale ACC Suite non raggiungibile. Avvia il launcher locale e riprova.'
+const LOCAL_PROGRAM_UNAVAILABLE = `Programma locale ${PRODUCT.displayName} non raggiungibile. Avvia il launcher locale e riprova.`
 
 function getElectronApi(): any | null {
   if (typeof window === 'undefined') return null

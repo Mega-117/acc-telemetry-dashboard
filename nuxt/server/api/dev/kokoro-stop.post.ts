@@ -1,5 +1,6 @@
 import { clearManagedKokoroProcess, getManagedKokoroPid, stopManagedKokoroProcess } from '../../utils/kokoroProcessRegistry'
 import { readKokoroRuntimeStatus } from '../../utils/kokoroRuntimeStatus'
+import { PRODUCT } from '../../../shared/productIdentity'
 
 export default defineEventHandler(async () => {
   if (process.env.NODE_ENV === 'production') {
@@ -17,7 +18,7 @@ export default defineEventHandler(async () => {
     return {
       status: 'skipped',
       reason: 'not-managed',
-      message: 'Kokoro e online ma non e stato avviato da ACC Suite in questa sessione.',
+      message: `Kokoro e online ma non e stato avviato da ${PRODUCT.displayName} in questa sessione.`,
     }
   }
 

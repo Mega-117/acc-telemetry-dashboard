@@ -1,3 +1,5 @@
+import { PRODUCT } from '../../../shared/productIdentity'
+
 export type QaBotState = 'OFF' | 'CHECKING' | 'ACTIVE' | 'STOPPING' | 'BLOCKED' | 'FAULT'
 
 export interface QaBotSnapshot {
@@ -20,7 +22,7 @@ const REASONS: Record<string, string> = {
   checking_preconditions: 'Verifica ACC, sessione, auto, pista e riferimento…',
   bot_active: 'Controllo attivo. Cambio gestito da ACC.',
   user_stop: 'Arrestato e comandi neutralizzati.',
-  app_quit: 'Arrestato con ACC Suite.',
+  app_quit: `Arrestato con ${PRODUCT.displayName}.`,
   bot_already_running: 'Il bot è già in esecuzione.',
   bot_state_stale: 'Stato del bot non aggiornato: arresto di sicurezza.',
   startup_timeout: 'Avvio non confermato entro il tempo di sicurezza.',

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PRODUCT } from '../../shared/productIdentity'
 import { onMounted, ref } from 'vue'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
 
@@ -26,7 +27,7 @@ onMounted(async () => {
 <template>
   <div v-if="ready" class="settings-page">
     <header class="settings-page__title">
-      <p>ACC SUITE</p>
+      <p>{{ PRODUCT.displayName }}</p>
       <h1>Impostazioni</h1>
       <span>Personalizza i controlli della tua postazione.</span>
     </header>

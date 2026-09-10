@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PRODUCT } from '../../../shared/productIdentity'
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 type Result = { ok: boolean; url?: string; reason?: string; running?: boolean }
 type Bridge = { pitwallV4Local?: (action: string) => Promise<Result> }
@@ -7,7 +8,7 @@ let timer: ReturnType<typeof setInterval> | undefined
 const bridge = () => (window as unknown as { electronAPI?: Bridge }).electronAPI
 async function start() {
   const api = bridge()?.pitwallV4Local
-  if (!api) { error.value = 'Apri V4 locale nella finestra Racer Core avviata dal worktree V4.'; return }
+  if (!api) { error.value = `Apri V4 locale nella finestra ${PRODUCT.displayName} avviata dal worktree V4.`; return }
   loading.value = true; error.value = ''
   try {
     const result = await api('start')

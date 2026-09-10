@@ -1,3 +1,4 @@
+import { PRODUCT } from '../../../shared/productIdentity'
 import type {
   RuntimeHealthState,
   RuntimeMigrationCompatibilityProfile
@@ -6,7 +7,7 @@ import type {
 export const RUNTIME_COMPATIBILITY_CACHE_SCHEMA_VERSION = 1
 export const RUNTIME_COMPATIBILITY_POLICY_VERSION = 1
 export const RUNTIME_COMPATIBILITY_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
-const CACHE_KEY_PREFIX = 'acc-suite:runtime-compatibility:v1:'
+const CACHE_KEY_PREFIX = `${PRODUCT.technicalName}:runtime-compatibility:v1:`
 
 export interface RuntimeCompatibilityCacheRecord {
   schemaVersion: 1

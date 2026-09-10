@@ -40,6 +40,7 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'shared/productIdentity.ts',
         'scripts/cloudflare-package.mjs',
         'app/services/monitoring/windowOpeningProbe.ts',
         'app/components/auth/*.vue',

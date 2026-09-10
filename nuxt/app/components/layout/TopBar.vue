@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PRODUCT } from '../../../shared/productIdentity'
 // ============================================
 // TopBar - Application header
 // ============================================
@@ -159,7 +160,7 @@ onMounted(() => {
     <div class="topbar__inner">
       <!-- Logo -->
       <div class="topbar__brand">
-        <img class="brand-logo" :src="`${brandBase}branding/racercore-horizontal-v1.svg`" alt="Racer Core" width="240" height="36" />
+        <img class="brand-logo" :src="`${brandBase}branding/racercore-horizontal-v1.svg`" :alt="PRODUCT.displayName" width="240" height="36" />
       </div>
 
       <TestModeBadge />

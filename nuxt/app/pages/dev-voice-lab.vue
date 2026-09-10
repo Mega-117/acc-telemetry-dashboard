@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PRODUCT } from '../../shared/productIdentity'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAppNotifications } from '~/composables/useAppNotifications'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
@@ -1178,7 +1179,7 @@ onBeforeUnmount(() => {
             Server locale su <code>{{ TTS_SERVER }}</code> (avvio automatico).
           </p>
           <p v-else>
-            Genera e ascolta le indicazioni vocali di riferimento per ogni pista e regola quali sono attive e con quanto anticipo vengono annunciate. Il motore vocale gira nel programma locale ACC Suite.
+            Genera e ascolta le indicazioni vocali di riferimento per ogni pista e regola quali sono attive e con quanto anticipo vengono annunciate. Il motore vocale gira nel programma locale {{ PRODUCT.displayName }}.
           </p>
         </div>
         <div class="server-card" :class="`server-card--${serverState === 'starting' ? 'checking' : serverState}`" data-testid="voice-lab-server-card">

@@ -1,4 +1,5 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { PRODUCT } from './shared/productIdentity'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
@@ -69,7 +70,7 @@ export default defineNuxtConfig({
 
     // Meta tags e font
     head: {
-      title: 'Racer Core',
+      title: PRODUCT.displayName,
       htmlAttrs: {
         lang: 'it'
       },

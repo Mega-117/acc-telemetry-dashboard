@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { PRODUCT } from '../../../shared/productIdentity'
 import { computed, onMounted, ref } from 'vue'
 import {
   loadAdminCockpitSnapshot,
@@ -12,7 +13,7 @@ definePageMeta({
   middleware: ['admin-only'],
 })
 
-useHead({ title: 'Cockpit admin · ACC Suite' })
+useHead({ title: `Cockpit admin · ${PRODUCT.displayName}` })
 
 const snapshot = ref<AdminCockpitSnapshot | null>(null)
 const loading = ref(true)
@@ -93,7 +94,7 @@ onMounted(loadSnapshot)
       <div>
         <p class="context-line">Amministrazione · fotografia runtime</p>
         <h1>Cockpit installazioni</h1>
-        <p>Versioni, ultimo contatto e stato operativo delle installazioni ACC Suite.</p>
+        <p>Versioni, ultimo contatto e stato operativo delle installazioni {{ PRODUCT.displayName }}.</p>
       </div>
       <button type="button" class="refresh-button" :disabled="loading" @click="loadSnapshot">
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
