@@ -44,6 +44,52 @@ async function publish(service: Awaited<ReturnType<typeof participant>>, roomId:
   expect(result.ok, JSON.stringify(result)).toBe(true)
 }
 describe('social rooms with real Firebase rules', () => {
+  it('routes V4 by recipient, accepts unchanged snapshots and freezes the requested context', async () => {
+    const A = await participant('A'), B = await participant('B'), C = await participant('C')
+    const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'V4 party' })
+    if (!created.ok) throw new Error(created.reason)
+    const roomId = created.value.roomId
+    await publish(A, roomId, true)
+    let bRooms: any[] = [], cRooms: any[] = []
+    stops.push(B.watchRooms(value => { bRooms = value }))
+    await vi.waitFor(() => expect(bRooms).toHaveLength(1))
+    expect((await B.joinRoom(roomId)).ok).toBe(true); await publish(B, roomId)
+    stops.push(C.watchRooms(value => { cRooms = value }))
+    await vi.waitFor(() => expect(cRooms).toHaveLength(1))
+    expect((await C.joinRoom(roomId)).ok).toBe(true); await publish(C, roomId, true)
+    for (const service of [A, B, C]) stops.push(service.watchMembers(roomId, () => {}))
+    for (const [service, contextId] of [[A, 'a'.repeat(64)], [C, 'c'.repeat(64)]] as const) {
+      expect((await service.publishPresence(roomId, { nickname: service.uid, kind: 'driver', driving: true, runtimeSessionId: service.uid,
+        strategy: { applicationMethods: ['standard', 'mfd-v4'], mfdV4: { ready: true, reason: null, contextId }, fuelToAdd: 0 } })).ok).toBe(true)
+    }
+    const plan = { method: 'mfd-v4', mfdV4: { version: 1, contextId: 'a'.repeat(64), stepMs: 60, operation: 'strategy',
+      fuelLiters: 0, changeTyres: false, brakes: false, repairBodywork: false, repairSuspension: false } }
+    const mfdPath = `${ROOT}/rooms/${roomId}/mfd/A/${A.session.connectionId()}`
+    await vi.waitFor(async () => {
+      const state = await B.io.read<any>(`rooms/${roomId}/mfd/A/${A.session.connectionId()}`)
+      expect(state?.strategy?.mfdV4?.contextId).toBe(plan.mfdV4.contextId)
+    })
+    await env.withSecurityRulesDisabled(async context => {
+      await update(ref(context.database() as unknown as Database, mfdPath), { updatedAt: Date.now() - 60000 })
+    })
+    await vi.waitFor(() => expect(B.sendReadiness(roomId, 'A').ready).toBe(true))
+    expect((await B.sendOrder(roomId, { plan, revision: 1, targetUid: 'C' })).ok).toBe(false)
+    const sent = await B.sendOrder(roomId, { plan, revision: 2, targetUid: 'A' })
+    expect(sent.ok, JSON.stringify(sent)).toBe(true)
+    if (!sent.ok) return
+    const path = `${ROOT}/rooms/${roomId}/orders/${sent.value}`
+    const db = env.authenticatedContext('B').database() as unknown as Database
+    const order = (await get(ref(db, path))).val()
+    expect(order.targetUid).toBe('A')
+    await assertFails(update(ref(db, path), { 'plan/mfdV4/fuelLiters': 20 }))
+    await assertFails(set(ref(db, `${ROOT}/rooms/${roomId}/orders/wrong-context`), {
+      ...order, orderId: 'wrong-context', plan: { ...plan, mfdV4: { ...plan.mfdV4, contextId: 'c'.repeat(64) } },
+    }))
+    expect((await C.claimOrder(roomId, sent.value)).ok).toBe(false)
+    expect((await A.claimOrder(roomId, sent.value)).ok).toBe(true)
+    expect((await A.publishOutcome(roomId, sent.value, { status: 'applied', method: 'mfd-v4', diary: 'verified' })).ok).toBe(true)
+    expect((await get(ref(db, path))).val().result.diary).toBe('verified')
+  })
   it('coalesces simultaneous open requests into one party', async () => {
     const A = await participant('A')
     const results = await Promise.all([

@@ -8,6 +8,7 @@ import Application from '~/components/pitwall/PitwallApplicationPanel.vue'
 const contextId = 'a'.repeat(64)
 function port() {
   return { sending: ref(false), orderStatus: ref(''), canSend: ref(true), sendReadiness: ref({ reason: null }),
+    selectedRoomId: ref('room'), selectedTargetUid: ref('rico'),
     carSnapshot: ref({ crew: [{ driverIndex: 0, name: 'Enrico Saiani', current: true }], strategy: { applicationMethods: ['standard', 'mfd-v4'], mfdV4: { ready: true, contextId }, fuelToAdd: 0 } }),
     executorLabel: ref('Rico117'), orderMethod: ref('mfd-v4'), orderReason: ref(''), orderFields: ref({}),
     lastError: ref(''), sendPlan: vi.fn(async () => true), draftSuspended: ref(false) }
@@ -16,6 +17,26 @@ function message(wrapper: ReturnType<typeof mount>, type: string, value: unknown
   const iframe = wrapper.get('iframe').element as HTMLIFrameElement
   window.dispatchEvent(new MessageEvent('message', { source: source || iframe.contentWindow, data: { channel: 'mfd-v4-online', type, value } }))
 }
+it('isolates drafts and ignores the previous iframe when the recipient changes', async () => {
+  const p = port(); const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
+  try {
+    const previous = (w.get('iframe').element as HTMLIFrameElement).contentWindow!
+    message(w, 'draft', { fuel: 12 })
+    p.selectedTargetUid.value = 'other'; await flushPromises()
+    const second = (w.get('iframe').element as HTMLIFrameElement).contentWindow!
+    expect(second === previous).toBe(false)
+    const post = vi.spyOn(second, 'postMessage')
+    message(w, 'ready', null)
+    expect(post.mock.calls.at(-1)![0].value.draft).toBeNull()
+    message(w, 'submit', { contextId }, previous); await flushPromises()
+    expect(p.sendPlan).not.toHaveBeenCalled()
+    message(w, 'draft', { fuel: 30 })
+    p.selectedTargetUid.value = 'rico'; await flushPromises()
+    const restored = vi.spyOn((w.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
+    message(w, 'ready', null)
+    expect(restored.mock.calls.at(-1)![0].value.draft).toEqual({ fuel: 12 })
+  } finally { w.unmount() }
+})
 it('sends only an entire intent from the owned iframe and current context', async () => {
   const p = port(); const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
   expect(w.get('iframe').attributes('sandbox')).toBe('allow-scripts')

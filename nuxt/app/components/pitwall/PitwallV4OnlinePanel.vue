@@ -4,7 +4,12 @@ import type { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { boundPitwallStrategy } from '~/services/pitwall/pitwallLink'
 import { usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
 const props = defineProps<{ port?: ReturnType<typeof usePitwallRoom> }>()
-const { v4Draft } = usePitwallApplicationMethod()
+const { v4Drafts } = usePitwallApplicationMethod()
+const draftKey = computed(() => JSON.stringify([props.port?.selectedRoomId?.value, props.port?.selectedTargetUid?.value]))
+const v4Draft = computed({
+  get: () => v4Drafts.value[draftKey.value] ?? null,
+  set: value => { v4Drafts.value[draftKey.value] = value },
+})
 const frame = ref<HTMLIFrameElement | null>(null)
 const frameReady = ref(false)
 type LocalIdentity = { ok: boolean, key?: string, reason?: string, drivers?: Array<{ driverIndex: number, firstName: string, lastName: string }> }
@@ -54,6 +59,7 @@ async function message(event: MessageEvent) {
   } catch (cause) { error.value = cause instanceof Error ? cause.message : 'Invio non riuscito.' }
   finally { publish() }
 }
+watch(draftKey, () => { frameReady.value = false; error.value = '' }, { flush: 'sync' })
 watch([car, busy, reason, outcome], publish)
 onMounted(() => window.addEventListener('message', message))
 onBeforeUnmount(() => window.removeEventListener('message', message))
@@ -75,7 +81,7 @@ onBeforeUnmount(() => window.removeEventListener('message', message))
         <button type="button" :disabled="busy || selectedIdentity === null" @click="associate(true)">Conferma associazione locale</button>
       </template>
     </details>
-    <iframe ref="frame" title="Strategia V4 online" src="/mfd-v4-online.html" sandbox="allow-scripts" class="v4-frame" />
+    <iframe :key="draftKey" ref="frame" title="Strategia V4 online" src="/mfd-v4-online.html" sandbox="allow-scripts" class="v4-frame" />
   </div>
 </template>
 <style scoped>

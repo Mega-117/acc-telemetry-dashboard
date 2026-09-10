@@ -96,6 +96,8 @@ def targeted(value):
     if not isinstance(value,str): return value
     return value.replace(".child('control/claim')", ".child('control').child(newData.child('targetUid').val()).child('claim')")
 orders=targeted(orders)
+# V4 context belongs to the selected account/connection, not the room itself.
+orders['.validate']=orders['.validate'].replace(".child('mfd')", ".child('mfd').child(newData.child('targetUid').val()).child(newData.child('targetConnectionId').val())")
 # claimedAt is one level below the order and uses a combined absolute path.
 orders['claimedAtMs']['.validate']=orders['claimedAtMs']['.validate'].replace(".child('control/claim/claimedAtMs')", ".child('control').child(newData.parent().child('targetUid').val()).child('claim/claimedAtMs')")
 rooms['orders']['$order']=orders
@@ -122,8 +124,8 @@ reject=f"(data.child('status').val() == 'pending' && newData.child('status').val
 orders['.write']=f"auth != null && newData.exists() && ({create_order} || {ack} || {finish} || {reject})"
 orders['.read']=f"auth != null && ({member} || data.child('senderId').val() == auth.uid || data.child('claimedBy').val() == auth.uid)"
 # No retired applicator payload can exist in this namespace.
-orders['.validate']=orders['.validate'].split(" && (!data.exists() || (newData.child('plan/method')")[0]
-orders['.validate'] += " && (!newData.child('plan/method').exists() || newData.child('plan/method').val() == 'standard') && (!data.exists() || newData.child('plan/method').val() == data.child('plan/method').val())"
+# Keep inherited immutable V4 fields and recipient-context validation intact.
+orders['.validate'] += " && (!newData.child('plan/method').exists() || newData.child('plan/method').val() == 'standard' || newData.child('plan/method').val() == 'mfd-v4')"
 for retired in ['accDrive','mfdV2','mfdV3']:
     orders['plan'].pop(retired,None)
 claim_order=f"{room}.child('orders').child(newData.child('orderId').val())"

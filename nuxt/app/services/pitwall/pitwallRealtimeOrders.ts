@@ -54,11 +54,13 @@ export function createPitwallRealtimeOrders(options: {
       if (input.plan.method != null && input.plan.method !== 'standard' && input.plan.method !== 'mfd-v4') throw new Error('Metodo strategia non supportato: usa Standard o V4.');
       if (input.plan.mfdV3 != null || input.plan.mfdV2 != null || input.plan.accDrive != null) throw new Error('Payload strategia non supportato.');
       if (input.plan.method === 'mfd-v4') {
-        const mfd = await io.read<{ uid: string, connectionId: string, updatedAt: number, strategy?: { applicationMethods?: string[], mfdV4?: { ready: boolean, contextId: string | null } } }>(`rooms/${roomId}/mfd`)
+        const mfdPath = `rooms/${roomId}/mfd${io.namespace === PITWALL_SOCIAL_ROOT ? `/${target.uid}/${target.connectionId}` : ''}`
+        const mfd = await io.read<{ uid: string, connectionId: string, strategy?: { applicationMethods?: string[], mfdV4?: { ready: boolean, contextId: string | null } } }>(mfdPath)
         const requested = input.plan.mfdV4 as { contextId?: unknown } | undefined
         if (mfd?.uid !== target.uid || mfd.connectionId !== target.connectionId || !mfd.strategy?.applicationMethods?.includes('mfd-v4')
-          || mfd.strategy.mfdV4?.ready !== true || !requested?.contextId || requested.contextId !== mfd.strategy.mfdV4.contextId
-          || io.serverNow() - mfd.updatedAt > 5000) throw new Error('Il PC del pilota non ha confermato questo contesto V4. Aggiorna lo stato prima di inviare.')
+          || mfd.strategy.mfdV4?.ready !== true || !requested?.contextId || requested.contextId !== mfd.strategy.mfdV4.contextId) throw new Error('Il PC del pilota non ha confermato questo contesto V4. Aggiorna lo stato prima di inviare.')
+        // Snapshots are event-driven; an unchanged snapshot is not stale. The
+        // connection must remain valid and the executor checks fresh ACC data.
         const current = targetDriver(roomId, input.targetUid)
         if (current?.uid !== target.uid || current.connectionId !== target.connectionId) throw new Error('Il destinatario è cambiato. Occorre un nuovo invio manuale.')
       }
