@@ -84,7 +84,7 @@ export default defineNuxtConfig({
             "default-src 'self'",
             // RTDB redirects its HTTP fallback to variable servers in our region.
             "script-src 'self' 'unsafe-inline' https://*.europe-west1.firebasedatabase.app",
-            "frame-src 'self' https://*.europe-west1.firebasedatabase.app",
+            `frame-src 'self' https://*.europe-west1.firebasedatabase.app${isDev ? ' http://127.0.0.1:*' : ''}`,
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com",
             "img-src 'self' data: https:",

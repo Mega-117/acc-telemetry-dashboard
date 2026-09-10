@@ -2,6 +2,7 @@
 // La Pit Wall: la vista nuova e' quella di default, cablata allo store vero
 // fornito dall'app. "Legacy" e' la pagina precedente, intatta. Con `?demo=1`
 // (solo strumenti dev) la vista nuova gira sulle fixture del prototipo.
+import PitwallV4Local from '~/components/pitwall/PitwallV4Local.vue'
 import PitwallPage from '~/components/pages/PitwallPage.vue'
 import PitwallConcept from '~/components/pitwall/concept/PitwallConcept.vue'
 import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
@@ -14,6 +15,7 @@ definePageMeta({
   layout: 'dashboard'
 })
 
+const v4Local = ref(false)
 const route = useRoute()
 providePitwallApplicationMethod()
 const { legacy, setLegacy } = usePitwallConceptMode()
@@ -26,11 +28,13 @@ if (demo.value) providePitwallStore(usePitwallConceptState())
   <div class="pitwall-route">
     <div class="pitwall-view-switch" aria-label="Seleziona vista Pit Wall">
       <span>Vista</span>
-      <button :class="{ active: !legacy }" @click="setLegacy(false)">Pit Wall</button>
-      <button :class="{ active: legacy }" @click="setLegacy(true)">Legacy</button>
+      <button :class="{ active: !v4Local && !legacy }" @click="v4Local = false; setLegacy(false)">Pit Wall</button>
+      <button :class="{ active: !v4Local && legacy }" @click="v4Local = false; setLegacy(true)">Legacy</button>
+      <button v-if="canUseDevTools()" :class="{ active: v4Local }" @click="v4Local = true">V4 locale</button>
       <em v-if="demo" class="pitwall-view-switch__demo">demo</em>
     </div>
-    <PitwallPage v-if="legacy" />
+    <PitwallV4Local v-if="v4Local" />
+    <PitwallPage v-else-if="legacy" />
     <PitwallConcept v-else />
   </div>
 </template>

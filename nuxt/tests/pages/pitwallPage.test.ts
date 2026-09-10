@@ -282,7 +282,8 @@ describe('Pitwall wiring', () => {
   it('usa la vista nuova come default e tiene la vecchia in una scheda Legacy', () => {
     // PIP-360: la Pit Wall e' la vista nuova, cablata allo store vero fornito
     // dall'app. La pagina precedente resta intatta dietro "Legacy".
-    expect(page).toContain('<PitwallPage v-if="legacy"')
+    expect(page).toContain('<PitwallV4Local v-if="v4Local"')
+    expect(page).toContain('<PitwallPage v-else-if="legacy"')
     expect(page).toContain('<PitwallConcept v-else')
     expect(page).toContain('Pit Wall')
     expect(page).toContain('Legacy')
