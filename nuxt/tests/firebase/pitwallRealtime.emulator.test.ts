@@ -12,8 +12,10 @@ const disposers: Array<() => void | Promise<void>> = []
 const transports: PitwallRealtimeTransport[] = []
 function db(uid: string) { return env.authenticatedContext(uid).database() as unknown as Database }
 beforeAll(async () => {
-  if (!process.env.FIREBASE_DATABASE_EMULATOR_HOST) throw new Error('Run only through firebase emulators:exec --only database --project demo-pitwall-audit')
-  env = await initializeTestEnvironment({ projectId: PROJECT, database: { host: '127.0.0.1', port: 9000,
+  const address = process.env.FIREBASE_DATABASE_EMULATOR_HOST
+  if (!address) throw new Error('Run only through firebase emulators:exec --only database --project demo-pitwall-audit')
+  const emulator = new URL(`http://${address}`)
+  env = await initializeTestEnvironment({ projectId: PROJECT, database: { host: emulator.hostname, port: Number(emulator.port),
     rules: readFileSync(new URL('../../../database.rules.json', import.meta.url), 'utf8') } })
 })
 beforeEach(async () => { await env.clearDatabase() })
