@@ -807,3 +807,16 @@ describe('Pitwall wiring', () => {
     expect(conceptState).toContain('JSON.parse(JSON.stringify(value))')
   })
 })
+
+describe('Standard-only Pitwall UI', () => {
+  it('keeps both Standard forms without an experimental selector', () => {
+    for (const source of [panel, conceptPitStop, page]) {
+      expect(source).not.toContain('PitwallApplicationPanel')
+      expect(source).not.toContain('usePitwallApplicationMethod')
+      expect(source).not.toContain('providePitwallApplicationMethod')
+      expect(source).not.toContain('method ===')
+    }
+    expect(panel).toContain('PitwallOrderBar')
+    expect(conceptPitStop).toContain('stop.orderStatus.value')
+  })
+})

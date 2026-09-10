@@ -47,13 +47,8 @@ export function createPitwallRealtimeOrders(options: {
       const senderConnectionId = session.connectionId()
       const readiness = sendReadiness(roomId)
       if (!readiness.ready || !target) throw new Error(readiness.reason || 'Pilota non disponibile.')
-      if (['acc-drive-7.8.1', 'mfd-v2'].includes(String(input.plan.method))) throw new Error('Metodo ACC Drive dismesso.')
-      if (input.plan.method === 'mfd-v3') {
-        const mfd = await io.read<{ uid: string, connectionId: string, strategy?: { applicationMethods?: string[], mfdV3?: { ready: boolean } } }>(`rooms/${roomId}/mfd`)
-        if (mfd?.uid !== target.uid || mfd.connectionId !== target.connectionId || !mfd.strategy?.applicationMethods?.includes('mfd-v3') || mfd.strategy?.mfdV3?.ready !== true) {
-          throw new Error('Il PC del pilota non ha confermato la disponibilità V3.')
-        }
-      }
+      if (input.plan.method != null && input.plan.method !== 'standard') throw new Error('Metodo strategia non supportato: usa Standard.');
+      if (input.plan.mfdV3 != null || input.plan.mfdV2 != null || input.plan.accDrive != null) throw new Error('Payload strategia non supportato.');
       const base = buildPitwallRoomOrder({ orderId, revision: input.revision, senderId: uid, plan: input.plan,
         nowMs: io.serverNow(), ttlMs: Math.min(input.ttlMs ?? PITWALL_ORDER_TTL_MS, PITWALL_ORDER_TTL_MS) })
       if (!base) throw new Error('Strategia non valida da inviare.')

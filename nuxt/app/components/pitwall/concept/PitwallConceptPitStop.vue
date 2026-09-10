@@ -31,10 +31,7 @@ import {
   stepFuel,
 } from "~/utils/pitwallPresentation";
 
-import { usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod';
-import PitwallApplicationPanel from '~/components/pitwall/PitwallApplicationPanel.vue';
 const { stop } = usePitwallStore();
-const { method } = usePitwallApplicationMethod();
 
 /**
  * Le due righe che "Sostituisci freni" apre: davanti e dietro, da 1 a 4.
@@ -133,8 +130,7 @@ function stepAll(direction: 1 | -1) {
       </span>
     </header>
 
-    <PitwallApplicationPanel :port="stop.application" />
-    <div v-show="method === 'standard'">
+    <div>
     <div class="pwc-pit-head">
       <b>Campo</b><b>Strategia</b><b>In macchina</b>
     </div>
