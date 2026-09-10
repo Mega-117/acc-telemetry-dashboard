@@ -8,14 +8,12 @@ import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
 import { usePitwallConceptState } from '~/composables/usePitwallConceptState'
 import { providePitwallStore } from '~/composables/usePitwallStore'
 import { canUseDevTools } from '~/utils/devToolsAccess'
-import { providePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
 
 definePageMeta({
   layout: 'dashboard'
 })
 
 const route = useRoute()
-providePitwallApplicationMethod()
 const { legacy, setLegacy } = usePitwallConceptMode()
 
 const demo = computed(() => route.query.demo === '1' && canUseDevTools())

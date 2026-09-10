@@ -11,7 +11,7 @@ type Watcher = (value: unknown) => void
 type Watched = { ready: boolean, value: unknown, watchers: Set<Watcher>, errors: Set<(error: Error) => void>, stop: Unsubscribe }
 
 /** One SDK connection, shared subscriptions, and server-confirmed mutations. */
-export function createPitwallRealtimeTransport(database: Database) {
+export function createPitwallRealtimeTransport(database: Database, namespace: string = PITWALL_ROOT) {
   const metrics = createPitwallIoMetrics()
   const watches = new Map<string, Watched>()
   const reads = new Map<string, Promise<unknown>>()
@@ -20,7 +20,7 @@ export function createPitwallRealtimeTransport(database: Database) {
   let offsetMs = 0
   let disposed = false
   let connectionGeneration = 0
-  const pathOf = (path: string) => `${PITWALL_ROOT}/${path}`
+  const pathOf = (path: string) => `${namespace}/${path}`
   const at = (path: string) => ref(database, pathOf(path))
   const requireOnline = () => { if (!connected || disposed) throw new Error('Collegamento Pitwall non disponibile. Riprova quando torna online.') }
   const stopOffset = onValue(ref(database, '.info/serverTimeOffset'), snapshot => { offsetMs = Number(snapshot.val()) || 0 })
@@ -141,11 +141,11 @@ export function createPitwallRealtimeTransport(database: Database) {
     return () => action.cancel()
   }
 
-  async function registerDisconnectUpdates(changes: Record<string, null>) {
+  async function registerDisconnectUpdates(changes: Record<string, unknown>) {
     requireOnline()
-    const action = onDisconnect(ref(database, PITWALL_ROOT))
+    const action = onDisconnect(ref(database, namespace))
     await action.update(changes)
-    metrics.record({ operation: 'disconnect-register', path: PITWALL_ROOT, bytes: jsonPayloadBytes(changes), success: true })
+    metrics.record({ operation: 'disconnect-register', path: namespace, bytes: jsonPayloadBytes(changes), success: true })
     requireOnline()
     // Cancelling the root operation would also cancel another session's presence.
     return async () => { await Promise.all(Object.keys(changes).map(path => onDisconnect(at(path)).cancel())) }
@@ -167,7 +167,7 @@ export function createPitwallRealtimeTransport(database: Database) {
     connected = false
   }
 
-  return { database, metrics, watch, read, write, transact, registerDisconnect, registerDisconnectUpdates, onConnection,
+  return { database, namespace, metrics, watch, read, write, transact, registerDisconnect, registerDisconnectUpdates, onConnection,
     online: () => connected && !disposed, serverNow: () => Date.now() + offsetMs,
     clockOffsetMs: () => offsetMs, serverTimestamp, dispose }
 }

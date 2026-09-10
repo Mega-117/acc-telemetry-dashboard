@@ -17,8 +17,8 @@ import type { Ref } from 'vue'
 import { isPitwallSessionFresh, type PitwallSession } from '~/services/pitwall/pitwallLink'
 import type { PitwallOutgoingLink } from '~/services/pitwall/pitwallEngineerService'
 
-/** Oltre questo numero non sarebbe comunque un elenco che si guarda. */
-export const PITWALL_MAX_WATCHED_PILOTS = 12
+/** Non troncare la lista amici; un limite esplicito resta disponibile per fixture. */
+export const PITWALL_MAX_WATCHED_PILOTS = Number.POSITIVE_INFINITY
 
 /**
  * Ogni quanto si ricontrolla se una presenza e' invecchiata.
@@ -81,13 +81,23 @@ export function createPitwallPresenceWatch(options: PitwallPresenceWatchOptions)
     if (!service) return
     for (const driverUid of watched) {
       if (watches.has(driverUid)) continue
-      watches.set(driverUid, service.watchPilotPresence(
+      let failed = false
+      let stop = () => {}
+      const handle = () => stop()
+      watches.set(driverUid, handle)
+      stop = service.watchPilotPresence(
         driverUid,
-        state => apply(driverUid, state),
-        // Una presenza che non arriva lascia l'ultima nota: invecchia da sola
-        // entro i novanta secondi, e far lampeggiare l'elenco sarebbe peggio.
-        () => {}
-      ))
+        state => { if (watches.get(driverUid) === handle) apply(driverUid, state) },
+        () => {
+          if (watches.get(driverUid) !== handle) return
+          failed = true
+          watches.delete(driverUid)
+          stop()
+          apply(driverUid, { session: null, reachable: false })
+        }
+      )
+      // Il mock o la cache possono consegnare l'errore durante subscribe.
+      if (failed) stop()
     }
   }
 

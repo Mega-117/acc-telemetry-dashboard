@@ -13,8 +13,6 @@ import { describePitwallConceptOrderStatus } from '~/utils/pitwallConcept'
 //  - `READY` significa applicata e riletta, mai inviata.
 import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
-import { usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
-import PitwallApplicationPanel from '~/components/pitwall/PitwallApplicationPanel.vue'
 import { usePitwallLink } from '~/composables/usePitwallLink'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import PitwallCarCard from '~/components/pitwall/PitwallCarCard.vue'
@@ -39,7 +37,6 @@ const { currentUser } = useFirebaseAuth()
 // La gara: chi c'e', chi guida, dove va l'ordine.
 const liveStore = usePitwallLiveStore()
 const link = liveStore.stop.application!
-const { method } = usePitwallApplicationMethod()
 // I permessi fra account restano il mattoncino della fiducia: chi mi ha
 // autorizzato una volta si ritrova invitato alle gare senza richiederlo, e da
 // qui si concede o si toglie. Non e' un secondo canale per gli ordini.
@@ -146,7 +143,15 @@ function onSearchInput() {
                 </select>
               </label>
               <button v-if="link.isManager.value && !link.roomClosed.value" type="button" class="btn btn--ghost" @click="link.closeRoom()">Chiudi gara</button>
-              <button v-if="link.amMember.value && link.room.value.hostUid !== currentUser?.uid" type="button" class="btn btn--ghost" @click="link.leave()">Esci</button>
+              <label class="select-control">
+                <span>Invia strategia a</span>
+                <select :value="link.selectedTargetUid.value ?? ''" :disabled="link.sending.value || ['pending', 'applying'].includes(link.orderStatus.value ?? '')" @change="link.selectTarget(($event.target as HTMLSelectElement).value || null)">
+                  <option value="" disabled>Seleziona un pilota</option>
+                  <option v-if="link.selectedTargetUid.value && !link.availableTargets.value.some(target => target.uid === link.selectedTargetUid.value)" :value="link.selectedTargetUid.value" disabled>Pilota non disponibile</option>
+                  <option v-for="target in link.availableTargets.value" :key="target.uid" :value="target.uid">{{ target.nickname }}</option>
+                </select>
+              </label>
+              <button v-if="link.amMember.value" type="button" class="btn btn--ghost" @click="link.leave()">Esci</button>
             </div>
           </template>
           <template v-else>
@@ -226,8 +231,7 @@ function onSearchInput() {
       <div class="workspace">
         <section class="strategy" aria-labelledby="strategy-title">
           <h2 id="strategy-title" class="panel-title">STRATEGIA DA INVIARE</h2>
-          <PitwallApplicationPanel :port="link" />
-          <div v-show="method === 'standard'" class="strategy__body">
+          <div class="strategy__body">
             <div class="strategy-topline">
               <div class="static-control" title="Sceglie il preset di strategia dell'assetto. Attenzione: riscrive carburante, set e pressioni con i valori del preset.">
                 <span>Preset strategia</span>
@@ -269,7 +273,7 @@ function onSearchInput() {
               </fieldset>
             </section>
           </div>
-          <PitwallOrderBar v-if="method === 'standard'" :status="orderStatus" :chips="changeChips" :stop="stopEstimate" :can-send="sendEnabled" :blocked-reason="blockedReason" @send="sendToCar" />
+          <PitwallOrderBar :status="orderStatus" :chips="changeChips" :stop="stopEstimate" :can-send="sendEnabled" :blocked-reason="blockedReason" @send="sendToCar" />
         </section>
 
         <PitwallCarCard :session="session" :fresh="carFresh" :age-seconds="presenceAgeSeconds" :display-plan="mfdPlan" :drivers="drivers" :stop="stopEstimate">

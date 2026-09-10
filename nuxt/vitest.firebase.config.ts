@@ -17,6 +17,6 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['tests/firebase/**/*.test.ts'],
-    exclude: ['tests/firebase/pitwallRealtime.*.test.ts']
+    exclude: ['tests/firebase/pitwallRealtime.*.test.ts', ...(!process.env.FIREBASE_DATABASE_EMULATOR_HOST ? ['tests/firebase/pitwallSocial.emulator.test.ts'] : [])]
   }
 })

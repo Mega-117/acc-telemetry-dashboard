@@ -4,6 +4,8 @@ import type { PitwallRealtimeSession } from './pitwallRealtimeSession'
 import { activeDriver, canClaimRealtimeOrder, type RealtimeConnection, type RealtimeOrder } from './pitwallRealtimeProtocol'
 import { buildPitwallRoomOrder, PITWALL_CLAIM_LEASE_MS, PITWALL_ORDER_TTL_MS, type PitwallRoomOrder } from './pitwallRoomContract'
 import type { PitwallRoomResult } from './pitwallRoomOrders'
+import { PITWALL_SOCIAL_ROOT } from './pitwallSocialRoom'
+import { emitPitwallDiagnostic, type PitwallDiagnosticContext } from './pitwallDiagnostics'
 
 export interface RealtimeClaim {
   protocolVersion: 3
@@ -26,52 +28,63 @@ export function createPitwallRealtimeOrders(options: {
   const { io, session, connections } = options
   const uid = session.uid
   const orderPath = (room: string, order: string) => `rooms/${room}/orders/${order}`
-  const controlPath = (room: string) => `rooms/${room}/control/claim`
+  const controlPath = (room: string) => `rooms/${room}/control/${io.namespace === PITWALL_SOCIAL_ROOT ? `${uid}/` : ''}claim`
   const acknowledged = new Map<string, RealtimeOrder>()
-  const diagnostic = (event: string, attemptId: string, reason?: string) => {
-    console.info('[PITWALL_DIAGNOSTIC] ' + JSON.stringify({ at: new Date().toISOString(), event, attemptId, orderId: attemptId, reason: reason?.slice(0, 500) }))
-  }
+  const diagnostic = (event: string, attemptId: string, reason?: string, context: PitwallDiagnosticContext = {}) =>
+    emitPitwallDiagnostic(event, { ...context, uid, attemptId, reason })
 
-  function sendReadiness(roomId: string): { ready: boolean, reason: string | null } {
-    const reason = !io.online() ? 'Il tuo collegamento è offline.'
+  function targetDriver(roomId: string, targetUid?: string | null) {
+    return activeDriver(connections(roomId).filter(connection => !targetUid || connection.uid === targetUid))
+  }
+  function sendReadiness(roomId: string, targetUid?: string | null): { ready: boolean, reason: string | null } {
+    const reason = !io.online() ? 'Riconnessione in corso. Attendi prima di inviare.'
       : !session.isReady(roomId) ? 'Il tuo ingresso nella gara non è ancora confermato.'
-      : !activeDriver(connections(roomId)) ? 'Nessun pilota disponibile per applicare la strategia.' : null
+      : !targetDriver(roomId, targetUid) ? 'Seleziona un pilota disponibile per applicare la strategia.' : null
     return { ready: reason === null, reason }
   }
 
-  async function sendOrder(roomId: string, input: { plan: Record<string, unknown>, revision: number, orderId?: string, ttlMs?: number }): Promise<PitwallRoomResult<string>> {
+  async function sendOrder(roomId: string, input: { plan: Record<string, unknown>, revision: number, orderId?: string, ttlMs?: number, targetUid?: string | null }): Promise<PitwallRoomResult<string>> {
     const orderId = input.orderId || crypto.randomUUID()
     diagnostic('send_attempt', orderId)
     try {
-      const target = activeDriver(connections(roomId))
+      const target = targetDriver(roomId, input.targetUid)
       const senderConnectionId = session.connectionId()
-      const readiness = sendReadiness(roomId)
+      const readiness = sendReadiness(roomId, input.targetUid)
       if (!readiness.ready || !target) throw new Error(readiness.reason || 'Pilota non disponibile.')
-      if (['acc-drive-7.8.1', 'mfd-v2'].includes(String(input.plan.method))) throw new Error('Metodo ACC Drive dismesso.')
-      if (input.plan.method === 'mfd-v3') {
-        const mfd = await io.read<{ uid: string, connectionId: string, strategy?: { applicationMethods?: string[], mfdV3?: { ready: boolean } } }>(`rooms/${roomId}/mfd`)
-        if (mfd?.uid !== target.uid || mfd.connectionId !== target.connectionId || !mfd.strategy?.applicationMethods?.includes('mfd-v3') || mfd.strategy?.mfdV3?.ready !== true) {
-          throw new Error('Il PC del pilota non ha confermato la disponibilità V3.')
-        }
-      }
+      if (input.plan.method != null && input.plan.method !== 'standard') throw new Error('Metodo strategia non supportato: usa Standard.');
+      if (input.plan.mfdV3 != null || input.plan.mfdV2 != null || input.plan.accDrive != null) throw new Error('Payload strategia non supportato.');
       const base = buildPitwallRoomOrder({ orderId, revision: input.revision, senderId: uid, plan: input.plan,
         nowMs: io.serverNow(), ttlMs: Math.min(input.ttlMs ?? PITWALL_ORDER_TTL_MS, PITWALL_ORDER_TTL_MS) })
       if (!base) throw new Error('Strategia non valida da inviare.')
       const order: RealtimeOrder = { ...base, protocolVersion: 3, targetUid: target.uid,
         targetConnectionId: target.connectionId, senderConnectionId }
       await io.write(`rooms/${roomId}`, { [`orders/${orderId}`]: order, [`pending/${orderId}`]: true })
-      diagnostic('send_confirmed', orderId)
+      diagnostic('send_confirmed', orderId, undefined, { roomId, targetUid: target.uid, targetConnectionId: target.connectionId, connectionId: senderConnectionId })
       return { ok: true, value: orderId }
     } catch (error) { const result = fail(error); diagnostic('send_failed', orderId, result.reason); return result }
   }
 
   function watchOrder(roomId: string, orderId: string, callback: (order: PitwallRoomOrder | null) => void) {
     let status = ''
-    return io.watch(orderPath(roomId, orderId), value => {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let stopped = false
+    const clear = () => { if (timer) clearTimeout(timer); timer = undefined }
+    const stop = io.watch(orderPath(roomId, orderId), value => {
+      if (stopped) return
+      clear()
       const order = value as RealtimeOrder | null
       if (order && status !== order.status) { status = order.status; diagnostic('order_' + status, orderId, (order.result as { reason?: string } | undefined)?.reason) }
+      if (order && !terminal(order)) {
+        const deadline = order.status === 'applying' ? Math.min(order.expiresAtMs, order.leaseUntilMs ?? order.expiresAtMs) : order.expiresAtMs
+        const remaining = deadline - io.serverNow()
+        // A missing acknowledgement is not a failed application. Keep listening
+        // for a recovered outcome, but release the UI from an indefinite wait.
+        if (remaining <= 0) { callback(null); return }
+        timer = setTimeout(() => { timer = undefined; if (!stopped) callback(null) }, remaining + 1)
+      }
       callback(order)
-    }, () => callback(null))
+    }, () => { clear(); if (!stopped) callback(null) })
+    return () => { stopped = true; clear(); stop() }
   }
   async function readOrder(roomId: string, orderId: string): Promise<PitwallRoomResult<PitwallRoomOrder | null>> {
     try { return { ok: true, value: await io.read<RealtimeOrder>(orderPath(roomId, orderId)) } }
@@ -133,8 +146,12 @@ export function createPitwallRealtimeOrders(options: {
       // Keeping this acknowledgement outside the claim branch avoids retransmitting order history in every transaction.
       const applying: RealtimeOrder = { ...order, status: 'applying', claimedBy: uid, claimedAtMs: claim.claimedAtMs, leaseUntilMs: claim.leaseUntilMs }
       await io.write(`rooms/${roomId}`, { [`orders/${orderId}`]: applying, [`pending/${orderId}`]: null })
-      if (!io.online() || session.connectionId() !== connectionId || claim.leaseUntilMs <= io.serverNow()) throw new Error('Presa in carico non piu valida: nessun input inviato.')
       acknowledged.set(`${roomId}/${orderId}`, applying)
+      diagnostic('order_claimed', orderId, undefined, { roomId, targetUid: uid, targetConnectionId: connectionId })
+      // La scrittura applying e' confermata: consegnare sempre il controllo
+      // al chiamante. acknowledgedOrder ricontrolla la generazione prima di
+      // qualsiasi input; se cambiata, il chiamante pubblica un rifiuto finale.
+      // Lanciare qui lasciava applying senza proprietario/outbox.
       return { ok: true }
     } catch (error) { return { ok: false, reason: 'error', detail: fail(error).reason } }
   }
@@ -159,10 +176,11 @@ export function createPitwallRealtimeOrders(options: {
         ...(outcome.method === 'acc-drive-7.8.1' ? { method: outcome.method, sourceStatus: outcome.sourceStatus ?? null, events: outcome.events ?? [], selectedDriverId: outcome.selectedDriverId ?? null } : {}) } }
       const claim = await io.read<RealtimeClaim>(controlPath(roomId))
       const changes: Record<string, unknown> = { [`orders/${orderId}`]: completed }
-      if (claim?.orderId === orderId && claim.uid === uid && claim.connectionId === order.targetConnectionId) changes['control/claim'] = null
+      if (claim?.orderId === orderId && claim.uid === uid && claim.connectionId === order.targetConnectionId) changes[io.namespace === PITWALL_SOCIAL_ROOT ? `control/${uid}/claim` : 'control/claim'] = null
       // Rules compare the old claim with this order. A race rejects the whole update, never clears someone else's claim.
       await io.write(`rooms/${roomId}`, changes)
       acknowledged.delete(key)
+      diagnostic('order_' + outcome.status, orderId, outcome.reason ?? undefined, { roomId, targetUid: uid, targetConnectionId: order.targetConnectionId })
       return { ok: true, value: true }
     } catch (error) { return fail(error) }
   }

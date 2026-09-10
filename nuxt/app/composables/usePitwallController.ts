@@ -152,6 +152,25 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     set: (value: boolean | null) => { repairs.value = updatePitwallRepairs(repairs.value, 'repairSuspension', value) },
   })
   const sentPlan = ref<PitwallPlan | null>(null)
+  const oneShot = { changeTyres, brakes, brakeFront, brakeRear, repairBodywork, repairSuspension, driverId, pitStrategy }
+  const editRevisions = new Map<string, number>()
+  let submittedFields = new Map<string, { revision: number, value: unknown }>()
+  for (const [field, value] of Object.entries(oneShot)) {
+    watch(value, () => editRevisions.set(field, (editRevisions.get(field) ?? 0) + 1), { flush: 'sync' })
+  }
+
+  function clearVerifiedFields(): void {
+    for (const [field, value] of Object.entries(oneShot)) {
+      const sent = submittedFields.get(field)
+      const outcome = link.orderFields.value[field]
+      if (!sent || outcome?.outcome !== 'verified' || sent.revision !== (editRevisions.get(field) ?? 0)) continue
+      if (outcome.requested !== sent.value || outcome.observed !== sent.value) continue
+      // Clearing an acknowledged field must not invoke the UI's coupled repair toggles.
+      if (field === 'repairBodywork' || field === 'repairSuspension') repairs.value = { ...repairs.value, [field]: null }
+      else value.value = null
+      submittedFields.delete(field)
+    }
+  }
   /**
    * Cio' che l'occhio del PC del pilota ha visto sul Pit MFD, campo per campo,
    * all'ultimo ordine che ha guardato quella riga. Sopravvive agli ordini
@@ -223,7 +242,8 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
    * nascosto le pressioni della Dry, perche' il piano le teneva ancora
    * (visto in pista, PIP-360).
    */
-  let synced: { fuel: number, tyreSet: number | null, compound: PitwallCompound, pressures: Record<PitwallWheel, number> } | null = null
+  type CarBase = { fuel: number, tyreSet: number | null, compound: PitwallCompound, pressures: Record<PitwallWheel, number> }
+  let synced: CarBase | null = null
   function rememberSynced(): void {
     synced = { fuel: fuelLiters.value, tyreSet: tyreSet.value, compound: compound.value, pressures: { ...pressures.value } }
   }
@@ -282,10 +302,10 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   // solo a ordine concluso.
   watch(() => [link.orderStatus.value, link.orderFields.value] as const, ([status], previous) => {
     if (['acc-drive-7.8.1', 'mfd-v2', 'mfd-v3'].includes(link.orderMethod?.value ?? '')) return
-    const settled = Boolean(status) && status !== 'pending' && status !== 'applying'
+    const settled = ['applied', 'partial', 'failed', 'rejected'].includes(status ?? '')
     if (settled) rememberSeen()
+    if (status === 'applied' || status === 'partial') clearVerifiedFields()
     if (status === previous?.[0]) return
-    if (status === 'applied' || status === 'partial') clearOneShotFields()
     if (settled) {
       // A ordine concluso la base torna a essere la macchina: i campi che
       // coincidono la seguono, quelli in disaccordo restano cio' che era stato
@@ -299,7 +319,34 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   }, { flush: 'sync' })
 
   let planInitialised = false
-  watch(() => link.selectedRoomId.value, () => { planInitialised = false; synced = null; seenOnScreen.value = {} })
+  type Draft = { plan: PitwallPlan, sent: PitwallPlan | null, touched: boolean, initialised: boolean, base: CarBase | null }
+  const drafts = new Map<string, Draft>()
+  const clonePlan = (value: PitwallPlan): PitwallPlan => ({ ...value, pressures: { ...value.pressures } })
+  watch(() => [link.selectedRoomId.value, link.selectedTargetUid?.value ?? null] as const, ([roomId, targetUid], previous) => {
+    if (previous?.[0] !== roomId) drafts.clear()
+    else if (previous?.[1]) drafts.set(previous[1], {
+      plan: clonePlan(plan.value), sent: sentPlan.value && clonePlan(sentPlan.value),
+      touched: compoundTouched.value, initialised: planInitialised, base: synced,
+    })
+    const saved = targetUid ? drafts.get(targetUid) : null
+    pressures.value = { ...(saved?.plan.pressures ?? { FL: 25, FR: 25, RL: 25, RR: 25 }) }
+    fuelLiters.value = saved?.plan.fuelLiters ?? 0
+    compound.value = saved?.plan.compound ?? 'dry'
+    tyreSet.value = saved?.plan.tyreSet ?? null
+    for (const [field, value] of Object.entries(oneShot)) {
+      if (field === 'repairBodywork' || field === 'repairSuspension') continue
+      // All entries retain their field's primitive type in the saved plan.
+      ;(value as { value: unknown }).value = saved?.plan[field as keyof PitwallPlan] ?? null
+    }
+    repairs.value = { repairBodywork: saved?.plan.repairBodywork ?? null, repairSuspension: saved?.plan.repairSuspension ?? null }
+    compoundTouched.value = saved?.touched ?? false
+    sentPlan.value = saved?.sent ?? null
+    planInitialised = saved?.initialised ?? false
+    synced = saved?.base ?? null
+    seenOnScreen.value = {}
+    submittedFields.clear()
+    editRevisions.clear()
+  }, { flush: 'sync' })
   watch(car, (next) => {
     if (link.draftSuspended?.value) return
     if (!session.value?.strategy) return
@@ -360,13 +407,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
     tyreSet.value = car.value.tyreSet
     // Tutto cio' che ACC non rilegge torna a "non toccare": e' l'unica posizione
     // onesta, perche' non sappiamo da dove si parte.
-    changeTyres.value = null
-    driverId.value = null
-    pitStrategy.value = null
-    brakes.value = null
-    brakeFront.value = null
-    brakeRear.value = null
-    repairs.value = { repairBodywork: null, repairSuspension: null }
+    clearOneShotFields()
     rememberSynced()
   }
 
@@ -479,6 +520,9 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
       pitStrategy: pitStrategy.value ?? previous?.pitStrategy ?? null,
     }
     const payload = planPayload()
+    submittedFields = new Map(Object.keys(oneShot).filter(field => field in payload).map(field => [
+      field, { revision: editRevisions.get(field) ?? 0, value: payload[field] },
+    ]))
     // Cio' che e' partito e' la nuova base: da qui in poi, finche' l'ingegnere
     // non lo tocca di nuovo, segue quello che la macchina rilegge.
     compoundTouched.value = false

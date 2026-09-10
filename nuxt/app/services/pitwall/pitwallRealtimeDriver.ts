@@ -2,6 +2,7 @@ import type { PitwallRoomDriverOptions, PitwallRoomDriverHandle, PitwallDriverSt
 import type { PitwallRealtimeRoomService } from './pitwallRealtimeRoomService'
 import { resolvePitwallRoomExecutor, type PitwallRoom, type PitwallRoomMember, type PitwallRoomOrder } from './pitwallRoomContract'
 import { createPitwallRoomOutcomeRecovery } from './pitwallRoomOutcomeRecovery'
+import { PITWALL_SOCIAL_ROOT } from './pitwallSocialRoom'
 
 type Options = Pick<PitwallRoomDriverOptions, 'uid' | 'nickname' | 'runtimeSessionId' | 'electronApi' | 'readVehicle' | 'readTrustedUids' | 'onStatus'> & {
   service: PitwallRealtimeRoomService
@@ -11,6 +12,8 @@ type Options = Pick<PitwallRoomDriverOptions, 'uid' | 'nickname' | 'runtimeSessi
 /** Event-driven driver: each new order is considered once, never retried when ACC becomes ready. */
 export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverHandle {
   const rooms = options.service
+  const social = rooms.io.namespace === PITWALL_SOCIAL_ROOT
+  const myExecutor = () => resolvePitwallRoomExecutor(social ? members.filter(member => member.uid === options.uid) : members, rooms.serverNow()).executor
   let wanted = false; let stopped = false
   let room: PitwallRoom | null = null
   let reason: string | null = null
@@ -26,7 +29,7 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
   let applying: string | null = null
   const handled = new Set<string>()
   const { drainPendingOutcomes, confirmOutcomes } = createPitwallRoomOutcomeRecovery({ uid: options.uid,
-    electronApi: options.electronApi, rooms, log: console, isStopped: () => stopped })
+    electronApi: options.electronApi, rooms: rooms.outcomeRecovery ?? rooms, log: console, isStopped: () => stopped })
   let recovery: Promise<void> | null = null
   const recover = () => { if (!recovery && rooms.io.online()) recovery = drainPendingOutcomes().finally(() => { recovery = null }); return recovery }
   const status = (): PitwallDriverStatus => ({ state: !wanted ? 'off' : room ? 'open' : 'arming', roomId: room?.roomId ?? null, reason })
@@ -41,7 +44,7 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
     // Set before any await: cached snapshot replay or simultaneous callbacks cannot enqueue it twice.
     if (handled.has(order.orderId) || stopped) return
     handled.add(order.orderId)
-    const executor = resolvePitwallRoomExecutor(members, rooms.serverNow()).executor
+    const executor = myExecutor()
     if (applying || executor?.connectionId !== rooms.session.connectionId()) {
       await rooms.rejectOrder(roomId, order.orderId, 'Il pilota non e disponibile o un altro ordine e in corso. Invia di nuovo quando pronto.')
       return
@@ -63,7 +66,7 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
       const current = await options.electronApi.pitwallGetLinkStatus?.()
       let outcome: { status: string, reason?: string | null, fields?: unknown, tyreSetCondition?: unknown, method?: string, sourceStatus?: string, events?: unknown, selectedDriverId?: number }
       if (!acknowledged || stopped || room?.roomId !== roomId || !current?.accReady || current.driverUid !== options.uid
-        || resolvePitwallRoomExecutor(members, rooms.serverNow()).executor?.connectionId !== rooms.session.connectionId()) {
+        || myExecutor()?.connectionId !== rooms.session.connectionId()) {
         outcome = { status: 'rejected', reason: 'Stato cambiato dopo la presa in carico: nessun input inviato. Invia di nuovo quando pronto.' }
       } else {
         try {
@@ -112,7 +115,17 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
   async function runSync() {
     const vehicle = await options.readVehicle()
     if (stopped) return
-    if (wanted && vehicle && !room) {
+    if (social && rooms.session.roomId() && rooms.session.roomId() !== room?.roomId) {
+      const selected = await rooms.readRoom(rooms.session.roomId()!)
+      if (selected?.memberUids.includes(options.uid)) { detach(); room = selected; wanted = true }
+    }
+    if (social && wanted && !room) {
+      const created = await rooms.ensureRoomForVehicle({ fingerprint: '', label: `Pitwall di ${options.nickname}` })
+      if (!created.ok) { reason = created.reason; emit(); return }
+      if (!wanted || stopped) { await rooms.leaveRoom(created.value.roomId); return }
+      room = created.value
+    }
+    if (!social && wanted && vehicle && !room) {
       if (confirming !== vehicle.fingerprint) {
         confirming = vehicle.fingerprint; confirmed = false
         if (confirmationTimer) clearTimeout(confirmationTimer)
@@ -125,7 +138,7 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
         room = created.value
       }
     }
-    if (room && vehicle && room.vehicleFingerprint !== vehicle.fingerprint) {
+    if (!social && room && vehicle && room.vehicleFingerprint !== vehicle.fingerprint) {
       const previous = room.roomId
       detach(); room = null; confirming = null; confirmed = false
       await rooms.clearPresence(previous)
@@ -151,6 +164,7 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
   let observedConnection = ''
   const stopReady = rooms.session.onReady(() => {
     void bindMain()
+    if (social && rooms.session.roomId() && rooms.session.roomId() !== room?.roomId) void sync()
     const id = rooms.session.connectionId()
     if (id && id !== observedConnection) { observedConnection = id; void recover(); if (wanted && !room) void sync() }
   })

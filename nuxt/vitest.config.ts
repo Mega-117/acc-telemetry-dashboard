@@ -25,7 +25,7 @@ export default defineConfig({
     // Coverage includes the real RTDB adapter exercised against the emulator.
     // Other Firebase suites and the 500-client load run retain their own isolated gates.
     exclude: process.env.FIREBASE_DATABASE_EMULATOR_HOST
-      ? readdirSync(resolve(root, 'tests/firebase')).filter(name => name !== 'pitwallRealtime.emulator.test.ts').map(name => `tests/firebase/${name}`)
+      ? readdirSync(resolve(root, 'tests/firebase')).filter(name => !['pitwallRealtime.emulator.test.ts', 'pitwallSocial.emulator.test.ts'].includes(name)).map(name => `tests/firebase/${name}`)
       : ['tests/firebase/**'],
     coverage: {
       provider: 'v8',
@@ -41,13 +41,14 @@ export default defineConfig({
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
         'scripts/cloudflare-package.mjs',
-        'app/composables/usePitwallApplicationMethod.ts',
-        'app/components/pitwall/PitwallApplicationPanel.vue',
         'app/services/monitoring/windowOpeningProbe.ts',
         'app/components/auth/*.vue',
         'app/components/electron/ElectronTitlebar.vue',
         'app/services/pitwall/pitwallIoMetrics.ts',
         'app/services/pitwall/pitwallRealtimeProtocol.ts',
+        'app/services/pitwall/pitwallSocialRoom.ts',
+        'app/services/pitwall/pitwallDiagnostics.ts',
+        'app/services/pitwall/pitwallSocialLifecycle.ts',
         'app/services/pitwall/pitwallRealtimeSession.ts',
         'app/services/pitwall/pitwallRealtimeTransport.ts',
         'app/services/pitwall/pitwallRealtimeOrders.ts',

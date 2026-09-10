@@ -8,6 +8,7 @@
 // ============================================
 
 import type { Ref } from 'vue'
+import { emitPitwallDiagnostic } from '~/services/pitwall/pitwallDiagnostics'
 import { pitwallFriendActions, type PitwallFriendView } from '~/services/pitwall/pitwallFriends'
 import type { PitwallRoom } from '~/services/pitwall/pitwallRoomContract'
 
@@ -15,10 +16,10 @@ export interface PitwallFriendActionDeps {
   uid: () => string | null
   friendViews: Ref<PitwallFriendView[]>
   trust: {
-    preAuthorise: (uid: string, scope: 'always' | 'once', expiresAtMs: number | null) => Promise<unknown>
-    requestLink: (uid: string, scope: 'always' | 'once') => Promise<unknown>
-    decide: (uid: string, decision: 'granted' | 'revoked') => Promise<unknown>
-    withdrawRequest: (uid: string) => Promise<unknown>
+    preAuthorise: (uid: string, scope: 'always' | 'once', expiresAtMs: number | null) => Promise<boolean>
+    requestLink: (uid: string, scope: 'always' | 'once') => Promise<boolean>
+    decide: (uid: string, decision: 'granted' | 'revoked') => Promise<boolean>
+    withdrawRequest: (uid: string) => Promise<boolean>
   }
   link: {
     rooms: Ref<PitwallRoom[]>
@@ -35,37 +36,27 @@ export function createPitwallFriendActions({ uid, friendViews, trust, link }: Pi
    */
   async function befriend(personId: string): Promise<void> {
     const before = friendViews.value.find(view => view.personId === personId) ?? null
-    await trust.preAuthorise(personId, 'always', null)
-    if (!before?.theyAllow) await trust.requestLink(personId, 'always')
+    link.notice.value = null
+    const context = { uid: uid() ?? undefined, peerUid: personId }
+    if (!await trust.preAuthorise(personId, 'always', null)) { emitPitwallDiagnostic('friend_failed', context); return }
+    if (!before?.theyAllow && !await trust.requestLink(personId, 'always')) { emitPitwallDiagnostic('friend_failed', context); return }
+    emitPitwallDiagnostic(before?.theyAllow ? 'friend_accepted' : 'friend_requested', context)
     link.notice.value = before?.theyAllow
-      ? 'Adesso siete amici.'
+      ? null
       : 'Richiesta inviata: quando accetta, siete amici.'
   }
 
-  /**
-   * Sciogliere la relazione tocca solo i documenti che esistono, e toglie la
-   * persona anche dalle mie gare aperte: `syncInvites` aggiunge soltanto, e
-   * senza questo un ex amico resterebbe al muretto fino alla chiusura. Dalle
-   * sue gare esco io: le regole non mi lasciano togliermi dagli invitati.
-   */
+  /** Revoca il rapporto sociale; chi e' gia' nella stanza rimane. */
   async function unfriend(personId: string): Promise<void> {
     const before = friendViews.value.find(view => view.personId === personId)
     const actions = pitwallFriendActions(before)
-    if (actions.revokeMine) await trust.decide(personId, 'revoked')
-    if (actions.withdrawTheirs) await trust.withdrawRequest(personId)
+    link.notice.value = null
+    if (actions.revokeMine && !await trust.decide(personId, 'revoked')) return
+    if (actions.withdrawTheirs && !await trust.withdrawRequest(personId)) return
     // I servizi parlano di permessi; l'utente ha tolto un amico o una richiesta.
     link.notice.value = before?.state === 'friends' ? 'Non siete più amici.' : 'Richiesta annullata.'
-    const me = uid()
-    const service = link.service()
-    if (!me || !service) return
-    for (const room of link.rooms.value) {
-      if (room.closedAt) continue
-      if (room.hostUid === me) {
-        if (room.allowedUids.includes(personId) || room.memberUids.includes(personId)) await service.revoke(room.roomId, personId)
-      } else if (room.hostUid === personId && room.memberUids.includes(me)) {
-        await service.leaveRoom(room.roomId)
-      }
-    }
+    emitPitwallDiagnostic('friend_revoked', { uid: uid() ?? undefined, peerUid: personId })
+
   }
 
   return { befriend, unfriend }

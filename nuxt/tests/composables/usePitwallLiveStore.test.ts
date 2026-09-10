@@ -102,6 +102,7 @@ function makeLink() {
     orderReason: ref(null),
     orderFields: ref({}),
     notice: ref<string | null>(null),
+    clearFeedback: vi.fn(),
     lastError: ref<string | null>(null),
     selectRoom: vi.fn(async (roomId: string) => { roomRef.value = fakes.link ? (fakes.link as ReturnType<typeof makeLink>).rooms.value.find(entry => entry.roomId === roomId) ?? null : null }),
     leave: vi.fn(async () => {}),
@@ -126,10 +127,10 @@ function makeTrust() {
     searchResults: ref<{ uid: string, nickname: string }[]>([]),
     searchTerm: ref(''),
     search: vi.fn(async () => {}),
-    requestLink: vi.fn(async () => {}),
-    withdrawRequest: vi.fn(async () => {}),
-    preAuthorise: vi.fn(async () => {}),
-    decide: vi.fn(async () => {}),
+    requestLink: vi.fn(async () => true),
+    withdrawRequest: vi.fn(async () => true),
+    preAuthorise: vi.fn(async () => true),
+    decide: vi.fn(async () => true),
     setExpiry: vi.fn(async () => {}),
     refreshIncoming: vi.fn(async () => {}),
     refreshPilots: vi.fn(async () => {}),
@@ -204,11 +205,23 @@ describe('la gara del pilota, vista dal pilota', () => {
     expect(link.closedByService).toEqual([])
   })
 
-  it('la gara di un altro in cui sono entrato non e la mia: sono l ingegnere, non il pilota', () => {
-    // Visto da popo il 2026-09-04: membro della stanza di RICO117, si vedeva
-    // "La tua gara" con "il tuo PC l'ha gia' aggiunto".
+  it('la stanza corrente e quella a cui appartengo anche se il creatore e un altro', () => {
     link.rooms.value = [room({ hostUid: 'pilota', memberUids: ['pilota', 'me'] })]
+    expect(store.myRoom.value?.id).toBe('r1')
+    expect(store.races.value).toEqual([])
+  })
+
+  it('la stanza sociale accessibile non e un invito del creatore a se stesso', () => {
+    link.rooms.value = [room({ membershipModel: 'social', hostUid: 'me', memberUids: ['popo'], allowedUids: ['me'] })]
     expect(store.myRoom.value).toBeNull()
+    expect(store.races.value.map(race => race.id)).toEqual(['r1'])
+    expect(store.notices.value).toEqual([])
+  })
+
+  it('la stanza sociale di un amico non genera un invito da accettare', () => {
+    link.rooms.value = [room({ membershipModel: 'social' })]
+    expect(store.notices.value).toEqual([])
+    expect(store.races.value).toHaveLength(1)
   })
 
   it('senza una gara aperta si dice che non c e, invece di mostrare il nulla', () => {
@@ -228,7 +241,7 @@ describe('la gara del pilota, vista dal pilota', () => {
     link.members.value = [{ connected: true }]
     expect(store.myRoom.value?.state).toBe('live')
     link.members.value = []
-    expect(store.myRoom.value?.state).toBe('dormant')
+    expect(store.myRoom.value?.state).toBe('live')
   })
 
   it('chi ha il volante lo si dice solo della gara che si sta guardando in diretta', () => {
@@ -258,7 +271,7 @@ describe('gli amici, in un elenco solo', () => {
       ['chiede', 'received', false],
       ['vecchio', 'received', false],
       ['chiesto', 'sent', false],
-      ['amico', 'friends', true],
+      ['amico', 'friends', false],
     ])
     // Chiunque sia gia' in un rapporto con me non si ripropone nella ricerca.
     trust.searchResults.value = [{ uid: 'chiesto', nickname: 'nuovochiesto' }, { uid: 'nuovo', nickname: 'nuovo' }]
@@ -281,10 +294,10 @@ describe('gli amici, in un elenco solo', () => {
     await settle()
     expect(trust.preAuthorise).toHaveBeenCalledWith('pronto', 'always', null)
     expect(trust.requestLink).not.toHaveBeenCalled()
-    expect(link.notice.value).toBe('Adesso siete amici.')
+    expect(link.notice.value).toBeNull()
   })
 
-  it('togliere un amico tocca solo i documenti che esistono, e lo toglie dalle mie gare aperte', async () => {
+  it('togliere un amico revoca solo la relazione senza espulsioni', async () => {
     befriended('ex')
     link.rooms.value = [
       room({ roomId: 'mia', hostUid: 'me', managerUids: ['me'], memberUids: ['me', 'ex'], allowedUids: ['ex'] }),
@@ -297,7 +310,7 @@ describe('gli amici, in un elenco solo', () => {
     await settle()
     expect(trust.decide).toHaveBeenCalledWith('ex', 'revoked')
     expect(trust.withdrawRequest).toHaveBeenCalledWith('ex')
-    expect(link.revokedByService).toEqual([{ roomId: 'mia', uid: 'ex' }, { roomId: 'sua', uid: 'me' }])
+    expect(link.revokedByService).toEqual([])
 
     // Solo la mia parte esisteva: si revoca quella e basta.
     vi.clearAllMocks()
@@ -327,6 +340,14 @@ describe('gli amici, in un elenco solo', () => {
 })
 
 describe('i Pitwall aperti e gli avvisi', () => {
+  it('does not execute a room action when selecting that room was refused', async () => {
+    link.room.value = room({ memberUids: ['me'] })
+    link.selectRoom.mockImplementationOnce(async () => {})
+    store.leaveRace('other')
+    await settle()
+    expect(link.leave).not.toHaveBeenCalled()
+  })
+
   it('una riga per amico con il Pitwall aperto, con pista e vettura lette dalla sua presenza', () => {
     link.rooms.value = [room({ track: 'nurburgring' })]
     befriended('pilota', { reachable: true, session: { ...LIVE_SESSION, car: 'ferrari_296_gt3', track: 'nurburgring' } })
@@ -347,46 +368,23 @@ describe('i Pitwall aperti e gli avvisi', () => {
     expect(store.notices.value.filter(notice => notice.kind === 'invite')).toEqual([{ id: 'inv:r1', kind: 'invite', personId: 'pilota', raceId: 'r1' }])
   })
 
-  it('un Pitwall e aperto se la gara non e chiusa e l amico e in pista: chi spegne sparisce da solo', () => {
-    // Amico con ACC spento: la stanza esiste ancora, la riga no.
+  it('la stanza resta aperta senza ACC, con macchina ferma e senza telemetria', () => {
     link.rooms.value = [room()]
     befriended('pilota', { reachable: false })
-    expect(store.races.value).toEqual([])
-    expect(store.friends.value[0]).toMatchObject({ personId: 'pilota', racing: false, pitwallOpen: false })
-
-    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: LIVE_SESSION })]
     expect(store.races.value).toHaveLength(1)
-
-    // The current connection names the room; old timestamps do not close it.
-    link.rooms.value = [room({ lastLiveAtMs: null })]
-    expect(store.races.value).toHaveLength(1)
+    expect(store.friends.value[0]).toMatchObject({ personId: 'pilota', racing: false, pitwallOpen: true })
     trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { ...LIVE_SESSION, roomId: null } })]
+    expect(store.races.value).toHaveLength(1)
+    link.rooms.value = [room({ closedAt: '2026-09-03T09:59:00.000Z' })]
     expect(store.races.value).toEqual([])
-
-    // Chiusa dal pilota: sparisce subito, e la gara di Monza di due giorni
-    // prima - ancora aperta, come tutte quelle vecchie - non la sostituisce:
-    // la presenza dice che oggi si corre altrove.
-    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { ...LIVE_SESSION, track: 'nurburgring' } })]
-    link.rooms.value = [
-      room({ closedAt: '2026-09-03T09:59:00.000Z', track: 'nurburgring' }),
-      room({ roomId: 'monza', track: 'monza', createdAt: '2026-09-01T08:00:00.000Z' }),
-    ]
-    expect(store.races.value).toEqual([])
-    expect(store.friends.value[0]).toMatchObject({ pitwallOpen: false })
-
-    // Spegne il gioco: il battito invecchia, reachable cade, la riga sparisce.
-    link.rooms.value = [room()]
-    trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: false })]
-    expect(store.races.value).toEqual([])
+    expect(store.friends.value[0]?.pitwallOpen).toBe(false)
   })
 
-  it('un permesso a un verso solo non e un Pitwall aperto: e una richiesta', () => {
-    // Prima "In pista" nasceva da chi mi aveva autorizzato, e bastava un
-    // verso. Adesso serve l'amicizia: chi mi ha solo chiesto non e' al muretto.
+  it('una richiesta al creatore non nasconde una stanza autorizzata tramite un altro membro', () => {
     link.rooms.value = [room()]
     trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: LIVE_SESSION })]
-    expect(store.races.value).toEqual([])
-    expect(store.friends.value[0]).toMatchObject({ personId: 'pilota', state: 'received', racing: true, pitwallOpen: false })
+    expect(store.races.value).toHaveLength(1)
+    expect(store.friends.value[0]).toMatchObject({ personId: 'pilota', state: 'received', racing: false, pitwallOpen: false })
   })
 
   it('due amici sulla stessa vettura sono una riga sola: quella di chi ha aperto', async () => {
@@ -409,7 +407,7 @@ describe('i Pitwall aperti e gli avvisi', () => {
   it('di uno stesso amico si apre la stanza aperta adesso, non quelle di ieri', () => {
     // Le stanze non si chiudono mai: dello stesso pilota ne restano molte.
     link.rooms.value = [
-      room({ roomId: 'vecchia', createdAt: '2026-09-01T08:00:00.000Z' }),
+      room({ roomId: 'vecchia', createdAt: '2026-09-01T08:00:00.000Z', closedAt: '2026-09-02T08:00:00.000Z' }),
       room({ roomId: 'oggi', createdAt: '2026-09-03T08:00:00.000Z' }),
       room({ roomId: 'chiusa', createdAt: '2026-09-03T09:00:00.000Z', closedAt: '2026-09-03T10:00:00.000Z' }),
     ]
@@ -417,7 +415,7 @@ describe('i Pitwall aperti e gli avvisi', () => {
     expect(store.races.value.map(race => race.id)).toEqual(['oggi'])
   })
 
-  it('gli inviti di un amico alle gare di ieri non sono una notizia; quelli di chi non e amico si', () => {
+  it('gli avvisi di stanza non dipendono dalla telemetria del creatore', () => {
     // Le stanze non si chiudono da sole e il PC dell'amico mi semina in ognuna:
     // visto dal vivo, sei campanelle "Gara non piu' disponibile".
     befriended('pilota', { reachable: false })
@@ -425,7 +423,7 @@ describe('i Pitwall aperti e gli avvisi', () => {
       room({ roomId: 'ieri', track: 'monza', createdAt: '2026-09-01T08:00:00.000Z' }),
       room({ roomId: 'ospite', hostUid: 'sconosciuto', memberUids: ['sconosciuto'], allowedUids: ['me'] }),
     ]
-    expect(store.notices.value.filter(notice => notice.kind === 'invite').map(notice => notice.raceId)).toEqual(['ospite'])
+    expect(store.notices.value.filter(notice => notice.kind === 'invite').map(notice => notice.raceId)).toEqual(['ieri', 'ospite'])
 
     // Appena l'amico apre il Pitwall (in pista, gara di oggi), l'invito conta.
     trust.outgoing.value = [outgoing('pilota', 'granted', { reachable: true, session: { ...LIVE_SESSION, roomId: 'ieri', track: 'monza' } })]
@@ -484,7 +482,7 @@ describe('i Pitwall aperti e gli avvisi', () => {
     expect(store.notices.value.filter(notice => notice.kind === 'granted')).toEqual([])
     befriended('nuovo')
     await nextTick()
-    expect(store.notices.value).toContainEqual({ id: `${NOTICE_PREFIX.granted}nuovo`, kind: 'granted', personId: 'nuovo' })
+    expect(store.notices.value.filter(notice => notice.kind === 'granted')).toEqual([])
     store.dismissNotice('grant:nuovo')
     expect(store.notices.value.filter(notice => notice.kind === 'granted')).toEqual([])
     trust.outgoing.value = [outgoing('nuovo', 'granted')]
