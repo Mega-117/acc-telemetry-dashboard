@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 64fe749cf5d20cde55c39493536a13abe7e14f74629a14f79020fbc8afc0106b -->
+<!-- Generated V4 online; SHA256 443f29b277096f9bd6f09c57ab3a2a3f3f5314e6421abb028ae3b3164de0913b -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1191,6 +1191,8 @@ else globalThis.MfdV4Contract = exported;
   function send(type, value) { parent.postMessage({ channel: 'mfd-v4-online', type: type, value: value }, '*'); }
   var nativeRender = renderForm;
   renderForm = function () {
+    // The shared driver control reads this button while rendering.
+    bA.disabled = busy || !snapshot?.ready;
     nativeRender();
     formEl.querySelectorAll('input[type=checkbox]').forEach(function (input) {
       var key = input.dataset.f;
@@ -1224,6 +1226,7 @@ else globalThis.MfdV4Contract = exported;
     }
     var checked = MfdV4Contract.validatePlan(p);
     if (!checked.ok) { log('err', checked.reason); return; }
+    logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
     busy = true; renderForm(); send('submit', checked.plan);
   });
   S = { applyPitStrategy: false, pitStrategy: 1, fuel: null, changeTyre: null, compound: null, tyreSet: null,
@@ -1251,10 +1254,11 @@ else globalThis.MfdV4Contract = exported;
   window.addEventListener('message', function (event) {
     if (event.source !== parent || event.data?.channel !== 'mfd-v4-online') return;
     if (event.data.type !== 'snapshot') return;
+    var previousReady = snapshot?.ready;
     snapshot = event.data.value;
     if (!snapshot || typeof snapshot !== 'object') return;
     restoring = true;
-    var redraw = !initialized || busy !== (snapshot.busy === true) || crewIdentityV4 !== snapshot.contextId;
+    var redraw = !initialized || previousReady !== snapshot.ready || busy !== (snapshot.busy === true) || crewIdentityV4 !== snapshot.contextId;
     if (!initialized) {
       if (snapshot.draft) Object.assign(S, snapshot.draft);
       else if (snapshot.strategy) {
@@ -1276,7 +1280,9 @@ else globalThis.MfdV4Contract = exported;
     busy = snapshot.busy === true;
     refresh.disabled = busy || !snapshot.strategy;
     document.getElementById('connTxt').textContent = snapshot.reason || 'PC del pilota pronto. Valori iniziali dai dati disponibili; completa le scelte mancanti.';
-    if (snapshot.outcome) {
+    if (busy) {
+      logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
+    } else if (snapshot.outcome) {
       logEl.textContent = snapshot.outcome;
     }
     if (redraw) renderForm();

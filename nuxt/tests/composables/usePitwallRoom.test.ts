@@ -59,7 +59,7 @@ vi.mock('~/services/pitwall/pitwallRealtimeRoomService', () => ({
     },
     listRooms: async () => [fakes.roomDoc],
     watchRooms: (onList: (list: unknown[]) => void) => { fakes.pushRooms = onList; return () => {} },
-    sendOrder: async () => (fakes.sendOk ? { ok: true, value: 'ord-1' } : { ok: false, reason: 'Gara chiusa.' }),
+    sendOrder: async () => { fakes.calls.push('send'); return fakes.sendOk ? { ok: true, value: 'ord-1' } : { ok: false, reason: 'Gara chiusa.' } },
     watchOrder: (_id: string, _orderId: string, onOrder: (order: unknown) => void) => { fakes.pushOrder = onOrder; return () => {} },
     invite: async (_id: string, who: string) => { fakes.calls.push(`invite:${who}`); return who === 'nessuno' ? { ok: false, reason: 'Troppe persone invitate a questa gara.' } : { ok: true, value: true } },
     revoke: async (_id: string, who: string) => { fakes.calls.push(`revoke:${who}`); return { ok: true, value: true } },
@@ -115,6 +115,7 @@ async function settle(): Promise<void> {
 let scope: ReturnType<typeof effectScope>
 
 beforeEach(() => {
+  sessionStorage.clear()
   vi.useFakeTimers()
   vi.setSystemTime(NOW)
   fakes.presence = []
@@ -328,6 +329,41 @@ describe('entrare e leggere la gara', () => {
 })
 
 describe('l ordine alla vettura', () => {
+  it('recovers V4 from RTDB after recreation without sending again', async () => {
+    const first = await open([member()])
+    expect(await first.sendPlan({ method: 'mfd-v4' })).toBe(true)
+    scope.stop()
+    scope = effectScope()
+    const recovered = await open([member()])
+    expect(recovered.orderId.value).toBe('ord-1')
+    expect(recovered.orderStatus.value).toBe('pending')
+    fakes.pushOrder?.({ senderId: 'me', targetUid: 'me', plan: { method: 'mfd-v4' }, status: 'applied', result: { diary: 'verificato', fields: {} } })
+    expect(recovered.orderDiary.value).toBe('verificato')
+    expect(recovered.orderStatus.value).toBe('applied')
+    expect(fakes.calls.filter(call => call === 'send')).toHaveLength(1)
+  })
+
+  it('rejects a recovered reference for another recipient and ignores stale callbacks', async () => {
+    sessionStorage.setItem('pitwall-v4-order:["me","r1","me"]', JSON.stringify({ id: 'ord-1', savedAt: NOW }))
+    const link = await open([member()])
+    const stale = fakes.pushOrder
+    fakes.pushOrder?.({ senderId: 'me', targetUid: 'other', plan: { method: 'mfd-v4' }, status: 'applied', result: { diary: 'wrong' } })
+    expect(link.orderStatus.value).toBe('unknown')
+    expect(link.orderDiary.value).toBe('')
+    link.selectTarget('other')
+    stale?.({ status: 'applied', result: { diary: 'stale' } })
+    expect(link.orderDiary.value).toBe('')
+    expect(fakes.calls).not.toContain('send')
+  })
+
+  it('does not recover expired or foreign-account references', async () => {
+    sessionStorage.setItem('pitwall-v4-order:["me","r1","me"]', JSON.stringify({ id: 'ord-1', savedAt: NOW - 86400001 }))
+    sessionStorage.setItem('pitwall-v4-order:["popo","r1","me"]', JSON.stringify({ id: 'foreign', savedAt: NOW }))
+    const link = await open([member()])
+    expect(link.orderId.value).toBeNull()
+    expect(fakes.calls).not.toContain('send')
+  })
+
   it('parte solo con un pilota fresco al volante, poi segue l esito campo per campo', async () => {
     const link = await open([])
     expect(await link.sendPlan({ tyreSet: 4 })).toBe(false)

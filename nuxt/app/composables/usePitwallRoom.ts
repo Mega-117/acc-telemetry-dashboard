@@ -144,6 +144,25 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   /** Chi applichera' l'ordine, adesso. Null quando non si puo' dire con certezza. */
   const selectedTargetUid = ref<string | null>(null)
   const targetTouched = ref(false)
+  function orderReferenceKey() {
+    return `pitwall-v4-order:${JSON.stringify([options.uid(), selectedRoomId.value, selectedTargetUid.value])}`
+  }
+  function rememberOrder(id: string) {
+    try { sessionStorage.setItem(orderReferenceKey(), JSON.stringify({ id, savedAt: Date.now() })) }
+    catch { /* Storage can be unavailable; live observation still works. */ }
+  }
+  // Recover only a reference. RTDB remains the authority for status and fields.
+  function recoverOrder() {
+    if (!selectedRoomId.value || !selectedTargetUid.value || orderId.value) return
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(orderReferenceKey()) || 'null')
+      if (!saved || typeof saved.id !== 'string' || !/^[\w-]{1,128}$/.test(saved.id)
+        || !Number.isFinite(saved.savedAt) || Date.now() - saved.savedAt > 86400000 || saved.savedAt > Date.now()) return
+      const currentService = service()
+      if (currentService) followOrder(currentService, selectedRoomId.value, saved.id, roomGeneration, true)
+    } catch { /* Invalid or unavailable storage is not a reason to send an order. */ }
+  }
+  watch(selectedTargetUid, recoverOrder)
   const availableTargets = computed(() => eligibleSocialDrivers(members.value.filter(member => isPitwallMemberFresh(member, nowTick.value))))
   watch(availableTargets, drivers => {
     const resolved = resolveSocialTarget(drivers, selectedTargetUid.value, targetTouched.value)
@@ -154,8 +173,10 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     if (sending.value || orderStatus.value === 'pending' || orderStatus.value === 'applying') return
     stopOrderWatch?.(); stopOrderWatch = null
     orderId.value = null; orderStatus.value = null; orderReason.value = null; orderFields.value = {}
+    orderMethod.value = 'standard'; orderDiary.value = ''
     selectedTargetUid.value = uid
     targetTouched.value = true
+    recoverOrder()
     emitPitwallDiagnostic('target_selected', { uid: myUid.value ?? undefined, targetUid: uid ?? undefined, roomId: selectedRoomId.value ?? undefined })
   }
   const executor = computed(() => resolvePitwallRoomExecutor(
@@ -336,6 +357,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     orderStatus.value = null
     orderReason.value = null
     orderFields.value = {}
+    orderMethod.value = 'standard'
+    orderDiary.value = ''
     sending.value = false
     stopRoomWatch?.()
     stopMembersWatch?.()
@@ -490,11 +513,29 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         return false
       }
 
-      orderId.value = sent.value
+      if (plan.method === 'mfd-v4') rememberOrder(sent.value)
+      followOrder(service_, roomId, sent.value, generation)
+      return true
+    } finally {
+      if (generation === roomGeneration) sending.value = false
+    }
+  }
+
+  function followOrder(service_: PitwallRoomService, roomId: string, id: string, generation: number, recovered = false) {
+      const target = selectedTargetUid.value
+      orderId.value = id
       orderStatus.value = 'pending'
+      if (recovered) { orderMethod.value = 'mfd-v4'; orderReason.value = 'Recupero esito in corso…' }
       stopOrderWatch?.()
-      stopOrderWatch = service_.watchOrder(roomId, sent.value, (document: PitwallRoomOrder | null) => {
-        if (generation !== roomGeneration) return
+      stopOrderWatch = service_.watchOrder(roomId, id, (document: PitwallRoomOrder | null) => {
+        if (generation !== roomGeneration || orderId.value !== id || selectedTargetUid.value !== target) return
+        if (recovered && document && (document.senderId !== options.uid() || document.plan?.method !== 'mfd-v4'
+          || (document as PitwallRoomOrder & { targetUid?: string }).targetUid !== target)) {
+          orderStatus.value = 'unknown'
+          orderReason.value = 'Esito non associato a questo mittente e destinatario.'
+          orderFields.value = {}; orderDiary.value = ''
+          return
+        }
         if (!document) {
           if (orderStatus.value && isPitwallOrderSettled(orderStatus.value as PitwallOrderStatus)) return
           orderStatus.value = 'unknown'
@@ -516,10 +557,6 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
           stopOrderWatch = null
         }
       })
-      return true
-    } finally {
-      if (generation === roomGeneration) sending.value = false
-    }
   }
 
   // --- Chi puo' entrare: solo un manager lo cambia ------------------------

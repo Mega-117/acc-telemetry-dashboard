@@ -69,7 +69,22 @@ export function createPitwallRealtimeOrders(options: {
       if (!base) throw new Error('Strategia non valida da inviare.')
       const order: RealtimeOrder = { ...base, protocolVersion: 3, targetUid: target.uid,
         targetConnectionId: target.connectionId, senderConnectionId }
-      await io.write(`rooms/${roomId}`, { [`orders/${orderId}`]: order, [`pending/${orderId}`]: true })
+      try {
+        await io.write(`rooms/${roomId}`, { [`orders/${orderId}`]: order, [`pending/${orderId}`]: true })
+      } catch (error) {
+        // A racing engineer can lose to an already claimed order. Diagnose the
+        // confirmed lease; never turn every permission error into "busy".
+        if (/permission[_-]denied/i.test(error instanceof Error ? error.message : String(error))) {
+          const claimPath = `rooms/${roomId}/control/${io.namespace === PITWALL_SOCIAL_ROOT ? `${target.uid}/` : ''}claim`
+          let claim: RealtimeClaim | null = null
+          try { claim = await io.read<RealtimeClaim>(claimPath) } catch { /* preserve the original denial */ }
+          if (claim?.uid === target.uid && claim.connectionId === target.connectionId
+            && claim.orderId !== orderId && claim.leaseUntilMs > io.serverNow()) {
+            throw new Error('Il pilota sta applicando un’altra strategia. Attendi l’esito, poi invia di nuovo manualmente.')
+          }
+        }
+        throw error
+      }
       diagnostic('send_confirmed', orderId, undefined, { roomId, targetUid: target.uid, targetConnectionId: target.connectionId, connectionId: senderConnectionId })
       return { ok: true, value: orderId }
     } catch (error) { const result = fail(error); diagnostic('send_failed', orderId, result.reason); return result }

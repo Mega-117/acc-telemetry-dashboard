@@ -4,6 +4,28 @@ import type { PitwallRealtimeTransport } from '~/services/pitwall/pitwallRealtim
 import type { PitwallRealtimeSession } from '~/services/pitwall/pitwallRealtimeSession'
 
 afterEach(() => vi.useRealTimers())
+describe('concurrent send diagnosis', () => {
+  it.each(['active', 'expired', 'other-driver', 'unreadable'])('only explains a confirmed active target lease: %s', async state => {
+    const denied = new Error('PERMISSION_DENIED: Permission denied')
+    const write = vi.fn().mockRejectedValue(denied)
+    const read = vi.fn(async () => {
+      if (state === 'unreadable') throw denied
+      return { uid: state === 'other-driver' ? 'someone-else' : 'driver', connectionId: 'dc', orderId: 'first',
+        leaseUntilMs: state === 'expired' ? 900 : 2000 }
+    })
+    const io = { namespace: 'pitwallRoomsV1', online: () => true, serverNow: () => 1000, read, write }
+    const orders = createPitwallRealtimeOrders({ io: io as unknown as PitwallRealtimeTransport,
+      session: { uid: 'engineer', isReady: () => true, connectionId: () => 'ec' } as unknown as PitwallRealtimeSession,
+      connections: () => [{ protocolVersion: 3, uid: 'driver', connectionId: 'dc', runtimeSessionId: 'runtime',
+        roomId: 'room', nickname: 'Driver', kind: 'driver', driving: true, sourceValid: true, updatedAt: 1000 }] })
+    const result = await orders.sendOrder('room', { orderId: 'second', revision: 1, plan: { fuelToAdd: 15 }, targetUid: 'driver' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.reason).toBe(state === 'active'
+      ? 'Il pilota sta applicando un’altra strategia. Attendi l’esito, poi invia di nuovo manualmente.' : denied.message)
+    expect(write).toHaveBeenCalledOnce()
+    expect(read).toHaveBeenCalledWith('rooms/room/control/driver/claim')
+  })
+})
 describe('order confirmation deadline', () => {
   it.each(['pending', 'applying'])('reports unavailable confirmation for %s and still receives a recovered result', status => {
     vi.useFakeTimers(); vi.setSystemTime(1000)
