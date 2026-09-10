@@ -81,6 +81,8 @@ export const PITWALL_ORDER_MAX_ATTEMPTS = 40
  * lasciato da un altro account su questo PC non e' pubblicabile da noi.
  */
 export interface PitwallPendingOutcome {
+  method?: string
+  diary?: string
   orderId: string
   roomId: string
   driverUid: string | null

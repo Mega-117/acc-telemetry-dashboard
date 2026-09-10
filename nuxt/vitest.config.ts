@@ -191,6 +191,8 @@ export default defineConfig({
         'app/composables/usePitwallFriendActions.ts',
         'app/composables/usePitwallRoom.ts',
         'app/components/pitwall/PitwallV4Local.vue',
+        'app/components/pitwall/PitwallV4OnlinePanel.vue',
+        'app/components/pitwall/PitwallApplicationPanel.vue',
         'app/components/pitwall/PitwallV3Panel.vue',
         'app/components/pitwall/PitwallV3Choice.vue',
         'app/services/pitwall/pitwallRoomRevision.ts',

@@ -55,6 +55,56 @@ async function send(engineer: PitwallRealtimeRoomService, roomId: string) {
 }
 
 describe('Pitwall RTDB rules and integrated services', () => {
+  it('V4 requires a current recipient context, freezes it and keeps its outcome method', async () => {
+    const { driver, engineer, roomId } = await openRoom()
+    const contextId = 'a'.repeat(64)
+    const dedicated = { method: 'mfd-v4', mfdV4: { version: 1, contextId, stepMs: 60, operation: 'strategy',
+      fuelLiters: 0, changeTyres: false, brakes: false, repairBodywork: false, repairSuspension: false } }
+    await vi.waitFor(() => expect(engineer.sendReadiness(roomId).ready).toBe(true))
+    expect((await engineer.sendOrder(roomId, { plan: dedicated, revision: 1 })).ok).toBe(false)
+    await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'runtime',
+      strategy: { applicationMethods: ['standard', 'mfd-v4'], mfdV4: { ready: true, contextId, reason: null } } })
+    await vi.waitFor(async () => expect((await engineer.io.read<any>(`rooms/${roomId}/mfd`))?.strategy?.mfdV4?.ready).toBe(true))
+    const sent = await engineer.sendOrder(roomId, { plan: dedicated, revision: 2 })
+    if (!sent.ok) throw new Error(sent.reason)
+    expect((await driver.claimOrder(roomId, sent.value)).ok).toBe(true)
+    const target = ref(driver.io.database, `pitwallV3/rooms/${roomId}/orders/${sent.value}`)
+    const original = (await get(target)).val()
+    for (const patch of [{ fuelLiters: 1 }, { contextId: 'b'.repeat(64) }, { stepMs: 100 }, { driverId: 0, driverName: 'Other' }]) {
+      await assertFails(set(target, { ...original, plan: { ...dedicated, mfdV4: { ...dedicated.mfdV4, ...patch } } }))
+    }
+    expect((await driver.publishOutcome(roomId, sent.value, { status: 'applied', method: 'mfd-v4' })).ok).toBe(true)
+    expect((await get(target)).val().result.method).toBe('mfd-v4')
+    expect((await driver.claimOrder(roomId, sent.value)).ok).toBe(false)
+    const stale = { ...dedicated, mfdV4: { ...dedicated.mfdV4, contextId: 'b'.repeat(64) } }
+    expect((await engineer.sendOrder(roomId, { plan: stale, revision: 3 })).ok).toBe(false)
+  })
+  it('V4 rules reject mixed payloads and malformed dependent choices without trusting the frontend', async () => {
+    const { driver, engineer, roomId } = await openRoom()
+    const baseId = await send(engineer, roomId)
+    const root = `pitwallV3/rooms/${roomId}`
+    const base = (await get(ref(driver.io.database, `${root}/orders/${baseId}`))).val()
+    const contextId = 'a'.repeat(64)
+    await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'runtime',
+      strategy: { applicationMethods: ['standard', 'mfd-v4'], mfdV4: { ready: true, contextId, reason: null } } })
+    await vi.waitFor(async () => expect((await engineer.io.read<any>(`rooms/${roomId}/mfd`))?.strategy?.mfdV4?.ready).toBe(true))
+    const p = { version: 1, contextId, stepMs: 60, operation: 'strategy', fuelLiters: 0,
+      changeTyres: false, brakes: false, repairBodywork: false, repairSuspension: false }
+    const invalid = [
+      { method: 'mfd-v4', mfdV4: { ...p, contextId: 'b'.repeat(64) } },
+      { method: 'mfd-v4', mfdV4: { ...p, stepMs: 10 } },
+      { method: 'mfd-v4', mfdV4: { ...p, brakes: true } },
+      { method: 'mfd-v4', mfdV4: { ...p, changeTyres: true } },
+      { method: 'mfd-v4', mfdV4: { ...p, driverId: 0 } },
+      { method: 'mfd-v4', mfdV4: { ...p, repairSuspension: true } },
+      { method: 'mfd-v4', mfdV4: p, fuelLiters: 0 },
+      { mfdV4: p },
+      { method: 'mfd-v4', mfdV4: { ...p, operation: 'preset', pitStrategy: 1 } },
+    ]
+    for (const [i, plan] of invalid.entries()) await assertFails(set(ref(engineer.io.database, `${root}/orders/v4-bad-${i}`), { ...base, orderId: `v4-bad-${i}`, plan }))
+    await assertSucceeds(set(ref(engineer.io.database, `${root}/orders/v4-preset`), { ...base, orderId: 'v4-preset',
+      plan: { method: 'mfd-v4', mfdV4: { version: 1, contextId, stepMs: 60, operation: 'preset', pitStrategy: 10 } } }))
+  })
   it('rejects malformed V3 operations and retired orders even when bypassing the sender', async () => {
     const { driver, engineer, roomId } = await openRoom()
     const id = await send(engineer, roomId)

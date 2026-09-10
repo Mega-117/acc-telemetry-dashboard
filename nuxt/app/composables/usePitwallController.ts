@@ -281,7 +281,7 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
   // Lo stato arriva prima degli esiti: si guardano entrambi, e si ricorda
   // solo a ordine concluso.
   watch(() => [link.orderStatus.value, link.orderFields.value] as const, ([status], previous) => {
-    if (['acc-drive-7.8.1', 'mfd-v2', 'mfd-v3'].includes(link.orderMethod?.value ?? '')) return
+    if (['acc-drive-7.8.1', 'mfd-v2', 'mfd-v3', 'mfd-v4'].includes(link.orderMethod?.value ?? '')) return
     const settled = Boolean(status) && status !== 'pending' && status !== 'applying'
     if (settled) rememberSeen()
     if (status === previous?.[0]) return

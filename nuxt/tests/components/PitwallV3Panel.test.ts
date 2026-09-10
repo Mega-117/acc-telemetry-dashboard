@@ -2,7 +2,8 @@
 import { defineComponent, ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { describe, it, expect, vi } from 'vitest'
-import Panel from '~/components/pitwall/PitwallApplicationPanel.vue'
+// Retained legacy component: the shared application selector now exposes V4.
+import Panel from '~/components/pitwall/PitwallV3Panel.vue'
 import { providePitwallApplicationMethod, MFD_V3_METHOD } from '~/composables/usePitwallApplicationMethod'
 import type { usePitwallRoom } from '~/composables/usePitwallRoom'
 vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ isAdmin: ref(true) }) }))

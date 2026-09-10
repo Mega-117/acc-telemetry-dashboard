@@ -13,7 +13,7 @@ export interface RealtimeClaim {
   claimedAtMs: number
   leaseUntilMs: number
 }
-type Outcome = { status: 'applied' | 'partial' | 'failed' | 'rejected', reason?: string | null, fields?: unknown, tyreSetCondition?: unknown, method?: string, sourceStatus?: string, events?: unknown, selectedDriverId?: number }
+type Outcome = { status: 'applied' | 'partial' | 'failed' | 'rejected', reason?: string | null, fields?: unknown, tyreSetCondition?: unknown, method?: string, diary?: string, sourceStatus?: string, events?: unknown, selectedDriverId?: number }
 const terminal = (order: RealtimeOrder) => ['applied', 'partial', 'failed', 'rejected'].includes(order.status)
 const fail = (error: unknown): { ok: false, reason: string } => ({ ok: false, reason: error instanceof Error ? error.message : String(error) })
 
@@ -53,6 +53,15 @@ export function createPitwallRealtimeOrders(options: {
         if (mfd?.uid !== target.uid || mfd.connectionId !== target.connectionId || !mfd.strategy?.applicationMethods?.includes('mfd-v3') || mfd.strategy?.mfdV3?.ready !== true) {
           throw new Error('Il PC del pilota non ha confermato la disponibilità V3.')
         }
+      }
+      if (input.plan.method === 'mfd-v4') {
+        const mfd = await io.read<{ uid: string, connectionId: string, updatedAt: number, strategy?: { applicationMethods?: string[], mfdV4?: { ready: boolean, contextId: string | null } } }>(`rooms/${roomId}/mfd`)
+        const requested = input.plan.mfdV4 as { contextId?: unknown } | undefined
+        if (mfd?.uid !== target.uid || mfd.connectionId !== target.connectionId || !mfd.strategy?.applicationMethods?.includes('mfd-v4')
+          || mfd.strategy.mfdV4?.ready !== true || !requested?.contextId || requested.contextId !== mfd.strategy.mfdV4.contextId
+          || io.serverNow() - mfd.updatedAt > 5000) throw new Error('Il PC del pilota non ha confermato questo contesto V4. Aggiorna lo stato prima di inviare.')
+        const current = activeDriver(connections(roomId))
+        if (current?.uid !== target.uid || current.connectionId !== target.connectionId) throw new Error('Il destinatario è cambiato. Occorre un nuovo invio manuale.')
       }
       const base = buildPitwallRoomOrder({ orderId, revision: input.revision, senderId: uid, plan: input.plan,
         nowMs: io.serverNow(), ttlMs: Math.min(input.ttlMs ?? PITWALL_ORDER_TTL_MS, PITWALL_ORDER_TTL_MS) })
@@ -155,7 +164,8 @@ export function createPitwallRealtimeOrders(options: {
       if (terminal(order)) return { ok: true, value: true }
       if (order.status !== 'applying' || order.claimedBy !== uid) throw new Error('Esito non appartenente a questo esecutore.')
       const completed = { ...order, status: outcome.status, appliedAt: new Date(io.serverNow()).toISOString(), result: { reason: outcome.reason ?? null, fields: outcome.fields ?? {}, ...(boundPitwallTyreCondition(outcome.tyreSetCondition) ? { tyreSetCondition: boundPitwallTyreCondition(outcome.tyreSetCondition) } : {}),
-        ...(['mfd-v2', 'mfd-v3'].includes(outcome.method ?? '') ? { method: outcome.method } : {}),
+        ...(['mfd-v2', 'mfd-v3', 'mfd-v4'].includes(outcome.method ?? '') ? { method: outcome.method } : {}),
+        ...(outcome.method === 'mfd-v4' ? { diary: typeof outcome.diary === 'string' ? outcome.diary.slice(-6000) : '' } : {}),
         ...(outcome.method === 'acc-drive-7.8.1' ? { method: outcome.method, sourceStatus: outcome.sourceStatus ?? null, events: outcome.events ?? [], selectedDriverId: outcome.selectedDriverId ?? null } : {}) } }
       const claim = await io.read<RealtimeClaim>(controlPath(roomId))
       const changes: Record<string, unknown> = { [`orders/${orderId}`]: completed }

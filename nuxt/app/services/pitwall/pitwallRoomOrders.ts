@@ -213,6 +213,8 @@ export function createPitwallRoomOrders(options: PitwallRoomOrdersOptions) {
 
   /** Dichiara com'e' andata. Solo chi ha preso l'ordine puo' farlo, e le regole lo impongono. */
   async function publishOutcome(roomId: string, orderId: string, outcome: {
+    method?: string
+    diary?: string
     status: 'applied' | 'partial' | 'failed' | 'rejected'
     reason?: string | null
     fields?: unknown

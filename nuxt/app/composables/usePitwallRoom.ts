@@ -69,6 +69,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
 
   const orderId = ref<string | null>(null)
   const orderMethod = ref('standard')
+  const orderDiary = ref('')
   const draftSuspended = ref(false)
   const orderStatus = ref<PitwallDisplayOrderStatus | null>(null)
   const readinessRevision = ref(0)
@@ -419,6 +420,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     rawError.value = null
     orderReason.value = null
     orderFields.value = {}
+    orderDiary.value = ''
     try {
       const sent = await service_.sendOrder(roomId, { plan, revision: nextRevision() })
       if (!sent.ok) {
@@ -436,10 +438,12 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         orderStatus.value = document.status as PitwallOrderStatus
         const result = document.result as {
           reason?: string | null
+          diary?: string
           fields?: Record<string, PitwallFieldOutcome>
         } | undefined
         orderReason.value = result?.reason ?? null
         orderFields.value = result?.fields ?? {}
+        orderDiary.value = typeof result?.diary === 'string' ? result.diary.slice(-6000) : ''
         if (isPitwallOrderSettled(document.status as PitwallOrderStatus)) {
           stopOrderWatch?.()
           stopOrderWatch = null
@@ -573,6 +577,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     nowTick,
     orderId,
     orderMethod,
+    orderDiary,
     draftSuspended,
     orderStatus,
     orderReason,

@@ -86,6 +86,7 @@ export function boundPitwallTyreCondition(value: unknown): PitwallTyreCondition 
 
 export interface PitwallStrategySnapshot {
   applicationMethods?: string[]
+  mfdV4?: { ready: boolean, reason: string | null, contextId: string | null }
   mfdV3?: { ready: boolean, reason: string | null, driverCount: number }
   fuelToAdd: number | null
   tyreSet: number | null
@@ -221,6 +222,7 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
     verifiedFields?: unknown
     applicationMethods?: unknown
     mfdV3?: PitwallStrategySnapshot['mfdV3']
+    mfdV4?: PitwallStrategySnapshot['mfdV4']
   }
   const wheels = ['FL', 'FR', 'RL', 'RR'] as const
   // `Number(null)` vale 0: un valore assente non deve diventare un numero.
@@ -234,7 +236,10 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
     : null
   return {
     fuelToAdd: finiteOrNull(source.fuelToAdd),
-    ...(Array.isArray(source.applicationMethods) && source.applicationMethods.includes('mfd-v3') ? { applicationMethods: ['standard', 'mfd-v3'] } : {}),
+    ...(Array.isArray(source.applicationMethods) ? { applicationMethods: ['standard', 'mfd-v3', 'mfd-v4'].filter(method => (source.applicationMethods as unknown[]).includes(method)) } : {}),
+    ...(source.mfdV4 ? { mfdV4: { ready: source.mfdV4.ready === true,
+      reason: typeof source.mfdV4.reason === 'string' ? source.mfdV4.reason.slice(0, 240) : null,
+      contextId: typeof source.mfdV4.contextId === 'string' && /^[a-f0-9]{64}$/.test(source.mfdV4.contextId) ? source.mfdV4.contextId : null } } : {}),
     ...(source.mfdV3 ? { mfdV3: { ready: source.mfdV3.ready === true, reason: typeof source.mfdV3.reason === 'string' ? source.mfdV3.reason.slice(0, 200) : null, driverCount: Number.isInteger(source.mfdV3.driverCount) ? Math.max(0, Math.min(16, source.mfdV3.driverCount)) : 0 } } : {}),
     tyreSet: finiteOrNull(source.tyreSet),
     ...(source.tyreSetCondition ? { tyreSetCondition: boundPitwallTyreCondition(source.tyreSetCondition) } : {}),

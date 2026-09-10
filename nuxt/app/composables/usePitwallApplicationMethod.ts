@@ -1,7 +1,8 @@
 import { inject, provide, reactive, ref, type InjectionKey } from 'vue'
 export const MFD_V3_METHOD = 'mfd-v3'
+export const MFD_V4_METHOD = 'mfd-v4'
 export function createPitwallApplicationMethod() {
-  return { method: ref('standard'), initialized: ref(false), draft: reactive({
+  return { method: ref('standard'), v4Draft: ref<Record<string, unknown> | null>(null), initialized: ref(false), draft: reactive({
     fuelLiters: null as number | null, changeTyres: null as boolean | null,
     compound: null as 'dry' | 'wet' | null, tyreSet: null as number | null,
     pressures: { FL: null, FR: null, RL: null, RR: null } as Record<'FL' | 'FR' | 'RL' | 'RR', number | null>,
