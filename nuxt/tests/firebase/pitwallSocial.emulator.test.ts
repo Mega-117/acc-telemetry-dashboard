@@ -44,6 +44,52 @@ async function publish(service: Awaited<ReturnType<typeof participant>>, roomId:
   expect(result.ok, JSON.stringify(result)).toBe(true)
 }
 describe('social rooms with real Firebase rules', () => {
+  it('rediscovers the room through B after A logs out with a stale own directory', async () => {
+    const A = await participant('A'), B = await participant('B')
+    const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Pitwall di A' })
+    if (!created.ok) throw new Error(created.reason)
+    const id = created.value.roomId
+    await publish(A, id)
+    let bRooms: any[] = []
+    stops.push(B.watchRooms(value => { bRooms = value }))
+    await vi.waitFor(() => expect(bRooms.map(room => room.roomId)).toEqual([id]))
+    expect((await B.joinRoom(id)).ok).toBe(true)
+    await publish(B, id)
+    await A.session.stop()
+    A.io.dispose()
+    const returned = await participant('A')
+    let aRooms: any[] = []
+    stops.push(returned.watchRooms(value => { aRooms = value }))
+    await vi.waitFor(() => expect(aRooms.map(room => room.roomId)).toEqual([id]))
+    expect(aRooms[0].memberUids).toEqual(['B'])
+    expect(await returned.ensureRoomForVehicle({ fingerprint: '', label: 'Do not duplicate' })).toMatchObject({ ok: true, value: { roomId: id } })
+    await publish(returned, id)
+    expect((await returned.ensureRoomForVehicle({ fingerprint: '', label: 'Do not duplicate' }))).toMatchObject({ ok: true, value: { roomId: id } })
+    await vi.waitFor(() => expect(bRooms).toHaveLength(1))
+    expect((await returned.leaveRoom(id)).ok).toBe(true)
+    await vi.waitFor(() => expect(aRooms[0]?.memberUids).toEqual(['B']))
+    expect((await returned.joinRoom(id)).ok).toBe(true)
+  })
+
+  it('opening immediately after login resumes the previous party before discovery starts', async () => {
+    const A = await participant('A'), B = await participant('B')
+    const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Original' })
+    if (!created.ok) throw new Error(created.reason)
+    const id = created.value.roomId
+    await publish(A, id)
+    let discovered: any[] = []
+    stops.push(B.watchRooms(value => { discovered = value }))
+    await vi.waitFor(() => expect(discovered).toHaveLength(1))
+    expect((await B.joinRoom(id)).ok).toBe(true)
+    await publish(B, id)
+    await A.session.stop()
+    A.io.dispose()
+    const returned = await participant('A')
+    expect(await returned.ensureRoomForVehicle({ fingerprint: '', label: 'New label' })).toMatchObject({ ok: true, value: { roomId: id, label: 'Original' } })
+    await publish(returned, id)
+    await vi.waitFor(() => expect(discovered).toHaveLength(1))
+  })
+
   it('accepts reciprocal friendship once, handles duplicate and crossed requests, and revokes future access', async () => {
     const make = async (uid: string) => {
       const database = env.authenticatedContext(uid).database() as unknown as Database

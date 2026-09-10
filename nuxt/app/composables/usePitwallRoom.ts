@@ -58,6 +58,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const loading = ref(false)
   const sending = ref(false)
   const rawError = ref<string | null>(null)
+  const discoveryError = ref<string | null>(null)
   const notice = ref<string | null>(null)
   /**
    * Batte ogni 5 s: freschezza e conflitti devono invecchiare da soli a schermo.
@@ -89,7 +90,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const runtimeSessionId = `pw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
   // Cio' che legge l'ingegnere e' la frase tradotta, non il gergo del servizio.
-  const lastError = computed(() => describePitwallLinkError(rawError.value))
+  const lastError = computed(() => describePitwallLinkError(rawError.value ?? discoveryError.value))
 
   function service(): PitwallRoomService | null {
     const uid = options.uid()
@@ -282,6 +283,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * niente. Il caso normale del pilota e' esattamente questo.
    */
   function applyRooms(list: PitwallRoom[]): void {
+    discoveryError.value = null
     rooms.value = list
   }
 
@@ -306,7 +308,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const service_ = service()
     if (!service_) return
     if (stopRoomsWatch) return
-    stopRoomsWatch = service_.watchRooms(applyRooms, (error) => { rawError.value = error?.message || 'Gare non disponibili.' })
+    stopRoomsWatch = service_.watchRooms(applyRooms, (error) => { discoveryError.value = error?.message || 'Gare non disponibili.' })
   }
 
   function detach(): void {
@@ -336,6 +338,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * senza scelta.
    */
   async function selectRoom(roomId: string | null): Promise<void> {
+    clearFeedback()
     if (roomId && roomId !== selectedRoomId.value && amMember.value) {
       rawError.value = 'Esci dalla stanza corrente prima di entrare in un’altra.'
       return
@@ -411,7 +414,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
           void loadNickname(uid)
         }
       },
-      (error) => { rawError.value = error?.message || 'Gara non raggiungibile.' }
+      (error) => { if (generation === roomGeneration) rawError.value = error?.message || 'Gara non raggiungibile.' }
     )
     // The first membership snapshot confirms access before announcing this connection.
     let announced = false
@@ -538,6 +541,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   }
 
   async function leave(): Promise<void> {
+    clearFeedback()
     const service_ = service()
     const roomId = selectedRoomId.value
     if (!service_ || !roomId) return
@@ -581,6 +585,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   }
 
   function stop(): void {
+    clearFeedback()
     void clearPresence()
     detach()
     stopOrderWatch?.()
@@ -596,6 +601,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     rooms.value = []
     nicknames.value = {}
   }
+
+  function clearFeedback(): void { rawError.value = null; discoveryError.value = null; notice.value = null }
 
   onScopeDispose(stop)
 
@@ -622,6 +629,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     sendReadiness,
     lastError,
     notice,
+    clearFeedback,
     clockSkewNotice,
     nowTick,
     orderId,

@@ -88,6 +88,8 @@ export type PitwallExecutorReason = 'ready' | 'nobody-driving' | 'multiple-drivi
 
 /** La stanza di una gara, come vive su Firestore. */
 export interface PitwallRoom {
+  /** Local projection: social discovery grants access, not a personal invitation. */
+  membershipModel?: 'social'
   schemaVersion: 2
   roomId: string
   label: string

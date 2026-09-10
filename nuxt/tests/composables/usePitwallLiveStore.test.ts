@@ -102,6 +102,7 @@ function makeLink() {
     orderReason: ref(null),
     orderFields: ref({}),
     notice: ref<string | null>(null),
+    clearFeedback: vi.fn(),
     lastError: ref<string | null>(null),
     selectRoom: vi.fn(async (roomId: string) => { roomRef.value = fakes.link ? (fakes.link as ReturnType<typeof makeLink>).rooms.value.find(entry => entry.roomId === roomId) ?? null : null }),
     leave: vi.fn(async () => {}),
@@ -204,11 +205,23 @@ describe('la gara del pilota, vista dal pilota', () => {
     expect(link.closedByService).toEqual([])
   })
 
-  it('la gara di un altro in cui sono entrato non e la mia: sono l ingegnere, non il pilota', () => {
-    // Visto da popo il 2026-09-04: membro della stanza di RICO117, si vedeva
-    // "La tua gara" con "il tuo PC l'ha gia' aggiunto".
+  it('la stanza corrente e quella a cui appartengo anche se il creatore e un altro', () => {
     link.rooms.value = [room({ hostUid: 'pilota', memberUids: ['pilota', 'me'] })]
+    expect(store.myRoom.value?.id).toBe('r1')
+    expect(store.races.value).toEqual([])
+  })
+
+  it('la stanza sociale accessibile non e un invito del creatore a se stesso', () => {
+    link.rooms.value = [room({ membershipModel: 'social', hostUid: 'me', memberUids: ['popo'], allowedUids: ['me'] })]
     expect(store.myRoom.value).toBeNull()
+    expect(store.races.value.map(race => race.id)).toEqual(['r1'])
+    expect(store.notices.value).toEqual([])
+  })
+
+  it('la stanza sociale di un amico non genera un invito da accettare', () => {
+    link.rooms.value = [room({ membershipModel: 'social' })]
+    expect(store.notices.value).toEqual([])
+    expect(store.races.value).toHaveLength(1)
   })
 
   it('senza una gara aperta si dice che non c e, invece di mostrare il nulla', () => {
@@ -327,6 +340,14 @@ describe('gli amici, in un elenco solo', () => {
 })
 
 describe('i Pitwall aperti e gli avvisi', () => {
+  it('does not execute a room action when selecting that room was refused', async () => {
+    link.room.value = room({ memberUids: ['me'] })
+    link.selectRoom.mockImplementationOnce(async () => {})
+    store.leaveRace('other')
+    await settle()
+    expect(link.leave).not.toHaveBeenCalled()
+  })
+
   it('una riga per amico con il Pitwall aperto, con pista e vettura lette dalla sua presenza', () => {
     link.rooms.value = [room({ track: 'nurburgring' })]
     befriended('pilota', { reachable: true, session: { ...LIVE_SESSION, car: 'ferrari_296_gt3', track: 'nurburgring' } })

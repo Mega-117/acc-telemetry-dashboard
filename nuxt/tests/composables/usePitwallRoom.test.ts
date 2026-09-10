@@ -148,6 +148,21 @@ async function open(members: PitwallRoomMember[], uid = 'me') {
 }
 
 describe('la connessione browser distinta dal runtime pilota', () => {
+  it('clears the previous switch error on reselect, leave and account stop', async () => {
+    const link = await open([member()])
+    await link.selectRoom('other')
+    expect(link.lastError.value).toContain('Esci dalla stanza corrente')
+    await link.selectRoom('r1')
+    expect(link.lastError.value).toBeNull()
+    await link.selectRoom('other')
+    await link.leave()
+    expect(link.lastError.value).toBeNull()
+    expect(link.selectedRoomId.value).toBeNull()
+    link.notice.value = 'Old feedback'
+    link.stop()
+    expect(link.notice.value).toBeNull()
+  })
+
   it('leaving clears pending order and ignores callbacks from the previous room', async () => {
     const link = await open([member()])
     await link.sendPlan({ fuelLiters: 20 })

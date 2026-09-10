@@ -35,7 +35,7 @@ const nick = (id: string) => pitwallConceptNicknameById(id, props.people);
 const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
 
 /** La gara mostrata: solo quando il Pitwall e' aperto, o quando la si guarda da un browser. */
-const room = computed(() => (props.pitwall.state === "open" || !props.pitwall.available ? props.room : null));
+const room = computed(() => props.room);
 
 /** Dove si corre: la pista, e il numero quando c'e'. */
 const where = computed(() => {
@@ -50,7 +50,7 @@ const where = computed(() => {
  * fra i tuoi assistenti farebbe sembrare che ti assisti da solo.
  */
 const connected = computed(() => (room.value?.members ?? [])
-  .filter(member => member.personId !== props.meId && member.role !== "invited" && member.online)
+  .filter(member => member.personId !== props.meId && member.role !== "invited")
   .map(member => member.personId));
 
 /** Amici che non sono ancora entrati: e' cio' che manca perche' ti assistano. */
@@ -68,7 +68,7 @@ const driving = computed(() => {
     <!-- Da un browser normale non c'e' nessun PC del pilota: si dice, invece
          di offrire un bottone che non fa niente. -->
     <article
-      v-if="!pitwall.available"
+      v-if="!pitwall.available && !room"
       class="pwc-panel pwc-mine"
       :class="{ 'is-closed': !room }"
     >
@@ -79,24 +79,11 @@ const driving = computed(() => {
           <small>Si apre dall'app desktop del pilota, anche con ACC spento.</small>
         </span>
       </div>
-      <span
-        v-if="room"
-        class="pwc-chip"
-        :class="room.state === 'live' ? 'is-always' : 'is-waiting'"
-      >{{ room.state === "live" ? "Aperto" : room.state === "dormant" ? "Nessuno da un po'" : "Chiuso" }}</span>
-      <button
-        v-if="room"
-        type="button"
-        class="pwc-btn"
-        @click="$emit('open')"
-      >
-        Apri la gara
-      </button>
     </article>
 
     <!-- Spento: un bottone solo. -->
     <article
-      v-else-if="pitwall.state === 'off'"
+      v-else-if="!room && pitwall.state === 'off'"
       class="pwc-panel pwc-mine is-off"
     >
       <div class="pwc-race__who">
@@ -117,17 +104,17 @@ const driving = computed(() => {
 
     <!-- Chiesto, ma la vettura non c'e' ancora: si arma e lo dice. -->
     <article
-      v-else-if="pitwall.state === 'arming'"
+      v-else-if="!room && pitwall.state === 'arming'"
       class="pwc-panel pwc-mine is-arming"
     >
       <div class="pwc-race__who">
         <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
         <span class="pwc-race__copy">
-          <strong>Il tuo Pitwall è pronto</strong>
+          <strong>{{ pitwall.reason ? 'Apertura del Pitwall non riuscita' : 'Apertura del Pitwall' }}</strong>
           <small>{{ pitwall.reason ?? "Apertura della stanza in corso." }}</small>
         </span>
       </div>
-      <span class="pwc-chip is-waiting">Connessione in corso</span>
+      <span class="pwc-chip is-waiting">{{ pitwall.reason ? 'Apertura non riuscita' : 'Connessione in corso' }}</span>
       <button
         type="button"
         class="pwc-link-btn"
@@ -181,8 +168,7 @@ const driving = computed(() => {
           è aperto, {{ waiting.length === 1 ? "gli" : "gli" }} basta un clic.
         </template>
         <template v-else>
-          Nessun amico può ancora entrare. Aggiungine uno qui sotto: quando
-          accetta, il tuo Pitwall gli compare da solo.
+          Gli amici di chi è nella stanza possono vederla e unirsi.
         </template>
       </p>
     </article>

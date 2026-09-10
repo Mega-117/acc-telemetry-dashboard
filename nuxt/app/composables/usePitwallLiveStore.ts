@@ -192,7 +192,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
 
   // One card per room; discovery already verified a present friend or membership.
   const races = computed<PitwallConceptRace[]>(() => [...new Map(link.rooms.value.map(room => [room.roomId, room])).values()]
-    .filter(room => !room.closedAt && !(room.hostUid === uid() && room.memberUids.includes(uid() ?? '')))
+    .filter(room => !room.closedAt && !room.memberUids.includes(uid() ?? ''))
     .map(room => ({ ...toRace(room), session: 'Pitwall aperto', live: true, joinable: true,
       track: room.track ? formatTrackName(room.track) : '' })))
   const selectedRace = computed<PitwallConceptRace | null>(() => (link.room.value ? toRace(link.room.value) : null))
@@ -212,12 +212,9 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   const myRoom = computed<PitwallConceptMyRoom | null>(() => {
     const me = uid()
     if (!me) return null
-    // "La tua gara" e' quella della vettura che il **tuo** PC ha aperto: la
-    // stanza di cui sei host. Esserne membro non basta - un ingegnere entrato
-    // nella gara di un pilota se la vedeva presentata come sua, con tanto di
-    // "il tuo PC l'ha gia' aggiunto" (visto da popo il 2026-09-04).
+    // The current party belongs to its participants, regardless of who created it.
     const room = link.rooms.value
-      .filter(candidate => !candidate.closedAt && candidate.hostUid === me && candidate.memberUids.includes(me))
+      .filter(candidate => !candidate.closedAt && candidate.memberUids.includes(me))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null
     if (!room) return null
     const selected = link.room.value?.roomId === room.roomId
@@ -234,7 +231,8 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
         ? link.executor.value.executor?.uid ?? null
         : null,
       members: membersOf(room, selected),
-      invitedIds: room.allowedUids.filter(person => !room.memberUids.includes(person)),
+      invitedIds: (room.membershipModel === 'social' ? friendViews.value.filter(friend => friend.state === 'friends').map(friend => friend.personId) : room.allowedUids)
+        .filter(person => !room.memberUids.includes(person)),
     }
   })
 
@@ -253,7 +251,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
       id: `${NOTICE_PREFIX.request}${view.personId}`, kind: 'request' as const, personId: view.personId,
     })),
     ...link.rooms.value
-      .filter(room => isPitwallRoomInvited(room, uid()) && !room.closedAt && !dismissedInvites.value.has(room.roomId))
+      .filter(room => room.membershipModel !== 'social' && room.hostUid !== uid() && isPitwallRoomInvited(room, uid()) && !room.closedAt && !dismissedInvites.value.has(room.roomId))
       .filter(room => openRaceIds.value.has(room.roomId) || !friendIds.value.has(room.hostUid))
       .map(room => ({
         id: `${NOTICE_PREFIX.invite}${room.roomId}`, kind: 'invite' as const, personId: room.hostUid, raceId: room.roomId,
@@ -285,19 +283,27 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   // ---- Il mio Pitwall -------------------------------------------------------
   const { pitwallIntent } = usePitwallIntent()
   function startPitwall(): void {
+    link.clearFeedback()
     void requestPitwallOpen().then((result) => { if (!result.ok) link.notice.value = result.reason })
   }
   function closePitwall(): void {
+    link.clearFeedback()
+    if (myRoom.value && pitwallIntent.value.roomId !== myRoom.value.id) {
+      void inRoom(myRoom.value.id, () => link.leave())
+      return
+    }
     void requestPitwallClose().then((result) => { if (!result.ok) link.notice.value = result.reason })
   }
 
   // ---- Azioni sulla gara ----------------------------------------------------
   async function inRoom(raceId: string, action: () => Promise<void>): Promise<void> {
     if (link.selectedRoomId.value !== raceId) await link.selectRoom(raceId)
+    if (link.selectedRoomId.value !== raceId) return
     await action()
   }
   function selectRace(raceId: string): void { void link.selectRoom(raceId) }
   function enterRace(raceId: string): void {
+    link.clearFeedback()
     dismissedInvites.value.delete(raceId)
     saveSet(`${DISMISSED_INVITES_KEY}:${uid()}`, dismissedInvites.value)
     // Con una sola gara accessibile il collegamento l'ha gia' scelta da solo:

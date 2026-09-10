@@ -32,7 +32,7 @@ export function createPitwallSocialLifecycle(options: {
     const roles = Object.fromEntries(Object.entries(access).filter(([id]) => alive.has(id)))
     // The entry witness is only a preview. Actual membership is granted by joinRoom.
     if (!roles[uid] && witnesses.has(meta.roomId)) roles[uid] = 'invited'
-    return roomFromRealtime(meta, roles)
+    return { ...roomFromRealtime(meta, roles)!, membershipModel: 'social' }
   }
 
   function watchRoom(roomId: string, callback: (room: PitwallRoom | null) => void, error?: (error: Error) => void) {
@@ -78,21 +78,36 @@ export function createPitwallSocialLifecycle(options: {
     const emit = () => { if (!stopped) callback([...rooms.values()]) }
     const sync = async () => {
       const generation = ++version
-      const desired = new Map<string, { sponsorUid: string, entry: SocialDirectoryEntry }>()
-      for (const [sponsorUid, entry] of directories) if (!desired.has(entry.roomId) || sponsorUid === uid) desired.set(entry.roomId, { sponsorUid, entry })
+      const desired = new Map<string, Array<{ sponsorUid: string, entry: SocialDirectoryEntry }>>()
+      for (const [sponsorUid, entry] of directories) {
+        const sources = desired.get(entry.roomId) ?? []
+        sources.push({ sponsorUid, entry })
+        desired.set(entry.roomId, sources)
+      }
       for (const [id, stop] of roomStops) if (!desired.has(id)) { stop(); roomStops.delete(id); rooms.delete(id); witnesses.delete(id) }
-      for (const [roomId, { sponsorUid, entry }] of desired) {
-        const source = `${sponsorUid}/${entry.connectionId}`
+      for (const [roomId, sources] of desired) {
+        const source = sources.map(({ sponsorUid, entry }) => `${sponsorUid}/${entry.connectionId}`).sort().join('|')
         if (roomStops.has(roomId) && roomSources.get(roomId) === source) continue
         roomStops.get(roomId)?.()
         roomStops.delete(roomId)
         try {
-          if (sponsorUid !== uid) {
-            const witness = { ...entry, sponsorUid }
-            await io.write(`admissions/${roomId}`, { [uid]: witness })
-            if (stopped || generation !== version) return
-            witnesses.set(roomId, witness)
+          // A logout leaves our directory behind. It must not mask a present
+          // friend who can authorize the same room on the next login.
+          let admitted = false
+          for (const { sponsorUid, entry } of sources) {
+            if (sponsorUid === uid) continue
+            try {
+              const witness = { ...entry, sponsorUid }
+              await io.write(`admissions/${roomId}`, { [uid]: witness })
+              if (stopped || generation !== version) return
+              witnesses.set(roomId, witness)
+              admitted = true
+              break
+            } catch (cause) {
+              if (!/permission.?denied/i.test(String(cause))) throw cause
+            }
           }
+          if (!admitted && !sources.some(value => value.sponsorUid === uid)) { rooms.delete(roomId); continue }
           if (stopped || generation !== version) return
           let failed = false
           let stop = () => {}
@@ -110,7 +125,7 @@ export function createPitwallSocialLifecycle(options: {
           if (failed) stop()
         } catch (cause) {
           rooms.delete(roomId)
-          emitPitwallDiagnostic('room_access_denied', { roomId, uid, peerUid: sponsorUid, reason: String(cause) })
+          emitPitwallDiagnostic('room_access_denied', { roomId, uid, reason: String(cause) })
           error?.(cause instanceof Error ? cause : new Error(String(cause)))
         }
       }
@@ -198,8 +213,37 @@ export function createPitwallSocialLifecycle(options: {
       if (existing) {
         // An expired member can lose read permission before its own stale
         // directory is cleaned. Leaving only removes this account's records.
-        const room = await readRoom(existing.roomId).catch(() => null)
-        if (room) return { ok: true as const, value: room }
+        let room = await readRoom(existing.roomId).catch(cause => {
+          if (/permission.?denied/i.test(String(cause))) return null
+          throw cause
+        })
+        // Opening immediately after login can precede the discovery listeners.
+        // Resolve the previous party through friends before declaring it gone.
+        if (!room) {
+          const friends = await new Promise<string[]>((resolve, reject) => {
+            let settled = false
+            let stop = () => {}
+            stop = options.watchFriends(value => { if (!settled) { settled = true; resolve(value); stop() } }, cause => { settled = true; reject(cause); stop() })
+            if (settled) stop()
+          })
+          for (const sponsorUid of friends) {
+            const entry = await io.read<SocialDirectoryEntry>(`directory/${sponsorUid}`)
+            if (entry?.roomId !== existing.roomId) continue
+            try {
+              const witness = { ...entry, sponsorUid }
+              await io.write(`admissions/${existing.roomId}`, { [uid]: witness })
+              witnesses.set(existing.roomId, witness)
+              room = await readRoom(existing.roomId)
+              if (room) break
+            } catch (cause) {
+              if (!/permission.?denied/i.test(String(cause))) throw cause
+            }
+          }
+        }
+        if (room?.memberUids.includes(uid)) return { ok: true as const, value: room }
+        // An explicit open after logout resumes the still-live previous party,
+        // once discovery has obtained access through a present friend.
+        if (room) return joinRoom(existing.roomId)
         const left = await leaveRoom(existing.roomId)
         if (!left.ok) return left
       }
@@ -217,7 +261,7 @@ export function createPitwallSocialLifecycle(options: {
         [`directory/${uid}`]: { roomId, connectionId, slot: '0' },
       })
       diagnostic('room_created', roomId)
-      return { ok: true as const, value: roomFromRealtime(meta, { [uid]: 'member' })! }
+      return { ok: true as const, value: { ...roomFromRealtime(meta, { [uid]: 'member' })!, membershipModel: 'social' as const } }
     } catch (error) { return fail(error) }
   }
 
