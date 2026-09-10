@@ -46,6 +46,7 @@ export interface PitwallConceptFriend {
 
 /** Una persona dentro una gara, con quello che ACC dice di lei. */
 export interface PitwallConceptMember {
+  reconnecting?: boolean
   connecting?: boolean
   personId: string
   role: PitwallConceptRole
@@ -62,7 +63,9 @@ export interface PitwallConceptReason {
 
 /** Una gara viva: si entra qui dentro, non su una persona. */
 export interface PitwallConceptRace {
+  membershipModel?: 'social'
   id: string
+  label?: string
   carNumber: number
   carModel: string
   track: string

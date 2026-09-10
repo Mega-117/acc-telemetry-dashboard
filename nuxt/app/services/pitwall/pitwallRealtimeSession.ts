@@ -1,6 +1,8 @@
 import type { PitwallRealtimeTransport } from './pitwallRealtimeTransport'
 import type { RealtimeConnection } from './pitwallRealtimeProtocol'
 import { stablePitwallValue } from './pitwallChangePublisher'
+import { PITWALL_SOCIAL_ROOT } from './pitwallSocialRoom'
+import { emitPitwallDiagnostic } from './pitwallDiagnostics'
 
 /** Canonical device presence; room presence is only an index to this connection. */
 export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: string) {
@@ -23,17 +25,27 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
     const id = connectionId
     const nextSignature = stablePitwallValue(captured)
     if (signature === nextSignature) return
-    const removals: Record<string, null> = { [`connections/${uid}/${id}`]: null }
+    const removals: Record<string, unknown> = { [`connections/${uid}/${id}`]: null }
     if (captured.roomId) removals[`rooms/${captured.roomId}/presence/${uid}/${id}`] = null
+    if (captured.roomId && io.namespace === PITWALL_SOCIAL_ROOT) {
+      removals[`rooms/${captured.roomId}/occupancy/${uid}/${id}`] = { nickname: captured.nickname, connectedAt: io.serverTimestamp(), disconnectedAt: io.serverTimestamp() }
+    }
     const cancel = await io.registerDisconnectUpdates(removals)
     disconnectCancellations.add(cancel)
-    for (const path of Object.keys(removals)) ownedPaths.add(path)
+    for (const path of Object.keys(removals)) ownedPaths.add(path.replace(/\/disconnectedAt$/, ''))
     if (token !== generation || !io.online()) return
     const changes: Record<string, unknown> = {
       [`connections/${uid}/${id}`]: { ...captured, uid, connectionId: id, protocolVersion: 3, updatedAt: io.serverTimestamp() },
     }
     if (currentRoom && currentRoom !== captured.roomId) changes[`rooms/${currentRoom}/presence/${uid}/${id}`] = null
     if (captured.roomId) changes[`rooms/${captured.roomId}/presence/${uid}/${id}`] = true
+    if (captured.roomId && io.namespace === PITWALL_SOCIAL_ROOT) {
+      changes[`rooms/${captured.roomId}/occupancy/${uid}/${id}`] = { nickname: captured.nickname, connectedAt: io.serverTimestamp(), disconnectedAt: null }
+      const directory = await io.read<{ roomId: string, connectionId: string, slot: string }>(`directory/${uid}`)
+      if (!directory || directory.roomId !== captured.roomId) throw new Error('Appartenenza alla stanza non più disponibile.')
+      if (token !== generation || !io.online()) return
+      changes[`directory/${uid}`] = { ...directory, connectionId: id }
+    }
     await io.write('', changes)
     if (token !== generation) {
       // The SDK can acknowledge an old queued presence after reconnect. Retire that
@@ -53,6 +65,7 @@ export function createPitwallRealtimeSession(io: PitwallRealtimeTransport, uid: 
     return publication
   }
   const stopConnection = io.onConnection(online => {
+    emitPitwallDiagnostic('connection_changed', { uid, connectionId: connectionId || undefined, roomId: currentRoom ?? undefined, reason: online ? 'connected' : 'reconnecting' })
     generation++
     signature = ''
     connectionId = ''

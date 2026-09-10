@@ -9,7 +9,9 @@
 // solo "applicata e riletta", mai "inviata".
 // ============================================
 
-import { computed, onScopeDispose, ref, shallowRef } from 'vue'
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
+import { eligibleSocialDrivers, resolveSocialTarget } from '~/services/pitwall/pitwallSocialRoom'
+import { emitPitwallDiagnostic } from '~/services/pitwall/pitwallDiagnostics'
 import { db } from '~/config/firebase'
 import { createPitwallRealtimeEngineerService } from '~/services/pitwall/pitwallRealtimeEngineerService'
 import {
@@ -56,6 +58,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const loading = ref(false)
   const sending = ref(false)
   const rawError = ref<string | null>(null)
+  const discoveryError = ref<string | null>(null)
   const notice = ref<string | null>(null)
   /**
    * Batte ogni 5 s: freschezza e conflitti devono invecchiare da soli a schermo.
@@ -82,12 +85,14 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   let stopRoomWatch: (() => void) | null = null
   let stopMembersWatch: (() => void) | null = null
   let stopOrderWatch: (() => void) | null = null
+  let roomGeneration = 0
+  let accountGeneration = 0
   let tickTimer: ReturnType<typeof setInterval> | null = null
   /** Identifica questa scheda: due schede aperte sono due presenze diverse. */
   const runtimeSessionId = `pw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
   // Cio' che legge l'ingegnere e' la frase tradotta, non il gergo del servizio.
-  const lastError = computed(() => describePitwallLinkError(rawError.value))
+  const lastError = computed(() => describePitwallLinkError(rawError.value ?? discoveryError.value))
 
   function service(): PitwallRoomService | null {
     const uid = options.uid()
@@ -137,7 +142,26 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const roomClosed = computed(() => Boolean(room.value?.closedAt))
 
   /** Chi applichera' l'ordine, adesso. Null quando non si puo' dire con certezza. */
-  const executor = computed(() => resolvePitwallRoomExecutor(members.value, nowTick.value))
+  const selectedTargetUid = ref<string | null>(null)
+  const targetTouched = ref(false)
+  const availableTargets = computed(() => eligibleSocialDrivers(members.value.filter(member => isPitwallMemberFresh(member, nowTick.value))))
+  watch(availableTargets, drivers => {
+    const resolved = resolveSocialTarget(drivers, selectedTargetUid.value, targetTouched.value)
+    if (resolved.selectedUid) { selectedTargetUid.value = resolved.selectedUid; targetTouched.value = true }
+    else if (drivers.length > 1) targetTouched.value = true
+  }, { flush: 'sync' })
+  function selectTarget(uid: string | null) {
+    if (sending.value || orderStatus.value === 'pending' || orderStatus.value === 'applying') return
+    stopOrderWatch?.(); stopOrderWatch = null
+    orderId.value = null; orderStatus.value = null; orderReason.value = null; orderFields.value = {}
+    selectedTargetUid.value = uid
+    targetTouched.value = true
+    emitPitwallDiagnostic('target_selected', { uid: myUid.value ?? undefined, targetUid: uid ?? undefined, roomId: selectedRoomId.value ?? undefined })
+  }
+  const executor = computed(() => resolvePitwallRoomExecutor(
+    selectedTargetUid.value ? members.value.filter(member => member.uid === selectedTargetUid.value) : targetTouched.value ? [] : members.value,
+    nowTick.value,
+  ))
   const executorLabel = computed(() => describePitwallRoomExecutor(executor.value))
 
   /**
@@ -148,6 +172,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * partito.
    */
   const crew = computed<PitwallCrewRow[]>(() => {
+    void readinessRevision.value
     const current = room.value
     if (!current) return []
     const byUid = new Map<string, PitwallRoomMember>()
@@ -162,6 +187,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         role: current.managerUids.includes(uid) ? 'manager' : 'member',
         kind: presence?.kind ?? 'engineer',
         online: isPitwallMemberFresh(presence, nowTick.value),
+        reconnecting: current.reconnectingUids?.includes(uid)
+          || (uid === myUid.value && serviceRef.value?.io?.online() === false),
         connecting: !membersLoaded.value || (presence != null && !isPitwallMemberFresh(presence, nowTick.value) && presence.updatedAtMs === 0),
         driving: executor.value.executor?.uid === uid
           || executor.value.conflicting.some(member => member.uid === uid),
@@ -224,7 +251,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const sendReadiness = computed(() => {
     void readinessRevision.value; void members.value; void nowTick.value
     return selectedRoomId.value && serviceRef.value
-      ? serviceRef.value.sendReadiness(selectedRoomId.value)
+      ? serviceRef.value.sendReadiness(selectedRoomId.value, selectedTargetUid.value)
       : { ready: false, reason: 'Entra in una gara per inviare.' }
   })
 
@@ -261,17 +288,25 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * niente. Il caso normale del pilota e' esattamente questo.
    */
   function applyRooms(list: PitwallRoom[]): void {
+    discoveryError.value = null
     rooms.value = list
+  }
+
+  /** A stopped login must not publish into a later login, even for the same uid. */
+  function currentAccount(service_: PitwallRoomService): () => boolean {
+    const generation = accountGeneration
+    return () => generation === accountGeneration && serviceRef.value === service_ && options.uid() === service_.uid
   }
 
   async function refreshRooms(): Promise<void> {
     const service_ = service()
     if (!service_) { rooms.value = []; return }
+    const current = currentAccount(service_)
     loading.value = true
     rawError.value = null
-    try { applyRooms(await service_.listRooms()) }
-    catch (error) { rawError.value = (error as Error)?.message || 'Gare non disponibili.'; rooms.value = [] }
-    finally { loading.value = false }
+    try { const list = await service_.listRooms(); if (current()) applyRooms(list) }
+    catch (error) { if (current()) { rawError.value = (error as Error)?.message || 'Gare non disponibili.'; rooms.value = [] } }
+    finally { if (current()) loading.value = false }
   }
 
   let stopRoomsWatch: (() => void) | null = null
@@ -285,10 +320,23 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const service_ = service()
     if (!service_) return
     if (stopRoomsWatch) return
-    stopRoomsWatch = service_.watchRooms(applyRooms, (error) => { rawError.value = error?.message || 'Gare non disponibili.' })
+    const current = currentAccount(service_)
+    stopRoomsWatch = service_.watchRooms(list => { if (current()) applyRooms(list) }, (error) => {
+      if (current()) discoveryError.value = error?.message || 'Gare non disponibili.'
+    })
   }
 
   function detach(): void {
+    roomGeneration++
+    selectedTargetUid.value = null
+    targetTouched.value = false
+    stopOrderWatch?.()
+    stopOrderWatch = null
+    orderId.value = null
+    orderStatus.value = null
+    orderReason.value = null
+    orderFields.value = {}
+    sending.value = false
     stopRoomWatch?.()
     stopMembersWatch?.()
     stopRoomWatch = null
@@ -305,11 +353,17 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * senza scelta.
    */
   async function selectRoom(roomId: string | null): Promise<void> {
+    clearFeedback()
+    if (roomId && roomId !== selectedRoomId.value && amMember.value) {
+      rawError.value = 'Esci dalla stanza corrente prima di entrare in un’altra.'
+      return
+    }
     if (roomId === selectedRoomId.value && (stopRoomWatch || loading.value)) {
       if (roomId && !serviceRef.value?.sendReadiness(roomId).ready) await publishMyPresence()
       return
     }
     detach()
+    const generation = roomGeneration
     selectedRoomId.value = roomId
     room.value = null
     if (!roomId) return
@@ -319,49 +373,52 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     rawError.value = null
     try {
       const current = await service_.readRoom(roomId)
+      if (generation !== roomGeneration) return
       if (!current) {
         rawError.value = 'Questa gara non esiste piu.'
+        selectedRoomId.value = null
         return
       }
       room.value = current
       if (isPitwallRoomInvited(current, myUid.value)) {
         const joined = await service_.joinRoom(roomId)
+        if (generation !== roomGeneration) return
         if (!joined.ok) {
           rawError.value = joined.reason
+          selectedRoomId.value = null
+          room.value = null
           return
         }
         room.value = joined.value
         notice.value = 'Sei entrato nella gara.'
       }
     } catch (error) {
+      if (generation !== roomGeneration) return
       rawError.value = (error as Error)?.message || 'Gara non raggiungibile.'
+      selectedRoomId.value = null
+      room.value = null
       return
     }
 
     stopRoomWatch = service_.watchRoom(
       roomId,
       (next) => {
+        if (generation !== roomGeneration) return
         // La gara e' sparita da sotto: un manager l'ha chiusa, e chiudere
         // vuol dire cancellare (PIP-379). Si torna all'elenco dicendolo,
         // prima che l'ascolto dei membri - che senza stanza le regole negano -
         // dipinga un errore su una schermata che non esiste piu'.
         if (!next) {
-          const previous = room.value
-          const crew = members.value
           detach()
           selectedRoomId.value = null
           room.value = null
-          const host = previous?.hostUid ?? null
-          const who = host && host !== myUid.value
-            ? crew.find(entry => entry.uid === host)?.nickname ?? nicknames.value[host] ?? null
-            : null
-          notice.value = who ? `${who} ha chiuso il Pitwall.` : 'Il Pitwall è stato chiuso.'
+          notice.value = 'Il Pitwall è chiuso o la partecipazione è scaduta.'
           return
         }
         room.value = next
         // Revoca mentre la pagina e' aperta: si dice, non si lascia una
         // schermata che sembra funzionare e non funziona piu'.
-        if (!isPitwallRoomMember(next, myUid.value) && !isPitwallRoomInvited(next, myUid.value)) {
+        if (!isPitwallRoomMember(next, myUid.value)) {
           rawError.value = 'Non fai piu parte di questa gara.'
           detach()
           selectedRoomId.value = null
@@ -372,13 +429,14 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
           void loadNickname(uid)
         }
       },
-      (error) => { rawError.value = error?.message || 'Gara non raggiungibile.' }
+      (error) => { if (generation === roomGeneration) rawError.value = error?.message || 'Gara non raggiungibile.' }
     )
     // The first membership snapshot confirms access before announcing this connection.
     let announced = false
     stopMembersWatch = service_.watchMembers(
       roomId,
       (list) => {
+        if (generation !== roomGeneration) return
         members.value = list
         membersLoaded.value = true
         if (!announced) {
@@ -416,13 +474,15 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     if (orderStatus.value === 'pending' || orderStatus.value === 'applying') return false
 
     sending.value = true
+    const generation = roomGeneration
     orderMethod.value = typeof plan.method === 'string' ? plan.method : 'standard'
     rawError.value = null
     orderReason.value = null
     orderFields.value = {}
     orderDiary.value = ''
     try {
-      const sent = await service_.sendOrder(roomId, { plan, revision: nextRevision() })
+      const sent = await service_.sendOrder(roomId, { plan, revision: nextRevision(), targetUid: selectedTargetUid.value })
+      if (generation !== roomGeneration) return false
       if (!sent.ok) {
         rawError.value = sent.reason
         orderReason.value = sent.reason
@@ -434,7 +494,14 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       orderStatus.value = 'pending'
       stopOrderWatch?.()
       stopOrderWatch = service_.watchOrder(roomId, sent.value, (document: PitwallRoomOrder | null) => {
-        if (!document) return
+        if (generation !== roomGeneration) return
+        if (!document) {
+          if (orderStatus.value && isPitwallOrderSettled(orderStatus.value as PitwallOrderStatus)) return
+          orderStatus.value = 'unknown'
+          orderReason.value = 'Conferma non disponibile. Verifica il MFD prima di un nuovo invio.'
+          orderFields.value = {}
+          return
+        }
         orderStatus.value = document.status as PitwallOrderStatus
         const result = document.result as {
           reason?: string | null
@@ -451,7 +518,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       })
       return true
     } finally {
-      sending.value = false
+      if (generation === roomGeneration) sending.value = false
     }
   }
 
@@ -492,19 +559,23 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   }
 
   async function leave(): Promise<void> {
+    clearFeedback()
     const service_ = service()
     const roomId = selectedRoomId.value
     if (!service_ || !roomId) return
-    const result = await service_.leaveRoom(roomId)
-    if (!result.ok) {
-      rawError.value = result.reason
-      return
-    }
+    const current = currentAccount(service_)
+    try {
+      const result = await service_.leaveRoom(roomId)
+      if (!current() || (selectedRoomId.value && selectedRoomId.value !== roomId)) return
+      if (!result.ok) { rawError.value = result.reason; return }
     // L'elenco non si rilegge: `watchRooms` e' in ascolto e consegna l'uscita
     // da solo. Rileggerlo erano due query in piu' per sapere una cosa che
     // stava gia' arrivando.
-    await selectRoom(null)
-    notice.value = 'Sei uscito dalla gara.'
+      await selectRoom(null)
+      if (current()) notice.value = 'Sei uscito dalla gara.'
+    } catch (error) {
+      if (current() && selectedRoomId.value === roomId) rawError.value = (error as Error)?.message || 'Uscita non riuscita.'
+    }
   }
 
   /**
@@ -516,16 +587,21 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const service_ = service()
     const roomId = selectedRoomId.value
     if (!service_ || !roomId) return
+    const current = currentAccount(service_)
+    const social = room.value?.membershipModel === 'social'
     detach()
-    const result = await service_.closeRoom(roomId)
-    if (!result.ok) {
-      rawError.value = result.reason
+    try {
+      const result = await service_.closeRoom(roomId)
+      if (!current() || (selectedRoomId.value && selectedRoomId.value !== roomId)) return
+      if (!result.ok) throw new Error(result.reason)
+      selectedRoomId.value = null
+      room.value = null
+      notice.value = social ? 'Sei uscito dalla gara.' : 'Gara chiusa.'
+    } catch (error) {
+      if (!current() || selectedRoomId.value !== roomId) return
       await selectRoom(roomId)
-      return
+      if (current()) rawError.value = (error as Error)?.message || 'Uscita non riuscita.'
     }
-    selectedRoomId.value = null
-    room.value = null
-    notice.value = 'Gara chiusa.'
   }
 
   function start(): void {
@@ -535,6 +611,9 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   }
 
   function stop(): void {
+    accountGeneration++
+    loading.value = false
+    clearFeedback()
     void clearPresence()
     detach()
     stopOrderWatch?.()
@@ -551,6 +630,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     nicknames.value = {}
   }
 
+  function clearFeedback(): void { rawError.value = null; discoveryError.value = null; notice.value = null }
+
   onScopeDispose(stop)
 
   return {
@@ -561,6 +642,9 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     crew,
     carSnapshot,
     executor,
+    availableTargets,
+    selectedTargetUid,
+    selectTarget,
     executorLabel,
     myRole,
     isManager,
@@ -573,6 +657,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     sendReadiness,
     lastError,
     notice,
+    clearFeedback,
     clockSkewNotice,
     nowTick,
     orderId,

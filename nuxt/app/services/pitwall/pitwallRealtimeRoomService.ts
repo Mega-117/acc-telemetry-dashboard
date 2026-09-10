@@ -1,18 +1,22 @@
-import { getPitwallRealtime } from '~/config/pitwallRealtime'
+import { getPitwallSocialRealtime } from '~/config/pitwallRealtime'
+import { db } from '~/config/firebase'
+import { createPitwallRealtimeEngineerService } from './pitwallRealtimeEngineerService'
+import { createPitwallSocialLifecycle } from './pitwallSocialLifecycle'
+import { PITWALL_SOCIAL_ROOT } from './pitwallSocialRoom'
 import { createPitwallRealtimeSession } from './pitwallRealtimeSession'
 import { createPitwallRealtimeOrders } from './pitwallRealtimeOrders'
 import { createPitwallChangePublisher } from './pitwallChangePublisher'
 import { roomFromRealtime, memberFromRealtime, type RealtimeConnection, type RealtimeMfd, type RealtimeRoomMeta, type RoomRole } from './pitwallRealtimeProtocol'
-import type { PitwallRealtimeTransport } from './pitwallRealtimeTransport'
+import { createPitwallRealtimeTransport, type PitwallRealtimeTransport } from './pitwallRealtimeTransport'
 import { boundPitwallCrew, boundPitwallStrategy } from './pitwallLink'
 import { PITWALL_MAX_ROOM_ALLOWED, PITWALL_VEHICLE_POINTER_TTL_MS, type PitwallRoom, type PitwallRoomMember, type PitwallVehiclePointer } from './pitwallRoomContract'
 import type { PitwallRoomResult } from './pitwallRoomOrders'
 
 const instances = new Map<string, ReturnType<typeof buildPitwallRealtimeRoomService>>()
-export function createPitwallRealtimeRoomService(options: { uid: string, io?: PitwallRealtimeTransport }) {
-  if (options.io) return buildPitwallRealtimeRoomService(options.uid, options.io)
+export function createPitwallRealtimeRoomService(options: { uid: string, io?: PitwallRealtimeTransport, watchFriends?: Parameters<typeof createPitwallSocialLifecycle>[0]['watchFriends'] }) {
+  if (options.io) return buildPitwallRealtimeRoomService(options.uid, options.io, options.watchFriends)
   let instance = instances.get(options.uid)
-  if (!instance) { instance = buildPitwallRealtimeRoomService(options.uid, getPitwallRealtime()); instances.set(options.uid, instance) }
+  if (!instance) { instance = buildPitwallRealtimeRoomService(options.uid, getPitwallSocialRealtime()); instances.set(options.uid, instance) }
   return instance
 }
 export async function stopPitwallRealtimeAccount(uid: string) {
@@ -23,8 +27,15 @@ export async function stopPitwallRealtimeAccount(uid: string) {
 const failure = (error: unknown): { ok: false, reason: string } => ({ ok: false, reason: error instanceof Error ? error.message : String(error) })
 const success = (): PitwallRoomResult<true> => ({ ok: true, value: true })
 
-function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTransport) {
+function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTransport, watchFriends?: Parameters<typeof createPitwallSocialLifecycle>[0]['watchFriends']) {
   const session = createPitwallRealtimeSession(io, uid)
+  const social = io.namespace === PITWALL_SOCIAL_ROOT ? createPitwallSocialLifecycle({
+    uid, io, connectionId: session.connectionId,
+    ensureConnection: async () => {
+      if (!session.connectionId()) await session.update({ roomId: null, nickname: uid, kind: 'engineer', driving: false, sourceValid: false, runtimeSessionId: crypto.randomUUID() })
+    },
+    watchFriends: watchFriends ?? ((callback, error) => createPitwallRealtimeEngineerService({ db, engineerUid: uid }).watchTrustedUids(callback, error)),
+  }) : null
   const members = new Map<string, RealtimeConnection[]>()
   const memberReaders = new Map<string, number>()
   const roomCache = new Map<string, PitwallRoom | null>()
@@ -38,7 +49,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
     const connectionId = session.connectionId()
     const roomId = session.roomId()
     if (!roomId || !connectionId || localPresence?.kind !== 'driver' || !localPresence.sourceValid) return
-    await io.write(`rooms/${roomId}`, { mfd: { uid, connectionId, crew: snapshot.crew,
+    await io.write(`rooms/${roomId}`, { [social ? `mfd/${uid}/${connectionId}` : 'mfd']: { uid, connectionId, crew: snapshot.crew,
       strategy: snapshot.strategy ? { ...snapshot.strategy, updatedAt: new Date(io.serverNow()).toISOString() } : null,
       updatedAt: io.serverTimestamp() } })
   }, error => { lastError = new Error(failure(error).reason) })
@@ -62,8 +73,25 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
     if (mfdWanted && session.roomId()) mfdPublisher.offer(mfdWanted)
   })
   const orders = createPitwallRealtimeOrders({ io, session, connections: roomId => members.get(roomId) ?? [] })
+  let historicalIo: PitwallRealtimeTransport | null = null
+  let historicalOrders: typeof orders | null = null
+  function outcomeStore(roomId: string) {
+    // Legacy room IDs are 10 random bytes in hex; social rooms use UUIDs.
+    // Only completed outcomes use this route, never new orders or membership.
+    if (!social || !/^[a-f0-9]{20}$/.test(roomId)) return orders
+    if (!historicalOrders) {
+      historicalIo = createPitwallRealtimeTransport(io.database)
+      historicalOrders = createPitwallRealtimeOrders({ io: historicalIo, session, connections: () => [] })
+    }
+    return historicalOrders
+  }
+  const outcomeRecovery = {
+    publishOutcome: (...args: Parameters<typeof orders.publishOutcome>) => outcomeStore(args[0]).publishOutcome(...args),
+    readOrder: (...args: Parameters<typeof orders.readOrder>) => outcomeStore(args[0]).readOrder(...args),
+  }
 
   function watchRoom(roomId: string, callback: (room: PitwallRoom | null) => void, error?: (error: Error) => void) {
+    if (social) return social.watchRoom(roomId, callback, error)
     let meta: RealtimeRoomMeta | null = null
     let access: Record<string, RoomRole> = {}
     let metaReady = false; let accessReady = false
@@ -77,6 +105,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
   }
 
   async function readRoom(roomId: string): Promise<PitwallRoom | null> {
+    if (social) return social.readRoom(roomId)
     const [meta, access] = await Promise.all([
       io.read<RealtimeRoomMeta>(`rooms/${roomId}/meta`), io.read<Record<string, RoomRole>>(`rooms/${roomId}/access`),
     ])
@@ -84,6 +113,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
   }
 
   function watchRooms(callback: (rooms: PitwallRoom[]) => void, error?: (error: Error) => void) {
+    if (social) return social.watchRooms(callback, error)
     const stops = new Map<string, () => void>()
     const values = new Map<string, PitwallRoom>()
     const emit = () => callback([...values.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt)))
@@ -106,12 +136,13 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
     const ready = new Set<string>()
     let indexReady = false
     let mfd: RealtimeMfd | null = null
+    let targetMfds: Record<string, Record<string, RealtimeMfd>> = {}
     const emit = () => {
       if (!io.online()) { members.set(roomId, []); callback([]); return }
       if (!indexReady || [...stops.keys()].some(id => !ready.has(id))) return
-      const list = [...connections.values()]; members.set(roomId, list); callback(list.map(value => memberFromRealtime(value, mfd)))
+      const list = [...connections.values()]; members.set(roomId, list); callback(list.map(value => memberFromRealtime(value, social ? targetMfds[value.uid]?.[value.connectionId] ?? null : mfd)))
     }
-    const stopMfd = io.watch(`rooms/${roomId}/mfd`, value => { mfd = value as RealtimeMfd | null; emit() }, cause => { mfd = null; emit(); error?.(cause) })
+    const stopMfd = io.watch(`rooms/${roomId}/mfd`, value => { mfd = value as RealtimeMfd | null; targetMfds = (value ?? {}) as typeof targetMfds; emit() }, cause => { mfd = null; targetMfds = {}; emit(); error?.(cause) })
     const stopIndex = io.watch(`rooms/${roomId}/presence`, value => {
       indexReady = false
       const ids = new Set<string>()
@@ -189,6 +220,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
   }
 
   async function joinRoom(roomId: string): Promise<PitwallRoomResult<PitwallRoom>> {
+    if (social) return social.joinRoom(roomId)
     try {
       // RTDB can invoke the first transaction callback with an empty local cache.
       // Propose the member role and let the server compare/retry and enforce the invitation.
@@ -200,6 +232,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
   }
 
   async function ensureRoomForVehicle(input: { fingerprint: string, label: string, track?: string | null, raceNumber?: number | null, teamName?: string | null, seedAllowedUids?: string[] }): Promise<PitwallRoomResult<PitwallRoom>> {
+    if (social) return social.createRoom(input)
     try {
       const pointer = await io.read<PitwallVehiclePointer>(`vehicles/${input.fingerprint}`)
       if (pointer && pointer.expiresAtMs > io.serverNow()) {
@@ -232,6 +265,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
   }
 
   async function syncInvites(roomId: string, trustedUids: string[]): Promise<PitwallRoomResult<number>> {
+    if (social) return { ok: true, value: 0 }
     try {
       const room = await readRoom(roomId)
       if (!room || !room.managerUids.includes(uid)) return { ok: true, value: 0 }
@@ -258,10 +292,15 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
     catch (error) { return failure(error) }
   }
   async function leaveRoom(roomId: string): Promise<PitwallRoomResult<true>> {
+    if (social) {
+      await clearPresence(roomId)
+      return social.leaveRoom(roomId)
+    }
     try { await clearPresence(roomId); return revoke(roomId, uid) }
     catch (error) { return failure(error) }
   }
   async function closeRoom(roomId: string): Promise<PitwallRoomResult<true>> {
+    if (social) return leaveRoom(roomId)
     try {
       const room = await readRoom(roomId)
       if (!room) return success()
@@ -275,10 +314,17 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
     } catch (error) { return failure(error) }
   }
   async function listRooms(): Promise<PitwallRoom[]> {
+    if (social) return new Promise(resolve => {
+      let stop = () => {}
+      let ready = false
+      stop = social.watchRooms(rooms => { ready = true; resolve(rooms); queueMicrotask(() => stop()) })
+      if (ready) stop()
+    })
     const index = await io.read<Record<string, true>>(`roomIndex/${uid}`)
     return (await Promise.all(Object.keys(index ?? {}).map(readRoom))).filter((room): room is PitwallRoom => room != null)
   }
   async function closeDormantRooms(rooms: PitwallRoom[], selectedRoomId: string | null, attempted: Set<string>) {
+    if (social) return
     for (const room of rooms) {
       if (room.roomId === selectedRoomId || attempted.has(room.roomId) || !room.managerUids.includes(uid)
         || io.serverNow() - Date.parse(room.createdAt) < PITWALL_VEHICLE_POINTER_TTL_MS) continue
@@ -300,8 +346,8 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
       } catch { /* A concurrent join or loss of access leaves cleanup to the next session. */ }
     }
   }
-  async function dispose() { stopped = true; mfdPublisher.stop(); stopReady(); await session.stop(); members.clear(); roomCache.clear() }
-  return { uid, io, session, ...orders, readRoom, watchRoom, watchRooms, watchMembers, publishPresence, clearPresence, clearEngineerPresence, deactivateDriver,
+  async function dispose() { stopped = true; mfdPublisher.stop(); stopReady(); await session.stop(); historicalIo?.dispose(); members.clear(); roomCache.clear() }
+  return { uid, io, session, ...orders, outcomeRecovery, readRoom, watchRoom, watchRooms, watchMembers, publishPresence, clearPresence, clearEngineerPresence, deactivateDriver,
     ensureRoomForVehicle, joinRoom, leaveRoom, closeRoom, closeDormantRooms, listRooms, invite, syncInvites, revoke, promote, dispose,
     serverNow: io.serverNow, toLocalMs: (serverMs: number) => serverMs - io.clockOffsetMs(), clockOffsetMs: io.clockOffsetMs,
     clockOutOfSync: () => Math.abs(io.clockOffsetMs()) > 30_000, lastError: () => lastError }

@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useOverlayInteractionContract } from '~/composables/useOverlayInteractionContract'
 import type { StandingsLayout } from '~/services/overlay/standingsLayout'
 
@@ -146,6 +146,9 @@ export function useHudOverlay(overlayId: string, getApi: () => HudOverlayBridge 
   const isPlacing = ref(false)
   const scale = ref<number>(getHudOverlayScaleDefault(overlayId))
   const settings = ref<HudOverlaySettings | null>(null)
+  let generation = 0
+  let started = false
+  let settingsLoaded = false
   let unsubscribers: Array<() => void> = []
 
   function api(): HudOverlayBridge | null {
@@ -177,9 +180,20 @@ export function useHudOverlay(overlayId: string, getApi: () => HudOverlayBridge 
     const bridge = api()
     if (!bridge?.hudOverlayGetSettings) return null
     const loaded = await bridge.hudOverlayGetSettings(overlayId)
+    settingsLoaded = loaded !== null
     settings.value = loaded ?? null
     if (loaded?.scale !== undefined) scale.value = clampScale(loaded.scale, overlayId)
     return settings.value
+  }
+
+  async function notifyContentReady(): Promise<boolean> {
+    const requestGeneration = generation
+    if (!started || !settingsLoaded) return false
+    await nextTick()
+    // A hidden/reloaded Electron renderer may suspend RAF. Signal committed DOM;
+    // the main process draws two frames at opacity zero before revealing it.
+    if (!started || requestGeneration !== generation) return false
+    return await api()?.hudOverlayContentReady?.(overlayId) === true
   }
 
   function setTransientViewport(request: HudTransientViewportRequest): Promise<unknown> | null {
@@ -193,6 +207,9 @@ export function useHudOverlay(overlayId: string, getApi: () => HudOverlayBridge 
    * `?scale=`) e si iscrive agli eventi push del main per scala e posizionamento.
    */
   function start(initialScale?: unknown): void {
+    generation += 1
+    started = true
+    settingsLoaded = false
     isElectron.value = !!api()
     if (initialScale !== undefined && initialScale !== null && initialScale !== '') {
       scale.value = clampScale(initialScale, overlayId)
@@ -220,6 +237,8 @@ export function useHudOverlay(overlayId: string, getApi: () => HudOverlayBridge 
 
 
   function stop(): void {
+    started = false
+    generation += 1
     stopInteractionSurface()
     for (const off of unsubscribers) {
       try { off() } catch { /* listener già rimosso */ }
@@ -233,6 +252,7 @@ export function useHudOverlay(overlayId: string, getApi: () => HudOverlayBridge 
     scale,
     settings,
     loadSettings,
+    notifyContentReady,
     setTransientViewport,
     start,
     stop,

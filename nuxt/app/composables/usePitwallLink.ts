@@ -151,7 +151,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   // guardato: l'elenco cambia e gli ascolti lo seguono. Si confronta *chi*
   // c'e', non l'oggetto, perche' ogni presenza che arriva riscrive l'elenco.
   watch(
-    () => outgoing.value.filter(link => link.usable).map(link => link.driverUid).join('|'),
+    () => [outgoing.value.filter(link => link.usable).map(link => link.driverUid).join('|'), incoming.value.filter(request => request.status === 'granted').map(request => request.engineerUid).join('|')].join(';'),
     () => presence.sync()
   )
 
@@ -186,19 +186,21 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   }
 
   /** Ritira una richiesta in attesa (o rinuncia a un collegamento). */
-  async function withdrawRequest(driverUid: string): Promise<void> {
+  async function withdrawRequest(driverUid: string): Promise<boolean> {
     const engineer = service()
-    if (!engineer) return
+    if (!engineer) { rawError.value = 'Devi essere collegato al tuo account.'; return false }
     try {
       const result = await engineer.withdraw(driverUid)
       if (!result.ok) {
         rawError.value = result.reason
-        return
+        return false
       }
       notice.value = 'Richiesta ritirata.'
       if (!stopGrantedWatch) await refreshPilots()
+      return true
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Ritiro non riuscito.'
+      return false
     }
   }
 
@@ -291,23 +293,25 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     decision: 'granted' | 'revoked',
     scope: PitwallGrantScope = 'always',
     expiresAtMs: number | null = null
-  ): Promise<void> {
+  ): Promise<boolean> {
     const engineer = service()
-    if (!engineer) return
+    if (!engineer) { rawError.value = 'Devi essere collegato al tuo account.'; return false }
     try {
       const result = await engineer.decideRequest(requesterUid, decision, scope, expiresAtMs)
       if (!result.ok) {
         rawError.value = result.reason
-        return
+        return false
       }
       notice.value = decision === 'granted'
-        ? (scope === 'once' ? 'Collegamento autorizzato solo per oggi.' : 'Collegamento autorizzato.')
+        ? null
         : 'Collegamento revocato.'
       // L'elenco si aggiorna da solo tramite l'ascolto; si rilegge solo se
       // quell'ascolto non e' attivo, per non pagare due volte la stessa cosa.
       if (!stopIncomingWatch) await refreshIncoming()
+      return true
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Decisione non riuscita.'
+      return false
     }
   }
 
@@ -316,21 +320,21 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     uid: string,
     scope: PitwallGrantScope = 'always',
     expiresAtMs: number | null = null
-  ): Promise<void> {
+  ): Promise<boolean> {
     const engineer = service()
-    if (!engineer) return
+    if (!engineer) { rawError.value = 'Devi essere collegato al tuo account.'; return false }
     try {
       const result = await engineer.preAuthorise(uid, scope, expiresAtMs)
       if (!result.ok) {
         rawError.value = result.reason
-        return
+        return false
       }
-      notice.value = scope === 'once'
-        ? 'Autorizzato per oggi: potra collegarsi senza chiedere fino a stasera.'
-        : 'Utente pre-autorizzato: potra collegarsi senza chiedere.'
+      notice.value = null
       if (!stopIncomingWatch) await refreshIncoming()
+      return true
     } catch (error) {
       rawError.value = (error as Error)?.message || 'Pre-autorizzazione non riuscita.'
+      return false
     }
   }
 

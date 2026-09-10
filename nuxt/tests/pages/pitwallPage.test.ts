@@ -460,7 +460,7 @@ describe('Pitwall wiring', () => {
     expect(conceptOrder).toContain('describePitwallConceptOrderStatus')
     expect(conceptOrder).toContain('props.status === "pending" || props.status === "applying"')
     expect(conceptPitStop).toContain(':status="[\'acc-drive-7.8.1\', \'mfd-v2\', \'mfd-v3\', \'mfd-v4\'].includes(stop.application?.orderMethod.value ?? \'\') ? null : stop.orderStatus.value"')
-    expect(conceptPitStop).not.toContain('orderStatus.value =')
+    expect(conceptPitStop).not.toMatch(/orderStatus\.value\s*=(?!=)/)
     expect(conceptOrder).toContain('class="pwc-order"')
     // Gli stati sono i sei veri che il PC del pilota scrive: niente "Scaduta"
     // inventata dal prototipo.
@@ -485,13 +485,13 @@ describe('Pitwall wiring', () => {
     expect(conceptRaces).toContain('nick(race.hostId)')
     expect(conceptRaces).toContain('Pitwall aperto')
     expect(conceptRaces).toContain('Entra')
-    expect(conceptRaces).toContain('Al muretto')
+    expect(conceptRaces).toContain('Partecipanti')
     // Il pilota non sta al muretto di se stesso: prima ci finiva dentro.
-    expect(conceptRaces).toContain('member.personId !== race.hostId')
+    expect(conceptRaces).not.toContain('member.personId !== race.hostId')
     expect(conceptRaces).toContain('Nessun amico ha il Pitwall aperto adesso.')
     // Niente righe "in pista ma non ancora invitato": o e' aperto, o non c'e'.
     expect(conceptRaces).not.toContain('joinable')
-    expect(liveStore).toContain('.filter(friend => friend.pitwallOpen && friend.raceId)')
+    expect(liveStore).toContain('new Map(link.rooms.value.map(room => [room.roomId, room]))')
     expect(concept).not.toContain('Collegati')
     expect(concept).not.toContain('Assisti')
   })
@@ -506,9 +506,9 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('@start="state.startPitwall()"')
     expect(concept).toContain('@close="state.closePitwall()"')
     expect(conceptMyRoom).toContain('Apri il Pitwall')
-    expect(conceptMyRoom).toContain('Chiudi il Pitwall')
+    expect(conceptMyRoom).toContain('Esci dal Pitwall')
     expect(conceptMyRoom).toContain("pitwall.state === 'arming'")
-    expect(conceptMyRoom).toContain('Si apre appena ACC è in sessione.')
+    expect(conceptMyRoom).toContain('Apertura della stanza in corso.')
     // Da un browser normale non c'e' nessun PC del pilota: si dice.
     expect(conceptMyRoom).toContain('!pitwall.available')
     expect(conceptMyRoom).toContain("Si apre dall'app desktop del pilota")
@@ -530,8 +530,8 @@ describe('Pitwall wiring', () => {
   })
 
   it('la pastiglia "in pista" negli elenchi segue chi guida, non chi sta al muretto', () => {
-    expect(conceptFriends).toContain('v-if="friend.racing"')
-    expect(conceptFriends).toContain('in pista')
+    expect(conceptFriends).not.toContain('v-if="friend.racing"')
+    expect(conceptFriends).not.toContain('>in pista</span>')
     expect(conceptFriends).not.toContain('in gara adesso')
   })
 
@@ -636,10 +636,10 @@ describe('Pitwall wiring', () => {
 
   it('dice cosa succede prima di togliere un amico', () => {
     expect(conceptFriends).toContain('function removeWarning')
-    expect(conceptFriends).toContain('non vedrà più il tuo Pitwall, e tu non vedrai il suo')
+    expect(conceptFriends).toContain('Chi è già nella stanza rimane')
     expect(conceptFriends).toContain('confirmRemove(friend.personId)')
     // Togliere un amico lo toglie anche dalle mie gare aperte.
-    expect(friendActions).toContain('await service.revoke(room.roomId, personId)')
+    expect(friendActions).not.toContain('await service.revoke(room.roomId, personId)')
   })
 
   it('niente scadenze e niente durate: un amico lo e finche non lo togli', () => {
@@ -806,5 +806,20 @@ describe('Pitwall wiring', () => {
     // Le fixture sono l'origine, non lo stato: si copiano prima di mutarle.
     expect(conceptState).toContain('function initialStore')
     expect(conceptState).toContain('JSON.parse(JSON.stringify(value))')
+  })
+})
+
+describe('Standard and V4 Pitwall UI', () => {
+  it('keeps both Standard forms and the shared V4 selector without restoring V3', () => {
+    for (const source of [panel, conceptPitStop, page]) {
+      expect(source).not.toContain('PitwallV3Panel')
+    }
+    for (const source of [panel, conceptPitStop]) {
+      expect(source).toContain('PitwallApplicationPanel')
+      expect(source).toContain("method === 'standard'")
+    }
+    expect(page).toContain('providePitwallApplicationMethod()')
+    expect(panel).toContain('PitwallOrderBar')
+    expect(conceptPitStop).toContain('stop.orderStatus.value')
   })
 })

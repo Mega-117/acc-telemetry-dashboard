@@ -3,6 +3,7 @@
 // ============================================
 
 import { ref, computed } from 'vue'
+import { createAuthTransitionQueue } from '~/services/auth/authTransitionQueue'
 import type { User } from 'firebase/auth'
 import type { UserProfileDocument } from '~/services/auth/userProvisioningService'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
@@ -39,6 +40,24 @@ const currentUserProfile = ref<CachedUserProfile | null>(null)
 let authListenerInitialized = false
 let authInitializationPromise: Promise<void> | null = null
 const authRevisionLease = createAuthRevisionLeaseCoordinator()
+const authActions = createAuthTransitionQueue()
+const authSync = createAuthTransitionQueue()
+let pendingLogout: Promise<{ success: boolean; error?: string }> | null = null
+let localIdentityCleared = false
+let pendingIdentityClear: Promise<void> | null = null
+
+function clearOwnedIdentity(): Promise<void> {
+    if (localIdentityCleared || !ownsLocalIdentityBridge()) return Promise.resolve()
+    if (pendingIdentityClear) return pendingIdentityClear
+    pendingIdentityClear = (async () => {
+        const cleared = await clearLocalUserIdentity()
+        if (requiresLocalIdentityBridge() && !cleared) {
+            throw new Error('Arresto del programma non confermato. Riprova il logout prima di accedere.')
+        }
+        localIdentityCleared = true
+    })().finally(() => { pendingIdentityClear = null })
+    return pendingIdentityClear
+}
 type RecoverableAuthTarget =
     | { kind: 'initialization' }
     | { kind: 'user'; user: User }
@@ -100,7 +119,9 @@ async function syncAuthenticatedUser(
     isCurrentRevision: () => boolean = () => true,
 ): Promise<AuthenticatedUserSyncResult> {
     const { ensureUserDocument, logoutCurrentUser } = await getAuthDependencies()
+    const refreshStarted = performance.now()
     const refreshResult = await reloadPersistedUser(user)
+    console.info('[AUTH_TIMING] refreshMs=' + Math.round(performance.now() - refreshStarted))
 
     if (refreshResult.status === 'invalid') {
         console.warn('[AUTH] Persisted session is definitively invalid:', refreshResult.errorCode)
@@ -125,14 +146,16 @@ async function syncAuthenticatedUser(
         currentUserProfile.value = null
         userRole.value = 'pilot'
         firestoreNickname.value = user.displayName || user.email?.split('@')[0] || ''
-        if (ownsLocalIdentityBridge()) await clearLocalUserIdentity()
+        if (ownsLocalIdentityBridge()) await clearOwnedIdentity()
         return { status: 'unverified', user }
     }
 
     currentUserProfile.value = userProfileCache.get(user.uid) ?? null
     let ensured
     try {
+        const profileStarted = performance.now()
         ensured = await ensureUserDocument(user)
+        console.info('[AUTH_TIMING] profileMs=' + Math.round(performance.now() - profileStarted))
     } catch (error) {
         console.warn('[AUTH] Authenticated profile provisioning deferred:', error)
         if (isCurrentRevision()) await syncLoggedOutUser()
@@ -143,9 +166,13 @@ async function syncAuthenticatedUser(
     firestoreNickname.value = ensured.nickname
     if (ownsLocalIdentityBridge()) {
         if (!isCurrentRevision()) return { status: 'recoverable', user: null }
+        localIdentityCleared = false
+        const runtimeStarted = performance.now()
         const saved = await saveLocalUserIdentity(user)
+        console.info('[AUTH_TIMING] runtimeMs=' + Math.round(performance.now() - runtimeStarted))
         if (!isCurrentRevision()) return { status: 'recoverable', user: null }
         if (requiresLocalIdentityBridge() && !saved) {
+            authError.value = 'Avvio del programma non riuscito. Riprova il login.'
             console.error('[AUTH] Local runtime rejected identity; signing out fail-closed')
             await logoutCurrentUser().catch(() => {})
             await syncLoggedOutUser()
@@ -161,7 +188,7 @@ async function syncLoggedOutUser() {
     userProfileCache.clear()
     userProfileRequests.clear()
     currentUserProfile.value = null
-    if (ownsLocalIdentityBridge()) await clearLocalUserIdentity()
+    if (ownsLocalIdentityBridge()) await clearOwnedIdentity()
 }
 
 async function loadCachedUserProfile(uid: string, { force = false } = {}) {
@@ -228,8 +255,26 @@ function commitAuthSyncResult(result: AuthenticatedUserSyncResult, observedUser:
     if (result.status !== 'recoverable') authRecoveryCoordinator.clear()
 }
 
-async function applyObservedAuthUser(user: User | null) {
+function applyObservedAuthUser(user: User | null) {
     const observation = authRevisionLease.observe(user?.uid || null)
+    return authSync.run(async () => {
+        if (!authRevisionLease.isRevisionCurrent(observation.revision)) return
+        try {
+            await processObservedAuthUser(user, observation)
+        } catch (error) {
+            if (!authRevisionLease.isRevisionCurrent(observation.revision)) return
+            currentUser.value = null
+            authSessionStatus.value = 'recoverable'
+            authError.value = error instanceof Error ? error.message : 'Sessione non disponibile. Riprova.'
+            isLoading.value = false
+        }
+    })
+}
+
+async function processObservedAuthUser(
+    user: User | null,
+    observation: ReturnType<typeof authRevisionLease.observe>,
+) {
     const revision = observation.revision
     const previousObservedUid = observation.previousUid
     const observedAuthUid = observation.uid
@@ -248,7 +293,7 @@ async function applyObservedAuthUser(user: User | null) {
     ) {
         // Revoke the previous core before provisioning another UID. Any
         // older callback sees the revision change at its next await.
-        await clearLocalUserIdentity()
+        await clearOwnedIdentity()
         if (!authRevisionLease.isRevisionCurrent(revision)) return
     }
 
@@ -314,6 +359,7 @@ async function initializeAuthListener() {
     const { auth, onAuthStateChanged } = authRuntime
     authListenerInitialized = true
     onAuthStateChanged(auth, async (user) => {
+        if (user !== auth.currentUser) return
         await applyObservedAuthUser(user)
     })
 }
@@ -347,7 +393,8 @@ export function useFirebaseAuth() {
         nickname: string,
         firstName: string = '',
         lastName: string = ''
-    ) => {
+    ) => authActions.run(async () => {
+        await authSync.whenIdle()
         invalidatePendingAuthWork()
         authError.value = null
         let translateError: ((code: string) => string) | null = null
@@ -363,47 +410,64 @@ export function useFirebaseAuth() {
             authError.value = translateError?.(error?.code) || 'Errore di autenticazione'
             return { success: false, error: authError.value }
         }
-    }
+    })
 
-    const login = async (email: string, password: string) => {
+    const login = (email: string, password: string) => authActions.run(async () => {
+        await authSync.whenIdle()
         invalidatePendingAuthWork()
         authError.value = null
         let translateError: ((code: string) => string) | null = null
         try {
-            const { loginWithEmail, translateAuthError } = await getAuthDependencies()
+            // A failed stop cannot be bypassed by submitting another login.
+            await clearOwnedIdentity()
+            const { auth, loginWithEmail, translateAuthError } = await getAuthDependencies()
             translateError = translateAuthError
             const { user } = await loginWithEmail(email, password)
+            await authSync.whenIdle()
+            // Same-UID sign-in need not emit onAuthStateChanged (for example
+            // after Firebase signOut failed). Reconcile the canonical user explicitly.
+            if (!authError.value && auth.currentUser === user
+                && (currentUser.value?.uid !== user.uid
+                    || !['ready', 'unverified'].includes(authSessionStatus.value))) {
+                await applyObservedAuthUser(user)
+            }
+            if (authError.value) return { success: false, error: authError.value }
             console.log('[AUTH] Login accepted')
             return { success: true, user }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (error: any) {
             console.error('[AUTH] Login error:', error?.code || 'initialization-failed')
-            authError.value = translateError?.(error?.code) || 'Errore di autenticazione'
+            authError.value = translateError?.(error?.code) || error?.message || 'Errore di autenticazione'
             return { success: false, error: authError.value }
         }
-    }
+    })
 
-    const logout = async () => {
-        const previousUser = currentUser.value
+    const performLogout = async () => {
         invalidatePendingAuthWork()
         currentUser.value = null
         authSessionStatus.value = 'initializing'
-        await syncLoggedOutUser()
         try {
+            await authSync.whenIdle()
+            await syncLoggedOutUser()
             const { logoutCurrentUser } = await getAuthDependencies()
             await logoutCurrentUser()
+            await authSync.whenIdle()
             console.log('[AUTH] Logged out')
             return { success: true }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (error: any) {
             console.error('[AUTH] Logout error:', error)
-            if (previousUser) {
-                authSessionStatus.value = 'recoverable'
-                recoverableAuthTarget = { kind: 'user', user: previousUser }
-                authRecoveryCoordinator.schedule()
-            }
+            authSessionStatus.value = 'signed-out'
+            recoverableAuthTarget = null
+            authError.value = error.message
             return { success: false, error: error.message }
         }
+    }
+
+    const logout = () => {
+        if (pendingLogout) return pendingLogout
+        pendingLogout = authActions.run(performLogout).finally(() => { pendingLogout = null })
+        return pendingLogout
     }
 
     const resendVerificationEmail = async () => {

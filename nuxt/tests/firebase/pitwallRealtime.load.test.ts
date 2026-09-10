@@ -19,7 +19,9 @@ afterAll(async () => {
 
 it('500 distinct authenticated SDK clients stay connected through 250 rooms, MFD changes and manual orders', async () => {
   if (!process.env.FIREBASE_DATABASE_EMULATOR_HOST) throw new Error('Emulator only')
-  env = await initializeTestEnvironment({ projectId: 'demo-pitwall-load', database: { host: '127.0.0.1', port: 9000,
+  const emulator = new URL('http://' + process.env.FIREBASE_DATABASE_EMULATOR_HOST)
+  if (!['127.0.0.1', 'localhost'].includes(emulator.hostname)) throw new Error('Local emulator only')
+  env = await initializeTestEnvironment({ projectId: 'demo-pitwall-load', database: { host: emulator.hostname, port: Number(emulator.port),
     rules: readFileSync(new URL('../../../database.rules.json', import.meta.url), 'utf8') } })
   await env.clearDatabase()
   const started = Date.now()

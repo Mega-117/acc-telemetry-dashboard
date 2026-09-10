@@ -15,9 +15,9 @@ import {
   pitwallConceptIsManager,
   pitwallConceptNicknameById,
   pitwallConceptRoomIsFull,
+  pitwallConceptRoomCapacity,
   splitPitwallConceptList,
   PITWALL_CONCEPT_LIST_LIMITS,
-  PITWALL_CONCEPT_MAX_ROOM_PEOPLE,
 } from "~/utils/pitwallConcept";
 import type { PitwallConceptMember, PitwallConceptPerson, PitwallConceptRace } from "~/utils/pitwallConcept";
 
@@ -41,6 +41,7 @@ const me = computed(() => props.meId ?? "");
 const isManager = computed(() => pitwallConceptIsManager(props.race, me.value));
 const canLeave = computed(() => pitwallConceptCanLeave(props.race, me.value));
 const isFull = computed(() => pitwallConceptRoomIsFull(props.race));
+const capacity = computed(() => pitwallConceptRoomCapacity(props.race));
 
 /** Prima chi guida, poi chi gestisce, poi il resto: l'ordine di chi guarda. */
 const ordered = computed(() => [...props.race.members].sort((left, right) => {
@@ -77,8 +78,9 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
         <span class="pwc-count">{{ race.members.length }}</span>
       </h2>
       <small v-if="isFull">
-        Questa gara è piena: {{ PITWALL_CONCEPT_MAX_ROOM_PEOPLE }} persone è il massimo.
+        Questa gara è piena: {{ capacity }} persone è il massimo.
       </small>
+      <small v-else-if="race.membershipModel === 'social'">Gli amici di chi è presente possono unirsi.</small>
       <small v-else-if="!isManager">Solo chi gestisce la gara può invitare o togliere.</small>
     </header>
 

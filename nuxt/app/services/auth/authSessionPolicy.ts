@@ -44,6 +44,20 @@ export function classifyPersistedAuthError(error: unknown): 'invalid' | 'recover
     : 'recoverable'
 }
 
+// Share only in-flight refreshes of the exact Firebase User instance.
+// Never cache success across logout or reuse credentials for another session.
+const credentialRefreshes = new WeakMap<User, Promise<void>>()
+export function refreshUserCredentials(user: User): Promise<void> {
+  const pending = credentialRefreshes.get(user)
+  if (pending) return pending
+  const request = (async () => {
+    await user.reload()
+    await user.getIdToken(true)
+  })().finally(() => { credentialRefreshes.delete(user) })
+  credentialRefreshes.set(user, request)
+  return request
+}
+
 export async function refreshPersistedAuthSession(
   user: User,
   dependencies: {
@@ -52,8 +66,7 @@ export async function refreshPersistedAuthSession(
   },
 ): Promise<PersistedAuthRefreshResult> {
   try {
-    await user.reload()
-    await user.getIdToken(true)
+    await refreshUserCredentials(user)
     const currentUser = dependencies.getCurrentUser()
     if (!currentUser || currentUser.uid !== user.uid) {
       return {
@@ -68,7 +81,8 @@ export async function refreshPersistedAuthSession(
     if (classifyPersistedAuthError(error) === 'recoverable') {
       return { status: 'recoverable', user, errorCode }
     }
-    await dependencies.signOut().catch(() => {})
+    // An obsolete failure must never sign out a newer session, even for the same UID.
+    if (dependencies.getCurrentUser() === user) await dependencies.signOut().catch(() => {})
     return { status: 'invalid', user: null, errorCode }
   }
 }

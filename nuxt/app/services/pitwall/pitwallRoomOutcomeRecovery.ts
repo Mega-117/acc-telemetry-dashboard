@@ -82,7 +82,9 @@ export function createPitwallRoomOutcomeRecovery(options: PitwallRoomOutcomeReco
       const current = await rooms.readOrder(outcome.roomId, outcome.orderId)
       if (!current.ok) continue
       const stillOpen = current.value && (current.value.status === 'pending' || current.value.status === 'applying')
-      if (!stillOpen) await confirmOutcomes([outcome.orderId])
+      // Missing is not proof of delivery (wrong namespace, retention, or stale
+      // cache). Keep the outbox until a terminal record is actually observed.
+      if (current.value && !stillOpen) await confirmOutcomes([outcome.orderId])
     }
   }
 

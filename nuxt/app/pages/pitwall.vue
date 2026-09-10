@@ -7,9 +7,9 @@ import PitwallPage from '~/components/pages/PitwallPage.vue'
 import PitwallConcept from '~/components/pitwall/concept/PitwallConcept.vue'
 import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
 import { usePitwallConceptState } from '~/composables/usePitwallConceptState'
+import { providePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
 import { providePitwallStore } from '~/composables/usePitwallStore'
 import { canUseDevTools } from '~/utils/devToolsAccess'
-import { providePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
 
 definePageMeta({
   layout: 'dashboard'
@@ -17,10 +17,10 @@ definePageMeta({
 
 const v4Local = ref(false)
 const route = useRoute()
-providePitwallApplicationMethod()
 const { legacy, setLegacy } = usePitwallConceptMode()
 
 const demo = computed(() => route.query.demo === '1' && canUseDevTools())
+providePitwallApplicationMethod()
 if (demo.value) providePitwallStore(usePitwallConceptState())
 </script>
 

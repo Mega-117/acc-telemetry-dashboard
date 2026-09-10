@@ -150,3 +150,31 @@ describe('useHudOverlay', () => {
     expect(() => hud.stop()).not.toThrow()
   })
 })
+
+
+describe('PIP-404 content readiness', () => {
+  it.each(['tyres', 'sectors', 'dashboard', 'info', 'standings'])('%s attende settings e DOM senza dipendere dai frame della finestra nascosta', async id => {
+    const { api } = makeApi()
+    const ready = vi.fn().mockResolvedValue(true)
+    const hud = useHudOverlay(id, () => ({ ...api, hudOverlayContentReady: ready }))
+    hud.start()
+    expect(await hud.notifyContentReady()).toBe(false)
+    await hud.loadSettings()
+    const pending = hud.notifyContentReady()
+    expect(ready).not.toHaveBeenCalled()
+    expect(await pending).toBe(true)
+    expect(ready).toHaveBeenCalledWith(id)
+    hud.stop()
+  })
+  it('non pubblica readiness dopo teardown durante il commit DOM', async () => {
+    const { api } = makeApi()
+    const ready = vi.fn()
+    const hud = useHudOverlay('tyres', () => ({ ...api, hudOverlayContentReady: ready }))
+    hud.start()
+    await hud.loadSettings()
+    const pending = hud.notifyContentReady()
+    hud.stop()
+    expect(await pending).toBe(false)
+    expect(ready).not.toHaveBeenCalled()
+  })
+})

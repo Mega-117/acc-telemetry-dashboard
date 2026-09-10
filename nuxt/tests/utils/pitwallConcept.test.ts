@@ -280,6 +280,20 @@ describe('Pitwall Concept: la gara, i ruoli e chi applica', () => {
     expect(pitwallConceptCanRemove(race(), plain)).toBe(true)
   })
 
+  it('lets every social member leave, enforces sixteen actual members and offers no moderation', () => {
+    const party = { ...race(), membershipModel: 'social' as const, hostId: PITWALL_CONCEPT_CURRENT_USER_ID }
+    expect(pitwallConceptCanLeave(party)).toBe(true)
+    const plain = party.members.find(member => member.role === 'member')!
+    expect(pitwallConceptCanRemove(party, plain)).toBe(false)
+    expect(pitwallConceptCanPromote(party, plain)).toBe(false)
+    party.members = Array.from({ length: 15 }, (_, i) => ({ personId: String(i), role: 'member', driving: false, online: true }))
+    party.members.push({ personId: 'preview', role: 'invited', driving: false, online: false })
+    expect(pitwallConceptRoomIsFull(party)).toBe(false)
+    party.members.push({ personId: 'last', role: 'member', driving: false, online: true })
+    expect(pitwallConceptRoomIsFull(party)).toBe(true)
+    expect(describePitwallConceptMember({ ...plain, reconnecting: true })).toBe('Riconnessione in corso')
+  })
+
   it('usa le stesse parole della vista classica per le pastiglie', () => {
     expect(describePitwallConceptMember({ personId: 'mario', role: 'manager', driving: true, online: true }))
       .toBe('AL VOLANTE')
@@ -342,6 +356,7 @@ describe('nessuna falsa applicazione parziale', () => {
     expect(result.detail).toBe('Set 2 già montato')
   })
   it('non dichiara nessun input se il risultato e incerto', () => {
+    expect(describePitwallConceptOrderStatus('unknown').label).toBe('Conferma non disponibile')
     const result = describePitwallConceptOrderStatus('partial', 'Tasto inviato, lettura persa', [{ outcome: 'selected' }])
     expect(result.label).toBe('Nessun campo confermato')
     expect(result.detail).toBe('Tasto inviato, lettura persa')

@@ -32,11 +32,19 @@ function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) 
     try {
       const existing = await io.read<PitwallGrant>(path(driverUid, uid))
       if (valid(existing)) return { ok: true as const, alreadyGranted: true }
+      if (existing?.status === 'pending') return { ok: true as const, alreadyGranted: false }
       const request = buildPitwallGrantRequest(driverUid, uid, stamp(), note, requestedScope)
       if (!request) throw new Error('Pilota non valido.')
       await io.write('', { [path(driverUid, uid)]: request.data, [`outgoing/${uid}/${driverUid}`]: true })
       return { ok: true as const, alreadyGranted: false }
-    } catch (error) { return failure(error) }
+    } catch (error) {
+      // Another tab/request may have won between the read and atomic write.
+      // Success requires an observed existing request, never just a denied write.
+      const current = await io.read<PitwallGrant>(path(driverUid, uid)).catch(() => null)
+      if (valid(current)) return { ok: true as const, alreadyGranted: true }
+      if (current?.status === 'pending') return { ok: true as const, alreadyGranted: false }
+      return failure(error)
+    }
   }
   async function withdraw(driverUid: string) {
     try { await io.write(path(driverUid, uid), { status: 'revoked', updatedAt: stamp() }); return { ok: true as const } }

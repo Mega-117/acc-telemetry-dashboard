@@ -9,8 +9,7 @@ import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useCoachInsights } from '~/composables/useCoachInsights'
 import { usePilotContext, useTargetUserId } from '~/composables/usePilotContext'
 import { usePublicPath } from '~/composables/usePublicPath'
-import { loadOverviewProjectionRecoverably } from '~/services/gateway/overviewProjectionLoadPolicy'
-import type { OverviewProjection } from '~/types/overviewProjections'
+import { useOverviewProjection } from '~/composables/useOverviewProjection'
 import type { CoachBriefingScenario } from '~/composables/useCoachInsights'
 
 
@@ -86,9 +85,9 @@ const { getPublicPath } = usePublicPath()
 const pilotContext = usePilotContext()
 const targetUserId = useTargetUserId()
 const telemetryGateway = useTelemetryGateway()
-const { isLoading } = telemetryGateway
-
-const overviewProjection = ref<OverviewProjection | null>(null)
+const overview = useOverviewProjection(uid => telemetryGateway.getOverviewProjection(uid))
+const { projection: overviewProjection, status: overviewStatus } = overview
+const isOverviewPlaceholder = computed(() => !overviewProjection.value && overviewStatus.value !== 'empty')
 const emptyActivityTotals = {
   practice: { minutes: 0, sessions: 0 },
   qualify: { minutes: 0, sessions: 0 },
@@ -97,17 +96,7 @@ const emptyActivityTotals = {
 
 
 async function loadOverview() {
-  const result = await loadOverviewProjectionRecoverably(
-    () => telemetryGateway.getOverviewProjection(targetUserId.value || undefined)
-  )
-  if (result.status === 'ready') {
-    overviewProjection.value = result.projection
-    return
-  }
-
-  // The runtime capability banner owns the user-facing cloud state. Keeping
-  // this view mounted lets its background retry recover without a Nuxt 500.
-  console.warn('[PANORAMICA] Cloud projection unavailable; keeping current view:', result.error)
+  await overview.load(targetUserId.value)
 }
 
 
@@ -125,7 +114,7 @@ watch(
   async () => {
     await loadOverview()
   },
-  { immediate: true }
+  { immediate: true, flush: 'sync' }
 )
 
 onMounted(() => {
@@ -133,6 +122,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  overview.dispose()
   window.removeEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
 })
 
@@ -239,11 +229,14 @@ const goToTrack = (track: { id: string } | null) => {
 
 <template>
   <LayoutPageContainer>
-    <div v-if="isLoading" class="loading-state">
-      <p>Caricamento dati...</p>
-    </div>
-    
-    <div v-else class="panoramica-wrapper">
+    <p v-if="overviewStatus === 'error'" role="status">
+      Dati non disponibili. <button type="button" @click="loadOverview">Riprova</button>
+    </p>
+    <div class="panoramica-wrapper" :class="{ 'overview-placeholder': isOverviewPlaceholder }"
+      :aria-busy="overviewStatus === 'pending'" :inert="isOverviewPlaceholder">
+      <span v-if="isOverviewPlaceholder" class="overview-loading-label" role="status">
+        {{ overviewStatus === 'error' ? 'Dati non disponibili' : 'Caricamento dati...' }}
+      </span>
       <!-- Top Section: lightweight coach briefing from recent projection data -->
       <div class="coach-sections">
         <div class="coach-hero coach-card" :class="briefingToneClass">
@@ -336,6 +329,32 @@ const goToTrack = (track: { id: string } | null) => {
 </template>
 
 <style lang="scss" scoped>
+.overview-loading-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.overview-placeholder :deep(.coach-sections > *),
+.overview-placeholder :deep(.panoramica-grid > *) {
+  position: relative;
+  overflow: hidden;
+  & > * { visibility: hidden; }
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 16px;
+    border-radius: 12px;
+    background: linear-gradient(110deg, rgba(255,255,255,.04) 20%, rgba(255,255,255,.09) 45%, rgba(255,255,255,.04) 70%);
+    background-size: 200% 100%;
+    animation: overview-loading 1.5s linear infinite;
+  }
+}
+@keyframes overview-loading { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .overview-placeholder :deep(*)::after { animation: none; }
+}
+
 .panoramica-wrapper {
   display: flex;
   flex-direction: column;
