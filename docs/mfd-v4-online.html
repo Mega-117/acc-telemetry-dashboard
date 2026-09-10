@@ -1,0 +1,1300 @@
+<!-- Generated V4 online; SHA256 443f29b277096f9bd6f09c57ab3a2a3f3f5314e6421abb028ae3b3164de0913b -->
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>ACC Drive — invio strategia al gioco</title>
+<style>
+  :root{--live:#3ddc84;--probe:#ffb020;--geo:#4aa3ff;--blind:#ff4d4d;--yellow:#e8e14a;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:#0d0e10;color:#ddd;font-family:"Segoe UI",Tahoma,Arial,sans-serif;
+       font-size:13px;padding:16px;}
+  .wrap{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;}
+  .panel{background:#17191d;border:1px solid #2a2d33;padding:12px;width:470px;}
+  h2{margin:0 0 2px;font-size:12px;letter-spacing:1.5px;color:#8a9099;text-transform:uppercase;}
+  .who{margin:0 0 10px;font-size:11px;color:#5d636b;}
+
+  #conn{padding:6px 8px;margin-bottom:10px;font-size:11px;border:1px solid #262a30;background:#101216;}
+  #conn b{color:#ccc;}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;
+       vertical-align:middle;background:#555;}
+  .dot.ok{background:var(--live);} .dot.no{background:var(--blind);}
+
+  .sm{background:#101216;border:1px solid #262a30;padding:8px;margin-bottom:10px;}
+  .sm h3{margin:0 0 6px;font-size:10px;letter-spacing:1.4px;color:#5d636b;}
+  .smgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 8px;font-size:11px;}
+  .smgrid div{display:flex;justify-content:space-between;padding:1px 3px;
+              font-family:Consolas,monospace;background:#16181d;}
+  .smgrid span:first-child{color:#6d737b;}
+  .smgrid span:last-child{color:var(--live);font-weight:600;}
+  .smgrid div.flash{background:#2a3a2c;}
+
+  table{width:100%;border-collapse:collapse;}
+  td{padding:2px 3px;vertical-align:middle;}
+  td.lb{text-align:right;color:#aab0b8;width:130px;white-space:nowrap;}
+  input[type=number],select{background:#0e1013;border:1px solid #2e333a;color:#eee;
+    padding:2px 4px;font-size:12px;width:74px;font-family:Consolas,monospace;}
+  input[type=checkbox]{accent-color:var(--geo);}
+  input:disabled,select:disabled{opacity:.35;}
+  .tag{display:inline-block;font-size:9px;padding:1px 4px;font-weight:700;width:74px;
+       text-align:center;border-radius:2px;}
+  .tag.live{background:#12341f;color:var(--live);border:1px solid #1d5c34;}
+  .tag.geo {background:#0e2740;color:var(--geo); border:1px solid #1c4b78;}
+  .tag.conv{background:#2e1a3d;color:#c39bf0;border:1px solid #4d2e66;}
+  .tag.sat {background:#0f2f2c;color:#4fd6c4;border:1px solid #1d5c56;}
+  .tag.mem {background:#3a2c0d;color:#ffb020;border:1px solid #6b5214;}
+  .tag.occhio{background:#2a1a3d;color:#d2a8ff;border:1px solid #55346b;}
+  .tag.no  {background:#3a1414;color:var(--blind);border:1px solid #6b1e1e;}
+  .chk{width:16px;text-align:center;font-weight:700;}
+  .chk.ok{color:var(--live);} .chk.no{color:var(--blind);} .chk.na{color:#585e66;}
+
+  .ctl{margin:12px 0 6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  button{background:#1f5c9e;border:0;color:#fff;padding:7px 14px;font-size:12px;
+         font-weight:600;cursor:pointer;}
+  button:hover{background:#2872c4;}
+  button:disabled{background:#333;color:#777;cursor:default;}
+  button.alt{background:#5a3a8f;} button.alt:hover{background:#6f4bad;}
+  .sp{font-size:11px;color:#7a8088;} .sp input{width:46px;}
+
+  #log{background:#0a0b0d;border:1px solid #23262b;height:300px;overflow-y:auto;
+       font-family:Consolas,monospace;font-size:11px;line-height:1.5;padding:6px;margin-top:8px;}
+  #log div{white-space:pre-wrap;}
+  .l-hdr{color:var(--geo);font-weight:700;} .l-info{color:#9aa3ad;}
+  .l-probe{color:var(--probe);} .l-ok{color:var(--live);} .l-err{color:var(--blind);}
+  .l-warn{color:#ff9b3d;} .l-key{color:#4d535b;} .l-conv{color:#c39bf0;}
+  #layout{font-family:Consolas,monospace;font-size:11px;color:#8a9099;background:#101216;
+          border:1px solid #262a30;padding:8px;margin-top:10px;line-height:1.5;}
+  #layout b{color:var(--yellow);font-weight:600;}
+  .legend{font-size:10px;color:#5d636b;margin-top:8px;line-height:1.8;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<section class="panel">
+  <h2>ACC Drive &mdash; invio strategia</h2>
+  <p class="who">questo pannello comanda il <b>pit MFD di Assetto Corsa Competizione</b></p>
+
+  <div id="conn"><span class="dot"></span><span id="connTxt">controllo connessione…</span></div>
+
+  <div class="sm">
+    <h3>SHARED MEMORY DEL GIOCO</h3>
+    <div class="smgrid" id="smgrid"></div>
+  </div>
+
+  <table id="form"></table>
+
+  <div class="ctl">
+    <button id="apply">INVIA STRATEGIA ALL'MFD</button>
+    <label class="sp">intervallo tasti <input type="number" id="gap" value="60" min="60" max="300" step="10"> ms</label>
+  </div>
+
+  <div id="layout">layout non ancora rilevato</div>
+
+  <div class="legend">
+    <span class="tag live">LIVE</span> in shared memory &rarr; scrivo, rileggo, correggo<br>
+    <span class="tag geo">GEOMETRIA</span> non leggibile: lo deduco da quante righe ha il menu<br>
+    <span class="tag conv">CONVERGENZA</span> cieco, ma 3 toggle lo portano a uno stato noto<br>
+    <span class="tag sat">FONDOCORSA</span> non leggibile ma <b>sbatte</b> contro il minimo: lo azzero e conto<br>
+    <span class="tag mem">A MEMORIA</span> non leggibile e <b>ciclico</b>: devo sapere da dove parto<br>
+    <span class="tag occhio">A VISTA</span> impostato alla cieca, poi <b>verificato su uno screenshot</b> e corretto<br>
+    <span class="tag no">NON TOCCO</span> il limitatore pits: nessun riscontro e nessuna normalizzazione
+  </div>
+</section>
+
+<section class="panel" style="width:520px">
+  <h2>Diario dell'operazione</h2>
+  <p class="who">ogni passo, ogni sonda, ogni correzione</p>
+  <div id="log"></div>
+</section>
+
+</div>
+
+<script>
+/* ==================================================================
+   Ponte verso il gioco. Le uniche due cose che il browser non sa fare
+   le fa acc_server.py: leggere la shared memory e premere i tasti.
+   ================================================================== */
+var cache = {}, presses = 0;
+function gap(){ return +document.getElementById('gap').value; }
+
+async function api(){ throw new Error("Invio locale non disponibile nel pannello online"); }
+
+function sm(){ return cache; }
+
+/* Riga su cui CREDO di essere. Serve a una cosa sola: accorgersi se un
+   tasto di modifica sta per finire sulla riga 0, il Limitatore pits, che
+   non va toccato mai. */
+var RIGA = null;
+function tracciaTasto(name, count){
+  if(RIGA === null || !L) return;
+  if(name === 'Down') RIGA = (RIGA + count) % L.n;
+  else if(name === 'Up') RIGA = (RIGA - count % L.n + L.n) % L.n;
+  else if(name === 'P') RIGA = 0;
+  else if((name === 'Left' || name === 'Right') && RIGA === 0)
+    log('err','  ⚠ ' + name + ' ×' + count + ' sulla riga 0 (LIMITATORE PITS)!');
+}
+
+async function key(name, count){
+  count = count || 1;
+  if ((name === 'Left' || name === 'Right') && (RIGA === null || RIGA === 0)) throw new Error('Riga non identificata o limitatore: input bloccato');
+  tracciaTasto(name, count);
+  cache = await api('/key', {name:name, count:count, gap:gap()});
+  presses += count;
+  return cache;
+}
+
+/* ==================================================================
+   Logica di navigazione, riscritta su come ACC si comporta davvero:
+     · il cursore CICLA, quindi contro gli estremi non ci si ancora
+     · P riporta il cursore in cima ed e' l'unica ancora assoluta
+     · le prime 4 righe non collassano mai
+        0 Limitatore · 1 Strategia Pit · 2 Carburante · 3 Cambio gomme
+     · con le gomme attive FL sta sempre a +7
+   ================================================================== */
+var EPS = 0.001;
+var logEl = document.getElementById('log');
+function log(c, m){
+  var d = document.createElement('div'); d.className='l-'+c; d.textContent=m;
+  logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function goTop(){ await key('P'); RIGA = 0; }        // cursore in cima
+async function down(n){ if(n>0) await key('Down', n); }
+async function at(row){ await goTop(); RIGA = 0; await down(row); RIGA = row; }
+
+var L = null;        // forma del menu, letta con la vista
+var FIRMA_LIM = null, LIM_TOCCATO = false;   // guardia sul limitatore pits
+var PROBLEMI = [];   // cose che NON si sono potute fare: mai nascoste
+var N_PILOTI = 0;    // quanti indici stabili conosce la calibrazione
+var ORDINE_PILOTI = null;  // indice stabile -> posizione nel giro del gioco
+var N_CICLICI = 0;   // quanti piloti ci sono davvero nel giro adesso
+var VIS = null;      // stato delle voci cieche, letto con la vista
+/* Equipaggio dal broadcasting UDP: da qui vengono i NOMI, non la selezione.
+   Chi sia selezionato nell'MFD lo dice solo la lettura a vista, e i due
+   dati non si mescolano. L'ordine e' quello dell'entry list della vettura;
+   se il conteggio non combacia con quello imparato a vista il server manda
+   crewDiscorde e qui si dice, invece di far finta di niente. */
+var CREW = null;
+
+/* ------------------------------------------------------------------
+   La forma del menu si LEGGE da uno screenshot, non si indovina.
+   Il metodo vecchio provava dei valori premendo → su righe sconosciute:
+   con la Wet un tentativo è finito su "Mescola", ha rimesso Dry e ha
+   ricalcolato le pressioni. Per misurare il menu lo modificava.
+   Ora l'unico tasto premuto è P, per portare il cursore in cima.
+   ------------------------------------------------------------------ */
+async function leggiPannello(){
+  var r = await api('/panel', {});
+  if(r.error){
+    log('err','  ' + r.error);
+    return null;
+  }
+  if(r.calibrataOra){
+    log('ok','  prima volta: calibrato da solo — passo ' +
+        r.calibrataOra.pitch.toFixed(2) + ' px, pannello ' +
+        r.calibrataOra.panelW + ' px');
+  }
+  if(!r.ok){ log('err','  ' + (r.why || 'lettura fallita')); return null; }
+  L = {n:r.n, flAt:r.flAt, dry:r.dry, tyreOn:r.tyreOn,
+       brakes:r.brakes, driver:r.driver, row:r.row};
+  VIS = r.read;
+  if(r.nPiloti) N_PILOTI = r.nPiloti;
+  if(r.crew) CREW = r.crew;
+  if(r.crewDiscorde)
+    log('warn','  ⚠ piloti: ' + r.crewDiscorde[0] + ' imparati a vista, ' +
+        r.crewDiscorde[1] + ' nella entry list: i nomi potrebbero non');
+  if(r.pilotiOrdine) ORDINE_PILOTI = r.pilotiOrdine;
+  if(r.nCiclici) N_CICLICI = r.nCiclici;
+  /* Il limitatore pits non va toccato MAI. Non serve sapere cosa dice:
+     basta confrontarne la sagoma fra il primo e l'ultimo scatto. */
+  if(FIRMA_LIM === null) FIRMA_LIM = r.firmaLimitatore;
+  else if(r.firmaLimitatore && FIRMA_LIM){
+    /* Confronto di FORMA, non di numeri: "SPENTO" e "ACCESO" hanno lo
+       stesso numero di lettere, quindi larghezza e pixel accesi coincidono
+       e non distinguerebbero niente. Misurato: letture della stessa parola
+       danno 1.000 anche con l'MFD spostato, una parola diversa 0.39. */
+    var a = FIRMA_LIM, b = r.firmaLimitatore, d = 0, n = 0;
+    for(var i = 0; i < a.length; i++)
+      for(var j = 0; j < a[i].length; j++){ d += Math.abs(a[i][j] - b[i][j]); n++; }
+    var somiglianza = n ? 1 - d / n : 1;
+    if(somiglianza < 0.95){
+      log('err','  ⚠ IL LIMITATORE PITS È CAMBIATO (somiglianza ' +
+          somiglianza.toFixed(3) + '): qualcosa ha premuto sulla riga 0.');
+      LIM_TOCCATO = true;
+    }
+  }
+  presses += 1;                                  // la P
+  return r;
+}
+
+async function detectLayout(){
+  log('hdr','— leggo la forma del menu —');
+  var r = await leggiPannello();
+  if(!r) return null;
+  log('probe','  ' + L.n + ' righe · ' + (L.tyreOn
+        ? 'gomme APERTE, mescola ' + (L.dry ? 'Dry' : 'Wet') + ', FL a +' + L.flAt
+        : 'gomme SPENTE') +
+      ' · freni ' + (L.brakes ? 'ESPANSI' : 'chiusi') +
+      ' · pilota ' + (L.driver ? 'presente' : 'assente'));
+  renderLayout();
+  return L;
+}
+
+/* Dopo un cambio che altera la forma NON rifaccio uno scatto: so
+   esattamente cosa è cambiato. La verità viene comunque ristabilita
+   dal controllo visivo finale. */
+function aggiornaLayout(delta){
+  if(!L) return;
+  if(L.flAt === null || L.flAt === undefined){
+    /* Senza la sezione gomme non c'e' nessun FL da cui contare: proseguire
+       significherebbe inventare gli indici (e' successo: FL finiva a +1 e i
+       tasti andavano su Strategia Pit e sul Limitatore). */
+    log('err','  indici non aggiornabili: la sezione gomme non e’ aperta');
+    return;
+  }
+  if(delta.dry !== undefined && delta.dry !== L.dry){
+    L.dry = delta.dry;
+    L.flAt += L.dry ? 1 : -1;                    // la Wet toglie "Set Pneumatici"
+  }
+  if(delta.brakes !== undefined) L.brakes = delta.brakes;
+  var f = L.flAt;
+  L.n = 4 + (L.dry?1:0) + 2 + 4 + 1 + (L.brakes?2:0) + (L.driver?1:0) + 2;
+  L.row = {limiter:0, pitStrategy:1, fuel:2, tyreCheck:3,
+           compound: L.dry ? 5 : 4, pressure: f-1,
+           fl:f, fr:f+1, rl:f+2, rr:f+3,
+           brakeCheck:f+4, body:L.n-1, susp:L.n-2};
+  if(L.dry) L.row.tyreSet = 4;
+  if(L.brakes){ L.row.brakeFront = f+5; L.row.brakeRear = f+6; }
+  if(L.driver) L.row.driver = L.n-3;
+  renderLayout();
+}
+
+function renderLayout(){
+  var el = document.getElementById('layout');
+  if(!L){ el.textContent = 'layout non ancora letto'; return; }
+  var names = ['Limitatore pits','Strategia Pit','Agg. carburante','Cambio gomme'];
+  if(L.tyreOn){
+    if(L.dry) names.push('Set Pneumatici');
+    names.push('Mescola','Pressione','FL','FR','RL','RR');
+  }
+  names.push('Sostituisci Freni');
+  if(L.brakes) names.push('Freno Anteriore','Freno Posteriore');
+  if(L.driver) names.push('Selezione pilota');
+  names.push('Sospensioni','Carrozzeria');
+  var h = '<b>' + L.n + ' righe</b>  ·  ' +
+          (L.tyreOn ? 'mescola <b>' + (L.dry?'Dry':'Wet') + '</b>' : '<b>gomme spente</b>') +
+          '  ·  letto a vista\n';
+  names.forEach(function(x,i){ h += '  ' + (i<10?' ':'') + i + '  ' + x + '\n'; });
+  el.innerHTML = h;
+}
+
+/* ---------- anello chiuso sui campi leggibili ---------- */
+async function closedLoop(field, target, tol, label, goto, maxPassi){
+  maxPassi = maxPassi || 210;
+  for(var att = 0; att < 3; att++){
+    var last = null, stuck = 0, steps = 0, visti = {};
+    for(var i = 0; i < maxPassi; i++){
+      var cur = sm()[field];
+      if(Math.abs(cur - target) <= tol){
+        if(steps) log('info','  ' + label + ' → ' + target + '  (' + steps + ' passi)');
+        return true;
+      }
+      /* Oscillazione: se rivedo lo stesso valore tre volte senza avvicinarmi,
+         il bersaglio non e' raggiungibile (ACC salta il set montato) e
+         insistere costa centinaia di tasti per niente. */
+      var k = String(cur);
+      visti[k] = (visti[k] || 0) + 1;
+      if(visti[k] >= 3){
+        log('warn','  ' + label + ': oscilla senza arrivarci, mi fermo a ' + cur);
+        return false;
+      }
+      if(cur === last){ if(++stuck > 3) break; } else stuck = 0;
+      last = cur; steps++;
+      await key(cur < target ? 'Right' : 'Left');
+    }
+    if(att === 2){ log('err','  ' + label + ': fermo su ' + sm()[field] + ', voluto ' + target); return false; }
+    log('warn','  ' + label + ' non risponde → mi ri-ancoro con P e ritento');
+    await goto();
+  }
+  return false;
+}
+
+/* ---------- fondocorsa ORIZZONTALE ----------
+   Il cursore verticale cicla, ma i campi a valore no: premendo Sinistra
+   abbastanza volte si arriva al minimo e lì ci si ferma. Per i campi che
+   nessun dato della shared memory espone è l'unico modo di sapere dove si è. */
+async function saturateThen(back, steps, label){
+  await key('Left', back);
+  if(steps > 0) await key('Right', steps);
+  log('conv','  ' + label + ' → minimo + ' + steps + ' passi');
+}
+
+/* I valori dei freni CICLANO su 4 (verificato: da 2, tre Destra danno 1).
+   Non c'e' fondocorsa e nessun campo li espone, quindi l'unica via e'
+   ricordarsi dove sono e muoversi di (voluto - creduto) mod 4. */
+async function cycleTo(now, want, label){
+  var d = ((want - now) % 4 + 4) % 4;
+  if(d) await key('Right', d);
+  log('conv','  ' + label + ': da ' + now + ' a ' + want + '  (' + d + ' passi su 4)');
+}
+
+
+/* ================================================================
+   CONTROLLO VISIVO
+   L'invio resta cieco. Qui si guarda soltanto, e si guarda DOPO:
+   le voci che nessun campo della shared memory espone (checkbox e
+   pastiglie freni) si verificano su uno screenshot, e se qualcosa non
+   torna si prepara una seconda sequenza cieca di correzione.
+   Due scatti per giro, mai a cavallo dell'intestazione RIPARAZIONI.
+   ================================================================ */
+function confronta(vis, S){
+  var bad = [];
+  if(vis.tyreCheck !== null && vis.tyreCheck !== S.changeTyre)
+    bad.push({campo:'changeTyre', letto:vis.tyreCheck, voluto:S.changeTyre});
+  if(S.changeTyre && vis.dry !== null && vis.dry !== undefined &&
+     vis.dry !== (S.compound === 'Dry'))
+    bad.push({campo:'compound', letto:vis.dry?'Dry':'Wet', voluto:S.compound});
+  if(vis.brakeCheck !== null && vis.brakeCheck !== S.brakes)
+    bad.push({campo:'brakes', letto:vis.brakeCheck, voluto:S.brakes});
+  if(S.brakes && vis.brakeFront != null && vis.brakeFront !== S.brakeFront)
+    bad.push({campo:'brakeFront', letto:vis.brakeFront, voluto:S.brakeFront});
+  if(S.brakes && vis.brakeRear != null && vis.brakeRear !== S.brakeRear)
+    bad.push({campo:'brakeRear', letto:vis.brakeRear, voluto:S.brakeRear});
+  if(L && L.driver && S.driverIdx !== null && S.driverIdx !== undefined &&
+     vis.driver !== null && vis.driver !== undefined && vis.driver !== S.driverIdx)
+    bad.push({campo:'driver', letto:vis.driver, voluto:S.driverIdx});
+  if(vis.susp !== null && vis.susp !== S.susp)
+    bad.push({campo:'susp', letto:vis.susp, voluto:S.susp});
+  if(vis.body !== null && vis.body !== S.body)
+    bad.push({campo:'body', letto:vis.body, voluto:S.body});
+  return bad;
+}
+
+function mostra(vis){
+  var f = function(v){ return v === true ? 'sì' : v === false ? 'no' : v === null ? '?' : v; };
+  log('info','  cambio gomme ' + f(vis.tyreCheck) +
+      (vis.dry !== null && vis.dry !== undefined ? ' (' + (vis.dry?'Dry':'Wet') + ')' : '') +
+      '  ·  sost. freni ' + f(vis.brakeCheck) +
+      (vis.brakeFront != null ? '  ·  ant ' + f(vis.brakeFront) + ' post ' + f(vis.brakeRear) : '') +
+      (vis.driver !== null && vis.driver !== undefined ? '  ·  pilota #' + vis.driver : '') +
+      '  ·  sospensioni ' + f(vis.susp) + '  ·  carrozzeria ' + f(vis.body));
+}
+
+/* Correzione mirata: solo le voci sbagliate, sempre alla cieca. */
+async function correggi(bad, S){
+  for(var i = 0; i < bad.length; i++){
+    var b = bad[i];
+    if(b.campo === 'changeTyre'){
+      await at(L.row.tyreCheck); await key('Right');
+      log('info','  corretto: cambio gomme → ' + (b.voluto?'ON':'OFF'));
+      if(!await detectLayout()) return false;
+    }
+    else if(b.campo === 'compound'){
+      await at(L.row.compound);
+      await key(b.voluto === 'Dry' ? 'Left' : 'Right');
+      log('info','  corretta: mescola → ' + b.voluto);
+      aggiornaLayout({dry: b.voluto === 'Dry'});
+    }
+    else if(b.campo === 'brakes'){
+      await at(L.row.brakeCheck); await key('Right');
+      log('info','  corretto: sostituisci freni → ' + (b.voluto?'ON':'OFF'));
+      aggiornaLayout({brakes: b.voluto});
+    }
+    else if(b.campo === 'brakeFront' || b.campo === 'brakeRear'){
+      /* ora il valore attuale lo SO davvero, l'ho letto */
+      var riga = (b.campo === 'brakeFront') ? L.row.brakeFront : L.row.brakeRear;
+      await at(riga);
+      await cycleTo(b.letto, b.voluto, b.campo);
+      if(b.campo === 'brakeFront') S.brakeFrontNow = b.voluto;
+      else                        S.brakeRearNow  = b.voluto;
+    }
+    else if(b.campo === 'driver'){
+      var ord2 = ORDINE_PILOTI || [], n2 = N_CICLICI || N_PILOTI;
+      if(ord2[b.voluto] === null || ord2[b.voluto] === undefined){
+        log('err','  pilota #' + b.voluto + ' non in lista: non lo correggo');
+      } else {
+        var d2 = ((ord2[b.voluto] - ord2[b.letto]) % n2 + n2) % n2;
+        await at(L.row.driver);
+        if(d2) await key('Right', d2);
+        log('info','  corretto: pilota da #' + b.letto + ' a #' + b.voluto);
+      }
+    }
+    else if(b.campo === 'susp' || b.campo === 'body'){
+      /* le riparazioni sono linkate: le rinormalizzo e le rimetto */
+      await at(L.row.body);
+      await key('Right'); await key('Up'); await key('Right');
+      await key('Down'); await key('Right');
+      if(S.susp){ await key('Up'); await key('Right'); }
+      else if(S.body){ await key('Right'); }
+      log('info','  corrette: riparazioni rinormalizzate e reimpostate');
+      return true;                       // sistema entrambe in un colpo
+    }
+  }
+  return true;
+}
+
+async function verificaVisiva(S){
+  log('hdr','— controllo visivo —');
+  var r = await leggiPannello();
+  if(!r) return null;
+  var vis = r.read;
+  vis.tyreOn = r.tyreOn; vis.dry = r.dry;
+  mostra(vis);
+
+  var mancanti = ['tyreCheck','brakeCheck','susp','body']
+      .filter(function(k){ return vis[k] === null || vis[k] === undefined; });
+  if(S.brakes && (vis.brakeFront == null || vis.brakeRear == null))
+    mancanti.push('mescole freni');
+  if(mancanti.length){
+    log('err','  lettura incompleta: ' + mancanti.join(', ') + ' non leggibili.');
+    log('err','  NON dichiaro nulla di verificato: controlla l’MFD a schermo.');
+    return null;
+  }
+
+  if (L.driver && S.driverIdx != null && vis.driver == null) { log('err','Pilota non verificabile'); return null; }
+  var bad = confronta(vis, S);
+  if(!bad.length){ log('ok','  ✓ tutte le voci cieche corrispondono'); return true; }
+
+  bad.forEach(function(b){
+    log('warn','  ✗ ' + b.campo + ': a schermo ' + b.letto + ', voluto ' + b.voluto);
+  });
+
+  log('hdr','— correggo e ricontrollo —');
+  if(!await correggi(bad, S)) return false;
+
+  var r2 = await leggiPannello();
+  if(!r2) return null;
+  var vis2 = r2.read;
+  vis2.tyreOn = r2.tyreOn; vis2.dry = r2.dry;
+  mostra(vis2);
+
+  if (['tyreCheck','brakeCheck','susp','body'].some(k => vis2[k] == null) || (S.brakes && (vis2.brakeFront == null || vis2.brakeRear == null)) || (L.driver && S.driverIdx != null && vis2.driver == null)) { log('err','Verifica finale incompleta'); return null; }
+  var bad2 = confronta(vis2, S);
+  if(!bad2.length){ log('ok','  ✓ corretto: ora tutto corrisponde'); renderForm(); return true; }
+  bad2.forEach(function(b){
+    log('err','  ✗ ANCORA SBAGLIATO — ' + b.campo + ': a schermo ' + b.letto +
+        ', voluto ' + b.voluto);
+  });
+  return false;
+}
+
+/* ================= invio completo ================= */
+async function apply(S){
+  presses = 0; logEl.innerHTML = '';
+  FIRMA_LIM = null; LIM_TOCCATO = false; PROBLEMI = [];
+  var t0 = Date.now();
+  log('hdr','════ INVIO STRATEGIA ALL’MFD DI ACC ════');
+  await api('/focus', {});
+
+  if(!await detectLayout()) return;
+
+  /* Senza la sezione gomme aperta non esistono ne' le pressioni leggibili
+     ne' la mescola: la forma del menu non e' determinabile e ogni indice
+     sarebbe inventato. La apro e rileggo. Se la strategia la vuole spenta,
+     la si rispegne alla fine. */
+  for(var tentativo = 0; !L.tyreOn && tentativo < 3; tentativo++){
+    log('info','  gomme spente: le accendo per potermi orientare' +
+        (tentativo ? '  (tentativo ' + (tentativo+1) + ')' : ''));
+    await at(L.row.tyreCheck);
+    await key('Right');
+    if(!await detectLayout()) return;
+  }
+  if(!L.tyreOn){ log('err','  non riesco ad aprire la sezione gomme'); return; }
+
+  /* ---- 0. STRATEGIA PIT per prima di tutto.
+            Non e' un semplice valore: carica un PRESET e sovrascrive
+            carburante, gomme, pressioni e perfino le checkbox.
+            Verificato che sbatte contro il minimo (1) e il massimo (30),
+            quindi si normalizza a sinistra e poi si conta.
+            Tutto il resto viene applicato DOPO, sopra al preset. ---- */
+  if(S.applyPitStrategy){
+    log('hdr','— carico il preset ' + S.pitStrategy + ' —');
+    log('warn','  un preset riscrive TUTTO l\'MFD: carburante, gomme, pressioni,');
+    log('warn','  checkbox e pastiglie freni. Per questo e\' un\'operazione a se\'.');
+    await at(L.row.pitStrategy);
+    await saturateThen(34, S.pitStrategy - 1, 'strategia pit = ' + S.pitStrategy);
+    if(!await detectLayout()) return;
+
+    /* Le pastiglie sono cicliche e invisibili: dopo un preset il valore
+       ricordato non vale piu' niente. Lo dichiaro sconosciuto invece di
+       fingere di saperlo. */
+    S.brakeFrontNow = null; S.brakeRearNow = null;
+    S.applyPitStrategy = false;
+    log('warn','  sequenza preset ' + S.pitStrategy + ' inviata: numero NON verificato. Controllalo nel MFD prima di proseguire.');
+    log('info','  le pastiglie le rileggo a vista al prossimo invio: dopo un');
+    log('info','  preset il valore ricordato non vale piu niente.');
+    log('hdr','════ PRESET NON VERIFICATO — ' + presses + ' tasti, ' +
+        ((Date.now()-t0)/1000).toFixed(1) + ' s ════');
+    renderForm();
+    return;
+  }
+
+  /* ---- 1. MESCOLA per prima: ACC ricalcola le pressioni quando cambia,
+            quindi va decisa prima di scriverle, non dopo ---- */
+  var wantDry = (S.compound === 'Dry');
+  if(S.changeTyre && L.dry !== wantDry){
+    log('hdr','— mescola —');
+    await at(L.row.compound);
+    /* Non e' un toggle: sinistra sceglie Dry, destra sceglie Wet, sempre.
+       Quindi il tasto e' deciso dalla mescola VOLUTA, non da quella attuale. */
+    await key(wantDry ? 'Left' : 'Right');
+    log('warn','  mescola → ' + S.compound + ' (' + (wantDry?'←':'→') +
+        '): il menu cambia forma e ACC ricalcola le pressioni');
+    aggiornaLayout({dry: wantDry});
+    log('info','  indici aggiornati: FL ora a +' + L.flAt + ', ' + L.n + ' righe');
+  }
+
+  /* ---- 2. FRENI: la checkbox non ha nessun campo, ma cambia il numero di
+            righe. Toggle + rimisura = anello chiuso sulla geometria ---- */
+  log('hdr','— sostituisci freni —');
+  log('probe','  ' + L.n + ' righe → freni attualmente ' + (L.brakes ? 'ON' : 'OFF'));
+  if(L.brakes !== S.brakes){
+    await at(L.row.brakeCheck);
+    await key('Right');
+    log('info','  toggle freni → ' + (S.brakes ? 'ON' : 'OFF'));
+    aggiornaLayout({brakes: S.brakes});
+    log('info','  indici aggiornati: ' + L.n + ' righe');
+  }
+  if(L.brakes){
+    log('hdr','— mescole freni —');
+    /* Il valore attuale delle pastiglie lo LEGGE il controllo visivo: le
+       cifre sono imparate in calibrazione. Prima lo si chiedeva all'utente
+       in due caselle "attuale a schermo", cioe' gli si chiedeva un dato che
+       sapevamo gia' guardare da soli — e se lo copiava sbagliato, il campo
+       e' ciclico e i passi finivano tutti storti. L'ultimo valore noto
+       resta solo come ripiego, dichiarato. */
+    var oraF = (VIS && VIS.brakeFront != null) ? VIS.brakeFront : S.brakeFrontNow;
+    var oraR = (VIS && VIS.brakeRear  != null) ? VIS.brakeRear  : S.brakeRearNow;
+    if(oraF == null || oraR == null){
+      log('err','  pastiglie illeggibili e nessuna memoria valida: il campo');
+      log('err','  e\' ciclico, senza il valore di partenza non so di quanti');
+      log('err','  passi muovermi. Freni NON impostati.');
+    } else {
+      if(!VIS || VIS.brakeFront == null)
+        log('warn','  pastiglie non lette a vista: uso l\'ultimo valore noto ('
+            + oraF + '/' + oraR + ')');
+      await at(L.row.brakeFront);
+      await cycleTo(oraF, S.brakeFront, 'freno anteriore');
+      await at(L.row.brakeRear);
+      await cycleTo(oraR, S.brakeRear, 'freno posteriore');
+      S.brakeFrontNow = S.brakeFront; S.brakeRearNow = S.brakeRear;
+    }
+  }
+
+  /* ---- 3. RIPARAZIONI: cieche, ma le checkbox sono linkate
+            (sospensioni ⇒ carrozzeria). Tre toggle convergono a NESSUNA
+            da tutti e tre gli stati possibili. ---- */
+  log('hdr','— riparazioni —');
+  await at(L.row.body);
+  await key('Right');                       // carrozzeria
+  await key('Up');   await key('Right');    // sospensioni
+  await key('Down'); await key('Right');    // carrozzeria
+  log('conv','  normalizzate a NESSUNA (3 toggle convergenti)');
+  if(S.susp){      await key('Up'); await key('Right'); log('info','  → sospensioni + carrozzeria'); }
+  else if(S.body){ await key('Right');                  log('info','  → solo carrozzeria'); }
+  else {                                                log('info','  → nessuna riparazione'); }
+
+  /* ---- 3-bis. PILOTA. A differenza dei freni non serve ricordarselo:
+            il nome si legge, quindi si parte sempre dal valore vero.
+            La lista e' ciclica, ci si muove di (voluto - letto) mod N. ---- */
+  if(L.driver && S.driverIdx !== null && S.driverIdx !== undefined){
+    log('hdr','— pilota —');
+    if(!N_PILOTI){
+      log('err','  piloti non imparati: premi CALIBRA VISTA con la riga pilota presente');
+      PROBLEMI.push('pilota non impostato (non calibrato)');
+    } else if(VIS.driver === null || VIS.driver === undefined){
+      log('err','  non riesco a leggere il pilota selezionato');
+      PROBLEMI.push('pilota non impostato (non leggibile)');
+    } else {
+      var voluto = S.driverIdx;
+      var ord = ORDINE_PILOTI || [];
+      /* L'indice e' STABILE, ma per muoversi serve la posizione nel giro del
+         gioco. Se il pilota voluto non e' piu' in squadra la sua posizione e'
+         nulla: lo dico invece di selezionarne un altro a caso. */
+      if(voluto < 0 || voluto >= N_PILOTI || ord[voluto] === null || ord[voluto] === undefined){
+        log('err','  il pilota #' + voluto + ' non è nella lista attuale.');
+        log('err','  ricalibra con la squadra giusta oppure scegline un altro.');
+        PROBLEMI.push('pilota #' + voluto + ' non presente in lista');
+      } else if(ord[VIS.driver] === null || ord[VIS.driver] === undefined){
+        log('err','  non riesco a collocare il pilota attuale nel giro');
+        PROBLEMI.push('pilota non impostato');
+      } else {
+        var n = N_CICLICI || N_PILOTI;
+        var d = ((ord[voluto] - ord[VIS.driver]) % n + n) % n;
+        log('info','  pilota: da #' + VIS.driver + ' a #' + voluto +
+            '  (' + d + ' passi su ' + n + ')');
+        if(d){ await at(L.row.driver); await key('Right', d); }
+      }
+    }
+  }
+
+  await selectDriverV4(S, false);
+  /* ---- 4. Ora i campi LIVE, per ultimi: da qui in poi non tocco più
+            niente che possa farli ricalcolare ---- */
+  var F = {fl:'mfdTyrePressureLF', fr:'mfdTyrePressureRF',
+           rl:'mfdTyrePressureLR', rr:'mfdTyrePressureRR'};
+  var ids = ['fl','fr','rl','rr'];
+
+  if(S.changeTyre && L.dry){
+    /* Con la Wet la riga "Set Pneumatici" resta a schermo ma in grigio, e
+       il cursore la salta: non e' impostabile. */
+    log('hdr','— set pneumatici —');
+    if(S.tyreSet === sm().currentTyreSet){
+      /* ACC salta il set gia' montato: non e' selezionabile. Provarci
+         comunque costava 600 tasti e 4 minuti per poi arrendersi. */
+      log('err','  set ' + S.tyreSet + ' è quello MONTATO sulla vettura:');
+      log('err','  ACC lo salta nella lista, non è selezionabile. Scegline un altro.');
+      PROBLEMI.push('set pneumatici ' + S.tyreSet + ' non selezionabile (è quello montato)');
+    } else {
+      await at(L.row.tyreSet);
+      if(!await closedLoop('mfdTyreSet', S.tyreSet - 1, 0, 'set pneumatici',
+                           function(){ return at(L.row.tyreSet); }, 20))
+        PROBLEMI.push('set pneumatici non impostato');
+    }
+  }
+
+  if(S.changeTyre){
+    log('hdr','— pressioni —');
+    for(var i = 0; i < 4; i++){
+      var id = ids[i];
+      var go = (function(x){ return function(){ return at(L.row[x]); }; })(id);
+      await go();
+      await closedLoop(F[id], S[id], 0.05, id.toUpperCase(), go, 210);
+    }
+  }
+
+  log('hdr','— carburante —');
+  await at(L.row.fuel);
+  await closedLoop('mfdFuelToAdd', S.fuel, 0.5, 'carburante',
+                   function(){ return at(L.row.fuel); }, 130);
+
+  /* ---- 5. Passata di controllo: rileggo tutto il leggibile e ricorreggo
+            quello che si è mosso per strada. Stessa rete di sicurezza del
+            simulatore, ed è l'unica che ho. ---- */
+  log('hdr','— passata di controllo —');
+  for(var pass = 0; pass < 3; pass++){
+    var fixed = 0;
+    if(Math.abs(sm().mfdFuelToAdd - S.fuel) > 0.5){
+      log('warn','  carburante derivato (' + sm().mfdFuelToAdd + '): correggo');
+      await at(L.row.fuel);
+      await closedLoop('mfdFuelToAdd', S.fuel, 0.5, 'carburante',
+                       function(){ return at(L.row.fuel); });
+      fixed++;
+    }
+    if(S.changeTyre){
+      if(L.dry && S.tyreSet !== sm().currentTyreSet && sm().mfdTyreSet !== S.tyreSet - 1){
+        log('warn','  set pneumatici derivato (' + (sm().mfdTyreSet+1) + '): correggo');
+        await at(L.row.tyreSet);
+        await closedLoop('mfdTyreSet', S.tyreSet - 1, 0, 'set pneumatici',
+                         function(){ return at(L.row.tyreSet); });
+        fixed++;
+      }
+      for(var w = 0; w < 4; w++){
+        var wid = ids[w];
+        if(Math.abs(sm()[F[wid]] - S[wid]) > 0.05){
+          log('warn','  ' + wid.toUpperCase() + ' derivata (' + sm()[F[wid]].toFixed(1) + '): correggo');
+          var g2 = (function(x){ return function(){ return at(L.row[x]); }; })(wid);
+          await g2();
+          await closedLoop(F[wid], S[wid], 0.05, wid.toUpperCase(), g2);
+          fixed++;
+        }
+      }
+    }
+    if(!fixed){ if(pass) log('ok','  tutto stabile'); break; }
+  }
+
+  /* ---- 6. Cambio gomme allo stato finale, per ultimo ---- */
+  log('hdr','— cambio gomme (stato finale) —');
+  if(L.tyreOn !== S.changeTyre){
+    await at(L.row.tyreCheck); await key('Right');
+    L.tyreOn = S.changeTyre;
+    log('info','  cambio gomme → ' + (S.changeTyre ? 'ON' : 'OFF') +
+        '  (lo conferma il controllo visivo)');
+  } else log('info','  già ' + (L.tyreOn ? 'ON' : 'OFF'));
+
+  /* ---- verifica ---- */
+  log('hdr','— verifica (solo campi leggibili) —');
+  var m = sm(), bad = 0;
+  function chk(name, got, want, tol){
+    var ok = Math.abs(got - want) <= tol;
+    if(!ok) bad++;
+    log(ok?'ok':'err', (ok?'  ✓ ':'  ✗ ') + name + ': letto ' + got + ', voluto ' + want);
+  }
+  chk('carburante', m.mfdFuelToAdd, S.fuel, 0.5);
+  if(S.changeTyre){
+    if(wantDry && S.tyreSet !== m.currentTyreSet) chk('set pneumatici', m.mfdTyreSet + 1, S.tyreSet, 0);
+    chk('FL', m.mfdTyrePressureLF, S.fl, 0.05);
+    chk('FR', m.mfdTyrePressureRF, S.fr, 0.05);
+    chk('RL', m.mfdTyrePressureLR, S.rl, 0.05);
+    chk('RR', m.mfdTyrePressureRR, S.rr, 0.05);
+  }
+  var visOk = await verificaVisiva(S);
+
+  await selectDriverV4(S, true);
+  globalThis.v4VerificationReached = visOk === true;
+  var esito;
+  if(bad) esito = bad + ' CAMPI LEGGIBILI SBAGLIATI';
+  else if(visOk === false) esito = 'VOCI CIECHE NON CORRETTE — guarda l\'MFD';
+  else if(visOk === null)  esito = 'OK sui campi leggibili, controllo visivo non riuscito';
+  else if(LIM_TOCCATO)     esito = 'valori a posto MA IL LIMITATORE PITS È STATO ALTERATO';
+  else if(PROBLEMI.length) esito = 'il resto è a posto, ma: ' + PROBLEMI.join(' · ');
+  else esito = 'TUTTO OK, verificato anche a schermo';
+  log((bad || visOk === false || LIM_TOCCATO) ? 'err'
+      : (visOk === null || PROBLEMI.length) ? 'warn' : 'ok',
+      '════ ' + esito + ' — ' + presses + ' tasti, ' +
+      ((Date.now()-t0)/1000).toFixed(1) + ' s ════');
+  renderForm();
+}
+
+/* ================= form ================= */
+var S = {applyPitStrategy:false, pitStrategy:1,
+         fuel:20, changeTyre:true, compound:'Dry', tyreSet:1,
+         fl:25.5, fr:26.0, rl:25.5, rr:26.0,
+         brakes:false, brakeFront:1, brakeRear:1,
+         /* Non sono piu' caselle da riempire: il valore attuale delle
+            pastiglie lo legge il controllo visivo. Restano come ultima
+            memoria, usata solo se la lettura non riesce. */
+         brakeFrontNow:1, brakeRearNow:1, driverIdx:0, susp:false, body:true};
+
+var FIELDS = [
+  ['applyPitStrategy','Cambia preset','bool','sat'],
+  ['pitStrategy','Strategia pit (1-30)','num','sat'],
+  ['fuel','Carburante (L)','num','live'],
+  ['changeTyre','Cambio gomme','bool','geo'],
+  ['compound','Mescola','sel','geo',['Dry','Wet']],
+  ['tyreSet','Set pneumatici','num','live'],
+  ['fl','Pressione FL','num','live'],
+  ['fr','Pressione FR','num','live'],
+  ['rl','Pressione RL','num','live'],
+  ['rr','Pressione RR','num','live'],
+  ['brakes','Sostituisci freni','bool','occhio'],
+  ['brakeFront','Freno anteriore','num','occhio'],
+  ['brakeRear','Freno posteriore','num','occhio'],
+  ['driverIdx','Pilota','num','occhio'],
+  ['susp','Sospensioni','bool','occhio'],
+  ['body','Carrozzeria','bool','conv']
+];
+var SMOF = {fuel:'mfdFuelToAdd', fl:'mfdTyrePressureLF', fr:'mfdTyrePressureRF',
+            rl:'mfdTyrePressureLR', rr:'mfdTyrePressureRR'};
+var TXT = {live:'LIVE', geo:'GEOMETRIA', conv:'CONVERGENZA', sat:'FONDOCORSA',
+           mem:'A MEMORIA', occhio:'A VISTA', no:'NON TOCCO'};
+
+var formEl = document.getElementById('form');
+function inattivo(id){
+  return (!S.changeTyre && ['compound','tyreSet','fl','fr','rl','rr'].indexOf(id)>=0)
+      || (S.compound==='Wet' && id==='tyreSet')
+      || (!S.brakes && ['brakeFront','brakeRear'].indexOf(id)>=0)
+      || (!S.applyPitStrategy && id==='pitStrategy')
+      /* un preset riscrive tutto: finche' e' selezionato non ha senso
+         toccare il resto, verrebbe sovrascritto */
+      || (S.applyPitStrategy && ['applyPitStrategy','pitStrategy'].indexOf(id) < 0);
+}
+
+function spia(id, tag, m){
+  if(tag!=='live' || inattivo(id)) return '<span class="chk na">·</span>';
+  var live = (id==='tyreSet') ? (m.mfdTyreSet+1) : m[SMOF[id]];
+  if(live === undefined) return '<span class="chk na">·</span>';
+  return Math.abs(live - S[id]) < 0.05 ? '<span class="chk ok">✓</span>'
+                                       : '<span class="chk no">✗</span>';
+}
+
+function etichettaBottone(){
+  var b = document.getElementById('apply');
+  if(b && !b.disabled)
+    b.textContent = S.applyPitStrategy ? 'CARICA IL PRESET '+S.pitStrategy
+                                       : "INVIA STRATEGIA ALL'MFD";
+}
+
+/* Aggiorna SOLO le spie, senza rifare il form.
+
+   Il polling ogni 700 ms chiamava renderForm(), che riscrive tutto il
+   contenuto della tabella: la casella su cui stavi scrivendo veniva
+   distrutta e ricreata, quindi perdevi il fuoco quasi subito e, se non
+   avevi ancora confermato, anche quello che stavi digitando. Le spie sono
+   l'unica cosa che cambia da sola, e per quelle basta toccare una cella. */
+function aggiornaSpie(){
+  var m = sm();
+  etichettaBottone();
+  FIELDS.forEach(function(f){
+    var tr = formEl.querySelector('tr[data-f="' + f[0] + '"]');
+    if(!tr) return;
+    var td = tr.lastElementChild, h = spia(f[0], f[3], m);
+    if(td.innerHTML !== h) td.innerHTML = h;
+  });
+}
+
+function renderForm(){
+  var m = sm();
+  etichettaBottone();
+  formEl.innerHTML = '';
+  FIELDS.forEach(function(f){
+    var id=f[0], lab=f[1], t=f[2], tag=f[3];
+    var na = inattivo(id);
+    var mark = spia(id, tag, m);
+    var dis = na ? ' disabled' : '';
+    if(id==='body' && S.susp) dis = ' disabled';
+    var inp;
+    if(t==='info') inp = '<span style="color:#5d636b;font-size:11px">preset: lo lascio stare</span>';
+    else if(t==='bool') inp = '<input type="checkbox" data-f="'+id+'"'+(S[id]?' checked':'')+dis+'>';
+    else if(t==='sel') inp = '<select data-f="'+id+'"'+dis+'>'+f[4].map(function(o){
+        return '<option'+(S[id]===o?' selected':'')+'>'+o+'</option>';}).join('')+'</select>';
+    else if(id==='driverIdx' && CREW && CREW.drivers && CREW.drivers.length){
+      /* Solo il nome. L'indice continua a esistere — e' lui che conta per
+         contare i passi nel menu — ma resta il valore dell'opzione, non
+         qualcosa da leggere: chi sceglie il pilota pensa al pilota. */
+      inp = '<select data-f="driverIdx"'+dis+'>' + CREW.drivers.map(function(d,i){
+        var n = ((d.first||'') + ' ' + (d.last||'')).trim() || d.short || ('pilota '+i);
+        if(d.short) n += ' [' + d.short + ']';
+        if(i === CREW.currentDriverIndex) n += '  · al volante';
+        return '<option value="'+i+'"'+(S.driverIdx===i?' selected':'')+'>'+
+               n + '</option>';
+      }).join('') + '</select>';
+    }
+    else{
+      var brk = ['brakeFront','brakeRear'].indexOf(id) >= 0;
+      var intero = brk || ['fuel','tyreSet','pitStrategy','driverIdx'].indexOf(id) >= 0;
+      var lim = brk ? ' min="1" max="4"' : (id==='pitStrategy' ? ' min="1" max="30"' : '');
+      var val = (S[id] === null || S[id] === undefined) ? '' : S[id];
+      var ph = (S[id] === null) ? ' placeholder="?"' : '';
+      inp = '<input type="number" data-f="'+id+'" value="'+val+'" step="'+
+            (intero?1:0.1)+'"'+lim+ph+dis+'>';
+      /* Un "0" da solo non spiega niente. Se il pilota e' ancora un numero
+         e' perche' l'equipaggio non e' arrivato dal broadcasting: si dice
+         qui, dove lo si vede, non solo nel log. */
+      if(id==='driverIdx')
+        inp += ' <span style="color:#c8a15a;font-size:11px">nomi non disponibili:'
+             + ' riavvia ACC</span>';
+    }
+    var tr = document.createElement('tr');
+    tr.dataset.f = id;
+    tr.innerHTML = '<td class="lb">'+lab+'</td><td>'+inp+'</td>'+
+                   '<td><span class="tag '+tag+'">'+TXT[tag]+'</span></td><td>'+mark+'</td>';
+    formEl.appendChild(tr);
+  });
+}
+formEl.addEventListener('change', function(e){
+  var f = e.target.dataset.f; if(!f) return;
+  S[f] = e.target.type==='checkbox' ? e.target.checked
+       : e.target.tagName==='SELECT' ? e.target.value : +e.target.value;
+  if(f==='driverIdx') S[f] = e.target.value === '' ? null : +e.target.value;      // l'elenco nomi restituisce testo
+  if(['brakeFront','brakeRear'].indexOf(f) >= 0)
+    S[f] = (e.target.value === '') ? null : Math.max(1, Math.min(4, Math.round(S[f])));
+  if(f==='pitStrategy') S[f] = Math.max(1, Math.min(30, Math.round(S[f])));
+  if(f==='susp' && S.susp) S.body = true;         // regola ACC: sospensioni ⇒ carrozzeria
+  if(f==='body' && !S.body) S.susp = false;
+  renderForm();
+});
+
+/* ---------- shared memory live ---------- */
+var grid = document.getElementById('smgrid'), prev = {};
+var KEYS = ['mfdFuelToAdd','mfdTyreSet','mfdTyrePressureLF','mfdTyrePressureRF',
+            'mfdTyrePressureLR','mfdTyrePressureRR','currentTyreSet','packetId'];
+function renderSM(){
+  var m = sm();
+  if(!grid.children.length) KEYS.forEach(function(k){
+    var d = document.createElement('div');
+    d.innerHTML = '<span>'+k.replace('mfdTyrePressure','p').replace('mfd','')+'</span><span></span>';
+    grid.appendChild(d);
+  });
+  KEYS.forEach(function(k,i){
+    var c = grid.children[i];
+    var v = (k.indexOf('Pressure')>0 || k==='mfdFuelToAdd') ? (m[k]||0).toFixed(1) : m[k];
+    if(String(v) !== String(prev[k])){
+      c.lastChild.textContent = v;
+      if(k!=='packetId'){ c.classList.add('flash');
+        setTimeout(function(){ c.classList.remove('flash'); }, 400); }
+      prev[k] = v;
+    }
+  });
+}
+
+/* ---------- stato connessione ---------- */
+var busy = false;
+async function poll(){
+  if(busy) return;
+  try{
+    var st = await api('/status');
+    cache = await api('/sm');
+    var d = document.querySelector('#conn .dot');
+    d.className = 'dot ' + (st.live && st.accWindow ? 'ok' : 'no');
+    document.getElementById('connTxt').innerHTML =
+      st.accWindow ? (st.live
+        ? 'ACC connesso &mdash; sessione <b>viva</b>, mescola montata <b>'+st.compound+
+          '</b>, set montato <b>'+st.currentTyreSet+'</b>'
+        : 'ACC c\'è ma la sessione non è viva (status '+st.status+'): entra in macchina')
+      : 'finestra di ACC non trovata';
+    renderSM(); aggiornaSpie();
+  }catch(e){
+    document.querySelector('#conn .dot').className = 'dot no';
+    document.getElementById('connTxt').textContent = 'ponte non raggiungibile — acc_server.py è avviato?';
+  }
+}
+// Names are EntryList identities; the original template-index selector is unused.
+S.driverIdx = null;
+S.driverEntryIndex = null;
+var crewIdentityV4 = null;
+var nativeRenderV4 = renderForm;
+function driverLabelV4(d) { return ((d.first || '') + ' ' + (d.last || '')).trim() || d.short || 'Nome non disponibile'; }
+renderForm = function () {
+  var crew = CREW; CREW = null;
+  nativeRenderV4(); CREW = crew;
+  var row = formEl.querySelector('tr[data-f="driverIdx"]');
+  if (!row) return;
+  var select = document.createElement('select');
+  select.dataset.f = 'driverEntryIndex';
+  select.setAttribute('aria-label', 'Prossimo pilota');
+  select.add(new Option('Nessun cambio', ''));
+  (crew && crew.drivers || []).forEach(function(d,i) { select.add(new Option(driverLabelV4(d), String(i))); });
+  select.value = S.driverEntryIndex == null ? '' : String(S.driverEntryIndex);
+  select.disabled = S.applyPitStrategy || busy || document.getElementById('apply').disabled;
+  var hint = document.createElement('div');
+  hint.textContent = crew ? 'Il nome selezionato viene verificato nel MFD.' : 'Equipaggio non disponibile dal logger. Puoi inviare gli altri campi senza cambio pilota.';
+  row.children[1].replaceChildren(select, hint);
+};
+formEl.addEventListener('change', function(e) {
+  if (e.target.dataset.f === 'driverEntryIndex') {
+    S.driverEntryIndex = e.target.value === '' ? null : Number(e.target.value);
+    renderForm();
+  }
+});
+var nativePollV4 = poll;
+poll = async function() {
+  await nativePollV4();
+  if (document.getElementById('apply').disabled) return;
+  var fresh = null;
+  try { var value = await api('/crew'); if (!value.error && Array.isArray(value.drivers)) fresh = value; } catch (_) {}
+  if (document.getElementById('apply').disabled) return;
+  if (JSON.stringify(fresh) !== JSON.stringify(CREW)) {
+    if (!fresh || fresh.identity !== crewIdentityV4) S.driverEntryIndex = null;
+    CREW = fresh; crewIdentityV4 = fresh && fresh.identity;
+    renderForm();
+  }
+};
+async function selectDriverV4(strategy, verifyOnly) {
+  if (strategy.driverEntryIndex == null || strategy.driverEntryIndex === '') return;
+  var target = Number(strategy.driverEntryIndex);
+  if (!CREW || !Number.isInteger(target) || !CREW.drivers[target]) throw new Error('Equipaggio pilota non disponibile');
+  log('hdr', verifyOnly ? '— verifica finale nome pilota —' : '— selezione pilota per nome —');
+  var result = await api('/driver', {target:target, identity:CREW.identity, verifyOnly:verifyOnly});
+  if (result.error) throw new Error(result.error);
+  if (result.driverIndex !== target) throw new Error('Pilota richiesto non verificato');
+  log('ok', driverLabelV4(CREW.drivers[target]) + ': nome verificato, ' + result.steps + ' cambi, ' + result.captures + ' catture');
+  // Native verification anchors again before inspecting the remaining fields.
+  RIGA = 0;
+  return result;
+}
+renderForm();
+
+
+
+/* ---------- bottone ---------- */
+/* Uno solo. Calibrazione e lettura della forma del menu non sono decisioni
+   dell'utente: il programma sa da solo se e' calibrato, e se non lo e' si
+   calibra al primo bisogno (lato server, in /panel). Chiedere di premere
+   CALIBRA VISTA era chiedere all'utente di sapere una cosa che sapevamo
+   gia' noi — e di ricordarsi l'ordine giusto in cui premere. */
+var bA = document.getElementById('apply');
+bA.addEventListener('click', async function(){
+  busy = true; bA.disabled = true; bA.textContent = 'INVIO IN CORSO…';
+  try{ await apply(S); } catch(e){ log('err','ERRORE: ' + e.message); }
+  finally{ busy = false; bA.disabled = false;
+           bA.textContent = "INVIA STRATEGIA ALL'MFD"; renderForm(); }
+});
+
+renderForm();
+log('info','Pronto: premi INVIA STRATEGIA. Al resto — fuoco su ACC, calibrazione');
+log('info','la prima volta, lettura della forma del menu — pensa lui.');
+// This adapter calls the SAME apply() used by the local panel. It does not
+// generate key sequences. It only supplies an immutable remote intent and
+// collects observations after the last input.
+(function () {
+  if (!window.mfdV4Runner) return;
+  var running = false;
+  window.mfdV4Runner.onRun(async function (plan) {
+    if (running) return;
+    running = true; busy = true; bA.disabled = true;
+    var started = Date.now(), observed = {}, failure = null, lastPanel = null, driver = null;
+    var originalPanel = leggiPannello;
+    var originalDriver = selectDriverV4;
+    leggiPannello = async function () { lastPanel = await originalPanel(); return lastPanel; };
+    selectDriverV4 = async function (strategy, verifyOnly) {
+      var result = await originalDriver(strategy, verifyOnly);
+      if (verifyOnly && result) driver = result;
+      return result;
+    };
+    try {
+      globalThis.v4VerificationReached = false;
+      CREW = await api('/crew');
+      if (plan.driverId != null && (!CREW?.drivers?.[plan.driverId] || driverLabelV4(CREW.drivers[plan.driverId]) !== plan.driverName)) throw new Error('Equipaggio o nome pilota cambiato.');
+      document.getElementById('gap').value = plan.stepMs;
+      var intent = { applyPitStrategy: plan.operation === 'preset', pitStrategy: plan.pitStrategy,
+        fuel: plan.fuelLiters, changeTyre: plan.changeTyres, compound: plan.compound === 'wet' ? 'Wet' : 'Dry',
+        tyreSet: plan.tyreSet, fl: plan.pressures?.FL, fr: plan.pressures?.FR,
+        rl: plan.pressures?.RL, rr: plan.pressures?.RR, brakes: plan.brakes,
+        brakeFront: plan.brakeFront, brakeRear: plan.brakeRear, brakeFrontNow: null, brakeRearNow: null,
+        driverIdx: null, driverEntryIndex: plan.driverId ?? null, susp: plan.repairSuspension, body: plan.repairBodywork };
+      await apply(intent);
+      // Preset execution has no number observation in the prototype.
+      if (plan.operation === 'preset') throw new Error('Sequenza preset inviata; numero non verificato nel MFD.');
+      if (!globalThis.v4VerificationReached) throw new Error('Sequenza interrotta prima della verifica finale.');
+      if (LIM_TOCCATO || PROBLEMI.length) throw new Error(LIM_TOCCATO ? 'Limitatore alterato.' : PROBLEMI.join(' · '));
+      // Fresh shared memory AFTER visual correction and named-driver verification.
+      var current = await api('/sm'), firstPacket = current.packetId;
+      for (var attempt = 0; attempt < 10 && current.packetId === firstPacket; attempt++) {
+        await new Promise(function (resolve) { setTimeout(resolve, 50); });
+        current = await api('/sm');
+      }
+      if (!Number.isFinite(current.packetId) || current.packetId === firstPacket) throw new Error('Shared memory non aggiornata dopo l’ultimo input.');
+      var live = await api('/status');
+      if (!live.live) throw new Error('Dati ACC non più disponibili.');
+      var put = function (k, value, source) { if (value !== undefined && value !== null) observed[k] = { value: value, source: source }; };
+      put('fuelLiters', current.mfdFuelToAdd, 'shared-memory');
+      if (plan.changeTyres) {
+        if (plan.compound === 'dry') put('tyreSet', Number.isFinite(current.mfdTyreSet) ? current.mfdTyreSet + 1 : null, 'shared-memory');
+        ['LF','RF','LR','RR'].forEach(function (suffix, i) { put(['FL','FR','RL','RR'][i], current['mfdTyrePressure' + suffix], 'shared-memory'); });
+      }
+      if (lastPanel?.ok) {
+        var visual = lastPanel.read || {};
+        put('changeTyres', lastPanel.tyreOn, 'visual');
+        if (plan.changeTyres && typeof lastPanel.dry === 'boolean') put('compound', lastPanel.dry ? 'dry' : 'wet', 'visual');
+        put('brakes', visual.brakeCheck, 'visual');
+        put('repairBodywork', visual.body, 'visual'); put('repairSuspension', visual.susp, 'visual');
+        if (plan.brakes) { put('brakeFront', visual.brakeFront, 'visual'); put('brakeRear', visual.brakeRear, 'visual'); }
+      }
+      if (driver) put('driverId', driver.driverIndex, 'visual-name');
+    } catch (error) { failure = error.message; }
+    finally {
+      leggiPannello = originalPanel; selectDriverV4 = originalDriver;
+      window.mfdV4Runner.complete({ observed: observed, failure: failure,
+        metrics: { durationMs: Date.now() - started, inputCount: presses },
+        diary: logEl.innerText.slice(-24000) });
+    }
+  });
+  window.mfdV4Runner.ready();
+})();
+
+</script>
+<script>'use strict';
+const METHOD = 'mfd-v4';
+const WHEELS = ['FL', 'FR', 'RL', 'RR'];
+const integer = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+
+function validatePlan(p) {
+    const bad = reason => ({
+        ok: false,
+        reason
+    });
+    if (!p || typeof p !== 'object' || Array.isArray(p) || Object.keys(p).some(k => !['version', 'contextId', 'stepMs', 'driverName', 'operation', 'fuelLiters', 'changeTyres', 'compound', 'tyreSet', 'pressures', 'brakes', 'brakeFront', 'brakeRear', 'driverId', 'repairBodywork', 'repairSuspension', 'pitStrategy'].includes(k))) return bad('Payload V4 non valido.');
+    if (p.version !== 1 || typeof p.contextId !== 'string' || !/^[a-f0-9]{64}$/.test(p.contextId) || !integer(p.stepMs,60,300)) return bad('Contesto V4 non valido.');
+    if (p.operation === 'preset') return Object.keys(p).length === 5 && integer(p.pitStrategy, 1, 30) ? {
+        ok: true,
+        plan: {
+            ...p
+        }
+    } : bad('Preset V4 non valido.');
+    if (p.operation !== 'strategy' || p.pitStrategy != null || !integer(p.fuelLiters, 0, 140) || !['changeTyres', 'brakes', 'repairBodywork', 'repairSuspension'].every(k => typeof p[k] === 'boolean') || (p.repairSuspension && !p.repairBodywork)) return bad('Completa le scelte V4; le sospensioni richiedono la carrozzeria.');
+    if (p.driverId != null && (!integer(p.driverId,0,63) || typeof p.driverName !== 'string' || !p.driverName.trim() || p.driverName.length > 160)) return bad('Pilota V4 non valido.');
+    if (p.driverId == null && p.driverName != null) return bad('Nome pilota senza selezione.');
+    if (p.changeTyres && (!['dry', 'wet'].includes(p.compound) || (p.compound === 'dry' && !integer(p.tyreSet, 1, 50)) || !p.pressures || Object.keys(p.pressures).length !== 4 || !WHEELS.every(k => typeof p.pressures[k] === 'number' && Number.isFinite(p.pressures[k]) && p.pressures[k] >= 20.3 && p.pressures[k] <= 35 && Math.abs(p.pressures[k] * 10 - Math.round(p.pressures[k] * 10)) < .00001))) return bad('Completa i valori gomme V4.');
+    if (p.brakes && !['brakeFront', 'brakeRear'].every(k => integer(p[k], 1, 4))) return bad('Completa le pastiglie V4.');
+    const plan = {
+        version: 1, contextId: p.contextId, stepMs: p.stepMs,
+        operation: 'strategy',
+        fuelLiters: p.fuelLiters,
+        changeTyres: p.changeTyres,
+        brakes: p.brakes,
+        repairBodywork: p.repairBodywork,
+        repairSuspension: p.repairSuspension
+    };
+    if (p.driverId != null) Object.assign(plan, {driverId:p.driverId, driverName:p.driverName});
+    if (p.brakes) Object.assign(plan, {
+        brakeFront: p.brakeFront,
+        brakeRear: p.brakeRear
+    });
+    if (p.changeTyres) Object.assign(plan, {
+        compound: p.compound,
+        pressures: {
+            ...p.pressures
+        },
+        ...(p.compound === 'dry' ? {
+            tyreSet: p.tyreSet
+        } : {})
+    });
+    return {
+        ok: true,
+        plan
+    };
+}
+
+function normalizeV4Order(raw) {
+    const parsed = validatePlan(raw?.mfdV4);
+    if (!parsed.ok) return parsed;
+    if (raw?.method !== METHOD || typeof raw.orderId !== 'string' || !raw.orderId.trim() || typeof raw.senderId !== 'string' || !raw.senderId.trim() || !Number.isSafeInteger(raw.revision) || raw.revision < 0 || ['fuelLiters', 'changeTyres', 'compound', 'tyreSet', 'pressures', 'brakes', 'brakeFront', 'brakeRear', 'driverId', 'repairBodywork', 'repairSuspension', 'pitStrategy', 'accDrive', 'mfdV2', 'mfdV3'].some(k => raw[k] != null)) return {
+        ok: false,
+        reason: 'Ordine V4 non valido.'
+    };
+    return {
+        ok: true,
+        order: {
+            orderId: raw.orderId,
+            senderId: raw.senderId,
+            revision: raw.revision,
+            issuedAt: raw.issuedAt,
+            expiresAt: raw.expiresAt ?? null,
+            method: METHOD,
+            mfdV4: parsed.plan
+        }
+    };
+}
+
+function targets(p) {
+    if (p.operation === 'preset') return {
+        pitStrategy: p.pitStrategy
+    };
+    const out = {
+        fuelLiters: p.fuelLiters,
+        changeTyres: p.changeTyres,
+        brakes: p.brakes,
+        repairBodywork: p.repairBodywork,
+        repairSuspension: p.repairSuspension
+    };
+    if (p.driverId != null) out.driverId = p.driverId;
+    if (p.brakes) Object.assign(out, {
+        brakeFront: p.brakeFront,
+        brakeRear: p.brakeRear
+    });
+    if (p.changeTyres) Object.assign(out, {
+        compound: p.compound,
+        ...(p.compound === 'dry' ? {
+            tyreSet: p.tyreSet
+        } : {}),
+        ...p.pressures
+    });
+    return out;
+}
+const exported = {
+    METHOD,
+    WHEELS,
+    validatePlan,
+    normalizeV4Order,
+    targets
+};
+
+if (typeof module !== "undefined") module.exports = exported;
+else globalThis.MfdV4Contract = exported;
+
+// Generated into the engineer iframe together with the canonical local form.
+// It never calls the Python service: only a whole, validated intent leaves it.
+(function () {
+  var snapshot = null, initialized = false, restoring = false;
+  function send(type, value) { parent.postMessage({ channel: 'mfd-v4-online', type: type, value: value }, '*'); }
+  var nativeRender = renderForm;
+  renderForm = function () {
+    // The shared driver control reads this button while rendering.
+    bA.disabled = busy || !snapshot?.ready;
+    nativeRender();
+    formEl.querySelectorAll('input[type=checkbox]').forEach(function (input) {
+      var key = input.dataset.f;
+      input.indeterminate = S[key] == null;
+      input.setAttribute('aria-label', (S[key] == null ? 'Da scegliere: ' : '') + key);
+    });
+    var compound = formEl.querySelector('select[data-f=compound]');
+    if (compound && S.compound == null) {
+      compound.add(new Option('Da scegliere', ''), 0); compound.value = '';
+    }
+    formEl.querySelectorAll('input,select').forEach(function (input) { if (busy) input.disabled = true; });
+    document.getElementById('gap').disabled = busy;
+    bA.disabled = busy || !snapshot?.ready;
+    bA.textContent = busy ? 'INVIO IN CORSO…' : S.applyPitStrategy ? 'CARICA PRESET' : 'INVIA STRATEGIA AL PILOTA';
+  };
+  // Remove the local listener rather than relying on a hidden local endpoint.
+  var button = bA.cloneNode(true); bA.replaceWith(button); bA = button;
+  bA.addEventListener('click', function () {
+    if (busy || !snapshot?.ready) return;
+    var p = { version: 1, contextId: snapshot.contextId, stepMs: Number(document.getElementById('gap').value),
+      operation: S.applyPitStrategy ? 'preset' : 'strategy' };
+    if (S.applyPitStrategy) p.pitStrategy = S.pitStrategy;
+    else {
+      Object.assign(p, { fuelLiters: S.fuel, changeTyres: S.changeTyre, brakes: S.brakes,
+        repairBodywork: S.body, repairSuspension: S.susp });
+      if (S.brakes) Object.assign(p, { brakeFront: S.brakeFront, brakeRear: S.brakeRear });
+      if (S.changeTyre) Object.assign(p, { compound: S.compound === 'Dry' ? 'dry' : S.compound === 'Wet' ? 'wet' : null,
+        pressures: { FL: S.fl, FR: S.fr, RL: S.rl, RR: S.rr }, ...(S.compound === 'Dry' ? { tyreSet: S.tyreSet } : {}) });
+      if (S.driverEntryIndex != null) Object.assign(p, { driverId: S.driverEntryIndex,
+        driverName: CREW?.drivers?.[S.driverEntryIndex] ? driverLabelV4(CREW.drivers[S.driverEntryIndex]) : '' });
+    }
+    var checked = MfdV4Contract.validatePlan(p);
+    if (!checked.ok) { log('err', checked.reason); return; }
+    logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
+    busy = true; renderForm(); send('submit', checked.plan);
+  });
+  S = { applyPitStrategy: false, pitStrategy: 1, fuel: null, changeTyre: null, compound: null, tyreSet: null,
+    fl: null, fr: null, rl: null, rr: null, brakes: null, brakeFront: null, brakeRear: null,
+    brakeFrontNow: null, brakeRearNow: null, driverIdx: null, driverEntryIndex: null, susp: null, body: null };
+  function saved() { if (!restoring) send('draft', { ...S, stepMs: Number(document.getElementById('gap').value) }); }
+  var refresh = document.createElement('button');
+  refresh.type = 'button'; refresh.textContent = 'Aggiorna bozza dai dati disponibili';
+  refresh.addEventListener('click', function () {
+    if (busy || !snapshot?.strategy) return;
+    S.fuel = snapshot.strategy.fuelToAdd ?? null;
+    S.tyreSet = snapshot.strategy.tyreSet == null ? null : snapshot.strategy.tyreSet + 1;
+    S.compound = snapshot.strategy.compound === 'dry' ? 'Dry' : snapshot.strategy.compound === 'wet' ? 'Wet' : null;
+    ['FL','FR','RL','RR'].forEach(function(key) { var value=snapshot.strategy.pressures?.[key]; S[key.toLowerCase()] = Number.isFinite(value) ? Math.round(value*10)/10 : null; });
+    // Values absent from telemetry stay a choice for the engineer.
+    renderForm(); saved();
+  });
+  bA.parentElement.appendChild(refresh);
+  formEl.addEventListener('change', function (event) {
+    if (busy) return;
+    if (event.target.type === 'number' && event.target.value === '') { S[event.target.dataset.f] = null; renderForm(); }
+    saved();
+  });
+  document.getElementById('gap').addEventListener('change', saved);
+  window.addEventListener('message', function (event) {
+    if (event.source !== parent || event.data?.channel !== 'mfd-v4-online') return;
+    if (event.data.type !== 'snapshot') return;
+    var previousReady = snapshot?.ready;
+    snapshot = event.data.value;
+    if (!snapshot || typeof snapshot !== 'object') return;
+    restoring = true;
+    var redraw = !initialized || previousReady !== snapshot.ready || busy !== (snapshot.busy === true) || crewIdentityV4 !== snapshot.contextId;
+    if (!initialized) {
+      if (snapshot.draft) Object.assign(S, snapshot.draft);
+      else if (snapshot.strategy) {
+        S.fuel = snapshot.strategy.fuelToAdd ?? null;
+        S.tyreSet = snapshot.strategy.tyreSet == null ? null : snapshot.strategy.tyreSet + 1;
+        S.compound = snapshot.strategy.compound === 'dry' ? 'Dry' : snapshot.strategy.compound === 'wet' ? 'Wet' : null;
+        ['FL','FR','RL','RR'].forEach(function (key) { var v=snapshot.strategy.pressures?.[key]; S[key.toLowerCase()] = Number.isFinite(v) ? Math.round(v*10)/10 : null; });
+      }
+      document.getElementById('gap').value = snapshot.draft?.stepMs || 60;
+      initialized = true;
+    }
+    if (crewIdentityV4 && crewIdentityV4 !== snapshot.contextId) S.driverEntryIndex = null;
+    crewIdentityV4 = snapshot.contextId;
+    CREW = { identity: snapshot.contextId, drivers: (snapshot.crew || []).map(function(d) {
+      return { first: d.name || d.firstName, last: d.name ? '' : d.lastName, short: d.shortName };
+    }) };
+    cache = { mfdFuelToAdd: snapshot.strategy?.fuelToAdd, mfdTyreSet: snapshot.strategy?.tyreSet };
+    ['LF','RF','LR','RR'].forEach(function (suffix,i) { cache['mfdTyrePressure'+suffix] = snapshot.strategy?.pressures?.[['FL','FR','RL','RR'][i]]; });
+    busy = snapshot.busy === true;
+    refresh.disabled = busy || !snapshot.strategy;
+    document.getElementById('connTxt').textContent = snapshot.reason || 'PC del pilota pronto. Valori iniziali dai dati disponibili; completa le scelte mancanti.';
+    if (busy) {
+      logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
+    } else if (snapshot.outcome) {
+      logEl.textContent = snapshot.outcome;
+    }
+    if (redraw) renderForm();
+    else bA.disabled = busy || !snapshot.ready;
+    if (!grid.children.length) renderSM();
+    KEYS.forEach(function (key, index) { var value = cache[key]; grid.children[index].lastChild.textContent = value == null ? '—' : String(value); });
+    restoring = false;
+  });
+  // Remote displays only current snapshots supplied by the authenticated room.
+  poll = async function () {};
+  logEl.textContent = 'Pronto: scegli la strategia da inviare al PC del pilota.';
+  renderForm(); send('ready', null);
+})();
+</script></body>
+</html>
