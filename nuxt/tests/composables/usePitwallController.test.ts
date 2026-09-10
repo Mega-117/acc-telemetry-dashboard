@@ -324,6 +324,20 @@ describe('il preset non parte mai per inerzia, e lo spento viaggia', () => {
     expect(controller.pitStrategy.value).toBe(2)
   })
 
+  it.each(['repairBodywork', 'repairSuspension'] as const)('partial clears only the verified repair: %s', async (verifiedField) => {
+    const { link, controller } = build()
+    controller.repairSuspension.value = true
+    await controller.sendToCar()
+    const unverifiedField = verifiedField === 'repairBodywork' ? 'repairSuspension' : 'repairBodywork'
+    link.orderFields.value = {
+      [verifiedField]: { outcome: 'verified', requested: true, observed: true, reason: null },
+      [unverifiedField]: { outcome: null, requested: true, observed: false, reason: 'not applied' },
+    }
+    link.orderStatus.value = 'partial'
+    expect(controller[verifiedField].value).toBeNull()
+    expect(controller[unverifiedField].value).toBe(true)
+  })
+
   it('tornare alla macchina rimette tutto cio che ACC non rilegge a non toccare', async () => {
     const { link, controller } = build()
     link.carSnapshot.value = snapshot(1_000)

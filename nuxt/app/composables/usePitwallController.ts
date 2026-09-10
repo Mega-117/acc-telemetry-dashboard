@@ -165,7 +165,9 @@ export function usePitwallController(link: PitwallRoomHandle, trust: PitwallTrus
       const outcome = link.orderFields.value[field]
       if (!sent || outcome?.outcome !== 'verified' || sent.revision !== (editRevisions.get(field) ?? 0)) continue
       if (outcome.requested !== sent.value || outcome.observed !== sent.value) continue
-      value.value = null
+      // Clearing an acknowledged field must not invoke the UI's coupled repair toggles.
+      if (field === 'repairBodywork' || field === 'repairSuspension') repairs.value = { ...repairs.value, [field]: null }
+      else value.value = null
       submittedFields.delete(field)
     }
   }
