@@ -18,6 +18,16 @@ export function socialMemberUids(occupancy: SocialOccupancy, now: number): strin
   return Object.keys(occupancy).filter(uid => Object.values(occupancy[uid] ?? {}).some(value => socialPresenceAlive(value, now)))
 }
 
+/** Room presence is readable by participants, including non-friends. */
+export function socialMemberNicknames(occupancy: SocialOccupancy, now: number): Record<string, string> {
+  return Object.fromEntries(Object.entries(occupancy).flatMap(([uid, connections]) => {
+    const named = Object.values(connections)
+      .filter(value => socialPresenceAlive(value, now) && value.nickname?.trim() && value.nickname.trim() !== uid)
+      .sort((a, b) => Number(a.disconnectedAt != null) - Number(b.disconnectedAt != null) || b.connectedAt - a.connectedAt)
+    return named[0] ? [[uid, named[0].nickname.trim()]] : []
+  }))
+}
+
 export function socialReconnectingUids(occupancy: SocialOccupancy, now: number): string[] {
   return socialMemberUids(occupancy, now).filter(uid =>
     Object.values(occupancy[uid] ?? {}).every(value => value.disconnectedAt != null))

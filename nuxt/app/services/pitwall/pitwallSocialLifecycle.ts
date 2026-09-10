@@ -2,7 +2,7 @@ import type { PitwallRealtimeTransport } from './pitwallRealtimeTransport'
 import { emitPitwallDiagnostic } from './pitwallDiagnostics'
 import type { PitwallRoom } from './pitwallRoomContract'
 import { roomFromRealtime, type RealtimeRoomMeta, type RoomRole } from './pitwallRealtimeProtocol'
-import { nextSocialExpiry, socialMemberUids, socialReconnectingUids, type SocialOccupancy } from './pitwallSocialRoom'
+import { nextSocialExpiry, socialMemberUids, socialMemberNicknames, socialReconnectingUids, type SocialOccupancy } from './pitwallSocialRoom'
 
 export interface SocialDirectoryEntry { roomId: string, connectionId: string, slot?: string }
 interface SocialSlot { uid: string, reservedAt: number }
@@ -33,7 +33,7 @@ export function createPitwallSocialLifecycle(options: {
     const roles = Object.fromEntries(Object.entries(access).filter(([id]) => alive.has(id)))
     // The entry witness is only a preview. Actual membership is granted by joinRoom.
     if (!roles[uid] && witnesses.has(meta.roomId)) roles[uid] = 'invited'
-    return { ...roomFromRealtime(meta, roles)!, membershipModel: 'social', reconnectingUids: socialReconnectingUids(occupancy, io.serverNow()) }
+    return { ...roomFromRealtime(meta, roles)!, membershipModel: 'social', reconnectingUids: socialReconnectingUids(occupancy, io.serverNow()), memberNicknames: socialMemberNicknames(occupancy, io.serverNow()) }
   }
 
   function watchRoom(roomId: string, callback: (room: PitwallRoom | null) => void, error?: (error: Error) => void) {

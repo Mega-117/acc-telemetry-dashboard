@@ -92,6 +92,8 @@ export interface PitwallRoom {
   membershipModel?: 'social'
   /** Local projection of members retained during the reconnect grace period. */
   reconnectingUids?: string[]
+  /** Local projection of nicknames already published in social room presence. */
+  memberNicknames?: Record<string, string>
   schemaVersion: 2
   roomId: string
   label: string

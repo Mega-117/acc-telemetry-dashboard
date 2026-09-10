@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { eligibleSocialDrivers, nextSocialExpiry, resolveSocialTarget, socialMemberUids, socialReconnectingUids, type SocialOccupancy } from '~/services/pitwall/pitwallSocialRoom'
+import { eligibleSocialDrivers, nextSocialExpiry, resolveSocialTarget, socialMemberUids, socialMemberNicknames, socialReconnectingUids, type SocialOccupancy } from '~/services/pitwall/pitwallSocialRoom'
 
 describe('social room lifetime', () => {
+  it('keeps non-friend names from living presence and ignores UID placeholders and expired connections', () => {
+    expect(socialMemberNicknames({ gino: {
+      old: { nickname: 'Old name', connectedAt: 1, disconnectedAt: 1 },
+      live: { nickname: ' Gino Coach ', connectedAt: 2, disconnectedAt: null },
+      pending: { nickname: 'gino', connectedAt: 3, disconnectedAt: null },
+    }, gone: { old: { nickname: 'Gone', connectedAt: 1, disconnectedAt: 1 } } }, 40000)).toEqual({ gino: 'Gino Coach' })
+  })
   const occupancy: SocialOccupancy = {
     A: { a: { nickname: 'A', connectedAt: 100, disconnectedAt: 1000 } },
     B: { b: { nickname: 'B', connectedAt: 100, disconnectedAt: null } },

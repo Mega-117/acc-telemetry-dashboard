@@ -184,6 +184,19 @@ describe('la prima lettura non e una notizia', () => {
 })
 
 describe('la gara del pilota, vista dal pilota', () => {
+  it('shows and updates non-friend nicknames in the lobby without opening the race', async () => {
+    link.rooms.value = [room({ membershipModel: 'social', memberUids: ['me', 'gino'], memberNicknames: { gino: 'Gino Coach' } })]
+    await nextTick()
+    expect(link.room.value).toBeNull()
+    expect(store.people.value.find(person => person.id === 'gino')?.handle).toBe('@Gino Coach')
+    expect(store.friends.value.some(friend => friend.personId === 'gino')).toBe(false)
+    link.rooms.value[0]!.memberNicknames = { gino: 'Gino updated' }
+    await nextTick()
+    expect(store.people.value.find(person => person.id === 'gino')?.handle).toBe('@Gino updated')
+    link.rooms.value = []
+    await nextTick()
+    expect(store.people.value.some(person => person.id === 'gino')).toBe(false)
+  })
   // "In pista" nasce da "le persone che mi hanno autorizzato": per costruzione
   // non contiene me. Chi guidava apriva la pagina e non vedeva la gara che il
   // suo stesso computer aveva appena aperto.

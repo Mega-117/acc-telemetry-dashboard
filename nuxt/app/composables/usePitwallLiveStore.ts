@@ -91,6 +91,12 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     for (const found of trust.searchResults.value) known.set(found.uid, found.nickname)
     for (const room of link.rooms.value) {
       for (const member of [...room.memberUids, ...room.allowedUids]) if (!known.has(member)) known.set(member, member)
+      // The lobby has no selected crew yet. Reuse names from room occupancy,
+      // rather than requiring a personal friendship with every participant.
+      for (const member of room.memberUids) {
+        const nickname = room.memberNicknames?.[member]?.trim()
+        if (nickname && nickname !== member) known.set(member, nickname)
+      }
     }
     return [...known.entries()].map(([id, nickname]) => ({ id, handle: `@${nickname}` }))
   })
