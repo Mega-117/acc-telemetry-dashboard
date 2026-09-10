@@ -2,7 +2,7 @@ import type { PitwallRealtimeTransport } from './pitwallRealtimeTransport'
 import { emitPitwallDiagnostic } from './pitwallDiagnostics'
 import type { PitwallRoom } from './pitwallRoomContract'
 import { roomFromRealtime, type RealtimeRoomMeta, type RoomRole } from './pitwallRealtimeProtocol'
-import { nextSocialExpiry, socialMemberUids, type SocialOccupancy } from './pitwallSocialRoom'
+import { nextSocialExpiry, socialMemberUids, socialReconnectingUids, type SocialOccupancy } from './pitwallSocialRoom'
 
 export interface SocialDirectoryEntry { roomId: string, connectionId: string, slot?: string }
 interface SocialSlot { uid: string, reservedAt: number }
@@ -22,6 +22,7 @@ export function createPitwallSocialLifecycle(options: {
 }) {
   const { uid, io } = options
   const witnesses = new Map<string, SocialDirectoryEntry & { sponsorUid: string }>()
+  let opening: ReturnType<typeof openRoom> | null = null
   const fail = (error: unknown) => ({ ok: false as const, reason: error instanceof Error ? error.message : String(error) })
   const diagnostic = (event: string, roomId: string) => emitPitwallDiagnostic(event, { roomId, uid, connectionId: options.connectionId() })
 
@@ -32,7 +33,7 @@ export function createPitwallSocialLifecycle(options: {
     const roles = Object.fromEntries(Object.entries(access).filter(([id]) => alive.has(id)))
     // The entry witness is only a preview. Actual membership is granted by joinRoom.
     if (!roles[uid] && witnesses.has(meta.roomId)) roles[uid] = 'invited'
-    return { ...roomFromRealtime(meta, roles)!, membershipModel: 'social' }
+    return { ...roomFromRealtime(meta, roles)!, membershipModel: 'social', reconnectingUids: socialReconnectingUids(occupancy, io.serverNow()) }
   }
 
   function watchRoom(roomId: string, callback: (room: PitwallRoom | null) => void, error?: (error: Error) => void) {
@@ -206,7 +207,13 @@ export function createPitwallSocialLifecycle(options: {
     }
   }
 
-  async function createRoom(input: { label: string }) {
+  function createRoom(input: { label: string }) {
+    // All entry points share this lifecycle: a double click is one intent.
+    if (!opening) opening = openRoom(input).finally(() => { opening = null })
+    return opening
+  }
+
+  async function openRoom(input: { label: string }) {
     try {
       await options.ensureConnection()
       const existing = await io.read<SocialDirectoryEntry>(`directory/${uid}`)

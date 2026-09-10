@@ -44,6 +44,51 @@ async function publish(service: Awaited<ReturnType<typeof participant>>, roomId:
   expect(result.ok, JSON.stringify(result)).toBe(true)
 }
 describe('social rooms with real Firebase rules', () => {
+  it('coalesces simultaneous open requests into one party', async () => {
+    const A = await participant('A')
+    const results = await Promise.all([
+      A.ensureRoomForVehicle({ fingerprint: '', label: 'First' }),
+      A.ensureRoomForVehicle({ fingerprint: '', label: 'Second' }),
+    ])
+    expect(results.map(result => result.ok)).toEqual([true, true])
+    const ids = results.flatMap(result => result.ok ? [result.value.roomId] : [])
+    expect(new Set(ids).size).toBe(1)
+    await env.withSecurityRulesDisabled(async context => {
+      const all = (await get(ref(context.database() as unknown as Database, `${ROOT}/rooms`))).val()
+      expect(Object.keys(all)).toEqual([ids[0]])
+    })
+  })
+
+  it('keeps non-friends together after their mutual friend leaves and prevents unauthorized reentry', async () => {
+    const A = await participant('A'), B = await participant('B'), C = await participant('C')
+    const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Stable party' })
+    if (!created.ok) throw new Error(created.reason)
+    const id = created.value.roomId
+    await publish(A, id)
+    let bRooms: any[] = [], cRooms: any[] = []
+    stops.push(B.watchRooms(value => { bRooms = value }))
+    await vi.waitFor(() => expect(bRooms).toHaveLength(1))
+    expect((await B.joinRoom(id)).ok).toBe(true)
+    await publish(B, id)
+    stops.push(C.watchRooms(value => { cRooms = value }))
+    await vi.waitFor(() => expect(cRooms).toHaveLength(1))
+    expect((await C.joinRoom(id)).ok).toBe(true)
+    await publish(C, id)
+    let members: string[] = []
+    stops.push(C.watchMembers(id, value => { members = value.map(member => member.uid).sort() }))
+    await vi.waitFor(() => expect(members).toEqual(['A', 'B', 'C']))
+    await env.withSecurityRulesDisabled(async context => {
+      await set(ref(context.database() as unknown as Database, 'pitwallV3/grants/B/C'), null)
+      await set(ref(context.database() as unknown as Database, 'pitwallV3/grants/C/B'), null)
+    })
+    expect((await B.leaveRoom(id)).ok).toBe(true)
+    await vi.waitFor(() => expect(members).toEqual(['A', 'C']))
+    expect(await C.readRoom(id)).toMatchObject({ label: 'Stable party', memberUids: ['A', 'C'] })
+    expect((await C.leaveRoom(id)).ok).toBe(true)
+    expect((await C.joinRoom(id)).ok).toBe(false)
+    expect(await A.readRoom(id)).toMatchObject({ memberUids: ['A'] })
+  })
+
   it('rediscovers the room through B after A logs out with a stale own directory', async () => {
     const A = await participant('A'), B = await participant('B')
     const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Pitwall di A' })
@@ -121,17 +166,23 @@ describe('social rooms with real Firebase rules', () => {
   })
   it('renews a short disconnection but cannot revive an expired membership', async () => {
     const A = await participant('A')
+    const observer = await participant('B')
     const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Stable' })
     expect(created.ok).toBe(true)
     if (!created.ok) return
     const roomId = created.value.roomId
     await publish(A, roomId, true)
+    let observed: any[] = []
+    stops.push(observer.watchRooms(value => { observed = value }))
+    await vi.waitFor(() => expect(observed.map(room => room.roomId)).toContain(roomId))
     const oldId = A.session.connectionId()
     goOffline(A.io.database)
     await vi.waitFor(() => expect(A.io.online()).toBe(false))
+    await vi.waitFor(() => expect(observed[0]?.reconnectingUids).toEqual(['A']))
     goOnline(A.io.database)
     await vi.waitFor(() => expect(A.session.isReady(roomId)).toBe(true))
     expect(A.session.connectionId()).not.toBe(oldId)
+    await vi.waitFor(() => expect(observed[0]?.reconnectingUids).toEqual([]))
     expect((await get(ref(A.io.database, `${ROOT}/directory/A`))).val().connectionId).toBe(A.session.connectionId())
     goOffline(A.io.database)
     await vi.waitFor(() => expect(A.io.online()).toBe(false))

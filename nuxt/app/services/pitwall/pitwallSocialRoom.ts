@@ -18,6 +18,11 @@ export function socialMemberUids(occupancy: SocialOccupancy, now: number): strin
   return Object.keys(occupancy).filter(uid => Object.values(occupancy[uid] ?? {}).some(value => socialPresenceAlive(value, now)))
 }
 
+export function socialReconnectingUids(occupancy: SocialOccupancy, now: number): string[] {
+  return socialMemberUids(occupancy, now).filter(uid =>
+    Object.values(occupancy[uid] ?? {}).every(value => value.disconnectedAt != null))
+}
+
 export function nextSocialExpiry(occupancy: SocialOccupancy, now: number): number | null {
   const deadlines = Object.values(occupancy).flatMap(connections => Object.values(connections))
     .flatMap(value => value.disconnectedAt == null ? [] : [value.disconnectedAt + PITWALL_RECONNECT_GRACE_MS])

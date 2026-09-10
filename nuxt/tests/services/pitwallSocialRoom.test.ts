@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { eligibleSocialDrivers, nextSocialExpiry, resolveSocialTarget, socialMemberUids, type SocialOccupancy } from '~/services/pitwall/pitwallSocialRoom'
+import { eligibleSocialDrivers, nextSocialExpiry, resolveSocialTarget, socialMemberUids, socialReconnectingUids, type SocialOccupancy } from '~/services/pitwall/pitwallSocialRoom'
 
 describe('social room lifetime', () => {
   const occupancy: SocialOccupancy = {
@@ -15,6 +15,11 @@ describe('social room lifetime', () => {
   it('empty and fully expired rooms have no living members', () => {
     expect(socialMemberUids({}, 100)).toEqual([])
     expect(socialMemberUids({ A: occupancy.A! }, 31000)).toEqual([])
+  })
+  it('marks only disconnected members still inside the grace period as reconnecting', () => {
+    expect(socialReconnectingUids(occupancy, 30999)).toEqual(['A'])
+    expect(socialReconnectingUids(occupancy, 31000)).toEqual([])
+    expect(socialReconnectingUids({ A: { ...occupancy.A, restored: { nickname: 'A', connectedAt: 2000, disconnectedAt: null } } }, 3000)).toEqual([])
   })
 })
 

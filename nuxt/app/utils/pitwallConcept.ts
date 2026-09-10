@@ -11,6 +11,7 @@
 //
 // Il modello si ri-esporta da qui, cosi' chi consuma il prototipo ha un import
 // solo. La direzione resta una: la logica conosce il modello, mai il contrario.
+import { PITWALL_SOCIAL_CAPACITY } from '~/services/pitwall/pitwallSocialRoom'
 import {
   PITWALL_CONCEPT_CURRENT_USER_ID,
   PITWALL_CONCEPT_FRIENDS,
@@ -380,7 +381,7 @@ export function pitwallConceptCanLeave(
   race: PitwallConceptRace | null,
   userId = PITWALL_CONCEPT_CURRENT_USER_ID,
 ): boolean {
-  return pitwallConceptAmMember(race, userId) && race?.hostId !== userId
+  return pitwallConceptAmMember(race, userId) && (race?.membershipModel === 'social' || race?.hostId !== userId)
 }
 
 /** Si promuove solo chi e' gia' entrato e non gestisce gia' la gara. */
@@ -389,7 +390,7 @@ export function pitwallConceptCanPromote(
   member: PitwallConceptMember,
   userId = PITWALL_CONCEPT_CURRENT_USER_ID,
 ): boolean {
-  return pitwallConceptIsManager(race, userId)
+  return race?.membershipModel !== 'social' && pitwallConceptIsManager(race, userId)
     && member.personId !== userId
     && member.role === 'member'
 }
@@ -400,7 +401,7 @@ export function pitwallConceptCanRemove(
   member: PitwallConceptMember,
   userId = PITWALL_CONCEPT_CURRENT_USER_ID,
 ): boolean {
-  return pitwallConceptIsManager(race, userId)
+  return race?.membershipModel !== 'social' && pitwallConceptIsManager(race, userId)
     && member.personId !== userId
     && member.personId !== race?.hostId
 }
@@ -435,8 +436,13 @@ export function pitwallConceptWallIds(race: PitwallConceptRace | null): string[]
  */
 export const PITWALL_CONCEPT_MAX_ROOM_PEOPLE = 32
 
+export function pitwallConceptRoomCapacity(race: PitwallConceptRace | null): number {
+  return race?.membershipModel === 'social' ? PITWALL_SOCIAL_CAPACITY : PITWALL_CONCEPT_MAX_ROOM_PEOPLE
+}
+
 export function pitwallConceptRoomIsFull(race: PitwallConceptRace | null): boolean {
-  return (race?.members.length ?? 0) >= PITWALL_CONCEPT_MAX_ROOM_PEOPLE
+  const members = race?.membershipModel === 'social' ? race.members.filter(member => member.role !== 'invited') : race?.members
+  return (members?.length ?? 0) >= pitwallConceptRoomCapacity(race)
 }
 
 /**
@@ -450,6 +456,7 @@ export function isPitwallConceptPinnedMember(member: PitwallConceptMember): bool
 
 /** Le stesse parole della vista classica, cosi' il porting non le reinventa. */
 export function describePitwallConceptMember(member: PitwallConceptMember): string {
+  if (member.reconnecting) return 'Riconnessione in corso'
   if (member.connecting) return 'collegamento in corso'
   if (member.driving) return 'AL VOLANTE'
   if (member.role === 'invited') return 'invitato · non ancora entrato'

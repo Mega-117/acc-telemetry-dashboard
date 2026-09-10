@@ -1,14 +1,17 @@
 import { createApp, computed, ref } from 'vue'
 import PitStop from '../../../app/components/pitwall/concept/PitwallConceptPitStop.vue'
 import MyRoom from '../../../app/components/pitwall/concept/PitwallConceptMyRoom.vue'
+import Wall from '../../../app/components/pitwall/concept/PitwallConceptWall.vue'
 import { providePitwallStore } from '../../../app/composables/usePitwallStore'
 import { usePitwallController } from '../../../app/composables/usePitwallController'
 
 // Synthetic boundary only: the production component and controller run without
 // Firebase, accounts, input IPC or any connection to the user's runtime.
-createApp({ components: { PitStop, MyRoom }, setup() {
+createApp({ components: { PitStop, MyRoom, Wall }, setup() {
   const currentRoom = ref<any>({ id: 'qa-room', label: 'Pitwall di A', track: null, carNumber: null, state: 'live', drivingId: null,
-    members: [{ personId: 'B', role: 'member', driving: false, online: false }], invitedIds: [] })
+    members: Array.from({ length: 16 }, (_, index) => ({ personId: index === 0 ? 'A' : String(index), role: 'member', driving: false, online: true })), invitedIds: [] })
+  const partyRace = computed(() => currentRoom.value && ({ ...currentRoom.value, membershipModel: 'social', hostId: 'A', carNumber: 0,
+    carModel: '', track: '', session: '', closed: false, reason: { kind: 'grant', personId: 'A' } }))
   const intent = { available: true, state: 'off', roomId: null, reason: null }
   const target = ref<string | null>(null)
   const available = ref([{ uid: 'A', nickname: 'Pilota A — gara' }, { uid: 'C', nickname: 'Pilota C — allenamento' }])
@@ -30,11 +33,12 @@ createApp({ components: { PitStop, MyRoom }, setup() {
   const controller = usePitwallController(link, { pendingIncoming: ref([]), grantedIncoming: ref([]) } as any)
   providePitwallStore({ stop: { ...controller, application: link, orderStatus: link.orderStatus, orderReason: link.orderReason,
     hasCarSnapshot: computed(() => !!link.carSnapshot.value), lastOrder: controller.sentPlan } } as any)
-  return { target, fuel: controller.fuelLiters, currentRoom, intent, leave: () => { currentRoom.value = null },
+  return { target, fuel: controller.fuelLiters, currentRoom, partyRace, intent, leave: () => { currentRoom.value = null },
+    recoverConnection: () => { if (currentRoom.value) currentRoom.value.members[0].reconnecting = !currentRoom.value.members[0].reconnecting },
     disconnect: () => { available.value = available.value.filter(x => x.uid !== 'A') },
     restore: () => { available.value = [{ uid: 'A', nickname: 'Pilota A — gara' }, { uid: 'C', nickname: 'Pilota C — allenamento' }] },
   }
-}, template: `<main><h1>Pitwall — QA isolata PIP390</h1><p>Vista B: A ha effettuato il logout, B resta nella stanza · dati sintetici</p><MyRoom :room="currentRoom" :pitwall="intent" :people="[{id:'B',handle:'@B'}]" me-id="B" @close="leave" /><nav><button @click="disconnect">Simula A indisponibile</button><button @click="restore">Ripristina A</button></nav><p>Destinatario: {{ target || 'nessuno' }} · Bozza carburante: {{ fuel }}</p><PitStop /></main>` }).mount('#app')
+}, template: `<main><h1>Pitwall — QA isolata PIP390</h1><p>Party sociale: creatore A, 16 partecipanti · dati sintetici</p><button @click="recoverConnection">Simula/ripristina riconnessione A</button><MyRoom :room="currentRoom" :pitwall="intent" :people="[{id:'A',handle:'@A'}]" me-id="A" @close="leave" /><Wall v-if="partyRace" :race="partyRace" :people="[{id:'A',handle:'@A'}]" me-id="A" @leave="leave" /><nav><button @click="disconnect">Simula A indisponibile</button><button @click="restore">Ripristina A</button></nav><p>Destinatario: {{ target || 'nessuno' }} · Bozza carburante: {{ fuel }}</p><PitStop /></main>` }).mount('#app')
 const style = document.createElement('style')
 style.textContent = 'body{margin:0;background:#111821;color:#eaf0f6;font:15px system-ui}main{max-width:1100px;margin:auto;padding:24px}button,select,input{font:inherit}button{cursor:pointer}nav{display:flex;gap:12px}h1{font-size:24px}'
 document.head.append(style)

@@ -85,6 +85,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   let stopMembersWatch: (() => void) | null = null
   let stopOrderWatch: (() => void) | null = null
   let roomGeneration = 0
+  let accountGeneration = 0
   let tickTimer: ReturnType<typeof setInterval> | null = null
   /** Identifica questa scheda: due schede aperte sono due presenze diverse. */
   const runtimeSessionId = `pw-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -170,6 +171,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * partito.
    */
   const crew = computed<PitwallCrewRow[]>(() => {
+    void readinessRevision.value
     const current = room.value
     if (!current) return []
     const byUid = new Map<string, PitwallRoomMember>()
@@ -184,6 +186,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         role: current.managerUids.includes(uid) ? 'manager' : 'member',
         kind: presence?.kind ?? 'engineer',
         online: isPitwallMemberFresh(presence, nowTick.value),
+        reconnecting: current.reconnectingUids?.includes(uid)
+          || (uid === myUid.value && serviceRef.value?.io?.online() === false),
         connecting: !membersLoaded.value || (presence != null && !isPitwallMemberFresh(presence, nowTick.value) && presence.updatedAtMs === 0),
         driving: executor.value.executor?.uid === uid
           || executor.value.conflicting.some(member => member.uid === uid),
@@ -287,14 +291,21 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     rooms.value = list
   }
 
+  /** A stopped login must not publish into a later login, even for the same uid. */
+  function currentAccount(service_: PitwallRoomService): () => boolean {
+    const generation = accountGeneration
+    return () => generation === accountGeneration && serviceRef.value === service_ && options.uid() === service_.uid
+  }
+
   async function refreshRooms(): Promise<void> {
     const service_ = service()
     if (!service_) { rooms.value = []; return }
+    const current = currentAccount(service_)
     loading.value = true
     rawError.value = null
-    try { applyRooms(await service_.listRooms()) }
-    catch (error) { rawError.value = (error as Error)?.message || 'Gare non disponibili.'; rooms.value = [] }
-    finally { loading.value = false }
+    try { const list = await service_.listRooms(); if (current()) applyRooms(list) }
+    catch (error) { if (current()) { rawError.value = (error as Error)?.message || 'Gare non disponibili.'; rooms.value = [] } }
+    finally { if (current()) loading.value = false }
   }
 
   let stopRoomsWatch: (() => void) | null = null
@@ -308,7 +319,10 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const service_ = service()
     if (!service_) return
     if (stopRoomsWatch) return
-    stopRoomsWatch = service_.watchRooms(applyRooms, (error) => { discoveryError.value = error?.message || 'Gare non disponibili.' })
+    const current = currentAccount(service_)
+    stopRoomsWatch = service_.watchRooms(list => { if (current()) applyRooms(list) }, (error) => {
+      if (current()) discoveryError.value = error?.message || 'Gare non disponibili.'
+    })
   }
 
   function detach(): void {
@@ -545,16 +559,19 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const service_ = service()
     const roomId = selectedRoomId.value
     if (!service_ || !roomId) return
-    const result = await service_.leaveRoom(roomId)
-    if (!result.ok) {
-      rawError.value = result.reason
-      return
-    }
+    const current = currentAccount(service_)
+    try {
+      const result = await service_.leaveRoom(roomId)
+      if (!current() || (selectedRoomId.value && selectedRoomId.value !== roomId)) return
+      if (!result.ok) { rawError.value = result.reason; return }
     // L'elenco non si rilegge: `watchRooms` e' in ascolto e consegna l'uscita
     // da solo. Rileggerlo erano due query in piu' per sapere una cosa che
     // stava gia' arrivando.
-    await selectRoom(null)
-    notice.value = 'Sei uscito dalla gara.'
+      await selectRoom(null)
+      if (current()) notice.value = 'Sei uscito dalla gara.'
+    } catch (error) {
+      if (current() && selectedRoomId.value === roomId) rawError.value = (error as Error)?.message || 'Uscita non riuscita.'
+    }
   }
 
   /**
@@ -566,16 +583,21 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const service_ = service()
     const roomId = selectedRoomId.value
     if (!service_ || !roomId) return
+    const current = currentAccount(service_)
+    const social = room.value?.membershipModel === 'social'
     detach()
-    const result = await service_.closeRoom(roomId)
-    if (!result.ok) {
-      rawError.value = result.reason
+    try {
+      const result = await service_.closeRoom(roomId)
+      if (!current() || (selectedRoomId.value && selectedRoomId.value !== roomId)) return
+      if (!result.ok) throw new Error(result.reason)
+      selectedRoomId.value = null
+      room.value = null
+      notice.value = social ? 'Sei uscito dalla gara.' : 'Gara chiusa.'
+    } catch (error) {
+      if (!current() || selectedRoomId.value !== roomId) return
       await selectRoom(roomId)
-      return
+      if (current()) rawError.value = (error as Error)?.message || 'Uscita non riuscita.'
     }
-    selectedRoomId.value = null
-    room.value = null
-    notice.value = 'Gara chiusa.'
   }
 
   function start(): void {
@@ -585,6 +607,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   }
 
   function stop(): void {
+    accountGeneration++
+    loading.value = false
     clearFeedback()
     void clearPresence()
     detach()

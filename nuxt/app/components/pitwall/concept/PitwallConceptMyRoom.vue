@@ -1,13 +1,6 @@
 <script setup lang="ts">
-// Il mio Pitwall, visto dal pilota (PIP-362).
-//
-// La gara non nasce piu' da sola quando ACC va in sessione: la apre il pilota,
-// quando vuole qualcuno al muretto. Chi si allena da solo non si ritrova un
-// Pitwall aperto senza averlo chiesto, e nessuna scrittura parte per niente.
-//
-// Tre stati da leggere: spento, "si apre appena ACC e' in sessione", aperto.
-// Piu' uno da dire: da un browser normale non c'e' nessun PC del pilota, e
-// il bottone non fa finta di esserci.
+// La stanza corrente appartiene ai partecipanti, indipendentemente da ACC.
+// L'intento desktop apre una stanza; una membership confermata prevale su off.
 import { computed } from "vue";
 import {
   pitwallConceptInitialsById,
@@ -23,11 +16,11 @@ const props = defineProps<{
   meId: string | null;
 }>();
 defineEmits<{
-  /** Apri il Pitwall: da qui la gara nasce appena ACC e' in sessione. */
+  /** Apri il Pitwall, anche senza ACC. */
   start: [];
-  /** Esci dal Pitwall: la gara si chiude e il battito si spegne. */
+  /** Esci: gli altri partecipanti rimangono nella stanza. */
   close: [];
-  /** Aprire la gara: dentro ci sono l'equipaggio e i comandi da manager. */
+  /** Mostra l'equipaggio e i comandi della strategia. */
   open: [];
 }>();
 
@@ -36,6 +29,7 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
 
 /** La gara mostrata: solo quando il Pitwall e' aperto, o quando la si guarda da un browser. */
 const room = computed(() => props.room);
+const reconnecting = computed(() => room.value?.members.some(member => member.personId === props.meId && member.reconnecting));
 
 /** Dove si corre: la pista, e il numero quando c'e'. */
 const where = computed(() => {
@@ -133,11 +127,11 @@ const driving = computed(() => {
         <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
         <span class="pwc-race__copy">
           <strong>{{ where || "Il tuo Pitwall" }}</strong>
-          <small>{{ driving ?? "Nessuno al volante adesso" }}</small>
+          <small>{{ reconnecting ? "Riconnessione in corso" : driving ?? "Nessuno al volante adesso" }}</small>
         </span>
       </div>
 
-      <span class="pwc-chip is-always">Aperto</span>
+      <span class="pwc-chip is-always">{{ reconnecting ? "Riconnessione in corso" : "Aperto" }}</span>
 
       <span class="pwc-mine__actions">
         <button

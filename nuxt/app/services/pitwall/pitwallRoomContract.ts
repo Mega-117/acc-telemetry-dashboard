@@ -90,6 +90,8 @@ export type PitwallExecutorReason = 'ready' | 'nobody-driving' | 'multiple-drivi
 export interface PitwallRoom {
   /** Local projection: social discovery grants access, not a personal invitation. */
   membershipModel?: 'social'
+  /** Local projection of members retained during the reconnect grace period. */
+  reconnectingUids?: string[]
   schemaVersion: 2
   roomId: string
   label: string
@@ -485,6 +487,7 @@ export interface PitwallFieldOutcome {
 
 /** Una riga dell'equipaggio, come la legge l'ingegnere. */
 export interface PitwallCrewRow {
+  reconnecting?: boolean
   uid: string
   nickname: string
   role: 'manager' | 'member'

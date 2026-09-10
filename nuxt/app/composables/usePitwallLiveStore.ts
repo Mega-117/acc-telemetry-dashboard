@@ -122,11 +122,13 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
         driving: row.driving,
         online: row.online,
         connecting: row.connecting,
+        reconnecting: row.reconnecting,
       }))
     }
     return [
       ...room.memberUids.map(member => ({
         personId: member,
+        reconnecting: room.reconnectingUids?.includes(member),
         role: (room.managerUids.includes(member) ? 'manager' : 'member') as PitwallConceptMember['role'],
         driving: false,
         online: false,
@@ -150,6 +152,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     const selected = link.room.value?.roomId === room.roomId
     return {
       id: room.roomId,
+      membershipModel: room.membershipModel,
       label: room.label,
       carNumber: room.raceNumber ?? 0,
       carModel: room.label,

@@ -148,6 +148,52 @@ async function open(members: PitwallRoomMember[], uid = 'me') {
 }
 
 describe('la connessione browser distinta dal runtime pilota', () => {
+  it('ignores a discovery callback queued before logout, including a new login to the same account', () => {
+    const link = build()
+    link.start()
+    const oldCallback = fakes.pushRooms!
+    link.stop()
+    link.start()
+    fakes.pushRooms!([room({ roomId: 'current' })])
+    oldCallback([room({ roomId: 'old' })])
+    expect(link.rooms.value.map(value => value.roomId)).toEqual(['current'])
+  })
+
+  it('ignores a pending refresh after logout', async () => {
+    const link = build()
+    let resolve!: (value: PitwallRoom[]) => void
+    vi.spyOn(link.service()!, 'listRooms').mockReturnValueOnce(new Promise(done => { resolve = done }))
+    const refreshing = link.refreshRooms()
+    link.stop()
+    resolve([room()])
+    await refreshing
+    expect(link.rooms.value).toEqual([])
+    expect(link.loading.value).toBe(false)
+  })
+
+  it('does not leave a newly selected room when an old logout-era leave finishes', async () => {
+    const link = await open([member()])
+    let resolve!: (value: { ok: true, value: true }) => void
+    vi.spyOn(link.service()!, 'leaveRoom').mockReturnValueOnce(new Promise(done => { resolve = done }))
+    const leaving = link.leave()
+    link.stop()
+    fakes.roomDoc = room({ roomId: 'new' })
+    await link.selectRoom('new')
+    resolve({ ok: true, value: true })
+    await leaving
+    expect(link.selectedRoomId.value).toBe('new')
+    expect(link.notice.value).not.toBe('Sei uscito dalla gara.')
+  })
+
+  it('shows a failed leave without pretending that the member has left', async () => {
+    const link = await open([member()])
+    vi.spyOn(link.service()!, 'leaveRoom').mockRejectedValueOnce(new Error('Connection interrupted'))
+    await expect(link.leave()).resolves.toBeUndefined()
+    expect(link.selectedRoomId.value).toBe('r1')
+    expect(link.lastError.value).toBeTruthy()
+    expect(link.notice.value).not.toBe('Sei uscito dalla gara.')
+  })
+
   it('clears the previous switch error on reselect, leave and account stop', async () => {
     const link = await open([member()])
     await link.selectRoom('other')
