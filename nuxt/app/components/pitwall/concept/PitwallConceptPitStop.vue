@@ -31,10 +31,7 @@ import {
   stepFuel,
 } from "~/utils/pitwallPresentation";
 
-import { usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod';
-import PitwallApplicationPanel from '~/components/pitwall/PitwallApplicationPanel.vue';
 const { stop } = usePitwallStore();
-const { method } = usePitwallApplicationMethod();
 
 /**
  * Le due righe che "Sostituisci freni" apre: davanti e dietro, da 1 a 4.
@@ -133,8 +130,20 @@ function stepAll(direction: 1 | -1) {
       </span>
     </header>
 
-    <PitwallApplicationPanel :port="stop.application" />
-    <div v-show="method === 'standard'">
+    <label v-if="stop.application?.availableTargets" class="pwc-recipient">
+      Invia strategia a
+      <select
+        :value="stop.application.selectedTargetUid.value ?? ''"
+        :disabled="stop.orderStatus.value === 'pending' || stop.orderStatus.value === 'applying'"
+        @change="stop.application.selectTarget(($event.target as HTMLSelectElement).value || null)"
+      >
+        <option value="">Seleziona un pilota</option>
+        <option v-for="target in stop.application.availableTargets.value" :key="target.uid" :value="target.uid">{{ target.nickname }}</option>
+        <option v-if="stop.application.selectedTargetUid.value && !stop.application.availableTargets.value.some(target => target.uid === stop.application?.selectedTargetUid.value)" :value="stop.application.selectedTargetUid.value" disabled>Pilota non disponibile</option>
+      </select>
+    </label>
+
+    <div>
     <div class="pwc-pit-head">
       <b>Campo</b><b>Strategia</b><b>In macchina</b>
     </div>
@@ -576,4 +585,6 @@ function stepAll(direction: 1 | -1) {
   }
 }
 .pwc-tyreset-note { margin: 4px 0 10px; font-size: 12px; color: #e7ba68; }
+.pwc-recipient { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pwc-recipient select { max-width: 100%; padding: 8px 12px; color: inherit; background: #17202b; border: 1px solid #526070; border-radius: 6px; }
 </style>

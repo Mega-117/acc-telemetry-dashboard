@@ -137,7 +137,7 @@ export function pitwallConceptFreshness(ageSeconds: number): 'live' | 'stale' {
  * come `null`. Sono quelli che il PC del pilota scrive davvero: il prototipo
  * non ne inventa altri.
  */
-export type PitwallConceptOrderStatus = PitwallOrderStatus | 'not_sent' | null
+export type PitwallConceptOrderStatus = PitwallOrderStatus | 'not_sent' | 'unknown' | null
 
 export function describePitwallConceptOrderStatus(
   status: PitwallConceptOrderStatus,
@@ -145,6 +145,8 @@ export function describePitwallConceptOrderStatus(
   outcomes: ReadonlyArray<{ outcome: string | null, reason?: string | null, dragged?: boolean }> = [],
 ): { label: string, detail: string, tone: 'neutral' | 'good' | 'warn' | 'bad' } {
   switch (status) {
+    case 'unknown':
+      return { label: 'Conferma non disponibile', detail: reason ?? 'Verifica il MFD prima di un nuovo invio.', tone: 'warn' }
     case 'not_sent':
       return { label: 'Non inviata', detail: reason ?? 'Invio non disponibile. Verifica il collegamento.', tone: 'bad' }
     case 'pending':

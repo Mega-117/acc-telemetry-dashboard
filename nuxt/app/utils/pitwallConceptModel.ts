@@ -63,6 +63,7 @@ export interface PitwallConceptReason {
 /** Una gara viva: si entra qui dentro, non su una persona. */
 export interface PitwallConceptRace {
   id: string
+  label?: string
   carNumber: number
   carModel: string
   track: string

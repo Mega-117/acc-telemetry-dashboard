@@ -148,6 +148,26 @@ async function open(members: PitwallRoomMember[], uid = 'me') {
 }
 
 describe('la connessione browser distinta dal runtime pilota', () => {
+  it('leaving clears pending order and ignores callbacks from the previous room', async () => {
+    const link = await open([member()])
+    await link.sendPlan({ fuelLiters: 20 })
+    const oldOrder = fakes.pushOrder
+    expect(link.orderStatus.value).toBe('pending')
+    await link.selectRoom(null)
+    oldOrder?.({ status: 'applying' })
+    expect(link.orderStatus.value).toBeNull()
+    expect(link.orderId.value).toBeNull()
+    expect(link.sending.value).toBe(false)
+  })
+
+  it('missing order reports an unavailable confirmation without claiming failure or success', async () => {
+    const link = await open([member()])
+    await link.sendPlan({ fuelLiters: 20 })
+    fakes.pushOrder?.(null)
+    expect(link.orderStatus.value).toBe('unknown')
+    expect(link.orderReason.value).toContain('Conferma non disponibile')
+  })
+
   it('annuncia il browser con identita distinta anche se il runtime dello stesso utente guida', async () => {
     await open([member()])
     expect(fakes.presence).toEqual([{ kind: 'engineer', driving: false }])
@@ -341,7 +361,7 @@ describe('le azioni da manager, uscire e chiudere', () => {
     fakes.pushRoom?.(null)
     expect(link.selectedRoomId.value).toBeNull()
     expect(link.room.value).toBeNull()
-    expect(link.notice.value).toBe('popo ha chiuso il Pitwall.')
+    expect(link.notice.value).toBe('Il Pitwall è chiuso o la partecipazione è scaduta.')
     expect(link.lastError.value).toBeNull()
   })
 

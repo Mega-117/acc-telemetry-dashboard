@@ -77,7 +77,7 @@ function confirmRemove(personId: string) {
 
 /** L'effetto detto a parole, prima di farlo. */
 function removeWarning(personId: string): string {
-  return `${nick(personId)} non vedrà più il tuo Pitwall, e tu non vedrai il suo.`;
+  return `Rimuovi l'amicizia con ${nick(personId)}. Chi è già nella stanza rimane; i nuovi ingressi richiedono un altro amico presente.`;
 }
 </script>
 
@@ -137,10 +137,7 @@ function removeWarning(personId: string): string {
         <span class="pwc-avatar">{{ initials(friend.personId) }}</span>
         <strong class="pwc-person__name">
           {{ nick(friend.personId) }}
-          <span
-            v-if="friend.racing"
-            class="pwc-live-dot"
-          >in pista</span>
+
         </strong>
 
         <span

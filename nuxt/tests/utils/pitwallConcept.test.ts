@@ -342,6 +342,7 @@ describe('nessuna falsa applicazione parziale', () => {
     expect(result.detail).toBe('Set 2 già montato')
   })
   it('non dichiara nessun input se il risultato e incerto', () => {
+    expect(describePitwallConceptOrderStatus('unknown').label).toBe('Conferma non disponibile')
     const result = describePitwallConceptOrderStatus('partial', 'Tasto inviato, lettura persa', [{ outcome: 'selected' }])
     expect(result.label).toBe('Nessun campo confermato')
     expect(result.detail).toBe('Tasto inviato, lettura persa')

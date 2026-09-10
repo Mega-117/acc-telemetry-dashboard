@@ -53,6 +53,7 @@ function fakeLink() {
     executor,
     executorLabel: computed(() => (executor.value.reason === 'ready' ? 'RICO117 al volante' : 'Nessuno al volante: nessun ordine parte.')),
     selectedRoomId: computed(() => room.value?.roomId ?? null),
+    selectedTargetUid: ref<string | null>('A'),
     roomClosed: computed(() => Boolean(room.value?.closedAt)),
     amMember: ref(true),
     canSend: ref(true),
@@ -60,7 +61,7 @@ function fakeLink() {
     crew: ref<{ uid: string }[]>([]),
     orderFields: ref<Record<string, { outcome: 'verified' | 'selected' | 'not-verifiable' | null, reason: string | null } | null>>({}),
     orderStatus: ref<string | null>(null),
-    sendPlan: vi.fn(async () => true),
+    sendPlan: vi.fn(async (_plan: Record<string, unknown>) => true),
   }
 }
 
@@ -79,6 +80,27 @@ function build() {
 }
 
 describe('la base dell ordine e la fotografia della vettura, solo se fresca', () => {
+  it('conserva una bozza distinta per A e C nella stessa stanza', async () => {
+    const { link, controller } = build()
+    link.carSnapshot.value = snapshot(0)
+    await nextTick()
+    controller.fuelLiters.value = 42
+    controller.changeTyres.value = true
+    link.selectedTargetUid.value = 'C'
+    link.carSnapshot.value = snapshot(0, { fuelToAdd: 3, pressures: { ...BASELINE }, compound: 'wet' })
+    await nextTick()
+    expect(controller.fuelLiters.value).toBe(3)
+    expect(controller.changeTyres.value).toBeNull()
+    controller.fuelLiters.value = 8
+    link.selectedTargetUid.value = 'A'
+    link.carSnapshot.value = snapshot(0)
+    await nextTick()
+    expect(controller.fuelLiters.value).toBe(42)
+    expect(controller.changeTyres.value).toBe(true)
+    link.selectedTargetUid.value = 'C'
+    await nextTick()
+    expect(controller.fuelLiters.value).toBe(8)
+  })
   it('keeps unchanged event-driven MFD valid for two hours and invalidates it on disconnect', async () => {
     const { link, controller } = build()
     link.carSnapshot.value = { ...snapshot(7_200_000), protocolVersion: 3, connected: true }
@@ -269,6 +291,8 @@ describe('il preset non parte mai per inerzia, e lo spento viaggia', () => {
     link.orderStatus.value = 'failed'
     await nextTick()
     expect(controller.changeTyres.value).toBe(true)
+    const payload = link.sendPlan.mock.calls[0]![0] as Record<string, unknown>
+    link.orderFields.value = Object.fromEntries(Object.entries(payload).map(([field, value]) => [field, { outcome: 'verified', reason: null, requested: value, observed: value }]))
     link.orderStatus.value = 'applied'
     await nextTick()
     expect([controller.changeTyres.value, controller.brakes.value, controller.driverId.value, controller.pitStrategy.value]).toEqual([null, null, null, null])
@@ -278,6 +302,26 @@ describe('il preset non parte mai per inerzia, e lo spento viaggia', () => {
     controller.repairSuspension.value = true
     await controller.sendToCar()
     expect(controller.sentPlan.value).toMatchObject({ changeTyres: true, brakes: false, driverId: '1', repairSuspension: true })
+  })
+
+  it('partial keeps failed fields and edits made after submission, including edit-and-revert', async () => {
+    const { link, controller } = build()
+    controller.changeTyres.value = true
+    controller.brakes.value = true
+    controller.pitStrategy.value = 2
+    await controller.sendToCar()
+    controller.pitStrategy.value = 3
+    controller.pitStrategy.value = 2
+    link.orderStatus.value = 'partial'
+    expect(controller.changeTyres.value).toBe(true)
+    link.orderFields.value = {
+      changeTyres: { outcome: 'verified', requested: true, observed: true, reason: null },
+      brakes: { outcome: null, requested: true, observed: false, reason: 'not applied' },
+      pitStrategy: { outcome: 'verified', requested: 2, observed: 2, reason: null },
+    }
+    expect(controller.changeTyres.value).toBeNull()
+    expect(controller.brakes.value).toBe(true)
+    expect(controller.pitStrategy.value).toBe(2)
   })
 
   it('tornare alla macchina rimette tutto cio che ACC non rilegge a non toccare', async () => {

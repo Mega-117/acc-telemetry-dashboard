@@ -25,7 +25,7 @@ const props = defineProps<{
 defineEmits<{
   /** Apri il Pitwall: da qui la gara nasce appena ACC e' in sessione. */
   start: [];
-  /** Chiudi il Pitwall: la gara si chiude e il battito si spegne. */
+  /** Esci dal Pitwall: la gara si chiude e il battito si spegne. */
   close: [];
   /** Aprire la gara: dentro ci sono l'equipaggio e i comandi da manager. */
   open: [];
@@ -76,7 +76,7 @@ const driving = computed(() => {
         <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
         <span class="pwc-race__copy">
           <strong>{{ where || "Il tuo Pitwall" }}</strong>
-          <small>Si apre dall'app desktop del pilota, sul PC dove gira ACC.</small>
+          <small>Si apre dall'app desktop del pilota, anche con ACC spento.</small>
         </span>
       </div>
       <span
@@ -124,10 +124,10 @@ const driving = computed(() => {
         <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
         <span class="pwc-race__copy">
           <strong>Il tuo Pitwall è pronto</strong>
-          <small>{{ pitwall.reason ?? "Si apre appena ACC è in sessione." }}</small>
+          <small>{{ pitwall.reason ?? "Apertura della stanza in corso." }}</small>
         </span>
       </div>
-      <span class="pwc-chip is-waiting">In attesa di ACC</span>
+      <span class="pwc-chip is-waiting">Connessione in corso</span>
       <button
         type="button"
         class="pwc-link-btn"
@@ -166,7 +166,7 @@ const driving = computed(() => {
           class="pwc-link-btn"
           @click="$emit('close')"
         >
-          Chiudi il Pitwall
+          Esci dal Pitwall
         </button>
       </span>
 

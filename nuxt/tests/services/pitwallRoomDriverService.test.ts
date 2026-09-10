@@ -672,7 +672,7 @@ describe('gli esiti che il cloud non ha ancora ricevuto', () => {
     handle = startDriver(fake, bridge)
     await settle(12)
 
-    expect(confirmed).toEqual(['ordine-perso'])
+    expect(confirmed).toEqual([])
   })
 
   it('non pubblica l\'esito applicato da un altro account su questo computer', async () => {

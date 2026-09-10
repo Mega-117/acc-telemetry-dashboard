@@ -131,13 +131,13 @@ describe('la presenza si ascolta, e costa per cambiamento invece che a tempo', (
     expect(mocks.detached.sort()).toEqual(['pilota', 'popo'])
   })
 
-  it('non guarda piu di dodici persone: oltre non e un elenco che si legge', async () => {
+  it('osserva tutti gli amici senza troncare la lista', async () => {
     mocks.outgoing = Array.from({ length: 20 }, (_unused, index) => outgoing(`pilota-${index}`))
     const link = start()
     await link.refreshPilots()
     link.watchLive()
 
-    expect(mocks.attached).toHaveLength(12)
+    expect(mocks.attached).toHaveLength(20)
     link.stop()
   })
 

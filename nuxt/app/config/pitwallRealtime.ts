@@ -1,8 +1,14 @@
 import { connectDatabaseEmulator, getDatabase } from 'firebase/database'
 import { app } from './firebase'
 import { createPitwallRealtimeTransport } from '~/services/pitwall/pitwallRealtimeTransport'
+import { PITWALL_SOCIAL_ROOT } from '~/services/pitwall/pitwallSocialRoom'
 
 let transport: ReturnType<typeof createPitwallRealtimeTransport> | null = null
+let socialTransport: ReturnType<typeof createPitwallRealtimeTransport> | null = null
+export function getPitwallSocialRealtime() {
+  if (!socialTransport) socialTransport = createPitwallRealtimeTransport(getPitwallRealtime().database, PITWALL_SOCIAL_ROOT)
+  return socialTransport
+}
 /** The development probe must never create a connection just to display its counters. */
 export function readPitwallRealtimeMetrics() { return import.meta.dev ? transport?.metrics.snapshot() ?? null : null }
 /** Lazy: importing a UI component must not open another network connection. */

@@ -28,7 +28,7 @@ import { derivePitwallFriends, sortPitwallFriends } from '~/services/pitwall/pit
 import { createPitwallFriendActions } from '~/composables/usePitwallFriendActions'
 import { requestPitwallClose, requestPitwallOpen, usePitwallIntent, type PitwallIntentStatus } from '~/composables/usePitwallIntent'
 import { searchPitwallConceptDirectory } from '~/utils/pitwallConcept'
-import { formatCarName, formatTrackName } from '~/utils/telemetryFormat'
+import { formatTrackName } from '~/utils/telemetryFormat'
 import type {
   PitwallConceptFriend,
   PitwallConceptMember,
@@ -40,7 +40,6 @@ import type {
 
 const SEARCH_DEBOUNCE_MS = 300
 const DISMISSED_INVITES_KEY = 'pitwall-dismissed-invites'
-const SEEN_GRANTS_KEY = 'pitwall-seen-grants'
 
 /** Un insieme di id ricordato dal browser: sopravvive al ricaricamento, non ad altri. */
 function loadSet(key: string): Set<string> {
@@ -101,25 +100,13 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   // legge e' una e sta in `pitwallFriends`. Qui si aggiungono solo presenza e
   // Pitwall aperto, che vengono dagli altri due mattoncini.
   const friendViews = computed(() => derivePitwallFriends(trust.incoming.value, trust.outgoing.value, link.nowTick.value))
-  const reachable = computed(() => new Map(trust.outgoing.value.filter(entry => entry.reachable).map(entry => [entry.driverUid, entry.session])))
-  const reachableIds = computed(() => new Set(reachable.value.keys()))
   const friends = computed<PitwallConceptFriend[]>(() => sortPitwallFriends(
-    friendViews.value.map((view) => {
-      const racing = reachableIds.value.has(view.personId)
-      const connection = reachable.value.get(view.personId)
-      const room = view.state === 'friends' && racing && connection?.roomId
-        ? link.rooms.value.find(room => room.roomId === connection.roomId && !room.closedAt) ?? null
-        : null
-      const open = room != null
-      return {
-        personId: view.personId,
-        state: view.state,
-        racing,
-        pitwallOpen: open,
-        ...(open ? { raceId: room.roomId } : {}),
-      }
+    friendViews.value.map(view => {
+      const room = view.state === 'friends'
+        ? link.rooms.value.find(room => !room.closedAt && room.memberUids.includes(view.personId)) ?? null : null
+      return { personId: view.personId, state: view.state, racing: false,
+        pitwallOpen: room != null, ...(room ? { raceId: room.roomId } : {}) }
     }),
-    id => reachableIds.value.has(id),
   ))
 
   // "Ce l'hai gia'" per chiunque sia gia' in un rapporto con me, in qualunque
@@ -163,6 +150,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     const selected = link.room.value?.roomId === room.roomId
     return {
       id: room.roomId,
+      label: room.label,
       carNumber: room.raceNumber ?? 0,
       carModel: room.label,
       track: room.track ?? '',
@@ -199,53 +187,14 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     void link.selectRoom(null)
   })
 
-  const dismissedInvites = ref(loadSet(DISMISSED_INVITES_KEY))
+  const dismissedInvites = ref(loadSet(`${DISMISSED_INVITES_KEY}:${uid()}`))
+  watch(uid, () => { dismissedInvites.value = loadSet(`${DISMISSED_INVITES_KEY}:${uid()}`) })
 
-  /**
-   * La gara aperta adesso da una persona, fra quelle che vedo.
-   *
-   * Le stanze non si chiudono mai: dello stesso pilota ne esistono tante,
-   * una per ogni sessione di sempre. Quella buona e' l'ultima aperta e non
-   * chiusa; le altre sono memoria, non un posto dove entrare.
-   */
-  /**
-   * I Pitwall aperti adesso: una riga per amico che ha aperto il suo.
-   *
-   * Elencare le stanze rispondeva alla domanda sbagliata: non si chiudono
-   * mai, quindi comparivano le sessioni di giorni prima. Elencare chi era in
-   * pista rispondeva a meta': in pista si puo' stare anche senza voler
-   * nessuno al muretto. La riga c'e' quando l'amico ha **aperto** il Pitwall
-   * - la sua gara e' viva e lui e' in pista - e sparisce da sola quando lo
-   * chiude o spegne.
-   */
-  const races = computed<PitwallConceptRace[]>(() => friends.value
-    .filter(friend => friend.pitwallOpen && friend.raceId)
-    .map((friend) => {
-      const entry = trust.outgoing.value.find(candidate => candidate.driverUid === friend.personId)
-      const room = link.rooms.value.find(candidate => candidate.roomId === friend.raceId)!
-      const selected = link.room.value?.roomId === room.roomId
-      const car = entry?.session?.car ?? null
-      // La pista viene dalla presenza, non dalla stanza: la stanza porta
-      // quella del giorno in cui e' nata, la presenza quella di adesso.
-      const track = entry?.session?.track ?? room.track ?? null
-      return {
-        id: room.roomId,
-        carNumber: room.raceNumber ?? 0,
-        carModel: car ? formatCarName(car) : room.label,
-        track: track ? formatTrackName(track) : '',
-        session: 'Pitwall aperto',
-        hostId: friend.personId,
-        members: membersOf(room, selected),
-        reason: { kind: 'grant' as const, personId: friend.personId },
-        closed: false,
-        live: true,
-        joinable: true,
-      }
-    })
-    // Due amici che si dividono la stessa vettura sono una gara sola: la riga
-    // resta una. Due righe che portano nello stesso pit stop sarebbero solo un
-    // doppione da capire.
-    .filter((race, index, all) => all.findIndex(other => other.id === race.id) === index))
+  // One card per room; discovery already verified a present friend or membership.
+  const races = computed<PitwallConceptRace[]>(() => [...new Map(link.rooms.value.map(room => [room.roomId, room])).values()]
+    .filter(room => !room.closedAt && !(room.hostUid === uid() && room.memberUids.includes(uid() ?? '')))
+    .map(room => ({ ...toRace(room), session: 'Pitwall aperto', live: true, joinable: true,
+      track: room.track ? formatTrackName(room.track) : '' })))
   const selectedRace = computed<PitwallConceptRace | null>(() => (link.room.value ? toRace(link.room.value) : null))
 
   /**
@@ -268,7 +217,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
     // nella gara di un pilota se la vedeva presentata come sua, con tanto di
     // "il tuo PC l'ha gia' aggiunto" (visto da popo il 2026-09-04).
     const room = link.rooms.value
-      .filter(candidate => !candidate.closedAt && candidate.hostUid === me)
+      .filter(candidate => !candidate.closedAt && candidate.hostUid === me && candidate.memberUids.includes(me))
       .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0] ?? null
     if (!room) return null
     const selected = link.room.value?.roomId === room.roomId
@@ -277,7 +226,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
       label: room.label,
       track: room.track ?? null,
       carNumber: room.raceNumber ?? null,
-      state: selected && link.members.value.some(member => member.connected) ? 'live' : 'dormant',
+      state: 'live',
       // Chi guida lo si sa solo dalla stanza che si sta guardando in diretta:
       // altrove sarebbe una deduzione da un elenco di identificativi, e si
       // preferisce non dirlo che dirlo a caso.
@@ -290,31 +239,6 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   })
 
   // ---- Avvisi ---------------------------------------------------------------
-  const seenGrants = ref(loadSet(SEEN_GRANTS_KEY))
-  const grantNotices = ref<PitwallConceptNotice[]>([])
-  let grantsSeeded = false
-  // "X ha accettato": e' una notizia solo quando l'amicizia si completa
-  // durante la sessione. La prima lettura semina gli amici che c'erano gia'
-  // senza avvisare - un'amicizia di due mesi fa non e' una notizia.
-  watch(friendViews, (views) => {
-    const complete = views.filter(view => view.state === 'friends')
-    if (!grantsSeeded) {
-      if (!views.length) return
-      grantsSeeded = true
-      for (const view of complete) seenGrants.value.add(view.personId)
-      saveSet(SEEN_GRANTS_KEY, seenGrants.value)
-      return
-    }
-    for (const view of complete) {
-      if (seenGrants.value.has(view.personId)) continue
-      seenGrants.value.add(view.personId)
-      grantNotices.value = [...grantNotices.value, {
-        id: `${NOTICE_PREFIX.granted}${view.personId}`, kind: 'granted', personId: view.personId,
-      }]
-    }
-    saveSet(SEEN_GRANTS_KEY, seenGrants.value)
-  })
-
   /**
    * Un invito e' un avviso solo se porta da qualche parte: il Pitwall aperto
    * di un amico, oppure la gara di chi non e' mio amico e mi ha invitato a
@@ -325,8 +249,8 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   const openRaceIds = computed(() => new Set(races.value.map(race => race.id)))
   const friendIds = computed(() => new Set(friendViews.value.filter(view => view.state === 'friends').map(view => view.personId)))
   const notices = computed<PitwallConceptNotice[]>(() => [
-    ...trust.pendingIncoming.value.map(request => ({
-      id: `${NOTICE_PREFIX.request}${request.engineerUid}`, kind: 'request' as const, personId: request.engineerUid,
+    ...friendViews.value.filter(view => view.state === 'received').map(view => ({
+      id: `${NOTICE_PREFIX.request}${view.personId}`, kind: 'request' as const, personId: view.personId,
     })),
     ...link.rooms.value
       .filter(room => isPitwallRoomInvited(room, uid()) && !room.closedAt && !dismissedInvites.value.has(room.roomId))
@@ -334,7 +258,6 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
       .map(room => ({
         id: `${NOTICE_PREFIX.invite}${room.roomId}`, kind: 'invite' as const, personId: room.hostUid, raceId: room.roomId,
       })),
-    ...grantNotices.value,
   ])
   const pendingNoticeCount = computed(() => notices.value.length)
 
@@ -376,7 +299,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   function selectRace(raceId: string): void { void link.selectRoom(raceId) }
   function enterRace(raceId: string): void {
     dismissedInvites.value.delete(raceId)
-    saveSet(DISMISSED_INVITES_KEY, dismissedInvites.value)
+    saveSet(`${DISMISSED_INVITES_KEY}:${uid()}`, dismissedInvites.value)
     // Con una sola gara accessibile il collegamento l'ha gia' scelta da solo:
     // riselezionarla la azzera per un istante, e la vista che la guardava
     // tornava alla home credendola sparita (visto il 2026-09-05, appena le
@@ -392,13 +315,11 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
 
   // ---- Avvisi: decidere -----------------------------------------------------
   function dismissNotice(id: string): void {
-    if (id.startsWith(NOTICE_PREFIX.granted)) {
-      grantNotices.value = grantNotices.value.filter(entry => entry.id !== id)
-    } else if (id.startsWith(NOTICE_PREFIX.invite)) {
+    if (id.startsWith(NOTICE_PREFIX.invite)) {
       // Le regole non permettono a un invitato di togliersi dagli invitati:
       // rifiutare e' una memoria di questo browser, e la gara resta aperta.
       dismissedInvites.value.add(id.slice(NOTICE_PREFIX.invite.length))
-      saveSet(DISMISSED_INVITES_KEY, dismissedInvites.value)
+      saveSet(`${DISMISSED_INVITES_KEY}:${uid()}`, dismissedInvites.value)
     }
   }
   function acceptNotice(id: string): void {

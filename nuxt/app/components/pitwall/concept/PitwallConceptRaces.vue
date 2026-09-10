@@ -59,7 +59,7 @@ function whereLabel(race: PitwallConceptRace): string {
  */
 function wallLabel(race: PitwallConceptRace): string {
   const others = race.members
-    .filter(member => member.personId !== race.hostId && member.role !== "invited")
+    .filter(member => member.role !== "invited")
     .map(member => member.personId);
   return describePitwallConceptWall(others, undefined, props.people);
 }
@@ -79,7 +79,7 @@ function wallLabel(race: PitwallConceptRace): string {
       <div class="pwc-race__who">
         <span class="pwc-avatar">{{ initials(race.hostId) }}</span>
         <span class="pwc-race__copy">
-          <strong>{{ nick(race.hostId) }}</strong>
+          <strong>{{ race.label || nick(race.hostId) }}</strong>
           <small>{{ whereLabel(race) || race.session }}</small>
         </span>
       </div>
@@ -88,7 +88,7 @@ function wallLabel(race: PitwallConceptRace): string {
         v-if="wallLabel(race)"
         class="pwc-role pwc-race__wall"
       >
-        <small>Al muretto</small>
+        <small>Partecipanti</small>
         <b>{{ wallLabel(race) }}</b>
       </span>
 
