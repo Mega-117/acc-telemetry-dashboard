@@ -4,6 +4,8 @@ import type { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { boundPitwallStrategy } from '~/services/pitwall/pitwallLink'
 import { usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
 const props = defineProps<{ port?: ReturnType<typeof usePitwallRoom> }>()
+// Public assets share Nuxt's deployment base, including static hosted builds.
+const formUrl = `${useRuntimeConfig().app.baseURL}mfd-v4-online.html`
 const { v4Drafts } = usePitwallApplicationMethod()
 const draftKey = computed(() => JSON.stringify([props.port?.selectedRoomId?.value, props.port?.selectedTargetUid?.value]))
 const v4Draft = computed({
@@ -81,7 +83,7 @@ onBeforeUnmount(() => window.removeEventListener('message', message))
         <button type="button" :disabled="busy || selectedIdentity === null" @click="associate(true)">Conferma associazione locale</button>
       </template>
     </details>
-    <iframe :key="draftKey" ref="frame" title="Strategia V4 online" src="/mfd-v4-online.html" sandbox="allow-scripts" class="v4-frame" />
+    <iframe :key="draftKey" ref="frame" title="Strategia V4 online" :src="formUrl" sandbox="allow-scripts" class="v4-frame" />
   </div>
 </template>
 <style scoped>

@@ -2,10 +2,20 @@
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref } from 'vue'
 import { serialize } from 'node:v8'
-import { expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import Panel from '~/components/pitwall/PitwallV4OnlinePanel.vue'
 import Application from '~/components/pitwall/PitwallApplicationPanel.vue'
 const contextId = 'a'.repeat(64)
+beforeEach(() => vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL: '/' } })))
+afterEach(() => vi.unstubAllGlobals())
+it.each(['/', '/acc-telemetry-dashboard/docs/'])('loads the form under the configured app base %s', (baseURL) => {
+  vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL } }))
+  const wrapper = mount(Panel)
+  try {
+    expect(wrapper.get('iframe').attributes('src')).toBe(`${baseURL}mfd-v4-online.html`)
+    expect(wrapper.get('iframe').attributes('sandbox')).toBe('allow-scripts')
+  } finally { wrapper.unmount() }
+})
 function port() {
   return { sending: ref(false), orderStatus: ref(''), canSend: ref(true), sendReadiness: ref({ reason: null }),
     selectedRoomId: ref('room'), selectedTargetUid: ref('rico'),
