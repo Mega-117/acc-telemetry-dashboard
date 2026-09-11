@@ -1,1 +1,0 @@
-import{af as a,bp as t,a7 as n,bU as o,z as s}from"./OSWFAQfs.js";const _={class:"page-container"},r=a({__name:"PageContainer",setup(c){return(e,p)=>(t(),n("div",_,[o(e.$slots,"default",{},void 0,!0)]))}}),d=Object.assign(s(r,[["__scopeId","data-v-71e40101"]]),{__name:"LayoutPageContainer"});export{d as _};
