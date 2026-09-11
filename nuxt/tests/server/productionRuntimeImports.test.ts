@@ -10,6 +10,13 @@ const nuxtConfig = readFileSync(resolve(process.cwd(), 'nuxt.config.ts'), 'utf8'
 const pagesWorkflow = readFileSync(resolve(process.cwd(), '../.github/workflows/static.yml'), 'utf8')
 
 describe('production runtime imports', () => {
+  it('keeps source and published fallbacks neutral and identical', () => {
+    const published = readFileSync(resolve(process.cwd(), '../docs/404.html'), 'utf8')
+    expect(published).toBe(githubPagesFallback)
+    expect(githubPagesFallback).toContain('<title>Loading…</title>')
+    expect(githubPagesFallback).toContain('<p>Loading…</p>')
+    expect(githubPagesFallback).not.toMatch(/ACC Telemetry Dashboard|ACC Suite/)
+  })
   it('imports the feature access composable used by the global navigation', () => {
     expect(tabsBar).toContain("import { useFeatureAccess } from '~/composables/useFeatureAccess'")
     expect(tabsBar).toContain('const { canAccess } = useFeatureAccess()')
