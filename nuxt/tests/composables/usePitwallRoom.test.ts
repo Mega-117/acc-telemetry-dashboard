@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // ============================================
 // Il composable della gara, visto da chi apre la pagina.
 //

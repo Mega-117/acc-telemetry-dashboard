@@ -19,47 +19,40 @@ jobs:
   fe-test:
     name: FE — typecheck + vitest
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: nuxt
 
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
       - uses: actions/setup-node@v4
         with:
-          node-version: "24"
+          node-version-file: ".node-version"
           cache: "npm"
           cache-dependency-path: nuxt/package-lock.json
 
       - name: Install dependencies
         run: npm ci
+        working-directory: nuxt
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: FE pipeline
-        shell: pwsh
-        run: ./scripts/check_fe_pipeline.ps1
-
-      - name: Unit tests
-        run: npm run test
-
-      - name: Coverage thresholds
-        run: npm run test:coverage
+      - name: Shared frontend checks
+        run: python scripts/ci_checks.py --group frontend
 
       - name: Security audit
         run: npm audit --audit-level=high
+        working-directory: nuxt
         continue-on-error: true
 
       - name: Arch guard — logger must not reference UI
         run: |
-          if grep -rn "overlay|feedback|display|notify" ../logger_core/ 2>/dev/null | grep -v ".pyc"; then
+          if grep -rn "overlay|feedback|display|notify" logger_core/ 2>/dev/null | grep -v ".pyc"; then
             echo "VIOLATION: logger_core references UI concepts"
             exit 1
           fi
@@ -67,10 +60,10 @@ jobs:
         continue-on-error: true
 
   # ─────────────────────────────────────────────
-  # Python quality — flake8 + mypy + pytest-cov
+  # Python quality — same lint and tests as the local gate
   # ─────────────────────────────────────────────
   python-test:
-    name: Python — flake8 + mypy + pytest
+    name: Python — flake8 + pytest
     runs-on: ubuntu-latest
 
     steps:
@@ -78,35 +71,16 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version-file: ".python-version"
 
       - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install flake8 mypy pytest pytest-cov
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          python -m pip install -r requirements-ci.txt
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
         working-directory: .
 
-      - name: Lint — flake8
-        run: |
-          if ls nuxt/scripts/*.py 2>/dev/null; then
-            flake8 nuxt/scripts/ --config=setup.cfg
-          else
-            echo "No Python files to lint"
-          fi
-        working-directory: .
-
-      - name: Run tests
-        run: |
-          set +e
-          pytest --tb=short -q
-          pytest_status=$?
-          set -e
-          if [ "$pytest_status" -eq 5 ]; then
-            echo "No Python tests collected"
-            exit 0
-          fi
-          exit "$pytest_status"
+      - name: Shared Python checks
+        run: python scripts/ci_checks.py --group python
         working-directory: .
 
   pages:

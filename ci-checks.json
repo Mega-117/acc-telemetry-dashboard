@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "groups": {
+    "frontend": [
+      {
+        "id": "typecheck",
+        "cwd": "nuxt",
+        "argv": [
+          "npm",
+          "run",
+          "typecheck"
+        ],
+        "timeoutSeconds": 120
+      },
+      {
+        "id": "pipeline",
+        "cwd": "nuxt",
+        "argv": [
+          "pwsh",
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          "scripts/check_fe_pipeline.ps1"
+        ],
+        "timeoutSeconds": 300
+      },
+      {
+        "id": "unit-tests",
+        "cwd": "nuxt",
+        "argv": [
+          "npm",
+          "run",
+          "test"
+        ],
+        "timeoutSeconds": 180
+      },
+      {
+        "id": "coverage",
+        "cwd": "nuxt",
+        "argv": [
+          "npm",
+          "run",
+          "test:coverage"
+        ],
+        "timeoutSeconds": 300
+      }
+    ],
+    "python": [
+      {
+        "id": "python-lint",
+        "cwd": ".",
+        "argv": [
+          "python",
+          "-m",
+          "flake8",
+          "nuxt/scripts/",
+          "scripts/ci_checks.py",
+          "scripts/tests/",
+          "--config=setup.cfg"
+        ],
+        "timeoutSeconds": 30
+      },
+      {
+        "id": "python-tests",
+        "cwd": ".",
+        "argv": [
+          "python",
+          "-m",
+          "pytest",
+          "--tb=short",
+          "-q"
+        ],
+        "timeoutSeconds": 60,
+        "allowNoTests": true
+      }
+    ]
+  }
+}

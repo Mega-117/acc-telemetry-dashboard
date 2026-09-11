@@ -7,6 +7,7 @@ const read = (path: string) => readFileSync(fileURLToPath(new URL(path, import.m
 const ci = parse(read('../../../.github/workflows/ci.yml'))
 const pages = parse(read('../../../.github/workflows/static.yml'))
 const cloudflare = parse(read('../../../.github/workflows/cloudflare.yml'))
+const checks = JSON.parse(read('../../../ci-checks.json'))
 
 describe('CI publication contract', () => {
   it('routes only verified develop pushes to Cloudflare without running generate', () => {
@@ -38,15 +39,44 @@ describe('CI publication contract', () => {
     expect(pkg.scripts['test:coverage']).toContain('--project demo-pitwall-audit')
     expect(pkg.scripts['test:coverage']).toContain('--only database')
     const steps = ci.jobs['fe-test'].steps
-    expect(steps.find((s: { uses?: string }) => s.uses?.startsWith('actions/setup-node@')).with['node-version']).toBe('24')
+    expect(steps.find((s: { uses?: string }) => s.uses?.startsWith('actions/setup-node@')).with['node-version-file']).toBe('.node-version')
+    expect(read('../../../.node-version').trim()).toMatch(/^24\.\d+\.\d+$/)
     expect(steps.find((s: { uses?: string }) => s.uses?.startsWith('actions/setup-java@')).with).toMatchObject({ distribution: 'temurin', 'java-version': '21' })
     const commands = steps.map((s: { run?: string }) => s.run)
-    for (const command of ['npm ci', 'npm run typecheck', './scripts/check_fe_pipeline.ps1', 'npm run test:coverage']) {
+    for (const command of ['npm ci', 'python scripts/ci_checks.py --group frontend']) {
       const step = steps.find((s: { run?: string }) => s.run === command)
       expect(step, command).toBeDefined()
       expect(step['continue-on-error']).toBeUndefined()
     }
-    expect(commands.indexOf('npm ci')).toBeLessThan(commands.indexOf('npm run typecheck'))
+    expect(commands.indexOf('npm ci')).toBeLessThan(commands.indexOf('python scripts/ci_checks.py --group frontend'))
+  })
+
+  it('runs every shared blocking check with declared runtimes and unchanged thresholds', () => {
+    const frontend = checks.groups.frontend
+    for (const script of ['typecheck', 'test', 'test:coverage']) {
+      expect(frontend.some((s: { argv: string[] }) => JSON.stringify(s.argv) === JSON.stringify(['npm', 'run', script]))).toBe(true)
+    }
+    expect(frontend.find((s: { id: string }) => s.id === 'pipeline').argv).toEqual([
+      'pwsh', '-NoProfile', '-NonInteractive', '-File', 'scripts/check_fe_pipeline.ps1',
+    ])
+    expect(checks.groups.python.find((s: { id: string }) => s.id === 'python-lint').argv).toContain('nuxt/scripts/')
+    expect(checks.groups.python.find((s: { id: string }) => s.id === 'python-tests').argv).toEqual(['python', '-m', 'pytest', '--tb=short', '-q'])
+    for (const group of Object.values(checks.groups) as { id: string; timeoutSeconds: number; allowNoTests?: boolean }[][]) {
+      for (const check of group) {
+        expect(check.timeoutSeconds).toBeGreaterThan(0)
+        if (check.id !== 'python-tests') expect(check.allowNoTests).toBeUndefined()
+      }
+    }
+    const pythonSteps = ci.jobs['python-test'].steps
+    expect(pythonSteps.some((s: { run?: string }) => s.run?.includes('pip install -r requirements-ci.txt'))).toBe(true)
+    const shared = pythonSteps.find((s: { run?: string }) => s.run === 'python scripts/ci_checks.py --group python')
+    expect(shared).toBeDefined()
+    expect(shared['continue-on-error']).toBeUndefined()
+    for (const job of ['fe-test', 'python-test']) {
+      expect(ci.jobs[job].steps.find((s: { uses?: string }) => s.uses?.startsWith('actions/setup-python@')).with['python-version-file']).toBe('.python-version')
+    }
+    expect(read('../../../.python-version').trim()).toBe('3.11')
+    expect(read('../../scripts/check_fe_pipeline.ps1')).not.toContain('C:\\nvm4w')
   })
 
   it('has no independent or manual Pages trigger and binds checkout to the caller SHA', () => {

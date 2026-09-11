@@ -1,6 +1,8 @@
 $ErrorActionPreference = 'Stop'
 
-$nodeExe = if (Test-Path 'C:\nvm4w\nodejs\node.exe') { 'C:\nvm4w\nodejs\node.exe' } elseif ($IsWindows -or $env:OS -eq 'Windows_NT') { 'node.exe' } else { 'node' }
+# Respect the runtime selected by the shared CI runner on PATH.
+$nodeName = if ($IsWindows -or $env:OS -eq 'Windows_NT') { 'node.exe' } else { 'node' }
+$nodeExe = @(Get-Command $nodeName -CommandType Application -ErrorAction Stop)[0].Source
 
 function Get-NormalizedPath([string]$path) {
     return $path.Replace('\', '/')
