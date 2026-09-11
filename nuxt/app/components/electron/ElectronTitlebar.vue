@@ -11,6 +11,8 @@ import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
 
 const brandBase = useRuntimeConfig().app.baseURL
+const distributionName = ref('Racer Core')
+const distributionIcon = ref(`${brandBase}branding/auth/racercore-rc.svg`)
 
 const route = useRoute()
 const router = useRouter()
@@ -41,6 +43,19 @@ onMounted(async () => {
   isElectronVisible.value = !!(window as any).electronAPI
   
   if (isElectronVisible.value) {
+    // Older desktop releases and browser previews keep the default branding.
+    try {
+      const bridge = (window as unknown as { electronAPI?: {
+        getDistributionIdentity?: () => Promise<{ displayName: string; channel: string; icon: string }>
+      } }).electronAPI
+      const identity = await bridge?.getDistributionIdentity?.()
+      if (identity && ['main', 'develop', 'source'].includes(identity.channel)) {
+        distributionName.value = identity.displayName
+        if (identity.icon.startsWith('data:image/x-icon;base64,')) distributionIcon.value = identity.icon
+      }
+    } catch {
+      // Presentation must not prevent login if an older bridge is unavailable.
+    }
     releaseRuntimeCapabilities = runtimeCapabilities.connect()
     // Check initial maximized state
     try {
@@ -159,7 +174,7 @@ const closeMaintenanceNotification = () => {
   <div v-if="isElectronVisible" class="electron-titlebar">
     <div class="titlebar-drag-region">
       <span class="titlebar-title titlebar-title--racer">
-        <img :src="`${brandBase}branding/auth/racercore-rc.svg`" alt="" width="40" height="16" /> RACER CORE
+        <img :src="distributionIcon" alt="" width="24" height="24" /> {{ distributionName }}
       </span>
     </div>
     

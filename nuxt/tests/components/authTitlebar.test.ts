@@ -32,7 +32,7 @@ it('uses the login Racer Core branding everywhere while preserving every window 
     await flushPromises()
     const controls = w.findAll('button').map(button => button.attributes('title'))
     expect(controls).toHaveLength(5)
-    expect(w.get('.titlebar-title').text()).toBe('RACER CORE')
+    expect(w.get('.titlebar-title').text()).toBe('Racer Core')
     expect(w.get('.titlebar-title img').attributes('src')).toBe('/suite/branding/auth/racercore-rc.svg')
     expect(w.findAll('button').map(button => button.attributes('title'))).toEqual(controls)
     await w.get('[title="Minimizza"]').trigger('click')
@@ -43,7 +43,28 @@ it('uses the login Racer Core branding everywhere while preserving every window 
     expect(api.windowMaximize).toHaveBeenCalledOnce()
     expect(api.windowClose).toHaveBeenCalledOnce()
     expect(api.pageRefresh).toHaveBeenCalledOnce()
-    expect(w.get('.titlebar-title').text()).toBe('RACER CORE')
+    expect(w.get('.titlebar-title').text()).toBe('Racer Core')
     expect(w.find('.titlebar-title img').exists()).toBe(true)
+  } finally { w.unmount() }
+})
+
+it('uses the compiled Develop identity and icon without changing controls', async () => {
+  vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL: '/' } }))
+  vi.stubGlobal('useRoute', () => ({ params: {}, fullPath: '/' }))
+  vi.stubGlobal('useRouter', () => ({ replace: vi.fn() }))
+  Object.defineProperty(window, 'electronAPI', { configurable: true, value: {
+    windowIsMaximized: vi.fn().mockResolvedValue(false),
+    getDistributionIdentity: vi.fn().mockResolvedValue({
+      displayName: 'Racer Core Develop', channel: 'develop', icon: 'data:image/x-icon;base64,AA=='
+    })
+  } })
+  const w = mount(ElectronTitlebar, { global: { stubs: {
+    ElectronSyncNotification: true, ElectronDataMaintenanceNotification: true,
+  } } })
+  try {
+    await flushPromises()
+    expect(w.get('.titlebar-title').text()).toBe('Racer Core Develop')
+    expect(w.get('.titlebar-title img').attributes('src')).toBe('data:image/x-icon;base64,AA==')
+    expect(w.findAll('button')).toHaveLength(5)
   } finally { w.unmount() }
 })
