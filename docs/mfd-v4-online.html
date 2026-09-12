@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 443f29b277096f9bd6f09c57ab3a2a3f3f5314e6421abb028ae3b3164de0913b -->
+<!-- Generated V4 online; SHA256 55e37680ea453caccd3223f7937ef6822be4196c4afb174aa2d90b39fd87489a -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -512,8 +512,8 @@ async function apply(S){
     log('hdr','— carico il preset ' + S.pitStrategy + ' —');
     log('warn','  un preset riscrive TUTTO l\'MFD: carburante, gomme, pressioni,');
     log('warn','  checkbox e pastiglie freni. Per questo e\' un\'operazione a se\'.');
-    await at(L.row.pitStrategy);
-    await saturateThen(34, S.pitStrategy - 1, 'strategia pit = ' + S.pitStrategy);
+    globalThis.v4PresetObserved = null;
+    globalThis.v4PresetObserved = await api('/preset', {target:S.pitStrategy});
     if(!await detectLayout()) return;
 
     /* Le pastiglie sono cicliche e invisibili: dopo un preset il valore
@@ -521,10 +521,10 @@ async function apply(S){
        fingere di saperlo. */
     S.brakeFrontNow = null; S.brakeRearNow = null;
     S.applyPitStrategy = false;
-    log('warn','  sequenza preset ' + S.pitStrategy + ' inviata: numero NON verificato. Controllalo nel MFD prima di proseguire.');
+    globalThis.v4PresetCompleted = true; log('ok','  preset ' + S.pitStrategy + ' verificato — ora puoi impostare il resto');
     log('info','  le pastiglie le rileggo a vista al prossimo invio: dopo un');
     log('info','  preset il valore ricordato non vale piu niente.');
-    log('hdr','════ PRESET NON VERIFICATO — ' + presses + ' tasti, ' +
+    log('hdr','════ PRESET CARICATO — ' + presses + ' tasti, ' +
         ((Date.now()-t0)/1000).toFixed(1) + ' s ════');
     renderForm();
     return;
@@ -1025,6 +1025,8 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
     };
     try {
       globalThis.v4VerificationReached = false;
+      globalThis.v4PresetObserved = null;
+      globalThis.v4PresetCompleted = false;
       CREW = await api('/crew');
       if (plan.driverId != null && (!CREW?.drivers?.[plan.driverId] || driverLabelV4(CREW.drivers[plan.driverId]) !== plan.driverName)) throw new Error('Equipaggio o nome pilota cambiato.');
       document.getElementById('gap').value = plan.stepMs;
@@ -1035,9 +1037,11 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
         brakeFront: plan.brakeFront, brakeRear: plan.brakeRear, brakeFrontNow: null, brakeRearNow: null,
         driverIdx: null, driverEntryIndex: plan.driverId ?? null, susp: plan.repairSuspension, body: plan.repairBodywork };
       await apply(intent);
-      // Preset execution has no number observation in the prototype.
-      if (plan.operation === 'preset') throw new Error('Sequenza preset inviata; numero non verificato nel MFD.');
-      if (!globalThis.v4VerificationReached) throw new Error('Sequenza interrotta prima della verifica finale.');
+      if (plan.operation === 'preset') {
+        if (!globalThis.v4PresetCompleted || !globalThis.v4PresetObserved?.verified || globalThis.v4PresetObserved.preset !== plan.pitStrategy)
+          throw new Error('Preset richiesto non verificato nel MFD.');
+      }
+      if (plan.operation !== 'preset' && !globalThis.v4VerificationReached) throw new Error('Sequenza interrotta prima della verifica finale.');
       if (LIM_TOCCATO || PROBLEMI.length) throw new Error(LIM_TOCCATO ? 'Limitatore alterato.' : PROBLEMI.join(' · '));
       // Fresh shared memory AFTER visual correction and named-driver verification.
       var current = await api('/sm'), firstPacket = current.packetId;
@@ -1048,6 +1052,10 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
       if (!Number.isFinite(current.packetId) || current.packetId === firstPacket) throw new Error('Shared memory non aggiornata dopo l’ultimo input.');
       var live = await api('/status');
       if (!live.live) throw new Error('Dati ACC non più disponibili.');
+      if (plan.operation === 'preset') {
+        observed.pitStrategy = {value: globalThis.v4PresetObserved.preset, source: 'visual-number'};
+        return;
+      }
       var put = function (k, value, source) { if (value !== undefined && value !== null) observed[k] = { value: value, source: source }; };
       put('fuelLiters', current.mfdFuelToAdd, 'shared-memory');
       if (plan.changeTyres) {
@@ -1187,7 +1195,7 @@ else globalThis.MfdV4Contract = exported;
 // Generated into the engineer iframe together with the canonical local form.
 // It never calls the Python service: only a whole, validated intent leaves it.
 (function () {
-  var snapshot = null, initialized = false, restoring = false;
+  var snapshot = null, initialized = false, restoring = false, crewSignature = null;
   function send(type, value) { parent.postMessage({ channel: 'mfd-v4-online', type: type, value: value }, '*'); }
   var nativeRender = renderForm;
   renderForm = function () {
@@ -1258,7 +1266,16 @@ else globalThis.MfdV4Contract = exported;
     snapshot = event.data.value;
     if (!snapshot || typeof snapshot !== 'object') return;
     restoring = true;
-    var redraw = !initialized || previousReady !== snapshot.ready || busy !== (snapshot.busy === true) || crewIdentityV4 !== snapshot.contextId;
+    // A preset is a one-shot operation, also when rejected/partial. Keeping
+    // this checked disabled every normal strategy field until a room reset.
+    var finishedPreset = busy && snapshot.busy !== true && S.applyPitStrategy;
+    if (finishedPreset) {
+      S.applyPitStrategy = false;
+      S.brakeFrontNow = null; S.brakeRearNow = null;
+    }
+    var nextCrewSignature = JSON.stringify(snapshot.crew || []);
+    var crewChanged = crewSignature !== nextCrewSignature;
+    var redraw = !initialized || crewChanged || previousReady !== snapshot.ready || busy !== (snapshot.busy === true) || crewIdentityV4 !== snapshot.contextId;
     if (!initialized) {
       if (snapshot.draft) Object.assign(S, snapshot.draft);
       else if (snapshot.strategy) {
@@ -1270,7 +1287,8 @@ else globalThis.MfdV4Contract = exported;
       document.getElementById('gap').value = snapshot.draft?.stepMs || 60;
       initialized = true;
     }
-    if (crewIdentityV4 && crewIdentityV4 !== snapshot.contextId) S.driverEntryIndex = null;
+    if ((crewSignature !== null && crewChanged) || (crewIdentityV4 && crewIdentityV4 !== snapshot.contextId)) S.driverEntryIndex = null;
+    crewSignature = nextCrewSignature;
     crewIdentityV4 = snapshot.contextId;
     CREW = { identity: snapshot.contextId, drivers: (snapshot.crew || []).map(function(d) {
       return { first: d.name || d.firstName, last: d.name ? '' : d.lastName, short: d.shortName };
@@ -1290,6 +1308,7 @@ else globalThis.MfdV4Contract = exported;
     if (!grid.children.length) renderSM();
     KEYS.forEach(function (key, index) { var value = cache[key]; grid.children[index].lastChild.textContent = value == null ? '—' : String(value); });
     restoring = false;
+    if (finishedPreset) saved();
   });
   // Remote displays only current snapshots supplied by the authenticated room.
   poll = async function () {};
