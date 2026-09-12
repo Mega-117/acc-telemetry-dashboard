@@ -36,6 +36,11 @@ it('canonical generated form handles unknowns, dependencies, names, zero and pre
   w.document.getElementById('apply').click()
   submit = post.mock.calls.find((c: any) => c[0].type === 'submit')?.[0] as any
   expect(submit.value).toEqual({ version: 1, contextId, stepMs: 60, operation: 'preset', pitStrategy: 10 })
+  snapshot({ outcome: 'Preset non disponibile' });
+  expect(w.S.applyPitStrategy).toBe(false)
+  expect(w.document.querySelector('input[data-f=fuel]').disabled).toBe(false)
+  snapshot({ crew: [{ driverIndex: 0, name: 'Pilota arrivato dopo' }] })
+  expect(w.document.querySelector('select[data-f=driverEntryIndex]').textContent).toContain('Pilota arrivato dopo')
   snapshot(); Object.assign(w.S, { applyPitStrategy: false, changeTyre: true, compound: 'Wet', brakes: true }); w.renderForm()
   expect(w.document.querySelector('input[data-f=tyreSet]').disabled).toBe(true)
   expect(w.document.querySelector('input[data-f=fl]').disabled).toBe(false)

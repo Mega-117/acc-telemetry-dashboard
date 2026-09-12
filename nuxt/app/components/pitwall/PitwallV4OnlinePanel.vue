@@ -62,7 +62,7 @@ async function message(event: MessageEvent) {
   finally { publish() }
 }
 watch(draftKey, () => { frameReady.value = false; error.value = '' }, { flush: 'sync' })
-watch([car, busy, reason, outcome], publish)
+watch([car, busy, reason, outcome, () => props.port?.carSnapshot.value?.crew], publish, { deep: true })
 onMounted(() => window.addEventListener('message', message))
 onBeforeUnmount(() => window.removeEventListener('message', message))
 </script>
