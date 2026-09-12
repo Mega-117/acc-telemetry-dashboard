@@ -30,7 +30,7 @@ if (demo.value) providePitwallStore(usePitwallConceptState())
       <span>Vista</span>
       <button :class="{ active: !v4Local && !legacy }" @click="v4Local = false; setLegacy(false)">Pit Wall</button>
       <button :class="{ active: !v4Local && legacy }" @click="v4Local = false; setLegacy(true)">Legacy</button>
-      <button v-if="canUseDevTools()" :class="{ active: v4Local }" @click="v4Local = true">V4 locale</button>
+      <button :class="{ active: v4Local }" @click="v4Local = true">V4 locale</button>
       <em v-if="demo" class="pitwall-view-switch__demo">demo</em>
     </div>
     <PitwallV4Local v-if="v4Local" />

@@ -8,7 +8,7 @@ let timer: ReturnType<typeof setInterval> | undefined
 const bridge = () => (window as unknown as { electronAPI?: Bridge }).electronAPI
 async function start() {
   const api = bridge()?.pitwallV4Local
-  if (!api) { error.value = `Apri V4 locale nella finestra ${PRODUCT.displayName} avviata dal worktree V4.`; return }
+  if (!api) { error.value = `Apri questa pagina nell’app ${PRODUCT.displayName} sul PC dove gira ACC. Dal browser puoi usare V4 online per inviare la strategia al pilota.`; return }
   loading.value = true; error.value = ''
   try {
     const result = await api('start')

@@ -175,10 +175,12 @@ export function createPitwallSocialLifecycle(options: {
       const connectionId = options.connectionId()
       if (!connectionId) throw new Error('Connessione non ancora pronta.')
       const slots = await io.read<Record<string, SocialSlot>>(`rooms/${roomId}/slots`) ?? {}
+      const occupancyNow = await io.read<SocialOccupancy>(`rooms/${roomId}/occupancy`) ?? {}
+      const presentUids = new Set(socialMemberUids(occupancyNow, io.serverNow()))
       let slot = Object.keys(slots).find(key => slots[key]?.uid === uid) ?? null
       if (!slot) for (let index = 0; index < 16; index++) {
         const key = String(index)
-        if (slots[key] && slots[key].reservedAt + 30_000 > io.serverNow()) continue
+        if (slots[key] && (presentUids.has(slots[key].uid) || slots[key].reservedAt + 30_000 > io.serverNow())) continue
         try {
           // The server also checks the owner's live membership before replacing
           // an expired reservation: client clocks cannot evict a participant.
@@ -186,7 +188,11 @@ export function createPitwallSocialLifecycle(options: {
             value == null || value.uid === uid || value.reservedAt + 30_000 <= io.serverNow()
               ? { uid, reservedAt: io.serverTimestamp() as unknown as number } : undefined)
           if (result.committed) { slot = key; reservedSlot = key; break }
-        } catch { /* A still-present participant owns this slot. Try the next. */ }
+        } catch (cause) {
+          // A concurrent join can win after the snapshot. Do not hide network
+          // failures behind a misleading room-capacity error.
+          if (!/permission.?denied/i.test(String(cause))) throw cause
+        }
       }
       if (slot == null) throw new Error('La stanza ha già 16 partecipanti.')
       const occupancy = { nickname: uid, connectedAt: io.serverTimestamp(), disconnectedAt: null }
