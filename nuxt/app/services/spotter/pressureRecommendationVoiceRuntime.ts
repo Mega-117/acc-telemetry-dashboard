@@ -38,6 +38,8 @@ export function createPressureRecommendationVoiceRuntime(options: {
   onEvent?: (event: PressureVoiceRuntimeEvent) => void
 }): PressureRecommendationVoiceRuntime {
   let state = createPressureRecommendationVoiceState()
+  let lastRecommendation = ''
+  let lastCrossing: number | null = null
   const publish = options.onEvent ?? (() => {})
 
   function applyOutcome(outcome: PressureRecommendationVoiceOutcome) {
@@ -63,6 +65,8 @@ export function createPressureRecommendationVoiceRuntime(options: {
   return {
     recordFinishCrossing(completedLaps) {
       const lap = Math.max(0, Math.trunc(completedLaps))
+      if (lastCrossing === lap) return
+      lastCrossing = lap
       publish({
         kind: 'finish_crossing_received',
         correlationId: pressureCorrelationId(lap),
@@ -71,6 +75,9 @@ export function createPressureRecommendationVoiceRuntime(options: {
       applyOutcome(recordPressureFinishCrossing(state, lap))
     },
     recordRecommendation(recommendation) {
+      const signature = JSON.stringify(recommendation)
+      if (signature === lastRecommendation) return
+      lastRecommendation = signature
       if (recommendation) {
         publish({
           kind: 'recommendation_received',
@@ -83,6 +90,8 @@ export function createPressureRecommendationVoiceRuntime(options: {
     reset() {
       // Auth/audio reconnects clear pending input, not warnings already consumed.
       // The producer's session identity is the authoritative cycle reset.
+      lastRecommendation = ''
+      lastCrossing = null
       state = { ...state, pendingFinishLaps: [], latestRecommendation: null, initialized: false }
     },
   }

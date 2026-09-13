@@ -7,7 +7,7 @@ import { usePublicPath } from '~/composables/usePublicPath'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { resolveLocalRuntimeCapability } from '~/services/auth/localIdentityBridge'
-import { resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
+import { lapTimeToBricks, timeBrickPath, resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
 import {
   createVoicePlaybackQueue,
   type VoiceCue,
@@ -16,7 +16,6 @@ import {
 import { createVoiceRuntimeDiagnostics } from '~/services/monitoring/voiceRuntimeDiagnostics'
 import {
   filterPlayableTrackVoiceReferences,
-  isLapCountIncrement,
   normalizeTrackName,
   type TrackVoiceReference,
 } from '~/services/spotter/trackVoiceReferences'
@@ -38,6 +37,7 @@ import {
   resolveCoachOverrides,
 } from '~/services/spotter/coachVoiceController'
 import { useCoachStatePoller } from '~/composables/useCoachStatePoller'
+import { createFinishLineVoiceRuntime } from '~/services/spotter/finishLineVoiceRuntime'
 import { createPressureRecommendationVoiceRuntime } from '~/services/spotter/pressureRecommendationVoiceRuntime'
 
 definePageMeta({ layout: false })
@@ -220,7 +220,7 @@ function disarmTrackVoiceReferences() {
 
 function stopRuntimeAudioForLogout() {
   disarmTrackVoiceReferences()
-  pressureVoiceRuntime.reset()
+  finishLineVoiceRuntime.reset()
   stopSpotterAudio()
 }
 
@@ -288,20 +288,22 @@ function tickTrackVoiceReferences() {
   }
 }
 
-function announceLapTime(completedLaps: number) {
+function announceLapTime(id: string, timeMs: number, valid: boolean) {
   if (!canRunSpotterAudio.value || !lapTimesAllowedForSession.value) return
-  const audioEntry = resolveLapTimeVoiceEntry(
-    liveLap.value.lastLapTimeMs,
-    liveLap.value.lapValid ?? true,
-    selectedVoice.value,
-  )
-  if (!audioEntry) return
-  enqueueAudioPath(audioEntry.path, {
-    source: 'lap-time',
-    id: `lap-time-${completedLaps}`,
-    correlationId: `lap-${completedLaps}`,
-  })
+  // Every timed lap includes its time, including invalid and out-of-range laps.
+  const entry = resolveLapTimeVoiceEntry(timeMs, true, selectedVoice.value)
+  const paths = entry
+    ? [...(!valid ? [timeBrickPath('invalid', selectedVoice.value)] : []), entry.path]
+    : lapTimeToBricks(timeMs, valid).map(brick => timeBrickPath(brick, selectedVoice.value))
+  paths.forEach((path, index) => enqueueAudioPath(path, {
+    source: 'lap-time', id: `${id}-${index}`, correlationId: id,
+  }))
 }
+
+const finishLineVoiceRuntime = createFinishLineVoiceRuntime({
+  pressure: pressureVoiceRuntime,
+  announceLap: announceLapTime,
+})
 
 onMounted(async () => {
   loadSpotterVoiceSettings()
@@ -315,26 +317,9 @@ onMounted(async () => {
   startCoachStatePolling()
 })
 
-watch(() => liveLap.value.lapsCompleted, (newVal, oldVal) => {
-  if (!canRunSpotterAudio.value) return
-  // Compatibilità con logger vecchi: con la fase autorevole presente, il
-  // contatore giri non governa più l'arming.
-  // Tempo giro solo su un incremento reale tra campioni freschi: le
-  // transizioni da/verso null sono recuperi di dato stale. Il ciclo per-giro
-  // dei riferimenti NON si resetta qui: lo governa il wrap del flusso di
-  // posizione (PIP-216), immune al lag tra live poller e fast poller.
-  if (!isLapCountIncrement(oldVal, newVal) || typeof newVal !== 'number') return
-  // L'eventuale tempo entra per primo nella FIFO. Il coordinatore attende la
-  // raccomandazione dello stesso giro di stint se il fast-state arriva dopo.
-  announceLapTime(newVal)
-  pressureVoiceRuntime.recordFinishCrossing(newVal)
+watch(fastState, frame => {
+  if (canRunSpotterAudio.value) finishLineVoiceRuntime.update(frame)
 })
-
-watch(
-  () => fastState.value.tyreSetup.pressureRecommendation,
-  recommendation => pressureVoiceRuntime.recordRecommendation(recommendation),
-  { deep: true },
-)
 
 watch(() => selectedVoice.value, async () => {
   await loadTrackVoiceReferences()
@@ -359,7 +344,7 @@ watch(canRunSpotterAudio, (canRun) => {
     return
   }
   resetTrackVoiceReferenceLapState()
-  pressureVoiceRuntime.reset()
+  finishLineVoiceRuntime.reset()
   tickTrackVoiceReferences()
 })
 
@@ -375,7 +360,6 @@ watch(() => fastState.value.sessionType, (sessionType, previousSessionType) => {
     // entrambe le modalita' sono abilitate e ACC passa active -> active.
     // La FIFO audio resta intatta: si azzera solo lo stato per-giro.
     resetTrackVoiceReferenceLapState()
-    pressureVoiceRuntime.reset()
   }
   tickTrackVoiceReferences()
 })
