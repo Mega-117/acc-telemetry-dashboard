@@ -7,6 +7,28 @@ import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
 import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
 
 describe('Info Target setup layout contract', () => {
+  it('adjusts each drum with the mouse wheel and ignores horizontal-only scrolling', async () => {
+    const host = document.createElement('div')
+    const time = vi.fn(), tolerance = vi.fn()
+    const app = createApp(InfoTargetSetup, {
+      targetTimeMs: 90_000, toleranceMs: 500, keepBetweenSessions: false,
+      appearance: 'sectors', contextLabel: 'Settori',
+      'onSet-target-time': time, 'onSelect-tolerance': tolerance,
+    })
+    try {
+      app.mount(host); await nextTick()
+      expect(host.querySelector('.info-target-setup--sectors')).not.toBeNull()
+      expect(host.querySelector('header span')?.textContent).toBe('Settori')
+      for (const control of host.querySelectorAll('.target-drum, .target-tolerance__control')) {
+        for (const deltaY of [0, -1, 1]) {
+          control.dispatchEvent(new WheelEvent('wheel', { deltaY, bubbles: true }))
+        }
+      }
+      expect(time.mock.calls.map(([value]) => value)).toEqual([150_000, 30_000, 91_000, 89_000, 90_100, 89_900])
+      expect(tolerance.mock.calls.map(([value]) => value)).toEqual([600, 400])
+    } finally { app.unmount() }
+  })
+
   it('edits every target control and reaches confirm/cancel through wheel selection', async () => {
     const host = document.createElement('div')
     document.body.append(host)
