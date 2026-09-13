@@ -940,7 +940,7 @@
 // Il giallo corsa indica il cursore del volante, mentre i colori del singolo
 // strumento continuano a descriverne lo stato. Le due informazioni non si
 // confondono anche quando il tema corrente usa un accento verde.
-.training-overlay button[data-overlay-wheel-action][data-overlay-selected] {
+.training-overlay button[data-overlay-wheel-action][data-overlay-selected]:not(.stop-hold-action) {
   border-color: #ffe27a;
   background: linear-gradient(105deg, rgba(104, 70, 9, 0.96), rgba(41, 31, 15, 0.98));
   box-shadow:
@@ -2049,6 +2049,7 @@ button.is-active {
     border-color 160ms ease;
 }
 
+.stop-hold-action[data-overlay-selected],
 .stop-hold-action.is-holding {
   border-color: rgba(239, 68, 68, 0.95);
   color: #fff;

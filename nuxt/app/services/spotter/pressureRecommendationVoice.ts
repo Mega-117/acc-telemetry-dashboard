@@ -1,7 +1,7 @@
 import type { PressureRecommendationViewModel } from '~/services/overlay/tyreSetupViewModel'
 
 export const PRESSURE_WARNING_SCENARIO_ID = 'pressureAdjustmentNeeded'
-export const PRESSURE_WARNING_STINT_LAPS: Readonly<Record<number, number>> = { 1: 3, 2: 5 }
+export const PRESSURE_WARNING_STINT_LAP = 3
 
 export interface PressureRecommendationVoiceState {
   pendingFinishLaps: number[]
@@ -33,8 +33,7 @@ function settle(state: PressureRecommendationVoiceState): PressureRecommendation
     return { state, announce: false }
   }
   const stint = r.stintNumber ?? 0
-  const threshold = PRESSURE_WARNING_STINT_LAPS[stint]
-  const announce = threshold !== undefined && r.completedLaps >= threshold
+  const announce = Number.isInteger(stint) && stint > 0 && r.completedLaps === PRESSURE_WARNING_STINT_LAP
     && !state.warnedStints.includes(stint)
     && r.status === 'ready' && r.eligible && r.needsAdjustment
   return {

@@ -23,6 +23,22 @@ function recommendation(
 }
 
 describe('pressureRecommendationVoiceRuntime deterministic replay', () => {
+  it('queues lap 3 of every stint, never lap 5, in the same session', () => {
+    const queued: string[] = []
+    const runtime = createPressureRecommendationVoiceRuntime({
+      getVoice: () => 'im_nicola',
+      enqueue: cue => { queued.push(cue.id); return true },
+    })
+    runtime.recordRecommendation(recommendation(0))
+    for (const stint of [1, 2, 3]) {
+      for (let lap = 1; lap <= 5; lap++) {
+        const source = (stint - 1) * 5 + lap
+        runtime.recordFinishCrossing(source)
+        runtime.recordRecommendation(recommendation(lap, { stintNumber: stint, sourceCompletedLaps: source }))
+      }
+    }
+    expect(queued).toEqual([1, 2, 3].map(stint => `pressureAdjustmentNeeded-session-session-a-stint-${stint}-lap-3`))
+  })
   it('does not rearm a consumed stint after an audio reconnect', () => {
     const queued: string[] = []
     const runtime = createPressureRecommendationVoiceRuntime({

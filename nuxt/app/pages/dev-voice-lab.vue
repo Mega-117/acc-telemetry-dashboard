@@ -769,6 +769,7 @@ function handleKokoroWorkSettled() {
 
 // ─── Copione: carica / salva ──────────────────────────────────────────────────
 async function loadScript() {
+  if (!hasFullVoiceLabAccess.value) return
   try {
     script.value = await $fetch<VoiceScript>('/api/dev/voice-script')
     scriptDirty.value = false
@@ -779,7 +780,7 @@ async function loadScript() {
 }
 
 async function saveScript() {
-  if (!script.value) return
+  if (!hasFullVoiceLabAccess.value || !script.value) return
   scriptStatus.value = 'Salvataggio...'
   try {
     await $fetch('/api/dev/voice-script', { method: 'POST', body: script.value })
@@ -1052,7 +1053,7 @@ async function saveAndRegenerate(
   entry: VoiceScriptStep | VoiceScriptScenario,
   options: { toast?: boolean } = {}
 ): Promise<boolean> {
-  if (serverState.value !== 'online') return false
+  if (!hasFullVoiceLabAccess.value || serverState.value !== 'online') return false
   const shouldToast = options.toast ?? true
   const key = rowKey(entry)
   const label = 'stepId' in entry ? entry.stepId : entry.id
@@ -1132,6 +1133,15 @@ async function loadAdminVoiceLabData() {
   await loadScript()
   await loadLapTimeCatalog()
 }
+
+// A direct link must also work when the admin role arrives after mount.
+watch([hasFullVoiceLabAccess, () => route.query.scenario, () => Boolean(script.value)], async ([admin, scenario, loaded]) => {
+  if (!admin || !loaded || scenario !== 'pressureAdjustmentNeeded') return
+  voiceLabSection.value = 'script'
+  showScenarios.value = true
+  await nextTick()
+  document.getElementById('voice-scenario-pressureAdjustmentNeeded')?.scrollIntoView({ block: 'center' })
+}, { immediate: true, flush: 'post' })
 
 watch(isReferenceOnlyMode, (referenceOnly) => {
   if (referenceOnly) {
@@ -1276,10 +1286,11 @@ onBeforeUnmount(() => {
             {{ showScenarios ? '▾' : '▸' }} Frasi di scenario (tutti gli allenamenti) · {{ scenarioRows.length }}
           </button>
           <template v-if="showScenarios">
-            <article v-for="entry in scenarioRows" :key="entry.id" class="phrase-row phrase-row--scenario">
+            <article v-for="entry in scenarioRows" :id="`voice-scenario-${entry.id}`" :key="entry.id" class="phrase-row phrase-row--scenario">
               <header>
-                <strong>{{ entry.id }}</strong>
+                <strong>{{ entry.id === 'pressureAdjustmentNeeded' ? 'Correzioni pressioni pronte' : entry.id }}</strong>
               </header>
+              <p v-if="entry.id === 'pressureAdjustmentNeeded'">Copione standard per tutti: salva e rigenera Sara e Nicola. La modifica sarà distribuita con la successiva pubblicazione.</p>
               <textarea v-model="entry.text" rows="2" maxlength="280" @input="markDirty(entry)" />
               <footer>
                 <label>

@@ -202,6 +202,7 @@ onMounted(() => {
 
             <article class="setting-block">
               <span>Avvisi pressioni</span>
+              <p>Alla fine del 3° giro di ogni stint, se le pressioni richiedono una correzione.</p>
               <strong>{{ pressureWarningsEnabled ? 'Attivo' : 'Disattivo' }}</strong>
               <button type="button" class="toggle-button" :class="{ 'is-active': pressureWarningsEnabled }" :aria-pressed="pressureWarningsEnabled" @click="togglePressureWarnings">
                 {{ pressureWarningsEnabled ? 'Disattiva avvisi pressioni' : 'Attiva avvisi pressioni' }}
@@ -211,6 +212,7 @@ onMounted(() => {
                 label="Sessioni abilitate per gli avvisi pressioni"
                 @update:model-value="setPressureWarningSessionModes"
               />
+              <NuxtLink v-if="isAdmin" to="/dev-voice-lab?section=script&scenario=pressureAdjustmentNeeded">Personalizza avviso nel Voice Lab</NuxtLink>
             </article>
           </div>
           <p class="panel-note">{{ runtimeMessage }}</p>

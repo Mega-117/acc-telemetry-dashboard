@@ -9,11 +9,11 @@ function rec(lap: number, stint = 1, source = lap, extra: Partial<PressureRecomm
 }
 
 describe('pressure voice physical stint cycle', () => {
-  it('warns once at stint 1 lap 3, once at stint 2 lap 5, never in stint 3, irrespective of applications', () => {
+  it('warns exactly at lap 3 of every physical stint, irrespective of applications', () => {
     let state = recordPressureRecommendation(createPressureRecommendationVoiceState(), rec(0)).state
     const heard: string[] = []
     let source = 0
-    for (const stint of [1, 2, 3]) {
+    for (const stint of [1, 2, 3, 17]) {
       state = recordPressureRecommendation(state, rec(0, stint, source)).state
       for (let lap = 1; lap <= 20; lap++) {
         source++
@@ -24,7 +24,7 @@ describe('pressure voice physical stint cycle', () => {
         expect(recordPressureFinishCrossing(state, source).announce).toBe(false)
       }
     }
-    expect(heard).toEqual(['1:3', '2:5'])
+    expect(heard).toEqual(['1:3', '2:3', '3:3', '17:3'])
   })
 
   it('waits for the matching lap in either arrival order, never the previous recommendation', () => {
@@ -41,12 +41,12 @@ describe('pressure voice physical stint cycle', () => {
     }
   })
 
-  it('defers unstable data and remains available after a within-tolerance lap', () => {
+  it('does not postpone the warning when lap 3 data is unstable', () => {
     let state = recordPressureRecommendation(createPressureRecommendationVoiceState(), rec(2)).state
     for (const [lap, status] of [[3, 'waiting_for_stable_pressure'], [4, 'within_tolerance'], [5, 'ready']] as const) {
       state = recordPressureFinishCrossing(state, lap).state
       const result = recordPressureRecommendation(state, rec(lap, 1, lap, { status, needsAdjustment: status !== 'within_tolerance', eligible: status !== 'waiting_for_stable_pressure' }))
-      expect(result.announce).toBe(lap === 5)
+      expect(result.announce).toBe(false)
       state = result.state
     }
   })
@@ -58,6 +58,20 @@ describe('pressure voice physical stint cycle', () => {
     state = recordPressureRecommendation(state, rec(2, 1, 2, { sessionId: 'session-b' })).state
     state = recordPressureFinishCrossing(state, 3).state
     expect(recordPressureRecommendation(state, rec(3, 1, 3, { sessionId: 'session-b' })).announce).toBe(true)
+  })
+
+  it('stays silent for lap 3 within tolerance, ineligible or missing a physical stint', () => {
+    for (const extra of [
+      { status: 'within_tolerance', needsAdjustment: false },
+      { eligible: false }, { stintNumber: null }, { stintNumber: 0 },
+    ] as Partial<PressureRecommendationViewModel>[]) {
+      let state = recordPressureRecommendation(createPressureRecommendationVoiceState(), rec(2)).state
+      state = recordPressureFinishCrossing(state, 3).state
+      const third = recordPressureRecommendation(state, rec(3, 1, 3, extra))
+      expect(third.announce).toBe(false)
+      state = recordPressureFinishCrossing(third.state, 4).state
+      expect(recordPressureRecommendation(state, rec(4)).announce).toBe(false)
+    }
   })
 
   it('does not reset the cycle when stint laps reset after a tyre change', () => {
