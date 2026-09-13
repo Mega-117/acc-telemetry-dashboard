@@ -1,8 +1,54 @@
+// @vitest-environment jsdom
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import { createApp, defineComponent, h, nextTick, ref } from 'vue'
+import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
+import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
 
 describe('Info Target setup layout contract', () => {
+  it('edits every target control and reaches confirm/cancel through wheel selection', async () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    const rects = vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([{}] as unknown as DOMRectList)
+    const time = ref(90_000), tolerance = ref(500), keep = ref(false)
+    const confirm = vi.fn(), cancel = vi.fn()
+    let nav!: ReturnType<typeof useOverlayActionSelection>
+    const app = createApp(defineComponent({
+      setup() {
+        const root = ref<HTMLElement | null>(null)
+        nav = useOverlayActionSelection(root, () => true)
+        return () => h('main', { ref: root }, h(InfoTargetSetup, {
+          targetTimeMs: time.value, toleranceMs: tolerance.value, keepBetweenSessions: keep.value,
+          'onSet-target-time': (value: number) => { time.value = value },
+          'onSelect-tolerance': (value: number) => { tolerance.value = value },
+          'onToggle-keep': () => { keep.value = !keep.value },
+          onConfirm: confirm, onCancel: cancel,
+        }))
+      },
+    }))
+    try {
+      app.mount(host); await nextTick(); nav.first()
+      const expected = [
+        ['target-minutes-increase', 150_000, 500], ['target-minutes-decrease', 90_000, 500],
+        ['target-seconds-increase', 91_000, 500], ['target-seconds-decrease', 90_000, 500],
+        ['target-tenths-increase', 90_100, 500], ['target-tenths-decrease', 90_000, 500],
+        ['target-tolerance-decrease', 90_000, 400], ['target-tolerance-increase', 90_000, 500],
+        ['target-keep', 90_000, 500], ['target-confirm', 90_000, 500], ['target-cancel', 90_000, 500],
+      ] as const
+      for (const [id, expectedTime, expectedTolerance] of expected) {
+        expect(nav.selectedId.value).toBe(id)
+        expect(host.querySelectorAll('[data-overlay-selected]')).toHaveLength(1)
+        nav.activate(); await nextTick()
+        expect(time.value).toBe(expectedTime); expect(tolerance.value).toBe(expectedTolerance)
+        nav.next()
+      }
+      expect(keep.value).toBe(true)
+      expect(confirm).toHaveBeenCalledTimes(1); expect(cancel).toHaveBeenCalledTimes(1)
+      expect(nav.selectedId.value).toBe('target-minutes-increase')
+    } finally { app.unmount(); host.remove(); rects.mockRestore() }
+  })
+
   it('keeps tolerance separate from the three-part time picker', () => {
     const source = readFileSync(resolve(process.cwd(), 'app/components/overlay/InfoTargetSetup.vue'), 'utf8')
 

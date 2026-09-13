@@ -92,6 +92,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         <button
           type="button"
           class="target-drum__arrow"
+          :data-overlay-wheel-action="`target-${control.id}-increase`"
           :aria-label="`Aumenta ${control.ariaLabel}`"
           @click="adjustControl(control, 1)"
         >
@@ -102,6 +103,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
           type="button"
           class="target-drum__arrow"
           :aria-label="`Diminuisci ${control.ariaLabel}`"
+          :data-overlay-wheel-action="`target-${control.id}-decrease`"
           @click="adjustControl(control, -1)"
         >
           ▼
@@ -123,6 +125,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         <button
           type="button"
           aria-label="Diminuisci Tolleranza massima"
+          data-overlay-wheel-action="target-tolerance-decrease"
           @click="adjustControl(toleranceControl, -1)"
         >
           −
@@ -131,6 +134,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         <button
           type="button"
           aria-label="Aumenta Tolleranza massima"
+          data-overlay-wheel-action="target-tolerance-increase"
           @click="adjustControl(toleranceControl, 1)"
         >
           +
@@ -141,6 +145,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
     <button
       type="button"
       class="target-keep"
+      data-overlay-wheel-action="target-keep"
       :class="{ 'is-active': keepBetweenSessions }"
       :aria-pressed="keepBetweenSessions"
       @click="emit('toggle-keep')"
@@ -150,8 +155,8 @@ function onWheel(control: PickerControl, event: WheelEvent) {
     </button>
 
     <div class="target-actions">
-      <button type="button" class="target-confirm" @click="emit('confirm')">Conferma</button>
-      <button type="button" class="target-cancel" @click="emit('cancel')">Annulla</button>
+      <button type="button" class="target-confirm" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
+      <button type="button" class="target-cancel" data-overlay-wheel-action="target-cancel" @click="emit('cancel')">Annulla</button>
     </div>
   </section>
 </template>

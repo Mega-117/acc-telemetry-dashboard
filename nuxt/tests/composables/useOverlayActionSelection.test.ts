@@ -49,7 +49,7 @@ describe('shared overlay selection', () => {
     nav.syntheticPointer({ ...state, movementRevision: 3 }); expect(nav.selectedId.value).toBe('back')
     nav.syntheticPointer({ ...state, movementRevision: 4 }); expect(nav.selectedId.value).toBe('start')
   })
-  it('updates after accordion changes and removes navigation during timers', async () => {
+  it('updates after accordion changes and removes navigation when disabled', async () => {
     root.querySelector('[inert]')!.removeAttribute('inert')
     nav.next(); expect(nav.selectedId.value).toBe('inert')
     root.querySelector('[data-overlay-wheel-action="inert"]')!.parentElement!.setAttribute('inert', '')
@@ -57,5 +57,20 @@ describe('shared overlay selection', () => {
     enabled = false; nav.refresh(); await nextTick()
     expect(nav.selectedId.value).toBeNull()
     expect(root.querySelectorAll('[data-overlay-selected]')).toHaveLength(0)
+  })
+  it('selects controls mounted after a transition and refreshes replaced action identities', async () => {
+    root.replaceChildren()
+    await nextTick()
+    expect(nav.selectedId.value).toBeNull()
+    root.innerHTML = '<button data-overlay-wheel-action="resume">Riprendi</button>'
+    await nextTick()
+    expect(nav.selectedId.value).toBe('resume')
+    const button = root.querySelector('button')!
+    button.dataset.overlayWheelAction = 'confirm-stop'
+    await nextTick()
+    expect(nav.selectedId.value).toBe('confirm-stop')
+    button.disabled = true
+    await nextTick()
+    expect(nav.selectedId.value).toBeNull()
   })
 });

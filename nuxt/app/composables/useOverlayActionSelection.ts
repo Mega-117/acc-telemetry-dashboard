@@ -1,4 +1,4 @@
-import { nextTick, ref, watch, type Ref } from 'vue'
+import { nextTick, onScopeDispose, ref, watch, type Ref } from 'vue'
 import { nextOverlayActionId, resolveOverlayActivation } from '~/services/overlay/overlayActionNavigation'
 import type { OverlayPointerState } from './useOverlayInteractionContract'
 
@@ -65,6 +65,19 @@ export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled
     fromTarget(document.elementFromPoint(state.x, state.y))
   }
   function resetPointer() { nativePoint = null }
+  // Nested transitions can mount controls after the phase watcher has run.
+  // Watch availability, excluding the selection attributes written by paint().
+  let observer: MutationObserver | undefined
+  watch(root, element => {
+    observer?.disconnect()
+    if (element) {
+      observer = new MutationObserver(refresh)
+      observer.observe(element, { childList: true, subtree: true, attributes: true,
+        attributeFilter: ['disabled', 'hidden', 'inert', 'aria-hidden', 'aria-disabled', 'data-overlay-wheel-action'] })
+    }
+    refresh()
+  }, { flush: 'post', immediate: true })
+  onScopeDispose(() => observer?.disconnect())
   watch(selectedId, paint, { flush: 'post' })
   return { selectedId, available, select, first, next, activate, refresh, pointerMove, syntheticPointer, resetPointer, focus: fromTarget }
 }

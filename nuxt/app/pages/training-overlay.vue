@@ -122,7 +122,7 @@ const canUseSpotterControls = computed(() => resolveLocalRuntimeCapability({
 // La selezione volante usa ID semantici e ricalcola il DOM a ogni comando.
 const overlayRoot = ref<HTMLElement | null>(null)
 const actionSelection = useOverlayActionSelection(overlayRoot, () =>
-  (phase.value === 'launcher' && !isTargetSetupOpen.value) || phase.value === 'select',
+  phase.value !== 'loading',
 )
 const { selectedId: selectedWheelActionId, first: selectFirstWheelAction,
   next: selectNextWheelAction, activate: activateSelectedWheelAction } = actionSelection
@@ -797,6 +797,11 @@ watch(canUseSpotterControls, (canUse) => {
 })
 
 
+watch(isShortcutStopConfirmOpen, (open) => {
+  if (open) actionSelection.select('confirm-stop', true)
+  else actionSelection.refresh()
+}, { flush: 'post' })
+
 watch(
   [phase, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
     spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, liveHudResizeKey],
@@ -905,6 +910,7 @@ onBeforeUnmount(() => {
                   v-for="option in originCornerOptions"
                   :key="option.id"
                   type="button"
+                  :data-overlay-wheel-action="`placement-corner-${option.id}`"
                   :class="{ 'is-active': originCorner === option.id }"
                   :aria-label="`Angolo ${option.label}`"
                   :aria-pressed="originCorner === option.id"
@@ -915,7 +921,7 @@ onBeforeUnmount(() => {
               </div>
             </div>
 
-            <button type="button" class="primary" :aria-label="primaryActionLabel" @click="executePrimaryAction">
+            <button type="button" class="primary" data-overlay-wheel-action="confirm-placement" :aria-label="primaryActionLabel" @click="executePrimaryAction">
               {{ primaryActionLabel }}
             </button>
           </div>
@@ -1111,7 +1117,7 @@ onBeforeUnmount(() => {
                   <strong>Allenamento completato</strong>
                 </div>
                 <div class="overlay-actions">
-                  <button type="button" class="primary" :aria-label="primaryActionLabel" @click="executePrimaryAction">
+                  <button type="button" class="primary" data-overlay-wheel-action="reset-training" :aria-label="primaryActionLabel" @click="executePrimaryAction">
                     {{ primaryActionLabel }}
                     <span class="key-hint" aria-hidden="true">Ctrl+N</span>
                   </button>
@@ -1197,6 +1203,7 @@ onBeforeUnmount(() => {
                   <button
                     type="button"
                     class="primary"
+                    :data-overlay-wheel-action="isShortcutStopConfirmOpen ? 'confirm-stop' : primaryAction"
                     :aria-label="isShortcutStopConfirmOpen ? 'Conferma stop sessione' : primaryActionLabel"
                     @click="executePrimaryAction"
                   >
@@ -1208,19 +1215,23 @@ onBeforeUnmount(() => {
                       v-if="phase === 'paused' && !isShortcutStopConfirmOpen"
                       type="button"
                       class="utility-action skip-step-action"
-                      aria-label="Skippa lo step corrente (solo mouse)"
-                      title="Skippa step (solo mouse)"
+                      data-overlay-wheel-action="skip-step"
+                      aria-label="Skippa lo step corrente"
+                      title="Skippa step"
                       @click="skipPausedStep"
                     >
                       Skippa step
                     </button>
                   </Transition>
                   <button
+                    v-if="!isShortcutStopConfirmOpen"
                     type="button"
+                    data-overlay-wheel-action="stop-training"
                     class="secondary-action danger-action stop-hold-action"
                     :class="{ 'is-holding': stopHoldProgress > 0 }"
                     :style="{ '--stop-progress': stopHoldProgressPercent }"
-                    aria-label="Stop: tieni premuto col mouse per interrompere la sessione"
+                    aria-label="Stop: tieni premuto col mouse oppure attiva e conferma dal volante"
+                    @click="$event.detail === 0 && handleGlobalStop()"
                     @pointerdown.prevent="startStopHold('pointer')"
                     @pointerup.prevent="cancelStopHold"
                     @pointerleave="cancelStopHold"
@@ -1229,6 +1240,9 @@ onBeforeUnmount(() => {
                     @keyup.space.prevent="cancelStopHold"
                   >
                     Stop
+                  </button>
+                  <button v-else type="button" class="secondary-action" data-overlay-wheel-action="cancel-stop" @click="closeShortcutStopConfirm">
+                    Annulla stop
                   </button>
                 </div>
               </template>

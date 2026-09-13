@@ -82,6 +82,7 @@ defineEmits<{
                             <button
                                 type="button"
                                 class="auto-advance-chip"
+                                data-overlay-wheel-action="cancel-auto-advance"
                                 aria-label="Annulla avanzamento automatico"
                                 @click="$emit('cancel-auto-advance')"
                             >
