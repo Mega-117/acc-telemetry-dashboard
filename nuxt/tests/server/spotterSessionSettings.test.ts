@@ -36,16 +36,13 @@ describe('Spotter session settings wiring', () => {
     expect(runtime).toContain('La FIFO audio resta intatta')
   })
 
-  it('accoda l’avviso pressioni dopo il tempo senza dipendere dal toggle tempo giro', () => {
-    const lapWatch = runtime.slice(
-      runtime.indexOf('watch(() => liveLap.value.lapsCompleted'),
-      runtime.indexOf('watch(() => selectedVoice.value'),
-    )
-    expect(lapWatch.indexOf('announceLapTime(newVal)')).toBeLessThan(
-      lapWatch.indexOf('pressureVoiceRuntime.recordFinishCrossing(newVal)'),
-    )
+  it('routes lap and pressure announcements through the coherent fast-state coordinator', () => {
+    // Ordering and the independent lap toggle are exercised by the mounted
+    // renderer tests in components/spotterAudioRuntime.test.ts.
+    expect(runtime).toMatch(/createFinishLineVoiceRuntime\(\{\s*pressure: pressureVoiceRuntime,\s*announceLap: announceLapTime,/)
+    expect(runtime).toMatch(/watch\(fastState, frame => \{\s*if \(canRunSpotterAudio.value\) finishLineVoiceRuntime.update\(frame\)/)
+    expect(runtime).not.toContain('watch(() => liveLap.value.lapsCompleted')
     expect(runtime).toContain('createPressureRecommendationVoiceRuntime')
-    expect(runtime).not.toMatch(/recordFinishCrossing[\s\S]{0,160}lapTimesAllowedForSession/)
   })
 
   it('usa capability attestata, coda riusabile e diagnostica persistente', () => {
