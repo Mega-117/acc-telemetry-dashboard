@@ -19,7 +19,8 @@
     {
       "id": "pressureAdjustmentNeeded",
       "origin": "system",
-      "text": "correzioni pressioni pronta."
+      "text": "correzioni pressioni, pronta!",
+      "speed": 1.3
     }
   ],
   "steps": [
