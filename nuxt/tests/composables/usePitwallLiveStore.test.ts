@@ -92,6 +92,7 @@ function makeLink() {
     members: ref<{ connected: boolean }[]>([]),
     crew: ref<{ uid: string, nickname: string, role: 'manager' | 'member', invited: boolean, driving: boolean, online: boolean, connecting: boolean }[]>([]),
     executor,
+    roomDriving: ref({ executor: null as { uid: string } | null, reason: 'nobody-driving', conflicting: [] }),
     executorLabel: computed(() => (executor.value.reason === 'ready' ? 'al volante' : 'Nessuno al volante')),
     selectedRoomId: computed(() => roomRef.value?.roomId ?? null),
     roomClosed: computed(() => Boolean(roomRef.value?.closedAt)),
@@ -262,11 +263,18 @@ describe('la gara del pilota, vista dal pilota', () => {
     // dirlo che dirlo a caso.
     const mia = room({ hostUid: 'me', memberUids: ['me'], lastLiveAtMs: NOW })
     link.rooms.value = [mia]
-    link.executor.value = { executor: { uid: 'me' }, reason: 'ready', conflicting: [] }
+    link.roomDriving.value = { executor: { uid: 'me' }, reason: 'ready', conflicting: [] }
     expect(store.myRoom.value?.drivingId).toBeNull()
 
     link.room.value = mia
     expect(store.myRoom.value?.drivingId).toBe('me')
+    link.roomDriving.value = { executor: { uid: 'popo' }, reason: 'ready', conflicting: [] }
+    expect(link.executor.value.reason).toBe('nobody-driving')
+    expect(store.myRoom.value?.drivingId).toBe('popo')
+    expect(store.selectedRace.value?.session).toBe('In pista')
+    link.roomDriving.value = { executor: null, reason: 'nobody-driving', conflicting: [] }
+    expect(store.myRoom.value?.drivingId).toBeNull()
+    expect(store.selectedRace.value?.session).toBe('In attesa')
   })
 })
 
@@ -461,7 +469,7 @@ describe('i Pitwall aperti e gli avvisi', () => {
       { uid: 'pilota', nickname: 'RICO117', role: 'manager', invited: false, driving: true, online: true, connecting: false },
       { uid: 'me', nickname: 'popo', role: 'member', invited: false, driving: false, online: false, connecting: true },
     ]
-    link.executor.value = { executor: { uid: 'pilota' }, reason: 'ready', conflicting: [] }
+    link.roomDriving.value = { executor: { uid: 'pilota' }, reason: 'ready', conflicting: [] }
     const race = store.selectedRace.value!
     expect(race.live).toBe(true)
     expect(race.session).toBe('In pista')

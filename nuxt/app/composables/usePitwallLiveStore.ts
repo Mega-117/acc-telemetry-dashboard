@@ -151,7 +151,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
   function sessionLabel(room: PitwallRoom, selected: boolean): string {
     if (room.closedAt) return 'Gara chiusa'
     if (!selected) return 'Entra per vedere chi guida'
-    return link.executor.value.reason === 'ready' ? 'In pista' : 'In attesa'
+    return link.roomDriving.value.reason === 'ready' ? 'In pista' : 'In attesa'
   }
 
   function toRace(room: PitwallRoom): PitwallConceptRace {
@@ -236,8 +236,8 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
       // Chi guida lo si sa solo dalla stanza che si sta guardando in diretta:
       // altrove sarebbe una deduzione da un elenco di identificativi, e si
       // preferisce non dirlo che dirlo a caso.
-      drivingId: selected && link.executor.value.reason === 'ready'
-        ? link.executor.value.executor?.uid ?? null
+      drivingId: selected && link.roomDriving.value.reason === 'ready'
+        ? link.roomDriving.value.executor?.uid ?? null
         : null,
       members: membersOf(room, selected),
       invitedIds: (room.membershipModel === 'social' ? friendViews.value.filter(friend => friend.state === 'friends').map(friend => friend.personId) : room.allowedUids)

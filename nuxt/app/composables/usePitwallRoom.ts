@@ -179,6 +179,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     recoverOrder()
     emitPitwallDiagnostic('target_selected', { uid: myUid.value ?? undefined, targetUid: uid ?? undefined, roomId: selectedRoomId.value ?? undefined })
   }
+  // Room presence must not depend on the selected strategy recipient.
+  const roomDriving = computed(() => resolvePitwallRoomExecutor(members.value, nowTick.value))
   const executor = computed(() => resolvePitwallRoomExecutor(
     selectedTargetUid.value ? members.value.filter(member => member.uid === selectedTargetUid.value) : targetTouched.value ? [] : members.value,
     nowTick.value,
@@ -211,8 +213,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         reconnecting: current.reconnectingUids?.includes(uid)
           || (uid === myUid.value && serviceRef.value?.io?.online() === false),
         connecting: !membersLoaded.value || (presence != null && !isPitwallMemberFresh(presence, nowTick.value) && presence.updatedAtMs === 0),
-        driving: executor.value.executor?.uid === uid
-          || executor.value.conflicting.some(member => member.uid === uid),
+        driving: roomDriving.value.executor?.uid === uid
+          || roomDriving.value.conflicting.some(member => member.uid === uid),
         invited: false,
         isSelf: uid === myUid.value,
       }
@@ -679,6 +681,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     crew,
     carSnapshot,
     executor,
+    roomDriving,
     availableTargets,
     selectedTargetUid,
     selectTarget,
