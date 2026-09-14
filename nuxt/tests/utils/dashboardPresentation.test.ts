@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { OPTIMAL_SHIFT_RPM_BY_ACC_CAR_ID } from '~/config/optimalShiftRpm'
 import type { FastOverlayState } from '~/composables/useFastStatePoller'
 import type { StandingsCarSnapshot } from '~/services/overlay/standingsPresentation'
 import { emptyTyreSetupViewModel } from '~/services/overlay/tyreSetupViewModel'
@@ -7,20 +8,6 @@ import {
   DEFAULT_DASHBOARD_OPTIONS,
   normalizeFuelCriticalLapsThreshold,
 } from '~/utils/dashboardPresentation'
-
-const EXPECTED_SHIFT_RPM = {
-  lamborghini_huracan_gt3_evo2: 8000,
-  porsche_992_gt3_r: 9000,
-  ferrari_296_gt3: 7300,
-  audi_r8_lms_evo_ii: 8000,
-  mercedes_amg_gt3_evo: 7150,
-  bmw_m4_gt3: 7000,
-  amr_v8_vantage_gt3: 6800,
-  honda_nsx_gt3_evo: 11740,
-  mclaren_720s_gt3: 7550,
-  bentley_continental_gt3_2018: 7000,
-  lexus_rc_f_gt3: 7700,
-} as const
 
 function context(car = 'porsche_992_gt3_r', sessionIndex = 1): FastOverlayState['context'] {
   return {
@@ -146,21 +133,18 @@ describe('dashboardPresentation', () => {
   })
 
 
-  it.each(Object.entries(EXPECTED_SHIFT_RPM))(
+  it.each(Object.entries(OPTIMAL_SHIFT_RPM_BY_ACC_CAR_ID))(
     'usa per %s la soglia verificata %i senza fallback',
     (car, threshold) => {
       expect(buildDashboardPresentation(state({ context: context(car), rpm: threshold - 1 })).shiftFlash).toBe(false)
       const atThreshold = buildDashboardPresentation(state({ context: context(car), rpm: threshold }))
       expect(atThreshold.shiftFlash).toBe(true)
       expect(atThreshold.rpmBand).toBe('blue')
+      expect(buildDashboardPresentation(state({ context: context(car), rpm: threshold + 1 })).shiftFlash).toBe(true)
     },
   )
 
   it.each([
-    'bentley_continental_gt3_2016',
-    'porsche_718_cayman_gt4_mr',
-    'porsche_992_gt3_cup',
-    'mclaren_720s_gt3_evo',
     'future_gt3',
     'Ferrari 296 GT3',
   ])('non lampeggia e non mostra il marker per auto non mappata: %s', (car) => {
@@ -184,7 +168,7 @@ describe('dashboardPresentation', () => {
       context: context('honda_nsx_gt3_evo', 2), rpm: 11740,
     })).shiftFlash).toBe(true)
     expect(buildDashboardPresentation(state({
-      context: context('bentley_continental_gt3_2016', 3), rpm: 11740,
+      context: context('bentley_continental_gt3_2016', 3), rpm: 6999,
     })).shiftFlash).toBe(false)
   })
 
@@ -213,7 +197,7 @@ describe('dashboardPresentation', () => {
     expect(mapped.shiftThresholdRatio).toBe(0.73)
 
     const hidden = buildDashboardPresentation(
-      state({ context: context('bentley_continental_gt3_2016'), maxRpm: 10000 }),
+      state({ context: context('future_gt3'), maxRpm: 10000 }),
       { ...DEFAULT_DASHBOARD_OPTIONS, rpmReference: true },
     )
     expect(hidden.shiftThresholdRatio).toBeNull()
