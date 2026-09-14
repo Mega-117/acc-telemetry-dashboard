@@ -5,9 +5,11 @@ import { serialize } from 'node:v8'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import Panel from '~/components/pitwall/PitwallV4OnlinePanel.vue'
 import Application from '~/components/pitwall/PitwallApplicationPanel.vue'
+import * as hostAccess from '~/utils/devToolsAccess'
+const actualIsDevToolsHost = hostAccess.isDevToolsHost
 const contextId = 'a'.repeat(64)
 beforeEach(() => vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL: '/' } })))
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 it.each(['/', '/acc-telemetry-dashboard/docs/'])('loads the form under the configured app base %s', (baseURL) => {
   vi.stubGlobal('useRuntimeConfig', () => ({ app: { baseURL } }))
   const wrapper = mount(Panel)
@@ -73,12 +75,33 @@ it('shows manual-send failures and publishes readiness to the frame', async () =
   message(w, 'draft', { fuel: 0 }); message(w, 'submit', { contextId }); await flushPromises()
   expect(w.text()).toContain('Permission denied'); w.unmount()
 })
-it('Standard stays default and the method switch suspends its draft', async () => {
+it.each(['racercore-develop.pages.dev', 'mega-117.github.io'])('shows only V4 online on %s and suspends the hidden Standard draft', async (host) => {
+  vi.spyOn(hostAccess, 'isDevToolsHost').mockImplementation(() => actualIsDevToolsHost(host))
   const p = port(); const w = mount(Application, { attachTo: document.body, props: { port: p as never } })
-  expect(w.get('button[aria-pressed=true]').text()).toBe('Standard')
-  await w.findAll('button')[1]!.trigger('click'); expect(p.draftSuspended.value).toBe(true)
-  p.sending.value = true; await flushPromises(); expect(w.findAll('button')[0]!.attributes('disabled')).toBeDefined()
-  w.unmount()
+  try {
+    expect(w.get('button[aria-pressed=true]').text()).toBe('V4 online')
+    expect(w.findAll('.methods button').map(button => button.text())).toEqual(['V4 online'])
+    expect(w.get('iframe').isVisible()).toBe(true)
+    expect(p.draftSuspended.value).toBe(true)
+    p.sending.value = true; await flushPromises()
+    expect(w.get('.methods button').attributes('disabled')).toBeDefined()
+  } finally { w.unmount() }
+})
+it.each(['localhost', '127.0.0.1', '::1'])('allows Standard only on local host %s, keeping V4 as default', async (host) => {
+  vi.spyOn(hostAccess, 'isDevToolsHost').mockImplementation(() => actualIsDevToolsHost(host))
+  const p = port(); const w = mount(Application, { attachTo: document.body, props: { port: p as never } })
+  try {
+    await flushPromises()
+    expect(w.get('button[aria-pressed=true]').text()).toBe('V4 online')
+    expect(w.findAll('.methods button').map(button => button.text())).toEqual(['Standard', 'V4 online'])
+    await w.get('.methods button').trigger('click')
+    expect(w.get('button[aria-pressed=true]').text()).toBe('Standard')
+    expect(p.draftSuspended.value).toBe(false)
+    expect(w.get('iframe').isVisible()).toBe(false)
+    await w.findAll('.methods button')[1]!.trigger('click')
+    expect(p.draftSuspended.value).toBe(true)
+    expect(w.get('iframe').isVisible()).toBe(true)
+  } finally { w.unmount() }
 })
 it('publishes cloneable room, crew and draft data across the iframe boundary', async () => {
   const p = port()

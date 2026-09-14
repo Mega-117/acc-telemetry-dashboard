@@ -9,13 +9,16 @@ import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
 import { usePitwallConceptState } from '~/composables/usePitwallConceptState'
 import { providePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
 import { providePitwallStore } from '~/composables/usePitwallStore'
-import { canUseDevTools } from '~/utils/devToolsAccess'
+import { canUseDevTools, isDevToolsHost } from '~/utils/devToolsAccess'
+import { onMounted } from 'vue'
 
 definePageMeta({
   layout: 'dashboard'
 })
 
 const v4Local = ref(false)
+const localViewsAvailable = ref(false)
+onMounted(() => { localViewsAvailable.value = isDevToolsHost() })
 const route = useRoute()
 const { legacy, setLegacy } = usePitwallConceptMode()
 
@@ -26,15 +29,15 @@ if (demo.value) providePitwallStore(usePitwallConceptState())
 
 <template>
   <div class="pitwall-route">
-    <div class="pitwall-view-switch" aria-label="Seleziona vista Pit Wall">
+    <div v-if="localViewsAvailable" class="pitwall-view-switch" aria-label="Seleziona vista Pit Wall">
       <span>Vista</span>
       <button :class="{ active: !v4Local && !legacy }" @click="v4Local = false; setLegacy(false)">Pit Wall</button>
       <button :class="{ active: !v4Local && legacy }" @click="v4Local = false; setLegacy(true)">Legacy</button>
       <button :class="{ active: v4Local }" @click="v4Local = true">V4 locale</button>
       <em v-if="demo" class="pitwall-view-switch__demo">demo</em>
     </div>
-    <PitwallV4Local v-if="v4Local" />
-    <PitwallPage v-else-if="legacy" />
+    <PitwallV4Local v-if="localViewsAvailable && v4Local" />
+    <PitwallPage v-else-if="localViewsAvailable && legacy" />
     <PitwallConcept v-else />
   </div>
 </template>
