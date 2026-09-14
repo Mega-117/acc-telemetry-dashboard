@@ -7,6 +7,7 @@ definePageMeta({ layout: 'dashboard' })
 
 const router = useRouter()
 const ready = ref(false)
+const section = ref<'commands' | 'startup'>('commands')
 const bridge = useWheelInputBridge()
 
 onBeforeRouteLeave(async () => { await bridge.finishConfiguration() })
@@ -29,17 +30,22 @@ onMounted(async () => {
     <header class="settings-page__title">
       <p>{{ PRODUCT.displayName }}</p>
       <h1>Impostazioni</h1>
-      <span>Personalizza i controlli della tua postazione.</span>
+      <span>Personalizza il programma e i controlli della tua postazione.</span>
     </header>
     <div class="settings-shell">
       <aside aria-label="Sezioni impostazioni">
-        <button type="button" class="is-active">
+        <button type="button" :class="{ 'is-active': section === 'commands' }" :aria-pressed="section === 'commands'" @click="section = 'commands'">
           <span aria-hidden="true">⌘</span>
           Comandi
         </button>
+        <button type="button" :class="{ 'is-active': section === 'startup' }" :aria-pressed="section === 'startup'" @click="section = 'startup'">
+          <span aria-hidden="true">⏻</span>
+          Avvio
+        </button>
       </aside>
       <main>
-        <SettingsCommandBindingsPanel />
+        <SettingsCommandBindingsPanel v-show="section === 'commands'" />
+        <SettingsStartupPanel v-if="section === 'startup'" />
       </main>
     </div>
   </div>

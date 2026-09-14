@@ -67,6 +67,8 @@ export default defineConfig({
         'app/composables/useOverlayActionSelection.ts',
         'app/components/overlay/InfoTargetSetup.vue',
         'app/components/settings/CommandBindingsPanel.vue',
+        'app/components/settings/StartupPanel.vue',
+        'app/pages/impostazioni.vue',
         'app/components/session-detail/SessionDetailPanelMode.vue',
         'app/components/session-detail/SessionAdvancedDebrief.vue',
         'app/components/session-detail/advanced/AdvancedDebriefContext.vue',
