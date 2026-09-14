@@ -182,6 +182,8 @@ function getInfoOptions(keys: InfoSettingKey[]) {
   return infoOptionDefinitions.filter(option => keys.includes(option.key))
 }
 const positioning = ref(false)
+const placementBusy = ref(false)
+const placementError = ref('')
 const trainingOpen = ref(false)
 // Stato "in guida" (PIP-177): quando attivo, gli overlay abilitati appaiono da
 // soli nella posizione salvata; tornando ai menu spariscono.
@@ -243,10 +245,12 @@ function applyPlacementStatus(status: any) {
   placementAutoSaveMs.value = Number.isFinite(Number(status.autoSaveMs)) ? Number(status.autoSaveMs) : 60000
 }
 
-async function refreshPlacementStatus() {
+async function refreshPlacementStatus(strict = false) {
   const api = getApi()
   if (!apiReady.value || typeof api?.hudOverlayGetPlacementStatus !== 'function') return
-  try { applyPlacementStatus(await api.hudOverlayGetPlacementStatus()) } catch { /* bridge non aggiornato */ }
+  try { applyPlacementStatus(await api.hudOverlayGetPlacementStatus()) } catch (error) {
+    if (strict) throw error
+  }
 }
 
 async function refreshState() {
@@ -431,22 +435,41 @@ onUnmounted(() => {
 })
 
 async function saveAndLock() {
-  const api = getApi()
-  if (!apiReady.value || !api?.hudOverlaySetAllPlacement) return
-  await api.hudOverlaySetAllPlacement(false)
-  await refreshPlacementStatus()
-  await refreshOverlayVisibility()
-  positionSaved.value = true
-  setTimeout(() => { positionSaved.value = false }, 1600)
+  await changePlacement(false)
 }
 
 async function startPositioning() {
-  const api = getApi()
-  if (!apiReady.value || !api?.hudOverlaySetAllPlacement) return
-  await api.hudOverlaySetAllPlacement(true)
-  await refreshPlacementStatus()
-  await refreshOverlayVisibility()
+  await changePlacement(true)
+}
+
+async function changePlacement(active: boolean) {
+  if (placementBusy.value) return
+  placementError.value = ''
   positionSaved.value = false
+  const api = getApi()
+  if (!apiReady.value || typeof api?.hudOverlaySetAllPlacement !== 'function') {
+    placementError.value = 'Comando non disponibile. Riapri la pagina HUD e riprova.'
+    return
+  }
+  placementBusy.value = true
+  try {
+    const confirmed = await api.hudOverlaySetAllPlacement(active)
+    if (typeof confirmed !== 'boolean') throw new Error('Invalid placement response')
+    positioning.value = confirmed
+    await refreshPlacementStatus(true)
+    if (positioning.value !== active) throw new Error('Placement not confirmed')
+    await refreshOverlayVisibility()
+    positionSaved.value = !active
+  } catch {
+    // A command may have reached Electron even if its response was lost.
+    // Read back the actual state so the next action is still available.
+    await refreshPlacementStatus()
+    placementError.value = active
+      ? 'Impossibile confermare la modifica delle posizioni. Riprova.'
+      : 'Impossibile confermare il salvataggio e il blocco. Riprova.'
+  } finally {
+    placementBusy.value = false
+  }
 }
 
 async function toggleHud(id: HudOverlayId) {
@@ -651,12 +674,13 @@ async function toggleTraining() {
               <b>{{ placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }}s</b> di inattività.
             </span>
             <span v-else>Posizioni salvate e bloccate.</span>
+            <span v-if="placementError" role="alert">{{ placementError }}</span>
           </div>
           <div class="test-hud__placement-actions">
             <button
               type="button"
               class="btn btn--primary"
-              :disabled="!apiReady || positioning"
+              :disabled="!apiReady || positioning || placementBusy"
               @click="startPositioning"
             >
               {{ positioning ? 'Modifica attiva' : 'Modifica posizioni' }}
@@ -664,7 +688,7 @@ async function toggleTraining() {
             <button
               type="button"
               class="btn"
-              :disabled="!apiReady || !positioning"
+              :disabled="!apiReady || !positioning || placementBusy"
               @click="saveAndLock"
             >
               {{ positionSaved ? 'Salvato' : 'Salva e blocca' }}
