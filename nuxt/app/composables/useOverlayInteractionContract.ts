@@ -94,7 +94,7 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
     if (!started || !selectors) return
     const surfaceRects = collectRects(selectors.surfaceSelector)
     const controlRects = collectRects(selectors.controlSelector)
-    void api()?.overlayInteractionUpdateContract?.({
+    return api()?.overlayInteractionUpdateContract?.({
       interactive: true,
       forcedCapture: options.isForcedCapture?.() === true,
       visualRects: surfaceRects,
@@ -127,6 +127,17 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
   function refresh() {
     observeCurrentElements()
     scheduleRefresh()
+  }
+
+  // Hidden Electron renderers may defer animation frames. Reopen must await
+  // publication of the current hit regions before acknowledging readiness.
+  function refreshNow() {
+    if (scheduledFrame !== null) {
+      window.cancelAnimationFrame(scheduledFrame)
+      scheduledFrame = null
+    }
+    observeCurrentElements()
+    return publishContract()
   }
 
   function handlePointerDown(event: PointerEvent) {
@@ -203,5 +214,6 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
     start,
     stop,
     refresh,
+    refreshNow,
   }
 }

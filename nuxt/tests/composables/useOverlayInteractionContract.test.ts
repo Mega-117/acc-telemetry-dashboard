@@ -73,6 +73,30 @@ function makeApi() {
 }
 
 describe('useOverlayInteractionContract', () => {
+  it('publishes and awaits hit regions even when a hidden renderer has no animation frame', async () => {
+    const { control, fakeWindow } = installDom()
+    fakeWindow.requestAnimationFrame = vi.fn(() => 42)
+    const { api } = makeApi()
+    let acknowledge!: () => void
+    api.overlayInteractionUpdateContract.mockImplementation(() => new Promise<void>(resolve => { acknowledge = resolve }))
+    const interaction = useOverlayInteractionContract({ getApi: () => api })
+    interaction.start({ surfaceSelector: '.surface', controlSelector: '.control' })
+    expect(api.overlayInteractionUpdateContract).not.toHaveBeenCalled()
+    control.rect.y = 40
+    let ready = false
+    const pending = Promise.resolve(interaction.refreshNow()).then(() => { ready = true })
+    await Promise.resolve()
+    expect(ready).toBe(false)
+    expect(api.overlayInteractionUpdateContract).toHaveBeenLastCalledWith(expect.objectContaining({
+      controlRects: [{ x: 140, y: 40, width: 50, height: 20 }],
+    }))
+    acknowledge()
+    await pending
+    expect(ready).toBe(true)
+    interaction.stop()
+    interaction.refreshNow()
+    expect(api.overlayInteractionUpdateContract).toHaveBeenCalledTimes(1)
+  })
   it.each(['transitionend', 'transitioncancel', 'animationend', 'animationcancel'])('refreshes translated controls after %s and cleans up', async (eventName) => {
     const { control, fakeWindow } = installDom()
     const { api } = makeApi()

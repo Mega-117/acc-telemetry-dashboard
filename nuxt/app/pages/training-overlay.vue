@@ -592,8 +592,10 @@ async function prepareOverlayReopen(revision?: number) {
   await nextTick()
   // Settle the hidden card without its normal morph animation before acknowledging.
   void overlayRoot.value?.offsetHeight
-  await getOverlayApi()?.trainingOverlayPrepared?.(revision)
   preparingReopen.value = false
+  await nextTick()
+  await interactionContract.refreshNow()
+  await getOverlayApi()?.trainingOverlayPrepared?.(revision)
 }
 
 function runBackAction() {
