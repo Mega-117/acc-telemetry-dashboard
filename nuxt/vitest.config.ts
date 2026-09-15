@@ -167,6 +167,7 @@ export default defineConfig({
         'app/utils/completedLapHoldSample.ts',
         'app/utils/customSectorReferences.ts',
         'app/components/overlay/SectorReferenceSetup.vue',
+        'app/components/overlay/SetupFuelPanel.vue',
         'app/services/spotter/trackVoiceReferences.ts',
         'app/services/spotter/trackVoiceReferenceRuntime.ts',
         'app/services/spotter/trackVoiceReferenceChanges.ts',

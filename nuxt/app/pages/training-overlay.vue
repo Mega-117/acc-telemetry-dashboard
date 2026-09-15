@@ -29,6 +29,7 @@ import {
 } from '~/composables/useOverlaySettings'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
+import SetupFuelPanel from '~/components/overlay/SetupFuelPanel.vue'
 import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
 import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
@@ -1054,6 +1055,7 @@ onBeforeUnmount(() => {
                         · {{ qaBotState.speedKmh ?? 0 }} km/h · giri validi {{ qaBotState.lapsValid }}/{{ qaBotState.lapsCompleted }}
                       </template>
                     </p>
+                    <SetupFuelPanel :api="getOverlayApi()" />
                     <PitwallOverlayButton
                       :api="getOverlayApi()"
                       :selected="selectedWheelActionId === 'pitwall'"
