@@ -33,6 +33,8 @@ const EMPTY_POINTER_STATE: OverlayPointerState = {
   cursor: 'default',
 }
 
+const LAYOUT_SETTLED_EVENTS = ['transitionend', 'transitioncancel', 'animationend', 'animationcancel'] as const
+
 function rectPayload(element: Element) {
   const rect = element.getBoundingClientRect()
   if (!(rect.width > 0 && rect.height > 0)) return null
@@ -149,6 +151,9 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
     }
     window.addEventListener('resize', refresh, true)
     window.addEventListener('scroll', scheduleRefresh, true)
+    // A transform can move controls without a ResizeObserver notification.
+    // Publish their final positions when the card/selection animation settles.
+    for (const event of LAYOUT_SETTLED_EVENTS) window.addEventListener(event, scheduleRefresh, true)
     window.addEventListener('pointerdown', handlePointerDown, true)
     window.addEventListener('pointerup', handlePointerUp, true)
     window.addEventListener('pointercancel', handlePointerUp, true)
@@ -183,6 +188,7 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', refresh, true)
       window.removeEventListener('scroll', scheduleRefresh, true)
+      for (const event of LAYOUT_SETTLED_EVENTS) window.removeEventListener(event, scheduleRefresh, true)
       window.removeEventListener('pointerdown', handlePointerDown, true)
       window.removeEventListener('pointerup', handlePointerUp, true)
       window.removeEventListener('pointercancel', handlePointerUp, true)

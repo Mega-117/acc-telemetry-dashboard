@@ -73,6 +73,23 @@ function makeApi() {
 }
 
 describe('useOverlayInteractionContract', () => {
+  it.each(['transitionend', 'transitioncancel', 'animationend', 'animationcancel'])('refreshes translated controls after %s and cleans up', async (eventName) => {
+    const { control, fakeWindow } = installDom()
+    const { api } = makeApi()
+    const interaction = useOverlayInteractionContract({ getApi: () => api })
+    interaction.start({ surfaceSelector: '.surface', controlSelector: '.control' })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    // Translation changes the hit position without resizing the element.
+    control.rect.y = 40
+    fakeWindow.dispatch(eventName)
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(api.overlayInteractionUpdateContract).toHaveBeenLastCalledWith(expect.objectContaining({ controlRects: [{ x: 140, y: 40, width: 50, height: 20 }] }))
+    interaction.stop()
+    const calls = api.overlayInteractionUpdateContract.mock.calls.length
+    fakeWindow.dispatch(eventName)
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(api.overlayInteractionUpdateContract).toHaveBeenCalledTimes(calls)
+  })
   it('updates hit areas after scrolling and removes the listener on stop', async () => {
     const { control, fakeWindow } = installDom()
     const { api } = makeApi()
