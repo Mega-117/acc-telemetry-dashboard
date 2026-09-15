@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 const props = defineProps<{ api: any }>()
 const open = ref(false), mode = ref('minutes'), minutes = ref(10), pending = ref(false), error = ref('')
 const state = ref<any>(null)
+const previewPending = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
 let generation = 0
 let initialized = false
@@ -15,6 +16,7 @@ const statusMessage = computed(() => pending.value ? 'Applicazione in corso…'
 async function refresh() {
   if (disposed || pending.value) return
   const token = ++generation
+  previewPending.value = true
   clearTimeout(timer)
   try {
     const value = await props.api?.trainingOverlayPreviewSetupFuel?.({ mode: mode.value, minutes: minutes.value })
@@ -28,9 +30,11 @@ async function refresh() {
     if (value && error.value.startsWith('Anteprima carburante')) error.value = ''
     if (!value) error.value = 'Riavvia Racer Core per attivare il comando carburante.'
   } catch { if (token === generation) { state.value = null; error.value = 'Anteprima carburante non disponibile. Riprovo automaticamente.' } }
+  finally { if (token === generation) previewPending.value = false }
   if (token === generation && open.value) timer = setTimeout(refresh, 1500)
 }
-watch([open, mode, minutes], () => { state.value = null; error.value = ''; if (open.value) void refresh(); else { generation++; clearTimeout(timer) } })
+// Keep the displayed estimate mounted while recalculating; only a fresh preview can be applied.
+watch([open, mode, minutes], () => { error.value = ''; if (open.value) void refresh(); else { generation++; clearTimeout(timer); state.value = null; previewPending.value = false } }, { flush: 'sync' })
 watch(open, value => { if (!value) initialized = false })
 function adjust(amount: number) {
   if (pending.value) return
@@ -52,7 +56,7 @@ async function keyboard(event: PointerEvent) {
   }
 }
 async function apply() {
-  if (!state.value?.available || pending.value) return
+  if (!state.value?.available || pending.value || previewPending.value) return
   pending.value = true; error.value = ''; generation++; clearTimeout(timer)
   const expected = plan.value
   try {
@@ -86,7 +90,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); void
         <details><summary>Come è calcolato</summary><p>{{ plan.consumptionSource }}. {{ plan.paceSource }}.</p><p v-for="note in plan.notes" :key="note">{{ note }}</p></details>
       </template>
 
-      <button class="fuel-apply" type="button" data-overlay-wheel-action="fuel-apply" :disabled="!state?.available || pending" @click="apply">{{ pending ? 'Applicazione…' : `Applica carburante${plan?.ok ? ` · ${plan.totalLitres} L` : ''}` }}</button>
+      <button class="fuel-apply" type="button" data-overlay-wheel-action="fuel-apply" :disabled="!state?.available || pending || previewPending" @click="apply">{{ pending ? 'Applicazione…' : `Applica carburante${plan?.ok ? ` · ${plan.totalLitres} L` : ''}` }}</button>
       <div class="fuel-status" role="status" aria-live="polite"><strong>Stato carburante</strong><p>{{ statusMessage }}</p></div>
     </div>
   </section>

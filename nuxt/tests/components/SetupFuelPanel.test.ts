@@ -37,3 +37,22 @@ it('shows readable blocked state and failed apply inside dedicated status area',
 it('failed preview disables a previously available action and explains failure',async()=>{
  const api=await mount();expect(button('fuel-apply').disabled).toBe(false);button('fuel').click();await flush();api.trainingOverlayPreviewSetupFuel.mockRejectedValue(Error('offline'));button('fuel').click();await flush();expect(button('fuel-apply').disabled).toBe(true);expect(document.querySelector('[role="status"]')?.textContent).toContain('Anteprima carburante non disponibile')
 })
+
+it('keeps the summary and expanded details mounted while minutes recalculate, blocking stale apply',async()=>{
+ const api=await mount();const total=document.querySelector('.fuel-total');const details=document.querySelector('details')!;details.open=true
+ let done:any;api.trainingOverlayPreviewSetupFuel.mockImplementationOnce(()=>new Promise(r=>done=r))
+ button('fuel-plus').click();await flush()
+ expect(document.querySelector('.fuel-total')).toBe(total);expect(document.querySelector('details')).toBe(details);expect(details.open).toBe(true)
+ expect(button('fuel-apply').disabled).toBe(true);button('fuel-apply').click();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled()
+ done({available:true,sessionType:0,plan:{ok:true,totalLitres:28,contextKey:'session',durationMs:660000,consumption:2.9,referenceLapMs:102000,notes:[]}});await flush()
+ expect(document.querySelector('.fuel-total')).toBe(total);expect(total?.textContent).toContain('28');expect(button('fuel-apply').disabled).toBe(false)
+ button('fuel-apply').click();await flush();expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledWith({mode:'minutes',minutes:11,contextKey:'session',totalLitres:28})
+})
+it('only the latest rapid duration preview can unlock apply',async()=>{
+ const api=await mount();let first:any,second:any
+ api.trainingOverlayPreviewSetupFuel.mockImplementationOnce(()=>new Promise(r=>first=r)).mockImplementationOnce(()=>new Promise(r=>second=r))
+ button('fuel-plus').click();await flush();button('fuel-minus').click();await flush()
+ const preview=(totalLitres:number)=>({available:true,sessionType:0,plan:{ok:true,totalLitres,contextKey:'session',durationMs:600000,consumption:2.9,referenceLapMs:102000,notes:[]}})
+ first(preview(28));await flush();expect(button('fuel-apply').disabled).toBe(true);expect(document.querySelector('.fuel-total')?.textContent).toContain('25')
+ second(preview(26));await flush();expect(button('fuel-apply').disabled).toBe(false);expect(document.querySelector('.fuel-total')?.textContent).toContain('26')
+})
