@@ -644,7 +644,7 @@ function executePrimaryAction() {
 
 // ─── Contratto interazione overlay (solo Electron) ────────────────────────────
 const OVERLAY_SURFACE_SELECTOR = '.overlay-card, .launcher-tools, .placement-work-area, .overlay-dev-toggle, .voice-point-notice'
-const OVERLAY_CONTROL_SELECTOR = 'button, input, select, textarea, [data-overlay-interactive]'
+const OVERLAY_CONTROL_SELECTOR = 'button, input, select, textarea, summary, .overlay-content--launcher, [data-overlay-interactive]'
 const interactionContract = useOverlayInteractionContract({
   getApi: getOverlayApi,
   isForcedCapture: () => phase.value === 'placement',

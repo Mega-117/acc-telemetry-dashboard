@@ -73,6 +73,22 @@ function makeApi() {
 }
 
 describe('useOverlayInteractionContract', () => {
+  it('updates hit areas after scrolling and removes the listener on stop', async () => {
+    const { control, fakeWindow } = installDom()
+    const { api } = makeApi()
+    const interaction = useOverlayInteractionContract({ getApi: () => api })
+    interaction.start({ surfaceSelector: '.surface', controlSelector: '.control' })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    control.rect.y = 20
+    fakeWindow.dispatch('scroll')
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(api.overlayInteractionUpdateContract).toHaveBeenLastCalledWith(expect.objectContaining({ controlRects: [{ x: 140, y: 20, width: 50, height: 20 }] }))
+    interaction.stop()
+    const calls = api.overlayInteractionUpdateContract.mock.calls.length
+    fakeWindow.dispatch('scroll')
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(api.overlayInteractionUpdateContract).toHaveBeenCalledTimes(calls)
+  })
   beforeEach(() => installDom())
   afterEach(() => {
     vi.unstubAllGlobals()

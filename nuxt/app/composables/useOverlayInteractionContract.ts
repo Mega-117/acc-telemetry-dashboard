@@ -148,6 +148,7 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
       removePointerListener = bridge.onOverlayInteractionPointerState(applyPointerState)
     }
     window.addEventListener('resize', refresh, true)
+    window.addEventListener('scroll', scheduleRefresh, true)
     window.addEventListener('pointerdown', handlePointerDown, true)
     window.addEventListener('pointerup', handlePointerUp, true)
     window.addEventListener('pointercancel', handlePointerUp, true)
@@ -181,6 +182,7 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
     removePointerListener = null
     if (typeof window !== 'undefined') {
       window.removeEventListener('resize', refresh, true)
+      window.removeEventListener('scroll', scheduleRefresh, true)
       window.removeEventListener('pointerdown', handlePointerDown, true)
       window.removeEventListener('pointerup', handlePointerUp, true)
       window.removeEventListener('pointercancel', handlePointerUp, true)

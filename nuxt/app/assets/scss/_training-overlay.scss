@@ -317,7 +317,9 @@
 }
 
 .overlay-content--launcher {
-  width: 282px;
+    width: 282px;
+    min-height: 0;
+    overflow: hidden auto;
 }
 
 .overlay-content--launcher.overlay-content--target {

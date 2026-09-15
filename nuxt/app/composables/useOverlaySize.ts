@@ -34,6 +34,7 @@ export function useOverlaySize(
   let overlaySizeRetry: ReturnType<typeof setTimeout> | null = null
   let lastRequest: { preset: OverlaySizePreset; width?: number; height?: number } | null = null
   let resizeObserver: ResizeObserver | null = null
+  let contentObserver: MutationObserver | null = null
   let morphCommitTimer: ReturnType<typeof setTimeout> | null = null
   // Dimensione target della card in px: il renderer la transiziona via CSS
   // mentre la finestra (gia' espansa alla dimensione contenitiva) aspetta il commit.
@@ -89,13 +90,22 @@ export function useOverlaySize(
     if (skip && !immediate) return
     // La card riceve la dimensione target (finestra meno padding work area) e
     // la transiziona; in placement resta il riempimento pieno via CSS.
-    cardSize.value = preset === 'placement'
+    if (!skip) cardSize.value = preset === 'placement'
       ? null
       : {
           width: size.width - OVERLAY_SURFACE_PADDING * 2,
           height: size.height - OVERLAY_SURFACE_PADDING * 2,
         }
-    if (!skip) await getApi()?.trainingOverlaySetSize?.(req)
+    if (!skip) {
+      const bounds = await getApi()?.trainingOverlaySetSize?.(req)
+      // Electron puo' limitare l'altezza al monitor: anche la card deve rispettarla.
+      if (lastRequest === req && preset !== 'placement' && bounds?.height > 0) {
+        cardSize.value = {
+          width: Math.min(size.width, bounds.width || size.width) - OVERLAY_SURFACE_PADDING * 2,
+          height: Math.min(size.height, bounds.height) - OVERLAY_SURFACE_PADDING * 2,
+        }
+      }
+    }
     if (immediate) {
       if (morphCommitTimer) clearTimeout(morphCommitTimer)
       morphCommitTimer = null
@@ -119,6 +129,8 @@ export function useOverlaySize(
   function disconnectResizeObserver() {
     resizeObserver?.disconnect()
     resizeObserver = null
+    contentObserver?.disconnect()
+    contentObserver = null
   }
 
   function connectResizeObserver() {
@@ -128,6 +140,22 @@ export function useOverlaySize(
     disconnectResizeObserver()
     resizeObserver = new ResizeObserver(() => scheduleOverlaySizeSync(1))
     resizeObserver.observe(el)
+    const observeContent = () => {
+      const surface = el.querySelector(OVERLAY_CONTENT_SELECTOR)
+      if (!surface) return
+      resizeObserver?.observe(surface)
+      // Il root resta grande quanto la finestra: osservare anche i figli naturali
+      // rileva carburante, dettagli e messaggi che crescono dentro un contenitore limitato.
+      for (const child of surface.children) resizeObserver?.observe(child)
+    }
+    observeContent()
+    contentObserver = new MutationObserver((records) => {
+      if (!records.some(record => record.type === 'attributes'
+        || [...record.addedNodes, ...record.removedNodes].some(node => node.nodeType === 1))) return
+      observeContent()
+      scheduleOverlaySizeSync(1)
+    })
+    contentObserver.observe(el, { childList: true, subtree: true, attributes: true, attributeFilter: ['open'] })
   }
 
   function cleanup() {
