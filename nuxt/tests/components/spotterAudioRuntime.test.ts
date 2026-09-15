@@ -15,6 +15,8 @@ vi.mock('~/services/spotter/trackVoiceReferenceChanges', () => ({ subscribeTrack
 
 let app: ReturnType<typeof createApp>
 let host: HTMLElement
+let targetUpdate: (settings: any) => void
+let removeTargetListener: ReturnType<typeof vi.fn>
 async function settle() { for (let i = 0; i < 30; i++) await nextTick() }
 async function feed(lap: number, session: string, valid = true, time = 101_900) {
   mocks.fast.value = {
@@ -32,7 +34,7 @@ beforeEach(() => {
   mocks.fast = ref({ isFresh: false, tyreSetup: { pressureRecommendation: null } })
   mocks.live = ref({ lapsCompleted: null, track: null }) // live poller never reports crossings
   mocks.played = []
-  mocks.settings = { selectedVoice: ref('if_sara'), coachEnabled: ref(true), pressureWarningsEnabled: ref(true),
+  mocks.settings = { targetLapVoiceEnabled: ref(true), selectedVoice: ref('if_sara'), coachEnabled: ref(true), pressureWarningsEnabled: ref(true),
     referencesEnabled: ref(false), adaptiveCoachEnabled: ref(false), adaptiveCoachMode: ref('all'),
     lapTimeSessionModes: ref(['practice']), pressureWarningSessionModes: ref(['practice']),
     referenceSessionModes: ref(['practice']), adaptiveCoachSessionModes: ref(['practice']), load() {} }
@@ -44,10 +46,15 @@ beforeEach(() => {
     async play() { mocks.played.push(this.path); queueMicrotask(() => this.onended?.()) }
     pause() {}
   })
+  removeTargetListener = vi.fn()
+  ;(window as any).electronAPI = {
+    infoTargetGetSettings: async () => ({ active: false, targetTimeMs: null, toleranceMs: 500 }),
+    onInfoTargetSettings: (callback: (settings: any) => void) => { targetUpdate = callback; return removeTargetListener },
+  }
   host = document.createElement('div'); document.body.appendChild(host)
   app = createApp(SpotterAudio); app.mount(host)
 })
-afterEach(() => { app.unmount(); host.remove(); vi.unstubAllGlobals() })
+afterEach(() => { app.unmount(); expect(removeTargetListener).toHaveBeenCalledOnce(); delete (window as any).electronAPI; host.remove(); vi.unstubAllGlobals() })
 
 it('plays each lap and then third-lap pressure across server/track changes without live-state crossings', async () => {
   for (const session of ['A', 'B']) for (let lap = 0; lap <= 3; lap++) await feed(lap, session)
@@ -70,4 +77,30 @@ it('pressure still speaks when lap times are disabled', async () => {
   mocks.settings.coachEnabled.value = false
   await feed(0, 'A'); await feed(1, 'A'); await feed(2, 'A'); await feed(3, 'A')
   expect(mocks.played).toEqual(['/voice/qualifying/pressureAdjustmentNeeded-if_sara.wav'])
+})
+
+it('target broadcasts beat an older initial IPC response and work independently of lap/pressure voice', async () => {
+  // Sent while the initial async get is pending: the older inactive snapshot must not win.
+  targetUpdate({ active: true, targetTimeMs: 101_900, toleranceMs: 500, keepBetweenSessions: false })
+  mocks.settings.coachEnabled.value = false
+  mocks.settings.pressureWarningsEnabled.value = false
+  await feed(0, 'A'); await feed(1, 'A'); await feed(1, 'A')
+  await feed(2, 'A', true, 102_401); await feed(3, 'A', false)
+  expect(mocks.played).toEqual(['/voice/qualifying/targetInside-if_sara.wav', '/voice/qualifying/targetOutside-if_sara.wav'])
+  mocks.settings.targetLapVoiceEnabled.value = false; await feed(4, 'A')
+  mocks.settings.targetLapVoiceEnabled.value = true; await feed(4, 'A')
+  expect(mocks.played).toHaveLength(2)
+  mocks.settings.selectedVoice.value = 'im_nicola'; await feed(5, 'A')
+  expect(mocks.played.at(-1)).toBe('/voice/qualifying/targetInside-im_nicola.wav')
+  targetUpdate({ active: false, targetTimeMs: null, toleranceMs: 500 }); await feed(6, 'A')
+  expect(mocks.played).toHaveLength(3)
+})
+it('mounted audio queues target after the lap and same-frame pressure warning', async () => {
+  targetUpdate({ active: true, targetTimeMs: 101_900, toleranceMs: 500, keepBetweenSessions: false })
+  await feed(2, 'A'); await feed(3, 'A')
+  expect(mocks.played).toEqual([
+    '/voice/qualifying/lap-time-1019-if_sara.wav',
+    '/voice/qualifying/pressureAdjustmentNeeded-if_sara.wav',
+    '/voice/qualifying/targetInside-if_sara.wav',
+  ])
 })

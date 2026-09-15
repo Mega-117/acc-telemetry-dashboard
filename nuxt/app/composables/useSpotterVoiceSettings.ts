@@ -17,6 +17,7 @@ export const spotterVoiceOptions: Array<{ id: SpotterVoiceId; label: string }> =
 
 const STORAGE_KEYS = {
   voice: 'acc.spotter.voice',
+  targetLapVoiceEnabled: 'acc.spotter.targetLap.enabled',
   pressureWarningsEnabled: 'acc.spotter.pressureWarnings.enabled',
   pressureWarningSessionModes: 'acc.spotter.pressureWarnings.sessionModes',
   referencesEnabled: 'acc.trackVoiceReferences.enabled',
@@ -43,6 +44,7 @@ const adaptiveCoachEnabled = ref(false)
 const adaptiveCoachSessionModes = ref<SpotterSessionMode[]>([...DEFAULT_SPOTTER_SESSION_MODES])
 const adaptiveCoachMode = ref<AdaptiveCoachMode>('focus')
 const loaded = ref(false)
+const targetLapVoiceEnabled = ref(true)
 const pressureWarningsEnabled = ref(true)
 const pressureWarningSessionModes = ref<SpotterSessionMode[]>([...SPOTTER_SESSION_MODES])
 
@@ -57,6 +59,7 @@ function canUseStorage() {
 function readSettings() {
   if (!canUseStorage()) return
   selectedVoice.value = resolveVoiceId(window.localStorage.getItem(STORAGE_KEYS.voice))
+  targetLapVoiceEnabled.value = window.localStorage.getItem(STORAGE_KEYS.targetLapVoiceEnabled) !== '0'
   const pressureRaw = window.localStorage.getItem(STORAGE_KEYS.pressureWarningsEnabled)
   pressureWarningsEnabled.value = pressureRaw === null ? true : pressureRaw === '1'
   const pressureModesRaw = window.localStorage.getItem(STORAGE_KEYS.pressureWarningSessionModes)
@@ -152,6 +155,11 @@ function toggleLapTimeSessionMode(mode: SpotterSessionMode) {
   setLapTimeSessionModes(toggleSpotterSessionMode(lapTimeSessionModes.value, mode))
 }
 
+function setTargetLapVoiceEnabled(enabled: boolean) {
+  targetLapVoiceEnabled.value = enabled
+  writeSetting(STORAGE_KEYS.targetLapVoiceEnabled, enabled ? '1' : '0')
+}
+
 function setPressureWarningsEnabled(enabled: boolean) {
   pressureWarningsEnabled.value = enabled
   writeSetting(STORAGE_KEYS.pressureWarningsEnabled, enabled ? '1' : '0')
@@ -188,6 +196,8 @@ export function useSpotterVoiceSettings() {
   })
 
   return {
+    targetLapVoiceEnabled,
+    setTargetLapVoiceEnabled,
     pressureWarningsEnabled,
     pressureWarningSessionModes,
     setPressureWarningsEnabled,

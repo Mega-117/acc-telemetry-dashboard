@@ -40,7 +40,7 @@ describe('Spotter session settings wiring', () => {
     // Ordering and the independent lap toggle are exercised by the mounted
     // renderer tests in components/spotterAudioRuntime.test.ts.
     expect(runtime).toMatch(/createFinishLineVoiceRuntime\(\{\s*pressure: pressureVoiceRuntime,\s*announceLap: announceLapTime,/)
-    expect(runtime).toMatch(/watch\(fastState, frame => \{\s*if \(canRunSpotterAudio.value\) finishLineVoiceRuntime.update\(frame\)/)
+    expect(runtime).toMatch(/watch\(fastState, frame => \{\s*if \(canRunSpotterAudio.value\)\s*\{\s*finishLineVoiceRuntime.update\(frame\)/)
     expect(runtime).not.toContain('watch(() => liveLap.value.lapsCompleted')
     expect(runtime).toContain('createPressureRecommendationVoiceRuntime')
   })

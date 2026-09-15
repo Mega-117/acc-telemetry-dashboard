@@ -37,6 +37,8 @@ import {
   resolveCoachOverrides,
 } from '~/services/spotter/coachVoiceController'
 import { useCoachStatePoller } from '~/composables/useCoachStatePoller'
+import { createTargetLapVoiceRuntime } from '~/services/spotter/targetLapVoiceRuntime'
+import type { InfoTargetSettings } from '~/utils/infoPresentation'
 import { createFinishLineVoiceRuntime } from '~/services/spotter/finishLineVoiceRuntime'
 import { createPressureRecommendationVoiceRuntime } from '~/services/spotter/pressureRecommendationVoiceRuntime'
 
@@ -50,6 +52,7 @@ useHead({
 const { getPublicPath } = usePublicPath()
 const {
   selectedVoice,
+  targetLapVoiceEnabled,
   pressureWarningsEnabled,
   pressureWarningSessionModes,
   referencesEnabled,
@@ -221,6 +224,7 @@ function disarmTrackVoiceReferences() {
 function stopRuntimeAudioForLogout() {
   disarmTrackVoiceReferences()
   finishLineVoiceRuntime.reset()
+  targetLapVoiceRuntime.reset()
   stopSpotterAudio()
 }
 
@@ -300,6 +304,17 @@ function announceLapTime(id: string, timeMs: number, valid: boolean) {
   }))
 }
 
+let targetSettings: InfoTargetSettings | null = null
+let removeTargetSettingsListener: (() => void) | undefined
+let targetSettingsRevision = 0
+let targetSettingsDisposed = false
+const targetLapVoiceRuntime = createTargetLapVoiceRuntime({
+  getTarget: () => targetSettings,
+  getVoice: () => selectedVoice.value,
+  canAnnounce: () => canRunSpotterAudio.value && targetLapVoiceEnabled.value,
+  enqueue: cue => voiceQueue.enqueue(cue),
+})
+
 const finishLineVoiceRuntime = createFinishLineVoiceRuntime({
   pressure: pressureVoiceRuntime,
   announceLap: announceLapTime,
@@ -307,6 +322,17 @@ const finishLineVoiceRuntime = createFinishLineVoiceRuntime({
 
 onMounted(async () => {
   loadSpotterVoiceSettings()
+  const api = getRuntimeApi()
+  removeTargetSettingsListener = api?.onInfoTargetSettings?.((next: InfoTargetSettings) => {
+    targetSettingsRevision += 1
+    targetSettings = next
+  })
+  const revision = targetSettingsRevision
+  try {
+    const settings = await api?.infoTargetGetSettings?.()
+    if (!targetSettingsDisposed && revision === targetSettingsRevision) targetSettings = settings || null
+  } catch { /* No target feedback without the central settings; other audio remains available. */ }
+  if (targetSettingsDisposed) return
   await loadTrackVoiceReferences()
   removeTrackVoiceReferenceChangeListener = subscribeTrackVoiceReferencesChanged(async () => {
     await loadTrackVoiceReferences()
@@ -318,7 +344,10 @@ onMounted(async () => {
 })
 
 watch(fastState, frame => {
-  if (canRunSpotterAudio.value) finishLineVoiceRuntime.update(frame)
+  if (canRunSpotterAudio.value) {
+    finishLineVoiceRuntime.update(frame)
+    targetLapVoiceRuntime.update(frame)
+  }
 })
 
 watch(() => selectedVoice.value, async () => {
@@ -345,6 +374,7 @@ watch(canRunSpotterAudio, (canRun) => {
   }
   resetTrackVoiceReferenceLapState()
   finishLineVoiceRuntime.reset()
+  targetLapVoiceRuntime.reset()
   tickTrackVoiceReferences()
 })
 
@@ -375,6 +405,8 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  targetSettingsDisposed = true
+  removeTargetSettingsListener?.()
   removeTrackVoiceReferenceChangeListener()
   stopLiveStatePolling()
   stopFastStatePolling()

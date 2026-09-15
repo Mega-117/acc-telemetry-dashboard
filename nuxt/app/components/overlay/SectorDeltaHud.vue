@@ -166,14 +166,16 @@ function ariaLabel(sector: SectorHudEntry): string {
           :class="{
             'sector-compact__lap--invalid': compactCurrentLapValid === false,
             'sector-compact__lap--unknown': compactCurrentLapValid === null,
-            'sector-compact__lap--target-inside': targetOutcome === 'inside',
-            'sector-compact__lap--target-outside': targetOutcome === 'outside',
+            'sector-compact__lap--target-inside': targetOutcome === 'inside' && compactCurrentLapValid === true,
+            'sector-compact__lap--target-outside': targetOutcome === 'outside' && compactCurrentLapValid === true,
           }"
         >{{ compactLapTime }}</strong>
         <small
           v-if="showCurrentLap !== false"
           class="sector-compact__lap-label"
-        >CURRENT LAP</small>
+          :class="{ 'sector-compact__lap-label--target': targetOutcome !== 'neutral' && compactCurrentLapValid === true }"
+        >{{ compactCurrentLapValid === true && targetOutcome !== 'neutral'
+          ? (targetOutcome === 'inside' ? 'NEL TARGET' : 'FUORI TARGET') : 'CURRENT LAP' }}</small>
       </div>
       <div class="sector-compact__rows">
         <div
@@ -307,18 +309,18 @@ function ariaLabel(sector: SectorHudEntry): string {
 .sector-compact__lap--target-inside,
 .sector-compact__lap--target-outside {
   border-radius: calc(8px * var(--hud-scale, 1));
-  outline: max(1px, calc(2px * var(--hud-scale, 1))) solid;
-  outline-offset: calc(4px * var(--hud-scale, 1));
+  /* Spread the fill beyond the glyphs without resizing the compact HUD. */
+  outline: none;
 }
 
 .sector-compact__lap--target-inside {
-  outline-color: #18d53b;
-  box-shadow: 0 0 calc(13px * var(--hud-scale, 1)) rgba(24, 213, 59, .42);
+  background: #0b315a;
+  box-shadow: 0 0 0 calc(4px * var(--hud-scale, 1)) #0b315a;
 }
 
 .sector-compact__lap--target-outside {
-  outline-color: #dc1010;
-  box-shadow: 0 0 calc(13px * var(--hud-scale, 1)) rgba(220, 16, 16, .42);
+  background: #542600;
+  box-shadow: 0 0 0 calc(4px * var(--hud-scale, 1)) #542600;
 }
 
 .sector-compact__lap-label {
@@ -329,6 +331,10 @@ function ariaLabel(sector: SectorHudEntry): string {
   font-size: calc(10px * var(--hud-scale, 1));
   font-weight: 900;
   line-height: 1;
+}
+
+.sector-compact__lap-label--target {
+  color: #fff;
 }
 
 .sector-compact__rows {

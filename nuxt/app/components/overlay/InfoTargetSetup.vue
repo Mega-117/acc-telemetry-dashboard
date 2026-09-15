@@ -12,6 +12,8 @@ const props = withDefaults(defineProps<{
   targetTimeMs: number
   toleranceMs: number
   keepBetweenSessions: boolean
+  voiceEnabled?: boolean
+  showVoiceToggle?: boolean
   contextLabel?: string
   appearance?: 'default' | 'sectors'
 }>(), {
@@ -23,6 +25,7 @@ const emit = defineEmits<{
   'set-target-time': [valueMs: number]
   'select-tolerance': [valueMs: number]
   'toggle-keep': []
+  'toggle-voice': []
   confirm: []
   cancel: []
 }>()
@@ -141,6 +144,19 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         </button>
       </div>
     </section>
+
+    <button
+      v-if="showVoiceToggle"
+      type="button"
+      class="target-keep"
+      data-overlay-wheel-action="target-voice"
+      :class="{ 'is-active': voiceEnabled }"
+      :aria-pressed="voiceEnabled"
+      @click="emit('toggle-voice')"
+    >
+      <i aria-hidden="true">{{ voiceEnabled ? '✓' : '' }}</i>
+      <span>Avviso vocale</span>
+    </button>
 
     <button
       type="button"

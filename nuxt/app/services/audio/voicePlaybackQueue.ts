@@ -4,7 +4,7 @@ import {
   type PlayableAudio,
 } from './audioPlayback'
 
-export type VoiceCueSource = 'lap-time' | 'pressure-warning' | 'track-reference' | 'coach'
+export type VoiceCueSource = 'lap-time' | 'target-lap' | 'pressure-warning' | 'track-reference' | 'coach'
 export type VoiceCuePathRole = 'primary' | 'fallback'
 
 export interface VoiceCue {
@@ -14,6 +14,7 @@ export interface VoiceCue {
   correlationId?: string
   scenarioId?: string
   fallbackPath?: string
+  canPlay?: () => boolean
 }
 
 export type VoicePlaybackQueueEventKind =
@@ -57,6 +58,7 @@ function normalizeCue(cue: VoiceCue): VoiceCue | null {
     id,
     path,
     source: cue.source,
+    canPlay: cue.canPlay,
     correlationId: cue.correlationId ? String(cue.correlationId).slice(0, 120) : undefined,
     scenarioId: cue.scenarioId ? String(cue.scenarioId).slice(0, 120) : undefined,
     fallbackPath: cue.fallbackPath ? String(cue.fallbackPath).trim() : undefined,
@@ -99,6 +101,10 @@ export function createVoicePlaybackQueue(options: VoicePlaybackQueueOptions): Vo
   ): Promise<AudioPlaybackOutcome | 'cancelled'> {
     if (queuedGeneration !== generation) {
       emit('cancelled', cue, pathRole, 'generation_changed')
+      return 'cancelled'
+    }
+    if (cue.canPlay && !cue.canPlay()) {
+      emit('skipped', cue, pathRole, 'cue_no_longer_eligible')
       return 'cancelled'
     }
     let audio: StoppableAudio

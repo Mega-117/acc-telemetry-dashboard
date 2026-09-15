@@ -40,6 +40,16 @@ async function renderHud(props: Record<string, unknown>): Promise<string> {
 }
 
 describe('SectorDeltaHud', () => {
+  it('labels outside feedback only on the valid compact time, leaving classic unchanged', async () => {
+    const props = { compactDisplayLap: { timeMs: 91_000, valid: true }, targetOutcome: 'outside' }
+    const compact = await renderHud({ ...props, variant: 'compact' })
+    expect(compact).toContain('FUORI TARGET')
+    expect(compact).toContain('sector-compact__lap--target-outside')
+    const classic = await renderHud({ ...props, variant: 'classic' })
+    expect(classic).not.toContain('FUORI TARGET')
+    expect(classic).not.toContain('sector-compact__lap--target-outside')
+  })
+
   it('centra insieme SETTORI e il confronto nel layout a tre riquadri', () => {
     const source = readFileSync(
       resolve(process.cwd(), 'app/pages/sectors-overlay.vue'),
@@ -349,7 +359,9 @@ describe('SectorDeltaHud', () => {
 
     expect(inside).toContain('sector-compact__lap--target-inside')
     expect(inside).not.toContain('sector-compact__lap--invalid')
-    expect(outsideInvalid).toContain('sector-compact__lap--target-outside')
+    expect(inside).toContain('NEL TARGET')
+    expect(outsideInvalid).not.toContain('sector-compact__lap--target-outside')
+    expect(outsideInvalid).not.toContain('FUORI TARGET')
     expect(outsideInvalid).toContain('sector-compact__lap--invalid')
     expect(hidden).not.toContain('sector-compact__lap--target-inside')
     expect(hidden).not.toContain('CURRENT LAP')

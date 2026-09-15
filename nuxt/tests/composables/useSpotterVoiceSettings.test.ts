@@ -26,6 +26,20 @@ afterEach(() => {
 })
 
 describe('useSpotterVoiceSettings session modes', () => {
+  it('defaults target voice on and persists its own switch across reloads independently', () => {
+    const settings = useSpotterVoiceSettings()
+    settings.load(); expect(settings.targetLapVoiceEnabled.value).toBe(true)
+    settings.setTargetLapVoiceEnabled(false); settings.load()
+    expect(settings.targetLapVoiceEnabled.value).toBe(false)
+    expect(settings.pressureWarningsEnabled.value).toBe(true)
+    expect(storage.get('acc.spotter.targetLap.enabled')).toBe('0')
+    storage.set('acc.spotter.targetLap.enabled', '1'); settings.load()
+    expect(settings.targetLapVoiceEnabled.value).toBe(true)
+    settings.setTargetLapVoiceEnabled(false); settings.setTargetLapVoiceEnabled(true)
+    expect(storage.get('acc.spotter.targetLap.enabled')).toBe('1')
+    expect(window.dispatchEvent).toHaveBeenCalled()
+  })
+
   it('defaults pressure warnings to enabled in all sessions without changing other defaults', () => {
     const settings = useSpotterVoiceSettings()
     settings.load()

@@ -1,4 +1,5 @@
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue'
+import { completedLapHoldSample } from '~/utils/completedLapHoldSample'
 import type { FastOverlayState } from '~/composables/useFastStatePoller'
 import {
   advanceCompletedLapHold,
@@ -10,18 +11,6 @@ function monotonicNow(): number {
   return typeof performance !== 'undefined' ? performance.now() : Date.now()
 }
 
-function contextKey(state: FastOverlayState): string | null {
-  const context = state.context
-  if (!context) return null
-  return JSON.stringify([
-    context.track,
-    context.car,
-    context.sessionType,
-    context.sessionIndex,
-    context.sessionUid,
-    context.serverId,
-  ])
-}
 
 export function useCompletedLapHold(fastState: Ref<FastOverlayState>) {
   const holdState = ref(createCompletedLapHoldState())
@@ -38,14 +27,7 @@ export function useCompletedLapHold(fastState: Ref<FastOverlayState>) {
   function refresh() {
     const nowMs = monotonicNow()
     clockMs.value = nowMs
-    const info = fastState.value.info
-    holdState.value = advanceCompletedLapHold(holdState.value, {
-      ready: fastState.value.isFresh && info !== null,
-      contextKey: contextKey(fastState.value),
-      lapsCompleted: info?.lapsCompleted ?? 0,
-      lastLapTimeMs: info?.lastLapTimeMs ?? null,
-      lastLapValid: info?.lastLapValid ?? null,
-    }, nowMs)
+    holdState.value = advanceCompletedLapHold(holdState.value, completedLapHoldSample(fastState.value), nowMs)
 
     clearReleaseTimer()
     if (holdState.value.holdUntilMs !== null) {

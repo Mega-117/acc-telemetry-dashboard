@@ -21,6 +21,18 @@
       "origin": "system",
       "text": "correzioni pressioni, pronta!",
       "speed": 1.3
+    },
+    {
+      "id": "targetInside",
+      "origin": "system",
+      "text": "nel target.",
+      "speed": 1.2
+    },
+    {
+      "id": "targetOutside",
+      "origin": "system",
+      "text": "fuori target.",
+      "speed": 1.2
     }
   ],
   "steps": [
