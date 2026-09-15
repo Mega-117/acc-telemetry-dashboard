@@ -11,6 +11,9 @@ if (import.meta.client) markHudRouteModulePhase('route-module-evaluated')
 // - Per ogni overlay: on/off + formato fisso (Piccolo/Medio/Grande).
 // Self-contained (come dev.vue): fuori dal contratto useTelemetryGateway.
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
+import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
+import type { HudOverlaySettings } from '~/composables/useHudOverlay'
 import { ChartNoAxesCombined, CircleDot, Clock3, Flag, Info, LayoutDashboard, ListOrdered, Trophy } from '@lucide/vue'
 import {
   supportsHudOverlayPresentationControl,
@@ -98,7 +101,12 @@ const sectorVariant = ref<'classic' | 'compact'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
 const showSectorCurrentLap = ref(true)
-const sectorDeltaReference = ref<'previousLap' | 'bestSector'>('previousLap')
+const sectorDeltaReference = ref<SectorDeltaReference>('previousLap')
+const sectorReferenceEditorOpen = ref(false)
+function sectorReferencesSaved(settings: HudOverlaySettings) {
+  sectorDeltaReference.value = normalizeSectorDeltaReference(settings.deltaReference)
+  sectorReferenceEditorOpen.value = false
+}
 function sectorSupports(control: HudOverlayPresentationControl): boolean {
   return supportsHudOverlayPresentationControl('sectors', sectorVariant.value, control)
 }
@@ -269,7 +277,7 @@ async function refreshState() {
       if (overlay.id === 'sectors' && typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
       if (overlay.id === 'sectors' && typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
       if (overlay.id === 'sectors' && typeof settings?.showCurrentLap === 'boolean') showSectorCurrentLap.value = settings.showCurrentLap
-      if (overlay.id === 'sectors') sectorDeltaReference.value = settings?.deltaReference === 'bestSector' ? 'bestSector' : 'previousLap'
+      if (overlay.id === 'sectors') sectorDeltaReference.value = normalizeSectorDeltaReference(settings?.deltaReference)
       if (overlay.id === 'dashboard') {
         dashboardSettings.electronicsReference = settings?.electronicsReference === true
         dashboardSettings.rpmReference = settings?.rpmReference === true
@@ -500,13 +508,22 @@ async function setTyreVariant(value: string) {
   tyreVariant.value = settings?.variant === 'advanced' || settings?.variant === 'race' ? settings.variant : 'classic'
 }
 
+function onSectorReferenceChange(event: Event) {
+  const select = event.target as HTMLSelectElement
+  const value = select.value
+  // Keep the select on the saved mode until the editor confirms successfully.
+  select.value = sectorDeltaReference.value
+  void setSectorDeltaReference(value)
+}
+
 async function setSectorDeltaReference(value: string) {
+  if (value === 'custom') { sectorReferenceEditorOpen.value = true; return }
   const api = getApi()
   if (!apiReady.value || !api?.hudOverlaySaveSettings) return
   const next = value === 'bestSector' ? 'bestSector' : 'previousLap'
   sectorDeltaReference.value = next
   const settings = await api.hudOverlaySaveSettings('sectors', { deltaReference: next })
-  sectorDeltaReference.value = settings?.deltaReference === 'bestSector' ? 'bestSector' : 'previousLap'
+  sectorDeltaReference.value = normalizeSectorDeltaReference(settings?.deltaReference)
 }
 
 async function setSectorVariant(value: string) {
@@ -1010,12 +1027,14 @@ async function toggleTraining() {
                       class="hud-select"
                       :value="sectorDeltaReference"
                       :disabled="selectedSettingsDisabled"
-                      @change="setSectorDeltaReference(($event.target as HTMLSelectElement).value)"
+                      @change="onSectorReferenceChange"
                     >
                       <option value="previousLap">Giro precedente</option>
                       <option value="bestSector">Miglior settore</option>
+                      <option value="custom">Personalizzati</option>
                     </select>
                   </label>
+                  <button v-if="sectorDeltaReference === 'custom'" type="button" class="hud-select" :disabled="selectedSettingsDisabled" @click="sectorReferenceEditorOpen = true">Modifica tempi personalizzati</button>
                   <label
                     v-if="sectorSupports('sectorCurrentLap')"
                     class="hud-control"
@@ -1240,9 +1259,14 @@ async function toggleTraining() {
       </div>
     </section>
   </LayoutPageContainer>
+  <div v-if="sectorReferenceEditorOpen" class="sector-reference-dialog" role="dialog" aria-modal="true" aria-label="Riferimenti settori">
+    <SectorReferenceSetup @saved="sectorReferencesSaved" @cancel="sectorReferenceEditorOpen = false" />
+  </div>
 </template>
 
 <style scoped lang="scss">
+.sector-reference-dialog { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: #0009; overflow-y: auto; }
+.sector-reference-dialog > * { width: min(100%, 460px); }
 .test-hud {
   --hud-accent: #fb923c;
   --hud-accent-strong: #f97316;

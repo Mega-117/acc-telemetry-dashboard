@@ -11,6 +11,7 @@ import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
 import HudTimedPager from '~/components/overlay/HudTimedPager.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
+import { resolveCustomSectorTimes } from '~/utils/customSectorReferences'
 import { normalizeSectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 import { resolveLocalCompactPresentation } from '~/utils/compactSectorPresentation'
 import {
@@ -88,6 +89,8 @@ const showReference = computed(() => settings.value?.showReference !== false)
 const showBest = computed(() => settings.value?.showBest !== false)
 const showCurrentLap = computed(() => settings.value?.showCurrentLap !== false)
 const deltaReference = computed(() => normalizeSectorDeltaReference(settings.value?.deltaReference))
+const customSectorTimes = computed(() => fastState.value.isFresh
+  ? resolveCustomSectorTimes(settings.value?.customSectorReferences, fastState.value.context) : null)
 const variant = computed(() => settings.value?.variant === 'compact' ? 'compact' : 'classic')
 const onTargetPage = computed(() => variant.value === 'compact' && compactPage.value === 'target')
 const localCompactPresentation = computed(() => resolveLocalCompactPresentation(fastState.value))
@@ -273,6 +276,7 @@ onBeforeUnmount(() => {
             :show-best="showBest"
             :show-current-lap="showCurrentLap"
             :delta-reference="deltaReference"
+        :custom-sector-times="customSectorTimes"
             variant="compact"
             live-running
             :live-current-lap-time-ms="liveCurrentLapTimeMs"
@@ -302,6 +306,7 @@ onBeforeUnmount(() => {
         :show-best="showBest"
         :show-current-lap="showCurrentLap"
         :delta-reference="deltaReference"
+        :custom-sector-times="customSectorTimes"
         variant="classic"
       />
     </div>

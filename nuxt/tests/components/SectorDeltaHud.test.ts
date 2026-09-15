@@ -368,3 +368,19 @@ describe('SectorDeltaHud', () => {
   })
 
 })
+
+it.each(['compact','classic'])('renders custom independent deltas at one decimal in %s', async variant => {
+ const html=await renderHud({variant, deltaReference:'custom', customSectorTimes:[31000,30000,32000]})
+ expect(html).toContain('CUSTOM')
+ expect(html).toContain('−0.2')
+ expect(html).toContain('+0.8')
+ expect(html).toContain('−1.2')
+ expect(html).not.toContain('+0.802')
+})
+
+it.each(['compact','classic'])('keeps exactly zero custom delta at a tenth in %s', async variant => {
+ const exact={...sectorHud,sectors:sectorHud.sectors.map((entry,index)=>({...entry,currentMs:[32500,27000,16800][index]}))}
+ const html=await renderHud({sectorHud:exact,variant,deltaReference:'custom',customSectorTimes:[32500,27000,16800]})
+ expect(html).toContain('+0.0')
+ expect(html).not.toContain('+0.000')
+})

@@ -1,4 +1,5 @@
 import { nextTick, ref } from 'vue'
+import type { CustomSectorReferences } from '~/utils/customSectorReferences'
 import { useOverlayInteractionContract } from '~/composables/useOverlayInteractionContract'
 import type { StandingsLayout } from '~/services/overlay/standingsLayout'
 
@@ -10,7 +11,8 @@ export interface HudOverlaySettings {
   showReference?: boolean
   showBest?: boolean
   showCurrentLap?: boolean
-  deltaReference?: 'previousLap' | 'bestSector'
+  deltaReference?: 'previousLap' | 'bestSector' | 'custom'
+  customSectorReferences?: CustomSectorReferences
   variant?: 'classic' | 'advanced' | 'race' | 'compact'
   electronicsReference?: boolean
   rpmReference?: boolean

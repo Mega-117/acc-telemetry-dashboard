@@ -165,6 +165,8 @@ export default defineConfig({
         'app/services/spotter/finishLineVoiceRuntime.ts',
         'app/services/spotter/targetLapVoiceRuntime.ts',
         'app/utils/completedLapHoldSample.ts',
+        'app/utils/customSectorReferences.ts',
+        'app/components/overlay/SectorReferenceSetup.vue',
         'app/services/spotter/trackVoiceReferences.ts',
         'app/services/spotter/trackVoiceReferenceRuntime.ts',
         'app/services/spotter/trackVoiceReferenceChanges.ts',

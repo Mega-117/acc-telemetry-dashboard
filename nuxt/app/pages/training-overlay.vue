@@ -30,6 +30,7 @@ import {
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
 import InfoTargetSetup from '~/components/overlay/InfoTargetSetup.vue'
+import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import PitwallOverlayButton from '~/components/pitwall/PitwallOverlayButton.vue'
@@ -131,6 +132,13 @@ const { selectedId: selectedWheelActionId, first: selectFirstWheelAction,
 const preparingReopen = ref(false)
 const isPointerOnOverlaySurface = ref(false)
 const isTargetSetupOpen = ref(false)
+const isSectorReferenceSetupOpen = ref(false)
+const sectorReferenceSetup = ref<InstanceType<typeof SectorReferenceSetup> | null>(null)
+function closeSectorReferenceSetup() { isSectorReferenceSetupOpen.value = false }
+async function saveSectorReferenceSetup() {
+  closeSectorReferenceSetup()
+  await getOverlayApi()?.trainingOverlayClose?.()
+}
 const infoTargetVoiceDraft = ref(true)
 const infoTargetActive = ref(false)
 const infoTargetTimeMs = ref(90_000)
@@ -563,6 +571,7 @@ async function prepareOverlayReopen(revision?: number) {
   actionSelection.resetPointer()
   if (resetsOverlayMenuOnHide(phase.value)) {
     cancelInfoTargetSetup()
+    closeSectorReferenceSetup()
     isTrainingPickerOpen.value = false
     isSettingsOpen.value = false
     closeShortcutStopConfirm()
@@ -587,6 +596,7 @@ async function prepareOverlayReopen(revision?: number) {
 }
 
 function runBackAction() {
+  if (isSectorReferenceSetupOpen.value) { closeSectorReferenceSetup(); return }
   if (isTargetSetupOpen.value) { cancelInfoTargetSetup(); return }
   if (isShortcutStopConfirmOpen.value) { closeShortcutStopConfirm(); return }
   if (phase.value === 'launcher') { closeOverlay(); return }
@@ -610,6 +620,7 @@ function executePrimaryAction() {
   const now = Date.now()
   if (now - lastPrimaryActionAt < PRIMARY_ACTION_DEBOUNCE_MS) { setDebugEvent(`debounce ${primaryAction.value}`); return }
   lastPrimaryActionAt = now; setDebugEvent(`azione: ${primaryAction.value}`)
+  if (isSectorReferenceSetupOpen.value) { void sectorReferenceSetup.value?.submit(); return }
   if (isTargetSetupOpen.value) { void confirmInfoTarget(); return }
   if (isShortcutStopConfirmOpen.value) { executeStop(); return }
   const actions: Record<PrimaryOverlayAction, () => void> = {
@@ -809,7 +820,7 @@ watch(isShortcutStopConfirmOpen, (open) => {
 
 watch(
   [phase, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
-    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, liveHudResizeKey],
+    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, isSectorReferenceSetupOpen, liveHudResizeKey],
   () => { scheduleOverlaySizeSync(); actionSelection.refresh() },
   { flush: 'post' }
 )
@@ -941,12 +952,12 @@ onBeforeUnmount(() => {
               :class="[
                 'overlay-content',
                 `overlay-content--${overlaySizePreset}`,
-                { 'overlay-content--target': isTargetSetupOpen },
+                { 'overlay-content--target': isTargetSetupOpen || isSectorReferenceSetupOpen },
               ]"
             >
 
               <template v-if="phase === 'launcher'">
-                <div v-if="!isTargetSetupOpen" class="launcher-tools" aria-label="Strumenti live overlay">
+                <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen" class="launcher-tools" aria-label="Strumenti live overlay">
                   <header class="launcher-tools__header">
                     <span>
                       Strumenti live
@@ -1024,6 +1035,9 @@ onBeforeUnmount(() => {
                     >
                       Target giro
                     </button>
+                    <button type="button" class="launcher-tool-button" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
+                      Riferimenti settori
+                    </button>
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training"
@@ -1099,7 +1113,7 @@ onBeforeUnmount(() => {
                   <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K chiude</p>
                 </div>
                 <InfoTargetSetup
-                  v-else
+                  v-else-if="isTargetSetupOpen"
                   :target-time-ms="infoTargetTimeMs"
                   :tolerance-ms="infoTargetToleranceMs"
                   :keep-between-sessions="infoTargetKeepBetweenSessions"
@@ -1112,6 +1126,7 @@ onBeforeUnmount(() => {
                   @confirm="confirmInfoTarget"
                   @cancel="cancelInfoTargetSetup"
                 />
+                <SectorReferenceSetup v-else-if="isSectorReferenceSetupOpen" ref="sectorReferenceSetup" keyboard-overlay @cancel="closeSectorReferenceSetup" @saved="saveSectorReferenceSetup" />
               </template>
 
               <template v-else-if="phase === 'completed'">
