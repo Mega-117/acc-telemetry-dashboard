@@ -17,3 +17,23 @@ describe('Fuel from Ctrl+K',()=>{
  it('blocks apply outside safe pit context',async()=>{const api=await mount(false);expect(button('fuel-apply').disabled).toBe(true);button('fuel-apply').click();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled()})
  it('wheel buttons change minutes and auto selects session duration',async()=>{const api=await mount();button('fuel-plus').click();await flush();expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'minutes',minutes:11});button('fuel-auto').click();await flush();expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'auto',minutes:11})})
 })
+
+const scroll = async(deltaY:number,ctrlKey=false) => {
+ const el=document.querySelector('input')!;const event=new WheelEvent('wheel',{deltaY,ctrlKey,bubbles:true,cancelable:true});el.dispatchEvent(event);await flush();return event
+}
+it('mouse wheel increments and decrements only minutes and prevents page scrolling',async()=>{
+ const api=await mount();expect((await scroll(-120)).defaultPrevented).toBe(true);expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'minutes',minutes:11});await scroll(120);expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'minutes',minutes:10});expect((await scroll(0)).defaultPrevented).toBe(false);expect((await scroll(-120,true)).defaultPrevented).toBe(false)
+})
+it('wheel clamps minutes at1and180',async()=>{
+ await mount();const el=document.querySelector('input')!;for(const [value,delta,expected] of [['180',-120,'180'],['1',120,'1']] as const){el.value=value;el.dispatchEvent(new Event('input',{bubbles:true}));await flush();await scroll(delta);expect(el.value).toBe(expected)}
+})
+it('pending application freezes wheel and input until completion',async()=>{
+ const api=await mount();let done:any;api.trainingOverlayApplySetupFuel.mockImplementation(()=>new Promise(r=>done=r));button('fuel-apply').click();await flush();expect((document.querySelector('input') as HTMLInputElement).disabled).toBe(true);await scroll(-120);expect((document.querySelector('input') as HTMLInputElement).value).toBe('10');done({ok:true,reason:'Completato'});await flush();expect(document.body.textContent).toContain('Completato')
+})
+it('shows readable blocked state and failed apply inside dedicated status area',async()=>{
+ const api=await mount();api.trainingOverlayApplySetupFuel.mockResolvedValue({ok:false,reason:'Apri il menu Pausa'} as any);button('fuel-apply').click();await flush();expect(document.querySelector('[role="status"]')?.textContent).toContain('Apri il menu Pausa');expect(document.body.textContent).toContain('Stint richiesto')
+})
+
+it('failed preview disables a previously available action and explains failure',async()=>{
+ const api=await mount();expect(button('fuel-apply').disabled).toBe(false);button('fuel').click();await flush();api.trainingOverlayPreviewSetupFuel.mockRejectedValue(Error('offline'));button('fuel').click();await flush();expect(button('fuel-apply').disabled).toBe(true);expect(document.querySelector('[role="status"]')?.textContent).toContain('Anteprima carburante non disponibile')
+})
