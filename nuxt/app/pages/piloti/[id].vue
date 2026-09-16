@@ -160,7 +160,7 @@ function goBackToList() {
         <template v-else>
           <!-- Panoramica -->
           <div v-if="activeTab === 'panoramica'" class="tab-content">
-            <PagesPanoramicaPage @go-to-track="handleGoToTrack" />
+            <PagesPanoramicaPage @go-to-track="handleGoToTrack" @go-to-session="handleGoToSession" />
           </div>
 
           <!-- Sessioni -->

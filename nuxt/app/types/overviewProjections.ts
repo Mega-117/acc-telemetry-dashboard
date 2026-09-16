@@ -26,7 +26,10 @@ export interface OverviewActivityDataPoint {
   race: number
 }
 
+import type { OverviewSessionPerformance } from '~/services/projections/overviewLastSession'
+
 export interface OverviewProjection {
+  lastSession?: OverviewSessionPerformance | null
   lastCar: OverviewCarProjection
   lastTrack: OverviewTrackProjection | null
   previousTrack: OverviewTrackProjection | null

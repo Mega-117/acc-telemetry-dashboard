@@ -4,7 +4,7 @@
 // DYNAMIC SVG CHART - Not an image!
 // ============================================
 
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
 
 // Types
 type DayData = {
@@ -17,6 +17,7 @@ type DayData = {
 }
 
 const props = defineProps<{
+  racing?: boolean
   data?: DayData[]
   practiceTotal?: { minutes: number; sessions: number }
   qualifyTotal?: { minutes: number; sessions: number }
@@ -25,13 +26,14 @@ const props = defineProps<{
 
 // Animation state
 const isAnimated = ref(false)
-
+let animationTimer: ReturnType<typeof setTimeout> | undefined
 
 onMounted(() => {
-  setTimeout(() => {
+  animationTimer = setTimeout(() => {
     isAnimated.value = true
   }, 100)
 })
+onBeforeUnmount(() => clearTimeout(animationTimer))
 
 // Day total
 const dayTotal = (day: { practice: number; qualify: number; race: number }) => day.practice + day.qualify + day.race
@@ -93,9 +95,9 @@ const formatYLabel = (minutes: number): string => {
 </script>
 
 <template>
-  <div class="activity-card">
+  <div class="activity-card" :class="{ 'activity-card--racing': racing }">
     <!-- Title -->
-    <h2 class="card-title">Attività (ultimi 7 giorni)</h2>
+    <h2 class="card-title">{{ racing ? 'Attività · ultimi 7 giorni' : 'Attività (ultimi 7 giorni)' }}</h2>
     
     <!-- Main Content: Chart + Legend Side by Side -->
     <div class="card-content">
@@ -115,7 +117,6 @@ const formatYLabel = (minutes: number): string => {
           >
             <!-- Total label above bar -->
             <span 
-              v-if="dayTotal(day) > 0"
               class="bar-total"
             >{{ formatYLabel(dayTotal(day)) }}</span>
             <!-- Stacked bar (height = total percentage of max) -->
@@ -473,4 +474,38 @@ $color-race: $racing-red;         // Red
     min-width: 90px;
   }
 }
+</style>
+
+<style scoped lang="scss">
+.activity-card--racing {
+  padding: 18px; min-height: 320px; background: transparent; border: 1px solid #b4b4b4; border-radius: 0; overflow: visible;
+  &::before, .accent-glow { display: none; }
+  .card-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; margin-bottom: 26px; }
+  .card-content { flex-direction: column; gap: 18px; }
+  .chart-area { min-height: 165px; flex: 1; }
+  .y-axis { padding-bottom: 32px; min-width: 30px; span { color: #ccc; font-size: 11px; } }
+  .bars-container { padding-bottom: 32px; gap: 12px; border: 0; }
+  .bar-column { max-width: none; flex: 1; border-bottom: 1px solid #ccc; background: repeating-linear-gradient(to top, #ffffff09 0 1px, transparent 1px 33.33%); }
+  .bar-total { font-size: 11px; color: #ddd; }
+  .bar-stack { width: 72%; gap: 0; clip-path: polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%); }
+  .bar { border-radius: 0; box-shadow: none; }
+  .bar--practice { background: #0076ff; }
+  .bar--qualify { background: #e7ff00; }
+  .bar--race { background: #ff0024; }
+  .day-label { bottom: -31px; color: #ddd; font-size: 11px; small { color: #bbb; font-size: 10px; } }
+  .legend { flex-direction: row; justify-content: space-between; min-width: 0; padding: 16px 0 0; border: 0; border-top: 1px solid #ffffff18; gap: 10px; }
+  .legend-item { flex: 1; min-width: 0; padding: 0; gap: 10px; }
+  .legend-item + .legend-item { border-left: 1px solid #ffffff60; padding-left: 18px; }
+  .legend-dot { height: 62px; width: 8px; border-radius: 0; margin: 0; box-shadow: none; clip-path: polygon(0 0,40% 0,100% 6px,100% 100%,60% 100%,0 calc(100% - 6px)); }
+  .legend-item--practice .legend-dot { background: #0076ff; }
+  .legend-item--qualify .legend-dot { background: #e7ff00; }
+  .legend-item--race .legend-dot { background: #ff0024; }
+  .legend-text { gap: 3px; }
+  .legend-label { font-size: 11px; color: #ddd; font-weight: 400; letter-spacing: 0; }
+  .legend-item--practice .legend-label { color: #269dff; }
+  .legend-item--qualify .legend-label { color: #e7ff00; }
+  .legend-value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; small { color: #ddd; font-size: 15px; } }
+  .legend-sessions { color: #ccc; font-size: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .bar { transition: none; } }
 </style>

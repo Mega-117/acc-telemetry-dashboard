@@ -1,0 +1,21 @@
+@font-face {
+  font-family: 'Racer Display'; src: url('../fonts/ChakraPetch-BoldItalic.ttf') format('truetype');
+  font-weight: 700; font-style: italic; font-display: swap;
+}
+.racing-button {
+  position: relative;
+  min-height: 44px; display: inline-flex; justify-content: center; align-items: center;
+  padding: 10px 24px; border: 1px solid #c9c9c9; border-radius: 0; background: transparent;
+  color: #fff; font: 500 14px/1.2 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase;
+  text-decoration: none; cursor: pointer; transition: background-color .15s, border-color .15s;
+  clip-path: polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px));
+  &:hover:not(:disabled) { background: #ffffff12; border-color: #fff; }
+  &:focus-visible { outline: 2px solid #fff; outline-offset: -5px; }
+  &:disabled { opacity: .4; cursor: default; }
+  &--primary { background: #ff0024; border-color: #ff0024; &:hover:not(:disabled) { background: #d90020; } }
+  &:not(.racing-button--primary)::before, &:not(.racing-button--primary)::after {
+    content: ''; position: absolute; width: 15px; height: 1px; background: #c9c9c9; transform: rotate(45deg);
+  }
+  &:not(.racing-button--primary)::before { right: -3px; top: 4px; }
+  &:not(.racing-button--primary)::after { left: -3px; bottom: 4px; }
+}

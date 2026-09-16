@@ -15,6 +15,7 @@ import { useSessionPager, type SessionPagerFilters } from './useSessionPager'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { buildTrackOverviewProjection } from '~/services/projections/buildTrackOverviewProjection'
 import { buildTrackDetailProjection } from '~/services/projections/buildTrackDetailProjection'
+import { selectOverviewLastSession, buildOverviewSessionPerformance } from '~/services/projections/overviewLastSession'
 import { buildOverviewProjection } from '~/services/projections/buildOverviewProjection'
 import { TRACK_METADATA, resolveTrackMetadata } from '~/services/projections/trackMetadata'
 import {
@@ -29,6 +30,7 @@ import type { SessionDetailViewModel } from '~/types/sessionDetailViewModel'
 import { endFirebaseScenario, startFirebaseScenario } from './useFirebaseTracker'
 import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
 import {
+    loadOverviewSessionSummary,
     loadTrackBest,
     loadTrackBestsMap,
     loadTrackDetailProjectionDoc,
@@ -306,6 +308,10 @@ export function useTelemetryGateway() {
 
         const bestsByTrack = await collectTrackBestTimes(relevantTrackIds, targetUserId)
         return buildOverviewProjection({
+            lastSession: snapshot.lastSession ? buildOverviewSessionPerformance({
+                id: snapshot.lastSession.sessionId, car: snapshot.lastSession.meta.car,
+                track: snapshot.lastSession.meta.track, date: snapshot.lastSession.meta.date_start,
+            }, snapshot.lastSession.summary) : null,
             lastUsedCar: snapshot.lastUsedCar,
             lastSessionDate: snapshot.lastSession?.meta.date_start || null,
             trackStats: snapshot.trackStats,
@@ -337,7 +343,11 @@ export function useTelemetryGateway() {
             const pendingSessions = await loadPendingLocalOverlay(resolvedUserId)
             const sessionIndex = userProjection?.sessionIndex || {}
             const trackStats = mergePendingTrackStats(buildTrackStatsFromSessionIndex(sessionIndex), pendingSessions)
-            const relevantTrackIds = trackStats.slice(0, 2).map((track) => track.track)
+            const reference = selectOverviewLastSession(sessionIndex.sessionsList || [], pendingSessions)
+            const relevantTrackIds = [...new Set([
+                ...(reference?.track ? [normalizeTrackKey(reference.track)] : []),
+                ...trackStats.slice(0, 2).map((track) => normalizeTrackKey(track.track)),
+            ])].slice(0, 2)
             const bestDocs = await Promise.all(relevantTrackIds.map((trackId) => loadTrackBest(resolvedUserId, trackId)))
             const bestsByTrack = mergePendingOverviewBestsByTrack(
                 Object.fromEntries(relevantTrackIds.map((trackId, index) => [normalizeTrackKey(trackId), buildOverviewBestTimesFromTrackBestDoc(bestDocs[index], 'GT3')])),
@@ -359,6 +369,11 @@ export function useTelemetryGateway() {
                 pendingSessions
             )
             const newest = getNewestSessionEntry(sessionIndex, pendingSessions)
+            const pendingSummary = pendingSessions.find(s => s.sessionId === reference?.id)?.summary
+            const lastSummary = reference
+                ? pendingSummary || await loadOverviewSessionSummary(resolvedUserId, reference.id)
+                : null
+            const lastSession = reference ? buildOverviewSessionPerformance(reference, lastSummary) : null
 
             pushGatewayDiagnostic({
                 source: pendingSessions.length > 0 ? 'mixed' : 'index_cache',
@@ -372,8 +387,9 @@ export function useTelemetryGateway() {
             })
 
             return buildOverviewProjection({
-                lastUsedCar: newest.car,
-                lastSessionDate: newest.date,
+                lastSession,
+                lastUsedCar: reference?.car || newest.car,
+                lastSessionDate: reference?.date || newest.date,
                 trackStats,
                 bestsByTrack,
                 activity7d: activity.activity7d,

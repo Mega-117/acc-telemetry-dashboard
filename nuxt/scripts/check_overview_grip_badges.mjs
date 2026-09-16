@@ -62,12 +62,12 @@ for (const token of [
 }
 
 for (const token of [
-  ':best-qualy-grip="lastTrackBestQualyGrip"',
-  ':best-race-grip="lastTrackBestRaceGrip"',
-  ':avg-time-grip="lastTrackAvgTimeGrip"',
-  ':best-qualy-grip="prevTrackBestQualyGrip"',
-  ':best-race-grip="prevTrackBestRaceGrip"',
-  ':avg-time-grip="prevTrackAvgTimeGrip"'
+  'grip: lastTrack.value?.bestQualyGrip',
+  'grip: lastTrack.value?.bestRaceGrip',
+  'grip: lastTrack.value?.bestAvgRaceGrip',
+  'v-if="column.grip"',
+  ':title="column.grip"',
+  'class="grip-badge"'
 ]) {
   assert.ok(page.includes(token), `PanoramicaPage missing card binding: ${token}`)
 }

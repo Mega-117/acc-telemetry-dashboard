@@ -8,6 +8,19 @@ import {
 } from '~/types/trackProjections'
 import { isSupportedTrackBestProjection } from '~/services/projections/trackBestProjectionGuard'
 
+import type { SessionSummary } from '~/types/telemetry'
+
+const sessionSummaryCache = new Map<string, CacheEntry<SessionSummary | null>>()
+
+// One bounded summary document, never raw chunks or a global session prefetch.
+export async function loadOverviewSessionSummary(uid: string, sessionId: string): Promise<SessionSummary | null> {
+  const key = `${uid}:${sessionId}`
+  const cached = sessionSummaryCache.get(key)
+  if (isFresh(cached)) return cached.value
+  const snap = await trackedGetDoc(doc(db, `users/${uid}/sessions/${sessionId}`), CALLER)
+  return setCache(sessionSummaryCache, key, snap.exists() ? snap.data()?.summary || null : null)
+}
+
 const CALLER = 'TelemetryProjectionRepository'
 const PROJECTION_CACHE_TTL_MS = 60_000
 
@@ -36,6 +49,9 @@ function setCache<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T): 
 }
 
 export function clearTelemetryProjectionRepositoryCache(uid?: string) {
+  for (const key of sessionSummaryCache.keys()) {
+    if (!uid || key.startsWith(`${uid}:`)) sessionSummaryCache.delete(key)
+  }
   if (!uid) {
     userProjectionCache.clear()
     trackBestCache.clear()

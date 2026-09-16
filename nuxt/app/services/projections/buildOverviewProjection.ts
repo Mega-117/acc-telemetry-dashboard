@@ -42,6 +42,7 @@ function buildTrackCard(
 }
 
 export function buildOverviewProjection(params: {
+  lastSession?: OverviewProjection['lastSession']
   lastUsedCar: string | null
   lastSessionDate: string | null
   trackStats: TrackStat[]
@@ -69,10 +70,14 @@ export function buildOverviewProjection(params: {
   } = params
 
   const sortedTrackStats = [...trackStats].sort((a, b) => (b.lastSession || '').localeCompare(a.lastSession || ''))
-  const lastTrack = buildTrackCard(sortedTrackStats[0] || null, bestsByTrack, normalizeTrackId, formatLapTime, formatTrackName)
+  const latestTrack = params.lastSession
+    ? { track: params.lastSession.track, lastSession: params.lastSession.date }
+    : sortedTrackStats[0] || null
+  const lastTrack = buildTrackCard(latestTrack, bestsByTrack, normalizeTrackId, formatLapTime, formatTrackName)
   const previousTrack = buildTrackCard(sortedTrackStats[1] || null, bestsByTrack, normalizeTrackId, formatLapTime, formatTrackName)
 
   return {
+    lastSession: params.lastSession || null,
     lastCar: {
       rawName: lastUsedCar,
       displayName: lastUsedCar ? formatCarName(lastUsedCar).toUpperCase() : 'NESSUNA AUTO',

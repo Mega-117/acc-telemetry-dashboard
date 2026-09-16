@@ -1,16 +1,13 @@
 <script setup lang="ts">
 // ============================================
-// PanoramicaPage - Overview with Virtual Coach
+// PanoramicaPage - latest drive and racing overview
 // ============================================
 
-import { ref, computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
-import { useCoachInsights } from '~/composables/useCoachInsights'
 import { usePilotContext, useTargetUserId } from '~/composables/usePilotContext'
-import { usePublicPath } from '~/composables/usePublicPath'
 import { useOverviewProjection } from '~/composables/useOverviewProjection'
-import type { CoachBriefingScenario } from '~/composables/useCoachInsights'
 
 
 // Car images
@@ -81,7 +78,6 @@ const carImages: Record<string, string> = {
   emil_frey: jaguarImg,
 }
 
-const { getPublicPath } = usePublicPath()
 const pilotContext = usePilotContext()
 const targetUserId = useTargetUserId()
 const telemetryGateway = useTelemetryGateway()
@@ -141,633 +137,122 @@ const lastCarImage = computed(() => {
   return defaultCarImg
 })
 
-const lastCarName = computed(() => overviewProjection.value?.lastCar.displayName || 'NESSUNA AUTO')
-const lastCarDate = computed(() => overviewProjection.value?.lastCar.lastUsedDate || '-')
-
+const lastCarName = computed(() => overviewProjection.value?.lastCar.displayName || 'Nessuna auto')
+const lastCarDate = computed(() => overviewProjection.value?.lastCar.lastUsedDate || 'Nessuna sessione registrata')
 const lastTrack = computed(() => overviewProjection.value?.lastTrack || null)
-const prevTrack = computed(() => overviewProjection.value?.previousTrack || null)
-
-const lastTrackName = computed(() => lastTrack.value?.name?.toUpperCase() || 'NESSUNA PISTA')
-const prevTrackName = computed(() => prevTrack.value?.name?.toUpperCase() || 'NESSUNA PISTA')
-const lastTrackBestQualy = computed(() => lastTrack.value?.bestQualy || '--:--.---')
-const lastTrackBestQualyGrip = computed(() => lastTrack.value?.bestQualyGrip || null)
-const lastTrackBestRace = computed(() => lastTrack.value?.bestRace || '--:--.---')
-const lastTrackBestRaceGrip = computed(() => lastTrack.value?.bestRaceGrip || null)
-const lastTrackAvgTime = computed(() => lastTrack.value?.bestAvgRace || '--:--.---')
-const lastTrackAvgTimeGrip = computed(() => lastTrack.value?.bestAvgRaceGrip || null)
-const prevTrackBestQualy = computed(() => prevTrack.value?.bestQualy || '--:--.---')
-const prevTrackBestQualyGrip = computed(() => prevTrack.value?.bestQualyGrip || null)
-const prevTrackBestRace = computed(() => prevTrack.value?.bestRace || '--:--.---')
-const prevTrackBestRaceGrip = computed(() => prevTrack.value?.bestRaceGrip || null)
-const prevTrackAvgTime = computed(() => prevTrack.value?.bestAvgRace || '--:--.---')
-const prevTrackAvgTimeGrip = computed(() => prevTrack.value?.bestAvgRaceGrip || null)
-const lastTrackImage = computed(() => getPublicPath(lastTrack.value?.image || '/tracks/track_default.png'))
-const prevTrackImage = computed(() => getPublicPath(prevTrack.value?.image || '/tracks/track_default.png'))
-
+const lastTrackName = computed(() => lastTrack.value?.name || 'La tua prossima pista')
+const lastSession = computed(() => overviewProjection.value?.lastSession || null)
+const performanceColumns = computed(() => [
+  { label: 'Quali', best: lastTrack.value?.bestQualy, grip: lastTrack.value?.bestQualyGrip, session: lastSession.value?.bestQualy },
+  { label: 'Race', best: lastTrack.value?.bestRace, grip: lastTrack.value?.bestRaceGrip, session: lastSession.value?.bestRace },
+  { label: 'AVG', best: lastTrack.value?.bestAvgRace, grip: lastTrack.value?.bestAvgRaceGrip, session: lastSession.value?.bestAvgRace },
+])
 const emit = defineEmits<{
   'go-to-track': [trackId: string]
+  'go-to-session': [sessionId: string]
 }>()
-
 const router = useRouter()
-
-const { getDailySuggestionScenarios, generateDailySuggestion } = useCoachInsights()
-const briefingSelection = ref<'auto' | CoachBriefingScenario>('auto')
-const briefingScenarioOptions = getDailySuggestionScenarios()
-
-const recommendedBriefingScenario = computed<CoachBriefingScenario>(() => {
-  return generateDailySuggestion(activityData.value, null).scenario || 'clean_laps'
-})
-
-const selectedBriefingScenario = computed<CoachBriefingScenario>(() => {
-  return briefingSelection.value === 'auto' ? recommendedBriefingScenario.value : briefingSelection.value
-})
-
-const dailySuggestion = computed(() => {
-  return generateDailySuggestion(
-    activityData.value,
-    briefingSelection.value === 'auto' ? null : selectedBriefingScenario.value
-  )
-})
-
-const briefingToneClass = computed(() => `tone-${dailySuggestion.value.tone || 'race'}`)
-const selectedTrainingLabel = computed(() => {
-  return briefingScenarioOptions.find((scenario) => scenario.id === selectedBriefingScenario.value)?.label || 'Pulizia'
-})
-const briefingModeLabel = computed(() => {
-  if (briefingSelection.value !== 'auto') return 'Scelta manuale'
-  return dailySuggestion.value.isDataDriven === false ? 'Dati insufficienti' : '7 giorni'
-})
-const dailySuggestionReliabilityNote = computed(() => {
-  if (briefingSelection.value !== 'auto') {
-    return 'Scenario scelto manualmente. Le prossime gare restano visibili nel calendario pilota.'
-  }
-  if (dailySuggestion.value.isDataDriven === false) {
-    return 'Il consiglio resta prudente finche non ci sono minuti recenti misurabili.'
-  }
-  return 'Il consiglio nasce dagli ultimi 7 giorni. Cambialo se oggi vuoi lavorare su un focus diverso.'
-})
-
-
-const prepSessionTarget = computed(() => ({
-  path: '/preparazione',
-  query: {
-    scenario: dailySuggestion.value.scenario || 'race_real'
-  }
-}))
-const goToTrack = (track: { id: string } | null) => {
-  if (!track?.id) return
-  const trackId = track.id
-
-  if (pilotContext.value) {
-    emit('go-to-track', trackId)
-    return
-  }
-
-  router.push(`/piste/${trackId}`)
+function goToTrack() {
+  if (!lastTrack.value?.id) return
+  if (pilotContext.value) emit('go-to-track', lastTrack.value.id)
+  else router.push(`/piste/${encodeURIComponent(lastTrack.value.id)}`)
+}
+function goToSession() {
+  if (!lastSession.value?.id) return
+  if (pilotContext.value) emit('go-to-session', lastSession.value.id)
+  else router.push(`/sessioni/${encodeURIComponent(lastSession.value.id)}`)
 }
 </script>
 
 <template>
   <LayoutPageContainer>
-    <p v-if="overviewStatus === 'error'" role="status">
+    <p v-if="overviewStatus === 'error'" class="overview-error" role="status">
       Dati non disponibili. <button type="button" @click="loadOverview">Riprova</button>
     </p>
-    <div class="panoramica-wrapper" :class="{ 'overview-placeholder': isOverviewPlaceholder }"
-      :aria-busy="overviewStatus === 'pending'" :inert="isOverviewPlaceholder">
-      <span v-if="isOverviewPlaceholder" class="overview-loading-label" role="status">
-        {{ overviewStatus === 'error' ? 'Dati non disponibili' : 'Caricamento dati...' }}
-      </span>
-      <!-- Top Section: lightweight coach briefing from recent projection data -->
-      <div class="coach-sections">
-        <div class="coach-hero coach-card" :class="briefingToneClass">
-          <div class="coach-card__header">
-            <div>
-              <span class="eyebrow">Briefing operativo</span>
-              <h2 class="coach-title">Oggi cosa fare</h2>
-            </div>
-            <span class="coach-chip">{{ briefingModeLabel }}</span>
+    <div class="racing-overview" :aria-busy="overviewStatus === 'pending'">
+      <section class="last-drive racing-panel" :class="{ 'overview-placeholder': isOverviewPlaceholder }" :inert="isOverviewPlaceholder" aria-label="Ultima sessione e migliori tempi">
+        <div class="last-drive__hero">
+          <img :src="lastCarImage" :alt="lastCarName" class="last-drive__image" />
+          <div class="last-drive__identity">
+            <h1>{{ lastTrackName }}</h1>
+            <h2>{{ lastCarName }}</h2>
+            <p>{{ lastCarDate }}</p>
           </div>
-
-          <div class="training-choice">
-            <div class="training-choice__summary">
-              <span>Allenamento</span>
-              <strong>{{ selectedTrainingLabel }}</strong>
-            </div>
-            <select v-model="briefingSelection" aria-label="Scegli allenamento">
-              <option value="auto">Consigliato dai dati</option>
-              <option v-for="scenario in briefingScenarioOptions" :key="scenario.id" :value="scenario.id">
-                {{ scenario.label }}
-              </option>
-            </select>
-          </div>
-
-          <div class="insight-box" :class="[dailySuggestion.type, briefingToneClass]">
-            <div class="insight-main">
-              <h3>{{ dailySuggestion.message }}</h3>
-              <p v-if="dailySuggestion.details">{{ dailySuggestion.details }}</p>
-            </div>
-            <NuxtLink :to="prepSessionTarget" class="action-btn">{{ dailySuggestion.ctaLabel || 'Apri allenamento' }}</NuxtLink>
-          </div>
-
-          <p class="coach-note">
-            {{ dailySuggestionReliabilityNote }}
-          </p>
         </div>
-        
-        <OverviewUpcomingRacesCard :user-id="targetUserId" />
-      </div>
+        <div class="last-drive__results">
+          <table class="performance-table" aria-label="Best storici pista e best ultima sessione">
+            <tbody>
+              <tr>
+                <td v-for="column in performanceColumns" :key="column.label">
+                  <span class="time-label">Best {{ column.label }}</span>
+                  <strong>{{ column.best || '--:--.---' }}</strong>
+                  <abbr v-if="column.grip" class="grip-badge" :title="column.grip">{{ column.grip.slice(0, 3).toUpperCase() }}</abbr>
+                </td>
+              </tr>
+              <tr>
+                <td v-for="column in performanceColumns" :key="column.label">
+                  <span class="time-label">Last session {{ column.label }}</span>
+                  <strong>{{ column.session || '--:--.---' }}</strong>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="last-drive__actions">
+            <button class="racing-button" :disabled="!lastTrack" @click="goToTrack">Dettaglio pista</button>
+            <button class="racing-button racing-button--primary" :disabled="!lastSession?.id" @click="goToSession">Ultima sessione</button>
+          </div>
+        </div>
+        <span v-if="isOverviewPlaceholder" class="overview-loading-label" role="status">Caricamento dati…</span>
+      </section>
 
-      <!-- Original Section: Data Grid -->
-      <h2 class="section-title" style="margin-top: 32px; margin-bottom: 24px;">Panoramica Dati</h2>
-      <div class="panoramica-grid">
-        <!-- Top Left: Featured Car -->
-        <CardsFeaturedCarCard 
-          :car-name="lastCarName"
-          :car-image="lastCarImage"
-          subtitle="Ultima auto utilizzata"
-          :date="lastCarDate"
-        />
-        
-        <!-- Top Right: Ultima Pista -->
-        <CardsTrackPerformanceCard
-          title="Ultima pista"
-          :track-name="lastTrackName"
-          :track-image="lastTrackImage"
-          :best-qualy="lastTrackBestQualy"
-          :best-qualy-grip="lastTrackBestQualyGrip"
-          :best-race="lastTrackBestRace"
-          :best-race-grip="lastTrackBestRaceGrip"
-          :avg-time="lastTrackAvgTime"
-          :avg-time-grip="lastTrackAvgTimeGrip"
-          @click="goToTrack(lastTrack)"
-        />
-        
-        <!-- Bottom Left: Activity -->
-        <CardsActivityCard 
-          :data="activityData"
-          :practice-total="activityTotals.practice"
-          :qualify-total="activityTotals.qualify"
-          :race-total="activityTotals.race"
-        />
-        
-        <!-- Bottom Right: Penultima Pista -->
-        <CardsTrackPerformanceCard
-          title="Penultima pista"
-          :track-name="prevTrackName"
-          :track-image="prevTrackImage"
-          :best-qualy="prevTrackBestQualy"
-          :best-qualy-grip="prevTrackBestQualyGrip"
-          :best-race="prevTrackBestRace"
-          :best-race-grip="prevTrackBestRaceGrip"
-          :avg-time="prevTrackAvgTime"
-          :avg-time-grip="prevTrackAvgTimeGrip"
-          @click="goToTrack(prevTrack)"
-        />
-      </div>
+      <aside class="racing-overview__side">
+        <OverviewUpcomingRacesCard :user-id="targetUserId" racing />
+        <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" racing :aria-busy="isOverviewPlaceholder" />
+        <section class="training-panel racing-panel">
+          <div><h2>Allenamenti</h2><p>Migliora il tuo tempo in pista</p></div>
+          <NuxtLink to="/preparazione?scenario=tracktitan_input" class="racing-button racing-button--primary">Esplora allenamenti</NuxtLink>
+        </section>
+      </aside>
     </div>
   </LayoutPageContainer>
 </template>
 
-<style lang="scss" scoped>
-.overview-loading-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-}
-.overview-placeholder :deep(.coach-sections > *),
-.overview-placeholder :deep(.panoramica-grid > *) {
-  position: relative;
-  overflow: hidden;
-  & > * { visibility: hidden; }
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 16px;
-    border-radius: 12px;
-    background: linear-gradient(110deg, rgba(255,255,255,.04) 20%, rgba(255,255,255,.09) 45%, rgba(255,255,255,.04) 70%);
-    background-size: 200% 100%;
-    animation: overview-loading 1.5s linear infinite;
-  }
-}
-@keyframes overview-loading { to { background-position: -200% 0; } }
-@media (prefers-reduced-motion: reduce) {
-  .overview-placeholder :deep(*)::after { animation: none; }
-}
-
-.panoramica-wrapper {
-  display: flex;
-  flex-direction: column;
-}
-
-.coach-sections {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-  align-items: stretch;
-}
-
-.coach-sections > .coach-card {
-  align-self: stretch !important;
-  height: 100%;
-  min-height: 100%;
-}
-
-.coach-hero {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.panoramica-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-auto-rows: 1fr;
-  gap: 24px;
-}
-
-.coach-card {
-  position: relative;
-  min-height: 190px;
-  padding: 24px;
-  border-radius: 18px;
-  overflow: hidden;
-  --briefing-accent: 255, 59, 34;
-  --briefing-accent-strong: #ff3b22;
-  --briefing-accent-end: #ff8a00;
-  background:
-    radial-gradient(circle at top left, rgba(var(--briefing-accent), 0.12), transparent 34%),
-    linear-gradient(145deg, rgba(26, 26, 36, 0.98), rgba(14, 14, 22, 0.98));
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.22);
-}
-
-.coach-card.tone-baseline {
-  --briefing-accent: 40, 183, 255;
-  --briefing-accent-strong: #28b7ff;
-  --briefing-accent-end: #4fd1c5;
-}
-
-.coach-card.tone-pace {
-  --briefing-accent: 255, 142, 41;
-  --briefing-accent-strong: #ff8e29;
-  --briefing-accent-end: #ffbf3f;
-}
-
-.coach-card.tone-race {
-  --briefing-accent: 255, 59, 34;
-  --briefing-accent-strong: #ff3b22;
-  --briefing-accent-end: #ff8a00;
-}
-
-.coach-card.tone-clean {
-  --briefing-accent: 255, 205, 64;
-  --briefing-accent-strong: #ffcd40;
-  --briefing-accent-end: #ff9f1c;
-}
-
-.coach-card.tone-success {
-  --briefing-accent: 34, 197, 94;
-  --briefing-accent-strong: #22c55e;
-  --briefing-accent-end: #14b8a6;
-}
-
-.driver-state {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  --briefing-accent: 66, 120, 255;
-  background:
-    radial-gradient(circle at top left, rgba(var(--briefing-accent), 0.09), transparent 36%),
-    linear-gradient(150deg, rgba(26, 24, 38, 0.98), rgba(16, 16, 26, 0.98));
-  box-shadow: 0 14px 30px rgba(0, 0, 0, 0.2);
-}
-
-.coach-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(135deg, rgba(var(--briefing-accent), 0.35), transparent 48%, rgba(var(--briefing-accent), 0.18));
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-}
-
-.coach-card__header {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-  margin-bottom: 18px;
-}
-
-.eyebrow {
-  display: block;
-  margin-bottom: 6px;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.coach-chip {
-  flex-shrink: 0;
-  padding: 5px 9px;
-  border-radius: 999px;
-  border: 1px solid rgba(var(--briefing-accent), 0.34);
-  background: rgba(var(--briefing-accent), 0.1);
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.coach-chip--muted {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.coach-title, .section-title {
-  color: var(--text-primary);
-  font-size: var(--font-size-xl, 24px);
-  margin: 0;
-  font-weight: 600;
-}
-
-.insight-box {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: clamp(32px, 4vw, 52px);
-  row-gap: 18px;
-  align-items: center;
-  padding: 18px 20px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-left: 4px solid rgba(255, 255, 255, 0.24);
-}
-.insight-box.actionable {
-  border-left-color: var(--briefing-accent-strong);
-  background: linear-gradient(90deg, rgba(var(--briefing-accent), 0.13), rgba(255, 255, 255, 0.035));
-}
-.insight-box.positive {
-  border-left-color: var(--briefing-accent-strong);
-  background: linear-gradient(90deg, rgba(var(--briefing-accent), 0.13), rgba(255, 255, 255, 0.035));
-}
-.insight-main {
-  max-width: 430px;
-  min-width: 0;
-}
-.insight-box h3 {
-  margin: 0 0 8px 0;
-  color: var(--text-primary);
-  font-size: var(--font-size-lg, 18px);
-}
-.insight-box p {
-  display: -webkit-box;
-  overflow: hidden;
-  margin: 0;
-  color: var(--text-secondary);
-  line-height: 1.45;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.training-choice {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(210px, 0.42fr);
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 14px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.training-choice__summary {
-  min-width: 0;
-}
-
-.training-choice span {
-  display: block;
-  color: rgba(255, 255, 255, 0.46);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.training-choice strong {
-  display: block;
-  margin-top: 5px;
-  color: #fff;
-  font-size: 17px;
-  font-weight: 900;
-  line-height: 1.1;
-}
-
-.training-choice select {
-  width: 100%;
-  min-height: 42px;
-  padding: 9px 12px;
-  border-radius: 11px;
-  border: 1px solid rgba(var(--briefing-accent), 0.32);
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  font-weight: 800;
-  outline: none;
-}
-
-.training-choice select:focus {
-  border-color: rgba(var(--briefing-accent), 0.62);
-  box-shadow: 0 0 0 3px rgba(var(--briefing-accent), 0.16);
-}
-
-.training-choice option {
-  color: #111;
-}
-
-.action-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 42px;
-  padding: 10px 16px;
-  background: linear-gradient(135deg, var(--briefing-accent-strong), var(--briefing-accent-end));
-  color: #fff;
-  border-radius: 999px;
-  text-decoration: none;
-  font-weight: 800;
-  white-space: nowrap;
-  justify-self: end;
-  box-shadow: 0 10px 24px rgba(var(--briefing-accent), 0.2);
-  transition: transform 0.2s, box-shadow 0.2s;
-}
-.action-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 14px 28px rgba(var(--briefing-accent), 0.28);
-}
-
-.action-btn--secondary {
-  justify-self: start;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: none;
-}
-
-.insight-text {
-  color: var(--text-secondary);
-  font-size: var(--font-size-md, 16px);
-  margin: 0 0 8px 0;
-}
-
-.coach-note {
-  margin: 14px 0 0 0;
-  color: rgba(255, 255, 255, 0.52);
-  font-size: 13px;
-  line-height: 1.55;
-}
-
-.coach-hero .coach-note {
-  margin-top: auto;
-}
-
-.driver-header {
-  align-items: center;
-  margin-bottom: 16px;
-}
-
-.driver-slide-container {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-}
-
-.driver-slide-panel {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  min-height: 100%;
-}
-
-.driver-slide-panel--recent {
-  gap: 14px;
-}
-
-.driver-summary {
-  min-height: 0;
-}
-
-.driver-slide-panel .coach-note {
-  margin-top: 10px;
-}
-
-.driver-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: auto;
-}
-
-.driver-metrics > div {
-  padding: 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-}
-
-.recent-breakdown {
-  display: grid;
-  gap: 6px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
-}
-
-.recent-breakdown__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
-  line-height: 1.2;
-}
-
-.recent-breakdown__row strong {
-  color: #fff;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.metric-value {
-  display: block;
-  color: #fff;
-  font-size: 22px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.metric-label {
-  display: block;
-  margin-top: 6px;
-  color: rgba(255, 255, 255, 0.46);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-
-.mini-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--spacing-lg, 16px);
-}
-
-.loading-state {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 300px;
-  color: var(--color-text-muted);
-}
-
-@media (max-width: 768px) {
-  .coach-sections {
-    grid-template-columns: 1fr;
-  }
-
-  .insight-box {
-    grid-template-columns: 1fr;
-  }
-
-  .insight-main {
-    max-width: none;
-  }
-
-  .action-btn {
-    width: 100%;
-  }
-
-  .training-choice {
-    grid-template-columns: 1fr;
-  }
-
-  .training-choice select {
-    width: 100%;
-  }
-
-  .panoramica-grid {
-    grid-template-columns: 1fr;
-  }
-}
+<style scoped lang="scss">
+.racing-overview { display: grid; grid-template-columns: minmax(0, 1.42fr) minmax(0, 1fr); gap: 16px; color: #f5f5f5; }
+.racing-panel { border: 1px solid #b4b4b4; background: transparent; min-width: 0; }
+.last-drive { display: flex; flex-direction: column; position: relative; }
+.last-drive__hero { position: relative; flex: 1; min-height: 340px; }
+.last-drive__image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 42%; mask-image: linear-gradient(#000 55%, #000b 74%, transparent 100%); }
+.last-drive__identity { position: absolute; bottom: 20px; left: 24px; right: 24px; text-shadow: 0 2px 12px #000; }
+.last-drive__identity h1, .last-drive__identity h2 { margin: 0; font-family: 'Racer Display', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; line-height: 1.13; }
+.last-drive__identity h1 { font-size: clamp(28px, 3vw, 48px); letter-spacing: -.025em; }
+.last-drive__identity h2 { font-size: clamp(20px, 2vw, 31px); margin-top: 3px; }
+.last-drive__identity p { margin: 8px 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; }
+.last-drive__results { padding: 0 22px 18px; }
+.performance-table { width: 100%; table-layout: fixed; border-collapse: collapse; background: transparent; }
+.performance-table tr { border-bottom: 1px solid #ffffff24; }
+.performance-table td { position: relative; padding: 14px 18px; vertical-align: top; }
+.performance-table td + td::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px; background: #ffffff65; }
+.time-label { display: block; font: 400 12px/1.3 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #ddd; margin-bottom: 3px; }
+.performance-table strong { font: italic 700 clamp(18px, 1.6vw, 25px)/1.2 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; }
+.grip-badge { display: inline-block; font-size: 9px; color: #c7c7c7; margin-left: 6px; text-decoration: none; }
+.last-drive__actions { display: flex; justify-content: center; gap: 24px; padding-top: 18px; }
+.last-drive__actions button { flex: 1; max-width: 280px; }
+.racing-overview__side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.overview-activity { flex: 1; }
+.training-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px; }
+.training-panel h2 { font: italic 700 22px/1.2 'Racer Display', sans-serif; text-transform: uppercase; margin: 0 0 6px; }
+.training-panel p { font: italic 13px/1.4 'Segoe UI', sans-serif; text-transform: uppercase; margin: 0; color: #ccc; }
+.training-panel .racing-button { padding-inline: 20px; font-size: 12px; }
+.overview-error { color: #ffafba; padding: 12px; }
+.overview-error button { color: #fff; background: transparent; border: 1px solid #aaa; padding: 6px 12px; }
+.overview-placeholder > :not(.overview-loading-label) { visibility: hidden; }
+.overview-placeholder::after { content: ''; position: absolute; inset: 16px; background: #ffffff08; animation: loading-pulse 1.5s ease-in-out infinite alternate; }
+.overview-loading-label { position: absolute; left: 24px; top: 24px; color: #ccc; }
+@keyframes loading-pulse { to { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .overview-placeholder::after { animation: none; } }
+@media (min-width: 1500px) { .last-drive__hero { min-height: 440px; } .training-panel { padding: 22px; } }
+@media (max-width: 1050px) { .racing-overview { grid-template-columns: 1.2fr 1fr; gap: 12px; } .last-drive__results { padding-inline: 12px; } .performance-table td { padding-inline: 10px; } .training-panel { flex-direction: column; align-items: stretch; } .last-drive__actions { gap: 12px; } }
+@media (max-width: 800px) { .racing-overview { grid-template-columns: 1fr; } .last-drive__hero { min-height: 390px; } .training-panel { flex-direction: row; } }
+@media (max-width: 480px) { .last-drive__hero { min-height: 310px; } .last-drive__identity { left: 16px; } .performance-table td { padding-inline: 6px; } .time-label { font-size: 10px; } .grip-badge { display: block; margin: 3px 0 0; } .training-panel { flex-direction: column; } .last-drive__actions button { padding-inline: 8px; font-size: 12px; } }
 </style>
