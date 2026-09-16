@@ -101,7 +101,7 @@ const handleGoToSettings = () => {
   :deep(.tabsbar) { border-bottom: 0; }
   :deep(.tab--section-start::before) { background: #b4b4b4; }
   // Sticky is relative to the app scroll area, already below the native titlebar.
-  .dashboard-sticky-header { background: #020202f5; flex-shrink: 0; }
+  .dashboard-sticky-header { background: transparent; flex-shrink: 0; }
   .main-content { display: flex; flex-direction: column; }
   :deep(.dropdown-trigger), :deep(.pwc-bell) {
     height: 46px; border: 1px solid #ffffff85; border-radius: 0;
