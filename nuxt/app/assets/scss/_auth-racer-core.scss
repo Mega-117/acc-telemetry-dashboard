@@ -14,7 +14,7 @@
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable both-edges;
-  background: #020202;
+  background: transparent;
   color: #fff;
   font-family: Inter, 'Segoe UI', sans-serif;
   font-size: 18px;
@@ -26,28 +26,6 @@
   :deep(p), :deep(h2), :deep(h3) { margin: 0; }
 }
 :global(body:has(.electron-titlebar) .racer-auth) { top: 36px; }
-.racer-auth__background {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  overflow: hidden;
-  background: repeating-linear-gradient(135deg, transparent 0 148px, #ffffff04 149px, transparent 150px),
-    radial-gradient(ellipse at 92% 95%, #62001677, #27000833 36%, transparent 68%), #020202;
-}
-.racer-auth__particle {
-  position: absolute;
-  width: 3px; height: 3px; border-radius: 50%;
-  background: #ff7188;
-  box-shadow: 0 0 5px #f4002870;
-  animation: racer-particle 18s linear infinite;
-  will-change: transform, opacity;
-}
-@keyframes racer-particle {
-  0% { transform: translate3d(110px,-110px,0); opacity: 0; }
-  20%,70% { opacity: .7; }
-  100% { transform: translate3d(-350px,350px,0); opacity: 0; }
-}
 .racer-auth__column { width: min(512px, calc(100% - 48px)); margin: 96px auto 32px; }
 .racer-auth__column--wide { width: min(584px, calc(100% - 48px)); }
 .racer-auth__brand { height: 174px; display: flex; justify-content: center; }
@@ -168,6 +146,6 @@
 @media (prefers-reduced-motion: reduce) {
   .racer-auth.dissolve-fade-zoom-enter-active,
   .racer-auth.dissolve-fade-zoom-leave-active { transition: none; }
-  .racer-auth__particle, .racer-auth :deep(.spinner) { animation: none; }
+  .racer-auth :deep(.spinner) { animation: none; }
   .racer-auth__height, .racer-auth :deep(.racer-enter-active), .racer-auth :deep(.racer-leave-active) { transition: none; }
 }

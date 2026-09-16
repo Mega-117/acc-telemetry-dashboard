@@ -110,7 +110,7 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
 
 .coach-layout {
   min-height: 100vh;
-  background: linear-gradient(180deg, #0a0a12 0%, #0f0f18 100%);
+  background: transparent;
 }
 
 .coach-header {

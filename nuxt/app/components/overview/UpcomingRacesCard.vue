@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { CirclePlus, Ellipsis } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
@@ -236,7 +237,7 @@ onBeforeUnmount(() => {
         <span v-if="!racing" class="eyebrow">Calendario pilota</span>
         <h2 class="coach-title">{{ racing ? 'Prossima gara' : 'Prossime gare' }}</h2>
       </div>
-      <button class="race-action" type="button" aria-label="Aggiungi gara" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara' : cloudWriteGate.message" @click="openCreateModal">{{ racing ? '+' : 'Aggiungi gara' }}</button>
+      <button class="race-action" type="button" aria-label="Aggiungi gara" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara' : cloudWriteGate.message" @click="openCreateModal"><CirclePlus v-if="racing" :size="32" :stroke-width="1.5" aria-hidden="true" /><span v-else>Aggiungi gara</span></button>
     </div>
 
     <div v-if="isLoading" class="race-empty">Caricamento gare...</div>
@@ -272,7 +273,7 @@ onBeforeUnmount(() => {
           <p>{{ featuredEvent.trackName }}<span v-if="featuredEvent.carName"> - {{ featuredEvent.carName }}</span></p>
         </div>
         <details v-if="racing" class="race-options">
-          <summary aria-label="Opzioni prossima gara" title="Opzioni prossima gara">•••</summary>
+          <summary aria-label="Opzioni prossima gara" title="Opzioni prossima gara"><Ellipsis :size="26" aria-hidden="true" /></summary>
           <div class="race-options__menu">
             <a v-if="featuredEvent.simGridUrl" :href="featuredEvent.simGridUrl" target="_blank" rel="noopener">SimGrid</a>
             <a v-if="featuredEvent.raceUrl" :href="featuredEvent.raceUrl" target="_blank" rel="noopener">Link gara</a>
@@ -384,7 +385,8 @@ onBeforeUnmount(() => {
   min-height: 192px; max-height: none; padding: 18px; overflow: visible;
   .coach-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; }
   .race-header { margin-bottom: 14px; }
-  .race-action { width: 32px; height: 32px; min-height: 32px; padding: 0; border: 1px solid #bbb; border-radius: 50%; color: #fff; background: none; font-size: 28px; font-weight: 300; line-height: 1; }
+  .race-action { display: grid; place-items: center; width: 40px; height: 40px; min-height: 40px; padding: 4px; border: 0; border-radius: 0; color: #fff; background: none; line-height: 1; }
+  .race-action svg, summary svg { display: block; flex-shrink: 0; }
   .featured-race { position: relative; border: 0; background: transparent; border-radius: 0; padding: 0 0 8px; min-height: 116px;
     grid-template-columns: minmax(86px,.32fr) minmax(0,1fr); grid-template-areas: 'countdown main'; gap: 16px; }
   .race-countdown { padding-right: 16px; align-items: center; border-color: #ffffff80; }
@@ -398,7 +400,7 @@ onBeforeUnmount(() => {
   .featured-race h3 { font: italic 700 clamp(19px,1.8vw,29px)/1.15 'Racer Display', sans-serif; }
   .featured-race p { color: #ccc; font-size: 13px; margin-top: 8px; padding-right: 22px; }
   .race-options { position: absolute; bottom: -8px; right: 0; z-index: 10; }
-  summary { list-style: none; cursor: pointer; padding: 8px; font-size: 16px; letter-spacing: 3px; }
+  summary { display: grid; place-items: center; list-style: none; cursor: pointer; padding: 7px; width: 40px; height: 40px; }
   summary::-webkit-details-marker { display: none; }
   .race-options__menu { position: absolute; right: 0; top: 100%; min-width: 155px; display: grid; border: 1px solid #777; padding: 6px; background: #111; box-shadow: 0 12px 24px #0009; }
   .race-options__menu a, .race-options__menu button { text-align: left; padding: 10px; color: #eee; background: none; border: 0; text-decoration: none; font: 13px 'Segoe UI', sans-serif; cursor: pointer; }

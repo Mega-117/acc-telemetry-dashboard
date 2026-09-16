@@ -437,6 +437,7 @@ provide('goToSettings', handleGoToSettings)
 
 <template>
   <div id="app" :class="{ 'app--training-overlay': isTrainingOverlayIntent || isHudOverlayRoute || isStandaloneRuntimeRoute }">
+    <UiRacingBackdrop v-if="!isTrainingOverlayIntent && !isHudOverlayRoute && !isStandaloneRuntimeRoute" />
     <UiAppNotifications v-if="!isTrainingOverlayIntent && !isHudOverlayRoute && !isStandaloneRuntimeRoute" />
 
     <template v-if="isProtectedRuntimeRoute && isSecondaryLocalRuntime && !canMountProtectedRuntime">
@@ -574,7 +575,8 @@ html, body {
 
 #app {
   min-height: 100vh;
-  background: $color-bg;
+  background: transparent;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
 }
@@ -710,7 +712,7 @@ body:has(.electron-titlebar) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: $color-bg;
+  background: transparent;
 }
 
 .loading-content {
@@ -744,7 +746,7 @@ body:has(.electron-titlebar) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: $color-bg;
+  background: transparent;
 }
 
 .initializing-content {

@@ -16,17 +16,10 @@ onMounted(() => {
 })
 onBeforeUnmount(() => observer?.disconnect())
 const base = useRuntimeConfig().app.baseURL
-const particles = Array.from({ length: 16 }, (_, i) => ({
-  left: `${8 + ((i * 37) % 90)}%`, top: `${(i * 23) % 100}%`,
-  animationDelay: `${-i * 1.7}s`, animationDuration: `${15 + i % 5 * 2}s`,
-}))
 </script>
 
 <template>
   <section class="racer-auth" :aria-label="`Autenticazione ${PRODUCT.displayName}`">
-    <div class="racer-auth__background" aria-hidden="true">
-      <i v-for="(particle, i) in particles" :key="i" class="racer-auth__particle" :style="particle" />
-    </div>
     <div class="racer-auth__column" :class="{ 'racer-auth__column--wide': wide }">
       <header class="racer-auth__brand">
         <div class="racer-auth__logo-viewport">

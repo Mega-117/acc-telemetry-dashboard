@@ -52,7 +52,6 @@ const handleGoToSettings = () => {
 
 <template>
   <div class="dashboard-layout" :class="{ 'racing-overview-shell': route.path === '/panoramica' }">
-    <UiRacingBackdrop v-if="route.path === '/panoramica'" />
     <!-- Sticky Header: TopBar + TabsBar -->
     <div class="dashboard-sticky-header">
       <LayoutTopBar
@@ -76,7 +75,7 @@ const handleGoToSettings = () => {
 <style lang="scss" scoped>
 .dashboard-layout {
   min-height: 100vh;
-  background: #0d0d12;
+  background: transparent;
 }
 
 .dashboard-sticky-header {

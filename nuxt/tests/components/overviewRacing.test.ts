@@ -16,6 +16,8 @@ describe('racing overview components', () => {
   it('opens the existing create form, validates and persists through the repository', async () => {
     const wrapper = mount(Calendar, { props: { userId: 'qa', racing: true }, global: { stubs: { teleport: true } } })
     await flushPromises()
+    expect(wrapper.get('[aria-label="Aggiungi gara"] svg circle').exists()).toBe(true)
+    expect(wrapper.get('[aria-label="Opzioni prossima gara"] svg').exists()).toBe(true)
     await wrapper.get('[aria-label="Aggiungi gara"]').trigger('click')
     await wrapper.get('form').trigger('submit')
     expect(wrapper.text()).toContain('Titolo, data e pista sono obbligatori')
