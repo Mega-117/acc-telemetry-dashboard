@@ -13,10 +13,10 @@ async function mount(available=true,sessionType=0) {
 }
 const button=(id:string)=>document.querySelector(`[data-overlay-wheel-action="${id}"]`) as HTMLButtonElement
 describe('Fuel from Ctrl+K',()=>{
- it('qualifying and race start with automatic session duration',async()=>{const api=await mount(true,1);await flush();expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'auto',minutes:10})})
+ it.each([0,1,2])('custom stint stays manual in session %i',async sessionType=>{const api=await mount(true,sessionType);expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'minutes',minutes:10})})
  it('shows total and sends current preview identity with one apply',async()=>{const api=await mount();expect(button('fuel-apply').textContent).toContain('25 L');button('fuel-apply').click();await flush();expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledWith({mode:'minutes',minutes:10,contextKey:'session',totalLitres:25});expect(document.body.textContent).toContain('25 L verificati')})
  it('blocks apply outside safe pit context',async()=>{const api=await mount(false);expect(button('fuel-apply').disabled).toBe(true);button('fuel-apply').click();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled()})
- it('wheel buttons change minutes and auto selects session duration',async()=>{const api=await mount();button('fuel-plus').click();await flush();expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'minutes',minutes:11});button('fuel-auto').click();await flush();expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'auto',minutes:11})})
+ it('wheel buttons change custom minutes',async()=>{const api=await mount();button('fuel-plus').click();await flush();expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'minutes',minutes:11})})
 })
 
 const scroll = async(deltaY:number,ctrlKey=false) => {
@@ -85,4 +85,46 @@ it('allows apply during background refresh and ignores its late reply', async ()
  done({available:false});await flush()
  expect(button('fuel-apply').disabled).toBe(false)
  expect(document.body.textContent).toContain('25 L verificati')
+})
+
+it('direct session button works while closed and applies its fresh auto plan exactly once',async()=>{
+ const api=await mount();button('fuel').click();await flush()
+ api.trainingOverlayPreviewSetupFuel.mockResolvedValue({available:true,plan:{ok:true,totalLitres:40,contextKey:'race'}} as any)
+ button('fuel-session').click();button('fuel-session').click();await flush()
+ expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'auto',minutes:10})
+ expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledTimes(1)
+ expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledWith({mode:'auto',minutes:10,contextKey:'race',totalLitres:40})
+ expect(document.querySelector('.fuel-body')).toBeNull()
+ expect(document.querySelector('[role="status"]')?.textContent).toContain('25 L verificati')
+})
+it('direct session failure is visible without opening the stint panel',async()=>{
+ const api=await mount();button('fuel').click();await flush()
+ api.trainingOverlayPreviewSetupFuel.mockResolvedValue({available:false,unavailableReason:'Fermati ai box'} as any)
+ button('fuel-session').click();await flush()
+ expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled()
+ expect(document.querySelector('[role="status"]')?.textContent).toContain('Fermati ai box')
+ expect(button('fuel-session').disabled).toBe(false)
+})
+it('direct session request blocks both modes during slow preview and ignores stale custom reply',async()=>{
+ const api=await mount();let custom:any,session:any
+ api.trainingOverlayPreviewSetupFuel.mockImplementationOnce(()=>new Promise(r=>custom=r)).mockImplementationOnce(()=>new Promise(r=>session=r))
+ button('fuel-plus').click();await flush();button('fuel-session').click();await flush()
+ expect(button('fuel-session').disabled).toBe(true);expect(button('fuel').disabled).toBe(true);expect(button('fuel-apply').disabled).toBe(true)
+ custom({available:true,plan:{ok:true,totalLitres:99,contextKey:'wrong'}});await flush()
+ session({available:true,plan:{ok:true,totalLitres:40,contextKey:'race'}});await flush()
+ expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledWith({mode:'auto',minutes:11,contextKey:'race',totalLitres:40})
+})
+it('unmount while auto preview is pending prevents application',async()=>{
+ const api=await mount();let done:any
+ api.trainingOverlayPreviewSetupFuel.mockImplementationOnce(()=>new Promise(r=>done=r))
+ button('fuel-session').click();await flush();app?.unmount();app=null
+ done({available:true,plan:{ok:true,totalLitres:40,contextKey:'race'}});await flush()
+ expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled()
+})
+it('direct IPC rejection is displayed and releases the buttons',async()=>{
+ const api=await mount();button('fuel').click();await flush()
+ api.trainingOverlayApplySetupFuel.mockRejectedValue(Error('offline'))
+ button('fuel-session').click();await flush()
+ expect(document.querySelector('[role="status"]')?.textContent).toContain('Applicazione interrotta')
+ expect(button('fuel-session').disabled).toBe(false)
 })
