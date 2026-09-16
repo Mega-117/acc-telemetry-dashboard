@@ -94,7 +94,9 @@ const handleGoToSettings = () => {
   --page-bottom-space: 22px;
   position: relative; isolation: isolate; background: transparent;
   --racing-accent: #ff0024;
-  :deep(.topbar), :deep(.tabsbar) { background: transparent; }
+  --racing-nav-border: rgba(255, 255, 255, 0.1411764706);
+  :deep(.topbar), :deep(.tabsbar) { background: transparent; border-bottom-color: var(--racing-nav-border); }
+  :deep(.tab--section-start::before) { background: var(--racing-nav-border); }
   // Sticky is relative to the app scroll area, already below the native titlebar.
   .dashboard-sticky-header { background: #020202f5; }
   :deep(.dropdown-trigger), :deep(.pwc-bell) {
@@ -103,7 +105,7 @@ const handleGoToSettings = () => {
   }
   :deep(.pwc-bell) { width: 46px; }
   :deep(.dropdown-trigger) { padding: 0 18px; gap: 16px; }
-  :deep(.user-name) { font: italic 400 18px/1.2 'Segoe UI', sans-serif; text-transform: uppercase; }
+  :deep(.user-name) { font: italic 500 18px/1.2 'Racer Display', sans-serif; text-transform: uppercase; }
   :deep(.arrow-icon) { color: #ddd; }
   :deep(.dropdown-trigger:hover), :deep(.pwc-bell:hover), :deep(.pwc-bell.is-open) { border-color: var(--racing-accent); background: #ff002414; }
   :deep(.dropdown-menu), :deep(.pwc-notices) { border-radius: 0; background: #090909; border-color: #ffffff70; box-shadow: 0 16px 35px #000b; }
@@ -116,7 +118,7 @@ const handleGoToSettings = () => {
   :deep(.brand-logo) { width: clamp(200px, 22vw, 300px); }
   :deep(.tab) { font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-size: 18px; font-weight: 700; letter-spacing: 0; padding: 13px 26px; color: #ccc; transition: color .15s; }
   :deep(.tab--active) { color: #fff; }
-  :deep(.tab--active::after) { height: 6px; background: var(--racing-accent); clip-path: polygon(5px 0,100% 0,calc(100% - 5px) 100%,0 100%); }
+  :deep(.tab--active::after) { height: 3px; background: var(--racing-accent); clip-path: polygon(3px 0,100% 0,calc(100% - 3px) 100%,0 100%); }
   :deep(.page-container) { max-width: 1800px; padding: 18px 26px 22px; }
 }
 @media (max-width: 700px) {
