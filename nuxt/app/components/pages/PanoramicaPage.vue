@@ -221,7 +221,8 @@ function goToSession() {
 .racing-overview { display: grid; grid-template-columns: minmax(0, 1.42fr) minmax(0, 1fr); gap: 16px; color: #f5f5f5; }
 .racing-panel { border: 1px solid #b4b4b4; background: transparent; min-width: 0; }
 .last-drive { display: flex; flex-direction: column; position: relative; }
-.last-drive__hero { position: relative; flex: 1; min-height: 340px; }
+// The image fades onto black, not onto the animated background behind the card.
+.last-drive__hero { position: relative; isolation: isolate; background: #020202; flex: 1; min-height: 340px; }
 .last-drive__image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 42%; mask-image: linear-gradient(#000 55%, #000b 74%, transparent 100%); }
 .last-drive__identity { position: absolute; bottom: 20px; left: 24px; right: 24px; text-shadow: 0 2px 12px #000; }
 .last-drive__identity h1, .last-drive__identity h2 { margin: 0; font-family: 'Racer Display', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; line-height: 1.13; }

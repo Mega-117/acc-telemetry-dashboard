@@ -91,8 +91,24 @@ const handleGoToSettings = () => {
 .racing-overview-shell {
   position: relative; isolation: isolate; background: transparent;
   --racing-accent: #ff0024;
-  :deep(.topbar), :deep(.tabsbar), .dashboard-sticky-header { background: transparent; }
-  .dashboard-sticky-header { position: relative; }
+  :deep(.topbar), :deep(.tabsbar) { background: transparent; }
+  // Sticky is relative to the app scroll area, already below the native titlebar.
+  .dashboard-sticky-header { background: #020202f5; }
+  :deep(.dropdown-trigger), :deep(.pwc-bell) {
+    height: 46px; border: 1px solid #ffffff85; border-radius: 0;
+    background: transparent; color: #eee;
+  }
+  :deep(.pwc-bell) { width: 46px; }
+  :deep(.dropdown-trigger) { padding: 0 18px; gap: 16px; }
+  :deep(.user-name) { font: italic 700 18px/1.2 'Racer Display', sans-serif; text-transform: uppercase; }
+  :deep(.arrow-icon) { color: #ddd; }
+  :deep(.dropdown-trigger:hover), :deep(.pwc-bell:hover), :deep(.pwc-bell.is-open) { border-color: var(--racing-accent); background: #ff002414; }
+  :deep(.dropdown-menu), :deep(.pwc-notices) { border-radius: 0; background: #090909; border-color: #ffffff70; box-shadow: 0 16px 35px #000b; }
+  :deep(.pwc-notices) { top: calc(100% + 8px); }
+  :deep(.dropdown-item) { border-radius: 0; }
+  :deep(.dropdown-item:hover:not(:disabled)) { background: #ff002414; }
+  :deep(.pwc-notices header strong) { font: italic 700 18px 'Racer Display', sans-serif; text-transform: uppercase; }
+  :deep(.dropdown-trigger:focus-visible), :deep(.pwc-bell:focus-visible) { outline: 2px solid #fff; outline-offset: 3px; }
   :deep(.topbar__inner) { max-width: 1800px; padding: 14px 28px; }
   :deep(.brand-logo) { width: clamp(200px, 22vw, 300px); }
   :deep(.tab) { font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-size: 18px; font-weight: 700; letter-spacing: 0; padding: 13px 26px; color: #ccc; transition: color .15s; }

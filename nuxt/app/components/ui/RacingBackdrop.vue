@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Official app background, extracted from the original login scene.
-const particles = Array.from({ length: 16 }, (_, i) => ({
+const particles = Array.from({ length: 28 }, (_, i) => ({
   left: `${8 + ((i * 37) % 90)}%`, top: `${(i * 23) % 100}%`,
   animationDelay: `${-i * 1.7}s`, animationDuration: `${15 + i % 5 * 2}s`,
 }))
