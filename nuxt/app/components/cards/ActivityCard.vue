@@ -478,7 +478,7 @@ $color-race: $racing-red;         // Red
 
 <style scoped lang="scss">
 .activity-card--racing {
-  padding: 18px; min-height: 320px; background: transparent; border: 1px solid #b4b4b4; border-radius: 0; overflow: visible;
+  padding: 18px; min-height: 320px; background: transparent; border: 1px solid #353535; border-radius: 0; overflow: visible;
   &::before, .accent-glow { display: none; }
   .card-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; margin-bottom: 26px; }
   .card-content { flex-direction: column; gap: 18px; }

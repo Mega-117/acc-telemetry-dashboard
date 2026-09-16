@@ -100,7 +100,7 @@ const handleGoToSettings = () => {
   }
   :deep(.pwc-bell) { width: 46px; }
   :deep(.dropdown-trigger) { padding: 0 18px; gap: 16px; }
-  :deep(.user-name) { font: italic 700 18px/1.2 'Racer Display', sans-serif; text-transform: uppercase; }
+  :deep(.user-name) { font: italic 400 18px/1.2 'Segoe UI', sans-serif; text-transform: uppercase; }
   :deep(.arrow-icon) { color: #ddd; }
   :deep(.dropdown-trigger:hover), :deep(.pwc-bell:hover), :deep(.pwc-bell.is-open) { border-color: var(--racing-accent); background: #ff002414; }
   :deep(.dropdown-menu), :deep(.pwc-notices) { border-radius: 0; background: #090909; border-color: #ffffff70; box-shadow: 0 16px 35px #000b; }

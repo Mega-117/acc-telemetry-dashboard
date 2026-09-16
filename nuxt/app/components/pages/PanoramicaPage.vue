@@ -219,7 +219,7 @@ function goToSession() {
 
 <style scoped lang="scss">
 .racing-overview { display: grid; grid-template-columns: minmax(0, 1.42fr) minmax(0, 1fr); gap: 16px; color: #f5f5f5; }
-.racing-panel { border: 1px solid #b4b4b4; background: transparent; min-width: 0; }
+.racing-panel { border: 1px solid #353535; background: transparent; min-width: 0; }
 .last-drive { display: flex; flex-direction: column; position: relative; }
 // The image fades onto black, not onto the animated background behind the card.
 .last-drive__hero { position: relative; isolation: isolate; background: #020202; flex: 1; min-height: 340px; }
