@@ -143,9 +143,9 @@ const lastTrack = computed(() => overviewProjection.value?.lastTrack || null)
 const lastTrackName = computed(() => lastTrack.value?.name || 'La tua prossima pista')
 const lastSession = computed(() => overviewProjection.value?.lastSession || null)
 const performanceColumns = computed(() => [
-  { label: 'Qualifica', best: lastTrack.value?.bestQualy, grip: lastTrack.value?.bestQualyGrip, session: lastSession.value?.bestQualy },
-  { label: 'Gara', best: lastTrack.value?.bestRace, grip: lastTrack.value?.bestRaceGrip, session: lastSession.value?.bestRace },
-  { label: 'Media gara', best: lastTrack.value?.bestAvgRace, grip: lastTrack.value?.bestAvgRaceGrip, session: lastSession.value?.bestAvgRace },
+  { label: 'Quali', best: lastTrack.value?.bestQualy, grip: lastTrack.value?.bestQualyGrip, session: lastSession.value?.bestQualy },
+  { label: 'Race', best: lastTrack.value?.bestRace, grip: lastTrack.value?.bestRaceGrip, session: lastSession.value?.bestRace },
+  { label: 'AVG', best: lastTrack.value?.bestAvgRace, grip: lastTrack.value?.bestAvgRaceGrip, session: lastSession.value?.bestAvgRace },
 ])
 const emit = defineEmits<{
   'go-to-track': [trackId: string]
@@ -184,14 +184,14 @@ function goToSession() {
             <tbody>
               <tr>
                 <td v-for="column in performanceColumns" :key="column.label">
-                  <span class="time-label">Record · {{ column.label }}</span>
+                  <span class="time-label">Best {{ column.label }}</span>
                   <strong>{{ column.best || '--:--.---' }}</strong>
                   <abbr v-if="column.grip" class="grip-badge" :title="column.grip">{{ column.grip.slice(0, 3).toUpperCase() }}</abbr>
                 </td>
               </tr>
               <tr>
                 <td v-for="column in performanceColumns" :key="column.label">
-                  <span class="time-label">Ultima sessione · {{ column.label }}</span>
+                  <span class="time-label">Last session {{ column.label }}</span>
                   <strong>{{ column.session || '--:--.---' }}</strong>
                 </td>
               </tr>
@@ -219,7 +219,7 @@ function goToSession() {
 
 <style scoped lang="scss">
 .racing-overview { display: grid; grid-template-columns: minmax(0, 1.42fr) minmax(0, 1fr); gap: 16px; color: #f5f5f5; }
-.racing-panel { border: 1px solid var(--racing-border-panel); background: transparent; min-width: 0; }
+.racing-panel { border: 1px solid rgba(255, 255, 255, 0.3960784314); background: transparent; min-width: 0; }
 .last-drive { display: flex; flex-direction: column; position: relative; }
 // The image fades onto black, not onto the animated background behind the card.
 .last-drive__hero { position: relative; isolation: isolate; background: #020202; flex: 1; min-height: 340px; }
@@ -228,14 +228,14 @@ function goToSession() {
 .last-drive__identity h1, .last-drive__identity h2 { margin: 0; font-family: 'Racer Display', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; line-height: 1.13; }
 .last-drive__identity h1 { font-size: clamp(28px, 3vw, 48px); letter-spacing: -.025em; }
 .last-drive__identity h2 { font-size: clamp(20px, 2vw, 31px); margin-top: 3px; }
-.last-drive__identity p { margin: 8px 0 0; font-size: 13px; text-transform: none; letter-spacing: .5px; }
+.last-drive__identity p { margin: 8px 0 0; font-size: 13px; text-transform: uppercase; letter-spacing: 2px; }
 .last-drive__results { padding: 0 22px 18px; }
 .performance-table { width: 100%; table-layout: fixed; border-collapse: collapse; background: transparent; }
-.performance-table tr { border-bottom: 1px solid var(--racing-border-divider); }
+.performance-table tr { border-bottom: 1px solid #ffffff24; }
 .performance-table td { position: relative; padding: 14px 18px; vertical-align: top; }
-.performance-table td + td::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px; background: var(--racing-border-divider); }
-.time-label { display: block; font: 400 12px/1.3 'Segoe UI', sans-serif; text-transform: none; color: #ddd; margin-bottom: 3px; }
-.performance-table strong { font: normal 500 clamp(18px, 1.6vw, 25px)/1.2 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; }
+.performance-table td + td::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px; background: #ffffff65; }
+.time-label { display: block; font: 400 12px/1.3 'Arial Narrow', 'Segoe UI', sans-serif; text-transform: uppercase; color: #ddd; margin-bottom: 3px; }
+.performance-table strong { font: italic 700 clamp(18px, 1.6vw, 25px)/1.2 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; }
 .grip-badge { display: inline-block; font-size: 9px; color: #c7c7c7; margin-left: 6px; text-decoration: none; }
 .last-drive__actions { display: flex; justify-content: center; gap: 24px; padding-top: 18px; }
 .last-drive__actions button { flex: 1; max-width: 280px; }
@@ -243,10 +243,10 @@ function goToSession() {
 .overview-activity { flex: 1; }
 .training-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px; }
 .training-panel h2 { font: italic 700 22px/1.2 'Racer Display', sans-serif; text-transform: uppercase; margin: 0 0 6px; }
-.training-panel p { font: 400 13px/1.4 'Segoe UI', sans-serif; text-transform: none; margin: 0; color: #ccc; }
+.training-panel p { font: italic 13px/1.4 'Segoe UI', sans-serif; text-transform: uppercase; margin: 0; color: #ccc; }
 .training-panel .racing-button { padding-inline: 20px; font-size: 12px; }
 .overview-error { color: #ffafba; padding: 12px; }
-.overview-error button { color: #fff; background: transparent; border: 1px solid var(--racing-border-control); padding: 6px 12px; }
+.overview-error button { color: #fff; background: transparent; border: 1px solid #aaa; padding: 6px 12px; }
 .overview-placeholder > :not(.overview-loading-label) { visibility: hidden; }
 .overview-placeholder::after { content: ''; position: absolute; inset: 16px; background: #ffffff08; animation: loading-pulse 1.5s ease-in-out infinite alternate; }
 .overview-loading-label { position: absolute; left: 24px; top: 24px; color: #ccc; }

@@ -375,40 +375,39 @@ onBeforeUnmount(() => {
 
 <style scoped lang="scss">
 .race-modal--racing {
-  border-radius: 0; border-color: var(--racing-border-panel); background: #101010;
+  border-radius: 0; border-color: #aaa; background: #101010;
   h2 { font-family: 'Racer Display', sans-serif; font-style: italic; text-transform: uppercase; }
   .primary-action { background: #ff0024; border-radius: 0; }
   input { border-radius: 0; }
 }
 .upcoming-races-card--racing {
-  border: 1px solid var(--racing-border-panel); border-radius: 0; background: transparent; box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.3960784314); border-radius: 0; background: transparent; box-shadow: none;
   min-height: 192px; max-height: none; padding: 18px; overflow: visible;
   .coach-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; }
   .race-header { margin-bottom: 14px; }
   .race-action { display: grid; place-items: center; width: 40px; height: 40px; min-height: 40px; padding: 4px; border: 0; border-radius: 0; color: #fff; background: none; line-height: 1; }
-  .race-action:hover:not(:disabled), summary:hover { color: #ff0024; }
   .race-action svg, summary svg { display: block; flex-shrink: 0; }
   .featured-race { position: relative; border: 0; background: transparent; border-radius: 0; padding: 0 0 8px; min-height: 116px;
     grid-template-columns: minmax(86px,.32fr) minmax(0,1fr); grid-template-areas: 'countdown main'; gap: 16px; }
-  .race-countdown { padding-right: 16px; align-items: center; border-color: var(--racing-border-divider); }
+  .race-countdown { padding-right: 16px; align-items: center; border-color: #ffffff80; }
   .race-countdown__label { order: 2; }
   .race-countdown__metric { margin: 0; flex-direction: column; align-items: center; gap: 5px; }
-  .race-countdown__value { font: normal 500 76px/.9 'Racer Display', sans-serif; }
-  .race-countdown__label, .race-countdown__unit, .race-countdown__suffix { color: #ddd; text-transform: none; font-size: 11px; letter-spacing: .5px; font-weight: 500; }
+  .race-countdown__value { font: italic 700 76px/.9 'Racer Display', sans-serif; }
+  .race-countdown__label, .race-countdown__unit, .race-countdown__suffix { color: #ddd; font-size: 10px; letter-spacing: 2px; font-weight: 500; }
   .race-countdown__suffix { display: none; }
   .race-countdown--today .race-countdown__value { font-size: 38px; color: #fff; }
-  .race-date { text-transform: none; font-size: 12px; color: #ddd; font-weight: 400; margin-bottom: 8px; }
+  .race-date { font-size: 12px; color: #ddd; font-weight: 400; margin-bottom: 8px; }
   .featured-race h3 { font: italic 700 clamp(19px,1.8vw,29px)/1.15 'Racer Display', sans-serif; }
   .featured-race p { color: #ccc; font-size: 13px; margin-top: 8px; padding-right: 22px; }
   .race-options { position: absolute; bottom: -8px; right: 0; z-index: 10; }
   summary { display: grid; place-items: center; list-style: none; cursor: pointer; padding: 7px; width: 40px; height: 40px; }
   summary::-webkit-details-marker { display: none; }
-  .race-options__menu { position: absolute; right: 0; top: 100%; min-width: 155px; display: grid; border: 1px solid var(--racing-border-control); padding: 6px; background: #111; box-shadow: 0 12px 24px #0009; }
+  .race-options__menu { position: absolute; right: 0; top: 100%; min-width: 155px; display: grid; border: 1px solid #777; padding: 6px; background: #111; box-shadow: 0 12px 24px #0009; }
   .race-options__menu a, .race-options__menu button { text-align: left; padding: 10px; color: #eee; background: none; border: 0; text-decoration: none; font: 13px 'Segoe UI', sans-serif; cursor: pointer; }
   .race-options__menu a:hover, .race-options__menu button:hover { background: #ffffff15; }
   button:disabled { opacity: .4; cursor: default; }
   summary:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid white; outline-offset: 2px; }
-  .race-list-block { border-top: 1px solid var(--racing-border-divider); }
+  .race-list-block { border-top: 1px solid #ffffff25; }
   .race-list { max-height: 140px; overflow-y: auto; }
   .compact-race { background: transparent; border-radius: 0; }
 }
