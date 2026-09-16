@@ -459,6 +459,14 @@ onBeforeUnmount(() => {
   summary { display: grid; place-items: center; list-style: none; cursor: pointer; padding: 7px; width: 40px; height: 40px; }
   summary::-webkit-details-marker { display: none; }
   .race-options[open] > summary { color: #ff0024; background: #ff002412; }
+  .race-options[open] .race-options__menu { animation: race-menu-in 180ms ease-out both; }
+  @keyframes race-menu-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .race-options[open] .race-options__menu { animation: none; }
+  }
   .race-options__menu {
     position: absolute; right: 0; top: calc(100% + 6px); width: 216px;
     max-width: calc(100vw - 48px); display: grid; gap: 2px;
