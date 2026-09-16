@@ -96,7 +96,7 @@ const handleGoToSettings = () => {
   --page-bottom-space: 22px;
   position: relative; isolation: isolate; background: transparent;
   --racing-accent: #ff0024;
-  --racing-nav-border: rgba(255, 255, 255, 0.1411764706);
+  --racing-nav-border: var(--racing-border-divider);
   :deep(.topbar), :deep(.tabsbar) { background: transparent; border-bottom-color: var(--racing-nav-border); }
   :deep(.tabsbar) { border-bottom: 0; }
   :deep(.tab--section-start::before) { background: #b4b4b4; }
@@ -104,7 +104,7 @@ const handleGoToSettings = () => {
   .dashboard-sticky-header { background: #020202f5; flex-shrink: 0; }
   .main-content { display: flex; flex-direction: column; }
   :deep(.dropdown-trigger), :deep(.pwc-bell) {
-    height: 46px; border: 1px solid #ffffff85; border-radius: 0;
+    height: 46px; border: 1px solid var(--racing-border-control); border-radius: 0;
     background: transparent; color: #eee;
   }
   :deep(.pwc-bell) { width: 46px; }
@@ -112,7 +112,7 @@ const handleGoToSettings = () => {
   :deep(.user-name) { font: italic 500 18px/1.2 'Racer Display', sans-serif; text-transform: uppercase; }
   :deep(.arrow-icon) { color: #ddd; }
   :deep(.dropdown-trigger:hover), :deep(.pwc-bell:hover), :deep(.pwc-bell.is-open) { border-color: var(--racing-accent); background: #ff002414; }
-  :deep(.dropdown-menu), :deep(.pwc-notices) { border-radius: 0; background: #090909; border-color: #ffffff70; box-shadow: 0 16px 35px #000b; }
+  :deep(.dropdown-menu), :deep(.pwc-notices) { border-radius: 0; background: #090909; border-color: var(--racing-border-control); box-shadow: 0 16px 35px #000b; }
   :deep(.pwc-notices) { top: calc(100% + 8px); }
   :deep(.dropdown-item) { border-radius: 0; }
   :deep(.dropdown-item:hover:not(:disabled)) { background: #ff002414; }

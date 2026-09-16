@@ -66,32 +66,18 @@ const practiceSummary = computed(() => props.practiceTotal || { minutes: 137, se
 const qualifySummary = computed(() => props.qualifyTotal || { minutes: 23, sessions: 3 })
 const raceSummary = computed(() => props.raceTotal || { minutes: 133, sessions: 2 })
 
-const formatSession = (count: number) => count === 1 ? 'sess.' : 'sess.'
+const formatSession = (count: number) => count === 1 ? 'sessione' : 'sessioni'
 
-// Format duration: if >= 60min, show as "Xh" or "XhYY", else show as minutes
-const formatDuration = (minutes: number): { value: string; unit: string } => {
-  if (minutes >= 60) {
-    const hours = Math.floor(minutes / 60)
-    const mins = minutes % 60
-    if (mins === 0) {
-      return { value: `${hours}`, unit: 'h' }
-    }
-    return { value: `${hours}h ${mins.toString().padStart(2, '0')}`, unit: '' }
-  }
-  return { value: `${minutes}`, unit: 'min' }
+// One duration convention for chart labels and summaries; parts allow smaller units.
+const formatDuration = (minutes: number): { value: string; unit: string }[] => {
+  const total = Math.max(0, Math.round(minutes))
+  if (total < 60) return [{ value: String(total), unit: 'min' }]
+  return [
+    { value: String(Math.floor(total / 60)), unit: 'h' },
+    { value: String(total % 60).padStart(2, '0'), unit: 'min' },
+  ]
 }
-
-// Format Y-axis label: "0", "30", "1h", "1h30", "2h" etc.
-const formatYLabel = (minutes: number): string => {
-  if (minutes === 0) return '0'
-  if (minutes >= 60) {
-    const hours = Math.floor(minutes / 60)
-    const mins = minutes % 60
-    if (mins === 0) return `${hours}h`
-    return `${hours}h${mins.toString().padStart(2, '0')}`
-  }
-  return `${minutes}min`
-}
+const formatYLabel = (minutes: number): string => formatDuration(minutes).map(part => `${part.value} ${part.unit}`).join(' ')
 </script>
 
 <template>
@@ -117,6 +103,7 @@ const formatYLabel = (minutes: number): string => {
           >
             <!-- Total label above bar -->
             <span 
+              v-if="dayTotal(day) > 0"
               class="bar-total"
             >{{ formatYLabel(dayTotal(day)) }}</span>
             <!-- Stacked bar (height = total percentage of max) -->
@@ -166,8 +153,8 @@ const formatYLabel = (minutes: number): string => {
         <div class="legend-item legend-item--practice">
           <span class="legend-dot"></span>
           <div class="legend-text">
-            <span class="legend-label">PRACTICE</span>
-            <span class="legend-value">{{ formatDuration(practiceSummary.minutes).value }}<small>{{ formatDuration(practiceSummary.minutes).unit }}</small></span>
+            <span class="legend-label">Prove libere</span>
+            <span class="legend-value"><span v-for="part in formatDuration(practiceSummary.minutes)" :key="part.unit" class="duration-part">{{ part.value }} <small>{{ part.unit }}</small>{{ ' ' }}</span></span>
             <span class="legend-sessions">{{ practiceSummary.sessions }} {{ formatSession(practiceSummary.sessions) }}</span>
           </div>
         </div>
@@ -175,8 +162,8 @@ const formatYLabel = (minutes: number): string => {
         <div class="legend-item legend-item--qualify">
           <span class="legend-dot"></span>
           <div class="legend-text">
-            <span class="legend-label">QUALIFY</span>
-            <span class="legend-value">{{ formatDuration(qualifySummary.minutes).value }}<small>{{ formatDuration(qualifySummary.minutes).unit }}</small></span>
+            <span class="legend-label">Qualifica</span>
+            <span class="legend-value"><span v-for="part in formatDuration(qualifySummary.minutes)" :key="part.unit" class="duration-part">{{ part.value }} <small>{{ part.unit }}</small>{{ ' ' }}</span></span>
             <span class="legend-sessions">{{ qualifySummary.sessions }} {{ formatSession(qualifySummary.sessions) }}</span>
           </div>
         </div>
@@ -184,8 +171,8 @@ const formatYLabel = (minutes: number): string => {
         <div class="legend-item legend-item--race">
           <span class="legend-dot"></span>
           <div class="legend-text">
-            <span class="legend-label">RACE</span>
-            <span class="legend-value">{{ formatDuration(raceSummary.minutes).value }}<small>{{ formatDuration(raceSummary.minutes).unit }}</small></span>
+            <span class="legend-label">Gara</span>
+            <span class="legend-value"><span v-for="part in formatDuration(raceSummary.minutes)" :key="part.unit" class="duration-part">{{ part.value }} <small>{{ part.unit }}</small>{{ ' ' }}</span></span>
             <span class="legend-sessions">{{ raceSummary.sessions }} {{ formatSession(raceSummary.sessions) }}</span>
           </div>
         </div>
@@ -479,33 +466,33 @@ $color-race: $racing-red;         // Red
 <style scoped lang="scss">
 .activity-card--racing {
   --activity-qualify: #ffc400;
-  padding: 18px; min-height: 320px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.3960784314); border-radius: 0; overflow: visible;
+  padding: 18px; min-height: 320px; background: transparent; border: 1px solid var(--racing-border-panel); border-radius: 0; overflow: visible;
   &::before, .accent-glow { display: none; }
   .card-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; margin-bottom: 26px; }
   .card-content { flex-direction: column; gap: 18px; }
   .chart-area { min-height: 165px; flex: 1; }
-  .y-axis { padding-bottom: 32px; min-width: 30px; span { color: #ccc; font-size: 11px; } }
+  .y-axis { padding-bottom: 32px; min-width: 62px; span { color: #ccc; font-size: 11px; } }
   .bars-container { padding-bottom: 32px; gap: 12px; border: 0; }
-  .bar-column { max-width: none; flex: 1; border-bottom: 1px solid #ccc; background: repeating-linear-gradient(to top, #ffffff09 0 1px, transparent 1px 33.33%); }
-  .bar-total { font-size: 11px; color: #ddd; }
+  .bar-column { max-width: none; flex: 1; border-bottom: 1px solid var(--racing-border-divider); background: repeating-linear-gradient(to top, #ffffff09 0 1px, transparent 1px 33.33%); }
+  .bar-total { white-space: nowrap; font-size: 11px; color: #ddd; }
   .bar-stack { width: 72%; gap: 0; clip-path: polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%); }
   .bar { border-radius: 0; box-shadow: none; }
   .bar--practice { background: #0076ff; }
   .bar--qualify { background: var(--activity-qualify); }
   .bar--race { background: #ff0024; }
   .day-label { bottom: -31px; color: #ddd; font-size: 11px; small { color: #bbb; font-size: 10px; } }
-  .legend { flex-direction: row; justify-content: space-between; min-width: 0; padding: 16px 0 0; border: 0; border-top: 1px solid #ffffff18; gap: 10px; }
+  .legend { flex-direction: row; justify-content: space-between; min-width: 0; padding: 16px 0 0; border: 0; border-top: 1px solid var(--racing-border-divider); gap: 10px; }
   .legend-item { flex: 1; min-width: 0; padding: 0; gap: 10px; }
-  .legend-item + .legend-item { border-left: 1px solid #ffffff60; padding-left: 18px; }
+  .legend-item + .legend-item { border-left: 1px solid var(--racing-border-divider); padding-left: 10px; }
   .legend-dot { height: 62px; width: 8px; border-radius: 0; margin: 0; box-shadow: none; clip-path: polygon(0 0,40% 0,100% 6px,100% 100%,60% 100%,0 calc(100% - 6px)); }
   .legend-item--practice .legend-dot { background: #0076ff; }
   .legend-item--qualify .legend-dot { background: var(--activity-qualify); }
   .legend-item--race .legend-dot { background: #ff0024; }
   .legend-text { gap: 3px; }
-  .legend-label { font-size: 11px; color: #ddd; font-weight: 400; letter-spacing: 0; }
+  .legend-label { text-transform: none; font-size: 12px; color: #ddd; font-weight: 400; letter-spacing: 0; }
   .legend-item--practice .legend-label { color: #269dff; }
   .legend-item--qualify .legend-label { color: var(--activity-qualify); }
-  .legend-value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; small { color: #ddd; font-size: 15px; } }
+  .legend-value { white-space: nowrap; font: normal 500 clamp(17px, 1.5vw, 22px)/1.2 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; small { margin-left: 0; color: #ddd; font: 400 12px 'Segoe UI', sans-serif; } }
   .legend-sessions { color: #ccc; font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) { .bar { transition: none; } }
