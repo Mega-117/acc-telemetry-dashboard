@@ -478,6 +478,7 @@ $color-race: $racing-red;         // Red
 
 <style scoped lang="scss">
 .activity-card--racing {
+  --activity-qualify: #e5a823;
   padding: 18px; min-height: 320px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.3960784314); border-radius: 0; overflow: visible;
   &::before, .accent-glow { display: none; }
   .card-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; margin-bottom: 26px; }
@@ -490,7 +491,7 @@ $color-race: $racing-red;         // Red
   .bar-stack { width: 72%; gap: 0; clip-path: polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,0 100%); }
   .bar { border-radius: 0; box-shadow: none; }
   .bar--practice { background: #0076ff; }
-  .bar--qualify { background: #e7ff00; }
+  .bar--qualify { background: var(--activity-qualify); }
   .bar--race { background: #ff0024; }
   .day-label { bottom: -31px; color: #ddd; font-size: 11px; small { color: #bbb; font-size: 10px; } }
   .legend { flex-direction: row; justify-content: space-between; min-width: 0; padding: 16px 0 0; border: 0; border-top: 1px solid #ffffff18; gap: 10px; }
@@ -498,12 +499,12 @@ $color-race: $racing-red;         // Red
   .legend-item + .legend-item { border-left: 1px solid #ffffff60; padding-left: 18px; }
   .legend-dot { height: 62px; width: 8px; border-radius: 0; margin: 0; box-shadow: none; clip-path: polygon(0 0,40% 0,100% 6px,100% 100%,60% 100%,0 calc(100% - 6px)); }
   .legend-item--practice .legend-dot { background: #0076ff; }
-  .legend-item--qualify .legend-dot { background: #e7ff00; }
+  .legend-item--qualify .legend-dot { background: var(--activity-qualify); }
   .legend-item--race .legend-dot { background: #ff0024; }
   .legend-text { gap: 3px; }
   .legend-label { font-size: 11px; color: #ddd; font-weight: 400; letter-spacing: 0; }
   .legend-item--practice .legend-label { color: #269dff; }
-  .legend-item--qualify .legend-label { color: #e7ff00; }
+  .legend-item--qualify .legend-label { color: var(--activity-qualify); }
   .legend-value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; small { color: #ddd; font-size: 15px; } }
   .legend-sessions { color: #ccc; font-size: 12px; }
 }

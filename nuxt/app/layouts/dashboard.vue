@@ -89,6 +89,9 @@ const handleGoToSettings = () => {
   flex: 1;
 }
 .racing-overview-shell {
+  // Size to content inside Electron's scroll area, which excludes its titlebar.
+  min-height: 0;
+  --page-bottom-space: 22px;
   position: relative; isolation: isolate; background: transparent;
   --racing-accent: #ff0024;
   :deep(.topbar), :deep(.tabsbar) { background: transparent; }
@@ -119,6 +122,7 @@ const handleGoToSettings = () => {
 @media (max-width: 700px) {
   .racing-overview-shell :deep(.tabsbar__inner) { overflow-x: auto; justify-content: flex-start; padding: 0 10px; gap: 0; }
   .racing-overview-shell :deep(.tab) { font-size: 15px; padding: 13px 15px; }
+  .racing-overview-shell { --page-bottom-space: 14px; }
   .racing-overview-shell :deep(.page-container) { padding: 14px; }
 }
 </style>

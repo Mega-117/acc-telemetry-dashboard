@@ -660,7 +660,7 @@ body:has(.electron-titlebar) {
   }
 
   > .dashboard-wrapper .page-container {
-    padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(var(--page-bottom-space, 64px) + env(safe-area-inset-bottom, 0px));
   }
 }
 
