@@ -774,20 +774,22 @@ body:has(.electron-titlebar) {
 // ============================================
 
 // === 1. FADE ZOOM ===
-.dissolve-fade-zoom-enter-active,
+.dissolve-fade-zoom-enter-active {
+  transition: opacity 180ms ease-out;
+}
+
 .dissolve-fade-zoom-leave-active {
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 100ms ease-in;
 }
 
-.dissolve-fade-zoom-enter-from {
-  opacity: 0;
-  transform: scale(0.9);
-}
-
+.dissolve-fade-zoom-enter-from,
 .dissolve-fade-zoom-leave-to {
   opacity: 0;
-  transform: scale(1.15);
-  filter: blur(8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dissolve-fade-zoom-enter-active,
+  .dissolve-fade-zoom-leave-active { transition: none; }
 }
 
 // === 2. WARP SPEED ===
