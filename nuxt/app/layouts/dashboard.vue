@@ -123,13 +123,13 @@ const handleGoToSettings = () => {
   :deep(.tab) { font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-size: 16px; font-weight: 700; letter-spacing: 0; padding: 13px 26px; color: #ccc; transition: color .15s; }
   :deep(.tab--active) { color: #fff; }
   :deep(.tab--active::after) { height: 3px; background: var(--racing-accent); clip-path: polygon(3px 0,100% 0,calc(100% - 3px) 100%,0 100%); }
-  :deep(.page-container) { width: 100%; max-width: 1800px; padding: 30px 26px 22px; flex: 1; display: flex; flex-direction: column; }
+  :deep(.page-container) { width: 100%; max-width: 1800px; padding: 26px 26px 22px; flex: 1; display: flex; flex-direction: column; }
   :deep(.racing-overview) { flex: 1; }
 }
 @media (max-width: 700px) {
   .racing-overview-shell :deep(.tabsbar__inner) { overflow-x: auto; justify-content: flex-start; padding: 0 10px; gap: 0; }
   .racing-overview-shell :deep(.tab) { padding: 13px 15px; }
   .racing-overview-shell { --page-bottom-space: 14px; }
-  .racing-overview-shell :deep(.page-container) { padding: 22px 14px 14px; }
+  .racing-overview-shell :deep(.page-container) { padding: 14px; }
 }
 </style>
