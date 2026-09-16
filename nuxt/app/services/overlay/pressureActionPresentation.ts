@@ -121,6 +121,17 @@ export function pressureActionPresentation(input: PressureActionInput | null | u
     }
   }
 
+  if (input?.reason === 'pit_pause_required') {
+    const guidance = 'Torna ai box, ferma l’auto e apri il menu Pausa per regolare le pressioni.'
+    return {
+      stateLabel: 'In attesa dei box',
+      guidance,
+      ariaLabel: guidance,
+      buttonLabel: 'Regola pressioni · solo ai box',
+      alert: { title: 'FERMATI AI BOX', guidance },
+    }
+  }
+
   if (input?.reason === 'tyre_set_changed') {
     return {
       stateLabel: 'Non disponibile',

@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { pressureActionPresentation } from '~/services/overlay/pressureActionPresentation'
 
 describe('pressureActionPresentation', () => {
+  it('shows pit-only notice while retaining a ready recommendation', () => {
+    const result = pressureActionPresentation({ state: 'unavailable', reason: 'pit_pause_required', recommendation: { status: 'ready' } })
+    expect(result.alert?.guidance).toContain('Torna ai box')
+    expect(result.buttonLabel).toContain('solo ai box')
+    expect(result.guidance).not.toContain('giri')
+  })
   it('does not mention lap validity when the producer disables that requirement', () => {
     expect(pressureActionPresentation({
       state: 'unavailable',
