@@ -91,12 +91,12 @@ const handleGoToSettings = () => {
 .racing-overview-shell {
   // Size to content inside Electron's scroll area, which excludes its titlebar.
   min-height: 0;
-  --page-bottom-space: 22px;
+  --page-bottom-space: 10px;
   position: relative; isolation: isolate; background: transparent;
   --racing-accent: #ff0024;
   --racing-nav-border: rgba(255, 255, 255, 0.1411764706);
   :deep(.topbar), :deep(.tabsbar) { background: transparent; border-bottom-color: var(--racing-nav-border); }
-  :deep(.tab--section-start::before) { background: var(--racing-nav-border); }
+  :deep(.tab--section-start::before) { background: #b4b4b4; }
   // Sticky is relative to the app scroll area, already below the native titlebar.
   .dashboard-sticky-header { background: #020202f5; }
   :deep(.dropdown-trigger), :deep(.pwc-bell) {
@@ -119,12 +119,12 @@ const handleGoToSettings = () => {
   :deep(.tab) { font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-size: 16px; font-weight: 700; letter-spacing: 0; padding: 13px 26px; color: #ccc; transition: color .15s; }
   :deep(.tab--active) { color: #fff; }
   :deep(.tab--active::after) { height: 3px; background: var(--racing-accent); clip-path: polygon(3px 0,100% 0,calc(100% - 3px) 100%,0 100%); }
-  :deep(.page-container) { max-width: 1800px; padding: 18px 26px 22px; }
+  :deep(.page-container) { max-width: 1800px; padding: 30px 26px 10px; }
 }
 @media (max-width: 700px) {
   .racing-overview-shell :deep(.tabsbar__inner) { overflow-x: auto; justify-content: flex-start; padding: 0 10px; gap: 0; }
   .racing-overview-shell :deep(.tab) { padding: 13px 15px; }
-  .racing-overview-shell { --page-bottom-space: 14px; }
-  .racing-overview-shell :deep(.page-container) { padding: 14px; }
+  .racing-overview-shell { --page-bottom-space: 6px; }
+  .racing-overview-shell :deep(.page-container) { padding: 22px 14px 6px; }
 }
 </style>
