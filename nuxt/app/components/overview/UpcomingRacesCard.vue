@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CirclePlus, Ellipsis, X } from '@lucide/vue'
+import { CirclePlus, Ellipsis, ExternalLink, Pencil, Trash2, X } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
@@ -277,10 +277,10 @@ onBeforeUnmount(() => {
         <details v-if="racing" class="race-options">
           <summary aria-label="Opzioni prossima gara" title="Opzioni prossima gara"><Ellipsis :size="26" aria-hidden="true" /></summary>
           <div class="race-options__menu">
-            <a v-if="featuredEvent.simGridUrl" :href="featuredEvent.simGridUrl" target="_blank" rel="noopener">SimGrid</a>
-            <a v-if="featuredEvent.raceUrl" :href="featuredEvent.raceUrl" target="_blank" rel="noopener">Link gara</a>
-            <button type="button" :disabled="!cloudWriteGate.allowed" @click="openEditModal(featuredEvent)">Modifica gara</button>
-            <button type="button" :disabled="!cloudWriteGate.allowed" @click="openDeleteModal(featuredEvent)">Elimina gara</button>
+            <a v-if="featuredEvent.simGridUrl" :href="featuredEvent.simGridUrl" target="_blank" rel="noopener"><ExternalLink :size="17" aria-hidden="true" /><span>SimGrid</span></a>
+            <a v-if="featuredEvent.raceUrl" :href="featuredEvent.raceUrl" target="_blank" rel="noopener"><ExternalLink :size="17" aria-hidden="true" /><span>Link gara</span></a>
+            <button type="button" class="race-options__edit" :disabled="!cloudWriteGate.allowed" @click="openEditModal(featuredEvent)"><Pencil :size="17" aria-hidden="true" /><span>Modifica gara</span></button>
+            <button type="button" class="race-options__delete" :disabled="!cloudWriteGate.allowed" @click="openDeleteModal(featuredEvent)"><Trash2 :size="17" aria-hidden="true" /><span>Elimina gara</span></button>
           </div>
         </details>
         <div v-else class="race-row-actions">
@@ -458,9 +458,27 @@ onBeforeUnmount(() => {
   .race-options { position: absolute; bottom: -8px; right: 0; z-index: 10; }
   summary { display: grid; place-items: center; list-style: none; cursor: pointer; padding: 7px; width: 40px; height: 40px; }
   summary::-webkit-details-marker { display: none; }
-  .race-options__menu { position: absolute; right: 0; top: 100%; min-width: 155px; display: grid; border: 1px solid #777; padding: 6px; background: #111; box-shadow: 0 12px 24px #0009; }
-  .race-options__menu a, .race-options__menu button { text-align: left; padding: 10px; color: #eee; background: none; border: 0; text-decoration: none; font: 13px 'Segoe UI', sans-serif; cursor: pointer; }
-  .race-options__menu a:hover, .race-options__menu button:hover { background: #ffffff15; }
+  .race-options[open] > summary { color: #ff0024; background: #ff002412; }
+  .race-options__menu {
+    position: absolute; right: 0; top: calc(100% + 6px); width: 216px;
+    max-width: calc(100vw - 48px); display: grid; gap: 2px;
+    border: 1px solid #ffffff65; padding: 6px;
+    background: radial-gradient(ellipse at top right, #62001628, transparent 75%), #090909;
+    box-shadow: 0 12px 32px #000b;
+  }
+  .race-options__menu a, .race-options__menu button {
+    display: flex; align-items: center; gap: 12px; min-height: 44px; width: 100%;
+    text-align: left; padding: 10px 12px; color: #eee; background: transparent;
+    border: 0; border-left: 2px solid transparent; border-radius: 0;
+    text-decoration: none; font: 500 14px/1.3 'Segoe UI', sans-serif; cursor: pointer;
+    transition: background-color 140ms ease, border-color 140ms ease;
+  }
+  .race-options__menu svg { flex-shrink: 0; color: #b4b4b4; }
+  .race-options__menu a + .race-options__edit { border-top: 1px solid #ffffff24; margin-top: 4px; }
+  .race-options__menu .race-options__delete { color: #ff7a8e; }
+  .race-options__menu .race-options__delete svg { color: currentColor; }
+  .race-options__menu a:hover, .race-options__menu button:hover:not(:disabled) { background: #ff002418; border-left-color: #ff0024; }
+  .race-options__menu a:focus-visible, .race-options__menu button:focus-visible { outline: 1px solid #fff; outline-offset: -2px; background: #ffffff0a; }
   button:disabled { opacity: .4; cursor: default; }
   summary:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid white; outline-offset: 2px; }
   .race-list-block { border-top: 1px solid #ffffff25; }
