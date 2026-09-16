@@ -100,7 +100,10 @@ describe('target lap voice shares the compact HUD verdict', () => {
   })
   it('ships both phrases for both voices as nonempty PCM WAVs', () => {
     for (const id of ['targetInside', 'targetOutside']) {
-      expect(voiceScript.scenarios.find(item => item.id === id)?.text).toBe(id === 'targetInside' ? 'nel target.' : 'fuori target.')
+      // Il copione può cambiare nel Voice Lab, anche per correggere la pronuncia TTS.
+      const phrase = voiceScript.scenarios.find(item => item.id === id)
+      expect(phrase).toMatchObject({ id, origin: 'system' })
+      expect(phrase?.text.trim().length).toBeGreaterThan(0)
       for (const voice of voiceScript.voices) {
         const path = resolve(process.cwd(), `public/voice/qualifying/${id}-${voice}.wav`)
         expect(existsSync(path), path).toBe(true)
