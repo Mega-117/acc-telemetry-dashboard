@@ -96,9 +96,7 @@ const handleGoToSettings = () => {
   --page-bottom-space: 22px;
   position: relative; isolation: isolate; background: transparent;
   --racing-accent: #ff0024;
-  --racing-nav-border: rgba(255, 255, 255, 0.1411764706);
-  :deep(.topbar), :deep(.tabsbar) { background: transparent; border-bottom-color: var(--racing-nav-border); }
-  :deep(.tabsbar) { border-bottom: 0; }
+  :deep(.topbar), :deep(.tabsbar) { background: transparent; border-bottom: 0; }
   :deep(.tab--section-start::before) { background: #b4b4b4; }
   // Sticky is relative to the app scroll area, already below the native titlebar.
   .dashboard-sticky-header { background: transparent; flex-shrink: 0; }
