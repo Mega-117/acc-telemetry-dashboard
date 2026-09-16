@@ -89,9 +89,11 @@ const handleGoToSettings = () => {
   flex: 1;
 }
 .racing-overview-shell {
-  // Size to content inside Electron's scroll area, which excludes its titlebar.
-  min-height: 0;
-  --page-bottom-space: 10px;
+  // Fill the available window; content can still grow beyond it on small screens.
+  min-height: var(--dashboard-viewport-height, 100dvh);
+  display: flex;
+  flex-direction: column;
+  --page-bottom-space: 22px;
   position: relative; isolation: isolate; background: transparent;
   --racing-accent: #ff0024;
   --racing-nav-border: rgba(255, 255, 255, 0.1411764706);
@@ -99,7 +101,8 @@ const handleGoToSettings = () => {
   :deep(.tabsbar) { border-bottom: 0; }
   :deep(.tab--section-start::before) { background: #b4b4b4; }
   // Sticky is relative to the app scroll area, already below the native titlebar.
-  .dashboard-sticky-header { background: #020202f5; }
+  .dashboard-sticky-header { background: #020202f5; flex-shrink: 0; }
+  .main-content { display: flex; flex-direction: column; }
   :deep(.dropdown-trigger), :deep(.pwc-bell) {
     height: 46px; border: 1px solid #ffffff85; border-radius: 0;
     background: transparent; color: #eee;
@@ -120,12 +123,13 @@ const handleGoToSettings = () => {
   :deep(.tab) { font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-size: 16px; font-weight: 700; letter-spacing: 0; padding: 13px 26px; color: #ccc; transition: color .15s; }
   :deep(.tab--active) { color: #fff; }
   :deep(.tab--active::after) { height: 3px; background: var(--racing-accent); clip-path: polygon(3px 0,100% 0,calc(100% - 3px) 100%,0 100%); }
-  :deep(.page-container) { max-width: 1800px; padding: 30px 26px 10px; }
+  :deep(.page-container) { width: 100%; max-width: 1800px; padding: 30px 26px 22px; flex: 1; display: flex; flex-direction: column; }
+  :deep(.racing-overview) { flex: 1; }
 }
 @media (max-width: 700px) {
   .racing-overview-shell :deep(.tabsbar__inner) { overflow-x: auto; justify-content: flex-start; padding: 0 10px; gap: 0; }
   .racing-overview-shell :deep(.tab) { padding: 13px 15px; }
-  .racing-overview-shell { --page-bottom-space: 6px; }
-  .racing-overview-shell :deep(.page-container) { padding: 22px 14px 6px; }
+  .racing-overview-shell { --page-bottom-space: 14px; }
+  .racing-overview-shell :deep(.page-container) { padding: 22px 14px 14px; }
 }
 </style>

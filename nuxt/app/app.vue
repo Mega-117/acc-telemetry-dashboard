@@ -638,6 +638,7 @@ body:has(.electron-titlebar) {
 }
 
 #app:has(.electron-titlebar) {
+  --dashboard-viewport-height: calc(100dvh - 36px);
   height: 100vh;
   width: 100vw;
   overflow: hidden;
