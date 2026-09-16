@@ -381,7 +381,7 @@ onBeforeUnmount(() => {
   input { border-radius: 0; }
 }
 .upcoming-races-card--racing {
-  border: 1px solid #353535; border-radius: 0; background: transparent; box-shadow: none;
+  border: 1px solid rgba(255, 255, 255, 0.3960784314); border-radius: 0; background: transparent; box-shadow: none;
   min-height: 192px; max-height: none; padding: 18px; overflow: visible;
   .coach-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; }
   .race-header { margin-bottom: 14px; }
