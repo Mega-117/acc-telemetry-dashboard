@@ -19,7 +19,11 @@ describe('racing overview components', () => {
     expect(wrapper.get('[aria-label="Aggiungi gara"] svg circle').exists()).toBe(true)
     expect(wrapper.get('[aria-label="Opzioni prossima gara"] svg').exists()).toBe(true)
     await wrapper.get('[aria-label="Aggiungi gara"]').trigger('click')
+    const errorSlot = wrapper.get('.race-error-slot--reserved').element
+    expect(wrapper.find('.form-error').exists()).toBe(false)
     await wrapper.get('form').trigger('submit')
+    expect(wrapper.get('.race-error-slot--reserved').element).toBe(errorSlot)
+    expect(wrapper.get('.race-error-slot--reserved').attributes('aria-live')).toBe('polite')
     expect(wrapper.text()).toContain('Titolo, data e pista sono obbligatori')
     const fields = wrapper.findAll('input')
     await fields[0]!.setValue('Nuova gara')

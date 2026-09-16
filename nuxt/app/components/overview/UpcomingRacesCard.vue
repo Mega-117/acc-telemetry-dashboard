@@ -134,9 +134,14 @@ function openDeleteModal(event: RaceCalendarEvent) {
 
 function closeModal() {
   if (isSaving.value) return
+  isModalOpen.value = false
+}
+
+function resetClosedModal() {
+  // Keep the outgoing content stable; a quick reopen must retain its new draft.
+  if (isModalOpen.value) return
   errorMessage.value = ''
   selectedEvent.value = null
-  isModalOpen.value = false
   resetForm()
 }
 
@@ -191,10 +196,7 @@ async function submitModal() {
         await createRaceCalendarEvent(props.userId, payload)
       }
     }
-    errorMessage.value = ''
-    selectedEvent.value = null
     isModalOpen.value = false
-    resetForm()
     await refreshEvents()
   } catch (error: any) {
     errorMessage.value = error?.message || 'Operazione non riuscita.'
@@ -310,6 +312,7 @@ onBeforeUnmount(() => {
     </div>
 
     <Teleport to="body">
+      <Transition name="race-modal-motion" @after-leave="resetClosedModal">
       <div v-if="isModalOpen" class="race-modal-backdrop" :class="{ 'race-modal-backdrop--racing': racing }" @click.self="closeModal">
         <form class="race-modal" :class="{ 'race-modal--racing': racing }" role="dialog" aria-modal="true" :aria-label="modalTitle" @keydown.esc="closeModal" @submit.prevent="submitModal">
           <header>
@@ -360,7 +363,9 @@ onBeforeUnmount(() => {
             </fieldset>
           </template>
 
-          <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
+          <div v-if="racing || errorMessage" class="race-error-slot" :class="{ 'race-error-slot--reserved': racing }" aria-live="polite" aria-atomic="true">
+            <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
+          </div>
 
           <footer>
             <button type="button" class="secondary-action" :class="{ 'racing-button': racing }" :disabled="isSaving" @click="closeModal">Annulla</button>
@@ -370,6 +375,7 @@ onBeforeUnmount(() => {
           </footer>
         </form>
       </div>
+      </Transition>
     </Teleport>
   </section>
 </template>
@@ -377,6 +383,18 @@ onBeforeUnmount(() => {
 <style src="../../assets/scss/components/upcoming-races-card.scss" lang="scss" scoped></style>
 
 <style scoped lang="scss">
+.race-modal-motion-enter-active { transition: opacity 220ms ease; }
+.race-modal-motion-leave-active { transition: opacity 160ms ease; }
+.race-modal-motion-enter-active .race-modal { transition: transform 220ms cubic-bezier(.2,.7,.2,1); }
+.race-modal-motion-leave-active .race-modal { transition: transform 160ms ease; }
+.race-modal-motion-enter-from, .race-modal-motion-leave-to { opacity: 0; }
+.race-modal-motion-enter-from .race-modal, .race-modal-motion-leave-to .race-modal { transform: translateY(10px) scale(.98); }
+.race-error-slot--reserved { height: 56px; min-height: 56px; overflow: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .race-modal-motion-enter-active, .race-modal-motion-leave-active,
+  .race-modal-motion-enter-active .race-modal, .race-modal-motion-leave-active .race-modal { transition-duration: 1ms; }
+  .race-modal-motion-enter-from .race-modal, .race-modal-motion-leave-to .race-modal { transform: none; }
+}
 .race-links { min-width: 0; margin: 0; padding: 14px 0 0; border: 0; border-top: 1px solid #ffffff24; }
 .race-links legend { padding: 0 10px 0 0; color: #ddd; font-size: 12px; text-transform: uppercase; }
 .field-optional { margin-left: 8px; color: #888; font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; }
