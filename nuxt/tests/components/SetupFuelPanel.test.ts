@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { createApp, nextTick } from 'vue'
+import { createApp, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
 import SetupFuelPanel from '~/components/overlay/SetupFuelPanel.vue'
 let app: ReturnType<typeof createApp> | null = null
 const flush = async () => { await Promise.resolve(); await nextTick(); await Promise.resolve(); await nextTick() }
-afterEach(() => { app?.unmount(); app=null; document.body.innerHTML=''; vi.restoreAllMocks() })
+afterEach(() => { app?.unmount(); app=null; document.body.innerHTML=''; vi.restoreAllMocks(); vi.useRealTimers() })
 async function mount(available=true,sessionType=0) {
  const api={trainingOverlayPreviewSetupFuel:vi.fn(async()=>({available,sessionType,plan:{ok:true,totalLitres:25,contextKey:'session',durationMs:600000,consumption:2.9,referenceLapMs:102000,notes:[]}})),trainingOverlayApplySetupFuel:vi.fn(async()=>({ok:true,reason:'25 L verificati'})),trainingOverlayKeyboardEditing:vi.fn(async()=>true)}
  const el=document.createElement('div');document.body.append(el);app=createApp(SetupFuelPanel,{api});app.mount(el)
@@ -55,4 +56,33 @@ it('only the latest rapid duration preview can unlock apply',async()=>{
  const preview=(totalLitres:number)=>({available:true,sessionType:0,plan:{ok:true,totalLitres,contextKey:'session',durationMs:600000,consumption:2.9,referenceLapMs:102000,notes:[]}})
  first(preview(28));await flush();expect(button('fuel-apply').disabled).toBe(true);expect(document.querySelector('.fuel-total')?.textContent).toContain('25')
  second(preview(26));await flush();expect(button('fuel-apply').disabled).toBe(false);expect(document.querySelector('.fuel-total')?.textContent).toContain('26')
+})
+
+it('keeps Apply enabled and wheel selection stable during a slow background refresh', async () => {
+ vi.useFakeTimers()
+ const api=await mount()
+ const rects=vi.spyOn(HTMLElement.prototype,'getClientRects').mockReturnValue([{}] as unknown as DOMRectList)
+ const nav=useOverlayActionSelection(ref(document.body),()=>true)
+ nav.select('fuel-apply')
+ let resolve:any
+ api.trainingOverlayPreviewSetupFuel.mockImplementationOnce(()=>new Promise(r=>resolve=r))
+ await vi.advanceTimersByTimeAsync(1500);await flush()
+ nav.refresh()
+ expect(button('fuel-apply').disabled).toBe(false)
+ expect(nav.selectedId.value).toBe('fuel-apply')
+ resolve({available:true,sessionType:0,plan:{ok:true,totalLitres:25,contextKey:'session',durationMs:600000,consumption:2.9,referenceLapMs:102000,notes:[]}})
+ await flush();nav.refresh()
+ expect(nav.selectedId.value).toBe('fuel-apply')
+ rects.mockRestore()
+})
+
+it('allows apply during background refresh and ignores its late reply', async () => {
+ vi.useFakeTimers();const api=await mount();let done:any
+ api.trainingOverlayPreviewSetupFuel.mockImplementationOnce(()=>new Promise(r=>done=r))
+ await vi.advanceTimersByTimeAsync(1500);await flush()
+ button('fuel-apply').click();await flush()
+ expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledTimes(1)
+ done({available:false});await flush()
+ expect(button('fuel-apply').disabled).toBe(false)
+ expect(document.body.textContent).toContain('25 L verificati')
 })

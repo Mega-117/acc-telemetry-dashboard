@@ -12,11 +12,11 @@ const plan = computed(() => state.value?.plan)
 const statusMessage = computed(() => pending.value ? 'Applicazione in corso…'
   : error.value || state.value?.conflict || state.value?.unavailableReason
   || (plan.value && !plan.value.ok ? plan.value.reason : '')
-  || state.value?.result?.reason || (state.value?.available ? 'Pronto: applica dal menu Pausa.' : 'Verifica delle condizioni…'))
-async function refresh() {
+  || state.value?.result?.reason || (state.value?.available ? 'Pronto: premi Applica dal menu Pausa; la schermata verrà verificata.' : 'Verifica delle condizioni…'))
+async function refresh(background = false) {
   if (disposed || pending.value) return
   const token = ++generation
-  previewPending.value = true
+  if (!background) previewPending.value = true
   clearTimeout(timer)
   try {
     const value = await props.api?.trainingOverlayPreviewSetupFuel?.({ mode: mode.value, minutes: minutes.value })
@@ -31,7 +31,7 @@ async function refresh() {
     if (!value) error.value = 'Riavvia Racer Core per attivare il comando carburante.'
   } catch { if (token === generation) { state.value = null; error.value = 'Anteprima carburante non disponibile. Riprovo automaticamente.' } }
   finally { if (token === generation) previewPending.value = false }
-  if (token === generation && open.value) timer = setTimeout(refresh, 1500)
+  if (token === generation && open.value) timer = setTimeout(() => refresh(true), 1500)
 }
 // Keep the displayed estimate mounted while recalculating; only a fresh preview can be applied.
 watch([open, mode, minutes], () => { error.value = ''; if (open.value) void refresh(); else { generation++; clearTimeout(timer); state.value = null; previewPending.value = false } }, { flush: 'sync' })
