@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CirclePlus, Ellipsis } from '@lucide/vue'
+import { CirclePlus, Ellipsis, X } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
@@ -310,14 +310,14 @@ onBeforeUnmount(() => {
     </div>
 
     <Teleport to="body">
-      <div v-if="isModalOpen" class="race-modal-backdrop" @click.self="closeModal">
+      <div v-if="isModalOpen" class="race-modal-backdrop" :class="{ 'race-modal-backdrop--racing': racing }" @click.self="closeModal">
         <form class="race-modal" :class="{ 'race-modal--racing': racing }" role="dialog" aria-modal="true" :aria-label="modalTitle" @keydown.esc="closeModal" @submit.prevent="submitModal">
           <header>
             <div>
               <span class="eyebrow">Calendario pilota</span>
               <h2>{{ modalTitle }}</h2>
             </div>
-            <button type="button" class="modal-close" aria-label="Chiudi" @click="closeModal">&times;</button>
+            <button type="button" class="modal-close" aria-label="Chiudi" @click="closeModal"><X :size="20" aria-hidden="true" /></button>
           </header>
 
           <div v-if="modalMode === 'delete'" class="delete-confirm">
@@ -327,25 +327,27 @@ onBeforeUnmount(() => {
           </div>
 
           <template v-else>
+            <label>
+              <span>Titolo gara</span>
+              <input v-model="form.title" type="text" placeholder="Es. Endurance Sprint" />
+            </label>
             <div class="form-row">
-              <label>
-                <span>Titolo gara</span>
-                <input v-model="form.title" type="text" placeholder="Es. Endurance Sprint" />
-              </label>
               <label>
                 <span>Data e ora</span>
                 <input v-model="form.startsAt" type="datetime-local" />
               </label>
+              <label>
+                <span>Pista</span>
+                <input v-model="form.trackName" type="text" placeholder="Es. Spa-Francorchamps" />
+              </label>
             </div>
             <label>
-              <span>Pista</span>
-              <input v-model="form.trackName" type="text" placeholder="Es. Spa-Francorchamps" />
-            </label>
-            <label>
-              <span>Vettura</span>
+              <span>Vettura <small class="field-optional">Facoltativa</small></span>
               <input v-model="form.carName" type="text" placeholder="Es. Ferrari 296 GT3" />
             </label>
-            <div class="form-row">
+            <fieldset class="race-links">
+              <legend>Link utili <small class="field-optional">Facoltativi</small></legend>
+              <div class="form-row">
               <label>
                 <span>SimGrid</span>
                 <input v-model="form.simGridUrl" type="url" placeholder="https://www.thesimgrid.com/..." />
@@ -354,14 +356,15 @@ onBeforeUnmount(() => {
                 <span>Link gara</span>
                 <input v-model="form.raceUrl" type="url" placeholder="Briefing, Discord, sito evento..." />
               </label>
-            </div>
+              </div>
+            </fieldset>
           </template>
 
           <p v-if="errorMessage" class="form-error">{{ errorMessage }}</p>
 
           <footer>
-            <button type="button" class="secondary-action" :disabled="isSaving" @click="closeModal">Annulla</button>
-            <button class="primary-action" :class="{ danger: modalMode === 'delete' }" type="submit" :disabled="isSaving || !cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? modalSubmitLabel : cloudWriteGate.message">
+            <button type="button" class="secondary-action" :class="{ 'racing-button': racing }" :disabled="isSaving" @click="closeModal">Annulla</button>
+            <button class="primary-action" :class="{ danger: modalMode === 'delete', 'racing-button racing-button--primary': racing }" type="submit" :disabled="isSaving || !cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? modalSubmitLabel : cloudWriteGate.message">
               {{ modalSubmitLabel }}
             </button>
           </footer>
@@ -374,11 +377,46 @@ onBeforeUnmount(() => {
 <style src="../../assets/scss/components/upcoming-races-card.scss" lang="scss" scoped></style>
 
 <style scoped lang="scss">
+.race-links { min-width: 0; margin: 0; padding: 14px 0 0; border: 0; border-top: 1px solid #ffffff24; }
+.race-links legend { padding: 0 10px 0 0; color: #ddd; font-size: 12px; text-transform: uppercase; }
+.field-optional { margin-left: 8px; color: #888; font-size: 11px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.race-modal-backdrop--racing { background: #000b; backdrop-filter: blur(5px); }
+:global(body:has(.electron-titlebar) .race-modal-backdrop--racing) { top: 36px; }
 .race-modal--racing {
-  border-radius: 0; border-color: #aaa; background: #101010;
-  h2 { font-family: 'Racer Display', sans-serif; font-style: italic; text-transform: uppercase; }
-  .primary-action { background: #ff0024; border-radius: 0; }
-  input { border-radius: 0; }
+  width: min(680px, 100%); max-height: calc(100dvh - 84px); padding: 28px; gap: 20px;
+  border-radius: 0; border-color: #ffffff65;
+  background: radial-gradient(ellipse at top right, #6b001b30, transparent 65%), #090909;
+  box-shadow: 0 24px 90px #000b;
+  header { align-items: flex-start; padding-bottom: 20px; border-bottom: 1px solid #ffffff24; }
+  .eyebrow { display: block; margin-bottom: 7px; color: #aaa; font-size: 11px; letter-spacing: 1.5px; font-weight: 500; }
+  h2 { font: italic 700 28px/1.2 'Racer Display', sans-serif; text-transform: uppercase; }
+  .modal-close { display: grid; place-items: center; width: 40px; height: 40px; flex-shrink: 0; border: 1px solid #ffffff65; border-radius: 0; background: transparent; }
+  .modal-close:hover { color: #ff0024; border-color: #ff0024; }
+  .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  label { min-width: 0; gap: 8px; }
+  label > span { color: #ccc; font-size: 12px; font-weight: 500; letter-spacing: .3px; }
+  input { width: 100%; min-width: 0; height: 46px; border-radius: 0; border-color: #ffffff30; background: #ffffff04; font-size: 14px; font-weight: 400; }
+  input::placeholder { color: #888; }
+  input:hover { border-color: #ffffff65; }
+  input:focus { border-color: #ff0024; outline: 1px solid #ff0024; outline-offset: 1px; }
+  button:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+  footer { flex-direction: row; justify-content: flex-end; gap: 12px; padding-top: 20px; border-top: 1px solid #ffffff24; }
+  footer .racing-button { min-width: 156px; min-height: 46px; padding: 10px 22px; border-radius: 0; font: 500 14px/1.2 'Segoe UI', sans-serif; text-transform: uppercase; }
+  .secondary-action { background: transparent; border: 1px solid #c9c9c9; color: #fff; }
+  .primary-action { background: #ff0024; }
+  .primary-action:hover:not(:disabled) { background: #d90020; }
+  .secondary-action:hover:not(:disabled) { background: #ffffff12; }
+  .delete-confirm { border-radius: 0; border-color: #ff002450; background: #ff00240a; padding: 18px; gap: 12px; }
+  .form-error { color: #ff9aaa; padding: 12px; border-left: 2px solid #ff0024; background: #ff00240a; }
+}
+@media (max-width: 560px) {
+  .race-modal-backdrop--racing { padding: 14px; }
+  .race-modal--racing {
+    max-height: calc(100dvh - 64px); padding: 20px; gap: 16px;
+    .form-row { grid-template-columns: 1fr; }
+    footer .racing-button { min-width: 0; flex: 1; padding-inline: 12px; }
+    h2 { font-size: 24px; }
+  }
 }
 .upcoming-races-card--racing {
   border: 1px solid rgba(255, 255, 255, 0.3960784314); border-radius: 0; background: transparent; box-shadow: none;
