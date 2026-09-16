@@ -33,7 +33,7 @@ describe('Info Target setup layout contract', () => {
     const host = document.createElement('div')
     document.body.append(host)
     const rects = vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([{}] as unknown as DOMRectList)
-    const time = ref(90_000), tolerance = ref(500), keep = ref(false), voice = ref(true)
+    const time = ref(90_000), tolerance = ref(500), keep = ref(false)
     const confirm = vi.fn(), cancel = vi.fn()
     let nav!: ReturnType<typeof useOverlayActionSelection>
     const app = createApp(defineComponent({
@@ -45,8 +45,6 @@ describe('Info Target setup layout contract', () => {
           'onSet-target-time': (value: number) => { time.value = value },
           'onSelect-tolerance': (value: number) => { tolerance.value = value },
           'onToggle-keep': () => { keep.value = !keep.value },
-          showVoiceToggle: true, voiceEnabled: voice.value,
-          'onToggle-voice': () => { voice.value = !voice.value },
           onConfirm: confirm, onCancel: cancel,
         }))
       },
@@ -58,7 +56,7 @@ describe('Info Target setup layout contract', () => {
         ['target-seconds-increase', 91_000, 500], ['target-seconds-decrease', 90_000, 500],
         ['target-tenths-increase', 90_100, 500], ['target-tenths-decrease', 90_000, 500],
         ['target-tolerance-decrease', 90_000, 400], ['target-tolerance-increase', 90_000, 500],
-        ['target-voice', 90_000, 500], ['target-keep', 90_000, 500], ['target-confirm', 90_000, 500], ['target-cancel', 90_000, 500],
+        ['target-keep', 90_000, 500], ['target-confirm', 90_000, 500], ['target-cancel', 90_000, 500],
       ] as const
       for (const [id, expectedTime, expectedTolerance] of expected) {
         expect(nav.selectedId.value).toBe(id)
@@ -67,8 +65,7 @@ describe('Info Target setup layout contract', () => {
         expect(time.value).toBe(expectedTime); expect(tolerance.value).toBe(expectedTolerance)
         nav.next()
       }
-      expect(voice.value).toBe(false)
-      expect(host.querySelector('[data-overlay-wheel-action=target-voice]')?.getAttribute('aria-pressed')).toBe('false')
+      expect(host.querySelector('[data-overlay-wheel-action=target-voice]')).toBeNull()
       expect(keep.value).toBe(true)
       expect(confirm).toHaveBeenCalledTimes(1); expect(cancel).toHaveBeenCalledTimes(1)
       expect(nav.selectedId.value).toBe('target-minutes-increase')

@@ -140,7 +140,6 @@ async function saveSectorReferenceSetup() {
   closeSectorReferenceSetup()
   await getOverlayApi()?.trainingOverlayClose?.()
 }
-const infoTargetVoiceDraft = ref(true)
 const infoTargetActive = ref(false)
 const infoTargetTimeMs = ref(90_000)
 const infoTargetToleranceMs = ref(500)
@@ -506,7 +505,6 @@ function applyInfoTargetSettings(settings: InfoTargetSettings | null | undefined
 }
 
 function openInfoTargetSetup() {
-  infoTargetVoiceDraft.value = targetLapVoiceEnabled.value
   if (!infoTargetActive.value) {
     const contextual = fastState.value.info?.bestLapTimeMs
       || fastState.value.info?.lastLapTimeMs
@@ -533,7 +531,6 @@ async function confirmInfoTarget() {
     keepBetweenSessions: infoTargetKeepBetweenSessions.value,
   }) as InfoTargetSettings | undefined
   applyInfoTargetSettings(saved)
-  if (saved) setTargetLapVoiceEnabled(infoTargetVoiceDraft.value)
   isTargetSetupOpen.value = false
   await getOverlayApi()?.trainingOverlayClose?.()
 }
@@ -1038,6 +1035,18 @@ onBeforeUnmount(() => {
                     >
                       Target giro
                     </button>
+                    <button
+                      type="button"
+                      class="launcher-tool-button launcher-tool-button--target"
+                      :class="{ 'is-active': targetLapVoiceEnabled, 'is-selected': selectedWheelActionId === 'target-voice' }"
+                      data-overlay-wheel-action="target-voice"
+                      :aria-pressed="targetLapVoiceEnabled"
+                      :disabled="!canUseSpotterControls"
+                      @focus="selectedWheelActionId = 'target-voice'"
+                      @click="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
+                    >
+                      {{ targetLapVoiceEnabled ? 'Disattiva voce target giro' : 'Attiva voce target giro' }}
+                    </button>
                     <button type="button" class="launcher-tool-button" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
                       Riferimenti settori
                     </button>
@@ -1121,9 +1130,6 @@ onBeforeUnmount(() => {
                   :target-time-ms="infoTargetTimeMs"
                   :tolerance-ms="infoTargetToleranceMs"
                   :keep-between-sessions="infoTargetKeepBetweenSessions"
-                  show-voice-toggle
-                  :voice-enabled="infoTargetVoiceDraft"
-                  @toggle-voice="infoTargetVoiceDraft = !infoTargetVoiceDraft"
                   @set-target-time="infoTargetTimeMs = $event"
                   @select-tolerance="infoTargetToleranceMs = $event"
                   @toggle-keep="infoTargetKeepBetweenSessions = !infoTargetKeepBetweenSessions"

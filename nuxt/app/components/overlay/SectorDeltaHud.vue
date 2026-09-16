@@ -91,6 +91,10 @@ function formatTime(ms: number | null): string {
 
 function formatDelta(ms: number | null): string {
   if (ms === null) return '--'
+  if (props.variant === 'compact') {
+    const hundredths = Math.round(Math.abs(ms) / 10)
+    return `${ms < 0 && hundredths > 0 ? '−' : '+'}${(hundredths / 100).toFixed(2)}`
+  }
   if (selectedReference.value === 'custom') return formatCustomSectorDelta(ms)
   if (Math.abs(ms) <= 0) return '+0.000'
   const sign = ms < 0 ? '-' : '+'
@@ -291,7 +295,8 @@ function ariaLabel(sector: SectorHudEntry): string {
 
 .sector-compact__lap {
   grid-column: 1 / -1;
-  justify-self: center;
+  justify-self: stretch;
+  text-align: center;
   color: #facc15;
   margin-top: calc(16px * var(--hud-scale, 1));
   font-size: calc(48px * var(--hud-scale, 1));
@@ -312,18 +317,18 @@ function ariaLabel(sector: SectorHudEntry): string {
 .sector-compact__lap--target-inside,
 .sector-compact__lap--target-outside {
   border-radius: calc(8px * var(--hud-scale, 1));
-  /* Spread the fill beyond the glyphs without resizing the compact HUD. */
+  /* The grid item spans the complete time row; preserve its height. */
   outline: none;
 }
 
 .sector-compact__lap--target-inside {
   background: #0b315a;
-  box-shadow: 0 0 0 calc(4px * var(--hud-scale, 1)) #0b315a;
+
 }
 
 .sector-compact__lap--target-outside {
   background: #542600;
-  box-shadow: 0 0 0 calc(4px * var(--hud-scale, 1)) #542600;
+
 }
 
 .sector-compact__lap-label {
