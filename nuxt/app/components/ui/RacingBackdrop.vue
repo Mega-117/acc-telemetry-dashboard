@@ -1,9 +1,10 @@
 <script setup lang="ts">
 // Official app background, extracted from the original login scene.
+// Keep the upper-left region quieter without changing the other trajectories.
 const particles = Array.from({ length: 28 }, (_, i) => ({
   left: `${8 + ((i * 37) % 90)}%`, top: `${(i * 23) % 100}%`,
   animationDelay: `${-i * 1.7}s`, animationDuration: `${15 + i % 5 * 2}s`,
-}))
+})).filter((particle, i) => !(parseFloat(particle.left) < 45 && parseFloat(particle.top) < 35 && i % 3 !== 0))
 </script>
 
 <template>
