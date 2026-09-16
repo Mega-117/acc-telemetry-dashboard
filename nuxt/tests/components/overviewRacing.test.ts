@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Calendar from '~/components/overview/UpcomingRacesCard.vue'
 import Activity from '~/components/cards/ActivityCard.vue'
+import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
 
 const mocks = vi.hoisted(() => ({ load: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() }))
 vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ currentUser: ref({ uid: 'qa' }), userRole: ref('pilot') }) }))
@@ -13,6 +14,26 @@ const event = { id: 'event', title: 'Gara QA', startsAt: '2099-10-01T19:00', tra
 beforeEach(() => { vi.clearAllMocks(); mocks.load.mockResolvedValue([event]) })
 
 describe('racing overview components', () => {
+  it('reuses the calendar request prepared for the same user and retries after failure', async () => {
+    const pending = Promise.reject(new Error('offline'))
+    const entry = ref({ takeEvents: vi.fn().mockReturnValueOnce(pending) })
+    const wrapper = mount(Calendar, { props: { userId: 'qa', racing: true }, global: { provide: { [overviewEntryKey as symbol]: entry } } })
+    await flushPromises()
+    expect(mocks.load).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Calendario non disponibile')
+    await wrapper.get('.race-empty button').trigger('click')
+    await flushPromises()
+    expect(mocks.load).toHaveBeenCalledOnce()
+    expect(wrapper.text()).toContain('Gara QA')
+    wrapper.unmount()
+  })
+  it('does not consume another user prepared calendar', async () => {
+    const wrapper = mount(Calendar, { props: { userId: 'qa', racing: true }, global: { provide: { [overviewEntryKey as symbol]: ref({ takeEvents: (uid: string) => uid === 'other' ? Promise.resolve([]) : undefined }) } } })
+    await flushPromises()
+    expect(mocks.load).toHaveBeenCalledWith('qa', 25)
+    expect(wrapper.text()).toContain('Gara QA')
+    wrapper.unmount()
+  })
   it('opens the existing create form, validates and persists through the repository', async () => {
     const wrapper = mount(Calendar, { props: { userId: 'qa', racing: true }, global: { stubs: { teleport: true } } })
     await flushPromises()

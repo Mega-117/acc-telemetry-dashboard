@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { CirclePlus, Ellipsis, ExternalLink, Pencil, Trash2, X } from '@lucide/vue'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
 import {
@@ -24,6 +25,9 @@ const { currentUser, userRole } = useFirebaseAuth()
 const cloudWriteGate = useRuntimeCapabilityGate().gate('cloudWrite')
 
 const events = ref<RaceCalendarEvent[]>([])
+const entry = inject(overviewEntryKey, null)
+let loadRevision = 0
+const calendarLoadError = ref(false)
 const isLoading = ref(false)
 const isSaving = ref(false)
 const errorMessage = ref('')
@@ -163,15 +167,23 @@ function validateForm(): RaceCalendarEventInput | null {
 }
 
 async function refreshEvents() {
-  if (!props.userId) {
+  const revision = ++loadRevision
+  const uid = props.userId
+  calendarLoadError.value = false
+  if (!uid) {
     events.value = []
+    isLoading.value = false
     return
   }
   isLoading.value = true
   try {
-    events.value = await loadRaceCalendarEvents(props.userId, 25)
+    const prepared = entry?.value?.takeEvents(uid)
+    const result = await (prepared || loadRaceCalendarEvents(uid, 25))
+    if (revision === loadRevision) events.value = result
+  } catch {
+    if (revision === loadRevision) calendarLoadError.value = true
   } finally {
-    isLoading.value = false
+    if (revision === loadRevision) isLoading.value = false
   }
 }
 
@@ -227,6 +239,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  loadRevision += 1
   window.removeEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
   if (clockTimer !== null) window.clearInterval(clockTimer)
 })
@@ -243,6 +256,10 @@ onBeforeUnmount(() => {
     </div>
 
     <div v-if="isLoading" class="race-empty">Caricamento gare...</div>
+    <div v-else-if="calendarLoadError" class="race-empty" role="status">
+      <span>Calendario non disponibile.</span>
+      <button type="button" class="race-action" @click="refreshEvents">Riprova</button>
+    </div>
     <div v-else-if="!featuredEvent" class="race-empty">
       <strong>Nessuna gara pianificata</strong>
       <span>Aggiungi la prossima gara per averla sempre in vista.</span>

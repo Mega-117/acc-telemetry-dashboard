@@ -119,6 +119,17 @@ describe('AuthOverlay password reset', () => {
     ])
   })
 
+  it('mantiene il form occupato mentre la shell prepara la panoramica', async () => {
+    const wrapper = mountOverlay()
+    await wrapper.setProps({ busy: true })
+    expect(wrapper.get('[data-testid="submit-login"]').attributes('disabled')).toBeDefined()
+    await wrapper.get('[data-testid="submit-login"]').trigger('click')
+    expect(loginMock).not.toHaveBeenCalled()
+    await wrapper.setProps({ busy: false })
+    expect(wrapper.get('[data-testid="submit-login"]').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('rende login single-flight anche con due invii concorrenti', async () => {
     let resolveLogin!: (result: { success: boolean }) => void
     loginMock.mockReturnValue(new Promise((resolve) => { resolveLogin = resolve }))

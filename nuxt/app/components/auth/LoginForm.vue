@@ -93,7 +93,7 @@ defineExpose({
       variant="primary"
       :loading="loading"
     >
-      <span>ACCEDI</span><AuthIcon name="arrow" />
+      <span aria-live="polite">{{ loading ? 'ACCESSO IN CORSO…' : 'ACCEDI' }}</span><AuthIcon name="arrow" />
     </UiBaseButton>
 
 

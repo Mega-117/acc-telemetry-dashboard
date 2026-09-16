@@ -3,7 +3,7 @@
 // AuthOverlay - Racing Style (Liquid Glass)
 // ============================================
 
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import AuthScene from './AuthScene.vue'
 import AuthIcon from './AuthIcon.vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
@@ -19,7 +19,9 @@ const resetFormRef = ref()
 
 // Firebase Auth
 const { login, register, resetPassword } = useFirebaseAuth()
+const props = defineProps<{ busy?: boolean }>()
 const isSubmitting = ref(false)
+const isBusy = computed(() => isSubmitting.value || props.busy)
 
 // Emit events to parent
 const emit = defineEmits<{
@@ -28,25 +30,25 @@ const emit = defineEmits<{
 }>()
 
 const handleTabChange = (tab: 'login' | 'register') => {
-  if (isSubmitting.value) return
+  if (isBusy.value) return
   currentTab.value = tab
   currentView.value = tab
 }
 
 const showResetPassword = () => {
-  if (isSubmitting.value) return
+  if (isBusy.value) return
   currentView.value = 'reset'
 }
 
 const backToLogin = () => {
-  if (isSubmitting.value) return
+  if (isBusy.value) return
   currentView.value = 'login'
   currentTab.value = 'login'
   resetFormRef.value?.reset()
 }
 
 const handleLogin = async (credentials: { email: string; password: string }) => {
-  if (isSubmitting.value) return
+  if (isBusy.value) return
   isSubmitting.value = true
 
   try {
@@ -65,7 +67,7 @@ const handleLogin = async (credentials: { email: string; password: string }) => 
 }
 
 const handleRegister = async (data: { firstName: string; lastName: string; nickname: string; email: string; password: string }) => {
-  if (isSubmitting.value) return
+  if (isBusy.value) return
   isSubmitting.value = true
 
   try {
@@ -83,7 +85,7 @@ const handleRegister = async (data: { firstName: string; lastName: string; nickn
 }
 
 const handleResetPassword = async (email: string) => {
-  if (isSubmitting.value) return
+  if (isBusy.value) return
   isSubmitting.value = true
 
   try {
@@ -104,14 +106,14 @@ const handleResetPassword = async (email: string) => {
 <template>
   <AuthScene :wide="currentView === 'register'">
     <nav class="auth-nav" aria-label="Accesso o registrazione">
-      <button v-if="currentView === 'reset'" class="auth-back" :disabled="isSubmitting" @click="backToLogin">
+      <button v-if="currentView === 'reset'" class="auth-back" :disabled="isBusy" @click="backToLogin">
         <AuthIcon name="back" /> Torna al login
       </button>
       <template v-else>
       <button class="auth-nav__item" :class="{ 'is-active': currentTab === 'login' }" :aria-current="currentTab === 'login' ? 'page' : undefined"
-        :disabled="isSubmitting" @click="handleTabChange('login')">ACCEDI</button>
+        :disabled="isBusy" @click="handleTabChange('login')">ACCEDI</button>
       <button class="auth-nav__item" :class="{ 'is-active': currentTab === 'register' }" :aria-current="currentTab === 'register' ? 'page' : undefined"
-        :disabled="isSubmitting" @click="handleTabChange('register')">REGISTRATI</button>
+        :disabled="isBusy" @click="handleTabChange('register')">REGISTRATI</button>
       </template>
     </nav>
         <!-- Forms with Transition -->
@@ -121,7 +123,7 @@ const handleResetPassword = async (email: string) => {
               v-if="currentView === 'login'"
               key="login"
               ref="loginFormRef"
-              :loading="isSubmitting"
+              :loading="isBusy"
               @submit="handleLogin"
               @forgot-password="showResetPassword"
             />
@@ -130,7 +132,7 @@ const handleResetPassword = async (email: string) => {
               v-else-if="currentView === 'register'"
               key="register"
               ref="registerFormRef"
-              :loading="isSubmitting"
+              :loading="isBusy"
               @submit="handleRegister"
             />
 
@@ -139,7 +141,7 @@ const handleResetPassword = async (email: string) => {
               key="reset"
               ref="resetFormRef"
               hide-back
-              :loading="isSubmitting"
+              :loading="isBusy"
               @submit="handleResetPassword"
               @back="backToLogin"
             />

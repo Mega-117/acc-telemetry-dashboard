@@ -3,7 +3,7 @@
 // App.vue - Main Application with Auth Flow
 // ============================================
 
-import { ref, computed, onMounted, onBeforeMount, onBeforeUnmount, watch, provide } from 'vue'
+import { ref, shallowRef, computed, onMounted, onBeforeMount, onBeforeUnmount, watch, provide } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { usePitwallDriverPresence } from '~/composables/usePitwallDriverPresence'
 import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
@@ -21,6 +21,11 @@ import { canUseDevTools } from '~/utils/devToolsAccess'
 import { toAuthStartupOutcome, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
 import { publishAuthStartupOutcome } from '~/services/auth/localIdentityBridge'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
+
+import { prepareOverviewEntry, decodeOverviewImage, overviewEntryKey, type OverviewEntry } from '~/services/auth/overviewEntryPreparation'
+import { getOverviewCarImage } from '~/utils/overviewCarImage'
+import { createAuthRevisionLeaseCoordinator } from '~/services/auth/authRevisionLease'
+import { loadRaceCalendarEvents } from '~/repositories/raceCalendarRepository'
 
 // === NUXT ROUTER ===
 const route = useRoute()
@@ -203,10 +208,19 @@ function listenToActivitiesTracked(userId: string) {
 // === APP STATE ===
 type AppState = 'initializing' | 'auth' | 'loading' | 'dashboard'
 type AuthState = 'login' | 'register' | 'reset' | 'register-success'
-type DissolveAnimation = 'fade-zoom' | 'warp' | 'particles' | 'slide-up'
 
 const appState = ref<AppState>('initializing')
 const authState = ref<AuthState>('login')
+const preparingDashboard = ref(false)
+const overviewEntry = shallowRef<OverviewEntry | null>(null)
+provide(overviewEntryKey, overviewEntry)
+const entryLeases = createAuthRevisionLeaseCoordinator()
+watch([() => currentUser.value?.uid, canEnterApp], () => {
+  entryLeases.observe(currentUser.value?.uid || null)
+  preparingDashboard.value = false
+  overviewEntry.value = null
+}, { immediate: true, flush: 'sync' })
+onBeforeUnmount(() => { entryLeases.invalidate() })
 const userEmail = ref('')
 const hasInitialized = ref(false)
 const showBrowserMaintenanceNotification = ref(false)
@@ -231,7 +245,7 @@ watch(
 )
 
 // === CONFIG ===
-const transitionName = 'dissolve-fade-zoom' // Fixed animation
+const transitionName = 'shell-motion'
 const dashboardRoutePrefixes = [
   '/panoramica',
   '/sessioni',
@@ -311,30 +325,55 @@ watch(authSessionStatus, (status) => {
   })
 }, { immediate: true })
 
-const enterDashboard = () => {
-  const startDashboard = () => {
-    if (!canEnterApp.value || !currentUser.value) {
-      showEmailVerificationGate()
-      return
-    }
-
-    appState.value = 'dashboard'
-    if (pendingSpaRedirectPath.value) {
-      router.replace(pendingSpaRedirectPath.value)
-      return
-    }
-
-    if (!isDashboardRoute(normalizedRoutePath.value)) {
-      router.push('/panoramica')
-    }
+// Warm only public code while signed out; user data starts after the auth gate.
+const warmDashboardCode = () => Promise.all([
+  preloadRouteComponents('/panoramica'), import('~/layouts/dashboard.vue'),
+])
+watch(appState, state => {
+  if (state === 'auth' && import.meta.client) {
+    void warmDashboardCode().catch(() => {})
   }
+})
 
-  startDashboard()
+const enterDashboard = async () => {
+  if (!canEnterApp.value || !currentUser.value) {
+    showEmailVerificationGate()
+    return
+  }
+  if (appState.value === 'dashboard' || preparingDashboard.value) return
+  const uid = currentUser.value.uid
+  const lease = entryLeases.capture(uid)
+  if (!lease) return
+  const destination = pendingSpaRedirectPath.value || (isDashboardRoute(normalizedRoutePath.value) ? route.fullPath : '/panoramica')
+  const isCurrent = () => entryLeases.isLeaseCurrent(lease, currentUser.value?.uid) && canEnterApp.value
+  preparingDashboard.value = true
+  try {
+    if (destination.split(/[?#]/)[0] === '/panoramica') {
+      const entry = prepareOverviewEntry(uid, {
+        projection: () => telemetryGateway.getOverviewProjection(uid),
+        events: () => loadRaceCalendarEvents(uid, 25),
+        image: projection => decodeOverviewImage(getOverviewCarImage(projection?.lastCar.rawName)),
+        code: warmDashboardCode,
+      })
+      overviewEntry.value = entry
+      await entry.ready
+    }
+    if (!isCurrent()) return
+    await router.replace(destination)
+    if (!isCurrent()) return
+    pendingSpaRedirectPath.value = ''
+    appState.value = 'dashboard'
+  } catch {
+    // Route failures retain the existing recoverable loading surface.
+    if (isCurrent()) appState.value = 'loading'
+  } finally {
+    if (isCurrent()) preparingDashboard.value = false
+  }
 }
 
 const applyAuthSessionToShell = (status: AuthSessionStatus) => {
   if (status === 'initializing' || status === 'recoverable') {
-    appState.value = 'loading'
+    if (status === 'recoverable' || appState.value !== 'auth') appState.value = 'loading'
     stopListening()
     return
   }
@@ -507,7 +546,7 @@ provide('goToSettings', handleGoToSettings)
       <NuxtRouteAnnouncer />
 
       <!-- Main Content with Transitions -->
-      <Transition :name="transitionName" :mode="appState === 'auth' ? undefined : 'out-in'">
+      <Transition :name="transitionName" :mode="appState === 'auth' ? 'out-in' : undefined" @before-leave="el => el.setAttribute('inert', '')">
         <!-- Initializing - waiting for Firebase auth check -->
         <div v-if="appState === 'initializing'" key="initializing" class="initializing-screen">
           <div class="initializing-content">
@@ -519,6 +558,7 @@ provide('goToSettings', handleGoToSettings)
         <AuthOverlay 
           v-else-if="appState === 'auth' && authState !== 'register-success'"
           key="auth"
+          :busy="preparingDashboard"
           @login-success="handleLoginSuccess"
           @register-success="handleRegisterSuccess"
         />
@@ -574,6 +614,7 @@ html, body {
 }
 
 #app {
+  position: relative;
   min-height: 100vh;
   background: transparent;
   isolation: isolate;
@@ -773,23 +814,22 @@ body:has(.electron-titlebar) {
 // DISSOLVE ANIMATIONS
 // ============================================
 
-// === 1. FADE ZOOM ===
-.dissolve-fade-zoom-enter-active {
-  transition: opacity 180ms ease-out;
+// Login crossfades; logout waits for the dashboard exit before showing auth.
+.shell-motion-enter-active { transition: opacity 260ms ease-out, transform 260ms ease-out; }
+.shell-motion-leave-active {
+  transition: opacity 220ms ease-in, transform 220ms ease-in;
+  position: absolute; inset: 0; z-index: 1; pointer-events: none;
 }
-
-.dissolve-fade-zoom-leave-active {
-  transition: opacity 100ms ease-in;
-}
-
-.dissolve-fade-zoom-enter-from,
-.dissolve-fade-zoom-leave-to {
-  opacity: 0;
-}
-
+#app:has(.electron-titlebar) > .shell-motion-leave-active { top: 36px; }
+.shell-motion-enter-from, .shell-motion-leave-to { opacity: 0; }
+.dashboard-wrapper.shell-motion-enter-from,
+.dashboard-wrapper.shell-motion-leave-to { transform: scale(.97); }
+.dashboard-wrapper.shell-motion-leave-active,
+.racer-auth.shell-motion-enter-active { transition-duration: 320ms; }
+.racer-auth.shell-motion-enter-from { transform: scale(.98); }
 @media (prefers-reduced-motion: reduce) {
-  .dissolve-fade-zoom-enter-active,
-  .dissolve-fade-zoom-leave-active { transition: none; }
+  .shell-motion-enter-active, .shell-motion-leave-active { transition: none; }
+  .shell-motion-enter-from, .shell-motion-leave-to { transform: none !important; }
 }
 
 // === 2. WARP SPEED ===
