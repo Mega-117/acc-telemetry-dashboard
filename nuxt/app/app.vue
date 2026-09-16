@@ -815,17 +815,15 @@ body:has(.electron-titlebar) {
 // ============================================
 
 // Login crossfades; logout waits for the dashboard exit before showing auth.
-.shell-motion-enter-active { transition: opacity 260ms ease-out, transform 260ms ease-out; }
+.shell-motion-enter-active { transition: opacity 600ms cubic-bezier(.4, 0, .2, 1), transform 600ms cubic-bezier(.4, 0, .2, 1); }
 .shell-motion-leave-active {
-  transition: opacity 220ms ease-in, transform 220ms ease-in;
+  transition: opacity 500ms cubic-bezier(.4, 0, .2, 1), transform 500ms cubic-bezier(.4, 0, .2, 1);
   position: absolute; inset: 0; z-index: 1; pointer-events: none;
 }
 #app:has(.electron-titlebar) > .shell-motion-leave-active { top: 36px; }
 .shell-motion-enter-from, .shell-motion-leave-to { opacity: 0; }
 .dashboard-wrapper.shell-motion-enter-from,
 .dashboard-wrapper.shell-motion-leave-to { transform: scale(.97); }
-.dashboard-wrapper.shell-motion-leave-active,
-.racer-auth.shell-motion-enter-active { transition-duration: 320ms; }
 .racer-auth.shell-motion-enter-from { transform: scale(.98); }
 @media (prefers-reduced-motion: reduce) {
   .shell-motion-enter-active, .shell-motion-leave-active { transition: none; }
