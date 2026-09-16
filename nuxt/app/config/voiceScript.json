@@ -9,12 +9,14 @@
     {
       "id": "lastMinute",
       "origin": "system",
-      "text": "ultimo minuto. chiudilo bene."
+      "text": "ultimo minuto. chiudilo bene.",
+      "speed": 1.3
     },
     {
       "id": "sessionComplete",
       "origin": "system",
-      "text": "allenamento completato, ottimo lavoro. ora fatti un recap a mente: cosa e' andato bene e su cosa lavorare la prossima volta."
+      "text": "allenamento completato, ottimo lavoro. ora fatti un recap a mente: cosa e' andato bene e su cosa lavorare la prossima volta.",
+      "speed": 1.3
     },
     {
       "id": "pressureAdjustmentNeeded",
@@ -25,14 +27,14 @@
     {
       "id": "targetInside",
       "origin": "system",
-      "text": "nel target.",
-      "speed": 1.2
+      "text": "giro nel targhet",
+      "speed": 1.35
     },
     {
       "id": "targetOutside",
       "origin": "system",
-      "text": "fuori target.",
-      "speed": 1.2
+      "text": "giro fuori targhet.",
+      "speed": 1.35
     }
   ],
   "steps": [
@@ -181,35 +183,40 @@
       "modeId": "short30",
       "stepId": "warmup",
       "origin": "system",
-      "text": "allenamento qualifica. warm-up. cinque minuti. scalda le gomme e fissa i riferimenti."
+      "text": "allenamento qualifica. wormap. cinque minuti. scalda le gomme e fissa i riferimenti.",
+      "speed": 1.3
     },
     {
       "trainingId": "qualifying",
       "modeId": "short30",
       "stepId": "qualy-1",
       "origin": "system",
-      "text": "qualifica uno. dieci minuti. pochi tentativi, mettine subito uno valido e forte."
+      "text": "qualifica uno. dieci minuti. pochi tentativi, mettine subito uno valido e forte.",
+      "speed": 1.3
     },
     {
       "trainingId": "qualifying",
       "modeId": "short30",
       "stepId": "pause",
       "origin": "system",
-      "text": "pausa. due minuti. respira e resetta. scegli una sola cosa da correggere."
+      "text": "pausa. due minuti. respira e resetta. scegli una sola cosa da correggere.",
+      "speed": 1.3
     },
     {
       "trainingId": "qualifying",
       "modeId": "short30",
       "stepId": "qualy-2",
       "origin": "system",
-      "text": "qualifica due. dieci minuti. stesso giro, piu' pulito. portalo a casa valido."
+      "text": "qualifica due. dieci minuti. stesso giro, piu' pulito. portalo a casa valido.",
+      "speed": 1.3
     },
     {
       "trainingId": "qualifying",
       "modeId": "short30",
       "stepId": "recap",
       "origin": "system",
-      "text": "recap. tre minuti. segna il tuo best valido e dove hai perso tempo."
+      "text": "recap. tre minuti. segna il tuo best valido e dove hai perso tempo.",
+      "speed": 1.3
     },
     {
       "trainingId": "qualifying",
