@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 a068fdda69c79b8f23cdc13892694c95aa661dee0fb1deb34c5bd6a7f2240d3e -->
+<!-- Generated V4 online; SHA256 f082aae59260cd8077305f692e4fd269b0c791424607ef11ae3c86612c42980a -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1202,9 +1202,32 @@ else globalThis.MfdV4Contract = exported;
 // It never calls the Python service: only a whole, validated intent leaves it.
 (function () {
   var snapshot = null, initialized = false, restoring = false, crewSignature = null;
+  // A field is seeded once; edits (including an intentional blank) own it thereafter.
+  var initializedFields = new Set(), editingField = null;
+  function seedStrategy(strategy, replace) {
+    var values = { fuel: strategy.fuelToAdd ?? null,
+      tyreSet: strategy.tyreSet == null ? null : strategy.tyreSet + 1,
+      compound: strategy.compound === 'dry' ? 'Dry' : strategy.compound === 'wet' ? 'Wet' : null };
+    ['FL','FR','RL','RR'].forEach(function(key) {
+      var value = strategy.pressures?.[key];
+      values[key.toLowerCase()] = Number.isFinite(value) ? Math.round(value*10)/10 : null;
+    });
+    var changed = false;
+    Object.keys(values).forEach(function(key) {
+      if (!replace && (initializedFields.has(key) || values[key] == null)) return;
+      S[key] = values[key]; initializedFields.add(key); changed = true;
+    });
+    return changed;
+  }
   function send(type, value) { parent.postMessage({ channel: 'mfd-v4-online', type: type, value: value }, '*'); }
+  etichettaBottone = function () {
+    bA.textContent = busy ? 'INVIO IN CORSO…' : S.applyPitStrategy ? 'CARICA PRESET' : 'INVIA STRATEGIA AL PILOTA';
+  };
   var nativeRender = renderForm;
   renderForm = function () {
+    var active = document.activeElement;
+    var editing = active && formEl.contains(active) && active.type === 'number' && editingField === active.dataset.f
+      ? { field: active.dataset.f, value: active.value } : null;
     // The shared driver control reads this button while rendering.
     bA.disabled = busy || !snapshot?.ready;
     nativeRender();
@@ -1220,7 +1243,13 @@ else globalThis.MfdV4Contract = exported;
     formEl.querySelectorAll('input,select').forEach(function (input) { if (busy) input.disabled = true; });
     document.getElementById('gap').disabled = busy;
     bA.disabled = busy || !snapshot?.ready;
-    bA.textContent = busy ? 'INVIO IN CORSO…' : S.applyPitStrategy ? 'CARICA PRESET' : 'INVIA STRATEGIA AL PILOTA';
+    etichettaBottone();
+    // A readiness/crew change can rebuild the form before the native change event.
+    // Preserve unfinished numeric input, but never re-enable an inapplicable field.
+    if (editing && !busy) {
+      var input = formEl.querySelector('input[data-f="' + editing.field + '"]');
+      if (input && !input.disabled) { input.value = editing.value; input.focus(); }
+    }
   };
   // Remove the local listener rather than relying on a hidden local endpoint.
   var button = bA.cloneNode(true); bA.replaceWith(button); bA = button;
@@ -1246,21 +1275,26 @@ else globalThis.MfdV4Contract = exported;
   S = { applyPitStrategy: false, pitStrategy: 1, fuel: null, changeTyre: null, compound: null, tyreSet: null,
     fl: null, fr: null, rl: null, rr: null, brakes: null, brakeFront: null, brakeRear: null,
     brakeFrontNow: null, brakeRearNow: null, driverIdx: null, driverEntryIndex: null, susp: null, body: null };
-  function saved() { if (!restoring) send('draft', { ...S, stepMs: Number(document.getElementById('gap').value) }); }
+  function saved() { if (!restoring) send('draft', { ...S, initializedFields: Array.from(initializedFields), stepMs: Number(document.getElementById('gap').value) }); }
   var refresh = document.createElement('button');
   refresh.type = 'button'; refresh.textContent = 'Aggiorna bozza dai dati disponibili';
   refresh.addEventListener('click', function () {
     if (busy || !snapshot?.strategy) return;
-    S.fuel = snapshot.strategy.fuelToAdd ?? null;
-    S.tyreSet = snapshot.strategy.tyreSet == null ? null : snapshot.strategy.tyreSet + 1;
-    S.compound = snapshot.strategy.compound === 'dry' ? 'Dry' : snapshot.strategy.compound === 'wet' ? 'Wet' : null;
-    ['FL','FR','RL','RR'].forEach(function(key) { var value=snapshot.strategy.pressures?.[key]; S[key.toLowerCase()] = Number.isFinite(value) ? Math.round(value*10)/10 : null; });
+    seedStrategy(snapshot.strategy, true);
     // Values absent from telemetry stay a choice for the engineer.
     renderForm(); saved();
   });
   bA.parentElement.appendChild(refresh);
+  formEl.addEventListener('input', function (event) {
+    if (!busy && event.target.dataset.f) {
+      initializedFields.add(event.target.dataset.f); editingField = event.target.dataset.f;
+    }
+  });
+  // Commit/clamping belongs to the canonical change handler, not the typing buffer.
+  formEl.addEventListener('change', function () { editingField = null; }, true);
   formEl.addEventListener('change', function (event) {
     if (busy) return;
+    if (event.target.dataset.f) initializedFields.add(event.target.dataset.f);
     if (event.target.type === 'number' && event.target.value === '') { S[event.target.dataset.f] = null; renderForm(); }
     saved();
   });
@@ -1283,16 +1317,17 @@ else globalThis.MfdV4Contract = exported;
     var crewChanged = crewSignature !== nextCrewSignature;
     var redraw = !initialized || crewChanged || previousReady !== snapshot.ready || busy !== (snapshot.busy === true) || crewIdentityV4 !== snapshot.contextId;
     if (!initialized) {
-      if (snapshot.draft) Object.assign(S, snapshot.draft);
-      else if (snapshot.strategy) {
-        S.fuel = snapshot.strategy.fuelToAdd ?? null;
-        S.tyreSet = snapshot.strategy.tyreSet == null ? null : snapshot.strategy.tyreSet + 1;
-        S.compound = snapshot.strategy.compound === 'dry' ? 'Dry' : snapshot.strategy.compound === 'wet' ? 'Wet' : null;
-        ['FL','FR','RL','RR'].forEach(function (key) { var v=snapshot.strategy.pressures?.[key]; S[key.toLowerCase()] = Number.isFinite(v) ? Math.round(v*10)/10 : null; });
+      if (snapshot.draft) {
+        Object.keys(S).forEach(function(key) {
+          if (!Object.prototype.hasOwnProperty.call(snapshot.draft, key)) return;
+          S[key] = snapshot.draft[key];
+          if (S[key] != null || snapshot.draft.initializedFields?.includes(key)) initializedFields.add(key);
+        });
       }
       document.getElementById('gap').value = snapshot.draft?.stepMs || 60;
       initialized = true;
     }
+    if (snapshot.busy !== true && snapshot.strategy && seedStrategy(snapshot.strategy, false)) redraw = true;
     if ((crewSignature !== null && crewChanged) || (crewIdentityV4 && crewIdentityV4 !== snapshot.contextId)) S.driverEntryIndex = null;
     crewSignature = nextCrewSignature;
     crewIdentityV4 = snapshot.contextId;
@@ -1310,7 +1345,7 @@ else globalThis.MfdV4Contract = exported;
       logEl.textContent = snapshot.outcome;
     }
     if (redraw) renderForm();
-    else bA.disabled = busy || !snapshot.ready;
+    else { aggiornaSpie(); bA.disabled = busy || !snapshot.ready; }
     if (!grid.children.length) renderSM();
     KEYS.forEach(function (key, index) { var value = cache[key]; grid.children[index].lastChild.textContent = value == null ? '—' : String(value); });
     restoring = false;
