@@ -372,25 +372,31 @@ describe('SectorDeltaHud', () => {
 it.each(['compact','classic'])('renders custom independent deltas at the layout precision in %s', async variant => {
  const html=await renderHud({variant, deltaReference:'custom', customSectorTimes:[31000,30000,32000]})
  expect(html).toContain('CUSTOM')
- expect(html).toContain(variant === 'compact' ? '>−0.20</small>' : '>−0.2</small>')
- expect(html).toContain(variant === 'compact' ? '>+0.80</small>' : '>+0.8</small>')
- expect(html).toContain(variant === 'compact' ? '−1.20' : '−1.2')
- expect(html).not.toContain('+0.802')
+ expect(html).toContain(variant === 'compact' ? '>−0.199</small>' : '>−0.2</small>')
+ expect(html).toContain(variant === 'compact' ? '>+0.802</small>' : '>+0.8</small>')
+ expect(html).toContain(variant === 'compact' ? '>−1.197</small>' : '>−1.2</small>')
+ if (variant === 'classic') expect(html).not.toContain('+0.802')
 })
 
 it.each(['compact','classic'])('keeps exactly zero custom delta at the layout precision in %s', async variant => {
  const exact={...sectorHud,sectors:sectorHud.sectors.map((entry,index)=>({...entry,currentMs:[32500,27000,16800][index]}))}
  const html=await renderHud({sectorHud:exact,variant,deltaReference:'custom',customSectorTimes:[32500,27000,16800]})
- expect(html).toContain(variant === 'compact' ? '>+0.00</small>' : '>+0.0</small>')
- expect(html).not.toContain('+0.000')
+ expect(html).toContain(variant === 'compact' ? '>+0.000</small>' : '>+0.0</small>')
+ if (variant === 'classic') expect(html).not.toContain('+0.000')
 })
 
-it.each(['custom', 'previousLap', 'bestSector'])('compact %s deltas use hundredths for all sectors without negative zero', async deltaReference => {
-  const deltas = [-1235, 1285, -4]
-  const hud = { ...sectorHud, sectors: sectorHud.sectors.map((item, index) => ({
-    ...item, currentMs: 30000 + deltas[index], referenceMs: 30000, bestReferenceMs: 30000, deltaMs: deltas[index],
-  })) }
-  const html = await renderHud({ sectorHud: hud, variant: 'compact', deltaReference, customSectorTimes: [30000,30000,30000] })
-  const values = [...html.matchAll(/class="sector-compact__delta[^"]*"[^>]*>([^<]*)</g)].map(match => match[1])
-  expect(values).toEqual(['−1.24', '+1.29', '+0.00'])
+describe.each(['custom', 'previousLap', 'bestSector'])('compact %s millisecond precision', deltaReference => {
+  it.each([
+    { deltas: [-425, 1285, -4], expected: ['−0.425', '+1.285', '−0.004'] },
+    { deltas: [-1234.5, 1234.5, -0.49], expected: ['−1.235', '+1.235', '+0.000'] },
+    { deltas: [-0.5, 0.5, 0], expected: ['−0.001', '+0.001', '+0.000'] },
+    { deltas: [-999.5, 999.5, 0.49], expected: ['−1.000', '+1.000', '+0.000'] },
+  ])('renders $deltas with symmetric rounding and unsigned zero', async ({ deltas, expected }) => {
+    const hud = { ...sectorHud, sectors: sectorHud.sectors.map((item, index) => ({
+      ...item, currentMs: 30000 + deltas[index], referenceMs: 30000, bestReferenceMs: 30000, deltaMs: deltas[index],
+    })) }
+    const html = await renderHud({ sectorHud: hud, variant: 'compact', deltaReference, customSectorTimes: [30000, 30000, 30000] })
+    const values = [...html.matchAll(/class="sector-compact__delta[^"]*"[^>]*>([^<]*)</g)].map(match => match[1])
+    expect(values).toEqual(expected)
+  })
 })

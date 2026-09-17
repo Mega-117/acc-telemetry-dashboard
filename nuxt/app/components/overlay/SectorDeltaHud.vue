@@ -92,8 +92,8 @@ function formatTime(ms: number | null): string {
 function formatDelta(ms: number | null): string {
   if (ms === null) return '--'
   if (props.variant === 'compact') {
-    const hundredths = Math.round(Math.abs(ms) / 10)
-    return `${ms < 0 && hundredths > 0 ? '−' : '+'}${(hundredths / 100).toFixed(2)}`
+    const milliseconds = Math.round(Math.abs(ms))
+    return `${ms < 0 && milliseconds > 0 ? '−' : '+'}${(milliseconds / 1000).toFixed(3)}`
   }
   if (selectedReference.value === 'custom') return formatCustomSectorDelta(ms)
   if (Math.abs(ms) <= 0) return '+0.000'
