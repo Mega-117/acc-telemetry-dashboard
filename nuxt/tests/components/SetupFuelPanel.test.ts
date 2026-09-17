@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
+import { setImmediate } from 'node:timers'
 import { createApp, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
 import SetupFuelPanel from '~/components/overlay/SetupFuelPanel.vue'
 let app: ReturnType<typeof createApp> | null = null
-const flush = async () => { await Promise.resolve(); await nextTick(); await Promise.resolve(); await nextTick() }
+const flush = async () => { await new Promise<void>(resolve => setImmediate(resolve)); await nextTick() }
 afterEach(() => { app?.unmount(); app=null; document.body.innerHTML=''; vi.restoreAllMocks(); vi.useRealTimers() })
 async function mount(available=true,sessionType=0) {
  const api={trainingOverlayPreviewSetupFuel:vi.fn(async()=>({available,sessionType,plan:{ok:true,totalLitres:25,contextKey:'session',durationMs:600000,consumption:2.9,referenceLapMs:102000,notes:[]}})),trainingOverlayApplySetupFuel:vi.fn(async()=>({ok:true,reason:'25 L verificati'})),trainingOverlayKeyboardEditing:vi.fn(async()=>true)}
@@ -127,4 +128,13 @@ it('direct IPC rejection is displayed and releases the buttons',async()=>{
  button('fuel-session').click();await flush()
  expect(document.querySelector('[role="status"]')?.textContent).toContain('Applicazione interrotta')
  expect(button('fuel-session').disabled).toBe(false)
+})
+
+it.each(['fuel-session','fuel-apply'])('renders immediate pending feedback before %s IPC hides the panel',async id=>{
+ const api=await mount();let pendingSeen=false;
+ api.trainingOverlayApplySetupFuel.mockImplementation(async()=>{pendingSeen=!!document.querySelector('[role="status"]')?.textContent?.includes('Preparazione carburante');return {ok:true,reason:'25 L verificati'}});
+ button(id).click();await flush();await flush();expect(pendingSeen).toBe(true);
+})
+it('unmount immediately after custom click prevents IPC',async()=>{
+ const api=await mount();button('fuel-apply').click();app?.unmount();app=null;await flush();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled();
 })

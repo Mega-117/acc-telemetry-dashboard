@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 const props = defineProps<{ api: any }>()
 const open = ref(false), minutes = ref(10), pending = ref(false), error = ref('')
 const state = ref<any>(null)
@@ -8,7 +8,7 @@ let timer: ReturnType<typeof setTimeout> | undefined
 let generation = 0
 let disposed = false
 const plan = computed(() => state.value?.plan)
-const statusMessage = computed(() => pending.value ? 'Applicazione in corso…'
+const statusMessage = computed(() => pending.value ? 'Preparazione carburante…'
   : error.value || state.value?.conflict || state.value?.unavailableReason
   || (plan.value && !plan.value.ok ? plan.value.reason : '')
   || state.value?.result?.reason || (state.value?.available ? 'Pronto: premi Applica dal menu Pausa; la schermata verrà verificata.' : 'Verifica delle condizioni…'))
@@ -47,9 +47,11 @@ async function keyboard(event: PointerEvent) {
     (event.target as HTMLInputElement).focus()
   }
 }
-function beginApplication() {
+async function beginApplication() {
   pending.value = true; error.value = ''; generation++; clearTimeout(timer)
   previewPending.value = false
+  // Commit the pending message before IPC can hide Ctrl+K.
+  await nextTick()
 }
 async function applyPlan(mode: 'auto' | 'minutes', expected: any) {
   const result = await props.api.trainingOverlayApplySetupFuel({ mode, minutes: Number(minutes.value), contextKey: expected.contextKey, totalLitres: expected.totalLitres })
@@ -61,8 +63,9 @@ function finishApplication() {
 }
 async function applySession() {
   if (pending.value) return
-  beginApplication()
+  await beginApplication()
   try {
+    if (disposed) return
     // Obtain a fresh session plan on click; never reuse the custom stint preview.
     const value = await props.api?.trainingOverlayPreviewSetupFuel?.({ mode: 'auto', minutes: Number(minutes.value) })
     if (disposed) return
@@ -77,8 +80,11 @@ async function applySession() {
 async function apply() {
   if (!state.value?.available || pending.value || previewPending.value) return
   const expected = plan.value
-  beginApplication()
-  try { await applyPlan('minutes', expected) }
+  await beginApplication()
+  try {
+    if (disposed) return
+    await applyPlan('minutes', expected)
+  }
   catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.' }
   finally { finishApplication() }
 }
