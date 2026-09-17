@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 55e37680ea453caccd3223f7937ef6822be4196c4afb174aa2d90b39fd87489a -->
+<!-- Generated V4 online; SHA256 a068fdda69c79b8f23cdc13892694c95aa661dee0fb1deb34c5bd6a7f2240d3e -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1017,6 +1017,11 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
     var started = Date.now(), observed = {}, failure = null, lastPanel = null, driver = null;
     var originalPanel = leggiPannello;
     var originalDriver = selectDriverV4;
+    var originalLog = log, lastError = null;
+    log = function (level, message) {
+      if (level === 'err') lastError = String(message).trim();
+      return originalLog.apply(this, arguments);
+    };
     leggiPannello = async function () { lastPanel = await originalPanel(); return lastPanel; };
     selectDriverV4 = async function (strategy, verifyOnly) {
       var result = await originalDriver(strategy, verifyOnly);
@@ -1039,9 +1044,9 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
       await apply(intent);
       if (plan.operation === 'preset') {
         if (!globalThis.v4PresetCompleted || !globalThis.v4PresetObserved?.verified || globalThis.v4PresetObserved.preset !== plan.pitStrategy)
-          throw new Error('Preset richiesto non verificato nel MFD.');
+          throw new Error(lastError || 'Preset richiesto non verificato nel MFD.');
       }
-      if (plan.operation !== 'preset' && !globalThis.v4VerificationReached) throw new Error('Sequenza interrotta prima della verifica finale.');
+      if (plan.operation !== 'preset' && !globalThis.v4VerificationReached) throw new Error(lastError || 'Sequenza interrotta prima della verifica finale.');
       if (LIM_TOCCATO || PROBLEMI.length) throw new Error(LIM_TOCCATO ? 'Limitatore alterato.' : PROBLEMI.join(' · '));
       // Fresh shared memory AFTER visual correction and named-driver verification.
       var current = await api('/sm'), firstPacket = current.packetId;
@@ -1074,6 +1079,7 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
     } catch (error) { failure = error.message; }
     finally {
       leggiPannello = originalPanel; selectDriverV4 = originalDriver;
+      log = originalLog;
       window.mfdV4Runner.complete({ observed: observed, failure: failure,
         metrics: { durationMs: Date.now() - started, inputCount: presses },
         diary: logEl.innerText.slice(-24000) });
