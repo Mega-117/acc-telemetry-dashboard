@@ -1,6 +1,5 @@
 import { ref } from 'vue'
 import type { StandingsStateEnvelope } from '~/services/overlay/standingsPresentation'
-import { isHudWindowActive, watchHudWindowActivity } from '~/services/overlay/hudWindowActivity'
 
 function unavailable(reason: string): StandingsStateEnvelope {
   return { status: 'unavailable', reason, snapshot: null }
@@ -46,7 +45,6 @@ export function useStandingsState(
   const nowMs = ref(Date.now())
   let unsubscribe: (() => void) | null = null
   let pollTimer: ReturnType<typeof setInterval> | null = null
-  let removeActivityListener: (() => void) | null = null
   let requestVersion = 0
   let lastPushAtMs: number | null = null
 
@@ -85,12 +83,7 @@ export function useStandingsState(
       })
     }
     void refresh()
-    // PIP-427: HUD nascosto = nessun lavoro; al ritorno si riparte da un pull fresco.
-    removeActivityListener = watchHudWindowActivity(getApi, (active) => {
-      if (active && pollTimer) void refresh()
-    })
     pollTimer = setInterval(() => {
-      if (!isHudWindowActive()) return
       const tickMs = Date.now()
       nowMs.value = tickMs
       if (lastPushAtMs === null || tickMs - lastPushAtMs >= safePollIntervalMs) {
@@ -108,10 +101,6 @@ export function useStandingsState(
     if (pollTimer) {
       clearInterval(pollTimer)
       pollTimer = null
-    }
-    if (removeActivityListener) {
-      removeActivityListener()
-      removeActivityListener = null
     }
     lastPushAtMs = null
   }
