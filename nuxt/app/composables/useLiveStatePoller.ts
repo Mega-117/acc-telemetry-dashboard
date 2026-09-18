@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { isHudWindowActive, watchHudWindowActivity } from '~/services/overlay/hudWindowActivity'
 
 export interface LiveLapState {
   currentLap: number | null
@@ -133,6 +134,7 @@ export function useLiveStatePoller(getApi: () => any | null) {
   const isPollingActive = ref(false)
   let liveStateInterval: ReturnType<typeof setInterval> | null = null
   let removePushListener: (() => void) | null = null
+  let removeActivityListener: (() => void) | null = null
 
   function applyState(state: any) {
     if (state && typeof state === 'object' && isLiveStateFresh(state.ts)) {
@@ -186,13 +188,21 @@ export function useLiveStatePoller(getApi: () => any | null) {
     }
 
     void pollOnce()
-    liveStateInterval = setInterval(pollOnce, 2000)
+    // PIP-427: HUD nascosto = nessun lavoro; al ritorno si riparte da un pull fresco.
+    liveStateInterval = setInterval(() => { if (isHudWindowActive()) void pollOnce() }, 2000)
+    removeActivityListener = watchHudWindowActivity(getApi, (active) => {
+      if (active && liveStateInterval) void pollOnce()
+    })
   }
 
   function stopLiveStatePolling() {
     if (liveStateInterval) {
       clearInterval(liveStateInterval)
       liveStateInterval = null
+    }
+    if (removeActivityListener) {
+      removeActivityListener()
+      removeActivityListener = null
     }
     if (removePushListener) {
       removePushListener()

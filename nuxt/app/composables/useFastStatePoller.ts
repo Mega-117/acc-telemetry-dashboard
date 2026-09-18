@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import type { TrackReferencePhase } from '~/services/spotter/trackVoiceReferences'
 import { normalizeSectorHud, type SectorHudState } from '~/composables/useLiveStatePoller'
+import { isHudWindowActive, watchHudWindowActivity } from '~/services/overlay/hudWindowActivity'
 import {
   emptyTyreSetupViewModel,
   normalizeTyreSetupViewModel,
@@ -240,6 +241,7 @@ const EMPTY_FAST_STATE: FastOverlayState = {
 
 const FAST_STATE_FRESH_MS = 2_000
 const FAST_STATE_POLL_MS = 250
+const FAST_STATE_PUSH_RECENT_MS = 1_000
 const MAX_CONSECUTIVE_ERRORS = 3
 const VALID_BANDS = new Set<FastStateSlipBand>(['white', 'green', 'yellow', 'orange', 'red'])
 const VALID_SLIP_STATES = new Set<FastStateSlipState>(['ok', 'limit', 'sliding', 'wheelspin', 'lockup'])
@@ -493,6 +495,8 @@ export function useFastStatePoller(getApi: () => any | null) {
   const isFastStateActive = computed(() => fastState.value.isLive && fastState.value.tyres.length === 4)
   let fastStateInterval: ReturnType<typeof setInterval> | null = null
   let removePushListener: (() => void) | null = null
+  let removeActivityListener: (() => void) | null = null
+  let lastPushAtMs = 0
 
   function applyState(state: any) {
     fastState.value = normalizeFastState(state)
@@ -508,7 +512,10 @@ export function useFastStatePoller(getApi: () => any | null) {
     }
 
     if (typeof api.onFastStateUpdate === 'function') {
-      removePushListener = api.onFastStateUpdate(applyState)
+      removePushListener = api.onFastStateUpdate((state: any) => {
+        lastPushAtMs = Date.now()
+        applyState(state)
+      })
     }
 
     let errorCount = 0
@@ -528,8 +535,23 @@ export function useFastStatePoller(getApi: () => any | null) {
       }
     }
 
+    // PIP-427: il poll e' la rete di sicurezza del push, non un secondo canale.
+    // - HUD nascosto: nessun lavoro; al ritorno si riparte da un pull fresco.
+    // - push in arrivo: il poll sarebbe un doppione (IPC + rilettura file +
+    //   normalizzazione di ~130 campi, 4 volte al secondo per finestra).
+    // Quando il push tace (ACC in pausa, watcher caduto) il poll riprende a
+    // 250 ms ben prima della soglia di freschezza, che quindi scatta come prima.
+    function pollTick() {
+      if (!isHudWindowActive()) return
+      if (Date.now() - lastPushAtMs < FAST_STATE_PUSH_RECENT_MS) return
+      void pollOnce()
+    }
+
     const firstPoll = pollOnce()
-    fastStateInterval = setInterval(pollOnce, FAST_STATE_POLL_MS)
+    fastStateInterval = setInterval(pollTick, FAST_STATE_POLL_MS)
+    removeActivityListener = watchHudWindowActivity(getApi, (active) => {
+      if (active && fastStateInterval) void pollOnce()
+    })
     return firstPoll
   }
 
@@ -538,6 +560,11 @@ export function useFastStatePoller(getApi: () => any | null) {
       clearInterval(fastStateInterval)
       fastStateInterval = null
     }
+    if (removeActivityListener) {
+      removeActivityListener()
+      removeActivityListener = null
+    }
+    lastPushAtMs = 0
     if (removePushListener) {
       removePushListener()
       removePushListener = null

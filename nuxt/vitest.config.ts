@@ -147,6 +147,7 @@ export default defineConfig({
         'app/services/telemetry/sessionMergeLogic.ts',
         'app/services/telemetry/theoreticalTimesCalculator.ts',
         'app/services/overlay/tyreSetupViewModel.ts',
+        'app/services/overlay/hudWindowActivity.ts',
         'app/services/overlay/pressureActionPresentation.ts',
         'app/services/overlay/standingsCarNumber.ts',
         'app/services/overlay/standingsLayout.ts',
