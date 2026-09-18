@@ -5,6 +5,7 @@ import {
   LAP_TIME_AUDIO_MIN_TENTHS,
   buildLapTimeVoiceCatalog,
   buildLapTimeVoiceEntry,
+  lapTimeAnnouncementPaths,
   lapTimeTenthsFromMs,
   lapTimeToBricks,
   lapTimeVoiceFilename,
@@ -98,5 +99,21 @@ describe('lapTimeAnnouncer (PIP-155 full lap-time WAV)', () => {
     })
     expect(resolveLapTimeVoiceEntry((LAP_TIME_AUDIO_MIN_TENTHS - 1) * 100, true, 'if_sara')).toBeNull()
     expect(resolveLapTimeVoiceEntry((LAP_TIME_AUDIO_MAX_TENTHS + 1) * 100, true, 'if_sara')).toBeNull()
+  })
+
+  it('al traguardo il tempo si sente solo con il WAV intero del range, mai a mattoncini', () => {
+    const invalid = '/voice/qualifying/time-invalid-if_sara.wav'
+    const below = (LAP_TIME_AUDIO_MIN_TENTHS - 1) * 100
+    const above = (LAP_TIME_AUDIO_MAX_TENTHS + 1) * 100
+    expect(lapTimeAnnouncementPaths(90_999, true, 'if_sara')).toEqual(['/voice/qualifying/lap-time-0909-if_sara.wav'])
+    expect(lapTimeAnnouncementPaths(90_999, false, 'if_sara')).toEqual([invalid, '/voice/qualifying/lap-time-0909-if_sara.wav'])
+    // Estremi inclusi.
+    expect(lapTimeAnnouncementPaths(LAP_TIME_AUDIO_MIN_TENTHS * 100, true, 'im_nicola')).toEqual(['/voice/qualifying/lap-time-0800-im_nicola.wav'])
+    expect(lapTimeAnnouncementPaths(LAP_TIME_AUDIO_MAX_TENTHS * 100, true, 'im_nicola')).toEqual(['/voice/qualifying/lap-time-1509-im_nicola.wav'])
+    // Fuori range: silenzio se valido, solo "giro non valido" se invalido.
+    for (const timeMs of [below, above, null, 0]) {
+      expect(lapTimeAnnouncementPaths(timeMs, true, 'if_sara')).toEqual([])
+      expect(lapTimeAnnouncementPaths(timeMs, false, 'if_sara')).toEqual([invalid])
+    }
   })
 })

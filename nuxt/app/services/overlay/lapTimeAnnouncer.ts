@@ -1,7 +1,7 @@
 // Annuncio tempi giro (PIP-155):
-// - primario: frase intera pre-generata, zero TTS live mentre si guida;
-// - fallback: vecchi mattoncini PIP-101, se il WAV intero manca o il tempo
-//   e' fuori dal range pre-generato.
+// - frase intera pre-generata, zero TTS live mentre si guida;
+// - fuori dal range pre-generato il tempo non viene annunciato: nessun
+//   ripiego sui vecchi mattoncini PIP-101.
 
 export const TIME_BRICK_DIR = '/voice/qualifying'
 export const LAP_TIME_AUDIO_DIR = '/voice/qualifying'
@@ -153,6 +153,24 @@ export function resolveLapTimeVoiceEntry(
 }
 
 /**
+ * Percorsi audio da accodare al traguardo (PIP-413).
+ * Il tempo si sente solo se esiste il WAV intero del range; fuori range resta
+ * soltanto l'eventuale "giro non valido". Nessun ripiego sui mattoncini:
+ * concatenati suonano come una lettura live di qualita' inferiore.
+ */
+export function lapTimeAnnouncementPaths(
+  timeMs: number | null,
+  valid: boolean,
+  voice: LapTimeAudioVoice,
+): string[] {
+  const paths = valid ? [] : [timeBrickPath('invalid', voice)]
+  const entry = resolveLapTimeVoiceEntry(timeMs, true, voice)
+  if (entry) paths.push(entry.path)
+  return paths
+}
+
+/**
+ * Non usato per gli annunci al traguardo: vedi lapTimeAnnouncementPaths.
  * Scompone un tempo giro nei mattoncini da riprodurre in sequenza.
  * Ritorna gli id dei mattoncini (senza voce/estensione).
  * - tempo nullo/non valido come numero: annuncia solo l'eventuale "giro non valido".

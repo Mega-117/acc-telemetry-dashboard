@@ -7,7 +7,7 @@ import { usePublicPath } from '~/composables/usePublicPath'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { resolveLocalRuntimeCapability } from '~/services/auth/localIdentityBridge'
-import { lapTimeToBricks, timeBrickPath, resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
+import { lapTimeAnnouncementPaths } from '~/services/overlay/lapTimeAnnouncer'
 import {
   createVoicePlaybackQueue,
   type VoiceCue,
@@ -294,11 +294,8 @@ function tickTrackVoiceReferences() {
 
 function announceLapTime(id: string, timeMs: number, valid: boolean) {
   if (!canRunSpotterAudio.value || !lapTimesAllowedForSession.value) return
-  // Every timed lap includes its time, including invalid and out-of-range laps.
-  const entry = resolveLapTimeVoiceEntry(timeMs, true, selectedVoice.value)
-  const paths = entry
-    ? [...(!valid ? [timeBrickPath('invalid', selectedVoice.value)] : []), entry.path]
-    : lapTimeToBricks(timeMs, valid).map(brick => timeBrickPath(brick, selectedVoice.value))
+  // The time is spoken only when its full WAV exists; out of range stays silent.
+  const paths = lapTimeAnnouncementPaths(timeMs, valid, selectedVoice.value)
   paths.forEach((path, index) => enqueueAudioPath(path, {
     source: 'lap-time', id: `${id}-${index}`, correlationId: id,
   }))
