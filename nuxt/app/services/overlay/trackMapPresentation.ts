@@ -54,6 +54,8 @@ export interface TrackMapPitPredictionInput extends TrackMapPitBasisInput {
 }
 
 export interface TrackMapDot extends TrackMapPoint {
+  // Where on the lap the item is: the renderer moves items ALONG the line.
+  spline: number
   carIndex: number
   diameter: number
   fill: string
@@ -65,6 +67,7 @@ export interface TrackMapDot extends TrackMapPoint {
 }
 
 export interface TrackMapMarker extends TrackMapPoint {
+  spline: number
   kind: 'pit' | 'damage'
   label: 'P' | '+'
   fill: string
@@ -153,6 +156,27 @@ export function pointAtSpline (outline: ReadonlyArray<TrackMapPoint>, spline: un
   return outline[Math.floor((outline.length - 1) * wrapped)] ?? null
 }
 
+const MOTION_TAU_MS = 120
+const MOTION_SNAP = 1e-5
+
+/**
+ * One animation step of an item towards its target, measured on the lap and
+ * not on the screen: moving x/y in a straight line makes a marker that jumps
+ * (a new stop time moves it by a third of a lap) cut across the circle or the
+ * infield. Along the lap, by the shorter way round, it follows the line.
+ */
+export function stepSplineToward (current: number, target: number, elapsedMs: number): number {
+  const from = finite(current)
+  const to = finite(target)
+  if (to === null) return current
+  if (from === null) return to
+  const delta = ((((to - from) % 1) + 1.5) % 1) - 0.5
+  if (Math.abs(delta) < MOTION_SNAP) return to
+  if (!(elapsedMs > 0)) return from
+  const next = from + delta * (1 - Math.exp(-elapsedMs / MOTION_TAU_MS))
+  return ((next % 1) + 1) % 1
+}
+
 export function outlineToPath (outline: ReadonlyArray<TrackMapPoint>): string {
   return outline.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ')
 }
@@ -209,6 +233,7 @@ export function buildTrackMapView (options: BuildTrackMapOptions): TrackMapView 
     const colors = carColors(car, { isLocal, leadsRace, leadsClass, isRace })
     view.dots.push({
       ...point,
+      spline: spline as number,
       carIndex,
       diameter: highlighted ? DIAMETER_HIGHLIGHT : DIAMETER_NORMAL,
       fill: colors.fill,
@@ -224,7 +249,7 @@ export function buildTrackMapView (options: BuildTrackMapOptions): TrackMapView 
     const point = pointAtSpline(outline, options.localSpline)
     if (point) {
       view.dots.push({
-        ...point, carIndex: localIndex, diameter: DIAMETER_HIGHLIGHT, fill: '#FF0000', text: '#FFFFFF',
+        ...point, spline: options.localSpline as number, carIndex: localIndex, diameter: DIAMETER_HIGHLIGHT, fill: '#FF0000', text: '#FFFFFF',
         opacity: 1, label: null, zIndex: 1000, isLocal: true
       })
     }
@@ -237,13 +262,13 @@ export function buildTrackMapView (options: BuildTrackMapOptions): TrackMapView 
     const damagePoint = damage?.visible === true ? pointAtSpline(outline, damage.spline) : null
     if (damagePoint) {
       view.markers.push({
-        ...damagePoint, kind: 'damage', label: '+', fill: TRACK_MAP_DAMAGE_COLOR, hollow: damage?.confidence !== 'high'
+        ...damagePoint, spline: damage!.spline as number, kind: 'damage', label: '+', fill: TRACK_MAP_DAMAGE_COLOR, hollow: damage?.confidence !== 'high'
       })
     }
     const pitPoint = pointAtSpline(outline, prediction.spline)
     if (pitPoint) {
       view.markers.push({
-        ...pitPoint, kind: 'pit', label: 'P', fill: TRACK_MAP_PIT_COLOR, hollow: prediction.confidence !== 'high'
+        ...pitPoint, spline: prediction.spline as number, kind: 'pit', label: 'P', fill: TRACK_MAP_PIT_COLOR, hollow: prediction.confidence !== 'high'
       })
     }
   }

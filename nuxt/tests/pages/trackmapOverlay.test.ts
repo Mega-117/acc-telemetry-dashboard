@@ -35,7 +35,11 @@ describe('Track Map overlay window contract', () => {
     expect(page).toContain('pitPrediction: fast.pitPrediction')
     // The rejoin point is the logger's job: no lap time or pit time maths in the renderer.
     expect(page).not.toMatch(/pitTime|lapTime|avgLap/i)
-    expect(read('app/components/overlay/TrackMapHud.vue')).not.toMatch(/spline/i)
+    // The component only animates along the line what it is given: no stop or lap time maths either.
+    const component = read('app/components/overlay/TrackMapHud.vue')
+    expect(component).not.toMatch(/pitTime|lapTime|stopTime|walkBack/i)
+    expect(component).toContain('stepSplineToward')
+    expect(component).not.toMatch(/transition:\s*transform/)
   })
 
   it('switches to the circle from the HUD setting, whatever the track', () => {

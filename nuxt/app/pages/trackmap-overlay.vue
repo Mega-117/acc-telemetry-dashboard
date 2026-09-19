@@ -93,7 +93,7 @@ onUnmounted(() => {
 <template>
   <main class="overlay-root">
     <OverlaySoftwareCursor :state="overlay.pointerState" />
-    <TrackMapHud :view="view" class="overlay-canvas" :style="canvasStyle" />
+    <TrackMapHud :view="view" :outline="outline" class="overlay-canvas" :style="canvasStyle" />
   </main>
 </template>
 

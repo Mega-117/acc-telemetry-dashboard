@@ -1,15 +1,56 @@
 <script setup lang="ts">
 // PIP-428 — sola presentazione: disegna cio' che trackMapPresentation ha deciso.
 // Spessori, colori e rotazione replicano TrackMapWindow.xaml di ACC Drive.
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   TRACK_MAP_CANVAS,
   TRACK_MAP_MARKER_DIAMETER,
   TRACK_MAP_ROTATION_DEG,
+  pointAtSpline,
+  stepSplineToward,
+  type TrackMapPoint,
   type TrackMapView,
 } from '~/services/overlay/trackMapPresentation'
 
-const props = defineProps<{ view: TrackMapView }>()
+const props = defineProps<{ view: TrackMapView, outline: ReadonlyArray<TrackMapPoint> }>()
+
+// Ogni elemento si muove LUNGO la linea: si anima la posizione sul giro e la si
+// riproietta sul tracciato a ogni frame. Animare x/y (una transizione CSS) fa
+// tagliare il cerchio o il prato a un pallino che salta, per esempio il pit
+// prediction quando cambia il tempo di sosta.
+const shown = ref<Record<string, number>>({})
+let frame = 0
+let lastFrameAt = 0
+
+function targets (): Array<[string, number]> {
+  return [
+    ...props.view.dots.map(dot => [`car:${dot.carIndex}`, dot.spline] as [string, number]),
+    ...props.view.markers.map(marker => [`marker:${marker.kind}`, marker.spline] as [string, number]),
+  ]
+}
+
+function animate (now: number) {
+  const elapsed = lastFrameAt ? Math.min(100, now - lastFrameAt) : 16
+  lastFrameAt = now
+  const previous = shown.value
+  const next: Record<string, number> = {}
+  let changed = false
+  for (const [key, target] of targets()) {
+    // Un elemento nuovo nasce gia' al suo posto, non ci arriva da zero.
+    next[key] = key in previous ? stepSplineToward(previous[key]!, target, elapsed) : target
+    changed ||= next[key] !== previous[key]
+  }
+  if (changed || Object.keys(previous).length !== Object.keys(next).length) shown.value = next
+  frame = requestAnimationFrame(animate)
+}
+
+function place (key: string, item: { spline: number, x: number, y: number }) {
+  const point = pointAtSpline(props.outline, shown.value[key] ?? item.spline) ?? item
+  return { transform: `translate(${point.x}px, ${point.y}px)` }
+}
+
+onMounted(() => { frame = requestAnimationFrame(animate) })
+onUnmounted(() => cancelAnimationFrame(frame))
 
 const MARGIN = 40
 const viewBox = `${-MARGIN} ${-MARGIN} ${TRACK_MAP_CANVAS + MARGIN * 2} ${TRACK_MAP_CANVAS + MARGIN * 2}`
@@ -34,7 +75,7 @@ const captionX = computed(() => center - captionWidth.value / 2)
         :key="dot.carIndex"
         class="track-map__item"
         :class="{ 'track-map__item--local': dot.isLocal }"
-        :style="{ transform: `translate(${dot.x}px, ${dot.y}px)` }"
+        :style="place(`car:${dot.carIndex}`, dot)"
         :opacity="dot.opacity"
       >
         <circle :r="dot.diameter / 2" :fill="dot.fill" stroke="#000000" stroke-width="2" />
@@ -56,7 +97,7 @@ const captionX = computed(() => center - captionWidth.value / 2)
         :key="marker.kind"
         class="track-map__item"
         :class="`track-map__marker--${marker.kind}`"
-        :style="{ transform: `translate(${marker.x}px, ${marker.y}px)` }"
+        :style="place(`marker:${marker.kind}`, marker)"
       >
         <!-- Pieno = il logger ha almeno due passaggi per tratto; vuoto = stima non verificabile. -->
         <circle
@@ -80,9 +121,7 @@ const captionX = computed(() => center - captionWidth.value / 2)
 .track-map{display:block;width:100%;height:100%;overflow:visible}
 .track-map__edge{fill:none;stroke:#696969;stroke-width:12;stroke-linejoin:round}
 .track-map__asphalt{fill:none;stroke:#000000;stroke-width:6;stroke-linejoin:round}
-/* Il roster UDP arriva a 4 Hz: la transizione copre il buco fra due campioni. */
-.track-map__item{transition:transform 250ms linear}
-.track-map__item--local{transition-duration:80ms}
+/* Nessuna transizione CSS sulla posizione: il movimento lo fa lo script, lungo la linea. */
 .track-map__number{fill:#ffffff;font:800 26px/1 system-ui,sans-serif}
 .track-map__letter{fill:#ffffff;font:700 26px/1 system-ui,sans-serif;text-anchor:middle}
 .track-map__caption rect{fill:#000000;opacity:.7}

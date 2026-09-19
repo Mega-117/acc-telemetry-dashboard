@@ -8,7 +8,8 @@ import {
   buildTrackMapView,
   normalizeTrackOutline,
   outlineToPath,
-  pointAtSpline
+  pointAtSpline,
+  stepSplineToward
 } from '~/services/overlay/trackMapPresentation'
 
 // A 200 x 100 m rectangle, wider than tall, not centred on the origin.
@@ -123,8 +124,8 @@ describe('buildTrackMapView', () => {
     }
     const view = buildTrackMapView({ outline, cars: [], localCarIndex: null, pitPrediction })
     expect(view.markers).toEqual([
-      { ...outline[1]!, kind: 'damage', label: '+', fill: TRACK_MAP_DAMAGE_COLOR, hollow: true },
-      { ...outline[2]!, kind: 'pit', label: 'P', fill: TRACK_MAP_PIT_COLOR, hollow: false }
+      { ...outline[1]!, spline: 0.25, kind: 'damage', label: '+', fill: TRACK_MAP_DAMAGE_COLOR, hollow: true },
+      { ...outline[2]!, spline: 0.5, kind: 'pit', label: 'P', fill: TRACK_MAP_PIT_COLOR, hollow: false }
     ])
     const hidden = { outline, cars: [], localCarIndex: null }
     expect(buildTrackMapView({ ...hidden, pitPrediction, showPitPrediction: false }).markers).toEqual([])
@@ -152,6 +153,39 @@ describe('buildTrackMapView', () => {
       .toBe('SOSTA 3,4 s · MFD · T 46,4 s')
     expect(buildTrackMapView({ outline, cars: [], localCarIndex: null, pitPrediction: basis, showPitPrediction: false }).caption)
       .toBeNull()
+  })
+
+  it('moves an item along the lap by the shorter way round, never across the map', () => {
+    // A new stop time moves the pit marker by a third of a lap: it must pass
+    // through the points in between, not jump or cut the circle.
+    let position = 0.10
+    const visited: number[] = []
+    for (let frame = 0; frame < 60; frame += 1) {
+      position = stepSplineToward(position, 0.40, 16)
+      visited.push(position)
+    }
+    expect(visited.every((value, index) => index === 0 || value >= visited[index - 1]!)).toBe(true)
+    expect(visited[0]!).toBeGreaterThan(0.10)
+    expect(visited[0]!).toBeLessThan(0.20)
+    expect(visited.at(-1)!).toBeCloseTo(0.40, 3)
+
+    // Across the start line the short way is backwards through 0, not forwards through 0.5.
+    const across = stepSplineToward(0.05, 0.95, 16)
+    expect(across > 0.95 || across < 0.05).toBe(true)
+    expect(stepSplineToward(0.95, 0.05, 16) > 0.95 || stepSplineToward(0.95, 0.05, 16) < 0.05).toBe(true)
+
+    // Settles exactly, ignores nonsense, and a first sighting starts on target.
+    expect(stepSplineToward(0.4000001, 0.4, 16)).toBe(0.4)
+    expect(stepSplineToward(0.2, Number.NaN, 16)).toBe(0.2)
+    expect(stepSplineToward(Number.NaN, 0.7, 16)).toBe(0.7)
+    expect(stepSplineToward(0.2, 0.6, 0)).toBe(0.2)
+  })
+
+  it('carries the lap position of every dot so the renderer can move it along the line', () => {
+    const view = buildTrackMapView({
+      outline, cars: [car({ car_index: 2, spline_position: 0.25 })], localCarIndex: 1, localSpline: 0.5
+    })
+    expect(view.dots.map(dot => [dot.carIndex, dot.spline])).toEqual([[2, 0.25], [1, 0.5]])
   })
 
   it('serialises the outline for an SVG polyline', () => {
