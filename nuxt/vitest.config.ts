@@ -152,6 +152,7 @@ export default defineConfig({
         'app/services/overlay/standingsLayout.ts',
         'app/services/overlay/standingsManufacturer.ts',
         'app/services/overlay/standingsPresentation.ts',
+        'app/services/overlay/trackMapPresentation.ts',
         'app/services/overlay/spectatorTelemetry.ts',
         'app/services/overlay/qaBotPresentation.ts',
         'app/services/overlay/overlayActionNavigation.ts',
