@@ -42,6 +42,10 @@ export interface HudOverlaySettings {
   showLapProgressBar?: boolean
   showTurnNumber?: boolean
   standingsLayout?: StandingsLayout
+  // Minimappa (PIP-428). pitTimeSeconds null = tempo sosta della tabella per pista.
+  showPitPrediction?: boolean
+  showCarNumbers?: boolean
+  pitTimeSeconds?: number | null
 }
 
 export const HUD_SCALE_MIN = 0.6
@@ -97,6 +101,10 @@ export const HUD_OVERLAY_INTERACTIONS: Record<string, HudOverlayInteractionDescr
     controlSelector: '',
   },
   standings: {
+    surfaceSelector: '.overlay-canvas',
+    controlSelector: '',
+  },
+  trackmap: {
     surfaceSelector: '.overlay-canvas',
     controlSelector: '',
   },

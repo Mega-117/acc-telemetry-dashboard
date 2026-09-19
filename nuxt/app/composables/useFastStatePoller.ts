@@ -97,6 +97,21 @@ export interface FastStateDamage {
   eventTs: number | null
 }
 
+export type FastStatePitConfidence = 'high' | 'low' | null
+
+// PIP-376: il logger dichiara il pallino; qui non si stima nulla.
+export interface FastStatePitPrediction {
+  available: boolean
+  reason: string | null
+  spline: number | null
+  confidence: FastStatePitConfidence
+  pitTimeS: number | null
+  pitTimeBaseS: number | null
+  pitTimeSource: string | null
+  inPitLane: boolean
+  damage: { visible: boolean, spline: number | null, confidence: FastStatePitConfidence }
+}
+
 export interface FastOverlayState {
   dataSource?: 'local' | 'focused'
   context: FastStateContext | null
@@ -104,6 +119,7 @@ export interface FastOverlayState {
   info: FastStateInfo | null
   sectorHud: SectorHudState | null
   damage: FastStateDamage | null
+  pitPrediction: FastStatePitPrediction | null
   flag: number | null
   lapsCompleted: number
   currentLapTimeMs: number | null
@@ -172,6 +188,7 @@ const EMPTY_FAST_STATE: FastOverlayState = {
   info: null,
   sectorHud: null,
   damage: null,
+  pitPrediction: null,
   flag: null,
   lapsCompleted: 0,
   currentLapTimeMs: null,
@@ -406,6 +423,36 @@ function normalizeLapPressureAverage(raw: any): FastStateLapPressureAverage {
   }
 }
 
+function normalizePitConfidence(value: unknown): FastStatePitConfidence {
+  return value === 'high' || value === 'low' ? value : null
+}
+
+function normalizeSpline(value: unknown): number | null {
+  const spline = toNumber(value)
+  return spline !== null && spline >= 0 && spline <= 1 ? spline : null
+}
+
+export function normalizePitPrediction(raw: any): FastStatePitPrediction | null {
+  if (!raw || typeof raw !== 'object') return null
+  const spline = normalizeSpline(raw.spline)
+  return {
+    // Disponibile solo se il logger lo dichiara E il punto e' utilizzabile.
+    available: raw.available === true && spline !== null,
+    reason: typeof raw.reason === 'string' ? raw.reason : null,
+    spline,
+    confidence: normalizePitConfidence(raw.confidence),
+    pitTimeS: toNumber(raw.pit_time_s),
+    pitTimeBaseS: toNumber(raw.pit_time_base_s),
+    pitTimeSource: typeof raw.pit_time_source === 'string' ? raw.pit_time_source : null,
+    inPitLane: raw.in_pit_lane === true,
+    damage: {
+      visible: raw.damage?.visible === true && normalizeSpline(raw.damage?.spline) !== null,
+      spline: normalizeSpline(raw.damage?.spline),
+      confidence: normalizePitConfidence(raw.damage?.confidence),
+    },
+  }
+}
+
 function normalizeFastState(state: any): FastOverlayState {
   if (!state || typeof state !== 'object' || !isFastStateFresh(state.ts)) {
     return { ...EMPTY_FAST_STATE }
@@ -422,6 +469,7 @@ function normalizeFastState(state: any): FastOverlayState {
     info: normalizeInfo(state.info),
     sectorHud: normalizeSectorHud(state.sector_hud),
     damage: normalizeDamage(state.damage),
+    pitPrediction: normalizePitPrediction(state.pit_prediction),
     flag: toNumber(state.flag),
     lapsCompleted: toNumber(state.laps_completed) ?? 0,
     currentLapTimeMs: toNumber(state.current_lap_time_ms),

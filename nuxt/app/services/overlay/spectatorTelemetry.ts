@@ -248,6 +248,8 @@ function focusedFastState(
     info,
     sectorHud: null,
     damage: null,
+    // Il pit prediction riguarda solo l'auto locale: su un'auto osservata non esiste.
+    pitPrediction: null,
     flag: focusedFlag(state),
     lapsCompleted: info.lapsCompleted,
     currentLapTimeMs: info.currentLapTimeMs,

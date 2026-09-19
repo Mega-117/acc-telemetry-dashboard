@@ -14,7 +14,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
-import { ChartNoAxesCombined, CircleDot, Clock3, Flag, Info, LayoutDashboard, ListOrdered, Trophy } from '@lucide/vue'
+import { ChartNoAxesCombined, CircleDot, Clock3, Flag, Info, LayoutDashboard, ListOrdered, Map as MapIcon, Trophy } from '@lucide/vue'
 import {
   supportsHudOverlayPresentationControl,
   type HudOverlayPresentationControl,
@@ -40,7 +40,7 @@ definePageMeta({
   middleware: 'hud-access'
 })
 
-type HudOverlayId = 'tyres' | 'sectors' | 'dashboard' | 'info' | 'standings'
+type HudOverlayId = 'tyres' | 'sectors' | 'dashboard' | 'info' | 'standings' | 'trackmap'
 type HudSettingsLayout = 'columns' | 'matrix'
 
 interface HudReplayScenario {
@@ -68,6 +68,7 @@ const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string 
   { id: 'dashboard', title: 'Dashboard', description: 'Marcia, carburante ed elettronica in stile ACC Drive.' },
   { id: 'info', title: 'Info', description: 'Delta, stint, carburante, grip, tempi e danni.' },
   { id: 'standings', title: 'Standings', description: 'Classifica di classe con top e auto intorno al pilota.' },
+  { id: 'trackmap', title: 'Minimappa', description: 'Tracciato con la tua auto, le altre in pista e il punto di uscita dai box.' },
 ]
 
 const hudOverlayIcons = {
@@ -76,6 +77,7 @@ const hudOverlayIcons = {
   dashboard: LayoutDashboard,
   info: Info,
   standings: ListOrdered,
+  trackmap: MapIcon,
 }
 
 const hudSettingsLayouts: Array<{ id: HudSettingsLayout, label: string, description: string }> = [
@@ -93,9 +95,9 @@ function getApi(): any | null {
 
 const isElectron = ref(false)
 const apiReady = ref(false)
-const enabled = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false })
-const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false })
-const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1, info: 1, standings: 0.8 })
+const enabled = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false, trackmap: false })
+const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false, trackmap: false })
+const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1, info: 1, standings: 0.8, trackmap: 1 })
 const tyreVariant = ref<'classic' | 'advanced' | 'race'>('classic')
 const sectorVariant = ref<'classic' | 'compact'>('classic')
 const showSectorReference = ref(true)
@@ -117,6 +119,12 @@ const dashboardSettings = reactive({
   speedDelta: false,
   fuelCriticalFlashEnabled: false,
   fuelCriticalLapsThreshold: 0.5,
+})
+// PIP-428: pitTimeSeconds null = tempo sosta della tabella per pista (ACC Drive: SG30 + 2 s).
+const trackmapSettings = reactive<{ showPitPrediction: boolean, showCarNumbers: boolean, pitTimeSeconds: number | null }>({
+  showPitPrediction: true,
+  showCarNumbers: false,
+  pitTimeSeconds: null,
 })
 const infoSettings = reactive({
   showYellowFlag: true,
@@ -286,6 +294,11 @@ async function refreshState() {
         dashboardSettings.fuelCriticalFlashEnabled = settings?.fuelCriticalFlashEnabled === true
         dashboardSettings.fuelCriticalLapsThreshold = Number.isFinite(Number(settings?.fuelCriticalLapsThreshold))
           ? Number(settings.fuelCriticalLapsThreshold) : 0.5
+      }
+      if (overlay.id === 'trackmap') {
+        trackmapSettings.showPitPrediction = settings?.showPitPrediction !== false
+        trackmapSettings.showCarNumbers = settings?.showCarNumbers === true
+        trackmapSettings.pitTimeSeconds = Number.isFinite(settings?.pitTimeSeconds) ? Number(settings.pitTimeSeconds) : null
       }
       if (overlay.id === 'standings') {
         for (const key of ['topCars', 'carsAhead', 'carsBehind'] as const) {
@@ -578,6 +591,24 @@ async function saveDashboardSetting(
 
 function toggleDashboardSetting(key: keyof typeof dashboardSettings) {
   void saveDashboardSetting(key, !(dashboardSettings as any)[key])
+}
+
+// Il main normalizza (1-600 s, altrimenti null) e rispecchia il valore al logger:
+// qui si mostra sempre cio' che il main ha davvero salvato.
+async function saveTrackmapSetting(
+  key: keyof typeof trackmapSettings,
+  value: boolean | number | null,
+) {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySaveSettings) return
+  ;(trackmapSettings as any)[key] = value
+  const settings = await api.hudOverlaySaveSettings('trackmap', { [key]: value })
+  if (settings && key in settings) (trackmapSettings as any)[key] = settings[key]
+}
+
+function savePitTimeInput(raw: string) {
+  const text = raw.trim()
+  void saveTrackmapSetting('pitTimeSeconds', text === '' ? null : Number(text))
 }
 
 
@@ -1141,6 +1172,46 @@ async function toggleTraining() {
                         @change="saveDashboardSetting('fuelCriticalLapsThreshold', Number(($event.target as HTMLInputElement).value))"
                       />
                       <b>giri</b>
+                    </span>
+                  </label>
+                </template>
+
+                <template v-else-if="selectedOverlayId === 'trackmap'">
+                  <label class="hud-control">
+                    <span><strong>Pit prediction</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="trackmapSettings.showPitPrediction"
+                      :disabled="selectedSettingsDisabled"
+                      @change="saveTrackmapSetting('showPitPrediction', !trackmapSettings.showPitPrediction)"
+                    />
+                  </label>
+                  <label class="hud-control">
+                    <span><strong>Numeri auto</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="trackmapSettings.showCarNumbers"
+                      :disabled="selectedSettingsDisabled"
+                      @change="saveTrackmapSetting('showCarNumbers', !trackmapSettings.showCarNumbers)"
+                    />
+                  </label>
+                  <label class="hud-control">
+                    <span><strong>Tempo sosta manuale</strong></span>
+                    <span class="hud-number">
+                      <input
+                        type="number"
+                        min="1"
+                        max="600"
+                        step="1"
+                        placeholder="auto"
+                        :value="trackmapSettings.pitTimeSeconds ?? ''"
+                        :disabled="selectedSettingsDisabled || !trackmapSettings.showPitPrediction"
+                        aria-label="Tempo perso per la sosta in secondi; vuoto usa il valore della pista"
+                        @change="savePitTimeInput(($event.target as HTMLInputElement).value)"
+                      />
+                      <b>s</b>
                     </span>
                   </label>
                 </template>
