@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // PIP-428 — sola presentazione: disegna cio' che trackMapPresentation ha deciso.
 // Spessori, colori e rotazione replicano TrackMapWindow.xaml di ACC Drive.
+import { computed } from 'vue'
 import {
   TRACK_MAP_CANVAS,
   TRACK_MAP_MARKER_DIAMETER,
@@ -8,7 +9,7 @@ import {
   type TrackMapView,
 } from '~/services/overlay/trackMapPresentation'
 
-defineProps<{ view: TrackMapView }>()
+const props = defineProps<{ view: TrackMapView }>()
 
 const MARGIN = 40
 const viewBox = `${-MARGIN} ${-MARGIN} ${TRACK_MAP_CANVAS + MARGIN * 2} ${TRACK_MAP_CANVAS + MARGIN * 2}`
@@ -16,6 +17,10 @@ const center = TRACK_MAP_CANVAS / 2
 const rotation = `rotate(${TRACK_MAP_ROTATION_DEG} ${center} ${center})`
 const upright = `rotate(${360 - TRACK_MAP_ROTATION_DEG})`
 const markerRadius = TRACK_MAP_MARKER_DIAMETER / 2
+// La scritta vive nel margine inferiore del riquadro, sotto il tracciato.
+const captionY = TRACK_MAP_CANVAS + MARGIN - 12
+const captionWidth = computed(() => Math.min(TRACK_MAP_CANVAS + MARGIN, (props.view.caption?.length ?? 0) * 17 + 28))
+const captionX = computed(() => center - captionWidth.value / 2)
 </script>
 
 <template>
@@ -63,6 +68,11 @@ const markerRadius = TRACK_MAP_MARKER_DIAMETER / 2
         <text :transform="upright" y="9" class="track-map__letter">{{ marker.label }}</text>
       </g>
     </g>
+    <!-- Fuori dalla rotazione: su che tempo di sosta si basa il pallino. -->
+    <g v-if="view.caption" class="track-map__caption">
+      <rect :x="captionX" :y="captionY - 30" :width="captionWidth" height="42" rx="8" />
+      <text :x="center" :y="captionY">{{ view.caption }}</text>
+    </g>
   </svg>
 </template>
 
@@ -75,4 +85,6 @@ const markerRadius = TRACK_MAP_MARKER_DIAMETER / 2
 .track-map__item--local{transition-duration:80ms}
 .track-map__number{fill:#ffffff;font:800 26px/1 system-ui,sans-serif}
 .track-map__letter{fill:#ffffff;font:700 26px/1 system-ui,sans-serif;text-anchor:middle}
+.track-map__caption rect{fill:#000000;opacity:.7}
+.track-map__caption text{fill:#ffffff;font:700 28px/1 system-ui,sans-serif;text-anchor:middle;font-variant-numeric:tabular-nums}
 </style>

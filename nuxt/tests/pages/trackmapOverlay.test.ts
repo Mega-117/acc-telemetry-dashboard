@@ -51,14 +51,14 @@ describe('Track Map overlay window contract', () => {
 describe('normalizePitPrediction', () => {
   const raw = {
     available: true, reason: null, spline: 0.42, confidence: 'high', pit_time_s: 61.5, pit_time_base_s: 68,
-    pit_time_source: 'acc-drive-sg30', in_pit_lane: true,
+    pit_time_source: 'acc-drive-sg30', stop_time_s: 30, in_pit_lane: true,
     damage: { visible: true, spline: 0.31, confidence: 'low', pit_time_s: 88 },
   }
 
   it('maps the logger contract', () => {
     expect(normalizePitPrediction(raw)).toEqual({
       available: true, reason: null, spline: 0.42, confidence: 'high', pitTimeS: 61.5, pitTimeBaseS: 68,
-      pitTimeSource: 'acc-drive-sg30', inPitLane: true,
+      pitTimeSource: 'acc-drive-sg30', stopTimeS: 30, inPitLane: true,
       damage: { visible: true, spline: 0.31, confidence: 'low' },
     })
   })

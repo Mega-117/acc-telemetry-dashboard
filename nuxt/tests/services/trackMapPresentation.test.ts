@@ -4,6 +4,7 @@ import {
   TRACK_MAP_CIRCLE_FILL,
   TRACK_MAP_DAMAGE_COLOR,
   TRACK_MAP_PIT_COLOR,
+  buildPitCaption,
   buildTrackMapView,
   normalizeTrackOutline,
   outlineToPath,
@@ -67,7 +68,7 @@ describe('buildTrackMapView', () => {
 
   it('draws nothing without an outline and never invents dots', () => {
     const view = buildTrackMapView({ outline: [], cars: [car({})], localCarIndex: 1 })
-    expect(view).toEqual({ outlinePath: '', dots: [], markers: [] })
+    expect(view).toEqual({ outlinePath: '', dots: [], markers: [], caption: null })
   })
 
   it('replicates ACC Drive colours, sizes and stacking', () => {
@@ -132,6 +133,25 @@ describe('buildTrackMapView', () => {
     expect(buildTrackMapView({ ...hidden, pitPrediction: null }).markers).toEqual([])
     const noDamage = buildTrackMapView({ ...hidden, pitPrediction: { ...pitPrediction, damage: { visible: false, spline: 0.25 } } })
     expect(noDamage.markers.map(marker => marker.kind)).toEqual(['pit'])
+  })
+
+  it('says which stop time the marker is based on, so the pilot can check it against the MFD', () => {
+    expect(buildPitCaption({ pitTimeBaseS: 46.4, pitTimeSource: 'mfd-screen', stopTimeS: 3.4 }))
+      .toBe('SOSTA 3,4 s · MFD · T 46,4 s')
+    expect(buildPitCaption({ pitTimeBaseS: 73, pitTimeSource: 'acc-drive-sg30', stopTimeS: 30 }))
+      .toBe('SOSTA 30,0 s · stima · T 73,0 s')
+    // A manual total has no stationary part to show.
+    expect(buildPitCaption({ pitTimeBaseS: 50, pitTimeSource: 'manual', stopTimeS: null })).toBe('manuale · T 50,0 s')
+    expect(buildPitCaption({ pitTimeBaseS: 50, pitTimeSource: 'something-new', stopTimeS: 0 })).toBe('SOSTA 0,0 s · T 50,0 s')
+    expect(buildPitCaption({ pitTimeBaseS: null, pitTimeSource: 'manual' })).toBeNull()
+    expect(buildPitCaption(null)).toBeNull()
+
+    const basis = { available: false, pitTimeBaseS: 46.4, pitTimeSource: 'mfd-screen', stopTimeS: 3.4 }
+    // Shown even before the marker exists, hidden with the pit prediction switch.
+    expect(buildTrackMapView({ outline, cars: [], localCarIndex: null, pitPrediction: basis }).caption)
+      .toBe('SOSTA 3,4 s · MFD · T 46,4 s')
+    expect(buildTrackMapView({ outline, cars: [], localCarIndex: null, pitPrediction: basis, showPitPrediction: false }).caption)
+      .toBeNull()
   })
 
   it('serialises the outline for an SVG polyline', () => {

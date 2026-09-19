@@ -108,6 +108,8 @@ export interface FastStatePitPrediction {
   pitTimeS: number | null
   pitTimeBaseS: number | null
   pitTimeSource: string | null
+  // Secondi da fermo su cui si basa il totale (null col tempo manuale).
+  stopTimeS: number | null
   inPitLane: boolean
   damage: { visible: boolean, spline: number | null, confidence: FastStatePitConfidence }
 }
@@ -444,6 +446,7 @@ export function normalizePitPrediction(raw: any): FastStatePitPrediction | null 
     pitTimeS: toNumber(raw.pit_time_s),
     pitTimeBaseS: toNumber(raw.pit_time_base_s),
     pitTimeSource: typeof raw.pit_time_source === 'string' ? raw.pit_time_source : null,
+    stopTimeS: toNumber(raw.stop_time_s),
     inPitLane: raw.in_pit_lane === true,
     damage: {
       visible: raw.damage?.visible === true && normalizeSpline(raw.damage?.spline) !== null,

@@ -46,7 +46,7 @@ export interface TrackMapCarInput {
   current_lap?: { is_invalid?: boolean } | null
 }
 
-export interface TrackMapPitPredictionInput {
+export interface TrackMapPitPredictionInput extends TrackMapPitBasisInput {
   available?: boolean
   spline?: number | null
   confidence?: 'high' | 'low' | null
@@ -76,6 +76,36 @@ export interface TrackMapView {
   outlinePath: string
   dots: TrackMapDot[]
   markers: TrackMapMarker[]
+  // Su che tempo si basa il pallino, cosi' il pilota lo confronta col MFD.
+  caption: string | null
+}
+
+export interface TrackMapPitBasisInput {
+  pitTimeBaseS?: number | null
+  pitTimeSource?: string | null
+  stopTimeS?: number | null
+}
+
+const PIT_SOURCE_LABELS: Record<string, string> = {
+  'mfd-screen': 'MFD',
+  'acc-drive-sg30': 'stima',
+  manual: 'manuale'
+}
+
+function seconds (value: number): string {
+  return `${value.toFixed(1).replace('.', ',')} s`
+}
+
+/** "SOSTA 3,4 s · MFD · T 46,4 s": the stationary seconds, where they come from, the total. */
+export function buildPitCaption (basis: TrackMapPitBasisInput | null | undefined): string | null {
+  const total = finite(basis?.pitTimeBaseS)
+  if (total === null) return null
+  const source = PIT_SOURCE_LABELS[String(basis?.pitTimeSource ?? '')] ?? null
+  const stop = finite(basis?.stopTimeS)
+  const parts = stop !== null ? [`SOSTA ${seconds(stop)}`] : []
+  if (source) parts.push(source)
+  parts.push(`T ${seconds(total)}`)
+  return parts.join(' · ')
 }
 
 function finite (value: unknown): number | null {
@@ -156,8 +186,10 @@ export interface BuildTrackMapOptions {
 
 export function buildTrackMapView (options: BuildTrackMapOptions): TrackMapView {
   const { outline } = options
-  const view: TrackMapView = { outlinePath: outlineToPath(outline), dots: [], markers: [] }
+  const view: TrackMapView = { outlinePath: outlineToPath(outline), dots: [], markers: [], caption: null }
   if (outline.length === 0) return view
+  // Shown even before the marker exists: the pilot can check the basis at once.
+  if (options.showPitPrediction !== false) view.caption = buildPitCaption(options.pitPrediction)
 
   const isRace = options.sessionType === SESSION_TYPE_RACE
   const localIndex = finite(options.localCarIndex)
