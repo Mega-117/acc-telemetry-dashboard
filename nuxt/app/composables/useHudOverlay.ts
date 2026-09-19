@@ -45,6 +45,7 @@ export interface HudOverlaySettings {
   // Minimappa (PIP-428). pitTimeSeconds null = tempo sosta della tabella per pista.
   showPitPrediction?: boolean
   showCarNumbers?: boolean
+  circleView?: boolean
   pitTimeSeconds?: number | null
 }
 

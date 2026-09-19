@@ -79,6 +79,11 @@ describe('HUD settings: Minimappa card', () => {
     await carNumbers.trigger('change'); await flushPromises()
     expect(api.hudOverlaySaveSettings).toHaveBeenLastCalledWith('trackmap', { showCarNumbers: true })
 
+    const circle = switches().find(input => input.element.closest('label')?.textContent?.includes('Vista a cerchio'))!
+    await circle.trigger('change'); await flushPromises()
+    expect(api.hudOverlaySaveSettings).toHaveBeenLastCalledWith('trackmap', { circleView: true })
+    expect((circle.element as HTMLInputElement).checked).toBe(true)
+
     await pitTimeInput().setValue('52.6'); await flushPromises()
     expect(api.hudOverlaySaveSettings).toHaveBeenLastCalledWith('trackmap', { pitTimeSeconds: 52.6 })
     expect((pitTimeInput().element as HTMLInputElement).value).toBe('53')

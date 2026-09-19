@@ -38,6 +38,11 @@ describe('Track Map overlay window contract', () => {
     expect(read('app/components/overlay/TrackMapHud.vue')).not.toMatch(/spline/i)
   })
 
+  it('switches to the circle from the HUD setting, whatever the track', () => {
+    expect(page).toMatch(/circleView === true\s*\?\s*TRACK_MAP_CIRCLE_KEY\s*:\s*telemetry\.fastState\.value\.context\?\.track/)
+    expect(page).toContain('isCircle ? TRACK_MAP_CIRCLE_FILL : 1')
+  })
+
   it('never commits track coordinates to the public frontend repository', () => {
     expect(page).not.toMatch(/import .*track_maps|\.json'/)
   })

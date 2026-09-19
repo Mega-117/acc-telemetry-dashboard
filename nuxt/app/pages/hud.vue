@@ -121,9 +121,12 @@ const dashboardSettings = reactive({
   fuelCriticalLapsThreshold: 0.5,
 })
 // PIP-428: pitTimeSeconds null = tempo sosta della tabella per pista (ACC Drive: SG30 + 2 s).
-const trackmapSettings = reactive<{ showPitPrediction: boolean, showCarNumbers: boolean, pitTimeSeconds: number | null }>({
+const trackmapSettings = reactive<{
+  showPitPrediction: boolean, showCarNumbers: boolean, circleView: boolean, pitTimeSeconds: number | null
+}>({
   showPitPrediction: true,
   showCarNumbers: false,
+  circleView: false,
   pitTimeSeconds: null,
 })
 const infoSettings = reactive({
@@ -298,6 +301,7 @@ async function refreshState() {
       if (overlay.id === 'trackmap') {
         trackmapSettings.showPitPrediction = settings?.showPitPrediction !== false
         trackmapSettings.showCarNumbers = settings?.showCarNumbers === true
+        trackmapSettings.circleView = settings?.circleView === true
         trackmapSettings.pitTimeSeconds = Number.isFinite(settings?.pitTimeSeconds) ? Number(settings.pitTimeSeconds) : null
       }
       if (overlay.id === 'standings') {
@@ -1195,6 +1199,16 @@ async function toggleTraining() {
                       :checked="trackmapSettings.showCarNumbers"
                       :disabled="selectedSettingsDisabled"
                       @change="saveTrackmapSetting('showCarNumbers', !trackmapSettings.showCarNumbers)"
+                    />
+                  </label>
+                  <label class="hud-control">
+                    <span><strong>Vista a cerchio</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="trackmapSettings.circleView"
+                      :disabled="selectedSettingsDisabled"
+                      @change="saveTrackmapSetting('circleView', !trackmapSettings.circleView)"
                     />
                   </label>
                   <label class="hud-control">

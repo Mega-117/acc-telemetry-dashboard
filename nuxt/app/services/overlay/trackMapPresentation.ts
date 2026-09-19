@@ -83,10 +83,17 @@ function finite (value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+// ACC Drive draws its circle ("Circle of Doom") smaller than a track: it scales
+// the points by 1.3 but the fitting box by 1.3 squared, leaving room around it
+// for the dots and their numbers.
+export const TRACK_MAP_CIRCLE_KEY = 'circle'
+export const TRACK_MAP_CIRCLE_FILL = 1 / 1.3
+
 /** ACC Drive `ConvertCoordinateToCanvasPointCenter`: keep aspect, centre on the canvas. */
 export function normalizeTrackOutline (
   points: ReadonlyArray<readonly [number, number]> | null | undefined,
-  canvas = TRACK_MAP_CANVAS
+  canvas = TRACK_MAP_CANVAS,
+  fill = 1
 ): TrackMapPoint[] {
   const valid = (points ?? []).filter(point =>
     Array.isArray(point) && finite(point[0]) !== null && finite(point[1]) !== null)
@@ -96,8 +103,9 @@ export function normalizeTrackOutline (
     minX = Math.min(minX, x); maxX = Math.max(maxX, x)
     minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z)
   }
-  const scale = Math.max(maxX - minX, maxZ - minZ)
-  if (!(scale > 0)) return []
+  const range = Math.max(maxX - minX, maxZ - minZ)
+  if (!(range > 0) || !(fill > 0)) return []
+  const scale = range / fill
   const centerX = (maxX + minX) / 2
   const centerZ = (maxZ + minZ) / 2
   return valid.map(([x, z]) => ({

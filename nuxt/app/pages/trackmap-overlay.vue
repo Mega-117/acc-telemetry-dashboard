@@ -10,6 +10,8 @@ import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import { useStandingsState } from '~/composables/useStandingsState'
 import {
+  TRACK_MAP_CIRCLE_FILL,
+  TRACK_MAP_CIRCLE_KEY,
   buildTrackMapView,
   normalizeTrackOutline,
   type TrackMapCarInput,
@@ -35,12 +37,21 @@ async function loadTrackMap (track: string | null) {
     const map = await getApi()?.hudOverlayGetTrackMap?.(track)
     // Una risposta arrivata dopo un altro cambio pista non deve sovrascrivere quella nuova.
     if (requestedTrack !== track) return
-    outline.value = normalizeTrackOutline(map?.status === 'available' ? map.points : null)
+    const isCircle = map?.key === TRACK_MAP_CIRCLE_KEY
+    outline.value = normalizeTrackOutline(
+      map?.status === 'available' ? map.points : null,
+      undefined,
+      isCircle ? TRACK_MAP_CIRCLE_FILL : 1,
+    )
   } catch {
     if (requestedTrack === track) outline.value = []
   }
 }
-const track = computed(() => telemetry.fastState.value.context?.track ?? null)
+// Vista a cerchio (il "Circle of Doom" di ACC Drive): stessa spline, stessi
+// pallini, ma il giro e' un cerchio invece della forma della pista.
+const track = computed(() => overlay.settings.value?.circleView === true
+  ? TRACK_MAP_CIRCLE_KEY
+  : telemetry.fastState.value.context?.track ?? null)
 watch(track, value => { void loadTrackMap(value) })
 
 const view = computed(() => {

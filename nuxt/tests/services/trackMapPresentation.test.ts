@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   TRACK_MAP_CANVAS,
+  TRACK_MAP_CIRCLE_FILL,
   TRACK_MAP_DAMAGE_COLOR,
   TRACK_MAP_PIT_COLOR,
   buildTrackMapView,
@@ -17,6 +18,16 @@ describe('normalizeTrackOutline', () => {
     const outline = normalizeTrackOutline(RECTANGLE)
     expect(outline[0]).toEqual({ x: 0, y: TRACK_MAP_CANVAS * 0.25 })
     expect(outline[2]).toEqual({ x: TRACK_MAP_CANVAS, y: TRACK_MAP_CANVAS * 0.75 })
+  })
+
+  it('draws the circle view smaller, like ACC Drive, and still centred', () => {
+    const square: [number, number][] = [[0, 0], [100, 0], [100, 100], [0, 100]]
+    const outline = normalizeTrackOutline(square, TRACK_MAP_CANVAS, TRACK_MAP_CIRCLE_FILL)
+    const margin = TRACK_MAP_CANVAS * (1 - TRACK_MAP_CIRCLE_FILL) / 2
+    expect(outline[0]!.x).toBeCloseTo(margin)
+    expect(outline[2]!.x).toBeCloseTo(TRACK_MAP_CANVAS - margin)
+    expect(outline[2]!.y).toBeCloseTo(TRACK_MAP_CANVAS - margin)
+    expect(normalizeTrackOutline(square, TRACK_MAP_CANVAS, 0)).toEqual([])
   })
 
   it('returns nothing for missing, malformed or degenerate data', () => {
