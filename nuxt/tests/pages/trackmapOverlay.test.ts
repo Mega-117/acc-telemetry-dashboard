@@ -38,7 +38,8 @@ describe('Track Map overlay window contract', () => {
     // The component only animates along the line what it is given: no stop or lap time maths either.
     const component = read('app/components/overlay/TrackMapHud.vue')
     expect(component).not.toMatch(/pitTime|lapTime|stopTime|walkBack/i)
-    expect(component).toContain('stepSplineToward')
+    expect(component).toContain('advanceTrackMapMotion')
+    expect(page).toContain('nowMs: standings.nowMs.value')
     expect(component).not.toMatch(/transition:\s*transform/)
   })
 

@@ -43,6 +43,7 @@ export interface TrackMapCarInput {
   kmh?: number | null
   car_location?: number | null
   has_realtime?: boolean
+  realtime_updated_at_ms?: number | null
   current_lap?: { is_invalid?: boolean } | null
 }
 
@@ -177,6 +178,44 @@ export function stepSplineToward (current: number, target: number, elapsedMs: nu
   return ((next % 1) + 1) % 1
 }
 
+// No car covers this much of a lap between two updates: it is "return to
+// pits", a session restart or data coming back after a gap. The item must
+// reappear in place, not sweep the whole circuit to get there.
+export const TRACK_MAP_TELEPORT_STEP = 0.05
+
+export interface TrackMapMotionItem {
+  key: string
+  spline: number
+  isLocal?: boolean
+  // Pit markers are measured from the local car: when it teleports, so do they.
+  followsLocal?: boolean
+}
+
+function lapDistance (from: number, to: number): number {
+  return Math.abs(((((to - from) % 1) + 1.5) % 1) - 0.5)
+}
+
+/** Next displayed lap position of every item; an item seen for the first time starts on target. */
+export function advanceTrackMapMotion (
+  previous: Readonly<Record<string, number>>,
+  items: ReadonlyArray<TrackMapMotionItem>,
+  elapsedMs: number
+): Record<string, number> {
+  const localTeleported = items.some(item => item.isLocal === true && item.key in previous
+    && lapDistance(previous[item.key]!, item.spline) > TRACK_MAP_TELEPORT_STEP)
+  const next: Record<string, number> = {}
+  for (const item of items) {
+    const shown = previous[item.key]
+    const snap = shown === undefined
+      || (item.followsLocal === true
+        ? localTeleported
+        // A marker may jump far on its own (new stop time): that one travels along the line.
+        : lapDistance(shown, item.spline) > TRACK_MAP_TELEPORT_STEP)
+    next[item.key] = snap ? item.spline : stepSplineToward(shown, item.spline, elapsedMs)
+  }
+  return next
+}
+
 export function outlineToPath (outline: ReadonlyArray<TrackMapPoint>): string {
   return outline.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ')
 }
@@ -206,6 +245,20 @@ export interface BuildTrackMapOptions {
   pitPrediction?: TrackMapPitPredictionInput | null
   showPitPrediction?: boolean
   showCarNumbers?: boolean
+  // Same freshness rule as Standings: a car whose UDP data is older than the
+  // snapshot TTL has left the server (its entry stays in the list) and is not drawn.
+  nowMs?: number | null
+  ttlMs?: number | null
+}
+
+const FUTURE_TOLERANCE_MS = 1000
+
+function isStaleCar (car: TrackMapCarInput, nowMs: number | null, ttlMs: number | null): boolean {
+  if (nowMs === null || ttlMs === null || !(ttlMs > 0)) return false
+  const updatedAt = finite(car.realtime_updated_at_ms)
+  if (updatedAt === null) return true
+  const age = nowMs - updatedAt
+  return age < -FUTURE_TOLERANCE_MS || age > ttlMs
 }
 
 export function buildTrackMapView (options: BuildTrackMapOptions): TrackMapView {
@@ -221,6 +274,8 @@ export function buildTrackMapView (options: BuildTrackMapOptions): TrackMapView 
   for (const car of options.cars ?? []) {
     const carIndex = finite(car?.car_index)
     if (carIndex === null || car.has_realtime === false) continue
+    // A stale local row is skipped too: shared memory draws the local car below.
+    if (isStaleCar(car, finite(options.nowMs), finite(options.ttlMs))) continue
     const isLocal = localIndex !== null && carIndex === localIndex
     // The local car follows shared memory (20 Hz) instead of the slower UDP feed.
     const spline = isLocal && finite(options.localSpline) !== null ? options.localSpline : car.spline_position

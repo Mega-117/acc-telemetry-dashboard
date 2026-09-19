@@ -56,8 +56,13 @@ watch(track, value => { void loadTrackMap(value) })
 
 const view = computed(() => {
   const fast = telemetry.fastState.value
-  const snapshot = standings.state.value.snapshot as { cars?: TrackMapCarInput[] } | null
+  const snapshot = standings.state.value.snapshot as {
+    cars?: TrackMapCarInput[], freshness?: { ttl_ms?: number }
+  } | null
   return buildTrackMapView({
+    // Chi ha lasciato il server resta in lista ma smette di aggiornarsi: non si disegna.
+    nowMs: standings.nowMs.value,
+    ttlMs: snapshot?.freshness?.ttl_ms ?? null,
     outline: outline.value,
     cars: snapshot?.cars ?? [],
     localCarIndex: fast.localDriver?.carIndex ?? null,

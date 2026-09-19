@@ -4,6 +4,7 @@ import {
   TRACK_MAP_CIRCLE_FILL,
   TRACK_MAP_DAMAGE_COLOR,
   TRACK_MAP_PIT_COLOR,
+  advanceTrackMapMotion,
   buildPitCaption,
   buildTrackMapView,
   normalizeTrackOutline,
@@ -179,6 +180,49 @@ describe('buildTrackMapView', () => {
     expect(stepSplineToward(0.2, Number.NaN, 16)).toBe(0.2)
     expect(stepSplineToward(Number.NaN, 0.7, 16)).toBe(0.7)
     expect(stepSplineToward(0.2, 0.6, 0)).toBe(0.2)
+  })
+
+  it('reappears in place after "return to pits" instead of sweeping the circuit', () => {
+    const items = [
+      { key: 'car:1', spline: 0.02, isLocal: true },
+      { key: 'car:2', spline: 0.31 },
+      { key: 'marker:pit', spline: 0.35, followsLocal: true },
+    ]
+    // The local car was at 0.60 and teleported to the pits; its marker goes with it.
+    const teleported = advanceTrackMapMotion({ 'car:1': 0.60, 'car:2': 0.30, 'marker:pit': 0.93 }, items, 16)
+    expect(teleported['car:1']).toBe(0.02)
+    expect(teleported['marker:pit']).toBe(0.35)
+    // The other car was just driving: it keeps moving along the line.
+    expect(teleported['car:2']).toBeGreaterThan(0.30)
+    expect(teleported['car:2']).toBeLessThan(0.31)
+
+    // Another car returning to its pit snaps too, without touching our marker.
+    const other = advanceTrackMapMotion({ 'car:1': 0.02, 'car:2': 0.70, 'marker:pit': 0.35 }, items, 16)
+    expect(other['car:2']).toBe(0.31)
+
+    // A new stop time moves only the marker far: that one still travels along the line.
+    const newStop = advanceTrackMapMotion({ 'car:1': 0.02, 'car:2': 0.31, 'marker:pit': 0.70 }, items, 16)
+    expect(newStop['marker:pit']).not.toBe(0.35)
+    expect(newStop['marker:pit']).toBeLessThan(0.70)
+
+    // First sighting starts on target; an item that disappeared is dropped.
+    expect(advanceTrackMapMotion({ 'car:9': 0.5 }, items, 16)).toEqual({ 'car:1': 0.02, 'car:2': 0.31, 'marker:pit': 0.35 })
+  })
+
+  it('does not draw a car that left the server but is still in the entry list', () => {
+    const now = 1_000_000
+    const cars = [
+      car({ car_index: 2, realtime_updated_at_ms: now - 400 }),
+      car({ car_index: 3, realtime_updated_at_ms: now - 60_000 }),   // gone a minute ago
+      car({ car_index: 4, realtime_updated_at_ms: null }),
+      car({ car_index: 1, realtime_updated_at_ms: now - 60_000 })    // stale local row
+    ]
+    const view = buildTrackMapView({ outline, cars, localCarIndex: 1, localSpline: 0.5, nowMs: now, ttlMs: 5000 })
+    expect(view.dots.map(dot => dot.carIndex).sort()).toEqual([1, 2])
+    // The local car never disappears: shared memory still knows where it is.
+    expect(view.dots.find(dot => dot.isLocal)).toMatchObject({ spline: 0.5 })
+    // Without a clock nothing is filtered (the caller decides).
+    expect(buildTrackMapView({ outline, cars, localCarIndex: 1 }).dots).toHaveLength(4)
   })
 
   it('carries the lap position of every dot so the renderer can move it along the line', () => {

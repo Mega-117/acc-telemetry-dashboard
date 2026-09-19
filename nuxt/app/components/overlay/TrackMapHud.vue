@@ -6,8 +6,9 @@ import {
   TRACK_MAP_CANVAS,
   TRACK_MAP_MARKER_DIAMETER,
   TRACK_MAP_ROTATION_DEG,
+  advanceTrackMapMotion,
   pointAtSpline,
-  stepSplineToward,
+  type TrackMapMotionItem,
   type TrackMapPoint,
   type TrackMapView,
 } from '~/services/overlay/trackMapPresentation'
@@ -22,10 +23,10 @@ const shown = ref<Record<string, number>>({})
 let frame = 0
 let lastFrameAt = 0
 
-function targets (): Array<[string, number]> {
+function motionItems (): TrackMapMotionItem[] {
   return [
-    ...props.view.dots.map(dot => [`car:${dot.carIndex}`, dot.spline] as [string, number]),
-    ...props.view.markers.map(marker => [`marker:${marker.kind}`, marker.spline] as [string, number]),
+    ...props.view.dots.map(dot => ({ key: `car:${dot.carIndex}`, spline: dot.spline, isLocal: dot.isLocal })),
+    ...props.view.markers.map(marker => ({ key: `marker:${marker.kind}`, spline: marker.spline, followsLocal: true })),
   ]
 }
 
@@ -33,14 +34,10 @@ function animate (now: number) {
   const elapsed = lastFrameAt ? Math.min(100, now - lastFrameAt) : 16
   lastFrameAt = now
   const previous = shown.value
-  const next: Record<string, number> = {}
-  let changed = false
-  for (const [key, target] of targets()) {
-    // Un elemento nuovo nasce gia' al suo posto, non ci arriva da zero.
-    next[key] = key in previous ? stepSplineToward(previous[key]!, target, elapsed) : target
-    changed ||= next[key] !== previous[key]
-  }
-  if (changed || Object.keys(previous).length !== Object.keys(next).length) shown.value = next
+  // Un teletrasporto ("torna ai pit") riappare sul posto invece di percorrere il circuito.
+  const next = advanceTrackMapMotion(previous, motionItems(), elapsed)
+  const keys = Object.keys(next)
+  if (keys.length !== Object.keys(previous).length || keys.some(key => next[key] !== previous[key])) shown.value = next
   frame = requestAnimationFrame(animate)
 }
 
