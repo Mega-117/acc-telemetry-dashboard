@@ -125,7 +125,7 @@ const trackmapSettings = reactive<{
   showPitPrediction: boolean, showCarNumbers: boolean, circleView: boolean, pitTimeSeconds: number | null
 }>({
   showPitPrediction: true,
-  showCarNumbers: false,
+  showCarNumbers: true,
   circleView: false,
   pitTimeSeconds: null,
 })
@@ -300,7 +300,7 @@ async function refreshState() {
       }
       if (overlay.id === 'trackmap') {
         trackmapSettings.showPitPrediction = settings?.showPitPrediction !== false
-        trackmapSettings.showCarNumbers = settings?.showCarNumbers === true
+        trackmapSettings.showCarNumbers = settings?.showCarNumbers !== false
         trackmapSettings.circleView = settings?.circleView === true
         trackmapSettings.pitTimeSeconds = Number.isFinite(settings?.pitTimeSeconds) ? Number(settings.pitTimeSeconds) : null
       }
@@ -1192,7 +1192,7 @@ async function toggleTraining() {
                     />
                   </label>
                   <label class="hud-control">
-                    <span><strong>Numeri auto</strong></span>
+                    <span><strong>Numeri auto (spento: posizione in gara)</strong></span>
                     <input
                       type="checkbox"
                       role="switch"

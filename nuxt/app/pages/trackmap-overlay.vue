@@ -10,17 +10,20 @@ import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import { useStandingsState } from '~/composables/useStandingsState'
 import {
-  TRACK_MAP_CIRCLE_FILL,
   TRACK_MAP_CIRCLE_KEY,
   buildTrackMapView,
   normalizeTrackOutline,
-  type TrackMapCarInput,
   type TrackMapPoint,
 } from '~/services/overlay/trackMapPresentation'
+// L'UNICO punto della minimappa che conosce un simulatore: l'adattatore traduce
+// il suo feed nella scena neutra che il disegno consuma. Un altro simulatore =
+// un altro adattatore (e la sua cartella di mappe), nient'altro.
+import { buildAccTrackMapScene, type AccStandingsCar } from '~/services/sim/acc/accTrackMapScene'
 
 definePageMeta({ layout: 'hud-overlay' })
 
 const BASE_SIZE = 300
+const SIM = 'acc'
 
 const route = useRoute()
 const getApi = () => typeof window === 'undefined' ? null : (window as any).electronAPI || null
@@ -29,19 +32,22 @@ const standings = useStandingsState(getApi)
 const telemetry = useFastStatePoller(getApi)
 
 const outline = ref<TrackMapPoint[]>([])
+const rotationDeg = ref(0)
 let requestedTrack: string | null | undefined
 async function loadTrackMap (track: string | null) {
   if (track === requestedTrack) return
   requestedTrack = track
   try {
-    const map = await getApi()?.hudOverlayGetTrackMap?.(track)
+    const map = await getApi()?.hudOverlayGetTrackMap?.(track, SIM)
     // Una risposta arrivata dopo un altro cambio pista non deve sovrascrivere quella nuova.
     if (requestedTrack !== track) return
-    const isCircle = map?.key === TRACK_MAP_CIRCLE_KEY
+    // Rotazione e riempimento li dichiara chi fornisce i dati della mappa.
+    const available = map?.status === 'available'
+    rotationDeg.value = available && Number.isFinite(map.rotationDeg) ? map.rotationDeg : 0
     outline.value = normalizeTrackOutline(
-      map?.status === 'available' ? map.points : null,
+      available ? map.points : null,
       undefined,
-      isCircle ? TRACK_MAP_CIRCLE_FILL : 1,
+      available && map.fill > 0 ? map.fill : 1,
     )
   } catch {
     if (requestedTrack === track) outline.value = []
@@ -57,20 +63,24 @@ watch(track, value => { void loadTrackMap(value) })
 const view = computed(() => {
   const fast = telemetry.fastState.value
   const snapshot = standings.state.value.snapshot as {
-    cars?: TrackMapCarInput[], freshness?: { ttl_ms?: number }
+    cars?: AccStandingsCar[], freshness?: { ttl_ms?: number }, session?: { focused_car_index?: number | null }
   } | null
-  return buildTrackMapView({
+  const scene = buildAccTrackMapScene({
+    cars: snapshot?.cars ?? [],
+    focusedCarIndex: snapshot?.session?.focused_car_index ?? null,
+    localCarIndex: fast.localDriver?.carIndex ?? null,
+    localLapPosition: fast.isLive ? fast.normalizedCarPosition : null,
+    sessionType: fast.sessionType,
     // Chi ha lasciato il server resta in lista ma smette di aggiornarsi: non si disegna.
     nowMs: standings.nowMs.value,
     ttlMs: snapshot?.freshness?.ttl_ms ?? null,
+  })
+  return buildTrackMapView({
     outline: outline.value,
-    cars: snapshot?.cars ?? [],
-    localCarIndex: fast.localDriver?.carIndex ?? null,
-    localSpline: fast.isLive ? fast.normalizedCarPosition : null,
-    sessionType: fast.sessionType,
+    scene,
     pitPrediction: fast.pitPrediction,
     showPitPrediction: overlay.settings.value?.showPitPrediction ?? true,
-    showCarNumbers: overlay.settings.value?.showCarNumbers ?? false,
+    showCarNumbers: overlay.settings.value?.showCarNumbers ?? true,
   })
 })
 const canvasStyle = computed(() => ({
@@ -98,7 +108,7 @@ onUnmounted(() => {
 <template>
   <main class="overlay-root">
     <OverlaySoftwareCursor :state="overlay.pointerState" />
-    <TrackMapHud :view="view" :outline="outline" class="overlay-canvas" :style="canvasStyle" />
+    <TrackMapHud :view="view" :outline="outline" :rotation-deg="rotationDeg" class="overlay-canvas" :style="canvasStyle" />
   </main>
 </template>
 

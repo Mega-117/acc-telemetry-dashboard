@@ -5,7 +5,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   TRACK_MAP_CANVAS,
   TRACK_MAP_MARKER_DIAMETER,
-  TRACK_MAP_ROTATION_DEG,
+  TRACK_MAP_PULSE_DIAMETER,
   advanceTrackMapMotion,
   pointAtSpline,
   type TrackMapMotionItem,
@@ -13,7 +13,12 @@ import {
   type TrackMapView,
 } from '~/services/overlay/trackMapPresentation'
 
-const props = defineProps<{ view: TrackMapView, outline: ReadonlyArray<TrackMapPoint> }>()
+// La rotazione e' una proprieta' dei dati della mappa (la dichiara chi li fornisce), non del disegno.
+const props = withDefaults(defineProps<{
+  view: TrackMapView
+  outline: ReadonlyArray<TrackMapPoint>
+  rotationDeg?: number
+}>(), { rotationDeg: 0 })
 
 // Ogni elemento si muove LUNGO la linea: si anima la posizione sul giro e la si
 // riproietta sul tracciato a ogni frame. Animare x/y (una transizione CSS) fa
@@ -52,9 +57,11 @@ onUnmounted(() => cancelAnimationFrame(frame))
 const MARGIN = 40
 const viewBox = `${-MARGIN} ${-MARGIN} ${TRACK_MAP_CANVAS + MARGIN * 2} ${TRACK_MAP_CANVAS + MARGIN * 2}`
 const center = TRACK_MAP_CANVAS / 2
-const rotation = `rotate(${TRACK_MAP_ROTATION_DEG} ${center} ${center})`
-const upright = `rotate(${360 - TRACK_MAP_ROTATION_DEG})`
+const rotation = computed(() => `rotate(${props.rotationDeg} ${center} ${center})`)
+// Testi e numeri restano dritti qualunque sia la rotazione della mappa.
+const upright = computed(() => `rotate(${-props.rotationDeg})`)
 const markerRadius = TRACK_MAP_MARKER_DIAMETER / 2
+const pulseRadius = TRACK_MAP_PULSE_DIAMETER / 2
 // La scritta vive nel margine inferiore del riquadro, sotto il tracciato.
 const captionY = TRACK_MAP_CANVAS + MARGIN - 12
 const captionWidth = computed(() => Math.min(TRACK_MAP_CANVAS + MARGIN, (props.view.caption?.length ?? 0) * 17 + 28))
@@ -76,6 +83,15 @@ const captionX = computed(() => center - captionWidth.value / 2)
         :opacity="dot.opacity"
       >
         <circle :r="dot.diameter / 2" :fill="dot.fill" stroke="#000000" stroke-width="2" />
+        <!-- Anello pulsante di ACC Drive: l'auto seguita e, in gara, il leader. -->
+        <circle
+          v-if="dot.pulse"
+          class="track-map__pulse"
+          :r="pulseRadius"
+          fill="none"
+          :stroke="dot.fill"
+          stroke-width="3"
+        />
         <g v-if="dot.label" :transform="upright">
           <rect
             :x="dot.diameter / 2 + 2"
@@ -119,6 +135,8 @@ const captionX = computed(() => center - captionWidth.value / 2)
 .track-map__edge{fill:none;stroke:#696969;stroke-width:12;stroke-linejoin:round}
 .track-map__asphalt{fill:none;stroke:#000000;stroke-width:6;stroke-linejoin:round}
 /* Nessuna transizione CSS sulla posizione: il movimento lo fa lo script, lungo la linea. */
+.track-map__pulse{animation:track-map-pulse .5s ease-in-out infinite alternate}
+@keyframes track-map-pulse{from{opacity:.2}to{opacity:1}}
 .track-map__number{fill:#ffffff;font:800 26px/1 system-ui,sans-serif}
 .track-map__letter{fill:#ffffff;font:700 26px/1 system-ui,sans-serif;text-anchor:middle}
 .track-map__caption rect{fill:#000000;opacity:.7}

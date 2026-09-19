@@ -45,7 +45,9 @@ describe('Track Map overlay window contract', () => {
 
   it('switches to the circle from the HUD setting, whatever the track', () => {
     expect(page).toMatch(/circleView === true\s*\?\s*TRACK_MAP_CIRCLE_KEY\s*:\s*telemetry\.fastState\.value\.context\?\.track/)
-    expect(page).toContain('isCircle ? TRACK_MAP_CIRCLE_FILL : 1')
+    // How the map is fitted and rotated comes with its data, not from the page.
+    expect(page).toContain('map.fill > 0 ? map.fill : 1')
+    expect(page).toContain('map.rotationDeg')
   })
 
   it('never commits track coordinates to the public frontend repository', () => {
