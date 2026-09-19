@@ -8,6 +8,7 @@ import {
   TRACK_MAP_PULSE_DIAMETER,
   advanceTrackMapMotion,
   pointAtSpline,
+  rotatedOutlineBottom,
   type TrackMapMotionItem,
   type TrackMapPoint,
   type TrackMapView,
@@ -62,8 +63,16 @@ const rotation = computed(() => `rotate(${props.rotationDeg} ${center} ${center}
 const upright = computed(() => `rotate(${-props.rotationDeg})`)
 const markerRadius = TRACK_MAP_MARKER_DIAMETER / 2
 const pulseRadius = TRACK_MAP_PULSE_DIAMETER / 2
-// La scritta vive nel margine inferiore del riquadro, sotto il tracciato.
-const captionY = TRACK_MAP_CANVAS + MARGIN - 12
+// La scritta sta subito sotto il disegno vero, non al bordo del riquadro: una
+// pista e' centrata ma quasi mai riempie il quadrato (Monza e' molto piu' larga
+// che alta), e al bordo la scritta resterebbe lontana dalla mappa. Il salto
+// copre il raggio di un pallino e il suo numero.
+const CAPTION_GAP = 46
+const captionY = computed(() => {
+  const bottom = rotatedOutlineBottom(props.outline, props.rotationDeg)
+  const preferred = (bottom ?? TRACK_MAP_CANVAS - MARGIN) + CAPTION_GAP
+  return Math.min(preferred, TRACK_MAP_CANVAS + MARGIN - 12)
+})
 const captionWidth = computed(() => Math.min(TRACK_MAP_CANVAS + MARGIN, (props.view.caption?.length ?? 0) * 17 + 28))
 const captionX = computed(() => center - captionWidth.value / 2)
 </script>

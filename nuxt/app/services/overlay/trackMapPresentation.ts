@@ -206,6 +206,29 @@ export function advanceTrackMapMotion (
   return next
 }
 
+/**
+ * Where the outline really ends on screen, once rotated: a track is centred on
+ * the canvas but rarely fills it (Monza is much wider than tall), so anything
+ * anchored to the canvas edge - the caption - would float far from the drawing.
+ */
+export function rotatedOutlineBottom (
+  outline: ReadonlyArray<TrackMapPoint>,
+  rotationDeg: number,
+  canvas = TRACK_MAP_CANVAS
+): number | null {
+  if (outline.length === 0) return null
+  const radians = (rotationDeg * Math.PI) / 180
+  const cos = Math.cos(radians)
+  const sin = Math.sin(radians)
+  const centre = canvas / 2
+  let bottom = -Infinity
+  for (const point of outline) {
+    const y = centre + (point.x - centre) * sin + (point.y - centre) * cos
+    if (y > bottom) bottom = y
+  }
+  return Number.isFinite(bottom) ? bottom : null
+}
+
 export function outlineToPath (outline: ReadonlyArray<TrackMapPoint>): string {
   return outline.map(point => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ')
 }

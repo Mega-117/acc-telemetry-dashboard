@@ -9,6 +9,7 @@ import {
   normalizeTrackOutline,
   outlineToPath,
   pointAtSpline,
+  rotatedOutlineBottom,
   stepSplineToward
 } from '~/services/overlay/trackMapPresentation'
 import type { TrackMapCar, TrackMapScene } from '~/services/sim/trackMapScene'
@@ -216,6 +217,15 @@ describe('buildTrackMapView', () => {
   it('carries the lap position of every dot so the renderer can move it along the line', () => {
     const view = buildTrackMapView({ outline, scene: scene([sceneCar({ id: 2, lapPosition: 0.25 }), sceneCar({ id: 1, lapPosition: 0.5 })]) })
     expect(view.dots.map(dot => [dot.carIndex, dot.spline])).toEqual([[2, 0.25], [1, 0.5]])
+  })
+
+  it('finds where the outline really ends once rotated, to keep the caption close to it', () => {
+    // The rectangle is wide and short: unrotated it stops well above the
+    // canvas edge, rotated by 90 degrees it reaches it.
+    expect(rotatedOutlineBottom(outline, 0)).toBeCloseTo(TRACK_MAP_CANVAS * 0.75)
+    expect(rotatedOutlineBottom(outline, 90)).toBeCloseTo(TRACK_MAP_CANVAS)
+    expect(rotatedOutlineBottom(outline, 270)).toBeCloseTo(TRACK_MAP_CANVAS)
+    expect(rotatedOutlineBottom([], 0)).toBeNull()
   })
 
   it('serialises the outline for an SVG polyline', () => {
