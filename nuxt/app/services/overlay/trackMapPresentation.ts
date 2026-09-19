@@ -85,7 +85,7 @@ export interface TrackMapView {
 
 const PIT_SOURCE_LABELS: Record<string, string> = {
   'mfd-screen': 'MFD',
-  'acc-drive-sg30': 'stima',
+  'acc-drive-sg30': 'presunta',
   manual: 'manuale'
 }
 
@@ -98,7 +98,12 @@ function seconds (value: number): string {
   return `${value.toFixed(1).replace('.', ',')} s`
 }
 
-/** "SOSTA 3,4 s · MFD · T 46,4 s": the stationary seconds, where they come from, the total. */
+/**
+ * "SOSTA 3,4 s · MFD · STIMA PITLANE 46,4 s": the stationary seconds, where
+ * they come from, and the whole time the stop costs against staying out - the
+ * pit lane crossing plus the stop, minus what the same stretch would take at
+ * racing speed. That is why the marker sits that far back on the map.
+ */
 export function buildPitCaption (basis: TrackMapPitBasisInput | null | undefined): string | null {
   const total = finite(basis?.pitTimeBaseS)
   if (total === null) return null
@@ -106,7 +111,7 @@ export function buildPitCaption (basis: TrackMapPitBasisInput | null | undefined
   const stop = finite(basis?.stopTimeS)
   const parts = stop !== null ? [`SOSTA ${seconds(stop)}`] : []
   if (source) parts.push(source)
-  parts.push(`T ${seconds(total)}`)
+  parts.push(`STIMA PITLANE ${seconds(total)}`)
   return parts.join(' · ')
 }
 

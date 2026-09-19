@@ -73,7 +73,7 @@ const captionY = computed(() => {
   const preferred = (bottom ?? TRACK_MAP_CANVAS - MARGIN) + CAPTION_GAP
   return Math.min(preferred, TRACK_MAP_CANVAS + MARGIN - 12)
 })
-const captionWidth = computed(() => Math.min(TRACK_MAP_CANVAS + MARGIN, (props.view.caption?.length ?? 0) * 17 + 28))
+const captionWidth = computed(() => Math.min(TRACK_MAP_CANVAS + MARGIN, (props.view.caption?.length ?? 0) * 20 + 32))
 const captionX = computed(() => center - captionWidth.value / 2)
 </script>
 
@@ -133,7 +133,7 @@ const captionX = computed(() => center - captionWidth.value / 2)
     </g>
     <!-- Fuori dalla rotazione: su che tempo di sosta si basa il pallino. -->
     <g v-if="view.caption" class="track-map__caption">
-      <rect :x="captionX" :y="captionY - 30" :width="captionWidth" height="42" rx="8" />
+      <rect :x="captionX" :y="captionY - 34" :width="captionWidth" height="48" rx="8" />
       <text :x="center" :y="captionY">{{ view.caption }}</text>
     </g>
   </svg>
@@ -149,5 +149,5 @@ const captionX = computed(() => center - captionWidth.value / 2)
 .track-map__number{fill:#ffffff;font:800 26px/1 system-ui,sans-serif}
 .track-map__letter{fill:#ffffff;font:700 26px/1 system-ui,sans-serif;text-anchor:middle}
 .track-map__caption rect{fill:#000000;opacity:.7}
-.track-map__caption text{fill:#ffffff;font:700 28px/1 system-ui,sans-serif;text-anchor:middle;font-variant-numeric:tabular-nums}
+.track-map__caption text{fill:#ffffff;font:700 34px/1 system-ui,sans-serif;text-anchor:middle;font-variant-numeric:tabular-nums}
 </style>

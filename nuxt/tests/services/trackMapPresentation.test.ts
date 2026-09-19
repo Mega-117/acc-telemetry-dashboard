@@ -146,19 +146,19 @@ describe('buildTrackMapView', () => {
 
   it('says which stop time the marker is based on, so the pilot can check it against the MFD', () => {
     expect(buildPitCaption({ pitTimeBaseS: 46.4, pitTimeSource: 'mfd-screen', stopTimeS: 3.4 }))
-      .toBe('SOSTA 3,4 s · MFD · T 46,4 s')
+      .toBe('SOSTA 3,4 s · MFD · STIMA PITLANE 46,4 s')
     expect(buildPitCaption({ pitTimeBaseS: 73, pitTimeSource: 'acc-drive-sg30', stopTimeS: 30 }))
-      .toBe('SOSTA 30,0 s · stima · T 73,0 s')
+      .toBe('SOSTA 30,0 s · presunta · STIMA PITLANE 73,0 s')
     // A manual total has no stationary part to show.
-    expect(buildPitCaption({ pitTimeBaseS: 50, pitTimeSource: 'manual', stopTimeS: null })).toBe('manuale · T 50,0 s')
-    expect(buildPitCaption({ pitTimeBaseS: 50, pitTimeSource: 'something-new', stopTimeS: 0 })).toBe('SOSTA 0,0 s · T 50,0 s')
+    expect(buildPitCaption({ pitTimeBaseS: 50, pitTimeSource: 'manual', stopTimeS: null })).toBe('manuale · STIMA PITLANE 50,0 s')
+    expect(buildPitCaption({ pitTimeBaseS: 50, pitTimeSource: 'something-new', stopTimeS: 0 })).toBe('SOSTA 0,0 s · STIMA PITLANE 50,0 s')
     expect(buildPitCaption({ pitTimeBaseS: null, pitTimeSource: 'manual' })).toBeNull()
     expect(buildPitCaption(null)).toBeNull()
 
     const basis = { available: false, pitTimeBaseS: 46.4, pitTimeSource: 'mfd-screen', stopTimeS: 3.4 }
     // Shown even before the marker exists, hidden with the pit prediction switch.
     expect(buildTrackMapView({ outline, scene: scene([]), pitPrediction: basis }).caption)
-      .toBe('SOSTA 3,4 s · MFD · T 46,4 s')
+      .toBe('SOSTA 3,4 s · MFD · STIMA PITLANE 46,4 s')
     expect(buildTrackMapView({ outline, scene: scene([]), pitPrediction: basis, showPitPrediction: false }).caption)
       .toBeNull()
   })
