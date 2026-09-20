@@ -73,6 +73,35 @@ function makeApi() {
 }
 
 describe('useOverlayInteractionContract', () => {
+  it('isolates hit regions and pointer classes in the shared surface', async () => {
+    const { surface, control, fakeWindow } = installDom()
+    const { api, emitPointer } = makeApi()
+    const root = {
+      classList: makeClassList(),
+      getBoundingClientRect: () => ({ x: 1000, y: 500, width: 300, height: 200 }),
+      querySelectorAll: (selector: string) => selector === '.surface' ? [surface] : [control],
+      contains: (element: unknown) => element === surface || element === control,
+    }
+    surface.rect = { x: 1005, y: 506, width: 200, height: 100 }
+    control.rect = { x: 1140, y: 575, width: 50, height: 20 }
+    ;(document as any).querySelector = () => root
+    const interaction = useOverlayInteractionContract({ getApi: () => ({ ...api, overlayRegionId: 'tyres' }) })
+    interaction.start({ surfaceSelector: '.surface', controlSelector: '.control' })
+    await interaction.refreshNow()
+    expect(api.overlayInteractionUpdateContract).toHaveBeenLastCalledWith(expect.objectContaining({
+      surfaceRects: [{ x: 5, y: 6, width: 200, height: 100 }],
+      controlRects: [{ x: 140, y: 75, width: 50, height: 20 }],
+    }))
+    const foreignControl = new FakeElement(control.rect, true)
+    fakeWindow.dispatch('pointerdown', { target: foreignControl })
+    expect(api.overlayInteractionPointerButton).not.toHaveBeenCalled()
+    fakeWindow.dispatch('pointerdown', { target: control })
+    expect(api.overlayInteractionPointerButton).toHaveBeenCalledWith(true)
+    emitPointer({ cursorVisible: true, surfaceHovered: true })
+    expect(root.classList.contains('overlay-software-cursor-active')).toBe(true)
+    expect(document.documentElement.classList.contains('overlay-software-cursor-active')).toBe(false)
+    interaction.stop()
+  })
   it('publishes and awaits hit regions even when a hidden renderer has no animation frame', async () => {
     const { control, fakeWindow } = installDom()
     fakeWindow.requestAnimationFrame = vi.fn(() => 42)

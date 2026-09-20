@@ -17,7 +17,8 @@ describe('Shared HUD overlay window contract', () => {
   it('routes every registered HUD through the shared safe-area layout', () => {
     const app = readFileSync(resolve(process.cwd(), 'app/app.vue'), 'utf8')
     const routeBlock = app.match(/const hudOverlayRoutes = \[([^\]]+)\]/s)?.[1] || ''
-    const routes = Array.from(routeBlock.matchAll(/'\/(.+?-overlay)'/g), match => match[1])
+    const routes = Array.from(routeBlock.matchAll(/'\/([^']+-overlay)'/g), match => match[1])
+    expect(routeBlock).toContain("'/overlay-surface'")
 
     expect(routes).toEqual([
       'tyres-overlay',

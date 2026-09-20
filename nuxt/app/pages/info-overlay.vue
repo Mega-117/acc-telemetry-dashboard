@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import InfoHud from '~/components/overlay/InfoHud.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
@@ -14,7 +15,7 @@ import {
 definePageMeta({ layout: 'hud-overlay' })
 
 const route = useRoute()
-const getApi = () => typeof window === 'undefined' ? null : (window as any).electronAPI || null
+const getApi = useOverlayRegionApi()
 const overlay = useHudOverlay('info', getApi)
 const { backgroundOpacity } = useHudOverlayBackground(overlay.settings)
 const telemetry = useOverlayTelemetrySource(getApi)
@@ -48,7 +49,7 @@ async function syncInfoViewport() {
   if (!canvas || typeof api?.hudOverlaySetSize !== 'function') return
   const rect = canvas.getBoundingClientRect()
   await api.hudOverlaySetSize('info', {
-    width: Math.ceil(window.innerWidth),
+    width: Math.ceil(api.overlayRegionId ? canvas.parentElement?.clientWidth || rect.width : window.innerWidth),
     height: Math.ceil(rect.height),
   })
 }

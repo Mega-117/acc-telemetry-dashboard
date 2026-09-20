@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // Overlay HUD Gomme (PIP-175): finestra Electron indipendente. Dimensione decisa
 // dal FORMATO (small/medium/large) lato Electron; qui si applica la scala dei
 // font e lo stato di posizionamento. Riusa TyreSlipHud + il poller esistente.
@@ -23,10 +24,7 @@ useHead({
   bodyAttrs: { class: 'training-overlay-runtime' },
 })
 
-function getApi(): any | null {
-  if (typeof window === 'undefined') return null
-  return (window as any).electronAPI || null
-}
+const getApi = useOverlayRegionApi()
 
 const route = useRoute()
 const { fastState, startFastStatePolling, stopFastStatePolling } = useOverlayTelemetrySource(getApi)
@@ -118,6 +116,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <div class="hud-tyres-scope" style="position:relative;width:100%;height:100%">
   <div
     class="hud-overlay"
     :style="{ '--hud-scale': scale }"
@@ -169,10 +168,13 @@ onBeforeUnmount(() => {
       <TyreSlipHud v-else :fast-state="fastState" />
     </div>
   </div>
+  </div>
 </template>
 
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
+
+.hud-tyres-scope {
 
 // Tutte le regole sono scopate sotto .hud-overlay per NON toccare l'overlay
 // allenamento (le classi .tyre-slip-hud ecc. sono globali e condivise).
@@ -321,5 +323,6 @@ onBeforeUnmount(() => {
 
 .hud-overlay .tyre-slip__bar {
   height: calc(7px * var(--hud-scale));
+}
 }
 </style>

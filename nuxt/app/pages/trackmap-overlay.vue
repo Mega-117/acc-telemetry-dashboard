@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // PIP-428 — HUD minimappa. La pagina collega soltanto le sorgenti: roster UDP
 // (standings), auto locale e pit prediction (fast_state, shared memory) e
 // coordinate della pista (file inclusi nel programma, via IPC). Tutta la logica
@@ -26,7 +27,7 @@ const BASE_SIZE = 300
 const SIM = 'acc'
 
 const route = useRoute()
-const getApi = () => typeof window === 'undefined' ? null : (window as any).electronAPI || null
+const getApi = useOverlayRegionApi()
 const overlay = useHudOverlay('trackmap', getApi)
 const standings = useStandingsState(getApi)
 const telemetry = useFastStatePoller(getApi)

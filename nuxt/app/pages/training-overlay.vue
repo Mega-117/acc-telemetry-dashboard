@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   resolveTrainingOverlayModeId,
@@ -162,10 +163,7 @@ let voicePointNoticeTimer: ReturnType<typeof setTimeout> | null = null
 const { isTestMode, toggle: toggleTestMode, stepBudgetMs, init: initTestMode } = useDevTestMode()
 
 // ─── API bridge ──────────────────────────────────────────────────────────────
-function getOverlayApi(): any | null {
-  if (typeof window === 'undefined') return null
-  return (window as any).electronAPI || null
-}
+const getOverlayApi = useOverlayRegionApi()
 
 // The logger owns recommendation facts; Electron owns Setup input; this page
 // only presents the versioned plan and never computes pressure corrections.
@@ -801,6 +799,7 @@ onMounted(async () => {
     })
   }
   connectResizeObserver(); scheduleOverlaySizeSync()
+  await api?.overlayRegionReady?.()
 })
 watch(() => spotterEnabled.value, () => {
   void savePreferences()

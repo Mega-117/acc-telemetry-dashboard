@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
@@ -108,10 +109,7 @@ const pressureVoiceRuntime = createPressureRecommendationVoiceRuntime({
   }),
 })
 
-function getRuntimeApi(): any | null {
-  if (typeof window === 'undefined') return null
-  return (window as any).electronAPI || null
-}
+const getRuntimeApi = useOverlayRegionApi()
 
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getRuntimeApi)
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getRuntimeApi)

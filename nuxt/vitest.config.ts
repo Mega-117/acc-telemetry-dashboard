@@ -239,6 +239,8 @@ export default defineConfig({
         'app/composables/useTrackBests.ts',
         // ── PIP-175: overlay HUD multipli ────────────────────────────────
         'app/composables/useHudOverlay.ts',
+        'app/composables/useOverlayRegionApi.ts',
+        'app/services/overlay/surfaceRegionBridge.ts',
         'app/composables/useRaceHudPage.ts',
         'app/composables/useOverlayInteractionRegions.ts',
         'app/composables/useOverlayInteractionContract.ts',

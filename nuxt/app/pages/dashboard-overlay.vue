@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, onMounted, onUnmounted } from 'vue'
 import DashboardHud from '~/components/overlay/DashboardHud.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
@@ -16,7 +17,7 @@ import {
 definePageMeta({ layout: 'hud-overlay' })
 
 const route = useRoute()
-const getApi = () => typeof window === 'undefined' ? null : (window as any).electronAPI || null
+const getApi = useOverlayRegionApi()
 const overlay = useHudOverlay('dashboard', getApi)
 const telemetry = useOverlayTelemetrySource(getApi, FOCUSED_CAR_FEED_INTERVAL_MS)
 const options = computed(() => ({
