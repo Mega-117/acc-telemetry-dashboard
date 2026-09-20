@@ -1,9 +1,19 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { parse } from '@vue/compiler-sfc'
+import { baseParse, NodeTypes } from '@vue/compiler-dom'
 
 describe('HUD settings page layout contract', () => {
   const source = readFileSync(resolve(process.cwd(), 'app/pages/hud.vue'), 'utf8')
+
+  it('keeps the sector editor inside the single page root required by route transitions', () => {
+    const template = parse(source).descriptor.template!.content
+    const root = baseParse(template).children.filter(node => node.type === NodeTypes.ELEMENT)
+    expect(root).toHaveLength(1)
+    expect(root[0]!.loc.source).toContain('class="sector-reference-dialog"')
+    expect(root[0]!.loc.source).toContain('@cancel="sectorReferenceEditorOpen = false"')
+  })
 
   it('uses the selected-overlay workspace instead of the expanding card grid', () => {
     expect(source).toContain('class="hud-workspace"')

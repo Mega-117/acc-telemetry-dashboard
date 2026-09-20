@@ -1343,10 +1343,11 @@ async function toggleTraining() {
         </article>
       </div>
     </section>
+    <!-- Keep the dialog inside the page root so Nuxt can finish route transitions. -->
+    <div v-if="sectorReferenceEditorOpen" class="sector-reference-dialog" role="dialog" aria-modal="true" aria-label="Riferimenti settori">
+      <SectorReferenceSetup @saved="sectorReferencesSaved" @cancel="sectorReferenceEditorOpen = false" />
+    </div>
   </LayoutPageContainer>
-  <div v-if="sectorReferenceEditorOpen" class="sector-reference-dialog" role="dialog" aria-modal="true" aria-label="Riferimenti settori">
-    <SectorReferenceSetup @saved="sectorReferencesSaved" @cancel="sectorReferenceEditorOpen = false" />
-  </div>
 </template>
 
 <style scoped lang="scss">
