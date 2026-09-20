@@ -300,13 +300,6 @@ export function buildTrackMapView (options: BuildTrackMapOptions): TrackMapView 
 
   const prediction = options.pitPrediction
   if (showPit && prediction?.available === true) {
-    const damage = prediction.damage
-    const damagePoint = damage?.visible === true ? pointAtSpline(outline, damage.spline) : null
-    if (damagePoint) {
-      view.markers.push({
-        ...damagePoint, spline: damage!.spline as number, kind: 'damage', label: '+', fill: TRACK_MAP_DAMAGE_COLOR, hollow: damage?.confidence !== 'high'
-      })
-    }
     const pitPoint = pointAtSpline(outline, prediction.spline)
     if (pitPoint) {
       view.markers.push({

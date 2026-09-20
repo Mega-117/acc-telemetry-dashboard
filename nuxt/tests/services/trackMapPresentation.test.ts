@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   TRACK_MAP_CANVAS,
-  TRACK_MAP_DAMAGE_COLOR,
   TRACK_MAP_PIT_COLOR,
   advanceTrackMapMotion,
   buildPitCaption,
@@ -119,14 +118,13 @@ describe('buildTrackMapView', () => {
     expect(buildTrackMapView({ outline, scene: scene(invalid) }).dots[0]!.fill).toBe('#D3D3D3')
   })
 
-  it('renders only the markers the logger declares, hollow when confidence is low', () => {
+  it('renders only P even with repair data, preserving confidence and availability gates', () => {
     const pitPrediction = {
       available: true, spline: 0.5, confidence: 'high' as const,
       damage: { visible: true, spline: 0.25, confidence: 'low' as const }
     }
     const base = { outline, scene: scene([]) }
     expect(buildTrackMapView({ ...base, pitPrediction }).markers).toEqual([
-      { ...outline[1]!, spline: 0.25, kind: 'damage', label: '+', fill: TRACK_MAP_DAMAGE_COLOR, hollow: true },
       { ...outline[2]!, spline: 0.5, kind: 'pit', label: 'P', fill: TRACK_MAP_PIT_COLOR, hollow: false }
     ])
     expect(buildTrackMapView({ ...base, pitPrediction, showPitPrediction: false }).markers).toEqual([])
