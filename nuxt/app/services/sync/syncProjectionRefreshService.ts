@@ -4,6 +4,15 @@ import { applyUserProjectionDeltas, type UserProjectionDelta } from './syncUserP
 import { applyTrackDetailProjectionDeltas } from './trackDetailProjectionService'
 import type { SessionDocument } from '~/types/telemetry'
 
+export interface ProjectionWrite {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- injected Firestore boundary
+  ref: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- projection document
+  data: any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Firestore set options
+  options?: any
+}
+
 export async function refreshSyncProjections(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
@@ -21,6 +30,7 @@ export async function refreshSyncProjections(params: {
   getDocFn: (ref: any) => Promise<any>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
+  commitWrites?: (writes: ProjectionWrite[]) => Promise<void>
   bestRulesVersion: number
   reason: string
   rebuildTrackBests?: boolean
@@ -35,7 +45,8 @@ export async function refreshSyncProjections(params: {
     clearTrackDerivedCaches,
     resetAllTrackBests,
     getDocFn,
-    setDocFn,
+    setDocFn: persistDoc,
+    commitWrites,
     bestRulesVersion,
     reason,
     rebuildTrackBests = false,
@@ -53,6 +64,18 @@ export async function refreshSyncProjections(params: {
 
   clearTrackDerivedCaches()
 
+  // Build the entire plan before publishing: the user index supplies the OLD
+  // contribution until every dependent projection can be committed together.
+  const writes = new Map<string, ProjectionWrite>()
+  const setDocFn: typeof persistDoc = async (ref, data, options) => {
+    writes.set(String(ref.path ?? ref), { ref, data, options })
+  }
+  async function commit() {
+    const plan = [...writes.values()]
+    if (commitWrites) await commitWrites(plan)
+    else for (const write of plan) await persistDoc(write.ref, write.data, write.options)
+  }
+
   // Il riepilogo utente va per primo: la sua lettura fornisce il contributo gia' contato
   // delle sessioni aggiornate, riusato da best e dettaglio pista senza altre letture.
   let previousContributions = new Map()
@@ -67,7 +90,9 @@ export async function refreshSyncProjections(params: {
     previousContributions = userResult.previousContributions
   }
 
-  if (!rebuildTrackBests && trackBestDeltas.length > 0) {
+  const missingPrevious = userProjectionDeltas.some(delta => delta.status === 'updated' && !previousContributions.has(delta.sessionId))
+
+  if (!rebuildTrackBests && !missingPrevious && trackBestDeltas.length > 0) {
     await applyTrackBestsProjectionDeltas({
       db,
       uid,
@@ -75,11 +100,12 @@ export async function refreshSyncProjections(params: {
       getDocFn,
       setDocFn,
       bestRulesVersion,
-      previousContributions
+      previousContributions,
+      strict: true
     })
   }
 
-  if (!rebuildTrackBests && userProjectionDeltas.length > 0) {
+  if (!rebuildTrackBests && !missingPrevious && userProjectionDeltas.length > 0) {
     const trackDetailResult = await applyTrackDetailProjectionDeltas({
       db,
       uid,
@@ -90,6 +116,7 @@ export async function refreshSyncProjections(params: {
     })
 
     if (!trackDetailResult.requiresFullRebuild) {
+      await commit()
       return {
         sessions: [],
         projectionsWritten: true,
@@ -100,6 +127,8 @@ export async function refreshSyncProjections(params: {
   }
 
   const freshSessions = await loadFullHistory(uid)
+  // Discard the incremental plan: the full rebuild writes each document once.
+  writes.clear()
 
   if (rebuildTrackBests) {
     await rebuildTrackBestsProjection({
@@ -112,6 +141,17 @@ export async function refreshSyncProjections(params: {
       bestRulesVersion
     })
     clearTrackDerivedCaches()
+  } else {
+    // A fallback must repair activity/bests too, not only users and track detail.
+    // Rebuild from authoritative sessions without deleting cloud documents first.
+    await applyTrackBestsProjectionDeltas({
+      db, uid, bestRulesVersion, setDocFn, strict: true,
+      getDocFn: async () => ({ exists: () => false }),
+      deltas: freshSessions.filter(session => session.meta?.track && session.sessionId).map(session => ({
+        trackId: session.meta.track, sessionId: session.sessionId,
+        dateStart: session.meta.date_start, car: session.meta.car, summary: session.summary
+      }))
+    })
   }
 
   await writeUserProjectionDocuments({
@@ -120,6 +160,7 @@ export async function refreshSyncProjections(params: {
     sessions: freshSessions,
     setDocFn
   })
+  await commit()
 
   return {
     sessions: freshSessions,

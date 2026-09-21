@@ -113,10 +113,12 @@ export interface TrackSnapshot {
 const MAX_DIAGNOSTICS = 300
 const globalGatewayDiagnostics = ref<PipelineDiagnosticEvent[]>([])
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-const trackDetailProjectionCache = new Map<string, { detail: TrackDetailProjectionDocument; trackBest: any | null }>()
+let gatewayCacheGeneration = 0
+const trackDetailProjectionCache = new Map<string, { cachedAt: number; detail: TrackDetailProjectionDocument; trackBest: any | null }>()
 const pendingLocalOverlayCache = new Map<string, { cachedAt: number; sessions: SessionDocument[] }>()
 
 export function clearTelemetryGatewayCache(uid?: string) {
+    gatewayCacheGeneration += 1
     const clearByPrefix = <T>(cache: Map<string, T>) => {
         if (!uid) {
             cache.clear()
@@ -271,10 +273,12 @@ export function useTelemetryGateway() {
         overviewSnapshotInFlight.set(cacheKey, request)
         try {
             const snapshot = await request
-            overviewSnapshotCache.set(cacheKey, { cachedAt: Date.now(), snapshot })
+            if (overviewSnapshotInFlight.get(cacheKey) === request) {
+                overviewSnapshotCache.set(cacheKey, { cachedAt: Date.now(), snapshot })
+            }
             return snapshot
         } finally {
-            overviewSnapshotInFlight.delete(cacheKey)
+            if (overviewSnapshotInFlight.get(cacheKey) === request) overviewSnapshotInFlight.delete(cacheKey)
         }
     }
 
@@ -645,7 +649,8 @@ export function useTelemetryGateway() {
             const normalizedTrackId = normalizeTrackKey(trackId)
             const cacheKey = `${resolvedUserId}:${normalizedTrackId}`
             let cached = trackDetailProjectionCache.get(cacheKey)
-            if (cached) recordFirebaseCacheHit('gateway.trackDetail')
+            if (!checkFirebaseCacheFreshness('gateway.trackDetail', cached?.cachedAt, OWNER_DATA_CACHE_TTL_MS)) cached = undefined
+            const generation = gatewayCacheGeneration
             if (!cached) {
                 const [detailResult, trackBestResult] = await Promise.allSettled([
                     loadTrackDetailProjectionDoc(resolvedUserId, normalizedTrackId),
@@ -670,8 +675,8 @@ export function useTelemetryGateway() {
                     })
                     return await getTrackDetailProjectionFallback(trackId, targetUserId, category, selectedGrip)
                 }
-                cached = { detail, trackBest }
-                trackDetailProjectionCache.set(cacheKey, cached)
+                cached = { cachedAt: Date.now(), detail, trackBest }
+                if (generation === gatewayCacheGeneration) trackDetailProjectionCache.set(cacheKey, cached)
             }
 
             const pendingSessions = await loadPendingLocalOverlay(resolvedUserId)

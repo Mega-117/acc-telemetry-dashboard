@@ -105,6 +105,7 @@ describe('applyTrackDetailProjectionDeltas', () => {
 
     const firstWithLaps = await applyTrackDetailProjectionDeltas({
       db: {}, uid: 'owner-1', deltas: [{ ...delta, status: 'updated' }],
+      previousContributions: new Map([['session-new', { laps: 0, lapsValid: 0, totalTime: 0 }]]),
       getDocFn: async () => ({ exists: () => true, data: () => existing() }), setDocFn
     })
     expect(firstWithLaps.wrote).toBe(true)
@@ -126,5 +127,26 @@ describe('applyTrackDetailProjectionDeltas', () => {
     })
     expect(result.wrote).toBe(false)
     expect(setDocFn).not.toHaveBeenCalled()
+  })
+
+  it('does not count an updated session missing from the bounded recent list as new', async () => {
+    const setDocFn = vi.fn()
+    const result = await applyTrackDetailProjectionDeltas({
+      db: {}, uid: 'owner-1', deltas: [{ ...delta, status: 'updated' }],
+      getDocFn: async () => ({ exists: () => true, data: () => existing() }), setDocFn,
+      previousContributions: new Map([['session-new', { laps: 5, lapsValid: 4, totalTime: 500_000 }]])
+    })
+    expect(result.requiresFullRebuild).toBe(true)
+    expect(setDocFn).not.toHaveBeenCalled()
+  })
+
+  it('uses the contribution of this projection after another projection has already advanced', async () => {
+    const setDocFn = vi.fn()
+    await applyTrackDetailProjectionDeltas({
+      db: {}, uid: 'owner-1', deltas: [{ ...delta, status: 'updated' }],
+      getDocFn: async () => ({ exists: () => true, data: () => withSession({ lapsValid: 4, totalTimeMs: 500_000 }) }), setDocFn,
+      previousContributions: new Map([['session-new', { laps: 12, lapsValid: 10, totalTime: 1_400_000 }]])
+    })
+    expect(setDocFn.mock.calls[0]![1].categories.GT3.activity.totalLaps).toBe(22)
   })
 })

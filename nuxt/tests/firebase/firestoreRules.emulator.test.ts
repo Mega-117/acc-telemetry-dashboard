@@ -33,6 +33,7 @@ import {
   isCompletedCanonicalMigrationCheckpoint
 } from '~/services/sync/canonicalMigrationCheckpoint'
 import { createSessionUploadService } from '~/services/sync/sessionUploadService'
+import { refreshSyncProjections, type ProjectionWrite } from '~/services/sync/syncProjectionRefreshService'
 import { inspectFirebaseStructureState } from '~/services/sync/firebaseStructureHealthService'
 import { repairPilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -46,6 +47,41 @@ const FRESH_PILOT_UID = 'qa-fresh-pilot'
 const FRESH_PILOT_EMAIL = 'qa-fresh-pilot@accsuite.invalid'
 
 let testEnv: RulesTestEnvironment
+
+it('PIP-436 commits the complete projection plan atomically under real owner rules', async () => {
+  const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
+  const date = new Date().toISOString()
+  const session = (laps: number) => ({ sessionId: 'atomic-session', meta: {
+    track: 'monza', car: 'ferrari_296_gt3', date_start: date, session_type: 0
+  }, summary: { laps, lapsValid: laps, totalTime: laps * 100_000, stintCount: 1 } })
+  let deny = false
+  const commitWrites = async (writes: ProjectionWrite[]) => {
+    const batch = writeBatch(db)
+    for (const write of writes) {
+      if (write.options) batch.set(write.ref, write.data, write.options)
+      else batch.set(write.ref, write.data)
+    }
+    if (deny) batch.set(doc(db, `users/${SECOND_PILOT_UID}/trackBests/monza`), { denied: true })
+    await batch.commit()
+  }
+  const input = (laps: number) => ({ db, uid: PILOT_UID, changedCount: 1,
+    loadFullHistory: async () => [session(laps)] as any, clearTrackDerivedCaches: () => {},
+    resetAllTrackBests: async () => 0, getDocFn: getDoc, setDocFn: setDoc,
+    commitWrites, bestRulesVersion: 5, reason: 'emulator-atomic-plan' })
+  await assertSucceeds(refreshSyncProjections(input(3)))
+  const delta = { status: 'updated' as const, sessionId: 'atomic-session', trackId: 'monza', car: 'ferrari_296_gt3',
+    dateStart: date, sessionType: 0, summary: session(8).summary }
+  const updated = { ...input(8), userProjectionDeltas: [delta], trackBestDeltas: [delta] }
+  const userRef = doc(db, `users/${PILOT_UID}`)
+  deny = true
+  await assertFails(refreshSyncProjections(updated))
+  expect((await getDoc(userRef)).data()?.sessionIndex.sessionsList[0].laps).toBe(3)
+  deny = false
+  await assertSucceeds(refreshSyncProjections(updated))
+  expect((await getDoc(userRef)).data()?.sessionIndex.sessionsList[0].laps).toBe(8)
+  expect((await getDoc(doc(db, `users/${PILOT_UID}/trackBests/monza`))).data()?.activity.totalLaps).toBe(8)
+  expect((await getDoc(doc(db, `users/${PILOT_UID}/trackDetailProjections/monza`))).data()?.categories.GT3.activity.totalLaps).toBe(8)
+})
 
 function diagnosticPayload(uid: string, eventId: string) {
   return {

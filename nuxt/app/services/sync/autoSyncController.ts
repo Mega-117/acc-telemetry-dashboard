@@ -106,6 +106,7 @@ export function setupAutoSyncController(params: {
   let bufferedChangedFiles: TelemetryFileDescriptor[] = []
   let heldChangedFiles: TelemetryFileDescriptor[] = []
   let holdTimer: number | null = null
+  let holdCheckInFlight = false
   const unsubscribers: Array<() => void> = []
 
   const current = () => !disposed && isLeaseCurrent(lease)
@@ -161,7 +162,7 @@ export function setupAutoSyncController(params: {
           const pendingFiles = bufferedChangedFiles
           bufferedChangedFiles = []
           if (pendingFiles.length > 0) {
-            await runAfterReady('filesChanged', { files: pendingFiles })
+            await onChangedFilesReady(pendingFiles)
           }
         }
       } catch {
@@ -182,11 +183,13 @@ export function setupAutoSyncController(params: {
   }
 
   async function runAfterReady(trigger: SyncTrigger, payload?: { files?: TelemetryFileDescriptor[] }) {
-    if (!current() || !authReady) return
+    if (!current() || !authReady) return false
     try {
       await handleTrigger(trigger, payload ? { ...payload, uid: lease.uid } : { uid: lease.uid })
+      return true
     } catch (error) {
       if (current()) console.warn(`[SYNC] ${trigger} failed:`, error)
+      return false
     }
   }
 
@@ -215,33 +218,37 @@ export function setupAutoSyncController(params: {
     }, drivingHoldPollMs)
   }
 
-  async function releaseHeld(extra: TelemetryFileDescriptor[] = []) {
-    const files = mergeHeldFiles(heldChangedFiles, extra)
-    const wasHolding = heldChangedFiles.length > 0
+  async function releaseHeld() {
+    const files = heldChangedFiles
     heldChangedFiles = []
     clearHoldTimer()
-    if (wasHolding) recordFirebaseJournalEvent({ kind: 'session', reason: 'sync-release' })
-    if (files.length > 0) await runAfterReady('filesChanged', { files })
+    if (!files.length) return
+    const succeeded = await runAfterReady('filesChanged', { files })
+    if (!current()) return
+    // Gli eventi arrivati durante l'upload sono piu' recenti del gruppo fallito.
+    if (!succeeded) heldChangedFiles = mergeHeldFiles(files, heldChangedFiles)
+    else recordFirebaseJournalEvent({ kind: 'session', reason: 'sync-release' })
   }
 
   async function releaseOrKeepHolding() {
-    if (!current() || heldChangedFiles.length === 0) return
-    if (await carOnTrack()) {
-      scheduleHoldCheck()
-      return
+    if (!current() || heldChangedFiles.length === 0 || holdCheckInFlight) return
+    holdCheckInFlight = true
+    try {
+      const onTrack = await carOnTrack()
+      if (!current()) return
+      if (!onTrack) await releaseHeld()
+    } finally {
+      holdCheckInFlight = false
+      if (heldChangedFiles.length > 0) scheduleHoldCheck()
     }
-    await releaseHeld()
   }
 
   async function onChangedFilesReady(changedFiles: TelemetryFileDescriptor[]) {
-    if (await carOnTrack()) {
-      if (!current()) return
-      if (heldChangedFiles.length === 0) recordFirebaseJournalEvent({ kind: 'session', reason: 'sync-hold' })
-      heldChangedFiles = mergeHeldFiles(heldChangedFiles, changedFiles)
-      scheduleHoldCheck()
-      return
-    }
-    await releaseHeld(changedFiles)
+    if (!current()) return
+    if (heldChangedFiles.length === 0) recordFirebaseJournalEvent({ kind: 'session', reason: 'sync-hold' })
+    // Accoda prima dell'I/O: risposte IPC fuori ordine non devono perdere revisioni.
+    heldChangedFiles = mergeHeldFiles(heldChangedFiles, changedFiles)
+    await releaseOrKeepHolding()
   }
 
   rememberUnsubscribe(electronAPI.onFilesChanged?.((data) => {

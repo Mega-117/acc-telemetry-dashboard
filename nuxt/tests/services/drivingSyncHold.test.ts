@@ -54,6 +54,27 @@ describe('autoSyncController: trattenuta in pista', () => {
   }
   const filesChangedCalls = (mock: ReturnType<typeof vi.fn>) => mock.mock.calls.filter(([trigger]) => trigger === 'filesChanged')
 
+  it('also holds changes received before authReady completes', async () => {
+    const { handleTrigger, files, dispose } = setup(async () => state({}))
+    files(['during-auth.json'])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(filesChangedCalls(handleTrigger)).toHaveLength(0)
+    dispose()
+  })
+
+  it('retries a failed release without requiring another file event', async () => {
+    let live: unknown = state({})
+    const { handleTrigger, files, dispose } = setup(async () => live)
+    await vi.advanceTimersByTimeAsync(0)
+    files(['a.json'])
+    await vi.advanceTimersByTimeAsync(0)
+    handleTrigger.mockRejectedValueOnce(new Error('offline'))
+    live = state({ inPitLane: true })
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(filesChangedCalls(handleTrigger)).toHaveLength(2)
+    dispose()
+  })
+
   it('trattiene i giri in pista e carica una volta sola rientrando ai box', async () => {
     let live: unknown = state({})
     const { handleTrigger, files } = setup(async () => live)

@@ -406,6 +406,8 @@ export async function applyTrackBestsProjectionDeltas(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   docFn?: (db: any, path: string) => any
   previousContributions?: Map<string, SessionContribution>
+  /** Sync reconciliation must not publish a partially built plan. */
+  strict?: boolean
 }): Promise<{ touchedTracks: string[]; updatedTracks: string[] }> {
   const {
     db,
@@ -450,6 +452,7 @@ export async function applyTrackBestsProjectionDeltas(params: {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     } catch (e: any) {
       console.warn(`[SYNC] Error updating trackBests for ${trackIdNorm}:`, e.message)
+      if (params.strict) throw e
     }
   }
 

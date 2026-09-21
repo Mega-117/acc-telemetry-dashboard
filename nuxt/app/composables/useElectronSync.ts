@@ -12,7 +12,7 @@ import { ref, computed } from 'vue'
 import { collection, doc } from 'firebase/firestore'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { useTelemetryData } from './useTelemetryData'
-import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc, trackedGetDocs, trackedSetDoc } from './useFirebaseTracker'
+import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedWriteBatch } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { ensureLocalTelemetrySummariesCanonical } from '~/utils/localCanonicalSummary'
@@ -34,7 +34,7 @@ import {
     runLocalMutationBoundary,
     type SyncMutationJournal
 } from '~/services/sync/syncMutationJournal'
-import { refreshSyncProjections } from '~/services/sync/syncProjectionRefreshService'
+import { refreshSyncProjections, type ProjectionWrite } from '~/services/sync/syncProjectionRefreshService'
 import { loadOwnerSessions } from '~/services/sync/ownerDataRepairService'
 import type { UserProjectionDelta } from '~/services/sync/syncUserProjectionDeltaService'
 import { resolveSyncTriggerAction, type SyncTrigger } from '~/services/sync/syncTriggerPolicy'
@@ -488,6 +488,16 @@ export function useElectronSync() {
         let userProjectionDeltas: UserProjectionDelta[] = []
         let localStateChanged = false
         const mutationJournal = createSyncMutationJournal()
+        const commitProjectionWrites = async (writes: ProjectionWrite[]) => {
+            assertLeaseCurrent(isCurrent)
+            if (!writes.length) return
+            // Never split the index from the projections that consume its delta.
+            if (writes.length > 500) throw new Error('projection_batch_exceeds_500_documents')
+            const batch = trackedWriteBatch(db, SYNC_CALLER)
+            for (const write of writes) batch.set(write.ref, write.data, write.options)
+            await batch.commit()
+            assertLeaseCurrent(isCurrent)
+        }
 
         try {
             if (trigger === 'filesChanged') {
@@ -550,6 +560,7 @@ export function useElectronSync() {
                 resetAllTrackBests,
                 getDocFn: getDoc,
                 setDocFn: guardedSetDoc,
+                commitWrites: commitProjectionWrites,
                 bestRulesVersion: BEST_RULES_VERSION,
                 reason: `${reasonPrefix}_projection_refresh`,
                 rebuildTrackBests: needsTrackBestsRebuild,
@@ -605,11 +616,14 @@ export function useElectronSync() {
                             resetAllTrackBests,
                             getDocFn: getDoc,
                             setDocFn: setDoc,
+                            commitWrites: commitProjectionWrites,
                             bestRulesVersion: BEST_RULES_VERSION,
                             reason: `${reasonPrefix}_partial_recovery`,
                             rebuildTrackBests: false,
-                            trackBestDeltas: partial.trackBestDeltas,
-                            userProjectionDeltas: partial.userProjectionDeltas
+                            // A prior interrupted cycle may have advanced individual
+                            // projections. Recover from authoritative full history.
+                            trackBestDeltas: [],
+                            userProjectionDeltas: []
                         })
                     }
                 })
@@ -778,6 +792,9 @@ export function useElectronSync() {
             handleTrigger: async (trigger, payload) => {
                 const results = await ownerOperations.track(executeTrigger(trigger, payload, isCurrent))
                 notifyIfChanged(results)
+                if (trigger === 'filesChanged' && results.some((item) => item.status === 'error')) {
+                    throw new Error('files_changed_sync_failed')
+                }
                 if (
                     trigger === 'authReady'
                     && (runtimeBootstrapState.value.phase !== 'ready' || results.some((item) => item.status === 'error'))

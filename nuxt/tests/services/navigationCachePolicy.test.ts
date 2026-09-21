@@ -20,6 +20,16 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers())
 
 describe('cache di navigazione', () => {
+  it('does not repopulate the cache with a read started before invalidation', async () => {
+    let resolve!: (snapshot: any) => void
+    fake.getDoc.mockReturnValueOnce(new Promise((done) => { resolve = done }))
+    const pending = loadUserProjection('u')
+    clearTelemetryProjectionRepositoryCache('u')
+    resolve({ exists: () => true, data: () => ({ stats: { totalSessions: 1 } }) })
+    await pending
+    await loadUserProjection('u')
+    expect(fake.getDoc).toHaveBeenCalledTimes(2)
+  })
   it('i dati owner durano 15 minuti, quelli condivisi 60 secondi', () => {
     expect(OWNER_DATA_CACHE_TTL_MS).toBe(15 * 60_000)
     expect(SHARED_DATA_CACHE_TTL_MS).toBe(60_000)

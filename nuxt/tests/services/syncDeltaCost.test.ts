@@ -9,6 +9,7 @@ vi.mock('firebase/firestore', () => ({
 import { applyUserProjectionDeltas } from '~/services/sync/syncUserProjectionDeltaService'
 import { applySessionListProjectionDeltas } from '~/services/sync/sessionListProjectionService'
 import { applyTrackBestsProjectionDeltas } from '~/services/sync/trackBestsProjectionService'
+import { refreshSyncProjections, type ProjectionWrite } from '~/services/sync/syncProjectionRefreshService'
 
 type Store = Map<string, any>
 let store: Store
@@ -26,6 +27,60 @@ const setDocFn = async (path: string, data: any, options?: { merge?: boolean }) 
 }
 
 const NOW = new Date().toISOString()
+
+describe('PIP-436 integrated projection recovery', () => {
+  function session(laps: number) {
+    return { sessionId: 's-new', meta: { track: 'monza', car: 'ferrari_296_gt3', date_start: NOW, session_type: 0 },
+      summary: { laps, lapsValid: laps - 1, totalTime: laps * 100_000, stintCount: 1 } } as any
+  }
+  async function commit(plan: ProjectionWrite[]) {
+    expect(new Set(plan.map(write => write.ref)).size).toBe(plan.length)
+    for (const write of plan) await setDocFn(write.ref, write.data, write.options)
+  }
+  const input = (laps: number) => ({
+    db: {}, uid: 'u', changedCount: 1, loadFullHistory: vi.fn(async () => [session(laps)]),
+    clearTrackDerivedCaches: vi.fn(), resetAllTrackBests: vi.fn(async () => 0),
+    getDocFn, setDocFn, commitWrites: commit, bestRulesVersion: 5, reason: 'audit-fixture'
+  })
+
+  it('publishes nothing on commit failure; retry and following lap remain exact', async () => {
+    await refreshSyncProjections(input(3))
+    const before = JSON.stringify([...store])
+    const updated = { ...input(8), userProjectionDeltas: [delta('updated', 8)], trackBestDeltas: [delta('updated', 8)] }
+    await expect(refreshSyncProjections({ ...updated, commitWrites: async () => { throw new Error('batch-offline') } })).rejects.toThrow('batch-offline')
+    expect(JSON.stringify([...store])).toBe(before)
+    writes.length = 0
+    await refreshSyncProjections(updated)
+    expect(updated.loadFullHistory).not.toHaveBeenCalled()
+    expect(new Set(writes).size).toBe(writes.length)
+    expect(store.get('users/u/trackBests/monza').activity.totalLaps).toBe(8)
+    expect(store.get('users/u/trackDetailProjections/monza').categories.GT3.activity.totalLaps).toBe(8)
+    await refreshSyncProjections({ ...input(9), userProjectionDeltas: [delta('updated', 9)], trackBestDeltas: [delta('updated', 9)] })
+    expect(store.get('users/u/trackBests/monza').activity.totalLaps).toBe(9)
+  })
+
+  it('missing prior contribution rebuilds every aggregate without publishing the unsafe delta', async () => {
+    await refreshSyncProjections(input(3))
+    store.get('users/u').sessionIndex.sessionsList = []
+    writes.length = 0
+    const updated = { ...input(8), userProjectionDeltas: [delta('updated', 8)], trackBestDeltas: [delta('updated', 8)] }
+    await refreshSyncProjections(updated)
+    expect(updated.loadFullHistory).toHaveBeenCalledOnce()
+    expect(updated.resetAllTrackBests).not.toHaveBeenCalled()
+    expect(new Set(writes).size).toBe(writes.length)
+    expect(store.get('users/u/trackBests/monza').activity.totalLaps).toBe(8)
+    expect(store.get('users/u/trackDetailProjections/monza').categories.GT3.activity.totalLaps).toBe(8)
+  })
+
+  it('an unavailable track read cannot publish the user index alone', async () => {
+    await refreshSyncProjections(input(3))
+    const before = JSON.stringify([...store])
+    await expect(refreshSyncProjections({ ...input(8), userProjectionDeltas: [delta('updated', 8)], trackBestDeltas: [delta('updated', 8)],
+      getDocFn: async (path: string) => { if (path.includes('/trackBests/')) throw new Error('read-offline'); return getDocFn(path) }
+    })).rejects.toThrow('read-offline')
+    expect(JSON.stringify([...store])).toBe(before)
+  })
+})
 const delta = (status: 'created' | 'updated', laps: number, extra: Record<string, unknown> = {}) => ({
   status, sessionId: 's-new', trackId: 'monza', dateStart: NOW, sessionType: 0, car: 'ferrari_296_gt3',
   summary: { laps, lapsValid: laps - 1, totalTime: laps * 100_000, stintCount: 1 }, ...extra

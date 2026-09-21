@@ -174,14 +174,14 @@ function mergeUpdatedDelta(
   const category = getCarCategory(session.meta.car)
   const existingCategory = document.categories[category] || buildEmptyCategoryProjection()
   const index = existingCategory.recentSessions.findIndex((item) => item.id === session.sessionId)
-  // Mai entrata (primo salvataggio senza giri): per il dettaglio pista e' una sessione nuova.
-  if (index < 0) return mergeCreatedDelta(document, delta)
+  // La lista e' limitata: l'assenza non prova che la sessione non sia gia' contata.
+  if (index < 0) return previous?.laps === 0 ? mergeCreatedDelta(document, delta) : null
 
   const old = existingCategory.recentSessions[index]!
-  const oldContribution = previous ?? (
+  const oldContribution = (
     old.lapsValid !== undefined && old.totalTimeMs !== undefined
       ? { laps: old.laps, lapsValid: old.lapsValid, totalTime: old.totalTimeMs }
-      : undefined
+      : previous
   )
   if (!oldContribution) return null
 
