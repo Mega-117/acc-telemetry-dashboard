@@ -77,9 +77,12 @@ assert.equal(projectionRefreshSource.includes('applyTrackBestsProjectionDeltas')
 assert.equal(projectionRefreshSource.includes('applyUserProjectionDeltas'), true, 'projection refresh must apply incremental user projection deltas')
 assert.equal(trackBestsSource.includes('syncedSessionIds: Array.from(countedSessionIds).slice(-100)'), false, 'trackBests activity idempotency must not be capped to the last 100 sessions')
 assert.ok(
-  projectionRefreshSource.indexOf('applyUserProjectionDeltas') < projectionRefreshSource.indexOf("sourceMode: 'cloud_fresh'"),
-  'normal incremental projection path must run before any cloud_fresh fallback'
+  projectionRefreshSource.indexOf('applyUserProjectionDeltas') < projectionRefreshSource.indexOf('await loadFullHistory(uid)'),
+  'normal incremental projection path must run before any full-history fallback'
 )
+// PIP-436: il ricalcolo su un sottoinsieme (caricatore UI limitato a 200) riscrive le proiezioni come
+// se le sessioni piu' vecchie non esistessero.
+assert.equal(projectionRefreshSource.includes('cloud_fresh'), false, 'projection rebuild must never use the capped cloud_fresh loader')
 
 const { applyTrackBestsProjectionDeltas } = await import('../app/services/sync/trackBestsProjectionService.ts')
 const { applyUserProjectionDeltas } = await import('../app/services/sync/syncUserProjectionDeltaService.ts')

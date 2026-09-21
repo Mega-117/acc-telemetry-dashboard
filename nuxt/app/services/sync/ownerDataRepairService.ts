@@ -254,7 +254,8 @@ async function canonicalizeCloudRawPayload(rawObj: any): Promise<{
   }
 }
 
-async function loadOwnerSessions(uid: string): Promise<SessionDocument[]> {
+/** Storico completo delle sessioni cloud dell'owner, senza limite (ricalcoli totali). */
+export async function loadOwnerSessions(uid: string): Promise<SessionDocument[]> {
   const snap = await getDocsTracked(query(collection(db, `users/${uid}/sessions`)))
   return (snap.docs || []).map(toSessionDocument)
 }

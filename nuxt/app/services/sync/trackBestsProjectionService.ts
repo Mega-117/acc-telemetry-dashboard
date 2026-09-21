@@ -3,6 +3,7 @@ import { CAR_CATEGORIES, getCarCategory, type CarCategory } from '~/utils/teleme
 import { normalizeTrackId } from '~/services/projections/trackMetadata'
 import { RACE_FUEL_BUCKETS, getRaceFuelBucket, type RaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
+import type { SessionContribution } from '~/types/trackProjections'
 
 export const TRACK_BESTS_SCHEMA_VERSION = 4
 
@@ -309,8 +310,9 @@ function mergeTrackBestsDocument(params: {
   existing: any | null
   deltas: TrackBestProjectionDelta[]
   bestRulesVersion: number
+  previousContributions?: Map<string, SessionContribution>
 }) {
-  const { trackIdNorm, existing, deltas, bestRulesVersion } = params
+  const { trackIdNorm, existing, deltas, bestRulesVersion, previousContributions = new Map() } = params
   const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
   const existingVersion = Number(existing?.version || 0)
   const newBests = buildInitialBests(existing, gripConditions)
@@ -341,6 +343,21 @@ function mergeTrackBestsDocument(params: {
       newActivity.sessionCount = Number(newActivity.sessionCount || 0) + 1
       newActivity.lastSessionDate = lastSessionDate
       hasActivityUpdates = true
+    } else {
+      // PIP-436: sessione gia' contata e poi allungata (giri successivi dello stesso file):
+      // l'attivita' cambia della differenza rispetto al contributo gia' registrato.
+      const previous = previousContributions.get(delta.sessionId)
+      if (previous) {
+        const lapDelta = Number(delta.summary?.laps || 0) - previous.laps
+        const validDelta = Number(delta.summary?.lapsValid || 0) - previous.lapsValid
+        const timeDelta = Number(delta.summary?.totalTime || 0) - previous.totalTime
+        if (lapDelta || validDelta || timeDelta) {
+          newActivity.totalLaps = Math.max(0, Number(newActivity.totalLaps || 0) + lapDelta)
+          newActivity.validLaps = Math.max(0, Number(newActivity.validLaps || 0) + validDelta)
+          newActivity.totalTimeMs = Math.max(0, Number(newActivity.totalTimeMs || 0) + timeDelta)
+          hasActivityUpdates = true
+        }
+      }
     }
   }
 
@@ -388,6 +405,7 @@ export async function applyTrackBestsProjectionDeltas(params: {
   bestRulesVersion: number
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   docFn?: (db: any, path: string) => any
+  previousContributions?: Map<string, SessionContribution>
 }): Promise<{ touchedTracks: string[]; updatedTracks: string[] }> {
   const {
     db,
@@ -396,7 +414,8 @@ export async function applyTrackBestsProjectionDeltas(params: {
     getDocFn,
     setDocFn,
     bestRulesVersion,
-    docFn = defaultDocFn
+    docFn = defaultDocFn,
+    previousContributions
   } = params
 
   const grouped = new Map<string, TrackBestProjectionDelta[]>()
@@ -421,7 +440,8 @@ export async function applyTrackBestsProjectionDeltas(params: {
         trackIdNorm,
         existing,
         deltas: grouped.get(trackIdNorm) || [],
-        bestRulesVersion
+        bestRulesVersion,
+        previousContributions
       })
 
       if (!merged.shouldWrite) continue

@@ -35,6 +35,7 @@ import {
     type SyncMutationJournal
 } from '~/services/sync/syncMutationJournal'
 import { refreshSyncProjections } from '~/services/sync/syncProjectionRefreshService'
+import { loadOwnerSessions } from '~/services/sync/ownerDataRepairService'
 import type { UserProjectionDelta } from '~/services/sync/syncUserProjectionDeltaService'
 import { resolveSyncTriggerAction, type SyncTrigger } from '~/services/sync/syncTriggerPolicy'
 import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTracker'
@@ -183,7 +184,7 @@ function getElectronApi(): any | null {
 
 export function useElectronSync() {
     const { currentUser, canEnterApp } = useFirebaseAuth()
-    const { loadSessions, resetAllTrackBests, clearTrackDerivedCaches } = useTelemetryData()
+    const { resetAllTrackBests, clearTrackDerivedCaches } = useTelemetryData()
     const ownerDataMaintenance = useOwnerDataMaintenance()
 
     const isSyncing = ref(false)
@@ -544,7 +545,7 @@ export function useElectronSync() {
                 db,
                 uid,
                 changedCount,
-                loadSessions,
+                loadFullHistory: loadOwnerSessions,
                 clearTrackDerivedCaches,
                 resetAllTrackBests,
                 getDocFn: getDoc,
@@ -599,7 +600,7 @@ export function useElectronSync() {
                             db,
                             uid,
                             changedCount: partial.cloudChangedCount,
-                            loadSessions,
+                            loadFullHistory: loadOwnerSessions,
                             clearTrackDerivedCaches,
                             resetAllTrackBests,
                             getDocFn: getDoc,

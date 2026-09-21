@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   applyTrackBestsProjectionDeltas: vi.fn(async () => undefined),
-  applyUserProjectionDeltas: vi.fn(async () => ({ wrote: true, totalSessions: 1, sessionsLast7Days: 1 })),
+  applyUserProjectionDeltas: vi.fn(async () => ({
+    wrote: true, totalSessions: 1, sessionsLast7Days: 1,
+    previousContributions: new Map([['session-new', { laps: 3, lapsValid: 2, totalTime: 300_000 }]])
+  })),
   applyTrackDetailProjectionDeltas: vi.fn(),
   rebuildTrackBestsProjection: vi.fn(async () => undefined),
   writeUserProjectionDocuments: vi.fn(async () => undefined)
@@ -30,12 +33,12 @@ const delta = {
   sessionType: 2, car: 'ferrari_296_gt3', summary: { laps: 12 }
 }
 
-function params(loadSessions = vi.fn(async () => [])) {
+function params(loadFullHistory = vi.fn(async (_uid: string) => [] as any[])) {
   return {
-    db: {}, uid: 'owner-1', changedCount: 1, loadSessions,
+    db: {}, uid: 'owner-1', changedCount: 1, loadFullHistory,
     clearTrackDerivedCaches: vi.fn(), resetAllTrackBests: vi.fn(async () => 0),
     getDocFn: vi.fn(), setDocFn: vi.fn(), bestRulesVersion: 5,
-    reason: 'test', userProjectionDeltas: [delta]
+    reason: 'test', userProjectionDeltas: [delta], trackBestDeltas: [delta]
   }
 }
 
@@ -50,21 +53,31 @@ describe('refreshSyncProjections', () => {
 
     expect(mocks.applyUserProjectionDeltas).toHaveBeenCalledOnce()
     expect(mocks.applyTrackDetailProjectionDeltas).toHaveBeenCalledOnce()
-    expect(input.loadSessions).not.toHaveBeenCalled()
+    expect(input.loadFullHistory).not.toHaveBeenCalled()
+    expect(mocks.writeUserProjectionDocuments).not.toHaveBeenCalled()
     expect(result.projectionsWritten).toBe(true)
   })
 
-  it('uses the existing full rebuild when incremental track detail is unsafe', async () => {
+  it('PIP-436: passes the already-counted contribution of updated sessions to track projections', async () => {
+    mocks.applyTrackDetailProjectionDeltas.mockResolvedValue({ wrote: true, requiresFullRebuild: false })
+    await refreshSyncProjections(params())
+
+    const userOrder = mocks.applyUserProjectionDeltas.mock.invocationCallOrder[0]!
+    expect(mocks.applyTrackBestsProjectionDeltas.mock.invocationCallOrder[0]).toBeGreaterThan(userOrder)
+    const previous = (mocks.applyTrackDetailProjectionDeltas.mock.calls[0] as any)[0].previousContributions
+    expect(previous.get('session-new')).toEqual({ laps: 3, lapsValid: 2, totalTime: 300_000 })
+    expect((mocks.applyTrackBestsProjectionDeltas.mock.calls[0] as any)[0].previousContributions).toBe(previous)
+  })
+
+  it('PIP-436: rebuilds from the full owner history, never from the capped UI loader', async () => {
     mocks.applyTrackDetailProjectionDeltas.mockResolvedValue({ wrote: false, requiresFullRebuild: true })
     const freshSessions = [{ sessionId: 'session-new' }]
-    const loadSessions = vi.fn(async () => freshSessions as any)
-    const input = params(loadSessions)
+    const loadFullHistory = vi.fn(async () => freshSessions as any)
+    const input = params(loadFullHistory)
 
     const result = await refreshSyncProjections(input)
 
-    expect(loadSessions).toHaveBeenCalledWith(undefined, true, {
-      sourceMode: 'cloud_fresh', context: 'test'
-    })
+    expect(loadFullHistory).toHaveBeenCalledWith('owner-1')
     expect(mocks.writeUserProjectionDocuments).toHaveBeenCalledWith(expect.objectContaining({
       sessions: freshSessions
     }))

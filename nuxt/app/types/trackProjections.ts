@@ -70,6 +70,13 @@ export interface TrackHeaderProjection {
   hasGripData: boolean
 }
 
+/** PIP-436: contributo gia' conteggiato di una sessione (giri, giri validi, tempo). */
+export interface SessionContribution {
+  laps: number
+  lapsValid: number
+  totalTime: number
+}
+
 export interface TrackRecentSessionProjection {
   id: string
   dateStart?: string
@@ -78,6 +85,9 @@ export interface TrackRecentSessionProjection {
   type: 'practice' | 'qualify' | 'race'
   car: string
   laps: number
+  // PIP-436: contributo all'attivita', per sostituire una sessione aggiornata senza ricalcolo.
+  lapsValid?: number
+  totalTimeMs?: number
   stints: number
   bestQualy?: string
   bestRace?: string

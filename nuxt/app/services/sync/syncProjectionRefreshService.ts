@@ -9,8 +9,12 @@ export async function refreshSyncProjections(params: {
   db: any
   uid: string
   changedCount: number
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-  loadSessions: (targetUserId?: string, forceRefresh?: boolean, options?: any) => Promise<SessionDocument[] | null>
+  /**
+   * PIP-436: storico completo dell'owner per il raro ricalcolo totale. Mai il caricatore
+   * limitato della UI: ricalcolare su un sottoinsieme sovrascrive statistiche e
+   * proiezioni come se le sessioni piu' vecchie non esistessero.
+   */
+  loadFullHistory: (uid: string) => Promise<SessionDocument[]>
   clearTrackDerivedCaches: () => void
   resetAllTrackBests: (uid: string) => Promise<number>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
@@ -27,7 +31,7 @@ export async function refreshSyncProjections(params: {
     db,
     uid,
     changedCount,
-    loadSessions,
+    loadFullHistory,
     clearTrackDerivedCaches,
     resetAllTrackBests,
     getDocFn,
@@ -49,6 +53,20 @@ export async function refreshSyncProjections(params: {
 
   clearTrackDerivedCaches()
 
+  // Il riepilogo utente va per primo: la sua lettura fornisce il contributo gia' contato
+  // delle sessioni aggiornate, riusato da best e dettaglio pista senza altre letture.
+  let previousContributions = new Map()
+  if (!rebuildTrackBests && userProjectionDeltas.length > 0) {
+    const userResult = await applyUserProjectionDeltas({
+      db,
+      uid,
+      deltas: userProjectionDeltas,
+      getDocFn,
+      setDocFn
+    })
+    previousContributions = userResult.previousContributions
+  }
+
   if (!rebuildTrackBests && trackBestDeltas.length > 0) {
     await applyTrackBestsProjectionDeltas({
       db,
@@ -56,25 +74,19 @@ export async function refreshSyncProjections(params: {
       deltas: trackBestDeltas,
       getDocFn,
       setDocFn,
-      bestRulesVersion
+      bestRulesVersion,
+      previousContributions
     })
   }
 
   if (!rebuildTrackBests && userProjectionDeltas.length > 0) {
-    await applyUserProjectionDeltas({
-      db,
-      uid,
-      deltas: userProjectionDeltas,
-      getDocFn,
-      setDocFn
-    })
-
     const trackDetailResult = await applyTrackDetailProjectionDeltas({
       db,
       uid,
       deltas: userProjectionDeltas,
       getDocFn,
-      setDocFn
+      setDocFn,
+      previousContributions
     })
 
     if (!trackDetailResult.requiresFullRebuild) {
@@ -84,12 +96,10 @@ export async function refreshSyncProjections(params: {
         rebuiltTrackBests: false
       }
     }
+    console.warn(`[SYNC] ${reason}: track detail not safely incremental, rebuilding from full history`)
   }
 
-  const freshSessions = await loadSessions(undefined, true, {
-    sourceMode: 'cloud_fresh',
-    context: reason
-  }) || []
+  const freshSessions = await loadFullHistory(uid)
 
   if (rebuildTrackBests) {
     await rebuildTrackBestsProjection({

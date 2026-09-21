@@ -301,12 +301,77 @@ export async function loadSessionListProjection(params: {
   return sessions
 }
 
+/**
+ * PIP-436: una sessione gia' in lista (giro successivo dello stesso file) viene sostituita
+ * nella sua pagina senza leggere le altre. Le sessioni aggiornate sono le piu' recenti,
+ * quindi quasi sempre in p0000. Se la data cambia, un ID manca o la meta non torna,
+ * ritorna null e si usa il percorso completo.
+ */
+async function replaceEntriesInPlace(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Firestore SDK boundary
+  db: any
+  uid: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- delta shape shared with the full path
+  deltas: Array<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Firestore snapshot boundary
+  getDocFn: (ref: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Firestore writer boundary
+  setDocFn: (ref: any, data: any, options?: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Firestore reference factory
+  docFn: (db: any, path: string) => any
+}): Promise<{ wrote: boolean; totalSessions: number } | null> {
+  const { db, uid, deltas, getDocFn, setDocFn, docFn } = params
+  // Una sessione nuova cambia conteggio e impaginazione: solo il percorso completo.
+  if (!deltas.every((delta) => delta?.status === 'updated')) return null
+  const metaSnap = await getDocFn(docFn(db, `users/${uid}/sessionListMeta/v1`))
+  if (!metaSnap.exists()) return null
+  const meta = metaSnap.data() as SessionListProjectionMeta
+  if (Number(meta?.schemaVersion || 0) !== SESSION_LIST_PROJECTION_SCHEMA_VERSION) return null
+  if (!Array.isArray(meta?.pageKeys) || meta.pageKeys.length === 0) return null
+
+  const pending = new Map(deltas.map((delta) => [delta.sessionId, createSessionListEntryFromDelta(delta)]))
+  const changedPages: SessionListProjectionPage[] = []
+  for (const key of meta.pageKeys) {
+    if (pending.size === 0) break
+    const pageSnap = await getDocFn(docFn(db, `users/${uid}/sessionListPages/${key}`))
+    if (!pageSnap.exists()) return null
+    const page = pageSnap.data() as SessionListProjectionPage
+    if (!Array.isArray(page?.items)) return null
+    let changed = false
+    let reorder = false
+    const items = page.items.map((item) => {
+      const next = item?.id ? pending.get(item.id) : undefined
+      if (!next) return item
+      pending.delete(item.id)
+      // Una data diversa sposterebbe la voce fra le pagine: serve il percorso completo.
+      if ((next.date || '') !== (item.date || '')) reorder = true
+      if (JSON.stringify(next) === JSON.stringify(item)) return item
+      changed = true
+      return next
+    })
+    if (reorder) return null
+    if (changed) changedPages.push({ ...page, items })
+  }
+  if (pending.size > 0) return null
+
+  for (const page of changedPages) {
+    await setDocFn(
+      docFn(db, `users/${uid}/sessionListPages/${page.pageKey}`),
+      sanitizeForFirestore({ ...page, updatedAt: new Date().toISOString() }),
+      { merge: true }
+    )
+  }
+  if (changedPages.length) projectionCache.delete(uid)
+  return { wrote: changedPages.length > 0, totalSessions: Number(meta.totalSessions || 0) }
+}
+
 export async function applySessionListProjectionDeltas(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
   deltas: Array<{
     sessionId: string
+    status?: 'created' | 'updated'
     dateStart?: string | null
     trackId?: string | null
     car?: string | null
@@ -323,6 +388,9 @@ export async function applySessionListProjectionDeltas(params: {
 }): Promise<{ wrote: boolean; totalSessions: number }> {
   const { db, uid, deltas, getDocFn, setDocFn, docFn = doc } = params
   if (deltas.length === 0) return { wrote: false, totalSessions: 0 }
+
+  const inPlace = await replaceEntriesInPlace({ db, uid, deltas, getDocFn, setDocFn, docFn })
+  if (inPlace) return inPlace
 
   const existing = await readSessionListProjectionDocs({ db, uid, getDocFn, docFn })
   if (!existing) return { wrote: false, totalSessions: 0 }
