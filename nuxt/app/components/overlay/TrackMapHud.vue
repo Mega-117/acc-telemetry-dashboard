@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // PIP-428 — sola presentazione: disegna cio' che trackMapPresentation ha deciso.
 // Spessori, colori e rotazione replicano TrackMapWindow.xaml di ACC Drive.
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { usePresentationActivity } from '~/composables/usePresentationVisibility'
 import {
   TRACK_MAP_CANVAS,
@@ -29,23 +30,40 @@ const props = withDefaults(defineProps<{
 const shown = ref<Record<string, number>>({})
 let frame = 0
 let lastFrameAt = 0
+let nextFrameAt = 0
+let active = false
+const FRAME_MS = 1000 / 60
 
-function motionItems (): TrackMapMotionItem[] {
+const motionItems = stableComputed<TrackMapMotionItem[]>(() => {
   return [
     ...props.view.dots.map(dot => ({ key: `car:${dot.carIndex}`, spline: dot.spline, isLocal: dot.isLocal })),
     ...props.view.markers.map(marker => ({ key: `marker:${marker.kind}`, spline: marker.spline, followsLocal: true })),
   ]
+})
+
+function wake () {
+  if (!active || frame) return
+  lastFrameAt = 0
+  nextFrameAt = 0
+  frame = requestAnimationFrame(animate)
 }
+watch(motionItems, wake)
 
 function animate (now: number) {
+  frame = 0
+  if (!active) return
+  // Limit Vue updates on high-refresh displays, preserving real elapsed time.
+  if (now < nextFrameAt) { frame = requestAnimationFrame(animate); return }
+  nextFrameAt = now + FRAME_MS - ((now - nextFrameAt) % FRAME_MS)
   const elapsed = lastFrameAt ? Math.min(100, now - lastFrameAt) : 16
   lastFrameAt = now
   const previous = shown.value
   // Un teletrasporto ("torna ai pit") riappare sul posto invece di percorrere il circuito.
-  const next = advanceTrackMapMotion(previous, motionItems(), elapsed)
+  const next = advanceTrackMapMotion(previous, motionItems.value, elapsed)
   const keys = Object.keys(next)
   if (keys.length !== Object.keys(previous).length || keys.some(key => next[key] !== previous[key])) shown.value = next
-  frame = requestAnimationFrame(animate)
+  // Sleep when settled; only changed targets wake the loop again.
+  if (motionItems.value.some(item => next[item.key] !== item.spline)) frame = requestAnimationFrame(animate)
 }
 
 function place (key: string, item: { spline: number, x: number, y: number }) {
@@ -55,10 +73,9 @@ function place (key: string, item: { spline: number, x: number, y: number }) {
 
 const animation = usePresentationActivity(() => {
   // Resume at current positions, without animating the hidden interval.
-  shown.value = Object.fromEntries(motionItems().map(item => [item.key, item.spline]))
-  lastFrameAt = 0
-  frame = requestAnimationFrame(animate)
-}, () => cancelAnimationFrame(frame))
+  shown.value = Object.fromEntries(motionItems.value.map(item => [item.key, item.spline]))
+  active = true
+}, () => { active = false; cancelAnimationFrame(frame); frame = 0 })
 onMounted(animation.start)
 onUnmounted(animation.stop)
 
