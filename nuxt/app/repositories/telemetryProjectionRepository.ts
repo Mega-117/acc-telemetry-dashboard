@@ -7,6 +7,7 @@ import {
   type TrackDetailProjectionDocument
 } from '~/types/trackProjections'
 import { isSupportedTrackBestProjection } from '~/services/projections/trackBestProjectionGuard'
+import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
 
 const CALLER = 'TelemetryProjectionRepository'
 const PROJECTION_CACHE_TTL_MS = 60_000
@@ -26,8 +27,8 @@ const trackBestCache = new Map<string, CacheEntry<any | null>>()
 const trackBestsMapCache = new Map<string, CacheEntry<Record<string, any>>>()
 const trackDetailProjectionCache = new Map<string, CacheEntry<TrackDetailProjectionDocument | null>>()
 
-function isFresh<T>(entry: CacheEntry<T> | undefined): entry is CacheEntry<T> {
-  return !!entry && Date.now() - entry.cachedAt <= PROJECTION_CACHE_TTL_MS
+function isFresh<T>(entry: CacheEntry<T> | undefined, cacheName: string): entry is CacheEntry<T> {
+  return checkFirebaseCacheFreshness(`projection.${cacheName}`, entry?.cachedAt, PROJECTION_CACHE_TTL_MS)
 }
 
 function setCache<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T): T {
@@ -56,7 +57,7 @@ export function clearTelemetryProjectionRepositoryCache(uid?: string) {
 
 export async function loadUserProjection(uid: string): Promise<UserProjectionDocument | null> {
   const cached = userProjectionCache.get(uid)
-  if (isFresh(cached)) return cached.value
+  if (isFresh(cached, 'userProjection')) return cached.value
 
   const snap = await trackedGetDoc(doc(db, `users/${uid}`), CALLER)
   if (!snap.exists()) return setCache(userProjectionCache, uid, null)
@@ -72,7 +73,7 @@ export async function loadTrackBest(uid: string, trackId: string): Promise<any |
   if (!normalizedTrackId) return null
   const cacheKey = `${uid}:${normalizedTrackId}`
   const cached = trackBestCache.get(cacheKey)
-  if (isFresh(cached)) return cached.value
+  if (isFresh(cached, 'trackBest')) return cached.value
 
   const snap = await trackedGetDoc(doc(db, `users/${uid}/trackBests/${normalizedTrackId}`), CALLER)
   if (!snap.exists()) return setCache(trackBestCache, cacheKey, null)
@@ -82,7 +83,7 @@ export async function loadTrackBest(uid: string, trackId: string): Promise<any |
 
 export async function loadTrackBestsMap(uid: string): Promise<Record<string, any>> {
   const cached = trackBestsMapCache.get(uid)
-  if (isFresh(cached)) return cached.value
+  if (isFresh(cached, 'trackBestsMap')) return cached.value
 
   const snap = await trackedGetDocs(query(collection(db, `users/${uid}/trackBests`)), CALLER)
   const result: Record<string, any> = {}
@@ -104,7 +105,7 @@ export async function loadTrackDetailProjectionDoc(
   if (!normalizedTrackId) return null
   const cacheKey = `${uid}:${normalizedTrackId}`
   const cached = trackDetailProjectionCache.get(cacheKey)
-  if (isFresh(cached)) return cached.value
+  if (isFresh(cached, 'trackDetail')) return cached.value
 
   const snap = await trackedGetDoc(doc(db, `users/${uid}/trackDetailProjections/${normalizedTrackId}`), CALLER)
   if (!snap.exists()) return setCache(trackDetailProjectionCache, cacheKey, null)

@@ -15,6 +15,7 @@ import {
 import { createAuthSessionRecoveryCoordinator } from '~/services/auth/authSessionRecoveryCoordinator'
 import { createAuthRevisionLeaseCoordinator, type AuthRevisionLease } from '~/services/auth/authRevisionLease'
 import { createRetryableSingleFlightLoader } from '~/services/auth/retryableSingleFlightLoader'
+import { recordFirebaseCacheHit } from '~/services/monitoring/firebaseOpsJournal'
 import {
     clearLocalUserIdentity,
     isSecondaryLocalRuntimeRenderer,
@@ -193,12 +194,14 @@ async function syncLoggedOutUser() {
 
 async function loadCachedUserProfile(uid: string, { force = false } = {}) {
     if (!force && userProfileCache.has(uid)) {
+        recordFirebaseCacheHit('auth.userProfile')
         const cached = userProfileCache.get(uid) ?? null
         if (currentUser.value?.uid === uid) currentUserProfile.value = cached
         return cached
     }
 
     if (!force && userProfileRequests.has(uid)) {
+        recordFirebaseCacheHit('auth.userProfile.inFlight')
         return userProfileRequests.get(uid)!
     }
 

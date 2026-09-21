@@ -3,6 +3,7 @@ import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
 import type { SessionDocument } from '~/types/telemetry'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
+import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
 
 export const SESSION_LIST_PROJECTION_SCHEMA_VERSION = 1
 export const SESSION_LIST_PROJECTION_PAGE_SIZE = 100
@@ -288,7 +289,7 @@ export async function loadSessionListProjection(params: {
   docFn?: (db: any, path: string) => any
 }): Promise<SessionDocument[] | null> {
   const cached = projectionCache.get(params.uid)
-  if (cached && Date.now() - cached.cachedAt <= SESSION_LIST_CACHE_TTL_MS) {
+  if (checkFirebaseCacheFreshness('sessionListProjection', cached?.cachedAt, SESSION_LIST_CACHE_TTL_MS) && cached) {
     return cached.sessions
   }
 

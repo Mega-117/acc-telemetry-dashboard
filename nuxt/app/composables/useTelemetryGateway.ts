@@ -27,6 +27,7 @@ import type { OverviewProjection } from '~/types/overviewProjections'
 import { loadSessionDetailViewModel } from '~/services/session-detail/loadSessionDetailViewModel'
 import type { SessionDetailViewModel } from '~/types/sessionDetailViewModel'
 import { endFirebaseScenario, startFirebaseScenario } from './useFirebaseTracker'
+import { checkFirebaseCacheFreshness, recordFirebaseCacheHit } from '~/services/monitoring/firebaseOpsJournal'
 import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
 import {
     loadTrackBest,
@@ -211,7 +212,7 @@ export function useTelemetryGateway() {
         ].join(':')
 
         const cached = overviewSnapshotCache.get(cacheKey)
-        if (cached && Date.now() - cached.cachedAt <= OVERVIEW_SNAPSHOT_CACHE_TTL_MS) {
+        if (checkFirebaseCacheFreshness('gateway.overviewSnapshot', cached?.cachedAt, OVERVIEW_SNAPSHOT_CACHE_TTL_MS) && cached) {
             pushGatewayDiagnostic({
                 source: isOnline ? 'cloud_fresh' : 'local_offline',
                 action: 'getOverviewSnapshot.cacheHit',
@@ -227,6 +228,7 @@ export function useTelemetryGateway() {
 
         const existingRequest = overviewSnapshotInFlight.get(cacheKey)
         if (existingRequest) {
+            recordFirebaseCacheHit('gateway.overviewSnapshot.inFlight')
             pushGatewayDiagnostic({
                 source: isOnline ? 'cloud_fresh' : 'local_offline',
                 action: 'getOverviewSnapshot.inFlightReuse',
@@ -642,6 +644,7 @@ export function useTelemetryGateway() {
             const normalizedTrackId = normalizeTrackKey(trackId)
             const cacheKey = `${resolvedUserId}:${normalizedTrackId}`
             let cached = trackDetailProjectionCache.get(cacheKey)
+            if (cached) recordFirebaseCacheHit('gateway.trackDetail')
             if (!cached) {
                 const [detailResult, trackBestResult] = await Promise.allSettled([
                     loadTrackDetailProjectionDoc(resolvedUserId, normalizedTrackId),

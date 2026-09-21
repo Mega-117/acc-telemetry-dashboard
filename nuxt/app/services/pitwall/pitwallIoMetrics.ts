@@ -1,3 +1,5 @@
+import { bucketRealtimePath, recordFirebaseJournalEvent } from '~/services/monitoring/firebaseOpsJournal'
+
 /** Logical operations and JSON payload bytes, never a Firebase billing meter. */
 export interface PitwallIoEvent {
   operation: 'read' | 'cache' | 'read-shared' | 'disconnect-register' | 'listen' | 'receive' | 'write' | 'delete' | 'transaction' | 'connection'
@@ -15,7 +17,36 @@ export function jsonPayloadBytes(value: unknown): number {
   return new TextEncoder().encode(JSON.stringify(value) ?? 'null').byteLength
 }
 
-export function createPitwallIoMetrics() {
+/** PIP-435: stesso evento verso il journal dev delle operazioni Firebase, senza identificativi nel percorso. */
+function journalRealtimeEvent(transport: string, event: PitwallIoEvent) {
+  const path = bucketRealtimePath(event.path)
+  if (event.operation === 'cache' || event.operation === 'read-shared') {
+    recordFirebaseJournalEvent({ kind: 'cache', cache: `rtdb.${event.operation}`, path, transport })
+    return
+  }
+  if (!event.success) {
+    // Rifiutata o annullata: resta visibile come errore, senza contare letture/scritture riuscite.
+    recordFirebaseJournalEvent({ kind: 'op', db: 'rtdb', type: event.operation, transport, path,
+      bytes: event.bytes, attempts: event.attempts, error: 'failed' })
+    return
+  }
+  const committed = event.operation === 'transaction' ? event.committed === true : undefined
+  recordFirebaseJournalEvent({
+    kind: 'op',
+    db: 'rtdb',
+    type: event.operation,
+    transport,
+    path,
+    bytes: event.bytes + (event.responseBytes ?? 0),
+    reads: event.operation === 'read' || event.operation === 'receive' ? 1 : undefined,
+    writes: event.operation === 'write' || event.operation === 'disconnect-register' || committed ? 1 : undefined,
+    deletes: event.operation === 'delete' ? Math.max(1, event.deletedPaths ?? 0) : event.deletedPaths || undefined,
+    attempts: event.attempts,
+    reason: event.operation === 'connection' ? (event.connected ? 'connected' : 'disconnected') : undefined,
+  })
+}
+
+export function createPitwallIoMetrics(transport = 'pitwall') {
   const totals = { reads: 0, writes: 0, deletes: 0, subscriptions: 0, deliveries: 0,
     transactions: 0, transactionAttempts: 0, failed: 0, payloadBytesReceived: 0,
     payloadBytesSent: 0, connections: 0, peakConnections: 0, cacheHits: 0, sharedReads: 0, disconnectRegistrations: 0, deletedPaths: 0 }
@@ -23,6 +54,7 @@ export function createPitwallIoMetrics() {
   function record(event: PitwallIoEvent) {
     events.push({ ...event })
     if (events.length > 500) events.shift()
+    journalRealtimeEvent(transport, event)
     if (!event.success) totals.failed++
     if (event.success) totals.deletedPaths += event.deletedPaths ?? 0
     switch (event.operation) {

@@ -12,6 +12,7 @@ import {
     type QueryDocumentSnapshot
 } from 'firebase/firestore'
 import { trackedGetCountFromServer, trackedGetDoc, trackedGetDocs } from './useFirebaseTracker'
+import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { db } from '~/config/firebase'
 import { formatCarName, formatTrackName, getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
@@ -272,7 +273,7 @@ function writePageCache(page: number, sessions: SessionDocument[]) {
 function readFreshPageCache(page: number): PageCacheEntry | null {
     const cached = globalPageCache.value[page]
     if (!cached) return null
-    if (Date.now() - cached.cachedAt > SESSION_PAGE_CACHE_TTL_MS) return null
+    if (!checkFirebaseCacheFreshness('sessionPager.page', cached.cachedAt, SESSION_PAGE_CACHE_TTL_MS)) return null
     return cached
 }
 
@@ -609,7 +610,7 @@ async function ensureCursorForPage(
 
 async function loadCloudIdentitySet(targetUserId: string): Promise<{ ids: Set<string>; logicalKeys: Set<string> }> {
     const cached = globalCloudIdentityCache.get(targetUserId)
-    if (cached && Date.now() - cached.cachedAt <= CLOUD_IDENTITY_CACHE_TTL_MS) {
+    if (checkFirebaseCacheFreshness('sessionPager.cloudIdentity', cached?.cachedAt, CLOUD_IDENTITY_CACHE_TTL_MS) && cached) {
         return {
             ids: cached.ids,
             logicalKeys: cached.logicalKeys

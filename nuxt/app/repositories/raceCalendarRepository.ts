@@ -1,6 +1,7 @@
 import { collection, doc, limit, orderBy, query } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { trackedAddDoc, trackedDeleteDoc, trackedGetDocs, trackedUpdateDoc } from '~/composables/useFirebaseTracker'
+import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
 
 const CALLER = 'RaceCalendarRepository'
 const RACE_CALENDAR_CACHE_TTL_MS = 60_000
@@ -76,7 +77,7 @@ function mapEvent(docSnap: any): RaceCalendarEvent {
 export async function loadRaceCalendarEvents(userId: string, maxItems = 25): Promise<RaceCalendarEvent[]> {
   const key = cacheKey(userId, maxItems)
   const cached = eventsCache.get(key)
-  if (cached && Date.now() - cached.cachedAt <= RACE_CALENDAR_CACHE_TTL_MS) {
+  if (checkFirebaseCacheFreshness('raceCalendar', cached?.cachedAt, RACE_CALENDAR_CACHE_TTL_MS) && cached) {
     return cached.events
   }
 

@@ -12,7 +12,7 @@ type Watched = { ready: boolean, value: unknown, watchers: Set<Watcher>, errors:
 
 /** One SDK connection, shared subscriptions, and server-confirmed mutations. */
 export function createPitwallRealtimeTransport(database: Database, namespace: string = PITWALL_ROOT) {
-  const metrics = createPitwallIoMetrics()
+  const metrics = createPitwallIoMetrics(namespace)
   const watches = new Map<string, Watched>()
   const reads = new Map<string, Promise<unknown>>()
   const connectionWatchers = new Set<(online: boolean) => void>()
@@ -137,6 +137,7 @@ export function createPitwallRealtimeTransport(database: Database, namespace: st
     requireOnline()
     const action = onDisconnect(at(path))
     await action.remove()
+    metrics.record({ operation: 'disconnect-register', path, bytes: 0, success: true })
     requireOnline()
     return () => action.cancel()
   }

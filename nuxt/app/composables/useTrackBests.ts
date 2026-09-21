@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { collection, query, doc, type DocumentReference, type Query } from 'firebase/firestore'
 import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedWriteBatch } from './useFirebaseTracker'
+import { recordFirebaseCacheHit } from '~/services/monitoring/firebaseOpsJournal'
 import { db } from '~/config/firebase'
 import {
     CAR_CATEGORIES,
@@ -56,6 +57,7 @@ function loadCacheFromStorage(key: string, userId: string): any | null {
             return null
         }
         console.log(`[CACHE] ✅ Loaded ${key} from sessionStorage (age: ${Math.round((Date.now() - timestamp) / 1000)}s)`)
+        recordFirebaseCacheHit(`trackBests.${key === CACHE_KEY_TRACK_BESTS ? 'bests' : 'activity'}`, Date.now() - timestamp)
         return data
     } catch (e) {
         console.warn('[CACHE] Failed to load from sessionStorage:', e)

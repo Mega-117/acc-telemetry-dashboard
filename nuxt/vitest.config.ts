@@ -50,6 +50,7 @@ export default defineConfig({
         'shared/productIdentity.ts',
         'scripts/cloudflare-package.mjs',
         'app/services/monitoring/windowOpeningProbe.ts',
+        'app/services/monitoring/firebaseOpsJournal.ts',
         'app/components/auth/*.vue',
         'app/components/electron/ElectronTitlebar.vue',
         'app/services/pitwall/pitwallIoMetrics.ts',
