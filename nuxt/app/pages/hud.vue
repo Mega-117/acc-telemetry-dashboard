@@ -5,6 +5,7 @@ if (import.meta.client) markHudRouteModulePhase('route-module-evaluated')
 </script>
 
 <script setup lang="ts">
+import { usePresentationInterval } from '~/composables/usePresentationVisibility'
 /* eslint-disable max-lines -- Legacy self-contained Electron bridge; split tracked separately from PIP-281 layout scope. */
 // HUD (PIP-209): pagina overlay protetta da capability centralizzata.
 // - Interruttore GLOBALE di posizionamento: sblocca/blocca TUTTI gli overlay.
@@ -230,8 +231,13 @@ const selectedOverlayId = ref<HudOverlayId>('tyres')
 const hudSettingsLayout = ref<HudSettingsLayout>('columns')
 const hudPerformanceSummary = ref('')
 let unsubscribeDriving: (() => void) | null = null
-let placementPollTimer: ReturnType<typeof setInterval> | null = null
-let replayPollTimer: ReturnType<typeof setInterval> | null = null
+const placementActivity = usePresentationInterval(() => {
+  nowMs.value = Date.now()
+  if (positioning.value) refreshPlacementStatus()
+}, 1000)
+const replayActivity = usePresentationInterval(() => {
+  if (replayStatus.value.running) void refreshReplayStatus()
+}, 500)
 
 
 const placementRemainingSeconds = computed(() => {
@@ -436,14 +442,9 @@ async function observeHudInitialReady() {
 
 onMounted(() => {
   void observeHudInitialReady()
-  placementPollTimer = setInterval(() => {
-    nowMs.value = Date.now()
-    if (positioning.value) refreshPlacementStatus()
-  }, 1000)
+  placementActivity.start()
   void refreshReplayStatus()
-  replayPollTimer = setInterval(() => {
-    if (replayStatus.value.running) void refreshReplayStatus()
-  }, 500)
+  replayActivity.start()
   const api = getApi()
   if (api && typeof api.onHudOverlayDrivingState === 'function') {
     unsubscribeDriving = api.onHudOverlayDrivingState((value: boolean) => {
@@ -455,8 +456,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (unsubscribeDriving) { unsubscribeDriving(); unsubscribeDriving = null }
-  if (placementPollTimer) { clearInterval(placementPollTimer); placementPollTimer = null }
-  if (replayPollTimer) { clearInterval(replayPollTimer); replayPollTimer = null }
+  placementActivity.stop()
+  replayActivity.stop()
 })
 
 async function saveAndLock() {

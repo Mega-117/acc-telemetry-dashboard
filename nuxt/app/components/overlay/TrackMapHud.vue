@@ -2,6 +2,7 @@
 // PIP-428 — sola presentazione: disegna cio' che trackMapPresentation ha deciso.
 // Spessori, colori e rotazione replicano TrackMapWindow.xaml di ACC Drive.
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { usePresentationActivity } from '~/composables/usePresentationVisibility'
 import {
   TRACK_MAP_CANVAS,
   TRACK_MAP_MARKER_DIAMETER,
@@ -52,8 +53,14 @@ function place (key: string, item: { spline: number, x: number, y: number }) {
   return { transform: `translate(${point.x}px, ${point.y}px)` }
 }
 
-onMounted(() => { frame = requestAnimationFrame(animate) })
-onUnmounted(() => cancelAnimationFrame(frame))
+const animation = usePresentationActivity(() => {
+  // Resume at current positions, without animating the hidden interval.
+  shown.value = Object.fromEntries(motionItems().map(item => [item.key, item.spline]))
+  lastFrameAt = 0
+  frame = requestAnimationFrame(animate)
+}, () => cancelAnimationFrame(frame))
+onMounted(animation.start)
+onUnmounted(animation.stop)
 
 const MARGIN = 40
 const viewBox = `${-MARGIN} ${-MARGIN} ${TRACK_MAP_CANVAS + MARGIN * 2} ${TRACK_MAP_CANVAS + MARGIN * 2}`

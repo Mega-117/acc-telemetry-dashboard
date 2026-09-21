@@ -1,4 +1,5 @@
 import { ref } from 'vue'
+import { usePresentationActivity } from './usePresentationVisibility'
 
 export interface LiveLapState {
   currentLap: number | null
@@ -128,11 +129,12 @@ export function normalizeSectorHud(raw: any): SectorHudState | null {
  * @param getApi - Factory that returns the current Electron API instance, or null if unavailable.
  * @returns Object with liveLap ref, isPollingActive ref, startLiveStatePolling, stopLiveStatePolling, resetLiveLap.
  */
-export function useLiveStatePoller(getApi: () => any | null) {
+export function useLiveStatePoller(getApi: () => any | null, background = false) {
   const liveLap = ref<LiveLapState>({ ...EMPTY_LAP_STATE })
   const isPollingActive = ref(false)
   let liveStateInterval: ReturnType<typeof setInterval> | null = null
   let removePushListener: (() => void) | null = null
+  let revision = 0
 
   function applyState(state: any) {
     if (state && typeof state === 'object' && isLiveStateFresh(state.ts)) {
@@ -168,14 +170,17 @@ export function useLiveStatePoller(getApi: () => any | null) {
     }
 
     let errorCount = 0
+    const requestRevision = revision
 
     async function pollOnce() {
       try {
         const state = await api.getLiveState()
+        if (requestRevision !== revision) return
         errorCount = 0
         isPollingActive.value = true
         applyState(state)
       } catch (err: any) {
+        if (requestRevision !== revision) return
         errorCount++
         console.warn(`[LiveStatePoller] IPC error (attempt ${errorCount}):`, err?.message ?? err)
         if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
@@ -190,6 +195,7 @@ export function useLiveStatePoller(getApi: () => any | null) {
   }
 
   function stopLiveStatePolling() {
+    revision++
     if (liveStateInterval) {
       clearInterval(liveStateInterval)
       liveStateInterval = null
@@ -204,5 +210,6 @@ export function useLiveStatePoller(getApi: () => any | null) {
     liveLap.value = { ...EMPTY_LAP_STATE }
   }
 
-  return { liveLap, isPollingActive, startLiveStatePolling, stopLiveStatePolling, resetLiveLap }
+  const activity = usePresentationActivity(startLiveStatePolling, stopLiveStatePolling, background)
+  return { liveLap, isPollingActive, startLiveStatePolling: activity.start, stopLiveStatePolling: activity.stop, resetLiveLap }
 }

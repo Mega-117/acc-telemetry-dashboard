@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { usePresentationActivity } from './usePresentationVisibility'
 
 export interface TimedHudPagerOptions<Page extends string> {
   defaultPage: Page
@@ -24,10 +25,24 @@ export function useTimedHudPager<Page extends string>(options: TimedHudPagerOpti
   let deadlineMs: number | null = null
   let expiryTimer: ReturnType<typeof setTimeout> | null = null
   let progressTimer: ReturnType<typeof setInterval> | null = null
+  const activity = usePresentationActivity(() => {
+    if (deadlineMs === null) return
+    const remaining = deadlineMs - Date.now()
+    if (remaining <= 0) { returnToDefault(); return }
+    updateProgress()
+    progressTimer = setInterval(updateProgress, progressTickMs)
+    expiryTimer = setTimeout(returnToDefault, remaining)
+  }, () => {
+    if (expiryTimer) clearTimeout(expiryTimer)
+    if (progressTimer) clearInterval(progressTimer)
+    expiryTimer = null
+    progressTimer = null
+  })
 
   const isTemporaryPage = computed(() => temporaryPageActive.value)
 
   function clearTimers() {
+    activity.stop()
     if (expiryTimer) clearTimeout(expiryTimer)
     if (progressTimer) clearInterval(progressTimer)
     expiryTimer = null
@@ -53,8 +68,7 @@ export function useTimedHudPager<Page extends string>(options: TimedHudPagerOpti
     progress.value = 1
     temporaryPageActive.value = true
     deadlineMs = Date.now() + temporaryDurationMs
-    progressTimer = setInterval(updateProgress, progressTickMs)
-    expiryTimer = setTimeout(returnToDefault, temporaryDurationMs)
+    activity.start()
   }
 
   function selectPage(page: Page, temporary = page !== options.defaultPage) {

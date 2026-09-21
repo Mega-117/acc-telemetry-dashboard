@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usePresentationInterval, usePresentationVisibility } from '~/composables/usePresentationVisibility'
+const presentationVisible = usePresentationVisibility()
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
@@ -171,13 +173,13 @@ const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not
 const dryPressurePresentation = computed(() => pressureActionPresentation(dryPressureState.value))
 const isDryPressurePreviewOpen = ref(false)
 const dryPressureBridgeStatus = ref('Nessuna raccomandazione TEST attiva.')
-let dryPressureTimer: ReturnType<typeof setInterval> | null = null
+const dryPressureActivity = usePresentationInterval(() => { void refreshDryPressureState() }, 500)
 const qaBotState = ref<QaBotSnapshot>(normalizeQaBotSnapshot({
   state: 'OFF',
   reason: 'bot_off',
 }))
 const qaBotView = computed(() => qaBotPresentation(qaBotState.value))
-let qaBotTimer: ReturnType<typeof setInterval> | null = null
+const qaBotActivity = usePresentationInterval(() => { void refreshQaBotState() }, 250)
 async function refreshQaBotState() {
   const api = getOverlayApi()
   if (!api?.trainingOverlayGetQaBotState) {
@@ -271,9 +273,9 @@ async function restoreTestDryPressure() {
 
 // ─── Composables ─────────────────────────────────────────────────────────────
 const { liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap } =
-  useLiveStatePoller(getOverlayApi)
+  useLiveStatePoller(getOverlayApi, true)
 const { fastState, startFastStatePolling, stopFastStatePolling } =
-  useFastStatePoller(getOverlayApi)
+  useFastStatePoller(getOverlayApi, true)
 
 const { trackingStart, trackingComplete, trackingAbandon } = useTrackingRecord(
   getOverlayApi,
@@ -784,9 +786,9 @@ onMounted(async () => {
   startLiveStatePolling()
   startFastStatePolling()
   await refreshDryPressureState()
-  dryPressureTimer = setInterval(() => { void refreshDryPressureState() }, 500)
+  dryPressureActivity.start()
   await refreshQaBotState()
-  qaBotTimer = setInterval(() => { void refreshQaBotState() }, 250)
+  qaBotActivity.start()
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
   removeInfoTargetListener = api?.onInfoTargetSettings?.((next: InfoTargetSettings) => {
     if (!isTargetSetupOpen.value) applyInfoTargetSettings(next)
@@ -835,9 +837,17 @@ watch(
   { flush: 'post' }
 )
 
+watch(presentationVisible, async (visible) => {
+  if (!visible) return
+  await nextTick()
+  connectResizeObserver()
+  scheduleOverlaySizeSync()
+  interactionContract.refresh()
+}, { flush: 'post' })
+
 onBeforeUnmount(() => {
-  if (dryPressureTimer) clearInterval(dryPressureTimer)
-  if (qaBotTimer) clearInterval(qaBotTimer)
+  dryPressureActivity.stop()
+  qaBotActivity.stop()
   clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopFastStatePolling(); stopVoice(); cleanupSize()
   if (voicePointNoticeTimer) clearTimeout(voicePointNoticeTimer)
   removeCommandListener?.()
@@ -852,6 +862,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main
+    v-if="presentationVisible || preparingReopen"
     ref="overlayRoot"
     @pointermove="actionSelection.pointerMove"
     @focusin="actionSelection.focus($event.target)"

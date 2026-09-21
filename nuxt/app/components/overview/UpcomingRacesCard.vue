@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePresentationInterval } from '~/composables/usePresentationVisibility'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useRuntimeCapabilityGate } from '~/composables/useRuntimeCapabilityGate'
@@ -29,7 +30,7 @@ const modalMode = ref<ModalMode>('create')
 const selectedEvent = ref<RaceCalendarEvent | null>(null)
 const isModalOpen = ref(false)
 const nowMs = ref(Date.now())
-let clockTimer: number | null = null
+const clockActivity = usePresentationInterval(() => { nowMs.value = Date.now() }, 60_000)
 const form = ref({
   title: '',
   startsAt: '',
@@ -216,14 +217,12 @@ watch(
 
 onMounted(() => {
   window.addEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
-  clockTimer = window.setInterval(() => {
-    nowMs.value = Date.now()
-  }, 60_000)
+  clockActivity.start()
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
-  if (clockTimer !== null) window.clearInterval(clockTimer)
+  clockActivity.stop()
 })
 </script>
 

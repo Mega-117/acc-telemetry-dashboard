@@ -21,6 +21,13 @@ import { canUseDevTools } from '~/utils/devToolsAccess'
 import { toAuthStartupOutcome, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
 import { publishAuthStartupOutcome } from '~/services/auth/localIdentityBridge'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
+import { useWindowPresentationVisibility } from '~/composables/usePresentationVisibility'
+import '~/assets/css/presentation-visibility.css'
+
+const presentationVisible = useWindowPresentationVisibility()
+watch(presentationVisible, visible => {
+  if (typeof document !== 'undefined') document.documentElement.dataset.presentationHidden = String(!visible)
+}, { immediate: true })
 
 // === NUXT ROUTER ===
 const route = useRoute()

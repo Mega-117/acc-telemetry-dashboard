@@ -1,4 +1,5 @@
 import { computed, onScopeDispose, ref, watch, type Ref } from 'vue'
+import { usePresentationActivity } from './usePresentationVisibility'
 import { completedLapHoldSample } from '~/utils/completedLapHoldSample'
 import type { FastOverlayState } from '~/composables/useFastStatePoller'
 import {
@@ -35,7 +36,9 @@ export function useCompletedLapHold(fastState: Ref<FastOverlayState>) {
     }
   }
 
-  watch(fastState, refresh, { deep: true, immediate: true })
+  const activity = usePresentationActivity(refresh, clearReleaseTimer)
+  activity.start()
+  watch(fastState, () => { if (activity.visible.value) refresh() }, { deep: true })
   onScopeDispose(clearReleaseTimer)
 
   const holding = computed(() => isCompletedLapHeld(holdState.value, clockMs.value))

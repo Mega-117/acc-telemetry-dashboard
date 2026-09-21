@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { usePresentationInterval } from '~/composables/usePresentationVisibility'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
@@ -22,7 +23,7 @@ const { backgroundOpacity } = useHudOverlayBackground(overlay.settings)
 const telemetry = useOverlayTelemetrySource(getApi)
 const canvasElement = ref<HTMLDivElement | null>(null)
 const clockMs = ref(Date.now())
-let timer: ReturnType<typeof setInterval> | null = null
+const clockActivity = usePresentationInterval(() => { clockMs.value = Date.now() }, 1000)
 let resizeObserver: ResizeObserver | null = null
 
 const options = computed(() => ({
@@ -61,7 +62,7 @@ onMounted(async () => {
   overlay.startInteractionSurface()
   await overlay.loadSettings()
   telemetry.startFastStatePolling()
-  timer = setInterval(() => { clockMs.value = Date.now() }, 1000)
+  clockActivity.start()
   if (typeof ResizeObserver === 'function' && canvasElement.value) {
     resizeObserver = new ResizeObserver(() => { void syncInfoViewport() })
     resizeObserver.observe(canvasElement.value)
@@ -74,7 +75,7 @@ onUnmounted(() => {
   telemetry.stopFastStatePolling()
   overlay.stop()
   resizeObserver?.disconnect()
-  if (timer) clearInterval(timer)
+  clockActivity.stop()
 })
 </script>
 

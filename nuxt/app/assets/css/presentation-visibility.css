@@ -1,0 +1,6 @@
+/* Freeze CSS work while hidden without changing app/service ownership. */
+html[data-presentation-hidden="true"] *,
+html[data-presentation-hidden="true"] *::before,
+html[data-presentation-hidden="true"] *::after {
+  animation-play-state: paused !important;
+}

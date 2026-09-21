@@ -111,8 +111,8 @@ const pressureVoiceRuntime = createPressureRecommendationVoiceRuntime({
 
 const getRuntimeApi = useOverlayRegionApi()
 
-const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getRuntimeApi)
-const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getRuntimeApi)
+const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getRuntimeApi, true)
+const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getRuntimeApi, true)
 // PIP-256: stato coach adattivo; attivo solo se pista coach = pista corrente
 // e se la voce dedicata "Feedback coach" lo consente (PIP-260)
 const { coachState, startCoachStatePolling, stopCoachStatePolling } = useCoachStatePoller(getRuntimeApi)

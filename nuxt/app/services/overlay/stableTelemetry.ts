@@ -1,4 +1,5 @@
 import { computed, type ComputedRef } from 'vue'
+import { usePresentationVisibility } from '~/composables/usePresentationVisibility'
 
 /** Preserve unchanged JSON branches, without rounding away telemetry or alarms. */
 export function retainUnchanged<T>(previous: T, next: T): T {
@@ -19,5 +20,7 @@ export function retainUnchanged<T>(previous: T, next: T): T {
 
 /** Child components are notified only when their actual presentation changes. */
 export function stableComputed<T>(read: () => T): ComputedRef<T> {
-  return computed<T>((previous) => retainUnchanged(previous as T, read()))
+  const visible = usePresentationVisibility()
+  return computed<T>((previous) => !visible.value && previous !== undefined
+    ? previous : retainUnchanged(previous as T, read()))
 }

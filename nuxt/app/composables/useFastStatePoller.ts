@@ -1,4 +1,5 @@
 import { computed, shallowRef } from 'vue'
+import { usePresentationActivity } from './usePresentationVisibility'
 import { retainUnchanged } from '~/services/overlay/stableTelemetry'
 import { createTelemetryRegistry } from '~/services/overlay/sharedTelemetryLease'
 import type { TrackReferencePhase } from '~/services/spotter/trackVoiceReferences'
@@ -625,7 +626,7 @@ function createFastStatePoller(getApi: () => any | null) {
 type FastSource = ReturnType<typeof createFastStatePoller> & { ready: Promise<void> }
 const fastSources = createTelemetryRegistry<FastSource>()
 
-export function useFastStatePoller(getApi: Parameters<typeof createFastStatePoller>[0]) {
+export function useFastStatePoller(getApi: Parameters<typeof createFastStatePoller>[0], background = false) {
   const attached = shallowRef<FastSource | null>(null)
   const frozen = shallowRef<FastOverlayState>({ ...EMPTY_FAST_STATE })
   let release: (() => void) | null = null
@@ -649,6 +650,9 @@ export function useFastStatePoller(getApi: Parameters<typeof createFastStatePoll
     release = lease.release
     return lease.source.ready
   }
-  return { fastState, isFastStateActive, startFastStatePolling, stopFastStatePolling }
+  const activity = usePresentationActivity(startFastStatePolling, stopFastStatePolling, background)
+  return { fastState, isFastStateActive,
+    startFastStatePolling: () => Promise.resolve(activity.start()).then(() => {}),
+    stopFastStatePolling: activity.stop }
 }
 

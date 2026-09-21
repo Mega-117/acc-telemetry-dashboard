@@ -1,4 +1,5 @@
 import { computed, shallowRef, ref } from 'vue'
+import { usePresentationActivity } from './usePresentationVisibility'
 import { createTelemetryRegistry } from '~/services/overlay/sharedTelemetryLease'
 import { retainUnchanged } from '~/services/overlay/stableTelemetry'
 import type { StandingsStateEnvelope } from '~/services/overlay/standingsPresentation'
@@ -166,5 +167,6 @@ export function useStandingsState(getApi: Parameters<typeof createStandingsState
     if (!release) acquire(false)
     return attached.value!.refresh()
   }
-  return { state, nowMs, refresh, start, stop }
+  const activity = usePresentationActivity(start, stop)
+  return { state, nowMs, refresh: () => activity.visible.value ? refresh() : Promise.resolve(state.value), start: activity.start, stop: activity.stop }
 }
