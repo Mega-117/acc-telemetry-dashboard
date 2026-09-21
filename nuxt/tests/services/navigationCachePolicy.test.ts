@@ -1,0 +1,47 @@
+// PIP-438: i dati dell'owner restano in cache finche' non cambiano (sync, profilo, refresh);
+// il TTL e' solo una rete di sicurezza. I dati di altri utenti restano brevi.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const fake = vi.hoisted(() => ({ getDoc: vi.fn(), getDocs: vi.fn() }))
+vi.mock('~/config/firebase', () => ({ db: {} }))
+vi.mock('firebase/firestore', () => ({ doc: (_db: unknown, path: string) => path, collection: (_db: unknown, path: string) => path, query: (value: unknown) => value }))
+vi.mock('~/composables/useFirebaseTracker', () => ({ trackedGetDoc: fake.getDoc, trackedGetDocs: fake.getDocs }))
+
+import { OWNER_DATA_CACHE_TTL_MS, SHARED_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
+import { clearTelemetryProjectionRepositoryCache, loadTrackBestsMap, loadUserProjection } from '~/repositories/telemetryProjectionRepository'
+
+beforeEach(() => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-09-21T10:00:00Z'))
+  fake.getDoc.mockReset().mockResolvedValue({ exists: () => true, data: () => ({ stats: {}, sessionIndex: {} }) })
+  fake.getDocs.mockReset().mockResolvedValue({ docs: [] })
+  clearTelemetryProjectionRepositoryCache()
+})
+afterEach(() => vi.useRealTimers())
+
+describe('cache di navigazione', () => {
+  it('i dati owner durano 15 minuti, quelli condivisi 60 secondi', () => {
+    expect(OWNER_DATA_CACHE_TTL_MS).toBe(15 * 60_000)
+    expect(SHARED_DATA_CACHE_TTL_MS).toBe(60_000)
+  })
+
+  it('tornare su una pagina dopo 10 minuti non rilegge Firebase', async () => {
+    await loadUserProjection('u')
+    await loadTrackBestsMap('u')
+    vi.advanceTimersByTime(10 * 60_000)
+    await loadUserProjection('u')
+    await loadTrackBestsMap('u')
+    expect(fake.getDoc).toHaveBeenCalledTimes(1)
+    expect(fake.getDocs).toHaveBeenCalledTimes(1)
+  })
+
+  it('una sync (invalidazione) fa rileggere subito; oltre il TTL si rilegge comunque', async () => {
+    await loadUserProjection('u')
+    clearTelemetryProjectionRepositoryCache('u')
+    await loadUserProjection('u')
+    expect(fake.getDoc).toHaveBeenCalledTimes(2)
+    vi.advanceTimersByTime(OWNER_DATA_CACHE_TTL_MS + 1)
+    await loadUserProjection('u')
+    expect(fake.getDoc).toHaveBeenCalledTimes(3)
+  })
+})

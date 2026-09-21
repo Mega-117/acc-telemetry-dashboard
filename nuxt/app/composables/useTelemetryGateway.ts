@@ -28,6 +28,7 @@ import { loadSessionDetailViewModel } from '~/services/session-detail/loadSessio
 import type { SessionDetailViewModel } from '~/types/sessionDetailViewModel'
 import { endFirebaseScenario, startFirebaseScenario } from './useFirebaseTracker'
 import { checkFirebaseCacheFreshness, recordFirebaseCacheHit } from '~/services/monitoring/firebaseOpsJournal'
+import { OWNER_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
 import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
 import {
     loadTrackBest,
@@ -91,7 +92,7 @@ export interface OverviewSnapshot {
     activityTotals: ReturnType<typeof useTelemetryData>['activityTotals']['value']
 }
 
-const OVERVIEW_SNAPSHOT_CACHE_TTL_MS = 60_000
+const OVERVIEW_SNAPSHOT_CACHE_TTL_MS = OWNER_DATA_CACHE_TTL_MS
 const PENDING_LOCAL_OVERLAY_CACHE_TTL_MS = 3000
 const overviewSnapshotInFlight = new Map<string, Promise<OverviewSnapshot | null>>()
 const overviewSnapshotCache = new Map<string, { cachedAt: number; snapshot: OverviewSnapshot | null }>()

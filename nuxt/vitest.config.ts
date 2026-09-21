@@ -51,6 +51,7 @@ export default defineConfig({
         'scripts/cloudflare-package.mjs',
         'app/services/monitoring/windowOpeningProbe.ts',
         'app/services/monitoring/firebaseOpsJournal.ts',
+        'app/services/cache/cachePolicy.ts',
         'app/components/auth/*.vue',
         'app/components/electron/ElectronTitlebar.vue',
         'app/services/pitwall/pitwallIoMetrics.ts',

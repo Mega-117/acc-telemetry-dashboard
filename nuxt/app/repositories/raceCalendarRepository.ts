@@ -2,9 +2,10 @@ import { collection, doc, limit, orderBy, query } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { trackedAddDoc, trackedDeleteDoc, trackedGetDocs, trackedUpdateDoc } from '~/composables/useFirebaseTracker'
 import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
+import { OWNER_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
 
 const CALLER = 'RaceCalendarRepository'
-const RACE_CALENDAR_CACHE_TTL_MS = 60_000
+const RACE_CALENDAR_CACHE_TTL_MS = OWNER_DATA_CACHE_TTL_MS
 
 type CalendarCacheEntry = {
   cachedAt: number

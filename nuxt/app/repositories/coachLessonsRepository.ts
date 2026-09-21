@@ -2,9 +2,10 @@ import { collection, doc, limit, orderBy, query, startAfter, where, type Documen
 import { db } from '~/config/firebase'
 import { trackedAddDoc, trackedGetCountFromServer, trackedGetDoc, trackedGetDocs, trackedUpdateDoc } from '~/composables/useFirebaseTracker'
 import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
+import { SHARED_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
 
 const CALLER = 'CoachLessonsRepository'
-const COACH_LESSONS_CACHE_TTL_MS = 60_000
+const COACH_LESSONS_CACHE_TTL_MS = SHARED_DATA_CACHE_TTL_MS
 
 export type CoachFeedbackType = 'positive' | 'issue' | 'action'
 

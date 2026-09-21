@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore'
 import { trackedGetCountFromServer, trackedGetDoc, trackedGetDocs } from './useFirebaseTracker'
 import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
+import { OWNER_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { db } from '~/config/firebase'
 import { formatCarName, formatTrackName, getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
@@ -32,7 +33,7 @@ import {
 const CALLER = 'SessionPager'
 const DEFAULT_PAGE_SIZE = 25
 const CLOUD_IDENTITY_CACHE_TTL_MS = 3000
-const SESSION_PAGE_CACHE_TTL_MS = 60_000
+const SESSION_PAGE_CACHE_TTL_MS = OWNER_DATA_CACHE_TTL_MS
 
 type SessionSyncState = 'synced' | 'pending_sync' | 'local_only' | 'sync_failed'
 

@@ -4,10 +4,11 @@ import { getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
 import type { SessionDocument } from '~/types/telemetry'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
+import { OWNER_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
 
 export const SESSION_LIST_PROJECTION_SCHEMA_VERSION = 1
 export const SESSION_LIST_PROJECTION_PAGE_SIZE = 100
-const SESSION_LIST_CACHE_TTL_MS = 60_000
+const SESSION_LIST_CACHE_TTL_MS = OWNER_DATA_CACHE_TTL_MS
 
 export type SessionListProjectionEntry = {
   id: string

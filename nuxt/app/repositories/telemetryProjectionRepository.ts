@@ -8,9 +8,10 @@ import {
 } from '~/types/trackProjections'
 import { isSupportedTrackBestProjection } from '~/services/projections/trackBestProjectionGuard'
 import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
+import { OWNER_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
 
 const CALLER = 'TelemetryProjectionRepository'
-const PROJECTION_CACHE_TTL_MS = 60_000
+const PROJECTION_CACHE_TTL_MS = OWNER_DATA_CACHE_TTL_MS
 
 type CacheEntry<T> = {
   cachedAt: number
