@@ -17,6 +17,16 @@ import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTrack
 const CALLER = 'ClientHeartbeat'
 const STORAGE_KEY_PREFIX = 'acc_client_heartbeat_'
 
+// PIP-439: l'invio forzato (avvio/login) vale una volta per caricamento pagina e per
+// account+installazione. Dopo un Ctrl+R il bootstrap attraversa piu' fasi e riaccende
+// `enabled` piu' volte: ogni riaccensione successiva segue la regola normale dei 15 minuti.
+const forcedHeartbeatOwners = new Set<string>()
+
+/** Solo test: dimentica gli invii forzati gia' fatti in questo caricamento. */
+export function resetForcedHeartbeatsForTest() {
+  forcedHeartbeatOwners.clear()
+}
+
 type ElectronHeartbeatApi = {
   getSuiteVersion?: () => Promise<SuiteVersionInfo | null>
   getRuntimeIdentity?: () => Promise<RuntimeInstallationIdentity | null>
@@ -81,7 +91,8 @@ export function useClientHeartbeat(options: {
       const storageOwner = `${uid}_${installationId}`
       const lastHeartbeatAt = getStoredHeartbeatAt(storageOwner)
       const latestRuntimeActivityAt = getLatestRuntimeActivityAt(identity)
-      if (!force && !shouldSendClientHeartbeat(
+      const forceNow = force && !forcedHeartbeatOwners.has(storageOwner)
+      if (!forceNow && !shouldSendClientHeartbeat(
         lastHeartbeatAt,
         nowMs,
         CLIENT_HEARTBEAT_INTERVAL_MS,
@@ -115,7 +126,8 @@ export function useClientHeartbeat(options: {
       })
       if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
       storeHeartbeatAt(storageOwner, heartbeatAt)
-      console.info('[HEARTBEAT] Client runtime report committed reason=auth_ready')
+      if (forceNow) forcedHeartbeatOwners.add(storageOwner)
+      console.info(`[HEARTBEAT] Client runtime report committed reason=${forceNow ? 'auth_ready' : 'interval'}`)
       return true
     } catch (error: any) {
       console.warn('[HEARTBEAT] Client heartbeat failed:', error?.message || error)
