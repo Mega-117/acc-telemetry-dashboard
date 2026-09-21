@@ -1,0 +1,1 @@
+import{ah as a,cO as t,bp as o,bt as n,a9 as r,a5 as c,B as _}from"./CtUgurTr.js";const p={class:"redirect-screen"},d=a({__name:"[...slug]",setup(u){const s=t();return o(()=>{s.replace("/panoramica")}),(i,e)=>(n(),r("div",p,[...e[0]||(e[0]=[c("p",null,"Reindirizzamento...",-1)])]))}}),m=_(d,[["__scopeId","data-v-d9cd5707"]]);export{m as default};
