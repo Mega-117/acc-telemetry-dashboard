@@ -146,6 +146,7 @@ export default defineConfig({
         'app/services/sync/syncScanService.ts',
         'app/services/sync/syncTriggerPolicy.ts',
         'app/services/sync/syncProjectionRefreshService.ts',
+        'app/services/sync/drivingSyncHoldPolicy.ts',
         'app/services/sync/syncUserProjectionDeltaService.ts',
         'app/services/sync/trackDetailProjectionService.ts',
         'app/repositories/telemetryLocalRepository.ts',

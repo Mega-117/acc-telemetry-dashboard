@@ -1,5 +1,7 @@
 import type { SyncTrigger } from './syncTriggerPolicy'
 import type { TelemetryFileDescriptor } from './syncScanService'
+import { DRIVING_HOLD_POLL_MS, isCarOnTrack, mergeHeldFiles } from './drivingSyncHoldPolicy'
+import { recordFirebaseJournalEvent } from '~/services/monitoring/firebaseOpsJournal'
 
 const WINDOW_FOCUS_SYNC_THROTTLE_MS = 5000
 const AUTH_READY_RETRY_DELAY_MS = 1000
@@ -48,6 +50,7 @@ type AutoSyncElectronApi = {
   onWindowFocused?: (callback: () => void) => (() => void) | void
   onInitialFiles?: (callback: (data: { files?: unknown[]; registry?: unknown }) => void) => (() => void) | void
   onRuntimeBootstrapCommand?: (callback: (command: { schemaVersion?: number; type?: string }) => void) => (() => void) | void
+  getLiveState?: () => Promise<unknown>
 }
 
 export interface AutoSyncTriggerPayload {
@@ -69,6 +72,8 @@ export function setupAutoSyncController(params: {
   recoveryRetryDelayMs?: number
   setTimeoutFn?: typeof window.setTimeout
   clearTimeoutFn?: typeof window.clearTimeout
+  drivingHoldPollMs?: number
+  nowFn?: () => number
 }): () => void {
   const {
     isElectron,
@@ -82,7 +87,9 @@ export function setupAutoSyncController(params: {
     retryDelayMs = AUTH_READY_RETRY_DELAY_MS,
     recoveryRetryDelayMs = AUTH_READY_RECOVERY_RETRY_DELAY_MS,
     setTimeoutFn = window.setTimeout.bind(window),
-    clearTimeoutFn = window.clearTimeout.bind(window)
+    clearTimeoutFn = window.clearTimeout.bind(window),
+    drivingHoldPollMs = DRIVING_HOLD_POLL_MS,
+    nowFn = Date.now
   } = params
 
   if (!isElectron || !electronAPI) return () => {}
@@ -97,6 +104,8 @@ export function setupAutoSyncController(params: {
   let retryTimer: number | null = null
   let lastWindowFocusSyncAt = 0
   let bufferedChangedFiles: TelemetryFileDescriptor[] = []
+  let heldChangedFiles: TelemetryFileDescriptor[] = []
+  let holdTimer: number | null = null
   const unsubscribers: Array<() => void> = []
 
   const current = () => !disposed && isLeaseCurrent(lease)
@@ -181,6 +190,60 @@ export function setupAutoSyncController(params: {
     }
   }
 
+  // PIP-437: lettura locale del live_state (nessuna operazione Firebase). Senza segnale
+  // leggibile la sync procede come prima: meglio caricare che trattenere per sempre.
+  async function carOnTrack(): Promise<boolean> {
+    if (typeof electronAPI?.getLiveState !== 'function') return false
+    try {
+      return isCarOnTrack(await electronAPI.getLiveState(), nowFn())
+    } catch {
+      return false
+    }
+  }
+
+  function clearHoldTimer() {
+    if (holdTimer === null) return
+    clearTimeoutFn(holdTimer)
+    holdTimer = null
+  }
+
+  function scheduleHoldCheck() {
+    if (holdTimer !== null || !current()) return
+    holdTimer = setTimeoutFn(() => {
+      holdTimer = null
+      void releaseOrKeepHolding()
+    }, drivingHoldPollMs)
+  }
+
+  async function releaseHeld(extra: TelemetryFileDescriptor[] = []) {
+    const files = mergeHeldFiles(heldChangedFiles, extra)
+    const wasHolding = heldChangedFiles.length > 0
+    heldChangedFiles = []
+    clearHoldTimer()
+    if (wasHolding) recordFirebaseJournalEvent({ kind: 'session', reason: 'sync-release' })
+    if (files.length > 0) await runAfterReady('filesChanged', { files })
+  }
+
+  async function releaseOrKeepHolding() {
+    if (!current() || heldChangedFiles.length === 0) return
+    if (await carOnTrack()) {
+      scheduleHoldCheck()
+      return
+    }
+    await releaseHeld()
+  }
+
+  async function onChangedFilesReady(changedFiles: TelemetryFileDescriptor[]) {
+    if (await carOnTrack()) {
+      if (!current()) return
+      if (heldChangedFiles.length === 0) recordFirebaseJournalEvent({ kind: 'session', reason: 'sync-hold' })
+      heldChangedFiles = mergeHeldFiles(heldChangedFiles, changedFiles)
+      scheduleHoldCheck()
+      return
+    }
+    await releaseHeld(changedFiles)
+  }
+
   rememberUnsubscribe(electronAPI.onFilesChanged?.((data) => {
     const changedFiles = [...(data?.new || []), ...(data?.modified || [])]
     if (!current() || changedFiles.length === 0) return
@@ -188,7 +251,7 @@ export function setupAutoSyncController(params: {
       bufferedChangedFiles = [...bufferedChangedFiles, ...changedFiles].slice(-MAX_BUFFERED_CHANGED_FILES)
       return
     }
-    void runAfterReady('filesChanged', { files: changedFiles })
+    void onChangedFilesReady(changedFiles)
   }))
 
   rememberUnsubscribe(electronAPI.onWindowFocused?.(() => {
@@ -231,8 +294,11 @@ export function setupAutoSyncController(params: {
     if (disposed) return
     disposed = true
     clearRetry()
+    clearHoldTimer()
     rearmRequested = false
     bufferedChangedFiles = []
+    // I file trattenuti restano salvati in locale: la scansione completa del prossimo authReady li carica.
+    heldChangedFiles = []
     window.removeEventListener('online', handleOnline)
     for (const unsubscribe of unsubscribers.splice(0)) unsubscribe()
   }
