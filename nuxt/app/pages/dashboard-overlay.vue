@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, onMounted, onUnmounted } from 'vue'
 import DashboardHud from '~/components/overlay/DashboardHud.vue'
@@ -31,7 +32,7 @@ const options = computed(() => ({
     overlay.settings.value?.fuelCriticalLapsThreshold,
   ),
 }))
-const model = computed(() => buildDashboardPresentation(
+const model = stableComputed(() => buildDashboardPresentation(
   telemetry.fastState.value,
   options.value,
   telemetry.focusedCar.value,

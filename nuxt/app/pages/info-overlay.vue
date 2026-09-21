@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import InfoHud from '~/components/overlay/InfoHud.vue'
@@ -38,7 +39,7 @@ const options = computed(() => ({
   showDamage: overlay.settings.value?.showDamage ?? DEFAULT_INFO_OPTIONS.showDamage,
   showTime: overlay.settings.value?.showTime ?? DEFAULT_INFO_OPTIONS.showTime,
 }))
-const model = computed(() => buildInfoPresentation(telemetry.fastState.value, options.value))
+const model = stableComputed(() => buildInfoPresentation(telemetry.fastState.value, options.value))
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
 const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // PIP-428 — HUD minimappa. La pagina collega soltanto le sorgenti: roster UDP
 // (standings), auto locale e pit prediction (fast_state, shared memory) e
@@ -61,7 +62,7 @@ const track = computed(() => overlay.settings.value?.circleView === true
   : telemetry.fastState.value.context?.track ?? null)
 watch(track, value => { void loadTrackMap(value) })
 
-const view = computed(() => {
+const view = stableComputed(() => {
   const fast = telemetry.fastState.value
   const snapshot = standings.state.value.snapshot as {
     cars?: AccStandingsCar[], freshness?: { ttl_ms?: number }, session?: { focused_car_index?: number | null }

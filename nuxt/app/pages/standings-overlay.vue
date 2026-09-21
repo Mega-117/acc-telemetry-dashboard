@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, onMounted, onUnmounted } from 'vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
@@ -49,7 +50,7 @@ const options = computed(() => ({
   showLapProgressBar: setting('showLapProgressBar') ?? DEFAULT_STANDINGS_OPTIONS.showLapProgressBar,
   standingsLayout: setting('standingsLayout') ?? null,
 }))
-const localDriver = computed(() => {
+const localDriver = stableComputed(() => {
   const state = fastState.fastState.value
   if (!state.localDriver) return null
   return {
@@ -58,7 +59,7 @@ const localDriver = computed(() => {
     isLive: state.isLive,
   }
 })
-const model = computed(() => buildStandingsPresentation(
+const model = stableComputed(() => buildStandingsPresentation(
   standings.state.value,
   options.value,
   standings.nowMs.value,

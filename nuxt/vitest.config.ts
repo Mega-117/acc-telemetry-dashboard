@@ -40,6 +40,8 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/services/overlay/stableTelemetry.ts',
+        'app/services/overlay/sharedTelemetryLease.ts',
         'app/composables/useOverlaySize.ts',
         'app/pages/hud.vue',
         'app/pages/dev-voice-lab.vue',

@@ -1,4 +1,6 @@
-import { computed, ref } from 'vue'
+import { computed, shallowRef } from 'vue'
+import { retainUnchanged } from '~/services/overlay/stableTelemetry'
+import { createTelemetryRegistry } from '~/services/overlay/sharedTelemetryLease'
 import type { TrackReferencePhase } from '~/services/spotter/trackVoiceReferences'
 import { normalizeSectorHud, type SectorHudState } from '~/composables/useLiveStatePoller'
 import {
@@ -539,14 +541,18 @@ function normalizeFastState(state: any): FastOverlayState {
   }
 }
 
-export function useFastStatePoller(getApi: () => any | null) {
-  const fastState = ref<FastOverlayState>({ ...EMPTY_FAST_STATE })
+function createFastStatePoller(getApi: () => any | null) {
+  const fastState = shallowRef<FastOverlayState>({ ...EMPTY_FAST_STATE })
   const isFastStateActive = computed(() => fastState.value.isLive && fastState.value.tyres.length === 4)
   let fastStateInterval: ReturnType<typeof setInterval> | null = null
   let removePushListener: (() => void) | null = null
+  let revision = 0
+  let lastRaw: { ts?: unknown } | null = null
+  let lastPushAt = -Infinity
 
   function applyState(state: any) {
-    fastState.value = normalizeFastState(state)
+    lastRaw = state
+    fastState.value = retainUnchanged(fastState.value, normalizeFastState(state))
   }
 
   function startFastStatePolling(): Promise<void> {
@@ -559,32 +565,50 @@ export function useFastStatePoller(getApi: () => any | null) {
     }
 
     if (typeof api.onFastStateUpdate === 'function') {
-      removePushListener = api.onFastStateUpdate(applyState)
+      removePushListener = api.onFastStateUpdate((state: any) => {
+        revision++
+        lastPushAt = Date.now()
+        applyState(state)
+      })
     }
 
     let errorCount = 0
+    let inFlight = false
 
     async function pollOnce() {
+      if (inFlight) return
+      inFlight = true
+      const requestRevision = revision
       try {
         const state = await api.getFastState()
+        if (requestRevision !== revision) return
         errorCount = 0
         applyState(state)
       } catch (err: any) {
+        if (requestRevision !== revision) return
         errorCount++
         console.warn(`[FastStatePoller] IPC error (attempt ${errorCount}):`, err?.message ?? err)
         if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
           stopFastStatePolling()
           applyState(null)
         }
+      } finally {
+        inFlight = false
       }
     }
 
     const firstPoll = pollOnce()
-    fastStateInterval = setInterval(pollOnce, FAST_STATE_POLL_MS)
+    fastStateInterval = setInterval(() => {
+      // Expiry remains active even with a stalled pull. Healthy pushes need no pull.
+      if (lastRaw && !isFastStateFresh(lastRaw.ts)) applyState(null)
+      if (Date.now() - lastPushAt >= FAST_STATE_POLL_MS) void pollOnce()
+    }, FAST_STATE_POLL_MS)
     return firstPoll
   }
 
   function stopFastStatePolling() {
+    revision++
+    lastPushAt = -Infinity
     if (fastStateInterval) {
       clearInterval(fastStateInterval)
       fastStateInterval = null
@@ -595,6 +619,36 @@ export function useFastStatePoller(getApi: () => any | null) {
     }
   }
 
+  return { fastState, isFastStateActive, startFastStatePolling, stopFastStatePolling }
+}
+
+type FastSource = ReturnType<typeof createFastStatePoller> & { ready: Promise<void> }
+const fastSources = createTelemetryRegistry<FastSource>()
+
+export function useFastStatePoller(getApi: Parameters<typeof createFastStatePoller>[0]) {
+  const attached = shallowRef<FastSource | null>(null)
+  const frozen = shallowRef<FastOverlayState>({ ...EMPTY_FAST_STATE })
+  let release: (() => void) | null = null
+  const fastState = computed(() => attached.value?.fastState.value ?? frozen.value)
+  const isFastStateActive = computed(() => fastState.value.isLive && fastState.value.tyres.length === 4)
+  function stopFastStatePolling() {
+    frozen.value = fastState.value
+    release?.()
+    release = null
+    attached.value = null
+  }
+  function startFastStatePolling(): Promise<void> {
+    stopFastStatePolling()
+    const api = getApi()
+    const key = typeof api?.getFastState === 'function' ? api.getFastState : getApi
+    const lease = fastSources.acquire(key, () => {
+      const source = createFastStatePoller(() => api)
+      return { ...source, ready: source.startFastStatePolling() }
+    }, source => source.stopFastStatePolling())
+    attached.value = lease.source
+    release = lease.release
+    return lease.source.ready
+  }
   return { fastState, isFastStateActive, startFastStatePolling, stopFastStatePolling }
 }
 
