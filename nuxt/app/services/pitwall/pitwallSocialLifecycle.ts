@@ -74,13 +74,6 @@ export function createPitwallSocialLifecycle(options: {
     const roomStops = new Map<string, () => void>()
     const roomSources = new Map<string, string>()
     const rooms = new Map<string, PitwallRoom>()
-    // PIP-439: una directory lasciata da un amico disconnesso da oltre 30 s (o la nostra
-    // dopo un riavvio) viene rifiutata dalle Rules. Ogni sync la ritentava: una scrittura e
-    // un ascolto rifiutati a ogni evento. Si riprova solo quando la voce cambia
-    // (nuova connessione), perche' la chiave include il connectionId.
-    const deniedAdmissions = new Set<string>()
-    const attemptingAdmissions = new Set<string>()
-    const failedRoomSources = new Map<string, string>()
     let stopped = false
     let version = 0
     const emit = () => { if (!stopped) callback([...rooms.values()]) }
@@ -96,8 +89,6 @@ export function createPitwallSocialLifecycle(options: {
       for (const [roomId, sources] of desired) {
         const source = sources.map(({ sponsorUid, entry }) => `${sponsorUid}/${entry.connectionId}`).sort().join('|')
         if (roomStops.has(roomId) && roomSources.get(roomId) === source) continue
-        if (failedRoomSources.get(roomId) === source) continue
-        failedRoomSources.delete(roomId)
         roomStops.get(roomId)?.()
         roomStops.delete(roomId)
         try {
@@ -106,9 +97,6 @@ export function createPitwallSocialLifecycle(options: {
           let admitted = false
           for (const { sponsorUid, entry } of sources) {
             if (sponsorUid === uid) continue
-            const admissionKey = `${roomId}|${sponsorUid}/${entry.connectionId}`
-            if (deniedAdmissions.has(admissionKey) || attemptingAdmissions.has(admissionKey)) continue
-            attemptingAdmissions.add(admissionKey)
             try {
               const witness = { ...entry, sponsorUid }
               await io.write(`admissions/${roomId}`, { [uid]: witness })
@@ -118,9 +106,6 @@ export function createPitwallSocialLifecycle(options: {
               break
             } catch (cause) {
               if (!/permission.?denied/i.test(String(cause))) throw cause
-              deniedAdmissions.add(admissionKey)
-            } finally {
-              attemptingAdmissions.delete(admissionKey)
             }
           }
           if (!admitted && !sources.some(value => value.sponsorUid === uid)) { rooms.delete(roomId); continue }
@@ -136,8 +121,6 @@ export function createPitwallSocialLifecycle(options: {
             emit()
           }, cause => {
             if (roomStops.get(roomId) !== handle) return
-            // Stanza non leggibile con queste sorgenti: non riascoltarla finche' non cambiano.
-            failedRoomSources.set(roomId, source)
             failed = true; roomStops.delete(roomId); rooms.delete(roomId); stop(); emit(); error?.(cause)
           })
           if (failed) stop()
@@ -169,10 +152,7 @@ export function createPitwallSocialLifecycle(options: {
       }
       void sync()
     }, error)
-    return () => {
-      stopped = true; version++; stopFriends(); directoryStops.forEach(stop => stop()); roomStops.forEach(stop => stop()); witnesses.clear()
-      deniedAdmissions.clear(); failedRoomSources.clear()
-    }
+    return () => { stopped = true; version++; stopFriends(); directoryStops.forEach(stop => stop()); roomStops.forEach(stop => stop()); witnesses.clear() }
   }
 
   async function joinRoom(roomId: string) {
