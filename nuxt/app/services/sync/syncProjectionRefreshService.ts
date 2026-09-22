@@ -101,7 +101,9 @@ export async function refreshSyncProjections(params: {
       setDocFn,
       bestRulesVersion,
       previousContributions,
-      strict: true
+      strict: true,
+      // PIP-441: l'indice piste viaggia nello stesso batch, solo per le piste cambiate.
+      indexMode: 'incremental'
     })
   }
 
@@ -146,6 +148,8 @@ export async function refreshSyncProjections(params: {
     // Rebuild from authoritative sessions without deleting cloud documents first.
     await applyTrackBestsProjectionDeltas({
       db, uid, bestRulesVersion, setDocFn, strict: true,
+      // I delta coprono tutto lo storico: l'indice piste viene riscritto completo.
+      indexMode: 'full',
       getDocFn: async () => ({ exists: () => false }),
       deltas: freshSessions.filter(session => session.meta?.track && session.sessionId).map(session => ({
         trackId: session.meta.track, sessionId: session.sessionId,

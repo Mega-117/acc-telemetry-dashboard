@@ -4,41 +4,25 @@ import { normalizeTrackId } from '~/services/projections/trackMetadata'
 import { RACE_FUEL_BUCKETS, getRaceFuelBucket, type RaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import type { SessionContribution } from '~/types/trackProjections'
+// PIP-441: la forma di `bests` vive in un modulo condiviso con l'indice piste.
+import {
+  emptyGripBests,
+  normalizeBucketRecord,
+  normalizeGripBest,
+  type FuelBucketRecord,
+  type GripBest
+} from '~/services/projections/trackBestsShape'
+import {
+  TRACK_BESTS_INDEX_MAX_BYTES,
+  buildDisabledTrackBestsIndexDocument,
+  buildTrackBestsIndexDocument,
+  buildTrackBestsIndexIncrementalWrite,
+  exceedsTrackBestsIndexSizeGuard,
+  trackBestsIndexPath,
+  type TrackBestsIndexMode
+} from './trackBestsIndexProjectionService'
 
 export const TRACK_BESTS_SCHEMA_VERSION = 4
-
-type FuelBucketRecord = {
-  timeMs: number
-  fuel: number | null
-  airTemp: number | null
-  roadTemp: number | null
-  grip: string | null
-  sessionId: string | null
-  date: string | null
-  sampleLapCount: number | null
-  confidence: string | null
-  source: string | null
-}
-
-type GripBest = {
-  bestQualy: number | null
-  bestQualyTemp: number | null
-  bestQualyFuel: number | null
-  bestQualySessionId: string | null
-  bestQualyDate: string | null
-  bestRace: number | null
-  bestRaceTemp: number | null
-  bestRaceFuel: number | null
-  bestRaceSessionId: string | null
-  bestRaceDate: string | null
-  bestAvgRace: number | null
-  bestAvgRaceTemp: number | null
-  bestAvgRaceFuel: number | null
-  bestAvgRaceSessionId: string | null
-  bestAvgRaceDate: string | null
-  raceBestByFuelBucket: Record<RaceFuelBucket, FuelBucketRecord | Record<string, never>>
-  raceAvgByFuelBucket: Record<RaceFuelBucket, FuelBucketRecord | Record<string, never>>
-}
 
 export interface TrackBestProjectionDelta {
   trackId: string
@@ -48,72 +32,6 @@ export interface TrackBestProjectionDelta {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   summary: any
   car?: string
-}
-
-function emptyGripBests(): GripBest {
-  return {
-    bestQualy: null, bestQualyTemp: null, bestQualyFuel: null, bestQualySessionId: null, bestQualyDate: null,
-    bestRace: null, bestRaceTemp: null, bestRaceFuel: null, bestRaceSessionId: null, bestRaceDate: null,
-    bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceFuel: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null,
-    raceBestByFuelBucket: emptyBucketMap(),
-    raceAvgByFuelBucket: emptyBucketMap()
-  }
-}
-
-function emptyBucketMap(): Record<RaceFuelBucket, Record<string, never>> {
-  return Object.fromEntries(RACE_FUEL_BUCKETS.map((bucket) => [bucket, {}])) as Record<RaceFuelBucket, Record<string, never>>
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-function normalizeBucketRecord(value: any, delta?: TrackBestProjectionDelta): FuelBucketRecord | Record<string, never> {
-  const timeMs = Number(value?.timeMs || 0)
-  if (!timeMs || !Number.isFinite(timeMs)) return {}
-  return {
-    timeMs,
-    fuel: value?.fuel ?? null,
-    airTemp: value?.airTemp ?? null,
-    roadTemp: value?.roadTemp ?? null,
-    grip: value?.grip ?? null,
-    sessionId: value?.sessionId || delta?.sessionId || null,
-    date: value?.date || delta?.dateStart || null,
-    sampleLapCount: value?.sampleLapCount ?? null,
-    confidence: value?.confidence || 'high',
-    source: value?.source || null
-  }
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-function normalizeBucketMap(value: any): Record<RaceFuelBucket, FuelBucketRecord | Record<string, never>> {
-  const normalized = emptyBucketMap() as Record<RaceFuelBucket, FuelBucketRecord | Record<string, never>>
-  for (const bucket of RACE_FUEL_BUCKETS) {
-    normalized[bucket] = normalizeBucketRecord(value?.[bucket])
-  }
-  return normalized
-}
-
-function normalizeGripBest(value: Partial<GripBest> | null | undefined): GripBest {
-  const source = value || {}
-  return {
-    bestQualy: source.bestQualy ?? null,
-    bestQualyTemp: source.bestQualyTemp ?? null,
-    bestQualyFuel: source.bestQualyFuel ?? null,
-    bestQualySessionId: source.bestQualySessionId ?? null,
-    bestQualyDate: source.bestQualyDate ?? null,
-    bestRace: source.bestRace ?? null,
-    bestRaceTemp: source.bestRaceTemp ?? null,
-    bestRaceFuel: source.bestRaceFuel ?? null,
-    bestRaceSessionId: source.bestRaceSessionId ?? null,
-    bestRaceDate: source.bestRaceDate ?? null,
-    bestAvgRace: source.bestAvgRace ?? null,
-    bestAvgRaceTemp: source.bestAvgRaceTemp ?? null,
-    bestAvgRaceFuel: source.bestAvgRaceFuel ?? null,
-    bestAvgRaceSessionId: source.bestAvgRaceSessionId ?? null,
-    bestAvgRaceDate: source.bestAvgRaceDate ?? null,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-    raceBestByFuelBucket: normalizeBucketMap((source as any).raceBestByFuelBucket),
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-    raceAvgByFuelBucket: normalizeBucketMap((source as any).raceAvgByFuelBucket)
-  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
@@ -408,7 +326,16 @@ export async function applyTrackBestsProjectionDeltas(params: {
   previousContributions?: Map<string, SessionContribution>
   /** Sync reconciliation must not publish a partially built plan. */
   strict?: boolean
-}): Promise<{ touchedTracks: string[]; updatedTracks: string[] }> {
+  /**
+   * PIP-441: come aggiornare `trackBestsIndex/v1` insieme ai documenti per pista.
+   * `incremental` = merge delle sole piste cambiate (sync, zero letture);
+   * `full` = i delta coprono TUTTE le piste (rebuild), l'indice viene riscritto completo;
+   * `none` (default) = solo documenti per pista, per i chiamanti legacy.
+   */
+  indexMode?: TrackBestsIndexMode
+  /** Timestamp ISO dell'indice, iniettabile per test deterministici. */
+  indexUpdatedAt?: string
+}): Promise<{ touchedTracks: string[]; updatedTracks: string[]; indexWritten: boolean }> {
   const {
     db,
     uid,
@@ -417,7 +344,9 @@ export async function applyTrackBestsProjectionDeltas(params: {
     setDocFn,
     bestRulesVersion,
     docFn = defaultDocFn,
-    previousContributions
+    previousContributions,
+    indexMode = 'none',
+    indexUpdatedAt
   } = params
 
   const grouped = new Map<string, TrackBestProjectionDelta[]>()
@@ -431,6 +360,8 @@ export async function applyTrackBestsProjectionDeltas(params: {
 
   const touchedTracks = Array.from(grouped.keys())
   const updatedTracks: string[] = []
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- documenti per pista destinati all'indice
+  const indexTrackDocs: Record<string, any> = {}
 
   for (const trackIdNorm of touchedTracks) {
     const trackBestsRef = docFn(db, `users/${uid}/trackBests/${trackIdNorm}`)
@@ -446,9 +377,12 @@ export async function applyTrackBestsProjectionDeltas(params: {
         previousContributions
       })
 
+      // Nel rebuild completo l'indice deve contenere anche le piste rimaste invariate.
+      if (indexMode === 'full') indexTrackDocs[trackIdNorm] = merged.data
       if (!merged.shouldWrite) continue
       await setDocFn(trackBestsRef, merged.data)
       updatedTracks.push(trackIdNorm)
+      if (indexMode === 'incremental') indexTrackDocs[trackIdNorm] = merged.data
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     } catch (e: any) {
       console.warn(`[SYNC] Error updating trackBests for ${trackIdNorm}:`, e.message)
@@ -456,9 +390,62 @@ export async function applyTrackBestsProjectionDeltas(params: {
     }
   }
 
+  const indexWritten = await writeTrackBestsIndex({
+    db, uid, indexMode, indexTrackDocs, updatedAt: indexUpdatedAt, setDocFn, docFn, strict: params.strict
+  })
+
   return {
     touchedTracks,
-    updatedTracks
+    updatedTracks,
+    indexWritten
+  }
+}
+
+async function writeTrackBestsIndex(params: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+  db: any
+  uid: string
+  indexMode: TrackBestsIndexMode
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- documenti per pista
+  indexTrackDocs: Record<string, any>
+  updatedAt?: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+  setDocFn: (ref: any, data: any, options?: any) => Promise<any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+  docFn: (db: any, path: string) => any
+  strict?: boolean
+}): Promise<boolean> {
+  const { db, uid, indexMode, indexTrackDocs, updatedAt, setDocFn, docFn } = params
+  if (indexMode === 'none') return false
+  const indexRef = docFn(db, trackBestsIndexPath(uid))
+
+  try {
+    if (indexMode === 'full') {
+      const indexDoc = buildTrackBestsIndexDocument(indexTrackDocs, updatedAt)
+      if (exceedsTrackBestsIndexSizeGuard(indexDoc)) {
+        // Oltre la soglia l'indice viene disabilitato in modo esplicito: i lettori
+        // tornano alla collection e la manutenzione non lo tratta come guasto.
+        console.warn(`[SYNC] trackBestsIndex for ${uid} exceeds ${TRACK_BESTS_INDEX_MAX_BYTES} bytes, writing disabled index`)
+        await setDocFn(indexRef, buildDisabledTrackBestsIndexDocument(updatedAt))
+        return true
+      }
+      await setDocFn(indexRef, indexDoc)
+      return true
+    }
+
+    const incremental = buildTrackBestsIndexIncrementalWrite(indexTrackDocs, updatedAt)
+    if (!incremental) return false
+    if (exceedsTrackBestsIndexSizeGuard(incremental.data)) {
+      console.warn(`[SYNC] trackBestsIndex delta for ${uid} exceeds ${TRACK_BESTS_INDEX_MAX_BYTES} bytes, skipping index write`)
+      return false
+    }
+    await setDocFn(indexRef, incremental.data, incremental.options)
+    return true
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+  } catch (e: any) {
+    console.warn(`[SYNC] Error updating trackBestsIndex for ${uid}:`, e.message)
+    if (params.strict) throw e
+    return false
   }
 }
 

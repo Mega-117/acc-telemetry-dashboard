@@ -21,8 +21,21 @@ const getDocFn = async (path: string) => {
   const data = store.get(path)
   return { exists: () => data !== undefined, data: () => data }
 }
-const setDocFn = async (path: string, data: any, options?: { merge?: boolean }) => {
+const setDocFn = async (path: string, data: any, options?: { merge?: boolean; mergeFields?: string[] }) => {
   writes.push(path)
+  if (options?.mergeFields) {
+    // Come Firestore: solo i percorsi indicati vengono sostituiti, il resto del documento resta.
+    const merged = structuredClone(store.get(path) || {})
+    for (const fieldPath of options.mergeFields) {
+      const keys = fieldPath.split('.')
+      let source = data
+      let target = merged
+      for (const key of keys.slice(0, -1)) { source = source?.[key]; target[key] = target[key] || {}; target = target[key] }
+      target[keys.at(-1)!] = source?.[keys.at(-1)!]
+    }
+    store.set(path, merged)
+    return
+  }
   store.set(path, options?.merge ? { ...(store.get(path) || {}), ...data } : data)
 }
 
@@ -50,13 +63,29 @@ describe('PIP-436 integrated projection recovery', () => {
     await expect(refreshSyncProjections({ ...updated, commitWrites: async () => { throw new Error('batch-offline') } })).rejects.toThrow('batch-offline')
     expect(JSON.stringify([...store])).toBe(before)
     writes.length = 0
+    reads.length = 0
     await refreshSyncProjections(updated)
     expect(updated.loadFullHistory).not.toHaveBeenCalled()
     expect(new Set(writes).size).toBe(writes.length)
     expect(store.get('users/u/trackBests/monza').activity.totalLaps).toBe(8)
     expect(store.get('users/u/trackDetailProjections/monza').categories.GT3.activity.totalLaps).toBe(8)
+    // PIP-441: +1 documento (indice piste, merge della sola pista cambiata) e 0 letture dell'indice.
+    expect(writes.filter((path) => path === 'users/u/trackBestsIndex/v1')).toHaveLength(1)
+    expect(reads).not.toContain('users/u/trackBestsIndex/v1')
+    expect(store.get('users/u/trackBestsIndex/v1').tracks.monza.activity.totalLaps).toBe(8)
+    expect(store.get('users/u/trackBestsIndex/v1').complete).toBe(true)
     await refreshSyncProjections({ ...input(9), userProjectionDeltas: [delta('updated', 9)], trackBestDeltas: [delta('updated', 9)] })
     expect(store.get('users/u/trackBests/monza').activity.totalLaps).toBe(9)
+    expect(store.get('users/u/trackBestsIndex/v1').tracks.monza.activity.totalLaps).toBe(9)
+  })
+
+  it('il primo caricamento (rebuild da storico) scrive l\'indice piste completo nello stesso piano', async () => {
+    await refreshSyncProjections(input(3))
+    const index = store.get('users/u/trackBestsIndex/v1')
+    expect(index).toMatchObject({ version: 1, complete: true })
+    expect(Object.keys(index.tracks)).toEqual(['monza'])
+    expect(index.tracks.monza).not.toHaveProperty('syncedSessionIds')
+    expect(writes.filter((path) => path === 'users/u/trackBestsIndex/v1')).toHaveLength(1)
   })
 
   it('missing prior contribution rebuilds every aggregate without publishing the unsafe delta', async () => {

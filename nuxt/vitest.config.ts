@@ -137,6 +137,11 @@ export default defineConfig({
         'app/services/sync/autoSyncController.ts',
         'app/services/sync/ownerDataMaintenanceService.ts',
         'app/services/sync/ownerDataRepairService.ts',
+        // PIP-441: indici di avvio (piste e calendario) e i repository che li leggono.
+        'app/services/sync/trackBestsIndexProjectionService.ts',
+        'app/services/projections/raceCalendarIndexProjectionService.ts',
+        'app/repositories/telemetryProjectionRepository.ts',
+        'app/repositories/raceCalendarRepository.ts',
         'app/services/sync/ownerOperationTracker.ts',
         'app/services/sync/sessionUploadService.ts',
         'app/services/sync/canonicalSummaryBridge.ts',

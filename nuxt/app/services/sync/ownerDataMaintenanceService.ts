@@ -147,7 +147,8 @@ function summarizeAudit(audit: OwnerDataAuditReport | null | undefined) {
       missingTrackBests: audit.projections.missingTrackBests.length,
       oldTrackBests: audit.projections.oldTrackBests.length,
       missingTrackDetailProjections: audit.projections.missingTrackDetailProjections.length,
-      oldTrackDetailProjections: audit.projections.oldTrackDetailProjections.length
+      oldTrackDetailProjections: audit.projections.oldTrackDetailProjections.length,
+      trackBestsIndexStale: audit.projections.trackBestsIndexStale === true
     },
     permissions: audit.permissions,
     issueCodes: audit.issues.map((item) => item.code)
@@ -172,6 +173,8 @@ function needsProjectionRebuild(audit: OwnerDataAuditReport): boolean {
     || audit.projections.oldTrackBests.length > 0
     || audit.projections.missingTrackDetailProjections.length > 0
     || audit.projections.oldTrackDetailProjections.length > 0
+    // PIP-441: la migrazione dell'indice piste passa dalla manutenzione 24h.
+    || audit.projections.trackBestsIndexStale === true
 }
 
 function needsMaintenance(audit: OwnerDataAuditReport): boolean {

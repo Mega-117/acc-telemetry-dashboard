@@ -24,10 +24,29 @@ const trackBestsProjection = read('nuxt/app/services/sync/trackBestsProjectionSe
 for (const required of [
   'match /pilotDirectory/{userId}',
   'match /trackDetailProjections/{trackId}',
-  'match /activities/{activityId}'
+  'match /activities/{activityId}',
+  // PIP-441: indici di avvio, additivi e validati per versione.
+  'match /trackBestsIndex/{docId}',
+  'match /raceCalendarIndex/{docId}',
+  'function validTrackBestsIndex()',
+  'function validRaceCalendarIndex()'
 ]) {
   assert.ok(rules.includes(required), `Missing Firestore rules block: ${required}`)
 }
+
+// PIP-441: ogni rebuild completo dei trackBests riscrive anche l'indice piste.
+assert.ok(
+  service.includes("indexMode: 'full'"),
+  'owner rebuild must rewrite the complete trackBestsIndex together with trackBests'
+)
+assert.ok(
+  projectionRebuild.includes("indexMode: 'full'"),
+  'trackBests projection rebuild must rewrite the complete trackBestsIndex'
+)
+assert.ok(
+  service.includes('isTrackBestsIndexConsistent'),
+  'owner audit and lightweight verification must detect a stale trackBestsIndex'
+)
 
 for (const required of [
   'auditOwnerData',

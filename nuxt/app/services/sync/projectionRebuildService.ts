@@ -38,7 +38,9 @@ export async function rebuildTrackBestsProjection(params: {
     deltas,
     getDocFn,
     setDocFn,
-    bestRulesVersion
+    bestRulesVersion,
+    // PIP-441: dopo il reset ogni pista viene riscritta, quindi l'indice e' completo.
+    indexMode: 'full'
   })
 }
 

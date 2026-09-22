@@ -383,4 +383,71 @@ assert.equal(userWrites[1].ref.path, 'pilotDirectory/user-1')
 assert.equal(userWrites[0].data.sessionIndex.totalSessions, 12)
 assert.equal(userWrites[0].data.sessionIndex.sessionsList.length, 11)
 
+// PIP-441: la sync incrementale aggiunge al massimo UN documento (l'indice piste, merge
+// delle sole piste cambiate) e nessuna lettura; il rebuild riscrive l'indice completo.
+assert.ok(
+  projectionRefreshSource.includes("indexMode: 'incremental'"),
+  'incremental projection refresh must merge changed tracks into trackBestsIndex'
+)
+assert.ok(
+  projectionRefreshSource.includes("indexMode: 'full'"),
+  'full-history fallback must rewrite the complete trackBestsIndex'
+)
+
+getCalls = 0
+setCalls = 0
+writes.length = 0
+const incremental = await applyTrackBestsProjectionDeltas({
+  db: {},
+  uid: 'user-1',
+  deltas: [makeDelta(1, 'monza'), makeDelta(2, 'spa')],
+  getDocFn: async () => {
+    getCalls++
+    return { exists: () => false, data: () => null }
+  },
+  setDocFn: async (ref, data, options) => {
+    setCalls++
+    writes.push({ ref, data, options })
+  },
+  bestRulesVersion: 2,
+  docFn: (_db, docPath) => ({ path: docPath }),
+  indexMode: 'incremental',
+  indexUpdatedAt: '2026-09-22T10:00:00.000Z'
+})
+assert.equal(incremental.indexWritten, true)
+assert.equal(getCalls, 2, 'incremental index write must not read the index document')
+assert.equal(setCalls, 3, 'incremental sync writes the changed tracks plus exactly one index document')
+const indexWrite = writes.find((write) => write.ref.path === 'users/user-1/trackBestsIndex/v1')
+assert.ok(indexWrite, 'index write must target users/{uid}/trackBestsIndex/v1')
+assert.deepEqual(indexWrite.options, { mergeFields: ['version', 'updatedAt', 'tracks.monza', 'tracks.spa'] }, 'changed entries must be replaced whole, never deep-merged')
+assert.deepEqual(Object.keys(indexWrite.data.tracks).sort(), ['monza', 'spa'])
+assert.equal(indexWrite.data.complete, undefined, 'incremental merge must not claim completeness')
+assert.equal(indexWrite.data.tracks.monza.syncedSessionIds, undefined, 'index entries must not carry the session ledger')
+assert.equal(indexWrite.data.tracks.monza.bests.GT3.Optimum.bestRace, 99999)
+
+getCalls = 0
+setCalls = 0
+writes.length = 0
+await applyTrackBestsProjectionDeltas({
+  db: {},
+  uid: 'user-1',
+  deltas: [makeDelta(1, 'monza')],
+  getDocFn: async () => {
+    getCalls++
+    return { exists: () => false, data: () => null }
+  },
+  setDocFn: async (ref, data, options) => {
+    setCalls++
+    writes.push({ ref, data, options })
+  },
+  bestRulesVersion: 2,
+  docFn: (_db, docPath) => ({ path: docPath }),
+  indexMode: 'full'
+})
+assert.equal(setCalls, 2)
+const fullIndexWrite = writes.find((write) => write.ref.path === 'users/user-1/trackBestsIndex/v1')
+assert.equal(fullIndexWrite.options, undefined, 'full rebuild must replace the index document')
+assert.equal(fullIndexWrite.data.complete, true)
+assert.deepEqual(Object.keys(fullIndexWrite.data.tracks), ['monza'])
+
 console.log('[SYNC_TRACKBESTS_AGGREGATE] OK')

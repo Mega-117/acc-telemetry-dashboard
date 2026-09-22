@@ -21,6 +21,7 @@ import {
   type TrackBestProjectionDelta
 } from './trackBestsProjectionService'
 import { TRACK_DETAIL_PROJECTION_SCHEMA_VERSION } from '~/types/trackProjections'
+import { isTrackBestsIndexConsistent, trackBestsIndexPath } from './trackBestsIndexProjectionService'
 import { writeUserProjectionDocuments } from './projectionRebuildService'
 import { writePilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
 import { PILOT_DIRECTORY_SCHEMA_VERSION } from '~/utils/pilotDirectoryFields'
@@ -69,6 +70,8 @@ export interface OwnerDataAuditReport {
     oldTrackBests: string[]
     missingTrackDetailProjections: string[]
     oldTrackDetailProjections: string[]
+    /** PIP-441: `trackBestsIndex/v1` assente, vecchio o non coerente con la collection. */
+    trackBestsIndexStale?: boolean
   }
   permissions: {
     user: 'ok' | 'denied'
@@ -129,6 +132,8 @@ export interface OwnerLightweightVerificationReport {
     pilotDirectoryValid: boolean
     oldTrackBests: string[]
     oldTrackDetailProjections: string[]
+    /** PIP-441: indice piste coerente con la collection (o disabilitato di proposito). */
+    trackBestsIndexValid?: boolean
   }
   issues: string[]
 }
@@ -315,6 +320,11 @@ function getTrackIdsFromSessions(sessions: SessionDocument[]): string[] {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+function toDocList(docs: any[]): Array<{ id: string; data: any }> {
+  return docs.map((docSnap) => ({ id: normalizeTrackId(docSnap.id), data: docSnap.data() || {} }))
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function toDocMap(docs: any[]): Map<string, any> {
   const result = new Map<string, any>()
   for (const docSnap of docs) {
@@ -404,8 +414,12 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
     let sessionListPageDocs: any[] = []
     let sessionListSchemaVersion = 0
     let sessionListTotalSessions = 0
+    let trackBestsIndexStale = false
     try {
       trackBestDocs = await loadCollectionDocs(`users/${uid}/trackBests`)
+      // PIP-441: l'indice piste deve rispecchiare la collection; se no il rebuild lo riscrive.
+      const indexSnap = await getDocTracked(doc(db, trackBestsIndexPath(uid)))
+      trackBestsIndexStale = !isTrackBestsIndexConsistent(indexSnap.exists() ? indexSnap.data() : null, toDocList(trackBestDocs))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     } catch (error: any) {
       permissions.trackBests = 'denied'
@@ -451,6 +465,9 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
     }
     for (const trackId of oldTrackBests.slice(0, MAX_ISSUES)) {
       issues.push(issue('warning', 'old_track_bests', 'Pista con trackBests schema/regole legacy.', { trackId }))
+    }
+    if (trackBestsIndexStale && permissions.trackBests === 'ok') {
+      issues.push(issue('warning', 'track_bests_index_stale', 'Indice piste (trackBestsIndex) mancante o non coerente con trackBests.'))
     }
     if (sessionListSchemaVersion !== SESSION_LIST_PROJECTION_SCHEMA_VERSION) {
       issues.push(issue('warning', 'session_list_schema_mismatch', 'Session list projection mancante o con schema vecchio.'))
@@ -514,7 +531,8 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
         missingTrackBests,
         oldTrackBests,
         missingTrackDetailProjections,
-        oldTrackDetailProjections
+        oldTrackDetailProjections,
+        trackBestsIndexStale
       },
       permissions,
       issues: issues.slice(0, MAX_ISSUES),
@@ -529,6 +547,12 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
     const userSnap = await getDocTracked(doc(db, `users/${uid}`))
     const userData = userSnap.exists() ? (userSnap.data() || {}) : {}
     const trackBestDocs = await loadCollectionDocs(`users/${uid}/trackBests`)
+    // PIP-441: un indice piste non coerente fa scattare il rebuild delle proiezioni.
+    const trackBestsIndexSnap = await getDocTracked(doc(db, trackBestsIndexPath(uid)))
+    const trackBestsIndexValid = isTrackBestsIndexConsistent(
+      trackBestsIndexSnap.exists() ? trackBestsIndexSnap.data() : null,
+      toDocList(trackBestDocs)
+    )
     const trackDetailDocs = await loadCollectionDocs(`users/${uid}/trackDetailProjections`)
     const pilotDirectorySnap = await getDocTracked(doc(db, `pilotDirectory/${uid}`))
     const pilotDirectory = pilotDirectorySnap.exists() ? (pilotDirectorySnap.data() || {}) : {}
@@ -566,6 +590,7 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
     if (!pilotDirectoryValid) issues.push('pilot_directory_missing_or_invalid')
     if (oldTrackBests.length > 0) issues.push('old_track_bests_schema_or_rules')
     if (oldTrackDetailProjections.length > 0) issues.push('old_track_detail_projection_schema')
+    if (!trackBestsIndexValid) issues.push('track_bests_index_missing_or_stale')
 
     return {
       generatedAt: new Date().toISOString(),
@@ -585,7 +610,8 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
         sessionListPageDocs: sessionListPageDocs.length,
         pilotDirectoryValid,
         oldTrackBests,
-        oldTrackDetailProjections
+        oldTrackDetailProjections,
+        trackBestsIndexValid
       },
       issues
     }
@@ -658,7 +684,9 @@ export async function rebuildOwnerProjections(
       deltas,
       getDocFn: guardedGetDoc,
       setDocFn: guardedSetDoc,
-      bestRulesVersion: BEST_RULES_VERSION
+      bestRulesVersion: BEST_RULES_VERSION,
+      // PIP-441: la collection e' stata azzerata, l'indice piste viene riscritto completo.
+      indexMode: 'full'
     })
     assertActive()
 

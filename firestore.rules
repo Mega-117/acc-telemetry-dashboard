@@ -32,6 +32,34 @@ service cloud.firestore {
       return value == null || (value is string && value.size() <= maxSize);
     }
 
+    // === Indici di avvio (PIP-441) ===
+    // `trackBestsIndex/v1` riassume tutti i `trackBests/*` dell'owner in un documento;
+    // `raceCalendarIndex/v1` conserva fino a 25 eventi del calendario. Schema additivo:
+    // solo la versione corrente, campi noti, mai altri utenti.
+    function validTrackBestsIndex() {
+      return request.resource.data.keys().hasAll(['version', 'updatedAt', 'tracks'])
+             && request.resource.data.keys().hasOnly([
+               'version', 'bestRulesVersion', 'updatedAt', 'complete', 'tracks'
+             ])
+             && request.resource.data.version == 1
+             && request.resource.data.updatedAt is string
+             && request.resource.data.updatedAt.size() <= 40
+             && request.resource.data.tracks is map
+             && request.resource.data.get('complete', false) is bool
+             && request.resource.data.get('bestRulesVersion', 0) is int;
+    }
+
+    function validRaceCalendarIndex() {
+      return request.resource.data.keys().hasAll(['version', 'updatedAt', 'events', 'truncated'])
+             && request.resource.data.keys().hasOnly(['version', 'updatedAt', 'events', 'truncated'])
+             && request.resource.data.version == 1
+             && request.resource.data.updatedAt is string
+             && request.resource.data.updatedAt.size() <= 40
+             && request.resource.data.events is list
+             && request.resource.data.events.size() <= 25
+             && request.resource.data.truncated is bool;
+    }
+
     // === Pit Wall (PIP-359) ===
     // Il collegamento fra pilota e ingegnere e' un permesso fra due account,
     // non una stanza con password. L'id del grant e' derivato dai due uid,
@@ -883,6 +911,17 @@ service cloud.firestore {
         allow read: if isCoachOfUser(userId);
       }
 
+      // PIP-441: indice piste, scritto solo dall'owner (sync, rebuild, manutenzione).
+      match /trackBestsIndex/{docId} {
+        allow read: if isAdmin();
+        allow read: if isOwner(userId);
+        allow read: if isCoachOfUser(userId);
+        allow create, update: if isOwner(userId)
+                              && docId == 'v1'
+                              && validTrackBestsIndex();
+        allow delete: if isOwner(userId);
+      }
+
       match /trackDetailProjections/{trackId} {
         allow read: if isAdmin();
         allow read, write: if isOwner(userId);
@@ -928,6 +967,18 @@ service cloud.firestore {
                       && isCurrentUserCoach()
                       && request.resource.data.createdBy == request.auth.uid
                       && request.resource.data.createdByRole == 'coach';
+      }
+
+      // PIP-441: sommario calendario, riscritto nello stesso batch di ogni modifica.
+      // Il coach assegnato puo' aggiornarlo perche' puo' gia' creare eventi.
+      match /raceCalendarIndex/{docId} {
+        allow read: if isAdmin();
+        allow read: if isOwner(userId);
+        allow read: if isCoachOfUser(userId);
+        allow create, update: if (isOwner(userId) || (isCoachOfUser(userId) && isCurrentUserCoach()))
+                              && docId == 'v1'
+                              && validRaceCalendarIndex();
+        allow delete: if isOwner(userId);
       }
 
       match /coachLessons/{lessonId} {

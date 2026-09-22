@@ -13,7 +13,11 @@ import { clearTelemetryProjectionRepositoryCache, loadTrackBestsMap, loadUserPro
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-09-21T10:00:00Z'))
-  fake.getDoc.mockReset().mockResolvedValue({ exists: () => true, data: () => ({ stats: {}, sessionIndex: {} }) })
+  // PIP-441: `loadTrackBestsMap` legge prima l'indice piste (`trackBestsIndex/v1`); qui
+  // l'indice manca, quindi il repository torna alla collection come prima.
+  fake.getDoc.mockReset().mockImplementation(async (path: string) => path.includes('/trackBestsIndex/')
+    ? { exists: () => false, data: () => null }
+    : { exists: () => true, data: () => ({ stats: {}, sessionIndex: {} }) })
   fake.getDocs.mockReset().mockResolvedValue({ docs: [] })
   clearTelemetryProjectionRepositoryCache()
 })
@@ -41,7 +45,8 @@ describe('cache di navigazione', () => {
     vi.advanceTimersByTime(10 * 60_000)
     await loadUserProjection('u')
     await loadTrackBestsMap('u')
-    expect(fake.getDoc).toHaveBeenCalledTimes(1)
+    // users/* + tentativo indice piste (assente), poi la collection: tutto una volta sola.
+    expect(fake.getDoc).toHaveBeenCalledTimes(2)
     expect(fake.getDocs).toHaveBeenCalledTimes(1)
   })
 
