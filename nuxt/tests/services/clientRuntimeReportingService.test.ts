@@ -41,7 +41,7 @@ function payload(installationId: string): ClientHeartbeatPayload {
 }
 
 describe('clientRuntimeReportingService', () => {
-  it('scrive una fonte per-installazione e due adapter con budget 3 write/0 read', async () => {
+  it('heartbeat periodico: una sola write installazione, zero read', async () => {
     const paths: string[] = []
     const set = vi.fn()
     const commit = vi.fn(async () => undefined)
@@ -59,9 +59,10 @@ describe('clientRuntimeReportingService', () => {
 
     expect(result).toEqual({
       writes: CLIENT_RUNTIME_REPORT_WRITE_BUDGET,
-      reads: CLIENT_RUNTIME_REPORT_READ_BUDGET
+      reads: CLIENT_RUNTIME_REPORT_READ_BUDGET,
+      metadataChanged: false
     })
-    expect(set).toHaveBeenCalledTimes(3)
+    expect(set).toHaveBeenCalledTimes(1)
     expect(commit).toHaveBeenCalledTimes(1)
     expect(set.mock.calls[0]?.[1]).toMatchObject({
       startedAt: '2026-07-30T18:00:00.000Z',
@@ -70,9 +71,7 @@ describe('clientRuntimeReportingService', () => {
       lastContactAt: '2026-07-30T19:00:00.000Z'
     })
     expect(paths).toEqual([
-      'users/pilot-1/runtimeInstallations/install-a',
-      'users/pilot-1',
-      'pilotDirectory/pilot-1'
+      'users/pilot-1/runtimeInstallations/install-a'
     ])
   })
 
@@ -102,7 +101,7 @@ describe('clientRuntimeReportingService', () => {
     expect(documents.has('users/pilot-1/runtimeInstallations/install-b')).toBe(true)
   })
 
-  it('mantiene atomiche e coerenti le tre proiezioni', async () => {
+  it('aggiorna gli adapter solo al cambio metadati e propaga un commit fallito', async () => {
     const set = vi.fn()
     const commit = vi.fn(async () => { throw new Error('batch denied') })
 
@@ -110,6 +109,7 @@ describe('clientRuntimeReportingService', () => {
       db: {},
       uid: 'pilot-1',
       payload: payload('install-a'),
+      previousUser: { suiteVersion: '0.3.0' },
       docFn: (_db, path) => path,
       writeBatchFn: () => ({ set, commit })
     })).rejects.toThrow('batch denied')
@@ -122,5 +122,18 @@ describe('clientRuntimeReportingService', () => {
     expect(installation.lastContactAt).toBe(user.clientRuntime.lastHeartbeatAt)
     expect(directory.clientLastHeartbeatAt).toBe(user.clientRuntime.lastHeartbeatAt)
     expect(directory.suiteVersion).toBe(user.suiteVersion)
+  })
+
+  it('metadati pubblici invariati non riscrivono users o directory', async () => {
+    const report = payload('install-a')
+    const set = vi.fn()
+    const result = await writeClientRuntimeReport({
+      db: {}, uid: 'pilot-1', payload: report,
+      previousUser: { suiteVersion: report.suiteVersion, clientRuntime: report.clientRuntime },
+      docFn: (_db, path) => path,
+      writeBatchFn: () => ({ set, commit: async () => undefined })
+    })
+    expect(result).toEqual({ writes: 1, reads: 0, metadataChanged: false })
+    expect(set).toHaveBeenCalledTimes(1)
   })
 })

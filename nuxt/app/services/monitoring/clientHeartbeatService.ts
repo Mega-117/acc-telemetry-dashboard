@@ -1,8 +1,8 @@
 import type { RuntimeBootstrapResult } from '~/services/runtime/runtimeBootstrapCoordinator'
 
 export const CLIENT_HEARTBEAT_SCHEMA_VERSION = 2
-export const CLIENT_HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000
-export const CLIENT_HEARTBEAT_RECENT_MS = 60 * 60 * 1000
+export const CLIENT_HEARTBEAT_INTERVAL_MS = 60 * 60 * 1000
+export const CLIENT_HEARTBEAT_RECENT_MS = 2 * 60 * 60 * 1000
 
 const MAX_VERSION_LENGTH = 80
 const MAX_REASON_CODE_LENGTH = 80

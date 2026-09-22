@@ -11,7 +11,7 @@ import {
   type SuiteVersionInfo
 } from '~/services/monitoring/clientHeartbeatService'
 import { writeClientRuntimeReport } from '~/services/monitoring/clientRuntimeReportingService'
-import { rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
+import { peekOwnerDocument, rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
 import type { RuntimeBootstrapResult } from '~/services/runtime/runtimeBootstrapCoordinator'
 import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTracker'
 
@@ -111,10 +111,11 @@ export function useClientHeartbeat(options: {
       }) : null
       if (!payload) return false
 
-      await writeClientRuntimeReport({
+      const report = await writeClientRuntimeReport({
         db,
         uid,
         payload,
+        previousUser: peekOwnerDocument(uid)?.data,
         writeBatchFn: (firestore) => trackedWriteBatch(
           firestore as Parameters<typeof trackedWriteBatch>[0],
           CALLER
@@ -128,7 +129,7 @@ export function useClientHeartbeat(options: {
       if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
       // PIP-442: stessi campi scritti su `users/{uid}`; la copia condivisa resta allineata
       // senza rileggere (la revisione delle proiezioni non cambia).
-      rememberOwnerDocumentPatch(uid, {
+      if (report.metadataChanged) rememberOwnerDocumentPatch(uid, {
         suiteVersion: payload.suiteVersion,
         suiteVersionDetail: payload.suiteVersionDetail,
         suiteVersionUpdatedAt: payload.suiteVersionUpdatedAt,

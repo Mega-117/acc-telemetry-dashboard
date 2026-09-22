@@ -6,7 +6,6 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { endFirebaseScenario, startFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { getClientHeartbeatStatus } from '~/services/monitoring/clientHeartbeatService'
 import {
   PILOT_PAGE_SIZE,
   countPilotDirectory,
@@ -118,10 +117,7 @@ function getInitials(pilot: Pilot): string {
 }
 
 function getVersionClass(pilot: Pilot): string {
-  const status = getClientHeartbeatStatus(pilot.clientLastHeartbeatAt)
-  if (status === 'recent') return 'version-badge--current'
-  if (status === 'stale') return 'version-badge--outdated'
-  return 'version-badge--unknown'
+  return pilot.clientUpdateState === 'pending' ? 'version-badge--outdated' : 'version-badge--current'
 }
 
 function getFirebaseHealthLabel(status?: string): string {
@@ -140,17 +136,6 @@ function getFirebaseHealthClass(status?: string): string {
   if (status === 'blocked') return 'firebase-health--blocked'
   if (status === 'future_schema') return 'firebase-health--future'
   return 'firebase-health--unknown'
-}
-
-function formatHeartbeat(dateStr?: string): string {
-  const status = getClientHeartbeatStatus(dateStr)
-  if (status === 'unknown') return 'Heartbeat sconosciuto'
-  const diffMinutes = Math.max(0, Math.floor((Date.now() - Date.parse(dateStr!)) / 60000))
-  if (diffMinutes < 1) return 'Attivo ora'
-  if (diffMinutes < 60) return `Attivo ${diffMinutes} min fa`
-  const diffHours = Math.floor(diffMinutes / 60)
-  if (diffHours < 24) return `Attivo ${diffHours} h fa`
-  return `Ultimo avvio ${Math.floor(diffHours / 24)} gg fa`
 }
 
 function formatDate(dateStr?: string): string {
@@ -244,7 +229,7 @@ watch(searchQuery, () => {
           <span v-if="pilot.suiteVersion" class="version-badge" :class="getVersionClass(pilot)">v{{ pilot.suiteVersion }}</span>
           <span v-else class="version-badge version-badge--unknown">—</span>
           <small class="version-meta">
-            {{ pilot.clientChannel || 'canale sconosciuto' }} · {{ formatHeartbeat(pilot.clientLastHeartbeatAt) }}
+            {{ pilot.clientChannel || 'canale sconosciuto' }} · versione segnalata {{ pilot.suiteVersionUpdatedAt ? formatDate(pilot.suiteVersionUpdatedAt) : 'senza data' }}
           </small>
           <small v-if="pilot.clientUpdateState === 'pending'" class="version-pending">Aggiornamento in corso</small>
           <small
