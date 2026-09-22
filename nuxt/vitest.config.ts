@@ -232,6 +232,7 @@ export default defineConfig({
         'app/composables/usePitwallController.ts',
         'app/composables/usePitwallLiveStore.ts',
         'app/composables/usePitwallLink.ts',
+        'app/composables/usePitwallDriverPresence.ts',
         'app/composables/usePitwallPresenceWatch.ts',
         'app/composables/usePitwallIntent.ts',
         'app/composables/usePitwallFriendActions.ts',

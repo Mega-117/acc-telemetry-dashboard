@@ -389,6 +389,17 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     presence.start()
   }
 
+  /** Campanella fuori dal Pitwall: solo richieste in arrivo, senza profili. */
+  function watchInbox(): void {
+    const engineer = service()
+    if (!engineer || stopIncomingWatch) return
+    stopIncomingWatch = engineer.watchIncomingRequests(
+      requests => { incoming.value = requests },
+      error => { rawError.value = error?.message || 'Richieste non disponibili.' },
+      true
+    )
+  }
+
   function stop(): void {
     stopOrderWatch?.()
     stopIncomingWatch?.()
@@ -437,6 +448,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     search,
     refreshIncoming,
     watchLive,
+    watchInbox,
     decide,
     preAuthorise,
     setExpiry,

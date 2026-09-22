@@ -136,6 +136,7 @@ function makeTrust() {
     refreshIncoming: vi.fn(async () => {}),
     refreshPilots: vi.fn(async () => {}),
     watchLive: vi.fn(),
+    watchInbox: vi.fn(),
     stop: vi.fn(),
     notice: ref<string | null>(null),
     lastError: ref<string | null>(null),
@@ -154,6 +155,7 @@ async function settle() {
 }
 
 beforeEach(async () => {
+  store.halt()
   link.rooms.value = []
   link.room.value = null
   link.crew.value = []
@@ -175,6 +177,21 @@ afterEach(() => {
 })
 
 describe('la prima lettura non e una notizia', () => {
+  it('switches between the single inbox and full Pitwall without duplicate starts', () => {
+    store.start(false); store.start(false)
+    expect(trust.watchInbox).toHaveBeenCalledTimes(1)
+    expect(link.start).not.toHaveBeenCalled()
+    expect(trust.watchLive).not.toHaveBeenCalled()
+    store.start(true); store.start(true)
+    expect(trust.stop).toHaveBeenCalledTimes(1)
+    expect(link.start).toHaveBeenCalledTimes(1)
+    expect(trust.watchLive).toHaveBeenCalledTimes(1)
+    store.start(false)
+    expect(link.stop).toHaveBeenCalledTimes(1)
+    expect(trust.watchInbox).toHaveBeenCalledTimes(2)
+    store.halt()
+    expect(trust.stop).toHaveBeenCalledTimes(3)
+  })
   it('semina le amicizie che c erano gia senza avvisare', async () => {
     // "X ha accettato" per un'amicizia di due mesi fa non e' una notizia.
     trust.outgoing.value = [outgoing('pilota', 'granted'), outgoing('altro', 'pending')]

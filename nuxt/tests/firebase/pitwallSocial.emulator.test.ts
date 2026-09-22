@@ -44,6 +44,13 @@ async function publish(service: Awaited<ReturnType<typeof participant>>, roomId:
   expect(result.ok, JSON.stringify(result)).toBe(true)
 }
 describe('social rooms with real Firebase rules', () => {
+  it('does not pretend to send guest invitations or admit a non-friend', async () => {
+    const A = await participant('A'), D = await participant('D')
+    const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Friends only' })
+    if (!created.ok) throw new Error(created.reason)
+    expect((await A.invite(created.value.roomId, 'D')).ok).toBe(false)
+    expect((await D.joinRoom(created.value.roomId)).ok).toBe(false)
+  })
   it('routes V4 by recipient, accepts unchanged snapshots and freezes the requested context', async () => {
     const A = await participant('A'), B = await participant('B'), C = await participant('C')
     const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'V4 party' })

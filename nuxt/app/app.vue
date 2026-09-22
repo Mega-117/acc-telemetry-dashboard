@@ -173,7 +173,9 @@ const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 // Lato pilota del Pit Wall: annuncia il pilota e ascolta gli ordini in arrivo.
 // Vive qui perche' questa e' la finestra che possiede la sessione Firebase; si
 // disattiva da sola fuori da Electron e quando i lavori cloud sono di un'altra.
-usePitwallDriverPresence({ jobsEnabled: primaryCloudOwner.jobsEnabled })
+const pitwallDemand = computed(() => normalizedRoutePath.value === '/pitwall'
+  || !!pitwallStore.myRoom.value || !!pitwallStore.pitwall.value.roomId)
+usePitwallDriverPresence({ jobsEnabled: primaryCloudOwner.jobsEnabled, demand: pitwallDemand })
 const isProtectedRuntimeRoute = computed(() => (
   isTrainingOverlayIntent.value
   || isHudOverlayRoute.value
@@ -232,11 +234,17 @@ watch(
   ([state, user, canEnter]) => {
     if (state !== 'dashboard' || !user || !canEnter) {
       stopListening()
-      pitwallStore.halt()
       return
     }
     listenToActivitiesTracked(user.uid)
-    pitwallStore.start()
+  },
+  { flush: 'post' }
+)
+watch(
+  [appState, currentUser, canEnterApp, pitwallDemand],
+  ([state, user, canEnter, needsPitwall]) => {
+    if (state !== 'dashboard' || !user || !canEnter) pitwallStore.halt()
+    else pitwallStore.start(needsPitwall)
   },
   { flush: 'post' }
 )

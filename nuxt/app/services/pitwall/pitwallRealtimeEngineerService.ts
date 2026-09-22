@@ -121,11 +121,21 @@ function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) 
     const grants = await Promise.all(Object.keys(index ?? {}).map(driver => io.read<PitwallGrant>(path(driver, uid))))
     return outgoingRows(grants.filter((grant): grant is PitwallGrant => grant != null))
   }
-  function watchIncomingRequests(callback: (requests: PitwallIncomingRequest[]) => void, error?: (error: Error) => void) {
+  function watchIncomingRequests(callback: (requests: PitwallIncomingRequest[]) => void, error?: (error: Error) => void, inboxOnly = false) {
     let version = 0; let stopped = false; let dataReady = false; let grants: PitwallGrant[] = []
-    const emit = async () => { if (!dataReady || stopped) return; const token = ++version; const rows = await incomingRows(grants); if (!stopped && token === version) callback(rows) }
+    const emit = async () => {
+      if (!dataReady || stopped) return
+      const token = ++version
+      // Inbox di avvio: un solo listener RTDB, nessuna lettura profilo/presenza.
+      const rows: PitwallIncomingRequest[] = inboxOnly
+        ? grants.filter(grant => grant.status === 'pending').map(grant => ({ engineerUid: grant.engineerUid,
+          nickname: null, status: grant.status, createdAt: grant.createdAt, scope: grant.scope ?? null,
+          expiresAtMs: grant.expiresAtMs ?? null, requestedScope: grant.requestedScope ?? null }))
+        : await incomingRows(grants)
+      if (!stopped && token === version) callback(rows)
+    }
     const stopData = io.watch(`grants/${uid}`, value => { grants = Object.values((value ?? {}) as Record<string, PitwallGrant>); dataReady = true; void emit().catch(error) }, error)
-    const stopProfiles = profiles.onChange(() => { void emit().catch(error) })
+    const stopProfiles = inboxOnly ? () => {} : profiles.onChange(() => { void emit().catch(error) })
     const stop = () => { stopped = true; stopData(); stopProfiles(); ownedStops.delete(stop) }
     ownedStops.add(stop)
     return stop

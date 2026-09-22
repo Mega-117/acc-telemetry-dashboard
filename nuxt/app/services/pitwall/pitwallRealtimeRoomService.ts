@@ -193,6 +193,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
   }
 
   async function publishEffectivePresence() {
+    if (stopped) return
     // The page owns membership; only a valid active driver may take execution priority.
     const driverActive = driverPresence?.roomId && driverPresence.driving && driverPresence.sourceValid
     const fallback = engineerPresence ?? driverPresence
@@ -279,6 +280,7 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
     } catch (error) { return failure(error) }
   }
   async function invite(roomId: string, inviteeUid: string): Promise<PitwallRoomResult<true>> {
+    if (social) return { ok: false, reason: 'La stanza è già visibile agli amici. Non è possibile invitare altri utenti.' }
     const result = await syncInvites(roomId, [inviteeUid]); return result.ok ? success() : result
   }
   async function revoke(roomId: string, memberUid: string): Promise<PitwallRoomResult<true>> {

@@ -119,7 +119,7 @@ function leave() {
         </b>
       </span>
       <button
-        v-if="isManager && !isFull"
+        v-if="isManager && !isFull && race.membershipModel !== 'social'"
         type="button"
         class="pwc-btn"
         @click="guestOpen = true"
@@ -127,7 +127,7 @@ function leave() {
         + Ospite
       </button>
       <span
-        v-else-if="isManager"
+        v-else-if="isManager && isFull"
         class="pwc-chip is-waiting pwc-wall__full"
       >Gara piena</span>
     </section>
@@ -146,7 +146,7 @@ function leave() {
     <PitwallConceptPitStop :race="race" />
 
     <div
-      v-if="guestOpen"
+      v-if="guestOpen && race?.membershipModel !== 'social'"
       class="pwc-modal"
       @click.self="closeGuest"
     >

@@ -1,7 +1,7 @@
 import { onScopeDispose, ref, watch, type Ref } from 'vue'
 import { PRODUCT } from '../../shared/productIdentity'
 import { db } from '~/config/firebase'
-import { createPitwallRealtimeRoomService, type PitwallRealtimeRoomService } from '~/services/pitwall/pitwallRealtimeRoomService'
+import { createPitwallRealtimeRoomService, stopPitwallRealtimeAccount, type PitwallRealtimeRoomService } from '~/services/pitwall/pitwallRealtimeRoomService'
 import { createPitwallRealtimeEngineerService } from '~/services/pitwall/pitwallRealtimeEngineerService'
 import { startPitwallRealtimeDriver } from '~/services/pitwall/pitwallRealtimeDriver'
 import type { PitwallDriverElectronApi } from '~/services/pitwall/pitwallDriverLinkService'
@@ -18,7 +18,7 @@ interface Bridge extends PitwallDriverElectronApi {
   onPitwallIntentRequest?: (callback: (request: { open: boolean } | null) => void) => () => void
 }
 const bridgeOf = () => typeof window === 'undefined' ? null : (window as unknown as { electronAPI?: Bridge }).electronAPI ?? null
-export interface PitwallDriverPresenceOptions { jobsEnabled: Ref<boolean> }
+export interface PitwallDriverPresenceOptions { jobsEnabled: Ref<boolean>, demand?: Ref<boolean> }
 
 /** The authenticated primary renderer owns one event-driven runtime presence. */
 export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) {
@@ -35,6 +35,19 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
   let syncing: Promise<void> | null = null
   let syncAgain = false
   let disposed = false
+  let explicitlyRequested = false
+  async function open() {
+    explicitlyRequested = true
+    await sync()
+    if (!handle) throw new Error(unavailableReason.value ?? 'Pitwall non disponibile.')
+    return handle.openPitwall()
+  }
+  async function close() {
+    explicitlyRequested = false
+    await handle?.closePitwall()
+    await sync()
+  }
+  function registerControls() { registerPitwallIntentControls({ open, close }) }
   function stop() {
     generation++
     while (stops.length) stops.pop()?.()
@@ -50,6 +63,17 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
     if (disposed || !options.jobsEnabled.value || bridge?.localIdentityRole !== 'primary' || !bridge.pitwallGetLinkStatus) { stop(); return }
     if (!bridge.onPitwallStrategyState || !bridge.pitwallSetRealtimeConnection) {
       unavailableReason.value = `Aggiorna e riavvia ${PRODUCT.displayName} per usare il nuovo Pitwall.`; stop(); return
+    }
+    if (options.demand && !options.demand.value && !explicitlyRequested && !roomId.value) {
+      if (handle) {
+        const uid = driverUid.value
+        stop()
+        if (uid) await stopPitwallRealtimeAccount(uid)
+      }
+      // The local shortcut must remain available without opening remote listeners.
+      registerControls()
+      setPitwallIntentStatus({ state: 'off', roomId: null, reason: null })
+      return
     }
     const identity = await bridge.pitwallGetLinkStatus()
     if (disposed || !options.jobsEnabled.value) return
@@ -90,9 +114,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
         },
         onStatus: value => { roomId.value = value.roomId; unavailableReason.value = value.reason; setPitwallIntentStatus(value); if (options.jobsEnabled.value) void bridge.pitwallReportIntentState?.({ ...value, available: true }).catch(() => {}) },
       })
-      const current = handle
-      registerPitwallIntentControls({ open: () => current.openPitwall(), close: () => current.closePitwall() })
-      stops.push(bridge.onPitwallIntentRequest?.(request => { if (handle === current) void (request?.open ? current.openPitwall() : current.closePitwall()) }) ?? (() => {}))
+      registerControls()
       active.value = true
       unavailableReason.value = null
     } catch (error) { unavailableReason.value = (error as Error).message; stop() }
@@ -106,8 +128,13 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
     return syncing
   }
   const stopAuth = bridgeOf()?.onLocalRuntimeAuthChanged?.(() => { void sync() })
-  watch(options.jobsEnabled, enabled => { if (!enabled) stop(); void sync() }, { flush: 'sync' })
+  const stopIntent = bridgeOf()?.onPitwallIntentRequest?.(request => {
+    if (!options.jobsEnabled.value || disposed) return
+    void (request?.open ? open() : close()).catch(error => { unavailableReason.value = (error as Error).message })
+  })
+  watch(options.jobsEnabled, enabled => { if (!enabled) { explicitlyRequested = false; stop() }; void sync() }, { flush: 'sync' })
+  if (options.demand) watch(options.demand, () => { void sync() }, { flush: 'post' })
   void sync()
-  onScopeDispose(() => { disposed = true; stopAuth?.(); stop() })
+  onScopeDispose(() => { disposed = true; stopIntent?.(); stopAuth?.(); stop() })
   return { active, driverUid, unavailableReason, roomId, roomUnavailableReason: () => handle?.unavailableReason() ?? null, stop }
 }
