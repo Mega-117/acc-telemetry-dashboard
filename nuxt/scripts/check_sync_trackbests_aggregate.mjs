@@ -93,7 +93,7 @@ assert.ok(projectionRefreshSource.includes('buildNextSyncMirror'), 'projection r
 assert.equal(sessionUploadSource.includes('users/${uid}/uploads/'), false, 'session upload must not write the uploads/{fileHash} registry')
 assert.ok(sessionUploadSource.includes('resolveKnownCloudSession'), 'session upload must reuse the cloud state known by the local registry')
 assert.ok(sessionUploadSource.includes('knownRawChunkIds'), 'session upload must derive chunk ids from the registry instead of querying rawChunks')
-assert.ok(electronSyncSource.includes("loadOwnerDocument(uid, { fresh: true, caller: SYNC_CALLER })"), 'sync cycle must read users/{uid} fresh exactly once')
+assert.ok(electronSyncSource.includes("loadOwnerDocument(uid, { fresh: hasProjectionWork || trigger !== 'authReady', caller: SYNC_CALLER })"), 'write cycles must read a fresh owner revision; only no-op authReady may share the freshly provisioned owner')
 assert.equal((electronSyncSource.match(/loadOwnerDocument\(/g) || []).length, 1, 'sync cycle must have a single users/{uid} read site')
 assert.ok(electronSyncSource.includes('publishSyncMirror('), 'sync cycle must publish the mirror after the commit')
 assert.ok(electronSyncSource.includes('invalidateSyncMirror(uid)'), 'a failed cycle must invalidate the mirror')
