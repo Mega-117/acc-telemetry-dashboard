@@ -11,7 +11,7 @@ import { checkFirebaseCacheFreshness, recordFirebaseJournalEvent } from '~/servi
 import { ownerDataCacheTtlFor } from '~/services/cache/cachePolicy'
 import { notifyOwnerCacheChanged } from '~/services/cache/ownerCacheSignals'
 import { loadOwnerDocument } from '~/repositories/ownerDocumentRepository'
-import { expandTrackBestsIndexEntry, isTrackBestsIndexUsable, trackBestsIndexPath } from '~/services/sync/trackBestsIndexProjectionService'
+import { buildTrackBestsIndexDocument, expandTrackBestsIndexEntry, isTrackBestsIndexUsable, trackBestsIndexPath } from '~/services/sync/trackBestsIndexProjectionService'
 // PIP-444: lettura a doppia forma, prima il documento unito per pista poi i vecchi documenti.
 import {
   TRACK_PROJECTIONS_COLLECTION,
@@ -49,6 +49,7 @@ const trackBestsMapCache = new Map<string, CacheEntry<TrackBestDocumentMap>>()
 // usabile, ricordato per non rileggerlo ad ogni pista entro l'avvio.
 const trackBestsIndexCache = new Map<string, CacheEntry<TrackBestsIndexEntry | null>>()
 const trackBestsIndexInFlight = new Map<string, Promise<TrackBestDocumentMap | null>>()
+const trackBestInFlight = new Map<string, Promise<TrackBestDocument | null>>()
 const trackDetailProjectionCache = new Map<string, CacheEntry<TrackDetailProjectionDocument | null>>()
 
 // PIP-442: l'owner corrente non scade a tempo (controllo di revisione); i dati di un altro
@@ -64,6 +65,8 @@ function setCache<T>(cache: Map<string, CacheEntry<T>>, key: string, value: T, g
 
 export function clearTelemetryProjectionRepositoryCache(uid?: string) {
   cacheGeneration += 1
+  trackBestsIndexInFlight.clear()
+  trackBestInFlight.clear()
   if (!uid) {
     trackBestCache.clear()
     trackBestsMapCache.clear()
@@ -186,6 +189,17 @@ export async function loadTrackBest(uid: string, trackId: string): Promise<Track
   const cached = trackBestCache.get(cacheKey)
   if (isFresh(cached, 'trackBest', uid)) return cached.value
 
+  const pending = trackBestInFlight.get(cacheKey)
+  if (pending) return pending
+  const request = readTrackBest(uid, normalizedTrackId, cacheKey)
+  trackBestInFlight.set(cacheKey, request)
+  try { return await request } finally {
+    if (trackBestInFlight.get(cacheKey) === request) trackBestInFlight.delete(cacheKey)
+  }
+}
+
+async function readTrackBest(uid: string, normalizedTrackId: string, cacheKey: string): Promise<TrackBestDocument | null> {
+
   // PIP-441: l'indice serve tutte le piste con una lettura condivisa (0 letture se gia' in cache).
   // La generazione va presa prima dell'await: un'invalidazione arrivata nel frattempo
   // non deve essere ripopolata con dati letti prima.
@@ -220,7 +234,14 @@ export async function loadTrackBestsMap(uid: string): Promise<TrackBestDocumentM
     .map((entry) => ({ id: entry.id, data: splitTrackProjectionDocument(entry.data).bests }))
   const snap = await trackedGetDocs(query(collection(db, `users/${uid}/trackBests`)), CALLER)
   const entries = (snap.docs || []).map((docSnap) => ({ id: docSnap.id, data: docSnap.data() || {} }))
-  return setCache(trackBestsMapCache, uid, collectSupportedTrackBests([...entries, ...mergedEntries], uid, generation), generation)
+  const map = collectSupportedTrackBests([...entries, ...mergedEntries], uid, generation)
+  if (generation === cacheGeneration) {
+    // La query completa e' gia' stata pagata: riusarla anche dopo il riavvio,
+    // mentre la manutenzione prepara l'indice cloud. Nessuna scrittura remota.
+    rememberTrackBestsIndex(uid, buildTrackBestsIndexDocument(map), generation)
+    notifyOwnerCacheChanged(uid)
+  }
+  return setCache(trackBestsMapCache, uid, map, generation)
 }
 
 /**

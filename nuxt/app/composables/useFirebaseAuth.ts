@@ -4,6 +4,7 @@
 
 import { ref, computed } from 'vue'
 import { createAuthTransitionQueue } from '~/services/auth/authTransitionQueue'
+import { clearProfileProjectionReceipt } from '~/services/auth/profileProjectionReceipt'
 import type { User } from 'firebase/auth'
 import type { UserProfileDocument } from '~/services/auth/userProvisioningService'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
@@ -184,6 +185,7 @@ async function syncAuthenticatedUser(
 }
 
 async function syncLoggedOutUser() {
+    clearProfileProjectionReceipt()
     userRole.value = 'pilot'
     firestoreNickname.value = ''
     userProfileCache.clear()

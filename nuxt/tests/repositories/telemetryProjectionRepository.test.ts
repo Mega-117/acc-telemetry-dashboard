@@ -60,6 +60,25 @@ afterEach(() => {
 })
 
 describe('telemetryProjectionRepository con indice piste', () => {
+  it('persists a complete fallback map as an index for zero-read restart before cloud migration', async () => {
+    store.set('users/u/trackBests/monza', trackDoc('monza'))
+    await loadTrackBestsMap('u')
+    const saved = exportTrackBestsIndexDocument('u')
+    expect(saved).toMatchObject({ complete: true })
+    clearTelemetryProjectionRepositoryCache('u')
+    fake.getDoc.mockClear(); fake.getDocs.mockClear()
+    expect(hydrateTrackBestsIndexCache('u', saved)).toBe(true)
+    expect(Object.keys(await loadTrackBestsMap('u'))).toEqual(['monza'])
+    expect((await loadTrackBest('u', 'monza')).activity.totalLaps).toBe(10)
+    expect(fake.getDoc).not.toHaveBeenCalled(); expect(fake.getDocs).not.toHaveBeenCalled()
+  })
+
+  it('shares a missing-index single-track fallback between concurrent overview readers', async () => {
+    store.set('users/u/trackBests/monza', trackDoc('monza'))
+    const result = await Promise.all([loadTrackBest('u', 'monza'), loadTrackBest('u', 'monza')])
+    expect(result[0]).toEqual(result[1])
+    expect(fake.getDoc).toHaveBeenCalledTimes(3) // index, merged, legacy: once each
+  })
   it('/piste: la mappa delle piste costa una sola lettura (l\'indice), nessuna query', async () => {
     store.set('users/u/trackBestsIndex/v1', buildTrackBestsIndexDocument({ monza: trackDoc('monza'), spa: trackDoc('spa') }))
     const map = await loadTrackBestsMap('u')

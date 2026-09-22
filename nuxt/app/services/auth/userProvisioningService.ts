@@ -7,6 +7,7 @@ import { buildPilotDirectoryProjection } from '~/services/pilotDirectoryProjecti
 // PIP-442: `users/{uid}` viene letto una volta per avvio e condiviso; questo modulo e' il
 // primo lettore (login/avvio) e aggiorna la copia con cio' che scrive.
 import { loadOwnerDocument, rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
+import { hasProfileProjectionReceipt, rememberProfileProjectionReceipt } from './profileProjectionReceipt'
 
 const AUTH_PROVISION_CALLER = 'AuthProvisioning'
 
@@ -126,11 +127,7 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
     const userDocRef = doc(db, 'users', user.uid)
     const publicProfileRef = doc(db, 'publicProfiles', user.uid)
     const pilotDirectoryRef = doc(db, 'pilotDirectory', user.uid)
-    const [userSnap, publicProfileSnap, pilotDirectorySnap] = await Promise.all([
-        loadOwnerDocument(user.uid, { caller: AUTH_PROVISION_CALLER }),
-        getDocTracked(publicProfileRef),
-        getDocTracked(pilotDirectoryRef)
-    ])
+    const userSnap = await loadOwnerDocument(user.uid, { caller: AUTH_PROVISION_CALLER })
 
     if (!userSnap.exists) {
         const userPayload = {
@@ -175,9 +172,15 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
         ...(shouldRepairUserDirectoryFields ? directoryFields : {}),
         ...(shouldRepairEmailVerification ? { emailVerified: user.emailVerified } : {})
     }
+    const pilotDirectoryProjection = buildPilotDirectoryProjection(user.uid, repairedUserData)
+    const receiptProjection = { nickname, directory: pilotDirectoryProjection }
+    if (!shouldRepairUserDirectoryFields && !shouldRepairEmailVerification
+        && hasProfileProjectionReceipt(user.uid, receiptProjection)) return { role, nickname }
+    const [publicProfileSnap, pilotDirectorySnap] = await Promise.all([
+        getDocTracked(publicProfileRef), getDocTracked(pilotDirectoryRef)
+    ])
     const publicProfileData = publicProfileSnap.exists() ? (publicProfileSnap.data() || {}) : {}
     const pilotDirectoryData = pilotDirectorySnap.exists() ? (pilotDirectorySnap.data() || {}) : {}
-    const pilotDirectoryProjection = buildPilotDirectoryProjection(user.uid, repairedUserData)
     const shouldRepairPublicProfile = !publicProfileSnap.exists()
         || needsPublicProfileRepair(publicProfileData, user.uid, nickname)
     const shouldRepairPilotDirectory = !pilotDirectorySnap.exists()
@@ -216,6 +219,7 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
         }
     }
 
+    rememberProfileProjectionReceipt(user.uid, receiptProjection)
     return { role, nickname }
 }
 
