@@ -1,6 +1,13 @@
 import type { SyncTrigger } from './syncTriggerPolicy'
 import type { TelemetryFileDescriptor } from './syncScanService'
-import { DRIVING_HOLD_POLL_MS, isCarOnTrack, mergeHeldFiles } from './drivingSyncHoldPolicy'
+import {
+  DRIVING_HOLD_POLL_MS,
+  INITIAL_DRIVING_HOLD_STATE,
+  decideDrivingHold,
+  mergeHeldFiles,
+  type DrivingHoldState,
+  type SyncReleaseReason
+} from './drivingSyncHoldPolicy'
 import { recordFirebaseJournalEvent } from '~/services/monitoring/firebaseOpsJournal'
 
 const WINDOW_FOCUS_SYNC_THROTTLE_MS = 5000
@@ -105,6 +112,8 @@ export function setupAutoSyncController(params: {
   let lastWindowFocusSyncAt = 0
   let bufferedChangedFiles: TelemetryFileDescriptor[] = []
   let heldChangedFiles: TelemetryFileDescriptor[] = []
+  // PIP-443: memoria del reducer (inizio della sosta ai box); vive solo mentre si trattiene.
+  let holdState: DrivingHoldState = INITIAL_DRIVING_HOLD_STATE
   let holdTimer: number | null = null
   let holdCheckInFlight = false
   const unsubscribers: Array<() => void> = []
@@ -195,12 +204,12 @@ export function setupAutoSyncController(params: {
 
   // PIP-437: lettura locale del live_state (nessuna operazione Firebase). Senza segnale
   // leggibile la sync procede come prima: meglio caricare che trattenere per sempre.
-  async function carOnTrack(): Promise<boolean> {
-    if (typeof electronAPI?.getLiveState !== 'function') return false
+  async function readLiveState(): Promise<unknown> {
+    if (typeof electronAPI?.getLiveState !== 'function') return undefined
     try {
-      return isCarOnTrack(await electronAPI.getLiveState(), nowFn())
+      return await electronAPI.getLiveState()
     } catch {
-      return false
+      return undefined
     }
   }
 
@@ -218,25 +227,33 @@ export function setupAutoSyncController(params: {
     }, drivingHoldPollMs)
   }
 
-  async function releaseHeld() {
+  /** Carica il gruppo trattenuto; false se l'upload fallisce (i file restano trattenuti). */
+  async function releaseHeld(reason: SyncReleaseReason): Promise<boolean> {
     const files = heldChangedFiles
     heldChangedFiles = []
     clearHoldTimer()
-    if (!files.length) return
+    if (!files.length) return true
     const succeeded = await runAfterReady('filesChanged', { files })
-    if (!current()) return
+    if (!current()) return succeeded
     // Gli eventi arrivati durante l'upload sono piu' recenti del gruppo fallito.
     if (!succeeded) heldChangedFiles = mergeHeldFiles(files, heldChangedFiles)
-    else recordFirebaseJournalEvent({ kind: 'session', reason: 'sync-release' })
+    else recordFirebaseJournalEvent({ kind: 'session', reason: 'sync-release', type: reason })
+    return succeeded
   }
 
+  // PIP-443: la decisione e' del reducer puro; qui solo timer e I/O. Se l'upload fallisce
+  // lo stato non avanza: il prossimo controllo ridecide il rilascio senza riaspettare.
   async function releaseOrKeepHolding() {
     if (!current() || heldChangedFiles.length === 0 || holdCheckInFlight) return
     holdCheckInFlight = true
     try {
-      const onTrack = await carOnTrack()
+      const decision = decideDrivingHold(holdState, await readLiveState(), nowFn())
       if (!current()) return
-      if (!onTrack) await releaseHeld()
+      if (decision.action === 'hold') {
+        holdState = decision.state
+        return
+      }
+      if (await releaseHeld(decision.reason)) holdState = decision.state
     } finally {
       holdCheckInFlight = false
       if (heldChangedFiles.length > 0) scheduleHoldCheck()
@@ -306,6 +323,7 @@ export function setupAutoSyncController(params: {
     bufferedChangedFiles = []
     // I file trattenuti restano salvati in locale: la scansione completa del prossimo authReady li carica.
     heldChangedFiles = []
+    holdState = INITIAL_DRIVING_HOLD_STATE
     window.removeEventListener('online', handleOnline)
     for (const unsubscribe of unsubscribers.splice(0)) unsubscribe()
   }
