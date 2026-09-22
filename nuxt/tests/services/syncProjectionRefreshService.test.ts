@@ -25,7 +25,7 @@ vi.mock('~/services/sync/projectionRebuildService', () => ({
   writeUserProjectionDocuments: mocks.writeUserProjectionDocuments
 }))
 
-import { refreshSyncProjections } from '~/services/sync/syncProjectionRefreshService'
+import { combineProjectionWrites, refreshSyncProjections } from '~/services/sync/syncProjectionRefreshService'
 
 const delta = {
   status: 'created' as const,
@@ -82,5 +82,34 @@ describe('refreshSyncProjections', () => {
       sessions: freshSessions
     }))
     expect(result.sessions).toBe(freshSessions)
+  })
+
+  // PIP-444: due scritture sullo stesso documento nel piano = un documento Firestore.
+  it('combineProjectionWrites: unisce mergeFields, fonde merge, un set pieno vince', () => {
+    const bests = { ref: 'p', data: { schemaVersion: 1, trackId: 't', bests: { a: 1 }, updatedAt: 'x' }, options: { mergeFields: ['schemaVersion', 'trackId', 'bests', 'updatedAt'] } }
+    const detail = { ref: 'p', data: { schemaVersion: 1, trackId: 't', detail: { b: 2 }, updatedAt: 'y' }, options: { mergeFields: ['schemaVersion', 'trackId', 'detail', 'updatedAt'] } }
+    expect(combineProjectionWrites(undefined, bests)).toBe(bests)
+    expect(combineProjectionWrites(bests, detail)).toEqual({
+      ref: 'p',
+      data: { schemaVersion: 1, trackId: 't', bests: { a: 1 }, detail: { b: 2 }, updatedAt: 'y' },
+      options: { mergeFields: ['schemaVersion', 'trackId', 'bests', 'updatedAt', 'detail'] }
+    })
+    const replace = { ref: 'p', data: { fresh: true } }
+    expect(combineProjectionWrites(bests, replace)).toBe(replace)
+    expect(combineProjectionWrites(replace, detail)).toEqual({ ref: 'p', data: { fresh: true, schemaVersion: 1, trackId: 't', detail: { b: 2 }, updatedAt: 'y' } })
+    const mergeA = { ref: 'p', data: { stats: { a: 1, nested: { x: 1 } } }, options: { merge: true } }
+    const mergeB = { ref: 'p', data: { stats: { b: 2, nested: { y: 2 } } }, options: { merge: true } }
+    expect(combineProjectionWrites(mergeA, mergeB)).toEqual({ ref: 'p', data: { stats: { a: 1, b: 2, nested: { x: 1, y: 2 } } }, options: { merge: true } })
+    expect(combineProjectionWrites(mergeA, detail)).toEqual({
+      ref: 'p', data: { stats: { a: 1, nested: { x: 1 } }, schemaVersion: 1, trackId: 't', detail: { b: 2 }, updatedAt: 'y' }, options: { merge: true }
+    })
+  })
+
+  it('PIP-444: senza mirror il ciclo legge con il lettore iniettato e non calcola alcun mirror', async () => {
+    mocks.applyTrackDetailProjectionDeltas.mockResolvedValue({ wrote: true, requiresFullRebuild: false })
+    const result = await refreshSyncProjections(params())
+    expect(result.mirror).toBeNull()
+    expect(result.mirrorCycle).toBeNull()
+    expect(result.writes).toEqual([])
   })
 })

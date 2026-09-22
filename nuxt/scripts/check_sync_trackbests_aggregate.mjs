@@ -84,6 +84,24 @@ assert.ok(
 // se le sessioni piu' vecchie non esistessero.
 assert.equal(projectionRefreshSource.includes('cloud_fresh'), false, 'projection rebuild must never use the capped cloud_fresh loader')
 
+// PIP-444: nessuna rilettura prima del batch. Il piano legge dal mirror locale (stessa
+// revisione owner), users/{uid} arriva dalla copia fresca del ciclo, `uploads/{hash}`
+// non viene piu' scritto e il registro locale evita la rilettura di sessions/rawChunks.
+assert.ok(projectionRefreshSource.includes('createSyncMirrorCycle'), 'projection refresh must read through the sync mirror cycle')
+assert.ok(projectionRefreshSource.includes('combineProjectionWrites'), 'projection plan must combine writes to the same document')
+assert.ok(projectionRefreshSource.includes('buildNextSyncMirror'), 'projection refresh must rebuild the mirror from the committed plan')
+assert.equal(sessionUploadSource.includes('users/${uid}/uploads/'), false, 'session upload must not write the uploads/{fileHash} registry')
+assert.ok(sessionUploadSource.includes('resolveKnownCloudSession'), 'session upload must reuse the cloud state known by the local registry')
+assert.ok(sessionUploadSource.includes('knownRawChunkIds'), 'session upload must derive chunk ids from the registry instead of querying rawChunks')
+assert.ok(electronSyncSource.includes("loadOwnerDocument(uid, { fresh: true, caller: SYNC_CALLER })"), 'sync cycle must read users/{uid} fresh exactly once')
+assert.equal((electronSyncSource.match(/loadOwnerDocument\(/g) || []).length, 1, 'sync cycle must have a single users/{uid} read site')
+assert.ok(electronSyncSource.includes('publishSyncMirror('), 'sync cycle must publish the mirror after the commit')
+assert.ok(electronSyncSource.includes('invalidateSyncMirror(uid)'), 'a failed cycle must invalidate the mirror')
+// PIP-444 (b): un documento per pista, entrambe le sezioni via mergeFields.
+assert.ok(trackBestsSource.includes('loadTrackProjectionSections'), 'trackBests must read the merged per-track document first')
+assert.ok(trackBestsSource.includes("section: 'bests'"), 'trackBests must write the bests section of the merged document')
+assert.equal(trackBestsSource.includes('users/${uid}/trackBests/${trackIdNorm}'), false, 'trackBests must no longer write the legacy per-track document')
+
 const { applyTrackBestsProjectionDeltas } = await import('../app/services/sync/trackBestsProjectionService.ts')
 const { applyUserProjectionDeltas } = await import('../app/services/sync/syncUserProjectionDeltaService.ts')
 
@@ -124,9 +142,9 @@ const result = await applyTrackBestsProjectionDeltas({
       data: () => null
     }
   },
-  setDocFn: async (ref, data) => {
+  setDocFn: async (ref, data, options) => {
     setCalls++
-    writes.push({ ref, data })
+    writes.push({ ref, data, options })
   },
   bestRulesVersion: 2,
   docFn: (_db, docPath) => ({ path: docPath })
@@ -134,13 +152,18 @@ const result = await applyTrackBestsProjectionDeltas({
 
 assert.deepEqual(result.touchedTracks, ['monza'])
 assert.deepEqual(result.updatedTracks, ['monza'])
-assert.equal(getCalls, 1)
+// PIP-444: documento unito assente -> 1 lettura del documento unito + 1 del vecchio trackBests.
+assert.equal(getCalls, 2, 'missing merged document: one merged read plus one legacy trackBests read')
 assert.equal(setCalls, 1)
-assert.equal(writes[0].data.activity.sessionCount, 10)
-assert.equal(writes[0].data.activity.totalLaps, 50)
-assert.equal(writes[0].data.bests.GT3.Optimum.bestRace, 99991)
-assert.equal(writes[0].data.bests.GT3.Optimum.raceBestByFuelBucket['40-60'].timeMs, 99991)
-assert.equal(writes[0].data.bests.GT3.Optimum.raceBestByFuelBucket['20-40'], undefined)
+assert.equal(writes[0].ref.path, 'users/user-1/trackProjections/monza', 'bests must be written into the merged per-track document')
+assert.deepEqual(writes[0].options, { mergeFields: ['schemaVersion', 'trackId', 'bests', 'updatedAt'] }, 'the bests section must replace itself whole')
+assert.equal(writes[0].data.schemaVersion, 1)
+assert.equal(writes[0].data.trackId, 'monza')
+assert.equal(writes[0].data.bests.activity.sessionCount, 10)
+assert.equal(writes[0].data.bests.activity.totalLaps, 50)
+assert.equal(writes[0].data.bests.bests.GT3.Optimum.bestRace, 99991)
+assert.equal(writes[0].data.bests.bests.GT3.Optimum.raceBestByFuelBucket['40-60'].timeMs, 99991)
+assert.equal(writes[0].data.bests.bests.GT3.Optimum.raceBestByFuelBucket['20-40'], undefined)
 
 getCalls = 0
 setCalls = 0
@@ -215,15 +238,15 @@ await applyTrackBestsProjectionDeltas({
   docFn: (_db, docPath) => ({ path: docPath })
 })
 
-assert.equal(getCalls, 1)
+assert.equal(getCalls, 2, 'missing merged document: one merged read plus one legacy trackBests read')
 assert.equal(setCalls, 1)
-assert.equal(writes[0].data.version, 4)
-assert.equal(writes[0].data.bestRulesVersion, 5)
-assert.equal(writes[0].data.bests.GT3.Optimum.bestRace, 98000)
-assert.equal(writes[0].data.bests.GT3.Optimum.bestRaceSessionId, 'monza-vnext')
-assert.equal(writes[0].data.bests.GT3.Optimum.raceBestByFuelBucket['60-80'].timeMs, 98000)
-assert.equal(writes[0].data.bests.GT3.Optimum.raceAvgByFuelBucket['60-80'].sampleLapCount, 5)
-assert.equal(writes[0].data.bests.GT3.Optimum.raceBestByFuelBucket['20-40'], undefined)
+assert.equal(writes[0].data.bests.version, 4)
+assert.equal(writes[0].data.bests.bestRulesVersion, 5)
+assert.equal(writes[0].data.bests.bests.GT3.Optimum.bestRace, 98000)
+assert.equal(writes[0].data.bests.bests.GT3.Optimum.bestRaceSessionId, 'monza-vnext')
+assert.equal(writes[0].data.bests.bests.GT3.Optimum.raceBestByFuelBucket['60-80'].timeMs, 98000)
+assert.equal(writes[0].data.bests.bests.GT3.Optimum.raceAvgByFuelBucket['60-80'].sampleLapCount, 5)
+assert.equal(writes[0].data.bests.bests.GT3.Optimum.raceBestByFuelBucket['20-40'], undefined)
 
 getCalls = 0
 setCalls = 0
@@ -247,13 +270,14 @@ await applyTrackBestsProjectionDeltas({
   docFn: (_db, docPath) => ({ path: docPath })
 })
 
-assert.equal(getCalls, 1)
+assert.equal(getCalls, 2, 'missing merged document: one merged read plus one legacy trackBests read')
 assert.equal(setCalls, 1)
-assert.equal(writes[0].data.activity.sessionCount, 120)
-assert.equal(writes[0].data.activity.totalLaps, 600)
-assert.equal(writes[0].data.activity.validLaps, 480)
-assert.equal(writes[0].data.syncedSessionIds.length, 120, 'trackBests must retain all counted session ids for idempotent activity totals')
+assert.equal(writes[0].data.bests.activity.sessionCount, 120)
+assert.equal(writes[0].data.bests.activity.totalLaps, 600)
+assert.equal(writes[0].data.bests.activity.validLaps, 480)
+assert.equal(writes[0].data.bests.syncedSessionIds.length, 120, 'trackBests must retain all counted session ids for idempotent activity totals')
 
+// Il documento unito appena scritto viene riletto come tale: una sola lettura per pista.
 const existingTrackBestsWithManySessions = writes[0].data
 getCalls = 0
 setCalls = 0
@@ -277,7 +301,7 @@ await applyTrackBestsProjectionDeltas({
   docFn: (_db, docPath) => ({ path: docPath })
 })
 
-assert.equal(getCalls, 1)
+assert.equal(getCalls, 1, 'merged document present: exactly one read per track')
 assert.equal(setCalls, 0, 'reprocessing an old session beyond the previous 100-id window must not rewrite or double count')
 
 getCalls = 0
@@ -305,8 +329,8 @@ await applyTrackBestsProjectionDeltas({
   docFn: (_db, docPath) => ({ path: docPath })
 })
 
-assert.equal(getCalls, 3)
-assert.equal(setCalls, 3)
+assert.equal(getCalls, 6, 'three tracks without merged document: merged + legacy read each')
+assert.equal(setCalls, 3, 'one merged document per track')
 
 getCalls = 0
 setCalls = 0
@@ -415,7 +439,7 @@ const incremental = await applyTrackBestsProjectionDeltas({
   indexUpdatedAt: '2026-09-22T10:00:00.000Z'
 })
 assert.equal(incremental.indexWritten, true)
-assert.equal(getCalls, 2, 'incremental index write must not read the index document')
+assert.equal(getCalls, 4, 'incremental index write must not read the index document (two tracks: merged + legacy read each)')
 assert.equal(setCalls, 3, 'incremental sync writes the changed tracks plus exactly one index document')
 const indexWrite = writes.find((write) => write.ref.path === 'users/user-1/trackBestsIndex/v1')
 assert.ok(indexWrite, 'index write must target users/{uid}/trackBestsIndex/v1')

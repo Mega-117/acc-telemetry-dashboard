@@ -8,12 +8,13 @@ import { db } from '~/config/firebase'
 import { trackedGetDoc } from '~/composables/useFirebaseTracker'
 import { checkFirebaseCacheFreshness, recordFirebaseCacheHit } from '~/services/monitoring/firebaseOpsJournal'
 import { ownerDataCacheTtlFor } from '~/services/cache/cachePolicy'
+import { extractOwnerRevision, mergeOwnerDocumentPatch, type OwnerDocumentData } from '~/services/cache/ownerRevision'
 
 const DEFAULT_CALLER = 'OwnerDocument'
 export const OWNER_DOCUMENT_CACHE_KEY = 'owner.document'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- documento Firestore `users/{uid}`
-export type OwnerDocumentData = Record<string, any>
+// PIP-444: la revisione vive in un modulo puro (`ownerRevision.ts`) condiviso con il piano di sync.
+export { extractOwnerRevision, type OwnerDocumentData }
 
 export interface OwnerDocumentSnapshot {
   uid: string
@@ -34,20 +35,6 @@ export interface LoadOwnerDocumentOptions {
 const cache = new Map<string, OwnerDocumentSnapshot>()
 const inFlight = new Map<string, Promise<OwnerDocumentSnapshot>>()
 let generation = 0
-
-/**
- * La revisione cambia solo quando cambiano le proiezioni owner: `sessionIndex.updatedAt`
- * viene scritto dalla sync incrementale, dal rebuild completo e dalla riparazione owner,
- * mai da heartbeat, profilo o checkpoint di manutenzione. `stats.updatedAt` copre i
- * documenti scritti prima dell'indice sessioni.
- */
-export function extractOwnerRevision(data: OwnerDocumentData | null | undefined): string | null {
-  const fromIndex = data?.sessionIndex?.updatedAt
-  if (typeof fromIndex === 'string' && fromIndex) return fromIndex
-  const fromStats = data?.stats?.updatedAt
-  if (typeof fromStats === 'string' && fromStats) return fromStats
-  return null
-}
 
 function toSnapshot(uid: string, exists: boolean, data: OwnerDocumentData | null): OwnerDocumentSnapshot {
   return { uid, exists, data, revision: extractOwnerRevision(data), readAt: Date.now() }
@@ -101,6 +88,17 @@ export function rememberOwnerDocumentPatch(uid: string, patch: OwnerDocumentData
   if (!cached || !cached.exists || !cached.data) return
   const data = { ...cached.data, ...patch }
   cache.set(uid, { ...cached, data, revision: extractOwnerRevision(data) })
+}
+
+/**
+ * PIP-444: la sync ha appena scritto `users/{uid}` con `merge` a partire dalla copia
+ * fresca letta nel ciclo: il documento risultante e' noto in locale e diventa la copia
+ * condivisa (revisione nuova compresa), senza rileggerlo. Non usare quando nel frattempo
+ * altri campi sono stati scritti senza passare da qui (manutenzione): in quel caso si svuota.
+ */
+export function rememberOwnerDocumentWrite(uid: string, base: OwnerDocumentData | null, patch: OwnerDocumentData) {
+  const data = mergeOwnerDocumentPatch(base, patch)
+  cache.set(uid, toSnapshot(uid, true, data))
 }
 
 export function clearOwnerDocumentCache(uid?: string) {

@@ -21,6 +21,12 @@ import {
   type TrackHistoricalPointProjection,
   type TrackRecentSessionProjection
 } from '~/types/trackProjections'
+// PIP-444: un documento per pista (`trackProjections/{trackId}`), sezione `detail`.
+import {
+  buildTrackProjectionSectionWrite,
+  loadTrackProjectionSections,
+  trackProjectionPath
+} from './trackProjectionDocument'
 
 export const TRACK_DETAIL_PROJECTION_MAX_ITEMS = 200
 
@@ -255,12 +261,12 @@ export async function applyTrackDetailProjectionDeltas(params: {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- opaque Firestore DocumentReference
-  const writes: Array<{ ref: any; document: TrackDetailProjectionDocument }> = []
+  const writes: Array<{ ref: any; trackId: string; document: TrackDetailProjectionDocument }> = []
   for (const [trackId, trackDeltas] of byTrack) {
-    const ref = docFn(db, `users/${uid}/trackDetailProjections/${trackId}`)
-    const snapshot = await getDocFn(ref)
-    if (!snapshot.exists()) return { wrote: false, requiresFullRebuild: true }
-    const existing = snapshot.data() as TrackDetailProjectionDocument
+    const ref = docFn(db, trackProjectionPath(uid, trackId))
+    const sections = await loadTrackProjectionSections({ db, uid, trackId, sections: ['detail'], getDocFn, docFn })
+    if (!sections.detail) return { wrote: false, requiresFullRebuild: true }
+    const existing = sections.detail as TrackDetailProjectionDocument
     if (existing.schemaVersion !== TRACK_DETAIL_PROJECTION_SCHEMA_VERSION) {
       return { wrote: false, requiresFullRebuild: true }
     }
@@ -273,14 +279,17 @@ export async function applyTrackDetailProjectionDeltas(params: {
     }
     // Voce identica (stesso file ricaricato senza cambiamenti utili): nessuna scrittura.
     if (sameProjection(sanitizeForFirestore(document), existing)) continue
-    writes.push({ ref, document })
+    writes.push({ ref, trackId, document })
   }
 
   for (const write of writes) {
-    await setDocFn(write.ref, {
-      ...sanitizeForFirestore(write.document),
+    const sectionWrite = buildTrackProjectionSectionWrite({
+      trackId: write.trackId,
+      section: 'detail',
+      data: { ...sanitizeForFirestore(write.document), updatedAt: serverTimestamp() },
       updatedAt: serverTimestamp()
-    }, { merge: true })
+    })
+    await setDocFn(write.ref, sectionWrite.data, sectionWrite.options)
   }
   return { wrote: writes.length > 0, requiresFullRebuild: false }
 }
@@ -358,13 +367,13 @@ export async function writeTrackDetailProjectionDocuments(params: {
 
   for (const trackId of trackIds) {
     const projection = sanitizeForFirestore(buildTrackDetailProjectionDocument(trackId, sessions))
-    await setDocFn(
-      doc(db, `users/${uid}/trackDetailProjections/${trackId}`),
-      {
-        ...projection,
-        updatedAt: serverTimestamp()
-      },
-      { merge: true }
-    )
+    // PIP-444: sezione `detail` del documento unito per pista, sostituita per intero.
+    const write = buildTrackProjectionSectionWrite({
+      trackId,
+      section: 'detail',
+      data: { ...projection, updatedAt: serverTimestamp() },
+      updatedAt: serverTimestamp()
+    })
+    await setDocFn(doc(db, trackProjectionPath(uid, trackId)), write.data, write.options)
   }
 }

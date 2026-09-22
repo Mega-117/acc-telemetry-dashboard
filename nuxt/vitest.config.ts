@@ -149,6 +149,10 @@ export default defineConfig({
         'app/services/cache/persistentOwnerCache.ts',
         'app/services/cache/ownerRevisionWatcher.ts',
         'app/composables/useOwnerCacheLifecycle.ts',
+        // PIP-444: mirror locale della sync, documento unito per pista, revisione owner pura.
+        'app/services/sync/syncMirrorService.ts',
+        'app/services/sync/trackProjectionDocument.ts',
+        'app/services/cache/ownerRevision.ts',
         'app/services/sync/sessionListProjectionService.ts',
         'app/services/sync/ownerOperationTracker.ts',
         'app/services/sync/sessionUploadService.ts',

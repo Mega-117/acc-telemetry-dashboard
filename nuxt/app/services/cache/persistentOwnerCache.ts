@@ -27,6 +27,8 @@ import {
   exportSessionListProjectionEntries,
   hydrateSessionListProjectionCache
 } from '~/services/sync/sessionListProjectionService'
+// PIP-444: il mirror della sync viaggia nello stesso file, con la propria revisione.
+import { exportSyncMirror, hydrateSyncMirror } from '~/services/sync/syncMirrorService'
 
 export const OWNER_DISK_CACHE_KEY = 'owner.disk'
 export const OWNER_CACHE_SAVE_DEBOUNCE_MS = 1_500
@@ -92,6 +94,8 @@ export async function hydrateOwnerCachesFromDisk(
   if (payload.entries.trackBestsIndex && hydrateTrackBestsIndexCache(uid, payload.entries.trackBestsIndex.document)) hydrated += 1
   if (payload.entries.raceCalendarIndex && hydrateRaceCalendarSummary(uid, payload.entries.raceCalendarIndex)) hydrated += 1
   if (payload.entries.sessionList && hydrateSessionListProjectionCache(uid, payload.entries.sessionList.entries)) hydrated += 1
+  // Il mirror ha la propria revisione: il ciclo di sync la confronta con la lettura fresca.
+  if (payload.entries.syncMirror && hydrateSyncMirror(uid, payload.entries.syncMirror)) hydrated += 1
   journal('hydrated', { bytes: hydrated })
   return 'hydrated'
 }
@@ -105,6 +109,8 @@ export function collectOwnerCacheEntries(uid: string): OwnerCacheEntries {
   if (calendar) entries.raceCalendarIndex = calendar
   const sessionList = exportSessionListProjectionEntries(uid)
   if (sessionList) entries.sessionList = { entries: sessionList }
+  const syncMirror = exportSyncMirror(uid)
+  if (syncMirror) entries.syncMirror = syncMirror
   return entries
 }
 

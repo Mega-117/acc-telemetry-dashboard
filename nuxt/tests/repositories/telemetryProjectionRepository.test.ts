@@ -19,7 +19,8 @@ import {
   exportTrackBestsIndexDocument,
   hydrateTrackBestsIndexCache,
   loadTrackBest,
-  loadTrackBestsMap
+  loadTrackBestsMap,
+  loadTrackDetailProjectionDoc
 } from '~/repositories/telemetryProjectionRepository'
 
 type Store = Map<string, any>
@@ -86,15 +87,17 @@ describe('telemetryProjectionRepository con indice piste', () => {
     const map = await loadTrackBestsMap('u')
     expect(Object.keys(map)).toEqual(['monza'])
     expect(fake.getDoc).toHaveBeenCalledTimes(1)
-    expect(fake.getDocs).toHaveBeenCalledTimes(1)
+    // PIP-444: prima la collection dei documenti uniti (vuota), poi la vecchia collection.
+    expect(fake.getDocs).toHaveBeenCalledTimes(2)
     clearTelemetryProjectionRepositoryCache('u')
     const single = await loadTrackBest('u', 'monza')
     expect(single.trackId).toBe('monza')
-    expect(fake.getDoc).toHaveBeenCalledTimes(3)
+    // indice (manca) + documento unito (manca) + vecchio documento.
+    expect(fake.getDoc).toHaveBeenCalledTimes(4)
     expect(fake.getDoc).toHaveBeenLastCalledWith('users/u/trackBests/monza', 'TelemetryProjectionRepository')
     // Il "manca" e' ricordato: la seconda pista non rilegge l'indice.
     await loadTrackBest('u', 'spa')
-    expect(fake.getDoc).toHaveBeenCalledTimes(4)
+    expect(fake.getDoc).toHaveBeenCalledTimes(6)
   })
 
   it('indice con versione vecchia o parziale (senza complete) viene ignorato', async () => {
@@ -104,7 +107,43 @@ describe('telemetryProjectionRepository con indice piste', () => {
     clearTelemetryProjectionRepositoryCache()
     store.set('users/u/trackBestsIndex/v1', { version: 1, updatedAt: 'x', tracks: { monza: trackDoc('monza') } })
     expect(Object.keys(await loadTrackBestsMap('u'))).toEqual(['spa'])
+    expect(fake.getDocs).toHaveBeenCalledTimes(4)
+  })
+
+  // PIP-444 (b): un documento per pista, letto prima dei vecchi documenti.
+  it('documento unito: una lettura serve dettaglio e best; il vecchio dettaglio solo se manca', async () => {
+    const detail = { schemaVersion: 2, trackId: 'monza', lastSessionDate: null, categories: { GT3: { sessionCount: 1 } } }
+    store.set('users/u/trackProjections/monza', { schemaVersion: 1, trackId: 'monza', bests: trackDoc('monza'), detail })
+    expect(await loadTrackDetailProjectionDoc('u', 'monza')).toEqual(detail)
+    expect(fake.getDoc).toHaveBeenCalledTimes(1)
+    expect(fake.getDoc).toHaveBeenLastCalledWith('users/u/trackProjections/monza', 'TelemetryProjectionRepository')
+    // I best della stessa pista sono gia' in cache: nessuna lettura (indice compreso).
+    expect((await loadTrackBest('u', 'monza')).trackId).toBe('monza')
+    expect(fake.getDoc).toHaveBeenCalledTimes(1)
+
+    clearTelemetryProjectionRepositoryCache('u')
+    store.delete('users/u/trackProjections/monza')
+    store.set('users/u/trackDetailProjections/monza', detail)
+    expect(await loadTrackDetailProjectionDoc('u', 'monza')).toEqual(detail)
+    expect(fake.getDoc).toHaveBeenCalledTimes(3)
+    expect(fake.getDoc).toHaveBeenLastCalledWith('users/u/trackDetailProjections/monza', 'TelemetryProjectionRepository')
+    // Documento unito con dettaglio di schema vecchio o assente: nessun dettaglio, senza fallback.
+    clearTelemetryProjectionRepositoryCache('u')
+    store.set('users/u/trackProjections/monza', { schemaVersion: 1, trackId: 'monza', bests: null, detail: { schemaVersion: 1 } })
+    expect(await loadTrackDetailProjectionDoc('u', 'monza')).toBeNull()
+    expect(fake.getDoc).toHaveBeenCalledTimes(4)
+  })
+
+  it('mappa senza indice: conserva le piste non migrate e preferisce i best nuovi', async () => {
+    store.set('users/u/trackProjections/monza', { schemaVersion: 1, trackId: 'monza', bests: trackDoc('monza'), detail: null })
+    store.set('users/u/trackProjections/legacy', { schemaVersion: 1, trackId: 'legacy', bests: trackDoc('legacy', { bestRulesVersion: 1 }), detail: null })
+    store.set('users/u/trackBests/spa', trackDoc('spa'))
+    store.set('users/u/trackBests/monza', trackDoc('monza', { activity: { totalLaps: 1 } }))
+    const map = await loadTrackBestsMap('u')
+    expect(Object.keys(map).sort()).toEqual(['monza', 'spa'])
+    expect(map.monza.activity.totalLaps).toBe(10)
     expect(fake.getDocs).toHaveBeenCalledTimes(2)
+    expect(fake.getDocs).toHaveBeenLastCalledWith('users/u/trackBests', 'TelemetryProjectionRepository')
   })
 
   it('indice non leggibile (rules non pubblicate, offline): fallback alla collection senza errore', async () => {
@@ -117,7 +156,8 @@ describe('telemetryProjectionRepository con indice piste', () => {
     expect(Object.keys(await loadTrackBestsMap('u'))).toEqual(['monza'])
     expect((await loadTrackBest('u', 'monza')).trackId).toBe('monza')
     expect(fake.getDoc).toHaveBeenCalledTimes(1)
-    expect(fake.getDocs).toHaveBeenCalledTimes(1)
+    // PIP-444: collection dei documenti uniti (vuota) + vecchia collection.
+    expect(fake.getDocs).toHaveBeenCalledTimes(2)
     warn.mockRestore()
   })
 

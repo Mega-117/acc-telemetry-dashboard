@@ -20,7 +20,7 @@ export async function rebuildTrackBestsProjection(params: {
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
   bestRulesVersion: number
 }): Promise<void> {
-  const { db, uid, sessions, resetAllTrackBests, getDocFn, setDocFn, bestRulesVersion } = params
+  const { db, uid, sessions, resetAllTrackBests, setDocFn, bestRulesVersion } = params
   await resetAllTrackBests(uid)
   const deltas: TrackBestProjectionDelta[] = sessions
     .filter((session) => !!session?.meta?.track && !!session?.sessionId)
@@ -36,7 +36,9 @@ export async function rebuildTrackBestsProjection(params: {
     db,
     uid,
     deltas,
-    getDocFn,
+    // PIP-444: i best sono appena stati azzerati e i delta coprono tutto lo storico: la
+    // sezione `bests` viene ricostruita da zero e sostituita per intero, senza letture.
+    getDocFn: async () => ({ exists: () => false, data: () => null }),
     setDocFn,
     bestRulesVersion,
     // PIP-441: dopo il reset ogni pista viene riscritta, quindi l'indice e' completo.

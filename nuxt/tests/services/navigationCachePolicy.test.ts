@@ -51,7 +51,8 @@ describe('cache di navigazione', () => {
     await loadUserProjection('pilot')
     await loadTrackBestsMap('pilot')
     expect(fake.getDoc).toHaveBeenCalledTimes(4)
-    expect(fake.getDocs).toHaveBeenCalledTimes(2)
+    // PIP-444: senza indice la mappa interroga prima i documenti uniti (vuoti), poi trackBests: 2 query per lettura.
+    expect(fake.getDocs).toHaveBeenCalledTimes(4)
     setCacheOwnerUid(null)
     expect(ownerDataCacheTtlFor('u')).toBe(FOREIGN_OWNER_DATA_CACHE_TTL_MS)
   })
@@ -80,9 +81,10 @@ describe('cache di navigazione', () => {
     vi.advanceTimersByTime(5 * 60 * 60_000)
     await loadUserProjection('u')
     await loadTrackBestsMap('u')
-    // users/* + tentativo indice piste (assente), poi la collection: tutto una volta sola.
+    // users/* + tentativo indice piste (assente), poi le collection (documenti uniti, poi
+    // trackBests: PIP-444): tutto una volta sola.
     expect(fake.getDoc).toHaveBeenCalledTimes(2)
-    expect(fake.getDocs).toHaveBeenCalledTimes(1)
+    expect(fake.getDocs).toHaveBeenCalledTimes(2)
   })
 
   it('una sync (invalidazione) fa rileggere subito; senza invalidazione mai', async () => {

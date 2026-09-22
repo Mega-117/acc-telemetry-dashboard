@@ -12,6 +12,13 @@ import { ownerDataCacheTtlFor } from '~/services/cache/cachePolicy'
 import { notifyOwnerCacheChanged } from '~/services/cache/ownerCacheSignals'
 import { loadOwnerDocument } from '~/repositories/ownerDocumentRepository'
 import { expandTrackBestsIndexEntry, isTrackBestsIndexUsable, trackBestsIndexPath } from '~/services/sync/trackBestsIndexProjectionService'
+// PIP-444: lettura a doppia forma, prima il documento unito per pista poi i vecchi documenti.
+import {
+  TRACK_PROJECTIONS_COLLECTION,
+  isTrackProjectionDocument,
+  splitTrackProjectionDocument,
+  trackProjectionPath
+} from '~/services/sync/trackProjectionDocument'
 
 let cacheGeneration = 0
 
@@ -186,6 +193,10 @@ export async function loadTrackBest(uid: string, trackId: string): Promise<Track
   const indexed = await loadTrackBestsIndex(uid)
   if (indexed) return setCache(trackBestCache, cacheKey, indexed[normalizedTrackId] ?? null, generation)
 
+  // PIP-444: documento unito per pista; il vecchio `trackBests/{trackId}` solo se manca.
+  const merged = await loadMergedTrackProjection(uid, normalizedTrackId, generation)
+  if (merged) return setCache(trackBestCache, cacheKey, isSupportedTrackBestProjection(merged.bests) ? merged.bests : null, generation)
+
   const snap = await trackedGetDoc(doc(db, `users/${uid}/trackBests/${normalizedTrackId}`), CALLER)
   if (!snap.exists()) return setCache(trackBestCache, cacheKey, null, generation)
   const data = snap.data() || null
@@ -200,10 +211,39 @@ export async function loadTrackBestsMap(uid: string): Promise<TrackBestDocumentM
   const indexed = await loadTrackBestsIndex(uid)
   if (indexed) return setCache(trackBestsMapCache, uid, indexed, generation)
 
-  // Fallback (indice assente/vecchio): la collection come prima di PIP-441.
+  // La migrazione e' per pista: una collection unita non vuota non implica che
+  // tutte le piste siano migrate. Unire i due formati, preferendo quello nuovo.
+  const mergedSnap = await trackedGetDocs(query(collection(db, `users/${uid}/${TRACK_PROJECTIONS_COLLECTION}`)), CALLER)
+  const mergedEntries = (mergedSnap.docs || [])
+    .map((docSnap) => ({ id: docSnap.id, data: docSnap.data() || {} }))
+    .filter((entry) => isTrackProjectionDocument(entry.data) && !!splitTrackProjectionDocument(entry.data).bests)
+    .map((entry) => ({ id: entry.id, data: splitTrackProjectionDocument(entry.data).bests }))
   const snap = await trackedGetDocs(query(collection(db, `users/${uid}/trackBests`)), CALLER)
   const entries = (snap.docs || []).map((docSnap) => ({ id: docSnap.id, data: docSnap.data() || {} }))
-  return setCache(trackBestsMapCache, uid, collectSupportedTrackBests(entries, uid, generation), generation)
+  return setCache(trackBestsMapCache, uid, collectSupportedTrackBests([...entries, ...mergedEntries], uid, generation), generation)
+}
+
+/**
+ * PIP-444: una lettura del documento unito serve sia il dettaglio pista sia i best (messi
+ * in cache insieme). `null` = documento assente o non unito: il chiamante usa la forma vecchia.
+ */
+async function loadMergedTrackProjection(
+  uid: string,
+  normalizedTrackId: string,
+  generation: number
+): Promise<{ bests: TrackBestDocument | null; detail: TrackDetailProjectionDocument | null } | null> {
+  const snap = await trackedGetDoc(doc(db, trackProjectionPath(uid, normalizedTrackId)), CALLER)
+  const data = snap.exists() ? snap.data() : null
+  if (!isTrackProjectionDocument(data)) return null
+  const sections = splitTrackProjectionDocument(data)
+  const detail = sections.detail && Number(sections.detail.schemaVersion || 0) === TRACK_DETAIL_PROJECTION_SCHEMA_VERSION
+    ? sections.detail as TrackDetailProjectionDocument
+    : null
+  if (sections.bests && isSupportedTrackBestProjection(sections.bests)) {
+    setCache(trackBestCache, `${uid}:${normalizedTrackId}`, sections.bests, generation)
+  }
+  setCache(trackDetailProjectionCache, `${uid}:${normalizedTrackId}`, detail, generation)
+  return { bests: sections.bests, detail }
 }
 
 export async function loadTrackDetailProjectionDoc(
@@ -217,6 +257,10 @@ export async function loadTrackDetailProjectionDoc(
   if (isFresh(cached, 'trackDetail', uid)) return cached.value
 
   const generation = cacheGeneration
+  // PIP-444: documento unito per pista; il vecchio `trackDetailProjections/{trackId}` solo se manca.
+  const merged = await loadMergedTrackProjection(uid, normalizedTrackId, generation)
+  if (merged) return merged.detail
+
   const snap = await trackedGetDoc(doc(db, `users/${uid}/trackDetailProjections/${normalizedTrackId}`), CALLER)
   if (!snap.exists()) return setCache(trackDetailProjectionCache, cacheKey, null, generation)
   const data = snap.data() || {}

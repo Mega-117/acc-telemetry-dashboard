@@ -7,6 +7,8 @@ const rebuildOwnerProjectionsMock = vi.hoisted(() => vi.fn())
 const rebuildOwnerSessionListProjectionMock = vi.hoisted(() => vi.fn())
 const reprocessOwnerCloudRawSummariesMock = vi.hoisted(() => vi.fn())
 const verifyOwnerMigrationLightweightMock = vi.hoisted(() => vi.fn())
+// PIP-444: migrazione dei vecchi documenti per pista nel documento unito.
+const migrateOwnerTrackProjectionsMock = vi.hoisted(() => vi.fn())
 const inspectFirebaseStructureStateMock = vi.hoisted(() => vi.fn())
 const claimFirebaseStructureLeaseMock = vi.hoisted(() => vi.fn())
 const renewFirebaseStructureLeaseMock = vi.hoisted(() => vi.fn())
@@ -51,6 +53,7 @@ vi.mock('~/services/sync/firebaseStructureHealthService', async (importOriginal)
 
 vi.mock('~/services/sync/ownerDataRepairService', () => ({
   auditOwnerData: auditOwnerDataMock,
+  migrateOwnerTrackProjections: migrateOwnerTrackProjectionsMock,
   rebuildOwnerProjections: rebuildOwnerProjectionsMock,
   rebuildOwnerSessionListProjection: rebuildOwnerSessionListProjectionMock,
   reprocessOwnerCloudRawSummaries: reprocessOwnerCloudRawSummariesMock,
@@ -231,6 +234,33 @@ describe('runOwnerDataMaintenanceGate', () => {
     expect(rebuildOwnerProjectionsMock).toHaveBeenCalledWith('uid-1', {
       assertActive: expect.any(Function)
     })
+  })
+
+  // PIP-444: piste ancora su documenti separati -> migrazione (una scrittura per pista), nessun rebuild.
+  it('migra i documenti per pista separati senza rebuild quando e\' l\'unica anomalia', async () => {
+    inspectFirebaseStructureStateMock.mockReturnValue({
+      action: 'verify_current',
+      code: 'health_verification_required'
+    })
+    verifyOwnerMigrationLightweightMock.mockResolvedValueOnce({ ok: false, issues: ['track_projections_unmerged'] })
+    const audit = cleanAudit()
+    audit.projections.unmergedTrackProjections = ['monza', 'spa']
+    audit.issues = [{ severity: 'info', code: 'track_projections_unmerged', message: 'x', trackId: 'monza' }]
+    auditOwnerDataMock.mockResolvedValue(audit)
+    migrateOwnerTrackProjectionsMock.mockResolvedValue({ generatedAt: 'now', uid: 'uid-1', migratedTracks: ['monza', 'spa'], alreadyMerged: 0 })
+    getDocMock.mockResolvedValue({
+      exists: () => true,
+      data: () => ({ maintenance: { canonicalDataMigration: migration } })
+    })
+
+    const { runOwnerDataMaintenanceGate } = await import('~/services/sync/ownerDataMaintenanceService')
+    const report = await runOwnerDataMaintenanceGate({ uid: 'uid-1' })
+
+    expect(report.status).toBe('completed')
+    expect(migrateOwnerTrackProjectionsMock).toHaveBeenCalledWith('uid-1', { assertActive: expect.any(Function) })
+    expect(rebuildOwnerProjectionsMock).not.toHaveBeenCalled()
+    expect(reprocessOwnerCloudRawSummariesMock).not.toHaveBeenCalled()
+    expect(report.audit?.projections.unmergedTrackProjections).toEqual([])
   })
 
   it('riesegue audit completo per uno stato partial scaduto', async () => {

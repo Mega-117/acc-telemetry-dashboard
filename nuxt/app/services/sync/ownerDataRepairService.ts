@@ -1,4 +1,4 @@
-import { collection, doc, limit, query } from 'firebase/firestore'
+import { collection, doc, limit, query, serverTimestamp } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import {
   trackedDeleteDoc,
@@ -23,6 +23,14 @@ import {
 import { TRACK_DETAIL_PROJECTION_SCHEMA_VERSION } from '~/types/trackProjections'
 import { isTrackBestsIndexConsistent, trackBestsIndexPath } from './trackBestsIndexProjectionService'
 import { writeUserProjectionDocuments } from './projectionRebuildService'
+// PIP-444: un documento per pista; audit e verifica accettano entrambe le forme.
+import {
+  TRACK_PROJECTIONS_COLLECTION,
+  buildTrackProjectionDocument,
+  collectTrackProjectionSections,
+  trackProjectionPath
+} from './trackProjectionDocument'
+import { invalidateSyncMirror } from './syncMirrorService'
 import { writePilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
 import { PILOT_DIRECTORY_SCHEMA_VERSION } from '~/utils/pilotDirectoryFields'
 import {
@@ -72,6 +80,8 @@ export interface OwnerDataAuditReport {
     oldTrackDetailProjections: string[]
     /** PIP-441: `trackBestsIndex/v1` assente, vecchio o non coerente con la collection. */
     trackBestsIndexStale?: boolean
+    /** PIP-444: piste con vecchi documenti (trackBests/trackDetailProjections) ma senza documento unito. */
+    unmergedTrackProjections?: string[]
   }
   permissions: {
     user: 'ok' | 'denied'
@@ -99,10 +109,20 @@ export interface OwnerProjectionRebuildReport {
   trackCount: number
   deletedTrackBests: number
   deletedTrackDetailProjections: number
+  /** PIP-444: documenti uniti `trackProjections/*` cancellati prima della ricostruzione. */
+  deletedTrackProjections?: number
   updatedTrackBests: string[]
   touchedTrackBests: string[]
   wroteUserProjection: boolean
   wrotePilotDirectory: boolean
+}
+
+/** PIP-444: esito della migrazione dei vecchi documenti per pista nel documento unito. */
+export interface OwnerTrackProjectionMigrationReport {
+  generatedAt: string
+  uid: string
+  migratedTracks: string[]
+  alreadyMerged: number
 }
 
 export interface OwnerSessionListProjectionRebuildReport {
@@ -325,15 +345,6 @@ function toDocList(docs: any[]): Array<{ id: string; data: any }> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-function toDocMap(docs: any[]): Map<string, any> {
-  const result = new Map<string, any>()
-  for (const docSnap of docs) {
-    result.set(normalizeTrackId(docSnap.id), docSnap.data() || {})
-  }
-  return result
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 export function isLegacyTrackBestProjectionDoc(data: any): boolean {
   return Number(data?.version || 0) < TRACK_BESTS_SCHEMA_VERSION
     || Number(data?.bestRulesVersion || 0) < BEST_RULES_VERSION
@@ -415,11 +426,17 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
     let sessionListSchemaVersion = 0
     let sessionListTotalSessions = 0
     let trackBestsIndexStale = false
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+    let mergedTrackDocs: any[] = []
+    try {
+      // PIP-444: i documenti uniti per pista contano per entrambe le sezioni.
+      mergedTrackDocs = await loadCollectionDocs(`users/${uid}/${TRACK_PROJECTIONS_COLLECTION}`)
+    } catch {
+      // Rules non ancora pubblicate: si valutano solo i vecchi documenti.
+      mergedTrackDocs = []
+    }
     try {
       trackBestDocs = await loadCollectionDocs(`users/${uid}/trackBests`)
-      // PIP-441: l'indice piste deve rispecchiare la collection; se no il rebuild lo riscrive.
-      const indexSnap = await getDocTracked(doc(db, trackBestsIndexPath(uid)))
-      trackBestsIndexStale = !isTrackBestsIndexConsistent(indexSnap.exists() ? indexSnap.data() : null, toDocList(trackBestDocs))
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     } catch (error: any) {
       permissions.trackBests = 'denied'
@@ -431,6 +448,25 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
     } catch (error: any) {
       permissions.trackDetailProjections = 'denied'
       issues.push(issue('error', 'track_detail_projection_denied', error?.message || 'Permessi insufficienti su trackDetailProjections.'))
+    }
+    const trackSections = collectTrackProjectionSections({
+      merged: toDocList(mergedTrackDocs),
+      legacyBests: toDocList(trackBestDocs),
+      legacyDetail: toDocList(trackDetailDocs)
+    })
+    if (permissions.trackBests === 'ok') {
+      try {
+        // PIP-441: l'indice piste deve rispecchiare i best per pista; se no il rebuild lo riscrive.
+        const indexSnap = await getDocTracked(doc(db, trackBestsIndexPath(uid)))
+        trackBestsIndexStale = !isTrackBestsIndexConsistent(
+          indexSnap.exists() ? indexSnap.data() : null,
+          Array.from(trackSections.bests.entries()).map(([id, data]) => ({ id, data }))
+        )
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+      } catch (error: any) {
+        permissions.trackBests = 'denied'
+        issues.push(issue('error', 'track_bests_denied', error?.message || 'Permessi insufficienti su trackBestsIndex.'))
+      }
     }
     try {
       await getDocTracked(doc(db, `pilotDirectory/${uid}`))
@@ -445,8 +481,10 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
       issues.push(issue('error', 'session_list_projection_denied', error?.message || 'Permessi insufficienti su sessionList projection.'))
     }
 
-    const trackBestMap = toDocMap(trackBestDocs)
-    const trackDetailMap = toDocMap(trackDetailDocs)
+    // PIP-444: unione per pista (documento unito preferito, altrimenti il vecchio documento).
+    const trackBestMap = trackSections.bests
+    const trackDetailMap = trackSections.detail
+    const unmergedTrackProjections = trackSections.unmerged
     const missingTrackBests = trackIds.filter((trackId) => !trackBestMap.has(trackId))
     const missingTrackDetailProjections = trackIds.filter((trackId) => !trackDetailMap.has(trackId))
     const expectedSessionListPageDocs = Math.ceil(sessions.length / SESSION_LIST_PROJECTION_PAGE_SIZE)
@@ -468,6 +506,9 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
     }
     if (trackBestsIndexStale && permissions.trackBests === 'ok') {
       issues.push(issue('warning', 'track_bests_index_stale', 'Indice piste (trackBestsIndex) mancante o non coerente con trackBests.'))
+    }
+    for (const trackId of unmergedTrackProjections.slice(0, MAX_ISSUES)) {
+      issues.push(issue('info', 'track_projections_unmerged', 'Pista con vecchi documenti separati, da migrare nel documento unito.', { trackId }))
     }
     if (sessionListSchemaVersion !== SESSION_LIST_PROJECTION_SCHEMA_VERSION) {
       issues.push(issue('warning', 'session_list_schema_mismatch', 'Session list projection mancante o con schema vecchio.'))
@@ -526,13 +567,14 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
         expectedStatsSchemaVersion: USER_STATS_SCHEMA_VERSION,
         trackBestsSchemaVersion: TRACK_BESTS_SCHEMA_VERSION,
         trackDetailProjectionSchemaVersion: TRACK_DETAIL_PROJECTION_SCHEMA_VERSION,
-        trackBestsDocs: trackBestDocs.length,
-        trackDetailProjectionDocs: trackDetailDocs.length,
+        trackBestsDocs: trackBestMap.size,
+        trackDetailProjectionDocs: trackDetailMap.size,
         missingTrackBests,
         oldTrackBests,
         missingTrackDetailProjections,
         oldTrackDetailProjections,
-        trackBestsIndexStale
+        trackBestsIndexStale,
+        unmergedTrackProjections
       },
       permissions,
       issues: issues.slice(0, MAX_ISSUES),
@@ -547,13 +589,23 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
     const userSnap = await getDocTracked(doc(db, `users/${uid}`))
     const userData = userSnap.exists() ? (userSnap.data() || {}) : {}
     const trackBestDocs = await loadCollectionDocs(`users/${uid}/trackBests`)
+    const trackDetailDocs = await loadCollectionDocs(`users/${uid}/trackDetailProjections`)
+    // PIP-444: i documenti uniti valgono per entrambe le sezioni; le piste ancora separate
+    // sono un'issue che porta alla migrazione (una scrittura per pista), non a un rebuild.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+    let mergedTrackDocs: any[] = []
+    try { mergedTrackDocs = await loadCollectionDocs(`users/${uid}/${TRACK_PROJECTIONS_COLLECTION}`) } catch { mergedTrackDocs = [] }
+    const trackSections = collectTrackProjectionSections({
+      merged: toDocList(mergedTrackDocs),
+      legacyBests: toDocList(trackBestDocs),
+      legacyDetail: toDocList(trackDetailDocs)
+    })
     // PIP-441: un indice piste non coerente fa scattare il rebuild delle proiezioni.
     const trackBestsIndexSnap = await getDocTracked(doc(db, trackBestsIndexPath(uid)))
     const trackBestsIndexValid = isTrackBestsIndexConsistent(
       trackBestsIndexSnap.exists() ? trackBestsIndexSnap.data() : null,
-      toDocList(trackBestDocs)
+      Array.from(trackSections.bests.entries()).map(([id, data]) => ({ id, data }))
     )
-    const trackDetailDocs = await loadCollectionDocs(`users/${uid}/trackDetailProjections`)
     const pilotDirectorySnap = await getDocTracked(doc(db, `pilotDirectory/${uid}`))
     const pilotDirectory = pilotDirectorySnap.exists() ? (pilotDirectorySnap.data() || {}) : {}
     const sessionListMetaSnap = await getDocTracked(doc(db, `users/${uid}/sessionListMeta/v1`))
@@ -563,16 +615,12 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
     const statsSchemaVersion = Number(userData?.stats?.schemaVersion || 0)
     const sessionIndexSchemaVersion = Number(userData?.sessionIndex?.schemaVersion || 0)
     const sessionListSchemaVersion = Number(sessionListMeta?.schemaVersion || 0)
-    const oldTrackBests = trackBestDocs
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-      .filter((docSnap: any) => isLegacyTrackBestProjectionDoc(docSnap.data() || {}))
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-      .map((docSnap: any) => docSnap.id)
-    const oldTrackDetailProjections = trackDetailDocs
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-      .filter((docSnap: any) => Number(docSnap.data()?.schemaVersion || 0) !== TRACK_DETAIL_PROJECTION_SCHEMA_VERSION)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-      .map((docSnap: any) => docSnap.id)
+    const oldTrackBests = Array.from(trackSections.bests.entries())
+      .filter(([, data]) => isLegacyTrackBestProjectionDoc(data || {}))
+      .map(([trackId]) => trackId)
+    const oldTrackDetailProjections = Array.from(trackSections.detail.entries())
+      .filter(([, data]) => Number(data?.schemaVersion || 0) !== TRACK_DETAIL_PROJECTION_SCHEMA_VERSION)
+      .map(([trackId]) => trackId)
 
     const pilotDirectoryValid = pilotDirectorySnap.exists()
       && Number(pilotDirectory.schemaVersion || 0) === PILOT_DIRECTORY_SCHEMA_VERSION
@@ -591,6 +639,7 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
     if (oldTrackBests.length > 0) issues.push('old_track_bests_schema_or_rules')
     if (oldTrackDetailProjections.length > 0) issues.push('old_track_detail_projection_schema')
     if (!trackBestsIndexValid) issues.push('track_bests_index_missing_or_stale')
+    if (trackSections.unmerged.length > 0) issues.push('track_projections_unmerged')
 
     return {
       generatedAt: new Date().toISOString(),
@@ -605,8 +654,8 @@ export async function verifyOwnerMigrationLightweight(uid: string): Promise<Owne
         expectedSessionListSchemaVersion: SESSION_LIST_PROJECTION_SCHEMA_VERSION
       },
       projections: {
-        trackBestsDocs: trackBestDocs.length,
-        trackDetailProjectionDocs: trackDetailDocs.length,
+        trackBestsDocs: trackSections.bests.size,
+        trackDetailProjectionDocs: trackSections.detail.size,
         sessionListPageDocs: sessionListPageDocs.length,
         pilotDirectoryValid,
         oldTrackBests,
@@ -676,13 +725,18 @@ export async function rebuildOwnerProjections(
 
     const deletedTrackBests = await deleteCollectionDocs(`users/${uid}/trackBests`, assertActive)
     const deletedTrackDetailProjections = await deleteCollectionDocs(`users/${uid}/trackDetailProjections`, assertActive)
+    // PIP-444: anche i documenti uniti per pista ripartono da zero; il mirror della sync
+    // non deve piu' servire i vecchi contenuti.
+    const deletedTrackProjections = await deleteCollectionDocs(`users/${uid}/${TRACK_PROJECTIONS_COLLECTION}`, assertActive)
+    invalidateSyncMirror(uid)
 
     assertActive()
     const trackBestsResult = await applyTrackBestsProjectionDeltas({
       db,
       uid,
       deltas,
-      getDocFn: guardedGetDoc,
+      // Le tre collection sono appena state svuotate: nessuna lettura per pista.
+      getDocFn: async () => ({ exists: () => false, data: () => null }),
       setDocFn: guardedSetDoc,
       bestRulesVersion: BEST_RULES_VERSION,
       // PIP-441: la collection e' stata azzerata, l'indice piste viene riscritto completo.
@@ -726,10 +780,59 @@ export async function rebuildOwnerProjections(
       trackCount: trackIds.length,
       deletedTrackBests,
       deletedTrackDetailProjections,
+      deletedTrackProjections,
       updatedTrackBests: trackBestsResult.updatedTracks,
       touchedTrackBests: trackBestsResult.touchedTracks,
       wroteUserProjection: true,
       wrotePilotDirectory
+    }
+  })
+}
+
+/**
+ * PIP-444: migrazione dei vecchi documenti per pista nel documento unito, dalla
+ * manutenzione 24h. Per ogni pista con vecchi documenti ma senza documento unito scrive
+ * `trackProjections/{trackId}` con le due sezioni cosi' come sono (una scrittura per
+ * pista, nessun ricalcolo). I vecchi documenti restano: la loro cancellazione non e'
+ * parte di questo task.
+ */
+export async function migrateOwnerTrackProjections(
+  uid: string,
+  options: OwnerDataRepairGuardOptions = {}
+): Promise<OwnerTrackProjectionMigrationReport> {
+  const assertActive = options.assertActive || (() => {})
+  return withFirebaseScenario('maintenance.ownerData.trackProjectionsMigration', { uid }, async () => {
+    assertActive()
+    const merged = await loadCollectionDocs(`users/${uid}/${TRACK_PROJECTIONS_COLLECTION}`)
+    assertActive()
+    const legacyBests = await loadCollectionDocs(`users/${uid}/trackBests`)
+    assertActive()
+    const legacyDetail = await loadCollectionDocs(`users/${uid}/trackDetailProjections`)
+    assertActive()
+    const sections = collectTrackProjectionSections({
+      merged: toDocList(merged),
+      legacyBests: toDocList(legacyBests),
+      legacyDetail: toDocList(legacyDetail)
+    })
+    const migratedTracks: string[] = []
+    for (const trackId of sections.unmerged) {
+      assertActive()
+      const document = buildTrackProjectionDocument({
+        trackId,
+        bests: sections.bests.get(trackId) ?? null,
+        detail: sections.detail.get(trackId) ?? null,
+        updatedAt: serverTimestamp()
+      })
+      await setDocTracked(doc(db, trackProjectionPath(uid, trackId)), sanitizeForFirestore(document))
+      assertActive()
+      migratedTracks.push(trackId)
+    }
+    if (migratedTracks.length > 0) invalidateSyncMirror(uid)
+    return {
+      generatedAt: new Date().toISOString(),
+      uid,
+      migratedTracks,
+      alreadyMerged: sections.mergedTrackIds.length
     }
   })
 }
@@ -743,6 +846,9 @@ export async function rebuildOwnerSessionListProjection(
     assertActive()
     const sessions = await loadOwnerSessions(uid)
     assertActive()
+    // PIP-444: la lista viene riscritta fuori dal piano di sync (senza cambiare la
+    // revisione owner): il mirror non deve piu' servire meta e pagine vecchie.
+    invalidateSyncMirror(uid)
     const projection = await writeSessionListProjectionDocuments({
       db,
       uid,

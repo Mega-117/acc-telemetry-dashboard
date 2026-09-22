@@ -6,6 +6,7 @@ import { clearCoachLessonsCache } from '~/repositories/coachLessonsRepository'
 import { clearRaceCalendarCache } from '~/repositories/raceCalendarRepository'
 import { clearTelemetryProjectionRepositoryCache } from '~/repositories/telemetryProjectionRepository'
 import { clearOwnerDocumentCache } from '~/repositories/ownerDocumentRepository'
+import { invalidateSyncMirror } from '~/services/sync/syncMirrorService'
 
 export type TelemetryCacheInvalidationScope =
   | 'sync'
@@ -32,6 +33,13 @@ export function invalidateTelemetryCaches(options: TelemetryCacheInvalidationOpt
     clearTelemetryProjectionRepositoryCache(uid)
     clearTelemetryGatewayCache(uid)
     clearSessionPagerCache(uid)
+  }
+
+  // PIP-444: il mirror della sync sopravvive allo scope `sync` (lo pubblica la sync stessa
+  // dopo il commit); logout, cambio account e refresh manuale lo svuotano. Chi riscrive i
+  // riepiloghi fuori dal piano (manutenzione, rebuild) chiama `invalidateSyncMirror`.
+  if (scope === 'all' || scope === 'manual-refresh') {
+    invalidateSyncMirror(uid)
   }
 
   if (scope === 'all' || scope === 'calendar' || scope === 'manual-refresh') {

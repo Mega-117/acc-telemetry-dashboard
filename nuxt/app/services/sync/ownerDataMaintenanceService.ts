@@ -11,6 +11,7 @@ import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import {
   auditOwnerData,
+  migrateOwnerTrackProjections,
   rebuildOwnerProjections,
   rebuildOwnerSessionListProjection,
   reprocessOwnerCloudRawSummaries,
@@ -150,7 +151,8 @@ function summarizeAudit(audit: OwnerDataAuditReport | null | undefined) {
       oldTrackBests: audit.projections.oldTrackBests.length,
       missingTrackDetailProjections: audit.projections.missingTrackDetailProjections.length,
       oldTrackDetailProjections: audit.projections.oldTrackDetailProjections.length,
-      trackBestsIndexStale: audit.projections.trackBestsIndexStale === true
+      trackBestsIndexStale: audit.projections.trackBestsIndexStale === true,
+      unmergedTrackProjections: audit.projections.unmergedTrackProjections?.length || 0
     },
     permissions: audit.permissions,
     issueCodes: audit.issues.map((item) => item.code)
@@ -649,9 +651,11 @@ export async function runOwnerDataMaintenanceGate(
     })
 
     let lightweightVerificationFailed = false
+    let lightweightIssues: string[] = []
     if (healthDecision.action === 'verify_current' && stored.health?.status !== 'partial') {
       await ensureActiveLease(uid, leaseId, assertActive)
       const verification = await retryActive(() => verifyOwnerMigrationLightweight(uid))
+      lightweightIssues = verification.issues
       if (verification.ok) {
         const report = skippedReport(uid, startedAt, 'Struttura dati verificata.', 'healthy')
         report.resumedFrom = resumedFrom
@@ -768,7 +772,29 @@ export async function runOwnerDataMaintenanceGate(
       throw new Error('Permessi insufficienti per completare la migrazione dati owner.')
     }
 
+    // PIP-444: piste ancora su documenti separati -> documento unito, una scrittura per
+    // pista e nessun ricalcolo. Un rebuild completo (se dovuto) le riscrive comunque.
     const versionedRawReprocess = needsVersionedRawReprocess(storedState)
+    const unmergedTrackProjections = audit.projections.unmergedTrackProjections || []
+    if (unmergedTrackProjections.length > 0 && !force && !versionedRawReprocess && !needsProjectionRebuild(audit)) {
+      await ensureActiveLease(uid, leaseId, assertActive)
+      emit(onProgress, {
+        status: 'running',
+        phase: 'rebuild',
+        progress: 30,
+        message: 'Unisco i documenti per pista...',
+        resumedFrom
+      })
+      const migration = await retryActive(() => migrateOwnerTrackProjections(uid, { assertActive }))
+      audit.projections.unmergedTrackProjections = unmergedTrackProjections
+        .filter((trackId) => !migration.migratedTracks.includes(trackId))
+      audit.issues = audit.issues.filter((item) => item.code !== 'track_projections_unmerged')
+      // Se la verifica leggera era fallita solo per le piste separate, ora e' risolta.
+      if (lightweightVerificationFailed && lightweightIssues.every((code) => code === 'track_projections_unmerged')) {
+        lightweightVerificationFailed = false
+      }
+    }
+
     if (!force && !versionedRawReprocess && !needsMaintenance(audit) && !lightweightVerificationFailed) {
       const report = buildReport({
         uid,

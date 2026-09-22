@@ -21,6 +21,12 @@ import {
   trackBestsIndexPath,
   type TrackBestsIndexMode
 } from './trackBestsIndexProjectionService'
+// PIP-444: un documento per pista (`trackProjections/{trackId}`), sezione `bests`.
+import {
+  buildTrackProjectionSectionWrite,
+  loadTrackProjectionSections,
+  trackProjectionPath
+} from './trackProjectionDocument'
 
 export const TRACK_BESTS_SCHEMA_VERSION = 4
 
@@ -364,11 +370,13 @@ export async function applyTrackBestsProjectionDeltas(params: {
   const indexTrackDocs: Record<string, any> = {}
 
   for (const trackIdNorm of touchedTracks) {
-    const trackBestsRef = docFn(db, `users/${uid}/trackBests/${trackIdNorm}`)
+    // PIP-444: la sezione `bests` vive nel documento unito per pista; i vecchi
+    // `trackBests/{trackId}` vengono letti solo finche' il documento unito non esiste.
+    const trackProjectionRef = docFn(db, trackProjectionPath(uid, trackIdNorm))
 
     try {
-      const existingSnap = await getDocFn(trackBestsRef)
-      const existing = existingSnap.exists() ? existingSnap.data() : null
+      const sections = await loadTrackProjectionSections({ db, uid, trackId: trackIdNorm, sections: ['bests'], getDocFn, docFn })
+      const existing = sections.bests
       const merged = mergeTrackBestsDocument({
         trackIdNorm,
         existing,
@@ -380,7 +388,13 @@ export async function applyTrackBestsProjectionDeltas(params: {
       // Nel rebuild completo l'indice deve contenere anche le piste rimaste invariate.
       if (indexMode === 'full') indexTrackDocs[trackIdNorm] = merged.data
       if (!merged.shouldWrite) continue
-      await setDocFn(trackBestsRef, merged.data)
+      const write = buildTrackProjectionSectionWrite({
+        trackId: trackIdNorm,
+        section: 'bests',
+        data: merged.data,
+        updatedAt: serverTimestamp()
+      })
+      await setDocFn(trackProjectionRef, write.data, write.options)
       updatedTracks.push(trackIdNorm)
       if (indexMode === 'incremental') indexTrackDocs[trackIdNorm] = merged.data
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type

@@ -49,6 +49,19 @@ service cloud.firestore {
              && request.resource.data.get('bestRulesVersion', 0) is int;
     }
 
+    // PIP-444: documento unito per pista. `bests`/`detail` sono mappe (o null) con la
+    // stessa forma dei vecchi `trackBests`/`trackDetailProjections`; `trackId` = id documento.
+    function validTrackProjection(trackId) {
+      return request.resource.data.keys().hasAll(['schemaVersion', 'trackId'])
+             && request.resource.data.keys().hasOnly([
+               'schemaVersion', 'trackId', 'bests', 'detail', 'updatedAt'
+             ])
+             && request.resource.data.schemaVersion == 1
+             && request.resource.data.trackId == trackId
+             && (!('bests' in request.resource.data) || request.resource.data.bests == null || request.resource.data.bests is map)
+             && (!('detail' in request.resource.data) || request.resource.data.detail == null || request.resource.data.detail is map);
+    }
+
     function validRaceCalendarIndex() {
       return request.resource.data.keys().hasAll(['version', 'updatedAt', 'events', 'truncated'])
              && request.resource.data.keys().hasOnly(['version', 'updatedAt', 'events', 'truncated'])
@@ -926,6 +939,18 @@ service cloud.firestore {
         allow read: if isAdmin();
         allow read, write: if isOwner(userId);
         allow read: if isCoachOfUser(userId);
+      }
+
+      // PIP-444: un documento per pista (sezioni `bests` e `detail`, stessa forma dei
+      // due documenti sopra), scritto solo dall'owner (sync, rebuild, manutenzione).
+      // Additivo: i vecchi documenti restano leggibili finche' la migrazione non finisce.
+      match /trackProjections/{trackId} {
+        allow read: if isAdmin();
+        allow read: if isOwner(userId);
+        allow read: if isCoachOfUser(userId);
+        allow create, update: if isOwner(userId)
+                              && validTrackProjection(trackId);
+        allow delete: if isOwner(userId);
       }
 
       match /sessionListMeta/{docId} {

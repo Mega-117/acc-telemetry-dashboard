@@ -4,9 +4,14 @@
 // si legge comunque una volta per avvio ed e' la fonte della revisione.
 import type { RaceCalendarIndexDocument } from '~/services/projections/raceCalendarIndexProjectionService'
 import type { SessionListProjectionEntry } from '~/services/sync/sessionListProjectionService'
+import { parseSyncMirrorEntry, type SyncMirrorEntry } from '~/services/sync/syncMirrorService'
 
 export const OWNER_CACHE_SCHEMA_VERSION = 1
-export const OWNER_CACHE_MAX_BYTES = 2 * 1024 * 1024
+// PIP-444: da 2 a 4 MB. Il file ospita anche il mirror della sync (fino a 1,5 MB: meta
+// e pagine toccate della lista sessioni, documento unito delle ultime 6 piste) accanto
+// all'indice piste (fino a 900 KB), al sommario calendario e alle voci della lista.
+// Lo stesso limite vive in `desktop-app/runtime/ownerCacheStore.js`.
+export const OWNER_CACHE_MAX_BYTES = 4 * 1024 * 1024
 
 export interface OwnerCacheEntries {
   /** Documento `trackBestsIndex/v1` cosi' come letto da Firestore. */
@@ -15,6 +20,8 @@ export interface OwnerCacheEntries {
   raceCalendarIndex?: { summary: RaceCalendarIndexDocument; cachedAt: number }
   /** Voci della lista sessioni (`sessionListPages/*`) gia' ordinate. */
   sessionList?: { entries: SessionListProjectionEntry[] }
+  /** PIP-444: mirror dei riepiloghi scritti dalla sync, con la propria revisione. */
+  syncMirror?: SyncMirrorEntry
 }
 
 export interface OwnerCachePayload {
@@ -25,7 +32,7 @@ export interface OwnerCachePayload {
   entries: OwnerCacheEntries
 }
 
-const ENTRY_KEYS = new Set<keyof OwnerCacheEntries>(['trackBestsIndex', 'raceCalendarIndex', 'sessionList'])
+const ENTRY_KEYS = new Set<keyof OwnerCacheEntries>(['trackBestsIndex', 'raceCalendarIndex', 'sessionList', 'syncMirror'])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
@@ -50,6 +57,8 @@ export function buildOwnerCachePayload(input: {
   if (input.entries.sessionList && Array.isArray(input.entries.sessionList.entries)) {
     entries.sessionList = { entries: input.entries.sessionList.entries }
   }
+  const syncMirror = input.entries.syncMirror ? parseSyncMirrorEntry(input.entries.syncMirror) : null
+  if (syncMirror) entries.syncMirror = syncMirror
   return {
     schemaVersion: OWNER_CACHE_SCHEMA_VERSION,
     uid: input.uid,
@@ -105,6 +114,10 @@ export function parseOwnerCachePayload(raw: unknown, expectedUid: string, maxByt
     } else if (key === 'sessionList') {
       if (!Array.isArray(value.entries) || !value.entries.every(isRecord)) return null
       entries.sessionList = { entries: value.entries as unknown as SessionListProjectionEntry[] }
+    } else if (key === 'syncMirror') {
+      const mirror = parseSyncMirrorEntry(value)
+      if (!mirror) return null
+      entries.syncMirror = mirror
     }
   }
 

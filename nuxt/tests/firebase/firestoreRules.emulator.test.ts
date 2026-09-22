@@ -79,8 +79,13 @@ it('PIP-436 commits the complete projection plan atomically under real owner rul
   deny = false
   await assertSucceeds(refreshSyncProjections(updated))
   expect((await getDoc(userRef)).data()?.sessionIndex.sessionsList[0].laps).toBe(8)
-  expect((await getDoc(doc(db, `users/${PILOT_UID}/trackBests/monza`))).data()?.activity.totalLaps).toBe(8)
-  expect((await getDoc(doc(db, `users/${PILOT_UID}/trackDetailProjections/monza`))).data()?.categories.GT3.activity.totalLaps).toBe(8)
+  // PIP-444 (b): un documento per pista con entrambe le sezioni, scritto con mergeFields sotto rules reali.
+  const trackProjection = (await getDoc(doc(db, `users/${PILOT_UID}/trackProjections/monza`))).data()
+  expect(trackProjection?.schemaVersion).toBe(1)
+  expect(trackProjection?.bests.activity.totalLaps).toBe(8)
+  expect(trackProjection?.detail.categories.GT3.activity.totalLaps).toBe(8)
+  expect((await getDoc(doc(db, `users/${PILOT_UID}/trackBests/monza`))).exists()).toBe(false)
+  expect((await getDoc(doc(db, `users/${PILOT_UID}/trackDetailProjections/monza`))).exists()).toBe(false)
   // PIP-441: l'indice piste viaggia nello stesso batch (merge incrementale sotto rules reali).
   const index = (await getDoc(doc(db, `users/${PILOT_UID}/trackBestsIndex/v1`))).data()
   expect(index?.complete).toBe(true)
@@ -991,6 +996,34 @@ describe('startup index documents (PIP-441)', () => {
     await assertFails(setDoc(doc(other, `users/${PILOT_UID}/trackBestsIndex/v1`), trackBestsIndex()))
     await assertFails(deleteDoc(doc(other, `users/${PILOT_UID}/trackBestsIndex/v1`)))
     await assertSucceeds(getDoc(doc(testEnv.authenticatedContext(ADMIN_UID).firestore(), `users/${PILOT_UID}/trackBestsIndex/v1`)))
+    await assertSucceeds(deleteDoc(ref))
+  })
+
+  // PIP-444 (b): un documento per pista, scritto solo dall'owner (sezioni mappa, versione 1, trackId = id).
+  it('trackProjections/{trackId}: owner crea per sezione, legge ed elimina; coach legge; altri negati; schema vincolato', async () => {
+    const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const ref = doc(owner, `users/${PILOT_UID}/trackProjections/monza`)
+    const bests = { version: 4, bestRulesVersion: 5, trackId: 'monza', bests: {}, activity: { sessionCount: 1 }, syncedSessionIds: ['s1'], lastSessionDate: null }
+    const detail = { schemaVersion: 2, trackId: 'monza', lastSessionDate: null, categories: {} }
+    await assertSucceeds(setDoc(ref, { schemaVersion: 1, trackId: 'monza', bests, updatedAt: serverTimestamp() }, { mergeFields: ['schemaVersion', 'trackId', 'bests', 'updatedAt'] }))
+    await assertSucceeds(setDoc(ref, { schemaVersion: 1, trackId: 'monza', detail, updatedAt: serverTimestamp() }, { mergeFields: ['schemaVersion', 'trackId', 'detail', 'updatedAt'] }))
+    const merged = (await getDoc(ref)).data()
+    expect(merged?.bests.activity.sessionCount).toBe(1)
+    expect(merged?.detail.schemaVersion).toBe(2)
+    await assertSucceeds(setDoc(ref, { schemaVersion: 1, trackId: 'monza', bests: null, detail: null }))
+    await assertFails(setDoc(ref, { schemaVersion: 2, trackId: 'monza', bests, detail }))
+    await assertFails(setDoc(ref, { schemaVersion: 1, trackId: 'spa', bests, detail }))
+    await assertFails(setDoc(ref, { schemaVersion: 1, trackId: 'monza', bests: 'not-a-map' }))
+    await assertFails(setDoc(ref, { schemaVersion: 1, trackId: 'monza', extra: true }))
+    await assertFails(setDoc(ref, { trackId: 'monza', bests }))
+
+    const other = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    await assertFails(getDoc(doc(other, `users/${PILOT_UID}/trackProjections/monza`)))
+    await assertFails(setDoc(doc(other, `users/${PILOT_UID}/trackProjections/monza`), { schemaVersion: 1, trackId: 'monza', bests, detail }))
+    await assertFails(deleteDoc(doc(other, `users/${PILOT_UID}/trackProjections/monza`)))
+    // Coach non assegnato (coachId null nel fixture): negato come per trackBests.
+    await assertFails(getDoc(doc(testEnv.authenticatedContext(COACH_UID).firestore(), `users/${PILOT_UID}/trackProjections/monza`)))
+    await assertSucceeds(getDoc(doc(testEnv.authenticatedContext(ADMIN_UID).firestore(), `users/${PILOT_UID}/trackProjections/monza`)))
     await assertSucceeds(deleteDoc(ref))
   })
 

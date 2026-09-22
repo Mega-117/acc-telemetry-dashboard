@@ -29,10 +29,36 @@ for (const required of [
   'match /trackBestsIndex/{docId}',
   'match /raceCalendarIndex/{docId}',
   'function validTrackBestsIndex()',
-  'function validRaceCalendarIndex()'
+  'function validRaceCalendarIndex()',
+  // PIP-444: un documento per pista, additivo e validato (schema, trackId, sezioni mappa).
+  'match /trackProjections/{trackId}',
+  'function validTrackProjection(trackId)'
 ]) {
   assert.ok(rules.includes(required), `Missing Firestore rules block: ${required}`)
 }
+
+// PIP-444: rebuild e migrazione lavorano sul documento unito per pista; i lettori
+// accettano entrambe le forme finche' la manutenzione non ha migrato tutte le piste.
+assert.ok(
+  service.includes('deleteCollectionDocs(`users/${uid}/${TRACK_PROJECTIONS_COLLECTION}`'),
+  'owner rebuild must delete the merged per-track documents before rebuilding'
+)
+assert.ok(
+  service.includes('migrateOwnerTrackProjections'),
+  'owner maintenance must be able to migrate legacy per-track documents into the merged one'
+)
+assert.ok(
+  service.includes('collectTrackProjectionSections'),
+  'owner audit and lightweight verification must evaluate merged and legacy per-track documents together'
+)
+assert.ok(
+  trackDetailWriter.includes("section: 'detail'") && !trackDetailWriter.includes('users/${uid}/trackDetailProjections/${trackId}'),
+  'trackDetail projection writes must target the detail section of the merged document'
+)
+assert.ok(
+  read('nuxt/app/repositories/telemetryProjectionRepository.ts').includes('loadMergedTrackProjection'),
+  'projection repository must read the merged per-track document before the legacy documents'
+)
 
 // PIP-441: ogni rebuild completo dei trackBests riscrive anche l'indice piste.
 assert.ok(

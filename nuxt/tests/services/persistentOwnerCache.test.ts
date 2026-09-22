@@ -28,6 +28,7 @@ import { clearRaceCalendarCache, loadRaceCalendarEvents } from '~/repositories/r
 import { clearSessionListProjectionCache, loadSessionListProjection } from '~/services/sync/sessionListProjectionService'
 import { onOwnerCacheChanged, resetOwnerCacheSignals } from '~/services/cache/ownerCacheSignals'
 import { buildOwnerCachePayload } from '~/services/cache/ownerCachePayload'
+import { getSyncMirror, invalidateSyncMirror, setSyncMirror, type SyncMirrorEntry } from '~/services/sync/syncMirrorService'
 import {
   clearPersistentOwnerCache,
   collectOwnerCacheEntries,
@@ -93,6 +94,7 @@ function clearMemory() {
   clearTelemetryProjectionRepositoryCache()
   clearRaceCalendarCache()
   clearSessionListProjectionCache()
+  invalidateSyncMirror()
 }
 
 beforeEach(() => {
@@ -251,5 +253,31 @@ describe('persistentOwnerCache', () => {
     expect(await clearPersistentOwnerCache('u', bridge)).toBe(true)
     expect(disk.has('u')).toBe(false)
     expect(await clearPersistentOwnerCache('u', null)).toBe(false)
+  })
+
+  // PIP-444: il mirror della sync viaggia nello stesso file e torna in memoria al riavvio.
+  it('il mirror della sync viene salvato con le altre voci e idratato al riavvio (stessa revisione)', async () => {
+    const bridge = makeBridge()
+    const mirror: SyncMirrorEntry = {
+      schemaVersion: 1, revision: 'r1', trackOrder: ['monza'], updatedAt: '2026-09-22T10:00:00.000Z',
+      docs: { 'sessionListMeta/v1': { schemaVersion: 1, pageKeys: ['p0000'] }, 'trackProjections/monza': { schemaVersion: 1, trackId: 'monza', bests: trackDoc('monza'), detail: null } }
+    }
+    await loadOwnerDocument('u')
+    setSyncMirror('u', mirror)
+    expect(collectOwnerCacheEntries('u').syncMirror).toEqual(mirror)
+    expect(await savePersistentOwnerCache('u', bridge)).toBe('saved')
+    expect(disk.get('u').entries.syncMirror.revision).toBe('r1')
+
+    clearMemory()
+    invalidateSyncMirror('u')
+    expect(getSyncMirror('u')).toBeNull()
+    await loadOwnerDocument('u')
+    expect(await hydrateOwnerCachesFromDisk('u', 'r1', bridge)).toBe('hydrated')
+    expect(getSyncMirror('u')).toEqual(mirror)
+    // Un file con mirror corrotto non idrata nulla (fail-closed dell'intero payload).
+    disk.set('u', { ...disk.get('u'), entries: { ...disk.get('u').entries, syncMirror: { schemaVersion: 1 } } })
+    invalidateSyncMirror('u')
+    expect(await hydrateOwnerCachesFromDisk('u', 'r1', bridge)).toBe('missing')
+    expect(getSyncMirror('u')).toBeNull()
   })
 })
