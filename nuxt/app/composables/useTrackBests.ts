@@ -4,7 +4,6 @@ import { ref, computed } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { collection, query, doc, deleteField, type Query } from 'firebase/firestore'
 import { trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedWriteBatch } from './useFirebaseTracker'
-import { recordFirebaseCacheHit } from '~/services/monitoring/firebaseOpsJournal'
 import { db } from '~/config/firebase'
 // PIP-441: le letture per pista passano dal repository, che serve l'indice piste
 // (`trackBestsIndex/v1`) con una lettura condivisa invece della collection completa.
@@ -44,42 +43,17 @@ function toTrackActivity(activity: any): TrackActivity {
     }
 }
 
-// Keys for sessionStorage cache
-const CACHE_KEY_TRACK_BESTS = 'acc_trackBests_cache'
-const CACHE_KEY_TRACK_ACTIVITY = 'acc_trackActivity_cache'
+// PIP-442: la copia in sessionStorage e' stata rimossa. Il prefetch passa dal repository,
+// che serve l'indice piste dalla cache persistente su disco (0 letture al secondo avvio)
+// e resta l'unica fonte di verita' per i best per pista.
+const LEGACY_SESSION_STORAGE_KEYS = ['acc_trackBests_cache', 'acc_trackActivity_cache']
 
-function saveCacheToStorage(key: string, data: any, userId: string): void {
+function clearLegacySessionStorage() {
     if (typeof window === 'undefined') return
     try {
-        const payload = { userId, data, timestamp: Date.now() }
-        sessionStorage.setItem(key, JSON.stringify(payload))
-        console.log(`[CACHE] 💾 Saved ${key} to sessionStorage`)
-    } catch (e) {
-        console.warn('[CACHE] Failed to save to sessionStorage:', e)
-    }
-}
-
-function loadCacheFromStorage(key: string, userId: string): any | null {
-    if (typeof window === 'undefined') return null
-    try {
-        const stored = sessionStorage.getItem(key)
-        if (!stored) return null
-        const { userId: storedUserId, data, timestamp } = JSON.parse(stored)
-        if (storedUserId !== userId) {
-            sessionStorage.removeItem(key)
-            return null
-        }
-        const maxAge = 3600000
-        if (Date.now() - timestamp > maxAge) {
-            sessionStorage.removeItem(key)
-            return null
-        }
-        console.log(`[CACHE] ✅ Loaded ${key} from sessionStorage (age: ${Math.round((Date.now() - timestamp) / 1000)}s)`)
-        recordFirebaseCacheHit(`trackBests.${key === CACHE_KEY_TRACK_BESTS ? 'bests' : 'activity'}`, Date.now() - timestamp)
-        return data
-    } catch (e) {
-        console.warn('[CACHE] Failed to load from sessionStorage:', e)
-        return null
+        for (const key of LEGACY_SESSION_STORAGE_KEYS) sessionStorage.removeItem(key)
+    } catch {
+        // Ignore storage errors in constrained environments.
     }
 }
 
@@ -382,12 +356,7 @@ export function useTrackBests() {
     function clearTrackDerivedCaches() {
         trackBestsCache.value = {}
         trackActivityCache.value = {}
-        try {
-            sessionStorage.removeItem(CACHE_KEY_TRACK_BESTS)
-            sessionStorage.removeItem(CACHE_KEY_TRACK_ACTIVITY)
-        } catch {
-            // Ignore storage errors in constrained environments.
-        }
+        clearLegacySessionStorage()
         console.log('[TRACK_BESTS] Cleared overview caches (trackBests + trackActivity)')
     }
 
@@ -435,13 +404,7 @@ export function useTrackBests() {
 
             trackBestsCache.value = {}
             trackActivityCache.value = {}
-
-            try {
-                sessionStorage.removeItem('acc_trackBests_cache')
-                sessionStorage.removeItem('acc_trackActivity_cache')
-            } catch {
-                // Ignore storage errors
-            }
+            clearLegacySessionStorage()
 
             return count
         } catch (e) {
@@ -455,19 +418,6 @@ export function useTrackBests() {
         if (!targetUserId) {
             console.warn('[PREFETCH] No user ID, skipping prefetch')
             return 0
-        }
-
-        const storedBests = loadCacheFromStorage(CACHE_KEY_TRACK_BESTS, targetUserId)
-        const storedActivity = loadCacheFromStorage(CACHE_KEY_TRACK_ACTIVITY, targetUserId)
-
-        if (storedBests && Object.keys(storedBests).length > 0) {
-            console.log(`[PREFETCH] ⚡ Using sessionStorage cache: ${Object.keys(storedBests).length} trackBests`)
-            Object.assign(trackBestsCache.value, storedBests)
-            if (storedActivity) {
-                Object.assign(trackActivityCache.value, storedActivity)
-            }
-            globalPrefetchComplete.value = true
-            return Object.keys(storedBests).length
         }
 
         const existingPrefetch = trackBestsPrefetchInFlight.get(targetUserId)
@@ -501,10 +451,7 @@ export function useTrackBests() {
                 }
 
                 const elapsed = Date.now() - startTime
-                console.log(`[PREFETCH] ✅ Loaded ${loadedCount} trackBests in ${elapsed}ms (1 index read instead of ${loadedCount})`)
-
-                saveCacheToStorage(CACHE_KEY_TRACK_BESTS, trackBestsCache.value, targetUserId)
-                saveCacheToStorage(CACHE_KEY_TRACK_ACTIVITY, trackActivityCache.value, targetUserId)
+                console.log(`[PREFETCH] ✅ Loaded ${loadedCount} trackBests in ${elapsed}ms (index cached in memory/disk)`)
 
                 globalPrefetchComplete.value = true
                 return loadedCount

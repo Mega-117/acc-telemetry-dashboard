@@ -4,6 +4,9 @@ import { db } from '~/config/firebase'
 import { trackedGetDoc, trackedWriteBatch } from '~/composables/useFirebaseTracker'
 import { buildPilotDirectoryFields } from '~/utils/pilotDirectoryFields'
 import { buildPilotDirectoryProjection } from '~/services/pilotDirectoryProjectionService'
+// PIP-442: `users/{uid}` viene letto una volta per avvio e condiviso; questo modulo e' il
+// primo lettore (login/avvio) e aggiorna la copia con cio' che scrive.
+import { loadOwnerDocument, rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
 
 const AUTH_PROVISION_CALLER = 'AuthProvisioning'
 
@@ -124,12 +127,12 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
     const publicProfileRef = doc(db, 'publicProfiles', user.uid)
     const pilotDirectoryRef = doc(db, 'pilotDirectory', user.uid)
     const [userSnap, publicProfileSnap, pilotDirectorySnap] = await Promise.all([
-        getDocTracked(userDocRef),
+        loadOwnerDocument(user.uid, { caller: AUTH_PROVISION_CALLER }),
         getDocTracked(publicProfileRef),
         getDocTracked(pilotDirectoryRef)
     ])
 
-    if (!userSnap.exists()) {
+    if (!userSnap.exists) {
         const userPayload = {
             uid: user.uid,
             email: user.email,
@@ -154,7 +157,7 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
         }
     }
 
-    const data = userSnap.data() || {}
+    const data = userSnap.data || {}
     const role = data.role || 'pilot'
     const nickname = data.nickname || defaultNickname
     const directoryFields = buildPilotDirectoryFields({
@@ -187,12 +190,13 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
         || shouldRepairPilotDirectory
     ) {
         const batch = trackedWriteBatch(db, AUTH_PROVISION_CALLER)
+        const userPatch = {
+            uid: user.uid,
+            ...(shouldRepairUserDirectoryFields ? directoryFields : {}),
+            ...(shouldRepairEmailVerification ? { emailVerified: user.emailVerified } : {})
+        }
         if (shouldRepairUserDirectoryFields || shouldRepairEmailVerification) {
-            batch.set(userDocRef, {
-                uid: user.uid,
-                ...(shouldRepairUserDirectoryFields ? directoryFields : {}),
-                ...(shouldRepairEmailVerification ? { emailVerified: user.emailVerified } : {})
-            }, { merge: true })
+            batch.set(userDocRef, userPatch, { merge: true })
         }
         if (shouldRepairPilotDirectory) {
             batch.set(pilotDirectoryRef, pilotDirectoryProjection, { merge: true })
@@ -207,18 +211,18 @@ export async function ensureUserDocument(user: User): Promise<EnsuredUserProfile
             }, { merge: true })
         }
         await batch.commit()
+        if (shouldRepairUserDirectoryFields || shouldRepairEmailVerification) {
+            rememberOwnerDocumentPatch(user.uid, userPatch)
+        }
     }
 
     return { role, nickname }
 }
 
-export async function getUserProfile(uid: string): Promise<UserProfileDocument | null> {
+export async function getUserProfile(uid: string, options: { fresh?: boolean } = {}): Promise<UserProfileDocument | null> {
     try {
-        const docSnap = await getDocTracked(doc(db, 'users', uid))
-        if (docSnap.exists()) {
-            return docSnap.data() as UserProfileDocument
-        }
-        return null
+        const snapshot = await loadOwnerDocument(uid, { fresh: options.fresh === true, caller: AUTH_PROVISION_CALLER })
+        return snapshot.exists ? (snapshot.data as UserProfileDocument) : null
     } catch (error) {
         console.error('[AUTH] Get profile error:', error)
         return null

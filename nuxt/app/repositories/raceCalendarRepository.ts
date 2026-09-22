@@ -2,8 +2,9 @@ import { collection, doc, limit, orderBy, query } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedWriteBatch } from '~/composables/useFirebaseTracker'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
-import { OWNER_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
+import { checkFirebaseCacheFreshness, recordFirebaseJournalEvent } from '~/services/monitoring/firebaseOpsJournal'
+import { RACE_CALENDAR_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
+import { notifyOwnerCacheChanged } from '~/services/cache/ownerCacheSignals'
 import {
   RACE_CALENDAR_INDEX_MAX_EVENTS,
   applyRaceCalendarIndexMutation,
@@ -17,7 +18,6 @@ import {
 } from '~/services/projections/raceCalendarIndexProjectionService'
 
 const CALLER = 'RaceCalendarRepository'
-const RACE_CALENDAR_CACHE_TTL_MS = OWNER_DATA_CACHE_TTL_MS
 
 type CalendarCacheEntry = {
   cachedAt: number
@@ -98,9 +98,28 @@ function resolveCurrentUid(): string | null {
   }
 }
 
-function rememberSummary(userId: string, summary: RaceCalendarIndexDocument | null) {
-  summaryCache.set(userId, { cachedAt: Date.now(), summary })
+function rememberSummary(userId: string, summary: RaceCalendarIndexDocument | null, cachedAt = Date.now()) {
+  summaryCache.set(userId, { cachedAt, summary })
+  // PIP-442: un sommario valido (letto o appena scritto) merita il salvataggio su disco.
+  if (summary) notifyOwnerCacheChanged(userId)
   return summary
+}
+
+/**
+ * PIP-442: idrata il sommario dal file locale conservando l'istante di lettura originale,
+ * cosi' il TTL del calendario (scrivibile anche dal coach) resta quello di sempre.
+ */
+export function hydrateRaceCalendarSummary(userId: string, input: { summary: unknown; cachedAt: number }): boolean {
+  if (!isRaceCalendarIndexUsable(input.summary)) return false
+  summaryCache.set(userId, { cachedAt: input.cachedAt, summary: input.summary })
+  recordFirebaseJournalEvent({ kind: 'cache', cache: 'raceCalendar.index', reason: 'disk' })
+  return true
+}
+
+/** Sommario in cache da salvare su disco; `null` se assente o non usabile. */
+export function exportRaceCalendarSummary(userId: string): { summary: RaceCalendarIndexDocument; cachedAt: number } | null {
+  const cached = summaryCache.get(userId)
+  return cached?.summary ? { summary: cached.summary, cachedAt: cached.cachedAt } : null
 }
 
 /** Una lettura per tutto il calendario; `null` quando il sommario manca o e' vecchio. */

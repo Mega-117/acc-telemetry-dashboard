@@ -3,12 +3,12 @@ import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
 import type { SessionDocument } from '~/types/telemetry'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
-import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
-import { OWNER_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
+import { checkFirebaseCacheFreshness, recordFirebaseJournalEvent } from '~/services/monitoring/firebaseOpsJournal'
+import { ownerDataCacheTtlFor } from '~/services/cache/cachePolicy'
+import { notifyOwnerCacheChanged } from '~/services/cache/ownerCacheSignals'
 
 export const SESSION_LIST_PROJECTION_SCHEMA_VERSION = 1
 export const SESSION_LIST_PROJECTION_PAGE_SIZE = 100
-const SESSION_LIST_CACHE_TTL_MS = OWNER_DATA_CACHE_TTL_MS
 
 export type SessionListProjectionEntry = {
   id: string
@@ -51,6 +51,8 @@ type SessionListProjectionPage = {
 
 type ProjectionCacheEntry = {
   cachedAt: number
+  /** Voci ordinate come lette dalle pagine: e' cio' che finisce nel file locale (PIP-442). */
+  entries: SessionListProjectionEntry[]
   sessions: SessionDocument[]
 }
 
@@ -290,16 +292,38 @@ export async function loadSessionListProjection(params: {
   docFn?: (db: any, path: string) => any
 }): Promise<SessionDocument[] | null> {
   const cached = projectionCache.get(params.uid)
-  if (checkFirebaseCacheFreshness('sessionListProjection', cached?.cachedAt, SESSION_LIST_CACHE_TTL_MS) && cached) {
+  if (checkFirebaseCacheFreshness('sessionListProjection', cached?.cachedAt, ownerDataCacheTtlFor(params.uid)) && cached) {
     return cached.sessions
   }
 
   const docs = await readSessionListProjectionDocs(params)
   if (!docs) return null
 
-  const sessions = sortEntries(docs.pages.flatMap((page) => page.items)).map(sessionListEntryToSessionDocument)
-  projectionCache.set(params.uid, { cachedAt: Date.now(), sessions })
+  const sessions = rememberSessionListEntries(params.uid, docs.pages.flatMap((page) => page.items))
+  // PIP-442: lista appena letta da Firebase, da salvare su disco.
+  notifyOwnerCacheChanged(params.uid)
   return sessions
+}
+
+function rememberSessionListEntries(uid: string, entriesInput: SessionListProjectionEntry[]): SessionDocument[] {
+  const entries = sortEntries(entriesInput)
+  const sessions = entries.map(sessionListEntryToSessionDocument)
+  projectionCache.set(uid, { cachedAt: Date.now(), entries, sessions })
+  return sessions
+}
+
+/** PIP-442: idrata la lista sessioni dal file locale (stessa revisione del documento owner). */
+export function hydrateSessionListProjectionCache(uid: string, entries: SessionListProjectionEntry[]): boolean {
+  const valid = entries.filter((entry) => entry && typeof entry.id === 'string' && entry.id)
+  if (valid.length !== entries.length) return false
+  rememberSessionListEntries(uid, valid)
+  recordFirebaseJournalEvent({ kind: 'cache', cache: 'sessionListProjection', reason: 'disk' })
+  return true
+}
+
+/** Voci in cache da salvare su disco; `null` se la lista non e' stata letta in questo avvio. */
+export function exportSessionListProjectionEntries(uid: string): SessionListProjectionEntry[] | null {
+  return projectionCache.get(uid)?.entries ?? null
 }
 
 /**

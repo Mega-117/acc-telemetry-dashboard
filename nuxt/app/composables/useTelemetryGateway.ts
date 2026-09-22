@@ -28,7 +28,9 @@ import { loadSessionDetailViewModel } from '~/services/session-detail/loadSessio
 import type { SessionDetailViewModel } from '~/types/sessionDetailViewModel'
 import { endFirebaseScenario, startFirebaseScenario } from './useFirebaseTracker'
 import { checkFirebaseCacheFreshness, recordFirebaseCacheHit } from '~/services/monitoring/firebaseOpsJournal'
-import { OWNER_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
+// PIP-442: cache dell'owner corrente senza scadenza (controllo di revisione); di un altro
+// pilota (coach) 15 minuti.
+import { ownerDataCacheTtlFor } from '~/services/cache/cachePolicy'
 import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
 import {
     loadTrackBest,
@@ -92,7 +94,6 @@ export interface OverviewSnapshot {
     activityTotals: ReturnType<typeof useTelemetryData>['activityTotals']['value']
 }
 
-const OVERVIEW_SNAPSHOT_CACHE_TTL_MS = OWNER_DATA_CACHE_TTL_MS
 const PENDING_LOCAL_OVERLAY_CACHE_TTL_MS = 3000
 const overviewSnapshotInFlight = new Map<string, Promise<OverviewSnapshot | null>>()
 const overviewSnapshotCache = new Map<string, { cachedAt: number; snapshot: OverviewSnapshot | null }>()
@@ -215,7 +216,8 @@ export function useTelemetryGateway() {
         ].join(':')
 
         const cached = overviewSnapshotCache.get(cacheKey)
-        if (checkFirebaseCacheFreshness('gateway.overviewSnapshot', cached?.cachedAt, OVERVIEW_SNAPSHOT_CACHE_TTL_MS) && cached) {
+        const snapshotTtlMs = ownerDataCacheTtlFor(resolvedUserId)
+        if (checkFirebaseCacheFreshness('gateway.overviewSnapshot', cached?.cachedAt, snapshotTtlMs) && cached) {
             pushGatewayDiagnostic({
                 source: isOnline ? 'cloud_fresh' : 'local_offline',
                 action: 'getOverviewSnapshot.cacheHit',
@@ -223,7 +225,7 @@ export function useTelemetryGateway() {
                 details: {
                     sessionCount: cached.snapshot?.sessions.length || 0,
                     sourceMode,
-                    ttlMs: OVERVIEW_SNAPSHOT_CACHE_TTL_MS
+                    ttlMs: snapshotTtlMs
                 }
             })
             return cached.snapshot
@@ -649,7 +651,7 @@ export function useTelemetryGateway() {
             const normalizedTrackId = normalizeTrackKey(trackId)
             const cacheKey = `${resolvedUserId}:${normalizedTrackId}`
             let cached = trackDetailProjectionCache.get(cacheKey)
-            if (!checkFirebaseCacheFreshness('gateway.trackDetail', cached?.cachedAt, OWNER_DATA_CACHE_TTL_MS)) cached = undefined
+            if (!checkFirebaseCacheFreshness('gateway.trackDetail', cached?.cachedAt, ownerDataCacheTtlFor(resolvedUserId))) cached = undefined
             const generation = gatewayCacheGeneration
             if (!cached) {
                 const [detailResult, trackBestResult] = await Promise.allSettled([

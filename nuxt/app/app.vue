@@ -16,6 +16,7 @@ import { usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
 import { providePitwallStore } from '~/composables/usePitwallStore'
 import { endFirebaseScenario, startFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
+import { useOwnerCacheLifecycle } from '~/composables/useOwnerCacheLifecycle'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
 import { canUseDevTools } from '~/utils/devToolsAccess'
 import { toAuthStartupOutcome, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
@@ -150,6 +151,9 @@ const primaryCloudOwner = usePrimaryCloudOwner({
   canEnterApp,
   cloudEnabled: cloudJobsAllowed
 })
+// PIP-442: cache proiezioni owner (memoria + file locale in Electron) legate all'account:
+// idratate prima di mostrare la dashboard, svuotate a logout/cambio account.
+const ownerCacheLifecycle = useOwnerCacheLifecycle({ currentUser, canEnterApp })
 watch(primaryCloudOwner.jobsEnabled, (enabled) => {
   const api = typeof window === 'undefined' ? null : (window as Window & { electronAPI?: { localIdentityRole?: string } }).electronAPI
   if (enabled && isPrimaryClientRuntime.value && api?.localIdentityRole === 'primary') {
@@ -318,12 +322,25 @@ watch(authSessionStatus, (status) => {
   })
 }, { immediate: true })
 
+// Rete di sicurezza per gli ingressi che non passano da enterDashboard: prepare e' idempotente.
+watch([appState, () => currentUser.value?.uid || null], ([state, uid]) => {
+  if (state === 'dashboard' && uid && canEnterApp.value) void ownerCacheLifecycle.prepare(uid)
+})
+
+let dashboardEntryRevision = 0
 const enterDashboard = () => {
-  const startDashboard = () => {
+  const startDashboard = async () => {
     if (!canEnterApp.value || !currentUser.value) {
       showEmailVerificationGate()
       return
     }
+
+    // Le pagine leggono le proiezioni al mount: prima si idrata dal disco (locale, bounded),
+    // cosi' il secondo avvio non paga letture Firebase gia' in cache.
+    const entryRevision = ++dashboardEntryRevision
+    const uid = currentUser.value.uid
+    await ownerCacheLifecycle.prepare(uid)
+    if (entryRevision !== dashboardEntryRevision || currentUser.value?.uid !== uid || !canEnterApp.value) return
 
     appState.value = 'dashboard'
     if (pendingSpaRedirectPath.value) {
@@ -336,7 +353,7 @@ const enterDashboard = () => {
     }
   }
 
-  startDashboard()
+  void startDashboard()
 }
 
 const applyAuthSessionToShell = (status: AuthSessionStatus) => {

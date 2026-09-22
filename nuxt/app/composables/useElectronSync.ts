@@ -42,6 +42,7 @@ import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTrack
 import { useOwnerDataMaintenance } from './useOwnerDataMaintenance'
 import { getRecentActivityDateKeys, getTelemetryActivityDateKey } from '~/services/telemetry/activityProjectionService'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
+import { loadOwnerDocument } from '~/repositories/ownerDocumentRepository'
 import { createRuntimeBootstrapCoordinator } from '~/services/runtime/runtimeBootstrapCoordinator'
 import {
     buildRendererBootstrapContext,
@@ -161,11 +162,13 @@ async function findMissingRecentSessionIndexIds(
     if (candidateIds.length === 0) return []
 
     assertLeaseCurrent(isCurrent)
-    const userSnap = await getDoc(doc(db, `users/${uid}`))
+    // PIP-442: lettura fresca voluta dal ciclo sync (stesso costo di prima); aggiorna anche
+    // la copia condivisa del documento owner. PIP-444 la rimuovera'.
+    const userSnap = await loadOwnerDocument(uid, { fresh: true, caller: SYNC_CALLER })
     assertLeaseCurrent(isCurrent)
-    if (!userSnap.exists()) return candidateIds
+    if (!userSnap.exists) return candidateIds
 
-    const sessionIndexList = userSnap.data()?.sessionIndex?.sessionsList
+    const sessionIndexList = userSnap.data?.sessionIndex?.sessionsList
     const indexedIds = new Set(
         (Array.isArray(sessionIndexList) ? sessionIndexList : [])
             // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type

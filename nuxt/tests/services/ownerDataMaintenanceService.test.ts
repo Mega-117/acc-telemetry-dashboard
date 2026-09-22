@@ -57,6 +57,8 @@ vi.mock('~/services/sync/ownerDataRepairService', () => ({
   verifyOwnerMigrationLightweight: verifyOwnerMigrationLightweightMock
 }))
 
+import { clearOwnerDocumentCache, peekOwnerDocument } from '~/repositories/ownerDocumentRepository'
+
 const migration = {
   version: 5,
   bestRulesVersion: 5,
@@ -111,6 +113,8 @@ describe('runOwnerDataMaintenanceGate', () => {
   afterEach(() => vi.useRealTimers())
   beforeEach(() => {
     vi.clearAllMocks()
+    // PIP-442: lo stato di manutenzione passa dal documento owner condiviso, senza scadenza.
+    clearOwnerDocumentCache()
     setDocMock.mockResolvedValue(undefined)
     auditOwnerDataMock.mockResolvedValue(cleanAudit())
     reprocessOwnerCloudRawSummariesMock.mockResolvedValue({
@@ -157,6 +161,12 @@ describe('runOwnerDataMaintenanceGate', () => {
     expect(report.status).toBe('skipped')
     expect(claimFirebaseStructureLeaseMock).not.toHaveBeenCalled()
     expect(auditOwnerDataMock).not.toHaveBeenCalled()
+    // PIP-442: nessuna scrittura di manutenzione -> la copia condivisa di users/{uid} resta
+    // valida per gli altri chiamanti dell'avvio (una sola lettura in tutto).
+    expect(getDocMock).toHaveBeenCalledOnce()
+    expect(peekOwnerDocument('uid-1')).not.toBeNull()
+    await runOwnerDataMaintenanceGate({ uid: 'uid-1' })
+    expect(getDocMock).toHaveBeenCalledOnce()
   })
 
   it('non esegue downgrade quando incontra una struttura futura', async () => {
@@ -193,6 +203,8 @@ describe('runOwnerDataMaintenanceGate', () => {
     const report = await runOwnerDataMaintenanceGate({ uid: 'uid-1' })
 
     expect(report.status).toBe('skipped')
+    // PIP-442: lease/checkpoint/health hanno scritto users/{uid}: la copia condivisa e' svuotata.
+    expect(peekOwnerDocument('uid-1')).toBeNull()
     expect(claimFirebaseStructureLeaseMock).toHaveBeenCalledOnce()
     expect(verifyOwnerMigrationLightweightMock).toHaveBeenCalledWith('uid-1')
     expect(auditOwnerDataMock).not.toHaveBeenCalled()

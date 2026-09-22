@@ -5,6 +5,7 @@ import { clearCoachDirectoryCache } from '~/repositories/coachDirectoryRepositor
 import { clearCoachLessonsCache } from '~/repositories/coachLessonsRepository'
 import { clearRaceCalendarCache } from '~/repositories/raceCalendarRepository'
 import { clearTelemetryProjectionRepositoryCache } from '~/repositories/telemetryProjectionRepository'
+import { clearOwnerDocumentCache } from '~/repositories/ownerDocumentRepository'
 
 export type TelemetryCacheInvalidationScope =
   | 'sync'
@@ -25,6 +26,9 @@ export function invalidateTelemetryCaches(options: TelemetryCacheInvalidationOpt
   const { uid, scope = 'all', dispatchEvent = true } = options
 
   if (scope === 'all' || scope === 'sync' || scope === 'profile' || scope === 'manual-refresh') {
+    // PIP-442: il documento owner condiviso e' stato riscritto (sync/profilo) o l'utente
+    // vuole dati freschi: la prossima lettura porta la revisione nuova.
+    clearOwnerDocumentCache(uid)
     clearTelemetryProjectionRepositoryCache(uid)
     clearTelemetryGatewayCache(uid)
     clearSessionPagerCache(uid)

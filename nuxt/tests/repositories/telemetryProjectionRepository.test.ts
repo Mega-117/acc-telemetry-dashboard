@@ -10,12 +10,14 @@ vi.mock('firebase/firestore', () => ({
 }))
 vi.mock('~/composables/useFirebaseTracker', () => ({ trackedGetDoc: fake.getDoc, trackedGetDocs: fake.getDocs }))
 
-import { OWNER_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
+import { OWNER_DATA_CACHE_TTL_MS, setCacheOwnerUid } from '~/services/cache/cachePolicy'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { TRACK_BESTS_SCHEMA_VERSION } from '~/services/sync/trackBestsProjectionService'
 import { buildTrackBestsIndexDocument } from '~/services/sync/trackBestsIndexProjectionService'
 import {
   clearTelemetryProjectionRepositoryCache,
+  exportTrackBestsIndexDocument,
+  hydrateTrackBestsIndexCache,
   loadTrackBest,
   loadTrackBestsMap
 } from '~/repositories/telemetryProjectionRepository'
@@ -48,8 +50,13 @@ beforeEach(() => {
   fake.getDoc.mockReset().mockImplementation(async (path: string) => snapshotFor(path))
   fake.getDocs.mockReset().mockImplementation(async (path: string) => ({ docs: collectionDocs(`${path}/`) }))
   clearTelemetryProjectionRepositoryCache()
+  // PIP-442: 'u' e' l'account corrente (cache senza scadenza a tempo).
+  setCacheOwnerUid('u')
 })
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  setCacheOwnerUid(null)
+  vi.useRealTimers()
+})
 
 describe('telemetryProjectionRepository con indice piste', () => {
   it('/piste: la mappa delle piste costa una sola lettura (l\'indice), nessuna query', async () => {
@@ -122,18 +129,32 @@ describe('telemetryProjectionRepository con indice piste', () => {
     expect(await loadTrackBest('u', 'legacy')).toBeNull()
   })
 
-  it('l\'indice segue il TTL owner e l\'invalidazione della sync', async () => {
+  it('l\'indice non scade a tempo (PIP-442) e segue solo l\'invalidazione della sync', async () => {
+    expect(OWNER_DATA_CACHE_TTL_MS).toBe(Number.POSITIVE_INFINITY)
     store.set('users/u/trackBestsIndex/v1', buildTrackBestsIndexDocument({ monza: trackDoc('monza') }))
     await loadTrackBestsMap('u')
-    vi.advanceTimersByTime(OWNER_DATA_CACHE_TTL_MS - 1)
+    vi.advanceTimersByTime(24 * 60 * 60_000)
     await loadTrackBestsMap('u')
+    await loadTrackBest('u', 'monza')
     expect(fake.getDoc).toHaveBeenCalledTimes(1)
     clearTelemetryProjectionRepositoryCache('u')
     await loadTrackBestsMap('u')
     expect(fake.getDoc).toHaveBeenCalledTimes(2)
-    vi.advanceTimersByTime(OWNER_DATA_CACHE_TTL_MS + 1)
-    await loadTrackBest('u', 'monza')
-    expect(fake.getDoc).toHaveBeenCalledTimes(3)
+  })
+
+  it('PIP-442: l\'indice idratato dal disco serve mappa e piste con 0 letture e si puo\' esportare', async () => {
+    const document = buildTrackBestsIndexDocument({ monza: trackDoc('monza'), spa: trackDoc('spa') })
+    expect(exportTrackBestsIndexDocument('u')).toBeNull()
+    expect(hydrateTrackBestsIndexCache('u', document)).toBe(true)
+    expect(Object.keys(await loadTrackBestsMap('u')).sort()).toEqual(['monza', 'spa'])
+    expect((await loadTrackBest('u', 'spa')).trackId).toBe('spa')
+    expect(fake.getDoc).not.toHaveBeenCalled()
+    expect(exportTrackBestsIndexDocument('u')).toBe(document)
+    // Un documento non usabile non idrata e non lascia un "manca" in cache.
+    expect(hydrateTrackBestsIndexCache('v', { version: 0 })).toBe(false)
+    store.set('users/v/trackBestsIndex/v1', buildTrackBestsIndexDocument({ monza: trackDoc('monza') }))
+    expect(Object.keys(await loadTrackBestsMap('v'))).toEqual(['monza'])
+    expect(fake.getDoc).toHaveBeenCalledTimes(1)
   })
 
   it('una lettura dell\'indice iniziata prima di un\'invalidazione non ripopola la cache', async () => {

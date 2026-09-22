@@ -206,7 +206,8 @@ async function loadCachedUserProfile(uid: string, { force = false } = {}) {
     }
 
     const { getUserProfile } = await getAuthDependencies()
-    const request: Promise<CachedUserProfile | null> = getUserProfile(uid)
+    // PIP-442: il profilo e' il documento owner condiviso; `force` chiede la lettura fresca.
+    const request: Promise<CachedUserProfile | null> = getUserProfile(uid, { fresh: force })
         .then((profile) => {
             const cachedProfile = profile && typeof profile === 'object'
                 ? profile as CachedUserProfile
@@ -233,6 +234,8 @@ function updateCachedUserProfile(uid: string, patch: CachedUserProfile) {
         ...patch
     }
     userProfileCache.set(uid, nextProfile)
+    // PIP-442: la copia condivisa di `users/{uid}` viene svuotata da chi salva il profilo
+    // (`invalidateTelemetryCaches({ scope: 'profile' })`), senza importare Firestore qui.
     if (currentUser.value?.uid === uid) currentUserProfile.value = nextProfile
 }
 

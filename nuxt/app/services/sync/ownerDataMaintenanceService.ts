@@ -1,10 +1,12 @@
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import {
-  trackedGetDoc,
   trackedRunTransaction,
   withFirebaseScenario
 } from '~/composables/useFirebaseTracker'
+// PIP-442: lo stato di manutenzione arriva dal documento owner condiviso (una lettura per
+// avvio); dopo una scrittura di manutenzione la copia viene svuotata.
+import { clearOwnerDocumentCache, loadOwnerDocument } from '~/repositories/ownerDocumentRepository'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import {
@@ -194,8 +196,8 @@ function isStoredStateReadyForSessionListUpgrade(state: OwnerDataMaintenanceStor
 }
 
 async function readStoredState(uid: string): Promise<OwnerDataMaintenanceEnvelope> {
-  const snap = await trackedGetDoc(doc(db, `users/${uid}`), CALLER)
-  const maintenance = snap.exists() ? (snap.data()?.maintenance || {}) : {}
+  const snap = await loadOwnerDocument(uid, { caller: CALLER })
+  const maintenance = snap.exists ? (snap.data?.maintenance || {}) : {}
   return {
     migration: (maintenance.canonicalDataMigration || null) as OwnerDataMaintenanceStoredState | null,
     health: (maintenance.firebaseStructureHealth || null) as FirebaseStructureHealthState | null
@@ -517,6 +519,9 @@ export async function runOwnerDataMaintenanceGate(
   const startedAt = nowIso()
   const leaseId = createFirebaseStructureLeaseId()
   let leaseAcquired = false
+  // PIP-442: lease, checkpoint e health scrivono `users/{uid}.maintenance`: la copia
+  // condivisa del documento va svuotata a fine gate, in ogni esito.
+  let ownerDocumentTouched = false
   let checkpointAttempt = 1
   let resumedFrom: string | null = null
   const retryActive = <T>(operation: () => Promise<T>) => withFirebaseStructureRetry(async () => {
@@ -550,6 +555,7 @@ export async function runOwnerDataMaintenanceGate(
 
     if (healthDecision.action === 'future_schema' || healthDecision.action === 'blocked_schema') {
       const status = healthDecision.action === 'future_schema' ? 'future_schema' : 'blocked'
+      ownerDocumentTouched = true
       await retryActive(() => publishFirebaseStructureHealth({
         uid,
         status,
@@ -601,6 +607,7 @@ export async function runOwnerDataMaintenanceGate(
       return report
     }
 
+    ownerDocumentTouched = true
     leaseAcquired = await retryActive(() => claimFirebaseStructureLease({
       uid,
       leaseId,
@@ -925,6 +932,8 @@ export async function runOwnerDataMaintenanceGate(
       reason
     })
     throw error
+  }).finally(() => {
+    if (ownerDocumentTouched) clearOwnerDocumentCache(uid)
   })
 }
 export async function completeOwnerDataMaintenanceAfterLocalSync(
