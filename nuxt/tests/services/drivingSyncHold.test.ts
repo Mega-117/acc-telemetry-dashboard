@@ -46,7 +46,7 @@ describe('classifyLiveState / isCarOnTrack', () => {
     expect(classifyLiveState(null, NOW)).toBe('unreadable')
     expect(classifyLiveState('{not json', NOW)).toBe('unreadable')
     expect(classifyLiveState(42, NOW)).toBe('unreadable')
-    // File presente ma senza sessione: menu, replay, pausa o ACC chiuso.
+    // File presente ma senza sessione: menu, replay o ACC chiuso.
     expect(classifyLiveState({ ts: 'bad' }, NOW)).toBe('not-live')
     expect(classifyLiveState(state({ live: false }), NOW)).toBe('not-live')
     expect(classifyLiveState(state({ live: false, inPitLane: true }), NOW)).toBe('not-live')
@@ -68,6 +68,15 @@ describe('classifyLiveState / isCarOnTrack', () => {
 describe('decideDrivingHold (reducer puro)', () => {
   const stopped = (ms: number) => state({ inPitLane: true }, loggerTimestamp(ms))
   const onTrack = (ms: number) => state({}, loggerTimestamp(ms))
+  it('holds ESC pause for three minutes, resets on resume, and releases stale telemetry', () => {
+    const pause = (ms: number) => state({ live: false, paused: true }, loggerTimestamp(ms))
+    const first = decideDrivingHold(INITIAL_DRIVING_HOLD_STATE, pause(NOW), NOW)
+    expect(first.action).toBe('hold')
+    expect(decideDrivingHold(first.state, pause(NOW + 2 * MINUTE), NOW + 2 * MINUTE).action).toBe('hold')
+    expect(decideDrivingHold(first.state, pause(NOW + 3 * MINUTE), NOW + 3 * MINUTE)).toMatchObject({ action: 'release', reason: 'pit-timeout' })
+    expect(decideDrivingHold(first.state, onTrack(NOW), NOW).state.stoppedSinceMs).toBeNull()
+    expect(decideDrivingHold(first.state, pause(NOW), NOW + LIVE_STATE_STALE_MS + 1)).toMatchObject({ action: 'release', reason: 'telemetry-stale' })
+  })
 
   it('in pista trattiene e azzera la sosta', () => {
     expect(decideDrivingHold(INITIAL_DRIVING_HOLD_STATE, onTrack(NOW), NOW)).toEqual({ action: 'hold', state: { stoppedSinceMs: null } })

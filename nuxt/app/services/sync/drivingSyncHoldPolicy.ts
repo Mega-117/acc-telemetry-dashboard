@@ -32,6 +32,7 @@ export type LiveGateStatus = 'unreadable' | 'not-live' | 'stale' | 'stopped' | '
 
 interface LiveGate {
   live?: unknown
+  paused?: unknown
   inPit?: unknown
   inPitLane?: unknown
   stationaryGarage?: unknown
@@ -49,8 +50,8 @@ function parseLoggerTimestamp(value: unknown): number | null {
 /**
  * Classifica il live_state grezzo (testo JSON dal bridge Electron o oggetto).
  * `unreadable` = nessun dato o non interpretabile; `not-live` = sessione non in corso
- * (menu, replay, pausa, ACC chiuso); `stale` = nessun dato fresco entro LIVE_STATE_STALE_MS;
- * `stopped` = in pit lane / box / garage; `on-track` = in pista.
+ * (menu, replay, ACC chiuso); `stale` = nessun dato fresco entro LIVE_STATE_STALE_MS;
+ * `stopped` = pausa / pit lane / box / garage; `on-track` = in pista.
  */
 export function classifyLiveState(rawLiveState: unknown, nowMs: number): LiveGateStatus {
   let liveState = rawLiveState
@@ -60,10 +61,10 @@ export function classifyLiveState(rawLiveState: unknown, nowMs: number): LiveGat
   if (!liveState || typeof liveState !== 'object') return 'unreadable'
   const state = liveState as { ts?: unknown, dryPressureLiveGate?: LiveGate }
   const gate = state.dryPressureLiveGate
-  if (!gate || typeof gate !== 'object' || gate.live !== true) return 'not-live'
+  if (!gate || typeof gate !== 'object' || (gate.live !== true && gate.paused !== true)) return 'not-live'
   const freshAt = parseLoggerTimestamp(gate.freshAt ?? state.ts)
   if (freshAt === null || nowMs - freshAt > LIVE_STATE_STALE_MS) return 'stale'
-  if (gate.inPit === true || gate.inPitLane === true || gate.stationaryGarage === true) return 'stopped'
+  if (gate.paused === true || gate.inPit === true || gate.inPitLane === true || gate.stationaryGarage === true) return 'stopped'
   return 'on-track'
 }
 
