@@ -20,7 +20,7 @@ const STORAGE_KEY_PREFIX = 'acc_client_heartbeat_'
 
 // PIP-439: l'invio forzato (avvio/login) vale una volta per caricamento pagina e per
 // account+installazione. Dopo un Ctrl+R il bootstrap attraversa piu' fasi e riaccende
-// `enabled` piu' volte: ogni riaccensione successiva segue la regola normale dei 15 minuti.
+// `enabled` piu' volte: ogni riaccensione successiva segue la cadenza oraria PIP-445.
 const forcedHeartbeatOwners = new Set<string>()
 
 /** Solo test: dimentica gli invii forzati gia' fatti in questo caricamento. */
