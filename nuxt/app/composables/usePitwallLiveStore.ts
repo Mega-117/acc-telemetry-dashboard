@@ -397,7 +397,10 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
     if (started) {
       if (fullStarted) link.stop()
       trust.stop()
-      if (fullStarted && !full && accountUid) void stopPitwallRealtimeAccount(accountUid)
+      if (fullStarted && !full && accountUid) {
+        stopPitwallRealtimeEngineerAccount(accountUid)
+        void stopPitwallRealtimeAccount(accountUid)
+      }
     }
     started = true
     fullStarted = full

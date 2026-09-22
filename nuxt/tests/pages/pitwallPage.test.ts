@@ -293,7 +293,7 @@ describe('Pitwall wiring', () => {
     expect(page).toContain("route.query.demo === '1' && canUseDevTools()")
     expect(page).toContain('if (demo.value) providePitwallStore(usePitwallConceptState())')
     expect(appRoot).toContain('providePitwallStore(pitwallStore)')
-    expect(appRoot).toContain('pitwallStore.start()')
+    expect(appRoot).toContain('pitwallStore.start(needsPitwall)')
     expect(appRoot).toContain('pitwallStore.halt()')
     expect(appRoot).not.toContain('isPitwallConceptSandbox')
     // I componenti non sanno quale presa hanno dietro: nessun servizio diretto.
