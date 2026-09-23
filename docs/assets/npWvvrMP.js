@@ -1,1 +1,0 @@
-import{B as e,bt as t,a9 as o}from"./CtUgurTr.js";const r={},c={"aria-hidden":"true"};function a(n,s){return t(),o("div",c)}const d=e(r,[["render",a]]);export{d as default};
