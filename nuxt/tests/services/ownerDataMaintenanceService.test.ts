@@ -142,6 +142,38 @@ describe('runOwnerDataMaintenanceGate', () => {
     })
     classifyFirebaseStructureErrorMock.mockReturnValue('unknown_error')
     advanceCheckpointMock.mockResolvedValue('advanced')
+    migrateOwnerTrackProjectionsMock.mockResolvedValue({ migratedTracks: ['imola'], alreadyMerged: 0 })
+  })
+
+  it.each([
+    ['track_projections_unmerged'],
+    ['track_bests_index_missing_or_stale'],
+    ['track_projections_unmerged', 'track_bests_index_missing_or_stale']
+  ])('repairs track-only issues %j without scanning or rebuilding sessions', async (...issues) => {
+    inspectFirebaseStructureStateMock.mockReturnValue({ action: 'verify_current' })
+    getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ maintenance: { canonicalDataMigration: migration } }) })
+    verifyOwnerMigrationLightweightMock.mockResolvedValueOnce({ ok: false, issues })
+    const { runOwnerDataMaintenanceGate } = await import('~/services/sync/ownerDataMaintenanceService')
+    expect((await runOwnerDataMaintenanceGate({ uid: 'uid-1' })).status).toBe('completed')
+    expect(migrateOwnerTrackProjectionsMock).toHaveBeenCalledWith('uid-1', expect.objectContaining({
+      repairIndex: issues.includes('track_bests_index_missing_or_stale')
+    }))
+    expect(verifyOwnerMigrationLightweightMock).toHaveBeenCalledTimes(2)
+    expect(auditOwnerDataMock).not.toHaveBeenCalled()
+    expect(rebuildOwnerProjectionsMock).not.toHaveBeenCalled()
+    expect(reprocessOwnerCloudRawSummariesMock).not.toHaveBeenCalled()
+  })
+
+  it('keeps full repair when a targeted repair leaves a structural problem', async () => {
+    inspectFirebaseStructureStateMock.mockReturnValue({ action: 'verify_current' })
+    getDocMock.mockResolvedValue({ exists: () => true, data: () => ({ maintenance: { canonicalDataMigration: migration } }) })
+    verifyOwnerMigrationLightweightMock
+      .mockResolvedValueOnce({ ok: false, issues: ['track_bests_index_missing_or_stale'] })
+      .mockResolvedValueOnce({ ok: false, issues: ['session_list_total_sessions_mismatch'] })
+    const { runOwnerDataMaintenanceGate } = await import('~/services/sync/ownerDataMaintenanceService')
+    await runOwnerDataMaintenanceGate({ uid: 'uid-1' })
+    expect(auditOwnerDataMock).toHaveBeenCalledOnce()
+    expect(rebuildOwnerProjectionsMock).toHaveBeenCalledOnce()
   })
 
   it('salta audit e repair quando lo stato health recente e sano', async () => {
@@ -257,10 +289,11 @@ describe('runOwnerDataMaintenanceGate', () => {
     const report = await runOwnerDataMaintenanceGate({ uid: 'uid-1' })
 
     expect(report.status).toBe('completed')
-    expect(migrateOwnerTrackProjectionsMock).toHaveBeenCalledWith('uid-1', { assertActive: expect.any(Function) })
+    expect(migrateOwnerTrackProjectionsMock).toHaveBeenCalledWith('uid-1', { assertActive: expect.any(Function), repairIndex: false })
     expect(rebuildOwnerProjectionsMock).not.toHaveBeenCalled()
     expect(reprocessOwnerCloudRawSummariesMock).not.toHaveBeenCalled()
-    expect(report.audit?.projections.unmergedTrackProjections).toEqual([])
+    expect(auditOwnerDataMock).not.toHaveBeenCalled()
+    expect(verifyOwnerMigrationLightweightMock).toHaveBeenCalledTimes(2)
   })
 
   it('riesegue audit completo per uno stato partial scaduto', async () => {

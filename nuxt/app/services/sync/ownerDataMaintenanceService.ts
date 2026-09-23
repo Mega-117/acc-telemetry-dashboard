@@ -654,10 +654,27 @@ export async function runOwnerDataMaintenanceGate(
     let lightweightIssues: string[] = []
     if (healthDecision.action === 'verify_current' && stored.health?.status !== 'partial') {
       await ensureActiveLease(uid, leaseId, assertActive)
-      const verification = await retryActive(() => verifyOwnerMigrationLightweight(uid))
+      let verification = await retryActive(() => verifyOwnerMigrationLightweight(uid))
+      let repairedTracks = false
+      // A format migration or stale derived index alone does not justify scanning
+      // every session twice and rebuilding otherwise healthy projections.
+      const trackOnlyIssues = new Set(['track_projections_unmerged', 'track_bests_index_missing_or_stale'])
+      if (!force && !needsVersionedRawReprocess(storedState)
+        && !verification.ok && verification.issues.length > 0
+        && verification.issues.every((code) => trackOnlyIssues.has(code))) {
+        await ensureActiveLease(uid, leaseId, assertActive)
+        await retryActive(() => migrateOwnerTrackProjections(uid, {
+          assertActive,
+          repairIndex: verification.issues.includes('track_bests_index_missing_or_stale')
+        }))
+        await ensureActiveLease(uid, leaseId, assertActive)
+        verification = await retryActive(() => verifyOwnerMigrationLightweight(uid))
+        repairedTracks = true
+      }
       lightweightIssues = verification.issues
       if (verification.ok) {
         const report = skippedReport(uid, startedAt, 'Struttura dati verificata.', 'healthy')
+        if (repairedTracks) { report.status = 'completed'; report.phase = 'completed' }
         report.resumedFrom = resumedFrom
         await finalizeMaintenanceOutcome({
           uid,
@@ -668,8 +685,8 @@ export async function runOwnerDataMaintenanceGate(
           assertActive
         })
         emit(onProgress, {
-          status: 'skipped',
-          phase: 'skipped',
+          status: report.status,
+          phase: report.phase,
           progress: 100,
           message: report.message,
           report

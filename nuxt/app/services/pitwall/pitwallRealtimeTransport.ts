@@ -2,7 +2,7 @@ import {
   get, onValue, ref, update, runTransaction, onDisconnect, serverTimestamp,
   type Database, type Unsubscribe,
 } from 'firebase/database'
-import { createPitwallIoMetrics, jsonPayloadBytes } from './pitwallIoMetrics'
+import { createPitwallIoMetrics, jsonPayloadBytes, pitwallIoErrorCode } from './pitwallIoMetrics'
 
 export const PITWALL_ROOT = 'pitwallV3'
 export const PITWALL_PROTOCOL = 3 as const
@@ -52,7 +52,7 @@ export function createPitwallRealtimeTransport(database: Database, namespace: st
         // Firebase cancels denied listeners. A later explicit rejoin must create
         // a fresh subscription instead of reusing this permanently dead entry.
         if (watches.get(path) === shared) watches.delete(path)
-        metrics.record({ operation: 'receive', path, bytes: 0, success: false })
+        metrics.record({ operation: 'receive', path, bytes: 0, success: false, errorCode: pitwallIoErrorCode(error) })
         for (const listener of shared.errors) listener(error)
       })
     }
@@ -91,7 +91,7 @@ export function createPitwallRealtimeTransport(database: Database, namespace: st
       metrics.record({ operation: 'read', path, bytes: jsonPayloadBytes(snapshot.val()), success: true })
       return snapshot.val() as T | null
     } catch (error) {
-      metrics.record({ operation: 'read', path, bytes: 0, success: false })
+      metrics.record({ operation: 'read', path, bytes: 0, success: false, errorCode: pitwallIoErrorCode(error) })
       throw error
     } finally { reads.delete(path) } })()
     reads.set(path, request)
@@ -106,7 +106,7 @@ export function createPitwallRealtimeTransport(database: Database, namespace: st
       metrics.record({ operation: removing ? 'delete' : 'write', path, bytes: jsonPayloadBytes(changes), success: true,
         deletedPaths: Object.values(changes).filter(value => value === null).length })
     } catch (error) {
-      metrics.record({ operation: removing ? 'delete' : 'write', path, bytes: jsonPayloadBytes(changes), success: false })
+      metrics.record({ operation: removing ? 'delete' : 'write', path, bytes: jsonPayloadBytes(changes), success: false, errorCode: pitwallIoErrorCode(error) })
       throw error
     }
   }
@@ -128,7 +128,7 @@ export function createPitwallRealtimeTransport(database: Database, namespace: st
         responseBytes: jsonPayloadBytes(result.snapshot.val()), deletedPaths: result.committed && !result.snapshot.exists() ? 1 : 0 })
       return { committed: result.committed, value: result.snapshot.val() as T | null }
     } catch (error) {
-      metrics.record({ operation: 'transaction', path, bytes, attempts, success: false })
+      metrics.record({ operation: 'transaction', path, bytes, attempts, success: false, errorCode: pitwallIoErrorCode(error) })
       throw error
     }
   }

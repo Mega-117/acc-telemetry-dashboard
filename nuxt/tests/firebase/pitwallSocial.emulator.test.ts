@@ -44,6 +44,33 @@ async function publish(service: Awaited<ReturnType<typeof participant>>, roomId:
   expect(result.ok, JSON.stringify(result)).toBe(true)
 }
 describe('social rooms with real Firebase rules', () => {
+  it('ignores expired directories without denied admissions and discovers the next live room', async () => {
+    const B = await participant('B')
+    await env.withSecurityRulesDisabled(async context => {
+      await update(ref(context.database() as unknown as Database, ROOT), {
+        'directory/A': { roomId: 'expired', connectionId: 'gone', slot: '0' },
+        'directory/B': { roomId: 'expired', connectionId: 'gone-too', slot: '1' },
+        'rooms/expired/slots/0': { uid: 'A', reservedAt: Date.now() - 60000 },
+        'rooms/expired/slots/1': { uid: 'B', reservedAt: Date.now() - 60000 },
+        'rooms/expired/access': { A: 'member', B: 'member' },
+        'rooms/expired/occupancy/A/gone': { nickname: 'A', connectedAt: Date.now() - 60000, disconnectedAt: Date.now() - 60000 },
+        'rooms/expired/occupancy/B/gone-too': { nickname: 'B', connectedAt: Date.now() - 60000, disconnectedAt: Date.now() - 60000 },
+      })
+    })
+    let rooms: any[] = []
+    stops.push(B.watchRooms(value => { rooms = value }))
+    await vi.waitFor(() => expect(B.io.metrics.events().filter(event => event.operation === 'receive'
+      && event.path.startsWith('connections/')).length).toBeGreaterThanOrEqual(2))
+    expect(rooms).toEqual([])
+    expect(B.io.metrics.events().filter(event => !event.success)).toEqual([])
+    expect(B.io.metrics.events().some(event => event.path.startsWith('admissions/'))).toBe(false)
+    const A = await participant('A')
+    const opened = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Fresh room' })
+    if (!opened.ok) throw new Error(opened.reason)
+    await publish(A, opened.value.roomId)
+    await vi.waitFor(() => expect(rooms.map(room => room.roomId)).toContain(opened.value.roomId))
+    expect((await B.joinRoom(opened.value.roomId)).ok).toBe(true)
+  })
   it('does not pretend to send guest invitations or admit a non-friend', async () => {
     const A = await participant('A'), D = await participant('D')
     const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Friends only' })

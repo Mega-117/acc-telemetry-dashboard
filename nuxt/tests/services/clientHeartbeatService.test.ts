@@ -132,4 +132,15 @@ describe('clientHeartbeatService', () => {
     }
     expect(count).toBe(2)
   })
+
+  it('counts a new dashboard opening once, not once per repeated signal', () => {
+    const first = '2026-09-23T09:00:00Z'
+    const opened = '2026-09-23T09:07:00Z'
+    const now = Date.parse(opened) + 1000
+    expect(shouldSendClientHeartbeat(first, now, CLIENT_HEARTBEAT_INTERVAL_MS, opened)).toBe(true)
+    const sent = new Date(now).toISOString()
+    for (let signal = 1; signal <= 20; signal++) {
+      expect(shouldSendClientHeartbeat(sent, now + signal * 1000, CLIENT_HEARTBEAT_INTERVAL_MS, opened)).toBe(false)
+    }
+  })
 })

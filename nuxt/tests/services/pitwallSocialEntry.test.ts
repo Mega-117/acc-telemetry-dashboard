@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPitwallSocialLifecycle } from '~/services/pitwall/pitwallSocialLifecycle'
 import type { PitwallRealtimeTransport } from '~/services/pitwall/pitwallRealtimeTransport'
 
@@ -36,5 +36,64 @@ describe('social room slot admission', () => {
     const s=setup(null,'network unavailable'); const result=await s.service.joinRoom('r')
     expect(result).toEqual({ok:false,reason:'network unavailable'})
     expect(s.transact).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('social discovery presence gate', () => {
+  afterEach(() => vi.useRealTimers())
+  function discovery() {
+    const callbacks = new Map<string, (value: unknown) => void>()
+    const write = vi.fn(async () => {})
+    const watch = vi.fn((path: string, callback: (value: unknown) => void) => {
+      callbacks.set(path, callback)
+      return () => { callbacks.delete(path) }
+    })
+    const service = createPitwallSocialLifecycle({ uid: 'guest',
+      io: { watch, write, serverNow: () => 100000 } as unknown as PitwallRealtimeTransport,
+      connectionId: () => 'guest-c', ensureConnection: async () => {},
+      watchFriends: callback => { callback(['friend']); return () => {} }
+    })
+    const stop = service.watchRooms(() => {})
+    return { callbacks, write, watch, stop }
+  }
+  it('does not request admissions or room metadata for stale own/friend directories', async () => {
+    const s = discovery()
+    for (const uid of ['guest', 'friend']) {
+      s.callbacks.get(`directory/${uid}`)?.({ roomId: 'old', connectionId: 'gone' })
+      s.callbacks.get(`connections/${uid}`)?.(null)
+    }
+    await Promise.resolve(); await Promise.resolve()
+    expect(s.write).not.toHaveBeenCalled()
+    expect(s.watch.mock.calls.some(([path]) => path.startsWith('rooms/'))).toBe(false)
+    s.stop(); expect(s.callbacks.size).toBe(0)
+  })
+  it('discovers a friend arriving after the directory and serializes concurrent signals', async () => {
+    const s = discovery()
+    s.callbacks.get('directory/friend')?.({ roomId: 'r', connectionId: 'c' })
+    s.callbacks.get('connections/friend')?.(null)
+    await Promise.resolve(); await Promise.resolve()
+    expect(s.write).not.toHaveBeenCalled()
+    s.callbacks.get('connections/friend')?.({ c: {} })
+    s.callbacks.get('connections/friend')?.({ c: {} })
+    await vi.waitFor(() => expect(s.callbacks.has('rooms/r/meta')).toBe(true))
+    expect(s.write).toHaveBeenCalledOnce()
+    s.stop()
+  })
+  it('retries transient occupancy races with a bound and cancels retries on exit', async () => {
+    vi.useFakeTimers()
+    const s = discovery()
+    s.write.mockRejectedValue(new Error('PERMISSION_DENIED'))
+    s.callbacks.get('directory/friend')?.({ roomId: 'r', connectionId: 'c' })
+    s.callbacks.get('connections/friend')?.({ c: {} })
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(s.write).toHaveBeenCalledTimes(4)
+    await vi.advanceTimersByTimeAsync(60000)
+    expect(s.write).toHaveBeenCalledTimes(4)
+    s.callbacks.get('connections/friend')?.({ c: {} })
+    await vi.advanceTimersByTimeAsync(1)
+    expect(s.write).toHaveBeenCalledTimes(5)
+    s.stop()
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(s.write).toHaveBeenCalledTimes(5)
   })
 })

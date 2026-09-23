@@ -21,7 +21,13 @@ import {
   type TrackBestProjectionDelta
 } from './trackBestsProjectionService'
 import { TRACK_DETAIL_PROJECTION_SCHEMA_VERSION } from '~/types/trackProjections'
-import { isTrackBestsIndexConsistent, trackBestsIndexPath } from './trackBestsIndexProjectionService'
+import {
+  buildDisabledTrackBestsIndexDocument,
+  buildTrackBestsIndexDocument,
+  exceedsTrackBestsIndexSizeGuard,
+  isTrackBestsIndexConsistent,
+  trackBestsIndexPath
+} from './trackBestsIndexProjectionService'
 import { writeUserProjectionDocuments } from './projectionRebuildService'
 // PIP-444: un documento per pista; audit e verifica accettano entrambe le forme.
 import {
@@ -31,6 +37,8 @@ import {
   trackProjectionPath
 } from './trackProjectionDocument'
 import { invalidateSyncMirror } from './syncMirrorService'
+import { clearTelemetryProjectionRepositoryCache } from '~/repositories/telemetryProjectionRepository'
+import { notifyOwnerCacheChanged } from '~/services/cache/ownerCacheSignals'
 import { writePilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
 import { PILOT_DIRECTORY_SCHEMA_VERSION } from '~/utils/pilotDirectoryFields'
 import {
@@ -798,7 +806,7 @@ export async function rebuildOwnerProjections(
  */
 export async function migrateOwnerTrackProjections(
   uid: string,
-  options: OwnerDataRepairGuardOptions = {}
+  options: OwnerDataRepairGuardOptions & { repairIndex?: boolean } = {}
 ): Promise<OwnerTrackProjectionMigrationReport> {
   const assertActive = options.assertActive || (() => {})
   return withFirebaseScenario('maintenance.ownerData.trackProjectionsMigration', { uid }, async () => {
@@ -828,6 +836,27 @@ export async function migrateOwnerTrackProjections(
       migratedTracks.push(trackId)
     }
     if (migratedTracks.length > 0) invalidateSyncMirror(uid)
+    // An index is derived from the track projections, not from the full session
+    // history. Repair only this document when the lightweight check found it stale.
+    if (options.repairIndex) {
+      assertActive()
+      const indexRef = doc(db, trackBestsIndexPath(uid))
+      const indexSnap = await getDocTracked(indexRef)
+      assertActive()
+      const tracks = Array.from(sections.bests, ([id, data]) => ({ id, data }))
+      if (!isTrackBestsIndexConsistent(indexSnap.exists() ? indexSnap.data() : null, tracks)) {
+        const index = buildTrackBestsIndexDocument(tracks)
+        await setDocTracked(indexRef, exceedsTrackBestsIndexSizeGuard(index)
+          ? buildDisabledTrackBestsIndexDocument(index.updatedAt)
+          : index)
+        // This write bypasses the sync plan: cached copies must not restore the
+        // stale index on the next upload or persist it across the next launch.
+        invalidateSyncMirror(uid)
+        clearTelemetryProjectionRepositoryCache(uid)
+        notifyOwnerCacheChanged(uid)
+        assertActive()
+      }
+    }
     return {
       generatedAt: new Date().toISOString(),
       uid,

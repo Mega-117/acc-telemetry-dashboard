@@ -1,8 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { createPitwallIoMetrics, jsonPayloadBytes } from '~/services/pitwall/pitwallIoMetrics'
+import { createPitwallIoMetrics, jsonPayloadBytes, pitwallIoErrorCode } from '~/services/pitwall/pitwallIoMetrics'
 import { estimateFirestoreSnapshot } from '~/services/pitwall/firestoreSnapshotEstimate'
 
 describe('Pitwall I/O observations are not billing', () => {
+  it('retains known error codes without leaking arbitrary messages or identifiers', () => {
+    expect(pitwallIoErrorCode({ code: 'PERMISSION_DENIED', message: 'private path' })).toBe('permission-denied')
+    expect(pitwallIoErrorCode({ code: 'database/unavailable' })).toBe('unavailable')
+    expect(pitwallIoErrorCode({ code: 'private-account@example.org' })).toBe('failed')
+    expect(pitwallIoErrorCode(new Error('private path'))).toBe('failed')
+    expect(pitwallIoErrorCode(null)).toBe('failed')
+  })
   it('counts one changed document rather than all four members on later snapshots', () => {
     const snapshot = { metadata: { fromCache: false }, docs: [{}, {}, {}, {}], docChanges: () => [{ doc: {} }] }
     expect(estimateFirestoreSnapshot(snapshot, true).reads).toBe(4)

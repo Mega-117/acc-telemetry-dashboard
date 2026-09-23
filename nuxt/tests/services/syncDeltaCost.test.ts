@@ -43,7 +43,7 @@ const setDocFn = async (path: string, data: any, options?: { merge?: boolean; me
   store.set(path, options?.merge ? { ...(store.get(path) || {}), ...data } : data)
 }
 
-const NOW = new Date().toISOString()
+const NOW = '2026-09-22T12:00:00.000Z'
 const TRACK = 'users/u/trackProjections/monza'
 
 describe('PIP-436 integrated projection recovery', () => {
@@ -150,10 +150,13 @@ function listEntry(id: string, date: string, laps = 3) {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date(NOW))
   store = new Map()
   reads.length = 0
   writes.length = 0
 })
+afterEach(() => vi.useRealTimers())
 
 describe('PIP-436 costo per giro', () => {
   it('sessionList: una sessione aggiornata legge meta + la sua pagina e scrive solo quella', async () => {

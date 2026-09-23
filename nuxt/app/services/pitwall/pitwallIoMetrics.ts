@@ -11,6 +11,15 @@ export interface PitwallIoEvent {
   connected?: boolean
   deletedPaths?: number
   responseBytes?: number
+  errorCode?: string
+}
+
+/** Only known SDK codes leave the transport; never persist an error message/URL. */
+export function pitwallIoErrorCode(error: unknown): string {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String(error.code).toLowerCase().replace(/^database\//, '').replaceAll('_', '-') : ''
+  return ['permission-denied', 'unavailable', 'network-error', 'disconnected', 'expired-token',
+    'invalid-token', 'maxretry', 'overridden', 'write-canceled'].includes(code) ? code : 'failed'
 }
 
 export function jsonPayloadBytes(value: unknown): number {
@@ -27,7 +36,7 @@ function journalRealtimeEvent(transport: string, event: PitwallIoEvent) {
   if (!event.success) {
     // Rifiutata o annullata: resta visibile come errore, senza contare letture/scritture riuscite.
     recordFirebaseJournalEvent({ kind: 'op', db: 'rtdb', type: event.operation, transport, path,
-      bytes: event.bytes, attempts: event.attempts, error: 'failed' })
+      bytes: event.bytes, attempts: event.attempts, error: pitwallIoErrorCode({ code: event.errorCode }) })
     return
   }
   const committed = event.operation === 'transaction' ? event.committed === true : undefined
