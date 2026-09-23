@@ -13,7 +13,8 @@ import {
   extractOwnerRevision,
   loadOwnerDocument,
   peekOwnerDocument,
-  rememberOwnerDocumentPatch
+  rememberOwnerDocumentPatch,
+  rememberOwnerDocumentWrite
 } from '~/repositories/ownerDocumentRepository'
 
 let sent: Array<Array<Record<string, unknown>>>
@@ -39,6 +40,20 @@ afterEach(() => {
 })
 
 describe('ownerDocumentRepository', () => {
+  it('a repeated unchanged-file scan reuses the committed owner; next write and invalidation still read fresh', async () => {
+    const owner = await loadOwnerDocument('u', { fresh: true })
+    rememberOwnerDocumentWrite('u', owner.data, { sessionIndex: { updatedAt: 'r2', sessionsList: [{ id: 'new-session' }] } })
+    fake.getDoc.mockClear()
+    const unchanged = await loadOwnerDocument('u', { fresh: false, caller: 'ElectronSync' })
+    expect(unchanged.revision).toBe('r2')
+    expect(unchanged.data?.sessionIndex?.sessionsList).toEqual([{ id: 'new-session' }])
+    expect(fake.getDoc).not.toHaveBeenCalled()
+    await loadOwnerDocument('u', { fresh: true, caller: 'ElectronSync' })
+    expect(fake.getDoc).toHaveBeenCalledOnce()
+    clearOwnerDocumentCache('u')
+    await loadOwnerDocument('u', { fresh: false, caller: 'ElectronSync' })
+    expect(fake.getDoc).toHaveBeenCalledTimes(2)
+  })
   it('sei chiamanti in parallelo e in sequenza costano una sola lettura', async () => {
     const parallel = await Promise.all([
       loadOwnerDocument('u', { caller: 'AuthProvisioning' }),

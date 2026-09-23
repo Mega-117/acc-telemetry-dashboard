@@ -9,11 +9,12 @@ vi.mock('firebase/firestore', () => ({
 }))
 
 import { applyUserProjectionDeltas } from '~/services/sync/syncUserProjectionDeltaService'
-import { applySessionListProjectionDeltas } from '~/services/sync/sessionListProjectionService'
+import { applySessionListProjectionDeltas, buildSessionListProjection, loadSessionListProjection, clearSessionListProjectionCache } from '~/services/sync/sessionListProjectionService'
 import { applyTrackBestsProjectionDeltas } from '~/services/sync/trackBestsProjectionService'
 import { refreshSyncProjections, type ProjectionWrite } from '~/services/sync/syncProjectionRefreshService'
 import { extractOwnerRevision } from '~/services/cache/ownerRevision'
 import type { SyncMirrorEntry } from '~/services/sync/syncMirrorService'
+import { buildOwnerCachePayload, serializeOwnerCachePayload, parseOwnerCachePayload } from '~/services/cache/ownerCachePayload'
 
 type Store = Map<string, any>
 let store: Store
@@ -42,6 +43,59 @@ const setDocFn = async (path: string, data: any, options?: { merge?: boolean; me
   }
   store.set(path, options?.merge ? { ...(store.get(path) || {}), ...data } : data)
 }
+
+describe('PIP-446 new sessions do not shift historical pages', () => {
+  function seed(count: number) {
+    const sessions = Array.from({ length: count }, (_, i) => ({ sessionId: `old-${i}`,
+      meta: { date_start: new Date(Date.UTC(2025, 0, 1) + i * 60000).toISOString(), track: 'monza', car: 'ferrari_296_gt3' },
+      summary: { laps: 2, lapsValid: 1 } })) as any[]
+    const projection = buildSessionListProjection(sessions)
+    store.set('users/u/sessionListMeta/v1', projection.meta)
+    for (const page of projection.pages) store.set(`users/u/sessionListPages/${page.pageKey}`, page)
+    return sessions
+  }
+  it.each([666, 700])('adds one session to %i entries with only meta + one page written, UI stays sorted', async count => {
+    seed(count)
+    const before = structuredClone(store)
+    await applySessionListProjectionDeltas({ db: {}, uid: 'u', deltas: [delta('created', 7)], getDocFn, setDocFn, docFn })
+    expect(reads).toHaveLength(3)
+    expect(writes).toHaveLength(2)
+    for (const [path, value] of before) if (!writes.includes(path)) expect(store.get(path)).toEqual(value)
+    clearSessionListProjectionCache()
+    const loaded = await loadSessionListProjection({ db: {}, uid: 'u', getDocFn, docFn })
+    expect(loaded).toHaveLength(count + 1)
+    expect(new Set(loaded!.map(s => s.sessionId)).size).toBe(count + 1)
+    expect(loaded![0]!.sessionId).toBe('s-new')
+    expect(loaded![0]!.summary.laps).toBe(7)
+    const first = JSON.stringify(loaded)
+    // Before a rebuild, another stint follows the append hint straight to the
+    // tail instead of walking the historical pages.
+    reads.length = 0
+    writes.length = 0
+    await applySessionListProjectionDeltas({ db: {}, uid: 'u', deltas: [delta('updated', 9)], getDocFn, setDocFn, docFn })
+    expect(reads).toHaveLength(2)
+    expect(writes).toHaveLength(1)
+    expect(reads[1]).toBe(`users/u/sessionListPages/${store.get('users/u/sessionListMeta/v1').lastInsertedPageKey}`)
+    // A replayed creation must not add a duplicate or increment the total twice.
+    await applySessionListProjectionDeltas({ db: {}, uid: 'u', deltas: [delta('created', 7)], getDocFn, setDocFn, docFn })
+    clearSessionListProjectionCache()
+    expect(JSON.stringify(await loadSessionListProjection({ db: {}, uid: 'u', getDocFn, docFn }))).toBe(first)
+    expect(store.get('users/u/sessionListMeta/v1').totalSessions).toBe(count + 1)
+    reads.length = 0
+    writes.length = 0
+    await applySessionListProjectionDeltas({ db: {}, uid: 'u', deltas: [delta('updated', 9)], getDocFn, setDocFn, docFn })
+    expect(reads).toHaveLength(2) // meta + tail, no historical scan for another stint
+    expect(writes).toHaveLength(1)
+  })
+  it('older imported session keeps all existing entries through reconciliation', async () => {
+    seed(201)
+    await applySessionListProjectionDeltas({ db: {}, uid: 'u', deltas: [delta('created', 3, { dateStart: '2020-01-01' })], getDocFn, setDocFn, docFn })
+    clearSessionListProjectionCache()
+    const loaded = await loadSessionListProjection({ db: {}, uid: 'u', getDocFn, docFn })
+    expect(loaded).toHaveLength(202)
+    expect(loaded!.at(-1)!.sessionId).toBe('s-new')
+  })
+})
 
 const NOW = '2026-09-22T12:00:00.000Z'
 const TRACK = 'users/u/trackProjections/monza'
@@ -282,6 +336,34 @@ describe('PIP-444 mirror locale del piano', () => {
     expect(Object.keys(first.mirror!.docs).sort()).toEqual(['sessionListMeta/v1', 'sessionListPages/p0000', TRACK.replace(`users/${uid}/`, '')])
     return first.mirror!
   }
+
+  it('666 historical sessions: cold sync, serialized cache and next new session preserve every entry without re-reading history', async () => {
+    history = Array.from({ length: 666 }, (_, i) => sessionDoc(`old-${i}`, 3,
+      new Date(Date.UTC(2025, 0, 1) + i * 60000).toISOString()))
+    await refreshSyncProjections({ ...base(), mirror: { entry: null, ownerDocument: ownerDocument() } })
+    reads.length = 0
+    plans = []
+    const first = await cycle([delta('created', 7)], null)
+    expect(first.mirrorCycle!.state).toBe('cold')
+    expect(reads).toHaveLength(4) // meta, first/last list pages, combined track projection
+    expect(plans[0]).toHaveLength(6) // upload session/raw are outside this projection plan
+    const serialized = serializeOwnerCachePayload(buildOwnerCachePayload({ uid,
+      revision: first.mirror!.revision, entries: { syncMirror: first.mirror! } }))
+    const restored = parseOwnerCachePayload(serialized, uid)!.entries.syncMirror!
+    vi.advanceTimersByTime(1000)
+    reads.length = 0
+    plans = []
+    const second = await cycle([delta('created', 4, { sessionId: 's-next', dateStart: '2026-09-23T12:00:00Z' })], restored)
+    expect(second.mirrorCycle!.state).toBe('hit')
+    expect(reads).toEqual([])
+    expect(plans[0]).toHaveLength(6)
+    clearSessionListProjectionCache()
+    const loaded = await loadSessionListProjection({ db: {}, uid, getDocFn, docFn })
+    expect(loaded).toHaveLength(668)
+    expect(new Set(loaded!.map(s => s.sessionId)).size).toBe(668)
+    expect(loaded!.slice(0, 2).map(s => s.sessionId)).toEqual(['s-next', 's-new'])
+    expect(store.get(TRACK).bests.activity.totalLaps).toBe(666 * 3 + 7 + 4)
+  })
 
   it('mirror caldo, sessione aggiornata su una pista: 0 letture oltre users/{uid}, 4 documenti, piano identico alle letture fresche', async () => {
     const mirror = await warmMirror()

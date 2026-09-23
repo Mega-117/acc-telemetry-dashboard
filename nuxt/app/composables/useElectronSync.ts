@@ -595,7 +595,7 @@ export function useElectronSync() {
                 assertLeaseCurrent(isCurrent)
                 // A no-op boot scan shares the revision just read by provisioning.
                 // A write cycle still checks a fresh server revision before its mirror.
-                ownerSnapshot = await loadOwnerDocument(uid, { fresh: hasProjectionWork || trigger !== 'authReady', caller: SYNC_CALLER })
+                ownerSnapshot = await loadOwnerDocument(uid, { fresh: hasProjectionWork, caller: SYNC_CALLER })
                 assertLeaseCurrent(isCurrent)
             }
             const missingRecentIndexedIds = findMissingRecentSessionIndexIds(recentCandidateIds, ownerSnapshot)

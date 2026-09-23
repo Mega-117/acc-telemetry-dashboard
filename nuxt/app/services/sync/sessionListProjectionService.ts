@@ -37,6 +37,8 @@ export type SessionListProjectionMeta = {
   totalSessions: number
   pageCount: number
   pageKeys: string[]
+  /** Read hint only: the physical bucket receiving the most recent append. */
+  lastInsertedPageKey?: string | null
   updatedAt: string
 }
 
@@ -204,6 +206,7 @@ function buildProjectionDocsFromEntries(
       totalSessions: entries.length,
       pageCount: pages.length,
       pageKeys,
+      lastInsertedPageKey: null,
       updatedAt: nowIso
     },
     pages
@@ -329,7 +332,7 @@ export function exportSessionListProjectionEntries(uid: string): SessionListProj
 /**
  * PIP-436: una sessione gia' in lista (giro successivo dello stesso file) viene sostituita
  * nella sua pagina senza leggere le altre. Le sessioni aggiornate sono le piu' recenti,
- * quindi quasi sempre in p0000. Se la data cambia, un ID manca o la meta non torna,
+ * prima nell'ultimo blocco (append), poi negli altri. Se la data cambia, un ID manca o la meta non torna,
  * ritorna null e si usa il percorso completo.
  */
 async function replaceEntriesInPlace(params: {
@@ -356,7 +359,13 @@ async function replaceEntriesInPlace(params: {
 
   const pending = new Map(deltas.map((delta) => [delta.sessionId, createSessionListEntryFromDelta(delta)]))
   const changedPages: SessionListProjectionPage[] = []
-  for (const key of meta.pageKeys) {
+  // New sessions are appended to the last physical bucket. Inspect it first,
+  // so another stint does not re-read every historical page to find its ID.
+  const hint = meta.lastInsertedPageKey
+  const searchKeys = hint && meta.pageKeys.includes(hint)
+    ? [hint, ...meta.pageKeys.filter(key => key !== hint)]
+    : meta.pageKeys
+  for (const key of searchKeys) {
     if (pending.size === 0) break
     const pageSnap = await getDocFn(docFn(db, `users/${uid}/sessionListPages/${key}`))
     if (!pageSnap.exists()) return null
@@ -390,6 +399,55 @@ async function replaceEntriesInPlace(params: {
   return { wrote: changedPages.length > 0, totalSessions: Number(meta.totalSessions || 0) }
 }
 
+// Physical pages are storage buckets; readers sort the complete entries by date.
+// Append genuinely new, newer sessions to the last bucket instead of shifting
+// every historical page. Imports, mixed updates and ambiguous dates keep the
+// full reconciliation path. The plan is committed atomically by the caller.
+async function appendNewEntries(params: Parameters<typeof applySessionListProjectionDeltas>[0]): Promise<{ wrote: boolean; totalSessions: number } | null> {
+  const { db, uid, deltas, getDocFn, setDocFn, docFn = doc } = params
+  if (deltas.length !== 1 || deltas[0]?.status !== 'created') return null
+  const entries = sortEntries(deltas.map(createSessionListEntryFromDelta))
+  if (entries.some(entry => !entry.id || !entry.date) || new Set(entries.map(entry => entry.id)).size !== entries.length) return null
+  const metaSnap = await getDocFn(docFn(db, `users/${uid}/sessionListMeta/v1`))
+  if (!metaSnap.exists()) return null
+  const meta = metaSnap.data() as SessionListProjectionMeta
+  if (meta.schemaVersion !== SESSION_LIST_PROJECTION_SCHEMA_VERSION || meta.pageSize !== SESSION_LIST_PROJECTION_PAGE_SIZE
+    || !Array.isArray(meta.pageKeys) || !meta.pageKeys.length || meta.pageCount !== meta.pageKeys.length) return null
+  const pages: SessionListProjectionPage[] = []
+  for (const key of new Set([meta.pageKeys[0]!, meta.pageKeys.at(-1)!])) {
+    const snap = await getDocFn(docFn(db, `users/${uid}/sessionListPages/${key}`))
+    if (!snap.exists()) return null
+    const page = snap.data() as SessionListProjectionPage
+    if (page.schemaVersion !== SESSION_LIST_PROJECTION_SCHEMA_VERSION || page.pageKey !== key
+      || !Array.isArray(page.items) || page.items.length > SESSION_LIST_PROJECTION_PAGE_SIZE) return null
+    pages.push(page)
+  }
+  const newestBoundary = pages.flatMap(page => page.items).reduce((date, entry) => entry.date > date ? entry.date : date, '')
+  if (entries.some(entry => entry.date <= newestBoundary)) return null
+  const last = pages.at(-1)!
+  if (last.pageIndex !== meta.pageCount - 1) return null
+  const now = new Date().toISOString()
+  const pageKeys = [...meta.pageKeys]
+  const remaining = [...entries]
+  const writes: SessionListProjectionPage[] = []
+  const room = SESSION_LIST_PROJECTION_PAGE_SIZE - last.items.length
+  if (room > 0) writes.push({ ...last, items: sortEntries([...last.items, ...remaining.splice(0, room)]), updatedAt: now })
+  while (remaining.length) {
+    const index = pageKeys.length
+    const key = pageKey(index)
+    if (pageKeys.includes(key)) return null
+    pageKeys.push(key)
+    writes.push({ schemaVersion: SESSION_LIST_PROJECTION_SCHEMA_VERSION, pageKey: key, pageIndex: index,
+      pageSize: SESSION_LIST_PROJECTION_PAGE_SIZE, items: remaining.splice(0, SESSION_LIST_PROJECTION_PAGE_SIZE), updatedAt: now })
+  }
+  const totalSessions = meta.totalSessions + entries.length
+  await setDocFn(docFn(db, `users/${uid}/sessionListMeta/v1`), sanitizeForFirestore({ ...meta,
+    totalSessions, pageKeys, pageCount: pageKeys.length, lastInsertedPageKey: writes.at(-1)!.pageKey, updatedAt: now }), { merge: true })
+  for (const page of writes) await setDocFn(docFn(db, `users/${uid}/sessionListPages/${page.pageKey}`), sanitizeForFirestore(page), { merge: true })
+  projectionCache.delete(uid)
+  return { wrote: true, totalSessions }
+}
+
 export async function applySessionListProjectionDeltas(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
@@ -413,6 +471,9 @@ export async function applySessionListProjectionDeltas(params: {
 }): Promise<{ wrote: boolean; totalSessions: number }> {
   const { db, uid, deltas, getDocFn, setDocFn, docFn = doc } = params
   if (deltas.length === 0) return { wrote: false, totalSessions: 0 }
+
+  const appended = await appendNewEntries(params)
+  if (appended) return appended
 
   const inPlace = await replaceEntriesInPlace({ db, uid, deltas, getDocFn, setDocFn, docFn })
   if (inPlace) return inPlace
