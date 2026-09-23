@@ -1,4 +1,5 @@
 import type { User } from 'firebase/auth'
+import { observeFirebaseAuthOperation } from '~/services/monitoring/firebaseOpsJournal'
 
 export type AuthSessionStatus =
   | 'initializing'
@@ -51,8 +52,8 @@ export function refreshUserCredentials(user: User): Promise<void> {
   const pending = credentialRefreshes.get(user)
   if (pending) return pending
   const request = (async () => {
-    await user.reload()
-    await user.getIdToken(true)
+    await observeFirebaseAuthOperation('reload', () => user.reload())
+    await observeFirebaseAuthOperation('refresh-token', () => user.getIdToken(true))
   })().finally(() => { credentialRefreshes.delete(user) })
   credentialRefreshes.set(user, request)
   return request

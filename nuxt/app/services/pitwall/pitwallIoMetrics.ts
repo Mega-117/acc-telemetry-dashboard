@@ -55,12 +55,13 @@ function journalRealtimeEvent(transport: string, event: PitwallIoEvent) {
   })
 }
 
-export function createPitwallIoMetrics(transport = 'pitwall') {
+export function createPitwallIoMetrics(transport = 'pitwall', enabled = !import.meta.env.PROD) {
   const totals = { reads: 0, writes: 0, deletes: 0, subscriptions: 0, deliveries: 0,
     transactions: 0, transactionAttempts: 0, failed: 0, payloadBytesReceived: 0,
     payloadBytesSent: 0, connections: 0, peakConnections: 0, cacheHits: 0, sharedReads: 0, disconnectRegistrations: 0, deletedPaths: 0 }
   const events: PitwallIoEvent[] = []
   function record(event: PitwallIoEvent) {
+    if (!enabled) return
     events.push({ ...event })
     if (events.length > 500) events.shift()
     journalRealtimeEvent(transport, event)
@@ -88,4 +89,20 @@ export function createPitwallIoMetrics(transport = 'pitwall') {
     }
   }
   return { record, snapshot: () => ({ ...totals }), events: () => events.map(event => ({ ...event })) }
+}
+
+type PitwallIoSnapshot = ReturnType<ReturnType<typeof createPitwallIoMetrics>['snapshot']>
+
+/** Both namespaces use the same SDK Database connection, but own distinct I/O. */
+export function combinePitwallIoMetrics(snapshots: Array<PitwallIoSnapshot | undefined>): PitwallIoSnapshot | null {
+  const available = snapshots.filter((value): value is PitwallIoSnapshot => value !== undefined)
+  if (!available.length) return null
+  const totals = { ...available[0]! }
+  for (const snapshot of available.slice(1)) {
+    for (const key of Object.keys(totals) as Array<keyof PitwallIoSnapshot>) {
+      totals[key] = key === 'connections' || key === 'peakConnections'
+        ? Math.max(totals[key], snapshot[key]) : totals[key] + snapshot[key]
+    }
+  }
+  return totals
 }

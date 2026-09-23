@@ -9,7 +9,7 @@ export type FirebaseJournalKind = 'op' | 'nav' | 'cache' | 'auth' | 'session'
 export interface FirebaseJournalEvent {
   kind: FirebaseJournalKind
   type?: string
-  db?: 'firestore' | 'rtdb'
+  db?: 'firestore' | 'rtdb' | 'auth' | 'storage'
   caller?: string
   path?: string
   from?: string
@@ -95,6 +95,23 @@ export function recordFirebaseJournalEvent(event: FirebaseJournalEvent) {
   }
   if (queue.length >= FLUSH_SIZE) flushFirebaseOpsJournal()
   else if (!timer) timer = setTimeout(flushFirebaseOpsJournal, FLUSH_DELAY_MS)
+}
+
+/** Explicit Auth SDK calls, not network requests or automatic SDK token renewal. */
+export async function observeFirebaseAuthOperation<T>(type: string, operation: () => Promise<T>): Promise<T> {
+  if (!isFirebaseOpsJournalEnabled()) return operation()
+  const started = Date.now()
+  try {
+    const result = await operation()
+    recordFirebaseJournalEvent({ kind: 'op', db: 'auth', type, caller: 'Auth', durationMs: Date.now() - started })
+    return result
+  } catch (error) {
+    // Only a constrained SDK code; never credentials, email or error message.
+    const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+      && /^auth\/[a-z-]{1,60}$/.test(error.code) ? error.code : 'failed'
+    recordFirebaseJournalEvent({ kind: 'op', db: 'auth', type, caller: 'Auth', error: code, durationMs: Date.now() - started })
+    throw error
+  }
 }
 
 /** Registra un dato servito da una cache davanti a Firebase: nessuna chiamata di rete. */

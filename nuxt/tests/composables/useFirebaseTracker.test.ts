@@ -1,13 +1,23 @@
-import { beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 const fake = vi.hoisted(() => ({ getDoc: vi.fn(), setDoc: vi.fn(), getDocs: vi.fn(), deleteDoc: vi.fn(),
   onSnapshot: vi.fn(), runTransaction: vi.fn(), commit: vi.fn() }))
 vi.mock('~/utils/devToolsAccess', () => ({ canUseDevTools: () => false }))
 vi.mock('firebase/firestore', () => ({ ...fake, addDoc: vi.fn(), updateDoc: vi.fn(), getCountFromServer: vi.fn(),
   writeBatch: () => ({ set: vi.fn(), update: vi.fn(), delete: vi.fn(), commit: fake.commit }) }))
 import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedWriteBatch, trackedOnSnapshot,
-  trackedRunTransaction, getFirebaseTotals, resetFirebaseTracker } from '~/composables/useFirebaseTracker'
+  trackedRunTransaction, getFirebaseTotals, getFirebaseLog, startFirebaseScenario, resetFirebaseTracker } from '~/composables/useFirebaseTracker'
 const doc = { path: 'publicProfiles/test' } as never
 beforeEach(() => { vi.clearAllMocks(); resetFirebaseTracker() })
+afterEach(() => vi.unstubAllEnvs())
+it('keeps Firebase working in production without collecting counters, logs or scenarios', async () => {
+  vi.stubEnv('PROD', true)
+  fake.getDoc.mockResolvedValue({ metadata: { fromCache: false } })
+  await trackedGetDoc(doc, 'test')
+  expect(fake.getDoc).toHaveBeenCalledOnce()
+  expect(getFirebaseTotals().estimatedReads).toBe(0)
+  expect(getFirebaseLog()).toEqual([])
+  expect(startFirebaseScenario('production')).toBe(0)
+})
 it('separates cache reads, server estimates, successful writes/deletes and failed attempts', async () => {
   fake.getDoc.mockResolvedValueOnce({ metadata: { fromCache: true } }).mockResolvedValueOnce({ metadata: { fromCache: false } })
   await trackedGetDoc(doc, 'test'); await trackedGetDoc(doc, 'test')

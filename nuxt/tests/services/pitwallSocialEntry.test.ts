@@ -43,19 +43,44 @@ describe('social discovery presence gate', () => {
   afterEach(() => vi.useRealTimers())
   function discovery() {
     const callbacks = new Map<string, (value: unknown) => void>()
+    const errors = new Map<string, (error: Error) => void>()
     const write = vi.fn(async () => {})
-    const watch = vi.fn((path: string, callback: (value: unknown) => void) => {
+    const watch = vi.fn((path: string, callback: (value: unknown) => void, error: (error: Error) => void) => {
       callbacks.set(path, callback)
+      errors.set(path, error)
       return () => { callbacks.delete(path) }
     })
     const service = createPitwallSocialLifecycle({ uid: 'guest',
-      io: { watch, write, serverNow: () => 100000 } as unknown as PitwallRealtimeTransport,
+      io: { watch, write, read: async () => ({ roomId: 'r', connectionId: 'guest-c' }), serverNow: () => 100000 } as unknown as PitwallRealtimeTransport,
       connectionId: () => 'guest-c', ensureConnection: async () => {},
       watchFriends: callback => { callback(['friend']); return () => {} }
     })
-    const stop = service.watchRooms(() => {})
-    return { callbacks, write, watch, stop }
+    const onError = vi.fn()
+    const stop = service.watchRooms(() => {}, onError)
+    return { callbacks, errors, onError, write, watch, stop, service }
   }
+  it.each([
+    ['permission-denied', 'preview', false],
+    ['unavailable', 'preview', true],
+    ['permission-denied', 'member', true],
+    ['permission-denied', 'initial', true],
+  ])('handles %s for %s without hiding actual faults', async (code, mode, reported) => {
+    const s = discovery()
+    s.callbacks.get('directory/friend')?.({ roomId: 'r', connectionId: 'c' })
+    s.callbacks.get('connections/friend')?.({ c: {} })
+    await vi.waitFor(() => expect(s.callbacks.has('rooms/r/meta')).toBe(true))
+    if (mode !== 'initial') {
+      s.callbacks.get('rooms/r/meta')?.({ roomId: 'r', hostUid: 'friend', label: 'test' })
+      s.callbacks.get('rooms/r/access')?.({ friend: 'member', ...(mode === 'member' ? { guest: 'member' } : {}) })
+      const present = { c: { connectedAt: 1, disconnectedAt: null } }
+      s.callbacks.get('rooms/r/occupancy')?.({ friend: present, ...(mode === 'member' ? { guest: present } : {}) })
+    }
+    s.errors.get('rooms/r/meta')?.(Object.assign(new Error('denied'), { code }))
+    expect(s.onError).toHaveBeenCalledTimes(reported ? 1 : 0)
+    expect(s.callbacks.has('rooms/r/occupancy')).toBe(false)
+    expect(s.write).toHaveBeenCalledOnce()
+    s.stop()
+  })
   it('does not request admissions or room metadata for stale own/friend directories', async () => {
     const s = discovery()
     for (const uid of ['guest', 'friend']) {
@@ -95,5 +120,27 @@ describe('social discovery presence gate', () => {
     s.stop()
     await vi.advanceTimersByTimeAsync(10000)
     expect(s.write).toHaveBeenCalledTimes(5)
+  })
+  it('keeps a live sponsor subscription when own membership appears and removes it before leave writes', async () => {
+    const s = discovery()
+    s.callbacks.get('directory/friend')?.({ roomId: 'r', connectionId: 'c' })
+    s.callbacks.get('connections/friend')?.({ c: {} })
+    await vi.waitFor(() => expect(s.callbacks.has('rooms/r/meta')).toBe(true))
+    const subscribed = s.watch.mock.calls.length
+    s.callbacks.get('directory/guest')?.({ roomId: 'r', connectionId: 'guest-c' })
+    s.callbacks.get('connections/guest')?.({ 'guest-c': {} })
+    await Promise.resolve(); await Promise.resolve()
+    expect(s.write).toHaveBeenCalledOnce()
+    expect(s.watch.mock.calls.length).toBe(subscribed + 1) // only the guest connection
+    s.write.mockImplementationOnce(async () => {
+      expect(s.callbacks.has('rooms/r/meta')).toBe(false)
+      expect(s.callbacks.has('rooms/r/access')).toBe(false)
+      expect(s.callbacks.has('rooms/r/occupancy')).toBe(false)
+      s.callbacks.get('directory/guest')?.(null)
+    })
+    expect((await s.service.leaveRoom('r')).ok).toBe(true)
+    // A present friend still makes the room discoverable after explicit exit.
+    await vi.waitFor(() => expect(s.callbacks.has('rooms/r/meta')).toBe(true))
+    s.stop()
   })
 })

@@ -284,6 +284,7 @@ describe('la gara del pilota, vista dal pilota', () => {
     expect(store.myRoom.value?.drivingId).toBeNull()
 
     link.room.value = mia
+    expect(store.myRoom.value?.drivingKnown).toBe(true)
     expect(store.myRoom.value?.drivingId).toBe('me')
     link.roomDriving.value = { executor: { uid: 'popo' }, reason: 'ready', conflicting: [] }
     expect(link.executor.value.reason).toBe('nobody-driving')
@@ -292,6 +293,8 @@ describe('la gara del pilota, vista dal pilota', () => {
     link.roomDriving.value = { executor: null, reason: 'nobody-driving', conflicting: [] }
     expect(store.myRoom.value?.drivingId).toBeNull()
     expect(store.selectedRace.value?.session).toBe('In attesa')
+    link.room.value = null
+    expect(store.myRoom.value?.drivingKnown).toBe(false)
   })
 })
 

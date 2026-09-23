@@ -289,6 +289,7 @@ function recordScenarioOperation(entry: FirebaseOperation) {
 }
 
 function recordOperation(input: Omit<FirebaseOperation, 'id' | 'pathBucket'>) {
+  if (import.meta.env.PROD) return
   const activeScenario = getActiveScenario()
   const entry: FirebaseOperation = {
     ...input,
@@ -401,6 +402,7 @@ function recordOperation(input: Omit<FirebaseOperation, 'id' | 'pathBucket'>) {
     deletes: entry.type === 'DELETE' ? 1 : entry.deleteDocs,
     docs: entry.docsCount,
     durationMs: entry.durationMs,
+    error: entry.type === 'ERROR' ? 'failed' : undefined,
     fromCache: entry.note === 'cache' ? true : undefined
   })
 }
@@ -723,6 +725,7 @@ export function getFirebaseLog() {
 }
 
 export function startFirebaseScenario(name: string, metadata: Record<string, unknown> = {}) {
+  if (import.meta.env.PROD) return 0
   const scenario: FirebaseScenarioReport = {
     id: ++scenarioCounter,
     name,

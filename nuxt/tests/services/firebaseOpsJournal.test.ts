@@ -10,6 +10,7 @@ import {
   flushFirebaseOpsJournal,
   isFirebaseOpsJournalEnabled,
   recordFirebaseJournalEvent,
+  observeFirebaseAuthOperation,
   routePatternForJournal,
   setFirebaseJournalRoute,
 } from '~/services/monitoring/firebaseOpsJournal'
@@ -32,6 +33,15 @@ afterEach(() => {
 const events = () => sent.flat()
 
 describe('journal dev delle operazioni Firebase (PIP-435)', () => {
+  it('counts explicit Auth calls separately and preserves outcomes without recording secrets', async () => {
+    const result = { token: 'private-token' }
+    expect(await observeFirebaseAuthOperation('login', async () => result)).toBe(result)
+    const failure = Object.assign(new Error('private-email@example.org'), { code: 'auth/network-request-failed' })
+    await expect(observeFirebaseAuthOperation('reload', async () => { throw failure })).rejects.toBe(failure)
+    flushFirebaseOpsJournal()
+    expect(events()).toMatchObject([{ db: 'auth', type: 'login' }, { db: 'auth', type: 'reload', error: 'auth/network-request-failed' }])
+    expect(JSON.stringify(events())).not.toMatch(/private|token/)
+  })
   it('non accoda nulla quando e fuori dallo sviluppo o senza bridge Electron', () => {
     configureFirebaseOpsJournal({ enabled: false, send: batch => { sent.push(batch) } })
     recordFirebaseJournalEvent({ kind: 'nav' })

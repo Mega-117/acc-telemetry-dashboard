@@ -11,6 +11,7 @@ import {
 import { auth } from '~/config/firebaseAuth'
 import { refreshUserCredentials } from './authSessionPolicy'
 import { createInitialUserDocument } from './userProvisioningService'
+import { observeFirebaseAuthOperation } from '~/services/monitoring/firebaseOpsJournal'
 
 // Con la protezione anti-enumerazione attiva sul progetto - `accsuite117` la usa -
 // Firebase non distingue piu' "utente inesistente" da "password errata": nega
@@ -48,14 +49,14 @@ export async function registerWithEmail(params: {
     lastName?: string
 }) {
     const { email, password, nickname, firstName = '', lastName = '' } = params
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+    const userCredential = await observeFirebaseAuthOperation('register', () => createUserWithEmailAndPassword(auth, email, password))
     const user = userCredential.user
 
     let profileReady = true
     let verificationEmailSent = true
 
     try {
-        await updateProfile(user, { displayName: nickname })
+        await observeFirebaseAuthOperation('update-profile', () => updateProfile(user, { displayName: nickname }))
     } catch (error) {
         profileReady = false
         console.warn('[AUTH] Registration display profile deferred:', getAuthErrorCode(error))
@@ -69,7 +70,7 @@ export async function registerWithEmail(params: {
     }
 
     try {
-        await sendEmailVerification(user)
+        await observeFirebaseAuthOperation('verification-email', () => sendEmailVerification(user))
     } catch (error) {
         verificationEmailSent = false
         console.warn('[AUTH] Registration verification email deferred:', getAuthErrorCode(error))
@@ -87,7 +88,7 @@ function getAuthErrorCode(error: unknown): string {
 }
 
 export async function loginWithEmail(email: string, password: string) {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password)
+    const userCredential = await observeFirebaseAuthOperation('login', () => signInWithEmailAndPassword(auth, email, password))
     // signInWithEmailAndPassword can resolve before fields such as
     // emailVerified reflect a verification completed in another session.
     // Refresh the canonical Auth user before the UI decides which surface to
@@ -97,15 +98,15 @@ export async function loginWithEmail(email: string, password: string) {
 }
 
 export async function sendPasswordResetWithEmail(email: string) {
-    await sendPasswordResetEmail(auth, email)
+    await observeFirebaseAuthOperation('password-reset', () => sendPasswordResetEmail(auth, email))
 }
 
 export async function logoutCurrentUser() {
-    await signOut(auth)
+    await observeFirebaseAuthOperation('logout', () => signOut(auth))
 }
 
 export async function resendCurrentVerificationEmail(user: User) {
-    await sendEmailVerification(user)
+    await observeFirebaseAuthOperation('verification-email', () => sendEmailVerification(user))
 }
 
 /**
@@ -119,7 +120,7 @@ export async function resendCurrentVerificationEmail(user: User) {
  * irraggiungibile - la correzione non puo' peggiorare la situazione.
  */
 export async function sendVerificationToUpdatedEmail(user: User, newEmail: string) {
-    await verifyBeforeUpdateEmail(user, newEmail)
+    await observeFirebaseAuthOperation('verify-new-email', () => verifyBeforeUpdateEmail(user, newEmail))
 }
 
 export async function refreshEmailVerificationState(user: User | null) {
@@ -127,10 +128,9 @@ export async function refreshEmailVerificationState(user: User | null) {
         return { verified: false, user: null }
     }
 
-    await user.reload()
     // Firestore Rules bind emailVerified to the Auth token claim. Refresh the
     // token before provisioning mirrors the reloaded User state into Firestore.
-    await user.getIdToken(true)
+    await refreshUserCredentials(user)
     return {
         verified: auth.currentUser?.emailVerified ?? false,
         user: auth.currentUser

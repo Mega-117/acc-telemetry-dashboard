@@ -239,6 +239,7 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
       drivingId: selected && link.roomDriving.value.reason === 'ready'
         ? link.roomDriving.value.executor?.uid ?? null
         : null,
+      drivingKnown: selected,
       members: membersOf(room, selected),
       invitedIds: (room.membershipModel === 'social' ? friendViews.value.filter(friend => friend.state === 'friends').map(friend => friend.personId) : room.allowedUids)
         .filter(person => !room.memberUids.includes(person)),
