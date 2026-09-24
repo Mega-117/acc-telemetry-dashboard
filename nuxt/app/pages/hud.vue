@@ -12,6 +12,7 @@ import { usePresentationInterval } from '~/composables/usePresentationVisibility
 // - Per ogni overlay: on/off + formato fisso (Piccolo/Medio/Grande).
 // Self-contained (come dev.vue): fuori dal contratto useTelemetryGateway.
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { originCornerOptions, resolveOverlayOriginCorner, type OverlayOriginCorner } from '~/composables/useOverlaySettings'
 import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
@@ -201,6 +202,24 @@ const standingsBooleanOptions: Array<{
 function getInfoOptions(keys: InfoSettingKey[]) {
   return infoOptionDefinitions.filter(option => keys.includes(option.key))
 }
+const trainingCorner = ref<OverlayOriginCorner>('top-left')
+const trainingCornerBusy = ref(false)
+async function setTrainingCorner(event: Event) {
+  const api = getApi()
+  if (!api?.trainingOverlaySetOriginCorner || trainingCornerBusy.value) return
+  trainingCornerBusy.value = true
+  placementError.value = ''
+  try {
+    const saved = await api.trainingOverlaySetOriginCorner((event.target as HTMLSelectElement).value)
+    trainingCorner.value = resolveOverlayOriginCorner(saved?.originCorner)
+    await refreshPlacementStatus()
+  } catch {
+    placementError.value = "Impossibile salvare l'angolo di Ctrl+K. Riprova."
+  } finally {
+    ;(event.target as HTMLSelectElement).value = trainingCorner.value
+    trainingCornerBusy.value = false
+  }
+}
 const positioning = ref(false)
 const placementBusy = ref(false)
 const placementError = ref('')
@@ -260,6 +279,9 @@ async function refreshOverlayVisibility() {
   await Promise.all(hudOverlays.map(async (overlay) => {
     try { open[overlay.id] = await api.hudOverlayIsOpen(overlay.id) } catch { open[overlay.id] = false }
   }))
+  if (typeof api.trainingOverlayIsOpen === 'function') {
+    try { trainingOpen.value = await api.trainingOverlayIsOpen() } catch { trainingOpen.value = false }
+  }
 }
 
 function applyPlacementStatus(status: any) {
@@ -283,6 +305,8 @@ async function refreshState() {
   isElectron.value = !!api
   apiReady.value = !!(api && typeof api.hudOverlayOpen === 'function')
   if (!apiReady.value) return
+  const training = await api.trainingOverlayGetSettings?.()
+  trainingCorner.value = resolveOverlayOriginCorner(training?.originCorner)
   for (const overlay of hudOverlays) {
     try {
       open[overlay.id] = await api.hudOverlayIsOpen(overlay.id)
@@ -722,6 +746,7 @@ async function toggleTraining() {
         >
           <div class="test-hud__placement-text">
             <strong id="hud-placement-title">Posizione di tutti gli overlay</strong>
+            <span>Include il pannello Ctrl+K.</span>
             <span v-if="positioning">
               Modifica attiva. Salvataggio automatico tra
               <b>{{ placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }}s</b> di inattività.
@@ -748,6 +773,21 @@ async function toggleTraining() {
             </button>
           </div>
         </section>
+
+        <label class="test-hud__always">
+          <span class="test-hud__always-text">
+            <strong>Pannello Ctrl+K</strong>
+            <em>L'angolo resta fermo quando cambia il contenuto.</em>
+          </span>
+          <select
+            aria-label="Angolo di apertura Ctrl+K"
+            :value="trainingCorner"
+            :disabled="!apiReady || !positioning || placementBusy || trainingCornerBusy"
+            @change="setTrainingCorner"
+          >
+            <option v-for="corner in originCornerOptions" :key="corner.id" :value="corner.id">{{ corner.label }}</option>
+          </select>
+        </label>
 
         <label
           class="test-hud__always"
@@ -880,16 +920,16 @@ async function toggleTraining() {
             aria-labelledby="hud-training-title"
           >
             <div>
-              <strong id="hud-training-title">Allenamento</strong>
+              <strong id="hud-training-title">Pannello Ctrl+K</strong>
               <span>{{ trainingOpen ? 'Visibile' : 'Nascosto' }}</span>
             </div>
             <button
               type="button"
               class="btn"
-              :disabled="!isElectron"
+              :disabled="!isElectron || positioning || placementBusy"
               @click="toggleTraining"
             >
-              {{ trainingOpen ? 'Nascondi allenamento' : 'Mostra allenamento' }}
+              {{ trainingOpen ? 'Nascondi pannello' : 'Mostra pannello' }}
             </button>
           </section>
         </aside>

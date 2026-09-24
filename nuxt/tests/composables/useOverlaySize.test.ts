@@ -4,6 +4,13 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { useOverlaySize } from '~/composables/useOverlaySize'
 
 let controller: ReturnType<typeof useOverlaySize>
+it('uses a compact placement preview instead of the old work area', async () => {
+  const { root, api } = setup()
+  root.innerHTML = '<section class="placement-work-area"></section>'
+  await controller.applyOverlaySize('placement', true)
+  expect(api.trainingOverlaySetSize).toHaveBeenCalledWith({ preset: 'placement', width: 334, height: 150 })
+  expect(controller.cardSize.value).toBeNull()
+})
 afterEach(() => { controller?.cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); document.body.innerHTML = '' })
 function setup(height = 950, displayHeight = 1080) {
   document.body.innerHTML = '<div id="root"><section class="overlay-card"><div class="overlay-content"><div class="launcher-tools"></div></div></section></div>'

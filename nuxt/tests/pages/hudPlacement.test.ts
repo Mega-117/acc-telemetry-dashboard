@@ -19,6 +19,8 @@ function makeApi() {
     hudOverlayGetSettings: vi.fn(async () => ({ enabled: true })),
     hudOverlayGetPlacementStatus: vi.fn(async () => ({ active, deadlineMs: active ? Date.now() + 60000 : null })),
     hudOverlaySetAllPlacement: vi.fn(async (value: boolean) => { active = value; return value }),
+    trainingOverlayGetSettings: vi.fn(async () => ({ originCorner: 'bottom-right' })),
+    trainingOverlaySetOriginCorner: vi.fn(async (originCorner: string) => ({ originCorner })),
   }
 }
 function buttons() { return wrapper!.findAll('.test-hud__placement-actions button') }
@@ -37,6 +39,27 @@ afterEach(() => {
 })
 
 describe('HUD placement commands', () => {
+  it('loads Ctrl+K corner and changes it only during shared placement', async () => {
+    await render()
+    const select = wrapper!.get('select[aria-label="Angolo di apertura Ctrl+K"]')
+    expect((select.element as HTMLSelectElement).value).toBe('bottom-right')
+    expect(select.attributes('disabled')).toBeDefined()
+    await buttons()[0]!.trigger('click'); await flushPromises()
+    expect(select.attributes('disabled')).toBeUndefined()
+    await select.setValue('top-right'); await flushPromises()
+    expect(api.trainingOverlaySetOriginCorner).toHaveBeenCalledWith('top-right')
+    expect((select.element as HTMLSelectElement).value).toBe('top-right')
+  })
+
+  it('restores the confirmed corner if saving fails', async () => {
+    active = true
+    api.trainingOverlaySetOriginCorner.mockRejectedValueOnce(new Error('save failed'))
+    await render()
+    const select = wrapper!.get('select[aria-label="Angolo di apertura Ctrl+K"]')
+    await select.setValue('top-left'); await flushPromises()
+    expect((select.element as HTMLSelectElement).value).toBe('bottom-right')
+    expect(wrapper!.get('[role="alert"]').text()).toContain("Impossibile salvare l'angolo")
+  })
   it('supports Edit / Save / Edit using confirmed runtime state', async () => {
     await render()
     await buttons()[0]!.trigger('click'); await flushPromises()

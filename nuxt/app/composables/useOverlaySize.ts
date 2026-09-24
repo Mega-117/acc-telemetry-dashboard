@@ -5,6 +5,7 @@ export type OverlaySizePreset = 'launcher' | 'placement' | 'select' | 'session' 
 export type OverlaySize = { width: number; height: number }
 
 const OVERLAY_WORK_AREA_SIZE: OverlaySize = { width: 472, height: 768 }
+const OVERLAY_PLACEMENT_SIZE: OverlaySize = { width: 334, height: 150 }
 const OVERLAY_SURFACE_PADDING = 10
 // La card persistente riempie la finestra: si misura il contenuto interno e si
 // aggiunge il "telaio" (padding card 14x2 + bordo 1x2) + padding work area 10x2.
@@ -50,12 +51,12 @@ export function useOverlaySize(
   }
 
   // Geometria dinamica: la finestra Electron si stringe attorno alla superficie
-  // misurata (comportamento "da browser"); il placement resta a work area piena.
+  // misurata (comportamento "da browser"); il placement usa una piccola anteprima trascinabile.
   function measureOverlaySize(preset: OverlaySizePreset): OverlaySize | null {
     if (preset === 'placement') {
       const placementSurface = overlayRoot.value?.querySelector(PLACEMENT_SURFACE_SELECTOR) as HTMLElement | null
       if (!placementSurface) return null
-      return OVERLAY_WORK_AREA_SIZE
+      return OVERLAY_PLACEMENT_SIZE
     }
 
     const surface = overlayRoot.value?.querySelector(OVERLAY_CONTENT_SELECTOR) as HTMLElement | null
