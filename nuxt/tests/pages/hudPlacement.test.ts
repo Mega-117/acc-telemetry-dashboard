@@ -39,27 +39,11 @@ afterEach(() => {
 })
 
 describe('HUD placement commands', () => {
-  it('loads Ctrl+K corner and changes it only during shared placement', async () => {
+  it('does not require a manual corner selection', async () => {
     await render()
-    const select = wrapper!.get('select[aria-label="Angolo di apertura Ctrl+K"]')
-    expect((select.element as HTMLSelectElement).value).toBe('bottom-right')
-    expect(select.attributes('disabled')).toBeDefined()
-    await buttons()[0]!.trigger('click'); await flushPromises()
-    expect(select.attributes('disabled')).toBeUndefined()
-    await select.setValue('top-right'); await flushPromises()
-    expect(api.trainingOverlaySetOriginCorner).toHaveBeenCalledWith('top-right')
-    expect((select.element as HTMLSelectElement).value).toBe('top-right')
+    expect(wrapper!.find('select[aria-label="Angolo di apertura Ctrl+K"]').exists()).toBe(false)
   })
 
-  it('restores the confirmed corner if saving fails', async () => {
-    active = true
-    api.trainingOverlaySetOriginCorner.mockRejectedValueOnce(new Error('save failed'))
-    await render()
-    const select = wrapper!.get('select[aria-label="Angolo di apertura Ctrl+K"]')
-    await select.setValue('top-left'); await flushPromises()
-    expect((select.element as HTMLSelectElement).value).toBe('bottom-right')
-    expect(wrapper!.get('[role="alert"]').text()).toContain("Impossibile salvare l'angolo")
-  })
   it('supports Edit / Save / Edit using confirmed runtime state', async () => {
     await render()
     await buttons()[0]!.trigger('click'); await flushPromises()
