@@ -12,7 +12,6 @@ import { usePresentationInterval } from '~/composables/usePresentationVisibility
 // - Per ogni overlay: on/off + formato fisso (Piccolo/Medio/Grande).
 // Self-contained (come dev.vue): fuori dal contratto useTelemetryGateway.
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
-import { originCornerOptions, resolveOverlayOriginCorner, type OverlayOriginCorner } from '~/composables/useOverlaySettings'
 import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
@@ -202,24 +201,6 @@ const standingsBooleanOptions: Array<{
 function getInfoOptions(keys: InfoSettingKey[]) {
   return infoOptionDefinitions.filter(option => keys.includes(option.key))
 }
-const trainingCorner = ref<OverlayOriginCorner>('top-left')
-const trainingCornerBusy = ref(false)
-async function setTrainingCorner(event: Event) {
-  const api = getApi()
-  if (!api?.trainingOverlaySetOriginCorner || trainingCornerBusy.value) return
-  trainingCornerBusy.value = true
-  placementError.value = ''
-  try {
-    const saved = await api.trainingOverlaySetOriginCorner((event.target as HTMLSelectElement).value)
-    trainingCorner.value = resolveOverlayOriginCorner(saved?.originCorner)
-    await refreshPlacementStatus()
-  } catch {
-    placementError.value = "Impossibile salvare l'angolo di Ctrl+K. Riprova."
-  } finally {
-    ;(event.target as HTMLSelectElement).value = trainingCorner.value
-    trainingCornerBusy.value = false
-  }
-}
 const positioning = ref(false)
 const placementBusy = ref(false)
 const placementError = ref('')
@@ -305,8 +286,6 @@ async function refreshState() {
   isElectron.value = !!api
   apiReady.value = !!(api && typeof api.hudOverlayOpen === 'function')
   if (!apiReady.value) return
-  const training = await api.trainingOverlayGetSettings?.()
-  trainingCorner.value = resolveOverlayOriginCorner(training?.originCorner)
   for (const overlay of hudOverlays) {
     try {
       open[overlay.id] = await api.hudOverlayIsOpen(overlay.id)
@@ -773,21 +752,6 @@ async function toggleTraining() {
             </button>
           </div>
         </section>
-
-        <label class="test-hud__always">
-          <span class="test-hud__always-text">
-            <strong>Pannello Ctrl+K</strong>
-            <em>L'angolo resta fermo quando cambia il contenuto.</em>
-          </span>
-          <select
-            aria-label="Angolo di apertura Ctrl+K"
-            :value="trainingCorner"
-            :disabled="!apiReady || !positioning || placementBusy || trainingCornerBusy"
-            @change="setTrainingCorner"
-          >
-            <option v-for="corner in originCornerOptions" :key="corner.id" :value="corner.id">{{ corner.label }}</option>
-          </select>
-        </label>
 
         <label
           class="test-hud__always"
