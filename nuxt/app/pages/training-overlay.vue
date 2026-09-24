@@ -172,6 +172,7 @@ const getOverlayApi = useOverlayRegionApi()
 const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not_fresh' })
 const dryPressurePresentation = computed(() => pressureActionPresentation(dryPressureState.value))
 const isDryPressurePreviewOpen = ref(false)
+const isDryPressureApplying = ref(false)
 const dryPressureBridgeStatus = ref('Nessuna raccomandazione TEST attiva.')
 const dryPressureActivity = usePresentationInterval(() => { void refreshDryPressureState() }, 500)
 const qaBotState = ref<QaBotSnapshot>(normalizeQaBotSnapshot({
@@ -228,7 +229,10 @@ async function refreshDryPressureState() {
   }
 }
 async function applyDryPressure() {
+  if (isDryPressureApplying.value) return
+  isDryPressureApplying.value = true
   isDryPressurePreviewOpen.value = true
+  await nextTick()
   try {
     const response = await getOverlayApi()?.trainingOverlayApplySetupPressure?.()
     if (!response?.accepted) {
@@ -240,6 +244,7 @@ async function applyDryPressure() {
       }
     }
   } catch (_) { dryPressureState.value = { state: 'blocked', reason: 'command_not_accepted' } }
+  finally { isDryPressureApplying.value = false }
   await refreshDryPressureState()
 }
 async function testDryPressure() {
@@ -1067,10 +1072,10 @@ onBeforeUnmount(() => {
                       @focus="selectedWheelActionId = 'pressure'"
                       :aria-label="dryPressurePresentation.ariaLabel"
                       aria-describedby="pressure-action-status"
-                      :disabled="dryPressureState.state !== 'ready'"
+                      :disabled="isDryPressureApplying || dryPressureState.state !== 'ready'"
                       @click="applyDryPressure"
                     >
-                      <span>{{ dryPressurePresentation.buttonLabel || 'Regola pressioni' }}</span>
+                      <span>{{ isDryPressureApplying ? 'Avvio…' : dryPressurePresentation.buttonLabel || 'Regola pressioni' }}</span>
                     </button>
                   </div>
                   <p id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
