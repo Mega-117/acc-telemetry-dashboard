@@ -40,6 +40,8 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/utils/trackTimesChart.ts',
+        'app/components/charts/TrackTimesChart.vue',
         'app/composables/useActivityFeed.ts',
         'app/composables/useFirebaseTracker.ts',
         'app/components/overlay/TrackMapHud.vue',
