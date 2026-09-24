@@ -14,12 +14,9 @@ import type {
   StandingsStateEnvelope,
 } from '~/services/overlay/standingsPresentation'
 import { ACC_BROADCASTING_SESSION_TYPES } from '~/services/overlay/standingsPresentation'
+import { accRainIntensity } from '~/utils/raceWeatherPresentation'
 
 export type OverlayTelemetrySource = 'local' | 'focused'
-
-const DELTA_ELIGIBLE_SESSION_TYPES: ReadonlySet<number> = new Set(
-  Object.values(ACC_BROADCASTING_SESSION_TYPES),
-)
 
 function validityFromInvalidFlag(value: unknown): boolean | null {
   return typeof value === 'boolean' ? !value : null
@@ -86,10 +83,8 @@ function focusedDelta(
   const raw = finiteNumber(car?.delta_ms)
   const location = finiteNumber(car?.car_location)
   const lapType = car?.current_lap?.lap_type
-  const sessionType = nonNegativeInteger(session?.session_type)
   const predictedLapMs = positiveTime(car?.predicted_lap_ms)
   const absoluteSessionBestLapMs = positiveTime(session?.best_session_lap_ms)
-  const engineRunning = car?.engine_running === true
   const available = car?.has_realtime === true
     && location === 1
     && lapType !== 'outlap'
@@ -99,9 +94,6 @@ function focusedDelta(
     && Math.abs(raw) <= DELTA_INVALID_LIMIT_MS
   const ms = available ? Math.round(raw) : 0
   const purple = available
-    && engineRunning
-    && sessionType !== null
-    && DELTA_ELIGIBLE_SESSION_TYPES.has(sessionType)
     && predictedLapMs !== null
     && predictedLapMs > PREDICTED_LAP_MIN_MS
     && absoluteSessionBestLapMs !== null
@@ -231,7 +223,12 @@ function focusedFastState(
 ): FastOverlayState {
   const snapshot = state?.snapshot ?? null
   const sessionType = normalizeBroadcastingSessionType(snapshot?.session.session_type)
-  const rainLevel = finiteNumber(snapshot?.session.weather?.rain_level)
+  // Weather is shared session data, not private car physics. Never interpret
+  // UDP's continuous rain_level as the graphics rain enum or invent forecasts.
+  const weatherAvailable = local.isFresh && local.isLive && snapshot !== null
+    && local.context?.sessionIndex !== null
+    && local.context?.sessionIndex === nonNegativeInteger(snapshot.session.session_index)
+    && local.context?.sessionType === sessionType
   const info = focusedInfo(car, state)
 
   return {
@@ -301,9 +298,9 @@ function focusedFastState(
     currentTyreSet: null,
     tyreSetAvailable: false,
     tyreCompound: null,
-    rainIntensity: rainLevel,
-    rainIntensity10Min: null,
-    rainIntensity30Min: null,
+    rainIntensity: weatherAvailable ? accRainIntensity(local.rainIntensity) : null,
+    rainIntensity10Min: weatherAvailable ? accRainIntensity(local.rainIntensity10Min) : null,
+    rainIntensity30Min: weatherAvailable ? accRainIntensity(local.rainIntensity30Min) : null,
     lapPressureAverage: {
       status: 'waiting_for_full_lap',
       lap: null,
@@ -405,7 +402,7 @@ export function trackRemoteFocus(
   if (state?.status === 'available' && state.snapshot) {
     const localIndex = nonNegativeInteger(state.snapshot.session.local_car_index)
     const focusedIndex = nonNegativeInteger(state.snapshot.session.focused_car_index)
-    if (localIndex !== null && focusedIndex !== null) {
+    if (focusedIndex !== null) {
       return { remote: focusedIndex !== localIndex, unavailableSinceMs: null }
     }
   }
@@ -466,7 +463,7 @@ export function routeOverlayTelemetry(
   const snapshot = focusedState.snapshot
   const localIndex = nonNegativeInteger(snapshot.session.local_car_index)
   const focusedIndex = nonNegativeInteger(snapshot.session.focused_car_index)
-  if (localIndex === null || focusedIndex === null) {
+  if (focusedIndex === null) {
     if (focusWasRemote) return focusedUnavailable(local, focusedState)
     return { source: 'local', fastState: local, sectorHud: null, focusedCar: null }
   }

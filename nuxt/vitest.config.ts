@@ -216,6 +216,8 @@ export default defineConfig({
         'app/utils/authRouteGuard.ts',
         'app/utils/tyreSlipPresentation.ts',
         'app/utils/tyreTemperaturePresentation.ts',
+        'app/utils/raceWeatherPresentation.ts',
+        'app/components/overlay/RaceWeatherIcon.vue',
         'app/utils/dashboardPresentation.ts',
         'app/utils/infoPresentation.ts',
         'app/utils/hudOverlayWindow.ts',

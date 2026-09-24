@@ -91,6 +91,36 @@ function envelope(focusedCarIndex = 1024): StandingsStateEnvelope {
   }
 }
 
+describe('focused Info and session weather without local physics', () => {
+  it('returns watched best, stint and delta with no local identity or engine', () => {
+    const state = envelope()
+    state.snapshot!.session.local_car_index = null
+    state.snapshot!.cars = [state.snapshot!.cars[1]!]
+    state.snapshot!.cars[0]!.delta_ms = -400
+    const result = routeOverlayTelemetry({ ...local, isEngineRunning: false }, state)
+    expect(result.source).toBe('focused')
+    expect(result.fastState.info).toMatchObject({
+      bestLapTimeMs: 110_912, stintTimeLeftMs: 75_000, delta: { ms: -400, available: true },
+    })
+    expect(result.fastState.fuelL).toBeNull()
+    expect(result.fastState.tyres).toEqual([])
+  })
+
+  it('shares fresh session forecasts without copying local tyres', () => {
+    const weather = { ...local, isFresh: true, isLive: true, rainIntensity: 0, rainIntensity10Min: 3, rainIntensity30Min: 5 }
+    const state = envelope()
+    const result = routeOverlayTelemetry(weather, state).fastState
+    expect([result.rainIntensity, result.rainIntensity10Min, result.rainIntensity30Min]).toEqual([0, 3, 5])
+    expect(result.tyres).toEqual([])
+    for (const input of [{ ...weather, isFresh: false }, { ...weather, isLive: false }, { ...weather, context: { ...weather.context!, sessionIndex: 8 } }]) {
+      const stale = routeOverlayTelemetry(input, state).fastState
+      expect([stale.rainIntensity, stale.rainIntensity10Min, stale.rainIntensity30Min]).toEqual([null, null, null])
+    }
+    state.snapshot!.session.weather = { rain_level: 0.2 }
+    expect(routeOverlayTelemetry({ ...weather, rainIntensity: null }, state).fastState.rainIntensity).toBeNull()
+  })
+})
+
 describe('spectator telemetry routing', () => {
   it('mantiene la telemetria locale quando il focus coincide con il pilota utente', () => {
     const result = routeOverlayTelemetry(local, envelope(1023))
@@ -310,7 +340,6 @@ describe('spectator telemetry routing', () => {
       Object.assign(state.snapshot!.cars[1], {
         delta_ms: -400,
         predicted_lap_ms: 87_500,
-        engine_running: true,
         car_location: 1,
         ...overrides,
       })
@@ -319,20 +348,20 @@ describe('spectator telemetry routing', () => {
 
     expect(delta(4, {})).toMatchObject({ side: 'negative', purple: true })
     expect(delta(10, {})).toMatchObject({ side: 'negative', purple: true })
-    expect(delta(2, {})).toMatchObject({ purple: false })
+    expect(delta(2, {})).toMatchObject({ purple: true })
     expect(delta(4, { delta_ms: 400, predicted_lap_ms: 88_500 })).toMatchObject({
       side: 'positive', purple: false,
     })
     expect(delta(4, { delta_ms: 0 })).toMatchObject({ side: 'zero', purple: false })
     expect(delta(4, { predicted_lap_ms: 79_000 })).toMatchObject({ purple: false })
-    expect(delta(4, { engine_running: undefined })).toMatchObject({ purple: false })
+    expect(delta(4, { engine_running: undefined })).toMatchObject({ purple: true })
+    expect(delta(4, { engine_running: false })).toMatchObject({ purple: true })
     expect(delta(4, { predicted_lap_ms: undefined })).toMatchObject({ purple: false })
     expect(delta(4, { car_location: 2 })).toMatchObject({ available: false, purple: false })
 
     const missingBest = envelope()
     missingBest.snapshot!.cars[1].delta_ms = -400
     missingBest.snapshot!.cars[1].predicted_lap_ms = 87_500
-    missingBest.snapshot!.cars[1].engine_running = true
     delete missingBest.snapshot!.session.best_session_lap_ms
     expect(routeOverlayTelemetry(local, missingBest).fastState.info!.delta.purple).toBe(false)
   })

@@ -3,6 +3,8 @@ import { computed } from 'vue'
 import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
 import { tyreTemperatureColor } from '~/utils/tyreTemperaturePresentation'
 import { buildBrakeAxlePresentation } from '~/utils/brakeAxlePresentation'
+import { raceWeatherItem } from '~/utils/raceWeatherPresentation'
+import RaceWeatherIcon from '~/components/overlay/RaceWeatherIcon.vue'
 
 const props = defineProps<{ fastState: FastOverlayState }>()
 const ids = ['FL', 'FR', 'RL', 'RR'] as const
@@ -47,12 +49,11 @@ function tyreColor(tyre: FastStateTyre) {
   return tyreTemperatureColor(tyre.coreTempC, props.fastState.tyreCompound === 'WET' ? 'WET' : 'DRY')
 }
 
-function weatherIcon(intensity: number | null) {
-  if (intensity === null) return '·'
-  if (intensity <= 0) return '☀'
-  if (intensity <= 2) return '☁'
-  return '☂'
-}
+const weather = computed(() => [
+  raceWeatherItem(props.fastState.rainIntensity, 0, props.fastState.isFresh && props.fastState.isLive),
+  raceWeatherItem(props.fastState.rainIntensity10Min, 10, props.fastState.isFresh && props.fastState.isLive),
+  raceWeatherItem(props.fastState.rainIntensity30Min, 30, props.fastState.isFresh && props.fastState.isLive),
+])
 
 function brakeText(number: number | null, suffix: string) {
   return number === null ? '--' : `${number.toFixed(0)}${suffix}`
@@ -62,12 +63,8 @@ function brakeText(number: number | null, suffix: string) {
 <template>
   <section class="tyre-race" aria-label="Race gomme e freni">
     <header class="tyre-race__weather">
-      <div v-for="item in [
-        { label: '0′', value: fastState.rainIntensity },
-        { label: '10′', value: fastState.rainIntensity10Min },
-        { label: '30′', value: fastState.rainIntensity30Min },
-      ]" :key="item.label">
-        <strong>{{ item.label }}</strong><span>{{ weatherIcon(item.value) }}</span>
+      <div v-for="item in weather" :key="item.horizon" :title="item.title" :aria-label="item.title" :data-rain-intensity="item.intensity">
+        <strong>{{ item.horizon }}</strong><span><RaceWeatherIcon :item="item" /></span>
       </div>
     </header>
 

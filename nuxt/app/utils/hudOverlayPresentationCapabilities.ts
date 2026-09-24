@@ -14,7 +14,7 @@ type PresentationRegistry = Record<
 export const HUD_OVERLAY_PRESENTATION_CAPABILITIES: PresentationRegistry = {
   tyres: {
     classic: ['layout'],
-    advanced: ['layout'],
+    race: ['layout'],
   },
   sectors: {
     classic: ['layout', 'deltaReference', 'sectorPrevious', 'sectorBest'],
