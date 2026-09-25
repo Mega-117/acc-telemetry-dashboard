@@ -57,6 +57,7 @@ const telemetryGateway = useTelemetryGateway()
 const {
   pagerSessions: rawSessions,
   pagerState,
+  pagerError,
   pagerIsOnline: isOnline
 } = telemetryGateway
 
@@ -130,7 +131,7 @@ function buildServerFilters(): SessionPagerFilters {
     track: filterTrack.value === 'all' ? null : filterTrack.value,
     car: filterCar.value === 'all' ? null : filterCar.value,
     carCategory: filterCarCategory.value === 'all' ? null : filterCarCategory.value,
-    hideEmpty: filterHideEmpty.value
+    hideEmpty: true
   }
 }
 
@@ -211,11 +212,10 @@ const filterTrack = ref('all')
 const filterCarCategory = ref<'all' | CarCategory>('all')
 const filterCar = ref('all')
 const filterTimeRange = ref<'today' | '7d' | '30d' | 'all'>('all')
-const filterHideEmpty = ref(true) // Hide sessions with 0 total laps (on by default)
 let filterReloadTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(
-  [filterType, filterTrack, filterCarCategory, filterCar, filterTimeRange, filterHideEmpty],
+  [filterType, filterTrack, filterCarCategory, filterCar, filterTimeRange],
   () => {
     if (filterReloadTimer) clearTimeout(filterReloadTimer)
     filterReloadTimer = setTimeout(() => {
@@ -229,10 +229,6 @@ watch(filterCarCategory, () => {
     filterCar.value = 'all'
   }
 })
-
-// === VIEW MODE ===
-type ViewMode = 'list' | 'card'
-const viewMode = ref<ViewMode>('card')
 
 const trackOptions = computed(() => ACC_TRACK_OPTIONS)
 const carOptions = computed(() => {
@@ -249,7 +245,7 @@ const carAllLabel = computed(() => filterCarCategory.value === 'all'
 const filteredSessions = computed(() => {
   return sessions.value.filter(session => {
     // Hide empty sessions (0 total laps)
-    if (filterHideEmpty.value && session.laps === 0) return false
+    if (session.laps === 0) return false
     
     // Type filter
     if (filterType.value !== 'all' && session.type !== filterType.value) return false
@@ -353,276 +349,234 @@ function goToSession(id: string) {
 </script>
 
 <template>
-  <LayoutPageContainer>
-    <h1 class="page-title">SESSIONI</h1>
-
-    <div v-if="!isOnline" class="offline-banner">
-      Modalità offline: visualizzo dati locali. La sincronizzazione riprenderà quando torni online.
-    </div>
-    
-    <!-- FILTERS -->
-    <div class="filters">
-      <!-- Left: Filter controls -->
-      <div class="filters-left">
-        <!-- Type filter (segmented) -->
-        <div class="filter-group">
-          <div class="segmented-control">
-            <button 
-              :class="['seg-btn', { 'seg-btn--active': filterType === 'all' }]"
-              @click="filterType = 'all'"
-            >Tutto</button>
-            <button 
-              :class="['seg-btn', 'seg-btn--practice', { 'seg-btn--active': filterType === 'practice' }]"
-              @click="filterType = 'practice'"
-            >Practice</button>
-            <button 
-              :class="['seg-btn', 'seg-btn--qualify', { 'seg-btn--active': filterType === 'qualify' }]"
-              @click="filterType = 'qualify'"
-            >Qualify</button>
-            <button 
-              :class="['seg-btn', 'seg-btn--race', { 'seg-btn--active': filterType === 'race' }]"
-              @click="filterType = 'race'"
-            >Race</button>
-          </div>
-        </div>
-        
-        <!-- Track select -->
-        <div class="filter-group">
-          <select v-model="filterTrack" class="filter-select" aria-label="Filtra pista">
-            <option value="all">Tutte le piste</option>
-            <option v-for="track in trackOptions" :key="track.id" :value="track.id">{{ track.name }}</option>
-          </select>
-        </div>
-
-        <!-- Car category select -->
-        <div class="filter-group">
-          <select v-model="filterCarCategory" class="filter-select" aria-label="Filtra categoria auto">
-            <option value="all">Tutte le categorie</option>
-            <option v-for="category in CAR_CATEGORIES" :key="category" :value="category">{{ category }}</option>
-          </select>
-        </div>
-        
-        <!-- Car select -->
-        <div class="filter-group">
-          <select v-model="filterCar" class="filter-select filter-select--car" aria-label="Filtra auto">
-            <option value="all">{{ carAllLabel }}</option>
-            <option v-for="car in carOptions" :key="car.id" :value="car.id">{{ car.name }}</option>
-          </select>
-        </div>
-        
-        <!-- Time range (segmented) -->
-        <div class="filter-group">
-          <div class="segmented-control segmented-control--compact">
-            <button 
-              :class="['seg-btn', { 'seg-btn--active': filterTimeRange === 'today' }]"
-              @click="filterTimeRange = 'today'"
-            >Oggi</button>
-            <button 
-              :class="['seg-btn', { 'seg-btn--active': filterTimeRange === '7d' }]"
-              @click="filterTimeRange = '7d'"
-            >7g</button>
-            <button 
-              :class="['seg-btn', { 'seg-btn--active': filterTimeRange === '30d' }]"
-              @click="filterTimeRange = '30d'"
-            >30g</button>
-            <button 
-              :class="['seg-btn', { 'seg-btn--active': filterTimeRange === 'all' }]"
-              @click="filterTimeRange = 'all'"
-            >Tutto</button>
-          </div>
-        </div>
-        
-        <!-- Hide empty sessions toggle -->
-        <div class="filter-group filter-group--toggle">
-          <label class="toggle-label">
-            <input 
-              type="checkbox" 
-              v-model="filterHideEmpty"
-              class="toggle-checkbox"
-            />
-            <span class="toggle-switch"></span>
-            <span class="toggle-text">Nascondi vuote</span>
-          </label>
-        </div>
-      </div>
-      
-      <!-- Right: View mode toggle -->
-      <div class="filters-right">
-        <div class="view-toggle">
-          <button 
-            :class="['view-btn', { 'view-btn--active': viewMode === 'list' }]"
-            @click="viewMode = 'list'"
-            title="Vista lista"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-            </svg>
-          </button>
-          <button 
-            :class="['view-btn', { 'view-btn--active': viewMode === 'card' }]"
-            @click="viewMode = 'card'"
-            title="Vista card"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <rect x="3" y="3" width="7" height="7" rx="1"/>
-              <rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/>
-              <rect x="14" y="14" width="7" height="7" rx="1"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
-    
-    <!-- No results -->
-    <div v-if="paginatedSessionsByDay.length === 0" class="no-results">
-      <p>Nessuna sessione trovata con i filtri selezionati.</p>
-    </div>
-    
-    <!-- LIST VIEW (original) -->
-    <div 
-      v-else-if="viewMode === 'list'" 
-      ref="sessionsRef"
-      :class="['day-groups', { 'day-groups--fading': isChangingPage }]"
-      @transitionend="isChangingPage = false"
+  <LayoutPageContainer class="sessions-page racing-data">
+    <h1 class="racing-sr-only">
+      Sessioni
+    </h1>
+    <p
+      v-if="!isOnline"
+      class="sessions-notice"
+      role="status"
     >
-      <div v-for="group in paginatedSessionsByDay" :key="group.date" class="day-group">
-        <!-- Day header -->
-        <div class="day-header">
-          <span class="day-date">{{ formatDateHeader(group.date) }}</span>
-          <span class="day-count">{{ group.sessions.length }} sessioni</span>
-        </div>
-        
-        <!-- Sessions list -->
-        <div class="sessions-list">
-          <div 
-            v-for="session in group.sessions" 
-            :key="session.id"
-            class="session-row"
-            @click="goToSession(session.id)"
-          >
-            <!-- Left side: type, time, track, car -->
-            <div class="row-left">
-              <span :class="['session-chip', `session-chip--${session.type}`]">
-                {{ getTypeLabel(session.type) }}
-              </span>
-              <span class="session-time">{{ session.time }}</span>
-              <span class="session-track">{{ session.track }}</span>
-              <span class="session-car">{{ session.car }}</span>
-            </div>
-            
-            <!-- Right side: stats + times (grid layout) -->
-            <div class="row-right">
-              <!-- GIRI / STINT chips -->
-              <div class="stat-chips">
-                <span class="stat-chip">GIRI {{ session.laps }}</span>
-                <span class="stat-chip">STINT {{ session.stints }}</span>
-              </div>
-              
-              <!-- Q Badge (fixed slot) -->
-              <div class="time-slot">
-                <span v-if="session.bestQualy" class="time-badge time-badge--qualy">
-                  Q {{ session.bestQualy }}
-                </span>
-                <span v-else class="time-badge time-badge--qualy time-badge--empty">
-                  Q —
-                </span>
-              </div>
-              
-              <!-- R Badge (Race) -->
-              <div class="time-slot">
-                <span v-if="session.bestRace" class="time-badge time-badge--race">
-                  R {{ session.bestRace }}
-                </span>
-                <span v-else class="time-badge time-badge--race time-badge--empty">
-                  R —
-                </span>
-              </div>
-              
-              <!-- CTA Arrow -->
-              <span class="session-cta">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M9 18l6-6-6-6"/>
-                </svg>
-              </span>
-            </div>
-          </div>
-        </div>
+      Modalità offline: visualizzo dati locali. La sincronizzazione riprenderà quando torni online.
+    </p>
+
+    <section
+      class="session-filters"
+      aria-label="Filtri sessioni"
+    >
+      <div
+        class="racing-filter-tabs"
+        role="group"
+        aria-label="Tipo di sessione"
+      >
+        <button
+          v-for="type in (['all', 'practice', 'qualify', 'race'] as const)"
+          :key="type"
+          type="button"
+          :aria-pressed="filterType === type"
+          :class="{ 'is-active': filterType === type }"
+          @click="filterType = type"
+        >
+          {{ type === 'all' ? 'Tutto' : getTypeLabel(type) }}
+        </button>
       </div>
-    </div>
-    
-    <!-- CARD VIEW (grouped) -->
-    <div v-else class="day-cards">
-      <div v-for="group in paginatedSessionsByDay" :key="group.date" class="day-card">
-        <!-- Card header with date -->
-        <div class="card-header">
-          <div class="card-header-info">
-            <span class="card-date">{{ formatDateHeader(group.date) }}</span>
-            <span class="card-count">{{ group.sessions.length }} sessioni</span>
-          </div>
-        </div>
-        
-        <!-- Sessions inside card -->
-        <div class="card-sessions">
-          <div 
-            v-for="session in group.sessions" 
-            :key="session.id"
-            class="card-session-row"
-            @click="goToSession(session.id)"
+      <div class="racing-filter-selects">
+        <select
+          v-model="filterTrack"
+          class="racing-select"
+          aria-label="Filtra pista"
+        >
+          <option value="all">
+            Tutte le piste
+          </option>
+          <option
+            v-for="track in trackOptions"
+            :key="track.id"
+            :value="track.id"
           >
-            <!-- Type chip -->
-            <span :class="['session-chip', `session-chip--${session.type}`]">
-              {{ getTypeLabel(session.type) }}
-            </span>
-            
-            <!-- Time -->
-            <span class="card-session-time">{{ session.time }}</span>
-            
-            <!-- Track -->
-            <span class="card-session-track">{{ session.track }}</span>
-            
-            <!-- Car -->
-            <span class="card-session-car">{{ session.car }}</span>
-            
-            <!-- Laps/Stints -->
-            <div class="card-stat-chips">
-              <span class="stat-chip">GIRI {{ session.laps }}</span>
-              <span class="stat-chip">STINT {{ session.stints }}</span>
-            </div>
-            
-            <!-- Times (with placeholders for alignment) -->
-            <div class="card-time-slot">
-              <span v-if="session.bestQualy" class="time-badge time-badge--qualy">
-                Q {{ session.bestQualy }}
-              </span>
-              <span v-else class="time-badge time-badge--qualy time-badge--empty">
-                Q —
-              </span>
-            </div>
-            
-            <div class="card-time-slot">
-              <span v-if="session.bestRace" class="time-badge time-badge--race">
-                R {{ session.bestRace }}
-              </span>
-              <span v-else class="time-badge time-badge--race time-badge--empty">
-                R —
-              </span>
-            </div>
-            
-            <!-- Arrow -->
-            <span class="session-cta">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 18l6-6-6-6"/>
-              </svg>
-            </span>
-          </div>
+            {{ track.name }}
+          </option>
+        </select>
+        <select
+          v-model="filterCarCategory"
+          class="racing-select"
+          aria-label="Filtra categoria auto"
+        >
+          <option value="all">
+            Tutte le categorie
+          </option>
+          <option
+            v-for="category in CAR_CATEGORIES"
+            :key="category"
+            :value="category"
+          >
+            {{ category }}
+          </option>
+        </select>
+        <select
+          v-model="filterCar"
+          class="racing-select racing-select--car"
+          aria-label="Filtra auto"
+        >
+          <option value="all">
+            {{ carAllLabel }}
+          </option>
+          <option
+            v-for="car in carOptions"
+            :key="car.id"
+            :value="car.id"
+          >
+            {{ car.name }}
+          </option>
+        </select>
+        <select
+          v-model="filterTimeRange"
+          class="racing-select"
+          aria-label="Filtra periodo"
+        >
+          <option value="all">
+            Tutto
+          </option>
+          <option value="today">
+            Oggi
+          </option>
+          <option value="7d">
+            Ultimi 7 giorni
+          </option>
+          <option value="30d">
+            Ultimi 30 giorni
+          </option>
+        </select>
+      </div>
+    </section>
+
+    <p
+      v-if="pagerError"
+      class="sessions-notice sessions-notice--error"
+      role="alert"
+    >
+      Impossibile caricare le sessioni.
+      <button
+        type="button"
+        class="racing-text-action"
+        :disabled="isLoading"
+        @click="reloadFirstPage(true)"
+      >
+        Riprova
+      </button>
+    </p>
+    <p
+      v-if="isLoading && !paginatedSessionsByDay.length"
+      class="sessions-status"
+      role="status"
+    >
+      Caricamento sessioni…
+    </p>
+    <p
+      v-else-if="!pagerError && !paginatedSessionsByDay.length"
+      class="sessions-status"
+      role="status"
+    >
+      Nessuna sessione trovata con i filtri selezionati.
+    </p>
+
+    <div
+      ref="sessionsRef"
+      class="session-days"
+      :aria-busy="isLoading || isChangingPage"
+    >
+      <div
+        v-for="group in paginatedSessionsByDay"
+        :key="group.date"
+        class="session-day"
+      >
+        <div
+          class="racing-table-scroll"
+          role="region"
+          :aria-label="`Sessioni del ${formatDateHeader(group.date)}`"
+          tabindex="0"
+        >
+          <table class="racing-day-table">
+            <caption>{{ formatDateHeader(group.date) }}</caption>
+            <colgroup>
+              <col class="col-type" /><col class="col-time" /><col class="col-track" /><col class="col-car" />
+              <col class="col-laps" /><col class="col-stints" /><col class="col-best" /><col class="col-best" />
+            </colgroup>
+            <thead class="racing-sr-only">
+              <tr>
+                <th scope="col">
+                  Tipo
+                </th><th scope="col">
+                  Ora
+                </th><th scope="col">
+                  Pista
+                </th><th scope="col">
+                  Auto
+                </th>
+                <th scope="col">
+                  Giri
+                </th><th scope="col">
+                  Stint
+                </th><th scope="col">
+                  Best Qualify
+                </th><th scope="col">
+                  Best Race
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="session in group.sessions"
+                :key="session.id"
+                class="session-row"
+                @click="goToSession(session.id)"
+              >
+                <td class="session-type">
+                  <span :class="['racing-session-badge', `racing-session-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
+                </td>
+                <td class="session-time">
+                  {{ session.time }}
+                </td>
+                <td class="session-track">
+                  <button
+                    type="button"
+                    class="session-open"
+                    :aria-label="`Apri sessione ${getTypeLabel(session.type)}, ${session.track}, ${formatDateHeader(group.date)}, ${session.time}`"
+                    @click.stop="goToSession(session.id)"
+                  >
+                    {{ session.track }}
+                  </button>
+                </td>
+                <td
+                  class="session-car"
+                  :title="session.car"
+                >
+                  {{ session.car }}
+                </td>
+                <td class="session-stat">
+                  {{ session.laps }} <span>{{ session.laps === 1 ? 'giro' : 'giri' }}</span>
+                </td>
+                <td class="session-stat">
+                  {{ session.stints }} <span>stint</span>
+                </td>
+                <td class="session-best session-best--qualify">
+                  <span class="best-label">Q</span><span :class="{ 'is-empty': !session.bestQualy }">{{ session.bestQualy || '–' }}</span>
+                </td>
+                <td class="session-best session-best--race">
+                  <span class="best-label">R</span><span :class="{ 'is-empty': !session.bestRace }">{{ session.bestRace || '–' }}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
 
-    <!-- PAGINATION CONTROLS -->
     <UiPaginationControls
-      v-model:currentPage="currentPage"
+      v-model:current-page="currentPage"
+      variant="racing"
+      :disabled="isLoading || isChangingPage"
       :total-pages="totalPages"
       :total-items="totalFilteredSessions"
       :scroll-target="sessionsRef"
@@ -633,669 +587,29 @@ function goToSession(id: string) {
 </template>
 
 <style lang="scss" scoped>
-@use '@/assets/scss/variables' as *;
-
-.page-title {
-  font-family: 'Outfit', $font-primary;
-  font-size: 24px;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 20px;
-  letter-spacing: 1px;
-}
-
-.offline-banner {
-  margin-bottom: 16px;
-  padding: 10px 14px;
-  border-radius: 10px;
-  background: rgba(255, 193, 7, 0.12);
-  border: 1px solid rgba(255, 193, 7, 0.35);
-  color: #ffd54f;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-// === FILTERS ===
-.filters {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 24px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-}
-
-.filters-left {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.filters-right {
-  display: flex;
-  align-items: center;
-}
-
-.view-toggle {
-  display: flex;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
-  padding: 3px;
-  gap: 2px;
-}
-
-.view-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 32px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-
-  svg {
-    width: 18px;
-    height: 18px;
-    color: rgba(255, 255, 255, 0.4);
-    transition: color 0.15s ease;
-  }
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.05);
-    svg { color: rgba(255, 255, 255, 0.7); }
-  }
-
-  &--active {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    svg { color: #fff; }
-  }
-}
-
-.filter-group {
-  display: flex;
-  align-items: center;
-  
-  &--toggle {
-    margin-left: 8px;
-  }
-}
-
-// Toggle switch for filtering
-.toggle-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.toggle-checkbox {
-  display: none;
-}
-
-.toggle-switch {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  transition: background 0.2s ease;
-  
-  &::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 16px;
-    height: 16px;
-    background: rgba(255, 255, 255, 0.5);
-    border-radius: 50%;
-    transition: all 0.2s ease;
-  }
-}
-
-.toggle-checkbox:checked + .toggle-switch {
-  background: rgba($racing-red, 0.4);
-  
-  &::after {
-    left: 18px;
-    background: $racing-red;
-  }
-}
-
-.toggle-text {
-  font-family: $font-primary;
-  font-size: 11px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.6);
-  letter-spacing: 0.2px;
-}
-
-// Segmented control
-.segmented-control {
-  display: flex;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
-  padding: 3px;
-  gap: 2px;
-
-  &--compact .seg-btn {
-    padding: 6px 12px;
-    min-width: 50px;
-  }
-}
-
-.seg-btn {
-  padding: 6px 14px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: rgba(255, 255, 255, 0.5);
-  font-family: $font-primary;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: all 0.15s ease;
-
-  &:hover {
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.05);
-    border-color: rgba(255, 255, 255, 0.1);
-  }
-
-  &--active {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #fff;
-  }
-
-  // Type-specific active states (aligned with session-chip)
-  &--practice.seg-btn--active {
-    background: rgba($accent-info, 0.12);
-    border: 1px solid rgba($accent-info, 0.4);
-    color: $accent-info;
-  }
-
-  &--qualify.seg-btn--active {
-    background: rgba($accent-warning, 0.12);
-    border: 1px solid rgba($accent-warning, 0.4);
-    color: $accent-warning;
-  }
-
-  &--race.seg-btn--active {
-    background: rgba(255, 100, 100, 0.12);
-    border: 1px solid rgba(255, 100, 100, 0.35);
-    color: rgb(255, 100, 100);
-  }
-}
-
-// Select
-.filter-select {
-  padding: 8px 32px 8px 12px;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.8);
-  font-family: $font-primary;
-  font-size: 12px;
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff80' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-
-  &:focus {
-    outline: none;
-    border-color: rgba($racing-red, 0.5);
-  }
-
-  option {
-    background: #1a1a24;
-    color: #fff;
-  }
-
-  &--car {
-    min-width: 210px;
-  }
-}
-
-// No results
-.no-results {
-  padding: 48px;
-  text-align: center;
-  color: rgba(255, 255, 255, 0.4);
-  font-family: $font-primary;
-}
-
-// === DAY GROUPS ===
-.day-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  opacity: 1;
-  transition: opacity 0.15s ease-out;
-
-  // Fade out state during page change
-  &--fading {
-    opacity: 0;
-  }
-}
-
-.day-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.day-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-}
-
-.day-date {
-  font-family: 'Outfit', $font-primary;
-  font-size: 13px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.5px;
-}
-
-.day-count {
-  font-family: $font-primary;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-// === SESSIONS LIST ===
-.sessions-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.session-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 16px;
-  background: #121218;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover {
-    border-color: rgba(255, 255, 255, 0.25);
-    transform: translateY(-2px);
-    box-shadow: 
-      0 6px 20px rgba(0, 0, 0, 0.3),
-      0 0 20px rgba(255, 255, 255, 0.1),
-      0 0 40px rgba(255, 255, 255, 0.05);
-
-    .row-right {
-      background: rgba(255, 255, 255, 0.02);
-    }
-
-    .session-cta {
-      color: #fff;
-      transform: translateX(3px);
-    }
-  }
-}
-
-// Left side
-.row-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.session-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-family: $font-primary;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-  text-transform: uppercase;
-  min-width: 80px;
-
-  &--practice {
-    background: rgba($accent-info, 0.12);
-    border: 1px solid rgba($accent-info, 0.4);
-    color: $accent-info;
-  }
-
-  &--qualify {
-    background: rgba($accent-warning, 0.12);
-    border: 1px solid rgba($accent-warning, 0.4);
-    color: $accent-warning;
-  }
-
-  &--race {
-    // Rosso più soft
-    background: rgba(255, 100, 100, 0.12);
-    border: 1px solid rgba(255, 100, 100, 0.35);
-    color: rgb(255, 100, 100);
-  }
-}
-
-.session-time {
-  font-family: $font-primary;
-  font-size: 14px;
-  font-weight: 500;
-  color: #fff;
-  min-width: 45px;
-}
-
-.session-track {
-  font-family: $font-primary;
-  font-size: 14px;
-  font-weight: 500;
-  color: #fff;
-  min-width: 100px;
-}
-
-.session-car {
-  font-family: $font-primary;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.45);
-}
-
-// Right side (Grid layout for fixed alignment)
-.row-right {
-  display: grid;
-  grid-template-columns: auto 105px 105px 32px;
-  align-items: center;
-  gap: 12px;
-  padding: 6px 8px 6px 16px;
-  border-radius: 8px;
-  transition: background 0.15s ease;
-}
-
-// Stat chips
-.stat-chips {
-  display: flex;
-  gap: 6px;
-}
-
-.stat-chip {
-  padding: 4px 10px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 4px;
-  font-family: $font-primary;
-  font-size: 10px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
-  letter-spacing: 0.3px;
-}
-
-// Time slot (fixed width container)
-.time-slot {
-  display: flex;
-  justify-content: center;
-}
-
-// Time badges (aligned with session-chip style)
-.time-badge {
-  padding: 6px 12px;
-  border-radius: 6px;
-  font-family: 'JetBrains Mono', 'Consolas', monospace;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.3px;
-  white-space: nowrap;
-  min-width: 95px;
-  text-align: center;
-
-  &--qualy {
-    background: rgba($accent-warning, 0.12);
-    border: 1px solid rgba($accent-warning, 0.4);
-    color: $accent-warning;
-  }
-
-  &--race {
-    background: rgba(255, 100, 100, 0.12);
-    border: 1px solid rgba(255, 100, 100, 0.35);
-    color: rgb(255, 100, 100);
-  }
-
-  &--race-sprint {
-    background: rgba(255, 140, 60, 0.12);
-    border: 1px solid rgba(255, 140, 60, 0.4);
-    color: rgb(255, 140, 60);
-  }
-
-  &--race-endurance {
-    background: rgba(200, 80, 120, 0.12);
-    border: 1px solid rgba(200, 80, 120, 0.4);
-    color: rgb(200, 80, 120);
-  }
-
-  // Empty state (no data placeholder)
-  &--empty {
-    opacity: 0.35;
-  }
-}
-
-.session-cta {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  color: rgba(255, 255, 255, 0.5);
-  transition: all 0.15s ease;
-
-  svg {
-    width: 18px;
-    height: 18px;
-  }
-}
-
-// === RESPONSIVE ===
-@media (max-width: 1200px) {
-  .row-left {
-    gap: 12px;
-  }
-
-  .session-car {
-    display: none;
-  }
-}
-
-@media (max-width: 900px) {
-  .session-row {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 12px;
-  }
-
-  .row-left {
-    flex-wrap: wrap;
-  }
-
-  .row-right {
-    justify-content: space-between;
-    padding: 8px 0 0 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  .session-car {
-    display: block;
-    width: 100%;
-    margin-top: 4px;
-  }
-}
-
-@media (max-width: 640px) {
-  .filters {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .segmented-control {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .seg-btn {
-    flex: 1;
-    padding: 8px 8px;
-    font-size: 11px;
-  }
-
-  .filter-select {
-    width: 100%;
-  }
-
-  .stat-chips {
-    gap: 4px;
-  }
-
-  .stat-chip {
-    padding: 3px 8px;
-    font-size: 9px;
-  }
-
-  .time-badge {
-    padding: 4px 8px;
-    font-size: 11px;
-  }
-}
-
-// === CARD VIEW ===
-.day-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 32px;
-}
-
-.day-card {
-  position: relative;
-  background: linear-gradient(145deg, #151520 0%, #0d0d12 100%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  overflow: hidden;
-  
-  // Subtle premium border glow
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 16px;
-    padding: 1px;
-    background: linear-gradient(135deg, rgba($racing-red, 0.15) 0%, transparent 50%, rgba($racing-orange, 0.1) 100%);
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-  }
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  padding: 18px 24px;
-  background: rgba(255, 255, 255, 0.04);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.card-header-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.card-date {
-  font-family: 'Outfit', $font-primary;
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-  letter-spacing: 0.5px;
-}
-
-.card-count {
-  font-family: $font-primary;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.card-sessions {
-  display: flex;
-  flex-direction: column;
-}
-
-.card-session-row {
-  display: grid;
-  grid-template-columns: 90px 50px 120px 1fr auto 105px 105px 32px;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 24px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:last-child {
-    border-bottom: none;
-  }
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.03);
-    box-shadow: 
-      0 4px 16px rgba(0, 0, 0, 0.2),
-      0 0 15px rgba(255, 255, 255, 0.06);
-
-    .session-cta {
-      color: #fff;
-      transform: translateX(3px);
-    }
-  }
-}
-
-.card-session-time {
-  font-family: $font-primary;
-  font-size: 14px;
-  font-weight: 500;
-  color: #fff;
-}
-
-.card-session-track {
-  font-family: $font-primary;
-  font-size: 14px;
-  font-weight: 500;
-  color: #fff;
-}
-
-.card-session-car {
-  font-family: $font-primary;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.card-stat-chips {
-  display: flex;
-  gap: 6px;
-}
-
-.card-time-slot {
-  display: flex;
-  justify-content: center;
-}
+.sessions-page { max-width: 1120px; padding-top: 20px; padding-bottom: 36px; }
+.session-filters { margin-bottom: var(--racing-space-section); }
+.session-days { scroll-margin-top: 170px; }
+.session-day + .session-day { margin-top: var(--racing-space-section); }
+.session-days[aria-busy="true"] { opacity: .55; pointer-events: none; }
+.session-row { cursor: pointer; }
+.session-row:hover, .session-row:focus-within { background: var(--racing-data-hover); }
+.col-type { width: 9%; } .col-time { width: 9%; } .col-track { width: 16%; } .col-car { width: 23%; }
+.col-laps, .col-stints { width: 9%; } .col-best { width: 12.5%; }
+.session-type { position: relative; }
+.session-type::after { content: ''; position: absolute; right: 0; top: 9px; bottom: 9px; border-right: 1px solid var(--racing-data-line); }
+.session-time, .session-stat { text-align: center; }
+.session-car, .session-stat span { color: var(--racing-data-muted); }
+.session-car { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.session-open { width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.session-best { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.session-best--qualify { color: var(--racing-qualify); position: relative; }
+.session-best--qualify::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; border-left: 1px solid var(--racing-data-line); }
+.session-best--race { color: var(--racing-race); }
+.best-label { color: var(--racing-data-muted); display: inline-block; width: 24px; }
+.session-best .is-empty { color: var(--racing-data-muted); }
+.sessions-status { padding: 40px 0; color: var(--racing-data-muted); }
+.sessions-notice { padding: 12px 0; color: var(--racing-qualify); font-size: var(--racing-data-text-size); }
+.sessions-notice--error { color: #ff8999; }
+@media (max-width: 700px) { .sessions-page { padding: 16px; } }
 </style>
-

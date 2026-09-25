@@ -40,6 +40,8 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/components/pages/SessioniPage.vue',
+        'app/components/ui/PaginationControls.vue',
         'app/services/auth/overviewEntryPreparation.ts',
         'app/utils/overviewCarImage.ts',
         'app/services/projections/overviewLastSession.ts',

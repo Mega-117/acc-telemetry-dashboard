@@ -9,6 +9,8 @@ const props = defineProps<{
   totalItems: number
   itemLabel?: string
   scrollTarget?: HTMLElement | null
+  variant?: 'default' | 'racing'
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -17,7 +19,7 @@ const emit = defineEmits<{
 }>()
 
 async function goToPage(page: number) {
-  if (page >= 1 && page <= props.totalPages && page !== props.currentPage) {
+  if (!props.disabled && page >= 1 && page <= props.totalPages && page !== props.currentPage) {
     emit('pageChange', page)
     
     // Smooth scroll to target if provided
@@ -45,18 +47,28 @@ async function nextPage() {
 </script>
 
 <template>
-  <div v-if="totalPages > 1" class="pagination">
+  <div
+    v-if="totalPages > 1 || variant === 'racing'"
+    class="pagination"
+    :class="{ 'pagination--racing': variant === 'racing' }"
+  >
     <span class="pagination-info">
       {{ totalItems }} {{ itemLabel || 'elementi' }} · Pagina {{ currentPage }} di {{ totalPages }}
     </span>
     <div class="pagination-controls">
       <button 
         class="pagination-btn"
-        :disabled="currentPage === 1"
+        aria-label="Pagina precedente"
+        :disabled="disabled || currentPage === 1"
         @click="prevPage"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M15 18l-6-6 6-6"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M15 18l-6-6 6-6" />
         </svg>
       </button>
       <div class="pagination-pages">
@@ -64,16 +76,27 @@ async function nextPage() {
           v-for="page in totalPages" 
           :key="page"
           :class="['page-btn', { 'page-btn--active': page === currentPage }]"
+          :aria-label="`Pagina ${page}`"
+          :aria-current="page === currentPage ? 'page' : undefined"
+          :disabled="disabled"
           @click="goToPage(page)"
-        >{{ page }}</button>
+        >
+          {{ page }}
+        </button>
       </div>
       <button 
         class="pagination-btn"
-        :disabled="currentPage === totalPages"
+        aria-label="Pagina successiva"
+        :disabled="disabled || currentPage === totalPages"
         @click="nextPage"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M9 18l6-6-6-6"/>
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M9 18l6-6-6-6" />
         </svg>
       </button>
     </div>
@@ -175,6 +198,18 @@ async function nextPage() {
     opacity: 0.3;
     cursor: not-allowed;
   }
+}
+
+.pagination--racing {
+  padding: 0; margin-top: 24px; background: transparent; border: 0; border-radius: 0; gap: 16px;
+  .pagination-info { color: var(--racing-data-muted); font: inherit; }
+  .pagination-controls, .pagination-pages { gap: 0; }
+  .pagination-controls { max-width: 100%; overflow-x: auto; padding: 4px; }
+  .page-btn, .pagination-btn { flex-shrink: 0; min-width: 30px; width: auto; height: 32px; padding: 0 10px; border-radius: 0; background: transparent; border: 1px solid var(--racing-data-line); color: #ededf0; font: inherit; box-shadow: none; }
+  .page-btn--active { background: var(--racing-data-accent); border-color: var(--racing-data-accent); }
+  .page-btn:hover:not(:disabled):not(.page-btn--active) { background: var(--racing-data-hover); }
+  .page-btn:disabled { cursor: default; opacity: .5; }
+  .page-btn:focus-visible, .pagination-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 }
 
 // Responsive
