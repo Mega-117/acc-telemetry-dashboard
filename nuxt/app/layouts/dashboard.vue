@@ -51,10 +51,7 @@ const handleGoToSettings = () => {
 </script>
 
 <template>
-  <div
-    class="dashboard-layout"
-    :class="{ 'racing-overview-shell': route.path === '/panoramica', 'racing-scroll-shell': route.path === '/sessioni' }"
-  >
+  <div class="dashboard-layout">
     <!-- Sticky Header: TopBar + TabsBar -->
     <div class="dashboard-sticky-header">
       <LayoutTopBar
@@ -94,7 +91,8 @@ const handleGoToSettings = () => {
   flex: 1;
   width: 100%; max-width: var(--app-content-max-width); margin-inline: auto; box-sizing: border-box;
 }
-.racing-scroll-shell {
+// Follow the rendered page, including its leave transition, rather than the next route.
+.dashboard-layout:has(:deep(.sessions-page)) {
   --page-bottom-space: 0px;
   height: var(--dashboard-viewport-height, 100dvh);
   min-height: 0;
@@ -107,7 +105,7 @@ const handleGoToSettings = () => {
   }
   .main-content { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 }
-.racing-overview-shell {
+.dashboard-layout:has(:deep(.racing-overview)) {
   // Fill the available window; content can still grow beyond it on small screens.
   min-height: var(--dashboard-viewport-height, 100dvh);
   display: flex;
@@ -120,7 +118,7 @@ const handleGoToSettings = () => {
   :deep(.racing-overview) { flex: 1; }
 }
 @media (max-width: 700px) {
-  .racing-overview-shell { --page-bottom-space: 14px; }
-  .racing-overview-shell :deep(.page-container) { padding: 14px; }
+  .dashboard-layout:has(:deep(.racing-overview)) { --page-bottom-space: 14px; }
+  .dashboard-layout:has(:deep(.racing-overview)) :deep(.page-container) { padding: 14px; }
 }
 </style>

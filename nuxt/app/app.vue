@@ -703,6 +703,8 @@ body.training-overlay-runtime iframe[src*='__nuxt_devtools__'] {
 html:has(.electron-titlebar),
 body:has(.electron-titlebar) {
   overflow: hidden;
+  // Electron scrolls inside the app; root gutters would change on route clipping.
+  scrollbar-gutter: auto;
 }
 
 #app:has(.electron-titlebar) {
@@ -720,12 +722,11 @@ body:has(.electron-titlebar) {
   > .initializing-screen {
     flex: 1 1 auto;
     min-height: 0;
-    // Force scrollbar to NOT take space - calc trick
-    width: calc(100% + 8px);
-    margin-right: -8px;
+    width: 100%;
     overflow-y: scroll;
     overflow-x: hidden;
-    padding-right: 8px;
+    // Keep centering identical when a page owns an inner scroll viewport.
+    scrollbar-gutter: stable;
   }
 
   > .dashboard-wrapper .page-container {
@@ -735,11 +736,14 @@ body:has(.electron-titlebar) {
 
 // Session list owns its viewport. Clip outer shells (unlike hidden, clip
 // cannot be programmatically scrolled by keyboard focus/scrollIntoView).
-html:has(.racing-scroll-shell),
-body:has(.racing-scroll-shell),
-#app:has(.racing-scroll-shell),
-#app:has(.electron-titlebar) > .dashboard-wrapper:has(.racing-scroll-shell) {
+html:has(.sessions-page),
+body:has(.sessions-page),
+#app:has(.sessions-page) {
   overflow: clip;
+}
+#app:has(.electron-titlebar) > .dashboard-wrapper:has(.sessions-page) {
+  // hidden retains the stable gutter; clip would remove it and shift the shell.
+  overflow: hidden;
 }
 
 // === CUSTOM SCROLLBAR STYLING ===

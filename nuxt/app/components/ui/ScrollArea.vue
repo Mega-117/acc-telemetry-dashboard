@@ -27,7 +27,7 @@ onBeforeUnmount(() => clearTimeout(idleTimer))
 </template>
 
 <style scoped>
-.scroll-area { scrollbar-color: transparent transparent; transition: scrollbar-color 180ms ease; }
+.scroll-area { scrollbar-width: thin; scrollbar-gutter: stable; scrollbar-color: transparent transparent; transition: scrollbar-color 180ms ease; }
 .scroll-area.is-scrolling { scrollbar-color: #ffffff45 transparent; }
 .scroll-area::-webkit-scrollbar-thumb { background: transparent; }
 .scroll-area.is-scrolling::-webkit-scrollbar-thumb { background: #ffffff45; }
