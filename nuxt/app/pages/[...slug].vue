@@ -19,7 +19,7 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: #0d0d12;
+  background: transparent;
   color: rgba(255, 255, 255, 0.5);
   font-family: 'Inter', sans-serif;
 }

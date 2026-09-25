@@ -573,6 +573,7 @@ watch(
 </template>
 
 <style lang="scss" scoped>
+@use '@/assets/scss/racing-chrome';
 @use '@/assets/scss/variables' as *;
 
 $color-bg: #0d0d12;
@@ -580,8 +581,9 @@ $color-card: #121218;
 $max-width: 1400px;
 
 .profile-page {
+  @include racing-chrome.chrome;
   min-height: 100vh;
-  background: $color-bg;
+  background: transparent;
   color: #fff;
   font-family: $font-primary;
 }
@@ -590,16 +592,16 @@ $max-width: 1400px;
   position: sticky;
   top: 0;
   z-index: 100;
-  padding: 16px 24px;
-  background: #0d0d12;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding: 14px 28px;
+  background: transparent;
+  border-bottom: 0;
 }
 
 .header-inner {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  max-width: $max-width;
+  max-width: 1800px;
   margin: 0 auto;
 }
 
@@ -607,11 +609,15 @@ $max-width: 1400px;
   display: flex;
   align-items: center;
   gap: 10px;
-  justify-self: center;
+  justify-self: start;
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .header-user {
   justify-self: end;
+  grid-column: 3;
+  grid-row: 1;
 }
 
 .brand-logo {
@@ -621,6 +627,8 @@ $max-width: 1400px;
 }
 
 .back-btn {
+  grid-column: 2;
+  grid-row: 1;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1310,6 +1318,9 @@ $max-width: 1400px;
   .header-brand {
     display: none;
   }
+
+  .back-btn { grid-column: 1; }
+  .header-user { grid-column: 2; }
 
   .profile-hero {
     align-items: flex-start;

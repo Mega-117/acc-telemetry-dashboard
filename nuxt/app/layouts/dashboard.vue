@@ -73,7 +73,9 @@ const handleGoToSettings = () => {
 </template>
 
 <style lang="scss" scoped>
+@use '@/assets/scss/racing-chrome';
 .dashboard-layout {
+  @include racing-chrome.chrome;
   min-height: 100vh;
   background: transparent;
 }
@@ -82,7 +84,7 @@ const handleGoToSettings = () => {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: #0d0d12;
+  background: transparent;
 }
 
 .main-content {
@@ -95,38 +97,12 @@ const handleGoToSettings = () => {
   flex-direction: column;
   --page-bottom-space: 22px;
   position: relative; isolation: isolate; background: transparent;
-  --racing-accent: #ff0024;
-  :deep(.topbar), :deep(.tabsbar) { background: transparent; border-bottom: 0; }
-  :deep(.tab--section-start::before) { background: #b4b4b4; }
-  // Sticky is relative to the app scroll area, already below the native titlebar.
-  .dashboard-sticky-header { background: transparent; flex-shrink: 0; }
+  .dashboard-sticky-header { flex-shrink: 0; }
   .main-content { display: flex; flex-direction: column; }
-  :deep(.dropdown-trigger), :deep(.pwc-bell) {
-    height: 46px; border: 1px solid #ffffff85; border-radius: 0;
-    background: transparent; color: #eee;
-  }
-  :deep(.pwc-bell) { width: 46px; }
-  :deep(.dropdown-trigger) { padding: 0 18px; gap: 16px; align-items: center; }
-  :deep(.user-name) { display: block; font: italic 500 18px/1 'Racer Display', sans-serif; text-transform: uppercase; transform: translateY(1px); }
-  :deep(.arrow-icon) { color: #ddd; width: 18px; height: 18px; flex-shrink: 0; }
-  :deep(.dropdown-trigger:hover), :deep(.pwc-bell:hover), :deep(.pwc-bell.is-open) { border-color: var(--racing-accent); background: #ff002414; }
-  :deep(.dropdown-menu), :deep(.pwc-notices) { border-radius: 0; background: #090909; border-color: #ffffff70; box-shadow: 0 16px 35px #000b; }
-  :deep(.pwc-notices) { top: calc(100% + 8px); }
-  :deep(.dropdown-item) { border-radius: 0; }
-  :deep(.dropdown-item:hover:not(:disabled)) { background: #ff002414; }
-  :deep(.pwc-notices header strong) { font: italic 700 18px 'Racer Display', sans-serif; text-transform: uppercase; }
-  :deep(.dropdown-trigger:focus-visible), :deep(.pwc-bell:focus-visible) { outline: 2px solid #fff; outline-offset: 3px; }
-  :deep(.topbar__inner) { max-width: 1800px; padding: 14px 28px; }
-  :deep(.brand-logo) { width: clamp(200px, 22vw, 300px); }
-  :deep(.tab) { font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-size: 16px; font-weight: 700; letter-spacing: 0; padding: 13px 26px; color: #ccc; transition: color .15s; }
-  :deep(.tab--active) { color: #fff; }
-  :deep(.tab--active::after) { height: 3px; background: var(--racing-accent); clip-path: polygon(3px 0,100% 0,calc(100% - 3px) 100%,0 100%); }
   :deep(.page-container) { width: 100%; max-width: 1800px; padding: 26px 26px 22px; flex: 1; display: flex; flex-direction: column; }
   :deep(.racing-overview) { flex: 1; }
 }
 @media (max-width: 700px) {
-  .racing-overview-shell :deep(.tabsbar__inner) { overflow-x: auto; justify-content: flex-start; padding: 0 10px; gap: 0; }
-  .racing-overview-shell :deep(.tab) { padding: 13px 15px; }
   .racing-overview-shell { --page-bottom-space: 14px; }
   .racing-overview-shell :deep(.page-container) { padding: 14px; }
 }

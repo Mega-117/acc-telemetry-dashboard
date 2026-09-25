@@ -40,9 +40,11 @@ const emit = defineEmits<{
 </template>
 
 <style lang="scss" scoped>
+@use '@/assets/scss/racing-chrome';
 .main-layout {
+  @include racing-chrome.chrome;
   min-height: 100vh;
-  background: #0d0d12;
+  background: transparent;
 }
 
 .main-content {

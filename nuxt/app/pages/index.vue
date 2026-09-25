@@ -25,7 +25,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #0d0d12;
+  background: transparent;
 }
 
 .loading-spinner {

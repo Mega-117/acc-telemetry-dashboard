@@ -249,7 +249,7 @@ function add(personId: string) {
 
   min-height: calc(100vh - 72px);
   padding: 32px clamp(20px, 4vw, 56px) 56px;
-  background: #0a0d13;
+  background: transparent;
   color: $text-primary;
   font-family: $font-primary;
 }

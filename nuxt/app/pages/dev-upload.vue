@@ -405,7 +405,7 @@ function getStatusColor(status: string): string {
 <style scoped>
 .dev-panel {
   min-height: 100vh;
-  background: #0d0d12;
+  background: transparent;
   color: #fff;
   padding: 40px;
   font-family: 'Inter', sans-serif;

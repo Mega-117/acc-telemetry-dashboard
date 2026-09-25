@@ -17,9 +17,16 @@ Pilota di sim racing davanti al monitor del PC, prima o dopo una sessione.
 La prima schermata mostra la composizione completa a 1400×900; pista, sessione, TrackTitan e gestione gara sono raggiungibili e funzionanti.
 
 ## Limiti
-- Prima esplorazione del tema, confinata alla Panoramica e alla sua shell.
+- Il layout dati resta della Panoramica; dal 25 settembre 2026 header, logo,
+  navbar e sfondo nero/alone rosso/stelle diventano il default condiviso delle
+  schermate app, su richiesta utente. Gli HUD in pista restano trasparenti.
 - Nessuna riscrittura di parser, regole best, sincronizzazione o autorizzazioni.
 - Nessuna integrazione o pubblicazione prima della valutazione utente.
 
 ## Token
 Font display locale Chakra Petch Bold Italic (`Racer Display`), testo Segoe UI/Inter esistente. Fondo #020202, testo #f5f5f5, bordi #b4b4b4, rosso #ff0024. Spazi 12/16/18/24px; pannelli rettilinei e pulsanti con taglio 10px. Colori attività #0076ff, #e7ff00, #ff0024.
+
+## Shell condivisa
+`assets/scss/_racing-chrome.scss` e la fonte unica degli stili header/nav/menu;
+i layout la includono senza dipendere dalla route attiva. `UiRacingBackdrop`
+resta montato una sola volta in app.vue, fuori dalle transizioni di pagina.

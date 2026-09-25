@@ -106,15 +106,17 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
 </template>
 
 <style lang="scss" scoped>
+@use '@/assets/scss/racing-chrome';
 @use '@/assets/scss/variables' as *;
 
 .coach-layout {
+  @include racing-chrome.chrome;
   min-height: 100vh;
   background: transparent;
 }
 
 .coach-header {
-  background: rgba($racing-orange, 0.08);
+  background: transparent;
   border-bottom: 1px solid rgba($racing-orange, 0.2);
 }
 
@@ -171,7 +173,7 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
 }
 
 .coach-header--admin {
-  background: rgba(#8b5cf6, 0.08);
+  background: transparent;
   border-bottom-color: rgba(#8b5cf6, 0.2);
 }
 
