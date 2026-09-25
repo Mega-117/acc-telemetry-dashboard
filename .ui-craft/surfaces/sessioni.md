@@ -16,9 +16,10 @@ padding. Su schermi stretti la tabella scorre orizzontalmente in una
 regione accessibile da tastiera; i filtri vanno a capo.
 
 ## Dati e stati
-Scorrimento: header fuori dal viewport scorrevole della lista, sfumatura di
-18px sul bordo navbar; contenitori esterni clip per impedire scroll involontari.
-Cambio pagina scorre solo il main marcato data-page-scroll. Paginazione con
+Scorrimento: header e filtri fuori dal viewport scorrevole della lista,
+maschera sfumata di 18px sotto i filtri; contenitori esterni clip per impedire
+scroll involontari. Cambio pagina scorre solo .sessions-scroll marcato
+data-page-scroll, che contiene lista, stati e paginazione. Paginazione con
 massimo sette elementi: estremi, vicine alla corrente ed ellissi disabilitate.
 Spazio fra giorni 36px. Hover/focus riga bianco gradiente #ffffff16 -> #ffffff09.
 

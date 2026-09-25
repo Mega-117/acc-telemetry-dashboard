@@ -69,7 +69,7 @@ const handleGoToSettings = () => {
     </div>
 
     <!-- Page Content with transitions -->
-    <main class="main-content" :data-page-scroll="route.path === '/sessioni' ? '' : undefined">
+    <main class="main-content">
       <slot></slot>
     </main>
   </div>
@@ -94,6 +94,7 @@ const handleGoToSettings = () => {
   flex: 1;
 }
 .racing-scroll-shell {
+  --page-bottom-space: 0px;
   height: var(--dashboard-viewport-height, 100dvh);
   min-height: 0;
   display: flex;
@@ -102,9 +103,8 @@ const handleGoToSettings = () => {
   .dashboard-sticky-header {
     position: relative;
     flex: 0 0 auto;
-    &::after { content: ''; position: absolute; inset: 100% 0 auto; height: 18px; background: linear-gradient(#02020299, transparent); pointer-events: none; }
   }
-  .main-content { min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+  .main-content { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 }
 .racing-overview-shell {
   // Fill the available window; content can still grow beyond it on small screens.

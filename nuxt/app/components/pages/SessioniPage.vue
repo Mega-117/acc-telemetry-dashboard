@@ -451,144 +451,157 @@ function goToSession(id: string) {
       </div>
     </section>
 
-    <p
-      v-if="pagerError"
-      class="sessions-notice sessions-notice--error"
-      role="alert"
-    >
-      Impossibile caricare le sessioni.
-      <button
-        type="button"
-        class="racing-text-action"
-        :disabled="isLoading"
-        @click="reloadFirstPage(true)"
-      >
-        Riprova
-      </button>
-    </p>
-    <p
-      v-if="isLoading && !paginatedSessionsByDay.length"
-      class="sessions-status"
-      role="status"
-    >
-      Caricamento sessioni…
-    </p>
-    <p
-      v-else-if="!pagerError && !paginatedSessionsByDay.length"
-      class="sessions-status"
-      role="status"
-    >
-      Nessuna sessione trovata con i filtri selezionati.
-    </p>
-
     <div
-      ref="sessionsRef"
-      class="session-days"
-      :aria-busy="isLoading || isChangingPage"
+      class="sessions-scroll"
+      data-page-scroll
+      role="region"
+      aria-label="Elenco sessioni"
+      tabindex="0"
     >
+      <p
+        v-if="pagerError"
+        class="sessions-notice sessions-notice--error"
+        role="alert"
+      >
+        Impossibile caricare le sessioni.
+        <button
+          type="button"
+          class="racing-text-action"
+          :disabled="isLoading"
+          @click="reloadFirstPage(true)"
+        >
+          Riprova
+        </button>
+      </p>
+      <p
+        v-if="isLoading && !paginatedSessionsByDay.length"
+        class="sessions-status"
+        role="status"
+      >
+        Caricamento sessioni…
+      </p>
+      <p
+        v-else-if="!pagerError && !paginatedSessionsByDay.length"
+        class="sessions-status"
+        role="status"
+      >
+        Nessuna sessione trovata con i filtri selezionati.
+      </p>
+
       <div
-        v-for="group in paginatedSessionsByDay"
-        :key="group.date"
-        class="session-day"
+        ref="sessionsRef"
+        class="session-days"
+        :aria-busy="isLoading || isChangingPage"
       >
         <div
-          class="racing-table-scroll"
-          role="region"
-          :aria-label="`Sessioni del ${formatDateHeader(group.date)}`"
-          tabindex="0"
+          v-for="group in paginatedSessionsByDay"
+          :key="group.date"
+          class="session-day"
         >
-          <table class="racing-day-table">
-            <caption>{{ formatDateHeader(group.date) }}</caption>
-            <colgroup>
-              <col class="col-type" /><col class="col-time" /><col class="col-track" /><col class="col-car" />
-              <col class="col-laps" /><col class="col-stints" /><col class="col-best" /><col class="col-best" />
-            </colgroup>
-            <thead class="racing-sr-only">
-              <tr>
-                <th scope="col">
-                  Tipo
-                </th><th scope="col">
-                  Ora
-                </th><th scope="col">
-                  Pista
-                </th><th scope="col">
-                  Auto
-                </th>
-                <th scope="col">
-                  Giri
-                </th><th scope="col">
-                  Stint
-                </th><th scope="col">
-                  Best Qualify
-                </th><th scope="col">
-                  Best Race
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="session in group.sessions"
-                :key="session.id"
-                class="session-row"
-                @click="goToSession(session.id)"
-              >
-                <td class="session-type">
-                  <span :class="['racing-session-badge', `racing-session-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
-                </td>
-                <td class="session-time">
-                  {{ session.time }}
-                </td>
-                <td class="session-track">
-                  <button
-                    type="button"
-                    class="session-open"
-                    :aria-label="`Apri sessione ${getTypeLabel(session.type)}, ${session.track}, ${formatDateHeader(group.date)}, ${session.time}`"
-                    @click.stop="goToSession(session.id)"
-                  >
-                    {{ session.track }}
-                  </button>
-                </td>
-                <td
-                  class="session-car"
-                  :title="session.car"
+          <div
+            class="racing-table-scroll"
+            role="region"
+            :aria-label="`Sessioni del ${formatDateHeader(group.date)}`"
+            tabindex="0"
+          >
+            <table class="racing-day-table">
+              <caption>{{ formatDateHeader(group.date) }}</caption>
+              <colgroup>
+                <col class="col-type" /><col class="col-time" /><col class="col-track" /><col class="col-car" />
+                <col class="col-laps" /><col class="col-stints" /><col class="col-best" /><col class="col-best" />
+              </colgroup>
+              <thead class="racing-sr-only">
+                <tr>
+                  <th scope="col">
+                    Tipo
+                  </th><th scope="col">
+                    Ora
+                  </th><th scope="col">
+                    Pista
+                  </th><th scope="col">
+                    Auto
+                  </th>
+                  <th scope="col">
+                    Giri
+                  </th><th scope="col">
+                    Stint
+                  </th><th scope="col">
+                    Best Qualify
+                  </th><th scope="col">
+                    Best Race
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="session in group.sessions"
+                  :key="session.id"
+                  class="session-row"
+                  @click="goToSession(session.id)"
                 >
-                  {{ session.car }}
-                </td>
-                <td class="session-stat">
-                  {{ session.laps }} <span>{{ session.laps === 1 ? 'giro' : 'giri' }}</span>
-                </td>
-                <td class="session-stat">
-                  {{ session.stints }} <span>stint</span>
-                </td>
-                <td class="session-best session-best--qualify">
-                  <span class="best-label">Q</span><span :class="{ 'is-empty': !session.bestQualy }">{{ session.bestQualy || '–' }}</span>
-                </td>
-                <td class="session-best session-best--race">
-                  <span class="best-label">R</span><span :class="{ 'is-empty': !session.bestRace }">{{ session.bestRace || '–' }}</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+                  <td class="session-type">
+                    <span :class="['racing-session-badge', `racing-session-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
+                  </td>
+                  <td class="session-time">
+                    {{ session.time }}
+                  </td>
+                  <td class="session-track">
+                    <button
+                      type="button"
+                      class="session-open"
+                      :aria-label="`Apri sessione ${getTypeLabel(session.type)}, ${session.track}, ${formatDateHeader(group.date)}, ${session.time}`"
+                      @click.stop="goToSession(session.id)"
+                    >
+                      {{ session.track }}
+                    </button>
+                  </td>
+                  <td
+                    class="session-car"
+                    :title="session.car"
+                  >
+                    {{ session.car }}
+                  </td>
+                  <td class="session-stat">
+                    {{ session.laps }} <span>{{ session.laps === 1 ? 'giro' : 'giri' }}</span>
+                  </td>
+                  <td class="session-stat">
+                    {{ session.stints }} <span>stint</span>
+                  </td>
+                  <td class="session-best session-best--qualify">
+                    <span class="best-label">Q</span><span :class="{ 'is-empty': !session.bestQualy }">{{ session.bestQualy || '–' }}</span>
+                  </td>
+                  <td class="session-best session-best--race">
+                    <span class="best-label">R</span><span :class="{ 'is-empty': !session.bestRace }">{{ session.bestRace || '–' }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
 
-    <UiPaginationControls
-      v-model:current-page="currentPage"
-      variant="racing"
-      :disabled="isLoading || isChangingPage"
-      :total-pages="totalPages"
-      :total-items="totalFilteredSessions"
-      :scroll-target="sessionsRef"
-      item-label="sessioni"
-      @page-change="onPageChange"
-    />
+      <UiPaginationControls
+        v-model:current-page="currentPage"
+        variant="racing"
+        :disabled="isLoading || isChangingPage"
+        :total-pages="totalPages"
+        :total-items="totalFilteredSessions"
+        :scroll-target="sessionsRef"
+        item-label="sessioni"
+        @page-change="onPageChange"
+      />
+    </div>
   </LayoutPageContainer>
 </template>
 
 <style lang="scss" scoped>
-.sessions-page { max-width: 1120px; padding-top: 40px; padding-bottom: 36px; }
-.session-filters { margin-bottom: 42px; }
+.sessions-page { width: 100%; max-width: 1120px; padding-top: 40px; padding-bottom: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.session-filters { margin-bottom: 24px; flex: 0 0 auto; }
+.sessions-scroll {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  overscroll-behavior-y: contain; scrollbar-gutter: stable;
+  padding: 18px 0 36px; mask-image: linear-gradient(to bottom, transparent, #000 18px);
+}
 .session-days { scroll-margin-top: 24px; }
 .session-day + .session-day { margin-top: 36px; }
 .session-days[aria-busy="true"] { opacity: .55; pointer-events: none; }
@@ -611,5 +624,5 @@ function goToSession(id: string) {
 .sessions-status { padding: 40px 0; color: var(--racing-data-muted); }
 .sessions-notice { padding: 12px 0; color: var(--racing-qualify); font-size: var(--racing-data-text-size); }
 .sessions-notice--error { color: #ff8999; }
-@media (max-width: 700px) { .sessions-page { padding: 32px 16px; } }
+@media (max-width: 700px) { .sessions-page { padding: 32px 16px 0; } }
 </style>

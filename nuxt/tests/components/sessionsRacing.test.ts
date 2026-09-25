@@ -30,6 +30,7 @@ beforeEach(() => {
     getSessionsPage: vi.fn().mockImplementation(async (_uid, _filters, page) => { fake.gateway.pagerState.value.currentPage = page }),
   }
   HTMLElement.prototype.scrollIntoView = vi.fn()
+  HTMLElement.prototype.scrollTo = vi.fn()
 })
 afterEach(() => { wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers() })
 
