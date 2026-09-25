@@ -6,6 +6,7 @@ export interface LiveLapState {
   lapsCompleted: number | null
   lapsValid: number | null
   lapValid: boolean | null
+  lastLapValid: boolean | null
   lastLapTimeMs: number | null
   sectorHud: SectorHudState | null
   // Contesto sessione dal logger: servono al Training Tracker (PIP-95).
@@ -48,6 +49,7 @@ const EMPTY_LAP_STATE: LiveLapState = {
   lapsCompleted: null,
   lapsValid: null,
   lapValid: null,
+  lastLapValid: null,
   lastLapTimeMs: null,
   sectorHud: null,
   track: null,
@@ -143,6 +145,7 @@ export function useLiveStatePoller(getApi: () => any | null, background = false)
         lapsCompleted: typeof state.laps_completed === 'number' ? state.laps_completed : null,
         lapsValid: typeof state.laps_valid === 'number' ? state.laps_valid : null,
         lapValid: typeof state.lap_valid === 'boolean' ? state.lap_valid : null,
+        lastLapValid: typeof state.last_lap_valid === 'boolean' ? state.last_lap_valid : null,
         lastLapTimeMs: typeof state.last_lap_time_ms === 'number' ? state.last_lap_time_ms : null,
         sectorHud: normalizeSectorHud(state.sector_hud),
         track: typeof state.track === 'string' && state.track ? state.track : null,
