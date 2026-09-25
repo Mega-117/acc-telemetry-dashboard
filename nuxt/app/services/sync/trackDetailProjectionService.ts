@@ -14,12 +14,19 @@ import { normalizeTrackId } from '~/services/projections/trackMetadata'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import {
   TRACK_DETAIL_PROJECTION_SCHEMA_VERSION,
+  type SessionContribution,
   type TrackActivityProjection,
   type TrackDetailProjectionCategoryDocument,
   type TrackDetailProjectionDocument,
   type TrackHistoricalPointProjection,
   type TrackRecentSessionProjection
 } from '~/types/trackProjections'
+// PIP-444: un documento per pista (`trackProjections/{trackId}`), sezione `detail`.
+import {
+  buildTrackProjectionSectionWrite,
+  loadTrackProjectionSections,
+  trackProjectionPath
+} from './trackProjectionDocument'
 
 export const TRACK_DETAIL_PROJECTION_MAX_ITEMS = 200
 
@@ -45,6 +52,8 @@ function buildRecentSession(session: SessionDocument): TrackRecentSessionProject
     type: getSessionTypeLabel(session.meta.session_type),
     car: formatCarName(session.meta.car),
     laps: summary.laps || 0,
+    lapsValid: Number(summary.lapsValid || 0),
+    totalTimeMs: Number(summary.totalTime || 0),
     stints: summary.stintCount || 0,
     bestQualy: summary.best_qualy_ms ? formatLapTime(summary.best_qualy_ms) : undefined,
     bestRace: sessionRaceTime ? formatLapTime(sessionRaceTime) : undefined
@@ -146,6 +155,87 @@ function mergeCreatedDelta(
   }
 }
 
+function withActivity(totalLaps: number, validLaps: number, totalTimeMs: number, sessionCount: number): TrackActivityProjection {
+  return {
+    totalLaps,
+    validLaps,
+    validPercent: totalLaps > 0 ? Math.round((validLaps / totalLaps) * 100) : 0,
+    totalTimeMs,
+    totalTimeFormatted: formatDriveTime(totalTimeMs),
+    sessionCount
+  }
+}
+
+/**
+ * PIP-436: una sessione gia' caricata (giro successivo dello stesso file) sostituisce la
+ * propria voce per ID e l'attivita' cambia solo della differenza. `null` = contributo
+ * precedente sconosciuto: meglio non scrivere che scrivere un totale sbagliato.
+ */
+function mergeUpdatedDelta(
+  document: TrackDetailProjectionDocument,
+  delta: UserProjectionDelta,
+  previous: SessionContribution | undefined
+): TrackDetailProjectionDocument | null {
+  const session = toSessionDocument(delta)
+  const category = getCarCategory(session.meta.car)
+  const existingCategory = document.categories[category] || buildEmptyCategoryProjection()
+  const index = existingCategory.recentSessions.findIndex((item) => item.id === session.sessionId)
+  // La lista e' limitata: l'assenza non prova che la sessione non sia gia' contata.
+  if (index < 0) return previous?.laps === 0 ? mergeCreatedDelta(document, delta) : null
+
+  const old = existingCategory.recentSessions[index]!
+  const oldContribution = (
+    old.lapsValid !== undefined && old.totalTimeMs !== undefined
+      ? { laps: old.laps, lapsValid: old.lapsValid, totalTime: old.totalTimeMs }
+      : previous
+  )
+  if (!oldContribution) return null
+
+  const laps = Number(session.summary?.laps || 0)
+  const removed = laps <= 0
+  const recentSessions = existingCategory.recentSessions.filter((item) => item.id !== session.sessionId)
+  const historicalTimes = existingCategory.historicalTimes.filter((item) => item.sessionId !== session.sessionId)
+  if (!removed) {
+    recentSessions.splice(index, 0, buildRecentSession(session))
+    historicalTimes.push(buildHistoricalPoint(session))
+    historicalTimes.sort((a, b) => (a.dateStart || '').localeCompare(b.dateStart || ''))
+  }
+  const totalLaps = Math.max(0, existingCategory.activity.totalLaps - oldContribution.laps + (removed ? 0 : laps))
+  const validLaps = Math.max(0, existingCategory.activity.validLaps - oldContribution.lapsValid
+    + (removed ? 0 : Number(session.summary?.lapsValid || 0)))
+  const totalTimeMs = Math.max(0, existingCategory.activity.totalTimeMs - oldContribution.totalTime
+    + (removed ? 0 : Number(session.summary?.totalTime || 0)))
+  const sessionCount = removed ? Math.max(0, existingCategory.sessionCount - 1) : existingCategory.sessionCount
+
+  return {
+    ...document,
+    categories: {
+      ...document.categories,
+      [category]: {
+        ...existingCategory,
+        recentSessions,
+        historicalTimes,
+        sessionCount,
+        activity: withActivity(totalLaps, validLaps, totalTimeMs, sessionCount)
+      }
+    }
+  }
+}
+
+/** Confronto indipendente dall'ordine dei campi (Firestore non lo conserva); ignora updatedAt. */
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical)
+  if (!value || typeof value !== 'object') return value
+  return Object.keys(value as Record<string, unknown>)
+    .filter((key) => key !== 'updatedAt' && (value as Record<string, unknown>)[key] !== undefined)
+    .sort()
+    .map((key) => [key, canonical((value as Record<string, unknown>)[key])])
+}
+
+function sameProjection(a: unknown, b: unknown) {
+  return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b))
+}
+
 export async function applyTrackDetailProjectionDeltas(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Firestore SDK boundary injected by the sync orchestrator
   db: any
@@ -157,12 +247,11 @@ export async function applyTrackDetailProjectionDeltas(params: {
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Firestore document reference factory boundary
   docFn?: (db: any, path: string) => any
+  /** Contributo gia' conteggiato delle sessioni aggiornate, letto da users.sessionIndex. */
+  previousContributions?: Map<string, SessionContribution>
 }): Promise<{ wrote: boolean; requiresFullRebuild: boolean }> {
-  const { db, uid, deltas, getDocFn, setDocFn, docFn = doc } = params
+  const { db, uid, deltas, getDocFn, setDocFn, docFn = doc, previousContributions = new Map() } = params
   if (deltas.length === 0) return { wrote: false, requiresFullRebuild: false }
-  if (deltas.some((delta) => delta.status !== 'created')) {
-    return { wrote: false, requiresFullRebuild: true }
-  }
 
   const byTrack = new Map<string, UserProjectionDelta[]>()
   for (const delta of deltas) {
@@ -172,24 +261,35 @@ export async function applyTrackDetailProjectionDeltas(params: {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- opaque Firestore DocumentReference
-  const writes: Array<{ ref: any; document: TrackDetailProjectionDocument }> = []
+  const writes: Array<{ ref: any; trackId: string; document: TrackDetailProjectionDocument }> = []
   for (const [trackId, trackDeltas] of byTrack) {
-    const ref = docFn(db, `users/${uid}/trackDetailProjections/${trackId}`)
-    const snapshot = await getDocFn(ref)
-    if (!snapshot.exists()) return { wrote: false, requiresFullRebuild: true }
-    const existing = snapshot.data() as TrackDetailProjectionDocument
+    const ref = docFn(db, trackProjectionPath(uid, trackId))
+    const sections = await loadTrackProjectionSections({ db, uid, trackId, sections: ['detail'], getDocFn, docFn })
+    if (!sections.detail) return { wrote: false, requiresFullRebuild: true }
+    const existing = sections.detail as TrackDetailProjectionDocument
     if (existing.schemaVersion !== TRACK_DETAIL_PROJECTION_SCHEMA_VERSION) {
       return { wrote: false, requiresFullRebuild: true }
     }
-    const document = trackDeltas.reduce(mergeCreatedDelta, existing)
-    writes.push({ ref, document })
+    let document: TrackDetailProjectionDocument | null = existing
+    for (const delta of trackDeltas) {
+      document = delta.status === 'updated'
+        ? mergeUpdatedDelta(document, delta, previousContributions.get(delta.sessionId))
+        : mergeCreatedDelta(document, delta)
+      if (!document) return { wrote: false, requiresFullRebuild: true }
+    }
+    // Voce identica (stesso file ricaricato senza cambiamenti utili): nessuna scrittura.
+    if (sameProjection(sanitizeForFirestore(document), existing)) continue
+    writes.push({ ref, trackId, document })
   }
 
   for (const write of writes) {
-    await setDocFn(write.ref, {
-      ...sanitizeForFirestore(write.document),
+    const sectionWrite = buildTrackProjectionSectionWrite({
+      trackId: write.trackId,
+      section: 'detail',
+      data: { ...sanitizeForFirestore(write.document), updatedAt: serverTimestamp() },
       updatedAt: serverTimestamp()
-    }, { merge: true })
+    })
+    await setDocFn(write.ref, sectionWrite.data, sectionWrite.options)
   }
   return { wrote: writes.length > 0, requiresFullRebuild: false }
 }
@@ -267,13 +367,13 @@ export async function writeTrackDetailProjectionDocuments(params: {
 
   for (const trackId of trackIds) {
     const projection = sanitizeForFirestore(buildTrackDetailProjectionDocument(trackId, sessions))
-    await setDocFn(
-      doc(db, `users/${uid}/trackDetailProjections/${trackId}`),
-      {
-        ...projection,
-        updatedAt: serverTimestamp()
-      },
-      { merge: true }
-    )
+    // PIP-444: sezione `detail` del documento unito per pista, sostituita per intero.
+    const write = buildTrackProjectionSectionWrite({
+      trackId,
+      section: 'detail',
+      data: { ...projection, updatedAt: serverTimestamp() },
+      updatedAt: serverTimestamp()
+    })
+    await setDocFn(doc(db, trackProjectionPath(uid, trackId)), write.data, write.options)
   }
 }

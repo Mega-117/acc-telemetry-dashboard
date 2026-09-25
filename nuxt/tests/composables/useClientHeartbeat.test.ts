@@ -17,7 +17,7 @@ vi.mock('~/services/monitoring/clientRuntimeReportingService', () => ({
   writeClientRuntimeReport: mocks.writeRuntimeReport
 }))
 
-import { useClientHeartbeat } from '~/composables/useClientHeartbeat'
+import { resetForcedHeartbeatsForTest, useClientHeartbeat } from '~/composables/useClientHeartbeat'
 
 async function settle() {
   await nextTick()
@@ -29,6 +29,7 @@ async function settle() {
 describe('useClientHeartbeat', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    resetForcedHeartbeatsForTest()
     mocks.auth = {
       currentUser: ref<{ uid: string } | null>({ uid: 'pilot-a' }),
       canEnterApp: ref(true)
@@ -36,7 +37,7 @@ describe('useClientHeartbeat', () => {
     mocks.writeRuntimeReport.mockResolvedValue({ writes: 3, reads: 0 })
   })
 
-  it('preserva il force di un heartbeat accodato durante authReady', async () => {
+  it('PIP-439: un solo invio forzato per caricamento, anche se authReady si riaccende', async () => {
     let resolveFirstIdentity!: (value: any) => void
     const firstIdentity = new Promise<any>((resolve) => { resolveFirstIdentity = resolve })
     const identity = {
@@ -66,7 +67,7 @@ describe('useClientHeartbeat', () => {
     const owner = useClientHeartbeat({
       enabled,
       runtimeState: ref({ phase: 'ready', capabilities: {}, events: [], migrationProgress: null }),
-      isLeaseCurrent: (uid) => uid === 'pilot-a'
+      isLeaseCurrent: (uid) => uid === mocks.auth.currentUser.value?.uid
     })
 
     enabled.value = true
@@ -76,8 +77,21 @@ describe('useClientHeartbeat', () => {
 
     resolveFirstIdentity(identity)
     await settle()
+    await vi.waitFor(() => expect(getRuntimeIdentity).toHaveBeenCalledTimes(2))
+    await settle()
+    // Il secondo forzato (accodato) segue la regola dei 15 minuti: localStorage dice "appena inviato".
+    expect(mocks.writeRuntimeReport).toHaveBeenCalledTimes(1)
+
+    enabled.value = false
+    await nextTick()
+    enabled.value = true
+    await settle()
+    expect(mocks.writeRuntimeReport).toHaveBeenCalledTimes(1)
+
+    // Cambio account nello stesso caricamento: nuovo owner, nuovo invio forzato.
+    mocks.auth.currentUser.value = { uid: 'pilot-b' }
+    await settle()
     await vi.waitFor(() => expect(mocks.writeRuntimeReport).toHaveBeenCalledTimes(2))
-    expect(getRuntimeIdentity).toHaveBeenCalledTimes(2)
 
     vi.unstubAllGlobals()
   })

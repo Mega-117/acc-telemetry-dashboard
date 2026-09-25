@@ -27,6 +27,19 @@ function setup() {
 }
 
 describe('coherent finish-line audio', () => {
+  it('waits for identified completed validity instead of defaulting to valid', () => {
+    const { runtime, laps } = setup()
+    runtime.update(frame(0))
+    for (const info of [null, { lapsCompleted: 0, lastLapValid: true }, { lapsCompleted: 1, lastLapValid: null }]) {
+      runtime.update(frame(1, 'server-a', { info }))
+      expect(laps).toEqual([])
+    }
+    const completed = frame(1, 'server-a', { lapValid: true, info: { lapsCompleted: 1, lastLapTimeMs: 100875, lastLapValid: false } })
+    runtime.update(completed)
+    runtime.update(completed)
+    expect(laps).toMatchObject([{ time: 100875, valid: false }])
+    expect(laps).toHaveLength(1)
+  })
   it('announces every lap after changing server, even with identical track and session type', () => {
     const { runtime, laps, events } = setup()
     for (const session of ['server-a', 'server-b']) {

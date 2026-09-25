@@ -4,17 +4,19 @@ import { ref } from 'vue'
 // ─── Firebase / config mocks ────────────────────────────────────────────────
 vi.mock('~/config/firebase', () => ({ db: {} }))
 vi.mock('~/composables/useFirebaseTracker', () => ({
-  trackedGetDoc: vi.fn(),
-  trackedGetDocs: vi.fn(),
+  // PIP-441: il repository legge l'indice piste; qui manca, quindi nessun documento.
+  trackedGetDoc: vi.fn(async () => ({ exists: () => false, data: () => null })),
+  trackedGetDocs: vi.fn(async () => ({ docs: [] })),
   trackedSetDoc: vi.fn(),
   trackedDeleteDoc: vi.fn(),
-  trackedWriteBatch: vi.fn(() => ({ update: vi.fn(), commit: vi.fn() })),
+  trackedWriteBatch: vi.fn(() => ({ update: vi.fn(), delete: vi.fn(), commit: vi.fn() })),
 }))
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(() => ({})),
   query: vi.fn((...args: any[]) => args[0]),
   where: vi.fn(() => ({})),
   doc: vi.fn(() => ({})),
+  deleteField: vi.fn(() => ({})),
 }))
 vi.mock('~/services/sync/trackBestsProjectionService', () => ({
   TRACK_BESTS_SCHEMA_VERSION: 1,

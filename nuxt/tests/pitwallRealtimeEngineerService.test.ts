@@ -28,6 +28,19 @@ function setup() {
 const grant = (driverUid = 'driver', engineerUid = 'me') => ({ schemaVersion: 1, driverUid, engineerUid, status: 'granted', scope: 'always', createdBy: driverUid, createdAt: '2026-09-06', updatedAt: '2026-09-06' })
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 describe('RTDB engineer relationships and event-only discovery', () => {
+  it('keeps only incoming requests in the background, without profile reads or outgoing listeners', async () => {
+    const h = setup(); const changed = vi.fn()
+    const stop = h.service.watchIncomingRequests(changed, undefined, true)
+    h.emit('grants/me', { friend: grant('me', 'friend'), pending: { ...grant('me', 'pending'), status: 'pending' } })
+    await vi.waitFor(() => expect(changed).toHaveBeenCalled())
+    expect(changed.mock.lastCall![0]).toEqual([expect.objectContaining({ engineerUid: 'pending', nickname: null })])
+    expect(h.io.watch.mock.calls.map(call => call[0])).toEqual(['grants/me'])
+    expect(profile.read).not.toHaveBeenCalled()
+    expect(h.io.read).not.toHaveBeenCalled()
+    expect(h.io.write).not.toHaveBeenCalled()
+    stop(); h.service.dispose()
+    expect([...h.callbacks.values()].every(set => set.size === 0)).toBe(true)
+  })
   it.each(['watchOutgoingLinks', 'watchIncomingRequests'] as const)('does not report empty data before the first RTDB snapshot: %s', async (method) => {
     const h = setup(); const changed = vi.fn()
     const stop = h.service[method](changed)

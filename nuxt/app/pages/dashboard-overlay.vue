@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { stableComputed } from '~/services/overlay/stableTelemetry'
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, onMounted, onUnmounted } from 'vue'
 import DashboardHud from '~/components/overlay/DashboardHud.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
@@ -16,7 +18,7 @@ import {
 definePageMeta({ layout: 'hud-overlay' })
 
 const route = useRoute()
-const getApi = () => typeof window === 'undefined' ? null : (window as any).electronAPI || null
+const getApi = useOverlayRegionApi()
 const overlay = useHudOverlay('dashboard', getApi)
 const telemetry = useOverlayTelemetrySource(getApi, FOCUSED_CAR_FEED_INTERVAL_MS)
 const options = computed(() => ({
@@ -30,7 +32,7 @@ const options = computed(() => ({
     overlay.settings.value?.fuelCriticalLapsThreshold,
   ),
 }))
-const model = computed(() => buildDashboardPresentation(
+const model = stableComputed(() => buildDashboardPresentation(
   telemetry.fastState.value,
   options.value,
   telemetry.focusedCar.value,

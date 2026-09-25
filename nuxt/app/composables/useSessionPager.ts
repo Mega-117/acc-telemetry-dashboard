@@ -12,11 +12,15 @@ import {
     type QueryDocumentSnapshot
 } from 'firebase/firestore'
 import { trackedGetCountFromServer, trackedGetDoc, trackedGetDocs } from './useFirebaseTracker'
+import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
+import { ownerDataCacheTtlFor } from '~/services/cache/cachePolicy'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { db } from '~/config/firebase'
 import { formatCarName, formatTrackName, getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
 import type { SessionDocument } from '~/types/telemetry'
 import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
+// PIP-442: `users/{uid}` e' letto una volta per avvio e condiviso con gli altri chiamanti.
+import { loadOwnerDocument } from '~/repositories/ownerDocumentRepository'
 import {
     buildLogicalSessionKey,
     dedupeCloudSessions,
@@ -31,7 +35,6 @@ import {
 const CALLER = 'SessionPager'
 const DEFAULT_PAGE_SIZE = 25
 const CLOUD_IDENTITY_CACHE_TTL_MS = 3000
-const SESSION_PAGE_CACHE_TTL_MS = 60_000
 
 type SessionSyncState = 'synced' | 'pending_sync' | 'local_only' | 'sync_failed'
 
@@ -269,10 +272,11 @@ function writePageCache(page: number, sessions: SessionDocument[]) {
     }
 }
 
-function readFreshPageCache(page: number): PageCacheEntry | null {
+function readFreshPageCache(page: number, targetUserId: string): PageCacheEntry | null {
     const cached = globalPageCache.value[page]
     if (!cached) return null
-    if (Date.now() - cached.cachedAt > SESSION_PAGE_CACHE_TTL_MS) return null
+    // PIP-442: pagine dell'owner corrente senza scadenza; di un altro pilota (coach) 15 minuti.
+    if (!checkFirebaseCacheFreshness('sessionPager.page', cached.cachedAt, ownerDataCacheTtlFor(targetUserId))) return null
     return cached
 }
 
@@ -352,10 +356,9 @@ function sessionFromIndexEntry(entry: any): SessionDocument {
 }
 
 async function loadCompleteSessionIndex(targetUserId: string): Promise<SessionDocument[] | null> {
-    const userRef = doc(db, `users/${targetUserId}`)
-    const snap = await getDocTracked(userRef)
-    if (!snap.exists()) return null
-    const data = snap.data() || {}
+    const snap = await loadOwnerDocument(targetUserId, { caller: CALLER })
+    if (!snap.exists) return null
+    const data = snap.data || {}
     const sessionIndex = data.sessionIndex || {}
     const list = Array.isArray(sessionIndex.sessionsList) ? sessionIndex.sessionsList : []
     const totalSessions = Number(sessionIndex.totalSessions ?? list.length)
@@ -414,10 +417,9 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
             }
         }
 
-        const userRef = doc(db, `users/${targetUserId}`)
-        const snap = await getDocTracked(userRef)
-        if (!snap.exists()) return null
-        const data = snap.data() || {}
+        const snap = await loadOwnerDocument(targetUserId, { caller: CALLER })
+        if (!snap.exists) return null
+        const data = snap.data || {}
         const stats = data.stats || {}
         const sessionIndex = data.sessionIndex || {}
 
@@ -609,7 +611,7 @@ async function ensureCursorForPage(
 
 async function loadCloudIdentitySet(targetUserId: string): Promise<{ ids: Set<string>; logicalKeys: Set<string> }> {
     const cached = globalCloudIdentityCache.get(targetUserId)
-    if (cached && Date.now() - cached.cachedAt <= CLOUD_IDENTITY_CACHE_TTL_MS) {
+    if (checkFirebaseCacheFreshness('sessionPager.cloudIdentity', cached?.cachedAt, CLOUD_IDENTITY_CACHE_TTL_MS) && cached) {
         return {
             ids: cached.ids,
             logicalKeys: cached.logicalKeys
@@ -620,10 +622,9 @@ async function loadCloudIdentitySet(targetUserId: string): Promise<{ ids: Set<st
     const logicalKeys = new Set<string>()
 
     try {
-        const userRef = doc(db, `users/${targetUserId}`)
-        const snap = await getDocTracked(userRef)
-        if (snap.exists()) {
-            const data = snap.data() || {}
+        const snap = await loadOwnerDocument(targetUserId, { caller: CALLER })
+        if (snap.exists) {
+            const data = snap.data || {}
             const list = Array.isArray(data.sessionIndex?.sessionsList) ? data.sessionIndex.sessionsList : []
             for (const entry of list) {
                 if (entry?.id) ids.add(String(entry.id))
@@ -767,7 +768,7 @@ export function useSessionPager() {
         if (resetNeeded) {
             resetPager(pageSize, filters, targetUserId)
         } else {
-            const cached = readFreshPageCache(requestedPage)
+            const cached = readFreshPageCache(requestedPage, targetUserId)
             if (cached) {
                 globalSessions.value = cached.sessions
                 globalState.value.currentPage = cached.state.currentPage

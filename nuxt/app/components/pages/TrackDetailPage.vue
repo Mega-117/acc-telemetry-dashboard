@@ -4,18 +4,7 @@
 // ============================================
 
 import { ref, computed, onMounted, watch } from 'vue'
-import { Line } from 'vue-chartjs'
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js'
+import TrackTimesChart from '~/components/charts/TrackTimesChart.vue'
 import {
   CAR_CATEGORIES,
   type CarCategory
@@ -27,17 +16,6 @@ import { RACE_FUEL_BUCKETS } from '~/services/telemetry/raceFuelClassification'
 import type { TrackDetailProjection, TrackFuelBucketReference } from '~/types/trackProjections'
 
 const { getPublicPath } = usePublicPath()
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-)
 
 const props = defineProps<{
   trackId: string
@@ -221,167 +199,6 @@ function onPageChange(page?: number) {
   }
 }
 
-function timeToSeconds(time: string): number {
-  if (!time || !time.includes(':')) return 0
-  const parts = time.split(':')
-  const mins = parseInt(parts[0] || '0', 10)
-  const rest = parts[1] || '0.000'
-  const secParts = rest.split('.')
-  const secs = parseInt(secParts[0] || '0', 10)
-  const ms = parseInt(secParts[1] || '0', 10)
-  return mins * 60 + secs + ms / 1000
-}
-
-function secondsToTimeString(seconds: number): string {
-  const mins = Math.floor(seconds / 60)
-  const secs = (seconds % 60).toFixed(3)
-  return `${mins}:${secs.padStart(6, '0')}`
-}
-
-const chartJsData = computed(() => {
-  const times = historicalTimes.value
-  const qualyPoints: { x: number; y: number; label: string }[] = []
-  const racePoints: { x: number; y: number; label: string }[] = []
-
-  times.forEach((point, index) => {
-    if (point.bestQualy) {
-      qualyPoints.push({ x: index, y: timeToSeconds(point.bestQualy), label: point.date })
-    }
-    if (point.bestRace) {
-      racePoints.push({ x: index, y: timeToSeconds(point.bestRace), label: point.date })
-    }
-  })
-
-  return {
-    labels: times.map((point) => point.date),
-    datasets: [
-      {
-        label: 'Best Qualifying',
-        data: qualyPoints,
-        borderColor: '#f0b400',
-        backgroundColor: 'rgba(240, 180, 0, 0.1)',
-        borderWidth: 2.5,
-        pointRadius: 5,
-        pointHoverRadius: 7,
-        pointBackgroundColor: '#f0b400',
-        pointBorderColor: '#f0b400',
-        tension: 0,
-        fill: false,
-        showLine: true
-      },
-      {
-        label: 'Best Race',
-        data: racePoints,
-        borderColor: '#ff6464',
-        backgroundColor: 'rgba(255, 100, 100, 0.1)',
-        borderWidth: 2.5,
-        pointRadius: 5,
-        pointHoverRadius: 7,
-        pointBackgroundColor: '#ff6464',
-        pointBorderColor: '#ff6464',
-        tension: 0,
-        fill: false,
-        showLine: true
-      }
-    ]
-  }
-})
-
-const chartOptions = computed(() => {
-  const times = historicalTimes.value
-  const qualyTimes = times.filter((t) => t.bestQualy).map((t) => timeToSeconds(t.bestQualy!))
-  const raceTimes = times.filter((t) => t.bestRace).map((t) => timeToSeconds(t.bestRace!))
-  const allTimes = [...qualyTimes, ...raceTimes]
-  const minTime = allTimes.length > 0 ? Math.min(...allTimes) - 0.5 : 0
-  const maxTime = allTimes.length > 0 ? Math.max(...allTimes) + 0.5 : 120
-  const labels = times.map((t) => t.date)
-
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: {
-      intersect: false,
-      mode: 'nearest' as const
-    },
-    plugins: {
-      legend: {
-        display: true,
-        position: 'bottom' as const,
-        labels: {
-          color: 'rgba(255, 255, 255, 0.7)',
-          usePointStyle: true,
-          padding: 20,
-          font: {
-            family: "'Inter', sans-serif",
-            size: 12
-          }
-        }
-      },
-      tooltip: {
-        enabled: true,
-        backgroundColor: 'rgba(20, 20, 30, 0.95)',
-        titleColor: '#fff',
-        bodyColor: 'rgba(255, 255, 255, 0.8)',
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        borderWidth: 1,
-        cornerRadius: 8,
-        padding: 12,
-        callbacks: {
-          title: function(context: any) {
-            const point = context[0]?.raw
-            return point?.label || labels[context[0]?.parsed?.x] || ''
-          },
-          label: function(context: any) {
-            const value = context.parsed.y
-            if (value === null || value === undefined) return ''
-            return `${context.dataset.label}: ${secondsToTimeString(value)}`
-          }
-        }
-      }
-    },
-    scales: {
-      x: {
-        type: 'linear' as const,
-        min: -0.5,
-        max: times.length - 0.5,
-        grid: {
-          color: 'rgba(255, 255, 255, 0.06)',
-          drawBorder: false
-        },
-        ticks: {
-          color: 'rgba(255, 255, 255, 0.5)',
-          font: {
-            family: "'Inter', sans-serif",
-            size: 11
-          },
-          stepSize: 1,
-          callback: function(value: string | number) {
-            return labels[Math.round(Number(value))] || ''
-          }
-        }
-      },
-      y: {
-        min: minTime,
-        max: maxTime,
-        grid: {
-          color: 'rgba(255, 255, 255, 0.06)',
-          drawBorder: false
-        },
-        ticks: {
-          color: 'rgba(255, 255, 255, 0.5)',
-          font: {
-            family: "'JetBrains Mono', monospace",
-            size: 11
-          },
-          callback: function(value: any) {
-            return secondsToTimeString(value)
-          }
-        }
-      }
-    }
-  }
-})
-
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
   const day = date.getDate()
@@ -506,21 +323,7 @@ function goToSession(id: string) {
     <!-- 2-Column Layout -->
     <div class="page-layout">
       <div class="main-content">
-        <!-- Historical Times Chart -->
-        <div class="section">
-          <div class="section-heading">
-            <div>
-              <h2 class="section-title">Andamento tempi</h2>
-            </div>
-          </div>
-          <div class="chart-container">
-            <div class="chart-wrapper">
-              <Line :data="chartJsData" :options="chartOptions" />
-            </div>
-          </div>
-        </div>
-        <!-- /Chart -->
-
+        <TrackTimesChart :key="`${trackId}-${targetUserId}-${selectedCategory}`" :history="historicalTimes" :loading="isProjectionLoading" />
         <!-- Recent Sessions (same layout as SessioniPage) -->
         <div ref="sessionsRef" class="section">
           <div class="section-heading">
@@ -1872,6 +1675,10 @@ function goToSession(id: string) {
 @media (max-width: 1024px) {
   .page-layout {
     flex-direction: column;
+  }
+
+  .main-content {
+    width: 100%;
   }
 
   .sidebar {

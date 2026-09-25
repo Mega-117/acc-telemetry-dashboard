@@ -11,11 +11,22 @@ import {
   type SuiteVersionInfo
 } from '~/services/monitoring/clientHeartbeatService'
 import { writeClientRuntimeReport } from '~/services/monitoring/clientRuntimeReportingService'
+import { peekOwnerDocument, rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
 import type { RuntimeBootstrapResult } from '~/services/runtime/runtimeBootstrapCoordinator'
 import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTracker'
 
 const CALLER = 'ClientHeartbeat'
 const STORAGE_KEY_PREFIX = 'acc_client_heartbeat_'
+
+// PIP-439: l'invio forzato (avvio/login) vale una volta per caricamento pagina e per
+// account+installazione. Dopo un Ctrl+R il bootstrap attraversa piu' fasi e riaccende
+// `enabled` piu' volte: ogni riaccensione successiva segue la cadenza oraria PIP-445.
+const forcedHeartbeatOwners = new Set<string>()
+
+/** Solo test: dimentica gli invii forzati gia' fatti in questo caricamento. */
+export function resetForcedHeartbeatsForTest() {
+  forcedHeartbeatOwners.clear()
+}
 
 type ElectronHeartbeatApi = {
   getSuiteVersion?: () => Promise<SuiteVersionInfo | null>
@@ -81,7 +92,8 @@ export function useClientHeartbeat(options: {
       const storageOwner = `${uid}_${installationId}`
       const lastHeartbeatAt = getStoredHeartbeatAt(storageOwner)
       const latestRuntimeActivityAt = getLatestRuntimeActivityAt(identity)
-      if (!force && !shouldSendClientHeartbeat(
+      const forceNow = force && !forcedHeartbeatOwners.has(storageOwner)
+      if (!forceNow && !shouldSendClientHeartbeat(
         lastHeartbeatAt,
         nowMs,
         CLIENT_HEARTBEAT_INTERVAL_MS,
@@ -99,10 +111,11 @@ export function useClientHeartbeat(options: {
       }) : null
       if (!payload) return false
 
-      await writeClientRuntimeReport({
+      const report = await writeClientRuntimeReport({
         db,
         uid,
         payload,
+        previousUser: peekOwnerDocument(uid)?.data,
         writeBatchFn: (firestore) => trackedWriteBatch(
           firestore as Parameters<typeof trackedWriteBatch>[0],
           CALLER
@@ -114,8 +127,17 @@ export function useClientHeartbeat(options: {
           : undefined
       })
       if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
+      // PIP-442: stessi campi scritti su `users/{uid}`; la copia condivisa resta allineata
+      // senza rileggere (la revisione delle proiezioni non cambia).
+      if (report.metadataChanged) rememberOwnerDocumentPatch(uid, {
+        suiteVersion: payload.suiteVersion,
+        suiteVersionDetail: payload.suiteVersionDetail,
+        suiteVersionUpdatedAt: payload.suiteVersionUpdatedAt,
+        clientRuntime: payload.clientRuntime
+      })
       storeHeartbeatAt(storageOwner, heartbeatAt)
-      console.info('[HEARTBEAT] Client runtime report committed reason=auth_ready')
+      if (forceNow) forcedHeartbeatOwners.add(storageOwner)
+      console.info(`[HEARTBEAT] Client runtime report committed reason=${forceNow ? 'auth_ready' : 'interval'}`)
       return true
     } catch (error: any) {
       console.warn('[HEARTBEAT] Client heartbeat failed:', error?.message || error)

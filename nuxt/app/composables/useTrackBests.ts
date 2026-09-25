@@ -2,9 +2,13 @@
 
 import { ref, computed } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { collection, query, doc, type DocumentReference, type Query } from 'firebase/firestore'
-import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedWriteBatch } from './useFirebaseTracker'
+import { collection, query, doc, deleteField, type Query } from 'firebase/firestore'
+import { trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedWriteBatch } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
+// PIP-441: le letture per pista passano dal repository, che serve l'indice piste
+// (`trackBestsIndex/v1`) con una lettura condivisa invece della collection completa.
+import { loadTrackBest, loadTrackBestsMap } from '~/repositories/telemetryProjectionRepository'
+import { TRACK_BESTS_INDEX_SCHEMA_VERSION, trackBestsIndexPath } from '~/services/sync/trackBestsIndexProjectionService'
 import {
     CAR_CATEGORIES,
     type CarCategory,
@@ -22,44 +26,34 @@ import { globalSessions } from '~/composables/useSessionLoader'
 import type { SessionDocument } from '~/types/telemetry'
 
 const CALLER = 'TrackBests'
-async function getDoc(ref: DocumentReference) { return trackedGetDoc(ref, CALLER) }
 async function getDocs(q: Query) { return trackedGetDocs(q, CALLER) }
 
-// Keys for sessionStorage cache
-const CACHE_KEY_TRACK_BESTS = 'acc_trackBests_cache'
-const CACHE_KEY_TRACK_ACTIVITY = 'acc_trackActivity_cache'
-
-function saveCacheToStorage(key: string, data: any, userId: string): void {
-    if (typeof window === 'undefined') return
-    try {
-        const payload = { userId, data, timestamp: Date.now() }
-        sessionStorage.setItem(key, JSON.stringify(payload))
-        console.log(`[CACHE] 💾 Saved ${key} to sessionStorage`)
-    } catch (e) {
-        console.warn('[CACHE] Failed to save to sessionStorage:', e)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- campo `activity` del documento trackBests
+function toTrackActivity(activity: any): TrackActivity {
+    return {
+        totalLaps: activity.totalLaps || 0,
+        validLaps: activity.validLaps || 0,
+        validPercent: activity.totalLaps > 0
+            ? Math.round((activity.validLaps / activity.totalLaps) * 100)
+            : 0,
+        totalTimeMs: activity.totalTimeMs || 0,
+        totalTimeFormatted: formatDriveTime(activity.totalTimeMs || 0),
+        sessionCount: activity.sessionCount || 0,
+        lastSessionDate: activity.lastSessionDate
     }
 }
 
-function loadCacheFromStorage(key: string, userId: string): any | null {
-    if (typeof window === 'undefined') return null
+// PIP-442: la copia in sessionStorage e' stata rimossa. Il prefetch passa dal repository,
+// che serve l'indice piste dalla cache persistente su disco (0 letture al secondo avvio)
+// e resta l'unica fonte di verita' per i best per pista.
+const LEGACY_SESSION_STORAGE_KEYS = ['acc_trackBests_cache', 'acc_trackActivity_cache']
+
+function clearLegacySessionStorage() {
+    if (typeof window === 'undefined') return
     try {
-        const stored = sessionStorage.getItem(key)
-        if (!stored) return null
-        const { userId: storedUserId, data, timestamp } = JSON.parse(stored)
-        if (storedUserId !== userId) {
-            sessionStorage.removeItem(key)
-            return null
-        }
-        const maxAge = 3600000
-        if (Date.now() - timestamp > maxAge) {
-            sessionStorage.removeItem(key)
-            return null
-        }
-        console.log(`[CACHE] ✅ Loaded ${key} from sessionStorage (age: ${Math.round((Date.now() - timestamp) / 1000)}s)`)
-        return data
-    } catch (e) {
-        console.warn('[CACHE] Failed to load from sessionStorage:', e)
-        return null
+        for (const key of LEGACY_SESSION_STORAGE_KEYS) sessionStorage.removeItem(key)
+    } catch {
+        // Ignore storage errors in constrained environments.
     }
 }
 
@@ -291,27 +285,20 @@ export function useTrackBests() {
 
         if (targetUserId) {
             try {
-                const docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)
-                const docSnap = await getDoc(docRef)
-
-                if (docSnap.exists()) {
-                    const data = docSnap.data()
-                    const version = data.version || 1
-
-                    if (version >= TRACK_BESTS_SCHEMA_VERSION && data.bests) {
-                        console.log(`[TRACK_BESTS] Firebase HIT V2 for ${trackIdNorm}`)
-                        const isV2Structure = CAR_CATEGORIES.some(cat => data.bests[cat])
-                        if (isV2Structure) {
-                            const cached = {
-                                bests: data.bests as CategoryBests,
-                                lastSessionDate: data.lastSessionDate || null
-                            }
-                            trackBestsCache.value[cacheKey] = cached
-                            return cached.bests[category] || {}
-                        }
+                // PIP-441: servito dall'indice piste in cache (0 letture) o da un documento singolo;
+                // il repository scarta schemi/regole legacy (isSupportedTrackBestProjection).
+                const data = await loadTrackBest(targetUserId, trackIdNorm)
+                if (data?.bests && CAR_CATEGORIES.some(cat => data.bests[cat])) {
+                    console.log(`[TRACK_BESTS] Firebase HIT V2 for ${trackIdNorm}`)
+                    const cached = {
+                        bests: data.bests as CategoryBests,
+                        lastSessionDate: data.lastSessionDate || null
                     }
-
-                    console.log(`[TRACK_BESTS] V1 detected for ${trackIdNorm}, migrating to V2...`)
+                    trackBestsCache.value[cacheKey] = cached
+                    if (data.activity && !trackActivityCache.value[cacheKey]) {
+                        trackActivityCache.value[cacheKey] = toTrackActivity(data.activity)
+                    }
+                    return cached.bests[category] || {}
                 }
             } catch (e) {
                 console.warn(`[TRACK_BESTS] Error reading from Firebase:`, e)
@@ -353,6 +340,12 @@ export function useTrackBests() {
             try {
                 const docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)
                 await trackedDeleteDoc(docRef, CALLER)
+                // PIP-441: togliamo la pista anche dall'indice, senza rileggerlo.
+                await trackedSetDoc(doc(db, trackBestsIndexPath(targetUserId)), {
+                    version: TRACK_BESTS_INDEX_SCHEMA_VERSION,
+                    updatedAt: new Date().toISOString(),
+                    tracks: { [trackIdNorm]: deleteField() }
+                }, { merge: true }, CALLER)
                 console.log(`[TRACK_BESTS] DELETED from Firebase for ${trackIdNorm}`)
             } catch (e) {
                 console.warn(`[TRACK_BESTS] Error deleting from Firebase:`, e)
@@ -363,12 +356,7 @@ export function useTrackBests() {
     function clearTrackDerivedCaches() {
         trackBestsCache.value = {}
         trackActivityCache.value = {}
-        try {
-            sessionStorage.removeItem(CACHE_KEY_TRACK_BESTS)
-            sessionStorage.removeItem(CACHE_KEY_TRACK_ACTIVITY)
-        } catch {
-            // Ignore storage errors in constrained environments.
-        }
+        clearLegacySessionStorage()
         console.log('[TRACK_BESTS] Cleared overview caches (trackBests + trackActivity)')
     }
 
@@ -394,9 +382,12 @@ export function useTrackBests() {
         try {
             const trackBestsRef = collection(db, `users/${targetUserId}/trackBests`)
             const snapshot = await getDocs(query(trackBestsRef))
+            // PIP-441: l'indice piste segue la collection: senza documenti per pista non deve esistere.
+            const indexRef = doc(db, trackBestsIndexPath(targetUserId))
 
             if (snapshot.empty) {
                 console.log('[TRACK_BESTS] No trackBests found to delete')
+                await trackedDeleteDoc(indexRef, CALLER)
                 trackBestsCache.value = {}
                 return 0
             }
@@ -405,6 +396,7 @@ export function useTrackBests() {
             snapshot.docs.forEach(docSnap => {
                 batch.delete(docSnap.ref)
             })
+            batch.delete(indexRef)
             await batch.commit()
 
             const count = snapshot.size
@@ -412,13 +404,7 @@ export function useTrackBests() {
 
             trackBestsCache.value = {}
             trackActivityCache.value = {}
-
-            try {
-                sessionStorage.removeItem('acc_trackBests_cache')
-                sessionStorage.removeItem('acc_trackActivity_cache')
-            } catch {
-                // Ignore storage errors
-            }
+            clearLegacySessionStorage()
 
             return count
         } catch (e) {
@@ -434,19 +420,6 @@ export function useTrackBests() {
             return 0
         }
 
-        const storedBests = loadCacheFromStorage(CACHE_KEY_TRACK_BESTS, targetUserId)
-        const storedActivity = loadCacheFromStorage(CACHE_KEY_TRACK_ACTIVITY, targetUserId)
-
-        if (storedBests && Object.keys(storedBests).length > 0) {
-            console.log(`[PREFETCH] ⚡ Using sessionStorage cache: ${Object.keys(storedBests).length} trackBests`)
-            Object.assign(trackBestsCache.value, storedBests)
-            if (storedActivity) {
-                Object.assign(trackActivityCache.value, storedActivity)
-            }
-            globalPrefetchComplete.value = true
-            return Object.keys(storedBests).length
-        }
-
         const existingPrefetch = trackBestsPrefetchInFlight.get(targetUserId)
         if (existingPrefetch) {
             console.log(`[PREFETCH] Reusing in-flight trackBests prefetch for user ${targetUserId}`)
@@ -458,120 +431,27 @@ export function useTrackBests() {
             const startTime = Date.now()
 
             try {
-                const trackBestsRef = collection(db, `users/${targetUserId}/trackBests`)
-                const snapshot = await getDocs(query(trackBestsRef))
+                // PIP-441: una sola lettura (indice piste) tramite il repository, condivisa con
+                // /piste e Panoramica. Il repository serve solo documenti con schema supportato;
+                // le piste legacy vengono ricostruite dalla manutenzione, non convertite qui.
+                const trackBestDocs = await loadTrackBestsMap(targetUserId)
 
                 let loadedCount = 0
-                const standardGrips = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
-
-                snapshot.forEach(docSnap => {
-                    const trackIdNorm = docSnap.id
-                    const data = docSnap.data()
+                for (const [trackIdNorm, data] of Object.entries(trackBestDocs)) {
+                    if (!data?.bests || !CAR_CATEGORIES.some(cat => data.bests[cat])) continue
                     const cacheKey = `${trackIdNorm}_${targetUserId}`
-                    const version = data.version || 1
-
-                    if (version >= TRACK_BESTS_SCHEMA_VERSION && data.bests) {
-                        const isV2Structure = CAR_CATEGORIES.some(cat => data.bests[cat])
-                        if (isV2Structure) {
-                            trackBestsCache.value[cacheKey] = {
-                                bests: data.bests as CategoryBests,
-                                lastSessionDate: data.lastSessionDate || null
-                            }
-                            loadedCount++
-
-                            if (data.activity) {
-                                const activity = data.activity
-                                trackActivityCache.value[cacheKey] = {
-                                    totalLaps: activity.totalLaps || 0,
-                                    validLaps: activity.validLaps || 0,
-                                    validPercent: activity.totalLaps > 0
-                                        ? Math.round((activity.validLaps / activity.totalLaps) * 100)
-                                        : 0,
-                                    totalTimeMs: activity.totalTimeMs || 0,
-                                    totalTimeFormatted: formatDriveTime(activity.totalTimeMs || 0),
-                                    sessionCount: activity.sessionCount || 0,
-                                    lastSessionDate: activity.lastSessionDate
-                                }
-                            }
-                            return
-                        }
-                    }
-
-                    // V1 legacy: Convert grip-level structure to V2 category structure
-                    const result: Record<string, GripBestTimes> = {}
-                    const bestsSource = data.bests || data
-
-                    for (const grip of standardGrips) {
-                        if (bestsSource[grip]) {
-                            result[grip] = bestsSource[grip] as GripBestTimes
-                        }
-                    }
-
-                    // Handle legacy 'Opt' -> merge into 'Optimum'
-                    if (bestsSource['Opt']) {
-                        const legacyOpt = bestsSource['Opt'] as GripBestTimes
-                        if (!result['Optimum']) {
-                            result['Optimum'] = legacyOpt
-                        } else {
-                            const opt = result['Optimum']
-                            if (legacyOpt.bestQualy && (!opt.bestQualy || legacyOpt.bestQualy < opt.bestQualy)) {
-                                opt.bestQualy = legacyOpt.bestQualy
-                                opt.bestQualyTemp = legacyOpt.bestQualyTemp
-                                opt.bestQualySessionId = legacyOpt.bestQualySessionId
-                                opt.bestQualyDate = legacyOpt.bestQualyDate
-                            }
-                            if (legacyOpt.bestRace && (!opt.bestRace || legacyOpt.bestRace < opt.bestRace)) {
-                                opt.bestRace = legacyOpt.bestRace
-                                opt.bestRaceTemp = legacyOpt.bestRaceTemp
-                                opt.bestRaceSessionId = legacyOpt.bestRaceSessionId
-                                opt.bestRaceDate = legacyOpt.bestRaceDate
-                            }
-                            if (legacyOpt.bestAvgRace && (!opt.bestAvgRace || legacyOpt.bestAvgRace < opt.bestAvgRace)) {
-                                opt.bestAvgRace = legacyOpt.bestAvgRace
-                                opt.bestAvgRaceTemp = legacyOpt.bestAvgRaceTemp
-                                opt.bestAvgRaceSessionId = legacyOpt.bestAvgRaceSessionId
-                                opt.bestAvgRaceDate = legacyOpt.bestAvgRaceDate
-                            }
-                        }
-                    }
-
-                    // Convert V1 to V2 (all legacy data defaults to GT3)
-                    const v2Bests: CategoryBests = {} as CategoryBests
-                    for (const cat of CAR_CATEGORIES) {
-                        v2Bests[cat] = {}
-                        for (const grip of standardGrips) {
-                            v2Bests[cat][grip] = cat === 'GT3' && result[grip] ? result[grip] : emptyGripBests()
-                        }
-                    }
-
                     trackBestsCache.value[cacheKey] = {
-                        bests: v2Bests,
+                        bests: data.bests as CategoryBests,
                         lastSessionDate: data.lastSessionDate || null
                     }
-
                     if (data.activity) {
-                        const activity = data.activity
-                        trackActivityCache.value[cacheKey] = {
-                            totalLaps: activity.totalLaps || 0,
-                            validLaps: activity.validLaps || 0,
-                            validPercent: activity.totalLaps > 0
-                                ? Math.round((activity.validLaps / activity.totalLaps) * 100)
-                                : 0,
-                            totalTimeMs: activity.totalTimeMs || 0,
-                            totalTimeFormatted: formatDriveTime(activity.totalTimeMs || 0),
-                            sessionCount: activity.sessionCount || 0,
-                            lastSessionDate: activity.lastSessionDate
-                        }
+                        trackActivityCache.value[cacheKey] = toTrackActivity(data.activity)
                     }
-
                     loadedCount++
-                })
+                }
 
                 const elapsed = Date.now() - startTime
-                console.log(`[PREFETCH] ✅ Loaded ${loadedCount} trackBests in ${elapsed}ms (1 query instead of ${loadedCount})`)
-
-                saveCacheToStorage(CACHE_KEY_TRACK_BESTS, trackBestsCache.value, targetUserId)
-                saveCacheToStorage(CACHE_KEY_TRACK_ACTIVITY, trackActivityCache.value, targetUserId)
+                console.log(`[PREFETCH] ✅ Loaded ${loadedCount} trackBests in ${elapsed}ms (index cached in memory/disk)`)
 
                 globalPrefetchComplete.value = true
                 return loadedCount
@@ -602,28 +482,13 @@ export function useTrackBests() {
 
         if (targetUserId && !isElectron.value) {
             try {
-                const docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)
-                const docSnap = await getDoc(docRef)
-
-                if (docSnap.exists()) {
-                    const data = docSnap.data()
-                    if (data.activity) {
-                        const activity = data.activity
-                        const result: TrackActivity = {
-                            totalLaps: activity.totalLaps || 0,
-                            validLaps: activity.validLaps || 0,
-                            validPercent: activity.totalLaps > 0
-                                ? Math.round((activity.validLaps / activity.totalLaps) * 100)
-                                : 0,
-                            totalTimeMs: activity.totalTimeMs || 0,
-                            totalTimeFormatted: formatDriveTime(activity.totalTimeMs || 0),
-                            sessionCount: activity.sessionCount || 0,
-                            lastSessionDate: activity.lastSessionDate
-                        }
-                        trackActivityCache.value[cacheKey] = result
-                        console.log(`[TRACK_BESTS] trackActivity Firebase HIT for ${trackIdNorm}`)
-                        return result
-                    }
+                // PIP-441: indice piste in cache (0 letture) o documento singolo, mai la collection.
+                const data = await loadTrackBest(targetUserId, trackIdNorm)
+                if (data?.activity) {
+                    const result = toTrackActivity(data.activity)
+                    trackActivityCache.value[cacheKey] = result
+                    console.log(`[TRACK_BESTS] trackActivity Firebase HIT for ${trackIdNorm}`)
+                    return result
                 }
             } catch (e) {
                 console.warn(`[TRACK_BESTS] Error reading trackActivity from Firebase:`, e)

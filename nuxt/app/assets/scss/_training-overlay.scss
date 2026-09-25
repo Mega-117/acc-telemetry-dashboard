@@ -1277,10 +1277,14 @@ p {
 }
 
 .placement-work-area {
+  opacity: 1;
   position: relative;
   grid-area: 1 / 1;
   display: grid;
-  grid-template-rows: 1fr auto;
+  grid-template-rows: auto auto auto;
+  align-content: center;
+  justify-items: center;
+  text-align: center;
   gap: 10px;
   width: 100%;
   height: 100%;

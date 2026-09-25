@@ -2,9 +2,16 @@ import { collection, doc, serverTimestamp } from 'firebase/firestore'
 import { trackedWriteBatch } from '~/composables/useFirebaseTracker'
 import type { TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { BEST_RULES_VERSION, extractMetadata, generateSessionId } from '~/utils/sessionParser'
-import type { RegistryCacheEntry } from './syncRegistryPolicy'
+import {
+  cloudStateFromSessionDocument,
+  knownRawChunkIds,
+  normalizeRegistryCloudState,
+  resolveKnownCloudSession,
+  type RegistryCacheEntry,
+  type RegistryCloudState
+} from './syncRegistryPolicy'
 
-export type { RegistryCacheEntry } from './syncRegistryPolicy'
+export type { RegistryCacheEntry, RegistryCloudState } from './syncRegistryPolicy'
 
 export function splitTextIntoChunks(str: string, size: number): string[] {
   const chunks: string[] = []
@@ -72,6 +79,23 @@ export function prepareSummaryForUpload(rawObj: any):
   }
 }
 
+/**
+ * PIP-444: documento sessione "come lo conosce il registro locale": stessi campi che la
+ * logica di aggiornamento legge da `sessions/{id}`, senza la lettura dal cloud.
+ */
+function existingFromCloudState(cloud: RegistryCloudState) {
+  return {
+    fileHash: cloud.fileHash,
+    rawDataHash: cloud.rawDataHash,
+    version: cloud.sessionVersion,
+    rawChunkCount: cloud.rawChunkCount,
+    rawSizeBytes: cloud.rawSizeBytes,
+    rawEncoding: cloud.rawEncoding,
+    summaryRulesVersion: cloud.summaryRulesVersion,
+    summary: { best_rules_version: cloud.summaryRulesVersion }
+  }
+}
+
 export function createSessionUploadService(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
@@ -111,6 +135,7 @@ export function createSessionUploadService(params: {
         committedStatus: 'created' | 'updated'
         sessionId: string
         projectionDelta: TrackBestProjectionDelta
+        cloudState: RegistryCloudState | null
       } | null = null
       try {
         assertActive()
@@ -147,19 +172,38 @@ export function createSessionUploadService(params: {
         const registry = await loadRegistryCache()
         assertActive()
         const registryEntry = registry[fileName]
+        // PIP-444: se il registro locale conosce lo stato cloud di questa sessione (ultimo
+        // caricamento riuscito da questo PC) non si rilegge `sessions/{id}` ne' si
+        // interrogano i raw chunk. Registro assente o incoerente: letture come prima.
+        const knownCloud = resolveKnownCloudSession({ entry: registryEntry, ownerId: uid, sessionId })
         if (canSkipViaRegistry(registry, fileName, { fileHash, rawDataHash, summaryHash }, uid)) {
-          existing = await getExistingSession(uid, sessionId)
-          assertActive()
-          existingChecked = true
-          const existingRulesVersion = getExistingRulesVersion(existing)
-          if (existing && existing.fileHash === fileHash && existingRulesVersion >= BEST_RULES_VERSION) {
-            return { status: 'unchanged' as const, fileName, sessionId, reason: 'registry_cache_hit' }
+          if (knownCloud && knownCloud.fileHash === fileHash && knownCloud.summaryRulesVersion >= BEST_RULES_VERSION) {
+            return { status: 'unchanged' as const, fileName, sessionId, reason: 'registry_cache_hit', cloudState: knownCloud }
+          }
+          if (!knownCloud) {
+            existing = await getExistingSession(uid, sessionId)
+            assertActive()
+            existingChecked = true
+            const existingRulesVersion = getExistingRulesVersion(existing)
+            if (existing && existing.fileHash === fileHash && existingRulesVersion >= BEST_RULES_VERSION) {
+              return {
+                status: 'unchanged' as const,
+                fileName,
+                sessionId,
+                reason: 'registry_cache_hit',
+                cloudState: cloudStateFromSessionDocument(sessionId, existing)
+              }
+            }
           }
         }
 
         if (!existingChecked) {
-          existing = await getExistingSession(uid, sessionId)
-          assertActive()
+          if (knownCloud) {
+            existing = existingFromCloudState(knownCloud)
+          } else {
+            existing = await getExistingSession(uid, sessionId)
+            assertActive()
+          }
         }
 
         let isUpdate = false
@@ -181,13 +225,25 @@ export function createSessionUploadService(params: {
 
           if (existing.fileHash === fileHash) {
             if (!needsRulesMigration) {
-              return { status: 'unchanged' as const, fileName, sessionId, reason: 'firebase_hash_match' }
+              return {
+                status: 'unchanged' as const,
+                fileName,
+                sessionId,
+                reason: 'firebase_hash_match',
+                cloudState: knownCloud || cloudStateFromSessionDocument(sessionId, existing)
+              }
             }
             chunksNeedUpdate = false
             isRulesMigration = true
           } else if (rawDataUnchanged && needsRulesMigration) {
             chunksNeedUpdate = false
             isRulesMigration = true
+          } else if (knownCloud) {
+            // Gli id dei chunk sono `0..n-1` per costruzione (stesso batch atomico): nessuna query.
+            existingChunks = knownRawChunkIds(knownCloud).map((id) => ({
+              id,
+              ref: doc(collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`), id)
+            }))
           } else {
             assertActive()
             existingChunks = await listExistingChunks(uid, sessionId)
@@ -199,7 +255,7 @@ export function createSessionUploadService(params: {
         const batch = trackedWriteBatch(db, 'SessionUploadService')
 
         const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
-        batch.set(sessionRef, {
+        const sessionDocument = {
           fileHash,
           rawDataHash,
           summaryHash,
@@ -212,10 +268,12 @@ export function createSessionUploadService(params: {
           rawSizeBytes: chunksNeedUpdate ? rawText.length : (existing?.rawSizeBytes || rawText.length),
           rawEncoding: existing?.rawEncoding || 'json-string',
           version: (existing?.version || 0) + 1
-        })
+        }
+        batch.set(sessionRef, sessionDocument)
 
-        const uploadRef = doc(db, `users/${uid}/uploads/${fileHash}`)
-        batch.set(uploadRef, { fileName, uploadedAt: serverTimestamp(), sessionId })
+        // PIP-444: `uploads/{fileHash}` non viene piu' scritto. Era un registro di dedupe
+        // per hash che nessun lettore consulta (rules senza get, nessun repository/admin):
+        // il registro locale conserva gia' hash e stato cloud per file.
 
         if (chunksNeedUpdate) {
           for (let idx = 0; idx < chunks.length; idx++) {
@@ -239,10 +297,20 @@ export function createSessionUploadService(params: {
           car: meta.car
         }
         const committedStatus = (isUpdate ? 'updated' : 'created') as 'created' | 'updated'
+        const cloudState = normalizeRegistryCloudState({
+          sessionId,
+          fileHash,
+          rawDataHash,
+          summaryRulesVersion: sessionDocument.summaryRulesVersion,
+          sessionVersion: sessionDocument.version,
+          rawChunkCount: sessionDocument.rawChunkCount,
+          rawSizeBytes: sessionDocument.rawSizeBytes,
+          rawEncoding: sessionDocument.rawEncoding
+        })
 
         assertActive()
         await batch.commit()
-        committedResult = { committedStatus, sessionId, projectionDelta }
+        committedResult = { committedStatus, sessionId, projectionDelta, cloudState }
         assertActive()
 
         return {
@@ -250,6 +318,7 @@ export function createSessionUploadService(params: {
           fileName,
           sessionId,
           projectionDelta,
+          cloudState,
           reason: isRulesMigration ? 'summary_rules_migration' : undefined
         }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type

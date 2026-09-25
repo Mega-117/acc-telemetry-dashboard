@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   applyTrackBestsProjectionDeltas: vi.fn(async () => undefined),
-  applyUserProjectionDeltas: vi.fn(async () => ({ wrote: true, totalSessions: 1, sessionsLast7Days: 1 })),
+  applyUserProjectionDeltas: vi.fn(async () => ({
+    wrote: true, totalSessions: 1, sessionsLast7Days: 1,
+    previousContributions: new Map([['session-new', { laps: 3, lapsValid: 2, totalTime: 300_000 }]])
+  })),
   applyTrackDetailProjectionDeltas: vi.fn(),
   rebuildTrackBestsProjection: vi.fn(async () => undefined),
   writeUserProjectionDocuments: vi.fn(async () => undefined)
@@ -22,7 +25,7 @@ vi.mock('~/services/sync/projectionRebuildService', () => ({
   writeUserProjectionDocuments: mocks.writeUserProjectionDocuments
 }))
 
-import { refreshSyncProjections } from '~/services/sync/syncProjectionRefreshService'
+import { combineProjectionWrites, refreshSyncProjections } from '~/services/sync/syncProjectionRefreshService'
 
 const delta = {
   status: 'created' as const,
@@ -30,12 +33,12 @@ const delta = {
   sessionType: 2, car: 'ferrari_296_gt3', summary: { laps: 12 }
 }
 
-function params(loadSessions = vi.fn(async () => [])) {
+function params(loadFullHistory = vi.fn(async (_uid: string) => [] as any[])) {
   return {
-    db: {}, uid: 'owner-1', changedCount: 1, loadSessions,
+    db: {}, uid: 'owner-1', changedCount: 1, loadFullHistory,
     clearTrackDerivedCaches: vi.fn(), resetAllTrackBests: vi.fn(async () => 0),
     getDocFn: vi.fn(), setDocFn: vi.fn(), bestRulesVersion: 5,
-    reason: 'test', userProjectionDeltas: [delta]
+    reason: 'test', userProjectionDeltas: [delta], trackBestDeltas: [delta]
   }
 }
 
@@ -50,24 +53,63 @@ describe('refreshSyncProjections', () => {
 
     expect(mocks.applyUserProjectionDeltas).toHaveBeenCalledOnce()
     expect(mocks.applyTrackDetailProjectionDeltas).toHaveBeenCalledOnce()
-    expect(input.loadSessions).not.toHaveBeenCalled()
+    expect(input.loadFullHistory).not.toHaveBeenCalled()
+    expect(mocks.writeUserProjectionDocuments).not.toHaveBeenCalled()
     expect(result.projectionsWritten).toBe(true)
   })
 
-  it('uses the existing full rebuild when incremental track detail is unsafe', async () => {
+  it('PIP-436: passes the already-counted contribution of updated sessions to track projections', async () => {
+    mocks.applyTrackDetailProjectionDeltas.mockResolvedValue({ wrote: true, requiresFullRebuild: false })
+    await refreshSyncProjections(params())
+
+    const userOrder = mocks.applyUserProjectionDeltas.mock.invocationCallOrder[0]!
+    expect(mocks.applyTrackBestsProjectionDeltas.mock.invocationCallOrder[0]).toBeGreaterThan(userOrder)
+    const previous = (mocks.applyTrackDetailProjectionDeltas.mock.calls[0] as any)[0].previousContributions
+    expect(previous.get('session-new')).toEqual({ laps: 3, lapsValid: 2, totalTime: 300_000 })
+    expect((mocks.applyTrackBestsProjectionDeltas.mock.calls[0] as any)[0].previousContributions).toBe(previous)
+  })
+
+  it('PIP-436: rebuilds from the full owner history, never from the capped UI loader', async () => {
     mocks.applyTrackDetailProjectionDeltas.mockResolvedValue({ wrote: false, requiresFullRebuild: true })
     const freshSessions = [{ sessionId: 'session-new' }]
-    const loadSessions = vi.fn(async () => freshSessions as any)
-    const input = params(loadSessions)
+    const loadFullHistory = vi.fn(async () => freshSessions as any)
+    const input = params(loadFullHistory)
 
     const result = await refreshSyncProjections(input)
 
-    expect(loadSessions).toHaveBeenCalledWith(undefined, true, {
-      sourceMode: 'cloud_fresh', context: 'test'
-    })
+    expect(loadFullHistory).toHaveBeenCalledWith('owner-1')
     expect(mocks.writeUserProjectionDocuments).toHaveBeenCalledWith(expect.objectContaining({
       sessions: freshSessions
     }))
     expect(result.sessions).toBe(freshSessions)
+  })
+
+  // PIP-444: due scritture sullo stesso documento nel piano = un documento Firestore.
+  it('combineProjectionWrites: unisce mergeFields, fonde merge, un set pieno vince', () => {
+    const bests = { ref: 'p', data: { schemaVersion: 1, trackId: 't', bests: { a: 1 }, updatedAt: 'x' }, options: { mergeFields: ['schemaVersion', 'trackId', 'bests', 'updatedAt'] } }
+    const detail = { ref: 'p', data: { schemaVersion: 1, trackId: 't', detail: { b: 2 }, updatedAt: 'y' }, options: { mergeFields: ['schemaVersion', 'trackId', 'detail', 'updatedAt'] } }
+    expect(combineProjectionWrites(undefined, bests)).toBe(bests)
+    expect(combineProjectionWrites(bests, detail)).toEqual({
+      ref: 'p',
+      data: { schemaVersion: 1, trackId: 't', bests: { a: 1 }, detail: { b: 2 }, updatedAt: 'y' },
+      options: { mergeFields: ['schemaVersion', 'trackId', 'bests', 'updatedAt', 'detail'] }
+    })
+    const replace = { ref: 'p', data: { fresh: true } }
+    expect(combineProjectionWrites(bests, replace)).toBe(replace)
+    expect(combineProjectionWrites(replace, detail)).toEqual({ ref: 'p', data: { fresh: true, schemaVersion: 1, trackId: 't', detail: { b: 2 }, updatedAt: 'y' } })
+    const mergeA = { ref: 'p', data: { stats: { a: 1, nested: { x: 1 } } }, options: { merge: true } }
+    const mergeB = { ref: 'p', data: { stats: { b: 2, nested: { y: 2 } } }, options: { merge: true } }
+    expect(combineProjectionWrites(mergeA, mergeB)).toEqual({ ref: 'p', data: { stats: { a: 1, b: 2, nested: { x: 1, y: 2 } } }, options: { merge: true } })
+    expect(combineProjectionWrites(mergeA, detail)).toEqual({
+      ref: 'p', data: { stats: { a: 1, nested: { x: 1 } }, schemaVersion: 1, trackId: 't', detail: { b: 2 }, updatedAt: 'y' }, options: { merge: true }
+    })
+  })
+
+  it('PIP-444: senza mirror il ciclo legge con il lettore iniettato e non calcola alcun mirror', async () => {
+    mocks.applyTrackDetailProjectionDeltas.mockResolvedValue({ wrote: true, requiresFullRebuild: false })
+    const result = await refreshSyncProjections(params())
+    expect(result.mirror).toBeNull()
+    expect(result.mirrorCycle).toBeNull()
+    expect(result.writes).toEqual([])
   })
 })

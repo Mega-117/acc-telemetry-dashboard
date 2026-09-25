@@ -61,7 +61,7 @@ function saveSet(key: string, value: Set<string>): void {
 
 export const NOTICE_PREFIX = { request: 'req:', invite: 'inv:', granted: 'grant:' } as const
 
-function createLiveStore(): PitwallStore & { start: () => void, halt: () => void, standardController: ReturnType<typeof usePitwallController> } {
+function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, halt: () => void, standardController: ReturnType<typeof usePitwallController> } {
   const { currentUser } = useFirebaseAuth()
   const uid = () => currentUser.value?.uid ?? null
   const link = usePitwallRoom({ uid })
@@ -239,6 +239,7 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
       drivingId: selected && link.roomDriving.value.reason === 'ready'
         ? link.roomDriving.value.executor?.uid ?? null
         : null,
+      drivingKnown: selected,
       members: membersOf(room, selected),
       invitedIds: (room.membershipModel === 'social' ? friendViews.value.filter(friend => friend.state === 'friends').map(friend => friend.personId) : room.allowedUids)
         .filter(person => !room.memberUids.includes(person)),
@@ -388,19 +389,34 @@ function createLiveStore(): PitwallStore & { start: () => void, halt: () => void
 
   // ---- Ciclo di vita --------------------------------------------------------
   let started = false
+  let fullStarted = false
   let accountUid: string | null = null
-  function start(): void {
-    if (started || !uid()) return
+  function start(full = true): void {
+    if (!uid()) return
+    if (started && accountUid !== uid()) halt()
+    if (started && fullStarted === full) return
+    if (started) {
+      if (fullStarted) link.stop()
+      trust.stop()
+      if (fullStarted && !full && accountUid) {
+        stopPitwallRealtimeEngineerAccount(accountUid)
+        void stopPitwallRealtimeAccount(accountUid)
+      }
+    }
     started = true
+    fullStarted = full
     accountUid = uid()
-    void loadOwnNickname()
-    link.start()
-    trust.watchLive()
+    if (full) {
+      void loadOwnNickname()
+      link.start()
+      trust.watchLive()
+    } else trust.watchInbox()
   }
   function halt(): void {
     if (!started) return
     started = false
-    link.stop()
+    if (fullStarted) link.stop()
+    fullStarted = false
     trust.stop()
     if (accountUid) {
       stopPitwallRealtimeEngineerAccount(accountUid)

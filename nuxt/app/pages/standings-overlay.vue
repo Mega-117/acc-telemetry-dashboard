@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { stableComputed } from '~/services/overlay/stableTelemetry'
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, onMounted, onUnmounted } from 'vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import StandingsHud from '~/components/overlay/StandingsHud.vue'
 import { useHudOverlay } from '~/composables/useHudOverlay'
-import type { HudOverlayBridge, HudOverlaySettings } from '~/composables/useHudOverlay'
+import type { HudOverlaySettings } from '~/composables/useHudOverlay'
 import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useStandingsHighlights } from '~/composables/useStandingsHighlights'
@@ -26,9 +28,7 @@ function parseStandingsBootstrap(value: unknown): Record<string, unknown> | null
   }
 }
 const standingsBootstrap = parseStandingsBootstrap(route.query.standingsBootstrap)
-const getApi = (): HudOverlayBridge | null => typeof window === 'undefined'
-  ? null
-  : (window as Window & { electronAPI?: HudOverlayBridge }).electronAPI ?? null
+const getApi = useOverlayRegionApi()
 const overlay = useHudOverlay('standings', getApi)
 const standings = useStandingsState(getApi)
 const fastState = useFastStatePoller(getApi)
@@ -50,7 +50,7 @@ const options = computed(() => ({
   showLapProgressBar: setting('showLapProgressBar') ?? DEFAULT_STANDINGS_OPTIONS.showLapProgressBar,
   standingsLayout: setting('standingsLayout') ?? null,
 }))
-const localDriver = computed(() => {
+const localDriver = stableComputed(() => {
   const state = fastState.fastState.value
   if (!state.localDriver) return null
   return {
@@ -59,7 +59,7 @@ const localDriver = computed(() => {
     isLive: state.isLive,
   }
 })
-const model = computed(() => buildStandingsPresentation(
+const model = stableComputed(() => buildStandingsPresentation(
   standings.state.value,
   options.value,
   standings.nowMs.value,

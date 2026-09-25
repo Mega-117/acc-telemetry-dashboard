@@ -65,7 +65,11 @@ vi.mock('~/services/pitwall/pitwallRealtimeRoomService', () => ({
     invite: async (_id: string, who: string) => { fakes.calls.push(`invite:${who}`); return who === 'nessuno' ? { ok: false, reason: 'Troppe persone invitate a questa gara.' } : { ok: true, value: true } },
     revoke: async (_id: string, who: string) => { fakes.calls.push(`revoke:${who}`); return { ok: true, value: true } },
     promote: async (_id: string, who: string) => { fakes.calls.push(`promote:${who}`); return { ok: true, value: true } },
-    leaveRoom: async () => { fakes.calls.push('leave'); return { ok: true, value: true } },
+    leaveRoom: async () => {
+      expect(fakes.pushRoom).toBeNull()
+      expect(fakes.pushMembers).toBeNull()
+      fakes.calls.push('leave'); return { ok: true, value: true }
+    },
     closeRoom: async () => { fakes.calls.push('close'); return { ok: true, value: true } },
     clearPresence: async () => { fakes.calls.push('clearPresence') },
     clearEngineerPresence: async () => { fakes.calls.push('clearPresence') },

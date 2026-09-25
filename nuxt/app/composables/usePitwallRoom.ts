@@ -603,17 +603,20 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     const roomId = selectedRoomId.value
     if (!service_ || !roomId) return
     const current = currentAccount(service_)
+    detach()
     try {
       const result = await service_.leaveRoom(roomId)
       if (!current() || (selectedRoomId.value && selectedRoomId.value !== roomId)) return
-      if (!result.ok) { rawError.value = result.reason; return }
+      if (!result.ok) throw new Error(result.reason)
     // L'elenco non si rilegge: `watchRooms` e' in ascolto e consegna l'uscita
     // da solo. Rileggerlo erano due query in piu' per sapere una cosa che
     // stava gia' arrivando.
       await selectRoom(null)
       if (current()) notice.value = 'Sei uscito dalla gara.'
     } catch (error) {
-      if (current() && selectedRoomId.value === roomId) rawError.value = (error as Error)?.message || 'Uscita non riuscita.'
+      if (!current() || selectedRoomId.value !== roomId) return
+      await selectRoom(roomId)
+      if (current()) rawError.value = (error as Error)?.message || 'Uscita non riuscita.'
     }
   }
 

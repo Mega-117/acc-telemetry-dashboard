@@ -12,14 +12,15 @@ import { ref, computed } from 'vue'
 import { collection, doc } from 'firebase/firestore'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { useTelemetryData } from './useTelemetryData'
-import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc, trackedGetDocs, trackedSetDoc } from './useFirebaseTracker'
+import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedWriteBatch } from './useFirebaseTracker'
 import { db } from '~/config/firebase'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { ensureLocalTelemetrySummariesCanonical } from '~/utils/localCanonicalSummary'
 import {
     createSessionUploadService,
     calculateContentHash,
-    type RegistryCacheEntry
+    type RegistryCacheEntry,
+    type RegistryCloudState
 } from '~/services/sync/sessionUploadService'
 import type { TrackBestProjectionDelta } from '~/services/sync/trackBestsProjectionService'
 import {
@@ -34,13 +35,25 @@ import {
     runLocalMutationBoundary,
     type SyncMutationJournal
 } from '~/services/sync/syncMutationJournal'
-import { refreshSyncProjections } from '~/services/sync/syncProjectionRefreshService'
+import { refreshSyncProjections, type ProjectionWrite } from '~/services/sync/syncProjectionRefreshService'
+import { loadOwnerSessions } from '~/services/sync/ownerDataRepairService'
 import type { UserProjectionDelta } from '~/services/sync/syncUserProjectionDeltaService'
 import { resolveSyncTriggerAction, type SyncTrigger } from '~/services/sync/syncTriggerPolicy'
 import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTracker'
 import { useOwnerDataMaintenance } from './useOwnerDataMaintenance'
 import { getRecentActivityDateKeys, getTelemetryActivityDateKey } from '~/services/telemetry/activityProjectionService'
 import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
+import { loadOwnerDocument, rememberOwnerDocumentWrite, type OwnerDocumentSnapshot } from '~/repositories/ownerDocumentRepository'
+// PIP-444: mirror locale dei riepiloghi (0 riletture con la stessa revisione) e sua pubblicazione.
+import {
+    SYNC_MIRROR_CACHE_KEY,
+    getSyncMirror,
+    invalidateSyncMirror,
+    refPath,
+    setSyncMirror
+} from '~/services/sync/syncMirrorService'
+import { notifyOwnerCacheChanged } from '~/services/cache/ownerCacheSignals'
+import { recordFirebaseJournalEvent } from '~/services/monitoring/firebaseOpsJournal'
 import { createRuntimeBootstrapCoordinator } from '~/services/runtime/runtimeBootstrapCoordinator'
 import {
     buildRendererBootstrapContext,
@@ -92,6 +105,8 @@ interface SyncResult {
     sessionId?: string
     projectionDelta?: TrackBestProjectionDelta
     committedStatus?: 'created' | 'updated'
+    /** PIP-444: stato cloud della sessione da conservare nel registro locale. */
+    cloudState?: RegistryCloudState | null
 }
 
 function mapUnchangedScanResult(file: SyncScanResult['unchangedFiles'][number]): SyncResult {
@@ -141,13 +156,10 @@ function getSyncResultActivityDateKey(result: SyncResult): string | null {
     return getSessionIdActivityDateKey(result.sessionId) || getTelemetryActivityDateKey(result.projectionDelta?.dateStart)
 }
 
-async function findMissingRecentSessionIndexIds(
-    uid: string,
-    results: SyncResult[],
-    isCurrent?: LeaseGuard
-): Promise<string[]> {
+/** Sessioni invariate degli ultimi 7 giorni: devono comparire nell'indice sessioni dell'owner. */
+function selectRecentUnchangedSessionIds(results: SyncResult[]): string[] {
     const recentDateKeys = new Set(getRecentActivityDateKeys(7))
-    const candidateIds = Array.from(new Set(
+    return Array.from(new Set(
         results
             .filter((result) => result.status === 'unchanged' && !!result.sessionId)
             .filter((result) => {
@@ -156,15 +168,20 @@ async function findMissingRecentSessionIndexIds(
             })
             .map((result) => result.sessionId as string)
     ))
+}
 
+/**
+ * PIP-444: usa la copia fresca di `users/{uid}` gia' letta dal ciclo (l'unica lettura),
+ * niente seconda lettura. Senza documento tutte le candidate risultano mancanti.
+ */
+function findMissingRecentSessionIndexIds(
+    candidateIds: string[],
+    ownerSnapshot: OwnerDocumentSnapshot | null
+): string[] {
     if (candidateIds.length === 0) return []
+    if (!ownerSnapshot?.exists) return candidateIds
 
-    assertLeaseCurrent(isCurrent)
-    const userSnap = await getDoc(doc(db, `users/${uid}`))
-    assertLeaseCurrent(isCurrent)
-    if (!userSnap.exists()) return candidateIds
-
-    const sessionIndexList = userSnap.data()?.sessionIndex?.sessionsList
+    const sessionIndexList = ownerSnapshot.data?.sessionIndex?.sessionsList
     const indexedIds = new Set(
         (Array.isArray(sessionIndexList) ? sessionIndexList : [])
             // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
@@ -172,6 +189,36 @@ async function findMissingRecentSessionIndexIds(
             .filter(Boolean)
     )
     return candidateIds.filter((sessionId) => !indexedIds.has(sessionId))
+}
+
+/**
+ * PIP-444: dopo un ciclo andato a buon fine il mirror dei riepiloghi viene sostituito con
+ * quello ricostruito dal piano committato e la copia condivisa di `users/{uid}` con il
+ * documento appena scritto (revisione nuova compresa): la cache persistente lo salva
+ * su disco con quella revisione. Il journal dev registra hit/stale/cold e le letture.
+ */
+function publishSyncMirror(params: {
+    uid: string
+    outcome: Awaited<ReturnType<typeof refreshSyncProjections>>
+    ownerSnapshot: OwnerDocumentSnapshot | null
+    ownerDocumentKnown: boolean
+}) {
+    const { uid, outcome, ownerSnapshot, ownerDocumentKnown } = params
+    if (!outcome.mirrorCycle) return
+    setSyncMirror(uid, outcome.mirror)
+    recordFirebaseJournalEvent({
+        kind: 'cache',
+        cache: SYNC_MIRROR_CACHE_KEY,
+        reason: outcome.mirrorCycle.state,
+        docs: outcome.mirrorCycle.stats.mirrorHits,
+        reads: outcome.mirrorCycle.stats.freshReads,
+        writes: outcome.writes.length
+    })
+    const usersWrite = outcome.writes.find((write) => refPath(write.ref) === `users/${uid}`)
+    if (usersWrite && ownerDocumentKnown) {
+        rememberOwnerDocumentWrite(uid, ownerSnapshot?.data ?? null, usersWrite.data)
+    }
+    notifyOwnerCacheChanged(uid)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
@@ -183,7 +230,7 @@ function getElectronApi(): any | null {
 
 export function useElectronSync() {
     const { currentUser, canEnterApp } = useFirebaseAuth()
-    const { loadSessions, resetAllTrackBests, clearTrackDerivedCaches } = useTelemetryData()
+    const { resetAllTrackBests, clearTrackDerivedCaches } = useTelemetryData()
     const ownerDataMaintenance = useOwnerDataMaintenance()
 
     const isSyncing = ref(false)
@@ -279,7 +326,10 @@ export function useElectronSync() {
             sessionId: result.sessionId || item.sessionId,
             mtime: item.file.mtime,
             size: item.file.size,
-            bestRulesVersion: BEST_RULES_VERSION
+            bestRulesVersion: BEST_RULES_VERSION,
+            // PIP-444: stato cloud della sessione (versione, hash, chunk): il prossimo
+            // caricamento dello stesso file non rilegge sessions/{id} ne' i raw chunk.
+            ...(result.cloudState ? { cloud: result.cloudState } : {})
         }
         assertLeaseCurrent(isCurrent)
         const canonicalEntry = await electronAPI.updateRegistry(item.fileName, entry)
@@ -487,6 +537,16 @@ export function useElectronSync() {
         let userProjectionDeltas: UserProjectionDelta[] = []
         let localStateChanged = false
         const mutationJournal = createSyncMutationJournal()
+        const commitProjectionWrites = async (writes: ProjectionWrite[]) => {
+            assertLeaseCurrent(isCurrent)
+            if (!writes.length) return
+            // Never split the index from the projections that consume its delta.
+            if (writes.length > 500) throw new Error('projection_batch_exceeds_500_documents')
+            const batch = trackedWriteBatch(db, SYNC_CALLER)
+            for (const write of writes) batch.set(write.ref, write.data, write.options)
+            await batch.commit()
+            assertLeaseCurrent(isCurrent)
+        }
 
         try {
             if (trigger === 'filesChanged') {
@@ -525,7 +585,20 @@ export function useElectronSync() {
                 localStateChanged = localStateChanged || pendingOutcome.localStateChanged
             }
 
-            const missingRecentIndexedIds = await findMissingRecentSessionIndexIds(uid, allResults, isCurrent)
+            // PIP-444: `users/{uid}` letto fresco UNA volta per ciclo (l'unica lettura del
+            // percorso caldo): serve sia al controllo dell'indice sessioni recenti sia, come
+            // revisione e contenuto, al piano delle proiezioni letto dal mirror locale.
+            const recentCandidateIds = selectRecentUnchangedSessionIds(allResults)
+            const hasProjectionWork = changedCount > 0 || trackBestDeltas.length > 0 || userProjectionDeltas.length > 0
+            let ownerSnapshot: OwnerDocumentSnapshot | null = null
+            if (recentCandidateIds.length > 0 || hasProjectionWork) {
+                assertLeaseCurrent(isCurrent)
+                // A no-op boot scan shares the revision just read by provisioning.
+                // A write cycle still checks a fresh server revision before its mirror.
+                ownerSnapshot = await loadOwnerDocument(uid, { fresh: hasProjectionWork, caller: SYNC_CALLER })
+                assertLeaseCurrent(isCurrent)
+            }
+            const missingRecentIndexedIds = findMissingRecentSessionIndexIds(recentCandidateIds, ownerSnapshot)
             if (missingRecentIndexedIds.length > 0) {
                 changedCount += 1
                 userProjectionDeltas = []
@@ -540,20 +613,27 @@ export function useElectronSync() {
                 return result
             }
             assertLeaseCurrent(isCurrent)
-            await refreshSyncProjections({
+            const projectionOutcome = await refreshSyncProjections({
                 db,
                 uid,
                 changedCount,
-                loadSessions,
+                loadFullHistory: loadOwnerSessions,
                 clearTrackDerivedCaches,
                 resetAllTrackBests,
                 getDocFn: getDoc,
                 setDocFn: guardedSetDoc,
+                commitWrites: commitProjectionWrites,
                 bestRulesVersion: BEST_RULES_VERSION,
                 reason: `${reasonPrefix}_projection_refresh`,
                 rebuildTrackBests: needsTrackBestsRebuild,
                 trackBestDeltas,
-                userProjectionDeltas
+                userProjectionDeltas,
+                mirror: {
+                    entry: getSyncMirror(uid),
+                    ownerDocument: ownerSnapshot
+                        ? { exists: ownerSnapshot.exists, data: ownerSnapshot.data, revision: ownerSnapshot.revision }
+                        : null
+                }
             })
             assertLeaseCurrent(isCurrent)
 
@@ -574,6 +654,16 @@ export function useElectronSync() {
                 invalidateTelemetryCaches({ uid, scope: 'sync' })
             }
 
+            // PIP-444: il mirror si pubblica DOPO le invalidazioni (che non lo toccano) e la
+            // copia condivisa di users/{uid} torna allineata al documento appena scritto,
+            // salvo quando la manutenzione ha scritto campi che qui non si conoscono.
+            publishSyncMirror({
+                uid,
+                outcome: projectionOutcome,
+                ownerSnapshot,
+                ownerDocumentKnown: !shouldCompleteMaintenanceAfterLocalSync
+            })
+
             const created = allResults.filter((r) => r.status === 'created').length
             const updated = allResults.filter((r) => r.status === 'updated').length
             const unchanged = allResults.filter((r) => r.status === 'unchanged').length
@@ -586,6 +676,9 @@ export function useElectronSync() {
         } catch (error: any) {
             queueService.setStatus('error')
             console.error(`[SYNC] Trigger ${trigger} failed:`, error)
+            // PIP-444: un ciclo fallito (commit del piano, lease, rete) rende il mirror
+            // inaffidabile: il ciclo seguente rilegge i riepiloghi dal cloud.
+            invalidateSyncMirror(uid)
             try {
                 await recoverPartialSyncMutations({
                     snapshot: mutationJournal.snapshot(),
@@ -599,16 +692,19 @@ export function useElectronSync() {
                             db,
                             uid,
                             changedCount: partial.cloudChangedCount,
-                            loadSessions,
+                            loadFullHistory: loadOwnerSessions,
                             clearTrackDerivedCaches,
                             resetAllTrackBests,
                             getDocFn: getDoc,
                             setDocFn: setDoc,
+                            commitWrites: commitProjectionWrites,
                             bestRulesVersion: BEST_RULES_VERSION,
                             reason: `${reasonPrefix}_partial_recovery`,
                             rebuildTrackBests: false,
-                            trackBestDeltas: partial.trackBestDeltas,
-                            userProjectionDeltas: partial.userProjectionDeltas
+                            // A prior interrupted cycle may have advanced individual
+                            // projections. Recover from authoritative full history.
+                            trackBestDeltas: [],
+                            userProjectionDeltas: []
                         })
                     }
                 })
@@ -777,6 +873,9 @@ export function useElectronSync() {
             handleTrigger: async (trigger, payload) => {
                 const results = await ownerOperations.track(executeTrigger(trigger, payload, isCurrent))
                 notifyIfChanged(results)
+                if (trigger === 'filesChanged' && results.some((item) => item.status === 'error')) {
+                    throw new Error('files_changed_sync_failed')
+                }
                 if (
                     trigger === 'authReady'
                     && (runtimeBootstrapState.value.phase !== 'ready' || results.some((item) => item.status === 'error'))

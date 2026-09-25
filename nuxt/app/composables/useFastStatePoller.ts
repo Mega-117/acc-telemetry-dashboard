@@ -1,4 +1,7 @@
-import { computed, ref } from 'vue'
+import { computed, shallowRef } from 'vue'
+import { usePresentationActivity } from './usePresentationVisibility'
+import { retainUnchanged } from '~/services/overlay/stableTelemetry'
+import { createTelemetryRegistry } from '~/services/overlay/sharedTelemetryLease'
 import type { TrackReferencePhase } from '~/services/spotter/trackVoiceReferences'
 import { normalizeSectorHud, type SectorHudState } from '~/composables/useLiveStatePoller'
 import {
@@ -97,6 +100,23 @@ export interface FastStateDamage {
   eventTs: number | null
 }
 
+export type FastStatePitConfidence = 'high' | 'low' | null
+
+// PIP-376: il logger dichiara il pallino; qui non si stima nulla.
+export interface FastStatePitPrediction {
+  available: boolean
+  reason: string | null
+  spline: number | null
+  confidence: FastStatePitConfidence
+  pitTimeS: number | null
+  pitTimeBaseS: number | null
+  pitTimeSource: string | null
+  // Secondi da fermo su cui si basa il totale (null col tempo manuale).
+  stopTimeS: number | null
+  inPitLane: boolean
+  damage: { visible: boolean, spline: number | null, confidence: FastStatePitConfidence }
+}
+
 export interface FastOverlayState {
   dataSource?: 'local' | 'focused'
   context: FastStateContext | null
@@ -104,6 +124,7 @@ export interface FastOverlayState {
   info: FastStateInfo | null
   sectorHud: SectorHudState | null
   damage: FastStateDamage | null
+  pitPrediction: FastStatePitPrediction | null
   flag: number | null
   lapsCompleted: number
   currentLapTimeMs: number | null
@@ -172,6 +193,7 @@ const EMPTY_FAST_STATE: FastOverlayState = {
   info: null,
   sectorHud: null,
   damage: null,
+  pitPrediction: null,
   flag: null,
   lapsCompleted: 0,
   currentLapTimeMs: null,
@@ -406,6 +428,37 @@ function normalizeLapPressureAverage(raw: any): FastStateLapPressureAverage {
   }
 }
 
+function normalizePitConfidence(value: unknown): FastStatePitConfidence {
+  return value === 'high' || value === 'low' ? value : null
+}
+
+function normalizeSpline(value: unknown): number | null {
+  const spline = toNumber(value)
+  return spline !== null && spline >= 0 && spline <= 1 ? spline : null
+}
+
+export function normalizePitPrediction(raw: any): FastStatePitPrediction | null {
+  if (!raw || typeof raw !== 'object') return null
+  const spline = normalizeSpline(raw.spline)
+  return {
+    // Disponibile solo se il logger lo dichiara E il punto e' utilizzabile.
+    available: raw.available === true && spline !== null,
+    reason: typeof raw.reason === 'string' ? raw.reason : null,
+    spline,
+    confidence: normalizePitConfidence(raw.confidence),
+    pitTimeS: toNumber(raw.pit_time_s),
+    pitTimeBaseS: toNumber(raw.pit_time_base_s),
+    pitTimeSource: typeof raw.pit_time_source === 'string' ? raw.pit_time_source : null,
+    stopTimeS: toNumber(raw.stop_time_s),
+    inPitLane: raw.in_pit_lane === true,
+    damage: {
+      visible: raw.damage?.visible === true && normalizeSpline(raw.damage?.spline) !== null,
+      spline: normalizeSpline(raw.damage?.spline),
+      confidence: normalizePitConfidence(raw.damage?.confidence),
+    },
+  }
+}
+
 function normalizeFastState(state: any): FastOverlayState {
   if (!state || typeof state !== 'object' || !isFastStateFresh(state.ts)) {
     return { ...EMPTY_FAST_STATE }
@@ -422,6 +475,7 @@ function normalizeFastState(state: any): FastOverlayState {
     info: normalizeInfo(state.info),
     sectorHud: normalizeSectorHud(state.sector_hud),
     damage: normalizeDamage(state.damage),
+    pitPrediction: normalizePitPrediction(state.pit_prediction),
     flag: toNumber(state.flag),
     lapsCompleted: toNumber(state.laps_completed) ?? 0,
     currentLapTimeMs: toNumber(state.current_lap_time_ms),
@@ -488,14 +542,18 @@ function normalizeFastState(state: any): FastOverlayState {
   }
 }
 
-export function useFastStatePoller(getApi: () => any | null) {
-  const fastState = ref<FastOverlayState>({ ...EMPTY_FAST_STATE })
+function createFastStatePoller(getApi: () => any | null) {
+  const fastState = shallowRef<FastOverlayState>({ ...EMPTY_FAST_STATE })
   const isFastStateActive = computed(() => fastState.value.isLive && fastState.value.tyres.length === 4)
   let fastStateInterval: ReturnType<typeof setInterval> | null = null
   let removePushListener: (() => void) | null = null
+  let revision = 0
+  let lastRaw: { ts?: unknown } | null = null
+  let lastPushAt = -Infinity
 
   function applyState(state: any) {
-    fastState.value = normalizeFastState(state)
+    lastRaw = state
+    fastState.value = retainUnchanged(fastState.value, normalizeFastState(state))
   }
 
   function startFastStatePolling(): Promise<void> {
@@ -508,32 +566,50 @@ export function useFastStatePoller(getApi: () => any | null) {
     }
 
     if (typeof api.onFastStateUpdate === 'function') {
-      removePushListener = api.onFastStateUpdate(applyState)
+      removePushListener = api.onFastStateUpdate((state: any) => {
+        revision++
+        lastPushAt = Date.now()
+        applyState(state)
+      })
     }
 
     let errorCount = 0
+    let inFlight = false
 
     async function pollOnce() {
+      if (inFlight) return
+      inFlight = true
+      const requestRevision = revision
       try {
         const state = await api.getFastState()
+        if (requestRevision !== revision) return
         errorCount = 0
         applyState(state)
       } catch (err: any) {
+        if (requestRevision !== revision) return
         errorCount++
         console.warn(`[FastStatePoller] IPC error (attempt ${errorCount}):`, err?.message ?? err)
         if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
           stopFastStatePolling()
           applyState(null)
         }
+      } finally {
+        inFlight = false
       }
     }
 
     const firstPoll = pollOnce()
-    fastStateInterval = setInterval(pollOnce, FAST_STATE_POLL_MS)
+    fastStateInterval = setInterval(() => {
+      // Expiry remains active even with a stalled pull. Healthy pushes need no pull.
+      if (lastRaw && !isFastStateFresh(lastRaw.ts)) applyState(null)
+      if (Date.now() - lastPushAt >= FAST_STATE_POLL_MS) void pollOnce()
+    }, FAST_STATE_POLL_MS)
     return firstPoll
   }
 
   function stopFastStatePolling() {
+    revision++
+    lastPushAt = -Infinity
     if (fastStateInterval) {
       clearInterval(fastStateInterval)
       fastStateInterval = null
@@ -545,5 +621,38 @@ export function useFastStatePoller(getApi: () => any | null) {
   }
 
   return { fastState, isFastStateActive, startFastStatePolling, stopFastStatePolling }
+}
+
+type FastSource = ReturnType<typeof createFastStatePoller> & { ready: Promise<void> }
+const fastSources = createTelemetryRegistry<FastSource>()
+
+export function useFastStatePoller(getApi: Parameters<typeof createFastStatePoller>[0], background = false) {
+  const attached = shallowRef<FastSource | null>(null)
+  const frozen = shallowRef<FastOverlayState>({ ...EMPTY_FAST_STATE })
+  let release: (() => void) | null = null
+  const fastState = computed(() => attached.value?.fastState.value ?? frozen.value)
+  const isFastStateActive = computed(() => fastState.value.isLive && fastState.value.tyres.length === 4)
+  function stopFastStatePolling() {
+    frozen.value = fastState.value
+    release?.()
+    release = null
+    attached.value = null
+  }
+  function startFastStatePolling(): Promise<void> {
+    stopFastStatePolling()
+    const api = getApi()
+    const key = typeof api?.getFastState === 'function' ? api.getFastState : getApi
+    const lease = fastSources.acquire(key, () => {
+      const source = createFastStatePoller(() => api)
+      return { ...source, ready: source.startFastStatePolling() }
+    }, source => source.stopFastStatePolling())
+    attached.value = lease.source
+    release = lease.release
+    return lease.source.ready
+  }
+  const activity = usePresentationActivity(startFastStatePolling, stopFastStatePolling, background)
+  return { fastState, isFastStateActive,
+    startFastStatePolling: () => Promise.resolve(activity.start()).then(() => {}),
+    stopFastStatePolling: activity.stop }
 }
 

@@ -173,8 +173,9 @@ export function startPitwallRealtimeDriver(options: Options): PitwallRoomDriverH
     if (confirmationTimer) clearTimeout(confirmationTimer)
     const previous = room
     if (previous) {
+      detach()
       const result = previous.managerUids.includes(options.uid) ? await rooms.closeRoom(previous.roomId) : await rooms.leaveRoom(previous.roomId)
-      if (!result.ok) { wanted = true; reason = result.reason; emit(); return }
+      if (!result.ok) { wanted = true; reason = result.reason; attach(previous.roomId); emit(); return }
     }
     detach(); room = null; confirming = null; confirmed = false
     await sync(); emit()

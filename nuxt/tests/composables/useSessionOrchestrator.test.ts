@@ -28,7 +28,7 @@ function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boo
   const enqueueVoice = vi.fn()
   const announceLap = vi.fn()
   const isSettingsOpen = ref(false)
-  const liveLap = ref<any>({ currentLap: null, lapValid: null, lapsCompleted: null, lapsValid: null, lastLapTimeMs: null, sectorHud: null, track: null, car: null })
+  const liveLap = ref<any>({ currentLap: null, lapValid: null, lastLapValid: null, lapsCompleted: null, lapsValid: null, lastLapTimeMs: null, sectorHud: null, track: null, car: null })
 
   const orchestrator = useSessionOrchestrator(
     phase as never,
@@ -186,6 +186,20 @@ describe('useSessionOrchestrator - completamento manuale e skip', () => {
 })
 
 describe('useSessionOrchestrator - annunci live giro controllati dalla voce coach (PIP-203)', () => {
+  it.each([false, true, null])('uses completed validity %s independently of current lap', async (valid) => {
+    const { liveLap, announceLap } = setup({ canAnnounceLiveLap: true })
+    liveLap.value = { ...liveLap.value, lapsCompleted: 0 }
+    await nextTick()
+    liveLap.value = { ...liveLap.value, lapsCompleted: 1, currentLap: 2,
+      lastLapTimeMs: 100875, lapValid: !valid, lastLapValid: valid }
+    await nextTick()
+    if (valid === null) expect(announceLap).not.toHaveBeenCalled()
+    else expect(announceLap).toHaveBeenCalledWith(1, 100875, valid)
+    liveLap.value = { ...liveLap.value, lapValid: valid }
+    await nextTick()
+    expect(announceLap).toHaveBeenCalledTimes(valid === null ? 0 : 1)
+  })
+
   it('non annuncia il tempo giro quando la voce coach e spenta', async () => {
     const { orchestrator, liveLap, announceLap } = setup({ canAnnounceLiveLap: false })
     orchestrator.startStep(0)
@@ -198,6 +212,7 @@ describe('useSessionOrchestrator - annunci live giro controllati dalla voce coac
       lapsCompleted: 1,
       lastLapTimeMs: 90_900,
       lapValid: true,
+      lastLapValid: true,
     }
     await nextTick()
 
@@ -216,10 +231,11 @@ describe('useSessionOrchestrator - annunci live giro controllati dalla voce coac
       lapsCompleted: 1,
       lastLapTimeMs: 90_900,
       lapValid: true,
+      lastLapValid: true,
     }
     await nextTick()
 
-    expect(announceLap).toHaveBeenCalledWith(2, 90_900, true)
+    expect(announceLap).toHaveBeenCalledWith(1, 90_900, true)
   })
 
   it('annuncia il tempo giro anche fuori allenamento quando la voce coach e accesa', async () => {
@@ -234,11 +250,12 @@ describe('useSessionOrchestrator - annunci live giro controllati dalla voce coac
       lapsCompleted: 1,
       lastLapTimeMs: 91_200,
       lapValid: true,
+      lastLapValid: true,
     }
     await nextTick()
 
     expect(phase.value).toBe('launcher')
-    expect(announceLap).toHaveBeenCalledWith(2, 91_200, true)
+    expect(announceLap).toHaveBeenCalledWith(1, 91_200, true)
   })
 })
 
@@ -269,7 +286,7 @@ describe('useSessionOrchestrator - voce allenamento separata dal gate tempo giro
       ref(10),
       () => {}, () => {}, vi.fn() as never, enqueueStepStart, vi.fn(),
       async () => {}, () => {}, () => {}, () => {},
-      ref({ currentLap: null, lapValid: null, lapsCompleted: null, lapsValid: null, lastLapTimeMs: null, sectorHud: null, track: null, car: null }),
+      ref({ currentLap: null, lapValid: null, lastLapValid: null, lapsCompleted: null, lapsValid: null, lastLapTimeMs: null, sectorHud: null, track: null, car: null }),
       () => {}, () => {}, () => {},
       async () => {}, async () => {}, async () => {}, async () => {},
       undefined,

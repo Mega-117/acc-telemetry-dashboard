@@ -45,12 +45,14 @@ describe('aggancio dell inquadratura remota', () => {
     expect(latch).toEqual({ remote: false, unavailableSinceMs: null })
   })
 
-  it('un envelope senza indici validi non cambia cio che sapevamo', () => {
+  it('un focus valido senza identita locale usa solo dati pubblici focused', () => {
     const observing = trackRemoteFocus(emptyRemoteFocusLatch(), envelope(1023, 1024), 1_000)
     const latch = trackRemoteFocus(observing, envelope(null, 1024), 1_500)
 
     expect(latch.remote).toBe(true)
-    expect(latch.unavailableSinceMs).toBe(1_500)
+    expect(latch.unavailableSinceMs).toBeNull()
+    expect(trackRemoteFocus(emptyRemoteFocusLatch(), envelope(null, 1024), 1_500).remote).toBe(true)
+    expect(trackRemoteFocus(latch, envelope(null, null), 2_000).unavailableSinceMs).toBe(2_000)
   })
 
   it('ricorda il primo istante di silenzio, non l ultimo', () => {

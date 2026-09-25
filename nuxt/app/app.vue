@@ -16,11 +16,19 @@ import { usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
 import { providePitwallStore } from '~/composables/usePitwallStore'
 import { endFirebaseScenario, startFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
+import { useOwnerCacheLifecycle } from '~/composables/useOwnerCacheLifecycle'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
 import { canUseDevTools } from '~/utils/devToolsAccess'
 import { toAuthStartupOutcome, type AuthSessionStatus } from '~/services/auth/authSessionPolicy'
 import { publishAuthStartupOutcome } from '~/services/auth/localIdentityBridge'
 import { useWheelInputBridge } from '~/composables/useWheelInputBridge'
+import { useWindowPresentationVisibility } from '~/composables/usePresentationVisibility'
+import '~/assets/css/presentation-visibility.css'
+
+const presentationVisible = useWindowPresentationVisibility()
+watch(presentationVisible, visible => {
+  if (typeof document !== 'undefined') document.documentElement.dataset.presentationHidden = String(!visible)
+}, { immediate: true })
 
 import { prepareOverviewEntry, decodeOverviewImage, overviewEntryKey, type OverviewEntry } from '~/services/auth/overviewEntryPreparation'
 import { getOverviewCarImage } from '~/utils/overviewCarImage'
@@ -58,7 +66,7 @@ const isTrainingOverlayIntent = computed(() => {
 // Overlay HUD semplici (PIP-175): come il training overlay, vivono in una
 // finestra Electron dedicata e vanno renderizzati standalone, fuori dalla shell
 // auth/dashboard (che altrimenti li redirige a /panoramica).
-const hudOverlayRoutes = ['/tyres-overlay', '/sectors-overlay', '/dashboard-overlay', '/info-overlay', '/standings-overlay']
+const hudOverlayRoutes = ['/overlay-surface', '/tyres-overlay', '/sectors-overlay', '/dashboard-overlay', '/info-overlay', '/standings-overlay', '/trackmap-overlay']
 const isHudOverlayRoute = computed(() => {
   return hudOverlayRoutes.includes(normalizedRoutePath.value)
     || hudOverlayRoutes.includes(browserOverlayPath.value)
@@ -148,6 +156,9 @@ const primaryCloudOwner = usePrimaryCloudOwner({
   canEnterApp,
   cloudEnabled: cloudJobsAllowed
 })
+// PIP-442: cache proiezioni owner (memoria + file locale in Electron) legate all'account:
+// idratate prima di mostrare la dashboard, svuotate a logout/cambio account.
+const ownerCacheLifecycle = useOwnerCacheLifecycle({ currentUser, canEnterApp })
 watch(primaryCloudOwner.jobsEnabled, (enabled) => {
   const api = typeof window === 'undefined' ? null : (window as Window & { electronAPI?: { localIdentityRole?: string } }).electronAPI
   if (enabled && isPrimaryClientRuntime.value && api?.localIdentityRole === 'primary') {
@@ -167,7 +178,9 @@ const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 // Lato pilota del Pit Wall: annuncia il pilota e ascolta gli ordini in arrivo.
 // Vive qui perche' questa e' la finestra che possiede la sessione Firebase; si
 // disattiva da sola fuori da Electron e quando i lavori cloud sono di un'altra.
-usePitwallDriverPresence({ jobsEnabled: primaryCloudOwner.jobsEnabled })
+const pitwallDemand = computed(() => normalizedRoutePath.value === '/pitwall'
+  || !!pitwallStore.myRoom.value || !!pitwallStore.pitwall.value.roomId)
+usePitwallDriverPresence({ jobsEnabled: primaryCloudOwner.jobsEnabled, demand: pitwallDemand })
 const isProtectedRuntimeRoute = computed(() => (
   isTrainingOverlayIntent.value
   || isHudOverlayRoute.value
@@ -235,11 +248,17 @@ watch(
   ([state, user, canEnter]) => {
     if (state !== 'dashboard' || !user || !canEnter) {
       stopListening()
-      pitwallStore.halt()
       return
     }
     listenToActivitiesTracked(user.uid)
-    pitwallStore.start()
+  },
+  { flush: 'post' }
+)
+watch(
+  [appState, currentUser, canEnterApp, pitwallDemand],
+  ([state, user, canEnter, needsPitwall]) => {
+    if (state !== 'dashboard' || !user || !canEnter) pitwallStore.halt()
+    else pitwallStore.start(needsPitwall)
   },
   { flush: 'post' }
 )
@@ -325,6 +344,11 @@ watch(authSessionStatus, (status) => {
   })
 }, { immediate: true })
 
+// Restore the owner cache for entries that bypass enterDashboard.
+watch([appState, () => currentUser.value?.uid || null], ([state, uid]) => {
+  if (state === 'dashboard' && uid && canEnterApp.value) void ownerCacheLifecycle.prepare(uid)
+})
+
 // Warm only public code while signed out; user data starts after the auth gate.
 const warmDashboardCode = () => Promise.all([
   preloadRouteComponents('/panoramica'), import('~/layouts/dashboard.vue'),
@@ -348,6 +372,9 @@ const enterDashboard = async () => {
   const isCurrent = () => entryLeases.isLeaseCurrent(lease, currentUser.value?.uid) && canEnterApp.value
   preparingDashboard.value = true
   try {
+    // Hydrate local projections before the overview preparation starts cloud reads.
+    await ownerCacheLifecycle.prepare(uid)
+    if (!isCurrent()) return
     if (destination.split(/[?#]/)[0] === '/panoramica') {
       const entry = prepareOverviewEntry(uid, {
         projection: () => telemetryGateway.getOverviewProjection(uid),

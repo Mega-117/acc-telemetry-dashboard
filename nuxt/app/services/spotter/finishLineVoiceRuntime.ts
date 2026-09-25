@@ -44,9 +44,8 @@ export function createFinishLineVoiceRuntime(options: {
     if (pendingLap !== null) {
       const time = frame.info?.lapsCompleted === lap
         ? frame.info.lastLapTimeMs ?? frame.lastLapTimeMs : frame.lastLapTimeMs
-      if (time !== null && Number.isFinite(time) && time > 0) {
-        const valid = frame.info?.lapsCompleted === lap
-          ? frame.info.lastLapValid ?? true : true
+      const valid = frame.info?.lapsCompleted === lap ? frame.info.lastLapValid : null
+      if (time !== null && Number.isFinite(time) && time > 0 && typeof valid === 'boolean') {
         options.announceLap(`lap-time-${generation}-${pendingLap}`, time, valid)
         pendingLap = null
       }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 const props = defineProps<{ api: any }>()
 const open = ref(false), minutes = ref(10), pending = ref(false), error = ref('')
 const state = ref<any>(null)
@@ -8,7 +8,25 @@ let timer: ReturnType<typeof setTimeout> | undefined
 let generation = 0
 let disposed = false
 const plan = computed(() => state.value?.plan)
-const statusMessage = computed(() => pending.value ? 'Applicazione in corso…'
+// Session type is polled lightly even while the panel is closed, so the
+// whole-session button can be disabled outside qualifying/race (PIP-423).
+const sessionType = ref<number | null>(null)
+const sessionAllowsAuto = computed(() => sessionType.value === 1 || sessionType.value === 2)
+const sessionHint = computed(() => sessionType.value === null ? 'Carburante intera sessione: in attesa della telemetria.' : 'Carburante intera sessione: disponibile solo in qualifica e gara.')
+let sessionTimer: ReturnType<typeof setTimeout> | undefined
+async function pollSession() {
+  clearTimeout(sessionTimer)
+  if (disposed) return
+  if (!pending.value) {
+    try {
+      const value = await props.api?.trainingOverlayPreviewSetupFuel?.({ mode: 'minutes', minutes: Number(minutes.value) })
+      if (!disposed && value && typeof value.sessionType === 'number') sessionType.value = value.sessionType
+    } catch { /* keep the last known session type */ }
+  }
+  if (!disposed) sessionTimer = setTimeout(pollSession, 5000)
+}
+void pollSession()
+const statusMessage = computed(() => pending.value ? 'Preparazione carburante…'
   : error.value || state.value?.conflict || state.value?.unavailableReason
   || (plan.value && !plan.value.ok ? plan.value.reason : '')
   || state.value?.result?.reason || (state.value?.available ? 'Pronto: premi Applica dal menu Pausa; la schermata verrà verificata.' : 'Verifica delle condizioni…'))
@@ -21,6 +39,7 @@ async function refresh(background = false) {
     const value = await props.api?.trainingOverlayPreviewSetupFuel?.({ mode: 'minutes', minutes: minutes.value })
     if (token !== generation) return
     state.value = value
+    if (value && typeof value.sessionType === 'number') sessionType.value = value.sessionType
     if (value && error.value.startsWith('Anteprima carburante')) error.value = ''
     if (!value) error.value = 'Riavvia Racer Core per attivare il comando carburante.'
   } catch { if (token === generation) { state.value = null; error.value = 'Anteprima carburante non disponibile. Riprovo automaticamente.' } }
@@ -47,9 +66,11 @@ async function keyboard(event: PointerEvent) {
     (event.target as HTMLInputElement).focus()
   }
 }
-function beginApplication() {
+async function beginApplication() {
   pending.value = true; error.value = ''; generation++; clearTimeout(timer)
   previewPending.value = false
+  // Commit the pending message before IPC can hide Ctrl+K.
+  await nextTick()
 }
 async function applyPlan(mode: 'auto' | 'minutes', expected: any) {
   const result = await props.api.trainingOverlayApplySetupFuel({ mode, minutes: Number(minutes.value), contextKey: expected.contextKey, totalLitres: expected.totalLitres })
@@ -60,9 +81,10 @@ function finishApplication() {
   if (open.value) void refresh()
 }
 async function applySession() {
-  if (pending.value) return
-  beginApplication()
+  if (pending.value || !sessionAllowsAuto.value) return
+  await beginApplication()
   try {
+    if (disposed) return
     // Obtain a fresh session plan on click; never reuse the custom stint preview.
     const value = await props.api?.trainingOverlayPreviewSetupFuel?.({ mode: 'auto', minutes: Number(minutes.value) })
     if (disposed) return
@@ -77,17 +99,21 @@ async function applySession() {
 async function apply() {
   if (!state.value?.available || pending.value || previewPending.value) return
   const expected = plan.value
-  beginApplication()
-  try { await applyPlan('minutes', expected) }
+  await beginApplication()
+  try {
+    if (disposed) return
+    await applyPlan('minutes', expected)
+  }
   catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.' }
   finally { finishApplication() }
 }
-onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); void props.api?.trainingOverlayKeyboardEditing?.(false) })
+onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clearTimeout(sessionTimer); void props.api?.trainingOverlayKeyboardEditing?.(false) })
 </script>
 
 <template>
   <section class="fuel-panel">
-    <button class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" :disabled="pending" @click="applySession">{{ pending ? 'Applicazione carburante…' : 'Carburante intera sessione' }}</button>
+    <button class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession">{{ pending ? 'Applicazione carburante…' : 'Carburante intera sessione' }}</button>
+    <p v-if="!sessionAllowsAuto && !pending" class="fuel-hint">{{ sessionHint }}</p>
     <div v-if="!open && (pending || error)" class="fuel-status" role="status" aria-live="polite"><strong>Stato carburante</strong><p>{{ statusMessage }}</p></div>
     <button class="fuel-open" type="button" data-overlay-wheel-action="fuel" :aria-expanded="open" :disabled="pending" @click="open = !open">Carburante durata stint</button>
     <div v-if="open" class="fuel-body">
@@ -101,7 +127,8 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); void
         <p class="fuel-total">{{ plan.totalLitres }} <small>L totali</small></p>
         <p>Stint richiesto: {{ (plan.durationMs / 60000).toFixed(1) }} min</p>
         <p v-if="plan.nominalAutonomyMs">Autonomia stimata con riserva: {{ (plan.nominalAutonomyMs / 60000).toFixed(1) }} min</p>
-        <p> {{ plan.consumption }} L/giro · riferimento {{ (plan.referenceLapMs / 1000).toFixed(1) }} s</p>
+        <p> {{ plan.consumption }} L/giro · riferimento {{ (plan.referenceLapMs / 1000).toFixed(1) }} s<template v-if="plan.referenceClass"> · {{ plan.referenceClass }}</template></p>
+        <p class="fuel-source">{{ plan.paceSource }}</p>
         <details><summary>Come è calcolato</summary><p>{{ plan.consumptionSource }}. {{ plan.paceSource }}.</p><p v-for="note in plan.notes" :key="note">{{ note }}</p></details>
       </template>
 
@@ -112,5 +139,5 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); void
 </template>
 
 <style scoped>
-.fuel-status{padding:10px;border:1px solid #6d604b;border-radius:8px;background:#24211c}.fuel-status strong{display:block;margin-bottom:4px}.fuel-panel{width:100%;text-align:left;display:grid;gap:8px}.fuel-open,.fuel-apply{width:100%;min-height:34px;border:1px solid #805126;border-radius:8px;background:#252019;color:#fff;font-weight:800}.fuel-body{padding:12px;border:1px solid #48423b;border-radius:10px;background:#131819;display:grid;gap:10px;font-size:12px;color:#d9e1e5}.fuel-body p{margin:0;line-height:1.4}.fuel-modes,.fuel-duration{display:flex;gap:8px;align-items:center}.fuel-body button{cursor:pointer;min-height:32px}.fuel-modes button,.fuel-duration button{background:#222b30;color:white;border:1px solid #526069;border-radius:6px;padding:5px 10px}.fuel-modes button[aria-pressed=true]{border-color:#ff9638;color:#ffae62}.fuel-duration input{width:62px;font-size:22px;text-align:center;color:white;background:#101516;border:1px solid #526069;border-radius:6px}.fuel-total{font-size:30px;font-weight:900}.fuel-total small{font-size:13px}.fuel-apply{background:#ff9638;color:#111}.fuel-open:disabled,.fuel-apply:disabled{opacity:.45;cursor:default}.fuel-body summary{cursor:pointer;color:#aeb9c0}button:focus-visible,input:focus-visible{outline:2px solid #ffb257;outline-offset:2px}
+.fuel-status{padding:10px;border:1px solid #6d604b;border-radius:8px;background:#24211c}.fuel-status strong{display:block;margin-bottom:4px}.fuel-panel{width:100%;text-align:left;display:grid;gap:8px}.fuel-open,.fuel-apply{width:100%;min-height:34px;border:1px solid #805126;border-radius:8px;background:#252019;color:#fff;font-weight:800}.fuel-body{padding:12px;border:1px solid #48423b;border-radius:10px;background:#131819;display:grid;gap:10px;font-size:12px;color:#d9e1e5}.fuel-body p{margin:0;line-height:1.4}.fuel-modes,.fuel-duration{display:flex;gap:8px;align-items:center}.fuel-body button{cursor:pointer;min-height:32px}.fuel-modes button,.fuel-duration button{background:#222b30;color:white;border:1px solid #526069;border-radius:6px;padding:5px 10px}.fuel-modes button[aria-pressed=true]{border-color:#ff9638;color:#ffae62}.fuel-duration input{width:62px;font-size:22px;text-align:center;color:white;background:#101516;border:1px solid #526069;border-radius:6px}.fuel-total{font-size:30px;font-weight:900}.fuel-total small{font-size:13px}.fuel-apply{background:#ff9638;color:#111}.fuel-open:disabled,.fuel-apply:disabled{opacity:.45;cursor:default}.fuel-body summary{cursor:pointer;color:#aeb9c0}.fuel-hint{margin:-4px 0 0;font-size:11px;color:#aeb9c0}.fuel-source{color:#aeb9c0}button:focus-visible,input:focus-visible{outline:2px solid #ffb257;outline-offset:2px}
 </style>

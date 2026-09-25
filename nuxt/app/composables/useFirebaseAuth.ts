@@ -4,6 +4,7 @@
 
 import { ref, computed } from 'vue'
 import { createAuthTransitionQueue } from '~/services/auth/authTransitionQueue'
+import { clearProfileProjectionReceipt } from '~/services/auth/profileProjectionReceipt'
 import type { User } from 'firebase/auth'
 import type { UserProfileDocument } from '~/services/auth/userProvisioningService'
 import { AUTH_EMAIL_VERIFICATION_REQUIRED } from '~/config/authPolicy'
@@ -15,6 +16,7 @@ import {
 import { createAuthSessionRecoveryCoordinator } from '~/services/auth/authSessionRecoveryCoordinator'
 import { createAuthRevisionLeaseCoordinator, type AuthRevisionLease } from '~/services/auth/authRevisionLease'
 import { createRetryableSingleFlightLoader } from '~/services/auth/retryableSingleFlightLoader'
+import { recordFirebaseCacheHit } from '~/services/monitoring/firebaseOpsJournal'
 import {
     clearLocalUserIdentity,
     isSecondaryLocalRuntimeRenderer,
@@ -183,6 +185,7 @@ async function syncAuthenticatedUser(
 }
 
 async function syncLoggedOutUser() {
+    clearProfileProjectionReceipt()
     userRole.value = 'pilot'
     firestoreNickname.value = ''
     userProfileCache.clear()
@@ -193,17 +196,20 @@ async function syncLoggedOutUser() {
 
 async function loadCachedUserProfile(uid: string, { force = false } = {}) {
     if (!force && userProfileCache.has(uid)) {
+        recordFirebaseCacheHit('auth.userProfile')
         const cached = userProfileCache.get(uid) ?? null
         if (currentUser.value?.uid === uid) currentUserProfile.value = cached
         return cached
     }
 
     if (!force && userProfileRequests.has(uid)) {
+        recordFirebaseCacheHit('auth.userProfile.inFlight')
         return userProfileRequests.get(uid)!
     }
 
     const { getUserProfile } = await getAuthDependencies()
-    const request: Promise<CachedUserProfile | null> = getUserProfile(uid)
+    // PIP-442: il profilo e' il documento owner condiviso; `force` chiede la lettura fresca.
+    const request: Promise<CachedUserProfile | null> = getUserProfile(uid, { fresh: force })
         .then((profile) => {
             const cachedProfile = profile && typeof profile === 'object'
                 ? profile as CachedUserProfile
@@ -230,6 +236,8 @@ function updateCachedUserProfile(uid: string, patch: CachedUserProfile) {
         ...patch
     }
     userProfileCache.set(uid, nextProfile)
+    // PIP-442: la copia condivisa di `users/{uid}` viene svuotata da chi salva il profilo
+    // (`invalidateTelemetryCaches({ scope: 'profile' })`), senza importare Firestore qui.
     if (currentUser.value?.uid === uid) currentUserProfile.value = nextProfile
 }
 

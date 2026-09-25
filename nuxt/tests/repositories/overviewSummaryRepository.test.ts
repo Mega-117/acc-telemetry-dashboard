@@ -25,3 +25,14 @@ it('represents a missing summary honestly and propagates read failures to retry 
   expect(await loadOverviewSessionSummary('qa', 'missing')).toBeNull()
   await expect(loadOverviewSessionSummary('qa', 'error')).rejects.toThrow('offline')
 })
+it('does not repopulate the cache when an old read completes after invalidation', async () => {
+  let resolveRead!: (value: unknown) => void
+  mocks.get.mockImplementationOnce(() => new Promise(resolve => { resolveRead = resolve }))
+  const pending = loadOverviewSessionSummary('qa', 'last')
+  clearTelemetryProjectionRepositoryCache('qa')
+  resolveRead({ exists: () => true, data: () => ({ summary: { best_qualy_ms: 90000 } }) })
+  await pending
+  mocks.get.mockResolvedValueOnce({ exists: () => true, data: () => ({ summary: { best_qualy_ms: 89000 } }) })
+  expect(await loadOverviewSessionSummary('qa', 'last')).toEqual({ best_qualy_ms: 89000 })
+  expect(mocks.get).toHaveBeenCalledTimes(2)
+})

@@ -33,6 +33,7 @@ import {
   isCompletedCanonicalMigrationCheckpoint
 } from '~/services/sync/canonicalMigrationCheckpoint'
 import { createSessionUploadService } from '~/services/sync/sessionUploadService'
+import { refreshSyncProjections, type ProjectionWrite } from '~/services/sync/syncProjectionRefreshService'
 import { inspectFirebaseStructureState } from '~/services/sync/firebaseStructureHealthService'
 import { repairPilotDirectoryFromUser } from '~/services/pilotDirectoryProjectionService'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -46,6 +47,51 @@ const FRESH_PILOT_UID = 'qa-fresh-pilot'
 const FRESH_PILOT_EMAIL = 'qa-fresh-pilot@accsuite.invalid'
 
 let testEnv: RulesTestEnvironment
+
+it('PIP-436 commits the complete projection plan atomically under real owner rules', async () => {
+  const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
+  const date = new Date().toISOString()
+  const session = (laps: number) => ({ sessionId: 'atomic-session', meta: {
+    track: 'monza', car: 'ferrari_296_gt3', date_start: date, session_type: 0
+  }, summary: { laps, lapsValid: laps, totalTime: laps * 100_000, stintCount: 1 } })
+  let deny = false
+  const commitWrites = async (writes: ProjectionWrite[]) => {
+    const batch = writeBatch(db)
+    for (const write of writes) {
+      if (write.options) batch.set(write.ref, write.data, write.options)
+      else batch.set(write.ref, write.data)
+    }
+    if (deny) batch.set(doc(db, `users/${SECOND_PILOT_UID}/trackBests/monza`), { denied: true })
+    await batch.commit()
+  }
+  const input = (laps: number) => ({ db, uid: PILOT_UID, changedCount: 1,
+    loadFullHistory: async () => [session(laps)] as any, clearTrackDerivedCaches: () => {},
+    resetAllTrackBests: async () => 0, getDocFn: getDoc, setDocFn: setDoc,
+    commitWrites, bestRulesVersion: 5, reason: 'emulator-atomic-plan' })
+  await assertSucceeds(refreshSyncProjections(input(3)))
+  const delta = { status: 'updated' as const, sessionId: 'atomic-session', trackId: 'monza', car: 'ferrari_296_gt3',
+    dateStart: date, sessionType: 0, summary: session(8).summary }
+  const updated = { ...input(8), userProjectionDeltas: [delta], trackBestDeltas: [delta] }
+  const userRef = doc(db, `users/${PILOT_UID}`)
+  deny = true
+  await assertFails(refreshSyncProjections(updated))
+  expect((await getDoc(userRef)).data()?.sessionIndex.sessionsList[0].laps).toBe(3)
+  deny = false
+  await assertSucceeds(refreshSyncProjections(updated))
+  expect((await getDoc(userRef)).data()?.sessionIndex.sessionsList[0].laps).toBe(8)
+  // PIP-444 (b): un documento per pista con entrambe le sezioni, scritto con mergeFields sotto rules reali.
+  const trackProjection = (await getDoc(doc(db, `users/${PILOT_UID}/trackProjections/monza`))).data()
+  expect(trackProjection?.schemaVersion).toBe(1)
+  expect(trackProjection?.bests.activity.totalLaps).toBe(8)
+  expect(trackProjection?.detail.categories.GT3.activity.totalLaps).toBe(8)
+  expect((await getDoc(doc(db, `users/${PILOT_UID}/trackBests/monza`))).exists()).toBe(false)
+  expect((await getDoc(doc(db, `users/${PILOT_UID}/trackDetailProjections/monza`))).exists()).toBe(false)
+  // PIP-441: l'indice piste viaggia nello stesso batch (merge incrementale sotto rules reali).
+  const index = (await getDoc(doc(db, `users/${PILOT_UID}/trackBestsIndex/v1`))).data()
+  expect(index?.complete).toBe(true)
+  expect(index?.tracks.monza.activity.totalLaps).toBe(8)
+  expect(index?.tracks.monza.syncedSessionIds).toBeUndefined()
+})
 
 function diagnosticPayload(uid: string, eventId: string) {
   return {
@@ -918,6 +964,94 @@ describe('migration checkpoint emulator', () => {
 // telemetria non abbia una porta d'ingresso, e che l'esito di un ordine lo
 // dichiari soltanto il PC che lo applica davvero.
 // ============================================================================
+
+// PIP-441: indici di avvio (piste e calendario) — owner ok, altri utenti negati, versione vincolata.
+describe('startup index documents (PIP-441)', () => {
+  const trackBestsIndex = (overrides: Record<string, unknown> = {}) => ({
+    version: 1, bestRulesVersion: 5, updatedAt: '2026-09-22T10:00:00.000Z', complete: true,
+    tracks: { monza: { version: 4, bestRulesVersion: 5, trackId: 'monza', bests: {}, activity: { sessionCount: 1 }, lastSessionDate: null } },
+    ...overrides
+  })
+  const raceCalendarIndex = (overrides: Record<string, unknown> = {}) => ({
+    version: 1, updatedAt: '2026-09-22T10:00:00.000Z', truncated: false,
+    events: [{ id: 'e1', title: 'Sprint', startsAt: '2026-10-01T18:00:00.000Z', trackName: 'Monza', carName: '', simGridUrl: '', raceUrl: '', createdBy: PILOT_UID, createdByRole: 'pilot', createdAt: '', updatedAt: '' }],
+    ...overrides
+  })
+
+  it('trackBestsIndex/v1: owner crea, merge incrementale, legge ed elimina; altri negati', async () => {
+    const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const ref = doc(owner, `users/${PILOT_UID}/trackBestsIndex/v1`)
+    await assertSucceeds(setDoc(ref, trackBestsIndex()))
+    await assertSucceeds(setDoc(ref, { version: 1, updatedAt: '2026-09-22T11:00:00.000Z', tracks: { spa: { version: 4, bestRulesVersion: 5, trackId: 'spa', bests: {}, activity: {}, lastSessionDate: null } } }, { merge: true }))
+    const merged = (await getDoc(ref)).data()
+    expect(merged?.complete).toBe(true)
+    expect(Object.keys(merged?.tracks || {}).sort()).toEqual(['monza', 'spa'])
+    await assertFails(setDoc(ref, trackBestsIndex({ version: 2 })))
+    await assertFails(setDoc(ref, trackBestsIndex({ rootKey: 'secret' })))
+    await assertFails(setDoc(ref, trackBestsIndex({ tracks: 'not-a-map' })))
+    await assertFails(setDoc(doc(owner, `users/${PILOT_UID}/trackBestsIndex/v2`), trackBestsIndex()))
+
+    const other = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    await assertFails(getDoc(doc(other, `users/${PILOT_UID}/trackBestsIndex/v1`)))
+    await assertFails(setDoc(doc(other, `users/${PILOT_UID}/trackBestsIndex/v1`), trackBestsIndex()))
+    await assertFails(deleteDoc(doc(other, `users/${PILOT_UID}/trackBestsIndex/v1`)))
+    await assertSucceeds(getDoc(doc(testEnv.authenticatedContext(ADMIN_UID).firestore(), `users/${PILOT_UID}/trackBestsIndex/v1`)))
+    await assertSucceeds(deleteDoc(ref))
+  })
+
+  // PIP-444 (b): un documento per pista, scritto solo dall'owner (sezioni mappa, versione 1, trackId = id).
+  it('trackProjections/{trackId}: owner crea per sezione, legge ed elimina; coach legge; altri negati; schema vincolato', async () => {
+    const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const ref = doc(owner, `users/${PILOT_UID}/trackProjections/monza`)
+    const bests = { version: 4, bestRulesVersion: 5, trackId: 'monza', bests: {}, activity: { sessionCount: 1 }, syncedSessionIds: ['s1'], lastSessionDate: null }
+    const detail = { schemaVersion: 2, trackId: 'monza', lastSessionDate: null, categories: {} }
+    await assertSucceeds(setDoc(ref, { schemaVersion: 1, trackId: 'monza', bests, updatedAt: serverTimestamp() }, { mergeFields: ['schemaVersion', 'trackId', 'bests', 'updatedAt'] }))
+    await assertSucceeds(setDoc(ref, { schemaVersion: 1, trackId: 'monza', detail, updatedAt: serverTimestamp() }, { mergeFields: ['schemaVersion', 'trackId', 'detail', 'updatedAt'] }))
+    const merged = (await getDoc(ref)).data()
+    expect(merged?.bests.activity.sessionCount).toBe(1)
+    expect(merged?.detail.schemaVersion).toBe(2)
+    await assertSucceeds(setDoc(ref, { schemaVersion: 1, trackId: 'monza', bests: null, detail: null }))
+    await assertFails(setDoc(ref, { schemaVersion: 2, trackId: 'monza', bests, detail }))
+    await assertFails(setDoc(ref, { schemaVersion: 1, trackId: 'spa', bests, detail }))
+    await assertFails(setDoc(ref, { schemaVersion: 1, trackId: 'monza', bests: 'not-a-map' }))
+    await assertFails(setDoc(ref, { schemaVersion: 1, trackId: 'monza', extra: true }))
+    await assertFails(setDoc(ref, { trackId: 'monza', bests }))
+
+    const other = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    await assertFails(getDoc(doc(other, `users/${PILOT_UID}/trackProjections/monza`)))
+    await assertFails(setDoc(doc(other, `users/${PILOT_UID}/trackProjections/monza`), { schemaVersion: 1, trackId: 'monza', bests, detail }))
+    await assertFails(deleteDoc(doc(other, `users/${PILOT_UID}/trackProjections/monza`)))
+    // Coach non assegnato (coachId null nel fixture): negato come per trackBests.
+    await assertFails(getDoc(doc(testEnv.authenticatedContext(COACH_UID).firestore(), `users/${PILOT_UID}/trackProjections/monza`)))
+    await assertSucceeds(getDoc(doc(testEnv.authenticatedContext(ADMIN_UID).firestore(), `users/${PILOT_UID}/trackProjections/monza`)))
+    await assertSucceeds(deleteDoc(ref))
+  })
+
+  it('raceCalendarIndex/v1: owner e coach assegnato scrivono, altri negati, versione e lista vincolate', async () => {
+    const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
+    const ref = doc(owner, `users/${PILOT_UID}/raceCalendarIndex/v1`)
+    await assertSucceeds(setDoc(ref, raceCalendarIndex()))
+    await assertSucceeds(setDoc(ref, raceCalendarIndex({ events: [] })))
+    await assertFails(setDoc(ref, raceCalendarIndex({ version: 2 })))
+    await assertFails(setDoc(ref, raceCalendarIndex({ extra: true })))
+    await assertFails(setDoc(ref, raceCalendarIndex({ truncated: 'no' })))
+    await assertFails(setDoc(ref, raceCalendarIndex({ events: Array.from({ length: 26 }, (_, index) => ({ id: `e${index}` })) })))
+
+    const other = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+    await assertFails(getDoc(doc(other, `users/${PILOT_UID}/raceCalendarIndex/v1`)))
+    await assertFails(setDoc(doc(other, `users/${PILOT_UID}/raceCalendarIndex/v1`), raceCalendarIndex()))
+
+    const coach = testEnv.authenticatedContext(COACH_UID).firestore()
+    await assertFails(setDoc(doc(coach, `users/${PILOT_UID}/raceCalendarIndex/v1`), raceCalendarIndex()))
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), `users/${PILOT_UID}`), { coachId: COACH_UID })
+    })
+    await assertSucceeds(getDoc(doc(coach, `users/${PILOT_UID}/raceCalendarIndex/v1`)))
+    await assertSucceeds(setDoc(doc(coach, `users/${PILOT_UID}/raceCalendarIndex/v1`), raceCalendarIndex()))
+    await assertFails(deleteDoc(doc(coach, `users/${PILOT_UID}/raceCalendarIndex/v1`)))
+    await assertSucceeds(deleteDoc(ref))
+  })
+})
 
 describe('Pitwall cutover: legacy Firestore protocol is closed for every client', () => {
   const paths = ['pitwallGrants/a_b', 'pitwallRooms/room', 'pitwallRooms/room/members/driver',

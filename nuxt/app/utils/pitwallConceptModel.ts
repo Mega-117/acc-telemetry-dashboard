@@ -103,6 +103,8 @@ export interface PitwallConceptRace {
  * entrare?". Due domande diverse, due forme diverse.
  */
 export interface PitwallConceptMyRoom {
+  /** False in discovery: no driver-presence subscription is active yet. */
+  drivingKnown?: boolean
   id: string
   label: string
   track: string | null

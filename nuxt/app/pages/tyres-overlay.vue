@@ -1,15 +1,12 @@
 <script setup lang="ts">
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // Overlay HUD Gomme (PIP-175): finestra Electron indipendente. Dimensione decisa
 // dal FORMATO (small/medium/large) lato Electron; qui si applica la scala dei
 // font e lo stato di posizionamento. Riusa TyreSlipHud + il poller esistente.
-import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted } from 'vue'
 import { useOverlayTelemetrySource } from '~/composables/useOverlayTelemetrySource'
 import { useHudOverlay } from '~/composables/useHudOverlay'
-import { useHudOverlayBackground } from '~/composables/useHudOverlayBackground'
-import HudOverlayBackground from '~/components/overlay/HudOverlayBackground.vue'
-import HudTimedPager from '~/components/overlay/HudTimedPager.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
-import TyreAdvancedHud from '~/components/overlay/TyreAdvancedHud.vue'
 import TyreRaceHud from '~/components/overlay/TyreRaceHud.vue'
 import DamageRaceHud from '~/components/overlay/DamageRaceHud.vue'
 import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
@@ -23,10 +20,7 @@ useHead({
   bodyAttrs: { class: 'training-overlay-runtime' },
 })
 
-function getApi(): any | null {
-  if (typeof window === 'undefined') return null
-  return (window as any).electronAPI || null
-}
+const getApi = useOverlayRegionApi()
 
 const route = useRoute()
 const { fastState, startFastStatePolling, stopFastStatePolling } = useOverlayTelemetrySource(getApi)
@@ -40,19 +34,17 @@ const {
   stop,
   startInteractionSurface,
   pointerState,
-  setTransientViewport,
 } = overlay
-const { backgroundOpacity } = useHudOverlayBackground(settings)
-const variant = computed<'classic' | 'advanced' | 'race'>(() => {
+const variant = computed<'classic' | 'race'>(() => {
   const requested = route.query.variant ?? settings.value?.variant
-  return requested === 'advanced' || requested === 'race' ? requested : 'classic'
+  return requested === 'advanced' || requested === 'race' ? 'race' : 'classic'
 })
 const racePager = useRaceHudPage(fastState)
 const { activePage: racePage, damageFlash: raceDamageFlash } = racePager
 
 // PIP-270: la Race non si spegne piu'. Nascondere l'intera sezione lasciava
 // visibile il solo pannello opaco, cioe' il rettangolo nero segnalato dal
-// pilota quando passava alla visuale di un altro. Come Classico e Avanzato,
+// pilota quando passava alla visuale di un altro. Come Classico,
 // la griglia resta montata e una fascia dice perche' i valori sono `--`.
 const RACE_STATUS_LABELS: Record<string, string> = {
   'no-data': 'NO DATA',
@@ -68,39 +60,6 @@ const raceBanner = computed(() => {
 function selectRacePage(page: RaceHudPage) {
   racePager.selectPage(page)
 }
-const advancedPage = computed<'live' | 'setup'>(() => (
-  import.meta.dev && route.query.page === 'setup' ? 'setup' : 'live'
-))
-const advancedPages = [
-  { id: 'live', label: 'LIVE' },
-  {
-    id: 'setup',
-    label: 'SETUP',
-    temporary: true,
-    // Sopra i 300 px di contenuto non scatta il layout ultra-compatto:
-    // le tre colonne mantengono intestazioni e valori leggibili.
-    minViewport: { width: 360, height: 440 },
-  },
-]
-
-function handleAdvancedPageChange(page: {
-  id: string
-  minViewport?: { width: number; height: number }
-}) {
-  const minViewport = page.id === 'setup' ? page.minViewport : undefined
-  void setTransientViewport({
-    active: !!minViewport,
-    key: 'tyres-setup',
-    minWidth: minViewport?.width,
-    minHeight: minViewport?.height,
-  })
-}
-
-watch(variant, (nextVariant) => {
-  if (nextVariant !== 'advanced') {
-    void setTransientViewport({ active: false, key: 'tyres-setup' })
-  }
-})
 
 onMounted(async () => {
   startFastStatePolling()
@@ -111,13 +70,13 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  void setTransientViewport({ active: false, key: 'tyres-setup' })
   stopFastStatePolling()
   stop()
 })
 </script>
 
 <template>
+  <div class="hud-tyres-scope" style="position:relative;width:100%;height:100%">
   <div
     class="hud-overlay"
     :style="{ '--hud-scale': scale }"
@@ -127,29 +86,11 @@ onBeforeUnmount(() => {
     <div
       class="hud-overlay__panel"
       :class="{
-        'hud-overlay__panel--advanced': variant === 'advanced',
         'hud-overlay__panel--race': variant === 'race',
       }"
     >
-      <HudOverlayBackground v-if="variant === 'advanced'" :opacity="backgroundOpacity" />
-      <HudTimedPager
-        v-if="variant === 'advanced'"
-        :pages="advancedPages"
-        default-page="live"
-        :initial-page="advancedPage"
-        :temporary-duration-ms="30_000"
-        :reveal-controls="pointerState.surfaceHovered"
-        @page-change="handleAdvancedPageChange"
-      >
-        <template #live>
-          <TyreAdvancedHud :fast-state="fastState" page="live" />
-        </template>
-        <template #setup>
-          <TyreAdvancedHud :fast-state="fastState" page="setup" />
-        </template>
-      </HudTimedPager>
       <section
-        v-else-if="variant === 'race'"
+        v-if="variant === 'race'"
         class="race-hud"
         :class="{
           'race-hud--yellow': fastState.flag === 2,
@@ -169,10 +110,13 @@ onBeforeUnmount(() => {
       <TyreSlipHud v-else :fast-state="fastState" />
     </div>
   </div>
+  </div>
 </template>
 
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
+
+.hud-tyres-scope {
 
 // Tutte le regole sono scopate sotto .hud-overlay per NON toccare l'overlay
 // allenamento (le classi .tyre-slip-hud ecc. sono globali e condivise).
@@ -204,16 +148,6 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   // Sfondo completamente OPACO (nessuna trasparenza) e nessuna ombra.
   background: #0b0e15;
-}
-
-.hud-overlay__panel--advanced {
-  border-color: transparent;
-  background: transparent;
-}
-
-.hud-overlay__panel--advanced > :not(.hud-overlay-background) {
-  position: relative;
-  z-index: 1;
 }
 
 .hud-overlay__panel--race {
@@ -321,5 +255,6 @@ onBeforeUnmount(() => {
 
 .hud-overlay .tyre-slip__bar {
   height: calc(7px * var(--hud-scale));
+}
 }
 </style>

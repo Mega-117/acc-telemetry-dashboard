@@ -4,6 +4,7 @@ import { ref, computed } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { type DocumentReference, type Query } from 'firebase/firestore'
 import { trackedGetDoc, trackedGetDocs } from './useFirebaseTracker'
+import { recordFirebaseCacheHit } from '~/services/monitoring/firebaseOpsJournal'
 import { db } from '~/config/firebase'
 import {
     loadLocalTelemetrySessions,
@@ -90,6 +91,7 @@ export function useSessionLoader() {
         const canUseInMemoryCache = sourceMode !== 'cloud_fresh'
         if (canUseInMemoryCache && !forceReload && !userChanged && sessions.value.length > 0) {
             console.log(`[SESSION_LOADER] Using cached sessions (${sessions.value.length}), skipping query`)
+            recordFirebaseCacheHit('sessionLoader.sessions')
             return sessions.value
         }
 

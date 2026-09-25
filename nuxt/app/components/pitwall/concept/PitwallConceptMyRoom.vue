@@ -127,7 +127,7 @@ const driving = computed(() => {
         <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
         <span class="pwc-race__copy">
           <strong>{{ where || "Il tuo Pitwall" }}</strong>
-          <small>{{ reconnecting ? "Riconnessione in corso" : driving ?? "Nessuno al volante adesso" }}</small>
+          <small>{{ reconnecting ? "Riconnessione in corso" : room?.drivingKnown === false ? "Apri la gara per vedere chi è al volante" : driving ?? "Nessuno al volante adesso" }}</small>
         </span>
       </div>
 

@@ -1,9 +1,11 @@
 import { collection, doc, limit, orderBy, query, startAfter, where, type DocumentData, type QueryDocumentSnapshot, type QueryConstraint } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { trackedAddDoc, trackedGetCountFromServer, trackedGetDoc, trackedGetDocs, trackedUpdateDoc } from '~/composables/useFirebaseTracker'
+import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
+import { SHARED_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
 
 const CALLER = 'CoachLessonsRepository'
-const COACH_LESSONS_CACHE_TTL_MS = 60_000
+const COACH_LESSONS_CACHE_TTL_MS = SHARED_DATA_CACHE_TTL_MS
 
 export type CoachFeedbackType = 'positive' | 'issue' | 'action'
 
@@ -90,8 +92,8 @@ function filtersKey(filters: CoachLessonFilters = {}) {
   })
 }
 
-function isFresh(cachedAt: number) {
-  return Date.now() - cachedAt <= COACH_LESSONS_CACHE_TTL_MS
+function isFresh(cachedAt: number, cacheName: string) {
+  return checkFirebaseCacheFreshness(`coachLessons.${cacheName}`, cachedAt, COACH_LESSONS_CACHE_TTL_MS)
 }
 
 function firstPageKey(pilotId: string, filters: CoachLessonFilters, pageSize: number) {
@@ -170,7 +172,7 @@ export async function loadCoachLessonsPage(
 ): Promise<CoachLessonsPage> {
   const key = firstPageKey(pilotId, filters, pageSize)
   const cached = cursor ? null : firstPageCache.get(key)
-  if (cached && isFresh(cached.cachedAt)) return cached.page
+  if (cached && isFresh(cached.cachedAt, 'firstPage')) return cached.page
 
   const snap = await trackedGetDocs(
     query(lessonsCollection(pilotId), ...buildCoachLessonConstraints(filters, pageSize, cursor)),
@@ -188,7 +190,7 @@ export async function loadCoachLessonsPage(
 
 export async function countCoachLessons(pilotId: string): Promise<number> {
   const cached = countCache.get(pilotId)
-  if (cached && isFresh(cached.cachedAt)) return cached.count
+  if (cached && isFresh(cached.cachedAt, 'count')) return cached.count
 
   const snap = await trackedGetCountFromServer(query(lessonsCollection(pilotId)), CALLER)
   const count = Number(snap.data().count || 0)
@@ -199,7 +201,7 @@ export async function countCoachLessons(pilotId: string): Promise<number> {
 export async function loadCoachLessons(pilotId: string, maxItems = 25): Promise<CoachLesson[]> {
   const key = `${pilotId}:${maxItems}`
   const cached = listCache.get(key)
-  if (cached && isFresh(cached.cachedAt)) return cached.lessons
+  if (cached && isFresh(cached.cachedAt, 'list')) return cached.lessons
 
   const snap = await trackedGetDocs(
     query(lessonsCollection(pilotId), orderBy('lessonAt', 'desc'), limit(maxItems)),
@@ -213,7 +215,7 @@ export async function loadCoachLessons(pilotId: string, maxItems = 25): Promise<
 export async function loadCoachLesson(pilotId: string, lessonId: string): Promise<CoachLesson | null> {
   const key = `${pilotId}:${lessonId}`
   const cached = lessonDetailCache.get(key)
-  if (cached && isFresh(cached.cachedAt)) return cached.lesson
+  if (cached && isFresh(cached.cachedAt, 'detail')) return cached.lesson
 
   const snap = await trackedGetDoc(doc(db, 'users', pilotId, 'coachLessons', lessonId), CALLER)
   const lesson = snap.exists() ? mapLesson(snap, pilotId) : null

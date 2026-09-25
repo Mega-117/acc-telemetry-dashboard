@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { usePresentationInterval, usePresentationVisibility } from '~/composables/usePresentationVisibility'
+const presentationVisible = usePresentationVisibility()
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   resolveTrainingOverlayModeId,
@@ -24,7 +27,7 @@ import { useTrainingSelection, type PlanPreviewChip } from '~/composables/useTra
 import { useSessionOrchestrator } from '~/composables/useSessionOrchestrator'
 import {
   useOverlaySettings, resolveOverlayOriginCorner, resolveOverlayOriginMode,
-  resolveAutoAdvanceSeconds, originCornerOptions,
+  resolveAutoAdvanceSeconds,
   type OverlayOriginCorner, type OverlayOriginMode,
 } from '~/composables/useOverlaySettings'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
@@ -59,11 +62,11 @@ useHead({
 })
 
 // ─── Types ───────────────────────────────────────────────────────────────────
-type OverlayPhase = 'loading' | 'placement' | 'launcher' | 'select' | 'running' | 'paused' | 'expired' | 'completed'
+type OverlayPhase = 'loading' | 'launcher' | 'select' | 'running' | 'paused' | 'expired' | 'completed'
 type OverlayCommand = Exclude<OverlayInputCommand, 'toggle'>
 type OverlaySizePreset = 'launcher' | 'placement' | 'select' | 'session' | 'expired' | 'completed'
 type OverlaySize = { width: number; height: number }
-type PrimaryOverlayAction = 'confirm-placement' | 'open-selection' | 'start' | 'pause' | 'resume' | 'complete-step' | 'next' | 'reset' | 'none'
+type PrimaryOverlayAction = 'open-selection' | 'start' | 'pause' | 'resume' | 'complete-step' | 'next' | 'reset' | 'none'
 
 interface TrainingOverlaySettings {
   hasConfiguredPosition?: boolean; lastTrainingId?: string
@@ -162,24 +165,22 @@ let voicePointNoticeTimer: ReturnType<typeof setTimeout> | null = null
 const { isTestMode, toggle: toggleTestMode, stepBudgetMs, init: initTestMode } = useDevTestMode()
 
 // ─── API bridge ──────────────────────────────────────────────────────────────
-function getOverlayApi(): any | null {
-  if (typeof window === 'undefined') return null
-  return (window as any).electronAPI || null
-}
+const getOverlayApi = useOverlayRegionApi()
 
 // The logger owns recommendation facts; Electron owns Setup input; this page
 // only presents the versioned plan and never computes pressure corrections.
 const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not_fresh' })
 const dryPressurePresentation = computed(() => pressureActionPresentation(dryPressureState.value))
 const isDryPressurePreviewOpen = ref(false)
+const isDryPressureApplying = ref(false)
 const dryPressureBridgeStatus = ref('Nessuna raccomandazione TEST attiva.')
-let dryPressureTimer: ReturnType<typeof setInterval> | null = null
+const dryPressureActivity = usePresentationInterval(() => { void refreshDryPressureState() }, 500)
 const qaBotState = ref<QaBotSnapshot>(normalizeQaBotSnapshot({
   state: 'OFF',
   reason: 'bot_off',
 }))
 const qaBotView = computed(() => qaBotPresentation(qaBotState.value))
-let qaBotTimer: ReturnType<typeof setInterval> | null = null
+const qaBotActivity = usePresentationInterval(() => { void refreshQaBotState() }, 250)
 async function refreshQaBotState() {
   const api = getOverlayApi()
   if (!api?.trainingOverlayGetQaBotState) {
@@ -228,7 +229,10 @@ async function refreshDryPressureState() {
   }
 }
 async function applyDryPressure() {
+  if (isDryPressureApplying.value) return
+  isDryPressureApplying.value = true
   isDryPressurePreviewOpen.value = true
+  await nextTick()
   try {
     const response = await getOverlayApi()?.trainingOverlayApplySetupPressure?.()
     if (!response?.accepted) {
@@ -240,6 +244,7 @@ async function applyDryPressure() {
       }
     }
   } catch (_) { dryPressureState.value = { state: 'blocked', reason: 'command_not_accepted' } }
+  finally { isDryPressureApplying.value = false }
   await refreshDryPressureState()
 }
 async function testDryPressure() {
@@ -273,9 +278,9 @@ async function restoreTestDryPressure() {
 
 // ─── Composables ─────────────────────────────────────────────────────────────
 const { liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap } =
-  useLiveStatePoller(getOverlayApi)
+  useLiveStatePoller(getOverlayApi, true)
 const { fastState, startFastStatePolling, stopFastStatePolling } =
-  useFastStatePoller(getOverlayApi)
+  useFastStatePoller(getOverlayApi, true)
 
 const { trackingStart, trackingComplete, trackingAbandon } = useTrackingRecord(
   getOverlayApi,
@@ -323,7 +328,7 @@ const totalSteps = computed(() => selectedMode.value.steps.length)
 const isActiveSession = computed(() => ['running', 'paused', 'expired'].includes(phase.value))
 const canManuallyAdvanceStep = computed(() => activeStep.value.durationMinutes <= 5)
 const canUseStopControl = computed(() => ['running', 'paused', 'expired'].includes(phase.value))
-const showPlacementControl = computed(() => isElectronRuntime.value || showDevControls.value)
+const placementActive = ref(false)
 const canUseVoicePointRecorder = computed(() => {
   if (!canUseSpotterControls.value || !showDevControls.value || typeof window === 'undefined') return false
   if (runtimeVoicePointRecorderAllowed.value) return true
@@ -331,7 +336,6 @@ const canUseVoicePointRecorder = computed(() => {
 })
 const primaryAction = computed<PrimaryOverlayAction>(() => {
   if (isShortcutStopConfirmOpen.value) return 'none'
-  if (phase.value === 'placement') return 'confirm-placement'
   if (phase.value === 'launcher') return 'open-selection'
   if (phase.value === 'select') return 'start'
   if (phase.value === 'running') return canManuallyAdvanceStep.value ? 'complete-step' : 'pause'
@@ -341,7 +345,7 @@ const primaryAction = computed<PrimaryOverlayAction>(() => {
   return 'none'
 })
 const primaryActionLabel = computed(() => ({
-  'confirm-placement': 'Usa posizione', 'open-selection': 'Inizia allenamento',
+  'open-selection': 'Inizia allenamento',
   start: 'Avvia', pause: 'Pausa', resume: 'Riprendi', 'complete-step': 'Skippa',
   next: 'Avanti', reset: 'Scegli allenamento', none: 'Azione',
 }[primaryAction.value]))
@@ -357,7 +361,6 @@ const formattedTime = computed(() => {
   return `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`
 })
 const activeTask = computed(() => {
-  if (phase.value === 'placement') return 'Trascina il box, poi conferma.'
   if (phase.value === 'select') return ''
   if (phase.value === 'launcher') return 'Apri la scelta allenamento.'
   if (phase.value === 'paused') return `Timer fermo. ${activeStep.value.hud}`
@@ -383,9 +386,6 @@ const sessionOverlayOpacity = computed(() => {
   const elapsedMs = Math.max(0, totalMs - remainingMs.value)
   return elapsedMs >= AUTO_DIM_DELAY_MS && remainingMs.value > AUTO_DIM_RESTORE_MS ? AUTO_DIM_OPACITY : 1
 })
-const selectedOriginLabel = computed(() =>
-  originCornerOptions.find(o => o.id === originCorner.value)?.label || 'Alto sx'
-)
 const hudTransitionKey = computed(() => `${phase.value}-${activeStepIndex.value}-${activeStep.value.id}`)
 // Le fasi di sessione condividono il contenuto: il cross-fade del contenitore
 // scatta solo tra macro-schermate; dentro la sessione anima OverlayHud.
@@ -393,8 +393,8 @@ const contentKey = computed(() =>
   ['running', 'paused', 'expired'].includes(phase.value) ? 'session' : phase.value
 )
 const overlaySizePreset = computed<OverlaySizePreset>(() => {
+  if (placementActive.value) return 'placement'
   if (phase.value === 'launcher') return 'launcher'
-  if (phase.value === 'placement') return 'placement'
   if (phase.value === 'select') return 'select'
   if (phase.value === 'expired') return 'expired'
   if (phase.value === 'completed') return 'completed'
@@ -436,7 +436,7 @@ const {
   autoDimDuringRun, autoAdvanceStep, autoAdvanceSeconds, originMode, originCorner,
   isTrainingPickerOpen, isSettingsOpen, savePreferences,
   toggleTrainingPicker, toggleSettingsPanel, toggleAutoDimDuringRun, toggleAutoAdvanceStep,
-  selectAutoAdvanceSeconds, selectOriginCorner, toggleSound,
+  selectAutoAdvanceSeconds, toggleSound,
 } = useOverlaySettings(
   getOverlayApi, soundEnabled, spotterEnabled, stopVoice, primeStepAudio,
   scheduleOverlaySizeSync, isActiveSession, closeShortcutStopConfirm,
@@ -473,24 +473,6 @@ const {
   stepBudgetMs,
   () => spotterEnabled.value,
 )
-
-function enterPlacementMode() {
-  if (isActiveSession.value) return
-  closeShortcutStopConfirm(); isSettingsOpen.value = false; isTrainingPickerOpen.value = false
-  originMode.value = 'manual'; phase.value = 'placement'
-}
-
-async function confirmPlacement() {
-  closeShortcutStopConfirm()
-  const settings = await getOverlayApi()?.trainingOverlayConfirmPlacement?.()
-  selectedTrainingId.value = resolveTrainingOverlayTrainingId(settings?.lastTrainingId || selectedTrainingId.value)
-  selectedModeId.value = resolveTrainingOverlayModeId(settings?.lastDurationId || selectedModeId.value)
-  originMode.value = resolveOverlayOriginMode(settings?.originMode || originMode.value)
-  originCorner.value = resolveOverlayOriginCorner(settings?.originCorner || originCorner.value)
-  remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000; phase.value = 'launcher'
-  await nextTick()
-  scheduleOverlaySizeSync()
-}
 
 async function closeOverlay() { await getOverlayApi()?.trainingOverlayClose?.() }
 function applyInfoTargetSettings(settings: InfoTargetSettings | null | undefined) {
@@ -580,7 +562,7 @@ async function prepareOverlayReopen(revision?: number) {
   // Never acknowledge an empty/old content node, even with CSS animations disabled.
   const deadline = Date.now() + 1000
   while (!overlayRoot.value?.querySelector(`.overlay-content--${overlaySizePreset.value}`)
-    && phase.value !== 'placement') {
+    && !placementActive.value) {
     if (Date.now() >= deadline) { preparingReopen.value = false; return }
     await new Promise(resolve => setTimeout(resolve, 16))
   }
@@ -600,7 +582,6 @@ function runBackAction() {
   if (isTargetSetupOpen.value) { cancelInfoTargetSetup(); return }
   if (isShortcutStopConfirmOpen.value) { closeShortcutStopConfirm(); return }
   if (phase.value === 'launcher') { closeOverlay(); return }
-  if (phase.value === 'placement') { phase.value = 'launcher'; return }
   if (phase.value === 'select') {
     if (isTrainingPickerOpen.value || isSettingsOpen.value) {
       isTrainingPickerOpen.value = false; isSettingsOpen.value = false; scheduleOverlaySizeSync(); return
@@ -624,7 +605,6 @@ function executePrimaryAction() {
   if (isTargetSetupOpen.value) { void confirmInfoTarget(); return }
   if (isShortcutStopConfirmOpen.value) { executeStop(); return }
   const actions: Record<PrimaryOverlayAction, () => void> = {
-    'confirm-placement': () => void confirmPlacement(),
     'open-selection': openTrainingSelection,
     start: () => {
       isSaving.value = true
@@ -646,7 +626,7 @@ const OVERLAY_SURFACE_SELECTOR = '.overlay-card, .launcher-tools, .placement-wor
 const OVERLAY_CONTROL_SELECTOR = 'button, input, select, textarea, summary, .overlay-content--launcher, [data-overlay-interactive]'
 const interactionContract = useOverlayInteractionContract({
   getApi: getOverlayApi,
-  isForcedCapture: () => phase.value === 'placement',
+  isForcedCapture: () => placementActive.value,
 })
 const { pointerState } = interactionContract
 watch(() => [pointerState.movementRevision, pointerState.surfaceHovered, pointerState.x, pointerState.y], () => { actionSelection.syntheticPointer(pointerState) }, { flush: 'post' })
@@ -723,8 +703,13 @@ async function recordVoicePointFromCurrentPosition() {
     showVoicePointNotice(error?.message || 'Riferimento non salvato.', 'error')
   }
 }
-function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayCommand; revision?: number }) {
+function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayCommand | 'origin-corner'; revision?: number; originCorner?: string }) {
   const command = typeof payload === 'string' ? payload : payload?.command
+  if (command === 'origin-corner' && typeof payload !== 'string') {
+    originCorner.value = resolveOverlayOriginCorner(payload.originCorner)
+    return
+  }
+  if (placementActive.value) return
   setDebugEvent(`comando overlay: ${command || 'vuoto'}`)
   if (command === 'prepare-reopen') { void prepareOverlayReopen(typeof payload === 'string' ? undefined : payload.revision); return }
   if (command === 'main-menu') { returnToMainMenu(); return }
@@ -738,6 +723,7 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
 }
 
 function handleLocalShortcut(event: KeyboardEvent) {
+  if (placementActive.value) return
   if (voicePointRecorderEnabled.value && event.code === 'Space' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
     event.preventDefault()
     if (!event.repeat) void recordVoicePointFromCurrentPosition()
@@ -760,6 +746,7 @@ function handleLocalShortcut(event: KeyboardEvent) {
 // ─── Lifecycle ───────────────────────────────────────────────────────────────
 let removeCommandListener: (() => void) | undefined
 let removeInfoTargetListener: (() => void) | undefined
+let removePlacementListener: (() => void) | undefined
 
 onMounted(async () => {
   document.body.classList.add('training-overlay-runtime')
@@ -779,17 +766,21 @@ onMounted(async () => {
   originMode.value = resolveOverlayOriginMode(settings?.originMode)
   originCorner.value = resolveOverlayOriginCorner(settings?.originCorner)
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000
-  phase.value = settings?.hasConfiguredPosition || !api ? 'launcher' : 'placement'
+  phase.value = 'launcher'
   await nextTick()
   selectFirstWheelAction()
   loadSpotterVoiceSettings()
   startLiveStatePolling()
   startFastStatePolling()
   await refreshDryPressureState()
-  dryPressureTimer = setInterval(() => { void refreshDryPressureState() }, 500)
+  dryPressureActivity.start()
   await refreshQaBotState()
-  qaBotTimer = setInterval(() => { void refreshQaBotState() }, 250)
+  qaBotActivity.start()
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
+  removePlacementListener = api?.onHudOverlayPlacement?.((active: boolean) => {
+    placementActive.value = active === true
+  })
+  placementActive.value = (await api?.hudOverlayIsPositioning?.()) === true
   removeInfoTargetListener = api?.onInfoTargetSettings?.((next: InfoTargetSettings) => {
     if (!isTargetSetupOpen.value) applyInfoTargetSettings(next)
   })
@@ -801,6 +792,7 @@ onMounted(async () => {
     })
   }
   connectResizeObserver(); scheduleOverlaySizeSync()
+  await api?.overlayRegionReady?.()
 })
 watch(() => spotterEnabled.value, () => {
   void savePreferences()
@@ -819,7 +811,7 @@ watch(isShortcutStopConfirmOpen, (open) => {
 }, { flush: 'post' })
 
 watch(
-  [phase, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
+  [phase, placementActive, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
     spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, isSectorReferenceSetupOpen, liveHudResizeKey],
   () => { scheduleOverlaySizeSync(); actionSelection.refresh() },
   { flush: 'post' }
@@ -827,21 +819,29 @@ watch(
 
 watch(
   phase,
-  (nextPhase) => {
+  () => {
     const api = getOverlayApi()
     if (!api?.overlayInteractionUpdateContract) return
     interactionContract.refresh()
-    if (nextPhase === 'placement') scheduleOverlaySizeSync()
   },
   { flush: 'post' }
 )
 
+watch(presentationVisible, async (visible) => {
+  if (!visible) return
+  await nextTick()
+  connectResizeObserver()
+  scheduleOverlaySizeSync()
+  interactionContract.refresh()
+}, { flush: 'post' })
+
 onBeforeUnmount(() => {
-  if (dryPressureTimer) clearInterval(dryPressureTimer)
-  if (qaBotTimer) clearInterval(qaBotTimer)
+  dryPressureActivity.stop()
+  qaBotActivity.stop()
   clearTimer(); cancelStopHold(); stopLiveStatePolling(); stopFastStatePolling(); stopVoice(); cleanupSize()
   if (voicePointNoticeTimer) clearTimeout(voicePointNoticeTimer)
   removeCommandListener?.()
+  removePlacementListener?.()
   removeInfoTargetListener?.()
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', handleLocalShortcut, true)
@@ -853,6 +853,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main
+    v-if="presentationVisible || preparingReopen"
     ref="overlayRoot"
     @pointermove="actionSelection.pointerMove"
     @focusin="actionSelection.focus($event.target)"
@@ -863,7 +864,7 @@ onBeforeUnmount(() => {
       `training-overlay--tone-${selectedTraining.tone}`,
       `training-overlay--origin-${originCorner}`,
       {
-        'training-overlay--drag': phase === 'placement',
+        'training-overlay--drag': placementActive,
         'training-overlay--preparing': preparingReopen,
         'training-overlay--web': !isElectronRuntime,
         'training-overlay--voice-points': voicePointRecorderEnabled,
@@ -906,46 +907,21 @@ onBeforeUnmount(() => {
     </Transition>
 
     <div class="overlay-work-area">
+      <section
+        v-if="placementActive"
+        key="placement"
+        class="placement-work-area overlay-card"
+        aria-label="Posiziona pannello Ctrl+K"
+      >
+        <strong>Pannello Ctrl+K</strong>
+        <span>Trascina per spostare</span>
+        <small>Salva e blocca dalla scheda HUD</small>
+      </section>
+
       <Transition name="overlay-surface" mode="out-in">
-        <section
-          v-if="phase === 'placement'"
-          key="placement"
-          class="placement-work-area overlay-surface--placement"
-          aria-label="Posiziona area overlay"
-        >
-          <div class="placement-drag-layer">
-            <span>Allinea l'area dell'overlay</span>
-            <p>Questa sara l'area dedicata alle card durante l'allenamento.</p>
-          </div>
-
-          <div class="placement-panel">
-            <div class="corner-control" aria-label="Origine overlay">
-              <span>Angolo di apertura</span>
-              <div class="corner-options">
-                <button
-                  v-for="option in originCornerOptions"
-                  :key="option.id"
-                  type="button"
-                  :data-overlay-wheel-action="`placement-corner-${option.id}`"
-                  :class="{ 'is-active': originCorner === option.id }"
-                  :aria-label="`Angolo ${option.label}`"
-                  :aria-pressed="originCorner === option.id"
-                  @click="selectOriginCorner(option.id)"
-                >
-                  {{ option.label }}
-                </button>
-              </div>
-            </div>
-
-            <button type="button" class="primary" data-overlay-wheel-action="confirm-placement" :aria-label="primaryActionLabel" @click="executePrimaryAction">
-              {{ primaryActionLabel }}
-            </button>
-          </div>
-        </section>
-
         <!-- Contenitore unico persistente (PIP-93): il morphing e' l'animazione
              di resize della finestra; dentro, il contenuto si avvicenda in cross-fade. -->
-        <section v-else-if="phase !== 'loading'" key="card" class="overlay-card">
+        <section v-if="phase !== 'loading'" v-show="!placementActive" key="card" class="overlay-card">
           <Transition name="content-swap" :css="!preparingReopen" :mode="preparingReopen ? undefined : 'out-in'" @after-enter="actionSelection.refresh()">
             <div
               :key="contentKey"
@@ -1096,10 +1072,10 @@ onBeforeUnmount(() => {
                       @focus="selectedWheelActionId = 'pressure'"
                       :aria-label="dryPressurePresentation.ariaLabel"
                       aria-describedby="pressure-action-status"
-                      :disabled="dryPressureState.state !== 'ready'"
+                      :disabled="isDryPressureApplying || dryPressureState.state !== 'ready'"
                       @click="applyDryPressure"
                     >
-                      <span>{{ dryPressurePresentation.buttonLabel || 'Regola pressioni' }}</span>
+                      <span>{{ isDryPressureApplying ? 'Avvio…' : dryPressurePresentation.buttonLabel || 'Regola pressioni' }}</span>
                     </button>
                   </div>
                   <p id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
@@ -1196,16 +1172,7 @@ onBeforeUnmount(() => {
                     {{ primaryActionLabel }}
                     <span class="key-hint" aria-hidden="true">Ctrl+N</span>
                   </button>
-                  <button
-                    v-if="showPlacementControl"
-                    type="button"
-                    class="utility-action"
-                    data-overlay-wheel-action="placement"
-                    aria-label="Sposta l'overlay sullo schermo"
-                    @click="enterPlacementMode"
-                  >
-                    Sposta
-                  </button>
+
                 </div>
                 <p class="launcher-hint" aria-hidden="true">
                   Ctrl+K chiude &middot; Ctrl+N avvia

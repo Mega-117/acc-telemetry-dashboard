@@ -19,6 +19,8 @@ function makeApi() {
     hudOverlayGetSettings: vi.fn(async () => ({ enabled: true })),
     hudOverlayGetPlacementStatus: vi.fn(async () => ({ active, deadlineMs: active ? Date.now() + 60000 : null })),
     hudOverlaySetAllPlacement: vi.fn(async (value: boolean) => { active = value; return value }),
+    trainingOverlayGetSettings: vi.fn(async () => ({ originCorner: 'bottom-right' })),
+    trainingOverlaySetOriginCorner: vi.fn(async (originCorner: string) => ({ originCorner })),
   }
 }
 function buttons() { return wrapper!.findAll('.test-hud__placement-actions button') }
@@ -37,6 +39,11 @@ afterEach(() => {
 })
 
 describe('HUD placement commands', () => {
+  it('does not require a manual corner selection', async () => {
+    await render()
+    expect(wrapper!.find('select[aria-label="Angolo di apertura Ctrl+K"]').exists()).toBe(false)
+  })
+
   it('supports Edit / Save / Edit using confirmed runtime state', async () => {
     await render()
     await buttons()[0]!.trigger('click'); await flushPromises()

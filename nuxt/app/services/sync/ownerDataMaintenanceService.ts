@@ -1,14 +1,17 @@
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import {
-  trackedGetDoc,
   trackedRunTransaction,
   withFirebaseScenario
 } from '~/composables/useFirebaseTracker'
+// PIP-442: lo stato di manutenzione arriva dal documento owner condiviso (una lettura per
+// avvio); dopo una scrittura di manutenzione la copia viene svuotata.
+import { clearOwnerDocumentCache, loadOwnerDocument } from '~/repositories/ownerDocumentRepository'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import {
   auditOwnerData,
+  migrateOwnerTrackProjections,
   rebuildOwnerProjections,
   rebuildOwnerSessionListProjection,
   reprocessOwnerCloudRawSummaries,
@@ -147,7 +150,9 @@ function summarizeAudit(audit: OwnerDataAuditReport | null | undefined) {
       missingTrackBests: audit.projections.missingTrackBests.length,
       oldTrackBests: audit.projections.oldTrackBests.length,
       missingTrackDetailProjections: audit.projections.missingTrackDetailProjections.length,
-      oldTrackDetailProjections: audit.projections.oldTrackDetailProjections.length
+      oldTrackDetailProjections: audit.projections.oldTrackDetailProjections.length,
+      trackBestsIndexStale: audit.projections.trackBestsIndexStale === true,
+      unmergedTrackProjections: audit.projections.unmergedTrackProjections?.length || 0
     },
     permissions: audit.permissions,
     issueCodes: audit.issues.map((item) => item.code)
@@ -172,6 +177,8 @@ function needsProjectionRebuild(audit: OwnerDataAuditReport): boolean {
     || audit.projections.oldTrackBests.length > 0
     || audit.projections.missingTrackDetailProjections.length > 0
     || audit.projections.oldTrackDetailProjections.length > 0
+    // PIP-441: la migrazione dell'indice piste passa dalla manutenzione 24h.
+    || audit.projections.trackBestsIndexStale === true
 }
 
 function needsMaintenance(audit: OwnerDataAuditReport): boolean {
@@ -191,8 +198,8 @@ function isStoredStateReadyForSessionListUpgrade(state: OwnerDataMaintenanceStor
 }
 
 async function readStoredState(uid: string): Promise<OwnerDataMaintenanceEnvelope> {
-  const snap = await trackedGetDoc(doc(db, `users/${uid}`), CALLER)
-  const maintenance = snap.exists() ? (snap.data()?.maintenance || {}) : {}
+  const snap = await loadOwnerDocument(uid, { caller: CALLER })
+  const maintenance = snap.exists ? (snap.data?.maintenance || {}) : {}
   return {
     migration: (maintenance.canonicalDataMigration || null) as OwnerDataMaintenanceStoredState | null,
     health: (maintenance.firebaseStructureHealth || null) as FirebaseStructureHealthState | null
@@ -514,6 +521,9 @@ export async function runOwnerDataMaintenanceGate(
   const startedAt = nowIso()
   const leaseId = createFirebaseStructureLeaseId()
   let leaseAcquired = false
+  // PIP-442: lease, checkpoint e health scrivono `users/{uid}.maintenance`: la copia
+  // condivisa del documento va svuotata a fine gate, in ogni esito.
+  let ownerDocumentTouched = false
   let checkpointAttempt = 1
   let resumedFrom: string | null = null
   const retryActive = <T>(operation: () => Promise<T>) => withFirebaseStructureRetry(async () => {
@@ -547,6 +557,7 @@ export async function runOwnerDataMaintenanceGate(
 
     if (healthDecision.action === 'future_schema' || healthDecision.action === 'blocked_schema') {
       const status = healthDecision.action === 'future_schema' ? 'future_schema' : 'blocked'
+      ownerDocumentTouched = true
       await retryActive(() => publishFirebaseStructureHealth({
         uid,
         status,
@@ -598,6 +609,7 @@ export async function runOwnerDataMaintenanceGate(
       return report
     }
 
+    ownerDocumentTouched = true
     leaseAcquired = await retryActive(() => claimFirebaseStructureLease({
       uid,
       leaseId,
@@ -639,11 +651,30 @@ export async function runOwnerDataMaintenanceGate(
     })
 
     let lightweightVerificationFailed = false
+    let lightweightIssues: string[] = []
     if (healthDecision.action === 'verify_current' && stored.health?.status !== 'partial') {
       await ensureActiveLease(uid, leaseId, assertActive)
-      const verification = await retryActive(() => verifyOwnerMigrationLightweight(uid))
+      let verification = await retryActive(() => verifyOwnerMigrationLightweight(uid))
+      let repairedTracks = false
+      // A format migration or stale derived index alone does not justify scanning
+      // every session twice and rebuilding otherwise healthy projections.
+      const trackOnlyIssues = new Set(['track_projections_unmerged', 'track_bests_index_missing_or_stale'])
+      if (!force && !needsVersionedRawReprocess(storedState)
+        && !verification.ok && verification.issues.length > 0
+        && verification.issues.every((code) => trackOnlyIssues.has(code))) {
+        await ensureActiveLease(uid, leaseId, assertActive)
+        await retryActive(() => migrateOwnerTrackProjections(uid, {
+          assertActive,
+          repairIndex: verification.issues.includes('track_bests_index_missing_or_stale')
+        }))
+        await ensureActiveLease(uid, leaseId, assertActive)
+        verification = await retryActive(() => verifyOwnerMigrationLightweight(uid))
+        repairedTracks = true
+      }
+      lightweightIssues = verification.issues
       if (verification.ok) {
         const report = skippedReport(uid, startedAt, 'Struttura dati verificata.', 'healthy')
+        if (repairedTracks) { report.status = 'completed'; report.phase = 'completed' }
         report.resumedFrom = resumedFrom
         await finalizeMaintenanceOutcome({
           uid,
@@ -654,8 +685,8 @@ export async function runOwnerDataMaintenanceGate(
           assertActive
         })
         emit(onProgress, {
-          status: 'skipped',
-          phase: 'skipped',
+          status: report.status,
+          phase: report.phase,
           progress: 100,
           message: report.message,
           report
@@ -758,7 +789,29 @@ export async function runOwnerDataMaintenanceGate(
       throw new Error('Permessi insufficienti per completare la migrazione dati owner.')
     }
 
+    // PIP-444: piste ancora su documenti separati -> documento unito, una scrittura per
+    // pista e nessun ricalcolo. Un rebuild completo (se dovuto) le riscrive comunque.
     const versionedRawReprocess = needsVersionedRawReprocess(storedState)
+    const unmergedTrackProjections = audit.projections.unmergedTrackProjections || []
+    if (unmergedTrackProjections.length > 0 && !force && !versionedRawReprocess && !needsProjectionRebuild(audit)) {
+      await ensureActiveLease(uid, leaseId, assertActive)
+      emit(onProgress, {
+        status: 'running',
+        phase: 'rebuild',
+        progress: 30,
+        message: 'Unisco i documenti per pista...',
+        resumedFrom
+      })
+      const migration = await retryActive(() => migrateOwnerTrackProjections(uid, { assertActive }))
+      audit.projections.unmergedTrackProjections = unmergedTrackProjections
+        .filter((trackId) => !migration.migratedTracks.includes(trackId))
+      audit.issues = audit.issues.filter((item) => item.code !== 'track_projections_unmerged')
+      // Se la verifica leggera era fallita solo per le piste separate, ora e' risolta.
+      if (lightweightVerificationFailed && lightweightIssues.every((code) => code === 'track_projections_unmerged')) {
+        lightweightVerificationFailed = false
+      }
+    }
+
     if (!force && !versionedRawReprocess && !needsMaintenance(audit) && !lightweightVerificationFailed) {
       const report = buildReport({
         uid,
@@ -922,6 +975,8 @@ export async function runOwnerDataMaintenanceGate(
       reason
     })
     throw error
+  }).finally(() => {
+    if (ownerDocumentTouched) clearOwnerDocumentCache(uid)
   })
 }
 export async function completeOwnerDataMaintenanceAfterLocalSync(

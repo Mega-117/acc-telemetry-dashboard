@@ -1,19 +1,37 @@
 // @vitest-environment jsdom
+import { setImmediate } from 'node:timers'
 import { createApp, nextTick, ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
 import SetupFuelPanel from '~/components/overlay/SetupFuelPanel.vue'
 let app: ReturnType<typeof createApp> | null = null
-const flush = async () => { await Promise.resolve(); await nextTick(); await Promise.resolve(); await nextTick() }
+const flush = async () => { await new Promise<void>(resolve => setImmediate(resolve)); await nextTick() }
 afterEach(() => { app?.unmount(); app=null; document.body.innerHTML=''; vi.restoreAllMocks(); vi.useRealTimers() })
-async function mount(available=true,sessionType=0) {
- const api={trainingOverlayPreviewSetupFuel:vi.fn(async()=>({available,sessionType,plan:{ok:true,totalLitres:25,contextKey:'session',durationMs:600000,consumption:2.9,referenceLapMs:102000,notes:[]}})),trainingOverlayApplySetupFuel:vi.fn(async()=>({ok:true,reason:'25 L verificati'})),trainingOverlayKeyboardEditing:vi.fn(async()=>true)}
+// Default session is a race: the whole-session button is only enabled in qualifying/race (PIP-423).
+async function mount(available=true,sessionType=2,planExtra:Record<string,unknown>={}) {
+ const api={trainingOverlayPreviewSetupFuel:vi.fn(async()=>({available,sessionType,plan:{ok:true,totalLitres:25,contextKey:'session',durationMs:600000,consumption:2.9,referenceLapMs:102000,notes:[],...planExtra}})),trainingOverlayApplySetupFuel:vi.fn(async()=>({ok:true,reason:'25 L verificati'})),trainingOverlayKeyboardEditing:vi.fn(async()=>true)}
  const el=document.createElement('div');document.body.append(el);app=createApp(SetupFuelPanel,{api});app.mount(el)
  ;(document.querySelector('[data-overlay-wheel-action="fuel"]') as HTMLButtonElement).click();await flush();return api
 }
 const button=(id:string)=>document.querySelector(`[data-overlay-wheel-action="${id}"]`) as HTMLButtonElement
 describe('Fuel from Ctrl+K',()=>{
  it.each([0,1,2])('custom stint stays manual in session %i',async sessionType=>{const api=await mount(true,sessionType);expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'minutes',minutes:10})})
+ it('whole-session button is disabled with a reason in practice and never applies (PIP-423)',async()=>{
+  const api=await mount(true,0);expect(button('fuel-session').disabled).toBe(true);expect(document.body.textContent).toContain('solo in qualifica e gara')
+  button('fuel-session').click();await flush();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled()
+ })
+ it.each([1,2])('whole-session button is enabled in session %i and applies the fresh auto plan',async sessionType=>{
+  const api=await mount(true,sessionType);expect(button('fuel-session').disabled).toBe(false);expect(document.body.textContent).not.toContain('solo in qualifica e gara')
+  button('fuel-session').click();await flush();expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledWith(expect.objectContaining({mode:'auto'}))
+ })
+ it('session type is learned from the preview even before the panel is opened',async()=>{
+  const api={trainingOverlayPreviewSetupFuel:vi.fn(async()=>({available:true,sessionType:2,plan:{ok:true,totalLitres:25,contextKey:'session',durationMs:600000,consumption:2.9,referenceLapMs:102000,notes:[]}})),trainingOverlayApplySetupFuel:vi.fn(async()=>({ok:true,reason:'ok'})),trainingOverlayKeyboardEditing:vi.fn(async()=>true)}
+  const el=document.createElement('div');document.body.append(el);app=createApp(SetupFuelPanel,{api});app.mount(el);expect(button('fuel-session').disabled).toBe(true);await flush();expect(button('fuel-session').disabled).toBe(false)
+ })
+ it('shows the reference pace source and class next to the estimate',async()=>{
+  await mount(true,2,{referenceLapMs:134827,referenceClass:'GT3',paceSource:'Record LFM gara della classe, anticipato del 5%'})
+  expect(document.body.textContent).toContain('134.8 s · GT3');expect(document.body.textContent).toContain('Record LFM gara della classe')
+ })
  it('shows total and sends current preview identity with one apply',async()=>{const api=await mount();expect(button('fuel-apply').textContent).toContain('25 L');button('fuel-apply').click();await flush();expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledWith({mode:'minutes',minutes:10,contextKey:'session',totalLitres:25});expect(document.body.textContent).toContain('25 L verificati')})
  it('blocks apply outside safe pit context',async()=>{const api=await mount(false);expect(button('fuel-apply').disabled).toBe(true);button('fuel-apply').click();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled()})
  it('wheel buttons change custom minutes',async()=>{const api=await mount();button('fuel-plus').click();await flush();expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'minutes',minutes:11})})
@@ -127,4 +145,13 @@ it('direct IPC rejection is displayed and releases the buttons',async()=>{
  button('fuel-session').click();await flush()
  expect(document.querySelector('[role="status"]')?.textContent).toContain('Applicazione interrotta')
  expect(button('fuel-session').disabled).toBe(false)
+})
+
+it.each(['fuel-session','fuel-apply'])('renders immediate pending feedback before %s IPC hides the panel',async id=>{
+ const api=await mount();let pendingSeen=false;
+ api.trainingOverlayApplySetupFuel.mockImplementation(async()=>{pendingSeen=!!document.querySelector('[role="status"]')?.textContent?.includes('Preparazione carburante');return {ok:true,reason:'25 L verificati'}});
+ button(id).click();await flush();await flush();expect(pendingSeen).toBe(true);
+})
+it('unmount immediately after custom click prevents IPC',async()=>{
+ const api=await mount();button('fuel-apply').click();app?.unmount();app=null;await flush();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled();
 })

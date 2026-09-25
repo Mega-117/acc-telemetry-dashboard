@@ -5,6 +5,8 @@ import { clearCoachDirectoryCache } from '~/repositories/coachDirectoryRepositor
 import { clearCoachLessonsCache } from '~/repositories/coachLessonsRepository'
 import { clearRaceCalendarCache } from '~/repositories/raceCalendarRepository'
 import { clearTelemetryProjectionRepositoryCache } from '~/repositories/telemetryProjectionRepository'
+import { clearOwnerDocumentCache } from '~/repositories/ownerDocumentRepository'
+import { invalidateSyncMirror } from '~/services/sync/syncMirrorService'
 
 export type TelemetryCacheInvalidationScope =
   | 'sync'
@@ -25,9 +27,19 @@ export function invalidateTelemetryCaches(options: TelemetryCacheInvalidationOpt
   const { uid, scope = 'all', dispatchEvent = true } = options
 
   if (scope === 'all' || scope === 'sync' || scope === 'profile' || scope === 'manual-refresh') {
+    // PIP-442: il documento owner condiviso e' stato riscritto (sync/profilo) o l'utente
+    // vuole dati freschi: la prossima lettura porta la revisione nuova.
+    clearOwnerDocumentCache(uid)
     clearTelemetryProjectionRepositoryCache(uid)
     clearTelemetryGatewayCache(uid)
     clearSessionPagerCache(uid)
+  }
+
+  // PIP-444: il mirror della sync sopravvive allo scope `sync` (lo pubblica la sync stessa
+  // dopo il commit); logout, cambio account e refresh manuale lo svuotano. Chi riscrive i
+  // riepiloghi fuori dal piano (manutenzione, rebuild) chiama `invalidateSyncMirror`.
+  if (scope === 'all' || scope === 'manual-refresh') {
+    invalidateSyncMirror(uid)
   }
 
   if (scope === 'all' || scope === 'calendar' || scope === 'manual-refresh') {

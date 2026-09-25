@@ -49,6 +49,8 @@ const activities = ref<ActivityItem[]>([])
 const isLoading = ref(false)
 const error = ref<string | null>(null)
 let unsubscribeSnapshot: (() => void) | null = null
+let listeningUid: string | null = null
+let listenerGeneration = 0
 
 export function useActivityFeed() {
   const db = getFirestore()
@@ -59,9 +61,14 @@ export function useActivityFeed() {
 
   // Listen to activities for a specific user
   const listenToActivities = (userId: string) => {
+    if (listeningUid === userId && unsubscribeSnapshot) return
     if (unsubscribeSnapshot) {
       unsubscribeSnapshot()
     }
+    unsubscribeSnapshot = null
+    listeningUid = userId
+    const generation = ++listenerGeneration
+    activities.value = []
 
     isLoading.value = true
     error.value = null
@@ -71,6 +78,7 @@ export function useActivityFeed() {
       const q = query(activitiesRef, orderBy('timestamp', 'desc'), limit(50))
 
       unsubscribeSnapshot = trackedOnSnapshot(q, CALLER, (snapshot) => {
+        if (generation !== listenerGeneration) return
         const items: ActivityItem[] = []
         snapshot.forEach((doc) => {
           const data = doc.data()
@@ -88,11 +96,14 @@ export function useActivityFeed() {
         activities.value = items
         isLoading.value = false
       }, (err) => {
+        if (generation !== listenerGeneration) return
+        listeningUid = null
         console.error('[ActivityFeed] Error listening to activities:', err)
         error.value = err.message
         isLoading.value = false
       })
     } catch (err: any) {
+      listeningUid = null
       console.error('[ActivityFeed] Setup error:', err)
       error.value = err.message
       isLoading.value = false
@@ -100,11 +111,14 @@ export function useActivityFeed() {
   }
 
   const stopListening = () => {
+    listenerGeneration++
+    listeningUid = null
     if (unsubscribeSnapshot) {
       unsubscribeSnapshot()
       unsubscribeSnapshot = null
     }
     activities.value = []
+    isLoading.value = false
   }
 
   // Add a new activity

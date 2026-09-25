@@ -1,10 +1,12 @@
 import { ref } from 'vue'
+import { usePresentationActivity } from './usePresentationVisibility'
 
 export interface LiveLapState {
   currentLap: number | null
   lapsCompleted: number | null
   lapsValid: number | null
   lapValid: boolean | null
+  lastLapValid: boolean | null
   lastLapTimeMs: number | null
   sectorHud: SectorHudState | null
   // Contesto sessione dal logger: servono al Training Tracker (PIP-95).
@@ -47,6 +49,7 @@ const EMPTY_LAP_STATE: LiveLapState = {
   lapsCompleted: null,
   lapsValid: null,
   lapValid: null,
+  lastLapValid: null,
   lastLapTimeMs: null,
   sectorHud: null,
   track: null,
@@ -128,11 +131,12 @@ export function normalizeSectorHud(raw: any): SectorHudState | null {
  * @param getApi - Factory that returns the current Electron API instance, or null if unavailable.
  * @returns Object with liveLap ref, isPollingActive ref, startLiveStatePolling, stopLiveStatePolling, resetLiveLap.
  */
-export function useLiveStatePoller(getApi: () => any | null) {
+export function useLiveStatePoller(getApi: () => any | null, background = false) {
   const liveLap = ref<LiveLapState>({ ...EMPTY_LAP_STATE })
   const isPollingActive = ref(false)
   let liveStateInterval: ReturnType<typeof setInterval> | null = null
   let removePushListener: (() => void) | null = null
+  let revision = 0
 
   function applyState(state: any) {
     if (state && typeof state === 'object' && isLiveStateFresh(state.ts)) {
@@ -141,6 +145,7 @@ export function useLiveStatePoller(getApi: () => any | null) {
         lapsCompleted: typeof state.laps_completed === 'number' ? state.laps_completed : null,
         lapsValid: typeof state.laps_valid === 'number' ? state.laps_valid : null,
         lapValid: typeof state.lap_valid === 'boolean' ? state.lap_valid : null,
+        lastLapValid: typeof state.last_lap_valid === 'boolean' ? state.last_lap_valid : null,
         lastLapTimeMs: typeof state.last_lap_time_ms === 'number' ? state.last_lap_time_ms : null,
         sectorHud: normalizeSectorHud(state.sector_hud),
         track: typeof state.track === 'string' && state.track ? state.track : null,
@@ -168,14 +173,17 @@ export function useLiveStatePoller(getApi: () => any | null) {
     }
 
     let errorCount = 0
+    const requestRevision = revision
 
     async function pollOnce() {
       try {
         const state = await api.getLiveState()
+        if (requestRevision !== revision) return
         errorCount = 0
         isPollingActive.value = true
         applyState(state)
       } catch (err: any) {
+        if (requestRevision !== revision) return
         errorCount++
         console.warn(`[LiveStatePoller] IPC error (attempt ${errorCount}):`, err?.message ?? err)
         if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
@@ -190,6 +198,7 @@ export function useLiveStatePoller(getApi: () => any | null) {
   }
 
   function stopLiveStatePolling() {
+    revision++
     if (liveStateInterval) {
       clearInterval(liveStateInterval)
       liveStateInterval = null
@@ -204,5 +213,6 @@ export function useLiveStatePoller(getApi: () => any | null) {
     liveLap.value = { ...EMPTY_LAP_STATE }
   }
 
-  return { liveLap, isPollingActive, startLiveStatePolling, stopLiveStatePolling, resetLiveLap }
+  const activity = usePresentationActivity(startLiveStatePolling, stopLiveStatePolling, background)
+  return { liveLap, isPollingActive, startLiveStatePolling: activity.start, stopLiveStatePolling: activity.stop, resetLiveLap }
 }

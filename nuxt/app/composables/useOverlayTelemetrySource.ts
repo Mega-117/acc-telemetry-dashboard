@@ -47,7 +47,9 @@ export function useOverlayTelemetrySource(
   const routed = computed(() => routeOverlayTelemetry(
     local.fastState.value,
     focused.state.value,
-    holdsRemoteFocus(remoteFocus.value, local.fastState.value, now()),
+    // Identical physics frames no longer invalidate the ref: expiry must
+    // explicitly depend on the shared clock, including a stalled feed.
+    holdsRemoteFocus(remoteFocus.value, local.fastState.value, focused.nowMs.value),
   ))
   const focusedDeltaAccumulator = ref(emptyFocusedInfoDeltaAccumulator())
   const focusedDelta = ref<ReturnType<typeof trackFocusedInfoDelta>['delta'] | null>(null)

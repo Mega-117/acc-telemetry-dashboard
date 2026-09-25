@@ -105,7 +105,7 @@ export function formatInfoDuration(valueMs: number | null | undefined): string {
 }
 
 export function formatInfoStintDuration(valueMs: number | null | undefined): string {
-  const value = positive(valueMs)
+  const value = typeof valueMs === 'number' && Number.isFinite(valueMs) && valueMs >= 0 ? valueMs : null
   if (value === null) return '-:--.---'
   const totalSeconds = Math.floor(value / 1000)
   const hours = Math.floor(totalSeconds / 3600)

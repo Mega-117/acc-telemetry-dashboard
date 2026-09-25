@@ -27,6 +27,16 @@ async function flushPromises() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('useLiveStatePoller', () => {
+  it.each([false, true, undefined])('keeps completed validity %s separate from current validity', async (valid) => {
+    const poller = useLiveStatePoller(() => makeApi(async () => ({
+      ts: freshTs(), laps_completed: 1, lap_valid: true, last_lap_valid: valid,
+    })))
+    poller.startLiveStatePolling()
+    await flushPromises()
+    expect(poller.liveLap.value.lastLapValid).toBe(valid ?? null)
+    expect(poller.liveLap.value.lapValid).toBe(true)
+    poller.stopLiveStatePolling()
+  })
   beforeEach(() => {
     vi.useFakeTimers()
     vi.spyOn(console, 'warn').mockImplementation(() => {})

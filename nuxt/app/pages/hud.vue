@@ -5,6 +5,7 @@ if (import.meta.client) markHudRouteModulePhase('route-module-evaluated')
 </script>
 
 <script setup lang="ts">
+import { usePresentationInterval } from '~/composables/usePresentationVisibility'
 /* eslint-disable max-lines -- Legacy self-contained Electron bridge; split tracked separately from PIP-281 layout scope. */
 // HUD (PIP-209): pagina overlay protetta da capability centralizzata.
 // - Interruttore GLOBALE di posizionamento: sblocca/blocca TUTTI gli overlay.
@@ -14,7 +15,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
-import { ChartNoAxesCombined, CircleDot, Clock3, Flag, Info, LayoutDashboard, ListOrdered, Trophy } from '@lucide/vue'
+import { ChartNoAxesCombined, CircleDot, Clock3, Flag, Info, LayoutDashboard, ListOrdered, Map as MapIcon, Trophy } from '@lucide/vue'
 import {
   supportsHudOverlayPresentationControl,
   type HudOverlayPresentationControl,
@@ -40,7 +41,7 @@ definePageMeta({
   middleware: 'hud-access'
 })
 
-type HudOverlayId = 'tyres' | 'sectors' | 'dashboard' | 'info' | 'standings'
+type HudOverlayId = 'tyres' | 'sectors' | 'dashboard' | 'info' | 'standings' | 'trackmap'
 type HudSettingsLayout = 'columns' | 'matrix'
 
 interface HudReplayScenario {
@@ -68,6 +69,7 @@ const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string 
   { id: 'dashboard', title: 'Dashboard', description: 'Marcia, carburante ed elettronica in stile ACC Drive.' },
   { id: 'info', title: 'Info', description: 'Delta, stint, carburante, grip, tempi e danni.' },
   { id: 'standings', title: 'Standings', description: 'Classifica di classe con top e auto intorno al pilota.' },
+  { id: 'trackmap', title: 'Minimappa', description: 'Tracciato con la tua auto, le altre in pista e il punto di uscita dai box.' },
 ]
 
 const hudOverlayIcons = {
@@ -76,6 +78,7 @@ const hudOverlayIcons = {
   dashboard: LayoutDashboard,
   info: Info,
   standings: ListOrdered,
+  trackmap: MapIcon,
 }
 
 const hudSettingsLayouts: Array<{ id: HudSettingsLayout, label: string, description: string }> = [
@@ -93,10 +96,10 @@ function getApi(): any | null {
 
 const isElectron = ref(false)
 const apiReady = ref(false)
-const enabled = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false })
-const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false })
-const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1, info: 1, standings: 0.8 })
-const tyreVariant = ref<'classic' | 'advanced' | 'race'>('classic')
+const enabled = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false, trackmap: false })
+const open = reactive<Record<HudOverlayId, boolean>>({ tyres: false, sectors: false, dashboard: false, info: false, standings: false, trackmap: false })
+const scale = reactive<Record<HudOverlayId, number>>({ tyres: 1, sectors: 1, dashboard: 1, info: 1, standings: 0.8, trackmap: 1 })
+const tyreVariant = ref<'classic' | 'race'>('classic')
 const sectorVariant = ref<'classic' | 'compact'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
@@ -117,6 +120,15 @@ const dashboardSettings = reactive({
   speedDelta: false,
   fuelCriticalFlashEnabled: false,
   fuelCriticalLapsThreshold: 0.5,
+})
+// PIP-428: pitTimeSeconds null = tempo sosta della tabella per pista (ACC Drive: SG30 + 2 s).
+const trackmapSettings = reactive<{
+  showPitPrediction: boolean, showCarNumbers: boolean, circleView: boolean, pitTimeSeconds: number | null
+}>({
+  showPitPrediction: true,
+  showCarNumbers: true,
+  circleView: false,
+  pitTimeSeconds: null,
 })
 const infoSettings = reactive({
   showYellowFlag: true,
@@ -219,8 +231,13 @@ const selectedOverlayId = ref<HudOverlayId>('tyres')
 const hudSettingsLayout = ref<HudSettingsLayout>('columns')
 const hudPerformanceSummary = ref('')
 let unsubscribeDriving: (() => void) | null = null
-let placementPollTimer: ReturnType<typeof setInterval> | null = null
-let replayPollTimer: ReturnType<typeof setInterval> | null = null
+const placementActivity = usePresentationInterval(() => {
+  nowMs.value = Date.now()
+  if (positioning.value) refreshPlacementStatus()
+}, 1000)
+const replayActivity = usePresentationInterval(() => {
+  if (replayStatus.value.running) void refreshReplayStatus()
+}, 500)
 
 
 const placementRemainingSeconds = computed(() => {
@@ -243,6 +260,9 @@ async function refreshOverlayVisibility() {
   await Promise.all(hudOverlays.map(async (overlay) => {
     try { open[overlay.id] = await api.hudOverlayIsOpen(overlay.id) } catch { open[overlay.id] = false }
   }))
+  if (typeof api.trainingOverlayIsOpen === 'function') {
+    try { trainingOpen.value = await api.trainingOverlayIsOpen() } catch { trainingOpen.value = false }
+  }
 }
 
 function applyPlacementStatus(status: any) {
@@ -272,7 +292,7 @@ async function refreshState() {
       const settings = await api.hudOverlayGetSettings(overlay.id)
       enabled[overlay.id] = settings?.enabled === true
       if (settings?.scale !== undefined) scale[overlay.id] = settings.scale
-      if (overlay.id === 'tyres') tyreVariant.value = settings?.variant === 'advanced' || settings?.variant === 'race' ? settings.variant : 'classic'
+      if (overlay.id === 'tyres') tyreVariant.value = settings?.variant === 'advanced' || settings?.variant === 'race' ? 'race' : 'classic'
       if (overlay.id === 'sectors') sectorVariant.value = settings?.variant === 'compact' ? 'compact' : 'classic'
       if (overlay.id === 'sectors' && typeof settings?.showReference === 'boolean') showSectorReference.value = settings.showReference
       if (overlay.id === 'sectors' && typeof settings?.showBest === 'boolean') showSectorBest.value = settings.showBest
@@ -286,6 +306,12 @@ async function refreshState() {
         dashboardSettings.fuelCriticalFlashEnabled = settings?.fuelCriticalFlashEnabled === true
         dashboardSettings.fuelCriticalLapsThreshold = Number.isFinite(Number(settings?.fuelCriticalLapsThreshold))
           ? Number(settings.fuelCriticalLapsThreshold) : 0.5
+      }
+      if (overlay.id === 'trackmap') {
+        trackmapSettings.showPitPrediction = settings?.showPitPrediction !== false
+        trackmapSettings.showCarNumbers = settings?.showCarNumbers !== false
+        trackmapSettings.circleView = settings?.circleView === true
+        trackmapSettings.pitTimeSeconds = Number.isFinite(settings?.pitTimeSeconds) ? Number(settings.pitTimeSeconds) : null
       }
       if (overlay.id === 'standings') {
         for (const key of ['topCars', 'carsAhead', 'carsBehind'] as const) {
@@ -419,14 +445,9 @@ async function observeHudInitialReady() {
 
 onMounted(() => {
   void observeHudInitialReady()
-  placementPollTimer = setInterval(() => {
-    nowMs.value = Date.now()
-    if (positioning.value) refreshPlacementStatus()
-  }, 1000)
+  placementActivity.start()
   void refreshReplayStatus()
-  replayPollTimer = setInterval(() => {
-    if (replayStatus.value.running) void refreshReplayStatus()
-  }, 500)
+  replayActivity.start()
   const api = getApi()
   if (api && typeof api.onHudOverlayDrivingState === 'function') {
     unsubscribeDriving = api.onHudOverlayDrivingState((value: boolean) => {
@@ -438,8 +459,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (unsubscribeDriving) { unsubscribeDriving(); unsubscribeDriving = null }
-  if (placementPollTimer) { clearInterval(placementPollTimer); placementPollTimer = null }
-  if (replayPollTimer) { clearInterval(replayPollTimer); replayPollTimer = null }
+  placementActivity.stop()
+  replayActivity.stop()
 })
 
 async function saveAndLock() {
@@ -502,10 +523,10 @@ function onScaleInput(id: HudOverlayId, raw: string) {
 async function setTyreVariant(value: string) {
   const api = getApi()
   if (!apiReady.value || !api?.hudOverlaySaveSettings) return
-  const next = value === 'advanced' || value === 'race' ? value : 'classic'
+  const next = value === 'advanced' || value === 'race' ? 'race' : 'classic'
   tyreVariant.value = next
   const settings = await api.hudOverlaySaveSettings('tyres', { variant: next })
-  tyreVariant.value = settings?.variant === 'advanced' || settings?.variant === 'race' ? settings.variant : 'classic'
+  tyreVariant.value = settings?.variant === 'advanced' || settings?.variant === 'race' ? 'race' : 'classic'
 }
 
 function onSectorReferenceChange(event: Event) {
@@ -578,6 +599,24 @@ async function saveDashboardSetting(
 
 function toggleDashboardSetting(key: keyof typeof dashboardSettings) {
   void saveDashboardSetting(key, !(dashboardSettings as any)[key])
+}
+
+// Il main normalizza (1-600 s, altrimenti null) e rispecchia il valore al logger:
+// qui si mostra sempre cio' che il main ha davvero salvato.
+async function saveTrackmapSetting(
+  key: keyof typeof trackmapSettings,
+  value: boolean | number | null,
+) {
+  const api = getApi()
+  if (!apiReady.value || !api?.hudOverlaySaveSettings) return
+  ;(trackmapSettings as any)[key] = value
+  const settings = await api.hudOverlaySaveSettings('trackmap', { [key]: value })
+  if (settings && key in settings) (trackmapSettings as any)[key] = settings[key]
+}
+
+function savePitTimeInput(raw: string) {
+  const text = raw.trim()
+  void saveTrackmapSetting('pitTimeSeconds', text === '' ? null : Number(text))
 }
 
 
@@ -686,6 +725,7 @@ async function toggleTraining() {
         >
           <div class="test-hud__placement-text">
             <strong id="hud-placement-title">Posizione di tutti gli overlay</strong>
+            <span>Include il pannello Ctrl+K.</span>
             <span v-if="positioning">
               Modifica attiva. Salvataggio automatico tra
               <b>{{ placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }}s</b> di inattività.
@@ -844,16 +884,16 @@ async function toggleTraining() {
             aria-labelledby="hud-training-title"
           >
             <div>
-              <strong id="hud-training-title">Allenamento</strong>
+              <strong id="hud-training-title">Pannello Ctrl+K</strong>
               <span>{{ trainingOpen ? 'Visibile' : 'Nascosto' }}</span>
             </div>
             <button
               type="button"
               class="btn"
-              :disabled="!isElectron"
+              :disabled="!isElectron || positioning || placementBusy"
               @click="toggleTraining"
             >
-              {{ trainingOpen ? 'Nascondi allenamento' : 'Mostra allenamento' }}
+              {{ trainingOpen ? 'Nascondi pannello' : 'Mostra pannello' }}
             </button>
           </section>
         </aside>
@@ -960,7 +1000,6 @@ async function toggleTraining() {
                   @change="setTyreVariant(($event.target as HTMLSelectElement).value)"
                 >
                   <option value="classic">Classico</option>
-                  <option value="advanced">Avanzato</option>
                   <option value="race">Race</option>
                 </select>
               </label>
@@ -984,7 +1023,7 @@ async function toggleTraining() {
               </label>
 
               <label
-                v-if="supportsHudOverlayBackground(selectedOverlayId) && (selectedOverlayId !== 'tyres' || tyreVariant === 'advanced')"
+                v-if="supportsHudOverlayBackground(selectedOverlayId) && selectedOverlayId !== 'tyres'"
                 class="hud-control hud-control--slider"
               >
                 <span>
@@ -1145,6 +1184,56 @@ async function toggleTraining() {
                   </label>
                 </template>
 
+                <template v-else-if="selectedOverlayId === 'trackmap'">
+                  <label class="hud-control">
+                    <span><strong>Pit prediction</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="trackmapSettings.showPitPrediction"
+                      :disabled="selectedSettingsDisabled"
+                      @change="saveTrackmapSetting('showPitPrediction', !trackmapSettings.showPitPrediction)"
+                    />
+                  </label>
+                  <label class="hud-control">
+                    <span><strong>Numeri auto (spento: posizione in gara)</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="trackmapSettings.showCarNumbers"
+                      :disabled="selectedSettingsDisabled"
+                      @change="saveTrackmapSetting('showCarNumbers', !trackmapSettings.showCarNumbers)"
+                    />
+                  </label>
+                  <label class="hud-control">
+                    <span><strong>Vista a cerchio</strong></span>
+                    <input
+                      type="checkbox"
+                      role="switch"
+                      :checked="trackmapSettings.circleView"
+                      :disabled="selectedSettingsDisabled"
+                      @change="saveTrackmapSetting('circleView', !trackmapSettings.circleView)"
+                    />
+                  </label>
+                  <label class="hud-control">
+                    <span><strong>Tempo sosta manuale</strong></span>
+                    <span class="hud-number">
+                      <input
+                        type="number"
+                        min="1"
+                        max="600"
+                        step="1"
+                        placeholder="auto"
+                        :value="trackmapSettings.pitTimeSeconds ?? ''"
+                        :disabled="selectedSettingsDisabled || !trackmapSettings.showPitPrediction"
+                        aria-label="Tempo perso per la sosta in secondi; vuoto usa il valore della pista"
+                        @change="savePitTimeInput(($event.target as HTMLInputElement).value)"
+                      />
+                      <b>s</b>
+                    </span>
+                  </label>
+                </template>
+
                 <template v-else-if="selectedOverlayId === 'standings'">
                   <label class="hud-control hud-control--slider">
                     <span><strong>Top Cars</strong></span>
@@ -1258,10 +1347,11 @@ async function toggleTraining() {
         </article>
       </div>
     </section>
+    <!-- Keep the dialog inside the page root so Nuxt can finish route transitions. -->
+    <div v-if="sectorReferenceEditorOpen" class="sector-reference-dialog" role="dialog" aria-modal="true" aria-label="Riferimenti settori">
+      <SectorReferenceSetup @saved="sectorReferencesSaved" @cancel="sectorReferenceEditorOpen = false" />
+    </div>
   </LayoutPageContainer>
-  <div v-if="sectorReferenceEditorOpen" class="sector-reference-dialog" role="dialog" aria-modal="true" aria-label="Riferimenti settori">
-    <SectorReferenceSetup @saved="sectorReferencesSaved" @cancel="sectorReferenceEditorOpen = false" />
-  </div>
 </template>
 
 <style scoped lang="scss">

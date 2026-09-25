@@ -7,6 +7,7 @@ import { USER_STATS_SCHEMA_VERSION } from './userStatsProjectionService'
 import { buildActivityProjectionFromEntries } from '~/services/telemetry/activityProjectionService'
 import type { TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { applySessionListProjectionDeltas } from './sessionListProjectionService'
+import type { SessionContribution } from '~/types/trackProjections'
 
 export interface UserProjectionDelta extends TrackBestProjectionDelta {
   status: 'created' | 'updated'
@@ -117,10 +118,16 @@ export async function applyUserProjectionDeltas(params: {
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   docFn?: (db: any, path: string) => any
-}): Promise<{ wrote: boolean; totalSessions: number; sessionsLast7Days: number }> {
+}): Promise<{
+  wrote: boolean
+  totalSessions: number
+  sessionsLast7Days: number
+  previousContributions: Map<string, SessionContribution>
+}> {
   const { db, uid, deltas, getDocFn, setDocFn, docFn = doc } = params
+  const previousContributions = new Map<string, SessionContribution>()
   if (deltas.length === 0) {
-    return { wrote: false, totalSessions: 0, sessionsLast7Days: 0 }
+    return { wrote: false, totalSessions: 0, sessionsLast7Days: 0, previousContributions }
   }
 
   const userRef = docFn(db, `users/${uid}`)
@@ -133,6 +140,18 @@ export async function applyUserProjectionDeltas(params: {
 
   for (const item of existingList) {
     if (item?.id) byId.set(item.id, item)
+  }
+  // PIP-436: contributo gia' conteggiato delle sessioni aggiornate, riusato dalle proiezioni
+  // per pista (sottrarre il vecchio, sommare il nuovo) senza rileggere lo storico.
+  for (const delta of deltas) {
+    const previous = byId.get(delta.sessionId)
+    if (delta.status === 'updated' && previous) {
+      previousContributions.set(delta.sessionId, {
+        laps: Number(previous.laps || 0),
+        lapsValid: Number(previous.lapsValid || 0),
+        totalTime: Number(previous.totalTime || 0)
+      })
+    }
   }
   for (const delta of deltas) {
     byId.set(delta.sessionId, toSessionIndexEntry(delta))
@@ -188,16 +207,22 @@ export async function applyUserProjectionDeltas(params: {
     docFn
   })
 
-  await updatePilotDirectoryActivity({
-    db,
-    uid,
-    fields: {
-      sessionsLast7Days,
-      lastSessionDate
-    },
-    setDocFn,
-    docFn
-  })
+  // Ogni scrittura di pilotDirectory costa anche una lettura nelle Rules (getAfter):
+  // solo se i valori pubblici cambiano davvero.
+  const directoryChanged = Number(existingStats.sessionsLast7Days ?? -1) !== sessionsLast7Days
+    || (existingStats.lastSessionDate || null) !== lastSessionDate
+  if (directoryChanged) {
+    await updatePilotDirectoryActivity({
+      db,
+      uid,
+      fields: {
+        sessionsLast7Days,
+        lastSessionDate
+      },
+      setDocFn,
+      docFn
+    })
+  }
 
-  return { wrote: true, totalSessions, sessionsLast7Days }
+  return { wrote: true, totalSessions, sessionsLast7Days, previousContributions }
 }

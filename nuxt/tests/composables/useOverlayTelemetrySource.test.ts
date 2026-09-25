@@ -2,6 +2,33 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { useOverlayTelemetrySource } from '../../app/composables/useOverlayTelemetrySource'
 
 describe('useOverlayTelemetrySource', () => {
+  it('returns to live local physics after the focus hold expires even when normalized frames never change', async () => {
+    vi.useFakeTimers()
+    let pushFocused!: (value: unknown) => void
+    const api = {
+      getFastState: vi.fn(async () => ({ ts: Date.now() / 1000, is_live: true, fuel_l: 30 })),
+      getFocusedCarState: vi.fn(async () => ({ status: 'unavailable', reason: 'stale', snapshot: null })),
+      onFocusedCarStateUpdate: vi.fn(cb => { pushFocused = cb; return vi.fn() }),
+    }
+    const telemetry = useOverlayTelemetrySource(() => api, 250)
+    telemetry.startFastStatePolling()
+    await vi.advanceTimersByTimeAsync(0)
+    pushFocused({ status: 'available', snapshot: {
+      session: { local_car_index: 1, focused_car_index: 2 },
+      freshness: { generated_at_ms: Date.now(), ttl_ms: 5000 },
+      cars: [],
+    } })
+    await vi.advanceTimersByTimeAsync(0)
+    pushFocused({ status: 'unavailable', reason: 'stale', snapshot: null })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(telemetry.source.value).toBe('focused')
+    await vi.advanceTimersByTimeAsync(4750)
+    expect(telemetry.source.value).toBe('focused')
+    await vi.advanceTimersByTimeAsync(250)
+    expect(telemetry.source.value).toBe('local')
+    expect(telemetry.fastState.value.fuelL).toBe(30)
+    telemetry.stopFastStatePolling()
+  })
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()

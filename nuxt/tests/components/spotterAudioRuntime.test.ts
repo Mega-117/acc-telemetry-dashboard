@@ -65,13 +65,15 @@ it('plays each lap and then third-lap pressure across server/track changes witho
   await feed(3, 'B')
   expect(mocks.played).toHaveLength(8)
 })
-it('announces invalid lap times and uses existing bricks outside the full-WAV range', async () => {
-  await feed(0, 'A'); await feed(1, 'A', false); await feed(2, 'A', true, 170_000)
-  expect(mocks.played).toEqual([
+it('announces invalid lap times and never reads a time outside the full-WAV range', async () => {
+  await feed(0, 'A'); await feed(1, 'A', false)
+  await feed(2, 'A', true, 170_000); await feed(3, 'A', false, 170_000); await feed(4, 'A', true, 70_000)
+  expect(mocks.played.filter(path => !path.includes('pressureAdjustmentNeeded'))).toEqual([
     '/voice/qualifying/time-invalid-if_sara.wav', '/voice/qualifying/lap-time-1019-if_sara.wav',
-    '/voice/qualifying/time-num-2-if_sara.wav', '/voice/qualifying/time-num-50-if_sara.wav',
-    '/voice/qualifying/time-e-if_sara.wav', '/voice/qualifying/time-num-0-if_sara.wav',
+    // Out of range: valid laps stay silent, invalid laps keep only the dedicated track.
+    '/voice/qualifying/time-invalid-if_sara.wav',
   ])
+  expect(mocks.played.some(path => path.includes('/time-num-') || path.includes('/time-e-'))).toBe(false)
 })
 it('pressure still speaks when lap times are disabled', async () => {
   mocks.settings.coachEnabled.value = false

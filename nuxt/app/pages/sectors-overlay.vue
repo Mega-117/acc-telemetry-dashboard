@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // Overlay HUD Settori (PIP-175/PIP-276): Classico e Compatto condividono
 // telemetria, riferimento delta e target runtime. TARGET e' solo un secondo
 // accesso alla stessa configurazione usata da Ctrl+K.
@@ -43,10 +44,7 @@ const pagerPages: PagerPage[] = [
   { id: 'target', label: 'TARGET', temporary: false, minViewport: TARGET_VIEWPORT },
 ]
 
-function getApi(): any | null {
-  if (typeof window === 'undefined') return null
-  return (window as any).electronAPI || null
-}
+const getApi = useOverlayRegionApi()
 
 const route = useRoute()
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getApi)
@@ -243,6 +241,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <div class="hud-sectors-scope" style="position:relative;width:100%;height:100%">
   <div
     class="hud-overlay"
     :style="{ '--hud-scale': rootScale }"
@@ -311,10 +310,13 @@ onBeforeUnmount(() => {
       />
     </div>
   </div>
+  </div>
 </template>
 
 <style lang="scss">
 @use '~/assets/scss/training-overlay' as *;
+
+.hud-sectors-scope {
 
 // Regole scopate sotto .hud-overlay per non toccare l'overlay allenamento.
 .hud-overlay {
@@ -473,5 +475,6 @@ onBeforeUnmount(() => {
   .hud-overlay--target *::after {
     transition: none !important;
   }
+}
 }
 </style>

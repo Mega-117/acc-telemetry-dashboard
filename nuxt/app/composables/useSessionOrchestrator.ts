@@ -149,7 +149,8 @@ export function useSessionOrchestrator(
     if (newVal === null || oldVal === null) return
     if (newVal <= oldVal) return
     if (!canAnnounceLiveLap()) return
-    announceLap(liveLap.value.currentLap ?? newVal, liveLap.value.lastLapTimeMs, liveLap.value.lapValid ?? true)
+    if (typeof liveLap.value.lastLapValid !== 'boolean') return
+    announceLap(newVal, liveLap.value.lastLapTimeMs, liveLap.value.lastLapValid)
   })
 
   // ── Session transitions ────────────────────────────────────────────────────

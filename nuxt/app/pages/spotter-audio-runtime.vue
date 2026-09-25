@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
@@ -7,7 +8,7 @@ import { usePublicPath } from '~/composables/usePublicPath'
 import { useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { resolveLocalRuntimeCapability } from '~/services/auth/localIdentityBridge'
-import { lapTimeToBricks, timeBrickPath, resolveLapTimeVoiceEntry } from '~/services/overlay/lapTimeAnnouncer'
+import { lapTimeAnnouncementPaths } from '~/services/overlay/lapTimeAnnouncer'
 import {
   createVoicePlaybackQueue,
   type VoiceCue,
@@ -108,13 +109,10 @@ const pressureVoiceRuntime = createPressureRecommendationVoiceRuntime({
   }),
 })
 
-function getRuntimeApi(): any | null {
-  if (typeof window === 'undefined') return null
-  return (window as any).electronAPI || null
-}
+const getRuntimeApi = useOverlayRegionApi()
 
-const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getRuntimeApi)
-const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getRuntimeApi)
+const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getRuntimeApi, true)
+const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getRuntimeApi, true)
 // PIP-256: stato coach adattivo; attivo solo se pista coach = pista corrente
 // e se la voce dedicata "Feedback coach" lo consente (PIP-260)
 const { coachState, startCoachStatePolling, stopCoachStatePolling } = useCoachStatePoller(getRuntimeApi)
@@ -294,11 +292,8 @@ function tickTrackVoiceReferences() {
 
 function announceLapTime(id: string, timeMs: number, valid: boolean) {
   if (!canRunSpotterAudio.value || !lapTimesAllowedForSession.value) return
-  // Every timed lap includes its time, including invalid and out-of-range laps.
-  const entry = resolveLapTimeVoiceEntry(timeMs, true, selectedVoice.value)
-  const paths = entry
-    ? [...(!valid ? [timeBrickPath('invalid', selectedVoice.value)] : []), entry.path]
-    : lapTimeToBricks(timeMs, valid).map(brick => timeBrickPath(brick, selectedVoice.value))
+  // The time is spoken only when its full WAV exists; out of range stays silent.
+  const paths = lapTimeAnnouncementPaths(timeMs, valid, selectedVoice.value)
   paths.forEach((path, index) => enqueueAudioPath(path, {
     source: 'lap-time', id: `${id}-${index}`, correlationId: id,
   }))

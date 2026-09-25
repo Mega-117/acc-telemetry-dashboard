@@ -12,7 +12,7 @@ describe('training overlay Setup pressure contract', () => {
     expect(source).toContain('@click="togglePressureAudio"')
     expect(source).toContain("'Disattiva avvisi pressioni' : 'Attiva avvisi pressioni'")
     expect(source).toMatch(/function togglePressureAudio\(\) \{\s*if \(!canUseSpotterControls.value\) return\s*togglePressureWarnings\(\)/)
-    expect(source).toContain(':disabled="dryPressureState.state !== \'ready\'"')
+    expect(source).toContain(':disabled="isDryPressureApplying || dryPressureState.state !== \'ready\'"')
   })
   it('presents the neutral product action without the retired popup', () => {
     expect(source).toContain('Regola pressioni')
@@ -28,7 +28,7 @@ describe('training overlay Setup pressure contract', () => {
 
   it('keeps the pressure action visible, disabled outside ready and pulsing only when ready', () => {
     expect(source).toContain("'is-ready': dryPressureState.state === 'ready'")
-    expect(source).toContain(":disabled=\"dryPressureState.state !== 'ready'\"")
+    expect(source).toContain(":disabled=\"isDryPressureApplying || dryPressureState.state !== 'ready'\"")
     expect(source).toContain('launcher-tool-button--pressure')
     expect(source).toContain('dryPressurePresentation.guidance')
     expect(styles).toContain('pressure-action-ready-pulse 2.4s ease-in-out infinite')

@@ -87,20 +87,31 @@ export async function repairPilotDirectoryFromUser(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   db: any
   uid: string
-  getDocFn: FirestoreGetDocFn
+  /** Lettore esplicito (test, strumenti dev); senza, il documento owner condiviso (PIP-442). */
+  getDocFn?: FirestoreGetDocFn
   setDocFn: FirestoreSetDocFn
   docFn?: FirestoreDocFn
 }): Promise<PilotDirectoryRepairResult> {
   const { db, uid, getDocFn, setDocFn, docFn = doc } = params
-  const userSnap = await getDocFn(docFn(db, `users/${uid}`))
-  if (!userSnap.exists()) {
+  let userData: Record<string, unknown> | null = null
+  if (getDocFn) {
+    const userSnap = await getDocFn(docFn(db, `users/${uid}`))
+    userData = userSnap.exists() ? (userSnap.data() || {}) : null
+  } else {
+    // Import pigro: questo servizio resta puro (nessun Firestore a livello di modulo) per
+    // i chiamanti della sync che iniettano il proprio lettore.
+    const { loadOwnerDocument } = await import('~/repositories/ownerDocumentRepository')
+    const snapshot = await loadOwnerDocument(uid, { caller: 'PilotDirectoryProjection' })
+    userData = snapshot.exists ? (snapshot.data || {}) : null
+  }
+  if (!userData) {
     return { uid, wrote: false, reason: 'missing_user' }
   }
 
   await writePilotDirectoryFromUser({
     db,
     uid,
-    userData: { uid, ...(userSnap.data() || {}) },
+    userData: { uid, ...userData },
     setDocFn,
     docFn
   })

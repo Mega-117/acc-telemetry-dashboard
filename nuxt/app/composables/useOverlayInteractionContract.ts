@@ -72,13 +72,32 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
     return options.getApi()
   }
 
+  function regionRoot(): HTMLElement | null {
+    const id = api()?.overlayRegionId
+    return id ? document.querySelector(`[data-surface-region="${id}"]`) : null
+  }
+
+  function elementsFor(selector: string): Element[] {
+    if (!selector) return []
+    return Array.from((regionRoot() || document).querySelectorAll(selector))
+  }
+
+  function regionRects(selector: string) {
+    const root = regionRoot()
+    if (!root) return collectRects(selector)
+    const origin = root.getBoundingClientRect()
+    return elementsFor(selector).map(rectPayload).filter(rect => !!rect)
+      .map(rect => ({ ...rect, x: rect.x - origin.x, y: rect.y - origin.y }))
+  }
+
   function applyDocumentPointerClasses() {
     if (typeof document === 'undefined') return
-    document.documentElement.classList.toggle(
+    const root = regionRoot() || document.documentElement
+    root.classList.toggle(
       'overlay-pointer-surface-hovered',
       pointerState.surfaceHovered,
     )
-    document.documentElement.classList.toggle(
+    root.classList.toggle(
       'overlay-software-cursor-active',
       pointerState.cursorVisible && !pointerState.placementActive,
     )
@@ -92,8 +111,8 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
   function publishContract() {
     scheduledFrame = null
     if (!started || !selectors) return
-    const surfaceRects = collectRects(selectors.surfaceSelector)
-    const controlRects = collectRects(selectors.controlSelector)
+    const surfaceRects = regionRects(selectors.surfaceSelector)
+    const controlRects = regionRects(selectors.controlSelector)
     return api()?.overlayInteractionUpdateContract?.({
       interactive: true,
       forcedCapture: options.isForcedCapture?.() === true,
@@ -116,7 +135,7 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
     const observed = new Set<Element>()
     for (const selector of [selectors.surfaceSelector, selectors.controlSelector]) {
       if (!selector) continue
-      for (const element of document.querySelectorAll(selector)) {
+      for (const element of elementsFor(selector)) {
         if (observed.has(element)) continue
         observed.add(element)
         resizeObserver.observe(element)
@@ -142,6 +161,7 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
 
   function handlePointerDown(event: PointerEvent) {
     if (!selectors?.controlSelector || !(event.target instanceof Element)) return
+    if (regionRoot() && !regionRoot()?.contains(event.target)) return
     if (!event.target.closest(selectors.controlSelector)) return
     void api()?.overlayInteractionPointerButton?.(true)
   }
@@ -175,7 +195,7 @@ export function useOverlayInteractionContract(options: OverlayInteractionContrac
       })
       if (hasRelevantMutation) refresh()
     })
-    mutationObserver.observe(document.body, {
+    mutationObserver.observe(regionRoot() || document.body, {
       subtree: true,
       childList: true,
       attributes: true,

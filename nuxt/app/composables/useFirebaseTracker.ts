@@ -29,6 +29,7 @@ import {
 } from 'firebase/firestore'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import { canUseDevTools } from '~/utils/devToolsAccess'
+import { recordFirebaseJournalEvent } from '~/services/monitoring/firebaseOpsJournal'
 
 type FirebaseOperationType =
   | 'READ'
@@ -288,6 +289,7 @@ function recordScenarioOperation(entry: FirebaseOperation) {
 }
 
 function recordOperation(input: Omit<FirebaseOperation, 'id' | 'pathBucket'>) {
+  if (import.meta.env.PROD) return
   const activeScenario = getActiveScenario()
   const entry: FirebaseOperation = {
     ...input,
@@ -388,6 +390,21 @@ function recordOperation(input: Omit<FirebaseOperation, 'id' | 'pathBucket'>) {
   recordScenarioOperation(entry)
   pushOperation(entry)
   maybeVerboseLog(entry)
+  recordFirebaseJournalEvent({
+    kind: 'op',
+    db: 'firestore',
+    type: entry.type,
+    caller: entry.caller,
+    path: entry.pathBucket,
+    scenario: entry.scenarioName,
+    reads: entry.estimatedReads,
+    writes: entry.estimatedWrites,
+    deletes: entry.type === 'DELETE' ? 1 : entry.deleteDocs,
+    docs: entry.docsCount,
+    durationMs: entry.durationMs,
+    error: entry.type === 'ERROR' ? 'failed' : undefined,
+    fromCache: entry.note === 'cache' ? true : undefined
+  })
 }
 
 function createOperationLogger(
@@ -708,6 +725,7 @@ export function getFirebaseLog() {
 }
 
 export function startFirebaseScenario(name: string, metadata: Record<string, unknown> = {}) {
+  if (import.meta.env.PROD) return 0
   const scenario: FirebaseScenarioReport = {
     id: ++scenarioCounter,
     name,

@@ -1,9 +1,11 @@
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { trackedGetDoc } from '~/composables/useFirebaseTracker'
+import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJournal'
+import { SHARED_DATA_CACHE_TTL_MS } from '~/services/cache/cachePolicy'
 
 const CALLER = 'CoachDirectoryRepository'
-const COACH_DIRECTORY_CACHE_TTL_MS = 60_000
+const COACH_DIRECTORY_CACHE_TTL_MS = SHARED_DATA_CACHE_TTL_MS
 
 export interface CoachDirectoryItem {
   uid: string
@@ -33,7 +35,7 @@ export function getCoachDisplayName(coach: CoachDirectoryItem | null | undefined
 export async function loadCoachById(coachId: string | null | undefined): Promise<CoachDirectoryItem | null> {
   if (!coachId) return null
   const cached = coachCache.get(coachId)
-  if (cached && Date.now() - cached.cachedAt <= COACH_DIRECTORY_CACHE_TTL_MS) {
+  if (checkFirebaseCacheFreshness('coachDirectory', cached?.cachedAt, COACH_DIRECTORY_CACHE_TTL_MS) && cached) {
     return cached.coach
   }
 

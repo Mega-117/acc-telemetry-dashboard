@@ -1,5 +1,5 @@
 import type { User } from 'firebase/auth'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const trackedGetDocMock = vi.hoisted(() => vi.fn())
 const batchSetMock = vi.hoisted(() => vi.fn())
@@ -41,6 +41,7 @@ import {
   ensureUserDocument,
   getUserProfile
 } from '~/services/auth/userProvisioningService'
+import { clearOwnerDocumentCache, peekOwnerDocument } from '~/repositories/ownerDocumentRepository'
 
 const freshUser = {
   uid: 'qa-fresh-pilot',
@@ -50,10 +51,16 @@ const freshUser = {
 } as User
 
 beforeEach(() => {
+  const storage = new Map<string, string>()
+  vi.stubGlobal('localStorage', { getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value), removeItem: (key: string) => storage.delete(key) })
   vi.clearAllMocks()
+  // PIP-442: `users/{uid}` e' condiviso e senza scadenza: ogni test riparte pulito.
+  clearOwnerDocumentCache()
   trackedGetDocMock.mockResolvedValue({ exists: () => false })
   batchCommitMock.mockResolvedValue(undefined)
 })
+afterEach(() => vi.unstubAllGlobals())
 
 describe('ensureUserDocument', () => {
   it('crea un profilo pilot rules-compatible prima delle proiezioni', async () => {
@@ -119,6 +126,16 @@ describe('ensureUserDocument', () => {
     })
     expect(batchSetMock).not.toHaveBeenCalled()
     expect(batchCommitMock).not.toHaveBeenCalled()
+    // A second boot still reads the canonical owner, but reuses the verified
+    // projections; no cached role is used to grant entry.
+    clearOwnerDocumentCache()
+    trackedGetDocMock.mockClear().mockResolvedValueOnce({ exists: () => true, data: () => userData })
+    expect(await ensureUserDocument(freshUser)).toEqual({ role: 'pilot', nickname: 'QA Pilot' })
+    expect(trackedGetDocMock).toHaveBeenCalledTimes(1)
+    clearOwnerDocumentCache()
+    trackedGetDocMock.mockClear().mockResolvedValueOnce({ exists: () => true, data: () => ({ ...userData, role: 'coach' }) })
+    expect((await ensureUserDocument(freshUser)).role).toBe('coach')
+    expect(trackedGetDocMock).toHaveBeenCalledTimes(3)
   })
 
   it('ripara in una batch le proiezioni mancanti di un utente esistente', async () => {
@@ -204,5 +221,30 @@ describe('getUserProfile', () => {
       { path: 'users/qa-fresh-pilot' },
       'AuthProvisioning'
     )
+  })
+
+  it('PIP-442: riusa il documento owner condiviso e rilegge solo con fresh', async () => {
+    trackedGetDocMock.mockResolvedValue({ exists: () => true, data: () => ({ nickname: 'QA Pilot' }) })
+    await getUserProfile(freshUser.uid)
+    await getUserProfile(freshUser.uid)
+    expect(trackedGetDocMock).toHaveBeenCalledTimes(1)
+    await getUserProfile(freshUser.uid, { fresh: true })
+    expect(trackedGetDocMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('PIP-442: ensureUserDocument popola la copia condivisa e la aggiorna con la riparazione', async () => {
+    trackedGetDocMock.mockImplementation(async (ref: { path: string }) => ref.path === 'users/qa-fresh-pilot'
+      ? { exists: () => true, data: () => ({ uid: 'stale', nickname: 'QA Pilot', role: 'pilot', emailVerified: false }) }
+      : { exists: () => false })
+    await ensureUserDocument(freshUser)
+    const shared = peekOwnerDocument(freshUser.uid)
+    expect(shared?.exists).toBe(true)
+    expect(shared?.data?.uid).toBe('qa-fresh-pilot')
+    expect(shared?.data?.emailVerified).toBe(true)
+    expect(shared?.data?.nickname).toBe('QA Pilot')
+    // Il documento owner e' stato letto una volta sola, insieme a publicProfile e pilotDirectory.
+    expect(trackedGetDocMock).toHaveBeenCalledTimes(3)
+    await getUserProfile(freshUser.uid)
+    expect(trackedGetDocMock).toHaveBeenCalledTimes(3)
   })
 })

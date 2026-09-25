@@ -114,7 +114,33 @@ describe('clientHeartbeatService', () => {
   it('classifica client recente, non recente e sconosciuto', () => {
     const now = Date.parse('2026-07-17T12:00:00Z')
     expect(getClientHeartbeatStatus('2026-07-17T11:01:00Z', now)).toBe('recent')
-    expect(getClientHeartbeatStatus('2026-07-17T10:59:59Z', now)).toBe('stale')
+    expect(getClientHeartbeatStatus('2026-07-17T10:00:00Z', now)).toBe('recent')
+    expect(getClientHeartbeatStatus('2026-07-17T09:59:59Z', now)).toBe('stale')
     expect(getClientHeartbeatStatus(undefined, now)).toBe('unknown')
+  })
+
+  it('90 minuti senza nuovi eventi richiedono due soli heartbeat', () => {
+    const start = Date.parse('2026-09-22T10:00:00Z')
+    let last: string | null = null
+    let count = 0
+    for (let minute = 0; minute <= 90; minute++) {
+      const now = start + minute * 60_000
+      if (shouldSendClientHeartbeat(last, now)) {
+        last = new Date(now).toISOString()
+        count++
+      }
+    }
+    expect(count).toBe(2)
+  })
+
+  it('counts a new dashboard opening once, not once per repeated signal', () => {
+    const first = '2026-09-23T09:00:00Z'
+    const opened = '2026-09-23T09:07:00Z'
+    const now = Date.parse(opened) + 1000
+    expect(shouldSendClientHeartbeat(first, now, CLIENT_HEARTBEAT_INTERVAL_MS, opened)).toBe(true)
+    const sent = new Date(now).toISOString()
+    for (let signal = 1; signal <= 20; signal++) {
+      expect(shouldSendClientHeartbeat(sent, now + signal * 1000, CLIENT_HEARTBEAT_INTERVAL_MS, opened)).toBe(false)
+    }
   })
 })
