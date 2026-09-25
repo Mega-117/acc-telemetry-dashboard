@@ -262,7 +262,7 @@ onMounted(() => {
 .topbar__inner {
   display: flex;
   align-items: center;
-  max-width: 1400px;
+  max-width: var(--app-content-max-width);
   margin: 0 auto;
   padding: $spacing-md $spacing-lg;
 }

@@ -18,7 +18,7 @@
   :deep(.dropdown-item:hover:not(:disabled)) { background: #ff002414; }
   :deep(.pwc-notices header strong) { font: italic 700 18px 'Racer Display', sans-serif; text-transform: uppercase; }
   :deep(.dropdown-trigger:focus-visible), :deep(.pwc-bell:focus-visible) { outline: 2px solid #fff; outline-offset: 3px; }
-  :deep(.topbar__inner) { max-width: 1800px; padding: 14px 28px; }
+  :deep(.topbar__inner) { max-width: var(--app-content-max-width); padding: 14px 28px; }
   :deep(.brand-logo) { width: clamp(200px, 22vw, 300px); }
   :deep(.tab) { font-family: 'Racer Display', 'Arial Narrow', sans-serif; font-style: italic; font-size: 16px; font-weight: 700; letter-spacing: 0; padding: 13px 26px; color: #ccc; transition: color .15s; }
   :deep(.tab--active) { color: #fff; }

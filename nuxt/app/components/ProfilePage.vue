@@ -578,7 +578,6 @@ watch(
 
 $color-bg: #0d0d12;
 $color-card: #121218;
-$max-width: 1400px;
 
 .profile-page {
   @include racing-chrome.chrome;
@@ -601,7 +600,7 @@ $max-width: 1400px;
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  max-width: 1800px;
+  max-width: calc(var(--app-content-max-width) - 56px);
   margin: 0 auto;
 }
 
@@ -654,11 +653,12 @@ $max-width: 1400px;
 }
 
 .profile-main {
+  width: 100%; max-width: var(--app-content-max-width); margin-inline: auto; box-sizing: border-box;
   padding: 34px 24px 42px;
 }
 
 .profile-container {
-  max-width: $max-width;
+  max-width: 100%;
   margin: 0 auto;
 }
 

@@ -124,7 +124,7 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
   display: flex;
   align-items: center;
   gap: 24px;
-  max-width: 1400px;
+  max-width: var(--app-content-max-width);
   margin: 0 auto;
   padding: 16px 24px;
 }
@@ -219,7 +219,7 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
 }
 
 .coach-main {
-  max-width: 1400px;
+  max-width: var(--app-content-max-width);
   margin: 0 auto;
   padding: 32px 24px;
 }

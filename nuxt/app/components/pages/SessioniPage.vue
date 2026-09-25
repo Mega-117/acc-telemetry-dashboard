@@ -592,7 +592,7 @@ function goToSession(id: string) {
 </template>
 
 <style lang="scss" scoped>
-.sessions-page { width: 100%; max-width: 1120px; padding-top: 40px; padding-bottom: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.sessions-page { width: 100%; padding-top: 40px; padding-bottom: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .session-filters { margin-bottom: 24px; flex: 0 0 auto; }
 .sessions-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   overscroll-behavior-y: contain; scrollbar-gutter: stable;

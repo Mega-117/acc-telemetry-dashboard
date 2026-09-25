@@ -11,7 +11,7 @@ Colonne: tipo, ora, pista, auto, giri, stint, Q, R. Il pulsante pista apre il
 dettaglio anche da tastiera; il click sulla riga conserva la stessa azione.
 `assets/scss/_racing-data.scss` definisce font, colori, spaziature, linee,
 filtri, badge e tabella riutilizzabili. PaginationControls espone variante racing.
-Righe 38px, separazione giorni 26px, testo 13px, contenitore 1120px incluso
+Righe 38px, separazione giorni 36px, testo 13px, contenitore condiviso 1400px incluso
 padding. Su schermi stretti la tabella scorre orizzontalmente in una
 regione accessibile da tastiera; i filtri vanno a capo.
 

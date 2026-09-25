@@ -47,7 +47,7 @@ const tabs = [
   display: flex;
   gap: 8px;
   align-items: center;
-  max-width: 1400px;
+  max-width: var(--app-content-max-width);
   margin: 0 auto;
   padding: 0 24px;
 }

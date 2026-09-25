@@ -92,6 +92,7 @@ const handleGoToSettings = () => {
 
 .main-content {
   flex: 1;
+  width: 100%; max-width: var(--app-content-max-width); margin-inline: auto; box-sizing: border-box;
 }
 .racing-scroll-shell {
   --page-bottom-space: 0px;
@@ -115,7 +116,7 @@ const handleGoToSettings = () => {
   position: relative; isolation: isolate; background: transparent;
   .dashboard-sticky-header { flex-shrink: 0; }
   .main-content { display: flex; flex-direction: column; }
-  :deep(.page-container) { width: 100%; max-width: 1800px; padding: 26px 26px 22px; flex: 1; display: flex; flex-direction: column; }
+  :deep(.page-container) { width: 100%; padding: 26px 26px 22px; flex: 1; display: flex; flex-direction: column; }
   :deep(.racing-overview) { flex: 1; }
 }
 @media (max-width: 700px) {

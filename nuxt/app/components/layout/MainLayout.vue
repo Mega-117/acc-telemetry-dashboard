@@ -49,5 +49,6 @@ const emit = defineEmits<{
 
 .main-content {
   flex: 1;
+  width: 100%; max-width: var(--app-content-max-width); margin-inline: auto; box-sizing: border-box;
 }
 </style>

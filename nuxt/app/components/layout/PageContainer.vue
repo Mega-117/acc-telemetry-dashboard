@@ -12,7 +12,9 @@
 
 <style lang="scss" scoped>
 .page-container {
-  max-width: 1400px;
+  width: 100%;
+  max-width: var(--app-content-max-width);
+  box-sizing: border-box;
   margin: 0 auto;
   padding: 32px 24px;
 }
