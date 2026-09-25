@@ -587,8 +587,8 @@ function goToSession(id: string) {
 </template>
 
 <style lang="scss" scoped>
-.sessions-page { max-width: 1120px; padding-top: 20px; padding-bottom: 36px; }
-.session-filters { margin-bottom: var(--racing-space-section); }
+.sessions-page { max-width: 1120px; padding-top: 40px; padding-bottom: 36px; }
+.session-filters { margin-bottom: 42px; }
 .session-days { scroll-margin-top: 170px; }
 .session-day + .session-day { margin-top: var(--racing-space-section); }
 .session-days[aria-busy="true"] { opacity: .55; pointer-events: none; }
@@ -611,5 +611,5 @@ function goToSession(id: string) {
 .sessions-status { padding: 40px 0; color: var(--racing-data-muted); }
 .sessions-notice { padding: 12px 0; color: var(--racing-qualify); font-size: var(--racing-data-text-size); }
 .sessions-notice--error { color: #ff8999; }
-@media (max-width: 700px) { .sessions-page { padding: 16px; } }
+@media (max-width: 700px) { .sessions-page { padding: 32px 16px; } }
 </style>

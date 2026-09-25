@@ -16,6 +16,11 @@ padding. Su schermi stretti la tabella scorre orizzontalmente in una
 regione accessibile da tastiera; i filtri vanno a capo.
 
 ## Dati e stati
+Filtri compatti: font condiviso 11px, select chiusa 144px (auto 176px),
+testo lungo troncato con ellissi e opzioni native complete. Freccia SVG a
+12px dal bordo destro, ripristino freccia nativa in forced-colors.
+Spazio sopra il blocco 40px (32px mobile), sotto 42px.
+
 Palette canonica richiesta il 25 settembre: Practice `#0076ff`, Qualify e
 tempi Q `#ffc400`, Race e tempi R `#ff0024`. Token globali
 `--racing-practice`, `--racing-qualify`, `--racing-race` in `_racing-theme.scss`,
