@@ -1,3 +1,10 @@
+:root {
+  // Canonical session palette: Practice, Qualify/Q times, Race/R times.
+  --racing-practice: #0076ff;
+  --racing-qualify: #ffc400;
+  --racing-race: #ff0024;
+}
+
 @font-face {
   font-family: 'Racer Display'; src: url('../fonts/ChakraPetch-MediumItalic.ttf') format('truetype');
   font-weight: 500; font-style: italic; font-display: swap;

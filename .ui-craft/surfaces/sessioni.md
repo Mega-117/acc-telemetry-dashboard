@@ -16,6 +16,11 @@ padding. Su schermi stretti la tabella scorre orizzontalmente in una
 regione accessibile da tastiera; i filtri vanno a capo.
 
 ## Dati e stati
+Palette canonica richiesta il 25 settembre: Practice `#0076ff`, Qualify e
+tempi Q `#ffc400`, Race e tempi R `#ff0024`. Token globali
+`--racing-practice`, `--racing-qualify`, `--racing-race` in `_racing-theme.scss`,
+condivisi da Sessioni e Attivita della Panoramica; usarli nel seguito del restyle.
+
 Gateway/pager esistenti, 25 record per pagina, filtro hideEmpty sempre true
 anche lato server. Q/R mancanti restano trattini. Caricamento, vuoto, offline
 ed errore con retry distinti. Nessuna nuova lettura raw o modifica della cache.
