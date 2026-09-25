@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
+import RacingSwitch from '../../app/components/ui/RacingSwitch.vue'
 import HudPage from '../../app/pages/hud.vue'
 
 vi.mock('~/composables/useHudOverlay', () => ({ getHudOverlayScaleMin: () => 0.5, getHudOverlayScaleMax: () => 3 }))
@@ -23,8 +24,8 @@ function makeApi() {
     trainingOverlaySetOriginCorner: vi.fn(async (originCorner: string) => ({ originCorner })),
   }
 }
-function buttons() { return wrapper!.findAll('.test-hud__placement-actions button') }
-async function render() { wrapper = mount(HudPage); await flushPromises() }
+function lockSwitch() { return wrapper!.get('button[aria-label="Blocca posizioni"]') }
+async function render() { wrapper = mount(HudPage, { global: { components: { UiRacingSwitch: RacingSwitch } } }); await flushPromises() }
 beforeEach(() => {
   vi.stubGlobal('definePageMeta', vi.fn())
   active = false
@@ -39,6 +40,19 @@ afterEach(() => {
 })
 
 describe('HUD placement commands', () => {
+  it('keeps all six overlay panels reachable with their common controls', async () => {
+    await render()
+    const items = wrapper!.findAll('.hud-overlay-list__item')
+    expect(items).toHaveLength(6)
+    for (const item of items) {
+      await item.trigger('click'); await flushPromises()
+      expect(item.attributes('aria-current')).toBe('true')
+      expect(wrapper!.find('.hud-settings [role="switch"]').exists()).toBe(true)
+      expect(wrapper!.find('.hud-settings input[type="range"]').exists()).toBe(true)
+    }
+    expect(wrapper!.text()).toContain('Pit prediction')
+    expect(wrapper!.text()).toContain('Vista a cerchio')
+  })
   it('does not require a manual corner selection', async () => {
     await render()
     expect(wrapper!.find('select[aria-label="Angolo di apertura Ctrl+K"]').exists()).toBe(false)
@@ -46,11 +60,11 @@ describe('HUD placement commands', () => {
 
   it('supports Edit / Save / Edit using confirmed runtime state', async () => {
     await render()
-    await buttons()[0]!.trigger('click'); await flushPromises()
-    expect(buttons()[1]!.attributes('disabled')).toBeUndefined()
-    await buttons()[1]!.trigger('click'); await flushPromises()
-    expect(wrapper!.text()).toContain('Posizioni salvate e bloccate.')
-    await buttons()[0]!.trigger('click'); await flushPromises()
+    await lockSwitch().trigger('click'); await flushPromises()
+    expect(lockSwitch().attributes('disabled')).toBeUndefined()
+    await lockSwitch().trigger('click'); await flushPromises()
+    expect(lockSwitch().attributes('aria-checked')).toBe('true')
+    await lockSwitch().trigger('click'); await flushPromises()
     expect(api.hudOverlaySetAllPlacement.mock.calls).toEqual([[true], [false], [true]])
     expect(wrapper!.find('[role="alert"]').exists()).toBe(false)
   })
@@ -58,10 +72,10 @@ describe('HUD placement commands', () => {
   it('shows failure and allows a successful retry', async () => {
     api.hudOverlaySetAllPlacement.mockRejectedValueOnce(new Error('IPC unavailable'))
     await render()
-    await buttons()[0]!.trigger('click'); await flushPromises()
+    await lockSwitch().trigger('click'); await flushPromises()
     expect(wrapper!.get('[role="alert"]').text()).toContain('Impossibile confermare la modifica')
-    expect(buttons()[0]!.attributes('disabled')).toBeUndefined()
-    await buttons()[0]!.trigger('click'); await flushPromises()
+    expect(lockSwitch().attributes('disabled')).toBeUndefined()
+    await lockSwitch().trigger('click'); await flushPromises()
     expect(wrapper!.find('[role="alert"]').exists()).toBe(false)
     expect(active).toBe(true)
   })
@@ -70,36 +84,36 @@ describe('HUD placement commands', () => {
     active = true
     api.hudOverlaySetAllPlacement.mockRejectedValueOnce(new Error('IPC unavailable'))
     await render()
-    await buttons()[1]!.trigger('click'); await flushPromises()
+    await lockSwitch().trigger('click'); await flushPromises()
     expect(wrapper!.get('[role="alert"]').text()).toContain('salvataggio e il blocco')
-    expect(buttons()[1]!.text()).toBe('Salva e blocca')
-    expect(buttons()[1]!.attributes('disabled')).toBeUndefined()
+    expect(lockSwitch().attributes('aria-checked')).toBe('false')
+    expect(lockSwitch().attributes('disabled')).toBeUndefined()
   })
 
   it('disables both commands while awaiting the runtime', async () => {
     let complete!: (value: boolean) => void
     api.hudOverlaySetAllPlacement.mockImplementationOnce(() => new Promise(resolve => { complete = resolve }))
     await render()
-    await buttons()[0]!.trigger('click')
-    expect(buttons().every(button => button.attributes('disabled') !== undefined)).toBe(true)
+    await lockSwitch().trigger('click')
+    expect(lockSwitch().attributes('disabled')).toBeDefined()
     active = true; complete(true); await flushPromises()
     expect(api.hudOverlaySetAllPlacement).toHaveBeenCalledTimes(1)
-    expect(buttons()[1]!.attributes('disabled')).toBeUndefined()
+    expect(lockSwitch().attributes('disabled')).toBeUndefined()
   })
 
   it('reports status read failure while retaining the acknowledged command state', async () => {
     await render()
     api.hudOverlayGetPlacementStatus.mockRejectedValue(new Error('read failed'))
-    await buttons()[0]!.trigger('click'); await flushPromises()
+    await lockSwitch().trigger('click'); await flushPromises()
     expect(wrapper!.get('[role="alert"]').text()).toContain('Impossibile confermare')
-    expect(buttons()[1]!.attributes('disabled')).toBeUndefined()
+    expect(lockSwitch().attributes('disabled')).toBeUndefined()
   })
 
   it('rejects an unconfirmed response instead of displaying success', async () => {
     api.hudOverlaySetAllPlacement.mockResolvedValueOnce(false)
     await render()
-    await buttons()[0]!.trigger('click'); await flushPromises()
+    await lockSwitch().trigger('click'); await flushPromises()
     expect(wrapper!.get('[role="alert"]').text()).toContain('Impossibile confermare')
-    expect(buttons()[0]!.attributes('disabled')).toBeUndefined()
+    expect(lockSwitch().attributes('disabled')).toBeUndefined()
   })
 })

@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { ChevronDown } from '@lucide/vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { spotterVoiceOptions, useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
 import { presentVoiceRuntimeMessage } from '~/services/spotter/voiceRuntimePresentation'
+import { usePublicPath } from '~/composables/usePublicPath'
 import SessionModePicker from '~/components/spotter/SessionModePicker.vue'
 
 definePageMeta({ layout: 'dashboard' })
@@ -32,6 +34,7 @@ interface TrackVoicePointCatalog {
 }
 
 const { isAdmin } = useFirebaseAuth()
+const { getPublicPath } = usePublicPath()
 const voiceLabRuntime = useVoiceLabRuntime()
 const {
   selectedVoice,
@@ -123,344 +126,221 @@ onMounted(() => {
   <LayoutPageContainer>
     <section class="spotter-page">
       <header class="spotter-hero">
-        <span class="spotter-kicker">Spotter</span>
         <h1>Avvisi vocali</h1>
-        <p>Decidi quali avvisi usare in pista. Il Voice Lab resta il posto dove modificare testi e generare WAV.</p>
       </header>
-
       <div class="spotter-grid">
-        <section class="spotter-panel spotter-panel--wide">
-          <header class="panel-head">
-            <div>
-              <span class="spotter-kicker">Impostazioni voce</span>
-              <h2>Profilo operativo</h2>
-            </div>
-            <span class="status-pill" :class="`status-pill--${runtimeState}`">
-              {{ runtimeState === 'online' ? 'Motore online' : runtimeState === 'checking' ? 'Controllo...' : 'Motore offline' }}
-            </span>
-          </header>
-
-          <div class="settings-grid">
-            <article class="setting-block">
-              <span>Voce predefinita</span>
-              <strong>{{ voiceLabel }}</strong>
-              <div class="segmented-control" aria-label="Voce predefinita">
-                <button
-                  v-for="voice in spotterVoiceOptions"
-                  :key="voice.id"
-                  type="button"
-                  :class="{ 'is-active': selectedVoice === voice.id }"
-                  @click="selectVoice(voice.id)"
-                >
-                  {{ voice.label }}
-                </button>
-              </div>
-            </article>
-
-            <article class="setting-block">
-              <span>Riferimenti pista</span>
-              <strong>{{ referencesEnabled ? 'Attivi' : 'Disattivi' }}</strong>
-              <button type="button" class="toggle-button" :class="{ 'is-active': referencesEnabled }" @click="toggleReferences">
-                {{ referencesEnabled ? 'Disattiva riferimenti' : 'Attiva riferimenti' }}
+        <div class="spotter-main">
+          <section
+            class="voice-profile racing-panel"
+            aria-label="Profilo operativo"
+          >
+            <h2>Profilo operativo</h2>
+            <div
+              class="voice-options"
+              role="group"
+              aria-label="Voce predefinita"
+            >
+              <button
+                v-for="voice in spotterVoiceOptions"
+                :key="voice.id"
+                type="button"
+                class="voice-card"
+                :class="{ 'is-active': selectedVoice === voice.id }"
+                :aria-pressed="selectedVoice === voice.id"
+                @click="selectVoice(voice.id)"
+              >
+                <img
+                  :src="getPublicPath(`/images/voices/${voice.id === 'if_sara' ? 'sara' : 'nicola'}.png`)"
+                  alt=""
+                />
+                <span class="voice-name">{{ voice.label }}</span>
+                <span class="voice-wave" aria-hidden="true"><i v-for="(height, index) in [6,14,24,38,22,12,18,10,8,25,40,28,18,12,16,8]" :key="index" :style="{ height: `${height}px` }"></i></span>
               </button>
+            </div>
+          </section>
+          <section
+            class="features racing-panel"
+            aria-label="Funzionalità vocali"
+          >
+            <div class="feature-head">
+              <span>Funzionalità</span><span>Sessioni abilitate</span>
+            </div>
+            <div class="feature-row">
+              <h3>Riferimenti pista</h3>
+              <div class="feature-control">
+                <UiRacingSwitch
+                  :model-value="referencesEnabled"
+                  label="Riferimenti pista"
+                  @update:model-value="toggleReferences"
+                />
+              </div>
               <SessionModePicker
                 :model-value="referenceSessionModes"
                 label="Sessioni abilitate per i riferimenti pista"
                 @update:model-value="setReferenceSessionModes"
               />
-            </article>
-
-            <article class="setting-block">
-              <span>Feedback coach</span>
-              <strong>{{ adaptiveCoachEnabled ? 'Attivo' : 'Disattivo' }}</strong>
-              <button type="button" class="toggle-button" :class="{ 'is-active': adaptiveCoachEnabled }" @click="toggleAdaptiveCoach">
-                {{ adaptiveCoachEnabled ? 'Disattiva feedback coach' : 'Attiva feedback coach' }}
-              </button>
-              <div class="segmented-control" aria-label="Modalità feedback coach">
-                <button type="button" :class="{ 'is-active': adaptiveCoachMode === 'focus' }" :disabled="!adaptiveCoachEnabled" @click="setAdaptiveCoachMode('focus')">Solo curva focus</button>
-                <button type="button" :class="{ 'is-active': adaptiveCoachMode === 'all' }" :disabled="!adaptiveCoachEnabled" @click="setAdaptiveCoachMode('all')">Tutte le curve</button>
+            </div>
+            <div class="feature-row">
+              <h3>Feedback coach</h3>
+              <div class="feature-control">
+                <UiRacingSwitch
+                  :model-value="adaptiveCoachEnabled"
+                  label="Feedback coach"
+                  @update:model-value="toggleAdaptiveCoach"
+                />
+                <div class="select-shell"><select
+                  class="racing-select"
+                  aria-label="Modalità feedback coach"
+                  :value="adaptiveCoachMode"
+                  :disabled="!adaptiveCoachEnabled"
+                  @change="setAdaptiveCoachMode(($event.target as HTMLSelectElement).value as 'focus' | 'all')"
+                >
+                  <option value="focus">
+                    Focus curva
+                  </option><option value="all">
+                    Tutte le curve
+                  </option>
+                </select><ChevronDown :size="14" aria-hidden="true" /></div>
               </div>
               <SessionModePicker
                 :model-value="adaptiveCoachSessionModes"
                 label="Sessioni abilitate per il feedback coach"
                 @update:model-value="setAdaptiveCoachSessionModes"
               />
-            </article>
-
-            <article class="setting-block">
-              <span>Avvisi giro</span>
-              <strong>{{ coachEnabled ? 'Attivo' : 'Disattivo' }}</strong>
-              <button type="button" class="toggle-button" :class="{ 'is-active': coachEnabled }" @click="toggleCoach">
-                {{ coachEnabled ? 'Disattiva avvisi' : 'Attiva avvisi' }}
-              </button>
+            </div>
+            <div class="feature-row">
+              <h3>Avvisi giro</h3>
+              <div class="feature-control">
+                <UiRacingSwitch
+                  :model-value="coachEnabled"
+                  label="Avvisi giro"
+                  @update:model-value="toggleCoach"
+                />
+              </div>
               <SessionModePicker
                 :model-value="lapTimeSessionModes"
                 label="Sessioni abilitate per gli avvisi giro"
                 @update:model-value="setLapTimeSessionModes"
               />
-            </article>
-
-            <article class="setting-block">
-              <span>Avvisi pressioni</span>
-              <p>Alla fine del 3° giro di ogni stint, se le pressioni richiedono una correzione.</p>
-              <strong>{{ pressureWarningsEnabled ? 'Attivo' : 'Disattivo' }}</strong>
-              <button type="button" class="toggle-button" :class="{ 'is-active': pressureWarningsEnabled }" :aria-pressed="pressureWarningsEnabled" @click="togglePressureWarnings">
-                {{ pressureWarningsEnabled ? 'Disattiva avvisi pressioni' : 'Attiva avvisi pressioni' }}
-              </button>
+            </div>
+            <div class="feature-row">
+              <h3 title="Correzioni pressioni alla fine del terzo giro di ogni stint">
+                Avvisi pressioni
+              </h3>
+              <div class="feature-control">
+                <UiRacingSwitch
+                  :model-value="pressureWarningsEnabled"
+                  label="Avvisi pressioni"
+                  @update:model-value="togglePressureWarnings"
+                />
+              </div>
               <SessionModePicker
                 :model-value="pressureWarningSessionModes"
                 label="Sessioni abilitate per gli avvisi pressioni"
                 @update:model-value="setPressureWarningSessionModes"
               />
-              <NuxtLink v-if="isAdmin" to="/dev-voice-lab?section=script&scenario=pressureAdjustmentNeeded">Personalizza avviso nel Voice Lab</NuxtLink>
-            </article>
+            </div>
+          </section>
+        </div>
+        <section class="reference-panel racing-panel">
+          <h2>Riferimenti pista</h2>
+          <div class="select-shell"><select
+            v-model="selectedTrack"
+            class="racing-select"
+            aria-label="Pista riferimenti"
+          >
+            <option
+              v-for="track in availableTracks"
+              :key="track"
+              :value="track"
+            >
+              {{ track }}
+            </option>
+          </select><ChevronDown :size="14" aria-hidden="true" /></div>
+          <dl class="reference-metrics">
+            <div><dt>Attivi</dt><dd>{{ activeReferences.length }}</dd></div>
+            <div><dt>Pronti con {{ voiceLabel }}</dt><dd>{{ readyReferences.length }}</dd></div>
+            <div :class="{ 'is-warning': missingReferences > 0 }">
+              <dt>Da rigenerare</dt><dd>{{ missingReferences }}</dd>
+            </div>
+            <div><dt>Disattivati</dt><dd>{{ disabledReferences }}</dd></div>
+          </dl>
+          <p
+            v-if="catalogError"
+            class="panel-error"
+            role="alert"
+          >
+            {{ catalogError }}
+          </p>
+          <div class="reference-status">
+            <span>{{ catalogBusy ? 'Caricamento…' : referenceStatusLabel }}</span><button
+              type="button"
+              :disabled="catalogBusy"
+              @click="loadCatalog"
+            >
+              Aggiorna
+            </button>
           </div>
-          <p class="panel-note">{{ runtimeMessage }}</p>
-        </section>
-
-        <section class="spotter-panel spotter-panel--wide">
-          <header class="panel-head">
-            <div>
-              <span class="spotter-kicker">Riferimenti pista</span>
-              <h2>{{ selectedTrack }}</h2>
-            </div>
-            <label class="track-select">
-              Pista
-              <select v-model="selectedTrack">
-                <option v-for="track in availableTracks" :key="track" :value="track">{{ track }}</option>
-              </select>
-            </label>
-          </header>
-
-          <div class="metric-grid">
-            <div class="metric-card">
-              <span>Attivi</span>
-              <strong>{{ activeReferences.length }}</strong>
-            </div>
-            <div class="metric-card">
-              <span>Pronti con {{ voiceLabel }}</span>
-              <strong>{{ readyReferences.length }}</strong>
-            </div>
-            <div class="metric-card" :class="{ 'is-warning': missingReferences > 0 }">
-              <span>Da rigenerare</span>
-              <strong>{{ missingReferences }}</strong>
-            </div>
-            <div class="metric-card">
-              <span>Disattivati</span>
-              <strong>{{ disabledReferences }}</strong>
-            </div>
-          </div>
-
-          <div class="status-row">
-            <span>{{ referenceStatusLabel }}</span>
-            <button type="button" class="secondary" :disabled="catalogBusy" @click="loadCatalog">Aggiorna</button>
-            <NuxtLink class="spotter-action" :to="referenceVoiceLabLink">Gestisci in Voice Lab</NuxtLink>
-          </div>
-          <p v-if="catalogError" class="panel-error">{{ catalogError }}</p>
-        </section>
-
-        <section v-if="isAdmin" class="spotter-panel">
-          <span class="spotter-kicker">Allenamenti</span>
-          <h2>Audio coach</h2>
-          <p>Gli step degli allenamenti usano WAV pre-generati. La scelta voce richiede rigenerazione audio nel Voice Lab.</p>
-          <NuxtLink v-if="isAdmin" class="spotter-action" to="/dev-voice-lab?section=script">Gestisci copione</NuxtLink>
-          <span v-else class="locked-note">Copione allenamenti disponibile solo admin.</span>
-        </section>
-
-        <section v-if="isAdmin" class="spotter-panel">
-          <span class="spotter-kicker">Voice Lab</span>
-          <h2>Laboratorio audio</h2>
-          <p>Modifica testi, ascolta anteprime, abilita/disabilita singole righe e genera le tracce WAV.</p>
-          <NuxtLink class="spotter-action" to="/dev-voice-lab?section=references">Apri Voice Lab</NuxtLink>
+          <NuxtLink
+            class="racing-button racing-button--primary"
+            :to="referenceVoiceLabLink"
+          >
+            Gestisci in Voice Lab
+          </NuxtLink>
         </section>
       </div>
+          <p
+            class="runtime-status"
+            role="status"
+            :class="{ 'is-warning': runtimeState !== 'online' }"
+          >
+            {{ runtimeMessage }}
+          </p>
+          <nav
+            v-if="isAdmin"
+            class="admin-links"
+            aria-label="Strumenti voce"
+          >
+            <NuxtLink to="/dev-voice-lab?section=script">
+              Copione allenamenti
+            </NuxtLink>
+            <NuxtLink to="/dev-voice-lab?section=script&scenario=pressureAdjustmentNeeded">
+              Personalizza avviso pressioni
+            </NuxtLink>
+          </nav>
     </section>
   </LayoutPageContainer>
 </template>
 
 <style lang="scss" scoped>
-@use '@/assets/scss/variables' as *;
+.spotter-page { color: #eee; padding-bottom: 32px; }
+.spotter-page .racing-select { appearance: none; width: 100%; min-height: 40px; padding: 8px 34px 8px 12px; border: 1px solid #ffffff55; border-radius: 0; background: #08090b; color: #ddd; color-scheme: dark; }
+.spotter-hero h1 { margin: 0 0 26px; font-size: 34px; font-weight: 650; }
+.spotter-grid { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 22px; align-items: stretch; }
+.spotter-main { min-width: 0; display: flex; flex-direction: column; }.racing-panel { border: 1px solid #ffffff40; background: #00000018; }
+h2 { margin: 0; padding-left: 14px; border-left: 3px solid var(--racing-race); color: var(--racing-race); font-size: 16px; font-weight: 500; text-transform: uppercase; }
+.voice-profile { display: grid; grid-template-columns: 180px minmax(0,1fr); align-items: center; gap: 22px; padding: 16px; margin-bottom: 14px; }
+.voice-options { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.voice-card { position: relative; height: 120px; overflow: hidden; padding: 1px; border: 0; background: #777; clip-path: polygon(10px 0,calc(100% - 10px) 0,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0 calc(100% - 10px),0 10px); color: #fff; cursor: pointer; }
+.voice-card img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) brightness(.65); clip-path: inherit; }
+.voice-card .voice-name { position: absolute; top: 20px; left: 20px; font: italic 700 22px 'Racer Display',sans-serif; text-transform: uppercase; text-shadow: 0 2px 8px #000; }
+.voice-card.is-active { background: #00ec9d; }.voice-card.is-active img { filter: none; }.voice-card:focus-visible { background: #fff; outline: none; }.voice-card:hover img { filter: brightness(1.1); }
+.feature-head,.feature-row { display: grid; grid-template-columns: minmax(150px,.85fr) minmax(245px,1.15fr) minmax(285px,1.35fr); gap: 22px; align-items: center; padding: 20px; }
+.feature-head { padding-block: 13px; font-size: 11px; text-transform: uppercase; color: #aaa; }.feature-head span:last-child { grid-column: 3; }
+.feature-row { border-top: 1px solid #ffffff25; min-height: 84px; }.feature-row h3 { margin: 0; border-left: 3px solid var(--racing-race); padding-left: 12px; font-size: 13px; font-weight: 500; text-transform: uppercase; }
+.feature-control { display: flex; align-items: center; gap: 20px; min-height: 46px; border-left: 1px solid #ffffff45; padding-left: 22px; }.feature-control select { min-width: 0; width: 145px; font-size: 11px; padding-left: 10px; }
+.reference-panel { padding: 24px 20px; display: flex; flex-direction: column; }.reference-panel > .select-shell { width: 100%; margin-top: 24px; }
+.reference-metrics { margin: 28px 0 16px; flex: 1; display: flex; flex-direction: column; }.reference-metrics div { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 70px; border-top: 1px solid #ffffff35; }.reference-metrics dt { font-size: 12px; text-transform: uppercase; color: #bfc7cc; }.reference-metrics dd { margin: 0; font-size: 26px; font-weight: 650; }
+.reference-panel .racing-button { width: 100%; font-size: 13px; }.reference-status { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 16px; font-size: 10px; color: #aaa; }.reference-status button { border: 0; background: none; color: #ddd; cursor: pointer; text-decoration: underline; }
+.runtime-status { margin: 12px 0; color: #9caaa2; font-size: 11px; }.is-warning,.panel-error { color: var(--racing-qualify); }.admin-links { display: flex; gap: 20px; font-size: 11px; }.admin-links a { color: #aaa; }
+@media(max-width: 1250px) { .spotter-grid { grid-template-columns: 1fr; }.reference-panel { max-width: 540px; }.feature-head,.feature-row { grid-template-columns: minmax(150px,.85fr) minmax(245px,1.15fr) minmax(285px,1.35fr); } }
+@media(max-width: 780px) { .voice-profile { grid-template-columns: 1fr; }.feature-head { display: none; }.feature-row { grid-template-columns: 1fr auto; }.feature-row :deep(.session-mode-picker) { grid-column: 1 / -1; }.feature-control { justify-content: flex-end; }.voice-card { height: 110px; }.spotter-hero h1 { font-size: 28px; } }
 
-.spotter-page {
-  padding: 32px 0 56px;
-  color: #f7fbff;
-}
-
-.spotter-hero {
-  max-width: 920px;
-  margin-bottom: 28px;
-}
-
-.spotter-kicker {
-  display: block;
-  margin-bottom: 8px;
-  color: $racing-orange;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.spotter-hero h1,
-.spotter-panel h2 {
-  margin: 0 0 10px;
-  letter-spacing: 0;
-}
-
-.spotter-hero p,
-.spotter-panel p,
-.panel-note,
-.locked-note {
-  margin: 0;
-  color: rgba(255, 255, 255, 0.68);
-  line-height: 1.55;
-}
-
-.spotter-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.spotter-panel {
-  display: grid;
-  gap: 18px;
-  padding: 22px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.035);
-}
-
-.spotter-panel--wide {
-  grid-column: 1 / -1;
-}
-
-.panel-head,
-.status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.settings-grid,
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.metric-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.setting-block,
-.metric-card {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
-  padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.18);
-}
-
-.setting-block span,
-.metric-card span,
-.track-select {
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.setting-block strong,
-.metric-card strong {
-  color: #fff;
-  font-size: 24px;
-}
-
-.segmented-control {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.segmented-control button,
-.toggle-button,
-.secondary,
-.track-select select {
-  min-height: 38px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #fff;
-  font-weight: 800;
-}
-
-.segmented-control button.is-active,
-.toggle-button.is-active {
-  border-color: rgba(86, 211, 100, 0.55);
-  background: rgba(86, 211, 100, 0.16);
-}
-
-.track-select {
-  display: grid;
-  gap: 6px;
-}
-
-.track-select select {
-  padding: 0 10px;
-}
-
-.status-pill {
-  padding: 7px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.72);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.status-pill--online {
-  border-color: rgba(86, 211, 100, 0.48);
-  color: #d7ffe0;
-}
-
-.metric-card.is-warning {
-  border-color: rgba(245, 158, 11, 0.42);
-}
-
-.spotter-action,
-.secondary {
-  width: fit-content;
-  padding: 10px 14px;
-  text-decoration: none;
-}
-
-.spotter-action {
-  border-radius: 6px;
-  background: linear-gradient(135deg, $racing-red, $racing-orange);
-  color: #fff;
-  font-weight: 800;
-}
-
-.panel-error {
-  color: #fecaca;
-}
-
-@media (max-width: 900px) {
-  .spotter-grid,
-  .settings-grid,
-  .metric-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .panel-head,
-  .status-row {
-    align-items: stretch;
-    flex-direction: column;
-  }
-}
+.features { flex: 1; display: flex; flex-direction: column; }.feature-row { flex: 1; min-height: 92px; }
+.feature-row :deep(.session-mode-picker) { border-left: 1px solid #ffffff45; padding-left: 22px; }
+.feature-head span:last-child { border-left: 1px solid #ffffff45; padding-left: 22px; }
+.select-shell { position: relative; min-width: 0; }.select-shell > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #ddd; }
+.voice-card .voice-wave { position: absolute; left: 20px; bottom: 16px; display: flex; align-items: center; gap: 4px; height: 40px; color: #a5a5a5; }.voice-wave i { display: block; width: 2px; background: currentColor; }.voice-card.is-active .voice-wave { color: #21ff83; filter: drop-shadow(0 0 4px #21ff8340); }
+@media(max-width: 1250px) { .reference-panel { max-width: none; }.reference-metrics { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 24px; } }
+@media(max-width: 780px) { .feature-row { gap: 18px; }.feature-control { border: 0; padding-left: 0; }.feature-row :deep(.session-mode-picker) { padding: 14px 0 0; border-left: 0; border-top: 1px solid #ffffff25; }.voice-card .voice-wave { gap: 3px; left: 16px; }.reference-metrics { display: flex; } }
 </style>

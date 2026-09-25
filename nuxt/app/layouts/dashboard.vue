@@ -114,11 +114,11 @@ const handleGoToSettings = () => {
   position: relative; isolation: isolate; background: transparent;
   .dashboard-sticky-header { flex-shrink: 0; }
   .main-content { display: flex; flex-direction: column; }
-  :deep(.page-container) { width: 100%; padding: 26px 26px 22px; flex: 1; display: flex; flex-direction: column; }
+  :deep(.page-container) { width: 100%; padding: var(--app-content-top-space) 26px 22px; flex: 1; display: flex; flex-direction: column; }
   :deep(.racing-overview) { flex: 1; }
 }
 @media (max-width: 700px) {
   .dashboard-layout:has(:deep(.racing-overview)) { --page-bottom-space: 14px; }
-  .dashboard-layout:has(:deep(.racing-overview)) :deep(.page-container) { padding: 14px; }
+  .dashboard-layout:has(:deep(.racing-overview)) :deep(.page-container) { padding: var(--app-content-top-space) 14px 14px; }
 }
 </style>

@@ -42,7 +42,6 @@ definePageMeta({
 })
 
 type HudOverlayId = 'tyres' | 'sectors' | 'dashboard' | 'info' | 'standings' | 'trackmap'
-type HudSettingsLayout = 'columns' | 'matrix'
 
 interface HudReplayScenario {
   id: string
@@ -81,10 +80,6 @@ const hudOverlayIcons = {
   trackmap: MapIcon,
 }
 
-const hudSettingsLayouts: Array<{ id: HudSettingsLayout, label: string, description: string }> = [
-  { id: 'columns', label: 'Colonne', description: 'Attivazione ampia, gruppi leggibili su due colonne' },
-  { id: 'matrix', label: 'Matrice', description: 'Griglia compatta con righe e colonne continue' },
-]
 
 const scaleMinFor = (id: HudOverlayId) => getHudOverlayScaleMin(id)
 const scaleMaxFor = (id: HudOverlayId) => getHudOverlayScaleMax(id)
@@ -228,7 +223,6 @@ const replayScenarioId = ref('full-hud')
 const replayBusy = ref(false)
 const replayMessage = ref('')
 const selectedOverlayId = ref<HudOverlayId>('tyres')
-const hudSettingsLayout = ref<HudSettingsLayout>('columns')
 const hudPerformanceSummary = ref('')
 let unsubscribeDriving: (() => void) | null = null
 const placementActivity = usePresentationInterval(() => {
@@ -685,9 +679,8 @@ async function toggleTraining() {
       >{{ hudPerformanceSummary }}</output>
       <header class="test-hud__hero">
         <div>
-          <span class="test-hud__kicker">Overlay</span>
           <h1>HUD</h1>
-          <p>Scegli un overlay e regola le opzioni disponibili.</p>
+          <p>Impostazioni overlay</p>
         </div>
         <p
           v-if="apiReady"
@@ -718,57 +711,36 @@ async function toggleTraining() {
       </header>
 
       <div class="test-hud__global">
-        <section
-          class="test-hud__placement"
-          :class="{ 'is-on': positioning }"
-          aria-labelledby="hud-placement-title"
-        >
-          <div class="test-hud__placement-text">
-            <strong id="hud-placement-title">Posizione di tutti gli overlay</strong>
-            <span>Include il pannello Ctrl+K.</span>
-            <span v-if="positioning">
-              Modifica attiva. Salvataggio automatico tra
-              <b>{{ placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }}s</b> di inattività.
-            </span>
-            <span v-else>Posizioni salvate e bloccate.</span>
-            <span v-if="placementError" role="alert">{{ placementError }}</span>
-          </div>
-          <div class="test-hud__placement-actions">
-            <button
-              type="button"
-              class="btn btn--primary"
-              :disabled="!apiReady || positioning || placementBusy"
-              @click="startPositioning"
-            >
-              {{ positioning ? 'Modifica attiva' : 'Modifica posizioni' }}
-            </button>
-            <button
-              type="button"
-              class="btn"
-              :disabled="!apiReady || !positioning || placementBusy"
-              @click="saveAndLock"
-            >
-              {{ positionSaved ? 'Salvato' : 'Salva e blocca' }}
-            </button>
-          </div>
-        </section>
-
-        <label
-          class="test-hud__always"
-          :class="{ 'is-on': alwaysVisible }"
-        >
-          <span class="test-hud__always-text">
-            <strong>Sempre visibili</strong>
-            <em>Mantiene visibili gli overlay abilitati anche fuori dalla guida.</em>
-          </span>
-          <input
-            type="checkbox"
-            role="switch"
-            :checked="alwaysVisible"
+        <div class="hud-global-control">
+          <span>Sempre visibili</span><UiRacingSwitch
+            label="Sempre visibili"
+            :model-value="alwaysVisible"
             :disabled="!apiReady"
-            @change="toggleAlwaysVisible"
+            @update:model-value="toggleAlwaysVisible"
           />
-        </label>
+        </div>
+        <div class="hud-global-control">
+          <span>Blocca posizioni</span><UiRacingSwitch
+            label="Blocca posizioni"
+            :model-value="!positioning"
+            :disabled="!apiReady || placementBusy"
+            @update:model-value="$event ? saveAndLock() : startPositioning()"
+          />
+        </div>
+        <p
+          v-if="positioning"
+          class="hud-placement-status"
+          role="status"
+        >
+          Blocco automatico tra {{ placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }}s di inattività · include Ctrl+K
+        </p>
+        <p
+          v-if="placementError"
+          class="hud-placement-status"
+          role="alert"
+        >
+          {{ placementError }}
+        </p>
       </div>
 
       <details
@@ -884,7 +856,7 @@ async function toggleTraining() {
             aria-labelledby="hud-training-title"
           >
             <div>
-              <strong id="hud-training-title">Pannello Ctrl+K</strong>
+              <strong id="hud-training-title">Allenamento · Ctrl+K</strong>
               <span>{{ trainingOpen ? 'Visibile' : 'Nascosto' }}</span>
             </div>
             <button
@@ -893,49 +865,25 @@ async function toggleTraining() {
               :disabled="!isElectron || positioning || placementBusy"
               @click="toggleTraining"
             >
-              {{ trainingOpen ? 'Nascondi pannello' : 'Mostra pannello' }}
+              {{ trainingOpen ? 'Nascondi' : 'Mostra' }}
             </button>
           </section>
         </aside>
 
         <article
           class="hud-settings"
-          :class="[
-            `hud-settings--${hudSettingsLayout}`,
-            { 'is-overlay-disabled': !enabled[selectedOverlayId] },
-          ]"
+          :class="{ 'is-overlay-disabled': !enabled[selectedOverlayId] }"
           :aria-labelledby="'hud-settings-' + selectedOverlay.id"
         >
           <header class="hud-settings__head">
             <div>
-              <span class="test-hud__kicker">Configurazione</span>
-              <h2 :id="'hud-settings-' + selectedOverlay.id">
+              <h2
+                :id="'hud-settings-' + selectedOverlay.id"
+                class="hud-sr-only"
+              >
                 {{ selectedOverlay.title }}
               </h2>
               <p>{{ selectedOverlay.description }}</p>
-            </div>
-            <div class="hud-layout-preview">
-              <span
-                id="hud-layout-preview-label"
-                class="hud-sr-only"
-              >Confronta layout</span>
-              <div
-                class="hud-layout-preview__options"
-                role="group"
-                aria-labelledby="hud-layout-preview-label"
-              >
-                <button
-                  v-for="layout in hudSettingsLayouts"
-                  :key="layout.id"
-                  type="button"
-                  :title="layout.description"
-                  :aria-pressed="hudSettingsLayout === layout.id"
-                  :class="{ 'is-active': hudSettingsLayout === layout.id }"
-                  @click="hudSettingsLayout = layout.id"
-                >
-                  {{ layout.label }}
-                </button>
-              </div>
             </div>
           </header>
 
@@ -943,7 +891,7 @@ async function toggleTraining() {
             class="hud-settings__common"
             aria-labelledby="hud-common-title"
           >
-            <div class="hud-settings__section-head">
+            <div class="hud-settings__section-head hud-sr-only">
               <h3 id="hud-common-title">
                 Impostazioni comuni
               </h3>
@@ -951,20 +899,13 @@ async function toggleTraining() {
 
             <div class="hud-settings__common-panel hud-settings__control-grid">
               <div class="hud-control hud-control--state">
-                <label class="hud-control__state-toggle">
-                  <input
-                    type="checkbox"
-                    role="switch"
-                    :checked="enabled[selectedOverlayId]"
-                    :disabled="!apiReady"
-                    @change="toggleHud(selectedOverlayId)"
-                  />
-                  <span
-                    class="hud-control__switch"
-                    aria-hidden="true"
-                  ></span>
-                  <strong>Overlay abilitato</strong>
-                </label>
+                <span class="hud-control__state-label">Attivo</span>
+                <UiRacingSwitch
+                  :label="`Abilita ${selectedOverlay.title}`"
+                  :model-value="enabled[selectedOverlayId]"
+                  :disabled="!apiReady"
+                  @update:model-value="toggleHud(selectedOverlayId)"
+                />
               </div>
               <label class="hud-control hud-control--slider">
                 <span>
@@ -1073,7 +1014,15 @@ async function toggleTraining() {
                       <option value="custom">Personalizzati</option>
                     </select>
                   </label>
-                  <button v-if="sectorDeltaReference === 'custom'" type="button" class="hud-select" :disabled="selectedSettingsDisabled" @click="sectorReferenceEditorOpen = true">Modifica tempi personalizzati</button>
+                  <button
+                    v-if="sectorDeltaReference === 'custom'"
+                    type="button"
+                    class="hud-select"
+                    :disabled="selectedSettingsDisabled"
+                    @click="sectorReferenceEditorOpen = true"
+                  >
+                    Modifica tempi personalizzati
+                  </button>
                   <label
                     v-if="sectorSupports('sectorCurrentLap')"
                     class="hud-control"
@@ -1081,7 +1030,6 @@ async function toggleTraining() {
                     <span><strong>Mostra tempo giro</strong></span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="showSectorCurrentLap"
                       :disabled="selectedSettingsDisabled"
                       @change="toggleSectorCurrentLap"
@@ -1094,7 +1042,6 @@ async function toggleTraining() {
                     <span><strong>Tempo settore precedente</strong></span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="showSectorReference"
                       :disabled="selectedSettingsDisabled"
                       @change="toggleSectorReference"
@@ -1107,7 +1054,6 @@ async function toggleTraining() {
                     <span><strong>Best settore</strong></span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="showSectorBest"
                       :disabled="selectedSettingsDisabled"
                       @change="toggleSectorBest"
@@ -1120,7 +1066,6 @@ async function toggleTraining() {
                     <span><strong>Riferimento elettronica</strong></span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="dashboardSettings.electronicsReference"
                       :disabled="selectedSettingsDisabled"
                       @change="toggleDashboardSetting('electronicsReference')"
@@ -1130,7 +1075,6 @@ async function toggleTraining() {
                     <span><strong>Riferimento RPM</strong></span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="dashboardSettings.rpmReference"
                       :disabled="selectedSettingsDisabled"
                       @change="toggleDashboardSetting('rpmReference')"
@@ -1140,7 +1084,6 @@ async function toggleTraining() {
                     <span><strong>Riferimento marcia</strong></span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="dashboardSettings.gearReference"
                       :disabled="selectedSettingsDisabled"
                       @change="toggleDashboardSetting('gearReference')"
@@ -1150,7 +1093,6 @@ async function toggleTraining() {
                     <span><strong>Delta velocità</strong></span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="dashboardSettings.speedDelta"
                       :disabled="selectedSettingsDisabled"
                       @change="toggleDashboardSetting('speedDelta')"
@@ -1160,7 +1102,6 @@ async function toggleTraining() {
                     <span><strong>Lampeggio carburante critico</strong></span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="dashboardSettings.fuelCriticalFlashEnabled"
                       :disabled="selectedSettingsDisabled"
                       @change="toggleDashboardSetting('fuelCriticalFlashEnabled')"
@@ -1189,7 +1130,6 @@ async function toggleTraining() {
                     <span><strong>Pit prediction</strong></span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="trackmapSettings.showPitPrediction"
                       :disabled="selectedSettingsDisabled"
                       @change="saveTrackmapSetting('showPitPrediction', !trackmapSettings.showPitPrediction)"
@@ -1199,7 +1139,6 @@ async function toggleTraining() {
                     <span><strong>Numeri auto (spento: posizione in gara)</strong></span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="trackmapSettings.showCarNumbers"
                       :disabled="selectedSettingsDisabled"
                       @change="saveTrackmapSetting('showCarNumbers', !trackmapSettings.showCarNumbers)"
@@ -1209,7 +1148,6 @@ async function toggleTraining() {
                     <span><strong>Vista a cerchio</strong></span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="trackmapSettings.circleView"
                       :disabled="selectedSettingsDisabled"
                       @change="saveTrackmapSetting('circleView', !trackmapSettings.circleView)"
@@ -1299,7 +1237,6 @@ async function toggleTraining() {
                     </span>
                     <input
                       type="checkbox"
-                      role="switch"
                       :checked="standingsSettings[option.key]"
                       :disabled="selectedSettingsDisabled || !option.supported"
                       @change="toggleStandingsSetting(option)"
@@ -1332,7 +1269,6 @@ async function toggleTraining() {
                         <span><strong>{{ option.label }}</strong></span>
                         <input
                           type="checkbox"
-                          role="switch"
                           :checked="infoSettings[option.key]"
                           :disabled="selectedSettingsDisabled"
                           @change="toggleInfoSetting(option.key)"
@@ -1348,1073 +1284,53 @@ async function toggleTraining() {
       </div>
     </section>
     <!-- Keep the dialog inside the page root so Nuxt can finish route transitions. -->
-    <div v-if="sectorReferenceEditorOpen" class="sector-reference-dialog" role="dialog" aria-modal="true" aria-label="Riferimenti settori">
-      <SectorReferenceSetup @saved="sectorReferencesSaved" @cancel="sectorReferenceEditorOpen = false" />
+    <div
+      v-if="sectorReferenceEditorOpen"
+      class="sector-reference-dialog"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Riferimenti settori"
+    >
+      <SectorReferenceSetup
+        @saved="sectorReferencesSaved"
+        @cancel="sectorReferenceEditorOpen = false"
+      />
     </div>
   </LayoutPageContainer>
 </template>
 
 <style scoped lang="scss">
-.sector-reference-dialog { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: #0009; overflow-y: auto; }
-.sector-reference-dialog > * { width: min(100%, 460px); }
-.test-hud {
-  --hud-accent: #fb923c;
-  --hud-accent-strong: #f97316;
-  --hud-surface: rgba(255, 255, 255, 0.035);
-  --hud-surface-raised: rgba(255, 255, 255, 0.055);
-  --hud-border: rgba(255, 255, 255, 0.1);
-  --hud-text-secondary: rgba(255, 255, 255, 0.66);
-  --hud-text-muted: rgba(255, 255, 255, 0.5);
-  display: grid;
-  gap: 24px;
-  color: rgba(255, 255, 255, 0.94);
-}
-
-.test-hud__hero {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 32px;
-  padding: 30px 32px;
-  border: 1px solid var(--hud-border);
-  border-radius: 18px;
-  background: #11131b;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-
-  h1 {
-    margin: 5px 0 8px;
-    color: rgba(255, 255, 255, 0.96);
-    font-size: clamp(32px, 4vw, 48px);
-    letter-spacing: -0.04em;
-  }
-
-  > div > p {
-    max-width: 720px;
-    margin: 0;
-    color: var(--hud-text-secondary);
-    line-height: 1.55;
-  }
-}
-
-.test-hud__kicker {
-  color: var(--hud-accent);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.test-hud__warning {
-  max-width: 520px;
-  margin: 0;
-  color: #fbbf24;
-  font-weight: 700;
-}
-
-.test-hud__driving {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 270px;
-  margin: 0;
-  padding: 11px 13px;
-  border: 1px solid var(--hud-border);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.025);
-
-  > span:last-child { display: grid; gap: 2px; }
-  strong { color: rgba(255, 255, 255, 0.88); font-size: 13px; }
-  em { color: var(--hud-text-muted); font-size: 11px; font-style: normal; }
-}
-
-.test-hud__driving-dot {
-  width: 9px;
-  height: 9px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.28);
-}
-
-.test-hud__driving.is-on .test-hud__driving-dot {
-  background: #22c55e;
-  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.14);
-}
-
-.test-hud__global {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.8fr);
-  gap: 16px;
-}
-
-.test-hud__placement,
-.test-hud__always {
-  border: 1px solid var(--hud-border);
-  border-radius: 14px;
-  background: var(--hud-surface);
-}
-
-.test-hud__placement {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 17px 19px;
-
-  &.is-on {
-    border-color: rgba(34, 197, 94, 0.5);
-    background: rgba(34, 197, 94, 0.07);
-  }
-}
-
-.test-hud__placement-text,
-.test-hud__always-text {
-  display: grid;
-  gap: 3px;
-
-  strong { color: rgba(255, 255, 255, 0.94); font-size: 15px; }
-  span,
-  em { color: var(--hud-text-secondary); font-size: 12px; font-style: normal; line-height: 1.4; }
-  b { color: rgba(255, 255, 255, 0.92); }
-}
-
-.test-hud__placement-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.test-hud__always {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 17px 19px;
-  cursor: pointer;
-
-  &.is-on {
-    border-color: rgba(251, 146, 60, 0.45);
-    background: rgba(251, 146, 60, 0.07);
-  }
-}
-
-.test-hud__always input,
-.hud-control > input[type='checkbox'],
-.hud-control__state-toggle > input[type='checkbox'] {
-  width: 20px;
-  height: 20px;
-  flex: 0 0 auto;
-  accent-color: var(--hud-accent);
-}
-
-.test-hud__replay {
-  border: 1px solid rgba(96, 165, 250, 0.28);
-  border-radius: 14px;
-  background: var(--hud-surface);
-
-  &.is-running { border-color: rgba(34, 197, 94, 0.5); }
-
-  summary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding: 15px 18px;
-    cursor: pointer;
-    list-style: none;
-  }
-
-  summary::-webkit-details-marker { display: none; }
-  summary > span { display: grid; gap: 2px; }
-  summary strong { font-size: 15px; }
-  summary em { color: var(--hud-text-muted); font-size: 11px; font-style: normal; }
-  summary b { color: #93c5fd; font-size: 11px; letter-spacing: 0.06em; }
-}
-
-.test-hud__replay-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.75fr);
-  gap: 24px;
-  padding: 0 18px 18px;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
-
-  > p {
-    margin: 16px 0 0;
-    color: var(--hud-text-secondary);
-    font-size: 12px;
-    line-height: 1.5;
-  }
-
-  code { color: #bfdbfe; }
-}
-
-.test-hud__replay-controls {
-  display: grid;
-  gap: 8px;
-  padding-top: 16px;
-
-  label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--hud-text-muted); font-size: 12px; font-weight: 700; }
-  p { min-height: 34px; margin: 0; color: var(--hud-text-muted); font-size: 12px; line-height: 1.4; }
-  > div { display: flex; gap: 8px; }
-  > em { color: #86efac; font-size: 12px; font-style: normal; }
-  > em.is-error { color: #fca5a5; }
-}
-
-.hud-workspace {
-  display: grid;
-  grid-template-columns: minmax(248px, 0.72fr) minmax(0, 2fr);
-  align-items: start;
-  gap: 18px;
-}
-
-.hud-overlay-list,
-.hud-settings {
-  border: 1px solid var(--hud-border);
-  background: var(--hud-surface);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
-}
-
-.hud-overlay-list {
-  position: sticky;
-  top: 18px;
-  padding: 18px;
-  border-radius: 14px;
-
-  nav { display: grid; gap: 7px; margin-top: 16px; }
-}
-
-.hud-overlay-list__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-
-  h2 { margin: 4px 0 0; font-size: 19px; letter-spacing: -0.02em; }
-  > span { color: var(--hud-text-muted); font-size: 11px; white-space: nowrap; }
-}
-
-.hud-overlay-list__item {
-  position: relative;
-  display: grid;
-  gap: 4px;
-  width: 100%;
-  padding: 11px 12px 11px 15px;
-  overflow: hidden;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  transition: background-color 120ms ease, border-color 120ms ease;
-
-  &::before {
-    position: absolute;
-    inset: 8px auto 8px 0;
-    width: 3px;
-    border-radius: 0 3px 3px 0;
-    background: transparent;
-    content: '';
-  }
-
-  &:hover { background: rgba(255, 255, 255, 0.04); }
-  &.is-selected {
-    border-color: rgba(251, 146, 60, 0.26);
-    background: rgba(251, 146, 60, 0.075);
-  }
-  &.is-selected::before { background: var(--hud-accent); }
-}
-
-.hud-overlay-list__title {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-
-  strong { font-size: 14px; }
-  em { color: var(--hud-text-muted); font-size: 10px; font-style: normal; font-weight: 700; }
-  em.is-on { color: #86efac; }
-}
-
-.hud-overlay-list__visibility {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 10px;
-
-  i {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, 0.25);
-  }
-
-  &.is-visible { color: rgba(255, 255, 255, 0.72); }
-  &.is-visible i { background: #22c55e; }
-}
-
-.hud-training {
-  display: grid;
-  gap: 9px;
-  margin-top: 18px;
-  padding-top: 17px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-
-  > div { display: flex; justify-content: space-between; gap: 12px; }
-  strong { font-size: 13px; }
-  span { color: var(--hud-text-muted); font-size: 10px; }
-  .btn { justify-self: start; }
-}
-
-.hud-settings {
-  min-width: 0;
-  overflow: hidden;
-  border-radius: 16px;
-}
-
-.hud-settings__head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
-  padding: 24px 26px 22px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.018);
-
-  h2 { margin: 4px 0 6px; font-size: 28px; letter-spacing: -0.035em; }
-  p { max-width: 680px; margin: 0; color: var(--hud-text-secondary); font-size: 13px; line-height: 1.5; }
-}
-
-.hud-layout-preview {
-  display: grid;
-  flex: 0 0 auto;
-  gap: 6px;
-
-  > span {
-    color: var(--hud-text-muted);
-    font-size: 10px;
-    font-weight: 700;
-    text-align: right;
-  }
-}
-
-.hud-layout-preview__options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  padding: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 9px;
-  background: rgba(0, 0, 0, 0.16);
-
-  button {
-    min-height: 44px;
-    padding: 7px 11px;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--hud-text-muted);
-    font: inherit;
-    font-size: 11px;
-    font-weight: 800;
-    cursor: pointer;
-    transition: background-color 120ms ease, color 120ms ease;
-
-    &:hover { color: rgba(255, 255, 255, 0.9); }
-    &.is-active {
-      background: rgba(251, 146, 60, 0.14);
-      color: #fdba74;
-    }
-  }
-}
-
-.hud-settings__common,
-.hud-settings__specific {
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  padding: 20px 22px;
-}
-
-.hud-settings__common {
-  gap: 10px;
-}
-
-.hud-settings__section-head {
-  margin-bottom: 2px;
-
-  h3 { margin: 0; font-size: 16px; }
-}
-
-.hud-settings__common-panel,
-.hud-settings__specific-panel {
-  overflow: hidden;
-  gap: 1px;
-  border: 0;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.09);
-}
-
-.hud-control--state {
-  display: flex;
-  align-items: center;
-  justify-content: start;
-}
-
-.hud-control__state-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 40px;
-  width: max-content;
-  cursor: pointer;
-
-  strong { color: rgba(255, 255, 255, 0.92); font-size: 13px; }
-}
-
-.hud-settings__control-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-
-  > .hud-control {
-    min-width: 0;
-    min-height: 54px;
-    border: 0;
-    border-radius: 0;
-    background: var(--hud-surface);
-  }
-
-  &:has(> .hud-control:first-child:last-child) {
-    grid-template-columns: 1fr;
-  }
-
-  &:has(> .hud-control:nth-child(2):last-child) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  &:has(> .hud-control:nth-child(4):last-child) > .hud-control:last-child {
-    grid-column: 1 / -1;
-  }
-}
-
-.hud-settings__common-panel > .hud-control:not(.hud-control--state) {
-  justify-content: flex-start;
-  gap: 14px;
-
-  > span:first-child { flex: 0 1 110px; }
-}
-
-.hud-settings__common-panel .hud-control__range {
-  grid-template-columns: 42px minmax(88px, 1fr);
-  flex: 1 1 150px;
-  min-width: 140px;
-}
-
-.hud-settings__divider {
-  height: 1px;
-  margin: 0 26px;
-  border: 0;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.hud-settings__specific {
-  padding-top: 18px;
-
-  .hud-select { flex-basis: 146px; min-width: 146px; }
-}
-
-.hud-settings__specific-panel > .hud-control:has(> input[type='checkbox']) {
-  justify-content: flex-start;
-  gap: 10px;
-  cursor: pointer;
-
-  > input[type='checkbox'] {
-    flex: 0 0 auto;
-    order: -1;
-    margin: 0;
-  }
-}
-
-.hud-settings__specific-panel > .hud-control:not(:has(> input[type='checkbox'])) {
-  justify-content: flex-start;
-  gap: 16px;
-
-  > span:first-child { flex: 0 1 150px; }
-}
-
-.hud-settings--band .hud-settings__common-panel {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-
-  > .hud-control--state { grid-column: 1 / -1; }
-  > .hud-control:not(.hud-control--state) { grid-column: span 2; }
-
-  &:has(> .hud-control:nth-child(2):last-child) > .hud-control:not(.hud-control--state) {
-    grid-column: 1 / -1;
-  }
-
-  &:has(> .hud-control:nth-child(3):last-child) > .hud-control:not(.hud-control--state) {
-    grid-column: span 3;
-  }
-}
-
-.hud-settings--flow {
-  .hud-settings__common-panel,
-  .hud-settings__specific-panel {
-    display: flex;
-    flex-wrap: wrap;
-    column-gap: 22px;
-    row-gap: 8px;
-    overflow: visible;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .hud-settings__control-grid > .hud-control {
-    flex: 1 1 240px;
-    padding-inline: 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.09);
-    background: transparent;
-  }
-
-  .hud-settings__control-grid > .hud-control--state {
-    flex: 0 1 210px;
-  }
-
-  .hud-settings__control-grid > .hud-control--slider {
-    flex-basis: 360px;
-  }
-
-  .hud-settings__specific-panel > .hud-control:has(> input[type='checkbox']) {
-    flex-basis: 190px;
-  }
-
-  .hud-settings__specific-panel > .hud-control:not(:has(> input[type='checkbox'])) {
-    flex-basis: 320px;
-  }
-}
-
-.hud-settings.is-overlay-disabled {
-  .hud-settings__common-panel > .hud-control:not(.hud-control--state),
-  .hud-settings__specific-panel > .hud-control {
-    opacity: 0.4;
-  }
-}
-
-.hud-settings__common-panel > .hud-control:not(.hud-control--state),
-.hud-settings__specific-panel > .hud-control {
-  transition: opacity 140ms ease;
-}
-
-.hud-control {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  min-height: 58px;
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.075);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.025);
-
-  > span:first-child { display: grid; gap: 3px; min-width: 0; }
-  strong { color: rgba(255, 255, 255, 0.92); font-size: 13px; }
-  em { color: var(--hud-text-muted); font-size: 11px; font-style: normal; line-height: 1.35; }
-}
-
-.hud-control--standings small {
-  color: var(--hud-text-muted);
-  font-size: 10px;
-  line-height: 1.3;
-}
-
-.hud-control--standings.is-unavailable {
-  opacity: 0.52;
-}
-
-.hud-control__range {
-  display: grid !important;
-  grid-template-columns: 48px minmax(150px, 240px);
-  align-items: center;
-  gap: 12px !important;
-  min-width: 250px;
-
-  b {
-    color: var(--hud-accent);
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-  }
-}
-
-.hud-select,
-.hud-number input {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 7px;
-  background-color: #171b25;
-  color: rgba(255, 255, 255, 0.94);
-  color-scheme: dark;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.hud-select {
-  flex: 0 0 172px;
-  min-width: 172px;
-  padding: 9px 30px 9px 10px;
-  cursor: pointer;
-
-  option { background-color: #171b25; color: rgba(255, 255, 255, 0.94); }
-}
-
-.hud-number {
-  display: flex !important;
-  align-items: center;
-  gap: 7px !important;
-
-  input { width: 86px; padding: 9px; font-variant-numeric: tabular-nums; }
-  b { color: var(--hud-text-muted); font-size: 10px; text-transform: uppercase; }
-}
-
-.hud-slider {
-  width: 100%;
-  height: 6px;
-  appearance: none;
-  -webkit-appearance: none;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  cursor: pointer;
-
-  &::-webkit-slider-thumb {
-    width: 18px;
-    height: 18px;
-    appearance: none;
-    -webkit-appearance: none;
-    border: 2px solid #1a0d04;
-    border-radius: 50%;
-    background: var(--hud-accent);
-    cursor: pointer;
-  }
-
-  &::-moz-range-thumb {
-    width: 18px;
-    height: 18px;
-    border: 2px solid #1a0d04;
-    border-radius: 50%;
-    background: var(--hud-accent);
-    cursor: pointer;
-  }
-}
-
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 36px;
-  padding: 8px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.92);
-  font-size: 12px;
-  font-weight: 800;
-  transition: background-color 120ms ease, border-color 120ms ease;
-
-  &:hover:not(:disabled) { border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.075); }
-}
-
-.btn--primary {
-  border-color: transparent;
-  background: var(--hud-accent);
-  color: #1a0d04;
-
-  &:hover:not(:disabled) { border-color: transparent; background: #fdba74; }
-}
-
-.btn:disabled,
-.hud-select:disabled,
-.hud-slider:disabled,
-.hud-number input:disabled,
-.hud-control > input:disabled,
-.hud-control__state-toggle > input:disabled,
-.test-hud__always input:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.hud-overlay-list__item:focus-visible,
-.hud-layout-preview__options button:focus-visible,
-.test-hud__replay summary:focus-visible,
-.hud-select:focus-visible,
-.hud-slider:focus-visible,
-.hud-number input:focus-visible,
-.hud-control > input:focus-visible,
-.hud-control__state-toggle > input:focus-visible,
-.test-hud__always input:focus-visible {
-  outline: 2px solid var(--hud-accent);
-  outline-offset: 2px;
-}
-
-@media (max-width: 980px) {
-  .test-hud__hero { align-items: flex-start; flex-direction: column; }
-  .test-hud__driving { width: 100%; }
-  .test-hud__global,
-  .hud-workspace { grid-template-columns: 1fr; }
-  .hud-overlay-list { position: static; }
-  .hud-layout-preview { width: 100%; }
-  .hud-layout-preview > span { text-align: left; }
-
-  .hud-settings__control-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-
-    &:has(> .hud-control:first-child:last-child) {
-      grid-template-columns: 1fr;
-    }
-
-    > .hud-control:last-child:nth-child(odd) {
-      grid-column: 1 / -1;
-    }
-
-    &:has(> .hud-control:nth-child(4):last-child) > .hud-control:last-child {
-      grid-column: auto;
-    }
-  }
-
-  .hud-settings--band .hud-settings__common-panel {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-
-    > .hud-control:not(.hud-control--state) { grid-column: auto; }
-    > .hud-control--state,
-    &:has(> .hud-control:nth-child(2):last-child) > .hud-control:not(.hud-control--state),
-    &:has(> .hud-control:nth-child(4):last-child) > .hud-control:last-child {
-      grid-column: 1 / -1;
-    }
-  }
-
-  .hud-overlay-list nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-@media (max-width: 680px) {
-  .test-hud { gap: 16px; }
-  .test-hud__hero { padding: 24px 20px; }
-  .test-hud__placement { align-items: stretch; flex-direction: column; }
-  .test-hud__placement-actions { flex-wrap: wrap; }
-  .test-hud__replay-body { grid-template-columns: 1fr; }
-  .hud-overlay-list nav { grid-template-columns: 1fr; }
-  .hud-settings__head { flex-direction: column; padding: 22px 18px 18px; }
-  .hud-settings__common,
-  .hud-settings__specific { padding: 20px 18px; }
-  .hud-settings__divider { margin: 0 18px; }
-  .hud-layout-preview__options { width: 100%; }
-
-  .hud-settings__control-grid,
-  .hud-settings--band .hud-settings__common-panel {
-    grid-template-columns: 1fr;
-
-    > .hud-control { grid-column: auto !important; }
-  }
-
-  .hud-control:not(:has(> input[type='checkbox'])) { align-items: stretch; flex-direction: column; gap: 12px; }
-  .hud-control > input[type='checkbox'] { align-self: auto; }
-  .hud-control__range { grid-template-columns: 42px minmax(0, 1fr); width: 100%; min-width: 0; }
-  .hud-select { width: 100%; min-width: 0; }
-  .hud-settings__common-panel > .hud-control:not(.hud-control--state) > span:first-child,
-  .hud-settings__specific-panel > .hud-control:not(:has(> input[type='checkbox'])) > span:first-child {
-    flex-basis: auto;
-  }
-  .hud-settings__specific-panel > .hud-control:has(> input[type='checkbox']) {
-    align-items: center;
-    flex-direction: row;
-  }
-}
-
-/* PIP-281 — tre composizioni di confronto: stessi controlli, gerarchie diverse. */
-.hud-sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* Gli strumenti di guida e QA restano disponibili, ma non interrompono il workspace di configurazione. */
-.test-hud__hero { order: 1; }
-.test-hud__global { order: 2; }
-.test-hud__replay { order: 3; }
-.hud-workspace { order: 4; }
-
-.hud-overlay-list__label {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.hud-overlay-list__icon {
-  flex: 0 0 auto;
-  color: rgba(255, 255, 255, 0.72);
-}
-
-.hud-overlay-list__title {
-  flex: 1;
-  align-items: center;
-}
-
-.hud-overlay-list__item.is-selected .hud-overlay-list__icon { color: var(--hud-accent); }
-
-.hud-control__state-toggle {
-  position: relative;
-  gap: 10px;
-}
-
-.hud-control__state-toggle > input[type='checkbox'] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-}
-
-.hud-control__switch {
-  position: relative;
-  width: 48px;
-  height: 28px;
-  flex: 0 0 auto;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  transition: background-color 140ms ease, border-color 140ms ease;
-}
-
-.hud-control__switch::after {
-  position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.76);
-  content: '';
-  transition: transform 140ms ease, background-color 140ms ease;
-}
-
-.hud-control__state-toggle > input:checked + .hud-control__switch {
-  border-color: transparent;
-  background: var(--hud-accent);
-}
-
-.hud-control__state-toggle > input:checked + .hud-control__switch::after {
-  transform: translateX(20px);
-  background: #1a0d04;
-}
-
-.hud-control__state-toggle > input:focus-visible + .hud-control__switch {
-  outline: 2px solid var(--hud-accent);
-  outline-offset: 3px;
-}
-
-.hud-info-group { min-width: 0; }
-
-.hud-info-group__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  color: rgba(255, 255, 255, 0.95);
-}
-
-.hud-info-group__head svg { color: var(--hud-accent); }
-.hud-info-group__head strong { font-size: 14px; }
-
-.hud-info-group__options {
-  display: grid;
-  gap: 0;
-}
-
-.hud-info-group__options > .hud-control {
-  min-height: 54px;
-  padding-inline: 6px;
-  border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0;
-  background: transparent;
-}
-
-.hud-info-group__options > .hud-control:last-child { border-bottom: 0; }
-
-/* Variante 2 — Colonne: interruttore a tutta riga, due colonne editoriali. */
-.hud-settings--columns .hud-settings__common { padding: 20px 26px 12px; }
-.hud-settings--columns .hud-settings__common-panel {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  overflow: visible;
-  column-gap: 42px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.hud-settings--columns .hud-settings__common-panel > .hud-control {
-  min-height: 76px;
-  padding-inline: 0;
-  border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0;
-  background: transparent;
-}
-
-.hud-settings--columns .hud-settings__common-panel > .hud-control--state {
-  grid-column: 1 / -1;
-  min-height: 72px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(251, 146, 60, 0.04);
-}
-
-.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(odd):not(.hud-control--state) { padding-right: 32px; }
-.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(even) { padding-left: 32px; border-left: 1px solid rgba(255, 255, 255, 0.1); }
-.hud-settings--columns .hud-settings__specific { padding: 18px 26px 26px; }
-.hud-settings--columns .hud-settings__specific-panel {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 44px;
-  overflow: visible;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-.hud-settings--columns .hud-info-group--strategy { grid-column: 2; grid-row: 1 / span 2; }
-.hud-settings--columns .hud-info-group--performance { margin-top: 18px; }
-
-
-/* Gli overlay con opzioni specifiche usano le stesse righe compatte di Info. */
-.hud-settings--columns .hud-settings__specific-panel > .hud-control {
-  min-height: 58px;
-  padding-inline: 0;
-  border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0;
-  background: transparent;
-}
-
-.hud-settings--columns .hud-settings__specific-panel > .hud-control:has(> input[type='checkbox']) {
-  gap: 10px;
-}
-
-.hud-settings--matrix .hud-settings__specific-panel > .hud-control {
-  min-height: 76px;
-  padding: 10px 26px;
-  border: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0;
-  background: transparent;
-}
-
-.hud-settings--matrix .hud-settings__specific-panel > .hud-control:nth-child(3n) { border-right: 0; }
-/* Variante 3 — Matrice: massimo utilizzo dello spazio, griglia continua e leggibile. */
-.hud-settings--matrix .hud-settings__common { padding: 22px 0 0; }
-.hud-settings--matrix .hud-settings__section-head { padding: 0 26px 12px; }
-.hud-settings--matrix .hud-settings__common-panel {
-  grid-template-columns: 1fr;
-  overflow: visible;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0;
-  background: transparent;
-}
-
-.hud-settings--matrix .hud-settings__common-panel > .hud-control {
-  min-height: 72px;
-  padding-inline: 26px;
-  border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0;
-  background: transparent;
-}
-
-.hud-settings--matrix .hud-settings__common-panel > .hud-control:last-child { border-bottom: 0; }
-.hud-settings--matrix .hud-settings__common-panel > .hud-control--state { min-height: 74px; background: rgba(251, 146, 60, 0.035); }
-.hud-settings--matrix .hud-settings__common-panel > .hud-control:not(.hud-control--state) { justify-content: flex-start; gap: 34px; }
-.hud-settings--matrix .hud-settings__common-panel > .hud-control:not(.hud-control--state) > span:first-child { flex: 0 0 min(32%, 300px); }
-.hud-settings--matrix .hud-settings__specific { padding: 24px 0 0; }
-.hud-settings--matrix .hud-settings__specific-panel {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  overflow: visible;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 0;
-  background: transparent;
-}
-
-.hud-settings--matrix .hud-info-group,
-.hud-settings--matrix .hud-info-group__options { display: contents; }
-.hud-settings--matrix .hud-info-group__head { display: none; }
-.hud-settings--matrix .hud-info-group__options > .hud-control {
-  min-height: 76px;
-  padding: 10px 26px;
-  border: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: transparent;
-}
-
-.hud-settings--matrix .hud-info-group__options > .hud-control:nth-child(3n) { border-right: 0; }
-.hud-settings--matrix .hud-info-group__options > .hud-control:last-child { border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-
-@media (max-width: 980px) {
-  .hud-settings--columns .hud-settings__specific-panel { gap: 22px; }
-  .hud-settings--matrix .hud-settings__specific-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .hud-settings--matrix .hud-info-group__options > .hud-control:nth-child(3n) { border-right: 1px solid rgba(255, 255, 255, 0.1); }
-  .hud-settings--matrix .hud-info-group__options > .hud-control:nth-child(2n) { border-right: 0; }
-}
-
-@media (max-width: 680px) {
-  .hud-overlay-list__item { padding-left: 12px; }
-  .hud-settings--columns .hud-settings__common { padding-inline: 18px; }
-  .hud-settings--columns .hud-settings__common-panel,
-  .hud-settings--columns .hud-settings__specific-panel,
-  .hud-settings--matrix .hud-settings__specific-panel { grid-template-columns: 1fr; }
-  .hud-settings--columns .hud-settings__common-panel > .hud-control { padding-inline: 0; border-left: 0; }
-  .hud-settings--columns .hud-info-group--strategy { grid-column: auto; grid-row: auto; }
-  .hud-settings--columns .hud-info-group--performance { margin-top: 0; }
-  .hud-settings--matrix .hud-settings__common-panel > .hud-control { padding-inline: 18px; }
-  .hud-settings--matrix .hud-settings__common-panel > .hud-control:not(.hud-control--state) { gap: 16px; }
-  .hud-settings--matrix .hud-settings__common-panel > .hud-control:not(.hud-control--state) > span:first-child { flex-basis: auto; }
-  .hud-settings--matrix .hud-info-group__options > .hud-control { padding-inline: 18px; border-right: 0; }
-}
-
-/* Rifiniture Colonne: attivazione centrata e slider indipendenti. */
-.hud-settings--columns .hud-control--state,
-.hud-settings--columns .hud-control--state .hud-control__state-toggle {
-  align-items: center;
-}
-
-.hud-settings--columns .hud-control--state .hud-control__state-toggle { min-height: 0; }
-.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(odd):not(.hud-control--state) { padding-right: 0; }
-.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(even) { padding-left: 0; border-left: 0; }
-.hud-settings--columns .hud-settings__common-panel > .hud-control--slider > span:first-child strong { white-space: nowrap; }
-
-/* Fascia comune Colonne: padding uniforme, un solo divider prima delle opzioni specifiche. */
-.hud-settings--columns .hud-settings__common { padding-bottom: 0; }
-.hud-settings--columns .hud-settings__common-panel > .hud-control {
-  padding-inline: 18px;
-  border-bottom: 0;
-}
-
-.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(odd):not(.hud-control--state),
-.hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(even) {
-  padding-inline: 18px;
-  border-left: 0;
-}
-
-@media (max-width: 680px) {
-  .hud-settings--columns .hud-settings__common-panel > .hud-control,
-  .hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(odd):not(.hud-control--state),
-  .hud-settings--columns .hud-settings__common-panel > .hud-control:nth-child(even) { padding-inline: 14px; }
-}
+.sector-reference-dialog { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 24px; background: #000b; }
+.sector-reference-dialog > * { width: min(100%,460px); }
+.hud-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+.test-hud { --hud-accent: var(--racing-race); --hud-border: #ffffff35; --hud-text-muted: #a2a2a8; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 24px; color: #eee; }
+.test-hud__hero { align-self: center; }.test-hud__hero h1 { margin: 0 0 4px; font-size: 34px; font-weight: 650; }.test-hud__hero p { margin: 0; font-size: 14px; color: #bcbcc3; }
+.test-hud__hero .test-hud__driving { margin-top: 8px; font-size: 10px; }.test-hud__driving em,.test-hud__driving-dot { display: none; }.test-hud__hero .test-hud__warning { color: var(--racing-qualify); margin-top: 10px; font-size: 12px; }
+.test-hud__global { display: flex; align-self: center; align-items: center; flex-wrap: wrap; max-width: 580px; gap: 12px 24px; padding: 12px 20px; border: 1px solid var(--hud-border); }
+.hud-global-control { display: flex; align-items: center; gap: 18px; font-size: 13px; }.hud-global-control + .hud-global-control { padding-left: 24px; border-left: 1px solid var(--hud-border); }.hud-placement-status { flex-basis: 100%; margin: 0; color: var(--racing-qualify); font-size: 11px; }
+.test-hud__replay { grid-column: 1 / -1; order: 5; border: 1px solid var(--hud-border); padding: 14px; font-size: 12px; }.test-hud__replay summary { display: flex; justify-content: space-between; gap: 14px; cursor: pointer; }.test-hud__replay em { display: block; color: var(--hud-text-muted); font-size: 10px; font-style: normal; }.test-hud__replay-body { padding-top: 14px; }.test-hud__replay-controls { display: grid; gap: 12px; }.test-hud__replay-controls > div { display: flex; gap: 12px; }
+.hud-workspace { grid-column: 1 / -1; display: grid; grid-template-columns: 270px minmax(0,1fr); gap: 0; padding: 26px; border: 1px solid #ffffff55; min-height: 470px; }
+.hud-overlay-list { padding-right: 24px; border-right: 1px solid var(--hud-border); }.hud-overlay-list nav { display: grid; gap: 4px; }.hud-overlay-list__head { display: none; }
+.hud-overlay-list__item { position: relative; width: 100%; min-height: 56px; text-align: left; border: 1px solid transparent; border-bottom-color: #ffffff16; padding: 12px; background: none; color: #ddd; cursor: pointer; clip-path: polygon(0 0,calc(100% - 10px) 0,100% 10px,100% 100%,10px 100%,0 calc(100% - 10px)); }
+.hud-overlay-list__item:hover { background: #ffffff0b; }.hud-overlay-list__item.is-selected { border-color: #ffffff70; background: linear-gradient(90deg,#ffffff20,#ffffff05); color: #fff; }.hud-overlay-list__item.is-selected::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 4px; background: #fff; }.hud-overlay-list__label { display: flex; align-items: center; gap: 18px; }.hud-overlay-list__icon { flex: 0 0 auto; }.hud-overlay-list__title strong { font-size: 14px; font-weight: 500; }.hud-overlay-list__title em,.hud-overlay-list__visibility { display: none; }
+.hud-training { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--hud-border); font-size: 12px; }.hud-training > div { display: flex; justify-content: space-between; gap: 8px; }.hud-training span { color: #aaa; }.hud-training button { margin-top: 16px; }
+.hud-settings { min-width: 0; padding-left: 30px; }.hud-settings__head { padding-bottom: 22px; border-bottom: 1px solid var(--hud-border); }.hud-settings__head p { margin: 0; font-size: 14px; color: #bfc0c5; }
+.hud-settings__common,.hud-settings__specific { padding-top: 24px; }.hud-settings__control-grid { display: flex; flex-direction: column; gap: 18px; }
+.hud-control { display: flex; align-items: center; justify-content: flex-start; gap: 16px; min-width: 0; min-height: 36px; max-width: 640px; font-size: 13px; }.hud-control > span:first-child { flex: 0 0 150px; }.hud-control strong,.hud-control__state-label { font-weight: 500; }.hud-control--state { justify-content: flex-start; }.hud-control--standings small { display: block; color: var(--hud-text-muted); font-size: 11px; }.hud-control.is-unavailable { opacity: .5; }
+.hud-settings__specific-panel > .hud-control:has(> input[type='checkbox']) { gap: 12px; }.hud-settings__specific-panel > .hud-control:has(> input[type='checkbox']) > span:first-child { flex: 0 1 auto; }.hud-settings__specific-panel > .hud-control > input[type='checkbox'] { order: -1; }
+.hud-control__range { display: grid; grid-template-columns: 42px minmax(90px,190px); align-items: center; gap: 14px; width: 246px; max-width: 100%; }.hud-control__range b { font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; color: #ddd; }
+.hud-select,.hud-number input { min-width: 0; width: 230px; max-width: 100%; min-height: 38px; padding: 8px 28px 8px 12px; border: 1px solid #ffffff55; border-radius: 0; color: #eee; background: #08090b; color-scheme: dark; font: inherit; font-size: 12px; }.hud-number { display: flex; gap: 8px; align-items: center; }.hud-number input { width: 80px; padding-right: 8px; }.hud-number b { font-size: 11px; color: #aaa; }
+.hud-slider { width: 100%; height: 3px; appearance: none; background: #ffffff45; cursor: pointer; accent-color: var(--racing-race); }.hud-slider::-webkit-slider-thumb { appearance: none; width: 4px; height: 20px; border: 0; border-radius: 0; background: #fff; }.hud-slider::-moz-range-thumb { width: 4px; height: 20px; border: 0; border-radius: 0; background: #fff; }.hud-slider::-moz-range-progress { background: var(--racing-race); }
+.hud-settings input[type='checkbox'] { appearance: auto; width: 16px; height: 16px; flex: 0 0 auto; accent-color: var(--racing-race); }
+.hud-settings__divider { height: 1px; margin: 24px 0 0; border: 0; background: var(--hud-border); }.hud-info-group { min-width: 0; }.hud-info-group h3 { margin: 0 0 14px; color: #aaa; font-size: 12px; text-transform: uppercase; }.hud-info-group + .hud-info-group { border-top: 1px solid var(--hud-border); padding-top: 20px; }.hud-info-group__head { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; color: #ccc; font-size: 13px; }.hud-info-group__options { display: grid; gap: 12px; }.hud-info-group__options .hud-control > span:first-child { flex: 0 1 auto; }.hud-info-group__options input { order: -1; }
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 8px 16px; border: 1px solid #ffffff55; background: #ffffff08; color: #eee; cursor: pointer; font-size: 12px; clip-path: polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px)); }.btn:hover:not(:disabled) { background: #ffffff18; }.btn--primary { background: var(--racing-race); }
+.test-hud :disabled { cursor: not-allowed; opacity: .45; }.hud-settings.is-overlay-disabled .hud-settings__specific { color: #999; }
+.hud-overlay-list__item:focus-visible,.test-hud button:focus-visible,.test-hud input:focus-visible,.test-hud select:focus-visible,.test-hud summary:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+@media(max-width: 980px) { .test-hud { grid-template-columns: 1fr; }.test-hud__global { justify-self: start; }.hud-workspace { grid-template-columns: 210px minmax(0,1fr); padding: 18px; }.hud-settings { padding-left: 20px; }.hud-control > span:first-child { flex-basis: 120px; } }
+@media(max-width: 680px) { .hud-workspace { grid-template-columns: 1fr; }.hud-overlay-list { border-right: 0; padding-right: 0; padding-bottom: 20px; border-bottom: 1px solid var(--hud-border); }.hud-overlay-list nav { grid-template-columns: repeat(2,minmax(0,1fr)); }.hud-settings { padding: 22px 0 0; }.hud-global-control + .hud-global-control { border: 0; padding-left: 0; }.hud-control { flex-wrap: wrap; }.hud-control__range { width: 220px; }.hud-control > span:first-child { flex-basis: 110px; } }
+
+// Two nested cut shapes keep the border continuous along both diagonals.
+.hud-overlay-list__item.is-selected { isolation: isolate; border: 0; background: #999; }
+.hud-overlay-list__item.is-selected::after { content: ''; position: absolute; inset: 1px; z-index: -1; background: linear-gradient(90deg,#262626,#0c0c0c); clip-path: polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px)); }
+.hud-overlay-list__item.is-selected::before { z-index: 1; }
 </style>

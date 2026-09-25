@@ -295,7 +295,7 @@ function onSearchInput() {
 </template>
 
 <style lang="scss" scoped>
-.pitwall-page { max-width: var(--app-content-max-width); margin: 0 auto; padding: 14px 16px 24px; }
+.pitwall-page { max-width: var(--app-content-max-width); margin: 0 auto; padding: var(--app-content-top-space) 16px 24px; }
 .pitwall { --accent-rgb: 53, 169, 242; --accent: #35a9f2; display: grid; gap: 14px; color: #f4f7fa; }
 .page-title { margin: 0; font-size: 17px; font-weight: 850; letter-spacing: .01em; }
 .connections { display: grid; grid-template-columns: .92fr .94fr 1.34fr; overflow: hidden; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; background: rgba(255,255,255,.12); gap: 1px; }

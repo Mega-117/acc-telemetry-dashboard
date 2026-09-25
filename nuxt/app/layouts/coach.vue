@@ -221,7 +221,7 @@ const isAdminRouteActive = (path: string) => route.path === path || route.path.s
 .coach-main {
   max-width: var(--app-content-max-width);
   margin: 0 auto;
-  padding: 32px 24px;
+  padding: var(--app-content-top-space) 24px 32px;
 }
 
 @media (max-width: $breakpoint-lg) {

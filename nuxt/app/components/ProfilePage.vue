@@ -654,7 +654,7 @@ $color-card: #121218;
 
 .profile-main {
   width: 100%; max-width: var(--app-content-max-width); margin-inline: auto; box-sizing: border-box;
-  padding: 34px 24px 42px;
+  padding: var(--app-content-top-space) 24px 42px;
 }
 
 .profile-container {

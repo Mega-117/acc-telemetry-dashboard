@@ -1,5 +1,6 @@
 :root {
   --app-content-max-width: 1400px;
+  --app-content-top-space: 40px;
   // Canonical session palette: Practice, Qualify/Q times, Race/R times.
   --racing-practice: #0076ff;
   --racing-qualify: #ffc400;
@@ -31,3 +32,8 @@
   &:not(.racing-button--primary)::before { right: -3px; top: 4px; }
   &:not(.racing-button--primary)::after { left: -3px; bottom: 4px; }
 }
+
+// Compact form controls shared by the racing settings surfaces.
+.racing-select { max-width: 100%; min-height: 38px; padding: 8px 34px 8px 14px; border: 1px solid #ffffff55; border-radius: 0; background: #08090b; color: #e5e5e5; font: inherit; font-size: 13px; color-scheme: dark; }
+.racing-select:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.racing-select:disabled { opacity: .4; }

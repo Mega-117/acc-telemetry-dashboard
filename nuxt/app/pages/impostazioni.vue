@@ -52,7 +52,7 @@ onMounted(async () => {
 </template>
 
 <style scoped lang="scss">
-.settings-page { max-width: var(--app-content-max-width); margin: 0 auto; padding: 36px 28px 64px; color: #fff; }
+.settings-page { max-width: var(--app-content-max-width); margin: 0 auto; padding: var(--app-content-top-space) 28px 64px; color: #fff; }
 .settings-page__title { margin-bottom: 26px; } .settings-page__title p { margin: 0 0 7px; color: #ff4d3d; font-size: 11px; font-weight: 800; letter-spacing: 1.8px; }
 .settings-page__title h1 { margin: 0 0 8px; font-size: 34px; } .settings-page__title span { color: #8f8f9d; }
 .settings-shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 22px; align-items: start; }

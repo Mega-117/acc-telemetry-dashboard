@@ -592,7 +592,7 @@ function goToSession(id: string) {
 </template>
 
 <style lang="scss" scoped>
-.sessions-page { width: 100%; padding-top: 40px; padding-bottom: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.sessions-page { width: 100%; padding-top: var(--app-content-top-space); padding-bottom: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .session-filters { margin-bottom: 24px; flex: 0 0 auto; }
 .sessions-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   overscroll-behavior-y: contain; scrollbar-gutter: stable;
@@ -620,5 +620,5 @@ function goToSession(id: string) {
 .sessions-status { padding: 40px 0; color: var(--racing-data-muted); }
 .sessions-notice { padding: 12px 0; color: var(--racing-qualify); font-size: var(--racing-data-text-size); }
 .sessions-notice--error { color: #ff8999; }
-@media (max-width: 700px) { .sessions-page { padding: 32px 16px 0; } }
+@media (max-width: 700px) { .sessions-page { padding: var(--app-content-top-space) 16px 0; } }
 </style>

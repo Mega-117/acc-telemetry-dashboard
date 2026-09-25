@@ -27,13 +27,16 @@ function toggle(mode: SpotterSessionMode) {
 
 <template>
   <div class="session-mode-picker">
-    <span>Sessioni abilitate</span>
-    <div class="session-mode-buttons" role="group" :aria-label="label">
+    <div
+      class="session-mode-buttons"
+      role="group"
+      :aria-label="label"
+    >
       <button
         v-for="mode in SPOTTER_SESSION_MODES"
         :key="mode"
         type="button"
-        :class="{ 'is-active': modelValue.includes(mode) }"
+        :class="['racing-button', `mode-${mode}`, { 'is-active': modelValue.includes(mode) }]"
         :aria-pressed="modelValue.includes(mode)"
         @click="toggle(mode)"
       >
@@ -44,53 +47,13 @@ function toggle(mode: SpotterSessionMode) {
 </template>
 
 <style scoped lang="scss">
-.session-mode-picker {
-  display: grid;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.session-mode-picker > span {
-  color: rgba(255, 255, 255, 0.54);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.session-mode-buttons {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.session-mode-buttons button {
-  min-height: 34px;
-  padding: 7px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.055);
-  color: rgba(255, 255, 255, 0.66);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 750;
-  cursor: pointer;
-  transition: border-color 150ms ease, background 150ms ease, color 150ms ease;
-}
-
-.session-mode-buttons button:hover {
-  border-color: rgba(255, 255, 255, 0.28);
-  color: #fff;
-}
-
-.session-mode-buttons button.is-active {
-  border-color: rgba(76, 210, 112, 0.58);
-  background: rgba(44, 145, 75, 0.2);
-  color: #e9ffed;
-}
-
-.session-mode-buttons button:focus-visible {
-  outline: 2px solid #ff5a1f;
-  outline-offset: 2px;
-}
+.session-mode-buttons { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; }
+.session-mode-buttons button { --mode-color: var(--racing-practice); isolation: isolate; position: relative; min-height: 42px; min-width: 0; padding: 9px 10px; border: 0; background: #858585; color: #bbb; font: 600 11px/1.2 'Segoe UI',sans-serif; }
+.session-mode-buttons .mode-qualify { --mode-color: var(--racing-qualify); }.session-mode-buttons .mode-race { --mode-color: var(--racing-race); }
+.session-mode-buttons button::before { content: ''; position: absolute; inset: 1px; width: auto; height: auto; transform: none; z-index: -1; background: #080808; clip-path: polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px)); }
+.session-mode-buttons button::after { display: none; }
+.session-mode-buttons button.is-active { color: var(--mode-color); background: var(--mode-color); }
+.session-mode-buttons button.is-active::before { background: linear-gradient(110deg,color-mix(in srgb,var(--mode-color) 23%,transparent),color-mix(in srgb,var(--mode-color) 8%,transparent)),#080808; }
+.session-mode-buttons button:hover { color: #fff; }.session-mode-buttons button:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+@media(max-width: 700px) { .session-mode-buttons { gap: 8px; }.session-mode-buttons button { padding-inline: 8px; } }
 </style>

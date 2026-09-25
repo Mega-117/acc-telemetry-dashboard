@@ -42,7 +42,7 @@ async function openCard() {
   await entry!.trigger('click')
   await flushPromises()
 }
-const switches = () => wrapper!.findAll('input[role="switch"]')
+const switches = () => wrapper!.findAll('input[type="checkbox"]')
 const pitTimeInput = () => wrapper!.get('input[aria-label^="Tempo perso per la sosta"]')
 
 beforeEach(() => {

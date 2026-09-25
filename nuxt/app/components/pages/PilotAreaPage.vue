@@ -50,7 +50,7 @@ const pageCopy = computed(() => {
 .pilot-area-page {
   max-width: var(--app-content-max-width);
   margin: 0 auto;
-  padding: 34px 24px 52px;
+  padding: var(--app-content-top-space) 24px 52px;
   color: #fff;
   font-family: $font-primary;
 }
