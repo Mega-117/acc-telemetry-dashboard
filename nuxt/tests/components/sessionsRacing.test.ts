@@ -34,6 +34,34 @@ beforeEach(() => {
 afterEach(() => { wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers() })
 
 describe('Sessioni racing single table', () => {
+  it('scrolls only the designated list viewport when changing page', async () => {
+    const container = document.createElement('main')
+    container.dataset.pageScroll = ''
+    container.scrollTo = vi.fn()
+    const target = document.createElement('div')
+    container.append(target)
+    const w = mount(PaginationControls, { props: { currentPage: 1, totalPages: 3, totalItems: 60, scrollTarget: target } })
+    wrappers.push(w)
+    await w.get('[aria-label="Pagina 2"]').trigger('click')
+    await vi.advanceTimersByTimeAsync(500)
+    expect(container.scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
+    expect(target.scrollIntoView).not.toHaveBeenCalled()
+  })
+  it('bounds pagination at the beginning, middle and end of very large archives', async () => {
+    const w = mount(PaginationControls, { props: { currentPage: 1, totalPages: 10000000, totalItems: 250000000, variant: 'racing' } })
+    wrappers.push(w)
+    const labels = () => w.findAll('.page-btn').map(x => x.text())
+    expect(labels()).toEqual(['1', '2', '3', '4', '5', '…', '10000000'])
+    await w.setProps({ currentPage: 500 })
+    expect(labels()).toEqual(['1', '…', '499', '500', '501', '…', '10000000'])
+    expect(w.findAll('.pagination-gap').every(x => x.attributes('disabled') !== undefined)).toBe(true)
+    await w.get('[aria-label="Pagina 501"]').trigger('click')
+    expect(w.emitted('pageChange')).toEqual([[501]])
+    await w.setProps({ currentPage: 10000000 })
+    expect(labels()).toEqual(['1', '…', '9999996', '9999997', '9999998', '9999999', '10000000'])
+    await w.setProps({ totalPages: 7, currentPage: 4 })
+    expect(labels()).toEqual(['1', '2', '3', '4', '5', '6', '7'])
+  })
   it('keeps default pagination hidden on one page and shows the racing summary', async () => {
     const w = mount(PaginationControls, { props: { currentPage: 1, totalPages: 1, totalItems: 4 } })
     wrappers.push(w)

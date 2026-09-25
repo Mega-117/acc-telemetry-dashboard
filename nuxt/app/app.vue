@@ -733,6 +733,15 @@ body:has(.electron-titlebar) {
   }
 }
 
+// Session list owns its viewport. Clip outer shells (unlike hidden, clip
+// cannot be programmatically scrolled by keyboard focus/scrollIntoView).
+html:has(.racing-scroll-shell),
+body:has(.racing-scroll-shell),
+#app:has(.racing-scroll-shell),
+#app:has(.electron-titlebar) > .dashboard-wrapper:has(.racing-scroll-shell) {
+  overflow: clip;
+}
+
 // === CUSTOM SCROLLBAR STYLING ===
 // Webkit scrollbar styling (Chrome/Electron)
 ::-webkit-scrollbar {

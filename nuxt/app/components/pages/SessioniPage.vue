@@ -589,11 +589,11 @@ function goToSession(id: string) {
 <style lang="scss" scoped>
 .sessions-page { max-width: 1120px; padding-top: 40px; padding-bottom: 36px; }
 .session-filters { margin-bottom: 42px; }
-.session-days { scroll-margin-top: 170px; }
-.session-day + .session-day { margin-top: var(--racing-space-section); }
+.session-days { scroll-margin-top: 24px; }
+.session-day + .session-day { margin-top: 36px; }
 .session-days[aria-busy="true"] { opacity: .55; pointer-events: none; }
 .session-row { cursor: pointer; }
-.session-row:hover, .session-row:focus-within { background: var(--racing-data-hover); }
+.session-row:hover, .session-row:focus-within { background: linear-gradient(90deg, #ffffff16, #ffffff09); }
 .col-type { width: 9%; } .col-time { width: 9%; } .col-track { width: 16%; } .col-car { width: 23%; }
 .col-laps, .col-stints { width: 9%; } .col-best { width: 12.5%; }
 .session-type { position: relative; }

@@ -51,7 +51,10 @@ const handleGoToSettings = () => {
 </script>
 
 <template>
-  <div class="dashboard-layout" :class="{ 'racing-overview-shell': route.path === '/panoramica' }">
+  <div
+    class="dashboard-layout"
+    :class="{ 'racing-overview-shell': route.path === '/panoramica', 'racing-scroll-shell': route.path === '/sessioni' }"
+  >
     <!-- Sticky Header: TopBar + TabsBar -->
     <div class="dashboard-sticky-header">
       <LayoutTopBar
@@ -66,8 +69,8 @@ const handleGoToSettings = () => {
     </div>
 
     <!-- Page Content with transitions -->
-    <main class="main-content">
-      <slot />
+    <main class="main-content" :data-page-scroll="route.path === '/sessioni' ? '' : undefined">
+      <slot></slot>
     </main>
   </div>
 </template>
@@ -89,6 +92,19 @@ const handleGoToSettings = () => {
 
 .main-content {
   flex: 1;
+}
+.racing-scroll-shell {
+  height: var(--dashboard-viewport-height, 100dvh);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  .dashboard-sticky-header {
+    position: relative;
+    flex: 0 0 auto;
+    &::after { content: ''; position: absolute; inset: 100% 0 auto; height: 18px; background: linear-gradient(#02020299, transparent); pointer-events: none; }
+  }
+  .main-content { min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
 }
 .racing-overview-shell {
   // Fill the available window; content can still grow beyond it on small screens.

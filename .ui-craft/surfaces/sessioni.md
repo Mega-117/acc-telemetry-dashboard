@@ -16,6 +16,12 @@ padding. Su schermi stretti la tabella scorre orizzontalmente in una
 regione accessibile da tastiera; i filtri vanno a capo.
 
 ## Dati e stati
+Scorrimento: header fuori dal viewport scorrevole della lista, sfumatura di
+18px sul bordo navbar; contenitori esterni clip per impedire scroll involontari.
+Cambio pagina scorre solo il main marcato data-page-scroll. Paginazione con
+massimo sette elementi: estremi, vicine alla corrente ed ellissi disabilitate.
+Spazio fra giorni 36px. Hover/focus riga bianco gradiente #ffffff16 -> #ffffff09.
+
 Filtri compatti: font condiviso 11px, select chiusa 144px (auto 176px),
 testo lungo troncato con ellissi e opzioni native complete. Freccia SVG a
 12px dal bordo destro, ripristino freccia nativa in forced-colors.

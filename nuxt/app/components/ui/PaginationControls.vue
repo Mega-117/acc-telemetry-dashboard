@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 // ============================================
 // PaginationControls - Reusable pagination component
 // ============================================
@@ -18,6 +19,16 @@ const emit = defineEmits<{
   'pageChange': [page: number]
 }>()
 
+// Constant-sized window, even when an archive has millions of pages.
+const visiblePages = computed<(number | string)[]>(() => {
+  const total = Math.max(1, Math.floor(props.totalPages))
+  const current = Math.min(total, Math.max(1, props.currentPage))
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  if (current <= 4) return [1, 2, 3, 4, 5, 'end-gap', total]
+  if (current >= total - 3) return [1, 'start-gap', total - 4, total - 3, total - 2, total - 1, total]
+  return [1, 'start-gap', current - 1, current, current + 1, 'end-gap', total]
+})
+
 async function goToPage(page: number) {
   if (!props.disabled && page >= 1 && page <= props.totalPages && page !== props.currentPage) {
     emit('pageChange', page)
@@ -25,7 +36,13 @@ async function goToPage(page: number) {
     // Smooth scroll to target if provided
     if (props.scrollTarget) {
       await new Promise(resolve => setTimeout(resolve, 150)) // Wait for fade-out
-      props.scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      const container = props.scrollTarget.closest<HTMLElement>('[data-page-scroll]')
+      if (container) {
+        // scrollIntoView also scrolls outer ancestors, including the app shell.
+        container.scrollTo({ top: 0, behavior: 'smooth' })
+      } else {
+        props.scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
       await new Promise(resolve => setTimeout(resolve, 300)) // Wait for scroll
     }
     
@@ -73,15 +90,15 @@ async function nextPage() {
       </button>
       <div class="pagination-pages">
         <button 
-          v-for="page in totalPages" 
+          v-for="page in visiblePages"
           :key="page"
-          :class="['page-btn', { 'page-btn--active': page === currentPage }]"
-          :aria-label="`Pagina ${page}`"
+          :class="['page-btn', { 'page-btn--active': page === currentPage, 'pagination-gap': typeof page === 'string' }]"
+          :aria-label="typeof page === 'number' ? `Pagina ${page}` : 'Pagine intermedie'"
           :aria-current="page === currentPage ? 'page' : undefined"
-          :disabled="disabled"
-          @click="goToPage(page)"
+          :disabled="disabled || typeof page === 'string'"
+          @click="typeof page === 'number' && goToPage(page)"
         >
-          {{ page }}
+          {{ typeof page === 'number' ? page : '…' }}
         </button>
       </div>
       <button 
@@ -204,13 +221,16 @@ async function nextPage() {
   padding: 0; margin-top: 24px; background: transparent; border: 0; border-radius: 0; gap: 16px;
   .pagination-info { color: var(--racing-data-muted); font: inherit; }
   .pagination-controls, .pagination-pages { gap: 0; }
-  .pagination-controls { max-width: 100%; overflow-x: auto; padding: 4px; }
+  .pagination-controls { max-width: 100%; padding: 4px; }
+  .pagination-pages { flex-wrap: wrap; justify-content: center; }
   .page-btn, .pagination-btn { flex-shrink: 0; min-width: 30px; width: auto; height: 32px; padding: 0 10px; border-radius: 0; background: transparent; border: 1px solid var(--racing-data-line); color: #ededf0; font: inherit; box-shadow: none; }
   .page-btn--active { background: var(--racing-data-accent); border-color: var(--racing-data-accent); }
   .page-btn:hover:not(:disabled):not(.page-btn--active) { background: var(--racing-data-hover); }
   .page-btn:disabled { cursor: default; opacity: .5; }
   .page-btn:focus-visible, .pagination-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 }
+
+.pagination-gap, .pagination--racing .pagination-gap { border-color: transparent; background: transparent; box-shadow: none; cursor: default; }
 
 // Responsive
 @media (max-width: 600px) {
