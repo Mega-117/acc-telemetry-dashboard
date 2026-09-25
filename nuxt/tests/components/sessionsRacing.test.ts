@@ -4,6 +4,7 @@ import { ref, nextTick } from 'vue'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import SessioniPage from '~/components/pages/SessioniPage.vue'
 import PaginationControls from '~/components/ui/PaginationControls.vue'
+import ScrollArea from '~/components/ui/ScrollArea.vue'
 
 const fake = vi.hoisted(() => ({ gateway: null as any, uid: null as any }))
 vi.mock('~/composables/useTelemetryGateway', () => ({ useTelemetryGateway: () => fake.gateway }))
@@ -15,7 +16,7 @@ const session = (id: string, date: string, type = 0, laps = 4, car = 'ferrari_29
 })
 const wrappers: ReturnType<typeof mount>[] = []
 function render() {
-  const w = mount(SessioniPage, { global: { components: { UiPaginationControls: PaginationControls }, stubs: { LayoutPageContainer: { template: '<main><slot /></main>' } } } })
+  const w = mount(SessioniPage, { global: { components: { UiScrollArea: ScrollArea, UiPaginationControls: PaginationControls }, stubs: { LayoutPageContainer: { template: '<main><slot /></main>' } } } })
   wrappers.push(w)
   return w
 }
@@ -35,6 +36,23 @@ beforeEach(() => {
 afterEach(() => { wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers() })
 
 describe('Sessioni racing single table', () => {
+  it('shows the scrollbar only during scrolling and keeps pagination outside', async () => {
+    const w = render(); await flushPromises()
+    const area = w.get('.sessions-scroll')
+    expect(area.find('.pagination').exists()).toBe(false)
+    expect(area.classes()).not.toContain('is-scrolling')
+    await area.trigger('scroll')
+    expect(area.classes()).toContain('is-scrolling')
+    await vi.advanceTimersByTimeAsync(500)
+    await area.trigger('scroll')
+    await vi.advanceTimersByTimeAsync(500)
+    expect(area.classes()).toContain('is-scrolling')
+    await vi.advanceTimersByTimeAsync(200)
+    expect(area.classes()).not.toContain('is-scrolling')
+    await area.trigger('scroll')
+    w.unmount()
+    expect(vi.getTimerCount()).toBe(0)
+  })
   it('scrolls only the designated list viewport when changing page', async () => {
     const container = document.createElement('main')
     container.dataset.pageScroll = ''

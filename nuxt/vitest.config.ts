@@ -42,6 +42,7 @@ export default defineConfig({
       include: [
         'app/components/pages/SessioniPage.vue',
         'app/components/ui/PaginationControls.vue',
+        'app/components/ui/ScrollArea.vue',
         'app/services/auth/overviewEntryPreparation.ts',
         'app/utils/overviewCarImage.ts',
         'app/services/projections/overviewLastSession.ts',

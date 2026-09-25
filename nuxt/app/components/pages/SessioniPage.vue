@@ -451,12 +451,9 @@ function goToSession(id: string) {
       </div>
     </section>
 
-    <div
+    <UiScrollArea
       class="sessions-scroll"
-      data-page-scroll
-      role="region"
-      aria-label="Elenco sessioni"
-      tabindex="0"
+      label="Elenco sessioni"
     >
       <p
         v-if="pagerError"
@@ -579,29 +576,28 @@ function goToSession(id: string) {
           </div>
         </div>
       </div>
-
-      <UiPaginationControls
-        v-model:current-page="currentPage"
-        variant="racing"
-        :disabled="isLoading || isChangingPage"
-        :total-pages="totalPages"
-        :total-items="totalFilteredSessions"
-        :scroll-target="sessionsRef"
-        item-label="sessioni"
-        @page-change="onPageChange"
-      />
-    </div>
+    </UiScrollArea>
+    <UiPaginationControls
+      v-model:current-page="currentPage"
+      class="sessions-pagination"
+      variant="racing"
+      :disabled="isLoading || isChangingPage"
+      :total-pages="totalPages"
+      :total-items="totalFilteredSessions"
+      :scroll-target="sessionsRef"
+      item-label="sessioni"
+      @page-change="onPageChange"
+    />
   </LayoutPageContainer>
 </template>
 
 <style lang="scss" scoped>
 .sessions-page { width: 100%; max-width: 1120px; padding-top: 40px; padding-bottom: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .session-filters { margin-bottom: 24px; flex: 0 0 auto; }
-.sessions-scroll {
-  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+.sessions-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   overscroll-behavior-y: contain; scrollbar-gutter: stable;
-  padding: 18px 0 36px; mask-image: linear-gradient(to bottom, transparent, #000 18px);
-}
+  padding: 18px 0 12px; mask-image: linear-gradient(to bottom, transparent, #000 18px); }
+.sessions-pagination { flex: 0 0 auto; margin-top: 16px; padding-bottom: 24px; }
 .session-days { scroll-margin-top: 24px; }
 .session-day + .session-day { margin-top: 36px; }
 .session-days[aria-busy="true"] { opacity: .55; pointer-events: none; }

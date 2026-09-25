@@ -19,7 +19,10 @@ regione accessibile da tastiera; i filtri vanno a capo.
 Scorrimento: header e filtri fuori dal viewport scorrevole della lista,
 maschera sfumata di 18px sotto i filtri; contenitori esterni clip per impedire
 scroll involontari. Cambio pagina scorre solo .sessions-scroll marcato
-data-page-scroll, che contiene lista, stati e paginazione. Paginazione con
+data-page-scroll, che contiene lista e stati. Paginazione fissa in una riga
+separata sotto il viewport: la scrollbar termina sopra il pager.
+UiScrollArea mostra la barra durante scroll e la nasconde dopo 650ms inattivi,
+con fade 180ms e timer cancellato allo smontaggio. Paginazione con
 massimo sette elementi: estremi, vicine alla corrente ed ellissi disabilitate.
 Spazio fra giorni 36px. Hover/focus riga bianco gradiente #ffffff16 -> #ffffff09.
 
