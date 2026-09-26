@@ -39,7 +39,7 @@ for (const token of [
 }
 
 assert.ok(
-  gateway.includes('buildOverviewBestTimesFromTrackBestDoc(bestDocs[index], \'GT3\')'),
+  gateway.includes('buildOverviewBestTimesFromTrackBestDoc(bestDocs[index], category)'),
   'getOverviewProjection must use all-grip overview best selection'
 )
 
