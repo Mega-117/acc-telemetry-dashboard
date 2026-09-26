@@ -19,15 +19,7 @@ function makeApi() {
     hudOverlayIsOpen: vi.fn(async () => false),
     hudOverlayGetSettings: vi.fn(async (id: string) => id === 'trackmap' ? { enabled: true, ...stored } : { enabled: false }),
     hudOverlayGetPlacementStatus: vi.fn(async () => ({ active: false, deadlineMs: null })),
-    // Mirrors the main process: 1-600 s rounded, anything else becomes null.
     hudOverlaySaveSettings: vi.fn(async (_id: string, partial: Record<string, unknown>) => {
-      if ('pitTimeSeconds' in partial) {
-        const seconds = Number(partial.pitTimeSeconds)
-        partial = {
-          pitTimeSeconds: partial.pitTimeSeconds !== null && Number.isFinite(seconds) && seconds >= 1 && seconds <= 600
-            ? Math.round(seconds) : null,
-        }
-      }
       stored = { ...stored, ...partial }
       return { enabled: true, ...stored }
     }),
@@ -43,7 +35,6 @@ async function openCard() {
   await flushPromises()
 }
 const switches = () => wrapper!.findAll('input[type="checkbox"]')
-const pitTimeInput = () => wrapper!.get('input[aria-label^="Tempo perso per la sosta"]')
 
 beforeEach(() => {
   vi.stubGlobal('definePageMeta', vi.fn())
@@ -59,22 +50,18 @@ afterEach(() => {
 })
 
 describe('HUD settings: Minimappa card', () => {
-  it('hydrates from the saved settings and shows "auto" without a manual stop time', async () => {
+  it('ignores old manual settings and never exposes a stop-time input', async () => {
     stored = { showPitPrediction: false, showCarNumbers: true, pitTimeSeconds: 47 }
     api = makeApi()
     Object.assign(window, { electronAPI: api })
     await openCard()
     expect(wrapper!.text()).toContain('Pit prediction')
-    expect((pitTimeInput().element as HTMLInputElement).value).toBe('47')
-    // Without pit prediction the manual time has nothing to drive.
-    expect(pitTimeInput().attributes('disabled')).toBeDefined()
+    expect(wrapper!.text()).not.toContain('Tempo sosta manuale')
+    expect(wrapper!.find('input[type="number"]').exists()).toBe(false)
   })
 
   it('saves each option on the trackmap overlay and displays what the main process kept', async () => {
     await openCard()
-    expect((pitTimeInput().element as HTMLInputElement).value).toBe('')
-    expect(pitTimeInput().attributes('placeholder')).toBe('auto')
-
     const carNumbers = switches().find(input => input.element.closest('label')?.textContent?.includes('Numeri auto'))!
     await carNumbers.trigger('change'); await flushPromises()
     expect(api.hudOverlaySaveSettings).toHaveBeenLastCalledWith('trackmap', { showCarNumbers: true })
@@ -84,16 +71,9 @@ describe('HUD settings: Minimappa card', () => {
     expect(api.hudOverlaySaveSettings).toHaveBeenLastCalledWith('trackmap', { circleView: true })
     expect((circle.element as HTMLInputElement).checked).toBe(true)
 
-    await pitTimeInput().setValue('52.6'); await flushPromises()
-    expect(api.hudOverlaySaveSettings).toHaveBeenLastCalledWith('trackmap', { pitTimeSeconds: 52.6 })
-    expect((pitTimeInput().element as HTMLInputElement).value).toBe('53')
-
-    await pitTimeInput().setValue('9999'); await flushPromises()
-    expect((pitTimeInput().element as HTMLInputElement).value).toBe('')
-
-    await pitTimeInput().setValue('40'); await flushPromises()
-    await pitTimeInput().setValue(''); await flushPromises()
-    expect(api.hudOverlaySaveSettings).toHaveBeenLastCalledWith('trackmap', { pitTimeSeconds: null })
-    expect(stored.pitTimeSeconds).toBeNull()
+    const prediction = switches().find(input => input.element.closest('label')?.textContent?.includes('Pit prediction'))!
+    await prediction.trigger('change'); await flushPromises()
+    expect(api.hudOverlaySaveSettings).toHaveBeenLastCalledWith('trackmap', { showPitPrediction: false })
+    expect(api.hudOverlaySaveSettings.mock.calls.every(([, partial]) => !('pitTimeSeconds' in partial))).toBe(true)
   })
 })

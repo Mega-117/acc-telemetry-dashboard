@@ -5,11 +5,16 @@
 
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
+import { provideHeaderBack } from '~/composables/useHeaderBack'
+
+const headerBack = provideHeaderBack()
 
 const { userDisplayName, userEmail, logout: firebaseLogout } = useFirebaseAuth()
 const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 const route = useRoute()
-const router = useRouter()
+const contentViewport = ref<HTMLElement | null>(null)
+// Route changes reset the inner viewport, not the fixed application chrome.
+watch(() => route.path, () => { if (contentViewport.value) contentViewport.value.scrollTop = 0 }, { flush: 'post' })
 
 // Inject profile navigation from app.vue
 const goToProfile = inject<() => void>('goToProfile')
@@ -18,6 +23,7 @@ const goToSettings = inject<() => void>('goToSettings')
 // Determine active tab from route path
 const activeTab = computed(() => {
   const path = route.path
+  if (path === '/profilo' || path === '/impostazioni') return undefined
   if (path.startsWith('/sessioni')) return 'sessioni'
   if (path.startsWith('/piste')) return 'piste'
   if (path.startsWith('/pitwall')) return 'pitwall'
@@ -62,11 +68,11 @@ const handleGoToSettings = () => {
       />
 
       <!-- TabsBar with NuxtLink navigation -->
-      <LayoutTabsBarRouter :active-tab="activeTab" />
+      <LayoutTabsBarRouter :active-tab="activeTab" :back-label="headerBack?.label()" @back="headerBack?.run()" />
     </div>
 
     <!-- Page Content with transitions -->
-    <main class="main-content">
+    <main ref="contentViewport" class="dashboard-viewport" data-page-scroll>
       <slot></slot>
     </main>
   </div>
@@ -76,20 +82,39 @@ const handleGoToSettings = () => {
 @use '@/assets/scss/racing-chrome';
 .dashboard-layout {
   @include racing-chrome.chrome;
-  min-height: 100vh;
+  height: var(--dashboard-viewport-height, 100dvh);
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: transparent;
 }
 
 .dashboard-sticky-header {
-  position: sticky;
+  position: relative;
+  flex: 0 0 auto;
   top: 0;
   z-index: 100;
   background: transparent;
 }
 
-.main-content {
+.dashboard-viewport {
   flex: 1;
-  width: 100%; max-width: var(--app-content-max-width); margin-inline: auto; box-sizing: border-box;
+  width: 100%; min-height: 0; box-sizing: border-box;
+  overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  --page-bottom-space: 24px;
+}
+// Keep the page's original 40px offset: a fixed clear band followed by the
+// same 18px fade used below the session filters. Only content moves through it.
+.dashboard-layout:not(:has(:deep(.sessions-page))) {
+  .dashboard-sticky-header {
+    padding-bottom: calc(var(--app-content-top-space) - var(--app-scroll-fade-size));
+  }
+  > .dashboard-viewport {
+    --app-content-top-space: var(--app-scroll-fade-size);
+    mask-image: var(--app-scroll-fade-mask);
+  }
 }
 // Follow the rendered page, including its leave transition, rather than the next route.
 .dashboard-layout:has(:deep(.sessions-page)) {
@@ -103,7 +128,7 @@ const handleGoToSettings = () => {
     position: relative;
     flex: 0 0 auto;
   }
-  .main-content { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+  > .dashboard-viewport { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 }
 .dashboard-layout:has(:deep(.racing-overview)) {
   // Fill the available window; content can still grow beyond it on small screens.
@@ -113,12 +138,12 @@ const handleGoToSettings = () => {
   --page-bottom-space: 22px;
   position: relative; isolation: isolate; background: transparent;
   .dashboard-sticky-header { flex-shrink: 0; }
-  .main-content { display: flex; flex-direction: column; }
-  :deep(.page-container) { width: 100%; padding: var(--app-content-top-space) 26px 22px; flex: 1; display: flex; flex-direction: column; }
+  > .dashboard-viewport { display: flex; flex-direction: column; }
+  :deep(.page-container) { width: 100%; padding: var(--app-content-top-space) 24px 22px; flex: 1; display: flex; flex-direction: column; }
   :deep(.racing-overview) { flex: 1; }
 }
 @media (max-width: 700px) {
   .dashboard-layout:has(:deep(.racing-overview)) { --page-bottom-space: 14px; }
-  .dashboard-layout:has(:deep(.racing-overview)) :deep(.page-container) { padding: var(--app-content-top-space) 14px 14px; }
+  .dashboard-layout:has(:deep(.racing-overview)) :deep(.page-container) { padding: var(--app-content-top-space) 16px 14px; }
 }
 </style>

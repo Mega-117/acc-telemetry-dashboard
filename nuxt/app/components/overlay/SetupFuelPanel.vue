@@ -112,10 +112,9 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
 
 <template>
   <section class="fuel-panel">
-    <button class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession">{{ pending ? 'Applicazione carburante…' : 'Carburante intera sessione' }}</button>
-    <p v-if="!sessionAllowsAuto && !pending" class="fuel-hint">{{ sessionHint }}</p>
+    <button class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession">{{ pending ? 'Applicazione…' : 'Sessione' }}</button>
     <div v-if="!open && (pending || error)" class="fuel-status" role="status" aria-live="polite"><strong>Stato carburante</strong><p>{{ statusMessage }}</p></div>
-    <button class="fuel-open" type="button" data-overlay-wheel-action="fuel" :aria-expanded="open" :disabled="pending" @click="open = !open">Carburante durata stint</button>
+    <button class="fuel-open" type="button" data-overlay-wheel-action="fuel" aria-label="Carburante durata stint" :aria-expanded="open" :disabled="pending" @click="open = !open">Durata stint</button>
     <div v-if="open" class="fuel-body">
       <strong>Prepara il carburante per lo stint</strong>
       <div class="fuel-duration" :inert="pending || undefined">

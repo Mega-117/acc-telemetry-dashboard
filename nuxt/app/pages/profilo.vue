@@ -2,9 +2,10 @@
 // Profile page - rendered via Nuxt file-based routing
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
+import { useHeaderBack } from '~/composables/useHeaderBack'
 
 definePageMeta({
-  layout: false,
+  layout: 'dashboard',
   pageTransition: {
     name: 'profile-zoom',
     mode: 'out-in'
@@ -80,6 +81,7 @@ const handleBack = async () => {
   await wait(exitDurationMs)
   await navigateTo('/panoramica')
 }
+useHeaderBack(handleBack, () => 'Torna alla panoramica')
 </script>
 
 <template>
@@ -90,6 +92,7 @@ const handleBack = async () => {
     data-testid="profile-screen"
   >
     <ProfilePage
+      embedded
       :user-email="userEmail"
       :user-nickname="userDisplayName"
       :user-role="(userRole as 'pilot' | 'coach' | 'admin')"
@@ -102,7 +105,7 @@ const handleBack = async () => {
 
 <style scoped>
 .profile-screen {
-  min-height: 100vh;
+  min-height: 0;
   transform-origin: center top;
   will-change: opacity, transform, filter;
 }

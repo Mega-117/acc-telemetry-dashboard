@@ -1,0 +1,81 @@
+// Shared surfaces and compact controls for account/settings screens.
+@mixin panel {
+  background: #00000018;
+  border: 1px solid #ffffff40;
+  border-radius: 0;
+}
+
+@mixin action {
+  position: relative;
+  min-height: var(--rc-control-height, 40px);
+  padding: 9px 18px;
+  border: 0;
+  border-radius: 0;
+  background: var(--rc-hover, linear-gradient(90deg,#ffffff16,#ffffff09));
+  color: #ddd;
+  font: 500 var(--rc-control-text, 12px)/1.3 var(--rc-font, 'Inter'), 'Segoe UI', sans-serif;
+  cursor: pointer;
+  clip-path: polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px));
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    width: auto;
+    height: auto;
+    transform: none;
+    pointer-events: none;
+    background: currentColor;
+    opacity: .5;
+    clip-path: polygon(evenodd,0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px),0 0,1px 1px,1px calc(100% - 9.414px),9.414px calc(100% - 1px),calc(100% - 1px) calc(100% - 1px),calc(100% - 1px) 9.414px,calc(100% - 9.414px) 1px,1px 1px);
+  }
+  &:hover:not(:disabled) { background: linear-gradient(110deg,#ffffff25,#ffffff08); color: #fff; }
+  &:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+  &:disabled { opacity: .4; cursor: not-allowed; }
+}
+
+@mixin field {
+  min-height: var(--rc-control-height, 40px);
+  border: 1px solid #ffffff45;
+  border-radius: 0;
+  background-color: #08090b;
+  color: #ddd;
+  font-size: 13px;
+  &:focus-visible { outline: 1px solid var(--racing-race, #ff0024); outline-offset: 2px; }
+}
+
+// Opt-in tokens: do not alter Pitwall, detail views or Voice Lab.
+@mixin tokens {
+  --rc-font: 'Inter'; --rc-control-text: 12px; --rc-control-height: 40px;
+  --rc-space-xs: 8px; --rc-space-sm: 12px; --rc-space-md: 16px; --rc-space-lg: 24px; --rc-space-xl: 32px;
+  --rc-line: #ffffff25; --rc-border: #ffffff40; --rc-muted: #b3b3b8;
+  --rc-hover: linear-gradient(90deg,#ffffff16,#ffffff09);
+  --rc-selection: linear-gradient(90deg,#ffffff20,#ffffff05);
+  font-family: var(--rc-font), 'Segoe UI', sans-serif; color: #ededf0;
+}
+@mixin title { margin: 0 0 8px; font: 650 34px/1.2 var(--rc-font), 'Segoe UI', sans-serif; @media(max-width:700px) { font-size: 28px; } }
+@mixin select {
+  @include field;
+  appearance: none; padding: 8px 36px 8px 12px;
+  font-family: var(--rc-font), 'Segoe UI', sans-serif; font-size: var(--rc-control-text,12px);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m2 2 4 4 4-4' fill='none' stroke='%23b3b3b8' stroke-width='1.4'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 8px;
+  text-overflow: ellipsis; white-space: nowrap; color-scheme: dark;
+  option { background: #0b0b0e; color: #ededf0; }
+  &:disabled { opacity: .4; cursor: not-allowed; }
+  @media(forced-colors:active) { appearance: auto; background-image: none; }
+}
+@mixin navigation {
+  @include action; width: 100%; min-height: 56px; text-align: left;
+  background: transparent; box-shadow: none; font-size: 13px;
+  &::before { display: none; }
+  &::after { opacity: 0; }
+  &.is-active, &.is-selected { color: #fff; background: var(--rc-selection); box-shadow: inset 4px 0 #fff; }
+  &.is-active::after, &.is-selected::after { opacity: .5; }
+}
+@mixin slider {
+  appearance: none; height: 3px; background: #ffffff45; accent-color: var(--racing-race); cursor: pointer;
+  &::-webkit-slider-thumb { appearance: none; width: 4px; height: 18px; border: 0; border-radius: 0; background: #fff; }
+  &::-moz-range-thumb { width: 4px; height: 18px; border: 0; border-radius: 0; background: #fff; }
+  &::-moz-range-progress { background: var(--racing-race); }
+}
+@mixin primary { color: #fff; background: var(--racing-race); &:hover:not(:disabled) { background: #d90020; } }

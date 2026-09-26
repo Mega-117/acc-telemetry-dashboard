@@ -62,7 +62,10 @@ export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled
     movementRevision = state.movementRevision
     // Visibility/layout changes are not mouse movement. First sample seeds the baseline.
     if (previous === undefined || previous === movementRevision || !state.surfaceHovered || state.x === null || state.y === null) return
-    fromTarget(document.elementFromPoint(state.x, state.y))
+    // Shared-surface pointer packets are region-local; DOM hit testing expects
+    // viewport coordinates. Standalone windows already use viewport coordinates.
+    const region = root.value?.closest('[data-surface-region]')?.getBoundingClientRect()
+    fromTarget(document.elementFromPoint(state.x + (region?.left ?? 0), state.y + (region?.top ?? 0)))
   }
   function resetPointer() { nativePoint = null }
   // Nested transitions can mount controls after the phase watcher has run.

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHeaderBack } from '~/composables/useHeaderBack'
 // ============================================
 // SessionDetailPage - Master / Detail Layout
 // Now connected to Firebase for real data
@@ -73,6 +74,7 @@ const currentUserNickname = ref<string>('')
 
 const props = defineProps<{ sessionId: string; externalUserId?: string }>()
 const emit = defineEmits<{ back: [], 'go-to-track': [trackId: string] }>()
+const headerBack = useHeaderBack(() => emit('back'), () => 'Torna alle sessioni')
 
 // Is this a shared session from another user?
 const isSharedSession = computed(() => !!props.externalUserId)
@@ -2477,7 +2479,7 @@ const gripZones = computed(() => {
   <LayoutPageContainer class="session-detail-page">
     <!-- NAV -->
     <div class="nav-bar">
-      <button class="nav-btn" @click="emit('back')">
+      <button v-if="!headerBack" class="nav-btn" @click="emit('back')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
         Torna alle sessioni
       </button>
@@ -2497,7 +2499,7 @@ const gripZones = computed(() => {
     <div v-else-if="loadError" class="error-state">
       <p class="error-icon">⚠️</p>
       <p class="error-text">{{ loadError }}</p>
-      <button class="nav-btn" @click="emit('back')">Torna alle sessioni</button>
+      <button v-if="!headerBack" class="nav-btn" @click="emit('back')">Torna alle sessioni</button>
     </div>
 
     <template v-else>

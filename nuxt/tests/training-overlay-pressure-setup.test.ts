@@ -7,10 +7,8 @@ const styles = readFileSync(fileURLToPath(new URL('../app/assets/scss/_training-
 
 describe('training overlay Setup pressure contract', () => {
   it('offers an accessible independent audio action on the existing wheel navigation', () => {
-    expect(source).toContain('data-overlay-wheel-action="pressure-audio"')
-    expect(source).toContain(':aria-pressed="pressureWarningsEnabled"')
-    expect(source).toContain('@click="togglePressureAudio"')
-    expect(source).toContain("'Disattiva avvisi pressioni' : 'Attiva avvisi pressioni'")
+    expect(source).toContain(':pressure="pressureWarningsEnabled"')
+    expect(source).toContain('@toggle-pressure="togglePressureAudio"')
     expect(source).toMatch(/function togglePressureAudio\(\) \{\s*if \(!canUseSpotterControls.value\) return\s*togglePressureWarnings\(\)/)
     expect(source).toContain(':disabled="isDryPressureApplying || dryPressureState.state !== \'ready\'"')
   })
@@ -43,7 +41,7 @@ describe('training overlay Setup pressure contract', () => {
   it('shows a static prominent alert when the latest completed lap is invalid', () => {
     expect(source).toContain('v-if="dryPressurePresentation.alert"')
     expect(source).toContain('pressure-invalid-lap-alert')
-    expect(source).toContain("dryPressurePresentation.buttonLabel || 'Regola pressioni'")
+    expect(source).toContain(':title="dryPressurePresentation.ariaLabel')
     expect(source).toContain('dryPressurePresentation.alert.title')
     expect(source).toContain('dryPressurePresentation.alert.guidance')
     expect(source).not.toContain("dryPressureState.reason || 'Attendo tre giri completi")

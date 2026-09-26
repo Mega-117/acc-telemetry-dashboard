@@ -85,8 +85,7 @@ export interface TrackMapView {
 
 const PIT_SOURCE_LABELS: Record<string, string> = {
   'mfd-screen': 'MFD',
-  'acc-drive-sg30': 'presunta',
-  manual: 'manuale'
+  'acc-drive-sg30': 'presunta'
 }
 
 function finite (value: unknown): number | null {

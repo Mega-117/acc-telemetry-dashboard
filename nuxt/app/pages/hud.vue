@@ -15,7 +15,7 @@ import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
-import { ChartNoAxesCombined, CircleDot, Clock3, Flag, Info, LayoutDashboard, ListOrdered, Map as MapIcon, Trophy } from '@lucide/vue'
+import { ChartNoAxesCombined, CircleDot, Clock3, Eye, Flag, Info, LayoutDashboard, ListOrdered, LockKeyhole, Map as MapIcon, Trophy } from '@lucide/vue'
 import {
   supportsHudOverlayPresentationControl,
   type HudOverlayPresentationControl,
@@ -65,7 +65,7 @@ interface HudReplayStatus {
 const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string }> = [
   { id: 'tyres', title: 'Gomme', description: 'Temperature e pressioni per ogni pneumatico.' },
   { id: 'sectors', title: 'Settori', description: 'Tempi e delta dei tre settori.' },
-  { id: 'dashboard', title: 'Dashboard', description: 'Marcia, carburante ed elettronica in stile ACC Drive.' },
+  { id: 'dashboard', title: 'Dashboard', description: 'Marcia, carburante ed elettronica.' },
   { id: 'info', title: 'Info', description: 'Delta, stint, carburante, grip, tempi e danni.' },
   { id: 'standings', title: 'Standings', description: 'Classifica di classe con top e auto intorno al pilota.' },
   { id: 'trackmap', title: 'Minimappa', description: 'Tracciato con la tua auto, le altre in pista e il punto di uscita dai box.' },
@@ -116,14 +116,12 @@ const dashboardSettings = reactive({
   fuelCriticalFlashEnabled: false,
   fuelCriticalLapsThreshold: 0.5,
 })
-// PIP-428: pitTimeSeconds null = tempo sosta della tabella per pista (ACC Drive: SG30 + 2 s).
 const trackmapSettings = reactive<{
-  showPitPrediction: boolean, showCarNumbers: boolean, circleView: boolean, pitTimeSeconds: number | null
+  showPitPrediction: boolean, showCarNumbers: boolean, circleView: boolean
 }>({
   showPitPrediction: true,
   showCarNumbers: true,
   circleView: false,
-  pitTimeSeconds: null,
 })
 const infoSettings = reactive({
   showYellowFlag: true,
@@ -158,18 +156,18 @@ const backgroundTransparency = reactive<Record<HudOverlayBackgroundId, number>>(
 })
 type InfoSettingKey = keyof typeof infoSettings
 const infoOptionDefinitions: Array<{ key: InfoSettingKey, label: string }> = [
-  { key: 'showYellowFlag', label: 'Yellow Flag' },
-  { key: 'showStint', label: 'Stint Time' },
-  { key: 'showQFuel', label: 'Q-Fuel / Stint-Fuel' },
-  { key: 'showFuelLeft', label: 'Fuel Left' },
-  { key: 'showIncidents', label: 'Incidents' },
+  { key: 'showYellowFlag', label: 'Bandiera gialla' },
+  { key: 'showStint', label: 'Tempo stint' },
+  { key: 'showQFuel', label: 'Carburante qualifica / stint' },
+  { key: 'showFuelLeft', label: 'Carburante residuo' },
+  { key: 'showIncidents', label: 'Incidenti' },
   { key: 'showDelta', label: 'Delta' },
   { key: 'showGrip', label: 'Grip' },
-  { key: 'showPitExitTraffic', label: 'Pit Exit Traffic' },
-  { key: 'showOptimal', label: 'Optimal' },
-  { key: 'showBest', label: 'Best' },
-  { key: 'showDamage', label: 'Damage' },
-  { key: 'showTime', label: 'Local Time' },
+  { key: 'showPitExitTraffic', label: 'Traffico uscita box' },
+  { key: 'showOptimal', label: 'Tempo ideale' },
+  { key: 'showBest', label: 'Miglior tempo' },
+  { key: 'showDamage', label: 'Danni' },
+  { key: 'showTime', label: 'Ora locale' },
 ]
 const infoSettingGroups: Array<{ id: string, label: string, icon: typeof Trophy, keys: InfoSettingKey[] }> = [
   { id: 'race', label: 'Gara', icon: Trophy, keys: ['showYellowFlag', 'showIncidents', 'showPitExitTraffic'] },
@@ -184,13 +182,13 @@ const standingsBooleanOptions: Array<{
   supported: boolean
   dependency?: string
 }> = [
-  { key: 'showCarNumber', label: 'Car Number', supported: true },
-  { key: 'showFastestLap', label: 'Fastest Lap', supported: true },
-  { key: 'showLastLap', label: 'Last Lap', supported: true },
-  { key: 'showStintTimer', label: 'Stint Time', supported: false, dependency: 'Richiede telemetria stint avversari.' },
-  { key: 'showLapProgressBar', label: 'Lap Progress', supported: true },
-  { key: 'showIncidents', label: 'Incidents', supported: false, dependency: 'Richiede provider incidenti.' },
-  { key: 'showTurnNumber', label: 'Turn Number', supported: false, dependency: 'Richiede mappa curve autorevole.' },
+  { key: 'showCarNumber', label: 'Numero auto', supported: true },
+  { key: 'showFastestLap', label: 'Giro migliore', supported: true },
+  { key: 'showLastLap', label: 'Ultimo giro', supported: true },
+  { key: 'showStintTimer', label: 'Tempo stint', supported: false, dependency: 'Richiede telemetria stint avversari.' },
+  { key: 'showLapProgressBar', label: 'Avanzamento giro', supported: true },
+  { key: 'showIncidents', label: 'Incidenti', supported: false, dependency: 'Richiede provider incidenti.' },
+  { key: 'showTurnNumber', label: 'Numero curva', supported: false, dependency: 'Richiede mappa curve autorevole.' },
 ]
 
 function getInfoOptions(keys: InfoSettingKey[]) {
@@ -305,7 +303,6 @@ async function refreshState() {
         trackmapSettings.showPitPrediction = settings?.showPitPrediction !== false
         trackmapSettings.showCarNumbers = settings?.showCarNumbers !== false
         trackmapSettings.circleView = settings?.circleView === true
-        trackmapSettings.pitTimeSeconds = Number.isFinite(settings?.pitTimeSeconds) ? Number(settings.pitTimeSeconds) : null
       }
       if (overlay.id === 'standings') {
         for (const key of ['topCars', 'carsAhead', 'carsBehind'] as const) {
@@ -608,10 +605,7 @@ async function saveTrackmapSetting(
   if (settings && key in settings) (trackmapSettings as any)[key] = settings[key]
 }
 
-function savePitTimeInput(raw: string) {
-  const text = raw.trim()
-  void saveTrackmapSetting('pitTimeSeconds', text === '' ? null : Number(text))
-}
+
 
 
 
@@ -712,7 +706,7 @@ async function toggleTraining() {
 
       <div class="test-hud__global">
         <div class="hud-global-control">
-          <span>Sempre visibili</span><UiRacingSwitch
+          <span class="hud-global-label"><Eye :size="22" aria-hidden="true" />Sempre visibili</span><UiRacingSwitch
             label="Sempre visibili"
             :model-value="alwaysVisible"
             :disabled="!apiReady"
@@ -720,7 +714,7 @@ async function toggleTraining() {
           />
         </div>
         <div class="hud-global-control">
-          <span>Blocca posizioni</span><UiRacingSwitch
+          <span class="hud-global-label"><LockKeyhole :size="22" aria-hidden="true" />Blocca posizioni</span><UiRacingSwitch
             label="Blocca posizioni"
             :model-value="!positioning"
             :disabled="!apiReady || placementBusy"
@@ -728,7 +722,7 @@ async function toggleTraining() {
           />
         </div>
         <p
-          v-if="positioning"
+          v-if="positioning && !placementError"
           class="hud-placement-status"
           role="status"
         >
@@ -751,10 +745,10 @@ async function toggleTraining() {
       >
         <summary>
           <span>
-            <strong>Replay telemetria HUD</strong>
-            <em>Strumento QA · solo sviluppo</em>
+            <strong>Replay HUD</strong>
+            <em>Solo sviluppo</em>
           </span>
-          <b>{{ replayStatus.running ? 'ATTIVO · frame ' + replayStatus.frame : 'FERMO' }}</b>
+          <b>{{ replayStatus.running ? 'ATTIVO' : 'FERMO' }}</b>
         </summary>
         <div class="test-hud__replay-body">
           <p>
@@ -856,7 +850,7 @@ async function toggleTraining() {
             aria-labelledby="hud-training-title"
           >
             <div>
-              <strong id="hud-training-title">Allenamento · Ctrl+K</strong>
+              <strong id="hud-training-title">Pannello rapido · Ctrl+K</strong>
               <span>{{ trainingOpen ? 'Visibile' : 'Nascosto' }}</span>
             </div>
             <button
@@ -932,7 +926,7 @@ async function toggleTraining() {
                 class="hud-control"
               >
                 <span>
-                  <strong>Visualizzazione</strong>
+                  <strong>Layout</strong>
                 </span>
                 <select
                   class="hud-select"
@@ -1062,6 +1056,7 @@ async function toggleTraining() {
                 </template>
 
                 <template v-else-if="selectedOverlayId === 'dashboard'">
+                  <div class="hud-checkbox-grid hud-checkbox-grid--dashboard">
                   <label class="hud-control">
                     <span><strong>Riferimento elettronica</strong></span>
                     <input
@@ -1107,6 +1102,7 @@ async function toggleTraining() {
                       @change="toggleDashboardSetting('fuelCriticalFlashEnabled')"
                     />
                   </label>
+                  </div>
                   <label class="hud-control">
                     <span><strong>Soglia carburante critica</strong></span>
                     <span class="hud-number">
@@ -1153,28 +1149,13 @@ async function toggleTraining() {
                       @change="saveTrackmapSetting('circleView', !trackmapSettings.circleView)"
                     />
                   </label>
-                  <label class="hud-control">
-                    <span><strong>Tempo sosta manuale</strong></span>
-                    <span class="hud-number">
-                      <input
-                        type="number"
-                        min="1"
-                        max="600"
-                        step="1"
-                        placeholder="auto"
-                        :value="trackmapSettings.pitTimeSeconds ?? ''"
-                        :disabled="selectedSettingsDisabled || !trackmapSettings.showPitPrediction"
-                        aria-label="Tempo perso per la sosta in secondi; vuoto usa il valore della pista"
-                        @change="savePitTimeInput(($event.target as HTMLInputElement).value)"
-                      />
-                      <b>s</b>
-                    </span>
-                  </label>
+
                 </template>
 
                 <template v-else-if="selectedOverlayId === 'standings'">
+                  <div class="hud-slider-grid">
                   <label class="hud-control hud-control--slider">
-                    <span><strong>Top Cars</strong></span>
+                    <span><strong>Auto in testa</strong></span>
                     <span class="hud-control__range">
                       <b>{{ standingsSettings.topCars }}</b>
                       <input
@@ -1185,13 +1166,13 @@ async function toggleTraining() {
                         step="1"
                         :value="standingsSettings.topCars"
                         :disabled="selectedSettingsDisabled"
-                        aria-label="Top Cars"
+                        aria-label="Auto in testa"
                         @input="saveStandingsSetting('topCars', Number(($event.target as HTMLInputElement).value))"
                       />
                     </span>
                   </label>
                   <label class="hud-control hud-control--slider">
-                    <span><strong>Cars Ahead</strong></span>
+                    <span><strong>Auto davanti</strong></span>
                     <span class="hud-control__range">
                       <b>{{ standingsSettings.carsAhead }}</b>
                       <input
@@ -1202,13 +1183,13 @@ async function toggleTraining() {
                         step="1"
                         :value="standingsSettings.carsAhead"
                         :disabled="selectedSettingsDisabled"
-                        aria-label="Cars Ahead"
+                        aria-label="Auto davanti"
                         @input="saveStandingsSetting('carsAhead', Number(($event.target as HTMLInputElement).value))"
                       />
                     </span>
                   </label>
                   <label class="hud-control hud-control--slider">
-                    <span><strong>Cars Behind</strong></span>
+                    <span><strong>Auto dietro</strong></span>
                     <span class="hud-control__range">
                       <b>{{ standingsSettings.carsBehind }}</b>
                       <input
@@ -1219,11 +1200,13 @@ async function toggleTraining() {
                         step="1"
                         :value="standingsSettings.carsBehind"
                         :disabled="selectedSettingsDisabled"
-                        aria-label="Cars Behind"
+                        aria-label="Auto dietro"
                         @input="saveStandingsSetting('carsBehind', Number(($event.target as HTMLInputElement).value))"
                       />
                     </span>
                   </label>
+                  </div>
+                  <div class="hud-checkbox-grid">
                   <label
                     v-for="option in standingsBooleanOptions"
                     :key="option.key"
@@ -1242,9 +1225,11 @@ async function toggleTraining() {
                       @change="toggleStandingsSetting(option)"
                     />
                   </label>
+                  </div>
                 </template>
 
                 <template v-else-if="selectedOverlayId === 'info'">
+                  <div class="hud-info-columns">
                   <section
                     v-for="group in infoSettingGroups"
                     :key="group.id"
@@ -1276,6 +1261,7 @@ async function toggleTraining() {
                       </label>
                     </div>
                   </section>
+                  </div>
                 </template>
               </div>
             </section>
@@ -1300,6 +1286,7 @@ async function toggleTraining() {
 </template>
 
 <style scoped lang="scss">
+@use '@/assets/scss/racing-settings' as controls;
 .sector-reference-dialog { position: fixed; inset: 0; z-index: 1200; display: grid; place-items: center; padding: 24px; background: #000b; }
 .sector-reference-dialog > * { width: min(100%,460px); }
 .hud-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
@@ -1307,7 +1294,7 @@ async function toggleTraining() {
 .test-hud__hero { align-self: center; }.test-hud__hero h1 { margin: 0 0 4px; font-size: 34px; font-weight: 650; }.test-hud__hero p { margin: 0; font-size: 14px; color: #bcbcc3; }
 .test-hud__hero .test-hud__driving { margin-top: 8px; font-size: 10px; }.test-hud__driving em,.test-hud__driving-dot { display: none; }.test-hud__hero .test-hud__warning { color: var(--racing-qualify); margin-top: 10px; font-size: 12px; }
 .test-hud__global { display: flex; align-self: center; align-items: center; flex-wrap: wrap; max-width: 580px; gap: 12px 24px; padding: 12px 20px; border: 1px solid var(--hud-border); }
-.hud-global-control { display: flex; align-items: center; gap: 18px; font-size: 13px; }.hud-global-control + .hud-global-control { padding-left: 24px; border-left: 1px solid var(--hud-border); }.hud-placement-status { flex-basis: 100%; margin: 0; color: var(--racing-qualify); font-size: 11px; }
+.hud-global-control { display: flex; align-items: center; gap: 18px; font-size: 13px; }.hud-global-label { display: inline-flex; align-items: center; gap: 12px; }.hud-global-label svg { flex-shrink: 0; }.hud-global-control + .hud-global-control { padding-left: 24px; border-left: 1px solid var(--hud-border); }.hud-placement-status { flex-basis: 100%; margin: 0; color: var(--racing-qualify); font-size: 11px; }
 .test-hud__replay { grid-column: 1 / -1; order: 5; border: 1px solid var(--hud-border); padding: 14px; font-size: 12px; }.test-hud__replay summary { display: flex; justify-content: space-between; gap: 14px; cursor: pointer; }.test-hud__replay em { display: block; color: var(--hud-text-muted); font-size: 10px; font-style: normal; }.test-hud__replay-body { padding-top: 14px; }.test-hud__replay-controls { display: grid; gap: 12px; }.test-hud__replay-controls > div { display: flex; gap: 12px; }
 .hud-workspace { grid-column: 1 / -1; display: grid; grid-template-columns: 270px minmax(0,1fr); gap: 0; padding: 26px; border: 1px solid #ffffff55; min-height: 470px; }
 .hud-overlay-list { padding-right: 24px; border-right: 1px solid var(--hud-border); }.hud-overlay-list nav { display: grid; gap: 4px; }.hud-overlay-list__head { display: none; }
@@ -1329,8 +1316,66 @@ async function toggleTraining() {
 @media(max-width: 980px) { .test-hud { grid-template-columns: 1fr; }.test-hud__global { justify-self: start; }.hud-workspace { grid-template-columns: 210px minmax(0,1fr); padding: 18px; }.hud-settings { padding-left: 20px; }.hud-control > span:first-child { flex-basis: 120px; } }
 @media(max-width: 680px) { .hud-workspace { grid-template-columns: 1fr; }.hud-overlay-list { border-right: 0; padding-right: 0; padding-bottom: 20px; border-bottom: 1px solid var(--hud-border); }.hud-overlay-list nav { grid-template-columns: repeat(2,minmax(0,1fr)); }.hud-settings { padding: 22px 0 0; }.hud-global-control + .hud-global-control { border: 0; padding-left: 0; }.hud-control { flex-wrap: wrap; }.hud-control__range { width: 220px; }.hud-control > span:first-child { flex-basis: 110px; } }
 
-// Two nested cut shapes keep the border continuous along both diagonals.
-.hud-overlay-list__item.is-selected { isolation: isolate; border: 0; background: #999; }
-.hud-overlay-list__item.is-selected::after { content: ''; position: absolute; inset: 1px; z-index: -1; background: linear-gradient(90deg,#262626,#0c0c0c); clip-path: polygon(0 0,calc(100% - 9px) 0,100% 9px,100% 100%,9px 100%,0 calc(100% - 9px)); }
-.hud-overlay-list__item.is-selected::before { z-index: 1; }
+.test-hud { @include controls.tokens; }
+.test-hud__hero h1 { @include controls.title; }.test-hud .hud-select { @include controls.select; }.test-hud .btn { @include controls.action; }.test-hud .btn--primary { @include controls.primary; }.test-hud .hud-overlay-list__item { @include controls.navigation; }.test-hud .hud-slider { @include controls.slider; }.hud-workspace { border-color: var(--rc-border); }
+
+/* Compact workspace: long checkbox lists use the available horizontal space. */
+.test-hud { grid-template-columns: minmax(150px,1fr) auto auto; gap: 20px 16px; }
+.test-hud__hero { grid-column: 1; grid-row: 1; }
+.test-hud__global { position: relative; grid-column: 3; grid-row: 1; padding: 8px 14px; gap: 10px 16px; }
+.hud-placement-status { position: absolute; top: calc(100% + 8px); left: 0; right: 0; line-height: 16px; }
+.test-hud__replay { grid-column: 2; grid-row: 1; order: 0; align-self: center; position: relative; padding: 10px 12px; }
+.test-hud__replay summary { align-items: center; gap: 16px; list-style: none; }
+.test-hud__replay summary b { font-size: 10px; color: #b3b3b8; }
+.test-hud__replay.is-running summary b { color: #21ff83; }
+.test-hud__replay-body { position: absolute; z-index: 110; top: calc(100% + 8px); right: 0; width: min(460px,80vw); padding: 18px; background: #0b0c0f; border: 1px solid var(--rc-border); box-shadow: 0 12px 40px #000b; }
+.test-hud__replay-body > p { margin-bottom: 12px; }
+.hud-workspace { box-sizing: border-box; height: 514px; padding: 20px; min-height: 0; grid-template-columns: 240px minmax(0,1fr); grid-template-rows: minmax(0,1fr); }
+.hud-workspace > .hud-overlay-list,.hud-workspace > .hud-settings { min-height: 0; overflow-y: auto; }
+.hud-overlay-list { padding-right: 20px; }
+.test-hud .hud-overlay-list__item { min-height: 46px; padding-block: 8px; }
+.hud-training { margin-top: 16px; padding-top: 14px; }
+.hud-training > div { flex-wrap: wrap; }
+.hud-training button { margin-top: 10px; }
+.hud-settings { padding-left: 24px; }
+.hud-settings__head { padding-bottom: 14px; }
+.hud-settings__common,.hud-settings__specific { padding-top: 16px; }
+.hud-settings__control-grid { gap: 12px; }
+.hud-settings__divider { margin-top: 16px; }
+.hud-control { min-height: 36px; }
+.hud-control:has(> input[type='checkbox']) { min-height: 32px; }
+.hud-checkbox-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px 24px; max-width: 960px; }
+.hud-checkbox-grid--dashboard { grid-template-columns: repeat(2,minmax(0,1fr)); max-width: 720px; }
+.hud-slider-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 24px; max-width: 960px; margin-bottom: 12px; }
+.hud-slider-grid .hud-control { flex-direction: column; align-items: flex-start; gap: 12px; }
+.hud-slider-grid .hud-control > span:first-child { flex: none; }
+.hud-slider-grid .hud-control__range { width: 100%; grid-template-columns: 24px minmax(0,190px); }
+.hud-info-columns { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; }
+.hud-info-group + .hud-info-group { border-top: 0; padding-top: 0; padding-left: 20px; border-left: 1px solid var(--hud-border); }
+.hud-info-group__head { margin-bottom: 12px; }
+.hud-info-group__options { gap: 12px; }
+.hud-checkbox-grid .hud-control { gap: 10px; align-items: flex-start; }
+.hud-checkbox-grid .hud-control > span:first-child { flex: 1; }
+.hud-checkbox-grid input { order: -1; margin-top: 3px; }
+.hud-control.is-unavailable { opacity: 1; color: #aaa; }
+.test-hud :disabled { opacity: .65; }
+.hud-settings.is-overlay-disabled .hud-settings__specific { color: #b3b3b8; }
+@media(max-width:1100px) {
+  .test-hud { grid-template-columns: 1fr auto; }
+  .test-hud__global { grid-column: 2; }
+  .test-hud__replay { grid-row: 2; grid-column: 2; justify-self: end; }
+  .hud-info-columns { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .hud-checkbox-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:780px) {
+  .test-hud { grid-template-columns: 1fr; }
+  .test-hud__global,.test-hud__replay { grid-column: 1; grid-row: auto; justify-self: start; }
+  .test-hud__replay-body { left: 0; right: auto; }
+  .hud-info-columns,.hud-checkbox-grid,.hud-slider-grid { grid-template-columns: 1fr; }
+  .hud-info-group + .hud-info-group { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--hud-border); }
+}
+@media(max-width:680px) {
+  .hud-workspace { height: 760px; grid-template-rows: auto minmax(0,1fr); }
+  .test-hud__global { margin-bottom: 24px; }
+}
 </style>

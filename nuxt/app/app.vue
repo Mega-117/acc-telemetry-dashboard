@@ -934,3 +934,11 @@ body:has(.sessions-page),
   }
 }
 </style>
+
+<style lang="scss">
+// The shared dashboard owns scrolling below its header on every route.
+html:has(.dashboard-layout), body:has(.dashboard-layout) { overflow: hidden; scrollbar-gutter: auto; }
+#app:has(.electron-titlebar) > .dashboard-wrapper:has(.dashboard-layout) {
+  overflow: hidden; scrollbar-gutter: auto;
+}
+</style>

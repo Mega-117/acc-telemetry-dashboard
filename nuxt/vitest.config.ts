@@ -40,10 +40,17 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+          'app/services/ui/scrollbarActivity.ts',
+          'app/services/projections/buildTrackOverviewProjection.ts',
+          'app/services/projections/trackMetadata.ts',
         'app/components/pages/SessioniPage.vue',
+        'app/components/sessions/RacingSessionList.vue',
+        'app/components/pages/TrackDetailPage.vue',
+        'app/composables/useHeaderBack.ts',
         'app/components/ui/PaginationControls.vue',
         'app/components/ui/ScrollArea.vue',
         'app/components/ui/RacingSwitch.vue',
+        'app/components/overlay/QuickPanelVoiceControls.vue',
         'app/components/pages/PistePage.vue',
         'app/pages/spotter.vue',
         'app/components/spotter/SessionModePicker.vue',

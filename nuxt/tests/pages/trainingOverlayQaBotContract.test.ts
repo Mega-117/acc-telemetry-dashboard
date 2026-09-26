@@ -7,6 +7,8 @@ const source = readFileSync(resolve(process.cwd(), 'app/pages/training-overlay.v
 
 describe('training overlay qa bot boundary', () => {
   it('uses only the bounded preload API and renders canonical state', () => {
+    expect(source).toContain('const showQuickPanelDevTools = import.meta.dev')
+    expect(source).toContain('v-if="showQuickPanelDevTools" class="quick-panel-dev"')
     expect(source).toContain('trainingOverlayGetQaBotState')
     expect(source).toContain('trainingOverlayStartQaBot')
     expect(source).toContain('trainingOverlayStopQaBot')

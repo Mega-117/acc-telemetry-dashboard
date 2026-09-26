@@ -69,9 +69,9 @@ const lastTrack = computed(() => overviewProjection.value?.lastTrack || null)
 const lastTrackName = computed(() => lastTrack.value?.name || 'La tua prossima pista')
 const lastSession = computed(() => overviewProjection.value?.lastSession || null)
 const performanceColumns = computed(() => [
-  { label: 'Quali', best: lastTrack.value?.bestQualy, grip: lastTrack.value?.bestQualyGrip, session: lastSession.value?.bestQualy },
-  { label: 'Race', best: lastTrack.value?.bestRace, grip: lastTrack.value?.bestRaceGrip, session: lastSession.value?.bestRace },
-  { label: 'AVG', best: lastTrack.value?.bestAvgRace, grip: lastTrack.value?.bestAvgRaceGrip, session: lastSession.value?.bestAvgRace },
+  { label: 'Qualifica', best: lastTrack.value?.bestQualy, grip: lastTrack.value?.bestQualyGrip, session: lastSession.value?.bestQualy },
+  { label: 'Gara', best: lastTrack.value?.bestRace, grip: lastTrack.value?.bestRaceGrip, session: lastSession.value?.bestRace },
+  { label: 'Media gara', best: lastTrack.value?.bestAvgRace, grip: lastTrack.value?.bestAvgRaceGrip, session: lastSession.value?.bestAvgRace },
 ])
 const emit = defineEmits<{
   'go-to-track': [trackId: string]
@@ -110,14 +110,14 @@ function goToSession() {
             <tbody>
               <tr>
                 <td v-for="column in performanceColumns" :key="column.label">
-                  <span class="time-label">Best {{ column.label }}</span>
+                  <span class="time-label">Migliore · {{ column.label }}</span>
                   <strong>{{ column.best || '--:--.---' }}</strong>
                   <abbr v-if="column.grip" class="grip-badge" :title="column.grip">{{ column.grip.slice(0, 3).toUpperCase() }}</abbr>
                 </td>
               </tr>
               <tr>
                 <td v-for="column in performanceColumns" :key="column.label">
-                  <span class="time-label">Last session {{ column.label }}</span>
+                  <span class="time-label">Ultima · {{ column.label }}</span>
                   <strong>{{ column.session || '--:--.---' }}</strong>
                 </td>
               </tr>
@@ -144,6 +144,7 @@ function goToSession() {
 </template>
 
 <style scoped lang="scss">
+@use '@/assets/scss/racing-settings' as controls;
 .racing-overview { display: grid; grid-template-columns: minmax(0, 1.42fr) minmax(0, 1fr); gap: 16px; color: #f5f5f5; }
 .racing-panel { border: 1px solid rgba(255, 255, 255, 0.3960784314); background: transparent; min-width: 0; }
 .last-drive { display: flex; flex-direction: column; position: relative; }
@@ -164,7 +165,7 @@ function goToSession() {
 .performance-table strong { font: italic 700 clamp(18px, 1.6vw, 25px)/1.2 'Racer Display', sans-serif; font-variant-numeric: tabular-nums; }
 .grip-badge { display: inline-block; font-size: 9px; color: #c7c7c7; margin-left: 6px; text-decoration: none; }
 .last-drive__actions { display: flex; justify-content: center; gap: 24px; padding-top: 18px; }
-.last-drive__actions button { flex: 1; max-width: 280px; }
+.last-drive__actions button { flex: 0 1 auto; min-width: 150px; }
 .racing-overview__side { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .overview-activity { flex: 1; }
 .training-panel { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px; }
@@ -179,7 +180,17 @@ function goToSession() {
 @keyframes loading-pulse { to { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .overview-placeholder::after { animation: none; } }
 @media (min-width: 1500px) { .last-drive__hero { min-height: 440px; } .training-panel { padding: 22px; } }
+// Fit the normal desktop window through card proportions, not clipped content.
+@media (min-width: 1051px) and (max-height: 900px) {
+  .racing-overview { --overview-race-min-height: 154px; --overview-chart-min-height: 140px; --overview-chart-title-gap: 18px; }
+  .last-drive__hero { min-height: 300px; }
+  .training-panel { padding: 14px 18px; }
+}
 @media (max-width: 1050px) { .racing-overview { grid-template-columns: 1.2fr 1fr; gap: 12px; } .last-drive__results { padding-inline: 12px; } .performance-table td { padding-inline: 10px; } .training-panel { flex-direction: column; align-items: stretch; } .last-drive__actions { gap: 12px; } }
 @media (max-width: 800px) { .racing-overview { grid-template-columns: 1fr; } .last-drive__hero { min-height: 390px; } .training-panel { flex-direction: row; } }
 @media (max-width: 480px) { .last-drive__hero { min-height: 310px; } .last-drive__identity { left: 16px; } .performance-table td { padding-inline: 6px; } .time-label { font-size: 10px; } .grip-badge { display: block; margin: 3px 0 0; } .training-panel { flex-direction: column; } .last-drive__actions button { padding-inline: 8px; font-size: 12px; } }
+.racing-overview { @include controls.tokens; }
+.racing-overview .racing-button { @include controls.action; text-transform: none; }
+.racing-overview .racing-button::before { display: none; }
+.racing-overview .racing-button--primary { @include controls.primary; }
 </style>

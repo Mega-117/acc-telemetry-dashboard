@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import RacingSwitch from '~/components/ui/RacingSwitch.vue'
 
 type StartupState = { supported: boolean; enabled: boolean }
 type StartupApi = {
@@ -27,10 +28,7 @@ async function load() {
   } finally { busy.value = false }
 }
 
-async function change(event: Event) {
-  const input = event.target as HTMLInputElement
-  const enabled = input.checked
-  input.checked = state.value?.enabled === true
+async function change(enabled: boolean) {
   if (busy.value || !state.value?.supported) return
   busy.value = true
   saved.value = false
@@ -52,15 +50,14 @@ onMounted(load)
 <template>
   <section class="startup-panel" aria-labelledby="startup-title" :aria-busy="busy">
     <h2 id="startup-title">Avvio</h2>
-    <p>Decidi come avviare Racer Core quando accedi a Windows.</p>
-    <label class="startup-option">
+    <div class="startup-option">
       <span>
         <strong>Avvia con Windows</strong>
-        <small>Avvia il programma in background, nell’area di notifica, all’accesso al tuo account Windows.</small>
+        <small>All’accesso, resta in background nell’area di notifica.</small>
       </span>
-      <input type="checkbox" role="switch" :checked="state?.enabled === true"
-        :disabled="busy || !state?.supported" @change="change">
-    </label>
+      <RacingSwitch label="Avvia con Windows" :model-value="state?.enabled === true"
+        :disabled="busy || !state?.supported" @update:model-value="change" />
+    </div>
     <p v-if="state && !state.supported" class="startup-note">Disponibile nella versione installata per Windows.</p>
     <p v-if="error" role="alert">{{ error }}</p>
     <p v-else-if="saved" role="status">Impostazione salvata.</p>
@@ -70,13 +67,13 @@ onMounted(load)
 </template>
 
 <style scoped lang="scss">
-.startup-panel { padding: 24px; border: 1px solid rgba(255,255,255,.07); border-radius: 14px; background: #14141b; }
-h2 { margin: 0 0 8px; font-size: 24px; }
-p, small { color: #a0a0ac; line-height: 1.5; }
-.startup-option { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-top: 26px; padding: 18px 0; border-top: 1px solid rgba(255,255,255,.08); cursor: pointer; }
-strong, small { display: block; } small { margin-top: 7px; }
-input { flex-shrink: 0; width: 22px; height: 22px; accent-color: #ff4d3d; cursor: pointer; }
-input:disabled { cursor: default; }
-[role="alert"] { color: #ffb7ae; }
-button { padding: 9px 16px; border: 1px solid #555; border-radius: 8px; background: #24242f; color: #fff; cursor: pointer; }
+@use '@/assets/scss/racing-settings' as controls;
+.startup-panel { max-width: 600px; }
+h2 { margin: 0 0 12px; padding-left: 14px; border-left: 3px solid var(--racing-race); font-size: 20px; font-weight: 550; }
+p,small { color: #aaa; line-height: 1.6; font-size: 13px; }
+.startup-option { display: flex; align-items: center; gap: 24px; margin-top: 16px; padding: 16px 0; border-top: 1px solid #ffffff35; max-width: 560px; }
+strong,small { display: block; } strong { font-size: 14px; font-weight: 550; } small { margin-top: 8px; max-width: 480px; }
+.startup-option > span { flex: 1; }
+[role='alert'] { color: #ff7188; } [role='status'] { color: #21ff83; }
+button:not(.racing-switch) { @include controls.action; }
 </style>

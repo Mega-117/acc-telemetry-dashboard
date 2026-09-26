@@ -185,6 +185,16 @@ export const TRACK_METADATA: Record<string, TrackMetadata> = {
     turns: 16,
     image: '/tracks/track_nurburgring.png'
   },
+  nordschleife: {
+    id: 'nordschleife',
+    name: 'Nordschleife',
+    fullName: 'Nürburgring 24h — Nordschleife + GP',
+    country: 'Germania',
+    countryCode: 'DE',
+    length: '25.378 km',
+    turns: 170,
+    image: '/tracks/track_nordschleife_placeholder.svg'
+  },
   oulton_park: {
     id: 'oulton_park',
     name: 'Oulton Park',

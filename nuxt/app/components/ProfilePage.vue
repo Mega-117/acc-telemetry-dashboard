@@ -12,6 +12,7 @@ import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvali
 const brandBase = useRuntimeConfig().app.baseURL
 
 const props = defineProps<{
+  embedded?: boolean
   userEmail?: string
   userNickname?: string
   userRole?: 'pilot' | 'coach' | 'admin'
@@ -115,7 +116,7 @@ const setupSummaryRows = computed(() => {
 
 const hasEquipmentSummary = computed(() => hardwareSummaryRows.value.length > 0 || setupSummaryRows.value.length > 0)
 const isCoachProfile = computed(() => (props.userRole || 'pilot') === 'coach')
-const sharedSessionsStatus = computed(() => sharedSessionsCount.value > 0 ? `${sharedSessionsCount.value} pubbliche` : 'Nessuna pubblica')
+const sharedSessionsStatus = computed(() => sharedSessionsCount.value > 0 ? `${sharedSessionsCount.value} ${sharedSessionsCount.value === 1 ? 'pubblica' : 'pubbliche'}` : 'Nessuna pubblica')
 
 const tabs = computed<Array<{ id: ProfileTab; label: string }>>(() => [
   { id: 'account', label: 'Profilo' }
@@ -298,8 +299,8 @@ watch(
 </script>
 
 <template>
-  <div class="profile-page">
-    <header class="profile-header">
+  <div class="profile-page" :class="{ 'profile-page--embedded': embedded }">
+    <header v-if="!embedded" class="profile-header">
       <div class="header-inner">
         <button class="back-btn" @click="emit('back')">
           <svg viewBox="0 0 20 20" fill="none">
@@ -330,8 +331,8 @@ watch(
             <svg class="avatar-helmet" viewBox="0 0 100 100" fill="none">
               <defs>
                 <linearGradient id="helmetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#e10600" />
-                  <stop offset="100%" stop-color="#ff6b00" />
+                  <stop offset="0%" stop-color="#ff0024" />
+                  <stop offset="100%" stop-color="#ff7188" />
                 </linearGradient>
               </defs>
               <path d="M50 10C30 10 15 25 15 45V60C15 75 25 85 40 88L45 90H55L60 88C75 85 85 75 85 60V45C85 25 70 10 50 10Z" stroke="url(#helmetGrad)" stroke-width="3" fill="none" />
@@ -365,7 +366,7 @@ watch(
         <section class="tab-panel account-grid">
           <div class="profile-card equipment-card account-equipment-card" :class="{ 'equipment-card--coach': isCoachProfile }">
             <div class="card-head">
-              <h3 class="card-title">{{ isCoachProfile ? 'Attrezzatura' : 'Attrezzatura e impostazioni' }}</h3>
+              <h3 class="card-title">Attrezzatura</h3>
               <div class="card-actions">
                 <template v-if="isEditingEquipment">
                   <button class="ghost-action" type="button" :disabled="isSaving" @click="cancelEquipmentEdit">Annulla</button>
@@ -530,7 +531,7 @@ watch(
               <span class="status-pill">{{ sharedSessionsStatus }}</span>
             </div>
             <p v-if="sharedSessionsCount > 0" class="muted-text">
-              Hai <strong>{{ sharedSessionsCount }}</strong> sessioni condivise pubblicamente.
+              <strong>{{ sharedSessionsCount }}</strong> {{ sharedSessionsCount === 1 ? 'sessione condivisa pubblicamente' : 'sessioni condivise pubblicamente' }}.
             </p>
             <p v-else class="muted-text">Nessuna sessione condivisa.</p>
             <button
@@ -549,7 +550,7 @@ watch(
 
           <div class="profile-card profile-card--secondary maintenance-card">
             <span class="section-kicker">Manutenzione dati</span>
-            <h3 class="card-title">Best storici</h3>
+            <h3 class="card-title">Tempi migliori</h3>
             <p class="muted-text">
               Cancella i best storici salvati e li ricalcola alla prossima sincronizzazione.
             </p>
@@ -574,6 +575,7 @@ watch(
 
 <style lang="scss" scoped>
 @use '@/assets/scss/racing-chrome';
+@use '@/assets/scss/racing-settings' as controls;
 @use '@/assets/scss/variables' as *;
 
 $color-bg: #0d0d12;
@@ -648,7 +650,7 @@ $color-card: #121218;
 
   &:hover {
     color: #fff;
-    border-color: rgba($racing-red, 0.4);
+    border-color: rgba(#ff0024, 0.4);
   }
 }
 
@@ -709,9 +711,9 @@ $color-card: #121218;
   letter-spacing: 1px;
 
   &--pilot {
-    background: rgba($racing-red, 0.18);
-    color: $racing-red;
-    border: 1px solid rgba($racing-red, 0.36);
+    background: rgba(#ff0024, 0.18);
+    color: #ff0024;
+    border: 1px solid rgba(#ff0024, 0.36);
   }
 
   &--coach {
@@ -733,7 +735,7 @@ $color-card: #121218;
   padding: 8px;
   margin-bottom: 22px;
   background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
+  border-radius: 0;
 }
 
 .profile-tab {
@@ -756,8 +758,8 @@ $color-card: #121218;
 
   &--active {
     color: #fff;
-    background: rgba($racing-orange, 0.14);
-    border-color: rgba($racing-orange, 0.3);
+    background: rgba(#ff0024, 0.14);
+    border-color: rgba(#ff0024, 0.3);
   }
 }
 
@@ -778,9 +780,9 @@ $color-card: #121218;
 
 .profile-card {
   padding: 24px;
-  background: $color-card;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 14px;
+  background: #00000018;
+  border: 1px solid #ffffff40;
+  border-radius: 0;
 }
 
 .profile-card--secondary {
@@ -791,7 +793,7 @@ $color-card: #121218;
   border-color: rgba(239, 68, 68, 0.13);
   background:
     linear-gradient(180deg, rgba(239, 68, 68, 0.035), rgba(255, 255, 255, 0.01)),
-    $color-card;
+    transparent;
 }
 
 .card-head {
@@ -850,7 +852,7 @@ $color-card: #121218;
   padding: 6px 10px;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 999px;
+  border-radius: 0;
   color: rgba(255, 255, 255, 0.66);
   font-size: 12px;
   font-weight: 800;
@@ -872,7 +874,7 @@ $color-card: #121218;
 .primary-action {
   min-height: 42px;
   padding: 0 18px;
-  border-radius: 10px;
+  border-radius: 0;
   font-family: $font-primary;
   font-size: 13px;
   font-weight: 700;
@@ -903,7 +905,7 @@ $color-card: #121218;
 }
 
 .primary-action {
-  background: linear-gradient(135deg, $racing-red, $racing-orange);
+  background: linear-gradient(135deg, #ff0024, #ff0024);
   border: 0;
   color: #fff;
 
@@ -965,7 +967,7 @@ $color-card: #121218;
   padding: 0 12px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  border-radius: 0;
   color: #fff;
   font-family: $font-primary;
   cursor: pointer;
@@ -979,7 +981,7 @@ $color-card: #121218;
   }
 
   &:hover {
-    border-color: rgba($racing-orange, 0.25);
+    border-color: rgba(#ff0024, 0.25);
   }
 }
 
@@ -989,7 +991,7 @@ $color-card: #121218;
   justify-content: center;
   width: 28px;
   height: 28px;
-  color: $racing-orange;
+  color: #ff0024;
   transition: transform 0.2s ease;
 
   svg {
@@ -1031,7 +1033,7 @@ $color-card: #121218;
   padding: 12px 13px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  border-radius: 0;
 
   span {
     display: block;
@@ -1065,7 +1067,7 @@ $color-card: #121218;
   padding: 14px 16px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px dashed rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
+  border-radius: 0;
   color: rgba(255, 255, 255, 0.52);
   font-size: 14px;
 }
@@ -1115,14 +1117,14 @@ $color-card: #121218;
     padding: 0 14px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
+    border-radius: 0;
     color: #fff;
     font-family: $font-primary;
     font-size: 14px;
 
     &:focus {
       outline: none;
-      border-color: rgba($racing-orange, 0.55);
+      border-color: rgba(#ff0024, 0.55);
     }
   }
 }
@@ -1135,7 +1137,7 @@ $color-card: #121218;
   padding: 16px;
   background: rgba(255, 255, 255, 0.025);
   border: 1px solid rgba(255, 255, 255, 0.07);
-  border-radius: 12px;
+  border-radius: 0;
 }
 
 .settings-toggle {
@@ -1147,7 +1149,7 @@ $color-card: #121218;
   padding: 0 14px;
   background: rgba(255, 255, 255, 0.035);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  border-radius: 0;
   color: #fff;
   font-family: $font-primary;
   cursor: pointer;
@@ -1161,12 +1163,12 @@ $color-card: #121218;
   }
 
   strong {
-    color: $racing-orange;
+    color: #ff0024;
     font-size: 12px;
   }
 
   &:hover {
-    border-color: rgba($racing-orange, 0.24);
+    border-color: rgba(#ff0024, 0.24);
   }
 }
 
@@ -1204,7 +1206,7 @@ $color-card: #121218;
 .slider-row {
   input[type='range'] {
     width: 100%;
-    accent-color: $racing-orange;
+    accent-color: #ff0024;
   }
 
   output {
@@ -1237,8 +1239,8 @@ $color-card: #121218;
   cursor: pointer;
 
   &--active {
-    background: rgba($racing-orange, 0.18);
-    color: $racing-orange;
+    background: rgba(#ff0024, 0.18);
+    color: #ff0024;
   }
 }
 
@@ -1349,4 +1351,32 @@ $color-card: #121218;
     grid-template-columns: 1fr;
   }
 }
+
+// Shared racing controls retain the existing form and data handlers.
+.back-btn, .primary-action, .ghost-action, .danger-action { @include controls.action; }
+.primary-action { background: linear-gradient(110deg,#ff002430,#ff002412); color: #ff526b; }
+.danger-action { background: #ff00240c; color: #ff7188; }
+.primary-action--success, .danger-action--success { color: #21ff83; background: #21ff8314; }
+.profile-card { @include controls.panel; }
+.profile-hero { margin-bottom: 32px; }
+.hero-copy h1 { font-size: 34px; font-weight: 650; }
+.card-title { font-size: 16px; font-weight: 550; border-left: 3px solid var(--racing-race); padding-left: 14px; }
+.summary-cell, .setting-pill { border: 0; border-left: 1px solid #ffffff35; background: transparent; border-radius: 0; }
+.summary-cell strong { font-size: 14px; font-weight: 500; }
+.form-group input { @include controls.field; }
+.form-grid { max-width: 940px; }
+.fanatec-settings { background: transparent; border: 0; padding: 16px 0; max-width: 940px; }
+.scale-row, .slider-row { grid-template-columns: 240px minmax(140px,280px) 60px; }
+.slider-row input[type='range'] { accent-color: var(--racing-race); }
+.settings-toggle, .summary-toggle { border-radius: 0; background: transparent; border-color: #ffffff35; }
+.role-badge { border-radius: 0; }
+.role-badge--pilot { color: var(--racing-race); border-color: #ff002460; background: #ff002415; }
+.segmented-control, .segmented-control__item { border-radius: 0; }
+@media(max-width:700px) { .card-head { flex-wrap: wrap; }.scale-row,.slider-row { grid-template-columns: 1fr; }.profile-card { padding: 18px; }.hero-meta { font-size: 12px; } }
+.profile-page { @include controls.tokens; }
+.hero-copy h1 { @include controls.title; }.profile-page .primary-action { @include controls.primary; }.profile-page .slider-row input[type='range'] { @include controls.slider; }.profile-page .card-title { font-weight: 550; }.profile-page .summary-section h4 { font-weight: 500; }.profile-page .form-group span { font-weight: 500; }
+.profile-page--embedded { min-height: 0; }.profile-page--embedded .profile-main { padding-top: var(--app-content-top-space); }
+.profile-page .account-grid { max-width: 1120px; gap: 20px; }
+.profile-page .profile-card--secondary { min-height: 0; }
+.profile-page .card-head { margin-bottom: 16px; }
 </style>

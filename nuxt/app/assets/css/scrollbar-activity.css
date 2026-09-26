@@ -1,0 +1,22 @@
+/* Preserve scrollbar geometry: only its paint changes, never overflow or width.
+   Important overrides local page colours, including hover on an idle scrollbar. */
+.auto-hide-scrollbars,
+.auto-hide-scrollbars * {
+  scrollbar-color: transparent transparent !important;
+}
+.auto-hide-scrollbars.is-scrolling,
+.auto-hide-scrollbars .is-scrolling {
+  scrollbar-color: #ffffff60 transparent !important;
+}
+.auto-hide-scrollbars::-webkit-scrollbar-thumb,
+.auto-hide-scrollbars *::-webkit-scrollbar-thumb,
+.auto-hide-scrollbars::-webkit-scrollbar-track,
+.auto-hide-scrollbars *::-webkit-scrollbar-track,
+.auto-hide-scrollbars::-webkit-scrollbar-corner,
+.auto-hide-scrollbars *::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
+.auto-hide-scrollbars.is-scrolling::-webkit-scrollbar-thumb,
+.auto-hide-scrollbars .is-scrolling::-webkit-scrollbar-thumb {
+  background: #ffffff60 !important;
+}

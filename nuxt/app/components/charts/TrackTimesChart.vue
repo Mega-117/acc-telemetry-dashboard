@@ -14,7 +14,7 @@ const model = computed(() => buildTrackTimesChart(props.history, period.value, s
 const seriesLabels = { bestQualy: 'Best qualifica', bestRace: 'Best gara' }
 const chartData = computed<ChartData<'line', TrackChartPoint[]>>(() => ({
   datasets: (['bestQualy', 'bestRace'] as const).flatMap(key => {
-    const color = key === 'bestQualy' ? '#f0b400' : '#ff6464'
+    const color = key === 'bestQualy' ? '#ffc400' : '#ff0024'
     const points = model.value.series[key]
     const radii = points.map((point, index) => {
       const isolated = (points[index - 1]?.y == null) && (points[index + 1]?.y == null)
@@ -76,7 +76,7 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
 <template>
   <section class="track-times" aria-label="Andamento tempi">
     <header class="track-times__header">
-      <div><h2>Andamento tempi</h2><p>Best per sessione</p></div>
+      <h2 title="Migliori tempi per sessione">Andamento tempi</h2>
       <div class="track-times__controls">
         <label>Periodo
           <select v-model="period" aria-label="Periodo del grafico">
@@ -105,18 +105,6 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
           <span><i class="track-times__qualy" />Best qualifica</span>
           <span><i class="track-times__race" />Best gara</span>
         </div>
-        <div v-if="model.outside.length" class="track-times__notice" role="status">
-          <span>△ {{ model.outside.length }} {{ model.outside.length === 1 ? 'tempo fuori scala' : 'tempi fuori scala' }}</span>
-          <button type="button" @click="scale = 'complete'">Mostra tutti i tempi</button>
-        </div>
-        <details v-if="model.outside.length" class="track-times__details">
-          <summary>Consulta i tempi fuori scala</summary>
-          <ul>
-            <li v-for="point in model.outside" :key="`${point.sessionId}-${point.series}`">
-              {{ point.label }} · {{ seriesLabels[point.series] }} · <strong>{{ formatLapTime(point.original * 1000) }}</strong>
-            </li>
-          </ul>
-        </details>
       </template>
       <div v-else class="track-times__empty" role="status">
         <p>Nessun tempo disponibile{{ period === 'all' ? '.' : ' nel periodo selezionato.' }}</p>
@@ -125,41 +113,35 @@ const chartOptions = computed<ChartOptions<'line'>>(() => ({
       <p v-if="!loading && model.unknownDates && period !== 'all'" class="track-times__hint">
         {{ model.unknownDates }} {{ model.unknownDates === 1 ? 'sessione senza data completa: consultabile' : 'sessioni senza data completa: consultabili' }} nello storico disponibile.
       </p>
-      <p v-if="!loading && model.count" class="track-times__hint">
-        {{ model.sessionCount }} {{ model.sessionCount === 1 ? 'sessione' : 'sessioni' }} · {{ period === 'all' ? 'Storico disponibile, fino a 200 sessioni.' : 'Periodo riferito a oggi.' }}
-        {{ scale === 'focus' ? 'Focus adatta la scala; i tempi originali restano invariati.' : 'Scala completa: tutti i tempi del periodo.' }}
-      </p>
     </div>
   </section>
 </template>
 
 <style scoped lang="scss">
+@use '@/assets/scss/racing-settings' as controls;
 .track-times {
-  margin-bottom: 28px;
-  &__header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+  @include controls.tokens;
+  margin-bottom: 0;
+  &__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
   h2 { margin: 0; font-size: 18px; font-weight: 700; }
-  &__header p { margin: 5px 0 0; font-size: 12px; color: #94949f; }
   &__controls { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; }
   label, legend { font-size: 11px; color: #aaaab5; }
   label { display: flex; flex-direction: column; gap: 6px; }
   fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
   legend { padding: 0; margin-bottom: 6px; }
-  select, &__toggle { background: #1a1d2e; border: 1px solid #363847; border-radius: 7px; color: #eeeef4; }
-  select { padding: 8px; font: inherit; font-size: 12px; min-height: 35px; }
+  select, &__toggle { background: transparent; border: 1px solid var(--rc-line); border-radius: 0; color: #eeeef4; }
+  select { @include controls.select; --rc-control-height: 34px; background-color: transparent; }
   &__toggle { display: flex; overflow: hidden; }
   &__toggle button { border: 0; padding: 8px 10px; min-height: 33px; color: #a8a8b4; }
-  &__toggle button[aria-pressed='true'] { color: #fff; background: #393c50; }
+  &__toggle button[aria-pressed='true'] { color: #fff; background: #ffffff14; }
   button { background: transparent; color: #e0b96e; cursor: pointer; font: inherit; font-size: 12px; border: 0; }
-  button:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid #f0b400; outline-offset: 3px; }
-  &__card { padding: 16px; border: 1px solid rgba(255,255,255,.07); border-radius: 12px; background: rgba(255,255,255,.02); }
+  button:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid #ffc400; outline-offset: 3px; }
+  &__card { padding: 16px; border: 1px solid rgba(255,255,255,.07); border-radius: 0; background: transparent; }
   &__canvas { position: relative; height: 280px; }
   &__legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 20px; margin: 12px 0; color: #b7b7c1; font-size: 12px; }
   &__legend span { display: flex; align-items: center; gap: 7px; }
   &__legend i { width: 18px; height: 2px; display: inline-block; }
-  &__qualy { background: #f0b400; } &__race { background: #ff6464; }
-  &__notice { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; background: rgba(240,180,0,.06); border-radius: 6px; padding: 10px; font-size: 12px; color: #e0bc76; }
-  &__details { margin-top: 12px; color: #b7b7c1; font-size: 12px; }
-  summary { cursor: pointer; } li { margin: 8px 0; overflow-wrap: anywhere; }
+  &__qualy { background: #ffc400; } &__race { background: #ff0024; }
   &__hint { color: #92929e; font-size: 11px; line-height: 1.6; margin: 12px 0 0; }
   &__empty { min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #b7b7c1; font-size: 13px; }
   @media (max-width: 480px) { &__card { padding: 10px; } &__canvas { height: 260px; } }

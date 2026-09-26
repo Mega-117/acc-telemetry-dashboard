@@ -10,8 +10,11 @@ import { usePitwallConceptMode } from '~/composables/usePitwallConceptMode'
 import { markHudRoutePhase, startHudRouteTiming } from '~/utils/hudRoutePerformance'
 
 defineProps<{
+  backLabel?: string
   activeTab?: 'panoramica' | 'sessioni' | 'piste' | 'pitwall' | 'spotter' | 'area-pilota' | 'hud'
 }>()
+
+const emit = defineEmits<{ back: [] }>()
 
 const route = useRoute()
 const { openHome: openPitwallHome } = usePitwallConceptMode()
@@ -48,6 +51,9 @@ function onTabClick(tab: { id: string }) {
 
 <template>
   <nav class="tabsbar">
+    <button v-if="backLabel" class="tabsbar__back" type="button" :aria-label="backLabel" :title="backLabel" @click="emit('back')">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7" /></svg>
+    </button>
     <div class="tabsbar__inner">
       <NuxtLink
         v-for="tab in tabs"
@@ -72,8 +78,22 @@ function onTabClick(tab: { id: string }) {
 @use '@/assets/scss/variables' as *;
 
 .tabsbar {
+  position: relative;
   background: rgba(255, 255, 255, 0.01);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tabsbar__back {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  display: grid; place-items: center; width: 40px; height: 40px;
+  border: 1px solid transparent; background: transparent; color: #ccc; cursor: pointer;
+  transition: color 150ms, background-color 150ms, border-color 150ms;
+  &:hover { color: #fff; background: #ffffff0d; border-color: #ffffff30; }
+  &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+}
+
+@media (max-width: 1000px) {
+  .tabsbar__inner { margin-inline: 56px; overflow-x: auto; justify-content: flex-start; }
 }
 
 .tabsbar__inner {

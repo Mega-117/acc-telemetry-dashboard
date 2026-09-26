@@ -261,7 +261,7 @@ onBeforeUnmount(() => {
     </div>
     <div v-else-if="!featuredEvent" class="race-empty">
       <strong>Nessuna gara pianificata</strong>
-      <span>Aggiungi la prossima gara per averla sempre in vista.</span>
+      <span v-if="!racing">Aggiungi la prossima gara per averla sempre in vista.</span>
     </div>
     <div v-else class="race-content">
       <article
@@ -396,9 +396,11 @@ onBeforeUnmount(() => {
   </section>
 </template>
 
-<style src="../../assets/scss/components/upcoming-races-card.scss" lang="scss" scoped></style>
+<style src="../../assets/scss/components/upcoming-races-card.scss" lang="scss" scoped>.upcoming-races-card--racing .race-empty { border: 0; background: transparent; border-radius: 0; padding: 12px 0; }
+</style>
 
 <style scoped lang="scss">
+@use '@/assets/scss/racing-settings' as controls;
 .race-modal-motion-enter-active { transition: opacity 220ms ease; }
 .race-modal-motion-leave-active { transition: opacity 160ms ease; }
 .race-modal-motion-enter-active .race-modal { transition: transform 220ms cubic-bezier(.2,.7,.2,1); }
@@ -454,7 +456,7 @@ onBeforeUnmount(() => {
 }
 .upcoming-races-card--racing {
   border: 1px solid rgba(255, 255, 255, 0.3960784314); border-radius: 0; background: transparent; box-shadow: none;
-  min-height: 192px; max-height: none; padding: 18px; overflow: visible;
+  min-height: var(--overview-race-min-height, 192px); max-height: none; padding: 18px; overflow: visible;
   .coach-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; }
   .race-header { margin-bottom: 14px; }
   .race-action { display: grid; place-items: center; width: 40px; height: 40px; min-height: 40px; padding: 4px; border: 0; border-radius: 0; color: #fff; background: none; line-height: 1; }
@@ -509,6 +511,6 @@ onBeforeUnmount(() => {
   .race-list { max-height: 140px; overflow-y: auto; }
   .compact-race { background: transparent; border-radius: 0; }
 }
+.race-modal--racing { @include controls.tokens; footer .racing-button { @include controls.action; text-transform: none; &::before { display: none; } } footer .racing-button--primary { @include controls.primary; } }
+.upcoming-races-card--racing .race-empty { border: 0; background: transparent; border-radius: 0; padding: 12px 0; }
 </style>
-
-

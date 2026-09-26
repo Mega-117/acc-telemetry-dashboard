@@ -17,7 +17,7 @@ const button=(id:string)=>document.querySelector(`[data-overlay-wheel-action="${
 describe('Fuel from Ctrl+K',()=>{
  it.each([0,1,2])('custom stint stays manual in session %i',async sessionType=>{const api=await mount(true,sessionType);expect(api.trainingOverlayPreviewSetupFuel).toHaveBeenLastCalledWith({mode:'minutes',minutes:10})})
  it('whole-session button is disabled with a reason in practice and never applies (PIP-423)',async()=>{
-  const api=await mount(true,0);expect(button('fuel-session').disabled).toBe(true);expect(document.body.textContent).toContain('solo in qualifica e gara')
+  const api=await mount(true,0);expect(button('fuel-session').disabled).toBe(true);expect(button('fuel-session').title).toContain('solo in qualifica e gara')
   button('fuel-session').click();await flush();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled()
  })
  it.each([1,2])('whole-session button is enabled in session %i and applies the fresh auto plan',async sessionType=>{

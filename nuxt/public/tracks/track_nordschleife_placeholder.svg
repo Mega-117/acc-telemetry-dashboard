@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Nordschleife — immagine non ancora disponibile</title>
+  <defs>
+    <linearGradient id="background" x2="1" y2="1">
+      <stop stop-color="#11161c"/>
+      <stop offset="1" stop-color="#050608"/>
+    </linearGradient>
+    <pattern id="lines" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M0 72 72 0" stroke="#fff" stroke-opacity=".035"/>
+    </pattern>
+  </defs>
+  <path fill="url(#background)" d="M0 0h512v512H0z"/>
+  <path fill="url(#lines)" d="M0 0h512v512H0z"/>
+  <g fill="none" stroke="#8896a5" stroke-width="3" stroke-linejoin="round">
+    <path d="M208 295V171c38-22 59 22 99 0v78c-40 22-61-22-99 0"/>
+    <path d="M211 191c36-17 57 22 93 0M211 211c36-17 57 22 93 0M211 231c36-17 57 22 93 0" opacity=".35"/>
+  </g>
+  <path d="M224 327h64" stroke="#ff0024" stroke-width="3"/>
+  <text x="256" y="370" text-anchor="middle" fill="#adb6c0" font-family="Arial,sans-serif" font-size="22" letter-spacing="3">NORDSCHLEIFE</text>
+</svg>

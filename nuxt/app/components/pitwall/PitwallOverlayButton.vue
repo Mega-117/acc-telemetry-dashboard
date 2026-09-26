@@ -6,6 +6,7 @@
 // principale della suite - l'unica che possiede la sessione - e lo stato
 // torna indietro per la stessa strada, cosi' l'etichetta dice sempre la
 // verita' e non cio' che il bottone spera.
+import { LockKeyhole, LockKeyholeOpen, Clock3, LoaderCircle, CircleMinus } from '@lucide/vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import type { PitwallIntentStatus } from '~/composables/usePitwallIntent'
 
@@ -62,12 +63,20 @@ onBeforeUnmount(() => { stopListening?.() })
     class="launcher-tool-button launcher-tool-button--training"
     :class="{ 'is-active': status.state === 'open', 'is-selected': selected }"
     :aria-pressed="status.state === 'open'"
+    :aria-label="label + '. ' + hint"
+    :aria-busy="pending"
+    :data-state="pending ? 'pending' : !status.available ? 'unavailable' : status.state"
     :aria-current="selected ? 'true' : undefined"
     :disabled="pending || !status.available"
     :title="hint"
     @focus="$emit('focus')"
     @click="toggle"
   >
-    {{ label }}
+    <LoaderCircle v-if="pending" class="quick-state-icon" :size="16" aria-hidden="true" />
+    <CircleMinus v-else-if="!status.available" class="quick-state-icon" :size="16" aria-hidden="true" />
+    <LockKeyholeOpen v-else-if="status.state === 'open'" class="quick-state-icon" :size="16" aria-hidden="true" />
+    <Clock3 v-else-if="status.state === 'arming'" class="quick-state-icon" :size="16" aria-hidden="true" />
+    <LockKeyhole v-else class="quick-state-icon" :size="16" aria-hidden="true" />
+    <span>Pitwall</span>
   </button>
 </template>

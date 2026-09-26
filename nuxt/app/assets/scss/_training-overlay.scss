@@ -317,9 +317,13 @@
 }
 
 .overlay-content--launcher {
-    width: 282px;
+    width: 300px;
     min-height: 0;
     overflow: hidden auto;
+    // Content grows before the native window finishes resizing. Never reserve
+    // scrollbar width during that interval; retain scrolling on short displays.
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
 }
 
 .overlay-content--launcher.overlay-content--target {
@@ -572,6 +576,63 @@
 }
 
 .training-overlay--launcher {
+  .overlay-card {
+    --overlay-radius: 0px;
+    padding: 14px;
+    border-color: #ffffff30;
+    background: #0b0b0bf5;
+    box-shadow: 0 8px 24px #0008;
+  }
+
+  .quick-panel-logo { display: block; width: 56px; height: 28px; object-fit: contain; }
+  .quick-panel-heading { text-align: center; }
+  .quick-panel-voice-grid { position: relative; }
+  .quick-panel-voice-row .racing-switch { width: 48px; height: 36px; padding: 1px 0; }
+  .quick-panel-voice-row .racing-switch__track { transform: scale(.666667); }
+  .launcher-tool-button[data-state] { display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .quick-state-icon { flex: 0 0 auto; }
+  .launcher-tool-button[data-state='open'], .launcher-tool-button[data-state='ready'] { --quick-action-color: #21ff83; --quick-action-border: #21ff8360; --quick-action-bg: #21ff8310; color: var(--quick-action-color); border-color: var(--quick-action-border); background: var(--quick-action-bg); }
+  .launcher-tool-button[data-state='arming'], .launcher-tool-button[data-state='pending'] { --quick-action-color: #ffc400; --quick-action-border: #ffc40060; --quick-action-bg: #ffc4000d; color: var(--quick-action-color); border-color: var(--quick-action-border); background: var(--quick-action-bg); }
+  .launcher-tool-button[data-state='unavailable'] { color: #858585; }
+  .launcher-tool-button[data-state='pending'] .quick-state-icon { animation: quick-state-spin 1.2s linear infinite; }
+  .launcher-tool-button--pressure.is-ready::before { animation: none; }
+  @keyframes quick-state-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .launcher-tool-button[data-state='pending'] .quick-state-icon { animation: none; } }
+  .launcher-tools { gap: 12px; }
+  .launcher-tools__header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .launcher-tools__header > span { color: #f3f3f3; font-size: 12px; }
+  .launcher-tools__header > strong { color: #aaa; font-size: 11px; font-weight: 500; }
+  .launcher-tools__actions { gap: 14px; }
+  .quick-panel-section { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid #ffffff1a; }
+  .quick-panel-heading { margin: 0; color: #a3a3a3; font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+  .quick-panel-voice-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .quick-panel-voice-row { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; color: #eee; font-size: 11px; line-height: 16px; cursor: pointer; }
+  .quick-panel-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .launcher-tool-button, .fuel-open, .fuel-apply {
+    min-height: 36px; border: 1px solid #ffffff30; border-radius: 0;
+    background: #ffffff08; color: #eee; font-size: 12px; font-weight: 500;
+  }
+  .launcher-tool-button:hover:not(:disabled), .fuel-open:hover:not(:disabled) { background: #ffffff13; border-color: #ffffff55; }
+  .launcher-tool-button--training { background: #ffffff0d; }
+  .quick-panel-automations { gap: 8px; }
+  .fuel-panel { gap: 8px 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fuel-panel > .fuel-open { grid-row: 1; padding: 5px 8px; line-height: 1.35; }
+  .fuel-panel > :not(.fuel-open) { grid-column: 1 / -1; }
+  .quick-panel-secondary { border-top: 1px solid #ffffff12; padding-top: 10px; margin-top: 2px; }
+  .fuel-body, .fuel-status { border-color: #ffffff25; border-radius: 0; background: #141414; }
+  .fuel-hint, .launcher-hint { color: #a3a3a3; font-size: 10px; line-height: 1.4; text-align: left; margin: 0; }
+  .quick-panel-dev { padding-top: 8px; border-top: 1px solid #ffffff1a; font-size: 10px; color: #999; }
+  .quick-panel-dev summary { cursor: pointer; margin-bottom: 6px; }
+  // Focus is separate from switch state; never paint over the shared switch.
+  &.training-overlay button[data-overlay-wheel-action][data-overlay-selected]:not(.stop-hold-action) {
+    // Keep the full selection ring inside edge buttons: the scrolling viewport
+    // clips external outlines on the first and last columns.
+    outline: 1px solid #fff; outline-offset: -2px; border-color: var(--quick-action-border, #ffffff80);
+    background: var(--quick-action-bg, #ffffff16); color: var(--quick-action-color, #fff);
+    box-shadow: none; text-shadow: none; transform: none;
+  }
+  &.training-overlay button.racing-switch[data-overlay-selected] { background: transparent; border: 0; }
+
   .tyre-slip-hud,
   .sector-delta-hud {
     background: rgba(2, 6, 12, 0.2);

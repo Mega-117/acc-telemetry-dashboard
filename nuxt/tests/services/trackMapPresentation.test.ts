@@ -147,8 +147,8 @@ describe('buildTrackMapView', () => {
       .toBe('SOSTA 3,4 s · MFD · STIMA PITLANE 46,4 s')
     expect(buildPitCaption({ pitTimeBaseS: 73, pitTimeSource: 'acc-drive-sg30', stopTimeS: 30 }))
       .toBe('SOSTA 30,0 s · presunta · STIMA PITLANE 73,0 s')
-    // A manual total has no stationary part to show.
-    expect(buildPitCaption({ pitTimeBaseS: 50, pitTimeSource: 'manual', stopTimeS: null })).toBe('manuale · STIMA PITLANE 50,0 s')
+    // A retired source cannot advertise a configurable manual stop anymore.
+    expect(buildPitCaption({ pitTimeBaseS: 50, pitTimeSource: 'manual', stopTimeS: null })).toBe('STIMA PITLANE 50,0 s')
     expect(buildPitCaption({ pitTimeBaseS: 50, pitTimeSource: 'something-new', stopTimeS: 0 })).toBe('SOSTA 0,0 s · STIMA PITLANE 50,0 s')
     expect(buildPitCaption({ pitTimeBaseS: null, pitTimeSource: 'manual' })).toBeNull()
     expect(buildPitCaption(null)).toBeNull()

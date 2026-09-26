@@ -14,7 +14,7 @@ afterEach(() => { wrapper?.unmount(); vi.clearAllMocks() })
 describe('Piste racing grid', () => {
   it('keeps played and unplayed cards accessible and opens the existing track route', async () => {
     mock.load.mockResolvedValue([
-      { id: 'imola', name: 'Imola', sessions: 1, lastSession: '2026-09-25', image: '/imola.png', bestQualy: '1:40.200', bestRace: '1:41.100' },
+      { id: 'imola', name: 'Imola', sessions: 1, lastSession: '2026-09-25', image: '/imola.png' },
       { id: 'spa', name: 'Spa', sessions: 0 },
     ])
     wrapper = mount(PistePage, { global: { stubs: { LayoutPageContainer: { template: '<main><slot /></main>' } } } })
@@ -26,6 +26,7 @@ describe('Piste racing grid', () => {
     expect(wrapper.find('h1').exists()).toBe(false)
     const empty = wrapper.get('a[href="/piste/spa"]')
     expect(empty.classes()).toContain('track-card--unplayed')
+    expect(wrapper.get('a[href="/piste/imola"]').classes()).not.toContain('track-card--unplayed')
     expect(empty.attributes('aria-label')).toBe('Dettaglio pista Spa')
     await empty.trigger('click')
     expect(wrapper.emitted('go-to-track')).toEqual([['spa']])

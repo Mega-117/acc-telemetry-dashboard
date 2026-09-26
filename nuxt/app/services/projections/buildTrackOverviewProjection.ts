@@ -60,7 +60,15 @@ export function buildTrackOverviewProjection(params: {
     })
   }
 
-  return result.sort((a, b) => {
+  // Metadata includes legacy names (Spa/Donington). Do not display a second
+  // empty placeholder for the same circuit. Preserve every populated route:
+  // merging historical IDs here would make the detail page lose its sessions.
+  const visible = result.filter((track, index) => track.sessions > 0 || !result.some((other, otherIndex) =>
+    otherIndex !== index && other.name === track.name && other.image === track.image
+    && other.country === track.country && other.length === track.length
+    && (other.sessions > 0 || otherIndex < index),
+  ))
+  return visible.sort((a, b) => {
     if (a.sessions > 0 && b.sessions > 0) {
       return (b.lastSessionFull || '').localeCompare(a.lastSessionFull || '')
     }

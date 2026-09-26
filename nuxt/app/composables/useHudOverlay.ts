@@ -42,11 +42,10 @@ export interface HudOverlaySettings {
   showLapProgressBar?: boolean
   showTurnNumber?: boolean
   standingsLayout?: StandingsLayout
-  // Minimappa (PIP-428). pitTimeSeconds null = tempo sosta della tabella per pista.
+  // Minimappa: pit prediction alimentato dal logger (MFD o tabella pista).
   showPitPrediction?: boolean
   showCarNumbers?: boolean
   circleView?: boolean
-  pitTimeSeconds?: number | null
 }
 
 export const HUD_SCALE_MIN = 0.6

@@ -5,6 +5,8 @@ import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import SessioniPage from '~/components/pages/SessioniPage.vue'
 import PaginationControls from '~/components/ui/PaginationControls.vue'
 import ScrollArea from '~/components/ui/ScrollArea.vue'
+import { installScrollbarActivity } from '~/services/ui/scrollbarActivity'
+let disposeScrollbars: () => void
 
 const fake = vi.hoisted(() => ({ gateway: null as any, uid: null as any }))
 vi.mock('~/composables/useTelemetryGateway', () => ({ useTelemetryGateway: () => fake.gateway }))
@@ -16,12 +18,12 @@ const session = (id: string, date: string, type = 0, laps = 4, car = 'ferrari_29
 })
 const wrappers: ReturnType<typeof mount>[] = []
 function render() {
-  const w = mount(SessioniPage, { global: { components: { UiScrollArea: ScrollArea, UiPaginationControls: PaginationControls }, stubs: { LayoutPageContainer: { template: '<main><slot /></main>' } } } })
+  const w = mount(SessioniPage, { attachTo: document.body, global: { components: { UiScrollArea: ScrollArea, UiPaginationControls: PaginationControls }, stubs: { LayoutPageContainer: { template: '<main><slot /></main>' } } } })
   wrappers.push(w)
   return w
 }
 beforeEach(() => {
-  vi.useFakeTimers()
+  vi.useFakeTimers(); disposeScrollbars = installScrollbarActivity()
   vi.setSystemTime(new Date('2026-09-25T12:00:00'))
   fake.uid = ref('pilot')
   fake.gateway = {
@@ -33,7 +35,7 @@ beforeEach(() => {
   HTMLElement.prototype.scrollIntoView = vi.fn()
   HTMLElement.prototype.scrollTo = vi.fn()
 })
-afterEach(() => { wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers() })
+afterEach(() => { disposeScrollbars(); wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers() })
 
 describe('Sessioni racing single table', () => {
   it('shows the scrollbar only during scrolling and keeps pagination outside', async () => {
@@ -50,7 +52,7 @@ describe('Sessioni racing single table', () => {
     await vi.advanceTimersByTimeAsync(200)
     expect(area.classes()).not.toContain('is-scrolling')
     await area.trigger('scroll')
-    w.unmount()
+    w.unmount(); disposeScrollbars()
     expect(vi.getTimerCount()).toBe(0)
   })
   it('scrolls only the designated list viewport when changing page', async () => {
@@ -126,7 +128,7 @@ describe('Sessioni racing single table', () => {
   })
   it('opens the canonical detail exactly once from the accessible row button or the row', async () => {
     const w = render(); await flushPromises()
-    expect(w.get('.session-open').attributes('aria-label')).toContain('Apri sessione PRACTICE')
+    expect(w.get('.session-open').attributes('aria-label')).toContain('Apri sessione PROVE LIBERE')
     await w.get('.session-open').trigger('click')
     expect(w.emitted('go-to-session')).toEqual([['practice']])
     await w.findAll('tbody tr')[1]!.trigger('click')

@@ -166,7 +166,7 @@ const formatYLabel = (minutes: number): string => {
         <div class="legend-item legend-item--practice">
           <span class="legend-dot"></span>
           <div class="legend-text">
-            <span class="legend-label">PRACTICE</span>
+            <span class="legend-label">PROVE LIBERE</span>
             <span class="legend-value">{{ formatDuration(practiceSummary.minutes).value }}<small>{{ formatDuration(practiceSummary.minutes).unit }}</small></span>
             <span class="legend-sessions">{{ practiceSummary.sessions }} {{ formatSession(practiceSummary.sessions) }}</span>
           </div>
@@ -175,7 +175,7 @@ const formatYLabel = (minutes: number): string => {
         <div class="legend-item legend-item--qualify">
           <span class="legend-dot"></span>
           <div class="legend-text">
-            <span class="legend-label">QUALIFY</span>
+            <span class="legend-label">QUALIFICA</span>
             <span class="legend-value">{{ formatDuration(qualifySummary.minutes).value }}<small>{{ formatDuration(qualifySummary.minutes).unit }}</small></span>
             <span class="legend-sessions">{{ qualifySummary.sessions }} {{ formatSession(qualifySummary.sessions) }}</span>
           </div>
@@ -184,7 +184,7 @@ const formatYLabel = (minutes: number): string => {
         <div class="legend-item legend-item--race">
           <span class="legend-dot"></span>
           <div class="legend-text">
-            <span class="legend-label">RACE</span>
+            <span class="legend-label">GARA</span>
             <span class="legend-value">{{ formatDuration(raceSummary.minutes).value }}<small>{{ formatDuration(raceSummary.minutes).unit }}</small></span>
             <span class="legend-sessions">{{ raceSummary.sessions }} {{ formatSession(raceSummary.sessions) }}</span>
           </div>
@@ -480,9 +480,9 @@ $color-race: $racing-red;         // Red
 .activity-card--racing {
   padding: 18px; min-height: 320px; background: transparent; border: 1px solid rgba(255, 255, 255, 0.3960784314); border-radius: 0; overflow: visible;
   &::before, .accent-glow { display: none; }
-  .card-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; margin-bottom: 26px; }
+  .card-title { font: italic 700 19px/1.3 'Racer Display', sans-serif; text-transform: uppercase; margin-bottom: var(--overview-chart-title-gap, 26px); }
   .card-content { flex-direction: column; gap: 18px; }
-  .chart-area { min-height: 165px; flex: 1; }
+  .chart-area { min-height: var(--overview-chart-min-height, 165px); flex: 1; }
   .y-axis { padding-bottom: 32px; min-width: 30px; span { color: #ccc; font-size: 11px; } }
   .bars-container { padding-bottom: 32px; gap: 12px; border: 0; }
   .bar-column { max-width: none; flex: 1; border-bottom: 1px solid #ccc; background: repeating-linear-gradient(to top, #ffffff09 0 1px, transparent 1px 33.33%); }

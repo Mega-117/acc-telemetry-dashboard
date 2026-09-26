@@ -58,6 +58,23 @@ describe('shared overlay selection', () => {
     expect(nav.selectedId.value).toBeNull()
     expect(root.querySelectorAll('[data-overlay-selected]')).toHaveLength(0)
   })
+  it('converts region-local pointer coordinates without letting stationary packets override wheel navigation', () => {
+    const region = document.createElement('section')
+    region.dataset.surfaceRegion = 'training'
+    document.body.append(region); region.append(root)
+    vi.spyOn(region, 'getBoundingClientRect').mockReturnValue({ x: 80, y: 60, left: 80, top: 60 } as DOMRect)
+    const hit = vi.fn((x: number, y: number) => x === 100 && y === 90 ? root.lastElementChild : root.firstElementChild)
+    Object.defineProperty(document, 'elementFromPoint', { configurable: true, value: hit })
+    const state = { movementRevision: 10, x: 20, y: 30, surfaceHovered: true } as any
+    nav.syntheticPointer(state)
+    nav.syntheticPointer({ ...state, movementRevision: 11 })
+    expect(hit).toHaveBeenLastCalledWith(100, 90)
+    expect(nav.selectedId.value).toBe('start')
+    nav.next()
+    nav.syntheticPointer({ ...state, movementRevision: 11 })
+    expect(nav.selectedId.value).toBe('back')
+    region.replaceWith(root)
+  })
   it('selects controls mounted after a transition and refreshes replaced action identities', async () => {
     root.replaceChildren()
     await nextTick()

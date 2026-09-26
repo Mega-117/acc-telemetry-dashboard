@@ -30,6 +30,8 @@ import {
   resolveAutoAdvanceSeconds,
   type OverlayOriginCorner, type OverlayOriginMode,
 } from '~/composables/useOverlaySettings'
+import { CircleCheck, CircleMinus, LoaderCircle } from '@lucide/vue'
+import QuickPanelVoiceControls from '~/components/overlay/QuickPanelVoiceControls.vue'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
 import SetupFuelPanel from '~/components/overlay/SetupFuelPanel.vue'
@@ -368,16 +370,8 @@ const activeTask = computed(() => {
   if (phase.value === 'completed') return 'Allenamento completato.'
   return activeStep.value.hud
 })
-const coachAudioToggleLabel = computed(() => spotterEnabled.value ? 'Disattiva avvisi giro' : 'Attiva avvisi giro')
-const referenceAudioToggleLabel = computed(() => trackVoiceReferencesEnabled.value ? 'Disattiva riferimenti' : 'Attiva riferimenti')
-const pressureAudioToggleLabel = computed(() => pressureWarningsEnabled.value ? 'Disattiva avvisi pressioni' : 'Attiva avvisi pressioni')
-const launcherVoiceStatus = computed(() => {
-  if (!canUseSpotterControls.value) return 'Login richiesto'
-  if (!soundEnabled.value) return 'Audio disattivato'
-  const coach = spotterEnabled.value ? 'Avvisi giro ON' : 'Avvisi giro OFF'
-  const references = trackVoiceReferencesEnabled.value ? 'Riferimenti ON' : 'Riferimenti OFF'
-  return `${coach} · ${references}`
-})
+// Only the local development build exposes QA tools, never the installer build.
+const showQuickPanelDevTools = import.meta.dev
 const sessionOverlayOpacity = computed(() => {
   if (!autoDimDuringRun.value || phase.value !== 'running') return 1
   if (isPointerOnOverlaySurface.value) return 1
@@ -405,10 +399,10 @@ const liveHudResizeKey = computed(() => [
   liveLap.value.lapValid === false ? 'lap-invalid' : 'lap-valid',
 ].join(';'))
 const overlayThemeStyle = computed(() => ({
-  '--overlay-accent': selectedTraining.value.accent,
-  '--overlay-accent-end': selectedTraining.value.accentEnd,
-  '--overlay-accent-rgb': selectedTraining.value.accentRgb,
-  '--overlay-accent-contrast': selectedTraining.value.accentContrast,
+  '--overlay-accent': phase.value === 'launcher' ? '#e5e5e5' : selectedTraining.value.accent,
+  '--overlay-accent-end': phase.value === 'launcher' ? '#a3a3a3' : selectedTraining.value.accentEnd,
+  '--overlay-accent-rgb': phase.value === 'launcher' ? '229, 229, 229' : selectedTraining.value.accentRgb,
+  '--overlay-accent-contrast': phase.value === 'launcher' ? '#101010' : selectedTraining.value.accentContrast,
   '--overlay-transform-origin': originCorner.value.replace('-', ' '),
   '--overlay-work-area-width': `${OVERLAY_WORK_AREA_SIZE.width}px`,
   '--overlay-work-area-height': `${OVERLAY_WORK_AREA_SIZE.height}px`,
@@ -874,7 +868,7 @@ onBeforeUnmount(() => {
     <OverlaySoftwareCursor :state="pointerState" />
     <!-- Controlli dev (PIP-106): solo in sviluppo. Il badge appare quando ON. -->
     <button
-      v-if="showDevControls"
+      v-if="showDevControls && phase !== 'launcher'"
       type="button"
       class="overlay-dev-toggle"
       :aria-pressed="isTestMode"
@@ -885,7 +879,7 @@ onBeforeUnmount(() => {
     </button>
 
     <button
-      v-if="canUseVoicePointRecorder"
+      v-if="canUseVoicePointRecorder && phase !== 'launcher'"
       type="button"
       class="overlay-dev-toggle overlay-dev-toggle--voice-points"
       :aria-pressed="voicePointRecorderEnabled"
@@ -894,7 +888,7 @@ onBeforeUnmount(() => {
     >
       {{ voicePointRecorderEnabled ? 'REF ON' : 'REF OFF' }}
     </button>
-    <TestModeBadge class="overlay-test-badge" />
+    <TestModeBadge v-if="phase !== 'launcher'" class="overlay-test-badge" />
     <Transition name="chip-pop">
       <div
         v-if="voicePointNotice"
@@ -935,13 +929,7 @@ onBeforeUnmount(() => {
               <template v-if="phase === 'launcher'">
                 <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen" class="launcher-tools" aria-label="Strumenti live overlay">
                   <header class="launcher-tools__header">
-                    <span>
-                      Strumenti live
-                      <Transition name="chip-pop">
-                        <em v-if="!soundEnabled" class="mute-chip" role="status" aria-label="Audio disattivato">MUTO</em>
-                      </Transition>
-                    </span>
-                    <strong>{{ launcherVoiceStatus }}</strong>
+                    <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
                   </header>
                   <div class="launcher-tools__actions">
                     <button
@@ -954,50 +942,22 @@ onBeforeUnmount(() => {
                       @focus="selectedWheelActionId = 'training'"
                       @click="executePrimaryAction"
                     >
-                      Avvia allenamento
+                      Allenamento
                     </button>
-                    <button
-                      type="button"
-                      class="launcher-tool-button launcher-tool-button--spotter"
-                      :class="{ 'is-active': spotterEnabled, 'is-selected': selectedWheelActionId === 'coach' }"
-                      data-overlay-wheel-action="coach"
-                      :aria-pressed="spotterEnabled"
-                      :aria-current="selectedWheelActionId === 'coach' ? 'true' : undefined"
-                      :aria-label="coachAudioToggleLabel"
+                    <QuickPanelVoiceControls
+                      :coach="spotterEnabled"
+                      :references="trackVoiceReferencesEnabled"
+                      :pressure="pressureWarningsEnabled"
+                      :target="targetLapVoiceEnabled"
                       :disabled="!canUseSpotterControls"
-                      @focus="selectedWheelActionId = 'coach'"
-                      @click="toggleCoachAudio"
-                    >
-                      {{ coachAudioToggleLabel }}
-                    </button>
-                    <button
-                      type="button"
-                      class="launcher-tool-button launcher-tool-button--references"
-                      :class="{ 'is-active': trackVoiceReferencesEnabled, 'is-selected': selectedWheelActionId === 'references' }"
-                      data-overlay-wheel-action="references"
-                      :aria-pressed="trackVoiceReferencesEnabled"
-                      :aria-current="selectedWheelActionId === 'references' ? 'true' : undefined"
-                      :aria-label="referenceAudioToggleLabel"
-                      :disabled="!canUseSpotterControls"
-                      @focus="selectedWheelActionId = 'references'"
-                      @click="toggleTrackVoiceReferences"
-                    >
-                      {{ referenceAudioToggleLabel }}
-                    </button>
-                    <button
-                      type="button"
-                      class="launcher-tool-button launcher-tool-button--coach"
-                      :class="{ 'is-active': pressureWarningsEnabled, 'is-selected': selectedWheelActionId === 'pressure-audio' }"
-                      data-overlay-wheel-action="pressure-audio"
-                      :aria-pressed="pressureWarningsEnabled"
-                      :aria-current="selectedWheelActionId === 'pressure-audio' ? 'true' : undefined"
-                      :aria-label="pressureAudioToggleLabel"
-                      :disabled="!canUseSpotterControls"
-                      @focus="selectedWheelActionId = 'pressure-audio'"
-                      @click="togglePressureAudio"
-                    >
-                      {{ pressureAudioToggleLabel }}
-                    </button>
+                      @toggle-coach="toggleCoachAudio"
+                      @toggle-references="toggleTrackVoiceReferences"
+                      @toggle-pressure="togglePressureAudio"
+                      @toggle-target="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
+                    />
+                    <section class="quick-panel-section" aria-label="Riferimenti numerici">
+                      <h2 class="quick-panel-heading">Riferimenti</h2>
+                      <div class="quick-panel-pair">
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--target"
@@ -1011,44 +971,40 @@ onBeforeUnmount(() => {
                     >
                       Target giro
                     </button>
-                    <button
-                      type="button"
-                      class="launcher-tool-button launcher-tool-button--target"
-                      :class="{ 'is-active': targetLapVoiceEnabled, 'is-selected': selectedWheelActionId === 'target-voice' }"
-                      data-overlay-wheel-action="target-voice"
-                      :aria-pressed="targetLapVoiceEnabled"
-                      :disabled="!canUseSpotterControls"
-                      @focus="selectedWheelActionId = 'target-voice'"
-                      @click="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
-                    >
-                      {{ targetLapVoiceEnabled ? 'Disattiva voce target giro' : 'Attiva voce target giro' }}
-                    </button>
                     <button type="button" class="launcher-tool-button" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
-                      Riferimenti settori
+                      Settori
                     </button>
-                    <button
-                      type="button"
-                      class="launcher-tool-button launcher-tool-button--training"
-                      :class="{ 'is-active': qaBotView.active }"
-                      :aria-pressed="qaBotView.active"
-                      :disabled="qaBotView.pending"
-                      @click="toggleQaBot"
-                    >
-                      {{ qaBotView.label }}
-                    </button>
-                    <p class="launcher-hint" role="status" aria-live="polite">
-                      Bot: {{ qaBotView.stateLabel }} · {{ qaBotView.reason }}
-                      <template v-if="qaBotState.state === 'ACTIVE'">
-                        · {{ qaBotState.speedKmh ?? 0 }} km/h · giri validi {{ qaBotState.lapsValid }}/{{ qaBotState.lapsCompleted }}
-                      </template>
-                    </p>
+                      </div>
+                    </section>
+                    <section class="quick-panel-section quick-panel-automations" aria-label="Automazioni">
+                      <h2 class="quick-panel-heading">Carburante</h2>
                     <SetupFuelPanel :api="getOverlayApi()" />
+                    <div class="quick-panel-pair quick-panel-secondary">
                     <PitwallOverlayButton
                       :api="getOverlayApi()"
                       :selected="selectedWheelActionId === 'pitwall'"
                       data-overlay-wheel-action="pitwall"
                       @focus="selectedWheelActionId = 'pitwall'"
                     />
+                    <button
+                      type="button"
+                      class="launcher-tool-button launcher-tool-button--training launcher-tool-button--pressure"
+                      :class="{ 'is-ready': dryPressureState.state === 'ready', 'is-selected': selectedWheelActionId === 'pressure' }"
+                      data-overlay-wheel-action="pressure"
+                      @focus="selectedWheelActionId = 'pressure'"
+                      :aria-label="dryPressurePresentation.ariaLabel"
+                      :title="dryPressurePresentation.ariaLabel + ': ' + dryPressurePresentation.guidance"
+                      :data-state="isDryPressureApplying ? 'pending' : dryPressureState.state === 'ready' ? 'ready' : 'unavailable'"
+                      :aria-busy="isDryPressureApplying"
+                      :disabled="isDryPressureApplying || dryPressureState.state !== 'ready'"
+                      @click="applyDryPressure"
+                    >
+                      <LoaderCircle v-if="isDryPressureApplying" class="quick-state-icon" :size="16" aria-hidden="true" />
+                      <CircleCheck v-else-if="dryPressureState.state === 'ready'" class="quick-state-icon" :size="16" aria-hidden="true" />
+                      <CircleMinus v-else class="quick-state-icon" :size="16" aria-hidden="true" />
+                      <span>Pressioni</span>
+                    </button>
+                    </div>
                     <button v-if="dryPressureState.qaAvailable" type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Genera raccomandazione TEST</button>
                     <p v-if="dryPressureState.qaAvailable" class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
                     <button v-if="dryPressureState.qaActive" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Rimuovi raccomandazione TEST</button>
@@ -1064,24 +1020,10 @@ onBeforeUnmount(() => {
                         <span>{{ dryPressurePresentation.alert.guidance }}</span>
                       </span>
                     </div>
-                    <button
-                      type="button"
-                      class="launcher-tool-button launcher-tool-button--training launcher-tool-button--pressure"
-                      :class="{ 'is-ready': dryPressureState.state === 'ready', 'is-selected': selectedWheelActionId === 'pressure' }"
-                      data-overlay-wheel-action="pressure"
-                      @focus="selectedWheelActionId = 'pressure'"
-                      :aria-label="dryPressurePresentation.ariaLabel"
-                      aria-describedby="pressure-action-status"
-                      :disabled="isDryPressureApplying || dryPressureState.state !== 'ready'"
-                      @click="applyDryPressure"
-                    >
-                      <span>{{ isDryPressureApplying ? 'Avvio…' : dryPressurePresentation.buttonLabel || 'Regola pressioni' }}</span>
-                    </button>
-                  </div>
-                  <p id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
+                  <p v-if="dryPressureState.actionReasonCode" id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
                     Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
                   </p>
-                  <div class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
+                  <div v-if="dryPressureState.recommendation?.wheels" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <div class="pressure-plan__meta">
                       <span>{{ dryPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>
                       <span v-if="(dryPressureState.recommendation?.required_valid_laps ?? 1) > 0">{{ dryPressureState.recommendation?.valid_laps || 0 }}/{{ dryPressureState.recommendation?.required_valid_laps ?? 1 }} valido</span>
@@ -1099,7 +1041,29 @@ onBeforeUnmount(() => {
                     <p v-else class="pressure-plan__empty">{{ dryPressurePresentation.guidance }}</p>
                   </div>
 
-                  <p class="launcher-hint" aria-hidden="true">Ctrl+N avvia allenamento &middot; Ctrl+K chiude</p>
+                    </section>
+                    <details v-if="showQuickPanelDevTools" class="quick-panel-dev">
+                      <summary>Strumenti sviluppo</summary>
+                      <button type="button" class="launcher-tool-button" :aria-pressed="isTestMode" @click="toggleTestMode">Test timer</button>
+                      <button v-if="canUseVoicePointRecorder" type="button" class="launcher-tool-button" :aria-pressed="voicePointRecorderEnabled" @click="toggleVoicePointRecorder">Registra riferimenti</button>
+                    <button
+                      type="button"
+                      class="launcher-tool-button launcher-tool-button--training"
+                      :class="{ 'is-active': qaBotView.active }"
+                      :aria-pressed="qaBotView.active"
+                      :disabled="qaBotView.pending"
+                      @click="toggleQaBot"
+                    >
+                      {{ qaBotView.label }}
+                    </button>
+                    <p class="launcher-hint" role="status" aria-live="polite">
+                      Bot: {{ qaBotView.stateLabel }} · {{ qaBotView.reason }}
+                      <template v-if="qaBotState.state === 'ACTIVE'">
+                        · {{ qaBotState.speedKmh ?? 0 }} km/h · giri validi {{ qaBotState.lapsValid }}/{{ qaBotState.lapsCompleted }}
+                      </template>
+                    </p>
+                    </details>
+                  </div>
                 </div>
                 <InfoTargetSetup
                   v-else-if="isTargetSetupOpen"

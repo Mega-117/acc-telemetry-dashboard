@@ -9,9 +9,9 @@ import {
 
 const actions: Array<{ id: WheelControlAction; title: string; description: string }> = [
   { id: 'togglePalette', title: 'Apri / chiudi Control K', description: 'Mostra o nasconde il pannello comandi.' },
-  { id: 'nextAction', title: 'Voce successiva', description: 'Avanza tra le azioni disponibili e riparte dalla prima.' },
-  { id: 'activateAction', title: 'Conferma', description: 'Esegue il normale click della voce evidenziata.' },
-  { id: 'mainMenu', title: 'Menu principale', description: 'Facoltativo: torna al menu dalla selezione allenamento. Inattivo durante i timer.' },
+  { id: 'nextAction', title: 'Voce successiva', description: 'Passa alla voce successiva del pannello.' },
+  { id: 'activateAction', title: 'Conferma', description: 'Attiva la voce selezionata.' },
+  { id: 'mainMenu', title: 'Menu principale', description: 'Torna al menu allenamenti. Non attivo durante i timer.' },
 ]
 
 const {
@@ -106,7 +106,7 @@ onBeforeUnmount(() => {
       <div>
         <p class="eyebrow">VOLANTE, TASTIERA E BUTTON BOX</p>
         <h2 id="commands-title">Comandi</h2>
-        <p>Premi Assegna, poi il pulsante o il tasto che vuoi usare. Una pressione, un comando.</p>
+        <p>Scegli Assegna e premi il tasto o il pulsante da usare.</p>
       </div>
       <button
         type="button"
@@ -190,26 +190,33 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped lang="scss">
-.commands-panel { background: #16161d; border: 1px solid rgba(255,255,255,.08); border-radius: 16px; padding: 28px; color: #f5f5f7; }
-.commands-panel__header { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; border-bottom: 1px solid rgba(255,255,255,.08); padding-bottom: 22px; }
-h2 { margin: 4px 0 8px; font-size: 26px; } p { margin: 0; color: #9c9ca8; }
-.eyebrow { color: #ff4d3d; font-size: 11px; font-weight: 800; letter-spacing: 1.7px; }
-.test-button, .command-row button { border: 1px solid rgba(255,255,255,.14); background: #24242d; color: #fff; border-radius: 9px; padding: 9px 13px; cursor: pointer; }
-.test-button.is-active { color: #65e6bd; border-color: rgba(101,230,189,.55); background: rgba(101,230,189,.1); }
-button:disabled { opacity: .38; cursor: not-allowed; }
-.device-row { display: grid; gap: 9px; padding: 22px 0; }
-.device-row label { font-size: 13px; font-weight: 700; }
-.device-row select { max-width: 460px; width: 100%; color: #f5f5f7; background: #24242d; border: 1px solid rgba(255,255,255,.2); padding: 11px; border-radius: 9px; }
-.binding-copy { display: grid; gap: 6px; } .binding-copy span { font-size: 12px; color: #efb35b; }
-.keyboard-note { font-size: 13px; margin: 10px 0; }
-.device-status { color: #efb35b; font-size: 13px; } .device-status.is-connected { color: #65e6bd; }
-.command-error { padding: 12px 14px; background: rgba(255,77,61,.12); border: 1px solid rgba(255,77,61,.35); border-radius: 9px; color: #ff8c81; }
-.capture-hint { padding: 12px 14px; background: rgba(91,157,255,.1); border-radius: 9px; color: #8eb8ff; }
-.command-list { display: grid; gap: 10px; margin-top: 16px; }
-.command-row { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(250px, 1fr) auto; align-items: center; gap: 18px; padding: 18px; border: 1px solid rgba(255,255,255,.07); border-radius: 12px; background: #101016; transition: .16s ease; }
-.command-row.is-capturing { border-color: rgba(91,157,255,.65); } .command-row.is-tested { border-color: #65e6bd; box-shadow: 0 0 0 2px rgba(101,230,189,.14); }
-.command-row__copy { display: grid; gap: 5px; } .command-row__copy span { color: #858592; font-size: 13px; }
-.command-row code { color: #d6d6df; font-family: inherit; font-size: 13px; }
-.command-row__actions { display: flex; gap: 8px; } .command-row .remove-button { color: #ff8c81; }
-@media (max-width: 900px) { .command-row { grid-template-columns: 1fr; } .commands-panel__header { flex-direction: column; } }
+@use '@/assets/scss/racing-settings' as controls;
+.commands-panel { color: #eee; min-width: 0; max-width: 940px; --rc-control-height: 34px; }
+.commands-panel__header { display: flex; justify-content: space-between; gap: 16px; align-items: center; padding-bottom: 16px; }
+h2 { margin: 0 0 6px; padding-left: 14px; border-left: 3px solid var(--racing-race); font-size: 20px; font-weight: 550; }
+p { margin: 0; color: #aaa; font-size: 13px; line-height: 1.6; }
+.eyebrow { display: none; }
+.test-button,.command-row button { @include controls.action; white-space: nowrap; }
+.test-button.is-active { color: #21ff83; background: #21ff8314; }
+.device-row { display: grid; grid-template-columns: auto minmax(180px,320px); align-items: center; justify-content: start; gap: 8px 16px; padding: 0 0 16px; }
+.device-row label { font-size: 13px; }
+.device-row select { @include controls.field; appearance: none; width: 100%; padding: 9px 38px 9px 12px; text-overflow: ellipsis; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%23ccc' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
+.device-status,.device-row > div { grid-column: 1 / -1; color: #ffc400; font-size: 12px; }.device-status.is-connected { color: #21ff83; }
+.binding-copy { display: grid; gap: 6px; min-width: 0; }.binding-copy span { font-size: 12px; color: #ffc400; }
+.keyboard-note { font-size: 12px; margin: 10px 0; }
+.command-error,.capture-hint { padding: 12px 14px; margin-bottom: 12px; border-left: 2px solid currentColor; background: #ff002410; color: #ff7188; }
+.capture-hint { background: #0076ff15; color: #70b1ff; }
+.command-list { display: grid; margin-top: 8px; }
+.command-row { display: grid; grid-template-columns: minmax(200px,1fr) minmax(120px,180px) auto; align-items: center; gap: 16px; padding: 12px 0; border-top: 1px solid #ffffff25; transition: background .16s ease; }
+.command-row:hover { background: linear-gradient(110deg,#ffffff09,transparent); }
+.command-row.is-capturing { background: #0076ff12; }.command-row.is-tested { background: #21ff8314; }
+.command-row__copy { display: grid; gap: 3px; }.command-row__copy strong { font-size: 13px; font-weight: 550; }.command-row__copy span { color: #999; font-size: 12px; line-height: 1.5; }
+.command-row code { color: #ddd; padding: 6px 10px; border: 1px solid #ffffff25; background: #ffffff05; width: fit-content; max-width: 100%; font-family: inherit; font-size: 12px; overflow-wrap: anywhere; }
+.command-row__actions { display: flex; gap: 8px; }.command-row .remove-button { color: #ff7188; }
+@media(max-width:1150px) { .command-row { grid-template-columns: 1fr auto; }.binding-copy { grid-column: 1; }.command-row__actions { grid-column: 2; grid-row: 1 / span 2; } }
+@media(max-width:900px) { .commands-panel__header { flex-direction: column; } }
+@media(max-width:600px) { .command-row { grid-template-columns: 1fr; }.command-row__actions { grid-column: 1; grid-row: auto; }.device-row { grid-template-columns: 1fr; } }
+@media(prefers-reduced-motion:reduce) { .command-row { transition: none; } }
+.commands-panel .device-row select { @include controls.select; }
+.command-row:hover { background: var(--rc-hover); }
 </style>

@@ -81,7 +81,7 @@ const disabledReferences = computed(() => selectedTrackPoints.value.filter(point
 const referenceStatusLabel = computed(() => {
   if (!selectedTrackPoints.value.length) return 'Nessun riferimento registrato'
   if (!activeReferences.value.length) return 'Tutti i riferimenti sono disattivati'
-  if (missingReferences.value === 0) return 'Audio riferimenti pronto'
+  if (missingReferences.value === 0) return 'Riferimenti audio pronti'
   return 'Audio da rigenerare'
 })
 const referenceVoiceLabLink = computed(() => `/dev-voice-lab?section=references&track=${encodeURIComponent(selectedTrack.value)}`)
@@ -129,12 +129,11 @@ onMounted(() => {
         <h1>Avvisi vocali</h1>
       </header>
       <div class="spotter-grid">
-        <div class="spotter-main">
+        <div class="spotter-main racing-panel">
           <section
-            class="voice-profile racing-panel"
-            aria-label="Profilo operativo"
+            class="voice-profile"
+            aria-label="Voce dello spotter"
           >
-            <h2>Profilo operativo</h2>
             <div
               class="voice-options"
               role="group"
@@ -159,7 +158,7 @@ onMounted(() => {
             </div>
           </section>
           <section
-            class="features racing-panel"
+            class="features"
             aria-label="Funzionalità vocali"
           >
             <div class="feature-head">
@@ -313,34 +312,67 @@ onMounted(() => {
 </template>
 
 <style lang="scss" scoped>
+@use '@/assets/scss/racing-settings' as controls;
 .spotter-page { color: #eee; padding-bottom: 32px; }
 .spotter-page .racing-select { appearance: none; width: 100%; min-height: 40px; padding: 8px 34px 8px 12px; border: 1px solid #ffffff55; border-radius: 0; background: #08090b; color: #ddd; color-scheme: dark; }
 .spotter-hero h1 { margin: 0 0 26px; font-size: 34px; font-weight: 650; }
 .spotter-grid { display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 22px; align-items: stretch; }
 .spotter-main { min-width: 0; display: flex; flex-direction: column; }.racing-panel { border: 1px solid #ffffff40; background: #00000018; }
 h2 { margin: 0; padding-left: 14px; border-left: 3px solid var(--racing-race); color: var(--racing-race); font-size: 16px; font-weight: 500; text-transform: uppercase; }
-.voice-profile { display: grid; grid-template-columns: 180px minmax(0,1fr); align-items: center; gap: 22px; padding: 16px; margin-bottom: 14px; }
-.voice-options { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.voice-profile { display: grid; grid-template-columns: minmax(0,1fr); gap: 12px; margin: 0; min-width: 0; padding: 16px 16px 28px; }
+.feature-row::before { content: ''; position: absolute; left: 20px; right: 20px; height: 1px; background: var(--rc-line); pointer-events: none; }
+.feature-row::before { top: 0; }
+.voice-options { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; width: 100%; max-width: 720px; }
 .voice-card { position: relative; height: 120px; overflow: hidden; padding: 1px; border: 0; background: #777; clip-path: polygon(10px 0,calc(100% - 10px) 0,100% 10px,100% calc(100% - 10px),calc(100% - 10px) 100%,10px 100%,0 calc(100% - 10px),0 10px); color: #fff; cursor: pointer; }
 .voice-card img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) brightness(.65); clip-path: inherit; }
 .voice-card .voice-name { position: absolute; top: 20px; left: 20px; font: italic 700 22px 'Racer Display',sans-serif; text-transform: uppercase; text-shadow: 0 2px 8px #000; }
 .voice-card.is-active { background: #00ec9d; }.voice-card.is-active img { filter: none; }.voice-card:focus-visible { background: #fff; outline: none; }.voice-card:hover img { filter: brightness(1.1); }
-.feature-head,.feature-row { display: grid; grid-template-columns: minmax(150px,.85fr) minmax(245px,1.15fr) minmax(285px,1.35fr); gap: 22px; align-items: center; padding: 20px; }
+.feature-head,.feature-row { display: grid; grid-template-columns: minmax(165px,.65fr) 261px minmax(360px,1.5fr); gap: 16px; align-items: center; padding: 20px; }
 .feature-head { padding-block: 13px; font-size: 11px; text-transform: uppercase; color: #aaa; }.feature-head span:last-child { grid-column: 3; }
-.feature-row { border-top: 1px solid #ffffff25; min-height: 84px; }.feature-row h3 { margin: 0; border-left: 3px solid var(--racing-race); padding-left: 12px; font-size: 13px; font-weight: 500; text-transform: uppercase; }
-.feature-control { display: flex; align-items: center; gap: 20px; min-height: 46px; border-left: 1px solid #ffffff45; padding-left: 22px; }.feature-control select { min-width: 0; width: 145px; font-size: 11px; padding-left: 10px; }
+.feature-row { position: relative; min-height: 84px; }.feature-row h3 { margin: 0; border-left: 3px solid var(--racing-race); padding-left: 12px; font-size: 13px; font-weight: 500; text-transform: uppercase; }
+.feature-control { display: flex; align-items: center; gap: 32px; min-height: 46px; border-left: 1px solid #ffffff45; padding-left: 22px; }.feature-control .select-shell { flex: 0 0 135px; }.feature-control select { min-width: 0; font-size: 11px; padding-left: 10px; }
 .reference-panel { padding: 24px 20px; display: flex; flex-direction: column; }.reference-panel > .select-shell { width: 100%; margin-top: 24px; }
 .reference-metrics { margin: 28px 0 16px; flex: 1; display: flex; flex-direction: column; }.reference-metrics div { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 70px; border-top: 1px solid #ffffff35; }.reference-metrics dt { font-size: 12px; text-transform: uppercase; color: #bfc7cc; }.reference-metrics dd { margin: 0; font-size: 26px; font-weight: 650; }
 .reference-panel .racing-button { width: 100%; font-size: 13px; }.reference-status { display: flex; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 16px; font-size: 10px; color: #aaa; }.reference-status button { border: 0; background: none; color: #ddd; cursor: pointer; text-decoration: underline; }
 .runtime-status { margin: 12px 0; color: #9caaa2; font-size: 11px; }.is-warning,.panel-error { color: var(--racing-qualify); }.admin-links { display: flex; gap: 20px; font-size: 11px; }.admin-links a { color: #aaa; }
-@media(max-width: 1250px) { .spotter-grid { grid-template-columns: 1fr; }.reference-panel { max-width: 540px; }.feature-head,.feature-row { grid-template-columns: minmax(150px,.85fr) minmax(245px,1.15fr) minmax(285px,1.35fr); } }
+@media(max-width: 1350px) { .spotter-grid { grid-template-columns: 1fr; } }
+@media(max-width: 940px) { .feature-head,.feature-row { grid-template-columns: minmax(140px,1fr) 261px minmax(260px,1.5fr); } }
 @media(max-width: 780px) { .voice-profile { grid-template-columns: 1fr; }.feature-head { display: none; }.feature-row { grid-template-columns: 1fr auto; }.feature-row :deep(.session-mode-picker) { grid-column: 1 / -1; }.feature-control { justify-content: flex-end; }.voice-card { height: 110px; }.spotter-hero h1 { font-size: 28px; } }
 
 .features { flex: 1; display: flex; flex-direction: column; }.feature-row { flex: 1; min-height: 92px; }
-.feature-row :deep(.session-mode-picker) { border-left: 1px solid #ffffff45; padding-left: 22px; }
-.feature-head span:last-child { border-left: 1px solid #ffffff45; padding-left: 22px; }
+.feature-row :deep(.session-mode-picker) { min-height: 46px; display: flex; align-items: center; border-left: 1px solid #ffffff45; padding-left: 16px; }
+.feature-head span:last-child { border-left: 1px solid #ffffff45; padding-left: 16px; }
 .select-shell { position: relative; min-width: 0; }.select-shell > svg { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); pointer-events: none; color: #ddd; }
 .voice-card .voice-wave { position: absolute; left: 20px; bottom: 16px; display: flex; align-items: center; gap: 4px; height: 40px; color: #a5a5a5; }.voice-wave i { display: block; width: 2px; background: currentColor; }.voice-card.is-active .voice-wave { color: #21ff83; filter: drop-shadow(0 0 4px #21ff8340); }
-@media(max-width: 1250px) { .reference-panel { max-width: none; }.reference-metrics { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 24px; } }
+@media(max-width: 1350px) { .reference-panel { max-width: none; }.reference-metrics { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 24px; } }
 @media(max-width: 780px) { .feature-row { gap: 18px; }.feature-control { border: 0; padding-left: 0; }.feature-row :deep(.session-mode-picker) { padding: 14px 0 0; border-left: 0; border-top: 1px solid #ffffff25; }.voice-card .voice-wave { gap: 3px; left: 16px; }.reference-metrics { display: flex; } }
+.spotter-page { @include controls.tokens; }
+.spotter-hero h1 { @include controls.title; margin-bottom: 24px; }.spotter-page .racing-select { @include controls.select; }.select-shell > svg { display: none; }.reference-panel .racing-button { @include controls.action; @include controls.primary; }.reference-panel .racing-button::before { display: none; }.feature-row h3 { font-size: 13px; font-weight: 500; }
+
+.spotter-page { padding-bottom: 0; }
+.spotter-hero { margin-bottom: 24px; }
+.spotter-hero h1 { margin: 0; }
+.voice-card { height: 96px; }
+.voice-card .voice-name { top: 16px; }
+.voice-card .voice-wave { bottom: 12px; height: 32px; }
+.feature-head,.feature-row { padding: 12px 16px; }
+.feature-head { padding-block: 10px; }
+.feature-row { min-height: 72px; }
+.feature-row :deep(.session-mode-buttons) { width: 100%; max-width: 390px; --rc-control-height: 34px; }
+.feature-row :deep(.session-mode-buttons button) { padding-block: 6px; }
+.reference-panel { padding: 20px; }
+.reference-panel > .select-shell { margin-top: 20px; }
+.reference-metrics { flex: 0; margin: 24px 0 20px; }
+.reference-metrics div { min-height: 54px; flex: 0; }
+.reference-metrics dt { font-size: 12px; }
+.reference-metrics dd { font-size: 24px; }
+.reference-status { margin-top: auto; font-size: 11px; }
+.runtime-status { margin-block: 8px; font-size: 12px; }
+@media(min-width:1200px) and (max-width:1350px) {
+  .spotter-grid { grid-template-columns: minmax(0,1fr) 260px; gap: 16px; }
+  .feature-head,.feature-row { grid-template-columns: minmax(130px,.65fr) 244px minmax(280px,1.5fr); gap: 12px; }
+  .feature-control { gap: 24px; padding-left: 12px; }
+  .reference-metrics { display: flex; }
+}
+@media(max-width:780px) { .voice-profile { grid-template-columns: 1fr; }.feature-row { padding: 16px; } }
 </style>
