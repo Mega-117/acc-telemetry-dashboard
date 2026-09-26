@@ -80,8 +80,8 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
       <small v-if="isFull">
         Questa gara è piena: {{ capacity }} persone è il massimo.
       </small>
-      <small v-else-if="race.membershipModel === 'social'">Gli amici di chi è presente possono unirsi.</small>
-      <small v-else-if="!isManager">Solo chi gestisce la gara può invitare o togliere.</small>
+
+      <small v-else-if="race.membershipModel !== 'social' && !isManager">Solo chi gestisce la gara può invitare o togliere.</small>
     </header>
 
     <div
@@ -102,7 +102,7 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
         class="pwc-chip"
         :class="member.driving ? 'is-always' : 'is-waiting'"
       >
-        {{ describePitwallConceptMember(member) }}
+        {{ member.driving ? 'Al volante' : member.reconnecting ? 'Riconnessione' : member.role === 'invited' ? describePitwallConceptMember(member) : 'Al muretto' }}
       </span>
       <span class="pwc-person__actions">
         <button

@@ -75,31 +75,14 @@ it('shows manual-send failures and publishes readiness to the frame', async () =
   message(w, 'draft', { fuel: 0 }); message(w, 'submit', { contextId }); await flushPromises()
   expect(w.text()).toContain('Permission denied'); w.unmount()
 })
-it.each(['racercore-develop.pages.dev', 'mega-117.github.io'])('shows only V4 online on %s and suspends the hidden Standard draft', async (host) => {
+it.each(['racercore-develop.pages.dev', 'localhost', '127.0.0.1', '::1'])('shows only the operational V4 form on %s', async host => {
   vi.spyOn(hostAccess, 'isDevToolsHost').mockImplementation(() => actualIsDevToolsHost(host))
   const p = port(); const w = mount(Application, { attachTo: document.body, props: { port: p as never } })
   try {
-    expect(w.get('button[aria-pressed=true]').text()).toBe('V4 online')
-    expect(w.findAll('.methods button').map(button => button.text())).toEqual(['V4 online'])
+    expect(w.find('.methods').exists()).toBe(false)
     expect(w.get('iframe').isVisible()).toBe(true)
     expect(p.draftSuspended.value).toBe(true)
     p.sending.value = true; await flushPromises()
-    expect(w.get('.methods button').attributes('disabled')).toBeDefined()
-  } finally { w.unmount() }
-})
-it.each(['localhost', '127.0.0.1', '::1'])('allows Standard only on local host %s, keeping V4 as default', async (host) => {
-  vi.spyOn(hostAccess, 'isDevToolsHost').mockImplementation(() => actualIsDevToolsHost(host))
-  const p = port(); const w = mount(Application, { attachTo: document.body, props: { port: p as never } })
-  try {
-    await flushPromises()
-    expect(w.get('button[aria-pressed=true]').text()).toBe('V4 online')
-    expect(w.findAll('.methods button').map(button => button.text())).toEqual(['Standard', 'V4 online'])
-    await w.get('.methods button').trigger('click')
-    expect(w.get('button[aria-pressed=true]').text()).toBe('Standard')
-    expect(p.draftSuspended.value).toBe(false)
-    expect(w.get('iframe').isVisible()).toBe(false)
-    await w.findAll('.methods button')[1]!.trigger('click')
-    expect(p.draftSuspended.value).toBe(true)
     expect(w.get('iframe').isVisible()).toBe(true)
   } finally { w.unmount() }
 })
@@ -125,11 +108,12 @@ it('publishes cloneable room, crew and draft data across the iframe boundary', a
   } finally { w.unmount() }
 })
 it('associates the local identity only after an explicit crew choice', async () => {
+  vi.spyOn(hostAccess, 'canUseDevTools').mockReturnValue(true)
   const api = vi.fn(async () => ({ ok: true, key: 'crew-key', drivers: [{ driverIndex: 2, firstName: 'Enrico', lastName: 'Saiani' }] }))
   Object.defineProperty(window, 'electronAPI', { configurable: true, value: { pitwallV4Identity: api } })
   const p = port(); const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
   try {
-    await w.get('details button').trigger('click'); await flushPromises()
+    await flushPromises(); await w.get('details button').trigger('click'); await flushPromises()
     expect(api).toHaveBeenCalledWith({ action: 'status' })
     const confirm = w.findAll('details button')[1]!
     expect(confirm.attributes('disabled')).toBeDefined()
@@ -141,11 +125,12 @@ it('associates the local identity only after an explicit crew choice', async () 
   } finally { w.unmount(); Reflect.deleteProperty(window, 'electronAPI') }
 })
 it('reports an unavailable identity bridge without inventing an association', async () => {
+  vi.spyOn(hostAccess, 'canUseDevTools').mockReturnValue(true)
   const api = vi.fn(async () => { throw new Error('closed runtime') })
   Object.defineProperty(window, 'electronAPI', { configurable: true, value: { pitwallV4Identity: api } })
   const w = mount(Panel, { attachTo: document.body, props: { port: port() as never } })
   try {
-    await w.get('details button').trigger('click'); await flushPromises()
+    await flushPromises(); await w.get('details button').trigger('click'); await flushPromises()
     expect(w.text()).toContain('Identità locale non disponibile')
     expect(w.find('select').exists()).toBe(false)
   } finally { w.unmount(); Reflect.deleteProperty(window, 'electronAPI') }
@@ -161,4 +146,42 @@ it('publishes V4 field observations and never relabels Standard feedback', async
   p.orderMethod.value = 'standard'; await flushPromises()
   expect(post.mock.calls.at(-1)?.[0].value.outcome).toBe('')
   w.unmount()
+})
+
+it('accepts layout height only from the current frame and rejects invalid measurements', async () => {
+  const p = port(); const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
+  try {
+    message(w, 'layout-height', 740.2); await flushPromises()
+    expect(w.get('iframe').attributes('style')).toContain('741px')
+    message(w, 'layout-height', 600); await flushPromises()
+    expect(w.get('iframe').attributes('style')).toContain('600px')
+    for (const value of [NaN, Infinity, -1, 0, 10001, '800', {}]) message(w, 'layout-height', value)
+    message(w, 'layout-height', 900, window)
+    await flushPromises()
+    expect(w.get('iframe').attributes('style')).toContain('600px')
+    expect(p.sendPlan).not.toHaveBeenCalled()
+    const oldFrame = (w.get('iframe').element as HTMLIFrameElement).contentWindow!
+    p.selectedTargetUid.value = 'other'; await flushPromises()
+    message(w, 'layout-height', 800, oldFrame); await flushPromises()
+    expect(w.get('iframe').attributes('style')).toContain('1040px')
+  } finally { w.unmount() }
+})
+
+it.each([false, true])('publishes the development gate and current recipient without selecting another pilot (%s)', async (development) => {
+  vi.spyOn(hostAccess, 'canUseDevTools').mockReturnValue(development)
+  const p = { ...port(), availableTargets: ref([{ uid: 'rico', nickname: 'RICO117' }]), selectTarget: vi.fn() }
+  const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
+  try {
+    const post = vi.spyOn((w.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
+    message(w, 'ready', null)
+    expect(post.mock.calls.at(-1)![0].value).toMatchObject({ development, recipientLabel: 'RICO117' })
+    await flushPromises()
+    expect(w.get('.v4-recipient').text()).toContain('RICO117')
+    expect(w.find('.v4-tools').exists()).toBe(development)
+    if (development) expect(w.get('.v4-tools').attributes('open')).toBeUndefined()
+    p.availableTargets.value = []
+    await flushPromises()
+    expect(post.mock.calls.at(-1)![0].value.recipientLabel).toBe('')
+    expect(p.selectTarget).not.toHaveBeenCalled()
+  } finally { w.unmount() }
 })

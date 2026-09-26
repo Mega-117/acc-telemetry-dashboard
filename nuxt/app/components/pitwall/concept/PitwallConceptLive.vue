@@ -5,22 +5,19 @@
 //
 // Legge lo store fornito dall'antenato: mock nella demo, vero altrove.
 import { computed, ref } from "vue";
+import { useHeaderBack } from "~/composables/useHeaderBack";
 import PitwallConceptPitStop from "~/components/pitwall/concept/PitwallConceptPitStop.vue";
 import PitwallConceptSearch from "~/components/pitwall/concept/PitwallConceptSearch.vue";
 import PitwallConceptWall from "~/components/pitwall/concept/PitwallConceptWall.vue";
 import { usePitwallStore } from "~/composables/usePitwallStore";
 import {
   searchPitwallConceptDirectory,
-  pitwallConceptInitialsById,
   pitwallConceptIsManager,
-  pitwallConceptNicknameById,
   pitwallConceptRoomIsFull,
-  pitwallConceptWallIds,
-  pitwallConceptWallSummary,
-  resolvePitwallConceptExecutor,
 } from "~/utils/pitwallConcept";
 
 const emit = defineEmits<{ back: [] }>();
+const hasHeaderBack = useHeaderBack(() => emit("back"), () => "Torna ai Pitwall");
 
 const state = usePitwallStore();
 const race = computed(() => state.selectedRace.value);
@@ -29,13 +26,7 @@ const me = computed(() => state.meId.value ?? "");
 
 const guestOpen = ref(false);
 
-const nick = (id: string) => pitwallConceptNicknameById(id, people.value);
-const initials = (id: string) => pitwallConceptInitialsById(id, people.value);
 
-const executor = computed(() => resolvePitwallConceptExecutor(race.value));
-const driverName = computed(() => (executor.value.driverId ? nick(executor.value.driverId) : null));
-/** Sedici avatar in fila non si leggono: i primi cinque, poi un "+11". */
-const wall = computed(() => pitwallConceptWallSummary(pitwallConceptWallIds(race.value)));
 const isManager = computed(() => pitwallConceptIsManager(race.value, me.value));
 const isFull = computed(() => pitwallConceptRoomIsFull(race.value));
 
@@ -78,60 +69,16 @@ function leave() {
   <div class="pwc-live">
     <button
       type="button"
+      v-if="!hasHeaderBack"
       class="pwc-back pwc-live__back"
       @click="$emit('back')"
     >
       ← Pit Wall
     </button>
 
-    <section
-      v-if="race"
-      class="pwc-wall"
-    >
-      <span class="pwc-role">
-        <small>Al volante</small>
-        <b v-if="driverName">
-          <span class="pwc-avatar is-small">{{ initials(executor.driverId!) }}</span>
-          {{ driverName }}
-        </b>
-        <b v-else>—</b>
-        <em v-if="driverName">applica lui la strategia</em>
-        <em v-else-if="executor.state === 'multiple-driving'">in due al volante: nessun ordine parte</em>
-        <em v-else>nessuno al volante: nessun ordine parte</em>
-      </span>
-      <span
-        v-if="wall.shown.length"
-        class="pwc-role"
-      >
-        <small>Al muretto</small>
-        <b>
-          <span
-            v-for="id in wall.shown"
-            :key="id"
-            class="pwc-avatar is-small"
-            :title="nick(id)"
-          >{{ initials(id) }}</span>
-          <span
-            v-if="wall.extra"
-            class="pwc-avatar is-small is-more"
-            :title="`e altri ${wall.extra}`"
-          >+{{ wall.extra }}</span>
-        </b>
-      </span>
-      <button
-        v-if="isManager && !isFull && race.membershipModel !== 'social'"
-        type="button"
-        class="pwc-btn"
-        @click="guestOpen = true"
-      >
-        + Ospite
-      </button>
-      <span
-        v-else-if="isManager && isFull"
-        class="pwc-chip is-waiting pwc-wall__full"
-      >Gara piena</span>
-    </section>
-
+    <header class="pwc-live__heading"><h2>{{ race?.label || 'Pitwall' }}</h2>
+      <button v-if="isManager && !isFull && race?.membershipModel !== 'social'" type="button" class="pwc-btn" @click="guestOpen = true">+ Ospite</button>
+    </header>
     <PitwallConceptWall
       v-if="race"
       :race="race"
@@ -200,7 +147,7 @@ function leave() {
 .pwc-live {
   display: grid;
   gap: 16px;
-  width: min(820px, 100%);
+  width: 100%;
   margin: 0 auto;
 }
 .pwc-live__back { justify-self: start; padding: 4px 0; }

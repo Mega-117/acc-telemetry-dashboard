@@ -286,7 +286,7 @@ export function useTelemetryGateway() {
         }
     }
 
-    async function collectTrackBestTimes(trackIds: string[], targetUserId?: string): Promise<Record<string, TrackBestTimes>> {
+    async function collectTrackBestTimes(trackIds: string[], targetUserId: string | undefined, category: CarCategory): Promise<Record<string, TrackBestTimes>> {
         const uniqueTrackIds = Array.from(new Set(trackIds.map((trackId) => normalizeTrackKey(trackId)).filter(Boolean)))
         if (uniqueTrackIds.length === 0) return {}
         const resolvedUserId = resolveTargetUserId(targetUserId)
@@ -297,7 +297,7 @@ export function useTelemetryGateway() {
                 const trackBestDoc = await loadTrackBest(resolvedUserId, trackId)
                 return [
                     trackId,
-                    buildOverviewBestTimesFromTrackBestDoc(trackBestDoc, 'GT3')
+                    buildOverviewBestTimesFromTrackBestDoc(trackBestDoc, category)
                 ] as const
             })
         )
@@ -315,7 +315,8 @@ export function useTelemetryGateway() {
             .slice(0, 2)
             .map((track) => track.track)
 
-        const bestsByTrack = await collectTrackBestTimes(relevantTrackIds, targetUserId)
+        const category = getCarCategory(snapshot.lastSession?.meta.car || snapshot.lastUsedCar || '')
+        const bestsByTrack = await collectTrackBestTimes(relevantTrackIds, targetUserId, category)
         return buildOverviewProjection({
             lastSession: snapshot.lastSession ? buildOverviewSessionPerformance({
                 id: snapshot.lastSession.sessionId, car: snapshot.lastSession.meta.car,
@@ -353,14 +354,16 @@ export function useTelemetryGateway() {
             const sessionIndex = userProjection?.sessionIndex || {}
             const trackStats = mergePendingTrackStats(buildTrackStatsFromSessionIndex(sessionIndex), pendingSessions)
             const reference = selectOverviewLastSession(sessionIndex.sessionsList || [], pendingSessions)
+            const newest = getNewestSessionEntry(sessionIndex, pendingSessions)
+            const category = getCarCategory(reference?.car || newest.car || '')
             const relevantTrackIds = [...new Set([
                 ...(reference?.track ? [normalizeTrackKey(reference.track)] : []),
                 ...trackStats.slice(0, 2).map((track) => normalizeTrackKey(track.track)),
             ])].slice(0, 2)
             const bestDocs = await Promise.all(relevantTrackIds.map((trackId) => loadTrackBest(resolvedUserId, trackId)))
             const bestsByTrack = mergePendingOverviewBestsByTrack(
-                Object.fromEntries(relevantTrackIds.map((trackId, index) => [normalizeTrackKey(trackId), buildOverviewBestTimesFromTrackBestDoc(bestDocs[index], 'GT3')])),
-                pendingSessions
+                Object.fromEntries(relevantTrackIds.map((trackId, index) => [normalizeTrackKey(trackId), buildOverviewBestTimesFromTrackBestDoc(bestDocs[index], category)])),
+                pendingSessions, category
             )
             const baseActivity7d = buildActivity7dFromSessionIndex(sessionIndex)
             const baseActivityTotals = buildActivityTotalsFromSessionIndex(sessionIndex)
@@ -377,7 +380,6 @@ export function useTelemetryGateway() {
                 baseActivityTotals,
                 pendingSessions
             )
-            const newest = getNewestSessionEntry(sessionIndex, pendingSessions)
             const pendingSummary = pendingSessions.find(s => s.sessionId === reference?.id)?.summary
             const lastSummary = reference
                 ? pendingSummary || await loadOverviewSessionSummary(resolvedUserId, reference.id)

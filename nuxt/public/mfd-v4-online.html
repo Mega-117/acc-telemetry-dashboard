@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 f082aae59260cd8077305f692e4fd269b0c791424607ef11ae3c86612c42980a -->
+<!-- Generated V4 online; SHA256 bbd0b51453bc15864fb8ee4732620e9a8201f233d2d7ccdf8ff242558e7442ed -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -67,7 +67,89 @@
   #layout b{color:var(--yellow);font-weight:600;}
   .legend{font-size:10px;color:#5d636b;margin-top:8px;line-height:1.8;}
 </style>
-</head>
+<style>html { color-scheme: dark; background: transparent; overflow: hidden; }
+/* Online presentation only. Field IDs and operational scripts stay canonical. */
+body { background: transparent; color: #e8e8eb; font-family: Inter, "Segoe UI", sans-serif; padding: 0 16px 16px; font-size: 13px; }
+.wrap { display: block; }
+.panel { width: 100%; background: transparent; border: 0; padding: 0; }
+.wrap > .panel:first-child { display: grid; grid-template-columns: minmax(0,1fr) 200px; gap: 12px 24px; align-items: start; }
+.panel > h2, .panel > .who { display: none; }
+#conn { grid-column: 1 / -1; margin: 0; background: #ffffff04; border-color: #ffffff20; padding: 8px 10px; font-size: 12px; }
+#form { grid-column: 1; grid-row: 2 / span 3; }
+.sm { grid-column: 2; grid-row: 2; border: 0; border-left: 1px solid #ffffff25; padding: 0 0 0 16px; margin: 0; background: transparent; }
+.sm h3 { color: #b3b3b8; font-size: 11px; margin: 0 0 12px; letter-spacing: .08em; }
+.smgrid { grid-template-columns: 1fr; gap: 0; }
+.smgrid div { background: transparent; border-bottom: 1px solid #ffffff15; padding: 8px 0; font-size: 11px; }
+.smgrid span:first-child { color: #b3b3b8; }
+td { padding: 4px 4px; border-bottom: 1px solid #ffffff10; height: 32px; }
+td.lb { text-align: left; color: #e8e8eb; width: 140px; white-space: normal; }
+input[type=number], select { min-height: 28px; border: 1px solid #ffffff30; background: #08080a80; font-family: inherit; font-size: 12px; padding: 3px 6px; }
+input[type=number] { width: 76px; font-variant-numeric: tabular-nums; }
+select { max-width: 190px; }
+input:disabled,select:disabled { opacity: .5; }
+input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible { outline: 1px solid white; outline-offset: 2px; }
+.tag { border-radius: 0; width: 82px; font-size: 9px; padding: 3px; }
+.ctl { grid-column: 1 / -1; margin: 4px 0 0; gap: 12px; }
+button { background: #ff0024; border: 1px solid #ff0024; min-height: 34px; font-size: 12px; padding: 7px 14px; clip-path: polygon(0 0,calc(100% - 7px) 0,100% 7px,100% 100%,7px 100%,0 calc(100% - 7px)); }
+button:hover { background: #e50020; }
+button.alt { background: #ffffff08; border-color: #ffffff30; }
+button.alt:hover { background: #ffffff12; }
+button:disabled { background: #ffffff08; border-color: #ffffff18; color: #888; }
+#layout { grid-column: 2; grid-row: 3; margin: 0; background: transparent; border-color: #ffffff18; overflow-wrap: anywhere; }
+.legend { grid-column: 2; grid-row: 4; margin: 0; color: #b3b3b8; font-size: 11px; }
+.legend summary { cursor: pointer; padding: 6px 0; }
+.legend .tag { margin-top: 8px; }
+.v4-console { width: 100% !important; margin-top: 20px; padding-top: 16px; border-top: 1px solid #ffffff25; }
+.v4-console > h2 { display: block; font-size: 11px; color: #b3b3b8; }
+#log { height: 160px; margin-top: 12px; padding: 10px; border-color: #ffffff20; background: #00000028; overflow-wrap: anywhere; }
+@media(max-width:680px) {
+ .wrap > .panel:first-child { grid-template-columns: minmax(0,1fr); gap: 12px; }
+ #form { grid-column: 1; grid-row: 2; }
+ .sm { grid-column: 1; grid-row: 3; padding: 12px 0 0; border: 0; border-top: 1px solid #ffffff25; }
+ .smgrid { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 16px; }
+ #layout,.legend { grid-column: 1; grid-row: auto; }
+ td.lb { width: 110px; } select { max-width: 125px; }
+}
+
+#form { max-width: 620px; }
+
+/* The host scrolls the page; only the bounded console keeps its own scroll. */
+body { overflow: hidden; }
+input[type=checkbox] { width: 15px; height: 15px; accent-color: #21ff83; }
+.tag { background: transparent !important; font-weight: 600; }
+#conn { border: 0; border-bottom: 1px solid #ffffff20; background: transparent; padding: 8px 0 12px; }
+#layout { border: 0; padding: 0; color: #b3b3b8; }
+#log { scrollbar-width: thin; scrollbar-color: #ffffff30 transparent; }
+
+.draft-heading { grid-column: 1; grid-row: 2; margin: 0; color: #b3b3b8; font-size: 11px; font-weight: 600; }
+#form { grid-row: 3 / span 3; }
+.sm { grid-row: 2 / span 2; }
+#layout { grid-row: 4; }
+.legend { grid-row: 5; }
+.ctl { padding-top: 12px; border-top: 1px solid #ffffff25; }
+#apply, #refresh-draft { min-height: 40px; padding: 10px 18px; font-size: 13px; }
+#refresh-draft { border-color: #ffffff60; background: #ffffff0c; }
+.draft-confirm:not([hidden]) { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; width: 100%; padding: 12px; border: 1px solid #ffc40060; }
+.draft-confirm span { flex: 1 1 240px; font-size: 12px; }
+.v4-dev-tools { width: 100%; color: #b3b3b8; font-size: 11px; }
+.v4-dev-tools summary { cursor: pointer; padding: 8px 0; }
+@media(max-width:680px) {
+ #form { grid-row: 3; }
+ .sm { grid-row: 4; }
+ #layout,.legend { grid-row: auto; }
+}
+
+/* Rectangular action controls, including the restore confirmation. */
+.ctl button { clip-path: none; border-radius: 0; font-weight: 600; }
+#apply, #refresh-draft { min-height: 44px; padding: 11px 20px; font-size: 14px; }
+#refresh-draft { background: #242428; border-color: #8b8b94; color: #f0f0f3; }
+#refresh-draft:hover:not(:disabled) { background: #34343a; border-color: #c5c5cb; }
+#apply:disabled, #refresh-draft:disabled { opacity: 1; background: #202023; color: #a8a8b0; border-color: #55555e; cursor: not-allowed; }
+.legend summary { line-height: 1.5; color: #d4d4da; }
+.legend-item { padding: 10px 0; border-bottom: 1px solid #ffffff18; line-height: 1.55; overflow-wrap: anywhere; }
+.legend-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.legend-item .tag { display: block; margin: 0 0 5px; }
+</style></head>
 <body>
 <div class="wrap">
 
@@ -78,11 +160,11 @@
   <div id="conn"><span class="dot"></span><span id="connTxt">controllo connessione…</span></div>
 
   <div class="sm">
-    <h3>SHARED MEMORY DEL GIOCO</h3>
+    <h3>In macchina · live</h3>
     <div class="smgrid" id="smgrid"></div>
   </div>
 
-  <table id="form"></table>
+  <h3 class="draft-heading">Da inviare</h3><table id="form"></table>
 
   <div class="ctl">
     <button id="apply">INVIA STRATEGIA ALL'MFD</button>
@@ -91,19 +173,11 @@
 
   <div id="layout">layout non ancora rilevato</div>
 
-  <div class="legend">
-    <span class="tag live">LIVE</span> in shared memory &rarr; scrivo, rileggo, correggo<br>
-    <span class="tag geo">GEOMETRIA</span> non leggibile: lo deduco da quante righe ha il menu<br>
-    <span class="tag conv">CONVERGENZA</span> cieco, ma 3 toggle lo portano a uno stato noto<br>
-    <span class="tag sat">FONDOCORSA</span> non leggibile ma <b>sbatte</b> contro il minimo: lo azzero e conto<br>
-    <span class="tag mem">A MEMORIA</span> non leggibile e <b>ciclico</b>: devo sapere da dove parto<br>
-    <span class="tag occhio">A VISTA</span> impostato alla cieca, poi <b>verificato su uno screenshot</b> e corretto<br>
-    <span class="tag no">NON TOCCO</span> il limitatore pits: nessun riscontro e nessuna normalizzazione
-  </div>
+  <details class="legend"><summary>Come vengono verificati i campi</summary><div class="legend-item"><span class="tag live">LIVE</span> in shared memory &rarr; scrivo, rileggo, correggo</div><div class="legend-item"><span class="tag geo">GEOMETRIA</span> non leggibile: lo deduco da quante righe ha il menu</div><div class="legend-item"><span class="tag conv">CONVERGENZA</span> cieco, ma 3 toggle lo portano a uno stato noto</div><div class="legend-item"><span class="tag sat">FONDOCORSA</span> non leggibile ma <b>sbatte</b> contro il minimo: lo azzero e conto</div><div class="legend-item"><span class="tag mem">A MEMORIA</span> non leggibile e <b>ciclico</b>: devo sapere da dove parto</div><div class="legend-item"><span class="tag occhio">A VISTA</span> impostato alla cieca, poi <b>verificato su uno screenshot</b> e corretto</div><div class="legend-item"><span class="tag no">NON TOCCO</span> il limitatore pits: nessun riscontro e nessuna normalizzazione</div></details>
 </section>
 
 <section class="panel" style="width:520px">
-  <h2>Diario dell'operazione</h2>
+  <h2>Console</h2>
   <p class="who">ogni passo, ogni sonda, ogni correzione</p>
   <div id="log"></div>
 </section>
@@ -1201,7 +1275,7 @@ else globalThis.MfdV4Contract = exported;
 // Generated into the engineer iframe together with the canonical local form.
 // It never calls the Python service: only a whole, validated intent leaves it.
 (function () {
-  var snapshot = null, initialized = false, restoring = false, crewSignature = null;
+  var snapshot = null, initialized = false, restoring = false, crewSignature = null, edited = false;
   // A field is seeded once; edits (including an intentional blank) own it thereafter.
   var initializedFields = new Set(), editingField = null;
   function seedStrategy(strategy, replace) {
@@ -1221,7 +1295,7 @@ else globalThis.MfdV4Contract = exported;
   }
   function send(type, value) { parent.postMessage({ channel: 'mfd-v4-online', type: type, value: value }, '*'); }
   etichettaBottone = function () {
-    bA.textContent = busy ? 'INVIO IN CORSO…' : S.applyPitStrategy ? 'CARICA PRESET' : 'INVIA STRATEGIA AL PILOTA';
+    bA.textContent = busy ? 'INVIO IN CORSO…' : S.applyPitStrategy ? 'CARICA PRESET' : 'Invia strategia' + (snapshot?.recipientLabel ? ' a ' + snapshot.recipientLabel : '');
   };
   var nativeRender = renderForm;
   renderForm = function () {
@@ -1275,26 +1349,49 @@ else globalThis.MfdV4Contract = exported;
   S = { applyPitStrategy: false, pitStrategy: 1, fuel: null, changeTyre: null, compound: null, tyreSet: null,
     fl: null, fr: null, rl: null, rr: null, brakes: null, brakeFront: null, brakeRear: null,
     brakeFrontNow: null, brakeRearNow: null, driverIdx: null, driverEntryIndex: null, susp: null, body: null };
-  function saved() { if (!restoring) send('draft', { ...S, initializedFields: Array.from(initializedFields), stepMs: Number(document.getElementById('gap').value) }); }
+  function saved() { if (!restoring) send('draft', { ...S, initializedFields: Array.from(initializedFields), stepMs: Number(document.getElementById('gap').value), edited: edited }); }
   var refresh = document.createElement('button');
-  refresh.type = 'button'; refresh.textContent = 'Aggiorna bozza dai dati disponibili';
-  refresh.addEventListener('click', function () {
+  refresh.id = 'refresh-draft'; refresh.className = 'alt';
+  refresh.type = 'button'; refresh.textContent = 'Ripristina dai dati live';
+  var confirmation = document.createElement('div');
+  confirmation.className = 'draft-confirm'; confirmation.hidden = true;
+  confirmation.setAttribute('role', 'group'); confirmation.setAttribute('aria-label', 'Conferma ripristino bozza');
+  var explanation = document.createElement('span');
+  explanation.textContent = 'Sostituire i valori della bozza con i dati live disponibili? Nessun invio al pilota.';
+  var cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Annulla'; cancel.className = 'alt';
+  var confirm = document.createElement('button'); confirm.type = 'button'; confirm.textContent = 'Ripristina';
+  confirmation.append(explanation, cancel, confirm);
+  function restoreLive() {
     if (busy || !snapshot?.strategy) return;
     seedStrategy(snapshot.strategy, true);
-    // Values absent from telemetry stay a choice for the engineer.
-    renderForm(); saved();
+    edited = false; confirmation.hidden = true;
+    renderForm(); saved(); refresh.focus();
+  }
+  cancel.addEventListener('click', function () { confirmation.hidden = true; refresh.focus(); });
+  confirm.addEventListener('click', restoreLive);
+  refresh.addEventListener('click', function () {
+    if (busy || !snapshot?.strategy) return;
+    if (edited) { confirmation.hidden = false; cancel.focus(); }
+    else restoreLive();
   });
-  bA.parentElement.appendChild(refresh);
+  bA.parentElement.append(refresh, confirmation);
+  var devTools = document.createElement('details'); devTools.className = 'v4-dev-tools'; devTools.hidden = true;
+  var devSummary = document.createElement('summary'); devSummary.textContent = 'Sviluppo';
+  devTools.append(devSummary, document.getElementById('gap').closest('label'));
+  bA.parentElement.appendChild(devTools);
+  var consolePanel = logEl.closest('.panel');
+  consolePanel.classList.add('v4-console');
+  devTools.appendChild(consolePanel);
   formEl.addEventListener('input', function (event) {
     if (!busy && event.target.dataset.f) {
-      initializedFields.add(event.target.dataset.f); editingField = event.target.dataset.f;
+      edited = true; initializedFields.add(event.target.dataset.f); editingField = event.target.dataset.f;
     }
   });
   // Commit/clamping belongs to the canonical change handler, not the typing buffer.
   formEl.addEventListener('change', function () { editingField = null; }, true);
   formEl.addEventListener('change', function (event) {
     if (busy) return;
-    if (event.target.dataset.f) initializedFields.add(event.target.dataset.f);
+    if (event.target.dataset.f) { edited = true; initializedFields.add(event.target.dataset.f); }
     if (event.target.type === 'number' && event.target.value === '') { S[event.target.dataset.f] = null; renderForm(); }
     saved();
   });
@@ -1324,7 +1421,8 @@ else globalThis.MfdV4Contract = exported;
           if (S[key] != null || snapshot.draft.initializedFields?.includes(key)) initializedFields.add(key);
         });
       }
-      document.getElementById('gap').value = snapshot.draft?.stepMs || 60;
+      document.getElementById('gap').value = snapshot.development ? snapshot.draft?.stepMs || 60 : 60;
+      edited = snapshot.draft ? snapshot.draft.edited !== false : false;
       initialized = true;
     }
     if (snapshot.busy !== true && snapshot.strategy && seedStrategy(snapshot.strategy, false)) redraw = true;
@@ -1338,6 +1436,9 @@ else globalThis.MfdV4Contract = exported;
     ['LF','RF','LR','RR'].forEach(function (suffix,i) { cache['mfdTyrePressure'+suffix] = snapshot.strategy?.pressures?.[['FL','FR','RL','RR'][i]]; });
     busy = snapshot.busy === true;
     refresh.disabled = busy || !snapshot.strategy;
+    if (busy) confirmation.hidden = true;
+    devTools.hidden = snapshot.development !== true;
+    if (!snapshot.development) document.getElementById('gap').value = 60;
     document.getElementById('connTxt').textContent = snapshot.reason || 'PC del pilota pronto. Valori iniziali dai dati disponibili; completa le scelte mancanti.';
     if (busy) {
       logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
@@ -1345,7 +1446,7 @@ else globalThis.MfdV4Contract = exported;
       logEl.textContent = snapshot.outcome;
     }
     if (redraw) renderForm();
-    else { aggiornaSpie(); bA.disabled = busy || !snapshot.ready; }
+    else { aggiornaSpie(); bA.disabled = busy || !snapshot.ready; etichettaBottone(); }
     if (!grid.children.length) renderSM();
     KEYS.forEach(function (key, index) { var value = cache[key]; grid.children[index].lastChild.textContent = value == null ? '—' : String(value); });
     restoring = false;
@@ -1355,6 +1456,29 @@ else globalThis.MfdV4Contract = exported;
   poll = async function () {};
   logEl.textContent = 'Pronto: scegli la strategia da inviare al PC del pilota.';
   renderForm(); send('ready', null);
+})();
+</script><script>// Presentation-only bridge. Never reads fields or sends strategy intents.
+(function () {
+  var previous = 0, pending = false;
+  function measure() {
+    pending = false;
+    // Body content height can shrink; document scrollHeight includes the old viewport.
+    var height = Math.ceil(document.body.getBoundingClientRect().height) + 1;
+    if (height === previous || height < 1) return;
+    previous = height;
+    parent.postMessage({ channel: 'mfd-v4-online', type: 'layout-height', value: height }, '*');
+  }
+  function schedule() {
+    if (pending) return;
+    pending = true;
+    requestAnimationFrame(measure);
+  }
+  if (typeof ResizeObserver !== 'undefined') new ResizeObserver(schedule).observe(document.body);
+  window.addEventListener('resize', schedule);
+  window.addEventListener('load', schedule);
+  document.addEventListener('toggle', schedule, true);
+  if (document.fonts) document.fonts.ready.then(schedule);
+  schedule();
 })();
 </script></body>
 </html>

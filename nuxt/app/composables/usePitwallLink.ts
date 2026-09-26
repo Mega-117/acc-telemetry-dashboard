@@ -40,6 +40,8 @@ export interface PitwallFieldOutcome {
 export interface PitwallLinkOptions {
   /** Uid dell'ingegnere collegato. Null finche' non e' autenticato. */
   engineerUid: () => string | null
+  /** The calling view already presents empty results beside its search field. */
+  inlineSearchFeedback?: boolean
 }
 
 export function usePitwallLink(options: PitwallLinkOptions) {
@@ -258,7 +260,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     if (!engineer) return
     try {
       searchResults.value = await engineer.searchUsers(searchTerm.value)
-      if (searchTerm.value.trim().length >= 2 && searchResults.value.length === 0) {
+      if (!options.inlineSearchFeedback && searchTerm.value.trim().length >= 2 && searchResults.value.length === 0) {
         notice.value = 'Nessun utente trovato con questo nome.'
       } else {
         notice.value = null

@@ -30,6 +30,7 @@ export function useOverlaySize(
   getApi: () => any | null,
   getCurrentPreset: () => OverlaySizePreset,
   overlayRoot: Ref<HTMLElement | null>,
+  getMaxWidth: () => number = () => OVERLAY_WORK_AREA_SIZE.width,
 ) {
   let overlaySizeFrame: number | null = null
   let overlaySizeRetry: ReturnType<typeof setTimeout> | null = null
@@ -67,9 +68,12 @@ export function useOverlaySize(
     // clampa alla finestra corrente (altrimenti la misura insegue se stessa e la
     // finestra non cresce mai).
     const desiredHeight = Math.max(rect.height, surface.scrollHeight)
-    const desiredWidth = Math.max(rect.width, surface.scrollWidth)
+    // Request the intended horizontal width even before the native window grows.
+    // CSS still reflows within the actual viewport on narrow monitors.
+    const preferredWidth = Number.parseFloat(getComputedStyle(surface).getPropertyValue('--overlay-preferred-content-width')) || 0
+    const desiredWidth = Math.max(rect.width, surface.scrollWidth, preferredWidth)
     return {
-      width: Math.min(Math.ceil(desiredWidth) + OVERLAY_CARD_CHROME + OVERLAY_SURFACE_PADDING * 2, OVERLAY_WORK_AREA_SIZE.width),
+      width: Math.min(Math.ceil(desiredWidth) + OVERLAY_CARD_CHROME + OVERLAY_SURFACE_PADDING * 2, getMaxWidth()),
       height: Math.ceil(desiredHeight) + OVERLAY_CARD_CHROME + OVERLAY_SURFACE_PADDING * 2,
     }
   }

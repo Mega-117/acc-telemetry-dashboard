@@ -140,21 +140,22 @@ export function mergePendingBestsByTrack(
 
 export function mergePendingOverviewBestsByTrack(
     baseBests: Record<string, TrackBestTimes>,
-    pendingSessions: SessionDocument[]
+    pendingSessions: SessionDocument[],
+    category: CarCategory = 'GT3'
 ): Record<string, TrackBestTimes> {
     const merged: Record<string, TrackBestTimes> = { ...baseBests }
     for (const session of pendingSessions) {
-        if (getCarCategory(session.meta?.car || '') !== 'GT3') continue
+        if (getCarCategory(session.meta?.car || '') !== category) continue
         const trackId = normalizeTrackKey(session.meta?.track)
         if (!trackId) continue
-        const current = merged[trackId] || {
+        const current = { ...(merged[trackId] || {
             bestQualy: null,
             bestQualyGrip: null,
             bestRace: null,
             bestRaceGrip: null,
             bestAvgRace: null,
             bestAvgRaceGrip: null
-        }
+        }) }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         const bestByGrip = (session.summary as any)?.best_by_grip || {}
         for (const grip of OVERVIEW_GRIP_SCAN_ORDER) {

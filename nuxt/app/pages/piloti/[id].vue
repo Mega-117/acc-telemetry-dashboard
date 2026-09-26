@@ -112,12 +112,14 @@ function goBackToList() {
     </div>
 
     <!-- Pilot Sub-Tabs (hidden when showing detail view) -->
-    <nav v-if="detailView === 'none'" class="pilot-tabs">
+    <nav v-if="detailView === 'none'" class="pilot-tabs" aria-label="Sezioni del pilota">
       <button 
         v-for="tab in pilotTabs" 
         :key="tab.id"
-        class="pilot-tab"
-        :class="{ 'pilot-tab--active': activeTab === tab.id }"
+        class="pilot-tab tab"
+        type="button"
+        :aria-current="activeTab === tab.id ? 'page' : undefined"
+        :class="{ 'tab--active': activeTab === tab.id }"
         @click="activeTab = tab.id as any"
       >
         {{ tab.label }}
@@ -190,6 +192,8 @@ function goBackToList() {
   display: flex;
   flex-direction: column;
   gap: 0;
+  width: 100%;
+  min-width: 0;
 }
 
 // === PILOT HEADER ===
@@ -235,37 +239,41 @@ function goBackToList() {
 // === PILOT TABS ===
 .pilot-tabs {
   display: flex;
-  gap: 4px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 12px;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0;
   margin-bottom: 24px;
+  background: transparent;
+  border-radius: 0;
+  flex-shrink: 0;
 }
 
 .pilot-tab {
-  flex: 1;
-  padding: 12px 24px;
+  position: relative;
+  flex: 0 0 auto;
+  min-height: 48px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
-  border: none;
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.5);
-  font-family: $font-primary;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1px;
+  white-space: nowrap;
   cursor: pointer;
-  transition: all 0.2s ease;
-
-  &:hover {
-    color: rgba(255, 255, 255, 0.8);
-    background: rgba(255, 255, 255, 0.05);
+  &:hover { color: #fff; }
+  &:focus-visible { outline: 2px solid #fff; outline-offset: -4px; }
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: transparent;
   }
-
-  &--active {
-    background: rgba($racing-orange, 0.15);
-    color: $racing-orange;
-    border: 1px solid rgba($racing-orange, 0.3);
-  }
+}
+@media (max-width: 600px) {
+  .pilot-tabs { gap: 0; }
+  .pilot-tab { flex: 1; min-width: 0; padding-inline: 8px; font-size: 13px; }
 }
 
 // === CONTENT ===
@@ -273,14 +281,7 @@ function goBackToList() {
   min-height: 400px;
 }
 
-.tab-content {
-  animation: fadeIn 0.2s ease;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
+.tab-content { min-width: 0; }
 
 .loading {
   text-align: center;

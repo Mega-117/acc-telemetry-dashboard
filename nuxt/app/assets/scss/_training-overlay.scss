@@ -327,8 +327,10 @@
 }
 
 .overlay-content--launcher.overlay-content--target {
-  width: 420px;
+  width: 320px;
 }
+
+.overlay-content--launcher.overlay-content--target-lap { width: 300px; }
 
 .overlay-content--select {
   width: 420px;
@@ -580,7 +582,7 @@
     --overlay-radius: 0px;
     padding: 14px;
     border-color: #ffffff30;
-    background: #0b0b0bf5;
+    background: #0b0b0b;
     box-shadow: 0 8px 24px #0008;
   }
 
@@ -599,7 +601,10 @@
   @keyframes quick-state-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .launcher-tool-button[data-state='pending'] .quick-state-icon { animation: none; } }
   .launcher-tools { gap: 12px; }
-  .launcher-tools__header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .launcher-tools__header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .launcher-tools__header .quick-panel-training { width: 34px; height: 34px; min-height: 34px; padding: 0; margin-left: auto; flex: 0 0 auto; display: grid; place-items: center; }
+  .launcher-tools__header .quick-panel-layout { margin-left: 8px; flex: 0 0 auto; position: relative; }
+  .launcher-tools__header .quick-panel-layout::before { content: ""; position: absolute; left: -10px; top: 3px; bottom: 3px; width: 1px; background: #ffffff30; pointer-events: none; }
   .launcher-tools__header > span { color: #f3f3f3; font-size: 12px; }
   .launcher-tools__header > strong { color: #aaa; font-size: 11px; font-weight: 500; }
   .launcher-tools__actions { gap: 14px; }
@@ -2280,3 +2285,29 @@ button.is-active {
 
 .training-overlay button[data-overlay-wheel-action] { outline: none; }
 .overlay-menu-back { margin-bottom: 10px; }
+
+
+// Same controls, a different composition. Resize measures the preferred width
+// separately so the current narrow window cannot prevent horizontal expansion.
+.training-overlay--launcher .overlay-content--horizontal {
+  --overlay-preferred-content-width: 760px;
+  width: var(--overlay-preferred-content-width);
+  .launcher-tools__actions { grid-template-columns: minmax(0, 1fr) minmax(0, .8fr) minmax(0, 1.3fr); align-items: start; gap: 16px; }
+  .quick-panel-dev { grid-column: 1 / -1; }
+  .quick-panel-section { min-width: 0; padding-top: 0; border-top: 0; }
+  .quick-panel-section + .quick-panel-section { border-left: 1px solid #ffffff25; padding-left: 16px; }
+  .quick-panel-voice-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 8px; }
+  .quick-panel-section[aria-label="Riferimenti numerici"] .quick-panel-pair { grid-template-columns: 1fr; }
+  @media (max-width: 650px) {
+    .launcher-tools__actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .quick-panel-automations { grid-column: 1 / -1; border-left: 0 !important; padding-left: 0 !important; padding-top: 12px; border-top: 1px solid #ffffff25; }
+  }
+}
+
+.training-overlay--launcher .quick-reference { display:flex;min-width:0;border:1px solid #ffffff30; }
+.training-overlay--launcher .quick-reference > .launcher-tool-button { flex:1;min-width:0;border:0;display:flex;align-items:center;justify-content:center;gap:5px; }
+.training-overlay--launcher .quick-reference.is-active { border-color:#21ff8355;background:#21ff830a; }
+.training-overlay--launcher .quick-reference.is-active > .launcher-tool-button { color:#21ff83;background:transparent; }
+.training-overlay--launcher .quick-reference-off { flex:0 0 28px;display:grid;place-items:center;border:0;border-left:1px solid #21ff8330;border-radius:0;background:transparent;color:#21ff83;cursor:pointer; }
+.training-overlay--launcher .quick-reference-off:hover { background:#ffffff12; }
+.training-overlay--launcher .quick-reference-off:disabled { opacity:.4; }

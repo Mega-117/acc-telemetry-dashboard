@@ -502,3 +502,25 @@ describe('mergePendingOverviewBestsByTrack', () => {
         expect(result['spa']?.bestRaceGrip).toBe('Optimum')
     })
 })
+
+it.each(['GT3', 'GT4'] as const)('keeps overview history and pending sessions in the selected %s category', category => {
+    const doc = makeTrackBestDoc({
+        GT3: { Optimum: { bestQualy: 90000, bestRace: 91000, bestAvgRace: 92000 } },
+        GT4: { Optimum: { bestQualy: 100000, bestRace: 101000, bestAvgRace: 102000 } },
+    })
+    const base = { monza: buildOverviewBestTimesFromTrackBestDoc(doc, category) }
+    const before = structuredClone(base)
+    const result = mergePendingOverviewBestsByTrack(base, [
+        makeSession({ car: 'ferrari_296_gt3', bestQualy: 89000, bestRace: 90000, bestAvgRace: 91000 }),
+        makeSession({ car: 'bmw_m4_gt4', bestQualy: 99000, bestRace: 100000, bestAvgRace: 101000 }),
+    ], category)
+    const time = category === 'GT3' ? 89000 : 99000
+    expect(result.monza).toMatchObject({ bestQualy: time, bestRace: time + 1000, bestAvgRace: time + 2000 })
+    expect(base).toEqual(before)
+})
+
+it('does not fall back to GT3 when the latest car category has no history', () => {
+    const base = { monza: buildOverviewBestTimesFromTrackBestDoc(makeTrackBestDoc({ GT3: { Optimum: { bestQualy: 90000 } } }), 'GT4') }
+    const result = mergePendingOverviewBestsByTrack(base, [makeSession({ bestQualy: 88000 })], 'GT4')
+    expect(result.monza).toMatchObject({ bestQualy: null, bestRace: null, bestAvgRace: null })
+})

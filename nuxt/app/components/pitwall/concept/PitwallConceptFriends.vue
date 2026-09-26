@@ -1,18 +1,12 @@
 <script setup lang="ts">
-// Gli amici (PIP-362): un elenco solo, e una sola relazione da capire.
-//
-// Prima c'erano due colonne, una per verso del permesso, con quattro stati
-// ciascuna e una scadenza: il modello del database messo a schermo. Qui c'e'
-// cio' che l'utente legge davvero: siamo amici, gli ho chiesto, mi ha chiesto.
-// Chi aspetta una mia risposta sta in cima e non si nasconde mai dietro il
-// limite dell'elenco.
-//
-// La riga dice anche se l'amico e' in pista e se ha il Pitwall aperto: e' il
-// motivo per cui vale la pena guardarlo proprio ora.
+// Rubrica compatta: amici e richieste hanno gruppi distinti; la ricerca di
+// nuove persone occupa lo stesso spazio senza duplicare i campi.
+// Gli eventi continuano a essere gestiti dallo store della pagina.
 import { computed, ref } from "vue";
+import PitwallConceptActionMenu from "~/components/pitwall/concept/PitwallConceptActionMenu.vue";
+import ScrollArea from "~/components/ui/ScrollArea.vue";
 import PitwallConceptMore from "~/components/pitwall/concept/PitwallConceptMore.vue";
 import {
-  PITWALL_CONCEPT_FILTER_FROM,
   PITWALL_CONCEPT_LIST_LIMITS,
   filterPitwallConceptPeople,
   pitwallConceptInitialsById,
@@ -25,6 +19,7 @@ const props = defineProps<{
   /** Gia' nell'ordine di lettura: ricevute, inviate, in pista, il resto. */
   friends: PitwallConceptFriend[];
   people: PitwallConceptPerson[];
+  adding?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -39,19 +34,23 @@ const emit = defineEmits<{
 /** Togliere un amico e' l'unico gesto che chiede conferma: e' irreversibile. */
 const confirming = ref<string | null>(null);
 const filter = ref("");
+const tab = ref<"friends" | "requests">("friends");
 const expanded = ref(false);
 
 const nick = (id: string) => pitwallConceptNicknameById(id, props.people);
 const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
 
-/** Il filtro compare solo quando serve: sotto la decina e' un campo in piu'. */
-const showFilter = computed(() => props.friends.length >= PITWALL_CONCEPT_FILTER_FROM);
+/** Un solo filtro locale, disponibile quando la rubrica contiene persone. */
+const showFilter = computed(() => props.friends.length > 0);
+const isRequest = (friend: PitwallConceptFriend) => friend.state === "sent" || friend.state === "received";
+const requests = computed(() => props.friends.filter(isRequest));
 
 const filtered = computed(() => {
   const needle = filter.value.trim();
-  if (!needle) return props.friends;
+  const entries = props.friends.filter(friend => tab.value === "requests" ? isRequest(friend) : !isRequest(friend));
+  if (!needle) return entries;
   const allowed = new Set(filterPitwallConceptPeople(needle, props.people).map(person => person.id));
-  return props.friends.filter(friend => allowed.has(friend.personId));
+  return entries.filter(friend => allowed.has(friend.personId));
 });
 
 /** Una riga che aspetta una mia risposta non si nasconde mai. */
@@ -86,13 +85,19 @@ function removeWarning(personId: string): string {
     <header class="pwc-block__head">
       <h2 class="pwc-block__title">
         Amici
-        <span class="pwc-count">{{ friends.length }}</span>
+        <span class="pwc-count">{{ friends.length - requests.length }}</span>
       </h2>
-      <span
-        v-if="waiting"
-        class="pwc-chip is-asking"
-      >{{ waiting }} da decidere</span>
+      <slot name="heading-action" />
     </header>
+    <slot v-if="adding" name="search" />
+    <template v-else>
+    <div class="pwc-social-tabs" aria-label="Rubrica">
+      <button type="button" :aria-pressed="tab === 'friends'" @click="tab = 'friends'; expanded = false">Amici</button>
+      <button type="button" :aria-pressed="tab === 'requests'" @click="tab = 'requests'; expanded = false">
+        Richieste <span v-if="requests.length">{{ requests.length }}</span>
+        <span v-if="waiting" class="sr-only">, {{ waiting }} ricevute</span>
+      </button>
+    </div>
 
     <label
       v-if="showFilter"
@@ -111,8 +116,8 @@ function removeWarning(personId: string): string {
       </svg>
       <input
         v-model="filter"
-        placeholder="Filtra amici"
-        aria-label="Filtra amici"
+        placeholder="Cerca nella rubrica"
+        aria-label="Cerca nella rubrica"
       >
       <button
         v-if="filter"
@@ -124,6 +129,7 @@ function removeWarning(personId: string): string {
       </button>
     </label>
 
+    <ScrollArea class="pwc-social-scroll" :key="tab" :label="tab === 'friends' ? 'Elenco amici' : 'Richieste di amicizia'">
     <ul
       v-if="split.visible.length"
       class="pwc-people"
@@ -132,13 +138,23 @@ function removeWarning(personId: string): string {
         v-for="friend in split.visible"
         :key="friend.personId"
         class="pwc-person"
-        :class="{ 'is-deciding': friend.state === 'received' }"
+        :class="{ 'is-deciding': friend.state === 'received', 'is-friend': !isRequest(friend) }"
       >
         <span class="pwc-avatar">{{ initials(friend.personId) }}</span>
-        <strong class="pwc-person__name">
-          {{ nick(friend.personId) }}
-
-        </strong>
+        <div class="pwc-person__heading">
+          <strong class="pwc-person__name" :title="nick(friend.personId)">{{ nick(friend.personId) }}</strong>
+          <span v-if="!isRequest(friend)" class="pwc-person__status" role="status">
+            <span v-if="friend.pitwallOpen">● Pitwall aperto</span>
+          </span>
+          <PitwallConceptActionMenu
+            v-if="!isRequest(friend)"
+            :label="`Opzioni per ${nick(friend.personId)}`"
+            action-label="Rimuovi amico"
+            :primary-label="friend.pitwallOpen && friend.raceId ? 'Entra nel Pitwall' : undefined"
+            @primary="friend.raceId && emit('enter', friend.raceId)"
+            @select="askRemove(friend.personId)"
+          />
+        </div>
 
         <span
           v-if="friend.state === 'received'"
@@ -148,13 +164,8 @@ function removeWarning(personId: string): string {
           v-else-if="friend.state === 'sent'"
           class="pwc-chip is-waiting"
         >In attesa</span>
-        <span
-          v-else-if="friend.pitwallOpen"
-          class="pwc-chip is-always"
-        >Pitwall aperto</span>
-        <span v-else></span>
 
-        <span class="pwc-person__actions">
+        <span v-if="isRequest(friend)" class="pwc-person__actions">
           <template v-if="friend.state === 'received'">
             <button
               type="button"
@@ -180,24 +191,7 @@ function removeWarning(personId: string): string {
           >
             Annulla
           </button>
-          <template v-else>
-            <button
-              v-if="friend.pitwallOpen && friend.raceId"
-              type="button"
-              class="pwc-btn is-primary"
-              @click="emit('enter', friend.raceId)"
-            >
-              Entra
-            </button>
-            <button
-              type="button"
-              class="pwc-link-btn"
-              :aria-label="`Rimuovi ${nick(friend.personId)}`"
-              @click="askRemove(friend.personId)"
-            >
-              Rimuovi
-            </button>
-          </template>
+
         </span>
 
         <div
@@ -229,23 +223,24 @@ function removeWarning(personId: string): string {
       v-else-if="filter"
       class="pwc-empty"
     >
-      Nessun amico con questo nome.
+      Nessun risultato con questo nome.
     </p>
     <p
       v-else
       class="pwc-empty"
     >
-      Non hai ancora amici. Cerca il nickname di chi vuoi al muretto e aggiungilo:
-      quando accetta, vi vedrete i Pitwall a vicenda.
+      {{ tab === 'requests' ? 'Nessuna richiesta in sospeso.' : 'Nessun amico. Usa Aggiungi per cercare un nickname.' }}
     </p>
 
     <PitwallConceptMore
       :hidden="split.hidden"
       :expanded="expanded"
-      noun="amici"
-      noun-one="amico"
+      :noun="tab === 'requests' ? 'richieste' : 'amici'"
+      :noun-one="tab === 'requests' ? 'richiesta' : 'amico'"
       @toggle="expanded = !expanded"
     />
+    </ScrollArea>
+    </template>
   </section>
 </template>
 
@@ -266,4 +261,13 @@ function removeWarning(personId: string): string {
    attrezzo di servizio, non l'azione della pagina. */
 .pwc-search.is-slim { min-height: 38px; margin-top: 12px; }
 .pwc-search.is-slim input { font-size: 14px; }
+
+.pwc-person__heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.pwc-person__heading .pwc-person__name { flex: 1; min-width: 0; }
+.pwc .pwc-person.is-friend { grid-template-rows: 34px; row-gap: 0; }
+.pwc-person__status { flex: 0 0 auto; color: #4ade80; font-size: 10px; line-height: 18px; white-space: nowrap; }
+.pwc-person__status:empty { display: none; }
+.pwc-person.is-friend .pwc-person__heading { gap: 8px; }
+.pwc-person.is-friend .pwc-person__name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pwc-person.is-friend .pwc-confirm { grid-column: 1 / -1; }
 </style>

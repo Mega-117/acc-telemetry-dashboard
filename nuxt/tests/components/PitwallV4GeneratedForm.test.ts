@@ -5,7 +5,7 @@ const contextId = 'a'.repeat(64)
 const opened: JSDOM[] = []
 afterEach(() => { opened.splice(0).forEach(dom => dom.window.close()) })
 function onlineForm() {
-  const dom = new JSDOM(readFileSync(new URL('../../public/mfd-v4-online.html', import.meta.url), 'utf8'), { runScripts: 'outside-only' })
+  const dom = new JSDOM(readFileSync(new URL('../../public/mfd-v4-online.html', import.meta.url), 'utf8'), { runScripts: 'outside-only', pretendToBeVisual: true })
   opened.push(dom)
   const w = dom.window as any
   w.setInterval = () => 0
@@ -87,7 +87,7 @@ it('updates LIVE indicators in place while preserving input identity, typing and
   fuel.dispatchEvent(new w.Event('change', { bubbles: true }))
   snapshot({ strategy: { fuelToAdd: 18, tyreSet: 1, pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } } })
   expect(indicator('fuel')).toBe('✓'); expect(indicator('fl')).toBe('✓')
-  expect(w.document.getElementById('apply').textContent).toBe('INVIA STRATEGIA AL PILOTA')
+  expect(w.document.getElementById('apply').textContent).toBe('Invia strategia')
   w.document.getElementById('apply').click()
   const submit = (post.mock.calls.find((c: any) => c[0].type === 'submit')![0] as any).value
   expect(submit).toMatchObject({ operation: 'strategy', fuelLiters: 18, tyreSet: 2, changeTyres: true, pressures: { FL: 25, FR: 25, RL: 25, RR: 25 } })
@@ -110,16 +110,57 @@ it('defers initial values during an order and seeds them as soon as it finishes'
   expect(w.S.fuel).toBe(15)
 })
 
-it('still allows an explicit refresh to replace a draft with the latest machine values', () => {
-  const { w, snapshot, edit } = onlineForm()
+it('confirms replacing edited live fields, supports cancel and never submits on restore', () => {
+  const { w, snapshot, edit, post } = onlineForm()
   snapshot({ strategy: { fuelToAdd: 15 } }); edit('fuel', '17')
   snapshot({ strategy: { fuelToAdd: 30, tyreSet: 2, compound: 'wet' } })
+  const refresh = w.document.getElementById('refresh-draft')
+  const confirmation = w.document.querySelector('.draft-confirm')
+  refresh.click()
+  expect(confirmation.hidden).toBe(false)
   expect(w.S.fuel).toBe(17)
-  ;(Array.from(w.document.querySelectorAll('button')) as HTMLButtonElement[]).find(button => button.textContent === 'Aggiorna bozza dai dati disponibili')!.click()
+  confirmation.querySelector('button').click()
+  expect(confirmation.hidden).toBe(true)
+  expect(w.S.fuel).toBe(17)
+  refresh.click(); confirmation.querySelectorAll('button')[1].click()
   expect(w.S).toMatchObject({ fuel: 30, tyreSet: 3, compound: 'Wet' })
+  expect(confirmation.hidden).toBe(true)
+  expect(post.mock.calls.some((c: any) => c[0].type === 'submit')).toBe(false)
+  snapshot({ strategy: { fuelToAdd: 35 } }); refresh.click()
+  expect(w.S.fuel).toBe(35)
+  expect(confirmation.hidden).toBe(true)
+})
+
+it('hides timing outside development and ignores a development draft timing', () => {
+  const { w, snapshot } = onlineForm()
+  snapshot({ development: false, draft: { stepMs: 150 }, recipientLabel: 'RICO117' })
+  expect(w.document.querySelector('.v4-dev-tools').hidden).toBe(true)
+  expect(w.document.getElementById('gap').value).toBe('60')
+  expect(w.document.getElementById('apply').textContent).toBe('Invia strategia a RICO117')
+  snapshot({ development: true })
+  expect(w.document.querySelector('.v4-dev-tools').hidden).toBe(false)
+  const developer = onlineForm()
+  developer.snapshot({ development: true, draft: { stepMs: 150 } })
+  expect(developer.w.document.getElementById('gap').value).toBe('150')
+})
+
+it('blocks restore while busy or without telemetry and preserves a restored edited draft', () => {
+  const { w, snapshot, post } = onlineForm()
+  snapshot({ draft: { fuel: 17, edited: true }, strategy: { fuelToAdd: 30 } })
+  const refresh = w.document.getElementById('refresh-draft')
+  refresh.click()
+  expect(w.document.querySelector('.draft-confirm').hidden).toBe(false)
+  snapshot({ busy: true, strategy: { fuelToAdd: 30 } })
+  expect(refresh.disabled).toBe(true)
+  w.document.querySelectorAll('.draft-confirm button')[1].click()
+  expect(w.S.fuel).toBe(17)
+  expect(w.document.querySelector('.draft-confirm').hidden).toBe(true)
+  snapshot({ strategy: null })
+  expect(refresh.disabled).toBe(true)
+  expect(post.mock.calls.some((c: any) => c[0].type === 'submit')).toBe(false)
 })
 it('canonical generated form handles unknowns, dependencies, names, zero and preset separately', () => {
-  const dom = new JSDOM(readFileSync(new URL('../../public/mfd-v4-online.html', import.meta.url), 'utf8'), { runScripts: 'outside-only' })
+  const dom = new JSDOM(readFileSync(new URL('../../public/mfd-v4-online.html', import.meta.url), 'utf8'), { runScripts: 'outside-only', pretendToBeVisual: true })
   const w = dom.window as any
   w.setInterval = () => 0
   const post = vi.spyOn(w, 'postMessage').mockImplementation(() => {})
@@ -164,4 +205,20 @@ it('canonical generated form handles unknowns, dependencies, names, zero and pre
   const input = w.document.querySelector('input[data-f=fuel]'); input.value = ''; input.dispatchEvent(new w.Event('change', { bubbles: true }))
   expect(w.S.fuel).toBe(null)
   dom.window.close()
+})
+
+it('keeps the operational console inside the closed development accordion', () => {
+  const { w, snapshot } = onlineForm()
+  const tools = w.document.querySelector('.v4-dev-tools')
+  const consolePanel = w.document.querySelector('.v4-console')
+  expect(tools.contains(consolePanel)).toBe(true)
+  expect(tools.open).toBe(false)
+  snapshot({ development: false, outcome: 'Ordine verificato' })
+  expect(tools.hidden).toBe(true)
+  expect(consolePanel.textContent).toContain('Ordine verificato')
+  snapshot({ development: true, outcome: 'Ordine verificato' })
+  expect(tools.hidden).toBe(false)
+  expect(tools.open).toBe(false)
+  tools.open = true
+  expect(consolePanel.textContent).toContain('Ordine verificato')
 })

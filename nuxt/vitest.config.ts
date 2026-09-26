@@ -40,6 +40,9 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/components/pitwall/concept/PitwallConceptFriends.vue',
+        'app/components/pitwall/concept/PitwallConceptActionMenu.vue',
+        'app/components/pitwall/concept/PitwallConceptFeedback.vue',
           'app/services/ui/scrollbarActivity.ts',
           'app/services/projections/buildTrackOverviewProjection.ts',
           'app/services/projections/trackMetadata.ts',
@@ -291,6 +294,7 @@ export default defineConfig({
         'app/composables/useTrackBests.ts',
         // ── PIP-175: overlay HUD multipli ────────────────────────────────
         'app/composables/useHudOverlay.ts',
+        'app/components/overlay/QuickPanelLayoutToggle.vue',
         'app/composables/useOverlayRegionApi.ts',
         'app/services/overlay/surfaceRegionBridge.ts',
         'app/composables/useRaceHudPage.ts',

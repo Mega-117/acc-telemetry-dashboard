@@ -21,17 +21,17 @@ beforeEach(() => {
 
 describe('Pitwall navigation with the existing global store', () => {
   it('opens the lobby when no room is selected', () => {
-    const page = shallowMount(PitwallConcept)
+    const page = shallowMount(PitwallConcept, { global: { stubs: { ScrollArea: false } } })
     expect(page.find('.pwc-home').exists()).toBe(true)
     page.unmount()
   })
 
   it('opens home on remount while preserving room membership without joining again', () => {
     fake.store.selectedRace.value = { id: 'room' }
-    const first = shallowMount(PitwallConcept)
+    const first = shallowMount(PitwallConcept, { global: { stubs: { ScrollArea: false } } })
     expect(first.find('.pwc-home').exists()).toBe(true)
     first.unmount()
-    const returned = shallowMount(PitwallConcept)
+    const returned = shallowMount(PitwallConcept, { global: { stubs: { ScrollArea: false } } })
     expect(returned.find('.pwc-home').exists()).toBe(true)
     expect(fake.store.selectedRace.value.id).toBe('room')
     expect(fake.store.enterRace).not.toHaveBeenCalled()
@@ -41,7 +41,7 @@ describe('Pitwall navigation with the existing global store', () => {
   it('returns to the lobby when the selected room is removed', async () => {
     vi.stubGlobal('scrollTo', vi.fn())
     fake.store.selectedRace.value = { id: 'room' }
-    const page = shallowMount(PitwallConcept)
+    const page = shallowMount(PitwallConcept, { global: { stubs: { ScrollArea: false } } })
     page.findComponent({ name: 'PitwallConceptRaces' }).vm.$emit('enter', { id: 'room' })
     await nextTick()
     expect(page.findComponent({ name: 'PitwallConceptLive' }).exists()).toBe(true)
@@ -55,7 +55,7 @@ describe('Pitwall navigation with the existing global store', () => {
   it('a repeated navbar request returns home without leaving the room or sending an order', async () => {
     vi.stubGlobal('scrollTo', vi.fn())
     fake.store.selectedRace.value = { id: 'room' }
-    const page = shallowMount(PitwallConcept)
+    const page = shallowMount(PitwallConcept, { global: { stubs: { ScrollArea: false } } })
     page.findComponent({ name: 'PitwallConceptRaces' }).vm.$emit('enter', { id: 'room' })
     await nextTick()
     expect(page.findComponent({ name: 'PitwallConceptLive' }).exists()).toBe(true)

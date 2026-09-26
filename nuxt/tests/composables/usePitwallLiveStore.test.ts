@@ -381,6 +381,10 @@ describe('gli amici, in un elenco solo', () => {
 })
 
 describe('i Pitwall aperti e gli avvisi', () => {
+  it('does not project a social room name as a car model', () => {
+    link.rooms.value = [room({ membershipModel: 'social', label: 'Pitwall di Alex' })]
+    expect(store.races.value[0]).toMatchObject({ label: 'Pitwall di Alex', carModel: '' })
+  })
   it('does not execute a room action when selecting that room was refused', async () => {
     link.room.value = room({ memberUids: ['me'] })
     link.selectRoom.mockImplementationOnce(async () => {})

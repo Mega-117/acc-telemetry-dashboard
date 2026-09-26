@@ -9,6 +9,8 @@
 // Pitwall, entra. Niente versi, niente scadenze, niente codici da girarsi.
 // Le persone si chiamano col nickname e basta: nome e cognome non compaiono.
 import { computed, ref, watch } from "vue";
+import ScrollArea from "~/components/ui/ScrollArea.vue";
+import PitwallConceptFeedback from "~/components/pitwall/concept/PitwallConceptFeedback.vue";
 import PitwallConceptFriends from "~/components/pitwall/concept/PitwallConceptFriends.vue";
 import PitwallConceptLive from "~/components/pitwall/concept/PitwallConceptLive.vue";
 import PitwallConceptMyRoom from "~/components/pitwall/concept/PitwallConceptMyRoom.vue";
@@ -40,6 +42,7 @@ const found = computed(() => state.found.value);
 
 /** Il primo avvio non deve essere tre riquadri vuoti senza un punto di partenza. */
 const isFirstRun = computed(() => !friends.value.length);
+const addingFriend = ref(false);
 
 // La gara che si stava guardando non c'e' piu' (chiusa dal pilota, o non ne
 // facciamo piu' parte): si torna alla home, invece di restare in una schermata
@@ -94,37 +97,9 @@ function add(personId: string) {
 <template>
   <section
     class="pwc"
+    :class="{ 'pwc--home': screen === 'home', 'pwc--live': screen !== 'home' }"
     data-testid="pitwall-concept"
   >
-    <!-- I servizi parlano qui, in italiano: un errore di rete o una risposta
-         del server non restano muti. -->
-    <p
-      v-if="state.error.value"
-      class="pwc-flash is-error"
-      role="alert"
-    >
-      {{ state.error.value }}
-    </p>
-    <p
-      v-else-if="state.notice.value"
-      class="pwc-flash"
-      role="status"
-    >
-      {{ state.notice.value }}
-    </p>
-
-    <!-- L'orologio sbagliato non e' un errore dell'app e non passa da solo:
-         sta accanto agli altri messaggi, non al posto loro, e resta finche'
-         l'utente non lo sistema. -->
-    <p
-      v-if="state.clockWarning.value"
-      class="pwc-flash is-warn"
-      data-testid="pitwall-clock-warning"
-      role="alert"
-    >
-      {{ state.clockWarning.value }}
-    </p>
-
     <!-- HOME: il mio Pitwall, chi ha aperto il suo, gli amici -->
     <div
       v-if="screen === 'home'"
@@ -132,6 +107,8 @@ function add(personId: string) {
     >
       <!-- Il tuo Pitwall sta in cima: chi guida apre questa pagina per
            aprirlo o per sapere se il muretto lo vede, non per assistere. -->
+      <h1 class="sr-only">Pitwall</h1>
+      <div class="pwc-home__main">
       <section class="pwc-home__mine">
         <header class="pwc-block__head">
           <h2 class="pwc-block__title">
@@ -172,64 +149,57 @@ function add(personId: string) {
           v-if="isFirstRun"
           class="pwc-start"
         >
-          Si comincia da un amico: cerca il suo nickname qui sotto e aggiungilo.
-          Quando accetta, vedrai il suo Pitwall appena lo apre, e lui il tuo.
+          Aggiungi un amico dalla rubrica per trovare il suo Pitwall.
         </p>
 
+        <ScrollArea class="pwc-room-scroll" label="Pitwall aperti">
         <PitwallConceptRaces
           :races="races"
           :people="people"
           :me-id="state.meId.value"
           @enter="enter"
         />
+        </ScrollArea>
       </section>
 
-      <!-- Gli amici e la ricerca affiancati: sono le due meta' dello stesso
-           gesto, e vederle insieme toglie la scheda che ne nascondeva una. -->
-      <PitwallConceptFriends
-        class="pwc-home__friends"
-        :friends="friends"
-        :people="people"
-        @accept="state.befriend($event)"
-        @remove="state.unfriend($event)"
-        @enter="enterById"
-      />
-
-      <section class="pwc-home__add">
-        <h2 class="pwc-block__title">
-          Aggiungi un amico
-        </h2>
-        <p class="pwc-block__hint">
-          Cerca il nickname e aggiungilo: quando accetta, siete amici.
-        </p>
-
-        <PitwallConceptSearch
-          v-model="search"
-          :found="found"
-          linked-label="Già fra gli amici"
+      </div>
+      <aside class="pwc-home__social" aria-label="Amici e richieste">
+        <PitwallConceptFriends
+          class="pwc-home__friends"
+          :friends="friends"
+          :people="people"
+          :adding="addingFriend"
+          @accept="state.befriend($event)"
+          @remove="state.unfriend($event)"
+          @enter="enterById"
         >
-          <template #actions="{ person }">
-            <button
-              type="button"
-              class="pwc-btn is-primary"
-              @click="add(person.id)"
-            >
-              Aggiungi
+          <template #heading-action>
+            <button type="button" class="pwc-link-btn" :aria-expanded="addingFriend" @click="addingFriend = !addingFriend; search = ''">
+              {{ addingFriend ? 'Torna agli amici' : '+ Aggiungi' }}
             </button>
           </template>
-        </PitwallConceptSearch>
-      </section>
+          <template #search>
+            <PitwallConceptSearch v-model="search" :found="found" linked-label="Già collegato">
+              <template #actions="{ person }">
+                <button type="button" class="pwc-btn" @click="add(person.id)">Aggiungi</button>
+              </template>
+            </PitwallConceptSearch>
+          </template>
+        </PitwallConceptFriends>
+      </aside>
+      <PitwallConceptFeedback class="pwc-home__feedback" :error="state.error.value" :notice="state.notice.value" :warning="state.clockWarning.value" />
     </div>
 
-    <PitwallConceptLive
-      v-else
-      @back="go('home')"
-    />
+    <template v-else>
+      <PitwallConceptFeedback :error="state.error.value" :notice="state.notice.value" :warning="state.clockWarning.value" />
+      <PitwallConceptLive @back="go('home')" />
+    </template>
   </section>
 </template>
 
 <style lang="scss">
 @use "@/assets/scss/variables" as *;
+@use "@/assets/scss/racing-settings" as racing;
 
 /* Ritmo unico: passo verticale 8px, tre livelli di superficie, un solo accento.
    Niente strati di override sovrapposti: se una regola non serve, si toglie.
@@ -534,5 +504,133 @@ function add(personId: string) {
 
 @media (prefers-reduced-motion: reduce) {
   .pwc * { transition: none !important; }
+}
+
+// Landing page only: the live room keeps its existing controls and layout.
+.pwc.pwc--home {
+  @include racing.tokens;
+  --rc-control-height: 34px;
+  --pwc-line: var(--rc-line);
+  --pwc-surface: transparent;
+  --pwc-raised: transparent;
+  width: 100%;
+  max-width: var(--app-content-max-width, 1400px);
+  min-height: 0;
+  margin: 0 auto;
+  padding: var(--app-content-top-space, 40px) 24px 32px;
+  font-size: 13px;
+
+  .pwc-home { width: 100%; height: clamp(440px, calc(100dvh - 250px), 680px); grid-template-columns: minmax(0, 1fr) 320px; grid-template-rows: minmax(0, 1fr) 56px; gap: 16px 24px; align-items: stretch; padding: 24px 24px 0; border: 1px solid var(--rc-line); background: #00000018; }
+  .pwc-home__main { min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0,1fr); gap: 24px; }
+  .pwc-home__social { min-width: 0; min-height: 0; padding-left: 24px; border-left: 1px solid var(--rc-line); display: flex; flex-direction: column; }
+  .pwc-home__mine, .pwc-home__races { grid-column: auto; min-height: 0; }
+  .pwc-home__mine { max-height: 180px; overflow-y: auto; }
+  .pwc-home__races { display: flex; flex-direction: column; }
+  .pwc-home__races > .pwc-block__head, .pwc-side > .pwc-block__head, .pwc-social-tabs, .pwc-search { flex-shrink: 0; }
+  .pwc-home__races > .pwc-start { margin: 0 0 12px; }
+  .pwc-room-scroll, .pwc-social-scroll, .pwc-find__results { min-height: 0; flex: 1; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding-right: 8px; }
+  .pwc-side, .pwc-find { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .pwc-home__feedback { grid-column: 1 / -1; min-height: 0; overflow-y: auto; border-top: 1px solid var(--rc-line); padding: 8px 0; }
+  .pwc-home__feedback .pwc-flash { width: 100%; margin: 0; padding: 4px 0; border: 0; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+  .pwc-search input:focus-visible { outline: none; }
+
+  h2, strong, b { font-family: var(--rc-font), sans-serif; }
+  .pwc-block__title { font-size: 12px; letter-spacing: .08em; }
+  .pwc-block__head { min-height: 34px; margin-bottom: 12px; }
+  .pwc-btn { @include racing.action; padding: 7px 14px; }
+  .pwc-btn.is-primary { @include racing.primary; }
+  .pwc-btn.is-danger { color: #ff6178; background: #ff002419; }
+  .pwc-link-btn { min-height: 32px; font-size: 12px; }
+  button:focus-visible, input:focus-visible { outline-color: #fff; }
+  .pwc-btn:focus-visible { outline-offset: -3px; }
+  .pwc-panel, .pwc-race, .pwc-person, .pwc-search, .pwc-flash { border-radius: 0; }
+  .pwc-chip { border: 0; padding: 0; font-size: 11px; }
+  .pwc-chip.is-asking { color: #ffc400; }
+  .pwc-avatar { width: 28px; height: 28px; font-size: 10px; border-color: var(--rc-line); }
+  .pwc-race__copy strong { font-size: 14px; line-height: 1.4; }
+  .pwc-race__copy small { font-size: 12px; line-height: 1.5; }
+  .pwc-race__copy { gap: 6px; }
+  .pwc-mine { padding: 16px; gap: 16px; border-color: var(--rc-line); }
+  .pwc-mine .pwc-avatar { display: none; }
+  .pwc-mine__actions { flex-wrap: wrap; gap: 12px; }
+  .pwc-race { grid-template-columns: minmax(0,1fr) minmax(110px,.6fr) auto; gap: 24px; margin: 0; padding: 20px 0; border: 0; border-bottom: 1px solid var(--rc-line); background: transparent; }
+  .pwc-race:hover { background: #ffffff06; }
+  .pwc-race > .pwc-avatar, .pwc-race__who > .pwc-avatar { display: none; }
+  .pwc-race__wall { grid-column: auto; min-width: 0; }
+  .pwc-race__wall b { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+  .pwc-invitation { color: #ffc400; }
+  .pwc-role { gap: 6px; }
+  .pwc-role small { font-size: 10px; color: var(--rc-muted); }
+  .pwc-race__why { padding-top: 12px; font-size: 12px; line-height: 1.5; }
+  .pwc-people { gap: 0; margin-top: 12px; }
+  .pwc-person, .pwc-person.is-deciding, .pwc-person.is-add {
+    grid-template-columns: 28px minmax(0,1fr); gap: 8px 12px; padding: 14px 0;
+    border: 0; border-bottom: 1px solid var(--rc-line); background: transparent;
+  }
+  .pwc-person__name { font-size: 13px; font-weight: 600; }
+  .pwc-person > .pwc-chip, .pwc-person__actions, .pwc-person.is-deciding .pwc-person__actions { grid-column: 2; justify-self: start; }
+  .pwc-person > span:empty { display: none; }
+  .pwc-person__actions { flex-wrap: wrap; gap: 12px; }
+  .pwc-search, .pwc-search.is-slim { min-height: 34px; padding: 0 10px; margin: 12px 0 0; background: transparent; }
+  .pwc-search input, .pwc-search.is-slim input { font-size: 12px; min-width: 0; }
+  .pwc-search:focus-within { border-color: #ffffff80; }
+  .pwc-search svg { width: 16px; }
+  .pwc-empty { font-size: 12px; line-height: 1.6; padding-top: 12px; }
+  .pwc-start { border: 0; border-radius: 0; padding: 0; font-size: 12px; }
+  .pwc-social-tabs { display: flex; gap: 20px; border-bottom: 1px solid var(--rc-line); }
+  .pwc-social-tabs button { min-height: 34px; padding: 0; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--rc-muted); cursor: pointer; font-size: 12px; }
+  .pwc-social-tabs button[aria-pressed="true"] { color: #fff; border-bottom-color: var(--racing-race, #ff0024); }
+  .pwc-social-tabs span { margin-left: 5px; font-variant-numeric: tabular-nums; }
+  @media(max-width: 1000px) {
+    .pwc-home { grid-template-columns: minmax(0,1fr) 290px; gap: 24px; }
+    .pwc-home__social { padding-left: 20px; }
+    .pwc-mine { grid-template-columns: 1fr auto; }
+    .pwc-mine__actions { grid-column: 1 / -1; }
+    .pwc-race { grid-template-columns: minmax(0,1fr) auto; gap: 12px; }
+    .pwc-race__wall { grid-column: 1; grid-row: 2; }
+    .pwc-race > .pwc-btn { grid-column: 2; grid-row: 1 / 3; }
+  }
+  @media(max-width: 720px) {
+    padding-right: 16px; padding-left: 16px;
+    .pwc-home { height: 760px; grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr) minmax(0,1fr) 56px; gap: 16px; padding: 16px 16px 0; }
+    .pwc-home__social { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--rc-line); }
+    .pwc-mine, .pwc-mine.is-off { grid-template-columns: 1fr; }
+    .pwc-mine > .pwc-btn { justify-self: start; }
+  }
+}
+
+.pwc.pwc--live {
+  @include racing.tokens;
+  --rc-control-height: 34px;
+  --pwc-line: var(--rc-line); --pwc-raised: transparent; --pwc-surface: transparent;
+  width: 100%; max-width: var(--app-content-max-width,1400px); margin: 0 auto;
+  padding: var(--app-content-top-space,40px) 24px 32px; font-size: 13px;
+  .pwc-live { grid-template-columns: minmax(0,1fr) 260px; gap: 16px 24px; align-items: start; }
+  .pwc-live__back, .pwc-live__heading { grid-column: 1 / -1; }
+  .pwc-live__heading { width: 100%; margin: 0; padding: 0; display:flex; justify-content:space-between; align-items:center; }
+  .pwc-live__heading h2 { font-size: 18px; margin: 0 0 8px; }
+  .pwc-strategy { grid-column: 1; grid-row: 3; min-width: 0; }
+  .pwc-roster { grid-column: 2; grid-row: 3; padding: 0 16px; }
+  .pwc-panel { background: transparent; border: 1px solid var(--rc-line); border-radius: 0; }
+  .pwc-panel__head { padding: 16px; gap: 12px; border: 0; }
+  .pwc-panel__head h2 { font-size: 13px; margin: 0; }
+  .pwc-roster .pwc-panel__head { padding: 16px 0; }
+  .pwc-roster__row { grid-template-columns: 8px 24px minmax(0,1fr); padding: 12px 0; gap: 6px 8px; }
+  .pwc-roster__row > .pwc-chip { grid-column: 3; justify-self: start; }
+  .pwc-roster__row .pwc-person__actions:empty { display: none; }
+  .pwc-roster__foot { padding: 12px 0; }
+  .pwc-person__name { font-size: 13px; }
+  .pwc-chip, .pwc-fresh { border: 0; background: transparent; padding: 0; font-size: 11px; }
+  .pwc-recipient { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 0 16px 12px; font-size: 12px; }
+  .pwc-recipient select { @include racing.select; width: 210px; }
+  .pwc-btn { @include racing.action; }
+  .pwc-btn.is-primary { @include racing.primary; }
+  .pwc-link-btn { font-size: 12px; min-height: 32px; }
+  .pwc-flash { border-radius: 0; margin: 0 0 16px; padding: 8px 12px; font-size: 12px; }
+  @media (max-width: 1000px) {
+    .pwc-live { grid-template-columns: minmax(0,1fr); }
+    .pwc-roster { grid-column: 1; grid-row: 3; }
+    .pwc-strategy { grid-column: 1; grid-row: 4; }
+  }
 }
 </style>

@@ -24,21 +24,6 @@
   button.is-active::after { content: ''; position: absolute; inset: auto 0 0; height: 3px; background: var(--racing-data-accent); }
 }
 .racing-filter-selects { display: flex; flex-wrap: wrap; gap: var(--racing-space-control); }
-.racing-select {
-  color-scheme: dark;
-  // Fixed closed width; the native popup retains full option labels.
-  appearance: none;
-  min-height: 34px; width: 144px; min-width: 0; max-width: 100%; padding: 7px 34px 7px 12px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='m1 1 4 4 4-4' fill='none' stroke='%23b3b3b8' stroke-width='1.2'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 12px center; background-size: 10px 6px;
-  border: 1px solid var(--racing-data-edge); border-radius: 0; background-color: transparent;
-  color: var(--racing-data-muted); font: inherit; font-size: var(--racing-filter-text-size); cursor: pointer;
-  option { background: #0b0b0e; color: #ededf0; }
-  &:hover { border-color: #ffffff60; }
-  &--car { width: 176px; }
-  @media (forced-colors: active) { appearance: auto; background-image: none; }
-}
 .racing-table-scroll { overflow-x: auto; }
 .racing-day-table {
   width: 100%; min-width: 900px; table-layout: fixed; border-collapse: collapse;

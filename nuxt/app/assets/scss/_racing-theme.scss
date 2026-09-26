@@ -1,3 +1,5 @@
+@use 'racing-settings' as controls;
+
 :root {
   --app-content-max-width: 1400px;
   --app-content-top-space: 40px;
@@ -36,7 +38,7 @@
   &:not(.racing-button--primary)::after { left: -3px; bottom: 4px; }
 }
 
-// Compact form controls shared by the racing settings surfaces.
-.racing-select { max-width: 100%; min-height: 38px; padding: 8px 34px 8px 14px; border: 1px solid #ffffff55; border-radius: 0; background: #08090b; color: #e5e5e5; font: inherit; font-size: 13px; color-scheme: dark; }
-.racing-select:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-.racing-select:disabled { opacity: .4; }
+// One control definition; density is an explicit variant, not import order.
+.racing-select { @include controls.select; }
+.racing-select--compact { @include controls.compact-select; }
+.racing-select--car { width: 176px; }

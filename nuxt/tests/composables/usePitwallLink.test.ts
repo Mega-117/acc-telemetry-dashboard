@@ -295,3 +295,15 @@ describe('presenza RTDB e navigazione', () => {
     link.stop()
   })
 })
+
+
+describe('search feedback placement', () => {
+  it.each([true, false])('preserves results and uses inline feedback when configured: %s', async inlineSearchFeedback => {
+    const link = usePitwallLink({ engineerUid: () => 'me', inlineSearchFeedback })
+    link.searchTerm.value = 'nessuno'
+    await link.search()
+    expect(link.searchResults.value).toEqual([])
+    expect(link.notice.value).toBe(inlineSearchFeedback ? null : 'Nessun utente trovato con questo nome.')
+    link.stop()
+  })
+})

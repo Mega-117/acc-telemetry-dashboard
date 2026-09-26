@@ -13,7 +13,7 @@ const props = withDefaults(defineProps<{
   toleranceMs: number
   keepBetweenSessions: boolean
   contextLabel?: string
-  appearance?: 'default' | 'sectors'
+  appearance?: 'default' | 'sectors' | 'quick-panel'
 }>(), {
   contextLabel: 'HUD Info',
   appearance: 'default',
@@ -64,17 +64,18 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 <template>
   <section
     class="info-target-setup"
-    :class="{ 'info-target-setup--sectors': appearance === 'sectors' }"
+    :class="{ 'info-target-setup--sectors': appearance === 'sectors', 'info-target-setup--quick': appearance === 'quick-panel' }"
     data-overlay-interactive
     aria-label="Configura Target giro"
   >
     <header>
-      <span>{{ contextLabel }}</span>
+      <span v-if="appearance !== 'quick-panel'">{{ contextLabel }}</span>
       <strong>Target giro</strong>
-      <p>Imposta il riferimento del giro completo.</p>
+      <p v-if="appearance !== 'quick-panel'">Imposta il riferimento del giro completo.</p>
+      <output v-else aria-label="Tempo target" aria-live="polite">{{ formatInfoLapTime(targetTimeMs) }}</output>
     </header>
 
-    <div class="target-preview" aria-live="polite">
+    <div v-if="appearance !== 'quick-panel'" class="target-preview" aria-live="polite">
       <span>Tempo target</span>
       <strong>{{ formatInfoLapTime(targetTimeMs) }}</strong>
     </div>
@@ -113,8 +114,8 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 
     <section class="target-tolerance" aria-labelledby="target-tolerance-title">
       <div class="target-tolerance__copy">
-        <strong id="target-tolerance-title">Tolleranza</strong>
-        <p>Margine concesso oltre il target. I giri più veloci restano validi.</p>
+        <strong id="target-tolerance-title" title="Margine concesso oltre il target. I giri più veloci restano validi.">Tolleranza</strong>
+        <p v-if="appearance !== 'quick-panel'">Margine concesso oltre il target. I giri più veloci restano validi.</p>
       </div>
       <div
         class="target-tolerance__control"
@@ -146,13 +147,14 @@ function onWheel(control: PickerControl, event: WheelEvent) {
     <button
       type="button"
       class="target-keep"
+      title="Mantieni tra sessioni dello stesso server"
       data-overlay-wheel-action="target-keep"
       :class="{ 'is-active': keepBetweenSessions }"
       :aria-pressed="keepBetweenSessions"
       @click="emit('toggle-keep')"
     >
       <i aria-hidden="true">{{ keepBetweenSessions ? '✓' : '' }}</i>
-      <span>Mantieni tra sessioni dello stesso server</span>
+      <span>{{ appearance === 'quick-panel' ? 'Mantieni sullo stesso server' : 'Mantieni tra sessioni dello stesso server' }}</span>
     </button>
 
     <div class="target-actions">
@@ -337,6 +339,40 @@ header p { margin: 4px 0 0; color: rgba(255,255,255,.62); font-size: 13px; }
   box-shadow: none;
   -webkit-app-region: no-drag;
 }
+
+
+/* Ctrl+K uses the same neutral, compact chrome as its main menu. */
+.info-target-setup--quick {
+  padding: 0; gap: 12px; border: 0; border-radius: 0;
+  background: #0b0b0b; box-shadow: none;
+}
+.info-target-setup--quick header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #ffffff25; }
+.info-target-setup--quick header strong { margin: 0; font-size: 16px; font-weight: 600; }
+.info-target-setup--quick header output { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.info-target-setup--quick .target-picker { gap: 8px; }
+.info-target-setup--quick .target-drum { grid-template-rows: 20px 24px 28px 24px; border-radius: 0; background: #ffffff04; overflow: visible; }
+.info-target-setup--quick .target-drum > span { padding: 0; color: #aaa; font-weight: 600; }
+.info-target-setup--quick .target-drum > strong { font-size: 22px; font-weight: 600; }
+.info-target-setup--quick .target-drum:hover,
+.info-target-setup--quick .target-tolerance__control:hover { border-color: #ffffff50; box-shadow: none; }
+.info-target-setup--quick .target-drum:focus-within,
+.info-target-setup--quick .target-drum:focus,
+.info-target-setup--quick .target-tolerance__control:focus-within { border-color: #ffffff80; box-shadow: none; }
+.info-target-setup--quick button { border-radius: 0; }
+.info-target-setup--quick button:hover { color: #fff; background: #ffffff12; }
+.info-target-setup--quick button:focus-visible { outline: 1px solid white; outline-offset: -2px; }
+.info-target-setup--quick .target-tolerance { padding: 0; border: 0; border-radius: 0; background: transparent; }
+.info-target-setup--quick .target-tolerance__copy strong { font-weight: 500; letter-spacing: 0; }
+.info-target-setup--quick .target-tolerance__control { min-height: 32px; border-radius: 0; background: #ffffff04; }
+.info-target-setup--quick .target-tolerance__control strong { font-size: 14px; font-weight: 600; }
+.info-target-setup--quick .target-keep { padding: 4px 0; gap: 8px; grid-template-columns: 18px 1fr; border: 0; background: transparent; }
+.info-target-setup--quick .target-keep i { width: 16px; height: 16px; border-radius: 0; font-size: 12px; }
+.info-target-setup--quick .target-keep span { font-size: 12px; font-weight: 500; }
+.info-target-setup--quick .target-keep.is-active i { color: #21ff83; border-color: #21ff83; background: #21ff831a; }
+.info-target-setup--quick .target-actions { grid-template-columns: 1fr 1fr; padding-top: 12px; border-top: 1px solid #ffffff25; }
+.info-target-setup--quick .target-actions button { min-height: 34px; font-size: 12px; font-weight: 600; }
+.info-target-setup--quick .target-confirm { color: #fff; border: 1px solid #ff002480; background: #ff00241a; }
+.info-target-setup--quick .target-confirm:hover { background: #ff002430; }
 
 @media (prefers-reduced-motion: reduce) {
   .info-target-setup *,

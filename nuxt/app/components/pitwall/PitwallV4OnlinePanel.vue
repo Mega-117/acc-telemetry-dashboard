@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { usePitwallRoom } from '~/composables/usePitwallRoom'
+import { canUseDevTools } from '~/utils/devToolsAccess'
 import { boundPitwallStrategy } from '~/services/pitwall/pitwallLink'
 import { usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
 const props = defineProps<{ port?: ReturnType<typeof usePitwallRoom> }>()
@@ -14,6 +15,7 @@ const v4Draft = computed({
 })
 const frame = ref<HTMLIFrameElement | null>(null)
 const frameReady = ref(false)
+const frameHeight = ref(1040)
 type LocalIdentity = { ok: boolean, key?: string, reason?: string, drivers?: Array<{ driverIndex: number, firstName: string, lastName: string }> }
 const identity = ref<LocalIdentity | null>(null)
 const selectedIdentity = ref<number | null>(null)
@@ -25,6 +27,8 @@ async function associate(save = false) {
     : { action: 'status' }) }
   catch { identity.value = { ok: false, reason: 'Identità locale non disponibile.' } }
 }
+const development = ref(false)
+const recipientLabel = computed(() => props.port?.availableTargets?.value.find(target => target.uid === props.port?.selectedTargetUid?.value)?.nickname || '')
 const error = ref('')
 const busy = computed(() => props.port?.sending.value || ['pending', 'applying'].includes(props.port?.orderStatus.value ?? ''))
 const car = computed(() => boundPitwallStrategy(props.port?.carSnapshot.value?.strategy, ''))
@@ -38,7 +42,7 @@ function publish() {
   // The room and draft contain nested Vue proxies, which postMessage cannot clone.
   // This boundary carries JSON data only, like the remote strategy contract.
   const snapshot = { channel: 'mfd-v4-online', type: 'snapshot', value: {
-    ready: !reason.value, reason: error.value || reason.value, busy: !!busy.value,
+    development: development.value, recipientLabel: recipientLabel.value, ready: !reason.value, reason: error.value || reason.value, busy: !!busy.value,
     contextId: car.value?.mfdV4?.contextId, strategy: car.value,
     crew: props.port?.carSnapshot.value?.crew || [], draft: v4Draft.value, outcome: outcome.value,
   } }
@@ -46,6 +50,13 @@ function publish() {
 }
 async function message(event: MessageEvent) {
   if (!frame.value?.contentWindow || event.source !== frame.value.contentWindow || event.data?.channel !== 'mfd-v4-online') return
+  if (event.data.type === 'layout-height') {
+    const height = event.data.value
+    if (typeof height === 'number' && Number.isFinite(height) && height >= 100 && height <= 10000) {
+      frameHeight.value = Math.ceil(height)
+    }
+    return
+  }
   if (event.data.type === 'ready') { frameReady.value = true; publish(); return }
   if (event.data.type === 'draft' && !busy.value) {
     if (event.data.value && JSON.stringify(event.data.value).length < 4000) v4Draft.value = event.data.value
@@ -61,15 +72,26 @@ async function message(event: MessageEvent) {
   } catch (cause) { error.value = cause instanceof Error ? cause.message : 'Invio non riuscito.' }
   finally { publish() }
 }
-watch(draftKey, () => { frameReady.value = false; error.value = '' }, { flush: 'sync' })
-watch([car, busy, reason, outcome, () => props.port?.carSnapshot.value?.crew], publish, { deep: true })
-onMounted(() => window.addEventListener('message', message))
+watch(draftKey, () => { frameReady.value = false; frameHeight.value = 1040; error.value = '' }, { flush: 'sync' })
+watch([development, recipientLabel, car, busy, reason, outcome, () => props.port?.carSnapshot.value?.crew], publish, { deep: true })
+onMounted(() => { development.value = canUseDevTools(); window.addEventListener('message', message) })
 onBeforeUnmount(() => window.removeEventListener('message', message))
 </script>
 <template>
-  <div>
-    <p>Destinatario: <strong>{{ port?.executorLabel.value || 'Pilota non disponibile' }}</strong></p>
-    <p role="status">{{ error || reason || 'V4 pronta sul PC del pilota.' }}</p>
+  <div class="v4-online">
+    <p v-if="error || (!frameReady && reason)" role="status">{{ error || reason }}</p>
+    <p class="v4-recipient">Destinatario strategia <strong>{{ recipientLabel || 'Nessun pilota disponibile' }}</strong></p>
+    <details v-if="development" class="v4-tools">
+      <summary>Strumenti di sviluppo</summary>
+      <label v-if="port?.availableTargets" class="v4-target">
+        Destinatario strategia
+        <select :value="port.selectedTargetUid.value ?? ''" :disabled="busy"
+          @change="port.selectTarget(($event.target as HTMLSelectElement).value || null)">
+          <option value="">Seleziona un pilota</option>
+          <option v-for="target in port.availableTargets.value" :key="target.uid" :value="target.uid">{{ target.nickname }}</option>
+          <option v-if="port.selectedTargetUid.value && !port.availableTargets.value.some(target => target.uid === port?.selectedTargetUid.value)" :value="port.selectedTargetUid.value" disabled>Pilota non disponibile</option>
+        </select>
+      </label>
     <details v-if="localApi?.pitwallV4Identity">
       <summary>Identità sul PC del pilota</summary>
       <p>Solo se il nome locale di ACC è ambiguo, indica a quale pilota appartiene questo PC.</p>
@@ -83,9 +105,19 @@ onBeforeUnmount(() => window.removeEventListener('message', message))
         <button type="button" :disabled="busy || selectedIdentity === null" @click="associate(true)">Conferma associazione locale</button>
       </template>
     </details>
-    <iframe :key="draftKey" ref="frame" title="Strategia V4 online" :src="formUrl" sandbox="allow-scripts" class="v4-frame" />
+    </details>
+    <iframe :key="draftKey" ref="frame" title="Strategia V4 online" :src="formUrl" sandbox="allow-scripts" class="v4-frame" :style="{ height: `${frameHeight}px` }" />
   </div>
 </template>
 <style scoped>
-.v4-frame { display: block; width: 100%; height: 950px; border: 1px solid #3d4650; background: #0c0e10; }
+.v4-frame { display: block; width: 100%; border: 0; background: transparent; color-scheme: dark; }
+.v4-online > details { margin: 12px 0; font-size: 12px; }
+.v4-online > p:not(.v4-recipient) { color: #ff6178; font-size: 12px; }
+
+.v4-recipient { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 16px 12px; color: #a9a9b2; font-size: 12px; }
+.v4-recipient strong { color: #e8e8eb; font-weight: 600; }
+.v4-tools { margin: 0 16px 12px !important; color: #a9a9b2; }
+.v4-tools summary { cursor: pointer; }
+.v4-target { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
+.v4-target select { padding: 8px 12px; color: #e8e8eb; background: #101014; border: 1px solid #ffffff30; }
 </style>

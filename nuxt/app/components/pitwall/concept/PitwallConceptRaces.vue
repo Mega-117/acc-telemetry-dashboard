@@ -1,11 +1,6 @@
 <script setup lang="ts">
-// I Pitwall aperti adesso (PIP-369, PIP-360, PIP-362).
-//
-// Una riga per **amico che ha aperto il suo Pitwall**, non per stanza e non
-// per chiunque sia in pista. Elencare le stanze rispondeva alla domanda
-// sbagliata (non si chiudono mai); elencare chi era in pista rispondeva a
-// meta' (in pista si sta anche senza volere nessuno al muretto). Qui c'e' chi
-// ha detto "vieni": se chiude o spegne, la sua riga sparisce da sola.
+// Stanze accessibili: lo store fornisce una riga per stanza, senza duplicarla
+// per ciascun amico presente. La home presenta dati e inoltra solo l'ingresso.
 import { computed, ref } from "vue";
 import PitwallConceptMore from "~/components/pitwall/concept/PitwallConceptMore.vue";
 import {
@@ -28,7 +23,7 @@ defineEmits<{ enter: [race: PitwallConceptRace] }>();
 const expanded = ref(false);
 const me = computed(() => props.meId ?? "");
 
-const invited = (race: PitwallConceptRace) => pitwallConceptAmInvited(race, me.value);
+const invited = (race: PitwallConceptRace) => race.membershipModel !== "social" && pitwallConceptAmInvited(race, me.value);
 
 /** Prima quelli in cui sei gia' dentro, poi gli inviti, in fondo le chiuse. */
 const ordered = computed(() => [...props.races].sort((left, right) => {
@@ -50,7 +45,7 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
 /** Dove sta guidando: pista e vettura, quando le sappiamo. */
 function whereLabel(race: PitwallConceptRace): string {
   const number = race.carNumber ? `#${race.carNumber}` : "";
-  return [race.track, race.carModel, number].filter(Boolean).join(" · ");
+  return [race.track, race.carModel === race.label ? "" : race.carModel, number].filter(Boolean).join(" · ");
 }
 
 /**
@@ -80,7 +75,8 @@ function wallLabel(race: PitwallConceptRace): string {
         <span class="pwc-avatar">{{ initials(race.hostId) }}</span>
         <span class="pwc-race__copy">
           <strong>{{ race.label || nick(race.hostId) }}</strong>
-          <small>{{ whereLabel(race) || race.session }}</small>
+          <small v-if="whereLabel(race)">{{ whereLabel(race) }}</small>
+          <small v-if="invited(race) && !race.closed" class="pwc-invitation">Invito</small>
         </span>
       </div>
 
@@ -96,10 +92,7 @@ function wallLabel(race: PitwallConceptRace): string {
         v-if="race.closed"
         class="pwc-chip is-waiting"
       >Chiusa</span>
-      <span
-        v-else
-        class="pwc-chip is-always"
-      >Pitwall aperto</span>
+
 
       <button
         v-if="!race.closed"
@@ -110,20 +103,13 @@ function wallLabel(race: PitwallConceptRace): string {
         Entra
       </button>
 
-      <p
-        v-if="invited(race)"
-        class="pwc-race__why"
-      >
-        Entra per vedere la vettura e mandare la strategia.
-      </p>
     </article>
 
     <p
       v-if="!races.length"
       class="pwc-empty"
     >
-      Nessun amico ha il Pitwall aperto adesso. Quando uno lo apre compare qui
-      da solo, e ci entri con un clic.
+      Nessun Pitwall disponibile al momento.
     </p>
 
     <PitwallConceptMore

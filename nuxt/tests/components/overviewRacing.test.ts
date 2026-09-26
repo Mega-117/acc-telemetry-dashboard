@@ -14,6 +14,23 @@ const event = { id: 'event', title: 'Gara QA', startsAt: '2099-10-01T19:00', tra
 beforeEach(() => { vi.clearAllMocks(); mocks.load.mockResolvedValue([event]) })
 
 describe('racing overview components', () => {
+  it('keeps secondary race actions in its own menu and preserves delete confirmation', async () => {
+    mocks.load.mockResolvedValue([event, { ...event, id: 'second', title: 'Seconda gara', startsAt: '2099-10-02T19:00' }])
+    const wrapper = mount(Calendar, { props: { userId: 'qa', racing: true }, global: { stubs: { teleport: true } } })
+    await flushPromises()
+    expect(wrapper.find('.compact-actions').exists()).toBe(false)
+    expect(wrapper.get('.compact-race summary').attributes('aria-label')).toBe('Opzioni gara Seconda gara')
+    await wrapper.get('.compact-race .race-options__edit').trigger('click')
+    expect((wrapper.get('input').element as HTMLInputElement).value).toBe('Seconda gara')
+    await wrapper.get('[aria-label="Chiudi"]').trigger('click')
+    await wrapper.get('.compact-race .race-options__delete').trigger('click')
+    expect(wrapper.get('.delete-confirm').text()).toContain('Seconda gara')
+    expect(mocks.remove).not.toHaveBeenCalled()
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+    expect(mocks.remove).toHaveBeenCalledWith('qa', 'second')
+    wrapper.unmount()
+  })
   it('reuses the calendar request prepared for the same user and retries after failure', async () => {
     const pending = Promise.reject(new Error('offline'))
     const entry = ref({ takeEvents: vi.fn().mockReturnValueOnce(pending) })

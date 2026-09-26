@@ -2,6 +2,7 @@
 // La stanza corrente appartiene ai partecipanti, indipendentemente da ACC.
 // L'intento desktop apre una stanza; una membership confermata prevale su off.
 import { computed } from "vue";
+import PitwallConceptActionMenu from "~/components/pitwall/concept/PitwallConceptActionMenu.vue";
 import {
   pitwallConceptInitialsById,
   pitwallConceptNicknameById,
@@ -39,16 +40,10 @@ const where = computed(() => {
   return parts.filter(Boolean).join(" · ") || current.label;
 });
 
-/**
- * Chi e' collegato adesso, tolto te: la riga parla del tuo Pitwall, e contarti
- * fra i tuoi assistenti farebbe sembrare che ti assisti da solo.
- */
+/** Solo presenze effettive, mai gli amici invitati. */
 const connected = computed(() => (room.value?.members ?? [])
-  .filter(member => member.personId !== props.meId && member.role !== "invited")
-  .map(member => member.personId));
-
-/** Amici che non sono ancora entrati: e' cio' che manca perche' ti assistano. */
-const waiting = computed(() => room.value?.invitedIds ?? []);
+  .filter(member => member.role !== "invited")
+  .map(member => member.personId === props.meId ? "Tu" : nick(member.personId)));
 
 const driving = computed(() => {
   const id = room.value?.drivingId;
@@ -70,7 +65,7 @@ const driving = computed(() => {
         <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
         <span class="pwc-race__copy">
           <strong>{{ where || "Il tuo Pitwall" }}</strong>
-          <small>Si apre dall'app desktop del pilota, anche con ACC spento.</small>
+          <small>Aprilo dall’app desktop, anche senza ACC.</small>
         </span>
       </div>
     </article>
@@ -83,8 +78,8 @@ const driving = computed(() => {
       <div class="pwc-race__who">
         <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
         <span class="pwc-race__copy">
-          <strong>Il tuo Pitwall è chiuso</strong>
-          <small>Gli amici lo vedranno aperto e potranno entrare con un clic.</small>
+          <strong>Chiuso</strong>
+          <small>Aprilo per far entrare i tuoi amici.</small>
         </span>
       </div>
       <button
@@ -118,53 +113,23 @@ const driving = computed(() => {
       </button>
     </article>
 
-    <!-- Aperto: la gara esiste e gli amici la vedono. -->
-    <article
-      v-else
-      class="pwc-panel pwc-mine"
-    >
-      <div class="pwc-race__who">
-        <span class="pwc-avatar">{{ initials(meId ?? "") }}</span>
-        <span class="pwc-race__copy">
-          <strong>{{ where || "Il tuo Pitwall" }}</strong>
-          <small>{{ reconnecting ? "Riconnessione in corso" : room?.drivingKnown === false ? "Apri la gara per vedere chi è al volante" : driving ?? "Nessuno al volante adesso" }}</small>
-        </span>
+    <article v-else class="pwc-panel pwc-mine is-open">
+      <div class="pwc-race__copy">
+        <div class="pwc-mine__title">
+          <strong>{{ room?.label || where || "Il tuo Pitwall" }}</strong>
+          <span class="pwc-mine__status" :class="{ 'is-reconnecting': reconnecting }">
+            <span aria-hidden="true">●</span> {{ reconnecting ? "Riconnessione in corso" : "Aperto" }}
+          </span>
+        </div>
+        <small v-if="connected.length || (room?.drivingKnown !== false && driving)" class="pwc-mine__people">
+          <span v-if="connected.length">Presenti: {{ connected.join(", ") }}</span>
+          <span v-if="room?.drivingKnown !== false && driving">{{ driving }}</span>
+        </small>
       </div>
-
-      <span class="pwc-chip is-always">{{ reconnecting ? "Riconnessione in corso" : "Aperto" }}</span>
-
-      <span class="pwc-mine__actions">
-        <button
-          v-if="room"
-          type="button"
-          class="pwc-btn"
-          @click="$emit('open')"
-        >
-          Apri la gara
-        </button>
-        <button
-          type="button"
-          class="pwc-link-btn"
-          @click="$emit('close')"
-        >
-          Esci dal Pitwall
-        </button>
-      </span>
-
-      <p class="pwc-race__why">
-        <template v-if="connected.length">
-          Al muretto con te adesso:
-          <b>{{ connected.map(nick).join(", ") }}</b>.
-        </template>
-        <template v-else-if="waiting.length">
-          <b>{{ waiting.map(nick).join(", ") }}</b>
-          {{ waiting.length === 1 ? "può entrare" : "possono entrare" }}: il tuo Pitwall
-          è aperto, {{ waiting.length === 1 ? "gli" : "gli" }} basta un clic.
-        </template>
-        <template v-else>
-          Gli amici di chi è nella stanza possono vederla e unirsi.
-        </template>
-      </p>
+      <div class="pwc-mine__actions">
+        <button v-if="room" type="button" class="pwc-btn" @click="$emit('open')">Apri pannello</button>
+        <PitwallConceptActionMenu label="Opzioni Pitwall" action-label="Abbandona Pitwall" @select="$emit('close')" />
+      </div>
     </article>
   </div>
 </template>
@@ -183,6 +148,7 @@ const driving = computed(() => {
   padding: 12px 14px;
 }
 
+.pwc-mine.is-open,
 .pwc-mine.is-off { grid-template-columns: 1fr auto; }
 
 .pwc-mine__actions { display: flex; align-items: center; gap: 14px; }
@@ -201,4 +167,9 @@ const driving = computed(() => {
   .pwc-mine { grid-template-columns: 1fr auto; }
   .pwc-mine__actions { grid-column: 1 / -1; }
 }
+
+.pwc-mine__title { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.pwc-mine__status { color: #4ade80; font-size: 11px; white-space: nowrap; }
+.pwc-mine__status.is-reconnecting { color: #ffc400; }
+.pwc-mine__people { display: flex; flex-wrap: wrap; gap: 4px 16px; overflow-wrap: anywhere; }
 </style>

@@ -122,7 +122,7 @@ function stepAll(direction: 1 | -1) {
 </script>
 
 <template>
-  <section class="pwc-panel">
+  <section class="pwc-panel pwc-strategy">
     <header class="pwc-panel__head">
       <h2>Pit stop</h2>
       <span
@@ -133,21 +133,8 @@ function stepAll(direction: 1 | -1) {
       </span>
     </header>
 
-    <label v-if="stop.application?.availableTargets" class="pwc-recipient">
-      Invia strategia a
-      <select
-        :value="stop.application.selectedTargetUid.value ?? ''"
-        :disabled="stop.orderStatus.value === 'pending' || stop.orderStatus.value === 'applying'"
-        @change="stop.application.selectTarget(($event.target as HTMLSelectElement).value || null)"
-      >
-        <option value="">Seleziona un pilota</option>
-        <option v-for="target in stop.application.availableTargets.value" :key="target.uid" :value="target.uid">{{ target.nickname }}</option>
-        <option v-if="stop.application.selectedTargetUid.value && !stop.application.availableTargets.value.some(target => target.uid === stop.application?.selectedTargetUid.value)" :value="stop.application.selectedTargetUid.value" disabled>Pilota non disponibile</option>
-      </select>
-    </label>
-
     <PitwallApplicationPanel :port="stop.application" />
-    <div v-show="method === 'standard'">
+    <div v-if="method === 'standard'">
     <div class="pwc-pit-head">
       <b>Campo</b><b>Strategia</b><b>In macchina</b>
     </div>

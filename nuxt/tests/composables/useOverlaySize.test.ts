@@ -46,3 +46,27 @@ it('observes natural content and details changes even while root size is fixed',
   controller.cleanup()
   expect(disconnect).toHaveBeenCalled()
 })
+
+it('expands to the preferred horizontal width and returns to vertical without stale size', async () => {
+  const { root, surface, api } = setup(300)
+  controller.cleanup()
+  let horizontal = true
+  controller = useOverlaySize(() => api, () => 'launcher', ref(root), () => horizontal ? 810 : 472)
+  surface.style.setProperty('--overlay-preferred-content-width', '760px')
+  await controller.applyOverlaySize('launcher', true)
+  expect(api.trainingOverlaySetSize).toHaveBeenLastCalledWith({ preset: 'launcher', width: 810, height: 450 })
+  horizontal = false
+  surface.style.removeProperty('--overlay-preferred-content-width')
+  await controller.applyOverlaySize('launcher', true)
+  expect(api.trainingOverlaySetSize).toHaveBeenLastCalledWith({ preset: 'launcher', width: 332, height: 450 })
+})
+
+it('keeps the card inside native bounds when a monitor is narrower than the horizontal layout', async () => {
+  const { root, surface, api } = setup(300)
+  controller.cleanup()
+  api.trainingOverlaySetSize.mockImplementation(async size => ({ ...size, width: 640 }))
+  controller = useOverlaySize(() => api, () => 'launcher', ref(root), () => 810)
+  surface.style.setProperty('--overlay-preferred-content-width', '760px')
+  await controller.applyOverlaySize('launcher', true)
+  expect(controller.cardSize.value?.width).toBe(620)
+})

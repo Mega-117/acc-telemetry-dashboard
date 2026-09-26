@@ -13,6 +13,8 @@ async function setup(keyboardOverlay=false){
  ;(window as any).electronAPI=api
  const saved=vi.fn(),cancel=vi.fn(); const el=document.createElement('div');document.body.append(el)
  app=createApp(SectorReferenceSetup,{keyboardOverlay,onSaved:saved,onCancel:cancel});app.mount(el);await flush()
+ expect(button('sector-mode-bestSector').getAttribute('aria-pressed')).toBe('true')
+ button('sector-mode-custom').click();await flush()
  return {api,saved,cancel,el}
 }
 async function fill(values=['32,5','27.0','16,8']){document.querySelectorAll('input').forEach((el,i)=>{el.value=values[i]!;el.dispatchEvent(new Event('input',{bubbles:true}))});await flush()}

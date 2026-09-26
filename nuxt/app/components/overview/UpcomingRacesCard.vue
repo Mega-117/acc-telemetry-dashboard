@@ -308,17 +308,24 @@ onBeforeUnmount(() => {
       </article>
 
       <div v-if="secondaryEvents.length" class="race-list-block">
-        <div class="race-list-header">
+        <div v-if="!racing" class="race-list-header">
           <span>{{ secondaryEvents.length === 1 ? 'Gara successiva' : 'Gare successive' }}</span>
           <strong>{{ secondaryEvents.length }}</strong>
         </div>
-        <div class="race-list" aria-label="Altre gare pianificate">
+        <div class="race-list" :class="{ 'race-list--multiple': secondaryEvents.length > 1 }" aria-label="Altre gare pianificate">
           <article v-for="event in secondaryEvents" :key="event.id" class="compact-race">
             <div>
               <strong>{{ event.title }}</strong>
               <span>{{ formatEventDate(event.startsAt) }} - {{ event.trackName }}</span>
             </div>
-            <div class="compact-actions">
+            <details v-if="racing" class="race-options race-options--compact">
+              <summary :aria-label="`Opzioni gara ${event.title}`" :title="`Opzioni gara ${event.title}`"><Ellipsis :size="26" aria-hidden="true" /></summary>
+              <div class="race-options__menu">
+                <button type="button" class="race-options__edit" :disabled="!cloudWriteGate.allowed" @click="openEditModal(event)"><Pencil :size="17" aria-hidden="true" /><span>Modifica gara</span></button>
+                <button type="button" class="race-options__delete" :disabled="!cloudWriteGate.allowed" @click="openDeleteModal(event)"><Trash2 :size="17" aria-hidden="true" /><span>Elimina gara</span></button>
+              </div>
+            </details>
+            <div v-else class="compact-actions">
               <button type="button" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Modifica gara' : cloudWriteGate.message" @click="openEditModal(event)">Modifica</button>
               <button type="button" class="danger" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Elimina gara' : cloudWriteGate.message" @click="openDeleteModal(event)">Elimina</button>
             </div>
@@ -507,9 +514,32 @@ onBeforeUnmount(() => {
   .race-options__menu a:focus-visible, .race-options__menu button:focus-visible { outline: 1px solid #fff; outline-offset: -2px; background: #ffffff0a; }
   button:disabled { opacity: .4; cursor: default; }
   summary:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid white; outline-offset: 2px; }
-  .race-list-block { border-top: 1px solid #ffffff25; }
-  .race-list { max-height: 140px; overflow-y: auto; }
-  .compact-race { background: transparent; border-radius: 0; }
+  .race-list-block { border-top: 1px solid #ffffff25; padding-top: 8px; }
+  .race-list { max-height: none; overflow: visible; padding: 0; }
+  .compact-race { background: transparent; border: 0; border-radius: 0; padding: 0; min-width: 0; }
+  .compact-race > div:first-child { min-width: 0; }
+  .race-options--compact { position: relative; bottom: auto; right: auto; }
+  .race-options--compact .race-options__menu { top: auto; bottom: calc(100% + 6px); }
+  .race-options--compact .race-options__menu span { overflow: visible; font: inherit; color: inherit; }
+  .race-list--multiple { max-height: 140px; overflow-y: auto; }
+  // Keep menus reachable inside the bounded list when many races are planned.
+  .race-list--multiple .race-options[open] { grid-column: 1 / -1; }
+  .race-list--multiple .race-options[open] > summary { margin-left: auto; }
+  .race-list--multiple .race-options__menu { position: static; width: 100%; box-sizing: border-box; }
+}
+// Spend the normal desktop height on race information, not duplicated headings
+// and action rows. Smaller screens still retain natural document scrolling.
+@media (min-width: 1051px) and (max-height: 900px) {
+  .upcoming-races-card--racing {
+    padding: 14px 18px;
+    .race-header { margin-bottom: 8px; }
+    .race-content { gap: 8px; }
+    .featured-race { min-height: 88px; padding-bottom: 0; }
+    .race-countdown__value { font-size: 56px; }
+    .race-countdown__metric { gap: 3px; }
+    .race-date { margin-bottom: 6px; }
+    .featured-race p { margin-top: 6px; }
+  }
 }
 .race-modal--racing { @include controls.tokens; footer .racing-button { @include controls.action; text-transform: none; &::before { display: none; } } footer .racing-button--primary { @include controls.primary; } }
 .upcoming-races-card--racing .race-empty { border: 0; background: transparent; border-radius: 0; padding: 12px 0; }

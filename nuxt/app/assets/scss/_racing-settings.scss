@@ -40,7 +40,7 @@
   background-color: #08090b;
   color: #ddd;
   font-size: 13px;
-  &:focus-visible { outline: 1px solid var(--racing-race, #ff0024); outline-offset: 2px; }
+  &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 }
 
 // Opt-in tokens: do not alter Pitwall, detail views or Voice Lab.
@@ -55,14 +55,23 @@
 @mixin title { margin: 0 0 8px; font: 650 34px/1.2 var(--rc-font), 'Segoe UI', sans-serif; @media(max-width:700px) { font-size: 28px; } }
 @mixin select {
   @include field;
-  appearance: none; padding: 8px 36px 8px 12px;
+  appearance: none; min-width: 0; max-width: 100%; border-radius: 0; padding: 8px 36px 8px 12px;
+  cursor: pointer;
   font-family: var(--rc-font), 'Segoe UI', sans-serif; font-size: var(--rc-control-text,12px);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='m2 2 4 4 4-4' fill='none' stroke='%23b3b3b8' stroke-width='1.4'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 12px center; background-size: 12px 8px;
   text-overflow: ellipsis; white-space: nowrap; color-scheme: dark;
   option { background: #0b0b0e; color: #ededf0; }
+  &:hover:not(:disabled) { border-color: #ffffff60; }
   &:disabled { opacity: .4; cursor: not-allowed; }
   @media(forced-colors:active) { appearance: auto; background-image: none; }
+}
+// Compact filter geometry shared by data pages. Base select owns arrow and states.
+@mixin compact-select {
+  --rc-control-height: 34px;
+  --rc-control-text: 11px;
+  width: 144px;
+  background-color: transparent;
 }
 @mixin navigation {
   @include action; width: 100%; min-height: 56px; text-align: left;

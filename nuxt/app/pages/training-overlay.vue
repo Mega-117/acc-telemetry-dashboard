@@ -30,7 +30,8 @@ import {
   resolveAutoAdvanceSeconds,
   type OverlayOriginCorner, type OverlayOriginMode,
 } from '~/composables/useOverlaySettings'
-import { CircleCheck, CircleMinus, LoaderCircle } from '@lucide/vue'
+import { CircleCheck, CircleMinus, Dumbbell, Power, Check, LoaderCircle } from '@lucide/vue'
+import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
 import QuickPanelVoiceControls from '~/components/overlay/QuickPanelVoiceControls.vue'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
@@ -89,6 +90,7 @@ interface InfoTargetSettings {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const OVERLAY_WORK_AREA_SIZE: OverlaySize = { width: 472, height: 768 }
+const QUICK_PANEL_HORIZONTAL_WIDTH = 810
 const AUTO_DIM_DELAY_MS = 10_000
 const AUTO_DIM_RESTORE_MS = 10_000
 const AUTO_DIM_OPACITY = 0.6
@@ -108,6 +110,11 @@ const selectedTrainingId = ref<TrainingOverlayId>('tracktitan_input')
 const selectedModeId = ref<TrainingOverlayDurationModeId>('short30')
 const activeStepIndex = ref(0)
 const phase = ref<OverlayPhase>('loading')
+// Kept while the panel is hidden or an editor is open; no cloud preference.
+const quickPanelLayout = ref<'vertical' | 'horizontal'>('vertical')
+const isHorizontalQuickPanel = computed(() => phase.value === 'launcher'
+  && !isTargetSetupOpen.value && !isSectorReferenceSetupOpen.value
+  && quickPanelLayout.value === 'horizontal')
 const remainingMs = ref(0)
 const isElectronRuntime = ref(false)
 const {
@@ -139,9 +146,38 @@ const preparingReopen = ref(false)
 const isPointerOnOverlaySurface = ref(false)
 const isTargetSetupOpen = ref(false)
 const isSectorReferenceSetupOpen = ref(false)
+const customSectorsActive = ref(false)
+const referenceBusy = ref(false)
+async function refreshSectorReferenceState() {
+  const settings = await getOverlayApi()?.hudOverlayGetSettings?.('sectors')
+  customSectorsActive.value = settings?.deltaReference === 'custom'
+}
+async function disableReference(kind: 'target' | 'sectors') {
+  if (referenceBusy.value) return
+  referenceBusy.value = true
+  try {
+    if (kind === 'target') {
+      const saved = await getOverlayApi()?.infoTargetSaveSettings?.({ targetTimeMs: null })
+      if (!saved || saved.active) throw new Error('Target non disattivato')
+      applyInfoTargetSettings(saved)
+    } else {
+      const current = await getOverlayApi()?.hudOverlayGetSettings?.('sectors')
+      if (current?.deltaReference === 'custom' && !current.normalDeltaReference) {
+        isSectorReferenceSetupOpen.value = true
+        showVoicePointNotice('Scegli Giro precedente o Miglior settore.', 'ok')
+        return
+      }
+      const saved = await getOverlayApi()?.hudOverlaySaveSettings?.('sectors', { restoreNormalReference: true })
+      if (!saved || saved.deltaReference === 'custom') throw new Error('Riferimenti non disattivati')
+      customSectorsActive.value = false
+    }
+  } catch { showVoicePointNotice('Operazione non riuscita. Riprova.', 'error') }
+  finally { referenceBusy.value = false }
+}
 const sectorReferenceSetup = ref<InstanceType<typeof SectorReferenceSetup> | null>(null)
 function closeSectorReferenceSetup() { isSectorReferenceSetupOpen.value = false }
 async function saveSectorReferenceSetup() {
+  await refreshSectorReferenceState()
   closeSectorReferenceSetup()
   await getOverlayApi()?.trainingOverlayClose?.()
 }
@@ -318,8 +354,10 @@ const voice = useQualifyingVoice(
 )
 const { soundEnabled, primeStepAudio, playStepDoneSound, playCountdownBeep, enqueue: enqueueVoice, enqueueStepStart, stopVoice } = voice
 
-const overlaySizeComp = useOverlaySize(getOverlayApi, () => overlaySizePreset.value, overlayRoot)
+const overlaySizeComp = useOverlaySize(getOverlayApi, () => overlaySizePreset.value, overlayRoot,
+  () => isHorizontalQuickPanel.value ? QUICK_PANEL_HORIZONTAL_WIDTH : OVERLAY_WORK_AREA_SIZE.width)
 const { cardSize, scheduleOverlaySizeSync, connectResizeObserver, disconnectResizeObserver, cleanup: cleanupSize } = overlaySizeComp
+watch(isHorizontalQuickPanel, () => { scheduleOverlaySizeSync(); nextTick(() => actionSelection.refresh()) })
 
 
 // ─── Computed ────────────────────────────────────────────────────────────────
@@ -404,7 +442,7 @@ const overlayThemeStyle = computed(() => ({
   '--overlay-accent-rgb': phase.value === 'launcher' ? '229, 229, 229' : selectedTraining.value.accentRgb,
   '--overlay-accent-contrast': phase.value === 'launcher' ? '#101010' : selectedTraining.value.accentContrast,
   '--overlay-transform-origin': originCorner.value.replace('-', ' '),
-  '--overlay-work-area-width': `${OVERLAY_WORK_AREA_SIZE.width}px`,
+  '--overlay-work-area-width': `${isHorizontalQuickPanel.value ? QUICK_PANEL_HORIZONTAL_WIDTH : OVERLAY_WORK_AREA_SIZE.width}px`,
   '--overlay-work-area-height': `${OVERLAY_WORK_AREA_SIZE.height}px`,
   '--overlay-session-opacity': `${sessionOverlayOpacity.value}`,
   // Resize a due fasi (PIP-94): la card transiziona verso la dimensione target
@@ -540,6 +578,7 @@ function returnToMainMenu() {
 }
 
 async function prepareOverlayReopen(revision?: number) {
+  await refreshSectorReferenceState().catch(() => {})
   preparingReopen.value = true
   await nextTick()
   actionSelection.resetPointer()
@@ -748,6 +787,7 @@ onMounted(async () => {
   const api = getOverlayApi()
   isElectronRuntime.value = !!api
   const settings = await api?.trainingOverlayGetSettings?.() as TrainingOverlaySettings | undefined
+  await refreshSectorReferenceState().catch(() => {})
   const targetSettings = await api?.infoTargetGetSettings?.() as InfoTargetSettings | undefined
   applyInfoTargetSettings(targetSettings)
   selectedTrainingId.value = resolveTrainingOverlayTrainingId(settings?.lastTrainingId)
@@ -922,7 +962,9 @@ onBeforeUnmount(() => {
               :class="[
                 'overlay-content',
                 `overlay-content--${overlaySizePreset}`,
-                { 'overlay-content--target': isTargetSetupOpen || isSectorReferenceSetupOpen },
+                { 'overlay-content--target': isTargetSetupOpen || isSectorReferenceSetupOpen,
+                  'overlay-content--target-lap': isTargetSetupOpen,
+                  'overlay-content--horizontal': isHorizontalQuickPanel },
               ]"
             >
 
@@ -930,11 +972,10 @@ onBeforeUnmount(() => {
                 <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen" class="launcher-tools" aria-label="Strumenti live overlay">
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
-                  </header>
-                  <div class="launcher-tools__actions">
                     <button
                       type="button"
-                      class="launcher-tool-button launcher-tool-button--training"
+                      class="launcher-tool-button launcher-tool-button--training quick-panel-training"
+                      title="Allenamento"
                       :class="{ 'is-selected': selectedWheelActionId === 'training' }"
                       data-overlay-wheel-action="training"
                       :aria-label="primaryActionLabel"
@@ -942,8 +983,12 @@ onBeforeUnmount(() => {
                       @focus="selectedWheelActionId = 'training'"
                       @click="executePrimaryAction"
                     >
-                      Allenamento
+                      <Dumbbell :size="18" aria-hidden="true" />
                     </button>
+                    <QuickPanelLayoutToggle v-model="quickPanelLayout" />
+                  </header>
+                  <div class="launcher-tools__actions">
+
                     <QuickPanelVoiceControls
                       :coach="spotterEnabled"
                       :references="trackVoiceReferencesEnabled"
@@ -958,6 +1003,7 @@ onBeforeUnmount(() => {
                     <section class="quick-panel-section" aria-label="Riferimenti numerici">
                       <h2 class="quick-panel-heading">Riferimenti</h2>
                       <div class="quick-panel-pair">
+                    <div class="quick-reference" :class="{ 'is-active': infoTargetActive }">
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--target"
@@ -969,11 +1015,16 @@ onBeforeUnmount(() => {
                       @focus="selectedWheelActionId = 'target'"
                       @click="openInfoTargetSetup"
                     >
-                      Target giro
+                      <Check v-if="infoTargetActive" :size="12" aria-hidden="true" /> Target giro
                     </button>
-                    <button type="button" class="launcher-tool-button" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
-                      Settori
+                    <button v-if="infoTargetActive" class="quick-reference-off" data-overlay-wheel-action="target-disable" title="Disattiva target giro" aria-label="Disattiva target giro" :disabled="referenceBusy" @click="disableReference('target')"><Power :size="14" /></button>
+                    </div>
+                    <div class="quick-reference" :class="{ 'is-active': customSectorsActive }">
+                    <button type="button" class="launcher-tool-button" :aria-pressed="customSectorsActive" title="Configura riferimenti settori" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
+                      <Check v-if="customSectorsActive" :size="12" aria-hidden="true" /> Settori
                     </button>
+                    <button v-if="customSectorsActive" class="quick-reference-off" data-overlay-wheel-action="sector-disable" title="Disattiva personalizzati e ripristina il confronto abituale" aria-label="Disattiva riferimenti personalizzati" :disabled="referenceBusy" @click="disableReference('sectors')"><Power :size="14" /></button>
+                    </div>
                       </div>
                     </section>
                     <section class="quick-panel-section quick-panel-automations" aria-label="Automazioni">
@@ -1067,6 +1118,7 @@ onBeforeUnmount(() => {
                 </div>
                 <InfoTargetSetup
                   v-else-if="isTargetSetupOpen"
+                  appearance="quick-panel"
                   :target-time-ms="infoTargetTimeMs"
                   :tolerance-ms="infoTargetToleranceMs"
                   :keep-between-sessions="infoTargetKeepBetweenSessions"

@@ -321,7 +321,7 @@ describe('Pitwall wiring', () => {
     // il muretto le legge in ACC, qui resta la sola decisione da mandare.
     expect(conceptLive).toContain('class="pwc-back pwc-live__back"')
     expect(conceptLive).toContain('@click="$emit(\'back\')"')
-    expect(conceptLive).toContain('width: min(820px, 100%)')
+    expect(conceptLive).toContain('width: 100%')
     expect(conceptLive).toContain('<PitwallConceptPitStop')
     for (const gone of [
       'pwc-command',
@@ -483,12 +483,12 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('<PitwallConceptRaces')
     expect(concept).toContain('@enter="enter"')
     expect(conceptRaces).toContain('nick(race.hostId)')
-    expect(conceptRaces).toContain('Pitwall aperto')
+    expect(concept).toContain('Pitwall aperti')
     expect(conceptRaces).toContain('Entra')
     expect(conceptRaces).toContain('Partecipanti')
     // Il pilota non sta al muretto di se stesso: prima ci finiva dentro.
     expect(conceptRaces).not.toContain('member.personId !== race.hostId')
-    expect(conceptRaces).toContain('Nessun amico ha il Pitwall aperto adesso.')
+    expect(conceptRaces).toContain('Nessun Pitwall disponibile al momento.')
     // Niente righe "in pista ma non ancora invitato": o e' aperto, o non c'e'.
     expect(conceptRaces).not.toContain('joinable')
     expect(liveStore).toContain('new Map(link.rooms.value.map(room => [room.roomId, room]))')
@@ -506,23 +506,23 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('@start="state.startPitwall()"')
     expect(concept).toContain('@close="state.closePitwall()"')
     expect(conceptMyRoom).toContain('Apri il Pitwall')
-    expect(conceptMyRoom).toContain('Esci dal Pitwall')
+    expect(conceptMyRoom).toContain('Abbandona Pitwall')
     expect(conceptMyRoom).toContain("pitwall.state === 'arming'")
     expect(conceptMyRoom).toContain('Apertura della stanza in corso.')
     // Da un browser normale non c'e' nessun PC del pilota: si dice.
     expect(conceptMyRoom).toContain('!pitwall.available')
-    expect(conceptMyRoom).toContain("Si apre dall'app desktop del pilota")
+    expect(conceptMyRoom).toContain("Aprilo dall’app desktop")
     expect(conceptMyRoom).not.toContain('ne nasce una da sola')
     // Il pilota apre la propria gara come un ingegnere apre quella di un altro:
     // e' l'unica porta verso "+ Ospite", "Promuovi", "Togli", "Chiudi".
     expect(concept).toContain('@open="openMine"')
     expect(concept).toContain('state.enterRace(mine.id)')
-    expect(conceptMyRoom).toContain('Apri la gara')
+    expect(conceptMyRoom).toContain('Apri pannello')
     // In cima: chi guida apre la pagina per aprire il Pitwall o per sapere se
     // il muretto lo vede, non per assistere qualcun altro.
     expect(concept.indexOf('pwc-home__mine')).toBeLessThan(concept.indexOf('pwc-home__races'))
     expect(conceptMyRoom).toContain('Sei tu al volante')
-    expect(conceptMyRoom).toContain('Al muretto con te adesso')
+    expect(conceptMyRoom).toContain('Presenti:')
     // Il punto di vista e' di chi guarda, mai un utente fisso del prototipo.
     expect(conceptMyRoom).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
     // Il runtime del pilota non apre piu' la stanza senza l'intento.
@@ -543,7 +543,7 @@ describe('Pitwall wiring', () => {
     expect(conceptRaces).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
     expect(conceptWall).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
     expect(conceptLive).not.toContain('PITWALL_CONCEPT_CURRENT_USER_ID')
-    expect(conceptRaces).toContain('Entra per vedere la vettura e mandare la strategia')
+    expect(conceptRaces).toContain('Invito')
     expect(conceptRaces).toContain('.pwc-race.is-invited')
     expect(conceptRaces).toContain('.pwc-race.is-closed')
     expect(conceptRaces).toContain('Chiusa')
@@ -583,13 +583,15 @@ describe('Pitwall wiring', () => {
       expect(source).toContain('<PitwallConceptMore')
       expect(source).toContain('split.visible')
     }
-    expect(conceptLive).toContain('pitwallConceptWallSummary')
+    expect(conceptLive).toContain('<PitwallConceptWall')
     // Lo scroll interno resta fuori dagli elenchi: la wiki di prodotto lo ha
     // gia' tolto dalla Classica perche' nasconde le autorizzazioni arrivate
     // dopo. La campanella e' un menu a tendina, li' e' atteso.
-    for (const source of [conceptFriends, conceptRaces, conceptWall, concept]) {
+    for (const source of [conceptFriends, conceptRaces, conceptWall]) {
       expect(source).not.toContain('overflow-y: auto')
     }
+    expect(concept).toContain('<ScrollArea class="pwc-room-scroll"')
+    expect(conceptFriends).toContain('class="pwc-social-scroll"')
     expect(conceptBell).toContain('max-height:60vh;overflow-y:auto')
   })
 
@@ -603,9 +605,9 @@ describe('Pitwall wiring', () => {
   })
 
   it('conta le righe e offre un filtro solo quando l elenco lo merita', () => {
-    expect(conceptFriends).toContain('PITWALL_CONCEPT_FILTER_FROM')
+    expect(conceptFriends).toContain('Cerca nella rubrica')
     expect(conceptFriends).toContain('class="pwc-count"')
-    expect(conceptFriends).toContain('da decidere')
+    expect(conceptFriends).toContain('Richieste')
     expect(conceptWall).toContain('class="pwc-count"')
   })
 
@@ -654,7 +656,7 @@ describe('Pitwall wiring', () => {
   })
 
   it('chiama le persone col nickname e mai con nome e cognome', () => {
-    for (const source of [conceptRaces, conceptFriends, conceptWall, conceptLive]) {
+    for (const source of [conceptRaces, conceptFriends, conceptWall]) {
       expect(source).toContain('pitwallConceptNicknameById')
       expect(source).not.toContain('?.name')
     }
@@ -674,14 +676,14 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('<PitwallConceptSearch')
     expect(conceptLive).toContain('<PitwallConceptSearch')
     expect(concept).toContain('Aggiungi un amico')
-    expect(concept).toContain('linked-label="Già fra gli amici"')
+    expect(concept).toContain('linked-label="Già collegato"')
     expect(concept).toContain('if (next === "home") search.value = "";')
   })
 
   it('dice da dove si comincia quando non c e ancora nessuno', () => {
     expect(concept).toContain('isFirstRun')
     expect(concept).toContain('class="pwc-start"')
-    expect(concept).toContain('Si comincia da un amico')
+    expect(concept).toContain('Aggiungi un amico dalla rubrica')
   })
 
   it('mostra ruoli e poteri dentro la gara, come la vista classica', () => {

@@ -65,7 +65,7 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
   const { currentUser } = useFirebaseAuth()
   const uid = () => currentUser.value?.uid ?? null
   const link = usePitwallRoom({ uid })
-  const trust = usePitwallLink({ engineerUid: uid })
+  const trust = usePitwallLink({ engineerUid: uid, inlineSearchFeedback: true })
   const controller = usePitwallController(link, trust)
 
   // ---- Persone: chi conosciamo per nome --------------------------------------
@@ -161,7 +161,7 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
       membershipModel: room.membershipModel,
       label: room.label,
       carNumber: room.raceNumber ?? 0,
-      carModel: room.label,
+      carModel: room.membershipModel === 'social' ? '' : room.label, // Solo il formato legacy usa il nome vettura come label.
       track: room.track ?? '',
       session: sessionLabel(room, selected),
       hostId: room.hostUid,

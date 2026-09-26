@@ -29,7 +29,7 @@ describe('Info Target setup layout contract', () => {
     } finally { app.unmount() }
   })
 
-  it('edits every target control and reaches confirm/cancel through wheel selection', async () => {
+  it.each(['default', 'quick-panel'] as const)('edits every control through wheel selection (%s)', async (appearance) => {
     const host = document.createElement('div')
     document.body.append(host)
     const rects = vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([{}] as unknown as DOMRectList)
@@ -41,7 +41,7 @@ describe('Info Target setup layout contract', () => {
         const root = ref<HTMLElement | null>(null)
         nav = useOverlayActionSelection(root, () => true)
         return () => h('main', { ref: root }, h(InfoTargetSetup, {
-          targetTimeMs: time.value, toleranceMs: tolerance.value, keepBetweenSessions: keep.value,
+          appearance, targetTimeMs: time.value, toleranceMs: tolerance.value, keepBetweenSessions: keep.value,
           'onSet-target-time': (value: number) => { time.value = value },
           'onSelect-tolerance': (value: number) => { tolerance.value = value },
           'onToggle-keep': () => { keep.value = !keep.value },

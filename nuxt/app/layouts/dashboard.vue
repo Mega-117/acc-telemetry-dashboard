@@ -142,6 +142,17 @@ const handleGoToSettings = () => {
   :deep(.page-container) { width: 100%; padding: var(--app-content-top-space) 24px 22px; flex: 1; display: flex; flex-direction: column; }
   :deep(.racing-overview) { flex: 1; }
 }
+// The lobby consumes the actual space below the application chrome. Only its
+// lists scroll; the live room and narrow/very short windows retain page scrolling.
+@media (min-width: 721px) and (min-height: 650px) {
+  .dashboard-layout:has(:deep(.pwc--home)) {
+    > .dashboard-viewport { display: flex; flex-direction: column; overflow: hidden; }
+    :deep(.pitwall-route) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    :deep(.pwc.pwc--home) { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: 16px; }
+    :deep(.pwc--home .pwc-home) { flex: 1; height: auto; min-height: 0; }
+    :deep(.pitwall-dev-views) { flex: 0 0 auto; width: 100%; padding-bottom: 8px; }
+  }
+}
 @media (max-width: 700px) {
   .dashboard-layout:has(:deep(.racing-overview)) { --page-bottom-space: 14px; }
   .dashboard-layout:has(:deep(.racing-overview)) :deep(.page-container) { padding: var(--app-content-top-space) 16px 14px; }

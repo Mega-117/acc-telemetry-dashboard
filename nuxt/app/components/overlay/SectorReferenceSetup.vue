@@ -72,7 +72,7 @@ onMounted(async () => {
     const results = await Promise.all([getApi()?.hudOverlayGetSettings?.('sectors'), startFastStatePolling()])
     if (disposed) return
     if (!results[0]) throw new Error('Impostazioni non disponibili. Riapri il pannello.')
-    settings.value = results[0]; loaded.value = true
+    settings.value = results[0]; mode.value = results[0].deltaReference || 'previousLap'; loaded.value = true
   } catch (cause) { if (!disposed) error.value = cause instanceof Error ? cause.message : 'Caricamento non riuscito.' }
 })
 onBeforeUnmount(() => {
@@ -82,8 +82,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section class="sector-reference-setup" data-overlay-interactive aria-label="Riferimenti settori" @keydown="onKey">
-    <header><span>SETTORI</span><h2>Riferimenti settori</h2><p>{{ boundContext ? `${boundContext.track} · ${boundContext.car}` : 'Avvia ACC e seleziona pista e vettura.' }}</p></header>
+  <section class="sector-reference-setup" :class="{ 'sector-reference-setup--quick': keyboardOverlay }" data-overlay-interactive aria-label="Riferimenti settori" @keydown="onKey">
+    <header><span v-if="!keyboardOverlay">SETTORI</span><h2>Riferimenti settori</h2><p>{{ boundContext ? `${boundContext.track} · ${boundContext.car}` : 'Avvia ACC e seleziona pista e vettura.' }}</p></header>
     <div class="sector-reference-modes" role="group" aria-label="Confronta con">
       <button v-for="item in modes" :key="item.id" type="button" :data-overlay-wheel-action="`sector-mode-${item.id}`" :aria-pressed="mode === item.id" :disabled="saving" @click="mode = item.id">{{ item.label }}</button>
     </div>
@@ -101,7 +101,7 @@ onBeforeUnmount(() => {
           </div>
         </article>
       </div>
-      <p class="sector-reference-help">Totale: <strong>{{ total }} s</strong> · Il target giro resta indipendente.</p>
+      <p class="sector-reference-help">Totale: <strong>{{ total }} s</strong><span v-if="!keyboardOverlay"> · Il target giro resta indipendente.</span></p>
       <p v-if="contextChanged" role="alert">Pista o vettura cambiate. Chiudi e riapri il pannello.</p>
       <p v-else-if="draft.some(value => value !== '') && !valid" role="status">Inserisci tutti e tre i tempi, con al massimo un decimale.</p>
     </template>
@@ -117,4 +117,26 @@ button,input{font:inherit;box-sizing:border-box}button{cursor:pointer;color:inhe
 .sector-reference-modes{display:flex;gap:6px}.sector-reference-modes button{flex:1;padding:10px 5px;font-size:11px}.sector-reference-modes button[aria-pressed=true]{background:#fb923c30;border-color:#fb923c;color:#ffb46b}
 .sector-reference-drums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.sector-reference-drum{border:1px solid #ffffff20;border-radius:14px;background:#ffffff03;padding:10px 7px;text-align:center}.sector-reference-drum label{font-size:12px;color:#aeb4bd;font-weight:900}.sector-reference-drum input{display:block;width:100%;min-width:0;border:0;border-radius:4px;color:#fff;background:transparent;text-align:center;font-size:29px;font-weight:900;font-variant-numeric:tabular-nums;padding:7px 0}.sector-reference-drum input[aria-invalid=true]{outline:2px solid #f97316}.sector-reference-arrows{display:flex;gap:5px;margin:6px 0}.sector-reference-arrows button{flex:1;padding:4px 0;font-size:11px}.sector-reference-arrows small{display:block;font-size:9px;color:#aeb4bd}
 footer{display:flex;gap:8px}footer button{padding:12px 10px;font-size:12px}.sector-reference-save{flex:1;background:#ff9136;color:#101010;border-color:#ff9136}[role=alert]{color:#ffb46b}
+
+.sector-reference-setup--quick { padding:0;gap:12px;border:0;border-radius:0;background:#0b0b0b; }
+.sector-reference-setup--quick h2 { font-size:16px;font-weight:600;margin:0 0 6px; }
+.sector-reference-setup--quick header p { font-size:11px;line-height:1.4; }
+.sector-reference-setup--quick button { border-radius:0;font-weight:500; }
+.sector-reference-setup--quick button:hover:not(:disabled) { outline:none;background:#ffffff12; }
+.sector-reference-setup--quick button[data-overlay-selected],
+.sector-reference-setup--quick button:focus-visible,
+.sector-reference-setup--quick input:focus { outline:1px solid #fff;outline-offset:-2px; }
+.sector-reference-setup--quick .sector-reference-modes button { padding:7px 4px;min-height:34px;font-size:11px; }
+.sector-reference-setup--quick .sector-reference-modes button[aria-pressed=true] { color:#fff;border-color:#ffffff70;background:#ffffff12;box-shadow:inset 0 -2px #ff0024; }
+.sector-reference-setup--quick .sector-reference-help { font-size:11px; }
+.sector-reference-setup--quick .sector-reference-drum { border-radius:0;padding:6px 4px; }
+.sector-reference-setup--quick .sector-reference-drum label { font-size:10px;font-weight:600; }
+.sector-reference-setup--quick .sector-reference-drum input { border-radius:0;font-size:22px;font-weight:600;padding:4px 0; }
+.sector-reference-setup--quick .sector-reference-arrows { gap:4px;margin:4px 0; }
+.sector-reference-setup--quick .sector-reference-arrows button { padding:3px 0; }
+.sector-reference-setup--quick footer { display:grid;grid-template-columns:1fr 1fr;padding-top:12px;border-top:1px solid #ffffff25; }
+.sector-reference-setup--quick footer button { padding:8px;min-height:34px; }
+.sector-reference-setup--quick .sector-reference-save { color:#fff;border:1px solid #ff002480;background:#ff00241a; }
+.sector-reference-setup--quick .sector-reference-save:hover:not(:disabled) { background:#ff002430; }
+
 </style>

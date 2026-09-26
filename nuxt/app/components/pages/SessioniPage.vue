@@ -374,7 +374,7 @@ function goToSession(id: string) {
       <div class="racing-filter-selects">
         <select
           v-model="filterTrack"
-          class="racing-select"
+          class="racing-select racing-select--compact"
           aria-label="Filtra pista"
         >
           <option value="all">
@@ -390,7 +390,7 @@ function goToSession(id: string) {
         </select>
         <select
           v-model="filterCarCategory"
-          class="racing-select"
+          class="racing-select racing-select--compact"
           aria-label="Filtra categoria auto"
         >
           <option value="all">
@@ -406,7 +406,7 @@ function goToSession(id: string) {
         </select>
         <select
           v-model="filterCar"
-          class="racing-select racing-select--car"
+          class="racing-select racing-select--compact racing-select--car"
           aria-label="Filtra auto"
         >
           <option value="all">
@@ -422,7 +422,7 @@ function goToSession(id: string) {
         </select>
         <select
           v-model="filterTimeRange"
-          class="racing-select"
+          class="racing-select racing-select--compact"
           aria-label="Filtra periodo"
         >
           <option value="all">
@@ -512,5 +512,4 @@ function goToSession(id: string) {
 .sessions-notice--error { color: #ff8999; }
 @media (max-width: 700px) { .sessions-page { padding: var(--app-content-top-space) 16px 0; } }
 .sessions-page { @include controls.tokens; }
-.sessions-page .racing-select { @include controls.select; --rc-control-height: 34px; --rc-control-text: 11px; background-color: transparent; }
 </style>

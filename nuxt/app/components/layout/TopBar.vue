@@ -168,6 +168,7 @@ onMounted(() => {
       <!-- Spacer -->
       <div class="topbar__spacer"></div>
 
+      <div v-if="canAccessDevTools || isCoach || isAdmin" class="topbar__role-tools" role="group" aria-label="Strumenti riservati">
       <!-- Accesso strumenti DEV (solo admin + localhost/dev) -->
       <NuxtLink
         v-if="canAccessDevTools"
@@ -186,7 +187,8 @@ onMounted(() => {
       <button 
         v-if="isCoach || isAdmin" 
         class="coach-button" 
-        :class="{ 'coach-button--admin': isAdmin }"
+        type="button"
+        :aria-label="isAdmin ? 'Cockpit amministratore' : 'I miei piloti'"
         @click="goToCoachArea"
         :title="isAdmin ? 'Cockpit amministratore' : 'I miei piloti'"
       >
@@ -197,6 +199,8 @@ onMounted(() => {
           <path d="M21 21v-2a4 4 0 00-3-3.85"/>
         </svg>
       </button>
+
+      </div>
 
       <!-- Voice Assistant POC -->
       <div v-if="showVoiceControls" class="voice-group">
@@ -253,6 +257,7 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 @use '@/assets/scss/variables' as *;
+@use '@/assets/scss/racing-settings' as racing;
 
 .topbar {
   background: rgba(255, 255, 255, 0.02);
@@ -283,58 +288,37 @@ onMounted(() => {
   flex: 1;
 }
 
-.dev-button {
+ .topbar__role-tools {
   display: flex;
   align-items: center;
-  gap: 7px;
-  height: 42px;
-  padding: 0 14px;
-  margin-right: $spacing-sm;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: $radius-md;
-  color: rgba(255, 255, 255, 0.7);
-  font-family: $font-display;
-  font-size: $font-size-xs;
-  font-weight: $font-weight-bold;
-  letter-spacing: 1.5px;
-  text-decoration: none;
-  cursor: pointer;
-  transition: all $transition-fast;
-
-  &:hover {
-    background: rgba(#5eead4, 0.15);
-    border-color: rgba(#5eead4, 0.4);
-    color: #5eead4;
+  gap: 8px;
+  margin-right: 16px;
+  padding-right: 17px;
+  position: relative;
+  &::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    height: 28px;
+    width: 1px;
+    background: #ffffff35;
   }
 }
 
-.coach-button {
-  display: flex;
+.dev-button, .coach-button {
+  @include racing.action;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
-  margin-right: $spacing-sm;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: $radius-md;
-  color: rgba(255, 255, 255, 0.7);
-  cursor: pointer;
-  transition: all $transition-fast;
-
-  &:hover {
-    background: rgba($racing-orange, 0.15);
-    border-color: rgba($racing-orange, 0.4);
-    color: $racing-orange;
-  }
-  
-  &--admin:hover {
-    background: rgba(#8b5cf6, 0.15);
-    border-color: rgba(#8b5cf6, 0.4);
-    color: #8b5cf6;
-  }
+  flex-shrink: 0;
+  height: 46px;
+  gap: 7px;
+  text-decoration: none;
+  transition: background 150ms ease, color 150ms ease;
+  svg { flex-shrink: 0; }
 }
+.dev-button { padding: 0 14px; font-weight: 650; letter-spacing: .06em; }
+.coach-button { width: 46px; padding: 0; }
 
 .voice-group {
   display: flex;

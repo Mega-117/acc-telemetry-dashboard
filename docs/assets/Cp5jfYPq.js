@@ -1,1 +1,0 @@
-import{aY as r,bt as c,bs as s,cj as u,bS as l}from"./dMiJ30u1.js";const o=Symbol("header-back");function d(){const a=u(null);return l(o,a),a}function f(a,t){const e=r(o,null),n={run:a,label:t};return c(()=>{e&&(e.value=n)}),s(()=>{e?.value===n&&(e.value=null)}),!!e}export{d as p,f as u};

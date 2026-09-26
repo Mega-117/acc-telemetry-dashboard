@@ -1,0 +1,1 @@
+import{aX as t,bs as c,br as s,cf as u,bP as l}from"./B6Gu1lvW.js";const o=Symbol("header-back");function d(){const a=u(null);return l(o,a),a}function f(a,r){const e=t(o,null),n={run:a,label:r};return c(()=>{e&&(e.value=n)}),s(()=>{e?.value===n&&(e.value=null)}),!!e}export{d as p,f as u};

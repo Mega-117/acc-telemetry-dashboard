@@ -1,1 +1,0 @@
-import{ai as c,cI as l,au as m,bk as s}from"./dMiJ30u1.js";const f=c(async()=>{let e,a;const{isAuthenticated:o,userRole:r,isLoading:n}=l();let t=0;for(;n.value&&t<100;)[e,a]=m(()=>new Promise(u=>setTimeout(u,50))),await e,a(),t++;if(!o.value)return s("/");const i=r.value;if(i!=="coach"&&i!=="admin")return s("/panoramica")});export{f as default};

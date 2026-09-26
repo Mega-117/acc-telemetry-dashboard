@@ -9,6 +9,7 @@
 // "esiste, ma ce l'hai gia'" sono tre risposte diverse. Prima erano una sola
 // frase, e chi cercava una persona gia' collegata concludeva che non fosse
 // iscritta.
+import ScrollArea from "~/components/ui/ScrollArea.vue";
 import { pitwallConceptInitials, pitwallConceptNickname } from "~/utils/pitwallConcept";
 import type { PitwallConceptSearchResult } from "~/utils/pitwallConcept";
 
@@ -59,6 +60,7 @@ const query = defineModel<string>({ required: true });
       </button>
     </label>
 
+    <ScrollArea class="pwc-find__results" label="Risultati ricerca persone">
     <p
       v-if="found.state === 'too-short'"
       class="pwc-empty"
@@ -128,6 +130,7 @@ const query = defineModel<string>({ required: true });
     >
       E altre {{ found.linkedHidden }} che hai già.
     </p>
+    </ScrollArea>
   </div>
 </template>
 
