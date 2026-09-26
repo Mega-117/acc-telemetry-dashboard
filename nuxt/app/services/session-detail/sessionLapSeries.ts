@@ -100,7 +100,29 @@ export function filterIncludedLapPoints(
   points: NormalizedLapPoint[],
   excludedKeys: Set<string>
 ): NormalizedLapPoint[] {
-  return points.filter((point) => !excludedKeys.has(point.exclusionKey))
+  const included = points.filter((point) => point.timeSeconds > 0 && !excludedKeys.has(point.exclusionKey))
+  return included.map((point, index) => ({
+    ...point,
+    isStintStart: index === 0 || included[index - 1]?.source !== point.source || included[index - 1]?.stintNumber !== point.stintNumber
+  }))
+}
+
+/** Boundary laps stay in the raw table and recorded duration, but not pace by default. */
+export function buildBoundaryLapExclusions(points: NormalizedLapPoint[]): Set<string> {
+  const groups = new Map<string, NormalizedLapPoint[]>()
+  for (const point of points) {
+    const key = `${point.source}:${point.stintNumber}`
+    const group = groups.get(key) ?? []
+    group.push(point)
+    groups.set(key, group)
+  }
+  const excluded = new Set<string>()
+  for (const group of groups.values()) {
+    if (group[0]) excluded.add(group[0].exclusionKey)
+    const last = group[group.length - 1]
+    if (last) excluded.add(last.exclusionKey)
+  }
+  return excluded
 }
 
 export function buildIncludedLapSummary(

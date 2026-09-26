@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildIncludedLapSummary,
+  buildBoundaryLapExclusions,
   buildLapExclusionKey,
   buildLapTooltipLines,
   buildLapTooltipTitle,
@@ -10,6 +11,23 @@ import {
 } from '~/services/session-detail/sessionLapSeries'
 
 describe('sessionLapSeries', () => {
+  it('esclude gli estremi di ogni stint senza mutare dati, durata o origine', () => {
+    const points = ['a', 'b'].flatMap(source => [1, 2].flatMap(stintNumber => normalizeLapSeries({
+      laps: [150, 101, 102, 160].map((seconds, i) => ({ lap: i + 1, time: `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}.000`, valid: true })),
+      source: source as 'a' | 'b', strategy: 'A', stintNumber
+    })))
+    const excluded = buildBoundaryLapExclusions(points)
+    expect(excluded.size).toBe(8)
+    expect(filterIncludedLapPoints(points, excluded).map(p => p.exclusionKey)).toEqual([
+      'a:1:2', 'a:1:3', 'a:2:2', 'a:2:3', 'b:1:2', 'b:1:3', 'b:2:2', 'b:2:3'
+    ])
+    expect(points).toHaveLength(16)
+    expect(filterIncludedLapPoints(points, excluded).filter(p => p.isStintStart)).toHaveLength(4)
+    excluded.delete('b:2:4')
+    expect(filterIncludedLapPoints(points, excluded)).toHaveLength(9)
+    expect(buildBoundaryLapExclusions([]).size).toBe(0)
+    expect(buildBoundaryLapExclusions(points.slice(0, 1)).size).toBe(1)
+  })
   it('crea chiavi esclusione distinte per giri uguali in stint diversi', () => {
     expect(buildLapExclusionKey({ source: 'a', stintNumber: 1, lapNumber: 1 }))
       .toBe('a:1:1')

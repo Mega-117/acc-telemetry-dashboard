@@ -18,9 +18,9 @@ import {
 import {
     type GripBestTimes,
     createGetTheoreticalTimes,
+    getBucketRecord,
 } from '~/services/telemetry/theoreticalTimesCalculator'
 import { RACE_FUEL_BUCKETS, getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
-import { TRACK_BESTS_SCHEMA_VERSION } from '~/services/sync/trackBestsProjectionService'
 import { getTrackActivityTotalsFromSessions } from '~/services/telemetry/activityProjectionService'
 import { globalSessions } from '~/composables/useSessionLoader'
 import type { SessionDocument } from '~/types/telemetry'
@@ -101,7 +101,7 @@ export function useTrackBests() {
 
     async function calculateAllBestTimesForTrack(
         trackId: string,
-        _userId?: string
+        userId?: string
     ): Promise<{ bests: CategoryBests; lastSessionDate: string | null }> {
         const trackIdNorm = trackId.toLowerCase().replace(/[^a-z0-9]/g, '_')
         const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
@@ -113,6 +113,8 @@ export function useTrackBests() {
                 categoryBests[cat][grip] = emptyGripBests()
             }
         }
+
+        if (userId && userId !== currentUser.value?.uid) return { bests: categoryBests, lastSessionDate: null }
 
         const trackSessionsList = sessions.value.filter((s: SessionDocument) => {
             const sessionTrackId = s.meta.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
@@ -155,23 +157,29 @@ export function useTrackBests() {
 
                 for (const bucket of RACE_FUEL_BUCKETS) {
                     const raceRecord = sessionBest.raceBestByFuelBucket?.[bucket]
+                    const currentRaceBucket = getBucketRecord(currentBest.raceBestByFuelBucket, bucket)
+                    if (raceRecord?.timeMs && (!currentRaceBucket?.timeMs || raceRecord.timeMs < Number(currentRaceBucket.timeMs))) {
+                        currentBest.raceBestByFuelBucket![bucket] = raceRecord
+                    }
                     if (raceRecord?.timeMs && (!currentBest.bestRace || raceRecord.timeMs < currentBest.bestRace)) {
                         currentBest.bestRace = raceRecord.timeMs
                         currentBest.bestRaceTemp = raceRecord.airTemp ?? null
                         currentBest.bestRaceFuel = raceRecord.fuel ?? null
                         currentBest.bestRaceSessionId = raceRecord.sessionId || session.sessionId
                         currentBest.bestRaceDate = raceRecord.date || sessionDate
-                        currentBest.raceBestByFuelBucket![bucket] = raceRecord
                     }
 
                     const avgRecord = sessionBest.raceAvgByFuelBucket?.[bucket]
+                    const currentAvgBucket = getBucketRecord(currentBest.raceAvgByFuelBucket, bucket)
+                    if (avgRecord?.timeMs && (!currentAvgBucket?.timeMs || avgRecord.timeMs < Number(currentAvgBucket.timeMs))) {
+                        currentBest.raceAvgByFuelBucket![bucket] = avgRecord
+                    }
                     if (avgRecord?.timeMs && (!currentBest.bestAvgRace || avgRecord.timeMs < currentBest.bestAvgRace)) {
                         currentBest.bestAvgRace = avgRecord.timeMs
                         currentBest.bestAvgRaceTemp = avgRecord.airTemp ?? null
                         currentBest.bestAvgRaceFuel = avgRecord.fuel ?? null
                         currentBest.bestAvgRaceSessionId = avgRecord.sessionId || session.sessionId
                         currentBest.bestAvgRaceDate = avgRecord.date || sessionDate
-                        currentBest.raceAvgByFuelBucket![bucket] = avgRecord
                     }
                 }
 
@@ -308,22 +316,7 @@ export function useTrackBests() {
         console.log(`[TRACK_BESTS] calculating V2 for ${trackIdNorm}...`)
         const calculated = await calculateAllBestTimesForTrack(trackId, userId)
 
-        if (targetUserId && !isElectron.value) {
-            try {
-                const docRef = doc(db, `users/${targetUserId}/trackBests/${trackIdNorm}`)
-                await trackedSetDoc(docRef, {
-                    version: TRACK_BESTS_SCHEMA_VERSION,
-                    trackId: trackIdNorm,
-                    bests: calculated.bests,
-                    lastSessionDate: calculated.lastSessionDate,
-                    lastUpdated: new Date().toISOString()
-                }, CALLER)
-                console.log(`[TRACK_BESTS] V2 SAVED to Firebase for ${trackIdNorm}`)
-            } catch (e) {
-                console.warn(`[TRACK_BESTS] Error saving to Firebase:`, e)
-            }
-        }
-
+        // Reads never publish a partial legacy fallback over the canonical projection.
         trackBestsCache.value[cacheKey] = calculated
         return calculated.bests[category] || {}
     }

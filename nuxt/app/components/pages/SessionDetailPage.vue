@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Info } from '@lucide/vue'
+import { stintTypeLabel, gripAbbreviation, lapPointAppearance } from '~/services/session-detail/sessionPresentation'
 import { useHeaderBack } from '~/composables/useHeaderBack'
 // ============================================
 // SessionDetailPage - Master / Detail Layout
@@ -34,24 +36,25 @@ import {
   getCarCategory,
   MAX_REASONABLE_LAP_MS
 } from '~/utils/telemetryFormat'
-import type { FullSession, LapData, StintData } from '~/types/telemetry'
+import type { FullSession } from '~/types/telemetry'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
-import { useCoachInsights } from '~/composables/useCoachInsights'
 import { runSessionValidation } from '~/composables/useDebugValidator'
 import { usePilotContext } from '~/composables/usePilotContext'
+import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { shareSessionLink } from '~/services/session-detail/sessionShareService'
 import { autoSelectComparisonStints } from '~/services/session-detail/sessionCompareService'
 import { getSessionDetailLoadError } from '~/services/session-detail/loadSessionDetailViewModel'
 import {
   buildBestSectorSummary,
   buildComparisonRows,
-  buildSessionDetailLaps,
-  buildSessionDetailStint
+  buildSessionDetailStint,
+  buildSessionDetailLaps
 } from '~/services/session-detail/sessionComparisonTableService'
 import { timeToSeconds, secondsToTime } from '~/services/session-detail/sessionMath'
 import { buildSessionDisplayModel } from '~/services/session-detail/buildSessionDisplayModel'
 import {
   buildIncludedLapSummary,
+  buildBoundaryLapExclusions,
   buildLapExclusionKey,
   buildLapTooltipLines,
   buildLapTooltipTitle,
@@ -66,7 +69,7 @@ import type {
   TheoreticalReferenceSource
 } from '~/services/telemetry/theoreticalTimesCalculator'
 import type { SessionDetailLap, SessionDetailStint } from '~/types/sessionDetailViewModel'
-import SessionDetailPanelMode from '~/components/session-detail/SessionDetailPanelMode.vue'
+import SessionDetailPanel from '~/components/session-detail/SessionDetailPanel.vue'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, zoomPlugin)
 
@@ -95,9 +98,8 @@ const chartRef = ref<SessionChartRef | null>(null)
 
 // Layout mode for Stint Stats Card (1-5 variants)
 const stintLayoutMode = ref<1 | 2 | 3 | 4 | 5>(1)
-// Modalita' del pannello dettaglio: in 'advanced' la colonna stint collassa
-// e il debrief occupa l'intero container (PIP-361).
-const detailPanelMode = ref<'standard' | 'advanced'>('standard')
+// Comparison visibility is independent from the retained A/B selection.
+const comparisonOpen = ref(false)
 // Racing style theme - fixed to gold
 const racingStyle = ref<'gold'>('gold')
 // Compare table style mode: A=Gold, B=DualColor, C=Neutral, D=Gold+Badge
@@ -164,32 +166,13 @@ function zoomOut() {
   }
 }
 
-// Auto-exclude first lap (outlap/warmup)
-function applyWarmupExclusion() {
-  const laps = selectedStintLaps.value
-  if (laps.length > 0) {
-    const firstLap = laps[0]?.lap
-    excludedLaps.value = new Set(firstLap != null ? [buildLapExclusionKey({
-      source: 'a',
-      stintNumber: selectedStintNumber.value,
-      lapNumber: firstLap
-    })] : [])
-  } else {
-    excludedLaps.value = new Set()
-  }
-}
 // ========================================
 // FIREBASE DATA LOADING
 // ========================================
 const telemetryGateway = useTelemetryGateway()
-const { generateSessionInsight, generateComparisonInsight } = useCoachInsights()
 
 const { getTheoreticalTimes, generateShareLink, fetchSessionFull } = telemetryGateway
 const fullSession = ref<FullSession | null>(null)
-
-const sessionInsight = computed(() => {
-  return generateSessionInsight(fullSession.value)
-})
 
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
@@ -204,10 +187,10 @@ let autoSelectToastTimer: ReturnType<typeof setTimeout> | null = null
 
 async function shareSession() {
   if (!props.sessionId || isSharing.value) return
-  
+
   isSharing.value = true
   shareSuccess.value = false
-  
+
   try {
     const link = await shareSessionLink({
       sessionId: props.sessionId,
@@ -215,7 +198,7 @@ async function shareSession() {
     })
     shareSuccess.value = true
     console.log('[SHARE] Link copied:', link)
-    
+
     // Reset success state after 2 seconds
     setTimeout(() => {
       shareSuccess.value = false
@@ -258,7 +241,7 @@ onMounted(async () => {
     loadError.value = getSessionDetailLoadError(error)
   } finally {
     isLoading.value = false
-    
+
     // DEV: Auto-run validation tests
     if (import.meta.env.DEV && fullSession.value) {
       // Use nextTick to ensure session computed is updated
@@ -276,7 +259,7 @@ const compareModeActive = ref(false)
 const compareSelection = ref<number[]>([])
 const activeTableTab = ref<string>('COMPARE') // COMPARE, A-{stintNum}, B-{stintNum}
 
-const isCompareMode = computed(() => compareModeActive.value && compareSelection.value.length === 2)
+const isCompareMode = computed(() => comparisonOpen.value && compareModeActive.value && compareSelection.value.length === 2)
 const stintA = computed(() => compareSelection.value[0] ?? selectedStintNumber.value)
 const stintB = computed(() => compareSelection.value[1] ?? null)
 
@@ -319,67 +302,34 @@ function toggleCompareMode() {
 const showSessionPicker = ref(false)
 const crossSessionId = ref<string | null>(null)
 const crossSessionData = ref<FullSession | null>(null)
-const isCrossSessionMode = computed(() => crossSessionId.value !== null)
+const isCrossSessionMode = computed(() => comparisonOpen.value && crossSessionId.value !== null)
 
 // External session (from shared link)
 const crossSessionUserId = ref<string | null>(null)
+const { currentUser: comparisonCurrentUser } = useFirebaseAuth()
 const crossSessionNickname = ref<string | null>(null)
-const isExternalSession = computed(() => crossSessionUserId.value !== null)
+const isExternalSession = computed(() => !!crossSessionUserId.value && crossSessionUserId.value !== comparisonCurrentUser.value?.uid)
 
 function openSessionPicker() {
+  comparisonOpen.value = true
   showSessionPicker.value = true
 }
 
 // Auto-select best stints when Session B is loaded for immediate comparison
 function autoSelectBestStints(sessionBData: FullSession): void {
-  // --- Find best S1 stint ---
-  // Priority: best Race stint, then best Qualy stint, then first available
-  const s1Best = bestRaceStint.value || bestQualyStint.value
-  const s1StintNum = s1Best?.number || session.value.stints[0]?.number
-  
-  if (!s1StintNum) {
-    console.warn('[AUTO-SELECT] No S1 stints available')
-    return
-  }
-  
-  // --- Find best S2 stint ---
-  const s2Stints = sessionBData.stints || []
-  let s2BestStintNum: number | null = null
-  let s2BestLapMs: number | null = null
-  
-  s2Stints.forEach((stint: StintData) => {
-    const validLaps = (stint.laps || []).filter((lap: LapData) => lap.is_valid && !lap.has_pit_stop)
-    if (validLaps.length === 0) return
-    const bestMs = Math.min(...validLaps.map((lap: LapData) => lap.lap_time_ms))
-    
-    // Prefer Race stints over Qualify
-    const isRace = stint.type !== 'Qualify'
-    const currentIsRace = s2BestStintNum !== null && s2Stints.find((stint: StintData) => stint.stint_number === s2BestStintNum)?.type !== 'Qualify'
-    
-    if (s2BestLapMs === null || (isRace && !currentIsRace) || (isRace === currentIsRace && bestMs < s2BestLapMs)) {
-      s2BestLapMs = bestMs
-      s2BestStintNum = stint.stint_number
-    }
+  const { primaryStint: s1StintNum, secondaryStint: s2BestStintNum } = autoSelectComparisonStints({
+    primarySession: session.value, secondarySession: sessionBData,
+    bestRaceStint: bestRaceStint.value, bestQualyStint: bestQualyStint.value
   })
-  
-  // Fallback: first S2 stint
-  if (s2BestStintNum === null && s2Stints.length > 0) {
-    s2BestStintNum = s2Stints[0]?.stint_number ?? null
-  }
-  
-  if (!s2BestStintNum) {
-    console.warn('[AUTO-SELECT] No S2 stints available')
-    return
-  }
-  
+  if (!s1StintNum || !s2BestStintNum) return
   // --- Apply selections ---
   selectedCrossStintA.value = s1StintNum
   stintASource.value = 'a'
   selectedCrossStintB.value = s2BestStintNum
   stintBSource.value = 'b'
-  
+
   console.log(`[AUTO-SELECT] S1 best: #${s1StintNum}, S2 best: #${s2BestStintNum}`)
-  
+
   // Show toast notification
   if (autoSelectToastTimer) clearTimeout(autoSelectToastTimer)
   showAutoSelectToast.value = true
@@ -388,25 +338,34 @@ function autoSelectBestStints(sessionBData: FullSession): void {
   }, 5000)
 }
 
+let comparisonLoadVersion = 0
+const comparisonLoadError = ref<string | null>(null)
 async function handleSessionBSelect(sessionId: string, userId?: string, nickname?: string) {
-  crossSessionId.value = sessionId
-  crossSessionUserId.value = userId || null
-  crossSessionNickname.value = nickname || null
+  clearCrossSession()
+  clearCompare()
+  const version = ++comparisonLoadVersion
+  comparisonLoadError.value = null
   showSessionPicker.value = false
-  
-  // Load the full session data (with optional external userId)
-  const data = await fetchSessionFull(sessionId, userId)
-  if (data) {
+  try {
+    // The picker lists the signed-in user's sessions; shared links supply their owner explicitly.
+    const ownerId = userId || comparisonCurrentUser.value?.uid
+    if (!ownerId) throw new Error('Utente non disponibile')
+    const data = await fetchSessionFull(sessionId, ownerId)
+    if (version !== comparisonLoadVersion) return
+    if (!data) throw new Error('Sessione non disponibile')
+    crossSessionId.value = sessionId
+    crossSessionUserId.value = ownerId
+    crossSessionNickname.value = nickname || (ownerId === comparisonCurrentUser.value?.uid ? currentUserNickname.value : null)
     crossSessionData.value = data
-    console.log('[CROSS-SESSION] Loaded session B:', sessionId, userId ? `(external: ${nickname})` : '(own)', data.session_info.track)
-    
-    // Auto-select best stints for immediate comparison
-    await nextTick()
+    activeTableTab.value = 'COMPARE'
     autoSelectBestStints(data)
+  } catch {
+    if (version === comparisonLoadVersion) comparisonLoadError.value = 'Impossibile caricare la sessione da confrontare.'
   }
 }
 
 function clearCrossSession() {
+  comparisonLoadVersion++
   crossSessionId.value = null
   crossSessionData.value = null
   crossSessionUserId.value = null
@@ -434,14 +393,10 @@ const stintASecondSource = ref<'a' | 'b'>('a')
 const stintBSecondSource = ref<'a' | 'b'>('b')
 
 // Computed: stints from Session B formatted for display
-const crossSessionStints = computed(() => {
-  if (!crossSessionData.value) return []
-
-  return crossSessionData.value.stints.map((stint) => buildSessionDetailStint(stint, formatLapTime))
-})
+const crossSessionStints = computed(() => secondarySession.value.stints)
 
 // Cross-session compare mode is active when both stints are selected
-const isCrossSessionCompare = computed(() => 
+const isCrossSessionCompare = computed(() =>
   isCrossSessionMode.value && selectedCrossStintA.value !== null && selectedCrossStintB.value !== null
 )
 
@@ -462,7 +417,7 @@ const strategyASecond = ref<number | null>(null)
 const strategyBSecond = ref<number | null>(null)
 
 // Is strategy mode active (at least one strategy has 2 stints)
-const isStrategyMode = computed(() => 
+const isStrategyMode = computed(() =>
   strategyASecond.value !== null || strategyBSecond.value !== null
 )
 
@@ -470,8 +425,8 @@ const isStrategyMode = computed(() =>
 function getStintsForSource(source: 'a' | 'b'): SessionDetailStint[] {
   if (source === 'a') return session.value.stints
   // Source 'b': cross-session data
-  if (!crossSessionData.value) return session.value.stints
-  return crossSessionData.value.stints.map((stint) => buildSessionDetailStint(stint, formatLapTime))
+  if (!crossSessionData.value) return []
+  return crossSessionStints.value
 }
 
 // Helper: get laps data for a given source and stint number
@@ -479,11 +434,7 @@ function getLapsForSource(source: 'a' | 'b', stintNum: number): SessionDetailLap
   if (source === 'a') {
     return session.value.lapsData[stintNum as keyof typeof session.value.lapsData] || []
   }
-  // Source 'b': cross-session raw laps
-  if (!crossSessionData.value) return []
-  const crossStint = crossSessionData.value.stints.find((stint) => stint.stint_number === stintNum)
-  if (!crossStint?.laps) return []
-  return buildSessionDetailLaps(crossStint.laps, formatLapTime)
+  return secondarySession.value.lapsData[stintNum] || []
 }
 
 // Check if next consecutive stint exists for Strategy A
@@ -550,13 +501,13 @@ const isBuilderCompareReady = computed(() => {
 // Builder same-session compare: active when builder is ready AND no cross-session is loaded
 // This handles the case where user selects [+A] and [+B] within the same session
 const isBuilderSameSessionCompare = computed(() => {
-  return isBuilderCompareReady.value && !isCrossSessionMode.value
+  return comparisonOpen.value && isBuilderCompareReady.value && !isCrossSessionMode.value
 })
 
 // Builder SINGLE STINT mode: when builder has exactly 1 stint (not compare mode yet)
 // In this mode, right panel shows the single stint from builder, not viewedStint
 const isBuilderSingleStintMode = computed(() => {
-  return hasBuilderContent.value && !isBuilderCompareReady.value && !isCrossSessionMode.value
+  return comparisonOpen.value && hasBuilderContent.value && !isBuilderCompareReady.value
 })
 
 // Get the single stint from builder (whichever slot has it)
@@ -617,7 +568,7 @@ const strategyAStints = computed(() => {
 
 const strategyBStints = computed(() => {
   const stints: SessionDetailStint[] = []
-  
+
   if (selectedCrossStintB.value) {
     const sourceStints = getStintsForSource(stintBSource.value)
     const stint1 = sourceStints.find((stint) => stint.number === selectedCrossStintB.value)
@@ -694,7 +645,7 @@ function formatDuration(ms: number | undefined): string {
   const minutes = Math.floor(totalMs / 60000)
   const seconds = Math.floor((totalMs % 60000) / 1000)
   const millis = totalMs % 1000
-  
+
   return `${minutes}m ${String(seconds).padStart(2, '0')}.${String(millis).padStart(3, '0')}s`
 }
 
@@ -716,22 +667,22 @@ function canAddToBuilderA(stintNum: number): boolean {
   // NEW RULE: stint cannot be in both strategies - check if already in B (from same source)
   if (selectedCrossStintB.value === stintNum && stintBSource.value === 'a') return false
   if (strategyBSecond.value === stintNum && stintBSecondSource.value === 'a') return false
-  
+
   // Case 1: No stint selected yet in A - any can be added (if not in B)
   if (!selectedCrossStintA.value) return true
-  
+
   // Case 2: Already in builder A
   if (selectedCrossStintA.value === stintNum) return false
   if (strategyASecond.value === stintNum) return false
-  
+
   // Case 3: If A already has a stint from a DIFFERENT session, block
   if (stintASource.value !== 'a') return false
-  
+
   // Case 4: Can only add consecutive stint as second
   if (!strategyASecond.value) {
     return stintNum === selectedCrossStintA.value + 1
   }
-  
+
   return false
 }
 
@@ -740,22 +691,22 @@ function canAddToBuilderB(stintNum: number): boolean {
   // NEW RULE: stint cannot be in both strategies - check if already in A
   if (selectedCrossStintA.value === stintNum && stintASource.value === 'a') return false
   if (strategyASecond.value === stintNum && stintASecondSource.value === 'a') return false
-  
+
   // Case 1: No stint selected yet in B - any can be added (if not in A)
   if (!selectedCrossStintB.value) return true
-  
+
   // Case 2: Already in builder B
   if (selectedCrossStintB.value === stintNum) return false
   if (strategyBSecond.value === stintNum) return false
-  
+
   // Case 3: If B already has a stint from a DIFFERENT session, block
   if (stintBSource.value !== 'a') return false
-  
+
   // Case 4: Can only add consecutive stint as second
   if (!strategyBSecond.value) {
     return stintNum === selectedCrossStintB.value + 1
   }
-  
+
   return false
 }
 
@@ -764,7 +715,7 @@ function getAddToBuilderTooltipA(stintNum: number): string {
   // Check if in Strategy B first
   if (selectedCrossStintB.value === stintNum && stintBSource.value === 'a') return 'Già in Strategia B'
   if (strategyBSecond.value === stintNum && stintBSecondSource.value === 'a') return 'Già in Strategia B'
-  
+
   if (!selectedCrossStintA.value) return 'Aggiungi a Strategia A'
   if (selectedCrossStintA.value === stintNum) return 'Già in Strategia A'
   if (strategyASecond.value === stintNum) return 'Già in Strategia A'
@@ -782,7 +733,7 @@ function getAddToBuilderTooltipB(stintNum: number): string {
   // Check if in Strategy A first
   if (selectedCrossStintA.value === stintNum && stintASource.value === 'a') return 'Già in Strategia A'
   if (strategyASecond.value === stintNum && stintASecondSource.value === 'a') return 'Già in Strategia A'
-  
+
   if (!selectedCrossStintB.value) return 'Aggiungi a Strategia B'
   if (selectedCrossStintB.value === stintNum) return 'Già in Strategia B'
   if (strategyBSecond.value === stintNum) return 'Già in Strategia B'
@@ -797,6 +748,7 @@ function getAddToBuilderTooltipB(stintNum: number): string {
 
 // Add stint to Builder A (source = which session it comes from)
 function addToBuilderA(stintNum: number, source: 'a' | 'b' = 'a'): void {
+  if (!(source === 'a' ? canAddToBuilderA(stintNum) : canAddToBuilderACross(stintNum))) return
   if (!selectedCrossStintA.value) {
     selectedCrossStintA.value = stintNum
     stintASource.value = source
@@ -810,6 +762,7 @@ function addToBuilderA(stintNum: number, source: 'a' | 'b' = 'a'): void {
 
 // Add stint to Builder B (source = which session it comes from)
 function addToBuilderB(stintNum: number, source: 'a' | 'b' = 'a'): void {
+  if (!(source === 'a' ? canAddToBuilderB(stintNum) : canAddToBuilderBCross(stintNum))) return
   if (!selectedCrossStintB.value) {
     selectedCrossStintB.value = stintNum
     stintBSource.value = source
@@ -823,6 +776,8 @@ function addToBuilderB(stintNum: number, source: 'a' | 'b' = 'a'): void {
 
 // Cross-session specific: Check if stint from Source B can be added to Strategy A
 function canAddToBuilderACross(stintNum: number): boolean {
+  if (selectedCrossStintB.value === stintNum && stintBSource.value === 'b') return false
+  if (strategyBSecond.value === stintNum && stintBSecondSource.value === 'b') return false
   if (!selectedCrossStintA.value) return true
   // Already selected in A from source 'b'
   if (selectedCrossStintA.value === stintNum && stintASource.value === 'b') return false
@@ -855,7 +810,7 @@ function canAddToBuilderBCross(stintNum: number): boolean {
   // Check if already in Strategy A from source 'b'
   if (selectedCrossStintA.value === stintNum && stintASource.value === 'b') return false
   if (strategyASecond.value === stintNum && stintASecondSource.value === 'b') return false
-  
+
   if (!selectedCrossStintB.value) return true
   // Already in B
   if (selectedCrossStintB.value === stintNum) return false
@@ -873,7 +828,7 @@ function canAddToBuilderBCross(stintNum: number): boolean {
 function getAddToBuilderTooltipBCross(stintNum: number): string {
   if (selectedCrossStintA.value === stintNum && stintASource.value === 'b') return 'Già in Strategia A'
   if (strategyASecond.value === stintNum && stintASecondSource.value === 'b') return 'Già in Strategia A'
-  
+
   if (!selectedCrossStintB.value) return 'Aggiungi a Strategia B'
   if (selectedCrossStintB.value === stintNum) return 'Già in Strategia B'
   if (strategyBSecond.value === stintNum) return 'Già in Strategia B'
@@ -961,18 +916,14 @@ function selectStintForView(stintNum: number): void {
 // ========================================
 // TRANSFORMED SESSION DATA
 // ========================================
-const session = computed(() => {
+function toDisplayModel(fullSession: FullSession | null, sessionId: string) {
   return buildSessionDisplayModel({
-    sessionId: props.sessionId,
-    fullSession: fullSession.value,
-    maxReasonableLapMs: MAX_REASONABLE_LAP_MS,
-    formatLapTime,
-    formatCarName,
-    formatDateFull,
-    formatTime,
-    getSessionTypeLabel
+    sessionId, fullSession, maxReasonableLapMs: MAX_REASONABLE_LAP_MS,
+    formatLapTime, formatCarName, formatDateFull, formatTime, getSessionTypeLabel
   })
-})
+}
+const session = computed(() => toDisplayModel(fullSession.value, props.sessionId))
+const secondarySession = computed(() => toDisplayModel(crossSessionData.value, crossSessionId.value || ''))
 
 // ========================================
 // THEORETICAL TIMES - Using centralized getTheoreticalTimes with temp adjustment
@@ -1014,7 +965,7 @@ function emptyTheoreticalReference(
   }
 }
 
-const theoreticalTimes = ref<TheoreticalTimesData>({
+const emptyTheoreticalTimes: TheoreticalTimesData = {
   theoQualy: null, theoRace: null, theoAvgRace: null,
   dominantGrip: 'Optimum', stintTemp: 23,
   historicQualy: null, historicQualyTemp: null,
@@ -1024,7 +975,9 @@ const theoreticalTimes = ref<TheoreticalTimesData>({
   qualyReference: emptyTheoreticalReference('qualy'),
   raceReference: emptyTheoreticalReference('raceBest'),
   avgRaceReference: emptyTheoreticalReference('raceAvg')
-})
+}
+const stintTheoreticals = ref<Record<string, TheoreticalTimesData>>({})
+const theoreticalTimes = computed(() => stintTheoreticals.value[`${effectiveStintSource.value}:${effectiveStintNumber.value}`] ?? emptyTheoreticalTimes)
 // NOTE: Watch for theo recalculation is defined AFTER stintConditions (around line 550)
 
 // ========================================
@@ -1034,8 +987,16 @@ const selectedStintNumber = ref(1)
 const hasPreselected = ref(false)
 // NOTE: Watch is defined after bestRaceStint/bestQualyStint computeds
 
-const selectedStint = computed(() => session.value.stints.find(s => s.number === selectedStintNumber.value))
-const selectedStintLaps = computed(() => session.value.lapsData[selectedStintNumber.value] || [])
+const effectiveStintSource = computed<LapSeriesSource>(() => isBuilderSingleStintMode.value ? (selectedCrossStintA.value !== null ? stintASource.value : stintBSource.value) : 'a')
+const effectiveStintNumber = computed(() => isBuilderSingleStintMode.value ? builderSingleStintNumber.value ?? selectedStintNumber.value : selectedStintNumber.value)
+const selectedStintLaps = computed(() => getLapsForSource(effectiveStintSource.value, effectiveStintNumber.value))
+const selectedStint = computed(() => {
+  const stint = getStintsForSource(effectiveStintSource.value).find(s => s.number === effectiveStintNumber.value)
+  if (!stint) return undefined
+  const points = normalizeLapSeries({ laps: selectedStintLaps.value, source: effectiveStintSource.value, strategy: 'A', stintNumber: stint.number })
+  const metrics = buildIncludedLapSummary(filterIncludedLapPoints(points, excludedLaps.value))
+  return { ...stint, bestMs: metrics.bestMs, avgMs: metrics.avgMs, best: formatLapTime(metrics.bestMs), avg: metrics.avgWarning ? 'min 5 giri' : formatLapTime(metrics.avgMs), avgWarning: metrics.avgWarning }
+})
 
 function formatFuelStart(fuel: number | null | undefined): string {
   if (typeof fuel !== 'number' || !Number.isFinite(fuel) || fuel <= 0) return '—'
@@ -1104,9 +1065,6 @@ const selectedAvgTheoreticalReferenceLabel = computed(() => {
 // DISPLAYED STINT: the stint shown in the right panel (single stint mode)
 // Rule: if builder has content → use builder's stint, else use viewedStint
 const displayedStint = computed(() => {
-  if (isBuilderSingleStintMode.value) {
-    return builderSingleStint.value
-  }
   return selectedStint.value
 })
 
@@ -1117,29 +1075,10 @@ const displayedStintNumber = computed(() => {
   return selectedStintNumber.value
 })
 
-const displayedStintLaps = computed(() => {
-  if (isBuilderSingleStintMode.value) {
-    return builderSingleStintLaps.value
-  }
-  return selectedStintLaps.value
-})
+const displayedStintLaps = computed(() => selectedStintLaps.value)
 
 const isLimitedData = computed(() => displayedStintLaps.value.length <= 1)
 const isSingleStint = computed(() => session.value.stints.length === 1)
-
-// Auto-apply warmup exclusion when stint changes — always exclude first lap
-watch(selectedStintLaps, (laps) => {
-  if (laps.length > 0) {
-    const firstLap = laps[0]?.lap
-    excludedLaps.value = new Set(firstLap != null ? [buildLapExclusionKey({
-      source: 'a',
-      stintNumber: selectedStintNumber.value,
-      lapNumber: firstLap
-    })] : [])
-  } else {
-    excludedLaps.value = new Set()
-  }
-}, { immediate: true })
 
 // Compare mode stint data (same-session)
 const compareStintA = computed(() => stintA.value ? session.value.stints.find(s => s.number === stintA.value) : null)
@@ -1148,38 +1087,10 @@ const compareStintALaps = computed(() => stintA.value ? (session.value.lapsData[
 const compareStintBLaps = computed(() => stintB.value ? (session.value.lapsData[stintB.value as keyof typeof session.value.lapsData] || []) : [])
 
 // CROSS-SESSION compare stint data
-const crossStintA = computed(() => {
-  if (!selectedCrossStintA.value) return null
-  const stint = session.value.stints.find(s => s.number === selectedCrossStintA.value)
-  if (!stint) return null
-  
-  // Return with unified structure (avgCleanLap = avg for consistency)
-  return {
-    ...stint,
-    avgCleanLap: stint.avg  // Map avg to avgCleanLap for consistency with crossStintB
-  }
-})
-
-const crossStintB = computed(() => {
-  if (!selectedCrossStintB.value || !crossSessionData.value) return null
-  const raw = crossSessionData.value.stints.find((stint) => stint.stint_number === selectedCrossStintB.value)
-  if (!raw) return null
-
-  return buildSessionDetailStint(raw, formatLapTime)
-})
-
-const crossStintALaps = computed(() => {
-  if (!selectedCrossStintA.value) return []
-  return session.value.lapsData[selectedCrossStintA.value as keyof typeof session.value.lapsData] || []
-})
-
-const crossStintBLaps = computed(() => {
-  if (!selectedCrossStintB.value || !crossSessionData.value) return []
-  const stintData = crossSessionData.value.stints.find((stint) => stint.stint_number === selectedCrossStintB.value)
-  if (!stintData || !stintData.laps) return []
-
-  return buildSessionDetailLaps(stintData.laps, formatLapTime)
-})
+const crossStintA = computed(() => strategyAStints.value[0] ?? null)
+const crossStintB = computed(() => strategyBStints.value[0] ?? null)
+const crossStintALaps = computed(() => selectedCrossStintA.value ? getLapsForSource(stintASource.value, selectedCrossStintA.value) : [])
+const crossStintBLaps = computed(() => selectedCrossStintB.value ? getLapsForSource(stintBSource.value, selectedCrossStintB.value) : [])
 
 // Current tab laps for table (in compare mode)
 const currentTabLaps = computed(() => activeTableTab.value === 'A' ? compareStintALaps.value : compareStintBLaps.value)
@@ -1190,35 +1101,19 @@ const currentCrossTabLaps = computed(() => activeTableTab.value === 'A' ? crossS
 const currentCrossTabStint = computed(() => activeTableTab.value === 'A' ? crossStintA.value : crossStintB.value)
 
 // Get laps for individual stint tabs (handles A-{num} and B-{num} format)
+function getTableStintSource(side: 'A' | 'B', stintNumber: number): LapSeriesSource {
+  if (side === 'A') return stintNumber === strategyASecond.value ? stintASecondSource.value : stintASource.value
+  return stintNumber === strategyBSecond.value ? stintBSecondSource.value : stintBSource.value
+}
 function getLapsForTable(): SessionDetailLap[] {
-  const tab = activeTableTab.value
-  
-  // Parse tab format: 'A-1', 'A-2', 'B-1', 'B-2', etc.
-  if (tab.startsWith('A-')) {
-    const stintNum = parseInt(tab.slice(2))
-    if (!isNaN(stintNum)) {
-      return session.value.lapsData[stintNum] || []
-    }
-  } else if (tab.startsWith('B-')) {
-    const stintNum = parseInt(tab.slice(2))
-    if (!isNaN(stintNum)) {
-      // For same-session compare, B stints are also from current session
-      if (isBuilderSameSessionCompare.value) {
-        return session.value.lapsData[stintNum] || []
-      }
-      // For cross-session compare, B stints are from crossSessionData
-      if (isCrossSessionCompare.value && crossSessionData.value) {
-        const stintData = crossSessionData.value.stints.find((stint) => stint.stint_number === stintNum)
-        if (stintData?.laps) {
-          return buildSessionDetailLaps(stintData.laps, formatLapTime)
-        }
-      }
-      return session.value.lapsData[stintNum] || []
-    }
+  if (!comparisonOpen.value) return displayedStintLaps.value
+  const match = /^([AB])-(\d+)$/.exec(activeTableTab.value)
+  if (match) {
+    const side = match[1] as 'A' | 'B'
+    const number = Number(match[2])
+    return getLapsForSource(getTableStintSource(side, number), number)
   }
-  
-  // Fallback: selected stint laps
-  return selectedStintLaps.value
+  return displayedStintLaps.value
 }
 
 // ========================================
@@ -1345,7 +1240,7 @@ const bestRaceStint = computed(() => {
 watch([bestRaceStint, bestQualyStint], ([rBest, qBest]) => {
   // Only preselect once when data first loads
   if (hasPreselected.value) return
-  
+
   // Priority: Race stint, then Qualy stint
   if (rBest) {
     selectedStintNumber.value = rBest.number
@@ -1370,22 +1265,22 @@ function getStintWarning(stint: { type: string; number: number }): { icon: strin
   const laps = session.value.lapsData[stint.number as keyof typeof session.value.lapsData] || []
   const nonPitLaps = laps.filter(l => !l.pit)
   const validLaps = nonPitLaps.filter(l => l.valid)
-  
+
   // All laps invalid = disaster
   if (nonPitLaps.length > 0 && validLaps.length === 0) {
     return { icon: '⚠️', message: 'Tutti i giri invalidi' }
   }
-  
+
   // Race stint with < 5 laps = unreliable
   if (stint.type === 'R' && nonPitLaps.length < 5) {
     return { icon: '⚠️', message: `Stint gara troppo corto (${nonPitLaps.length} giri, min. 5)` }
   }
-  
+
   // Qualy stint with only 1 lap = unreliable
   if (stint.type === 'Q' && nonPitLaps.length <= 1) {
     return { icon: '⚠️', message: 'Dati limitati (1 giro)' }
   }
-  
+
   return null
 }
 
@@ -1425,25 +1320,24 @@ function getGradientColor(pct: number): string {
 // ========================================
 // COMPARE MODE HELPER FUNCTIONS
 // ========================================
-function getStintTempDisplay(laps: SessionDetailLap[]): number {
-  // Support both field names: airTemp (session.lapsData) and air (crossStintBLaps)
-  const validLaps = laps.filter(l => !l.pit && (l.airTemp || l.air))
-  if (validLaps.length === 0) return 0
-  const sum = validLaps.reduce((acc, l) => acc + (l.airTemp || l.air || 0), 0)
-  return Math.round(sum / validLaps.length)
+function getStintTempDisplay(laps: SessionDetailLap[]): string {
+  const temperatures = laps.filter(lap => !lap.pit && timeToSeconds(lap.time) > 0)
+    .map(lap => lap.airTemp ?? lap.air)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+  return temperatures.length ? `${Math.round(temperatures.reduce((a, b) => a + b, 0) / temperatures.length)}°` : '—'
 }
 
 function getStintGripDisplay(laps: SessionDetailLap[]): string {
   const validLaps = laps.filter(l => !l.pit && l.grip && l.grip !== 'Unknown')
-  if (validLaps.length === 0) return 'Optimum'
-  
+  if (validLaps.length === 0) return '—'
+
   // Count grip occurrences
   const gripCounts: Record<string, number> = {}
   for (const lap of validLaps) {
     const grip = lap.grip === 'Opt' ? 'Optimum' : (lap.grip ?? 'Optimum')
     gripCounts[grip] = (gripCounts[grip] || 0) + 1
   }
-  
+
   // Return the dominant grip
   let dominant = 'Optimum'
   let maxCount = 0
@@ -1489,7 +1383,7 @@ function formatDurationMs(totalMs: number): string {
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = Math.floor(totalSeconds % 60)
   const milliseconds = Math.round(totalMs % 1000)
-  
+
   if (hours > 0) {
     return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`
   }
@@ -1499,7 +1393,7 @@ function formatDurationMs(totalMs: number): string {
 // Format sector time with full milliseconds precision (29.543 instead of 29.5)
 function formatSectorTime(sectorTime: string | number | null | undefined): string {
   if (!sectorTime) return '—'
-  
+
   // If it's already a string
   if (typeof sectorTime === 'string') {
     const strTime = sectorTime as string
@@ -1511,14 +1405,14 @@ function formatSectorTime(sectorTime: string | number | null | undefined): strin
     }
     return strTime
   }
-  
+
   // If it's a number (milliseconds or seconds)
   if (typeof sectorTime === 'number') {
     // If > 1000, assume milliseconds and convert to seconds
     const secs = sectorTime > 1000 ? sectorTime / 1000 : sectorTime
     return secs.toFixed(3)
   }
-  
+
   return '—'
 }
 
@@ -1538,7 +1432,7 @@ function getCompareDeltaClass(aMs: number | null | undefined, bMs: number | null
   if (!aMs || !bMs) return 'far'
   const deltaMs = aMs - bMs
   const deltaSec = deltaMs / 1000
-  
+
   if (deltaSec < 0) return 'faster'     // A is faster (green)
   if (deltaSec === 0) return 'ontarget'
   if (deltaSec <= 0.3) return 'close'   // A is slightly slower (yellow)
@@ -1551,16 +1445,16 @@ function getCrossCompareDelta(metric: 'best' | 'avg'): string {
   const stintA = crossStintA.value
   const stintB = crossStintB.value
   if (!stintA || !stintB) return '—'
-  
+
   // Parse lap time strings back to ms for delta calculation
   const timeA = metric === 'best' ? stintA.best : stintA.avgCleanLap
   const timeB = metric === 'best' ? stintB.best : stintB.avgCleanLap
-  
+
   const msA = parseLapTimeToMs(timeA)
   const msB = parseLapTimeToMs(timeB)
-  
+
   if (!msA || !msB) return '—'
-  
+
   const deltaMs = msA - msB
   const deltaSec = deltaMs / 1000
   if (deltaSec === 0) return '0.000'
@@ -1572,17 +1466,17 @@ function getCrossCompareDeltaClass(metric: 'best' | 'avg'): string {
   const stintA = crossStintA.value
   const stintB = crossStintB.value
   if (!stintA || !stintB) return 'far'
-  
+
   const timeA = metric === 'best' ? stintA.best : stintA.avgCleanLap
   const timeB = metric === 'best' ? stintB.best : stintB.avgCleanLap
-  
+
   const msA = parseLapTimeToMs(timeA)
   const msB = parseLapTimeToMs(timeB)
-  
+
   if (!msA || !msB) return 'far'
-  
+
   const deltaSec = (msA - msB) / 1000
-  
+
   if (deltaSec < 0) return 'faster'
   if (deltaSec === 0) return 'ontarget'
   if (deltaSec <= 0.3) return 'close'
@@ -1603,39 +1497,39 @@ function parseLapTimeToMs(timeStr: string | undefined): number | null {
 
 // STINT CONDITIONS - Temp, Grip evolution with percentages
 // ========================================
-const stintConditions = computed(() => {
-  const laps = selectedStintLaps.value.filter(l => !l.pit)
+function getStintConditions(stintLaps: SessionDetailLap[]) {
+  const laps = stintLaps.filter(l => !l.pit && timeToSeconds(l.time) > 0)
   if (laps.length === 0) {
     return {
       airTemp: { start: 0, mid: 0, end: 0, changed: false },
       grip: { dominant: 'Optimum', percentages: [], changed: false, display: 'Optimum' }
     }
   }
-  
+
   const midIndex = Math.floor(laps.length / 2)
   const endIndex = laps.length - 1
-  
+
   // Air Temperature (rounded to integers)
   const tempStart = Math.round(laps[0]?.airTemp || 0)
   const tempMid = Math.round(laps[midIndex]?.airTemp || tempStart)
   const tempEnd = Math.round(laps[endIndex]?.airTemp || tempStart)
   const tempChanged = Math.abs(tempStart - tempEnd) >= 2 || Math.abs(tempStart - tempMid) >= 2
-  
+
   // Grip - count occurrences, filter Unknown, track first occurrence order
   const gripCounts: Record<string, number> = {}
   const gripOrder: string[] = []  // Track order of first occurrence
   let validGripLaps = 0
-  
+
   // Normalize grip values (handle abbreviations)
   const normalizeGrip = (grip: string) => {
     if (grip === 'Opt') return 'Optimum'
     return grip
   }
-  
+
   for (const lap of laps) {
     let grip = lap.grip || 'Unknown'
     grip = normalizeGrip(grip)
-    
+
     if (grip !== 'Unknown') {
       if (!gripCounts[grip]) {
         gripOrder.push(grip)  // Add to order on first occurrence
@@ -1644,12 +1538,12 @@ const stintConditions = computed(() => {
       validGripLaps++
     }
   }
-  
+
   // Calculate percentages and find dominant
   const percentages: { grip: string; pct: number }[] = []
   let dominant = 'Optimum'  // Default fallback
   let maxCount = 0
-  
+
   for (const grip of gripOrder) {  // Iterate in first-occurrence order
     const count = gripCounts[grip] || 0
     if (count === 0) continue
@@ -1660,67 +1554,54 @@ const stintConditions = computed(() => {
       dominant = grip
     }
   }
-  
+
   // Build display string (already in chronological order)
   const changed = percentages.length > 1
   let display = dominant
   if (changed) {
     display = percentages.map(p => `${p.grip} (${p.pct}%)`).join(' → ')
   }
-  
+
   // Calculate average temperature for the stint
-  const avgTemp = tempChanged 
+  const avgTemp = tempChanged
     ? Math.round((tempStart + tempMid + tempEnd) / 3)
     : tempStart
-  
+
   return {
     airTemp: { start: tempStart, mid: tempMid, end: tempEnd, changed: tempChanged, avg: avgTemp },
     grip: { dominant, percentages, changed, display }
   }
-})
+}
+const stintConditions = computed(() => getStintConditions(selectedStintLaps.value))
 
 // ========================================
 // THEORETICAL TIMES WATCHER - Recalculate when stint/session changes
 // ========================================
 watch(
-  [() => fullSession.value, () => stintConditions.value, () => selectedStint.value?.fuelStart],
-  async ([fs, conditions]) => {
-    if (!fs) return
-    
-    const info = fs.session_info
-    const trackId = (info.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
-    const dominantGrip = conditions.grip.dominant || 'Optimum'
-    const stintTemp = conditions.airTemp.avg || Math.round(info.start_air_temp || 23)
-    
-    // Get car category from session
-    const carCategory = getCarCategory(info.car || '')
-    
-    // Use centralized getTheoreticalTimes with temp adjustment and category
-    const theo = await getTheoreticalTimes(
-      trackId,
-      dominantGrip,
-      stintTemp,
-      carCategory,
-      targetUserId.value || undefined,
-      selectedStint.value?.type === 'R' ? selectedStint.value?.fuelStart ?? null : null
-    )
-    
-    theoreticalTimes.value = {
-      theoQualy: theo.theoQualy,
-      theoRace: theo.theoRace,
-      theoAvgRace: theo.theoAvgRace,
-      dominantGrip,
-      stintTemp,
-      historicQualy: theo.historicQualy,
-      historicQualyTemp: theo.historicQualyTemp,
-      historicRace: theo.historicRace,
-      historicRaceTemp: theo.historicRaceTemp,
-      historicAvgRace: theo.historicAvgRace,
-      historicAvgRaceTemp: theo.historicAvgRaceTemp,
-      fuelBucket: theo.fuelBucket,
-      qualyReference: theo.qualyReference,
-      raceReference: theo.raceReference,
-      avgRaceReference: theo.avgRaceReference
+  [fullSession, crossSessionData, () => props.externalUserId || targetUserId.value, crossSessionUserId],
+  async ([primary, secondary, primaryOwner, secondaryOwner], _previous, onCleanup) => {
+    let stale = false
+    onCleanup(() => { stale = true })
+    stintTheoreticals.value = {}
+    for (const [source, fs, owner] of [['a', primary, primaryOwner], ['b', secondary, secondaryOwner || primaryOwner]] as const) {
+      if (!fs) continue
+      const info = fs.session_info
+      const trackId = (info.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
+      // Sequential reads let the gateway reuse its cached projection for every stint.
+      for (const stint of fs.stints) {
+        const conditions = getStintConditions(buildSessionDetailLaps(stint.laps, formatLapTime))
+        const dominantGrip = conditions.grip.dominant
+        const stintTemp = conditions.airTemp.avg || Math.round(info.start_air_temp || 23)
+        try {
+          const theo = await getTheoreticalTimes(trackId, dominantGrip, stintTemp, getCarCategory(info.car || ''), owner || undefined, stint.type === 'Qualify' ? null : stint.fuel_start)
+          if (stale) return
+          stintTheoreticals.value = { ...stintTheoreticals.value, [`${source}:${stint.stint_number}`]: { ...theo, dominantGrip, stintTemp } }
+        } catch {
+          if (stale) return
+          // Missing owner history stays unavailable; never substitute the visitor's reference.
+          stintTheoreticals.value = { ...stintTheoreticals.value, [`${source}:${stint.stint_number}`]: emptyTheoreticalTimes }
+        }
+      }
     }
   },
   { immediate: true }
@@ -1762,18 +1643,13 @@ function buildStrategyPoints(params: {
 }
 
 function isLapExcludedInCurrentTable(lap: SessionDetailLap): boolean {
-  const activeTab = activeTableTab.value
-  if (activeTab.startsWith('B-')) {
-    const stintNumber = Number(activeTab.replace('B-', ''))
-    const source: LapSeriesSource = isCrossSessionCompare.value ? 'b' : 'a'
-    const set = isCrossSessionCompare.value ? excludedLapsCrossB.value : excludedLapsB.value
-    return set.has(lapExclusionKey(lap, source, stintNumber))
-  }
-  if (activeTab.startsWith('A-')) {
-    const stintNumber = Number(activeTab.replace('A-', ''))
-    return excludedLaps.value.has(lapExclusionKey(lap, 'a', stintNumber))
-  }
-  return excludedLaps.value.has(lapExclusionKey(lap, 'a', selectedStintNumber.value))
+  if (!comparisonOpen.value) return excludedLaps.value.has(lapExclusionKey(lap, effectiveStintSource.value, displayedStintNumber.value))
+  const match = /^([AB])-(\d+)$/.exec(activeTableTab.value)
+  const side = (match?.[1] ?? 'A') as 'A' | 'B'
+  const stint = match ? Number(match[2]) : displayedStintNumber.value
+  const source = match ? getTableStintSource(side, stint!) : effectiveStintSource.value
+  const excluded = side === 'A' ? excludedLaps.value : isCrossSessionCompare.value ? excludedLapsCrossB.value : excludedLapsB.value
+  return excluded.has(lapExclusionKey(lap, source, stint))
 }
 
 const chartLapPointsA = computed(() => {
@@ -1789,7 +1665,7 @@ const chartLapPointsA = computed(() => {
     const stints = selectedCrossStintA.value
       ? [{ number: selectedCrossStintA.value }, ...(isStrategyMode.value && strategyASecond.value ? [{ number: strategyASecond.value }] : [])]
       : []
-    return buildStrategyPoints({ stints, sources: ['a', 'a'], strategy: 'A' })
+    return buildStrategyPoints({ stints, sources: [stintASource.value, stintASecondSource.value], strategy: 'A' })
   }
 
   if (isCompareMode.value && stintA.value) {
@@ -1802,10 +1678,10 @@ const chartLapPointsA = computed(() => {
   }
 
   return normalizeLapSeries({
-    laps: selectedStintLaps.value,
-    source: 'a',
+    laps: displayedStintLaps.value,
+    source: effectiveStintSource.value,
     strategy: 'A',
-    stintNumber: selectedStintNumber.value
+    stintNumber: displayedStintNumber.value ?? 0
   })
 })
 
@@ -1829,11 +1705,25 @@ const chartLapPointsB = computed(() => {
 
   if (isCrossSessionCompare.value && selectedCrossStintB.value) {
     const stints = [{ number: selectedCrossStintB.value }, ...(isStrategyMode.value && strategyBSecond.value ? [{ number: strategyBSecond.value }] : [])]
-    return buildStrategyPoints({ stints, sources: ['b', 'b'], strategy: 'B' })
+    return buildStrategyPoints({ stints, sources: [stintBSource.value, stintBSecondSource.value], strategy: 'B' })
   }
 
   return []
 })
+
+// Only a changed selection resets manual overrides, never a recomputation of its metrics.
+watch(() => chartLapPointsA.value.map(p => p.exclusionKey).join('|'), () => {
+  excludedLaps.value = buildBoundaryLapExclusions(chartLapPointsA.value)
+}, { immediate: true })
+watch(() => chartLapPointsB.value.map(p => p.exclusionKey).join('|'), () => {
+  excludedLapsB.value = buildBoundaryLapExclusions(chartLapPointsB.value)
+  excludedLapsCrossB.value = buildBoundaryLapExclusions(chartLapPointsB.value)
+}, { immediate: true })
+const isAnyComparison = computed(() => isCompareMode.value || isBuilderSameSessionCompare.value || isCrossSessionCompare.value)
+function strategyCaption(points: NormalizedLapPoint[]): string {
+  return [...new Set(points.map(p => `${isCrossSessionMode.value ? (p.source === 'b' ? 'S2 ' : 'S1 ') : ''}#${p.stintNumber}`))].join(' + ')
+}
+const comparisonTitle = computed(() => isAnyComparison.value ? `A: ${strategyCaption(chartLapPointsA.value)} · B: ${strategyCaption(chartLapPointsB.value)}` : '')
 
 const includedLapPointsA = computed(() => filterIncludedLapPoints(chartLapPointsA.value, excludedLaps.value))
 
@@ -1859,7 +1749,8 @@ function buildStrategySummaryRows(stints: SessionDetailStint[], points: Normaliz
       avgMs: summary.avgMs,
       avg: summary.avgWarning ? 'min 5 giri' : formatSummaryTime(summary.avgMs),
       avgWarning: summary.avgWarning,
-      durationMs: summary.durationMs
+      durationMs: stint.durationMs || Math.round(getLapsForSource(points.find(p => p.stintIndex === stintIndex)?.source ?? 'a', stint.number).reduce((sum, lap) => sum + timeToSeconds(lap.time) * 1000, 0)),
+      paceDurationMs: summary.durationMs
     }
   })
 }
@@ -1893,80 +1784,55 @@ const chartData = computed(() => {
       ? compareStintA.value
       : selectedStint.value
   const isQualy = stintData?.type === 'Q'
-  
+
   // Get theoretical from computed (with temp adjustment)
   const theoMs = isQualy ? theoreticalTimes.value.theoQualy : theoreticalTimes.value.theoRace
   const theoSecA = theoMs ? theoMs / 1000 : 0
-  
+
   // Target Zone = Theoretical + TARGET_THRESHOLD_S
   const targetLine = theoSecA > 0 ? theoSecA + TARGET_THRESHOLD_S : 0
-  
+
   // Find best lap time in stint (for purple marker)
   const bestLapTime = stintData?.best
   const bestLapSec = timeToSeconds(bestLapTime)
-  
+
   // Helper to check if lap TIME is on-target (under the target line) - ignores validity
   const isTimeOnTarget = (lap: NormalizedLapPoint) => {
     if (lap.pit) return false
     return lap.timeSeconds <= targetLine
   }
-  
+
   // Helper to check if lap is valid and on-target
   const isOnTarget = (lap: NormalizedLapPoint) => {
     if (lap.pit || !lap.valid) return false
     return isTimeOnTarget(lap)
   }
-  
+
   // Helper to check if lap is the best lap
   const isBestLap = (lap: NormalizedLapPoint) => {
     if (lap.pit || !lap.valid) return false
     return lap.time === bestLapTime
   }
-  
-  // Background colors: purple=best, green=on-target, blue=off-target, gray=pit, red=invalid
-  const pointBackgroundColors = lapsA.map(l => {
-    if (l.pit) return '#6b7280' // Gray for pit
-    if (!l.valid) return '#ef4444' // Red for invalid (even if time was on-target)
-    if (showTargetZone.value && isBestLap(l)) return '#a855f7' // Purple for best lap
-    if (showTargetZone.value && isOnTarget(l)) return '#10b981' // Green for on-target
-    return '#3b82f6' // Blue for normal
-  })
-  
-  // Border colors: green border for invalid laps that had on-target time
-  const pointBorderColors = lapsA.map(l => {
-    if (l.pit) return '#6b7280' // Gray for pit
-    if (!l.valid) {
-      // Invalid lap - check if time was on-target to show green border
-      if (showTargetZone.value && isTimeOnTarget(l)) return '#10b981' // Green border
-      return '#ef4444' // Red border for normal invalid
-    }
-    if (showTargetZone.value && isBestLap(l)) return '#a855f7' // Purple for best lap
-    if (showTargetZone.value && isOnTarget(l)) return '#10b981' // Green for on-target
-    return '#3b82f6' // Blue for normal
-  })
-  
-  // Border width: 2px for invalid on-target laps, 1px for others
-  const pointBorderWidths = lapsA.map(l => {
-    if (!l.valid && !l.pit && showTargetZone.value && isTimeOnTarget(l)) return 2
-    return 1
-  })
-  
+
+  const appearanceA = lapsA.map(l => lapPointAppearance(l))
+
   const datasets: SessionChartDataset[] = [
     {
-      label: isBuilderSameSessionCompare.value 
-        ? `Strategia A (${strategyAStints.value.map(s => `#${s.number}`).join('+')})` 
-        : isCompareMode.value 
-          ? `A: Stint #${stintA.value}` 
+      label: isBuilderSameSessionCompare.value
+        ? `Strategia A (${strategyAStints.value.map(s => `#${s.number}`).join('+')})`
+        : isCompareMode.value
+          ? `A: Stint #${stintA.value}`
           : isCrossSessionCompare.value
             ? `Strategia A · Stint #${selectedCrossStintA.value}${strategyASecond.value ? '+#' + strategyASecond.value : ''}`
           : 'Tempo',
       data: lapsA.map(l => l.timeSeconds),
       borderColor: '#3b82f6',
       backgroundColor: 'rgba(59,130,246,0.1)',
-      pointBackgroundColor: pointBackgroundColors,
-      pointBorderColor: pointBorderColors,
-      pointBorderWidth: pointBorderWidths,
-      pointRadius: 5,
+      pointBackgroundColor: appearanceA.map(p => p.color),
+      pointBorderColor: appearanceA.map(p => p.color),
+      pointStyle: appearanceA.map(p => p.shape),
+      pointBorderWidth: 2,
+      pointRadius: 4,
       tension: 0,
       order: 1,
       _points: lapsA,
@@ -1988,10 +1854,10 @@ const chartData = computed(() => {
       order: 3
     }
   ]
-  
+
   // Add target zone line for Race stints (when toggle is on)
   const isRace = !isQualy
-  if (isRace && showTargetZone.value && lapsA.length > 0) {
+  if (isRace && (showTargetZone.value && !isAnyComparison.value) && lapsA.length > 0) {
     datasets.push({
       label: `Target (+${TARGET_THRESHOLD_S}s)`,
       data: lapsA.map(() => targetLine),
@@ -2004,12 +1870,12 @@ const chartData = computed(() => {
       order: 4
     })
   }
-  
+
   // Add grip zone backgrounds (when toggle is on and there's variation)
-  if (showGripZones.value && hasGripVariation.value && lapsA.length > 0) {
+  if (!isAnyComparison.value && showGripZones.value && hasGripVariation.value && lapsA.length > 0) {
     // Find max Y value in the data for zone height
     const maxY = Math.max(...lapsA.map(l => l.timeSeconds)) + 5
-    
+
     gripZones.value.forEach((zone, zoneIdx) => {
       const color = gripColors[zone.gripLevel] || gripColors['Opt']
       // Create data array with null for laps outside this zone
@@ -2020,7 +1886,7 @@ const chartData = computed(() => {
         }
         return null
       })
-      
+
       datasets.push({
         label: `_grip_${zoneIdx}`, // Hidden label (starts with _)
         data: zoneData,
@@ -2033,29 +1899,26 @@ const chartData = computed(() => {
       })
     })
   }
-  
+
   if (lapsB.length > 0) {
     const stintLabels = isBuilderSameSessionCompare.value
       ? strategyBStints.value.map(s => `#${s.number}`).join('+')
       : isCompareMode.value
         ? `#${stintB.value}`
         : `#${selectedCrossStintB.value}${strategyBSecond.value ? '+#' + strategyBSecond.value : ''}`
-    
-    // Generate segment colors for multi-stint (different shade for each stint)
-    const segmentColors = lapsB.map(l => {
-      if (l.pit) return '#6b7280'
-      if (!l.valid) return '#ef4444'
-      // Use lighter purple for 2nd stint
-      return l.stintIndex > 0 ? '#a78bfa' : '#8b5cf6'
-    })
-    
+
+    const appearanceB = lapsB.map(l => lapPointAppearance(l))
+
     datasets.splice(1, 0, {
       label: isCompareMode.value ? `B: Stint ${stintLabels}` : `Strategia B (${stintLabels})`,
       data: lapsB.map(l => l.timeSeconds),
       borderColor: '#8b5cf6',
       backgroundColor: 'rgba(139,92,246,0.1)',
-      pointBackgroundColor: segmentColors,
-      pointRadius: 5,
+      pointBackgroundColor: appearanceB.map(p => p.color),
+      pointBorderColor: appearanceB.map(p => p.color),
+      pointStyle: appearanceB.map(p => p.shape),
+      pointBorderWidth: 2,
+      pointRadius: 4,
       tension: 0,
       _points: lapsB,
       segment: {
@@ -2067,12 +1930,12 @@ const chartData = computed(() => {
       }
     })
   }
-  
+
   // Generate X-axis labels from actual lap numbers (skipping excluded laps)
   // In normal mode: labels come directly from filtered lapsA lap numbers
   // In compare modes: use max range to align both series
   let labels: string[]
-  
+
   if (isBuilderSameSessionCompare.value || isCrossSessionCompare.value || isCompareMode.value) {
     // Compare mode: use continuous numbering for alignment
     const maxLapCount = Math.max(lapsA.length, lapsB.length)
@@ -2082,7 +1945,7 @@ const chartData = computed(() => {
     labels = lapsA.map(l => `G${l.sessionLapNumber}`)
   }
   const maxLapCount = labels.length
-  
+
   // Extend Strategy A data with null values if shorter than max (so line stops where data ends)
   if ((isBuilderSameSessionCompare.value || isCrossSessionCompare.value || isCompareMode.value) && lapsA.length < maxLapCount) {
     // Find Strategy A dataset and extend with nulls
@@ -2099,7 +1962,7 @@ const chartData = computed(() => {
         }
       }
     }
-    
+
     // Extend theo and target lines to max length
     const theoDataset = datasets.find(d => d.label?.startsWith('Teorico'))
     if (theoDataset && Array.isArray(theoDataset.data) && theoDataset.data.length < maxLapCount) {
@@ -2108,7 +1971,7 @@ const chartData = computed(() => {
         theoDataset.data.push(theoValue)
       }
     }
-    
+
     const targetDataset = datasets.find(d => d.label?.startsWith('Target'))
     if (targetDataset && Array.isArray(targetDataset.data) && targetDataset.data.length < maxLapCount) {
       const targetValue = targetDataset.data[0] ?? null
@@ -2117,8 +1980,9 @@ const chartData = computed(() => {
       }
     }
   }
-  
-  return { labels, datasets }
+
+  const visibleDatasets = datasets.filter(d => !d.label?.startsWith('Teorico') || (!isAnyComparison.value && theoSecA > 0))
+  return { labels, datasets: visibleDatasets }
 })
 
 const chartOptions = {
@@ -2151,7 +2015,14 @@ const chartOptions = {
           if (ctx.dataset.label?.startsWith('_')) return '' // Hide internal tooltip
           const point = (ctx.dataset as SessionChartDataset)._points?.[ctx.dataIndex]
           const raw = typeof ctx.raw === 'number' ? ctx.raw : null
-          if (point && raw !== null) return [`${ctx.dataset.label}: ${secondsToTime(raw)}`, ...buildLapTooltipLines(point)]
+          if (point && raw !== null) {
+            const lines = [`${ctx.dataset.label}: ${secondsToTime(raw)}`, ...buildLapTooltipLines(point)]
+            const target = timeToSeconds(consistencyStats.value.targetLine)
+            if (!isAnyComparison.value && showTargetZone.value && displayedStint.value?.type === 'R' && !point.pit && target > 0) {
+              lines.push(raw <= target ? 'Nel target' : 'Fuori target')
+            }
+            return lines
+          }
           if (ctx.raw == null) return ''
           return raw === null ? '' : `${ctx.dataset.label}: ${secondsToTime(raw)}`
         }
@@ -2165,7 +2036,8 @@ const chartOptions = {
       },
       zoom: {
         wheel: {
-          enabled: true
+          enabled: true,
+          modifierKey: 'ctrl' as const
         },
         pinch: {
           enabled: true
@@ -2189,9 +2061,9 @@ const chartOptions = {
 // ========================================
 // HELPERS
 // ========================================
-function getTypeLabel(t: string) { return { practice: 'PRACTICE', qualify: 'QUALIFY', race: 'RACE' }[t] || t.toUpperCase() }
+function getTypeLabel(t: string) { return { practice: 'LIBERE', qualify: 'QUALIFICA', race: 'GARA' }[t] || t.toUpperCase() }
 // Delta color scheme: green=on-target/faster, yellow=close, orange=margin, red=far
-function getDeltaClass(d: string | undefined) { 
+function getDeltaClass(d: string | undefined) {
   if (!d || d === '-') return 'far'
   const v = parseFloat(d)
   if (isNaN(v)) return 'far'
@@ -2201,7 +2073,7 @@ function getDeltaClass(d: string | undefined) {
   if (v <= 0.5) return 'margin'   // Acceptable margin (orange)
   return 'far'                    // Far from target (red)
 }
-function getDeltaLabel(d: string) { 
+function getDeltaLabel(d: string) {
   if (!d || d === '-') return '-'
   const v = parseFloat(d)
   if (isNaN(v)) return '-'
@@ -2214,22 +2086,14 @@ function getDeltaLabel(d: string) {
 
 // Calculate delta vs theoretical for a stint (using correct grip-based theoretical with temp adjustment)
 function getStintDeltaVsTheo(stint: typeof session.value.stints[0]): string {
-  if (!stint) return '-'
-  
-  // Get theoretical time based on stint type
-  const isQualy = stint.type === 'Q'
-  const theoMs = isQualy ? theoreticalTimes.value.theoQualy : theoreticalTimes.value.theoRace
-  
-  if (!theoMs) return '-'
-  
-  // Parse actual best time from stint
-  const actualSec = timeToSeconds(stint.best)
-  if (actualSec === 0) return '-'
-  
-  const theoSec = theoMs / 1000
-  const delta = actualSec - theoSec
-  
-  return delta >= 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3)
+  const reference = stintTheoreticals.value[`a:${stint.number}`]
+  const theoMs = stint.type === 'Q' ? reference?.theoQualy : reference?.theoRace
+  const points = normalizeLapSeries({ laps: session.value.lapsData[stint.number] || [], source: 'a', strategy: 'A', stintNumber: stint.number })
+  const exclusions = stint.number === effectiveStintNumber.value && !isAnyComparison.value ? excludedLaps.value : buildBoundaryLapExclusions(points)
+  const actualMs = buildIncludedLapSummary(filterIncludedLapPoints(points, exclusions)).bestMs
+  if (!theoMs || !actualMs) return '—'
+  const delta = (actualMs - theoMs) / 1000
+  return `${delta >= 0 ? '+' : ''}${delta.toFixed(3)}`
 }
 
 // For colored dots in comparison box
@@ -2266,11 +2130,11 @@ function getTheoAvg(): string {
 // ========================================
 const deltaBest = computed(() => {
   if (!selectedStint.value) return { value: '-', seconds: 0, class: 'neutral' }
-  
+
   // Parse actual best time from stint (string format M:SS.mmm)
   const actualSec = timeToSeconds(selectedStint.value.best)
   if (actualSec === 0) return { value: '-', seconds: 0, class: 'neutral' }
-  
+
   // Get theoretical based on stint type
   let theoMs: number | null = null
   if (selectedStint.value.type === 'Q') {
@@ -2278,39 +2142,39 @@ const deltaBest = computed(() => {
   } else {
     theoMs = theoreticalTimes.value.theoRace
   }
-  
+
   if (!theoMs) return { value: '-', seconds: 0, class: 'neutral' }
-  
+
   const theoSec = theoMs / 1000
   const delta = actualSec - theoSec
   const formatted = delta >= 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3)
-  return { 
-    value: formatted, 
+  return {
+    value: formatted,
     seconds: delta,
-    class: getDeltaClass(formatted) 
+    class: getDeltaClass(formatted)
   }
 })
 
 const deltaAvg = computed(() => {
   if (!selectedStint.value) return { value: '-', seconds: 0, class: 'neutral' }
-  
+
   // Parse actual avg time from stint
   const actualSec = timeToSeconds(selectedStint.value.avg)
   if (actualSec === 0) return { value: '-', seconds: 0, class: 'neutral' }
-  
+
   // Avg delta only meaningful for Race stints
   if (selectedStint.value.type === 'Q') return { value: '-', seconds: 0, class: 'neutral' }
-  
+
   const theoAvgMs = theoreticalTimes.value.theoAvgRace
   if (!theoAvgMs) return { value: '-', seconds: 0, class: 'neutral' }
-  
+
   const theoAvgSec = theoAvgMs / 1000
   const delta = actualSec - theoAvgSec
   const formatted = delta >= 0 ? `+${delta.toFixed(3)}` : delta.toFixed(3)
-  return { 
-    value: formatted, 
+  return {
+    value: formatted,
     seconds: delta,
-    class: getDeltaClass(formatted) 
+    class: getDeltaClass(formatted)
   }
 })
 
@@ -2321,29 +2185,29 @@ const consistencyStats = computed(() => {
   if (!selectedStint.value || selectedStintLaps.value.length === 0) {
     return { onTarget: 0, total: 0, pct: 0, targetLine: '-' }
   }
-  
+
   // Get theoretical time based on stint type (with temp adjustment)
   const isQualy = selectedStint.value.type === 'Q'
   const theoMs = isQualy ? theoreticalTimes.value.theoQualy : theoreticalTimes.value.theoRace
-  
+
   if (!theoMs) {
     return { onTarget: 0, total: 0, pct: 0, targetLine: '-' }
   }
-  
+
   // Target = Theoretical + TARGET_THRESHOLD_S
   const theoSec = theoMs / 1000
   const targetLine = theoSec + TARGET_THRESHOLD_S
-  
+
   // Include all laps (valid and invalid), excluding only pit laps
-  const allLaps = selectedStintLaps.value.filter(l => !l.pit)
+  const allLaps = includedLapPointsA.value.filter(l => !l.pit && l.timeSeconds > 0)
   const total = allLaps.length
-  
+
   let onTarget = 0
   allLaps.forEach(lap => {
     const lapSec = timeToSeconds(lap.time)
     if (lapSec <= targetLine) onTarget++
   })
-  
+
   return {
     onTarget,
     total,
@@ -2356,11 +2220,11 @@ const consistencyStats = computed(() => {
 // VALIDITY STATS (percentage of valid laps)
 // ========================================
 const validityStats = computed(() => {
-  const allLaps = selectedStintLaps.value.filter(l => !l.pit) // Exclude pit laps from count
+  const allLaps = includedLapPointsA.value.filter(l => !l.pit && l.timeSeconds > 0)
   const total = allLaps.length
   const valid = allLaps.filter(l => l.valid).length
   const invalid = total - valid
-  
+
   return {
     valid,
     invalid,
@@ -2376,27 +2240,27 @@ const stintDuration = computed(() => {
   if (!selectedStint.value) {
     return { hours: 0, minutes: 0, seconds: 0, milliseconds: 0, formatted: '0:00.000', totalMs: 0 }
   }
-  
+
   // Use pre-calculated duration from JSON (fallback to 0 if missing)
   let totalMs = selectedStint.value.durationMs || 0
-  
+
   if (totalMs === 0 && selectedStintLaps.value.length > 0) {
     // Fallback: sum lap times if durationMs not available
     selectedStintLaps.value.forEach(lap => {
       totalMs += timeToSeconds(lap.time) * 1000
     })
   }
-  
+
   // Calculate precise values WITHOUT rounding
   const totalSeconds = totalMs / 1000
   const hours = Math.floor(totalSeconds / 3600)
   const minutes = Math.floor((totalSeconds % 3600) / 60)
   const seconds = Math.floor(totalSeconds % 60)
   const milliseconds = Math.round(totalMs % 1000) // Only round ms to integer
-  
+
   // Precise format: "15m 34.465s" or "1h 04m 31.123s" for >1h
   let formatted = ''
-  
+
   if (hours > 0) {
     // "1h 04m 31.123s" - full format with hours
     formatted = `${hours}h ${minutes.toString().padStart(2, '0')}m ${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}s`
@@ -2404,7 +2268,7 @@ const stintDuration = computed(() => {
     // "15m 34.465s" - minutes + seconds.milliseconds
     formatted = `${minutes}m ${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}s`
   }
-  
+
   return { hours, minutes, seconds, milliseconds, formatted, totalMs }
 })
 
@@ -2436,21 +2300,21 @@ const hasGripVariation = computed(() => {
 const gripZones = computed(() => {
   const laps = selectedStintLaps.value
   if (laps.length === 0) return []
-  
+
   const zones: { gripLevel: string; startLap: number; endLap: number }[] = []
   let currentGrip = laps[0]?.grip || 'Opt'
   let startLap = 1
-  
+
   laps.forEach((lap, idx) => {
     if (lap.grip !== currentGrip) {
       zones.push({ gripLevel: currentGrip, startLap, endLap: idx })
-      currentGrip = lap.grip
+      currentGrip = lap.grip || 'Unknown'
       startLap = idx + 1
     }
   })
   // Add final zone
   zones.push({ gripLevel: currentGrip, startLap, endLap: laps.length })
-  
+
   return zones
 })
 </script>
@@ -2478,15 +2342,12 @@ const gripZones = computed(() => {
   </Teleport>
   <LayoutPageContainer class="session-detail-page">
     <!-- NAV -->
-    <div class="nav-bar">
+    <div v-if="!headerBack" class="nav-bar">
       <button v-if="!headerBack" class="nav-btn" @click="emit('back')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
         Torna alle sessioni
       </button>
-      <button class="nav-btn nav-btn--accent" @click="emit('go-to-track', session.trackId)">
-        Apri pista
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-      </button>
+
     </div>
 
     <!-- LOADING STATE -->
@@ -2509,8 +2370,12 @@ const gripZones = computed(() => {
       <div class="header-row">
         <h1 class="track-name">{{ session.track.toUpperCase() }}</h1>
         <span :class="['type-badge', `type-badge--${session.type}`]">{{ getTypeLabel(session.type) }}</span>
+      <button class="nav-btn nav-btn--accent" @click="emit('go-to-track', session.trackId)">
+        Apri pista
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
         <button class="share-session-btn" @click="shareSession" title="Condividi questa sessione">
-          🔗 Condividi
+          Condividi
         </button>
       </div>
       <div class="header-meta">
@@ -2522,60 +2387,33 @@ const gripZones = computed(() => {
       </div>
     </header>
 
-    <!-- LETTURA FINALE (COACH INSIGHT) -->
-    <div class="coach-insight-banner" :class="sessionInsight.type">
-      <div class="insight-icon">
-        <span v-if="sessionInsight.type === 'positive'">✅</span>
-        <span v-else-if="sessionInsight.type === 'negative'">⚠️</span>
-        <span v-else>ℹ️</span>
-      </div>
-      <div class="insight-content">
-        <h3 class="insight-title">{{ sessionInsight.message }}</h3>
-        <p class="insight-details" v-if="sessionInsight.details">{{ sessionInsight.details }}</p>
-      </div>
-    </div>
-
     <!-- ========================================== -->
     <!-- MASTER / DETAIL LAYOUT -->
     <!-- ========================================== -->
     <div
       class="master-detail"
-      :class="{ 'master-detail--advanced': detailPanelMode === 'advanced' }"
+      :class="{ 'master-detail--comparing': comparisonOpen }"
     >
       <!-- MASTER: Stint List with Header (collassata in modalita' Avanzata) -->
       <aside
-        v-show="detailPanelMode !== 'advanced'"
         class="master"
       >
-        <!-- <h2 class="master-title">Stint ({{ session.stints.length }})</h2> -->
-        
-        <!-- CONTROL PANEL - Simplified 
-        <div class="control-panel">
+        <h2 class="master-title">Stint</h2>
+        <div class="analysis-mode" role="group" aria-label="Modalità analisi">
+          <button type="button" :aria-pressed="!comparisonOpen" @click="comparisonOpen = false">Analisi</button>
+          <button type="button" :aria-pressed="comparisonOpen" aria-controls="session-comparison-builder" @click="comparisonOpen = true">Confronto</button>
         </div>
-        -->
-        
-        <!-- BUILDER PANEL: Always visible -->
-        <div class="builder-panel">
+        <div v-if="comparisonOpen" class="builder-panel" id="session-comparison-builder">
           <div class="builder-panel-header">
-            <span class="builder-panel-title">CONFRONTA STINT</span>
-            <!-- Combo Status/Reset Button -->
-            <template v-if="hasBuilderContent">
-              <button v-if="isBuilderCompareReady" class="builder-combo-btn builder-combo-btn--active" @click="resetBuilder" title="Confronto attivo - Clicca per resettare">
-                <span class="combo-status">✓ Attivo</span>
-                <span class="combo-divider">|</span>
-                <span class="combo-reset">×</span>
-              </button>
-              <button v-else class="builder-combo-btn" @click="resetBuilder" title="Azzera selezione">
-                × Reset
-              </button>
-            </template>
+            <span class="builder-panel-title">Composizione</span>
+            <button v-if="hasBuilderContent" class="builder-clear" @click="resetBuilder">Svuota selezione</button>
           </div>
-          
+
           <!-- Slot A -->
           <div class="builder-slot builder-slot--a">
             <span class="builder-slot-label">A</span>
             <div class="builder-slot-content">
-              <span v-if="!selectedCrossStintA" class="builder-slot-empty">Seleziona stint con [+A]</span>
+              <span v-if="!selectedCrossStintA" class="builder-slot-empty">Seleziona +A nella lista</span>
               <template v-else>
                 <span :class="['builder-chip', stintASource === 'a' ? 'builder-chip--s1' : 'builder-chip--s2']">
                   <span v-if="isCrossSessionMode" class="chip-session-tag">{{ stintASource === 'a' ? 'S1' : 'S2' }}</span>
@@ -2590,12 +2428,12 @@ const gripZones = computed(() => {
               </template>
             </div>
           </div>
-          
+
           <!-- Slot B -->
           <div class="builder-slot builder-slot--b">
             <span class="builder-slot-label">B</span>
             <div class="builder-slot-content">
-              <span v-if="!selectedCrossStintB" class="builder-slot-empty">Seleziona stint con [+B]</span>
+              <span v-if="!selectedCrossStintB" class="builder-slot-empty">Seleziona +B nella lista</span>
               <template v-else>
                 <span :class="['builder-chip', stintBSource === 'a' ? 'builder-chip--s1' : 'builder-chip--s2']">
                   <span v-if="isCrossSessionMode" class="chip-session-tag">{{ stintBSource === 'a' ? 'S1' : 'S2' }}</span>
@@ -2611,8 +2449,15 @@ const gripZones = computed(() => {
             </div>
           </div>
         </div>
-        
-        <!-- Header removed per UX audit - was adding noise without value -->
+
+        <!-- <h2 class="master-title">Stint ({{ session.stints.length }})</h2> -->
+
+        <!-- CONTROL PANEL - Simplified
+        <div class="control-panel">
+        </div>
+        -->
+
+        <!-- BUILDER PANEL: Always visible -->
         <!-- CROSS-SESSION MODE: Show two sections -->
         <template v-if="isCrossSessionMode">
           <!-- Session A Section -->
@@ -2621,52 +2466,49 @@ const gripZones = computed(() => {
               <span class="cross-session-label">S1 — {{ currentUserNickname || 'Te' }}</span>
               <span class="cross-session-date">{{ session.date }}</span>
             </div>
-            
+
             <div class="stint-list stint-list--builder">
               <div
                 v-for="stint in session.stints"
                 :key="'a-' + stint.number"
-                :class="['stint-item stint-item--builder stint-item--session-a', { 
+                :class="['stint-item stint-item--builder stint-item--session-a', {
                   'builder-selected': isStintInBuilderA(stint.number, 'a') || isStintInBuilderB(stint.number, 'a'),
                   'viewing': selectedStintNumber === stint.number,
-                  'best-stint': isBestStint(stint)
+                  'best-stint': false
                 }]"
                 @click="viewStintA(stint.number)"
               >
                 <!-- [+A] Button -->
-                <button 
-                  class="stint-add-btn stint-add-btn--a"
+                <button
+                  v-if="comparisonOpen" class="stint-add-btn stint-add-btn--a"
                   :disabled="!canAddToBuilderA(stint.number)"
                   :title="getAddToBuilderTooltipA(stint.number)"
                   @click.stop="addToBuilderA(stint.number, 'a')"
                 >+A</button>
-                
+
                 <!-- [+B] Button -->
-                <button 
-                  class="stint-add-btn stint-add-btn--b"
+                <button
+                  v-if="comparisonOpen" class="stint-add-btn stint-add-btn--b"
                   :disabled="!canAddToBuilderB(stint.number)"
                   :title="getAddToBuilderTooltipB(stint.number)"
                   @click.stop="addToBuilderB(stint.number, 'a')"
                 >+B</button>
-                
+
                 <!-- Trophy for best stint OR Warning icon OR empty space -->
-                <span class="stint-icon-slot">
-                  <template v-if="isBestStint(stint)">🏆</template>
-                  <template v-else-if="getStintWarning(stint)">{{ getStintWarning(stint)?.icon }}</template>
-                </span>
-                
+
+
                 <!-- Stint Number -->
-                <span class="stint-number">S1 #{{ stint.number }}</span>
-                
+                <span class="stint-number">#{{ stint.number }}</span>
+
                 <!-- Stint Type badge -->
-                <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stint.type }}</span>
-                
+                <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stintTypeLabel(stint.type) }}</span>
+
                 <!-- Laps count -->
-                <span class="stint-laps">{{ stint.laps }} Giri</span>
+                <span class="stint-laps">{{ stint.laps }}</span>
               </div>
             </div>
           </div>
-          
+
           <!-- Session B Section -->
           <div class="cross-session-section">
             <div class="cross-session-header cross-session-header--b">
@@ -2680,122 +2522,115 @@ const gripZones = computed(() => {
               </span>
               <button class="cross-session-close" @click="clearCrossSession" title="Rimuovi questa sorgente">✕</button>
             </div>
-            
+
             <div class="stint-list stint-list--builder">
               <div
                 v-for="stint in crossSessionStints"
                 :key="'b-' + stint.number"
-                :class="['stint-item stint-item--builder stint-item--session-b', { 
+                :class="['stint-item stint-item--builder stint-item--session-b', {
                   'builder-selected': isStintInBuilderA(stint.number, 'b') || isStintInBuilderB(stint.number, 'b')
                 }]"
                 @click="viewStintB(stint.number)"
               >
                 <!-- [+A] Button -->
-                <button 
-                  class="stint-add-btn stint-add-btn--a"
+                <button
+                  v-if="comparisonOpen" class="stint-add-btn stint-add-btn--a"
                   :disabled="!canAddToBuilderACross(stint.number)"
                   :title="getAddToBuilderTooltipACross(stint.number)"
                   @click.stop="addToBuilderACross(stint.number)"
                 >+A</button>
-                
+
                 <!-- [+B] Button -->
-                <button 
-                  class="stint-add-btn stint-add-btn--b"
+                <button
+                  v-if="comparisonOpen" class="stint-add-btn stint-add-btn--b"
                   :disabled="!canAddToBuilderBCross(stint.number)"
                   :title="getAddToBuilderTooltipBCross(stint.number)"
                   @click.stop="addToBuilderBCross(stint.number)"
                 >+B</button>
-                
+
                 <!-- Trophy for best stint OR Warning icon OR empty space -->
-                <span class="stint-icon-slot">
-                  <template v-if="isBestStint(stint)">🏆</template>
-                  <template v-else-if="getStintWarning(stint)">{{ getStintWarning(stint)?.icon }}</template>
-                </span>
-                
+
+
                 <!-- Stint Number -->
-                <span class="stint-number">S2 #{{ stint.number }}</span>
-                
+                <span class="stint-number">#{{ stint.number }}</span>
+
                 <!-- Stint Type badge -->
-                <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stint.type }}</span>
-                
+                <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stintTypeLabel(stint.type) }}</span>
+
                 <!-- Laps count -->
-                <span class="stint-laps">{{ stint.laps }} Giri</span>
+                <span class="stint-laps">{{ stint.laps }}</span>
               </div>
             </div>
           </div>
         </template>
-        
+
         <!-- NORMAL MODE: Single stint list with [+A] [+B] buttons -->
         <template v-else>
-          <h4 class="master-title">STINT</h4>
+          <div class="stint-columns" aria-hidden="true"><span>#</span><span>Tipo</span><span>Giri</span><span v-if="!comparisonOpen">Δ rif.</span><span v-else>A / B</span></div>
           <div class="stint-list stint-list--builder">
             <div
             v-for="stint in session.stints"
             :key="stint.number"
-            :class="['stint-item stint-item--builder', { 
+            :class="['stint-item stint-item--builder', {
               selected: selectedStintNumber === stint.number,
-              'builder-selected': isStintInBuilderA(stint.number) || isStintInBuilderB(stint.number),
-              'best-stint': isBestStint(stint)
+              'builder-selected': comparisonOpen && (isStintInBuilderA(stint.number) || isStintInBuilderB(stint.number)),
+              'best-stint': false
             }]"
-            @click="selectStintForView(stint.number)"
+            :role="comparisonOpen ? undefined : 'button'" :tabindex="comparisonOpen ? undefined : 0" :aria-label="`Visualizza stint ${stint.number}`" @keydown.enter="selectStintForView(stint.number)" @keydown.space.prevent="selectStintForView(stint.number)" @click="selectStintForView(stint.number)"
           >
             <!-- [+A] Button -->
-            <button 
-              class="stint-add-btn stint-add-btn--a"
+            <button
+              v-if="comparisonOpen" class="stint-add-btn stint-add-btn--a"
               :disabled="!canAddToBuilderA(stint.number)"
               :title="getAddToBuilderTooltipA(stint.number)"
               @click.stop="addToBuilderA(stint.number)"
             >+A</button>
-            
+
             <!-- [+B] Button -->
-            <button 
-              class="stint-add-btn stint-add-btn--b"
+            <button
+              v-if="comparisonOpen" class="stint-add-btn stint-add-btn--b"
               :disabled="!canAddToBuilderB(stint.number)"
               :title="getAddToBuilderTooltipB(stint.number)"
               @click.stop="addToBuilderB(stint.number)"
             >+B</button>
-            
+
             <!-- Trophy for best stint OR Warning icon OR empty space -->
-            <span class="stint-icon-slot">
-              <template v-if="isBestStint(stint)">🏆</template>
-              <template v-else-if="getStintWarning(stint)">{{ getStintWarning(stint)?.icon }}</template>
-            </span>
-            
+
+
             <!-- Stint Number -->
             <span class="stint-number">#{{ stint.number }}</span>
-            
+
             <!-- Stint Type badge -->
-            <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stint.type }}</span>
-            
+            <span :class="['stint-type', `stint-type--${stint.type.toLowerCase()}`]">{{ stintTypeLabel(stint.type) }}</span>
+
             <!-- Laps count -->
-            <span class="stint-laps">{{ stint.laps }} Giri</span>
-            
+            <span class="stint-laps">{{ stint.laps }}</span>
+
             <!-- Delta value only (no label) -->
-            <span :class="['stint-delta', `delta--${getDeltaClass(getStintDeltaVsTheo(stint))}`]">
+            <span v-if="!comparisonOpen" :class="['stint-delta', `delta--${getDeltaClass(getStintDeltaVsTheo(stint))}`]">
               {{ getStintDeltaVsTheo(stint) }}
             </span>
           </div>
         </div>
-        
+
         <!-- ALTRA SESSIONE BUTTON: Below stint list, hidden when cross-session active -->
-        <button 
-          class="altra-sessione-btn"
+        <button
+          v-if="comparisonOpen" class="altra-sessione-btn"
           @click="openSessionPicker"
         >
-          Confronta con altra sessione
+          Altra sessione o link
         </button>
         </template>
       </aside>
 
       <!-- DETAIL: Analysis Panel -->
       <section class="detail">
-        <SessionDetailPanelMode
-          :stint-number="displayedStintNumber"
-          :stint-type="displayedStint?.type"
-          :laps="displayedStintLaps"
-          @mode-change="detailPanelMode = $event"
+        <SessionDetailPanel
+          :comparison-open="comparisonOpen"
+          :label="comparisonTitle || `Stint ${displayedStintNumber ?? '—'}`"
         >
-        <!-- Compare header removed per user request -->
+        <!-- Header removed per UX audit - was adding noise without value -->
+        <p v-if="comparisonLoadError" role="alert">{{ comparisonLoadError }}</p>
 
         <!-- Stint Header removed per user request (RACE/BEST pills) -->
 
@@ -2815,67 +2650,74 @@ const gripZones = computed(() => {
         <!-- ========================================== -->
         <!-- COMPARE MODE: Layout 1 - Headers + Table  -->
         <!-- ========================================== -->
-        <div v-if="isCompareMode || isBuilderSameSessionCompare || isCrossSessionCompare" class="compare-layout compare-style--A">
-          <!-- Conditions Headers -->
-          <div class="compare-conditions">
-            <!-- A Header -->
-            <div class="compare-condition-card compare-condition-card--a">
-              <div class="cond-stint-label">A: Stint #{{ (isBuilderSameSessionCompare || isCrossSessionCompare) ? selectedCrossStintA : stintA }}</div>
-              <div class="cond-details">
-                <span class="cond-item"><span class="cond-lbl">Aria:</span> {{ getStintTempDisplay((isBuilderSameSessionCompare || isCrossSessionCompare) ? crossStintALaps : compareStintALaps) }}°</span>
-                <span class="cond-item"><span class="cond-lbl">Grip:</span> {{ getStintGripDisplay((isBuilderSameSessionCompare || isCrossSessionCompare) ? crossStintALaps : compareStintALaps) }}</span>
+        <div v-if="isCompareMode || isBuilderSameSessionCompare || isCrossSessionCompare" class="compare-layout stint-stats-card">
+          <aside class="stint-context compare-context" aria-label="Condizioni del confronto">
+            <section v-for="side in ['A', 'B'] as const" :key="side" class="compare-context-side">
+              <h3 :class="['compare-context-title', `compare-context-title--${side.toLowerCase()}`]">{{ side }} · {{ strategyCaption(side === 'A' ? chartLapPointsA : chartLapPointsB) }}</h3>
+              <dl class="stint-context-data">
+                <div><dt>Aria</dt><dd>{{ getStintTempDisplay((side === 'A' ? chartLapPointsA : chartLapPointsB).map(p => p.raw)) }}</dd></div>
+                <div><dt>Grip</dt><dd>{{ getStintGripDisplay((side === 'A' ? chartLapPointsA : chartLapPointsB).map(p => p.raw)) }}</dd></div>
+              </dl>
+              <div class="compare-fuel" :data-testid="`comparison-fuel-${side}`">
+                <h4>Carburante iniziale</h4>
+                <dl>
+                  <div v-for="(stint, index) in (side === 'A' ? strategyAStints : strategyBStints)" :key="index">
+                    <dt>Stint #{{ stint.number }}</dt>
+                    <dd>{{ formatFuelStart(stint.fuelStart) }}</dd>
+                  </div>
+                </dl>
               </div>
-            </div>
-            <!-- B Header -->
-            <div class="compare-condition-card compare-condition-card--b">
-              <div class="cond-stint-label">B: Stint #{{ (isBuilderSameSessionCompare || isCrossSessionCompare) ? selectedCrossStintB : stintB }}</div>
-              <div class="cond-details">
-                <span class="cond-item"><span class="cond-lbl">Aria:</span> {{ getStintTempDisplay((isBuilderSameSessionCompare || isCrossSessionCompare) ? crossStintBLaps : compareStintBLaps) }}°</span>
-                <span class="cond-item"><span class="cond-lbl">Grip:</span> {{ getStintGripDisplay((isBuilderSameSessionCompare || isCrossSessionCompare) ? crossStintBLaps : compareStintBLaps) }}</span>
-              </div>
-            </div>
-          </div>
+            </section>
+          </aside>
 
           <!-- Comparison Table - Multi-stint strategy support -->
           <div class="compare-table-wrap">
             <div class="ssc-table">
               <div class="ssc-table-header">
                 <div class="ssc-th ssc-th--label"></div>
-                <div class="ssc-th">STRATEGIA A</div>
-                <div class="ssc-th">STRATEGIA B</div>
-                <div class="ssc-th">- DELTA</div>
+                <div class="ssc-th summary-side--a">STRATEGIA A</div>
+                <div class="ssc-th summary-side--b">STRATEGIA B</div>
+                <div class="ssc-th">DELTA</div>
               </div>
-              
+
               <!-- Loop through each stint position -->
-              <template v-for="(_, stintIndex) in maxStrategyStints" :key="stintIndex">
-                <!-- Stint separator header (only if multiple stints) -->
-                <div v-if="maxStrategyStints > 1" class="ssc-stint-separator">
-                  <span>STINT {{ stintIndex + 1 }}</span>
+              <section v-for="(_, stintIndex) in maxStrategyStints" :key="stintIndex" class="comparison-stint-block" :aria-label="`Confronto stint, posizione ${stintIndex + 1}`">
+                <div class="ssc-table-row comparison-stint-heading">
+                  <div></div>
+                  <div class="ssc-td summary-side--a">
+                    <span v-if="strategyAStints[stintIndex]">Stint #{{ strategyAStints[stintIndex].number }}</span>
+                    <span v-else class="comparison-no-stint">Nessuno stint</span>
+                  </div>
+                  <div class="ssc-td summary-side--b">
+                    <span v-if="strategyBStints[stintIndex]">Stint #{{ strategyBStints[stintIndex].number }}</span>
+                    <span v-else class="comparison-no-stint">Nessuno stint</span>
+                  </div>
+                  <div></div>
                 </div>
-                
+
                 <!-- BEST row -->
                 <div class="ssc-table-row">
                   <div class="ssc-td ssc-td--label">BEST</div>
                   <div class="ssc-td ssc-td--value">{{ strategyASummaryRows[stintIndex]?.best ?? '—' }}</div>
                   <div class="ssc-td ssc-td--value">{{ strategyBSummaryRows[stintIndex]?.best ?? '—' }}</div>
                   <div class="ssc-td">
-                    <span v-if="strategyASummaryRows[stintIndex] && strategyBSummaryRows[stintIndex]" 
+                    <span v-if="strategyASummaryRows[stintIndex] && strategyBSummaryRows[stintIndex]"
                           :class="['ssc-delta', getCompareDeltaClass(strategyASummaryRows[stintIndex]?.bestMs, strategyBSummaryRows[stintIndex]?.bestMs)]">
                       {{ formatCompareDelta(strategyASummaryRows[stintIndex]?.bestMs, strategyBSummaryRows[stintIndex]?.bestMs) }}
                     </span>
                     <span v-else class="ssc-delta ssc-delta--empty">—</span>
                   </div>
                 </div>
-                
+
                 <!-- AVG row -->
                 <div class="ssc-table-row">
-                  <div class="ssc-td ssc-td--label">AVG</div>
+                  <div class="ssc-td ssc-td--label">MEDIA</div>
                   <div :class="['ssc-td', 'ssc-td--value', { 'ssc-td--warning': strategyASummaryRows[stintIndex]?.avgWarning }]">
-                    <template v-if="strategyASummaryRows[stintIndex]?.avgWarning">⚠️ {{ strategyASummaryRows[stintIndex]?.avg }}</template>
+                    <template v-if="strategyASummaryRows[stintIndex]?.avgWarning">{{ strategyASummaryRows[stintIndex]?.avg }}</template>
                     <template v-else>{{ strategyASummaryRows[stintIndex]?.avg ?? '—' }}</template>
                   </div>
                   <div :class="['ssc-td', 'ssc-td--value', { 'ssc-td--warning': strategyBSummaryRows[stintIndex]?.avgWarning }]">
-                    <template v-if="strategyBSummaryRows[stintIndex]?.avgWarning">⚠️ {{ strategyBSummaryRows[stintIndex]?.avg }}</template>
+                    <template v-if="strategyBSummaryRows[stintIndex]?.avgWarning">{{ strategyBSummaryRows[stintIndex]?.avg }}</template>
                     <template v-else>{{ strategyBSummaryRows[stintIndex]?.avg ?? '—' }}</template>
                   </div>
                   <div class="ssc-td">
@@ -2886,30 +2728,32 @@ const gripZones = computed(() => {
                     <span v-else class="ssc-delta ssc-delta--empty">—</span>
                   </div>
                 </div>
-                
-                <!-- GIRI + DURATA combined row -->
+
+                <!-- Keep lap counts and duration on distinct, readable rows. -->
                 <div class="ssc-table-row ssc-table-row--compact">
-                  <div class="ssc-td ssc-td--label">GIRI VALIDI</div>
+                  <div class="ssc-td ssc-td--label">VALIDI</div>
                   <div class="ssc-td ssc-td--compact">
                     <template v-if="strategyASummaryRows[stintIndex]">
                       {{ strategyASummaryRows[stintIndex].validLapsCount ?? 0 }} su {{ strategyASummaryRows[stintIndex].laps ?? 0 }}
-                      <span class="compact-sep">·</span>
-                      {{ formatDuration(strategyASummaryRows[stintIndex]?.durationMs) }}
                     </template>
                     <template v-else>—</template>
                   </div>
                   <div class="ssc-td ssc-td--compact">
                     <template v-if="strategyBSummaryRows[stintIndex]">
                       {{ strategyBSummaryRows[stintIndex].validLapsCount ?? 0 }} su {{ strategyBSummaryRows[stintIndex].laps ?? 0 }}
-                      <span class="compact-sep">·</span>
-                      {{ formatDuration(strategyBSummaryRows[stintIndex]?.durationMs) }}
                     </template>
                     <template v-else>—</template>
                   </div>
                   <div class="ssc-td"></div>
                 </div>
-              </template>
-              
+                <div class="ssc-table-row ssc-table-row--duration">
+                  <div class="ssc-td ssc-td--label">DURATA</div>
+                  <div class="ssc-td ssc-td--value ssc-td--duration">{{ strategyASummaryRows[stintIndex] ? formatDuration(strategyASummaryRows[stintIndex]?.durationMs) : '—' }}</div>
+                  <div class="ssc-td ssc-td--value ssc-td--duration">{{ strategyBSummaryRows[stintIndex] ? formatDuration(strategyBSummaryRows[stintIndex]?.durationMs) : '—' }}</div>
+                  <div class="ssc-td"></div>
+                </div>
+              </section>
+
               <!-- TOTALE row (only if more than 1 stint in either strategy) -->
               <template v-if="maxStrategyStints > 1">
                 <div class="ssc-stint-separator ssc-stint-separator--total">
@@ -2929,70 +2773,63 @@ const gripZones = computed(() => {
         <!-- ========================================== -->
         <!-- SINGLE STINT: Stats Card (non-compare mode) -->
         <!-- ========================================== -->
-        <div v-if="!isCompareMode && !isCrossSessionCompare && !isBuilderSameSessionCompare && displayedStint" 
+        <div v-if="!isCompareMode && !isCrossSessionCompare && !isBuilderSameSessionCompare && displayedStint"
              :class="['stint-stats-card', `racing-theme--${racingStyle}`]">
 
-          <!-- Table Layout with Explicit Comparison -->
-          <div class="ssc-header">
-              <div class="ssc-header-left">
-                <span :class="['stint-type', `stint-type--${displayedStint?.type?.toLowerCase()}`]">{{ displayedStint?.type === 'R' ? 'Race' : 'Qualifying' }}</span>
-                <span class="ssc-stint-label">STINT #{{ displayedStintNumber }}</span>
-                <span class="ssc-header-divider">|</span>
-                <span class="ssc-condition-text">
-                  <span class="ssc-cond-lbl">ARIA</span>
-                  <span class="ssc-cond-val">{{ stintConditions.airTemp.avg || stintConditions.airTemp.start }}°</span>
-                </span>
-                <span class="ssc-condition-text">
-                  <span class="ssc-cond-lbl">GRIP</span>
-                  <span class="ssc-cond-val">{{ stintConditions.grip.dominant }}</span>
-                </span>
-                <span class="ssc-condition-text" data-testid="stint-start-fuel">
-                  <span class="ssc-cond-lbl">FUEL START</span>
-                  <span class="ssc-cond-val">{{ formatFuelStart(displayedStint?.fuelStart) }}</span>
-                </span>
-              </div>
-              <div class="ssc-header-right">
-                <span v-if="stintReferenceLabel" class="ssc-reference-label" data-testid="stint-reference-fuel">{{ stintReferenceLabel }}</span>
-                <span class="ssc-duration-label">Durata: {{ stintDuration.formatted }}</span>
-              </div>
+          <aside class="stint-context" aria-label="Condizioni dello stint">
+            <dl class="stint-context-data">
+              <div class="stint-context-duration"><dt>Durata</dt><dd>{{ stintDuration.formatted }}</dd></div>
+              <div><dt>Aria</dt><dd>{{ stintConditions.airTemp.avg || stintConditions.airTemp.start }}°</dd></div>
+              <div><dt>Grip</dt><dd>{{ stintConditions.grip.dominant }}</dd></div>
+              <div class="stint-context-fuel" data-testid="stint-start-fuel"><dt>Carburante iniziale</dt><dd>{{ formatFuelStart(displayedStint?.fuelStart) }}</dd></div>
+            </dl>
+            <div v-if="selectedStint?.type === 'R' && consistencyStats.total > 0" class="stint-target">
+              <span>Soglia target</span>
+              <strong>{{ consistencyStats.targetLine }}</strong>
+              <small>Oltre questo tempo: fuori target</small>
             </div>
-            <div
+          </aside>
+
+            <div class="ssc-table">
+              <div class="ssc-table-header">
+                <div class="ssc-th ssc-th--label"></div>
+                <div class="ssc-th">STINT</div>
+                <div class="ssc-th ssc-th--theo">
+                  RIFERIMENTO
+                              <details
               v-if="selectedBestTheoreticalReferenceLabel || selectedAvgTheoreticalReferenceLabel"
               class="ssc-theory-meta"
               data-testid="theoretical-reference-meta"
             >
-              <span
-                v-if="selectedBestTheoreticalReferenceLabel"
-                class="ssc-theory-pill"
-                data-testid="theoretical-best-reference"
-              >
-                {{ selectedBestTheoreticalReferenceLabel }}
-              </span>
-              <span
-                v-if="selectedAvgTheoreticalReferenceLabel"
-                class="ssc-theory-pill"
-                data-testid="theoretical-avg-reference"
-              >
-                {{ selectedAvgTheoreticalReferenceLabel }}
-              </span>
-            </div>
-            <div class="ssc-table">
-              <div class="ssc-table-header">
-                <div class="ssc-th ssc-th--label"></div>
-                <div class="ssc-th">TEMPI STINT</div>
-                <div class="ssc-th ssc-th--theo">
-                  TEORICO
-                  <span class="theo-info" title="Tempo Teorico = Storico + (TempStint - TempStorico) × 100ms/°C">?</span>
+              <summary aria-label="Dettagli riferimento" title="Dettagli riferimento"><Info :size="18" aria-hidden="true" /></summary>
+              <div class="reference-popover" role="note">
+                <strong class="reference-title">Come nasce il riferimento</strong>
+                <p>Il tuo storico compatibile, adattato alla temperatura di questo stint.</p>
+                <section v-for="entry in [{ title: 'Miglior giro', ref: selectedBestTheoreticalReference }, { title: 'Media gara', ref: selectedAvgTheoreticalReference }]" :key="entry.title">
+                  <template v-if="entry.ref">
+                    <h5>{{ entry.title }}</h5>
+                    <p v-if="!entry.ref.historicMs">Nessuno storico compatibile disponibile.</p>
+                    <dl v-else>
+                      <dt>Tempo storico</dt><dd>{{ formatLapTime(entry.ref.historicMs) }}</dd>
+                      <template v-if="entry.ref.fuelBucket"><dt>Carburante iniziale</dt><dd>{{ entry.ref.fuelBucket }} L</dd></template>
+                      <dt>Temperatura storico</dt><dd>{{ entry.ref.hasHistoricTemp ? formatReferenceTemp(entry.ref.historicTempRounded) : 'Non disponibile' }}</dd>
+                      <dt>Temperatura stint</dt><dd>{{ formatReferenceTemp(entry.ref.stintTemp) }}</dd>
+                      <dt>Correzione sul tempo</dt><dd>{{ formatReferenceCorrection(entry.ref.adjustmentMs) }}</dd>
+                    </dl>
+                  </template>
+                </section>
+              </div>
+            </details>
                 </div>
-                <div class="ssc-th">- DELTA</div>
+                <div class="ssc-th">DELTA</div>
               </div>
               <div class="ssc-table-row">
                 <div class="ssc-td ssc-td--label">BEST</div>
                 <div class="ssc-td ssc-td--value">{{ selectedStint?.best ?? '—:—.---' }}</div>
                 <div class="ssc-td ssc-td--value ssc-td--theo">
-                  {{ selectedStint?.type === 'Q' 
+                  {{ selectedStint?.type === 'Q'
                      ? (theoreticalTimes.theoQualy ? formatLapTime(theoreticalTimes.theoQualy) : '—:—.---')
-                     : (theoreticalTimes.theoRace ? formatLapTime(theoreticalTimes.theoRace) : '—:—.---') 
+                     : (theoreticalTimes.theoRace ? formatLapTime(theoreticalTimes.theoRace) : '—:—.---')
                   }}
                 </div>
                 <div class="ssc-td">
@@ -3000,8 +2837,8 @@ const gripZones = computed(() => {
                 </div>
               </div>
               <div class="ssc-table-row">
-                <div class="ssc-td ssc-td--label">AVG</div>
-                <div class="ssc-td ssc-td--value">{{ selectedStint?.avg ?? '—:—.---' }}</div>
+                <div class="ssc-td ssc-td--label">MEDIA</div>
+                <div class="ssc-td ssc-td--value" :class="{ 'ssc-value--note': selectedStint?.avg?.includes('min') }">{{ selectedStint?.avg ?? '—:—.---' }}</div>
                 <div class="ssc-td ssc-td--value ssc-td--theo">
                   {{ selectedStint?.type === 'Q' ? '—' : (theoreticalTimes.theoAvgRace ? formatLapTime(theoreticalTimes.theoAvgRace) : '—:—.---') }}
                 </div>
@@ -3009,12 +2846,6 @@ const gripZones = computed(() => {
                   <span v-if="selectedStint?.type !== 'Q'" :class="['ssc-delta', deltaAvg.class]">{{ deltaAvg.value }}</span>
                   <span v-else class="ssc-delta ssc-delta--na">—</span>
                 </div>
-              </div>
-            </div>
-            <div v-if="selectedStint?.type === 'R' && consistencyStats.total > 0" class="ssc-target-section">
-              <div class="ssc-target-row-bottom">
-                <span class="ssc-target-label">TARGET GARA:</span>
-                <span class="ssc-target-value">{{ consistencyStats.targetLine }}</span>
               </div>
             </div>
             <div class="ssc-progress-section">
@@ -3026,7 +2857,7 @@ const gripZones = computed(() => {
                 <div class="ssc-progress-bar">
                   <div class="ssc-progress-fill" :style="{ width: consistencyStats.pct + '%', background: getGradientColor(consistencyStats.pct) }"></div>
                 </div>
-                <span class="ssc-progress-pct" :style="{ color: getGradientColor(consistencyStats.pct) }">{{ consistencyStats.pct }}%</span>
+
               </div>
               <div v-if="validityStats.total > 0" class="ssc-progress-row">
                 <div class="ssc-progress-label">
@@ -3036,7 +2867,7 @@ const gripZones = computed(() => {
                 <div class="ssc-progress-bar">
                   <div class="ssc-progress-fill" :style="{ width: validityStats.pct + '%', background: getGradientColor(validityStats.pct) }"></div>
                 </div>
-                <span class="ssc-progress-pct" :style="{ color: getGradientColor(validityStats.pct) }">{{ validityStats.pct }}%</span>
+
               </div>
             </div>
         </div>
@@ -3045,8 +2876,8 @@ const gripZones = computed(() => {
         <div class="chart-section">
           <div class="chart-header-row">
             <h4 class="chart-title">
-              <template v-if="isCompareMode">Confronto Tempi — A: Stint #{{ stintA }} vs B: Stint #{{ stintB }}</template>
-              <template v-else>Tempi Giro — Stint {{ selectedStintNumber }}</template>
+              <template v-if="isAnyComparison">Confronto tempi — {{ comparisonTitle }}</template>
+              <template v-else>Tempi Giro — Stint {{ displayedStintNumber }}</template>
             </h4>
             <!-- Chart Toolbar -->
             <div class="chart-toolbar">
@@ -3065,162 +2896,32 @@ const gripZones = computed(() => {
               </button>
             </div>
           </div>
-          
+
           <!-- Lap Manager Panel -->
           <div v-if="showLapManager" class="lap-manager">
-            <!-- Strategy A Laps -->
-            <div class="lap-manager-section">
+            <div v-for="side in (isAnyComparison ? ['A', 'B'] : ['A'])" :key="side" class="lap-manager-section">
               <div class="lap-manager-header">
-                <span class="lap-manager-title">{{ 
-                  isBuilderSameSessionCompare ? 'Strategia A · ' + strategyAStints.map(s => '#' + s.number).join('+') :
-                  isCrossSessionCompare ? 'Strategia A · Stint #' + selectedCrossStintA :
-                  isCompareMode ? 'Strategia A · Stint #' + stintA : 'Escludi Giri' 
-                }}</span>
-                <button class="lap-manager-reset" @click="resetExcludedLaps" :disabled="excludedLaps.size === 0">
-                  Reset
-                </button>
-              </div>
-              
-              <!-- Multi-Stint Grid (Builder Same-Session mode) -->
-              <template v-if="isBuilderSameSessionCompare">
-                <div v-for="stint in strategyAStints" :key="'stint-a-' + stint.number" class="lap-manager-stint-group">
-                  <div class="lap-manager-stint-header">Stint #{{ stint.number }}</div>
-                  <div class="lap-manager-grid">
-                    <button 
-                      v-for="lap in (session.lapsData[stint.number] || [])" 
-                      :key="'a-' + stint.number + '-' + lap.lap"
-                      :class="[
-                        'lap-toggle-btn',
-                        { 'lap-toggle-btn--excluded': excludedLaps.has(lapExclusionKey(lap, 'a', stint.number)) },
-                        { 'lap-toggle-btn--invalid': !lap.valid && !lap.pit },
-                        { 'lap-toggle-btn--pit': lap.pit }
-                      ]"
-                      @click="toggleLapExclusion(lapExclusionKey(lap, 'a', stint.number))"
-                      :title="`Giro ${lap.lap} - ${lap.time}${!lap.valid ? ' (Invalido)' : ''}${lap.pit ? ' (Pit)' : ''}`"
-                    >
-                      {{ lap.lap }}
-                    </button>
-                  </div>
-                </div>
-              </template>
-              
-              <!-- Single Stint Grid (other modes) -->
-              <template v-else>
-                <div class="lap-manager-grid">
-                  <button 
-                    v-for="lap in (isCrossSessionCompare ? crossStintALaps : isCompareMode ? compareStintALaps : selectedStintLaps)" 
-                    :key="'a-' + lap.lap"
-                    :class="[
-                      'lap-toggle-btn',
-                      { 'lap-toggle-btn--excluded': excludedLaps.has(lapExclusionKey(lap, 'a', isCrossSessionCompare ? selectedCrossStintA : isCompareMode ? stintA : selectedStintNumber)) },
-                      { 'lap-toggle-btn--invalid': !lap.valid && !lap.pit },
-                      { 'lap-toggle-btn--pit': lap.pit }
-                    ]"
-                    @click="toggleLapExclusion(lapExclusionKey(lap, 'a', isCrossSessionCompare ? selectedCrossStintA : isCompareMode ? stintA : selectedStintNumber))"
-                    :title="`Giro ${lap.lap} - ${lap.time}${!lap.valid ? ' (Invalido)' : ''}${lap.pit ? ' (Pit)' : ''}`"
-                  >
-                    {{ lap.lap }}
-                  </button>
-                </div>
-              </template>
-              
-              <div v-if="excludedLaps.size > 0" class="lap-manager-info">
-                {{ excludedLaps.size }} giri esclusi
-              </div>
-            </div>
-            
-            <!-- Strategy B Laps (in compare modes OR Builder Same-Session mode) -->
-            <div v-if="isCompareMode || isBuilderSameSessionCompare" class="lap-manager-section lap-manager-section--b">
-              <div class="lap-manager-header">
-                <span class="lap-manager-title">{{ 
-                  isBuilderSameSessionCompare ? 'Strategia B · ' + strategyBStints.map(s => '#' + s.number).join('+') :
-                  'B: Stint #' + stintB 
-                }}</span>
-                <button class="lap-manager-reset" @click="resetExcludedLapsB" :disabled="excludedLapsB.size === 0">
-                  Reset
-                </button>
-              </div>
-              
-              <!-- Multi-Stint Grid (Builder Same-Session mode) -->
-              <template v-if="isBuilderSameSessionCompare">
-                <div v-for="stint in strategyBStints" :key="'stint-b-' + stint.number" class="lap-manager-stint-group">
-                  <div class="lap-manager-stint-header lap-manager-stint-header--b">Stint #{{ stint.number }}</div>
-                  <div class="lap-manager-grid">
-                    <button 
-                      v-for="lap in (session.lapsData[stint.number] || [])" 
-                      :key="'b-' + stint.number + '-' + lap.lap"
-                      :class="[
-                        'lap-toggle-btn lap-toggle-btn--b',
-                        { 'lap-toggle-btn--excluded': excludedLapsB.has(lapExclusionKey(lap, 'a', stint.number)) },
-                        { 'lap-toggle-btn--invalid': !lap.valid && !lap.pit },
-                        { 'lap-toggle-btn--pit': lap.pit }
-                      ]"
-                      @click="toggleLapExclusionB(lapExclusionKey(lap, 'a', stint.number))"
-                      :title="`Giro ${lap.lap} - ${lap.time}${!lap.valid ? ' (Invalido)' : ''}${lap.pit ? ' (Pit)' : ''}`"
-                    >
-                      {{ lap.lap }}
-                    </button>
-                  </div>
-                </div>
-              </template>
-              
-              <!-- Single Stint Grid (compare mode) -->
-              <template v-else>
-                <div class="lap-manager-grid">
-                  <button 
-                    v-for="lap in compareStintBLaps" 
-                    :key="'b-' + lap.lap"
-                    :class="[
-                      'lap-toggle-btn lap-toggle-btn--b',
-                      { 'lap-toggle-btn--excluded': excludedLapsB.has(lapExclusionKey(lap, 'a', stintB)) },
-                      { 'lap-toggle-btn--invalid': !lap.valid && !lap.pit },
-                      { 'lap-toggle-btn--pit': lap.pit }
-                    ]"
-                    @click="toggleLapExclusionB(lapExclusionKey(lap, 'a', stintB))"
-                    :title="`Giro ${lap.lap} - ${lap.time}${!lap.valid ? ' (Invalido)' : ''}${lap.pit ? ' (Pit)' : ''}`"
-                  >
-                    {{ lap.lap }}
-                  </button>
-                </div>
-              </template>
-              
-              <div v-if="excludedLapsB.size > 0" class="lap-manager-info">
-                {{ excludedLapsB.size }} giri esclusi
-              </div>
-            </div>
-            
-            <!-- Session B Laps (only in CROSS-SESSION mode) -->
-            <div v-if="isCrossSessionCompare" class="lap-manager-section lap-manager-section--b">
-              <div class="lap-manager-header">
-                <span class="lap-manager-title">Strategia B · Stint #{{ selectedCrossStintB }}</span>
-                <button class="lap-manager-reset" @click="resetExcludedLapsCrossB" :disabled="excludedLapsCrossB.size === 0">
-                  Reset
-                </button>
+                <span class="lap-manager-title">{{ isAnyComparison ? `Strategia ${side}` : 'Giri analizzati' }}</span>
+                <button class="lap-manager-reset" @click="side === 'A' ? resetExcludedLaps() : isCrossSessionCompare ? resetExcludedLapsCrossB() : resetExcludedLapsB()">Includi tutti</button>
               </div>
               <div class="lap-manager-grid">
-                <button 
-                  v-for="lap in crossStintBLaps" 
-                  :key="'crossb-' + lap.lapNumber"
-                  :class="[
-                    'lap-toggle-btn lap-toggle-btn--b',
-                    { 'lap-toggle-btn--excluded': excludedLapsCrossB.has(lapExclusionKey(lap, 'b', selectedCrossStintB)) },
-                    { 'lap-toggle-btn--invalid': !lap.valid && !lap.pit },
-                    { 'lap-toggle-btn--pit': lap.pit }
-                  ]"
-                  @click="toggleLapExclusionCrossB(lapExclusionKey(lap, 'b', selectedCrossStintB))"
-                  :title="`Giro ${lap.lapNumber} - ${lap.lapTime}${!lap.valid ? ' (Invalido)' : ''}${lap.pit ? ' (Pit)' : ''}`"
-                >
-                  {{ lap.lapNumber }}
+                <button v-for="point in (side === 'A' ? chartLapPointsA : chartLapPointsB)" :key="point.exclusionKey"
+                  :class="['lap-toggle-btn', { 'lap-toggle-btn--b': side === 'B', 'lap-toggle-btn--excluded': (side === 'A' ? excludedLaps : isCrossSessionCompare ? excludedLapsCrossB : excludedLapsB).has(point.exclusionKey), 'lap-toggle-btn--invalid': !point.valid, 'lap-toggle-btn--pit': point.pit }]"
+                  :title="`Stint #${point.stintNumber} · Giro ${point.sessionLapNumber} · ${point.time}`"
+                  @click="side === 'A' ? toggleLapExclusion(point.exclusionKey) : isCrossSessionCompare ? toggleLapExclusionCrossB(point.exclusionKey) : toggleLapExclusionB(point.exclusionKey)">
+                  #{{ point.stintNumber }} · {{ point.sessionLapNumber }}
                 </button>
               </div>
-              <div v-if="excludedLapsCrossB.size > 0" class="lap-manager-info">
-                {{ excludedLapsCrossB.size }} giri esclusi
-              </div>
             </div>
+            <p class="lap-manager-info">Primo e ultimo giro esclusi dal passo per ogni stint. Durata registrata invariata.</p>
           </div>
-          
+
           <div class="chart-wrap">
             <Line ref="chartRef" :data="chartData" :options="chartOptions" />
+          </div>
+          <div class="point-legend" aria-label="Legenda giri">
+            <span class="key-valid">● Valido</span><span class="key-invalid">● Non valido</span>
+            <span class="chart-zoom-hint">Zoom: Ctrl + rotella</span>
           </div>
           <!-- Grip Legend -->
           <div v-if="hasGripVariation && showGripZones" class="grip-legend">
@@ -3243,27 +2944,27 @@ const gripZones = computed(() => {
                 Confronto
               </button>
               <!-- All stints from Strategy A -->
-              <button 
-                v-for="stint in strategyAStints" 
+              <button
+                v-for="stint in strategyAStints"
                 :key="'tab-a-' + stint.number"
-                :class="['lap-tab lap-tab--a', { 'lap-tab--active': activeTableTab === 'A-' + stint.number }]" 
+                :class="['lap-tab lap-tab--a', { 'lap-tab--active': activeTableTab === 'A-' + stint.number }]"
                 @click="activeTableTab = 'A-' + stint.number"
               >
                 A: Stint #{{ stint.number }}
               </button>
               <!-- All stints from Strategy B -->
-              <button 
-                v-for="stint in strategyBStints" 
+              <button
+                v-for="stint in strategyBStints"
                 :key="'tab-b-' + stint.number"
-                :class="['lap-tab lap-tab--b', { 'lap-tab--active': activeTableTab === 'B-' + stint.number }]" 
+                :class="['lap-tab lap-tab--b', { 'lap-tab--active': activeTableTab === 'B-' + stint.number }]"
                 @click="activeTableTab = 'B-' + stint.number"
               >
                 B: Stint #{{ stint.number }}
               </button>
             </div>
-            <h4 v-else class="laps-title">Tabella Giri — Stint {{ selectedStintNumber }}</h4>
+            <h4 v-else class="laps-title">Tabella Giri — Stint {{ displayedStintNumber }}</h4>
           </div>
-          
+
           <!-- COMPARISON VIEW: Side-by-side A vs B -->
           <div v-if="activeTableTab === 'COMPARE' && (isCompareMode || isCrossSessionCompare || isBuilderSameSessionCompare)" class="laps-table-wrap">
             <table class="laps-table laps-table--compare">
@@ -3303,23 +3004,23 @@ const gripZones = computed(() => {
                   <tr>
                     <td class="col-index">{{ row.index }}</td>
                     <!-- Strategia A data -->
-                    <td class="col-a time">{{ row.lapA ? (row.lapA.time || row.lapA.lapTime || '—') : '—' }}</td>
-                    <td class="col-a sector">{{ row.lapA ? formatSectorTime(row.lapA.sectors?.[0] || row.lapA.s1) : '—' }}</td>
-                    <td class="col-a sector">{{ row.lapA ? formatSectorTime(row.lapA.sectors?.[1] || row.lapA.s2) : '—' }}</td>
-                    <td class="col-a sector">{{ row.lapA ? formatSectorTime(row.lapA.sectors?.[2] || row.lapA.s3) : '—' }}</td>
+                    <td class="col-a time" :class="{ 'lap-cell-invalid': row.lapA && !row.lapA.valid, 'lap-cell-pit': row.lapA?.pit }">{{ row.lapA ? (row.lapA.time || row.lapA.lapTime || '—') : '—' }}<span v-if="row.lapA?.pit" class="lap-state lap-state--pit">PIT</span></td>
+                    <td class="col-a sector" :class="{ 'lap-cell-invalid': row.lapA && !row.lapA.valid, 'lap-cell-pit': row.lapA?.pit }">{{ row.lapA ? formatSectorTime(row.lapA.sectors?.[0] || row.lapA.s1) : '—' }}</td>
+                    <td class="col-a sector" :class="{ 'lap-cell-invalid': row.lapA && !row.lapA.valid, 'lap-cell-pit': row.lapA?.pit }">{{ row.lapA ? formatSectorTime(row.lapA.sectors?.[1] || row.lapA.s2) : '—' }}</td>
+                    <td class="col-a sector" :class="{ 'lap-cell-invalid': row.lapA && !row.lapA.valid, 'lap-cell-pit': row.lapA?.pit }">{{ row.lapA ? formatSectorTime(row.lapA.sectors?.[2] || row.lapA.s3) : '—' }}</td>
                     <!-- Delta -->
                     <td :class="['col-delta', 'delta', `delta--${row.deltaClass}`]">{{ row.deltaFormatted }}</td>
                     <!-- Strategia B data -->
-                    <td class="col-b time">{{ row.lapB ? (row.lapB.time || row.lapB.lapTime || '—') : '—' }}</td>
-                    <td class="col-b sector">{{ row.lapB ? formatSectorTime(row.lapB.sectors?.[0] || row.lapB.s1) : '—' }}</td>
-                    <td class="col-b sector">{{ row.lapB ? formatSectorTime(row.lapB.sectors?.[1] || row.lapB.s2) : '—' }}</td>
-                    <td class="col-b sector">{{ row.lapB ? formatSectorTime(row.lapB.sectors?.[2] || row.lapB.s3) : '—' }}</td>
+                    <td class="col-b time" :class="{ 'lap-cell-invalid': row.lapB && !row.lapB.valid, 'lap-cell-pit': row.lapB?.pit }">{{ row.lapB ? (row.lapB.time || row.lapB.lapTime || '—') : '—' }}<span v-if="row.lapB?.pit" class="lap-state lap-state--pit">PIT</span></td>
+                    <td class="col-b sector" :class="{ 'lap-cell-invalid': row.lapB && !row.lapB.valid, 'lap-cell-pit': row.lapB?.pit }">{{ row.lapB ? formatSectorTime(row.lapB.sectors?.[0] || row.lapB.s1) : '—' }}</td>
+                    <td class="col-b sector" :class="{ 'lap-cell-invalid': row.lapB && !row.lapB.valid, 'lap-cell-pit': row.lapB?.pit }">{{ row.lapB ? formatSectorTime(row.lapB.sectors?.[1] || row.lapB.s2) : '—' }}</td>
+                    <td class="col-b sector" :class="{ 'lap-cell-invalid': row.lapB && !row.lapB.valid, 'lap-cell-pit': row.lapB?.pit }">{{ row.lapB ? formatSectorTime(row.lapB.sectors?.[2] || row.lapB.s3) : '—' }}</td>
                   </tr>
                 </template>
               </tbody>
             </table>
           </div>
-          
+
           <!-- SINGLE STINT VIEW: Original table for A or B tab -->
           <div v-else class="laps-table-wrap">
             <table class="laps-table">
@@ -3327,27 +3028,28 @@ const gripZones = computed(() => {
                 <tr>
                   <th>Giro</th>
                   <th>Tempo</th>
-                  <th>Δ Teorico</th>
+                  <th>Δ best</th>
                   <th>S1</th>
                   <th>S2</th>
                   <th>S3</th>
-                  <th>Fuel</th>
-                  <th>Air°</th>
+                  <th>Carb.</th>
+                  <th>Aria</th>
                   <th>Grip</th>
-                  <th>Stato</th>
+
                 </tr>
               </thead>
               <tbody>
-                <tr 
-                  v-for="lap in getLapsForTable()" 
-                  :key="lap.lap || lap.lapNumber" 
-                  :class="{ 
-                    'lap-pit': lap.pit, 
+                <tr
+                  v-for="lap in getLapsForTable()"
+                  :key="lap.lap || lap.lapNumber"
+                  :class="{
+                    'lap-pit': lap.pit,
+                    'lap-invalid': !lap.valid,
                     'lap-excluded': isLapExcludedInCurrentTable(lap),
                     'lap-best': isBestLap(lap)
                   }"
                 >
-                  <td>{{ lap.lap || lap.lapNumber }}</td>
+                  <td class="lap-number-cell">{{ lap.lap || lap.lapNumber }}<span v-if="isLapExcludedInCurrentTable(lap)" class="lap-state lap-state--excluded" title="Escluso dai calcoli del passo; il giro rimane nei dati" aria-label="Escluso dai calcoli del passo">Escluso</span><span v-if="lap.pit" class="lap-state lap-state--pit" title="Giro con passaggio ai box">PIT</span></td>
                   <td class="time">{{ lap.time || lap.lapTime }}</td>
                   <td :class="['delta', `delta--${getDeltaClass(lap.delta)}`]">{{ lap.delta || '—' }}</td>
                   <td :class="['sector', { 'sector--best': isBestSector(lap, 0) }]">{{ formatSectorTime(lap.sectors?.[0] || lap.s1) }}</td>
@@ -3355,12 +3057,7 @@ const gripZones = computed(() => {
                   <td :class="['sector', { 'sector--best': isBestSector(lap, 2) }]">{{ formatSectorTime(lap.sectors?.[2] || lap.s3) }}</td>
                   <td>{{ lap.fuel }}L</td>
                   <td>{{ Math.round(lap.airTemp || lap.air || 0) }}°</td>
-                  <td>{{ lap.grip }}</td>
-                  <td class="stato">
-                    <span v-if="lap.pit" class="badge badge--pit">PIT</span>
-                    <span v-else-if="!lap.valid" class="badge badge--invalid">INV</span>
-                    <span v-else class="badge badge--valid">OK</span>
-                  </td>
+                  <td><abbr :title="lap.grip">{{ gripAbbreviation(lap.grip) }}</abbr></td>
                 </tr>
               </tbody>
             </table>
@@ -3368,12 +3065,12 @@ const gripZones = computed(() => {
         </div>
 
 
-        </SessionDetailPanelMode>
+        </SessionDetailPanel>
       </section>
     </div>
     </template>
   </LayoutPageContainer>
-  
+
   <!-- Session Picker Modal for cross-session compare -->
   <UiSessionPickerModal
     :is-open="showSessionPicker"
@@ -3387,6 +3084,7 @@ const gripZones = computed(() => {
 
 <style lang="scss" scoped>
 @use '@/assets/scss/variables' as *;
+@use '@/assets/scss/racing-settings' as racing;
 
 .session-detail-page { display: flex; flex-direction: column; height: 100%; }
 
@@ -3448,7 +3146,7 @@ const gripZones = computed(() => {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-  
+
   &:hover {
     background: $racing-red;
     border-color: $racing-red;
@@ -3528,7 +3226,7 @@ const gripZones = computed(() => {
 
 // MASTER / DETAIL
 .master-detail { display: grid; grid-template-columns: 380px 1fr; gap: 32px; flex: 1; min-height: 0; align-items: start; }
-.master-detail--advanced { grid-template-columns: 1fr; }
+
 
 // MASTER
 .master {
@@ -3573,11 +3271,11 @@ const gripZones = computed(() => {
 // CROSS-SESSION SECTIONS
 .cross-session-section {
   margin-bottom: 12px;
-  
+
   &:last-child { margin-bottom: 0; }
-  
-  .stint-list { 
-    flex: none; 
+
+  .stint-list {
+    flex: none;
     max-height: 180px;
     overflow-y: auto;
   }
@@ -3590,12 +3288,12 @@ const gripZones = computed(() => {
   padding: 8px 12px;
   margin-bottom: 6px;
   border-radius: 6px;
-  
+
   &--a {
     background: rgba(#3b82f6, 0.1);
     border: 1px solid rgba(#3b82f6, 0.25);
   }
-  
+
   &--b {
     background: rgba(#8b5cf6, 0.1);
     border: 1px solid rgba(#8b5cf6, 0.25);
@@ -3607,7 +3305,7 @@ const gripZones = computed(() => {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  
+
   .cross-session-header--a & { color: #60a5fa; }
   .cross-session-header--b & { color: #a78bfa; }
 }
@@ -3628,7 +3326,7 @@ const gripZones = computed(() => {
   font-size: 10px;
   cursor: pointer;
   transition: all 0.15s;
-  
+
   &:hover {
     background: rgba($racing-red, 0.2);
     border-color: rgba($racing-red, 0.4);
@@ -3665,17 +3363,17 @@ const gripZones = computed(() => {
   gap: 8px;
   padding: 6px 10px;
   border-radius: 6px;
-  
+
   &--a, &--a2 {
     background: rgba(#3b82f6, 0.1);
     border: 1px solid rgba(#3b82f6, 0.25);
   }
-  
+
   &--b, &--b2 {
     background: rgba(#8b5cf6, 0.1);
     border: 1px solid rgba(#8b5cf6, 0.25);
   }
-  
+
   &--a2, &--b2 {
     background: rgba(255,255,255,0.03);
   }
@@ -3686,12 +3384,12 @@ const gripZones = computed(() => {
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 4px;
-  
+
   .strategy-stint--a &, .strategy-stint--a2 & {
     background: #3b82f6;
     color: white;
   }
-  
+
   .strategy-stint--b &, .strategy-stint--b2 & {
     background: #8b5cf6;
     color: white;
@@ -3714,17 +3412,17 @@ const gripZones = computed(() => {
   color: #10b981;
   cursor: pointer;
   transition: all 0.15s;
-  
+
   &:hover {
     background: rgba(#10b981, 0.2);
     border-style: solid;
   }
-  
+
   &--b {
     background: rgba(#8b5cf6, 0.1);
     border-color: rgba(#8b5cf6, 0.4);
     color: #a78bfa;
-    
+
     &:hover {
       background: rgba(#8b5cf6, 0.2);
     }
@@ -3741,7 +3439,7 @@ const gripZones = computed(() => {
   color: rgba(255,255,255,0.5);
   font-size: 12px;
   cursor: pointer;
-  
+
   &:hover {
     background: rgba($racing-red, 0.2);
     border-color: rgba($racing-red, 0.4);
@@ -3965,7 +3663,7 @@ const gripZones = computed(() => {
   border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   overflow: hidden;
-  
+
   // Top accent line
   &::before {
     content: '';
@@ -3975,12 +3673,12 @@ const gripZones = computed(() => {
     right: 0;
     height: 2px;
   }
-  
+
   &--a {
     &::before { background: linear-gradient(90deg, #3b82f6 0%, rgba(59, 130, 246, 0.3) 100%); }
     .cond-stint-label { color: #60a5fa; }
   }
-  
+
   &--b {
     &::before { background: linear-gradient(90deg, #8b5cf6 0%, rgba(139, 92, 246, 0.3) 100%); }
     .cond-stint-label { color: #a78bfa; }
@@ -4028,17 +3726,17 @@ const gripZones = computed(() => {
 .compare-table {
   width: 100%;
   border-collapse: collapse;
-  
+
   th, td {
     padding: 14px 20px;
   }
-  
+
   // Header row - subtle but distinct
   thead tr {
     background: linear-gradient(90deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 100%);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   }
-  
+
   th {
     color: rgba(255, 255, 255, 0.5);
     font-size: 10px;
@@ -4046,26 +3744,26 @@ const gripZones = computed(() => {
     text-transform: uppercase;
     letter-spacing: 1px;
     text-align: left;
-    
+
     &:first-child { width: 100px; }
   }
-  
+
   tbody tr {
     transition: background 0.15s ease;
-    
+
     &:hover {
       background: rgba(255, 255, 255, 0.02);
     }
-    
+
     &:not(:last-child) td {
       border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     }
   }
-  
+
   td {
     text-align: left;
   }
-  
+
   // Metric labels - left column
   .metric-label {
     font-family: $font-primary;
@@ -4075,7 +3773,7 @@ const gripZones = computed(() => {
     text-transform: uppercase;
     letter-spacing: 1px;
   }
-  
+
   // Time values - monospace, prominent
   .metric-value {
     font-family: 'JetBrains Mono', 'Monaco', monospace;
@@ -4084,21 +3782,21 @@ const gripZones = computed(() => {
     color: #fff;
     letter-spacing: 0.5px;
   }
-  
+
   // Delta badges - racing style with glow
   .metric-delta {
     font-family: 'JetBrains Mono', 'Monaco', monospace;
     font-size: 12px;
     font-weight: 700;
     letter-spacing: 0.5px;
-    
+
     // Badge container
     padding: 6px 14px;
     border-radius: 4px;
     display: inline-block;
     min-width: 80px;
     text-align: center;
-    
+
     // Green - B is faster (negative delta)
     &.delta--faster, &.delta--ontarget {
       background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%);
@@ -4106,7 +3804,7 @@ const gripZones = computed(() => {
       border: 1px solid rgba(16, 185, 129, 0.35);
       box-shadow: 0 0 12px rgba(16, 185, 129, 0.15);
     }
-    
+
     // Yellow - close
     &.delta--close {
       background: linear-gradient(135deg, rgba(234, 179, 8, 0.2) 0%, rgba(234, 179, 8, 0.1) 100%);
@@ -4114,7 +3812,7 @@ const gripZones = computed(() => {
       border: 1px solid rgba(234, 179, 8, 0.35);
       box-shadow: 0 0 12px rgba(234, 179, 8, 0.15);
     }
-    
+
     // Orange - margin
     &.delta--margin {
       background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(249, 115, 22, 0.1) 100%);
@@ -4122,7 +3820,7 @@ const gripZones = computed(() => {
       border: 1px solid rgba(249, 115, 22, 0.35);
       box-shadow: 0 0 12px rgba(249, 115, 22, 0.15);
     }
-    
+
     // Red - far (B much slower)
     &.delta--far {
       background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
@@ -4130,27 +3828,27 @@ const gripZones = computed(() => {
       border: 1px solid rgba(239, 68, 68, 0.35);
       box-shadow: 0 0 12px rgba(239, 68, 68, 0.15);
     }
-    
+
     // For strategy duration comparison
     &.delta--negative {
       background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.1) 100%);
       color: #34d399;
       border: 1px solid rgba(16, 185, 129, 0.35);
     }
-    
+
     &.delta--positive {
       background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
       color: #f87171;
       border: 1px solid rgba(239, 68, 68, 0.35);
     }
   }
-  
+
   // Strategy section rows
   .strategy-section-row {
     background: rgba(255,255,255,0.02);
     border-top: 1px solid rgba(255,255,255,0.08);
   }
-  
+
   .strategy-section-label {
     font-size: 10px;
     font-weight: 700;
@@ -4159,16 +3857,16 @@ const gripZones = computed(() => {
     letter-spacing: 1.5px;
     padding: 8px 20px !important;
   }
-  
+
   .strategy-totale-row {
     background: rgba(59, 130, 246, 0.05);
     border-top: 2px solid rgba(59, 130, 246, 0.2);
   }
-  
+
   .strategy-totale-data {
     background: rgba(59, 130, 246, 0.03);
   }
-  
+
   .metric-value--bold {
     font-weight: 800;
     font-size: 17px;
@@ -4184,7 +3882,7 @@ const gripZones = computed(() => {
 }
 .compare-card {
   flex: 1;
-  
+
   &--a {
     border-color: rgba(#3b82f6, 0.3);
     .ssc-header { border-bottom-color: rgba(#3b82f6, 0.2); }
@@ -4198,7 +3896,7 @@ const gripZones = computed(() => {
 .ssc-label-b { color: #8b5cf6; }
 .ssc-table--compact {
   padding: 12px 16px;
-  
+
   .ssc-table-row {
     padding: 8px 0;
     display: flex;
@@ -4529,12 +4227,12 @@ const gripZones = computed(() => {
 .laps-table .time { font-family: 'JetBrains Mono', monospace; color: #fff; font-weight: 600; }
 
 // Delta column with colored badge-style backgrounds
-.laps-table .delta { 
+.laps-table .delta {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
   font-size: 10px;
   margin-top: 8px;
-  
+
   // Wrapper styling - badge appearance
   span, & {
     display: inline-block;
@@ -4543,28 +4241,28 @@ const gripZones = computed(() => {
     min-width: 60px;
     text-align: center;
   }
-  
+
   // Green: faster than target
   &.delta--faster, &.delta--ontarget {
     background: rgba(16, 185, 129, 0.15);
     color: #10b981;
     border: 1px solid rgba(16, 185, 129, 0.25);
   }
-  
+
   // Yellow: close to target
   &.delta--close {
     background: rgba(234, 179, 8, 0.15);
     color: #eab308;
     border: 1px solid rgba(234, 179, 8, 0.25);
   }
-  
+
   // Orange: within margin
   &.delta--margin {
     background: rgba(249, 115, 22, 0.15);
     color: #f97316;
     border: 1px solid rgba(249, 115, 22, 0.25);
   }
-  
+
   // Red: far from target
   &.delta--far {
     background: rgba(239, 68, 68, 0.15);
@@ -4586,19 +4284,19 @@ const gripZones = computed(() => {
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  
+
   &--valid {
     background: rgba(16, 185, 129, 0.2);
     color: #10b981;
     border: 1px solid rgba(16, 185, 129, 0.3);
   }
-  
+
   &--invalid {
     background: rgba(239, 68, 68, 0.2);
     color: #ef4444;
     border: 1px solid rgba(239, 68, 68, 0.3);
   }
-  
+
   &--pit {
     background: rgba(245, 158, 11, 0.2);
     color: #f59e0b;
@@ -4615,8 +4313,8 @@ const gripZones = computed(() => {
 // Excluded lap: very dimmed, appears disabled
 .laps-table tr.lap-excluded {
   background: rgba(0,0,0,0.3);
-  td { 
-    color: rgba(255,255,255,0.25) !important; 
+  td {
+    color: rgba(255,255,255,0.25) !important;
     text-decoration: line-through;
     text-decoration-color: rgba(255,255,255,0.15);
   }
@@ -4708,15 +4406,15 @@ const gripZones = computed(() => {
   color: rgba(255,255,255,0.5);
   cursor: pointer;
   transition: all 0.15s;
-  
+
   svg { width: 16px; height: 16px; }
-  
+
   &:hover {
     background: rgba(255,255,255,0.12);
     border-color: rgba(255,255,255,0.2);
     color: #fff;
   }
-  
+
   &--active {
     background: rgba($racing-red, 0.2);
     border-color: rgba($racing-red, 0.4);
@@ -4780,11 +4478,11 @@ const gripZones = computed(() => {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
-  
+
   &:hover:not(:disabled) {
     background: rgba($racing-red, 0.2);
   }
-  
+
   &:disabled {
     opacity: 0.4;
     cursor: not-allowed;
@@ -4813,44 +4511,44 @@ const gripZones = computed(() => {
   font-family: 'JetBrains Mono', monospace;
   cursor: pointer;
   transition: all 0.15s;
-  
+
   &:hover {
     background: rgba(59, 130, 246, 0.25);
     transform: scale(1.05);
   }
-  
+
   // Invalid lap
   &--invalid {
     background: rgba(239, 68, 68, 0.15);
     border-color: rgba(239, 68, 68, 0.4);
     color: #ef4444;
   }
-  
+
   // Pit lap
   &--pit {
     background: rgba(107, 114, 128, 0.15);
     border-color: rgba(107, 114, 128, 0.4);
     color: #6b7280;
   }
-  
+
   // Excluded state
   &--excluded {
     background: rgba(255,255,255,0.05);
     border-color: rgba(255,255,255,0.15);
     color: rgba(255,255,255,0.3);
     text-decoration: line-through;
-    
+
     &:hover {
       background: rgba(255,255,255,0.1);
     }
   }
-  
+
   // Stint B buttons (purple)
   &--b {
     background: rgba(139, 92, 246, 0.15);
     border-color: rgba(139, 92, 246, 0.4);
     color: #8b5cf6;
-    
+
     &:hover {
       background: rgba(139, 92, 246, 0.25);
     }
@@ -4868,7 +4566,7 @@ const gripZones = computed(() => {
 // Multi-stint group container
 .lap-manager-stint-group {
   margin-bottom: 12px;
-  
+
   &:last-child {
     margin-bottom: 0;
   }
@@ -4883,7 +4581,7 @@ const gripZones = computed(() => {
   background: rgba(59, 130, 246, 0.1);
   border-left: 2px solid rgba(59, 130, 246, 0.5);
   border-radius: 0 4px 4px 0;
-  
+
   &--b {
     color: rgba(192, 132, 252, 0.9);
     background: rgba(139, 92, 246, 0.1);
@@ -4896,7 +4594,7 @@ const gripZones = computed(() => {
 // ========================================
 .laps-table tbody tr.excluded {
   opacity: 0.35;
-  
+
   td {
     background: rgba(255,255,255,0.02) !important;
   }
@@ -4912,10 +4610,10 @@ const gripZones = computed(() => {
   margin-bottom: 24px;
   overflow: hidden;
   position: relative;
-  box-shadow: 
+  box-shadow:
     0 4px 20px rgba(0,0,0,0.4),
     inset 0 1px 0 rgba(255,255,255,0.05);
-  
+
   // Red racing stripe on left
   &::before {
     content: '';
@@ -5082,7 +4780,7 @@ const gripZones = computed(() => {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
-  
+
   &--race {
     background: rgba(59, 130, 246, 0.2);
     color: #60a5fa;
@@ -5132,7 +4830,7 @@ const gripZones = computed(() => {
   border-radius: 50%;
   cursor: help;
   transition: all 0.2s ease;
-  
+
   &:hover {
     background: rgba(239,68,68,0.6);
     transform: scale(1.1);
@@ -5146,11 +4844,11 @@ const gripZones = computed(() => {
   border-bottom: 1px solid rgba(255,255,255,0.04);
   transition: background 0.15s ease;
   align-items: center;
-  
+
   &:hover {
     background: rgba(239,68,68,0.03);
   }
-  
+
   &:last-child {
     border-bottom: none;
   }
@@ -5158,7 +4856,7 @@ const gripZones = computed(() => {
 .ssc-td {
   display: flex;
   align-items: center;
-  
+
   &--label {
     font-size: 11px;
     font-weight: 800;
@@ -5209,7 +4907,7 @@ const gripZones = computed(() => {
   background: linear-gradient(90deg, rgba(59,130,246,0.15) 0%, rgba(59,130,246,0.05) 50%, transparent 100%);
   border-left: 3px solid rgba(59,130,246,0.8);
   position: relative;
-  
+
   span {
     font-size: 11px;
     font-weight: 800;
@@ -5218,7 +4916,7 @@ const gripZones = computed(() => {
     color: rgba(59,130,246,0.9);
     padding-left: 12px;
   }
-  
+
   // Show which strategy has this stint
   &::after {
     content: '';
@@ -5230,17 +4928,17 @@ const gripZones = computed(() => {
     background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.02) 100%);
     pointer-events: none;
   }
-  
+
   &--total {
     background: linear-gradient(90deg, rgba(245,158,11,0.15) 0%, rgba(245,158,11,0.05) 50%, transparent 100%);
     border-left: 3px solid rgba(245,158,11,0.8);
     margin-top: 20px;
-    
+
     span {
       color: rgba(245,158,11,0.95);
       font-size: 10px;
     }
-    
+
     &::after {
       display: none;
     }
@@ -5272,7 +4970,7 @@ const gripZones = computed(() => {
   min-width: 70px;
   text-align: center;
   display: inline-block;
-  
+
   &.faster, &.ontarget {
     color: $accent-success;
     border: 1px solid rgba($accent-success, 0.5);
@@ -5342,7 +5040,7 @@ const gripZones = computed(() => {
   height: 100%;
   border-radius: 5px;
   transition: width 0.3s ease;
-  
+
   &--valid {
     background: #10b981;
   }
@@ -5393,7 +5091,7 @@ const gripZones = computed(() => {
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s ease;
-  
+
   &:hover {
     background: rgba(255,255,255,0.1);
     color: rgba(255,255,255,0.8);
@@ -5421,7 +5119,7 @@ const gripZones = computed(() => {
   border-radius: 50%;
   cursor: pointer;
   transition: all 0.15s ease;
-  
+
   &:hover {
     transform: scale(1.2);
     border-color: rgba(255,255,255,0.5);
@@ -5430,7 +5128,7 @@ const gripZones = computed(() => {
     border-color: #fff;
     box-shadow: 0 0 8px currentColor;
   }
-  
+
   &--red { background: linear-gradient(135deg, #ef4444, #dc2626); }
   &--gold { background: linear-gradient(135deg, #f59e0b, #d97706); }
   &--lime { background: linear-gradient(135deg, #84cc16, #65a30d); }
@@ -6050,13 +5748,13 @@ const gripZones = computed(() => {
   align-items: center;
   gap: 6px;
   cursor: pointer;
-  
+
   input {
     display: none;
-    
+
     &:checked + .ssc-toggle-slider {
       background: $accent-success;
-      
+
       &::after {
         transform: translateX(14px);
       }
@@ -6070,7 +5768,7 @@ const gripZones = computed(() => {
   background: rgba(255,255,255,0.2);
   border-radius: 9px;
   transition: background 0.2s;
-  
+
   &::after {
     content: '';
     position: absolute;
@@ -6129,36 +5827,36 @@ const gripZones = computed(() => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  
+
   &:hover {
     background: rgba(239, 68, 68, 0.2);
     border-color: rgba(239, 68, 68, 0.4);
   }
-  
+
   // Stato attivo - verde con status
   &--active {
     background: rgba(34, 197, 94, 0.1);
     border-color: rgba(34, 197, 94, 0.3);
     color: #22c55e;
-    
+
     .combo-status {
       font-weight: 600;
     }
-    
+
     .combo-divider {
       color: rgba(34, 197, 94, 0.4);
       margin: 0 2px;
     }
-    
+
     .combo-reset {
       color: rgba(255,255,255,0.5);
       font-size: 13px;
-      
+
       &:hover {
         color: #ef4444;
       }
     }
-    
+
     &:hover {
       background: rgba(34, 197, 94, 0.15);
       border-color: rgba(34, 197, 94, 0.5);
@@ -6172,7 +5870,7 @@ const gripZones = computed(() => {
   gap: 14px;
   padding: 10px 0;
   min-height: 45px;
-  
+
   &:not(:last-child) {
     border-bottom: 1px solid rgba(255,255,255,0.05);
   }
@@ -6274,7 +5972,7 @@ const gripZones = computed(() => {
   opacity: 0.6;
   line-height: 1;
   transition: opacity 0.15s;
-  
+
   &:hover {
     opacity: 1;
   }
@@ -6298,13 +5996,13 @@ const gripZones = computed(() => {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  
+
   &--a {
     background: rgba(20, 184, 166, 0.1);
     border: 1px solid rgba(20, 184, 166, 0.25);
     color: #5eead4;
   }
-  
+
   &--b {
     background: rgba(245, 158, 11, 0.1);
     border: 1px solid rgba(245, 158, 11, 0.25);
@@ -6329,7 +6027,7 @@ const gripZones = computed(() => {
   justify-content: center;
   cursor: pointer;
   transition: all 0.15s ease;
-  
+
   &:hover {
     background: rgba(239, 68, 68, 0.3);
     border-color: rgba(239, 68, 68, 0.5);
@@ -6364,12 +6062,12 @@ const gripZones = computed(() => {
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.15s ease;
-  
+
   &:hover {
     background: rgba(255,255,255,0.06);
     border-color: rgba(255,255,255,0.1);
   }
-  
+
   // Selected stint (in builder) — session-based color
   // Default = teal (main session / normal mode)
   &.builder-selected {
@@ -6377,25 +6075,25 @@ const gripZones = computed(() => {
     border-color: rgba(20, 184, 166, 0.25);
     border-left: 3px solid #14b8a6;
   }
-  
+
   // Currently viewing in detail panel (not in builder)
   &.viewing:not(.builder-selected) {
     background: rgba(255,255,255,0.08);
     border-color: rgba(255,255,255,0.15);
   }
-  
+
   // Session-colored left border (cross-session mode)
   &.stint-item--session-a {
     border-left: 3px solid rgba(20, 184, 166, 0.4);
-    
+
     &.builder-selected {
       border-left-color: #14b8a6;
     }
   }
-  
+
   &.stint-item--session-b {
     border-left: 3px solid rgba(245, 158, 11, 0.4);
-    
+
     // Override: Session B selected = amber
     &.builder-selected {
       background: rgba(245, 158, 11, 0.08);
@@ -6422,33 +6120,33 @@ const gripZones = computed(() => {
   justify-content: center;
   line-height: 1;
   font-family: 'JetBrains Mono', monospace;
-  
+
   &--a {
     border-color: rgba(59, 130, 246, 0.3);
     color: #60a5fa;
-    
+
     &:hover:not(:disabled) {
       background: #3b82f6;
       color: white;
       border-color: #3b82f6;
     }
   }
-  
+
   &--b {
     border-color: rgba(168, 85, 247, 0.3);
     color: #c084fc;
-    
+
     &:hover:not(:disabled) {
       background: #a855f7;
       color: white;
       border-color: #a855f7;
     }
   }
-  
+
   &:disabled {
     opacity: 0.2;
     cursor: not-allowed;
-    
+
     // Slightly increase visibility on hover so tooltip is easier to see
     &:hover {
       opacity: 0.35;
@@ -6479,14 +6177,14 @@ const gripZones = computed(() => {
   border-radius: 4px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  
+
   // Race = rosso
   &--r {
     background: rgba(239, 68, 68, 0.15);
     color: #ef4444;
     border: 1px solid rgba(239, 68, 68, 0.4);
   }
-  
+
   // Quali = giallo
   &--q {
     background: rgba(234, 179, 8, 0.15);
@@ -6521,25 +6219,25 @@ const gripZones = computed(() => {
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 4px;
-  
+
   // Green: on target (perfect)
   &.delta--ontarget {
     background: rgba(16, 185, 129, 0.15);
     color: #10b981;
   }
-  
+
   // Yellow/Gold: close to target
   &.delta--close {
     background: rgba(234, 179, 8, 0.15);
     color: #eab308;
   }
-  
+
   // Orange: margin (mid range)
   &.delta--margin {
     background: rgba(249, 115, 22, 0.15);
     color: #f97316;
   }
-  
+
   // Red: far from target
   &.delta--far {
     background: rgba(239, 68, 68, 0.15);
@@ -6563,7 +6261,7 @@ const gripZones = computed(() => {
   text-align: center;
   cursor: pointer;
   transition: all 0.15s ease;
-  
+
   &:hover {
     border-color: rgba(255, 255, 255, 0.5);
     background: rgba(255, 255, 255, 0.08);
@@ -6580,27 +6278,27 @@ const gripZones = computed(() => {
     border-left: 1px solid rgba(59, 130, 246, 0.15);
     border-right: 1px solid rgba(59, 130, 246, 0.15);
   }
-  
+
   .col-b {
     background: rgba(168, 85, 247, 0.06);
     border-left: 1px solid rgba(168, 85, 247, 0.15);
     border-right: 1px solid rgba(168, 85, 247, 0.15);
   }
-  
+
   .col-index {
     text-align: center;
     width: 36px;
     color: rgba(255, 255, 255, 0.4);
     font-size: 11px;
   }
-  
+
   .col-delta {
     text-align: center;
     font-weight: 600;
     width: 70px;
     background: rgba(255, 255, 255, 0.02);
   }
-  
+
   thead {
     tr:first-child {
       th.col-a {
@@ -6609,20 +6307,20 @@ const gripZones = computed(() => {
         font-weight: 700;
         border-bottom: 2px solid rgba(59, 130, 246, 0.4);
       }
-      
+
       th.col-b {
         background: rgba(168, 85, 247, 0.15);
         color: #c084fc;
         font-weight: 700;
         border-bottom: 2px solid rgba(168, 85, 247, 0.4);
       }
-      
+
       th.col-delta {
         background: rgba(255, 255, 255, 0.05);
         color: rgba(255, 255, 255, 0.7);
       }
     }
-    
+
     .sub-header {
       th {
         font-size: 9px;
@@ -6633,7 +6331,7 @@ const gripZones = computed(() => {
       }
     }
   }
-  
+
   tbody {
     tr {
       &:hover {
@@ -6641,16 +6339,16 @@ const gripZones = computed(() => {
         .col-b { background: rgba(168, 85, 247, 0.12); }
       }
     }
-    
+
     td {
       font-size: 12px;
       padding: 6px 8px;
-      
+
       &.time {
         font-family: 'JetBrains Mono', monospace;
         font-weight: 600;
       }
-      
+
       &.sector {
         font-family: 'JetBrains Mono', monospace;
         font-size: 11px;
@@ -6664,7 +6362,7 @@ const gripZones = computed(() => {
 .lap-tab--compare {
   border-color: rgba(255, 255, 255, 0.3) !important;
   color: rgba(255, 255, 255, 0.7) !important;
-  
+
   &.lap-tab--active {
     background: rgba(255, 255, 255, 0.1) !important;
     border-color: rgba(255, 255, 255, 0.5) !important;
@@ -6696,7 +6394,7 @@ const gripZones = computed(() => {
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
-  
+
   &:hover {
     background: rgba(255,255,255,0.1);
     border-color: rgba(255,255,255,0.4);
@@ -6714,13 +6412,13 @@ const gripZones = computed(() => {
 // ═══════════════════════════════════════════
 .compare-style--A {
   position: relative;
-  
+
   .compare-table-wrap {
     position: relative;
     border-radius: 8px;
     overflow: hidden;
     background: rgba(0,0,0,0.35);
-    
+
     &::before {
       content: '';
       position: absolute;
@@ -6731,10 +6429,10 @@ const gripZones = computed(() => {
       background: linear-gradient(180deg, #f59e0b 0%, #d97706 50%, #b45309 100%);
     }
   }
-  
+
   .compare-table {
     background: linear-gradient(90deg, rgba(245,158,11,0.06) 0%, rgba(0,0,0,0.3) 30%, rgba(0,0,0,0.25) 100%);
-    
+
     th {
       font-size: 13px;
       font-weight: 800;
@@ -6743,13 +6441,13 @@ const gripZones = computed(() => {
       color: rgba(255,255,255,0.85);
       border-bottom: 2px solid rgba(245,158,11,0.25);
     }
-    
+
     td.metric-value {
       font-size: 18px;
       font-weight: 700;
       color: #fff;
     }
-    
+
     tr:hover {
       background: rgba(245,158,11,0.03);
     }
@@ -6762,7 +6460,7 @@ const gripZones = computed(() => {
 .stint-header-row {
   background: rgba(255, 255, 255, 0.02) !important;
   border-top: 2px solid rgba(255, 255, 255, 0.08);
-  
+
   &:hover {
     background: rgba(255, 255, 255, 0.03) !important;
   }
@@ -6775,12 +6473,12 @@ const gripZones = computed(() => {
 
 .stint-header-cell {
   padding: 10px 12px !important;
-  
+
   &--a {
     background: linear-gradient(90deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
     border-bottom: 2px solid rgba(255, 255, 255, 0.15);
   }
-  
+
   &--b {
     background: linear-gradient(270deg, rgba(255, 255, 255, 0.04) 0%, transparent 100%);
     border-bottom: 2px solid rgba(255, 255, 255, 0.15);
@@ -6793,11 +6491,11 @@ const gripZones = computed(() => {
   text-transform: uppercase;
   letter-spacing: 1.5px;
   white-space: nowrap;
-  
+
   .stint-header-cell--a & {
     color: rgba(255, 255, 255, 0.7);
   }
-  
+
   .stint-header-cell--b & {
     color: rgba(255, 255, 255, 0.5);
   }
@@ -6859,6 +6557,325 @@ const gripZones = computed(() => {
   color: var(--text-secondary);
   font-size: var(--font-size-md, 14px);
 }
+
+// Session analysis uses the shared racing language, preserving chart semantics.
+.session-detail-page {
+  @include racing.tokens;
+  height: auto; min-height: 100%;
+  .session-header { margin-bottom: 20px; }
+  .header-row { gap: 12px; }
+  .track-name { font-size: 26px; }
+  .header-row .nav-btn { margin-left: auto; }
+  .header-row .share-session-btn { margin-left: 0; }
+  .master-detail { grid-template-columns: 240px minmax(0, 1fr); gap: 0; border: 1px solid var(--rc-line); background: #00000020; }
+  .master-detail--comparing { grid-template-columns: 280px minmax(0, 1fr); }
+  .master { background: transparent; border: 0; border-right: 1px solid var(--rc-line); border-radius: 0; padding: 16px 12px; top: 0; overflow-y: auto; max-height: calc(100dvh - 190px); }
+  .detail { min-width: 0; background: transparent; border: 0; border-radius: 0; padding: 20px 24px; }
+  .stint-list-heading { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; margin-bottom: 12px; }
+  .stint-list-heading span { font-size: 10px; color: var(--rc-muted); }
+  .master-title { margin: 0; font-size: 12px; }
+  .stint-list { gap: 4px; }
+  .stint-item.stint-item--builder { display: flex; gap: 8px; min-height: 44px; padding: 8px; background: transparent; border: 0; border-left: 2px solid transparent; border-bottom: 1px solid #ffffff12; border-radius: 0; }
+  .stint-item:hover { background: #ffffff08; }
+  .stint-item.selected, .stint-item.viewing { background: var(--rc-selection); border-left-color: var(--racing-race, #ff0024); }
+  .stint-item.builder-selected { background: #ffffff0c; border-left-color: #ddd; }
+  .stint-number { font-size: 12px; min-width: 20px; }
+  .stint-laps { display: inline; font-size: 11px; white-space: nowrap; }
+  .stint-delta { margin-left: auto; padding: 0; background: none; border: 0; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .stint-type { border-radius: 0; padding: 3px 5px; font-size: 10px; }
+  .stint-add-btn { width: 28px; height: 28px; border-radius: 0; flex-shrink: 0; }
+  .builder-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; padding: 0 0 20px; margin: 0 0 20px; border: 0; border-bottom: 1px solid var(--rc-line); background: transparent; border-radius: 0; }
+  .builder-panel-header { grid-column: 1 / -1; margin: 0; }
+  .builder-slot { border: 0; margin: 0; padding: 0; min-height: 32px; }
+  .builder-chip { border-radius: 0; }
+  .builder-slot-empty { font-size: 12px; }
+  .altra-sessione-btn, .share-session-btn, .header-row .nav-btn { @include racing.action; font-size: 12px; margin-top: 12px; }
+  .header-row .nav-btn { margin-top: 0; }
+  .share-session-btn { margin-top: 0; }
+  .cross-session-header { flex-wrap: wrap; gap: 6px; }
+  .stint-stats-card, .compare-layout, .compare-condition-card { background: transparent; border: 0; border-radius: 0; box-shadow: none; }
+  .stint-stats-card { padding: 0; margin-bottom: 24px; overflow: visible; }
+  .ssc-header { flex-wrap: wrap; gap: 8px; padding: 0 0 8px; background: none; border-bottom: 1px solid var(--rc-line); }
+  .ssc-header-left { flex-wrap: wrap; gap: 12px; }
+  .ssc-header-right { flex-wrap: wrap; }
+  .ssc-theory-meta { margin: 0; display: block; background: none; border: 0; padding: 0; font-size: 11px; color: var(--rc-muted); }
+  .ssc-theory-meta summary { cursor: pointer; padding: 8px 0; }
+  .ssc-theory-pill { display: block; background: none; border: 0; padding: 4px 0; }
+  .ssc-table { padding: 0; background: none; border: 0; border-radius: 0; }
+  .stint-stats-card::before { display: none; }
+  .ssc-table-row { padding: 0; }
+  .ssc-table-header { margin: 0; padding: 0; border-bottom: 1px solid var(--rc-line); }
+  .ssc-th { font-size: 11px; font-weight: 600; letter-spacing: .4px; }
+  .ssc-table-header { background: #ffffff04; }
+  .ssc-td--value { font-size: 21px; font-family: var(--rc-font); font-variant-numeric: tabular-nums; }
+  .ssc-td--theo { color: var(--rc-muted); }
+  .ssc-td--compact { display: block; line-height: 1.6; font-size: 11px; overflow-wrap: anywhere; }
+  .ssc-td--compact .compact-sep { display: block; height: 0; visibility: hidden; }
+  .compare-table-wrap { background: transparent; border: 0; border-radius: 0; }
+  .compare-table-wrap::before { display: none; }
+  .ssc-td, .ssc-th { padding-top: 12px; padding-bottom: 12px; }
+  .ssc-progress-section { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .ssc-progress-row { margin: 0; flex-wrap: wrap; gap: 8px; }
+  .ssc-progress-section { padding: 12px 0; }
+  .ssc-progress-label { min-width: 0; flex: 1; justify-content: space-between; }
+  .ssc-progress-title { font-size: 11px; }
+  .ssc-progress-bar { display: none; }
+  .ssc-target-section { padding: 10px 0; background: none; }
+  .ssc-target-value { font-size: 14px; }
+  .chart-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--rc-line); }
+  .chart-wrap { height: 300px; border-radius: 0; }
+  .chart-container { background: #00000028; border-radius: 0; }
+  .chart-toolbar { background: none; border: 0; padding: 0; }
+  .toolbar-btn, .table-tab, .lap-pill { border-radius: 0; }
+  .laps-table-wrapper, .lap-manager { border-radius: 0; background: #00000020; }
+  .compare-conditions { gap: 20px; }
+  .compare-condition-card { border-left: 2px solid; padding: 8px 12px; }
+  .compare-condition-card--a { border-color: #3b82f6; }
+  .compare-condition-card--b { border-color: #a78bfa; }
+  .cross-session-header { background: transparent; border: 0; border-bottom: 1px solid var(--rc-line); border-radius: 0; padding: 8px 0; }
+  button:focus-visible, summary:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+  @media (max-width: 1000px) {
+    .master-detail, .master-detail--comparing { grid-template-columns: 220px minmax(0, 1fr); }
+    .detail { padding: 16px; }
+    .stint-item.stint-item--builder { flex-wrap: wrap; }
+    .ssc-td--value { font-size: 16px; }
+  }
+  @media (max-width: 720px) {
+    .master-detail, .master-detail--comparing { grid-template-columns: minmax(0, 1fr); }
+    .master { position: static; max-height: 230px; border-right: 0; border-bottom: 1px solid var(--rc-line); }
+    .builder-panel, .ssc-progress-section { grid-template-columns: 1fr; gap: 12px; }
+    .ssc-td--value { font-size: 14px; }
+  }
+}
+
+// PIP-453: controls on the left, results on the right.
+.session-detail-page {
+  .master-detail, .master-detail--comparing { position: relative; grid-template-columns: 320px minmax(0, 1fr); align-items: start; }
+  .master-detail::before { content: ''; position: absolute; left: 320px; top: 20px; bottom: 20px; border-left: 1px solid var(--rc-line); pointer-events: none; }
+  .master { display: block; border: 0; padding: 20px 16px; }
+  .master-title { margin-bottom: 14px; font-size: 14px; }
+  .analysis-mode { display: flex; gap: 0; margin-bottom: 24px; border-bottom: 1px solid var(--rc-line); }
+  .analysis-mode button { flex: 1; border: 0; border-bottom: 2px solid transparent; background: none; padding: 10px 6px; color: var(--rc-muted); font-size: 14px; cursor: pointer; }
+  .analysis-mode button[aria-pressed='true'] { color: white; border-bottom-color: #ff0024; }
+  .stint-columns, .stint-item.stint-item--builder { display: grid; grid-template-columns: 30px minmax(70px, 1fr) 34px 72px; gap: 8px; align-items: center; }
+  .stint-columns { padding: 0 8px 8px; font-size: 11px; color: var(--rc-muted); }
+  .stint-columns span:nth-child(n+3) { text-align: right; }
+  .stint-number { grid-column: 1; grid-row: 1; font-size: 13px; }
+  .stint-type { grid-column: 2; grid-row: 1; padding: 3px 0; border: 0; background: none; font-size: 13px; text-transform: none; }
+  .stint-laps { grid-column: 3; grid-row: 1; text-align: right; font-size: 13px; }
+  .stint-delta { grid-column: 4; grid-row: 1; font-size: 13px; }
+  .stint-add-btn { grid-column: 4; grid-row: 1; width: 32px; height: 30px; }
+  .stint-add-btn--a { justify-self: start; }
+  .stint-add-btn--b { justify-self: end; }
+  .builder-panel { position: static; display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; padding-bottom: 20px; }
+  .builder-clear { border: 0; background: none; color: var(--rc-muted); cursor: pointer; font-size: 11px; padding: 4px; }
+  .builder-clear:hover { color: white; }
+  .builder-slot { gap: 10px; }
+  .stint-stats-card .ssc-table { max-width: 660px; overflow: visible; }
+  .stint-stats-card .ssc-table-header, .stint-stats-card .ssc-table-row { grid-template-columns: 60px minmax(110px, 1fr) minmax(80px, .8fr) minmax(110px, 1fr); }
+  .stint-stats-card .ssc-table-header > :nth-child(3), .stint-stats-card .ssc-table-row > :nth-child(3) { grid-column: 4; grid-row: 1; }
+  .stint-stats-card .ssc-table-header > :nth-child(4), .stint-stats-card .ssc-table-row > :nth-child(4) { grid-column: 3; grid-row: 1; }
+  .ssc-td--value { font-size: 23px; }
+  .ssc-delta { background: none !important; border: 0 !important; padding: 0; min-width: 0; font-size: 17px; }
+  .ssc-header { flex-wrap: wrap; gap: 8px 20px; }
+  .ssc-header .stint-type { font-size: 13px; }
+  .ssc-th--theo { display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .ssc-theory-meta { position: relative; display: inline-block; margin: 0; padding: 0; border: 0; text-align: left; }
+  .ssc-theory-meta summary { list-style: none; font-size: 17px; cursor: pointer; color: var(--rc-muted); line-height: 1; padding: 4px; }
+  .ssc-theory-meta summary::-webkit-details-marker { display: none; }
+  .reference-popover { position: absolute; right: 0; top: 30px; width: min(320px, 70vw); padding: 16px; background: #121214; border: 1px solid #ffffff35; box-shadow: 0 8px 24px #0008; z-index: 20; font-size: 13px; line-height: 1.6; font-weight: 400; letter-spacing: normal; text-transform: none; }
+  .reference-popover > span { display: block; margin: 0 0 10px; padding: 0; border: 0; background: none; color: #d1d1d5; font-size: 13px; line-height: 1.6; font-weight: 400; }
+  .stint-item .stint-type { text-align: left; }
+  .ssc-td--warning { font-size: 13px; }
+  .ssc-progress-section { max-width: 600px; gap: 32px; padding: 20px 0 4px; }
+  .ssc-progress-row { display: grid; grid-template-columns: 1fr; gap: 9px; align-content: start; }
+  .ssc-progress-label { display: flex; flex-direction: row; justify-content: flex-start; align-items: baseline; gap: 12px; min-width: 0; }
+  .ssc-progress-title { font-size: 12px; }
+  .ssc-progress-count { font-size: 15px; white-space: nowrap; }
+  .ssc-progress-bar { display: block; width: 100%; height: 4px; border-radius: 0; background: #ffffff15; }
+  .ssc-progress-fill { height: 100%; border-radius: 0; }
+  .metric-note { font-size: 12px; color: var(--rc-muted); }
+  .metric-note strong { margin-left: 6px; color: white; font-weight: 500; }
+  .laps-table { table-layout: auto; }
+  .laps-table th { font-size: 11px; padding: 10px 8px; }
+  .laps-table td { font-size: 14px; padding: 12px 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .laps-table .time { font-size: 16px; }
+  .laps-table .sector { font-size: 14px; }
+  .laps-table .delta { display: table-cell; background: transparent !important; border-radius: 0; box-shadow: none; border-left: 0; border-right: 0; font-size: 14px; }
+  .laps-table tr.lap-invalid { background: #ff304b0c; }
+  .laps-table tr.lap-pit { background: #ffbe0010; opacity: 1; }
+  .laps-table tr.lap-excluded { opacity: 1; }
+  .laps-table tr.lap-excluded:not(.lap-invalid) td, .laps-table tr.lap-excluded:not(.lap-invalid) .time { color: #a1a1aa !important; text-decoration: none; }
+  .laps-table tr.lap-excluded .delta { opacity: 1; }
+  .laps-table td.lap-cell-invalid { background: #ff304b0c; }
+  .laps-table td.lap-cell-pit { background: #ffbe0010; }
+  .laps-table-wrap { border-radius: 0; }
+  .laps-table .delta { border-top-color: transparent; border-bottom-color: #ffffff0a; }
+
+  .lap-state { display: inline-block; margin-left: 5px; font-size: 10px; }
+  .lap-state--pit { color: #e9b94e; }
+  .lap-state--invalid { color: #ff6376; font-size: 17px; }
+  abbr { text-decoration: none; cursor: help; }
+  .point-legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 10px; font-size: 12px; color: var(--rc-muted); }
+  .key-target { color: #10b981; } .key-best { color: #c084fc; }
+  @media(max-width: 1050px) {
+    .master-detail, .master-detail--comparing { grid-template-columns: 300px minmax(0, 1fr); }
+    .master-detail::before { left: 300px; }
+    .master { padding: 20px 12px; }
+    .stint-columns, .stint-item.stint-item--builder { grid-template-columns: 28px minmax(64px,1fr) 28px 68px; gap: 6px; }
+    .ssc-td--value { font-size: 20px; }
+    .ssc-header-left { flex-wrap: wrap; }
+  }
+  @media(max-width: 860px) {
+    .master-detail, .master-detail--comparing { grid-template-columns: minmax(0,1fr); }
+    .master-detail::before { display: none; }
+    .master { position: static; max-height: 360px; border-bottom: 1px solid var(--rc-line); }
+    .detail { padding: 20px 16px; }
+    .stint-columns, .stint-item.stint-item--builder { grid-template-columns: 40px minmax(70px,1fr) 50px 90px; }
+  }
+  @media(max-width: 500px) {
+    .stint-stats-card .ssc-table-header, .stint-stats-card .ssc-table-row { grid-template-columns: 42px minmax(88px,1fr) 68px minmax(88px,1fr); }
+    .ssc-td--value { font-size: 17px; } .ssc-delta { font-size: 14px; }
+    .ssc-progress-section { grid-template-columns: 1fr; gap: 20px; }
+  }
+}
+
+
+// Single-stint summary: aligned results with context alongside, never detached.
+.session-detail-page {
+  .stint-stats-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 240px;
+    column-gap: 28px;
+    container-type: inline-size;
+  }
+  .stint-stats-card .ssc-table { grid-column: 1; grid-row: 1; width: 100%; max-width: none; }
+  .stint-stats-card .ssc-progress-section { grid-column: 1; grid-row: 2; max-width: none; margin: 0; padding-top: 22px; gap: 24px; }
+  .stint-stats-card .ssc-table-header, .stint-stats-card .ssc-table-row {
+    grid-template-columns: 52px minmax(100px, 1fr) 82px minmax(100px, 1fr);
+    gap: 12px;
+    align-items: center;
+  }
+  .stint-stats-card .ssc-th, .stint-stats-card .ssc-td { justify-content: flex-start; text-align: left; min-width: 0; }
+  .stint-stats-card .ssc-th { letter-spacing: 0; font-size: 11px; }
+  .stint-stats-card .ssc-td--value { font-size: 22px; white-space: nowrap; }
+  .stint-stats-card .ssc-value--note { font-size: 14px; color: var(--rc-text-muted, #a1a1aa); }
+  .stint-context { grid-column: 2; grid-row: 1 / span 2; padding-left: 24px; border-left: 1px solid var(--rc-line); }
+  .stint-context-data { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0; }
+  .stint-context-duration, .stint-context-fuel { grid-column: 1 / -1; }
+  .stint-context dt { font-size: 12px; color: #a1a1aa; margin-bottom: 6px; }
+  .stint-context dd { font-size: 15px; font-weight: 600; margin: 0; font-variant-numeric: tabular-nums; }
+  .stint-context-duration dd { font-size: 19px; }
+  .stint-target { display: grid; gap: 6px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--rc-line); }
+  .stint-target > span { font-size: 13px; font-weight: 600; }
+  .stint-target strong { font-size: 24px; color: #20d9a0; font-variant-numeric: tabular-nums; }
+  .stint-target small { font-size: 12px; color: #a1a1aa; }
+  .stint-item .stint-type { padding: 4px 6px; justify-self: start; border: 1px solid currentColor; line-height: 1.2; font-size: 12px; }
+  .stint-item .stint-type--r { background: #ff003c18; color: #ff4569; border-color: #ff003c55; }
+  .stint-item .stint-type--q { background: #ffd00014; color: #ffd000; border-color: #ffd00055; }
+  .laps-table tr.lap-invalid { background: #ff304b12; }
+  .lap-excluded:not(.lap-invalid):not(.lap-pit) { background: #ffffff03; }
+  .lap-state--excluded { color: #a1a1aa; font-size: 10px; font-weight: 500; }
+  .lap-number-cell { white-space: nowrap; }
+  @media (max-width: 1200px) {
+    .stint-stats-card { grid-template-columns: minmax(0, 1fr); }
+    .stint-context { grid-column: 1; grid-row: 3; padding: 20px 0 0; margin-top: 20px; border-left: 0; border-top: 1px solid var(--rc-line); display: flex; gap: 28px; align-items: start; }
+    .stint-context-data { flex: 1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .stint-context-duration, .stint-context-fuel { grid-column: auto; }
+    .stint-target { margin: 0; padding: 0; border: 0; }
+  }
+  @media (max-width: 550px) {
+    .stint-context { flex-direction: column; }
+    .stint-context-data { width: 100%; }
+    .stint-stats-card .ssc-table-header, .stint-stats-card .ssc-table-row { grid-template-columns: 42px minmax(80px, 1fr) 64px minmax(80px, 1fr); gap: 6px; }
+    .stint-stats-card .ssc-td--value { font-size: 16px; }
+    .stint-stats-card .ssc-value--note { font-size: 12px; }
+  }
+}
+
+
+.session-detail-page {
+  .stint-stats-card .ssc-table-header, .stint-stats-card .ssc-table-row { grid-template-columns: 52px repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .stint-stats-card .ssc-th, .stint-stats-card .ssc-td { justify-content: center; text-align: center; }
+  .stint-stats-card .ssc-td--label { justify-content: flex-start; text-align: left; }
+  .stint-stats-card .ssc-th { font-size: 13px; }
+  .ssc-theory-meta summary { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 0; }
+  .ssc-theory-meta summary svg { flex-shrink: 0; }
+  .reference-popover { width: min(360px, 75vw); padding: 20px; text-align: left; text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .reference-title { font-size: 15px; color: #fff; }
+  .reference-popover p { font-size: 13px; line-height: 1.5; color: #b8b8c0; margin: 8px 0 16px; }
+  .reference-popover h5 { font-size: 13px; margin: 16px 0 10px; color: white; }
+  .reference-popover dl { display: grid; grid-template-columns: 1fr auto; gap: 10px 18px; margin: 0; padding-bottom: 14px; border-bottom: 1px solid var(--rc-line); }
+  .reference-popover dt { font-size: 12px; color: #aaaab4; }
+  .reference-popover dd { margin: 0; font-size: 13px; color: #fff; font-variant-numeric: tabular-nums; text-align: right; }
+  .stint-columns, .stint-item.stint-item--builder { grid-template-columns: 28px minmax(70px, 1fr) 32px 72px; column-gap: 12px; }
+  .stint-columns span:nth-child(3), .stint-laps { text-align: center; }
+  .key-valid { color: #10b981; } .key-invalid { color: #ef4444; }
+  .chart-zoom-hint { margin-left: auto; color: #a1a1aa; }
+  @media(max-width: 550px) {
+    .stint-stats-card .ssc-table-header, .stint-stats-card .ssc-table-row { grid-template-columns: 42px repeat(3, minmax(0, 1fr)); gap: 6px; }
+    .stint-stats-card .ssc-th { font-size: 11px; }
+  }
+}
+
+
+// Both summaries use the same stint-stats-card grid, column order and typography.
+.session-detail-page {
+  .compare-layout.stint-stats-card { display: grid; align-items: start; }
+  .compare-layout .compare-table-wrap { grid-column: 1; grid-row: 1; padding: 0; overflow: visible; }
+  .compare-layout .ssc-table { padding: 0; }
+  .compare-layout .ssc-th, .compare-layout .ssc-td { border-left: 0; border-right: 0; background: none; }
+  .compare-layout .ssc-th--label, .compare-layout .ssc-td--label { font-size: 12px; letter-spacing: 0; white-space: nowrap; overflow-wrap: normal; }
+  .compare-layout .ssc-td--warning { font-size: 14px; color: #a1a1aa; }
+  .compare-layout .ssc-table-row--compact .ssc-td--compact { display: flex; font-family: var(--rc-font); font-size: 16px; line-height: 1.5; }
+  .compare-layout .ssc-stint-separator { display: block; padding: 20px 0 8px; margin: 0; border: 0; background: none; font-size: 13px; font-weight: 600; color: #a1a1aa; text-align: left; }
+  .compare-layout .ssc-stint-separator span { padding: 0; font: inherit; letter-spacing: .5px; color: inherit; }
+  .compare-layout .ssc-stint-separator::after { display: none; }
+  .compare-layout .ssc-table-row--duration { padding-bottom: 12px; border-bottom: 1px solid var(--rc-line); }
+  .compare-layout .ssc-stint-separator--total { color: #f0cc76; }
+  .compare-layout .ssc-table-row--total { background: #e9b94e12; border-top: 1px solid #e9b94e45; border-bottom: 1px solid #e9b94e45; }
+  .compare-layout .ssc-td--duration { font-size: 18px; white-space: nowrap; color: #f1f1f4; }
+  .compare-layout .ssc-table-row--total .ssc-td--duration { font-size: 20px; color: #f1f1f4; }
+  .comparison-stint-block { margin-top: 0; box-shadow: none; }
+  .comparison-stint-block + .comparison-stint-block { margin-top: 24px; }
+  .compare-layout .comparison-stint-heading { background: #ffffff08; border-top: 1px solid #ffffff28; border-bottom: 1px solid #ffffff20; }
+  .compare-layout .ssc-table-header + .comparison-stint-block .comparison-stint-heading { border-top: 0; }
+  .comparison-stint-heading .ssc-td { font-size: 14px; font-weight: 600; }
+  .comparison-no-stint { color: #888892; font-weight: 400; font-size: 12px; }
+  .comparison-stint-block .ssc-td--label, .compare-layout .ssc-table-row--total .ssc-td--label { padding-left: 8px; }
+  .compare-layout .comparison-stint-block .ssc-table-row--duration { border-bottom: 0; padding-bottom: 4px; }
+  .laps-table-wrap { overflow-x: auto; }
+  .laps-table th, .laps-table td { text-align: center; vertical-align: middle; }
+  .laps-table th:first-child, .laps-table td:first-child { text-align: left; }
+  .laps-table:not(.laps-table--compare) th:first-child { width: 16%; min-width: 120px; }
+  .laps-table .time { min-width: 112px; }
+  .laps-table .delta { min-width: 88px; }
+  .laps-table .sector { min-width: 80px; }
+  .laps-table:not(.laps-table--compare) th:nth-last-child(-n+3) { width: 8%; min-width: 64px; }
+  .laps-table--compare .col-index { min-width: 40px; text-align: left; }
+  .laps-table--compare thead tr:nth-child(2) th { text-align: center; }
+  .compare-context { grid-row: 1; }
+  .compare-context-title { font-size: 13px; margin: 0 0 16px; }
+  .compare-fuel { margin-top: 20px; }
+  .compare-fuel h4 { font-size: 12px; font-weight: 400; color: #a1a1aa; margin: 0 0 10px; }
+  .compare-fuel dl { display: grid; gap: 10px; margin: 0; }
+  .compare-fuel dl > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .compare-fuel dt { margin: 0; font-size: 13px; }
+  .compare-fuel dd { font-size: 15px; white-space: nowrap; }
+  .compare-context-title--a, .summary-side--a { color: #72a8ff; }
+  .compare-context-title--b, .summary-side--b { color: #b895ff; }
+  .compare-context-side + .compare-context-side { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--rc-line); }
+  @media(max-width: 1200px) {
+    .compare-context { grid-row: 2; }
+    .compare-context-side { flex: 1; min-width: 0; }
+    .compare-context-side + .compare-context-side { margin: 0; padding: 0; border: 0; }
+  }
+  @media(max-width: 550px) {
+    .compare-context { flex-direction: row; }
+    .compare-context .stint-context-data { grid-template-columns: 1fr; }
+  }
+}
+
 </style>
 
 <!-- Global styles for Teleported notification banner -->
@@ -6960,7 +6977,7 @@ const gripZones = computed(() => {
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.15s ease;
-  
+
   &:hover {
     background: rgba(20, 184, 166, 0.25);
     border-color: rgba(20, 184, 166, 0.5);
@@ -6976,7 +6993,7 @@ const gripZones = computed(() => {
   padding: 2px 4px;
   margin-left: 4px;
   transition: color 0.15s ease;
-  
+
   &:hover {
     color: rgba(255, 255, 255, 0.8);
   }
@@ -7026,5 +7043,6 @@ const gripZones = computed(() => {
   color: var(--text-secondary);
   font-size: var(--font-size-md, 14px);
 }
+
 </style>
 

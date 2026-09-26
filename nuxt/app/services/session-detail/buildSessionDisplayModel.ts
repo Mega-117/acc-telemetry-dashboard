@@ -75,7 +75,7 @@ export function buildSessionDisplayModel(params: {
       avg: avgLapMs ? formatLapTime(avgLapMs) : (avgWarning ? 'min 5 giri' : '—'),
       avgWarning,
       avgMs: avgLapMs,
-      durationMs: stint.stint_drive_time_ms || 0,
+      durationMs: stint.stint_drive_time_ms || stint.laps.reduce((sum, lap) => sum + (lap.lap_time_ms || 0), 0),
       theoretical: formatLapTime(sessionBestLap),
       deltaVsTheo: bestLapMs && sessionBestLap ? `+${((bestLapMs - sessionBestLap) / 1000).toFixed(3)}` : '-',
       conditions: {

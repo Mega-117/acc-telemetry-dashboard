@@ -17,7 +17,7 @@ const theoreticalSource = fs.readFileSync(
 
 assert.match(
   sessionDetailSource,
-  /selectedStint\.value\?\.type === 'R'\s*\?\s*selectedStint\.value\?\.fuelStart \?\? null\s*:\s*null/,
+  /stint\.type === 'Qualify' \? null : stint\.fuel_start/,
   'Session Detail must pass stint fuelStart, not best-lap fuel, to getTheoreticalTimes for race stints.'
 )
 

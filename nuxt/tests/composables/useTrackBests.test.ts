@@ -52,6 +52,19 @@ describe('useTrackBests', () => {
 
   // ───────────────────────────────────────────────────
   describe('calculateAllBestTimesForTrack', () => {
+    it('mantiene bucket distinti e non usa lo storico del visitatore per altri piloti', async () => {
+      globalSessions.value = [{ sessionId: 'bucket-fixture', meta: { track: 'monza', car: 'ferrari_296_gt3' }, summary: { best_by_grip: { Optimum: {
+        bestQualy: 99000,
+        raceBestByFuelBucket: { '40-60': { timeMs: 100000, fuel: 50 }, '100+': { timeMs: 102000, fuel: 110 } },
+        raceAvgByFuelBucket: { '40-60': { timeMs: 101000, fuel: 50 }, '100+': { timeMs: 103000, fuel: 110 } }
+      } } } }] as any
+      const service = useTrackBests()
+      const own = await service.calculateAllBestTimesForTrack('monza', 'user-tb')
+      expect(own.bests.GT3.Optimum.raceBestByFuelBucket!['100+']?.timeMs).toBe(102000)
+      expect(own.bests.GT3.Optimum.raceAvgByFuelBucket!['100+']?.timeMs).toBe(103000)
+      const shared = await service.calculateAllBestTimesForTrack('monza', 'other-owner')
+      expect(shared.bests.GT3.Optimum.bestQualy).toBeNull()
+    })
     it('ritorna bests vuoti e lastSessionDate null se non ci sono sessioni', async () => {
       const { calculateAllBestTimesForTrack } = useTrackBests()
       const result = await calculateAllBestTimesForTrack('monza')

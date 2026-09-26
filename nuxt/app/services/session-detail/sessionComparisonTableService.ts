@@ -22,6 +22,7 @@ export function buildSessionDetailStint(
     number: stint.stint_number,
     type: stint.type === 'Qualify' ? 'Q' : stint.type === 'Race' ? 'R' : 'P',
     laps: stint.laps.length,
+    fuelStart: stint.fuel_start,
     best: formatLapTime(metrics.bestMs),
     bestMs: metrics.bestMs,
     avg: formatLapTime(metrics.avgMs),
