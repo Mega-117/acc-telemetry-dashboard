@@ -103,60 +103,59 @@ const handleGoToSettings = () => {
   position: relative; // Anchor the outgoing page during the crossfade.
   flex: 1;
   width: 100%; min-height: 0; box-sizing: border-box;
-  overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain;
-  scrollbar-gutter: stable;
   --page-bottom-space: 24px;
 }
-// Keep the page's original 40px offset: a fixed clear band followed by the
-// same 18px fade used below the session filters. Only content moves through it.
-.dashboard-layout:not(:has(:deep(.sessions-page))) {
-  .dashboard-sticky-header {
-    padding-bottom: calc(var(--app-content-top-space) - var(--app-scroll-fade-size));
-  }
-  > .dashboard-viewport {
-    --app-content-top-space: var(--app-scroll-fade-size);
-    mask-image: var(--app-scroll-fade-mask);
-  }
-}
-// Follow the rendered page, including its leave transition, rather than the next route.
-.dashboard-layout:has(:deep(.sessions-page)) {
-  --page-bottom-space: 0px;
-  height: var(--dashboard-viewport-height, 100dvh);
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
+// Every route owns its scrolling and sizing. The shell must never change based
+// on descendants: two different pages coexist during a crossfade.
+.dashboard-viewport {
   overflow: hidden;
-  .dashboard-sticky-header {
-    position: relative;
-    flex: 0 0 auto;
-  }
-  > .dashboard-viewport { min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
-}
-.dashboard-layout:has(:deep(.racing-overview)) {
-  // Fill the available window; content can still grow beyond it on small screens.
-  min-height: var(--dashboard-viewport-height, 100dvh);
   display: flex;
   flex-direction: column;
-  --page-bottom-space: 22px;
-  position: relative; isolation: isolate; background: transparent;
-  .dashboard-sticky-header { flex-shrink: 0; }
-  > .dashboard-viewport { display: flex; flex-direction: column; }
-  :deep(.page-container) { width: 100%; padding: var(--app-content-top-space) 24px 22px; flex: 1; display: flex; flex-direction: column; }
-  :deep(.racing-overview) { flex: 1; }
 }
+.dashboard-viewport > :deep(*) {
+  flex: 1 1 0%;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: contain;
+}
+// Page-local positioning (e.g. Pitwall's position:relative) must not put the
+// outgoing page back in flex flow and halve the incoming page's height.
+.dashboard-viewport > :deep(.page-fade-leave-active) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  flex: none;
+  pointer-events: none;
+}
+.dashboard-viewport > :deep(.sessions-page) {
+  overflow: hidden;
+  --page-bottom-space: 0px;
+}
+.dashboard-viewport > :deep(:not(.sessions-page)) {
+  mask-image: var(--app-scroll-fade-mask);
+}
+.dashboard-viewport > :deep(.page-container:has(.racing-overview)) {
+  --page-bottom-space: 22px;
+  padding: var(--app-content-top-space) 24px 22px;
+  display: flex;
+  flex-direction: column;
+}
+.dashboard-viewport :deep(.racing-overview) { flex: 1 0 auto; }
 // The lobby consumes the actual space below the application chrome. Only its
 // lists scroll; the live room and narrow/very short windows retain page scrolling.
 @media (min-width: 721px) and (min-height: 650px) {
-  .dashboard-layout:has(:deep(.pwc--home)) {
-    > .dashboard-viewport { display: flex; flex-direction: column; overflow: hidden; }
-    :deep(.pitwall-route) { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .dashboard-viewport > :deep(.pitwall-route:has(.pwc--home)) {
+    display: flex; flex-direction: column; overflow: hidden;
     :deep(.pwc.pwc--home) { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-bottom: 16px; }
     :deep(.pwc--home .pwc-home) { flex: 1; height: auto; min-height: 0; }
     :deep(.pitwall-dev-views) { flex: 0 0 auto; width: 100%; padding-bottom: 8px; }
   }
 }
 @media (max-width: 700px) {
-  .dashboard-layout:has(:deep(.racing-overview)) { --page-bottom-space: 14px; }
-  .dashboard-layout:has(:deep(.racing-overview)) :deep(.page-container) { padding: var(--app-content-top-space) 16px 14px; }
+  .dashboard-viewport > :deep(.page-container:has(.racing-overview)) { padding: var(--app-content-top-space) 16px 14px; }
 }
 </style>

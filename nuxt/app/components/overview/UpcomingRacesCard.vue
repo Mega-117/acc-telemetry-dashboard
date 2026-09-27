@@ -18,6 +18,8 @@ import { getRaceCalendarCountdown } from '~/utils/raceCalendarCountdown'
 const props = defineProps<{
   userId: string | null | undefined
   racing?: boolean
+  initialEvents?: RaceCalendarEvent[]
+  initialUserId?: string
 }>()
 
 type ModalMode = 'create' | 'edit' | 'delete'
@@ -25,7 +27,7 @@ type ModalMode = 'create' | 'edit' | 'delete'
 const { currentUser, userRole } = useFirebaseAuth()
 const cloudWriteGate = useRuntimeCapabilityGate().gate('cloudWrite')
 
-const events = ref<RaceCalendarEvent[]>([])
+const events = ref<RaceCalendarEvent[]>(props.initialUserId === props.userId ? props.initialEvents || [] : [])
 const entry = inject(overviewEntryKey, null)
 let loadRevision = 0
 const calendarLoadError = ref(false)
@@ -229,7 +231,7 @@ function handleCacheInvalidated(event: Event) {
 watch(
   () => props.userId,
   () => void refreshEvents(),
-  { immediate: true },
+  { immediate: !(props.initialEvents && props.initialUserId === props.userId) },
 )
 
 onMounted(() => {

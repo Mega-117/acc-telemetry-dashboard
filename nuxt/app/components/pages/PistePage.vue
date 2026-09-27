@@ -21,7 +21,8 @@ const emit = defineEmits<{
 
 const telemetryGateway = useTelemetryGateway()
 const targetUserId = usePilotContext()
-const sortedTracks = ref<TrackDisplay[]>([])
+const props = defineProps<{ initialTracks?: TrackDisplay[] }>()
+const sortedTracks = ref<TrackDisplay[]>(props.initialTracks || [])
 
 
 async function loadTracks() {
@@ -35,7 +36,7 @@ function handleCacheInvalidated(event: Event) {
   }
 }
 
-watch(() => targetUserId.value, loadTracks, { immediate: true })
+watch(() => targetUserId.value, loadTracks, { immediate: !props.initialTracks })
 
 onMounted(() => {
   window.addEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)

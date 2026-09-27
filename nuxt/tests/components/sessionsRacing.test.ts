@@ -17,8 +17,8 @@ const session = (id: string, date: string, type = 0, laps = 4, car = 'ferrari_29
   summary: { laps, lapsValid: laps, stintCount: 1, best_qualy_ms: 100782, best_session_race_ms: type === 2 ? 101957 : null },
 })
 const wrappers: ReturnType<typeof mount>[] = []
-function render() {
-  const w = mount(SessioniPage, { attachTo: document.body, global: { components: { UiScrollArea: ScrollArea, UiPaginationControls: PaginationControls }, stubs: { LayoutPageContainer: { template: '<main><slot /></main>' } } } })
+function render(initiallyPrepared = false) {
+  const w = mount(SessioniPage, { props: { initiallyPrepared }, attachTo: document.body, global: { components: { UiScrollArea: ScrollArea, UiPaginationControls: PaginationControls }, stubs: { LayoutPageContainer: { template: '<main><slot /></main>' } } } })
   wrappers.push(w)
   return w
 }
@@ -38,6 +38,16 @@ beforeEach(() => {
 afterEach(() => { disposeScrollbars(); wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers() })
 
 describe('Sessioni racing single table', () => {
+  it('uses the prepared page immediately without a second initial request', async () => {
+    const w = render(true)
+    expect(w.find('.sessions-pagination').exists()).toBe(true)
+    expect(w.text()).not.toContain('Caricamento sessioni')
+    await flushPromises()
+    expect(fake.gateway.getSessionsPage).not.toHaveBeenCalled()
+    fake.uid.value = 'other'
+    await flushPromises()
+    expect(fake.gateway.getSessionsPage).toHaveBeenCalledOnce()
+  })
   it('shows the scrollbar only during scrolling and keeps pagination outside', async () => {
     const w = render(); await flushPromises()
     const area = w.get('.sessions-scroll')

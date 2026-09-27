@@ -11,6 +11,10 @@ import { useOverviewProjection } from '~/composables/useOverviewProjection'
 import { OVERVIEW_CAR_SIZES } from '~/utils/responsiveImage'
 import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
+import type { OverviewProjection } from '~/types/overviewProjections'
+import type { RaceCalendarEvent } from '~/repositories/raceCalendarRepository'
+
+const props = defineProps<{ prepared?: { uid: string; projection: OverviewProjection | null; events: RaceCalendarEvent[] } }>()
 
 const pilotContext = usePilotContext()
 const targetUserId = useTargetUserId()
@@ -18,7 +22,7 @@ const telemetryGateway = useTelemetryGateway()
 const entry = inject(overviewEntryKey, null)
 const overview = useOverviewProjection(uid => {
   return entry?.value?.takeProjection(uid) || telemetryGateway.getOverviewProjection(uid)
-})
+}, props.prepared?.uid === targetUserId.value ? props.prepared : undefined)
 const { projection: overviewProjection, status: overviewStatus } = overview
 const isOverviewPlaceholder = computed(() => !overviewProjection.value && overviewStatus.value !== 'empty')
 const emptyActivityTotals = {
@@ -42,9 +46,15 @@ function handleCacheInvalidated(event: Event) {
 
 }
 
+let initial = true
 watch(
   () => targetUserId.value,
   async () => {
+    if (initial && props.prepared?.uid === targetUserId.value) {
+      initial = false
+      return
+    }
+    initial = false
     await loadOverview()
   },
   { immediate: true, flush: 'sync' }
@@ -133,7 +143,7 @@ function goToSession() {
       </section>
 
       <aside class="racing-overview__side">
-        <OverviewUpcomingRacesCard :user-id="targetUserId" racing />
+        <OverviewUpcomingRacesCard :user-id="targetUserId" :initial-events="prepared?.events" :initial-user-id="prepared?.uid" racing />
         <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" racing :aria-busy="isOverviewPlaceholder" />
         <section class="training-panel racing-panel">
           <div><h2>Allenamenti</h2><p>Migliora il tuo tempo in pista</p></div>

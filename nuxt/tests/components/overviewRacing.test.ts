@@ -14,6 +14,16 @@ const event = { id: 'event', title: 'Gara QA', startsAt: '2099-10-01T19:00', tra
 beforeEach(() => { vi.clearAllMocks(); mocks.load.mockResolvedValue([event]) })
 
 describe('racing overview components', () => {
+  it('shows a prepared calendar immediately and reloads on owner change', async () => {
+    const wrapper = mount(Calendar, { props: { userId: 'qa', initialUserId: 'qa', initialEvents: [event] as any, racing: true } })
+    expect(wrapper.text()).toContain('Gara QA')
+    expect(wrapper.text()).not.toContain('Caricamento gare')
+    expect(mocks.load).not.toHaveBeenCalled()
+    await wrapper.setProps({ userId: 'other' })
+    await flushPromises()
+    expect(mocks.load).toHaveBeenCalledWith('other', 25)
+    wrapper.unmount()
+  })
   it('keeps secondary race actions in its own menu and preserves delete confirmation', async () => {
     mocks.load.mockResolvedValue([event, { ...event, id: 'second', title: 'Seconda gara', startsAt: '2099-10-02T19:00' }])
     const wrapper = mount(Calendar, { props: { userId: 'qa', racing: true }, global: { stubs: { teleport: true } } })

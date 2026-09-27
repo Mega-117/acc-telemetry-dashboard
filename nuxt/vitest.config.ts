@@ -40,6 +40,7 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/services/ui/pagePreparation.ts',
         'app/components/pitwall/concept/PitwallConceptFriends.vue',
         'app/components/pitwall/concept/PitwallConceptActionMenu.vue',
         'app/components/pitwall/concept/PitwallConceptFeedback.vue',

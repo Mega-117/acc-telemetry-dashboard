@@ -12,6 +12,11 @@ let wrapper: ReturnType<typeof mount> | undefined
 afterEach(() => { wrapper?.unmount(); vi.clearAllMocks() })
 
 describe('Piste racing grid', () => {
+  it('renders prepared cards in the first frame without reloading them', () => {
+    wrapper = mount(PistePage, { props: { initialTracks: [{ id: 'spa', name: 'Spa', sessions: 0 }] as any }, global: { stubs: { LayoutPageContainer: { template: '<main><slot /></main>' } } } })
+    expect(wrapper.text()).toContain('Spa')
+    expect(mock.load).not.toHaveBeenCalled()
+  })
   it('keeps played and unplayed cards accessible and opens the existing track route', async () => {
     mock.load.mockResolvedValue([
       { id: 'imola', name: 'Imola', sessions: 1, lastSession: '2026-09-25', image: '/imola.png' },

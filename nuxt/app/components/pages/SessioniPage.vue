@@ -48,6 +48,7 @@ interface DisplaySession {
   syncState?: 'synced' | 'pending_sync' | 'local_only' | 'sync_failed'
 }
 
+const props = defineProps<{ initiallyPrepared?: boolean }>()
 const ITEMS_PER_PAGE = 25
 
 // Get pilot context (will be set when coach views a pilot)
@@ -148,7 +149,7 @@ async function reloadFirstPage(forceReset = false) {
 }
 
 onMounted(async () => {
-  await reloadFirstPage()
+  if (!props.initiallyPrepared) await reloadFirstPage()
 })
 
 function handleCacheInvalidated(event: Event) {

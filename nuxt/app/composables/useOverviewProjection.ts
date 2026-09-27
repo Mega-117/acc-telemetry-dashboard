@@ -3,10 +3,10 @@ import type { OverviewProjection } from '~/types/overviewProjections'
 import { loadOverviewProjectionRecoverably } from '~/services/gateway/overviewProjectionLoadPolicy'
 
 /** Request ownership belongs to this view, independently of the sessions loader. */
-export function useOverviewProjection(loadProjection: (uid: string) => Promise<OverviewProjection | null>) {
-  const projection = shallowRef<OverviewProjection | null>(null)
-  const status = ref<'pending' | 'ready' | 'empty' | 'error'>('pending')
-  let owner: string | null = null
+export function useOverviewProjection(loadProjection: (uid: string) => Promise<OverviewProjection | null>, initial?: { uid: string; projection: OverviewProjection | null }) {
+  const projection = shallowRef<OverviewProjection | null>(initial?.projection || null)
+  const status = ref<'pending' | 'ready' | 'empty' | 'error'>(initial ? (initial.projection ? 'ready' : 'empty') : 'pending')
+  let owner: string | null = initial?.uid || null
   let revision = 0
   async function load(uid: string | null | undefined) {
     const request = ++revision
