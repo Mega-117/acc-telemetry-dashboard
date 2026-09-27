@@ -29,6 +29,16 @@ function message(wrapper: ReturnType<typeof mount>, type: string, value: unknown
   const iframe = wrapper.get('iframe').element as HTMLIFrameElement
   window.dispatchEvent(new MessageEvent('message', { source: source || iframe.contentWindow, data: { channel: 'mfd-v4-online', type, value } }))
 }
+it('publishes structured field verification with its original order context', () => {
+  const p = { ...port(), orderId: ref('order-one'), orderContextId: ref('original-context') }
+  p.orderFields.value = { brakes: { requested: false, observed: false, outcome: 'verified', source: 'visual' } }
+  const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
+  try {
+    const post = vi.spyOn((w.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
+    message(w, 'ready', null)
+    expect(post.mock.calls.at(-1)![0].value.verification).toEqual({ orderId: 'order-one', contextId: 'original-context', fields: p.orderFields.value })
+  } finally { w.unmount() }
+})
 it('isolates drafts and ignores the previous iframe when the recipient changes', async () => {
   const p = port(); const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
   try {

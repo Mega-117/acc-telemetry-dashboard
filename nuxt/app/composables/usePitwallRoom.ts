@@ -71,6 +71,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   const nowTick = ref(Date.now())
 
   const orderId = ref<string | null>(null)
+  const orderContextId = ref<string | null>(null)
   const orderMethod = ref('standard')
   const orderDiary = ref('')
   const draftSuspended = ref(false)
@@ -526,6 +527,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   function followOrder(service_: PitwallRoomService, roomId: string, id: string, generation: number, recovered = false) {
       const target = selectedTargetUid.value
       orderId.value = id
+      orderContextId.value = null
       orderStatus.value = 'pending'
       if (recovered) { orderMethod.value = 'mfd-v4'; orderReason.value = 'Recupero esito in corso…' }
       stopOrderWatch?.()
@@ -546,6 +548,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
           return
         }
         orderStatus.value = document.status as PitwallOrderStatus
+        const v4Context = (document.plan?.mfdV4 as { contextId?: unknown } | undefined)?.contextId
+        orderContextId.value = document.plan?.method === 'mfd-v4' && typeof v4Context === 'string' ? v4Context : null
         const result = document.result as {
           reason?: string | null
           diary?: string
@@ -704,6 +708,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     clockSkewNotice,
     nowTick,
     orderId,
+    orderContextId,
     orderMethod,
     orderDiary,
     draftSuspended,

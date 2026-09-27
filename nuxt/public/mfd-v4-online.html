@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 c6b1f19e6a2af97f89fc142104e6bb03e229c83cf56adc431b60a8ff92cf93d5 -->
+<!-- Generated V4 online; SHA256 e86998662d1fa864e94c8c9af8effdf29486ee85644d4e89bf4366b4d11d1b89 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1283,6 +1283,33 @@ else globalThis.MfdV4Contract = exported;
   var snapshot = null, initialized = false, restoring = false, crewSignature = null, edited = false;
   // A field is seeded once; edits (including an intentional blank) own it thereafter.
   var initializedFields = new Set(), editingField = null;
+  var invalidatedChecks = new Set(), verificationOrder = null;
+  var visualFields = { changeTyre: 'changeTyres', compound: 'compound', brakes: 'brakes',
+    brakeFront: 'brakeFront', brakeRear: 'brakeRear', driverIdx: 'driverId', susp: 'repairSuspension', body: 'repairBodywork' };
+  var nativeSpia = spia;
+  spia = function (id, tag, m) {
+    if (!visualFields[id]) return nativeSpia(id, tag, m);
+    var neutral = '<span class="chk na" title="Non verificato o non applicabile" aria-label="Non verificato o non applicabile">—</span>';
+    var proof = snapshot?.verification;
+    var field = proof?.fields?.[visualFields[id]];
+    var current = id === 'driverIdx' ? S.driverEntryIndex : id === 'compound' ? S.compound?.toLowerCase() : S[id];
+    if (busy || !snapshot?.ready || !proof?.orderId || proof.contextId !== snapshot.contextId ||
+        inattivo(id) || invalidatedChecks.has(id) || current == null || !field || field.requested !== current ||
+        !['visual', 'visual-name', 'visual-number'].includes(field.source)) return neutral;
+    if (field.outcome === 'verified' && field.observed === current)
+      return '<span class="chk ok" title="Confermato visivamente nel MFD · ultimo invio" aria-label="Confermato visivamente nel MFD">✓</span>';
+    if (field.outcome === 'mismatch')
+      return '<span class="chk no" title="Il valore letto nel MFD non corrisponde all’ultimo invio" aria-label="Valore MFD diverso da quello richiesto">✕</span>';
+    return neutral;
+  };
+  function invalidateChecks(key) {
+    invalidatedChecks.add(key === 'driverEntryIndex' ? 'driverIdx' : key);
+    if (key === 'changeTyre') invalidatedChecks.add('compound');
+    if (key === 'brakes') { invalidatedChecks.add('brakeFront'); invalidatedChecks.add('brakeRear'); }
+    if (key === 'susp') invalidatedChecks.add('body');
+    if (key === 'applyPitStrategy') Object.keys(visualFields).forEach(function (k) { invalidatedChecks.add(k); });
+    aggiornaSpie();
+  }
   function seedStrategy(strategy, replace) {
     var values = { fuel: strategy.fuelToAdd ?? null,
       tyreSet: strategy.tyreSet == null ? null : strategy.tyreSet + 1,
@@ -1356,7 +1383,8 @@ else globalThis.MfdV4Contract = exported;
   S = { applyPitStrategy: false, pitStrategy: 1, fuel: null, changeTyre: null, compound: null, tyreSet: null,
     fl: null, fr: null, rl: null, rr: null, brakes: null, brakeFront: null, brakeRear: null,
     brakeFrontNow: null, brakeRearNow: null, driverIdx: null, driverEntryIndex: null, susp: null, body: null };
-  function saved() { if (!restoring) send('draft', { ...S, initializedFields: Array.from(initializedFields), stepMs: Number(document.getElementById('gap').value), edited: edited }); }
+  function saved() { if (!restoring) send('draft', { ...S, initializedFields: Array.from(initializedFields), stepMs: Number(document.getElementById('gap').value), edited: edited,
+    verificationOrder: verificationOrder, invalidatedChecks: Array.from(invalidatedChecks) }); }
   var refresh = document.createElement('button');
   refresh.id = 'refresh-draft'; refresh.className = 'alt';
   refresh.type = 'button'; refresh.textContent = 'Ripristina dai dati live';
@@ -1404,13 +1432,14 @@ else globalThis.MfdV4Contract = exported;
   formEl.addEventListener('input', function (event) {
     if (!busy && event.target.dataset.f) {
       edited = true; initializedFields.add(event.target.dataset.f); editingField = event.target.dataset.f;
+      invalidateChecks(event.target.dataset.f);
     }
   });
   // Commit/clamping belongs to the canonical change handler, not the typing buffer.
   formEl.addEventListener('change', function () { editingField = null; }, true);
   formEl.addEventListener('change', function (event) {
     if (busy) return;
-    if (event.target.dataset.f) { edited = true; initializedFields.add(event.target.dataset.f); }
+    if (event.target.dataset.f) { edited = true; initializedFields.add(event.target.dataset.f); invalidateChecks(event.target.dataset.f); }
     if (event.target.type === 'number' && event.target.value === '') { S[event.target.dataset.f] = null; renderForm(); }
     saved();
   });
@@ -1421,6 +1450,12 @@ else globalThis.MfdV4Contract = exported;
     var previousReady = snapshot?.ready;
     snapshot = event.data.value;
     if (!snapshot || typeof snapshot !== 'object') return;
+    if (snapshot.verification?.orderId && snapshot.verification.orderId !== verificationOrder) {
+      verificationOrder = snapshot.verification.orderId;
+      invalidatedChecks.clear();
+    }
+    if (snapshot.draft?.verificationOrder === verificationOrder && Array.isArray(snapshot.draft?.invalidatedChecks))
+      snapshot.draft.invalidatedChecks.forEach(function (key) { invalidatedChecks.add(key); });
     restoring = true;
     // A preset is a one-shot operation, also when rejected/partial. Keeping
     // this checked disabled every normal strategy field until a room reset.

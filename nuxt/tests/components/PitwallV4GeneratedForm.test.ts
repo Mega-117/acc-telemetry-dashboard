@@ -3,6 +3,35 @@ import { JSDOM } from 'jsdom'
 import { afterEach, expect, it, vi } from 'vitest'
 const contextId = 'a'.repeat(64)
 const opened: JSDOM[] = []
+
+it('shows only matching visual outcomes and invalidates edited fields and their dependencies', () => {
+  const { w, snapshot } = onlineForm()
+  const fields = {
+    changeTyres: { requested: true, observed: true, outcome: 'verified', source: 'visual' },
+    compound: { requested: 'dry', observed: 'dry', outcome: 'verified', source: 'visual' },
+    brakes: { requested: false, observed: false, outcome: 'verified', source: 'visual' },
+    repairSuspension: { requested: false, observed: true, outcome: 'mismatch', source: 'visual' },
+    repairBodywork: { requested: false, outcome: 'unknown', source: 'visual' },
+    driverId: { requested: 0, observed: 0, outcome: 'verified', source: 'visual-name' },
+  }
+  const verification = { orderId: 'one', contextId, fields }
+  const mark = (id: string) => w.document.querySelector(`tr[data-f="${id}"] .chk`).textContent
+  snapshot({ draft: { changeTyre: true, compound: 'Dry', brakes: false, susp: false, body: false, driverEntryIndex: 0 }, verification })
+  expect(mark('changeTyre')).toBe('✓'); expect(mark('compound')).toBe('✓')
+  expect(mark('brakes')).toBe('✓'); expect(mark('driverIdx')).toBe('✓')
+  expect(mark('susp')).toBe('✕'); expect(mark('body')).toBe('—'); expect(mark('brakeFront')).toBe('—')
+  const input = w.document.querySelector('input[data-f="changeTyre"]')
+  input.checked = false; input.dispatchEvent(new w.Event('change', { bubbles: true }))
+  expect(mark('changeTyre')).toBe('—'); expect(mark('compound')).toBe('—')
+  snapshot({ verification }); expect(mark('changeTyre')).toBe('—')
+  snapshot({ verification: { ...verification, orderId: 'two', fields: { ...fields, changeTyres: { ...fields.changeTyres, requested: false, observed: false } } } })
+  expect(mark('changeTyre')).toBe('✓')
+  snapshot({ verification, busy: true }); expect(mark('brakes')).toBe('—')
+  snapshot({ verification: { ...verification, contextId: 'other' } }); expect(mark('brakes')).toBe('—')
+  snapshot({ verification: { ...verification, fields: { brakes: { ...fields.brakes, source: 'convergence' } } } }); expect(mark('brakes')).toBe('—')
+  snapshot({ verification, draft: { verificationOrder: 'one', invalidatedChecks: ['brakes'] } }); expect(mark('brakes')).toBe('—')
+  snapshot({ verification: { ...verification, orderId: 'three' } }); expect(mark('brakes')).toBe('✓')
+})
 afterEach(() => { opened.splice(0).forEach(dom => dom.window.close()) })
 function onlineForm() {
   const dom = new JSDOM(readFileSync(new URL('../../public/mfd-v4-online.html', import.meta.url), 'utf8'), { runScripts: 'outside-only', pretendToBeVisual: true })

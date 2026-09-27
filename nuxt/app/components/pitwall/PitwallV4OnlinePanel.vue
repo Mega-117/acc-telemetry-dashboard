@@ -50,6 +50,10 @@ function publish() {
     development: development.value, recipientLabel: recipientLabel.value, ready: !reason.value, reason: error.value || reason.value, busy: !!busy.value,
     contextId: car.value?.mfdV4?.contextId, strategy: car.value,
     crew: props.port?.carSnapshot.value?.crew || [], draft: v4Draft.value, outcome: outcome.value, result: result.value,
+    verification: props.port?.orderMethod.value === 'mfd-v4' ? {
+      orderId: props.port.orderId?.value, contextId: props.port.orderContextId?.value,
+      fields: props.port.orderFields.value,
+    } : null,
   } }
   frame.value?.contentWindow?.postMessage(JSON.parse(JSON.stringify(snapshot)), '*')
 }
