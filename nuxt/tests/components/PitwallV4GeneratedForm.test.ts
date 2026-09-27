@@ -243,3 +243,17 @@ it('exposes validation and remote failures outside developer console, without st
   snapshot({ result: { label: 'Impostata e confermata', problem: false } })
   expect(result.textContent).toContain('Impostata e confermata')
 })
+it('corrects a visually detected suspension mismatch and checks it again', async () => {
+  const { w, snapshot } = onlineForm(); snapshot()
+  w.L = { driver:false }
+  const plan = { changeTyre:true, compound:'Wet', brakes:false, susp:true, body:true, driverIdx:null }
+  const reading = (susp: boolean) => ({ tyreOn:true, dry:false, read:{tyreCheck:true, brakeCheck:false, susp, body:true} })
+  w.leggiPannello = vi.fn().mockResolvedValueOnce(reading(false)).mockResolvedValueOnce(reading(true))
+  w.correggi = vi.fn().mockResolvedValue(true)
+  expect(await w.verificaVisiva(plan)).toBe(true)
+  expect(w.correggi).toHaveBeenCalledWith([{campo:'susp',letto:false,voluto:true}],plan)
+  expect(w.leggiPannello).toHaveBeenCalledTimes(2)
+  w.leggiPannello = vi.fn().mockResolvedValue(null); w.correggi.mockClear()
+  expect(await w.verificaVisiva(plan)).toBeNull()
+  expect(w.correggi).not.toHaveBeenCalled()
+})
