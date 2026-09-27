@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 bbd0b51453bc15864fb8ee4732620e9a8201f233d2d7ccdf8ff242558e7442ed -->
+<!-- Generated V4 online; SHA256 eee4ac8b8e64b8805b84a2adc2c9134076d9326d956eaf481ff874e0f6cbfd80 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -149,6 +149,12 @@ input[type=checkbox] { width: 15px; height: 15px; accent-color: #21ff83; }
 .legend-item { padding: 10px 0; border-bottom: 1px solid #ffffff18; line-height: 1.55; overflow-wrap: anywhere; }
 .legend-item:last-child { border-bottom: 0; padding-bottom: 0; }
 .legend-item .tag { display: block; margin: 0 0 5px; }
+#strategy-result { flex-basis: 100%; padding: 12px 14px; border-left: 3px solid #16bd91; background: #10241e; color: #e8e8eb; font-size: 14px; }
+#strategy-result[hidden] { display: none; }
+#strategy-result strong, #strategy-result span { display: block; }
+#strategy-result span { margin-top: 5px; line-height: 1.5; }
+#strategy-result[data-problem=true] { border-color: #ff6178; background: #291318; }
+.new-tyre-badge { display: inline-block; margin: 4px 0 4px 12px; padding: 3px 7px; color: #eafcf5; background: #12392c; border: 1px solid #287b59; font-size: 11px; font-weight: 700; white-space: nowrap; vertical-align: middle; }
 </style></head>
 <body>
 <div class="wrap">
@@ -1145,6 +1151,8 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
         var visual = lastPanel.read || {};
         put('changeTyres', lastPanel.tyreOn, 'visual');
         if (plan.changeTyres && typeof lastPanel.dry === 'boolean') put('compound', lastPanel.dry ? 'dry' : 'wet', 'visual');
+        if (plan.changeTyres && lastPanel.dry && visual.newTyreMarker === true)
+          put('newTyreMarker', true, 'visual');
         put('brakes', visual.brakeCheck, 'visual');
         put('repairBodywork', visual.body, 'visual'); put('repairSuspension', visual.susp, 'visual');
         if (plan.brakes) { put('brakeFront', visual.brakeFront, 'visual'); put('brakeRear', visual.brakeRear, 'visual'); }
@@ -1278,6 +1286,49 @@ else globalThis.MfdV4Contract = exported;
   var snapshot = null, initialized = false, restoring = false, crewSignature = null, edited = false;
   // A field is seeded once; edits (including an intentional blank) own it thereafter.
   var initializedFields = new Set(), editingField = null;
+  var invalidatedChecks = new Set(), verificationOrder = null;
+  var visualFields = { changeTyre: 'changeTyres', compound: 'compound', brakes: 'brakes',
+    brakeFront: 'brakeFront', brakeRear: 'brakeRear', driverIdx: 'driverId', susp: 'repairSuspension', body: 'repairBodywork' };
+  var nativeSpia = spia;
+  function renderTyreBadge() {
+    formEl.querySelector('.new-tyre-badge')?.remove();
+    var proof = snapshot?.verification, tyre = proof?.tyreSetCondition;
+    if (busy || !snapshot?.ready || !proof?.orderId || proof.contextId !== snapshot.contextId ||
+        S.applyPitStrategy || S.changeTyre !== true || S.compound !== 'Dry' ||
+        ['changeTyre','compound','tyreSet'].some(function(k) { return invalidatedChecks.has(k); }) ||
+        tyre?.state !== 'new' || tyre.compound !== 'dry' || tyre.via !== 'screen' || tyre.tyreSet !== S.tyreSet ||
+        proof.fields?.tyreSet?.outcome !== 'verified' || proof.fields.tyreSet.observed !== S.tyreSet) return;
+      var cell = formEl.querySelector('tr[data-f="tyreSet"] td:nth-child(2)');
+    if (!cell) return;
+    var badge = document.createElement('span'); badge.className = 'new-tyre-badge'; badge.textContent = 'SET NUOVO';
+    badge.title = 'Set ' + tyre.tyreSet + ': pallino bianco confermato nel MFD all’ultimo invio';
+    cell.appendChild(badge);
+  }
+  var nativeUpdateChecks = aggiornaSpie;
+  aggiornaSpie = function () { nativeUpdateChecks(); renderTyreBadge(); };
+  spia = function (id, tag, m) {
+    if (!visualFields[id]) return nativeSpia(id, tag, m);
+    var neutral = '<span class="chk na" title="Non verificato o non applicabile" aria-label="Non verificato o non applicabile">—</span>';
+    var proof = snapshot?.verification;
+    var field = proof?.fields?.[visualFields[id]];
+    var current = id === 'driverIdx' ? S.driverEntryIndex : id === 'compound' ? S.compound?.toLowerCase() : S[id];
+    if (busy || !snapshot?.ready || !proof?.orderId || proof.contextId !== snapshot.contextId ||
+        inattivo(id) || invalidatedChecks.has(id) || current == null || !field || field.requested !== current ||
+        !['visual', 'visual-name', 'visual-number'].includes(field.source)) return neutral;
+    if (field.outcome === 'verified' && field.observed === current)
+      return '<span class="chk ok" title="Confermato visivamente nel MFD · ultimo invio" aria-label="Confermato visivamente nel MFD">✓</span>';
+    if (field.outcome === 'mismatch')
+      return '<span class="chk no" title="Il valore letto nel MFD non corrisponde all’ultimo invio" aria-label="Valore MFD diverso da quello richiesto">✕</span>';
+    return neutral;
+  };
+  function invalidateChecks(key) {
+    invalidatedChecks.add(key === 'driverEntryIndex' ? 'driverIdx' : key);
+    if (key === 'changeTyre') invalidatedChecks.add('compound');
+    if (key === 'brakes') { invalidatedChecks.add('brakeFront'); invalidatedChecks.add('brakeRear'); }
+    if (key === 'susp') invalidatedChecks.add('body');
+    if (key === 'applyPitStrategy') Object.keys(visualFields).forEach(function (k) { invalidatedChecks.add(k); });
+    aggiornaSpie();
+  }
   function seedStrategy(strategy, replace) {
     var values = { fuel: strategy.fuelToAdd ?? null,
       tyreSet: strategy.tyreSet == null ? null : strategy.tyreSet + 1,
@@ -1305,6 +1356,7 @@ else globalThis.MfdV4Contract = exported;
     // The shared driver control reads this button while rendering.
     bA.disabled = busy || !snapshot?.ready;
     nativeRender();
+    renderTyreBadge();
     formEl.querySelectorAll('input[type=checkbox]').forEach(function (input) {
       var key = input.dataset.f;
       input.indeterminate = S[key] == null;
@@ -1342,14 +1394,17 @@ else globalThis.MfdV4Contract = exported;
         driverName: CREW?.drivers?.[S.driverEntryIndex] ? driverLabelV4(CREW.drivers[S.driverEntryIndex]) : '' });
     }
     var checked = MfdV4Contract.validatePlan(p);
-    if (!checked.ok) { log('err', checked.reason); return; }
+    if (!checked.ok) { validationMessage = checked.reason; log('err', checked.reason); showResult('Controlla la strategia', checked.reason, true); return; }
+    validationMessage = '';
+    showResult('Invio in corso', 'Attendo l’esito dal PC del pilota.', false);
     logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
     busy = true; renderForm(); send('submit', checked.plan);
   });
   S = { applyPitStrategy: false, pitStrategy: 1, fuel: null, changeTyre: null, compound: null, tyreSet: null,
     fl: null, fr: null, rl: null, rr: null, brakes: null, brakeFront: null, brakeRear: null,
     brakeFrontNow: null, brakeRearNow: null, driverIdx: null, driverEntryIndex: null, susp: null, body: null };
-  function saved() { if (!restoring) send('draft', { ...S, initializedFields: Array.from(initializedFields), stepMs: Number(document.getElementById('gap').value), edited: edited }); }
+  function saved() { if (!restoring) send('draft', { ...S, initializedFields: Array.from(initializedFields), stepMs: Number(document.getElementById('gap').value), edited: edited,
+    verificationOrder: verificationOrder, invalidatedChecks: Array.from(invalidatedChecks) }); }
   var refresh = document.createElement('button');
   refresh.id = 'refresh-draft'; refresh.className = 'alt';
   refresh.type = 'button'; refresh.textContent = 'Ripristina dai dati live';
@@ -1375,6 +1430,18 @@ else globalThis.MfdV4Contract = exported;
     else restoreLive();
   });
   bA.parentElement.append(refresh, confirmation);
+  var validationMessage = '';
+  var resultBox = document.createElement('div');
+  resultBox.id = 'strategy-result'; resultBox.hidden = true;
+  resultBox.setAttribute('role', 'status'); resultBox.setAttribute('aria-live', 'polite');
+  bA.parentElement.appendChild(resultBox);
+  function showResult(title, detail, problem) {
+    resultBox.replaceChildren();
+    var heading = document.createElement('strong'); heading.textContent = title;
+    var message = document.createElement('span'); message.textContent = detail || '';
+    resultBox.append(heading, message); resultBox.hidden = false;
+    resultBox.dataset.problem = String(!!problem);
+  }
   var devTools = document.createElement('details'); devTools.className = 'v4-dev-tools'; devTools.hidden = true;
   var devSummary = document.createElement('summary'); devSummary.textContent = 'Sviluppo';
   devTools.append(devSummary, document.getElementById('gap').closest('label'));
@@ -1385,13 +1452,14 @@ else globalThis.MfdV4Contract = exported;
   formEl.addEventListener('input', function (event) {
     if (!busy && event.target.dataset.f) {
       edited = true; initializedFields.add(event.target.dataset.f); editingField = event.target.dataset.f;
+      invalidateChecks(event.target.dataset.f);
     }
   });
   // Commit/clamping belongs to the canonical change handler, not the typing buffer.
   formEl.addEventListener('change', function () { editingField = null; }, true);
   formEl.addEventListener('change', function (event) {
     if (busy) return;
-    if (event.target.dataset.f) { edited = true; initializedFields.add(event.target.dataset.f); }
+    if (event.target.dataset.f) { edited = true; initializedFields.add(event.target.dataset.f); invalidateChecks(event.target.dataset.f); }
     if (event.target.type === 'number' && event.target.value === '') { S[event.target.dataset.f] = null; renderForm(); }
     saved();
   });
@@ -1402,6 +1470,12 @@ else globalThis.MfdV4Contract = exported;
     var previousReady = snapshot?.ready;
     snapshot = event.data.value;
     if (!snapshot || typeof snapshot !== 'object') return;
+    if (snapshot.verification?.orderId && snapshot.verification.orderId !== verificationOrder) {
+      verificationOrder = snapshot.verification.orderId;
+      invalidatedChecks.clear();
+    }
+    if (snapshot.draft?.verificationOrder === verificationOrder && Array.isArray(snapshot.draft?.invalidatedChecks))
+      snapshot.draft.invalidatedChecks.forEach(function (key) { invalidatedChecks.add(key); });
     restoring = true;
     // A preset is a one-shot operation, also when rejected/partial. Keeping
     // this checked disabled every normal strategy field until a room reset.
@@ -1439,12 +1513,14 @@ else globalThis.MfdV4Contract = exported;
     if (busy) confirmation.hidden = true;
     devTools.hidden = snapshot.development !== true;
     if (!snapshot.development) document.getElementById('gap').value = 60;
-    document.getElementById('connTxt').textContent = snapshot.reason || 'PC del pilota pronto. Valori iniziali dai dati disponibili; completa le scelte mancanti.';
+    document.getElementById('connTxt').textContent = busy ? 'Invio in corso al PC del pilota.' : snapshot.reason || 'PC del pilota pronto. Valori iniziali dai dati disponibili; completa le scelte mancanti.';
     if (busy) {
+      showResult('Invio in corso', 'Attendo l’esito dal PC del pilota.', false);
       logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
     } else if (snapshot.outcome) {
       logEl.textContent = snapshot.outcome;
     }
+    if (!busy && snapshot.result && !validationMessage) showResult(snapshot.result.label, snapshot.result.reason, snapshot.result.problem);
     if (redraw) renderForm();
     else { aggiornaSpie(); bA.disabled = busy || !snapshot.ready; etichettaBottone(); }
     if (!grid.children.length) renderSM();
