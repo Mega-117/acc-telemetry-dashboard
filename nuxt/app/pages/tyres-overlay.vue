@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // Overlay HUD Gomme (PIP-175): finestra Electron indipendente. Dimensione decisa
 // dal FORMATO (small/medium/large) lato Electron; qui si applica la scala dei
@@ -82,6 +83,7 @@ onBeforeUnmount(() => {
     :style="{ '--hud-scale': scale }"
     :class="{ 'hud-overlay--web': !isElectron }"
   >
+    <OverlayPlacementLock overlay-id="tyres" />
     <OverlaySoftwareCursor :state="pointerState" />
     <div
       class="hud-overlay__panel"

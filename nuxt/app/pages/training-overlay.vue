@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { usePresentationInterval, usePresentationVisibility } from '~/composables/usePresentationVisibility'
 const presentationVisible = usePresentationVisibility()
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
@@ -425,7 +426,6 @@ const contentKey = computed(() =>
   ['running', 'paused', 'expired'].includes(phase.value) ? 'session' : phase.value
 )
 const overlaySizePreset = computed<OverlaySizePreset>(() => {
-  if (placementActive.value) return 'placement'
   if (phase.value === 'launcher') return 'launcher'
   if (phase.value === 'select') return 'select'
   if (phase.value === 'expired') return 'expired'
@@ -655,7 +655,7 @@ function executePrimaryAction() {
 }
 
 // ─── Contratto interazione overlay (solo Electron) ────────────────────────────
-const OVERLAY_SURFACE_SELECTOR = '.overlay-card, .launcher-tools, .placement-work-area, .overlay-dev-toggle, .voice-point-notice'
+const OVERLAY_SURFACE_SELECTOR = '.overlay-card, .launcher-tools, .overlay-placement-lock, .overlay-dev-toggle, .voice-point-notice'
 const OVERLAY_CONTROL_SELECTOR = 'button, input, select, textarea, summary, .overlay-content--launcher, [data-overlay-interactive]'
 const interactionContract = useOverlayInteractionContract({
   getApi: getOverlayApi,
@@ -812,10 +812,13 @@ onMounted(async () => {
   await refreshQaBotState()
   qaBotActivity.start()
   removeCommandListener = api?.onTrainingOverlayCommand?.(handleOverlayCommand)
+  let receivedPlacement = false
   removePlacementListener = api?.onHudOverlayPlacement?.((active: boolean) => {
+    receivedPlacement = true
     placementActive.value = active === true
   })
-  placementActive.value = (await api?.hudOverlayIsPositioning?.()) === true
+  const initialPlacement = (await api?.hudOverlayGetPlacement?.('training')) === true
+  if (!receivedPlacement) placementActive.value = initialPlacement
   removeInfoTargetListener = api?.onInfoTargetSettings?.((next: InfoTargetSettings) => {
     if (!isTargetSetupOpen.value) applyInfoTargetSettings(next)
   })
@@ -942,21 +945,11 @@ onBeforeUnmount(() => {
     </Transition>
 
     <div class="overlay-work-area">
-      <section
-        v-if="placementActive"
-        key="placement"
-        class="placement-work-area overlay-card"
-        aria-label="Posiziona pannello Ctrl+K"
-      >
-        <strong>Pannello Ctrl+K</strong>
-        <span>Trascina per spostare</span>
-        <small>Salva e blocca dalla scheda HUD</small>
-      </section>
-
       <Transition name="overlay-surface" mode="out-in">
         <!-- Contenitore unico persistente (PIP-93): il morphing e' l'animazione
              di resize della finestra; dentro, il contenuto si avvicenda in cross-fade. -->
-        <section v-if="phase !== 'loading'" v-show="!placementActive" key="card" class="overlay-card">
+        <section v-if="phase !== 'loading'" key="card" class="overlay-card">
+          <OverlayPlacementLock overlay-id="training" />
           <Transition name="content-swap" :css="!preparingReopen" :mode="preparingReopen ? undefined : 'out-in'" @after-enter="actionSelection.refresh()">
             <div
               :key="contentKey"

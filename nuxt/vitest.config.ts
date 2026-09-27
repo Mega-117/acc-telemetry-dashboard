@@ -298,6 +298,7 @@ export default defineConfig({
         // ── PIP-175: overlay HUD multipli ────────────────────────────────
         'app/composables/useHudOverlay.ts',
         'app/components/overlay/QuickPanelLayoutToggle.vue',
+        'app/components/overlay/OverlayPlacementLock.vue',
         'app/composables/useOverlayRegionApi.ts',
         'app/services/overlay/surfaceRegionBridge.ts',
         'app/composables/useRaceHudPage.ts',

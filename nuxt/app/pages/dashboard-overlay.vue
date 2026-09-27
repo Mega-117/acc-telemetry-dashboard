@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 import { computed, onMounted, onUnmounted } from 'vue'
@@ -54,6 +55,7 @@ onUnmounted(() => {
 
 <template>
   <main class="overlay-root">
+    <OverlayPlacementLock overlay-id="dashboard" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
     <DashboardHud :model="model" class="overlay-canvas" :style="canvasStyle" />
   </main>

@@ -11,6 +11,8 @@ const EVENTS: Record<string, string> = {
 export function createSurfaceRegionBridge(api: any, id: string) {
   const bridge = { ...api }
   bridge.overlayRegionId = id
+  bridge.hudOverlaySetPlacement = (_overlayId: string, active: boolean) => api.hudOverlaySetPlacement(id, active)
+  bridge.hudOverlayGetPlacement = () => api.hudOverlayGetPlacement(id)
   for (const [method, channel] of Object.entries(EVENTS)) {
     bridge[method] = (callback: (payload: unknown) => void) => api.onOverlaySurfaceEvent((event: any) => {
       if (event.id === id && event.channel === channel) callback(event.payload)

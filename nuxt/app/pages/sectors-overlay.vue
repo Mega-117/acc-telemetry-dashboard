@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // Overlay HUD Settori (PIP-175/PIP-276): Classico e Compatto condividono
 // telemetria, riferimento delta e target runtime. TARGET e' solo un secondo
@@ -250,6 +251,7 @@ onBeforeUnmount(() => {
       'hud-overlay--target': onTargetPage,
     }"
   >
+    <OverlayPlacementLock overlay-id="sectors" />
     <OverlaySoftwareCursor :state="pointerState" />
     <div
       class="hud-overlay__panel"

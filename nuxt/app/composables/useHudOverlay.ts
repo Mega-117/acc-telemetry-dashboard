@@ -178,8 +178,8 @@ export function useHudOverlay(overlayId: string, getApi: () => HudOverlayBridge 
   ): void {
     const declared = HUD_OVERLAY_INTERACTIONS[overlayId]
     interactionContract.start({
-      surfaceSelector: surfaceSelector ?? declared?.surfaceSelector ?? '.hud-overlay__panel',
-      controlSelector: controlSelector ?? declared?.controlSelector ?? '',
+      surfaceSelector: `${surfaceSelector ?? declared?.surfaceSelector ?? '.hud-overlay__panel'}, .overlay-placement-lock`,
+      controlSelector: [controlSelector ?? declared?.controlSelector, '.overlay-placement-lock'].filter(Boolean).join(', '),
     })
   }
 

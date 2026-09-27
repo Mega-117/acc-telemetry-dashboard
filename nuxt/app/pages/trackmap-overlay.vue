@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // PIP-428 — HUD minimappa. La pagina collega soltanto le sorgenti: roster UDP
@@ -109,6 +110,7 @@ onUnmounted(() => {
 
 <template>
   <main class="overlay-root">
+    <OverlayPlacementLock overlay-id="trackmap" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
     <TrackMapHud :view="view" :outline="outline" :rotation-deg="rotationDeg" class="overlay-canvas" :style="canvasStyle" />
   </main>

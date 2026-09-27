@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { usePresentationInterval } from '~/composables/usePresentationVisibility'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
@@ -81,6 +82,7 @@ onUnmounted(() => {
 
 <template>
   <main class="overlay-root">
+    <OverlayPlacementLock overlay-id="info" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
     <div
       ref="canvasElement"
