@@ -66,7 +66,7 @@ export default defineNuxtConfig({
     buildAssetsDir,
 
     // Page transitions
-    pageTransition: { name: 'page-fade', mode: 'default' }, // Crossfade without an empty out-in interval.
+    pageTransition: { name: 'page-fade', mode: 'out-in' }, // Finish leaving before revealing the next view.
 
     // Meta tags e font
     head: {
