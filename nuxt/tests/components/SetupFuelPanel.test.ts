@@ -28,9 +28,9 @@ describe('Fuel from Ctrl+K',()=>{
   const api={trainingOverlayPreviewSetupFuel:vi.fn(async()=>({available:true,sessionType:2,plan:{ok:true,totalLitres:25,contextKey:'session',durationMs:600000,consumption:2.9,referenceLapMs:102000,notes:[]}})),trainingOverlayApplySetupFuel:vi.fn(async()=>({ok:true,reason:'ok'})),trainingOverlayKeyboardEditing:vi.fn(async()=>true)}
   const el=document.createElement('div');document.body.append(el);app=createApp(SetupFuelPanel,{api});app.mount(el);expect(button('fuel-session').disabled).toBe(true);await flush();expect(button('fuel-session').disabled).toBe(false)
  })
- it('shows the reference pace source and class next to the estimate',async()=>{
+ it('keeps litres on Apply without the expanded calculation summary',async()=>{
   await mount(true,2,{referenceLapMs:134827,referenceClass:'GT3',paceSource:'Record LFM gara della classe, anticipato del 5%'})
-  expect(document.body.textContent).toContain('134.8 s · GT3');expect(document.body.textContent).toContain('Record LFM gara della classe')
+  expect(button('fuel-apply').textContent).toContain('25 L');expect(document.body.textContent).not.toContain('Record LFM gara della classe');expect(document.querySelector('details')).toBeNull()
  })
  it('shows total and sends current preview identity with one apply',async()=>{const api=await mount();expect(button('fuel-apply').textContent).toContain('25 L');button('fuel-apply').click();await flush();expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledWith({mode:'minutes',minutes:10,contextKey:'session',totalLitres:25});expect(document.body.textContent).toContain('25 L verificati')})
  it('blocks apply outside safe pit context',async()=>{const api=await mount(false);expect(button('fuel-apply').disabled).toBe(true);button('fuel-apply').click();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled()})
@@ -50,21 +50,21 @@ it('pending application freezes wheel and input until completion',async()=>{
  const api=await mount();let done:any;api.trainingOverlayApplySetupFuel.mockImplementation(()=>new Promise(r=>done=r));button('fuel-apply').click();await flush();expect((document.querySelector('input') as HTMLInputElement).disabled).toBe(true);await scroll(-120);expect((document.querySelector('input') as HTMLInputElement).value).toBe('10');done({ok:true,reason:'Completato'});await flush();expect(document.body.textContent).toContain('Completato')
 })
 it('shows readable blocked state and failed apply inside dedicated status area',async()=>{
- const api=await mount();api.trainingOverlayApplySetupFuel.mockResolvedValue({ok:false,reason:'Apri il menu Pausa'} as any);button('fuel-apply').click();await flush();expect(document.querySelector('[role="status"]')?.textContent).toContain('Apri il menu Pausa');expect(document.body.textContent).toContain('Stint richiesto')
+ const api=await mount();api.trainingOverlayApplySetupFuel.mockResolvedValue({ok:false,reason:'Apri il menu Pausa'} as any);button('fuel-apply').click();await flush();expect(document.querySelector('[role="status"]')?.textContent).toContain('Apri il menu Pausa');expect(button('fuel-apply').textContent).toContain('25 L')
 })
 
 it('failed preview disables a previously available action and explains failure',async()=>{
  const api=await mount();expect(button('fuel-apply').disabled).toBe(false);button('fuel').click();await flush();api.trainingOverlayPreviewSetupFuel.mockRejectedValue(Error('offline'));button('fuel').click();await flush();expect(button('fuel-apply').disabled).toBe(true);expect(document.querySelector('[role="status"]')?.textContent).toContain('Anteprima carburante non disponibile')
 })
 
-it('keeps the summary and expanded details mounted while minutes recalculate, blocking stale apply',async()=>{
- const api=await mount();const total=document.querySelector('.fuel-total');const details=document.querySelector('details')!;details.open=true
+it('keeps Apply mounted while minutes recalculate, blocking stale apply',async()=>{
+ const api=await mount();const total=button('fuel-apply')
  let done:any;api.trainingOverlayPreviewSetupFuel.mockImplementationOnce(()=>new Promise(r=>done=r))
  button('fuel-plus').click();await flush()
- expect(document.querySelector('.fuel-total')).toBe(total);expect(document.querySelector('details')).toBe(details);expect(details.open).toBe(true)
+ expect(button('fuel-apply')).toBe(total)
  expect(button('fuel-apply').disabled).toBe(true);button('fuel-apply').click();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled()
  done({available:true,sessionType:0,plan:{ok:true,totalLitres:28,contextKey:'session',durationMs:660000,consumption:2.9,referenceLapMs:102000,notes:[]}});await flush()
- expect(document.querySelector('.fuel-total')).toBe(total);expect(total?.textContent).toContain('28');expect(button('fuel-apply').disabled).toBe(false)
+ expect(button('fuel-apply')).toBe(total);expect(total.textContent).toContain('28 L');expect(button('fuel-apply').disabled).toBe(false)
  button('fuel-apply').click();await flush();expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledWith({mode:'minutes',minutes:11,contextKey:'session',totalLitres:28})
 })
 it('only the latest rapid duration preview can unlock apply',async()=>{
@@ -72,8 +72,8 @@ it('only the latest rapid duration preview can unlock apply',async()=>{
  api.trainingOverlayPreviewSetupFuel.mockImplementationOnce(()=>new Promise(r=>first=r)).mockImplementationOnce(()=>new Promise(r=>second=r))
  button('fuel-plus').click();await flush();button('fuel-minus').click();await flush()
  const preview=(totalLitres:number)=>({available:true,sessionType:0,plan:{ok:true,totalLitres,contextKey:'session',durationMs:600000,consumption:2.9,referenceLapMs:102000,notes:[]}})
- first(preview(28));await flush();expect(button('fuel-apply').disabled).toBe(true);expect(document.querySelector('.fuel-total')?.textContent).toContain('25')
- second(preview(26));await flush();expect(button('fuel-apply').disabled).toBe(false);expect(document.querySelector('.fuel-total')?.textContent).toContain('26')
+ first(preview(28));await flush();expect(button('fuel-apply').disabled).toBe(true);expect(button('fuel-apply').textContent).toContain('25 L')
+ second(preview(26));await flush();expect(button('fuel-apply').disabled).toBe(false);expect(button('fuel-apply').textContent).toContain('26 L')
 })
 
 it('keeps Apply enabled and wheel selection stable during a slow background refresh', async () => {

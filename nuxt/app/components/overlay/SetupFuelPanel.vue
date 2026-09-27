@@ -122,15 +122,6 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
         <label><input v-model.number="minutes" type="number" min="1" max="180" step="1" aria-label="Minuti stint" :disabled="pending" @wheel="wheelMinutes" @pointerdown="keyboard" @keydown.stop @blur="api?.trainingOverlayKeyboardEditing?.(false)"> min</label>
         <button type="button" data-overlay-wheel-action="fuel-plus" aria-label="Un minuto in più" @click="adjust(1)">+</button>
       </div>
-      <template v-if="plan?.totalLitres">
-        <p class="fuel-total">{{ plan.totalLitres }} <small>L totali</small></p>
-        <p>Stint richiesto: {{ (plan.durationMs / 60000).toFixed(1) }} min</p>
-        <p v-if="plan.nominalAutonomyMs">Autonomia stimata con riserva: {{ (plan.nominalAutonomyMs / 60000).toFixed(1) }} min</p>
-        <p> {{ plan.consumption }} L/giro · riferimento {{ (plan.referenceLapMs / 1000).toFixed(1) }} s<template v-if="plan.referenceClass"> · {{ plan.referenceClass }}</template></p>
-        <p class="fuel-source">{{ plan.paceSource }}</p>
-        <details><summary>Come è calcolato</summary><p>{{ plan.consumptionSource }}. {{ plan.paceSource }}.</p><p v-for="note in plan.notes" :key="note">{{ note }}</p></details>
-      </template>
-
       <button class="fuel-apply" type="button" data-overlay-wheel-action="fuel-apply" :disabled="!state?.available || pending || previewPending" @click="apply">{{ pending ? 'Applicazione…' : `Applica carburante${plan?.ok ? ` · ${plan.totalLitres} L` : ''}` }}</button>
       <div class="fuel-status" role="status" aria-live="polite"><strong>Stato carburante</strong><p>{{ statusMessage }}</p></div>
     </div>
