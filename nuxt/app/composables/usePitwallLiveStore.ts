@@ -61,7 +61,7 @@ function saveSet(key: string, value: Set<string>): void {
 
 export const NOTICE_PREFIX = { request: 'req:', invite: 'inv:', granted: 'grant:' } as const
 
-function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, halt: () => void, standardController: ReturnType<typeof usePitwallController> } {
+function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, halt: () => void, standardController: ReturnType<typeof usePitwallController>, inboxAccount: Ref<string | null>, respondFriendRequest: (personId: string, accept: boolean) => Promise<boolean> } {
   const { currentUser } = useFirebaseAuth()
   const uid = () => currentUser.value?.uid ?? null
   const link = usePitwallRoom({ uid })
@@ -391,6 +391,7 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
   let started = false
   let fullStarted = false
   let accountUid: string | null = null
+  const inboxAccount = ref<string | null>(null)
   function start(full = true): void {
     if (!uid()) return
     if (started && accountUid !== uid()) halt()
@@ -411,9 +412,11 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
       link.start()
       trust.watchLive()
     } else trust.watchInbox()
+    inboxAccount.value = accountUid
   }
   function halt(): void {
     if (!started) return
+    inboxAccount.value = null
     started = false
     if (fullStarted) link.stop()
     fullStarted = false
@@ -428,6 +431,7 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
   }
 
   return {
+    inboxAccount,
     people,
     friends,
     pitwall: pitwallIntent as Ref<PitwallIntentStatus>,
@@ -435,6 +439,13 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
     closePitwall,
     befriend: (personId: string) => { void befriend(personId) },
     unfriend: (personId: string) => { void unfriend(personId) },
+    respondFriendRequest: async (personId, accept) => {
+      const account = uid()
+      const view = await trust.readFriendView(personId)
+      if (!account || uid() !== account) return false
+      if (view?.state !== 'received') return true // Already answered in another view.
+      return accept ? befriend(personId, view) : unfriend(personId, view)
+    },
     races,
     myRoom,
     notices,

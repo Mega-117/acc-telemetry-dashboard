@@ -34,29 +34,35 @@ export function createPitwallFriendActions({ uid, friendViews, trust, link }: Pi
    * chiedo a lui (`X__me`). Se lui aveva gia' autorizzato me, siamo amici
    * adesso; altrimenti la sua parte arriva quando accetta.
    */
-  async function befriend(personId: string): Promise<void> {
-    const before = friendViews.value.find(view => view.personId === personId) ?? null
+  async function befriend(personId: string, before = friendViews.value.find(view => view.personId === personId) ?? null): Promise<boolean> {
+    const account = uid()
+    if (!account) return false
     link.notice.value = null
     const context = { uid: uid() ?? undefined, peerUid: personId }
-    if (!await trust.preAuthorise(personId, 'always', null)) { emitPitwallDiagnostic('friend_failed', context); return }
-    if (!before?.theyAllow && !await trust.requestLink(personId, 'always')) { emitPitwallDiagnostic('friend_failed', context); return }
+    if (!await trust.preAuthorise(personId, 'always', null) || uid() !== account) { emitPitwallDiagnostic('friend_failed', context); return false }
+    if (!before?.theyAllow && !await trust.requestLink(personId, 'always')) { emitPitwallDiagnostic('friend_failed', context); return false }
+    if (uid() !== account) return false
     emitPitwallDiagnostic(before?.theyAllow ? 'friend_accepted' : 'friend_requested', context)
     link.notice.value = before?.theyAllow
       ? null
       : 'Richiesta inviata: quando accetta, siete amici.'
+    return true
   }
 
   /** Revoca il rapporto sociale; chi e' gia' nella stanza rimane. */
-  async function unfriend(personId: string): Promise<void> {
-    const before = friendViews.value.find(view => view.personId === personId)
+  async function unfriend(personId: string, before = friendViews.value.find(view => view.personId === personId)): Promise<boolean> {
+    const account = uid()
+    if (!account) return false
     const actions = pitwallFriendActions(before)
     link.notice.value = null
-    if (actions.revokeMine && !await trust.decide(personId, 'revoked')) return
-    if (actions.withdrawTheirs && !await trust.withdrawRequest(personId)) return
+    if (actions.revokeMine && !await trust.decide(personId, 'revoked')) return false
+    if (uid() !== account) return false
+    if (actions.withdrawTheirs && !await trust.withdrawRequest(personId)) return false
+    if (uid() !== account) return false
     // I servizi parlano di permessi; l'utente ha tolto un amico o una richiesta.
     link.notice.value = before?.state === 'friends' ? 'Non siete più amici.' : 'Richiesta annullata.'
     emitPitwallDiagnostic('friend_revoked', { uid: uid() ?? undefined, peerUid: personId })
-
+    return true
   }
 
   return { befriend, unfriend }

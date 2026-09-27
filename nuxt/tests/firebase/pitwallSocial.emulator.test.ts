@@ -233,12 +233,15 @@ describe('social rooms with real Firebase rules', () => {
     expect((await X.requestLink('Y', 'always')).ok).toBe(true)
     expect((await X.requestLink('Y', 'always')).ok).toBe(true)
     expect(xFriends).toEqual([])
+    expect(await Y.readFriendView('X')).toMatchObject({ state: 'received', mineStatus: 'pending', theirsStatus: 'granted' })
     expect((await Y.preAuthorise('X', 'always')).ok).toBe(true)
     await vi.waitFor(() => { expect(xFriends).toEqual(['Y']); expect(yFriends).toEqual(['X']) })
     const repeated = await Promise.all([X.requestLink('Y', 'always'), Y.requestLink('X', 'always')])
     expect(repeated).toEqual([{ ok: true, alreadyGranted: true }, { ok: true, alreadyGranted: true }])
     expect((await Y.decideRequest('X', 'revoked')).ok).toBe(true)
     await vi.waitFor(() => { expect(xFriends).toEqual([]); expect(yFriends).toEqual([]) })
+    expect((await Y.withdraw('X')).ok).toBe(true)
+    expect(await Y.readFriendView('X')).toBeNull()
     // Both users can ask at the same time after revocation; neither overwrites
     // an already accepted reciprocal grant with a new pending request.
     await Promise.all([X.preAuthorise('Y', 'always'), Y.preAuthorise('X', 'always')])

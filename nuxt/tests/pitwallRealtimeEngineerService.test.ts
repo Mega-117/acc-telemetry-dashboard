@@ -28,18 +28,30 @@ function setup() {
 const grant = (driverUid = 'driver', engineerUid = 'me') => ({ schemaVersion: 1, driverUid, engineerUid, status: 'granted', scope: 'always', createdBy: driverUid, createdAt: '2026-09-06', updatedAt: '2026-09-06' })
 afterEach(() => { vi.useRealTimers(); vi.clearAllMocks() })
 describe('RTDB engineer relationships and event-only discovery', () => {
-  it('keeps only incoming requests in the background, without profile reads or outgoing listeners', async () => {
+  it('keeps only incoming requests in the background and resolves only pending senders', async () => {
     const h = setup(); const changed = vi.fn()
     const stop = h.service.watchIncomingRequests(changed, undefined, true)
     h.emit('grants/me', { friend: grant('me', 'friend'), pending: { ...grant('me', 'pending'), status: 'pending' } })
     await vi.waitFor(() => expect(changed).toHaveBeenCalled())
-    expect(changed.mock.lastCall![0]).toEqual([expect.objectContaining({ engineerUid: 'pending', nickname: null })])
+    expect(changed.mock.lastCall![0]).toEqual([expect.objectContaining({ engineerUid: 'pending', nickname: 'Name pending' })])
     expect(h.io.watch.mock.calls.map(call => call[0])).toEqual(['grants/me'])
-    expect(profile.read).not.toHaveBeenCalled()
+    expect(profile.read).toHaveBeenCalledExactlyOnceWith('pending')
     expect(h.io.read).not.toHaveBeenCalled()
     expect(h.io.write).not.toHaveBeenCalled()
     stop(); h.service.dispose()
     expect([...h.callbacks.values()].every(set => set.size === 0)).toBe(true)
+  })
+  it('reads both sides of one friendship without populating the reduced inbox with unrelated grants', async () => {
+    const h = setup()
+    h.values.set('grants/me/peer', { ...grant('me', 'peer'), status: 'pending' })
+    h.values.set('grants/peer/me', grant('peer', 'me'))
+    expect(await h.service.readFriendView('peer')).toMatchObject({ state: 'received', mineStatus: 'pending', theirsStatus: 'granted', theyAllow: true })
+    expect(h.io.read.mock.calls.map(call => call[0])).toEqual(['grants/me/peer', 'grants/peer/me'])
+    expect(h.io.write).not.toHaveBeenCalled(); expect(h.io.watch).not.toHaveBeenCalled()
+    expect(profile.read).not.toHaveBeenCalled()
+    expect(await h.service.readFriendView('absent')).toBeNull()
+    h.io.read.mockRejectedValueOnce(new Error('offline'))
+    await expect(h.service.readFriendView('peer')).rejects.toThrow('offline')
   })
   it.each(['watchOutgoingLinks', 'watchIncomingRequests'] as const)('does not report empty data before the first RTDB snapshot: %s', async (method) => {
     const h = setup(); const changed = vi.fn()

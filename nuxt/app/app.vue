@@ -13,6 +13,7 @@ import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifec
 import { useClientDiagnostics } from '~/composables/useClientDiagnostics'
 import { usePrimaryCloudOwner } from '~/composables/usePrimaryCloudOwner'
 import { usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
+import { useControlKFriendRequests } from '~/composables/useControlKFriendRequests'
 import { providePitwallStore } from '~/composables/usePitwallStore'
 import { endFirebaseScenario, startFirebaseScenario } from '~/composables/useFirebaseTracker'
 import { useOwnerDataMaintenance } from '~/composables/useOwnerDataMaintenance'
@@ -183,6 +184,7 @@ const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 const pitwallDemand = computed(() => normalizedRoutePath.value === '/pitwall'
   || !!pitwallStore.myRoom.value || !!pitwallStore.pitwall.value.roomId)
 usePitwallDriverPresence({ jobsEnabled: primaryCloudOwner.jobsEnabled, demand: pitwallDemand })
+useControlKFriendRequests(pitwallStore, primaryCloudOwner.jobsEnabled)
 const isProtectedRuntimeRoute = computed(() => (
   isTrainingOverlayIntent.value
   || isHudOverlayRoute.value

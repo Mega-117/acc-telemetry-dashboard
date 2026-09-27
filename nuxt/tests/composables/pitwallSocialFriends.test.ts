@@ -5,17 +5,30 @@ import { createPitwallPresenceWatch } from '~/composables/usePitwallPresenceWatc
 import type { PitwallFriendView } from '~/services/pitwall/pitwallFriends'
 import type { PitwallOutgoingLink } from '~/services/pitwall/pitwallEngineerService'
 
-function setup() {
+function setup(identity = ref<string | null>('A')) {
   const trust = { preAuthorise: vi.fn(async () => true), requestLink: vi.fn(async () => true), decide: vi.fn(async () => true), withdrawRequest: vi.fn(async () => true) }
   const friendViews = ref<PitwallFriendView[]>([])
   const notice = ref<string | null>('old success')
   const revoke = vi.fn()
   const leaveRoom = vi.fn()
-  const actions = createPitwallFriendActions({ uid: () => 'A', friendViews, trust, link: { rooms: ref([]), notice, service: () => ({ revoke, leaveRoom }) } })
+  const actions = createPitwallFriendActions({ uid: () => identity.value, friendViews, trust, link: { rooms: ref([]), notice, service: () => ({ revoke, leaveRoom }) } })
   return { ...actions, trust, friendViews, notice, revoke, leaveRoom }
 }
 
 describe('social friendship actions', () => {
+  it('stops a multi-write accept/reject when the authenticated account changes', async () => {
+    const uid = ref<string | null>('A'); const s = setup(uid)
+    s.trust.preAuthorise.mockImplementationOnce(async () => { uid.value = 'other'; return true })
+    expect(await s.befriend('B')).toBe(false)
+    expect(s.trust.requestLink).not.toHaveBeenCalled()
+    uid.value = 'A'
+    s.friendViews.value = [{ personId: 'B', nickname: 'B', state: 'received', iAllow: false, theyAllow: true, mineStatus: 'pending', theirsStatus: 'granted' }]
+    s.trust.decide.mockImplementationOnce(async () => { uid.value = null; return true })
+    expect(await s.unfriend('B')).toBe(false)
+    expect(s.trust.withdrawRequest).not.toHaveBeenCalled()
+    expect(await s.befriend('B')).toBe(false)
+    expect(await s.unfriend('B')).toBe(false)
+  })
   it('does not request or announce success after failed pre-authorisation', async () => {
     const s = setup(); s.trust.preAuthorise.mockResolvedValue(false)
     await s.befriend('B')

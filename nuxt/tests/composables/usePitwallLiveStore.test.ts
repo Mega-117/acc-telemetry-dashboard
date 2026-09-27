@@ -135,6 +135,7 @@ function makeTrust() {
     setExpiry: vi.fn(async () => {}),
     refreshIncoming: vi.fn(async () => {}),
     refreshPilots: vi.fn(async () => {}),
+    readFriendView: vi.fn(async () => ({ personId: 'peer', nickname: 'Peer', state: 'received', iAllow: false, theyAllow: true, mineStatus: 'pending', theirsStatus: 'granted' })),
     watchLive: vi.fn(),
     watchInbox: vi.fn(),
     stop: vi.fn(),
@@ -177,6 +178,19 @@ afterEach(() => {
 })
 
 describe('la prima lettura non e una notizia', () => {
+  it('answers a reduced-inbox request using both freshly read grant directions', async () => {
+    store.start(false)
+    expect(store.inboxAccount.value).toBe('me')
+    expect(await store.respondFriendRequest('peer', false)).toBe(true)
+    expect(trust.readFriendView).toHaveBeenCalledWith('peer')
+    expect(trust.decide).toHaveBeenCalledWith('peer', 'revoked')
+    expect(trust.withdrawRequest).toHaveBeenCalledWith('peer')
+    expect(await store.respondFriendRequest('peer', true)).toBe(true)
+    expect(trust.requestLink).not.toHaveBeenCalled()
+    trust.readFriendView.mockRejectedValueOnce(new Error('offline'))
+    await expect(store.respondFriendRequest('peer', true)).rejects.toThrow('offline')
+    store.halt(); expect(store.inboxAccount.value).toBeNull()
+  })
   it('switches between the single inbox and full Pitwall without duplicate starts', () => {
     store.start(false); store.start(false)
     expect(trust.watchInbox).toHaveBeenCalledTimes(1)

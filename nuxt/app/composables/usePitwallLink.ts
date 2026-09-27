@@ -420,6 +420,11 @@ export function usePitwallLink(options: PitwallLinkOptions) {
   onScopeDispose(stop)
 
   return {
+    readFriendView: async (personId: string) => {
+      const engineer = service()
+      if (!engineer) throw new Error('Account non disponibile.')
+      return engineer.readFriendView(personId)
+    },
     outgoing,
     pilots,
     pendingOutgoing,

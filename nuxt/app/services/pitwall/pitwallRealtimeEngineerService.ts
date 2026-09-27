@@ -1,7 +1,7 @@
 import type { Firestore } from 'firebase/firestore'
 import { getPitwallRealtime } from '~/config/pitwallRealtime'
 import { createPitwallProfileCache } from './pitwallProfileCache'
-import { friendUidsFromGrants } from './pitwallFriends'
+import { derivePitwallFriends, friendUidsFromGrants } from './pitwallFriends'
 import { createPitwallEngineerService, type PitwallOutgoingLink, type PitwallIncomingRequest } from './pitwallEngineerService'
 import { activeDriver, type RealtimeConnection } from './pitwallRealtimeProtocol'
 import { buildPitwallGrantRequest, buildPitwallPreAuthorisation, isPitwallGrantUsable, PITWALL_GRANT_ONCE_DURATION_MS,
@@ -71,15 +71,23 @@ function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) 
     catch (error) { return failure(error) }
   }
 
-  async function outgoingRows(grants: PitwallGrant[]): Promise<PitwallOutgoingLink[]> {
-    return Promise.all(grants.map(async grant => ({ driverUid: grant.driverUid, nickname: await profiles.read(grant.driverUid),
+  async function outgoingRows(grants: PitwallGrant[], names = true): Promise<PitwallOutgoingLink[]> {
+    return Promise.all(grants.map(async grant => ({ driverUid: grant.driverUid, nickname: names ? await profiles.read(grant.driverUid) : grant.driverUid,
       status: grant.status, scope: grant.scope ?? null, expiresAtMs: grant.expiresAtMs ?? null,
       requestedScope: grant.requestedScope ?? null, usable: valid(grant), session: null, reachable: false })))
   }
-  async function incomingRows(grants: PitwallGrant[]): Promise<PitwallIncomingRequest[]> {
-    return Promise.all(grants.map(async grant => ({ engineerUid: grant.engineerUid, nickname: await profiles.read(grant.engineerUid),
+  async function incomingRows(grants: PitwallGrant[], names = true): Promise<PitwallIncomingRequest[]> {
+    return Promise.all(grants.map(async grant => ({ engineerUid: grant.engineerUid, nickname: names ? await profiles.read(grant.engineerUid) : null,
       status: grant.status, createdAt: grant.createdAt, scope: grant.scope ?? null, expiresAtMs: grant.expiresAtMs ?? null,
       requestedScope: grant.requestedScope ?? null })))
+  }
+  async function readFriendView(personId: string) {
+    const [mine, theirs] = await Promise.all([
+      io.read<PitwallGrant>(path(uid, personId)), io.read<PitwallGrant>(path(personId, uid)),
+    ])
+    // Correctness of a response must not depend on directory/profile availability.
+    const [incoming, outgoing] = await Promise.all([incomingRows(mine ? [mine] : [], false), outgoingRows(theirs ? [theirs] : [], false)])
+    return derivePitwallFriends(incoming, outgoing, io.serverNow()).find(view => view.personId === personId) ?? null
   }
   function watchOutgoingGrants(callback: (grants: PitwallGrant[]) => void, error?: (error: Error) => void) {
     const grants = new Map<string, PitwallGrant>()
@@ -126,11 +134,9 @@ function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) 
     const emit = async () => {
       if (!dataReady || stopped) return
       const token = ++version
-      // Inbox di avvio: un solo listener RTDB, nessuna lettura profilo/presenza.
+      // Inbox: one listener; resolve names only for actionable requests, never the whole roster.
       const rows: PitwallIncomingRequest[] = inboxOnly
-        ? grants.filter(grant => grant.status === 'pending').map(grant => ({ engineerUid: grant.engineerUid,
-          nickname: null, status: grant.status, createdAt: grant.createdAt, scope: grant.scope ?? null,
-          expiresAtMs: grant.expiresAtMs ?? null, requestedScope: grant.requestedScope ?? null }))
+        ? await incomingRows(grants.filter(grant => grant.status === 'pending'))
         : await incomingRows(grants)
       if (!stopped && token === version) callback(rows)
     }
@@ -187,7 +193,7 @@ function buildService(db: Firestore, uid: string, io: PitwallRealtimeTransport) 
   }
   function watchOrder(_driverUid: string, _orderId: string, callback: (order: (PitwallOrderDocument & { result?: unknown, appliedAt?: string }) | null) => void) { callback(null); return () => {} }
   function dispose() { for (const stop of [...ownedStops]) stop(); profiles.stop() }
-  return { requestLink, withdraw, decideRequest, preAuthorise, updateGrantExpiry, listOutgoingLinks, watchOutgoingLinks,
+  return { requestLink, withdraw, decideRequest, preAuthorise, updateGrantExpiry, listOutgoingLinks, watchOutgoingLinks, readFriendView,
     listIncomingRequests, watchIncomingRequests, watchGrantedPilots, listLinkedPilots, watchPilotPresence, readPilotPresence,
     searchUsers, sendOrder, watchOrder, watchTrustedUids, nicknameOf: profiles.read, dispose }
 }

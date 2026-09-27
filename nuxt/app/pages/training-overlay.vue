@@ -42,6 +42,7 @@ import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
 import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import PitwallOverlayButton from '~/components/pitwall/PitwallOverlayButton.vue'
+import ControlKFriendRequests from '~/components/overlay/ControlKFriendRequests.vue'
 import { resolveOverlayKeyboardCommand, type OverlayInputCommand } from '~/services/overlay/overlayInputModel'
 import { resetsOverlayMenuOnHide } from '~/services/overlay/overlayActionNavigation'
 import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
@@ -1050,6 +1051,7 @@ onBeforeUnmount(() => {
                       <span>Pressioni</span>
                     </button>
                     </div>
+                    <ControlKFriendRequests :api="getOverlayApi()" />
                     <button v-if="dryPressureState.qaAvailable" type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Genera raccomandazione TEST</button>
                     <p v-if="dryPressureState.qaAvailable" class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
                     <button v-if="dryPressureState.qaActive" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Rimuovi raccomandazione TEST</button>
