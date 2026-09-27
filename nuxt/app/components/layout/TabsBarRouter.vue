@@ -59,6 +59,7 @@ function onTabClick(tab: { id: string }) {
         v-for="tab in tabs"
         :key="tab.id"
         :to="tab.to"
+        :prefetch-on="{ interaction: true, visibility: false }"
         class="tab"
         :class="{ 'tab--active': isActive(tab.to), 'tab--section-start': tab.id === 'spotter' }"
         @click="onTabClick(tab)"

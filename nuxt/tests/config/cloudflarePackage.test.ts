@@ -28,6 +28,12 @@ describe('Cloudflare static package', () => {
     }
     expect(readFileSync(join(output, '404.html'), 'utf8')).toBe('<html>fallback</html>')
     expect(readFileSync(join(output, '_redirects'), 'utf8')).toBe(`/ ${APP_PATH} 302\n`)
+    const headers = readFileSync(join(output, '_headers'), 'utf8')
+    expect(headers).toContain(`${APP_PATH}images/optimized/*\n  Cache-Control: public, max-age=31536000, immutable`)
+    expect(headers).toContain(`${APP_PATH}assets/*.woff2`)
+    expect(headers).not.toContain(`${APP_PATH}assets/*\n`)
+    expect(headers).not.toContain('.html')
+    expect(headers).not.toContain('.json')
     expect(existsSync(join(output, '.env'))).toBe(false)
   })
   it('refuses to overwrite previous output', () => {

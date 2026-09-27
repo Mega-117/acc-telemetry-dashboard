@@ -31,6 +31,7 @@ watch(presentationVisible, visible => {
 }, { immediate: true })
 
 import { prepareOverviewEntry, decodeOverviewImage, overviewEntryKey, type OverviewEntry } from '~/services/auth/overviewEntryPreparation'
+import { responsiveImage, OVERVIEW_CAR_SIZES } from '~/utils/responsiveImage'
 import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { createAuthRevisionLeaseCoordinator } from '~/services/auth/authRevisionLease'
 import { loadRaceCalendarEvents } from '~/repositories/raceCalendarRepository'
@@ -38,6 +39,7 @@ import { loadRaceCalendarEvents } from '~/repositories/raceCalendarRepository'
 // === NUXT ROUTER ===
 const route = useRoute()
 const router = useRouter()
+const appBaseURL = useRuntimeConfig().app.baseURL
 const getRouteQueryString = (value: unknown): string => {
   if (Array.isArray(value)) return String(value[0] || '')
   return typeof value === 'string' ? value : ''
@@ -379,7 +381,7 @@ const enterDashboard = async () => {
       const entry = prepareOverviewEntry(uid, {
         projection: () => telemetryGateway.getOverviewProjection(uid),
         events: () => loadRaceCalendarEvents(uid, 25),
-        image: projection => decodeOverviewImage(getOverviewCarImage(projection?.lastCar.rawName)),
+        image: projection => decodeOverviewImage(responsiveImage(getOverviewCarImage(projection?.lastCar.rawName), appBaseURL, OVERVIEW_CAR_SIZES)),
         code: warmDashboardCode,
       })
       overviewEntry.value = entry
@@ -620,7 +622,7 @@ provide('goToSettings', handleGoToSettings)
 
       </Transition>
 
-      <DevFirebaseProbe v-if="showDevFirebaseProbe" />
+      <LazyDevFirebaseProbe v-if="showDevFirebaseProbe" />
     </template>
   </div>
 </template>

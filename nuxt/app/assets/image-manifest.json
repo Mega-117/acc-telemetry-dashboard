@@ -1,0 +1,926 @@
+{
+  "/images/cars/aston_martin_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 679754,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/aston_martin_gt3-256-3d68ac092ef6.webp",
+        "bytes": 12792
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/aston_martin_gt3-512-3b12165342e6.webp",
+        "bytes": 35424
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/aston_martin_gt3-1024-58e1f100362f.webp",
+        "bytes": 90238
+      }
+    ]
+  },
+  "/images/cars/audi_r8_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 662985,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/audi_r8_gt3-256-ca76cb0b97ce.webp",
+        "bytes": 11066
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/audi_r8_gt3-512-0fc345e6c087.webp",
+        "bytes": 31254
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/audi_r8_gt3-1024-6ef1e67d5a42.webp",
+        "bytes": 85502
+      }
+    ]
+  },
+  "/images/cars/bentley_continental_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 695171,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/bentley_continental_gt3-256-a4c3ad879b36.webp",
+        "bytes": 14432
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/bentley_continental_gt3-512-9b02e5265f2b.webp",
+        "bytes": 40482
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/bentley_continental_gt3-1024-5cba5f42ef0c.webp",
+        "bytes": 101828
+      }
+    ]
+  },
+  "/images/cars/bmw_m4_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 611882,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/bmw_m4_gt3-256-1bb9b47f680c.webp",
+        "bytes": 9110
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/bmw_m4_gt3-512-44e28049ea27.webp",
+        "bytes": 24592
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/bmw_m4_gt3-1024-0516c47895c2.webp",
+        "bytes": 60706
+      }
+    ]
+  },
+  "/images/cars/default_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 600174,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/default_gt3-256-08e0f6c9e709.webp",
+        "bytes": 8430
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/default_gt3-512-eb2c70eea73d.webp",
+        "bytes": 23158
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/default_gt3-1024-38382ba68dab.webp",
+        "bytes": 59790
+      }
+    ]
+  },
+  "/images/cars/ferrari_296_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 810570,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/ferrari_296_gt3-256-bda6eea88792.webp",
+        "bytes": 13372
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/ferrari_296_gt3-512-d5a9a9173cdf.webp",
+        "bytes": 41242
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/ferrari_296_gt3-1024-f4f561954c6f.webp",
+        "bytes": 127780
+      }
+    ]
+  },
+  "/images/cars/ferrari_488_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 724246,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/ferrari_488_gt3-256-1c5cfb7fa454.webp",
+        "bytes": 16256
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/ferrari_488_gt3-512-bc857a5a5925.webp",
+        "bytes": 45360
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/ferrari_488_gt3-1024-2f29cb631a42.webp",
+        "bytes": 114318
+      }
+    ]
+  },
+  "/images/cars/honda_nsx_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 741875,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/honda_nsx_gt3-256-63c21a1bb986.webp",
+        "bytes": 14322
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/honda_nsx_gt3-512-fc04682a22f4.webp",
+        "bytes": 47266
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/honda_nsx_gt3-1024-dfe6c23cad03.webp",
+        "bytes": 130118
+      }
+    ]
+  },
+  "/images/cars/jaguar_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 686452,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/jaguar_gt3-256-0b86a1a6b9bb.webp",
+        "bytes": 14512
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/jaguar_gt3-512-57f695949f56.webp",
+        "bytes": 38634
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/jaguar_gt3-1024-d58682d98609.webp",
+        "bytes": 93326
+      }
+    ]
+  },
+  "/images/cars/lamborghini_huracan_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 494598,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/lamborghini_huracan_gt3-256-593f0fe729db.webp",
+        "bytes": 9556
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/lamborghini_huracan_gt3-512-1c7089524138.webp",
+        "bytes": 25960
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/lamborghini_huracan_gt3-1024-6c7c122ffc02.webp",
+        "bytes": 62692
+      }
+    ]
+  },
+  "/images/cars/lexus_rcf_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 742897,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/lexus_rcf_gt3-256-e6b752504346.webp",
+        "bytes": 17590
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/lexus_rcf_gt3-512-d83e39419fda.webp",
+        "bytes": 47790
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/lexus_rcf_gt3-1024-b60e6e20552b.webp",
+        "bytes": 124284
+      }
+    ]
+  },
+  "/images/cars/mclaren_720s_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 702551,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/mclaren_720s_gt3-256-39dafc4d914f.webp",
+        "bytes": 11582
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/mclaren_720s_gt3-512-46273aa0e424.webp",
+        "bytes": 34554
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/mclaren_720s_gt3-1024-4e7b8f7a0e7a.webp",
+        "bytes": 96540
+      }
+    ]
+  },
+  "/images/cars/mercedes_amg_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 739042,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/mercedes_amg_gt3-256-f95b21a7a08d.webp",
+        "bytes": 14506
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/mercedes_amg_gt3-512-8983070a9796.webp",
+        "bytes": 42820
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/mercedes_amg_gt3-1024-25a1fceaf05a.webp",
+        "bytes": 111228
+      }
+    ]
+  },
+  "/images/cars/mustang_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 718940,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/mustang_gt3-256-7c45baa09606.webp",
+        "bytes": 12516
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/mustang_gt3-512-29c74fa575d6.webp",
+        "bytes": 39170
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/mustang_gt3-1024-bc5f1d4f2e0e.webp",
+        "bytes": 106698
+      }
+    ]
+  },
+  "/images/cars/nissan_gtr_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 733938,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/nissan_gtr_gt3-256-1c24242c48e1.webp",
+        "bytes": 16476
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/nissan_gtr_gt3-512-93681b2136c9.webp",
+        "bytes": 45280
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/nissan_gtr_gt3-1024-4ae2daee857a.webp",
+        "bytes": 109526
+      }
+    ]
+  },
+  "/images/cars/porsche_911_gt3.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 722862,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/porsche_911_gt3-256-155f9d99c794.webp",
+        "bytes": 13434
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/porsche_911_gt3-512-ec59a8bfcb1f.webp",
+        "bytes": 41140
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/porsche_911_gt3-1024-59a6b7fc0e23.webp",
+        "bytes": 109036
+      }
+    ]
+  },
+  "/tracks/track_barcelona.png": {
+    "width": 1254,
+    "height": 1254,
+    "sourceBytes": 2179562,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_barcelona-256-cb23b143628c.webp",
+        "bytes": 14592
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_barcelona-512-f6f1fba24402.webp",
+        "bytes": 46392
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_barcelona-1024-61223497dc02.webp",
+        "bytes": 140214
+      }
+    ]
+  },
+  "/tracks/track_brands_hatch.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 622175,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_brands_hatch-256-ef243185bc58.webp",
+        "bytes": 7596
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_brands_hatch-512-174465338106.webp",
+        "bytes": 23322
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_brands_hatch-1024-663900e11500.webp",
+        "bytes": 67106
+      }
+    ]
+  },
+  "/tracks/track_cota.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 693744,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_cota-256-4bebe0028d2c.webp",
+        "bytes": 9338
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_cota-512-2d32ef5c7cce.webp",
+        "bytes": 28318
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_cota-1024-1e77e21f84cb.webp",
+        "bytes": 79844
+      }
+    ]
+  },
+  "/tracks/track_donington.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 651659,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_donington-256-d0208416267e.webp",
+        "bytes": 5742
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_donington-512-1d01c18064c8.webp",
+        "bytes": 24364
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_donington-1024-fb7e05ea8802.webp",
+        "bytes": 96852
+      }
+    ]
+  },
+  "/tracks/track_hungaroring.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 751079,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_hungaroring-256-76b050aada07.webp",
+        "bytes": 7402
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_hungaroring-512-5b66bfd39282.webp",
+        "bytes": 22934
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_hungaroring-1024-7106cfefd70b.webp",
+        "bytes": 85962
+      }
+    ]
+  },
+  "/tracks/track_imola.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 659165,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_imola-256-4003ea546ef2.webp",
+        "bytes": 7216
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_imola-512-4f003c18ab64.webp",
+        "bytes": 20586
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_imola-1024-09014debdfb7.webp",
+        "bytes": 59808
+      }
+    ]
+  },
+  "/tracks/track_indianapolis.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 762410,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_indianapolis-256-8b4b4475df7a.webp",
+        "bytes": 11970
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_indianapolis-512-aa96948c46b8.webp",
+        "bytes": 34380
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_indianapolis-1024-e38d91a45b4b.webp",
+        "bytes": 97490
+      }
+    ]
+  },
+  "/tracks/track_kyalami.png": {
+    "width": 1254,
+    "height": 1254,
+    "sourceBytes": 2009255,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_kyalami-256-b8b705d8d64d.webp",
+        "bytes": 13764
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_kyalami-512-448ecfce3f94.webp",
+        "bytes": 41316
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_kyalami-1024-09a1fe9fa7e9.webp",
+        "bytes": 119426
+      }
+    ]
+  },
+  "/tracks/track_laguna_seca.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 640999,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_laguna_seca-256-1bdec9b1915a.webp",
+        "bytes": 7434
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_laguna_seca-512-e96bebe719bd.webp",
+        "bytes": 20744
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_laguna_seca-1024-d6fda7ea0735.webp",
+        "bytes": 57582
+      }
+    ]
+  },
+  "/tracks/track_misano.png": {
+    "width": 1254,
+    "height": 1254,
+    "sourceBytes": 2188623,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_misano-256-edba707684f1.webp",
+        "bytes": 17296
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_misano-512-0bc5432c6e95.webp",
+        "bytes": 55122
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_misano-1024-b7ed4b4055b3.webp",
+        "bytes": 161474
+      }
+    ]
+  },
+  "/tracks/track_monza.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 622663,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_monza-256-de713eec2906.webp",
+        "bytes": 4626
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_monza-512-e1987a822b49.webp",
+        "bytes": 16414
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_monza-1024-d55a9b12837a.webp",
+        "bytes": 65722
+      }
+    ]
+  },
+  "/tracks/track_mount_panorama.png": {
+    "width": 1254,
+    "height": 1254,
+    "sourceBytes": 2364975,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_mount_panorama-256-f6bc18a42783.webp",
+        "bytes": 16428
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_mount_panorama-512-45212c7119d7.webp",
+        "bytes": 56426
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_mount_panorama-1024-169bf8aeac0a.webp",
+        "bytes": 177178
+      }
+    ]
+  },
+  "/tracks/track_nurburgring.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 1539508,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_nurburgring-256-64a290a09fe2.webp",
+        "bytes": 11316
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_nurburgring-512-cd2b5a654d1e.webp",
+        "bytes": 33300
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_nurburgring-1024-25b06bd0739b.webp",
+        "bytes": 93292
+      }
+    ]
+  },
+  "/tracks/track_oulton_park.png": {
+    "width": 1254,
+    "height": 1254,
+    "sourceBytes": 2340567,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_oulton_park-256-49b1a92c35af.webp",
+        "bytes": 18040
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_oulton_park-512-8c73f0588623.webp",
+        "bytes": 59334
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_oulton_park-1024-619c013f7d35.webp",
+        "bytes": 169692
+      }
+    ]
+  },
+  "/tracks/track_paul_ricard.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 845861,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_paul_ricard-256-6975e1397f06.webp",
+        "bytes": 7706
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_paul_ricard-512-eb1ebd182f43.webp",
+        "bytes": 27520
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_paul_ricard-1024-f007b3124055.webp",
+        "bytes": 156144
+      }
+    ]
+  },
+  "/tracks/track_red_bull_ring.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 808841,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_red_bull_ring-256-c116f2cfdedf.webp",
+        "bytes": 10260
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_red_bull_ring-512-1c0f92f87979.webp",
+        "bytes": 31658
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_red_bull_ring-1024-68fc98fbd309.webp",
+        "bytes": 120686
+      }
+    ]
+  },
+  "/tracks/track_silverstone.png": {
+    "width": 1254,
+    "height": 1254,
+    "sourceBytes": 2643459,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_silverstone-256-e8e988ae9745.webp",
+        "bytes": 31320
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_silverstone-512-5abfe513a9e8.webp",
+        "bytes": 97058
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_silverstone-1024-e1cbd8ed5707.webp",
+        "bytes": 352480
+      }
+    ]
+  },
+  "/tracks/track_snetterton.png": {
+    "width": 1254,
+    "height": 1254,
+    "sourceBytes": 2092368,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_snetterton-256-4811c7d1fd37.webp",
+        "bytes": 15134
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_snetterton-512-f6a0bc0b16da.webp",
+        "bytes": 47590
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_snetterton-1024-c8f24e84a4ec.webp",
+        "bytes": 140528
+      }
+    ]
+  },
+  "/tracks/track_spa.png": {
+    "width": 1254,
+    "height": 1254,
+    "sourceBytes": 2128181,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_spa-256-156568ef6fce.webp",
+        "bytes": 15478
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_spa-512-5308445f56dd.webp",
+        "bytes": 48314
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_spa-1024-ed87e34b02b3.webp",
+        "bytes": 142876
+      }
+    ]
+  },
+  "/tracks/track_suzuka.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 684861,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_suzuka-256-ec611cfe857d.webp",
+        "bytes": 9372
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_suzuka-512-a9a5ad4c48d9.webp",
+        "bytes": 26080
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_suzuka-1024-322fb566c900.webp",
+        "bytes": 72262
+      }
+    ]
+  },
+  "/tracks/track_valencia.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 755386,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_valencia-256-d7cee6ce6a8b.webp",
+        "bytes": 10268
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_valencia-512-a625a81652c3.webp",
+        "bytes": 31712
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_valencia-1024-69efe9077e19.webp",
+        "bytes": 100710
+      }
+    ]
+  },
+  "/tracks/track_watkins_glen.png": {
+    "width": 1254,
+    "height": 1254,
+    "sourceBytes": 2045864,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_watkins_glen-256-0374cddee708.webp",
+        "bytes": 16162
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_watkins_glen-512-9e1649f4576d.webp",
+        "bytes": 50098
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_watkins_glen-1024-ffdcc1f88252.webp",
+        "bytes": 140720
+      }
+    ]
+  },
+  "/tracks/track_zandvoort.png": {
+    "width": 1024,
+    "height": 1024,
+    "sourceBytes": 708190,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_zandvoort-256-7fcd1714299e.webp",
+        "bytes": 9558
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_zandvoort-512-f6d596ce7c19.webp",
+        "bytes": 25784
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_zandvoort-1024-9b2e7af9e85c.webp",
+        "bytes": 76986
+      }
+    ]
+  },
+  "/tracks/track_zolder.png": {
+    "width": 1254,
+    "height": 1254,
+    "sourceBytes": 2081785,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/track_zolder-256-f1963de744bc.webp",
+        "bytes": 16328
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/track_zolder-512-07025fe62fb1.webp",
+        "bytes": 51894
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/track_zolder-1024-8fa51a87e8ab.webp",
+        "bytes": 148564
+      }
+    ]
+  },
+  "/images/voices/nicola.png": {
+    "width": 1774,
+    "height": 887,
+    "sourceBytes": 1396235,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/nicola-256-31493644adda.webp",
+        "bytes": 2368
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/nicola-512-735f77361e2c.webp",
+        "bytes": 6740
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/nicola-1024-8d144e503c6b.webp",
+        "bytes": 19586
+      }
+    ]
+  },
+  "/images/voices/sara.png": {
+    "width": 1774,
+    "height": 887,
+    "sourceBytes": 1460498,
+    "variants": [
+      {
+        "width": 256,
+        "src": "/images/optimized/sara-256-f0185a3b21a3.webp",
+        "bytes": 2504
+      },
+      {
+        "width": 512,
+        "src": "/images/optimized/sara-512-dcd517dd325d.webp",
+        "bytes": 6950
+      },
+      {
+        "width": 1024,
+        "src": "/images/optimized/sara-1024-3fb0656f35af.webp",
+        "bytes": 20598
+      }
+    ]
+  }
+}

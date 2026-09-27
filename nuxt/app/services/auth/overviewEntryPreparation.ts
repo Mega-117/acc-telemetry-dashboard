@@ -46,8 +46,14 @@ export function prepareOverviewEntry(uid: string, dependencies: {
   }
 }
 
-export async function decodeOverviewImage(source: string): Promise<void> {
+export async function decodeOverviewImage(source: string | { src: string; srcset?: string; sizes?: string }): Promise<void> {
   const image = new Image()
-  image.src = source
+  if (typeof source === 'string') image.src = source
+  else {
+    // Set responsive selection before src so preparation and the rendered image share one request.
+    if (source.sizes) image.sizes = source.sizes
+    if (source.srcset) image.srcset = source.srcset
+    image.src = source.src
+  }
   await image.decode()
 }

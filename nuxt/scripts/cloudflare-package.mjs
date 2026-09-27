@@ -30,7 +30,7 @@ export function packageCloudflare(source, destination) {
   for (const required of ['index.html', '404.html']) {
     if (!files.includes(required)) throw new Error(`Missing generated ${required}; run npm run generate manually`)
   }
-  if (files.length > 19998) throw new Error('Too many assets for Pages Free')
+  if (files.length > 19997) throw new Error('Too many assets for Pages Free')
   // Resolve the parent to reject output aliases back inside docs.
   const parent = realpathSync(dirname(output))
   const relParent = relative(input, parent)
@@ -43,6 +43,16 @@ export function packageCloudflare(source, destination) {
   }
   copyFileSync(join(input, '404.html'), join(output, '404.html'))
   writeFileSync(join(output, '_redirects'), `/ ${APP_PATH} 302\n`)
+  // Only fingerprinted assets get immutable caching; HTML and mutable manifests must revalidate.
+  writeFileSync(join(output, '_headers'), [
+    ...['js', 'css', 'woff2'].flatMap(extension => [
+      `${APP_PATH}assets/*.${extension}`,
+      '  Cache-Control: public, max-age=31536000, immutable',
+    ]),
+    `${APP_PATH}images/optimized/*`,
+    '  Cache-Control: public, max-age=31536000, immutable',
+    '',
+  ].join('\n'))
   return { files: files.length, appPath: APP_PATH, output }
 }
 

@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { usePilotContext, useTargetUserId } from '~/composables/usePilotContext'
 import { useOverviewProjection } from '~/composables/useOverviewProjection'
+import { OVERVIEW_CAR_SIZES } from '~/utils/responsiveImage'
 import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
 
@@ -98,7 +99,7 @@ function goToSession() {
     <div class="racing-overview" :aria-busy="overviewStatus === 'pending'">
       <section class="last-drive racing-panel" :class="{ 'overview-placeholder': isOverviewPlaceholder }" :inert="isOverviewPlaceholder" aria-label="Ultima sessione e migliori tempi">
         <div class="last-drive__hero">
-          <img :src="lastCarImage" :alt="lastCarName" class="last-drive__image" />
+          <UiResponsiveImage :src="lastCarImage" :alt="lastCarName" :sizes="OVERVIEW_CAR_SIZES" loading="eager" fetchpriority="high" class="last-drive__image" />
           <div class="last-drive__identity">
             <h1>{{ lastTrackName }}</h1>
             <h2>{{ lastCarName }}</h2>

@@ -59,6 +59,8 @@ export default defineConfig({
         'app/components/spotter/SessionModePicker.vue',
         'app/services/auth/overviewEntryPreparation.ts',
         'app/utils/overviewCarImage.ts',
+        'app/utils/responsiveImage.ts',
+        'app/components/ui/ResponsiveImage.vue',
         'app/services/projections/overviewLastSession.ts',
         'app/utils/trackTimesChart.ts',
         'app/components/charts/TrackTimesChart.vue',

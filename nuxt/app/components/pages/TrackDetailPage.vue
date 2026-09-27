@@ -12,13 +12,11 @@ import {
   type CarCategory
 } from '~/utils/telemetryFormat'
 import { usePilotContext } from '~/composables/usePilotContext'
-import { usePublicPath } from '~/composables/usePublicPath'
 import { useHeaderBack } from '~/composables/useHeaderBack'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { RACE_FUEL_BUCKETS } from '~/services/telemetry/raceFuelClassification'
 import type { TrackDetailProjection, TrackFuelBucketReference } from '~/types/trackProjections'
 
-const { getPublicPath } = usePublicPath()
 
 const props = defineProps<{
   trackId: string
@@ -241,7 +239,7 @@ function goToSession(id: string) {
     <!-- Track Header -->
     <div class="track-header">
       <div class="track-header-image">
-        <img :src="getPublicPath(track.image)" :alt="track.name" />
+        <UiResponsiveImage :src="track.image" :alt="track.name" sizes="(max-width: 760px) 88px, 104px" loading="eager" />
       </div>
       <div class="track-header-info">
         <div class="track-title-row">

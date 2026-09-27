@@ -5,7 +5,6 @@ import { spotterVoiceOptions, useSpotterVoiceSettings } from '~/composables/useS
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
 import { resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
 import { presentVoiceRuntimeMessage } from '~/services/spotter/voiceRuntimePresentation'
-import { usePublicPath } from '~/composables/usePublicPath'
 import SessionModePicker from '~/components/spotter/SessionModePicker.vue'
 
 definePageMeta({ layout: 'dashboard' })
@@ -33,7 +32,6 @@ interface TrackVoicePointCatalog {
 }
 
 const { isAdmin } = useFirebaseAuth()
-const { getPublicPath } = usePublicPath()
 const voiceLabRuntime = useVoiceLabRuntime()
 const {
   selectedVoice,
@@ -147,8 +145,9 @@ onMounted(() => {
                 :aria-pressed="selectedVoice === voice.id"
                 @click="selectVoice(voice.id)"
               >
-                <img
-                  :src="getPublicPath(`/images/voices/${voice.id === 'if_sara' ? 'sara' : 'nicola'}.png`)"
+                <UiResponsiveImage
+                  sizes="(max-width: 800px) calc(50vw - 48px), 352px"
+                  :src="`/images/voices/${voice.id === 'if_sara' ? 'sara' : 'nicola'}.png`"
                   alt=""
                 />
                 <span class="voice-name">{{ voice.label }}</span>

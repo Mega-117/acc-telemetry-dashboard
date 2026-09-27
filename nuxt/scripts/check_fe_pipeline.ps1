@@ -216,4 +216,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+& $nodeExe (Join-Path $PSScriptRoot 'check-performance-assets.mjs')
+if ($LASTEXITCODE -ne 0) { exit 1 }
+
 Write-Output "[PIPELINE_CHECK] OK - files checked: $($files.Count)"

@@ -4,6 +4,7 @@
 // Projection-first via telemetry gateway
 // ============================================
 
+import { TRACK_CARD_SIZES } from '~/utils/responsiveImage'
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { usePilotContext } from '~/composables/usePilotContext'
 import { usePublicPath } from '~/composables/usePublicPath'
@@ -65,7 +66,7 @@ function goToTrack(id: string) {
     </p>
     <div class="tracks-grid">
       <a
-        v-for="track in sortedTracks"
+        v-for="(track, index) in sortedTracks"
         :key="track.id"
         :href="getPublicPath(`/piste/${track.id}`)"
         class="track-card"
@@ -75,12 +76,13 @@ function goToTrack(id: string) {
       >
         <div class="track-card__surface">
           <div class="card-image-section">
-            <img
+            <UiResponsiveImage
               v-if="track.image"
-              :src="getPublicPath(track.image)"
+              :src="track.image"
+              :sizes="TRACK_CARD_SIZES"
               :alt="track.name"
               class="card-track-image"
-              loading="lazy"
+              :loading="index < 6 ? 'eager' : 'lazy'"
             />
           </div>
           <div class="card-content">
