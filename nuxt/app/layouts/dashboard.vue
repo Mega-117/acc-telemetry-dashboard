@@ -7,7 +7,8 @@ import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useConfirmedLogout } from '~/composables/useConfirmedLogout'
 import { provideHeaderBack } from '~/composables/useHeaderBack'
 
-const headerBack = provideHeaderBack()
+const router = useRouter()
+const headerBack = provideHeaderBack(() => router.back())
 
 const { userDisplayName, userEmail, logout: firebaseLogout } = useFirebaseAuth()
 const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)

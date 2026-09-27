@@ -2784,7 +2784,21 @@ const gripZones = computed(() => {
               <div class="stint-context-fuel" data-testid="stint-start-fuel"><dt>Carburante iniziale</dt><dd>{{ formatFuelStart(displayedStint?.fuelStart) }}</dd></div>
             </dl>
             <div v-if="selectedStint?.type === 'R' && consistencyStats.total > 0" class="stint-target">
-              <span>Soglia target</span>
+              <div class="stint-target-heading">
+                <span>Soglia target</span>
+                <details class="ssc-theory-meta target-info" :key="`${effectiveStintSource}:${effectiveStintNumber}`">
+                  <summary aria-label="Come si calcola la soglia target" title="Come si calcola la soglia target"><Info :size="18" aria-hidden="true" /></summary>
+                  <div class="reference-popover" role="note">
+                    <strong class="reference-title">Come si calcola il target</strong>
+                    <p>Al best di riferimento, già adattato alla temperatura dello stint, aggiungiamo sei decimi di secondo.</p>
+                    <dl>
+                      <dt>Best di riferimento</dt><dd>{{ formatLapTime(theoreticalTimes.theoRace) }}</dd>
+                      <dt>Margine</dt><dd>+ {{ TARGET_THRESHOLD_S.toFixed(3).replace('.', ',') }} s</dd>
+                      <dt>Soglia target</dt><dd>{{ consistencyStats.targetLine }}</dd>
+                    </dl>
+                  </div>
+                </details>
+              </div>
               <strong>{{ consistencyStats.targetLine }}</strong>
               <small>Oltre questo tempo: fuori target</small>
             </div>
@@ -6767,8 +6781,8 @@ const gripZones = computed(() => {
   .stint-context dd { font-size: 15px; font-weight: 600; margin: 0; font-variant-numeric: tabular-nums; }
   .stint-context-duration dd { font-size: 19px; }
   .stint-target { display: grid; gap: 6px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--rc-line); }
-  .stint-target > span { font-size: 13px; font-weight: 600; }
-  .stint-target strong { font-size: 24px; color: #20d9a0; font-variant-numeric: tabular-nums; }
+  .stint-target-heading { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; }
+  .stint-target > strong { font-size: 24px; color: #20d9a0; font-variant-numeric: tabular-nums; }
   .stint-target small { font-size: 12px; color: #a1a1aa; }
   .stint-item .stint-type { padding: 4px 6px; justify-self: start; border: 1px solid currentColor; line-height: 1.2; font-size: 12px; }
   .stint-item .stint-type--r { background: #ff003c18; color: #ff4569; border-color: #ff003c55; }
@@ -6808,6 +6822,10 @@ const gripZones = computed(() => {
   .reference-popover dl { display: grid; grid-template-columns: 1fr auto; gap: 10px 18px; margin: 0; padding-bottom: 14px; border-bottom: 1px solid var(--rc-line); }
   .reference-popover dt { font-size: 12px; color: #aaaab4; }
   .reference-popover dd { margin: 0; font-size: 13px; color: #fff; font-variant-numeric: tabular-nums; text-align: right; }
+  .target-info summary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  @media(max-width: 550px) {
+    .target-info .reference-popover { right: auto; left: -90px; width: min(360px, calc(100vw - 64px)); box-sizing: border-box; }
+  }
   .stint-columns, .stint-item.stint-item--builder { grid-template-columns: 28px minmax(70px, 1fr) 32px 72px; column-gap: 12px; }
   .stint-columns span:nth-child(3), .stint-laps { text-align: center; }
   .key-valid { color: #10b981; } .key-invalid { color: #ef4444; }
@@ -6847,7 +6865,20 @@ const gripZones = computed(() => {
   .laps-table-wrap { overflow-x: auto; }
   .laps-table th, .laps-table td { text-align: center; vertical-align: middle; }
   .laps-table th:first-child, .laps-table td:first-child { text-align: left; }
-  .laps-table:not(.laps-table--compare) th:first-child { width: 16%; min-width: 120px; }
+  .laps-table:not(.laps-table--compare) th:first-child { width: 11%; min-width: 84px; }
+  .laps-table:not(.laps-table--compare) :is(th, td):nth-child(6) { padding-right: 20px; }
+  .laps-table:not(.laps-table--compare) :is(th, td):nth-child(7) { padding-left: 20px; }
+  .laps-table:not(.laps-table--compare) td:is(:nth-child(5), :nth-child(6)) { position: relative; }
+  .laps-table:not(.laps-table--compare) td:is(:nth-child(5), :nth-child(6))::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.14);
+    pointer-events: none;
+  }
   .laps-table .time { min-width: 112px; }
   .laps-table .delta { min-width: 88px; }
   .laps-table .sector { min-width: 80px; }

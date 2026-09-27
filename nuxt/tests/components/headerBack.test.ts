@@ -5,6 +5,43 @@ import { defineComponent, h, nextTick, ref } from 'vue'
 import { provideHeaderBack, useHeaderBack } from '~/composables/useHeaderBack'
 
 describe('header return action', () => {
+  it('returns through shell history instead of the page hardcoded destination', async () => {
+    const historyBack = vi.fn()
+    const pageBack = vi.fn()
+    const Page = defineComponent({ setup() {
+      useHeaderBack(pageBack, () => 'Torna alle sessioni')
+      return () => null
+    } })
+    const wrapper = mount(defineComponent({ setup() {
+      const back = provideHeaderBack(historyBack)
+      return () => h('div', [back.value && h('button', { onClick: back.value.run }, back.value.label()), h(Page)])
+    } }))
+    await nextTick()
+    await wrapper.get('button').trigger('click')
+    expect(wrapper.get('button').text()).toBe('Indietro')
+    expect(historyBack).toHaveBeenCalledOnce()
+    expect(pageBack).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('preserves same-route view navigation such as returning from a Pitwall room', async () => {
+    const historyBack = vi.fn()
+    const viewBack = vi.fn()
+    const Page = defineComponent({ setup() {
+      useHeaderBack(viewBack, () => 'Torna ai Pitwall', 'view')
+      return () => null
+    } })
+    const wrapper = mount(defineComponent({ setup() {
+      const back = provideHeaderBack(historyBack)
+      return () => h('div', [back.value && h('button', { onClick: back.value.run }, back.value.label()), h(Page)])
+    } }))
+    await nextTick()
+    await wrapper.get('button').trigger('click')
+    expect(viewBack).toHaveBeenCalledOnce()
+    expect(historyBack).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('uses the page callback, updates its label and clears on leaving', async () => {
     const run = vi.fn()
     const visible = ref(true)

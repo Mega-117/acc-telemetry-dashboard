@@ -17,7 +17,7 @@ import {
 } from "~/utils/pitwallConcept";
 
 const emit = defineEmits<{ back: [] }>();
-const hasHeaderBack = useHeaderBack(() => emit("back"), () => "Torna ai Pitwall");
+const hasHeaderBack = useHeaderBack(() => emit("back"), () => "Torna ai Pitwall", 'view');
 
 const state = usePitwallStore();
 const race = computed(() => state.selectedRace.value);

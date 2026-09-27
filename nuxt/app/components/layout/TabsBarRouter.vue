@@ -79,21 +79,21 @@ function onTabClick(tab: { id: string }) {
 
 .tabsbar {
   position: relative;
+  width: 100%;
+  max-width: var(--app-content-max-width, 1400px);
+  margin-inline: auto;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.01);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .tabsbar__back {
-  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  position: absolute; left: 24px; top: 50%; transform: translateY(-50%);
   display: grid; place-items: center; width: 40px; height: 40px;
   border: 1px solid transparent; background: transparent; color: #ccc; cursor: pointer;
   transition: color 150ms, background-color 150ms, border-color 150ms;
   &:hover { color: #fff; background: #ffffff0d; border-color: #ffffff30; }
   &:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-}
-
-@media (max-width: 1000px) {
-  .tabsbar__inner { margin-inline: 56px; overflow-x: auto; justify-content: flex-start; }
 }
 
 .tabsbar__inner {
@@ -104,6 +104,10 @@ function onTabClick(tab: { id: string }) {
   max-width: var(--app-content-max-width);
   margin: 0 auto;
   padding: 0 24px;
+}
+
+@media (max-width: 1000px) {
+  .tabsbar__inner { margin-inline: 72px 16px; overflow-x: auto; justify-content: flex-start; }
 }
 
 .tab {

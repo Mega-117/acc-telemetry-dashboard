@@ -6,16 +6,22 @@ interface HeaderBackAction {
 }
 
 const headerBackKey: InjectionKey<ShallowRef<HeaderBackAction | null>> = Symbol('header-back')
+const historyBackKey: InjectionKey<() => unknown> = Symbol('header-history-back')
 
-export function provideHeaderBack() {
+export function provideHeaderBack(historyBack?: () => unknown) {
   const action = shallowRef<HeaderBackAction | null>(null)
   provide(headerBackKey, action)
+  if (historyBack) provide(historyBackKey, historyBack)
   return action
 }
 
-export function useHeaderBack(run: () => unknown, label: () => string) {
+export function useHeaderBack(run: () => unknown, label: () => string, mode: 'history' | 'view' = 'history') {
   const header = inject(headerBackKey, null)
-  const action: HeaderBackAction = { run, label }
+  const historyBack = inject(historyBackKey, null)
+  // Routed pages return through history; same-route views keep their local exit.
+  const action: HeaderBackAction = mode === 'history' && historyBack
+    ? { run: historyBack, label: () => 'Indietro' }
+    : { run, label }
   onMounted(() => { if (header) header.value = action })
   // A leaving page must not clear the action of the page entering after it.
   onBeforeUnmount(() => { if (header?.value === action) header.value = null })

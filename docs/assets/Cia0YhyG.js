@@ -1,1 +1,0 @@
-import{aW as t,br as c,bq as u,ce as l,bO as s}from"./BCCsJuac.js";const o=Symbol("header-back");function d(){const a=l(null);return s(o,a),a}function f(a,r){const e=t(o,null),n={run:a,label:r};return c(()=>{e&&(e.value=n)}),u(()=>{e?.value===n&&(e.value=null)}),!!e}export{d as p,f as u};
