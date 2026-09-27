@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 bbd0b51453bc15864fb8ee4732620e9a8201f233d2d7ccdf8ff242558e7442ed -->
+<!-- Generated V4 online; SHA256 c6b1f19e6a2af97f89fc142104e6bb03e229c83cf56adc431b60a8ff92cf93d5 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -149,6 +149,11 @@ input[type=checkbox] { width: 15px; height: 15px; accent-color: #21ff83; }
 .legend-item { padding: 10px 0; border-bottom: 1px solid #ffffff18; line-height: 1.55; overflow-wrap: anywhere; }
 .legend-item:last-child { border-bottom: 0; padding-bottom: 0; }
 .legend-item .tag { display: block; margin: 0 0 5px; }
+#strategy-result { flex-basis: 100%; padding: 12px 14px; border-left: 3px solid #16bd91; background: #10241e; color: #e8e8eb; font-size: 14px; }
+#strategy-result[hidden] { display: none; }
+#strategy-result strong, #strategy-result span { display: block; }
+#strategy-result span { margin-top: 5px; line-height: 1.5; }
+#strategy-result[data-problem=true] { border-color: #ff6178; background: #291318; }
 </style></head>
 <body>
 <div class="wrap">
@@ -1342,7 +1347,9 @@ else globalThis.MfdV4Contract = exported;
         driverName: CREW?.drivers?.[S.driverEntryIndex] ? driverLabelV4(CREW.drivers[S.driverEntryIndex]) : '' });
     }
     var checked = MfdV4Contract.validatePlan(p);
-    if (!checked.ok) { log('err', checked.reason); return; }
+    if (!checked.ok) { validationMessage = checked.reason; log('err', checked.reason); showResult('Controlla la strategia', checked.reason, true); return; }
+    validationMessage = '';
+    showResult('Invio in corso', 'Attendo l’esito dal PC del pilota.', false);
     logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
     busy = true; renderForm(); send('submit', checked.plan);
   });
@@ -1375,6 +1382,18 @@ else globalThis.MfdV4Contract = exported;
     else restoreLive();
   });
   bA.parentElement.append(refresh, confirmation);
+  var validationMessage = '';
+  var resultBox = document.createElement('div');
+  resultBox.id = 'strategy-result'; resultBox.hidden = true;
+  resultBox.setAttribute('role', 'status'); resultBox.setAttribute('aria-live', 'polite');
+  bA.parentElement.appendChild(resultBox);
+  function showResult(title, detail, problem) {
+    resultBox.replaceChildren();
+    var heading = document.createElement('strong'); heading.textContent = title;
+    var message = document.createElement('span'); message.textContent = detail || '';
+    resultBox.append(heading, message); resultBox.hidden = false;
+    resultBox.dataset.problem = String(!!problem);
+  }
   var devTools = document.createElement('details'); devTools.className = 'v4-dev-tools'; devTools.hidden = true;
   var devSummary = document.createElement('summary'); devSummary.textContent = 'Sviluppo';
   devTools.append(devSummary, document.getElementById('gap').closest('label'));
@@ -1439,12 +1458,14 @@ else globalThis.MfdV4Contract = exported;
     if (busy) confirmation.hidden = true;
     devTools.hidden = snapshot.development !== true;
     if (!snapshot.development) document.getElementById('gap').value = 60;
-    document.getElementById('connTxt').textContent = snapshot.reason || 'PC del pilota pronto. Valori iniziali dai dati disponibili; completa le scelte mancanti.';
+    document.getElementById('connTxt').textContent = busy ? 'Invio in corso al PC del pilota.' : snapshot.reason || 'PC del pilota pronto. Valori iniziali dai dati disponibili; completa le scelte mancanti.';
     if (busy) {
+      showResult('Invio in corso', 'Attendo l’esito dal PC del pilota.', false);
       logEl.textContent = 'Invio in corso: attendo il nuovo esito dal PC del pilota.';
     } else if (snapshot.outcome) {
       logEl.textContent = snapshot.outcome;
     }
+    if (!busy && snapshot.result && !validationMessage) showResult(snapshot.result.label, snapshot.result.reason, snapshot.result.problem);
     if (redraw) renderForm();
     else { aggiornaSpie(); bA.disabled = busy || !snapshot.ready; etichettaBottone(); }
     if (!grid.children.length) renderSM();

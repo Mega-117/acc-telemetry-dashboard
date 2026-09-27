@@ -2,7 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { canUseDevTools } from '~/utils/devToolsAccess'
-import { boundPitwallStrategy } from '~/services/pitwall/pitwallLink'
+import { boundPitwallStrategy, describePitwallOrderStatus } from '~/services/pitwall/pitwallLink'
 import { usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
 const props = defineProps<{ port?: ReturnType<typeof usePitwallRoom> }>()
 // Public assets share Nuxt's deployment base, including static hosted builds.
@@ -37,6 +37,11 @@ const reason = computed(() => !props.port?.canSend.value ? props.port?.sendReadi
     : !car.value.mfdV4?.ready ? car.value.mfdV4?.reason || 'V4 non disponibile sul PC del pilota.' : null)
 const outcome = computed(() => props.port?.orderMethod.value === 'mfd-v4'
   ? [props.port.orderDiary?.value, props.port.orderReason.value, ...Object.entries(props.port.orderFields.value).map(([key, value]) => `${key}: ${JSON.stringify(value)}`)].filter(Boolean).join('\n') : '')
+const result = computed(() => error.value
+  ? { label: 'Non inviata', reason: error.value, problem: true }
+  : props.port?.orderMethod.value === 'mfd-v4' && props.port.orderStatus.value
+    ? { ...describePitwallOrderStatus(props.port.orderStatus.value), reason: props.port.orderReason.value }
+    : null)
 function publish() {
   if (!frameReady.value) return
   // The room and draft contain nested Vue proxies, which postMessage cannot clone.
@@ -44,7 +49,7 @@ function publish() {
   const snapshot = { channel: 'mfd-v4-online', type: 'snapshot', value: {
     development: development.value, recipientLabel: recipientLabel.value, ready: !reason.value, reason: error.value || reason.value, busy: !!busy.value,
     contextId: car.value?.mfdV4?.contextId, strategy: car.value,
-    crew: props.port?.carSnapshot.value?.crew || [], draft: v4Draft.value, outcome: outcome.value,
+    crew: props.port?.carSnapshot.value?.crew || [], draft: v4Draft.value, outcome: outcome.value, result: result.value,
   } }
   frame.value?.contentWindow?.postMessage(JSON.parse(JSON.stringify(snapshot)), '*')
 }
@@ -73,7 +78,7 @@ async function message(event: MessageEvent) {
   finally { publish() }
 }
 watch(draftKey, () => { frameReady.value = false; frameHeight.value = 1040; error.value = '' }, { flush: 'sync' })
-watch([development, recipientLabel, car, busy, reason, outcome, () => props.port?.carSnapshot.value?.crew], publish, { deep: true })
+watch([development, recipientLabel, car, busy, reason, outcome, result, () => props.port?.carSnapshot.value?.crew], publish, { deep: true })
 onMounted(() => { development.value = canUseDevTools(); window.addEventListener('message', message) })
 onBeforeUnmount(() => window.removeEventListener('message', message))
 </script>
