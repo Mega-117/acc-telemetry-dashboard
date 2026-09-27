@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 583120cfe2d219dbe75a42163fce73ae0fcdc865b57b50f3fe0124a77ccde0d9 -->
+<!-- Generated V4 online; SHA256 eee4ac8b8e64b8805b84a2adc2c9134076d9326d956eaf481ff874e0f6cbfd80 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1298,7 +1298,7 @@ else globalThis.MfdV4Contract = exported;
         ['changeTyre','compound','tyreSet'].some(function(k) { return invalidatedChecks.has(k); }) ||
         tyre?.state !== 'new' || tyre.compound !== 'dry' || tyre.via !== 'screen' || tyre.tyreSet !== S.tyreSet ||
         proof.fields?.tyreSet?.outcome !== 'verified' || proof.fields.tyreSet.observed !== S.tyreSet) return;
-    var cell = formEl.querySelector('tr[data-f="compound"] td:nth-child(2)');
+      var cell = formEl.querySelector('tr[data-f="tyreSet"] td:nth-child(2)');
     if (!cell) return;
     var badge = document.createElement('span'); badge.className = 'new-tyre-badge'; badge.textContent = 'SET NUOVO';
     badge.title = 'Set ' + tyre.tyreSet + ': pallino bianco confermato nel MFD all’ultimo invio';
