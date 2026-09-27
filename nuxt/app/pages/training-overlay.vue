@@ -966,6 +966,7 @@ onBeforeUnmount(() => {
                 <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen" class="launcher-tools" aria-label="Strumenti live overlay">
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
+                    <QuickPanelLayoutToggle v-model="quickPanelLayout" />
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training quick-panel-training"
@@ -979,7 +980,6 @@ onBeforeUnmount(() => {
                     >
                       <Dumbbell :size="18" aria-hidden="true" />
                     </button>
-                    <QuickPanelLayoutToggle v-model="quickPanelLayout" />
                   </header>
                   <div class="launcher-tools__actions">
 

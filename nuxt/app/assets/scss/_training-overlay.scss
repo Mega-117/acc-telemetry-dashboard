@@ -601,10 +601,12 @@
   @keyframes quick-state-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .launcher-tool-button[data-state='pending'] .quick-state-icon { animation: none; } }
   .launcher-tools { gap: 12px; }
-  .launcher-tools__header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .launcher-tools__header .quick-panel-training { width: 34px; height: 34px; min-height: 34px; padding: 0; margin-left: auto; flex: 0 0 auto; display: grid; place-items: center; }
-  .launcher-tools__header .quick-panel-layout { margin-left: 8px; flex: 0 0 auto; position: relative; }
-  .launcher-tools__header .quick-panel-layout::before { content: ""; position: absolute; left: -10px; top: 3px; bottom: 3px; width: 1px; background: #ffffff30; pointer-events: none; }
+  .launcher-tools__header { display: grid; grid-template-columns: 56px minmax(0, 1fr) 34px; align-items: center; gap: 10px; }
+  .launcher-tools__header .quick-panel-training { width: 34px; height: 34px; min-height: 34px; padding: 0; display: grid; place-items: center; }
+  .launcher-tools__header .quick-panel-layout { justify-self: center; opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
+  &:hover .quick-panel-layout,
+  .overlay-pointer-surface-hovered & .quick-panel-layout { opacity: 1; pointer-events: auto; }
+  @media (prefers-reduced-motion: reduce) { .quick-panel-layout { transition: none; } }
   .launcher-tools__header > span { color: #f3f3f3; font-size: 12px; }
   .launcher-tools__header > strong { color: #aaa; font-size: 11px; font-weight: 500; }
   .launcher-tools__actions { gap: 14px; }
