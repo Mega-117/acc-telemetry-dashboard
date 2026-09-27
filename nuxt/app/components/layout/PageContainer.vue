@@ -5,7 +5,7 @@
 </script>
 
 <template>
-  <div class="page-container">
+  <div class="page-container" data-page-scroll>
     <slot />
   </div>
 </template>

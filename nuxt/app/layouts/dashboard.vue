@@ -13,9 +13,8 @@ const headerBack = provideHeaderBack(() => router.back())
 const { userDisplayName, userEmail, logout: firebaseLogout } = useFirebaseAuth()
 const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 const route = useRoute()
-const contentViewport = ref<HTMLElement | null>(null)
-// Route changes reset the inner viewport, not the fixed application chrome.
-watch(() => route.path, () => { if (contentViewport.value) contentViewport.value.scrollTop = 0 }, { flush: 'post' })
+// Each newly mounted page owns its scroll position. Do not reset the outgoing
+// page while an asynchronous destination is still preparing.
 
 // Inject profile navigation from app.vue
 const goToProfile = inject<() => void>('goToProfile')
@@ -73,7 +72,7 @@ const handleGoToSettings = () => {
     </div>
 
     <!-- Page Content with transitions -->
-    <main ref="contentViewport" class="dashboard-viewport" data-page-scroll>
+    <main class="dashboard-viewport">
       <slot></slot>
     </main>
   </div>
