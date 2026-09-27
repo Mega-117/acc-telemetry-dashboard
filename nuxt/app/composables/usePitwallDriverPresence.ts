@@ -48,6 +48,11 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
     await sync()
   }
   function registerControls() { registerPitwallIntentControls({ open, close }) }
+  function publishStatus(value: PitwallDriverStatus) {
+    setPitwallIntentStatus(value)
+    // Ctrl+K reads the main-process cache, not the renderer's local ref.
+    if (options.jobsEnabled.value) void bridgeOf()?.pitwallReportIntentState?.({ ...value, available: true }).catch(() => {})
+  }
   function stop() {
     generation++
     while (stops.length) stops.pop()?.()
@@ -72,7 +77,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
       }
       // The local shortcut must remain available without opening remote listeners.
       registerControls()
-      setPitwallIntentStatus({ state: 'off', roomId: null, reason: null })
+      publishStatus({ state: 'off', roomId: null, reason: null })
       return
     }
     const identity = await bridge.pitwallGetLinkStatus()
@@ -112,7 +117,7 @@ export function usePitwallDriverPresence(options: PitwallDriverPresenceOptions) 
           return { fingerprint: vehicle.fingerprint, label: vehicle.label ?? 'Gara in corso', track: vehicle.trackName ?? state.identity?.track,
             raceNumber: vehicle.raceNumber, teamName: vehicle.teamName, driving: state.driverState === 'driving', crew, strategy: state.car ? { ...state.car, fittedTyreSet: state.identity?.fittedTyreSet ?? null } : null }
         },
-        onStatus: value => { roomId.value = value.roomId; unavailableReason.value = value.reason; setPitwallIntentStatus(value); if (options.jobsEnabled.value) void bridge.pitwallReportIntentState?.({ ...value, available: true }).catch(() => {}) },
+        onStatus: value => { roomId.value = value.roomId; unavailableReason.value = value.reason; publishStatus(value) },
       })
       registerControls()
       active.value = true

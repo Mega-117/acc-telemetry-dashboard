@@ -15,6 +15,8 @@ import { requestPitwallOpen, requestPitwallClose, resetPitwallIntentForTests } f
 
 let scope: ReturnType<typeof effectScope>
 let status: (value: { state: string, roomId: string | null, reason: null }) => void
+let intent: (request: { open: boolean }) => void
+const reportIntent = vi.fn(async (_status: unknown) => {})
 const handle = { stop: vi.fn(), sync: vi.fn(async () => {}), refreshInvites: vi.fn(), unavailableReason: () => null,
   openPitwall: vi.fn(async () => { status({ state: 'open', roomId: 'room', reason: null }) }),
   closePitwall: vi.fn(async () => { status({ state: 'off', roomId: null, reason: null }) }),
@@ -30,13 +32,33 @@ beforeEach(() => {
   Object.assign(window, { electronAPI: {
     localIdentityRole: 'primary', pitwallGetLinkStatus: vi.fn(async () => ({ trustedSender: true, driverUid: 'me' })),
     onPitwallStrategyState: vi.fn(() => vi.fn()), pitwallSetRealtimeConnection: vi.fn(async () => {}),
-    pitwallGetStrategyState: vi.fn(async () => null), onPitwallIntentRequest: vi.fn(() => vi.fn()),
+    pitwallGetStrategyState: vi.fn(async () => null),
+    pitwallReportIntentState: reportIntent,
+    onPitwallIntentRequest: vi.fn(callback => { intent = callback; return vi.fn() }),
   } })
   f.driver.mockImplementation(options => { status = options.onStatus; return handle })
 })
 afterEach(() => { scope.stop(); resetPitwallIntentForTests(); Reflect.deleteProperty(window, 'electronAPI') })
 
 describe('Pitwall presence on demand', () => {
+  it('publishes shortcut availability before page entry and opens/closes through the Electron intent', async () => {
+    const h = start(); await settle()
+    expect(reportIntent).toHaveBeenLastCalledWith({ state: 'off', roomId: null, reason: null, available: true })
+    expect(f.rooms).not.toHaveBeenCalled()
+    expect(f.friends).not.toHaveBeenCalled()
+    expect(f.nickname).not.toHaveBeenCalled()
+    intent({ open: true }); await settle()
+    expect(handle.openPitwall).toHaveBeenCalledTimes(1)
+    expect(reportIntent).toHaveBeenLastCalledWith({ state: 'open', roomId: 'room', reason: null, available: true })
+    intent({ open: false }); await settle()
+    expect(handle.closePitwall).toHaveBeenCalledTimes(1)
+    expect(handle.stop).toHaveBeenCalledTimes(1)
+    expect(h.presence.active.value).toBe(false)
+    expect(h.demand.value).toBe(false)
+    expect(reportIntent).toHaveBeenLastCalledWith({ state: 'off', roomId: null, reason: null, available: true })
+    intent({ open: true }); await settle()
+    expect(handle.openPitwall).toHaveBeenCalledTimes(2)
+  })
   it('does no remote work in background, starts on page entry and stops after leaving without a room', async () => {
     const h = start(); await settle()
     expect(f.rooms).not.toHaveBeenCalled(); expect(f.friends).not.toHaveBeenCalled(); expect(f.nickname).not.toHaveBeenCalled()
