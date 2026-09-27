@@ -108,7 +108,7 @@ describe('App protected runtime route contract', () => {
     )
 
     expect(appSource).toContain('usePrimaryCloudOwner')
-    expect(appSource).toContain('flushEnabled: primaryCloudOwner.jobsEnabled')
+    expect(appSource).toContain('flushEnabled: primaryCloudOwner.reportingEnabled')
     expect(ownerSource).toContain("api?.localIdentityRole === 'primary'")
     expect(ownerSource).toContain('isRuntimeWindowOwner(api)')
     expect(ownerSource).toContain('await waitForOwnerJobsIdle()')

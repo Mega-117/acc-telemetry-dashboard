@@ -41,7 +41,7 @@ assert.match(adminPage, /CONFERMA ESPLICITA RICHIESTA/, 'admin cleanup must requ
 assert.match(adminPage, /cancelCleanup/, 'admin cleanup must support zero-write cancellation')
 assert.match(adminPage, /Continua pulizia/, 'admin cleanup must expose bounded resume progress')
 assert.doesNotMatch(adminPage, /event\.userId|selected\.userId/, 'admin UI must never render diagnostic UID')
-for (const token of ['Oggi', 'Ultimi 7 giorni', 'Ultimi 30 giorni', 'Intervallo personalizzato', 'Precedente', 'Successiva', 'Azzera filtri', 'Riprova']) {
+for (const token of ['Oggi', 'Ricevuti negli ultimi 7 giorni', 'Ricevuti negli ultimi 30 giorni', 'Intervallo personalizzato', 'Precedente', 'Successiva', 'Azzera filtri', 'Riprova']) {
   assert.ok(adminPage.includes(token), 'admin diagnostics UI missing state/control: ' + token)
 }
 assert.match(adminPage, /color-scheme: dark/, 'diagnostic dropdowns must declare a readable dark color scheme')

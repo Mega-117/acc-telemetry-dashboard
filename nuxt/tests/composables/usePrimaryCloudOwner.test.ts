@@ -49,6 +49,27 @@ describe('usePrimaryCloudOwner', () => {
     }
   })
 
+  it('reports degraded health without enabling sync-dependent jobs, stops on auth/offline', async () => {
+    vi.stubGlobal('window', { electronAPI: { localIdentityRole: 'primary', runtimeBootstrapRole: 'owner' } })
+    const canEnterApp = ref(true)
+    mocks.sync.runtimeBootstrapState.value = {
+      phase: 'degraded', capabilities: { remoteHealth: { state: 'allowed' } }, events: []
+    }
+    const scope = effectScope()
+    const owner = scope.run(() => usePrimaryCloudOwner({ currentUser: ref({ uid: 'qa' }), canEnterApp }))!
+    await settle()
+    expect(owner.jobsEnabled.value).toBe(false)
+    expect(owner.reportingEnabled.value).toBe(true)
+    expect(mocks.heartbeat.mock.calls[0][0].enabled.value).toBe(true)
+    mocks.sync.runtimeBootstrapState.value.capabilities.remoteHealth.state = 'pending'
+    expect(owner.reportingEnabled.value).toBe(false)
+    mocks.sync.runtimeBootstrapState.value.capabilities.remoteHealth.state = 'allowed'
+    canEnterApp.value = false
+    expect(owner.reportingEnabled.value).toBe(false)
+    scope.stop()
+    vi.unstubAllGlobals()
+  })
+
   it('avvia una sessione nel primary e drena A prima di avviare B', async () => {
     vi.stubGlobal('window', {
       electronAPI: { localIdentityRole: 'primary', runtimeBootstrapRole: 'owner' }

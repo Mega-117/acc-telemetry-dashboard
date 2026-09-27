@@ -37,6 +37,42 @@ describe('useClientHeartbeat', () => {
     mocks.writeRuntimeReport.mockResolvedValue({ writes: 3, reads: 0 })
   })
 
+  it('persists successful launch receipts and failure backoff across renderer reloads', async () => {
+    const values = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (key: string) => values.get(key) || null, setItem: (key: string, value: string) => values.set(key, value) })
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1000000)
+    const identity = { installationId: 'persistent', createdAt: '2026-01-01', lastSuiteLaunchAt: '2026-09-27T12:00:00Z' }
+    vi.stubGlobal('window', {
+      electronAPI: { getRuntimeIdentity: async () => identity, getSuiteVersion: async () => ({ suite: '0.4.6' }) },
+      setInterval: vi.fn(() => 1), addEventListener: vi.fn(), removeEventListener: vi.fn()
+    })
+    const options = { enabled: ref(false), runtimeState: ref({ phase: 'ready', capabilities: {}, events: [] }) } as any
+    const first = useClientHeartbeat(options)
+    mocks.writeRuntimeReport.mockRejectedValueOnce(new Error('offline'))
+    options.enabled.value = true
+    await settle()
+    await first.waitForIdle()
+    expect(mocks.writeRuntimeReport).toHaveBeenCalledTimes(1)
+    resetForcedHeartbeatsForTest()
+    const reloaded = useClientHeartbeat(options)
+    await settle()
+    await reloaded.waitForIdle()
+    expect(mocks.writeRuntimeReport).toHaveBeenCalledTimes(1)
+    clock.mockReturnValue(1060001)
+    await reloaded.sendHeartbeat()
+    expect(mocks.writeRuntimeReport).toHaveBeenCalledTimes(2)
+    resetForcedHeartbeatsForTest()
+    const acknowledgedReload = useClientHeartbeat(options)
+    await settle()
+    await acknowledgedReload.waitForIdle()
+    expect(mocks.writeRuntimeReport).toHaveBeenCalledTimes(2)
+    identity.lastSuiteLaunchAt = '2026-09-27T13:00:00Z'
+    await acknowledgedReload.sendHeartbeat()
+    expect(mocks.writeRuntimeReport).toHaveBeenCalledTimes(3)
+    clock.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
   it('PIP-439: un solo invio forzato per caricamento, anche se authReady si riaccende', async () => {
     let resolveFirstIdentity!: (value: any) => void
     const firstIdentity = new Promise<any>((resolve) => { resolveFirstIdentity = resolve })
@@ -79,7 +115,7 @@ describe('useClientHeartbeat', () => {
     await settle()
     await vi.waitFor(() => expect(getRuntimeIdentity).toHaveBeenCalledTimes(2))
     await settle()
-    // Il secondo forzato (accodato) segue la regola dei 15 minuti: localStorage dice "appena inviato".
+    // La ricevuta in memoria sopprime il secondo invio accodato dello stesso avvio.
     expect(mocks.writeRuntimeReport).toHaveBeenCalledTimes(1)
 
     enabled.value = false

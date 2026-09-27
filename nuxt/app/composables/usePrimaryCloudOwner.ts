@@ -62,6 +62,14 @@ export function usePrimaryCloudOwner(options: {
       && leases.isCurrent(active)
   }
 
+  // Reporting uses the explicit health capability, not the success of session sync.
+  // Authentication, single ownership and the policy's offline gate still apply.
+  const reportingEnabled = computed(() => {
+    const uid = currentUid.value
+    return !!uid && options.canEnterApp.value && isLeaseCurrent(uid)
+      && sync.runtimeBootstrapState.value.capabilities.remoteHealth?.state === 'allowed'
+  })
+
   function revokeCurrentOwner() {
     readyGeneration.value = null
     leases.revoke()
@@ -71,7 +79,7 @@ export function usePrimaryCloudOwner(options: {
   }
 
   const heartbeat = useClientHeartbeat({
-    enabled: jobsEnabled,
+    enabled: reportingEnabled,
     runtimeState: sync.runtimeBootstrapState,
     isLeaseCurrent
   })
@@ -151,6 +159,7 @@ export function usePrimaryCloudOwner(options: {
 
   return {
     jobsEnabled,
+    reportingEnabled,
     isExactPrimaryOwner,
     isLeaseCurrent,
     registerOwnerDrainer,

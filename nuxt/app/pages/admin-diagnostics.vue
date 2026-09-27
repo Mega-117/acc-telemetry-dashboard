@@ -372,8 +372,8 @@ onMounted(() => resetAndLoad())
         Periodo
         <select v-model="periodPreset">
           <option value="today">Oggi</option>
-          <option value="7d">Ultimi 7 giorni</option>
-          <option value="30d">Ultimi 30 giorni</option>
+          <option value="7d">Ricevuti negli ultimi 7 giorni</option>
+          <option value="30d">Ricevuti negli ultimi 30 giorni</option>
           <option value="custom">Intervallo personalizzato</option>
         </select>
       </label>
@@ -388,7 +388,7 @@ onMounted(() => resetAndLoad())
         </label>
       </template>
       <span class="page-summary">
-        Totale {{ total }}{{ totalIsCapped ? '+' : '' }} · Pagina {{ currentPage }} di {{ totalPages }}
+        Rapporti {{ total }}{{ totalIsCapped ? '+' : '' }} · Pagina {{ currentPage }} di {{ totalPages }}
         <small v-if="totalIsCapped">(conteggio limitato a {{ CLIENT_DIAGNOSTICS_MAX_COUNT }})</small>
       </span>
     </section>
@@ -433,7 +433,7 @@ onMounted(() => resetAndLoad())
           <span>{{ event.message }}</span>
           <small>{{ diagnosticOccurrences(event) }}</small>
           <small>
-            {{ formatItalianDiagnosticDate(event.occurredAt) }} · v{{ event.suiteVersion || '?' }}
+            Evento {{ formatItalianDiagnosticDate(event.occurredAt) }} · Ricevuto {{ formatItalianDiagnosticDate(event.receivedAt) }} · v{{ event.suiteVersion || '?' }}
             · {{ event.channel || 'canale sconosciuto' }}
           </small>
         </span>

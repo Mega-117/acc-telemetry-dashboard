@@ -4,6 +4,34 @@ export const CLIENT_HEARTBEAT_SCHEMA_VERSION = 2
 export const CLIENT_HEARTBEAT_INTERVAL_MS = 60 * 60 * 1000
 export const CLIENT_HEARTBEAT_RECENT_MS = 2 * 60 * 60 * 1000
 
+export interface RuntimeReportReceipt {
+  sentAt: number
+  launch: string | null
+  version: string
+  health: string
+  settled: boolean
+}
+
+export function runtimeReportSignature(payload: ClientHeartbeatPayload): Omit<RuntimeReportReceipt, 'sentAt'> {
+  return {
+    launch: payload.installationRuntime.lastSuiteLaunchAt || null,
+    version: JSON.stringify([payload.suiteVersion, payload.clientRuntime.channel,
+      payload.clientRuntime.updateState, payload.clientRuntime.components]),
+    health: JSON.stringify([payload.installationRuntime.health, payload.installationRuntime.migration]),
+    settled: ['ready', 'degraded'].includes(payload.installationRuntime.health.phase)
+  }
+}
+
+export function isRuntimeReportDue(receipt: RuntimeReportReceipt | null, payload: ClientHeartbeatPayload, now: number): boolean {
+  if (!receipt || !Number.isFinite(receipt.sentAt) || receipt.sentAt > now) return true
+  const signature = runtimeReportSignature(payload)
+  return receipt.launch !== signature.launch || receipt.version !== signature.version
+    || (!receipt.settled && signature.settled)
+    || now - receipt.sentAt >= CLIENT_HEARTBEAT_INTERVAL_MS
+    // Coalesce bootstrap progress; do not emit one cloud report per phase/percentage.
+    || (receipt.health !== signature.health && now - receipt.sentAt >= 60_000)
+}
+
 const MAX_VERSION_LENGTH = 80
 const MAX_REASON_CODE_LENGTH = 80
 

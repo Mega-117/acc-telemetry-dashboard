@@ -51,7 +51,7 @@ describe('AdminCockpitTable', () => {
     expect(html).toContain('Installazione registrata il')
     expect(html).toContain('Ultimo avvio della Suite')
     expect(html).toContain('Ultima apertura Dashboard')
-    expect(html).toContain('Ultima connessione')
+    expect(html).toContain('Ultimo contatto segnalato')
     expect(html).toContain('Mai registrato')
     expect(html).not.toContain('<th scope="col">Avvio</th>')
     expect(html).toContain('Contatto recente')

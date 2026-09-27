@@ -148,6 +148,7 @@ export default defineConfig({
         'app/services/gateway/trackDetailProjectionBuilder.ts',
         'app/services/gateway/overviewProjectionLoadPolicy.ts',
         'app/services/monitoring/clientHeartbeatService.ts',
+        'app/repositories/adminActivityRepository.ts',
         'app/services/monitoring/clientRuntimeReportingService.ts',
         'app/services/monitoring/clientDiagnosticsService.ts',
         'app/services/monitoring/browserDiagnosticStore.ts',

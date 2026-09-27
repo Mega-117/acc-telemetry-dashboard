@@ -3,30 +3,24 @@ import { db } from '~/config/firebase'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { trackedWriteBatch } from '~/composables/useFirebaseTracker'
 import {
-  CLIENT_HEARTBEAT_INTERVAL_MS,
   buildClientHeartbeatPayload,
-  getLatestRuntimeActivityAt,
-  shouldSendClientHeartbeat,
+  isRuntimeReportDue,
+  runtimeReportSignature,
+  type RuntimeReportReceipt,
   type RuntimeInstallationIdentity,
   type SuiteVersionInfo
 } from '~/services/monitoring/clientHeartbeatService'
 import { writeClientRuntimeReport } from '~/services/monitoring/clientRuntimeReportingService'
-import { peekOwnerDocument, rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
+import { loadOwnerDocument, peekOwnerDocument, rememberOwnerDocumentPatch } from '~/repositories/ownerDocumentRepository'
 import type { RuntimeBootstrapResult } from '~/services/runtime/runtimeBootstrapCoordinator'
 import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTracker'
 
 const CALLER = 'ClientHeartbeat'
 const STORAGE_KEY_PREFIX = 'acc_client_heartbeat_'
 
-// PIP-439: l'invio forzato (avvio/login) vale una volta per caricamento pagina e per
-// account+installazione. Dopo un Ctrl+R il bootstrap attraversa piu' fasi e riaccende
-// `enabled` piu' volte: ogni riaccensione successiva segue la cadenza oraria PIP-445.
-const forcedHeartbeatOwners = new Set<string>()
-
-/** Solo test: dimentica gli invii forzati gia' fatti in questo caricamento. */
-export function resetForcedHeartbeatsForTest() {
-  forcedHeartbeatOwners.clear()
-}
+const memoryReceipts = new Map<string, RuntimeReportReceipt>()
+/** Clear memory only: persisted receipts deliberately survive renderer reload. */
+export function resetForcedHeartbeatsForTest() { memoryReceipts.clear() }
 
 type ElectronHeartbeatApi = {
   getSuiteVersion?: () => Promise<SuiteVersionInfo | null>
@@ -39,14 +33,17 @@ function getElectronApi(): ElectronHeartbeatApi | null {
   return ((window as any).electronAPI || null) as ElectronHeartbeatApi | null
 }
 
-function getStoredHeartbeatAt(uid: string): string | null {
-  if (typeof localStorage === 'undefined') return null
-  return localStorage.getItem(`${STORAGE_KEY_PREFIX}${uid}`)
+function readReceipt(owner: string): RuntimeReportReceipt | null {
+  if (memoryReceipts.has(owner)) return memoryReceipts.get(owner)!
+  try {
+    const value = JSON.parse(localStorage.getItem(`${STORAGE_KEY_PREFIX}v2_${owner}`) || 'null')
+    return value && typeof value.version === 'string' && typeof value.health === 'string'
+      && typeof value.sentAt === 'number' ? value : null
+  } catch { return null }
 }
-
-function storeHeartbeatAt(uid: string, heartbeatAt: string) {
-  if (typeof localStorage === 'undefined') return
-  localStorage.setItem(`${STORAGE_KEY_PREFIX}${uid}`, heartbeatAt)
+function saveReceipt(owner: string, receipt: RuntimeReportReceipt) {
+  memoryReceipts.set(owner, receipt)
+  try { localStorage.setItem(`${STORAGE_KEY_PREFIX}v2_${owner}`, JSON.stringify(receipt)) } catch { /* memory fallback */ }
 }
 
 export function useClientHeartbeat(options: {
@@ -60,7 +57,24 @@ export function useClientHeartbeat(options: {
   let isSending = false
   let sendQueued = false
   let sendQueuedForce = false
+  const retryByOwner = new Map<string, { attempts: number; nextAt: number }>()
   const ownerOperations = createOwnerOperationTracker()
+  const isCurrent = (uid: string) => options.enabled.value && canEnterApp.value
+    && currentUser.value?.uid === uid && (!options.isLeaseCurrent || options.isLeaseCurrent(uid))
+  function retryState(owner: string) {
+    if (retryByOwner.has(owner)) return retryByOwner.get(owner)
+    try {
+      const value = JSON.parse(localStorage.getItem(`${STORAGE_KEY_PREFIX}retry_${owner}`) || 'null')
+      if (value && Number.isFinite(value.nextAt) && Number.isFinite(value.attempts)
+        && value.nextAt <= Date.now() + 3_600_000) return value as { attempts: number; nextAt: number }
+    } catch { /* unavailable storage */ }
+    return undefined
+  }
+  function persistRetry(owner: string, value: { attempts: number; nextAt: number } | null) {
+    if (value) retryByOwner.set(owner, value)
+    else retryByOwner.delete(owner)
+    try { localStorage.setItem(`${STORAGE_KEY_PREFIX}retry_${owner}`, JSON.stringify(value)) } catch { /* memory fallback */ }
+  }
 
   async function performHeartbeat(force = false): Promise<boolean> {
     const uid = currentUser.value?.uid
@@ -74,7 +88,7 @@ export function useClientHeartbeat(options: {
     ) {
       return false
     }
-    if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
+    if (!isCurrent(uid)) return false
 
     if (isSending) {
       sendQueued = true
@@ -83,50 +97,43 @@ export function useClientHeartbeat(options: {
     }
 
     isSending = true
+    let failedOwner: string | null = null
     try {
       const identity = await electronAPI.getRuntimeIdentity()
-      if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
+      if (!isCurrent(uid)) return false
       const installationId = identity?.installationId
       if (!installationId || identity?.fallback === true) return false
       const nowMs = Date.now()
       const storageOwner = `${uid}_${installationId}`
-      const lastHeartbeatAt = getStoredHeartbeatAt(storageOwner)
-      const latestRuntimeActivityAt = getLatestRuntimeActivityAt(identity)
-      const forceNow = force && !forcedHeartbeatOwners.has(storageOwner)
-      if (!forceNow && !shouldSendClientHeartbeat(
-        lastHeartbeatAt,
-        nowMs,
-        CLIENT_HEARTBEAT_INTERVAL_MS,
-        latestRuntimeActivityAt
-      )) {
-        return false
-      }
-
+      failedOwner = storageOwner
+      const retry = retryState(storageOwner)
+      if (retry && nowMs < retry.nextAt) return false
       const version = await electronAPI.getSuiteVersion()
-      if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
+      if (!isCurrent(uid)) return false
       const heartbeatAt = new Date(nowMs).toISOString()
       const payload = version ? buildClientHeartbeatPayload(version, heartbeatAt, {
         identity,
         runtimeState: options.runtimeState.value
       }) : null
       if (!payload) return false
+      if (!isRuntimeReportDue(readReceipt(storageOwner), payload, nowMs)) return false
 
+      const mayWriteProfile = options.runtimeState.value.capabilities.cloudWrite?.state === 'allowed'
+      let previousUser = mayWriteProfile ? peekOwnerDocument(uid)?.data : null
+      if (mayWriteProfile && !previousUser) previousUser = (await loadOwnerDocument(uid, { caller: CALLER })).data
+      if (!isCurrent(uid)) return false
       const report = await writeClientRuntimeReport({
         db,
         uid,
         payload,
-        previousUser: peekOwnerDocument(uid)?.data,
+        previousUser,
         writeBatchFn: (firestore) => trackedWriteBatch(
           firestore as Parameters<typeof trackedWriteBatch>[0],
           CALLER
         ),
-        assertCurrent: options.isLeaseCurrent
-          ? () => {
-              if (!options.isLeaseCurrent!(uid)) throw new Error('cloud_owner_lease_stale')
-            }
-          : undefined
+        assertCurrent: () => { if (!isCurrent(uid)) throw new Error('cloud_owner_lease_stale') }
       })
-      if (options.isLeaseCurrent && !options.isLeaseCurrent(uid)) return false
+      if (!isCurrent(uid)) return false
       // PIP-442: stessi campi scritti su `users/{uid}`; la copia condivisa resta allineata
       // senza rileggere (la revisione delle proiezioni non cambia).
       if (report.metadataChanged) rememberOwnerDocumentPatch(uid, {
@@ -135,12 +142,17 @@ export function useClientHeartbeat(options: {
         suiteVersionUpdatedAt: payload.suiteVersionUpdatedAt,
         clientRuntime: payload.clientRuntime
       })
-      storeHeartbeatAt(storageOwner, heartbeatAt)
-      if (forceNow) forcedHeartbeatOwners.add(storageOwner)
-      console.info(`[HEARTBEAT] Client runtime report committed reason=${forceNow ? 'auth_ready' : 'interval'}`)
+      saveReceipt(storageOwner, { ...runtimeReportSignature(payload), sentAt: nowMs })
+      persistRetry(storageOwner, null)
+      console.info('[HEARTBEAT] Runtime report committed')
       return true
     } catch (error: any) {
-      console.warn('[HEARTBEAT] Client heartbeat failed:', error?.message || error)
+      if (failedOwner && (!options.isLeaseCurrent || options.isLeaseCurrent(uid))) {
+        const attempts = (retryState(failedOwner)?.attempts || 0) + 1
+        const delay = [60_000, 300_000, 900_000, 3_600_000][Math.min(attempts - 1, 3)]!
+        persistRetry(failedOwner, { attempts, nextAt: Date.now() + delay })
+      }
+      console.warn('[HEARTBEAT] Client heartbeat failed:' , error?.message || error)
       return false
     } finally {
       isSending = false
@@ -158,7 +170,7 @@ export function useClientHeartbeat(options: {
   }
 
   const stopWatch = watch(
-    [currentUser, canEnterApp, options.enabled],
+    [currentUser, canEnterApp, options.enabled, () => options.runtimeState.value.phase],
     ([user, canEnter, enabled]) => {
       if (user && canEnter && enabled) {
         void sendHeartbeat(true)
@@ -172,7 +184,7 @@ export function useClientHeartbeat(options: {
   }
 
   if (typeof window !== 'undefined') {
-    intervalId = window.setInterval(handleRuntimeActivity, CLIENT_HEARTBEAT_INTERVAL_MS)
+    intervalId = window.setInterval(handleRuntimeActivity, 60_000)
     window.addEventListener('online', handleRuntimeActivity)
     const unsubscribe = getElectronApi()?.onWindowFocused?.(handleRuntimeActivity)
     unsubscribeWindowFocused = typeof unsubscribe === 'function' ? unsubscribe : null

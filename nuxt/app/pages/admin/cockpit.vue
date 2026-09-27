@@ -145,7 +145,7 @@ onMounted(loadSnapshot)
         <select v-model="contactFilter">
           <option value="all">Tutti</option>
           <option value="recent">Recente</option>
-          <option value="stale">Oltre 60 min</option>
+          <option value="stale">Oltre 2 ore</option>
           <option value="unknown">Sconosciuto</option>
           <option value="missing">Nessun report</option>
         </select>

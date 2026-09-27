@@ -21,7 +21,7 @@ export async function writeClientRuntimeReport(params: {
   writeBatchFn: FirestoreWriteBatchFn
   docFn?: FirestoreDocFn
   assertCurrent?: () => void
-  previousUser?: { suiteVersion?: unknown; clientRuntime?: { channel?: unknown; updateState?: unknown } } | null
+  previousUser?: { suiteVersion?: unknown; clientRuntime?: { channel?: unknown; updateState?: unknown; components?: unknown } } | null
 }): Promise<{ writes: number, reads: 0, metadataChanged: boolean }> {
   const {
     db,
@@ -39,6 +39,7 @@ export async function writeClientRuntimeReport(params: {
     previous.suiteVersion !== payload.suiteVersion
     || (previous.clientRuntime?.channel ?? null) !== payload.clientRuntime.channel
     || (previous.clientRuntime?.updateState ?? null) !== payload.clientRuntime.updateState
+    || JSON.stringify(previous.clientRuntime?.components ?? null) !== JSON.stringify(payload.clientRuntime.components)
   )
   const batch = writeBatchFn(db)
 

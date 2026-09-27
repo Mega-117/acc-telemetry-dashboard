@@ -173,7 +173,7 @@ const clientDiagnostics = useClientDiagnostics({
     (isPrimaryClientRuntime.value || isRuntimeBootstrapRoute.value)
     && cloudJobsAllowed.value
   )),
-  flushEnabled: primaryCloudOwner.jobsEnabled,
+  flushEnabled: primaryCloudOwner.reportingEnabled,
   isLeaseCurrent: primaryCloudOwner.isLeaseCurrent
 })
 primaryCloudOwner.registerOwnerDrainer(clientDiagnostics.waitForIdle)

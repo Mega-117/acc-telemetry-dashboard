@@ -33,7 +33,7 @@ function pilotName(row: AdminCockpitRow): string {
 function contactState(value: string | null | undefined) {
   const status = getClientHeartbeatStatus(value)
   if (status === 'recent') return { tone: 'success', label: 'Contatto recente' }
-  if (status === 'stale') return { tone: 'warning', label: 'Contatto oltre 60 min' }
+  if (status === 'stale') return { tone: 'warning', label: 'Contatto oltre 2 ore' }
   return { tone: 'neutral', label: 'Contatto sconosciuto' }
 }
 
@@ -100,7 +100,7 @@ const skeletonRows = Array.from({ length: 6 }, (_, index) => index)
             <th scope="col">Installazione registrata il</th>
             <th scope="col">Ultimo avvio della Suite</th>
             <th scope="col">Ultima apertura Dashboard</th>
-            <th scope="col">Ultima connessione</th>
+            <th scope="col">Ultimo contatto segnalato</th>
             <th scope="col">Update</th>
             <th scope="col">Health e migrazione</th>
             <th scope="col">Errori sintetici</th>

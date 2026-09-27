@@ -3,8 +3,9 @@
 // PilotiPage - paginated pilot directory for coaches and admins
 // ============================================
 
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { endFirebaseScenario, startFirebaseScenario } from '~/composables/useFirebaseTracker'
+import { loadAdminActivityIndexes, summarizeAdminActivity, type ActivityIndex } from '~/repositories/adminActivityRepository'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import {
   PILOT_PAGE_SIZE,
@@ -23,6 +24,23 @@ const { currentUser, isAdmin, userRole } = useFirebaseAuth()
 type Pilot = PilotDirectoryItem
 
 const pilots = ref<Pilot[]>([])
+const activityIndexes = ref(new Map<string, ActivityIndex | null>())
+const activityNow = ref(Date.now())
+let activityClock: ReturnType<typeof setInterval> | null = null
+onMounted(() => { activityClock = setInterval(() => { activityNow.value = Date.now() }, 60_000) })
+onBeforeUnmount(() => { if (activityClock) clearInterval(activityClock) })
+function activityLabel(pilot: Pilot) {
+  if (!isAdmin.value) return pilot.totalSessions == null ? '—' : String(pilot.totalSessions)
+  const activity = summarizeAdminActivity(activityIndexes.value.get(pilot.uid) || null, activityNow.value)
+  return activity.count === null ? '—' : `${activity.count}${activity.partial ? '+' : ''}`
+}
+function activityHint(pilot: Pilot) {
+  if (!isAdmin.value) return 'Conteggio riportato dall’ultima sincronizzazione del pilota'
+  const activity = summarizeAdminActivity(activityIndexes.value.get(pilot.uid) || null, activityNow.value)
+  return activity.count === null ? 'Indice non disponibile: conteggio non verificabile'
+    : `${activity.partial ? 'Conteggio parziale' : 'Sessioni sincronizzate nelle ultime 168 ore'}. Dati aggiornati: ${activity.updatedAt ? formatDate(activity.updatedAt) : 'data non disponibile'}`
+}
+let fetchRevision = 0
 const isLoading = ref(true)
 const searchQuery = ref('')
 const totalItems = ref<number | null>(null)
@@ -37,6 +55,8 @@ const hasNextPage = computed(() => !!nextCursor.value)
 const visibleTotalLabel = computed(() => totalItems.value === null ? pilots.value.length : totalItems.value)
 
 const fetchPilots = async (options: { reset?: boolean; direction?: 'next' | 'prev' } = {}) => {
+  const revision = ++fetchRevision
+  const viewerUid = currentUser.value?.uid
   if (!currentUser.value) {
     isLoading.value = false
     return
@@ -76,13 +96,21 @@ const fetchPilots = async (options: { reset?: boolean; direction?: 'next' | 'pre
       })
     ])
 
+    let indexes = new Map<string, ActivityIndex | null>()
+    if (isAdmin.value && viewerUid) {
+      try { indexes = await loadAdminActivityIndexes(viewerUid, page.pilots.map(pilot => pilot.uid)) }
+      catch (error) { console.warn('[ADMIN] Activity index unavailable', error) }
+    }
+    if (revision !== fetchRevision || currentUser.value?.uid !== viewerUid) return
+    activityIndexes.value = indexes
+    activityNow.value = Date.now()
     pilots.value = page.pilots
     nextCursor.value = page.hasNext ? page.nextCursor : null
     totalItems.value = count
   } catch (e) {
     console.error('Error fetching pilots:', e)
   } finally {
-    isLoading.value = false
+    if (revision === fetchRevision) isLoading.value = false
     endFirebaseScenario(scenarioId)
   }
 }
@@ -117,11 +145,11 @@ function getInitials(pilot: Pilot): string {
 }
 
 function getVersionClass(pilot: Pilot): string {
-  return pilot.clientUpdateState === 'pending' ? 'version-badge--outdated' : 'version-badge--current'
+  return pilot.clientUpdateState === 'pending' ? 'version-badge--outdated' : 'version-badge--reported'
 }
 
 function getFirebaseHealthLabel(status?: string): string {
-  if (status === 'healthy') return 'Firebase OK'
+  if (status === 'healthy') return 'Struttura verificata'
   if (status === 'repairing') return 'Verifica in corso'
   if (status === 'partial') return 'Firebase parziale'
   if (status === 'blocked') return 'Firebase bloccato'
@@ -139,8 +167,9 @@ function getFirebaseHealthClass(status?: string): string {
 }
 
 function formatDate(dateStr?: string): string {
-  if (!dateStr) return 'Mai attivo'
+  if (!dateStr) return 'Nessuna sessione ricevuta'
   const date = new Date(dateStr)
+  if (!Number.isFinite(date.getTime())) return 'Data non disponibile'
   const day = date.getDate()
   const months = ['Gen', 'Feb', 'Mar', 'Apr', 'Mag', 'Giu', 'Lug', 'Ago', 'Set', 'Ott', 'Nov', 'Dic']
   return `${day} ${months[date.getMonth()]} ${date.getFullYear()}`
@@ -183,6 +212,10 @@ watch(searchQuery, () => {
       </div>
     </div>
 
+    <p v-if="isAdmin" class="page-subtitle">
+      Sessioni sincronizzate nelle ultime 168 ore. + indica un conteggio parziale; — indica dati non disponibili.
+    </p>
+
     <!-- Loading State -->
     <div v-if="isLoading" class="state-box">
       Caricamento piloti...
@@ -203,7 +236,7 @@ watch(searchQuery, () => {
         <span class="lh-name">Pilota</span>
         <span class="lh-nickname">Nickname</span>
         <span class="lh-sessions">Sessioni (7gg)</span>
-        <span class="lh-last">Ultima attività</span>
+        <span class="lh-last">Ultima sessione</span>
         <span v-if="isAdmin" class="lh-version">Versione</span>
         <span class="lh-cta"></span>
       </div>
@@ -223,7 +256,7 @@ watch(searchQuery, () => {
           </span>
         </span>
         <span class="lr-nickname">{{ pilot.nickname }}</span>
-        <span class="lr-sessions">{{ pilot.totalSessions || 0 }}</span>
+        <span class="lr-sessions" :title="activityHint(pilot)">{{ activityLabel(pilot) }}</span>
         <span class="lr-last">{{ formatDate(pilot.lastSession) }}</span>
         <span v-if="isAdmin" class="lr-version">
           <span v-if="pilot.suiteVersion" class="version-badge" :class="getVersionClass(pilot)">v{{ pilot.suiteVersion }}</span>
@@ -237,7 +270,7 @@ watch(searchQuery, () => {
             :class="getFirebaseHealthClass(pilot.firebaseHealthStatus)"
             :title="pilot.firebaseHealthCode || 'Controllo struttura Firebase non ancora eseguito'"
           >
-            {{ getFirebaseHealthLabel(pilot.firebaseHealthStatus) }}
+            {{ getFirebaseHealthLabel(pilot.firebaseHealthStatus) }} · {{ pilot.firebaseHealthCheckedAt ? formatDate(pilot.firebaseHealthCheckedAt) : 'data non disponibile' }}
           </small>
         </span>
         <span class="lr-cta">
@@ -549,9 +582,9 @@ watch(searchQuery, () => {
   border-radius: 4px;
   letter-spacing: 0.3px;
 
-  &--current {
-    background: rgba(#22c55e, 0.15);
-    color: #22c55e;
+  &--reported {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.85);
   }
 
   &--outdated {
