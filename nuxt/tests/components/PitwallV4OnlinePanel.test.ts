@@ -36,7 +36,7 @@ it('publishes structured field verification with its original order context', ()
   try {
     const post = vi.spyOn((w.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
     message(w, 'ready', null)
-    expect(post.mock.calls.at(-1)![0].value.verification).toEqual({ orderId: 'order-one', contextId: 'original-context', fields: p.orderFields.value })
+    expect(post.mock.calls.at(-1)![0].value.verification).toEqual({ orderId: 'order-one', contextId: 'original-context', fields: p.orderFields.value, tyreSetCondition: null })
   } finally { w.unmount() }
 })
 it('isolates drafts and ignores the previous iframe when the recipient changes', async () => {

@@ -72,6 +72,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
 
   const orderId = ref<string | null>(null)
   const orderContextId = ref<string | null>(null)
+  const orderTyreSetCondition = ref<unknown>(null)
   const orderMethod = ref('standard')
   const orderDiary = ref('')
   const draftSuspended = ref(false)
@@ -528,6 +529,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       const target = selectedTargetUid.value
       orderId.value = id
       orderContextId.value = null
+      orderTyreSetCondition.value = null
       orderStatus.value = 'pending'
       if (recovered) { orderMethod.value = 'mfd-v4'; orderReason.value = 'Recupero esito in corso…' }
       stopOrderWatch?.()
@@ -554,9 +556,11 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
           reason?: string | null
           diary?: string
           fields?: Record<string, PitwallFieldOutcome>
+          tyreSetCondition?: unknown
         } | undefined
         orderReason.value = result?.reason ?? null
         orderFields.value = result?.fields ?? {}
+        orderTyreSetCondition.value = result?.tyreSetCondition ?? null
         orderDiary.value = typeof result?.diary === 'string' ? result.diary.slice(-6000) : ''
         if (isPitwallOrderSettled(document.status as PitwallOrderStatus)) {
           stopOrderWatch?.()
@@ -709,6 +713,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     nowTick,
     orderId,
     orderContextId,
+    orderTyreSetCondition,
     orderMethod,
     orderDiary,
     draftSuspended,

@@ -2,7 +2,7 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { usePitwallRoom } from '~/composables/usePitwallRoom'
 import { canUseDevTools } from '~/utils/devToolsAccess'
-import { boundPitwallStrategy, describePitwallOrderStatus } from '~/services/pitwall/pitwallLink'
+import { boundPitwallStrategy, boundPitwallTyreCondition, describePitwallOrderStatus } from '~/services/pitwall/pitwallLink'
 import { usePitwallApplicationMethod } from '~/composables/usePitwallApplicationMethod'
 const props = defineProps<{ port?: ReturnType<typeof usePitwallRoom> }>()
 // Public assets share Nuxt's deployment base, including static hosted builds.
@@ -53,6 +53,7 @@ function publish() {
     verification: props.port?.orderMethod.value === 'mfd-v4' ? {
       orderId: props.port.orderId?.value, contextId: props.port.orderContextId?.value,
       fields: props.port.orderFields.value,
+      tyreSetCondition: boundPitwallTyreCondition(props.port.orderTyreSetCondition?.value),
     } : null,
   } }
   frame.value?.contentWindow?.postMessage(JSON.parse(JSON.stringify(snapshot)), '*')

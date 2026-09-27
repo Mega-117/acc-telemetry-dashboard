@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 e86998662d1fa864e94c8c9af8effdf29486ee85644d4e89bf4366b4d11d1b89 -->
+<!-- Generated V4 online; SHA256 583120cfe2d219dbe75a42163fce73ae0fcdc865b57b50f3fe0124a77ccde0d9 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -154,6 +154,7 @@ input[type=checkbox] { width: 15px; height: 15px; accent-color: #21ff83; }
 #strategy-result strong, #strategy-result span { display: block; }
 #strategy-result span { margin-top: 5px; line-height: 1.5; }
 #strategy-result[data-problem=true] { border-color: #ff6178; background: #291318; }
+.new-tyre-badge { display: inline-block; margin: 4px 0 4px 12px; padding: 3px 7px; color: #eafcf5; background: #12392c; border: 1px solid #287b59; font-size: 11px; font-weight: 700; white-space: nowrap; vertical-align: middle; }
 </style></head>
 <body>
 <div class="wrap">
@@ -1150,6 +1151,8 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
         var visual = lastPanel.read || {};
         put('changeTyres', lastPanel.tyreOn, 'visual');
         if (plan.changeTyres && typeof lastPanel.dry === 'boolean') put('compound', lastPanel.dry ? 'dry' : 'wet', 'visual');
+        if (plan.changeTyres && lastPanel.dry && visual.newTyreMarker === true)
+          put('newTyreMarker', true, 'visual');
         put('brakes', visual.brakeCheck, 'visual');
         put('repairBodywork', visual.body, 'visual'); put('repairSuspension', visual.susp, 'visual');
         if (plan.brakes) { put('brakeFront', visual.brakeFront, 'visual'); put('brakeRear', visual.brakeRear, 'visual'); }
@@ -1287,6 +1290,22 @@ else globalThis.MfdV4Contract = exported;
   var visualFields = { changeTyre: 'changeTyres', compound: 'compound', brakes: 'brakes',
     brakeFront: 'brakeFront', brakeRear: 'brakeRear', driverIdx: 'driverId', susp: 'repairSuspension', body: 'repairBodywork' };
   var nativeSpia = spia;
+  function renderTyreBadge() {
+    formEl.querySelector('.new-tyre-badge')?.remove();
+    var proof = snapshot?.verification, tyre = proof?.tyreSetCondition;
+    if (busy || !snapshot?.ready || !proof?.orderId || proof.contextId !== snapshot.contextId ||
+        S.applyPitStrategy || S.changeTyre !== true || S.compound !== 'Dry' ||
+        ['changeTyre','compound','tyreSet'].some(function(k) { return invalidatedChecks.has(k); }) ||
+        tyre?.state !== 'new' || tyre.compound !== 'dry' || tyre.via !== 'screen' || tyre.tyreSet !== S.tyreSet ||
+        proof.fields?.tyreSet?.outcome !== 'verified' || proof.fields.tyreSet.observed !== S.tyreSet) return;
+    var cell = formEl.querySelector('tr[data-f="compound"] td:nth-child(2)');
+    if (!cell) return;
+    var badge = document.createElement('span'); badge.className = 'new-tyre-badge'; badge.textContent = 'SET NUOVO';
+    badge.title = 'Set ' + tyre.tyreSet + ': pallino bianco confermato nel MFD all’ultimo invio';
+    cell.appendChild(badge);
+  }
+  var nativeUpdateChecks = aggiornaSpie;
+  aggiornaSpie = function () { nativeUpdateChecks(); renderTyreBadge(); };
   spia = function (id, tag, m) {
     if (!visualFields[id]) return nativeSpia(id, tag, m);
     var neutral = '<span class="chk na" title="Non verificato o non applicabile" aria-label="Non verificato o non applicabile">—</span>';
@@ -1337,6 +1356,7 @@ else globalThis.MfdV4Contract = exported;
     // The shared driver control reads this button while rendering.
     bA.disabled = busy || !snapshot?.ready;
     nativeRender();
+    renderTyreBadge();
     formEl.querySelectorAll('input[type=checkbox]').forEach(function (input) {
       var key = input.dataset.f;
       input.indeterminate = S[key] == null;

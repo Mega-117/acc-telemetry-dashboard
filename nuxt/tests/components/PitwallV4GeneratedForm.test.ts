@@ -4,6 +4,22 @@ import { afterEach, expect, it, vi } from 'vitest'
 const contextId = 'a'.repeat(64)
 const opened: JSDOM[] = []
 
+it('shows SET NUOVO only for the verified selected dry set and clears on draft edits', () => {
+  const { w, snapshot, edit } = onlineForm()
+  const verification = { orderId: 'new', contextId, fields: { tyreSet: { outcome: 'verified', observed: 3 } },
+    tyreSetCondition: { state: 'new', compound: 'dry', via: 'screen', tyreSet: 3 } }
+  const badge = () => w.document.querySelector('.new-tyre-badge')
+  snapshot({ draft: { changeTyre: true, compound: 'Dry', tyreSet: 3 }, verification })
+  expect(badge()?.textContent).toBe('SET NUOVO')
+  snapshot({ verification: { ...verification, tyreSetCondition: { ...verification.tyreSetCondition, state: 'unknown' } } })
+  expect(badge()).toBeNull()
+  snapshot({ verification }); expect(badge()).not.toBeNull()
+  edit('tyreSet','4'); expect(badge()).toBeNull()
+  edit('tyreSet','3'); snapshot({ verification }); expect(badge()).toBeNull()
+  snapshot({ verification: { ...verification, orderId: 'next' } }); expect(badge()).not.toBeNull()
+  snapshot({ verification, busy: true }); expect(badge()).toBeNull()
+})
+
 it('shows only matching visual outcomes and invalidates edited fields and their dependencies', () => {
   const { w, snapshot } = onlineForm()
   const fields = {
