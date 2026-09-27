@@ -15,6 +15,14 @@ describe('overlayActionNavigation', () => {
   })
   const visibleEnabled = ['training', 'coach', 'target']
 
+  it('moves backward, wraps and recovers missing selection', () => {
+    expect(nextOverlayActionId('coach', visibleEnabled, -1)).toBe('training')
+    expect(nextOverlayActionId('training', visibleEnabled, -1)).toBe('target')
+    expect(nextOverlayActionId('removed', visibleEnabled, -1)).toBe('training')
+    expect(nextOverlayActionId(null, [], -1)).toBeNull()
+    expect(nextOverlayActionId('only', ['only'], -1)).toBe('only')
+  })
+
   it('starts from the first visible enabled action and wraps', () => {
     expect(firstOverlayActionId(visibleEnabled)).toBe('training')
     expect(nextOverlayActionId(null, visibleEnabled)).toBe('training')

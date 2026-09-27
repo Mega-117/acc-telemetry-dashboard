@@ -10,6 +10,7 @@ import {
 const actions: Array<{ id: WheelControlAction; title: string; description: string }> = [
   { id: 'togglePalette', title: 'Apri / chiudi Control K', description: 'Mostra o nasconde il pannello comandi.' },
   { id: 'nextAction', title: 'Voce successiva', description: 'Passa alla voce successiva del pannello.' },
+  { id: 'previousAction', title: 'Voce precedente', description: 'Passa alla voce precedente del pannello.' },
   { id: 'activateAction', title: 'Conferma', description: 'Attiva la voce selezionata.' },
   { id: 'mainMenu', title: 'Menu principale', description: 'Torna al menu allenamenti. Non attivo durante i timer.' },
 ]

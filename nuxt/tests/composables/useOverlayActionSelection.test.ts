@@ -19,6 +19,16 @@ describe('shared overlay selection', () => {
     nav.first()
   })
   afterEach(() => { scope.stop(); root.remove(); vi.restoreAllMocks() })
+  it('previous wraps, skips unavailable actions and does not click', () => {
+    const click = vi.fn()
+    root.addEventListener('click', click)
+    nav.previous(); expect(nav.selectedId.value).toBe('start')
+    nav.previous(); expect(nav.selectedId.value).toBe('back')
+    expect(root.querySelectorAll('[data-overlay-selected]')).toHaveLength(1)
+    expect(click).not.toHaveBeenCalled()
+    enabled = false
+    nav.previous(); expect(nav.selectedId.value).toBeNull()
+  })
   it('cycles in visual order skipping disabled/inert controls and activates only the highlighted action', () => {
     const click = vi.fn()
     root.lastElementChild!.addEventListener('click', click)

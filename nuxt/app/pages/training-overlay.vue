@@ -748,6 +748,7 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   if (command === 'main-menu') { returnToMainMenu(); return }
   if (command === 'primary') executePrimaryAction()
   if (command === 'next-action') selectNextWheelAction()
+  if (command === 'previous-action') actionSelection.previous()
   if (command === 'activate-action') activateSelectedWheelAction()
   if (command === 'reset-action-selection') selectFirstWheelAction()
   if (command === 'back') runBackAction()

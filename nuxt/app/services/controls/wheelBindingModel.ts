@@ -1,4 +1,4 @@
-export const WHEEL_CONTROL_ACTIONS = ['togglePalette', 'nextAction', 'activateAction', 'mainMenu'] as const
+export const WHEEL_CONTROL_ACTIONS = ['togglePalette', 'nextAction', 'previousAction', 'activateAction', 'mainMenu'] as const
 export type WheelControlAction = typeof WHEEL_CONTROL_ACTIONS[number]
 
 export interface WheelBinding {
@@ -42,6 +42,7 @@ export interface WheelControlsState {
 export const EMPTY_WHEEL_BINDINGS: Record<WheelControlAction, null> = {
   togglePalette: null,
   nextAction: null,
+  previousAction: null,
   activateAction: null,
   mainMenu: null,
 }

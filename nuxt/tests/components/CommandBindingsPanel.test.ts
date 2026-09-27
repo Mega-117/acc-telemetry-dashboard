@@ -16,6 +16,18 @@ beforeEach(() => {
 })
 
 describe('CommandBindingsPanel', () => {
+  it('offers previous item with its own assignment and removal', async () => {
+    const wrapper = mount(CommandBindingsPanel)
+    const row = wrapper.findAll('.command-row').find(row => row.text().includes('Voce precedente'))!
+    expect(row.exists()).toBe(true)
+    await row.findAll('button').find(button => button.text() === 'Assegna')!.trigger('click')
+    expect(mock.bridge.beginCapture).toHaveBeenCalledWith('previousAction', '')
+    mock.bridge.state.value.bindings.previousAction = { deviceId: 'Wheel', deviceLabel: 'Wheel', button: 4 }
+    await wrapper.vm.$nextTick()
+    await row.findAll('button').find(button => button.text() === 'Rimuovi')!.trigger('click')
+    expect(mock.bridge.clearBinding).toHaveBeenCalledWith('previousAction')
+    wrapper.unmount()
+  })
   it('keeps keyboard assign enabled when controller failed and retries only that source', async () => {
     Object.assign(mock.bridge.state.value, { inputBackend: 'native', inputStatus: 'ready', devices: [], sources: { keyboard: { status: 'ready', reason: null }, controller: { status: 'unavailable', reason: 'spawn_failed' } } })
     mock.bridge.retrySource = vi.fn()

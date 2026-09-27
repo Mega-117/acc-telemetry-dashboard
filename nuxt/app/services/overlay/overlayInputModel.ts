@@ -9,6 +9,7 @@ export type OverlayInputCommand =
   | 'mute'
   | 'stop'
   | 'next-action'
+  | 'previous-action'
   | 'activate-action'
   | 'reset-action-selection'
   | 'prepare-reopen'

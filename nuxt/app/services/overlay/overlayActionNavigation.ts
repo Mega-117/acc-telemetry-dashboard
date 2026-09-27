@@ -11,11 +11,11 @@ export function firstOverlayActionId(availableIds: string[]): string | null {
   return availableIds[0] ?? null
 }
 
-export function nextOverlayActionId(currentId: string | null, availableIds: string[]): string | null {
+export function nextOverlayActionId(currentId: string | null, availableIds: string[], direction: 1 | -1 = 1): string | null {
   if (availableIds.length === 0) return null
   const currentIndex = currentId ? availableIds.indexOf(currentId) : -1
   if (currentIndex < 0) return availableIds[0] ?? null
-  return availableIds[(currentIndex + 1) % availableIds.length] ?? null
+  return availableIds[(currentIndex + direction + availableIds.length) % availableIds.length] ?? null
 }
 
 export function resolveOverlayActivation(

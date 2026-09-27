@@ -33,9 +33,10 @@ export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled
     if (focus) available().find(button => button.dataset.overlayWheelAction === id)?.focus({ preventScroll: true })
   }
   function first() { select(available()[0]?.dataset.overlayWheelAction || null) }
-  function next() {
-    select(nextOverlayActionId(selectedId.value, available().map(button => button.dataset.overlayWheelAction!)), true)
+  function next(direction: 1 | -1 = 1) {
+    select(nextOverlayActionId(selectedId.value, available().map(button => button.dataset.overlayWheelAction!), direction), true)
   }
+  function previous() { next(-1) }
   function activate() {
     const buttons = available()
     const decision = resolveOverlayActivation(selectedId.value, buttons.map(button => button.dataset.overlayWheelAction!))
@@ -82,5 +83,5 @@ export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled
   }, { flush: 'post', immediate: true })
   onScopeDispose(() => observer?.disconnect())
   watch(selectedId, paint, { flush: 'post' })
-  return { selectedId, available, select, first, next, activate, refresh, pointerMove, syntheticPointer, resetPointer, focus: fromTarget }
+  return { selectedId, available, select, first, next, previous, activate, refresh, pointerMove, syntheticPointer, resetPointer, focus: fromTarget }
 }
