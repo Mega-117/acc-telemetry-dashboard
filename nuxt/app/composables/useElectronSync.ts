@@ -36,7 +36,6 @@ import {
     type SyncMutationJournal
 } from '~/services/sync/syncMutationJournal'
 import { refreshSyncProjections, type ProjectionWrite } from '~/services/sync/syncProjectionRefreshService'
-import { loadOwnerSessions } from '~/services/sync/ownerDataRepairService'
 import type { UserProjectionDelta } from '~/services/sync/syncUserProjectionDeltaService'
 import { resolveSyncTriggerAction, type SyncTrigger } from '~/services/sync/syncTriggerPolicy'
 import { createOwnerOperationTracker } from '~/services/sync/ownerOperationTracker'
@@ -617,7 +616,7 @@ export function useElectronSync() {
                 db,
                 uid,
                 changedCount,
-                loadFullHistory: loadOwnerSessions,
+                loadFullHistory: async (owner) => (await import('~/services/sync/ownerDataRepairService')).loadOwnerSessions(owner),
                 clearTrackDerivedCaches,
                 resetAllTrackBests,
                 getDocFn: getDoc,
@@ -692,7 +691,7 @@ export function useElectronSync() {
                             db,
                             uid,
                             changedCount: partial.cloudChangedCount,
-                            loadFullHistory: loadOwnerSessions,
+                            loadFullHistory: async (owner) => (await import('~/services/sync/ownerDataRepairService')).loadOwnerSessions(owner),
                             clearTrackDerivedCaches,
                             resetAllTrackBests,
                             getDocFn: getDoc,

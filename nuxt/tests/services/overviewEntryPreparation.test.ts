@@ -9,7 +9,7 @@ const deferred = <T>() => {
   return { promise, resolve }
 }
 
-it('prepares data, calendar, code and decoded image once before revealing', async () => {
+it('prepares primary content and shares each request once', async () => {
   vi.useFakeTimers()
   const image = deferred<void>()
   const data = { lastCar: { rawName: 'ferrari_296' } } as any
@@ -69,4 +69,29 @@ it('decodes the selected image and keeps car aliases and default fallback', asyn
   expect(getOverviewCarImage('AMR V8')).toContain('aston_martin_gt3.png')
   expect(getOverviewCarImage(null)).toContain('default_gt3.png')
   expect(getOverviewCarImage('unknown')).toContain('default_gt3.png')
+})
+
+
+it('reveals primary content while the calendar is still pending and reuses its late result', async () => {
+  const events = deferred<any[]>()
+  const loadEvents = vi.fn(() => events.promise)
+  const entry = prepareOverviewEntry('A', { projection: async () => null, events: loadEvents, image: async () => {}, code: async () => {} })
+  await entry.ready
+  expect(loadEvents).toHaveBeenCalledOnce()
+  expect(entry.takeEvents('B')).toBeUndefined()
+  const cardRequest = entry.takeEvents('A')
+  const rows = [{ id: 'race' }]
+  events.resolve(rows)
+  expect(await cardRequest).toBe(rows)
+  expect(entry.takeEvents('A')).toBeUndefined()
+})
+
+it('observes a late calendar failure without blocking entry or hiding the error from the card', async () => {
+  let reject!: (error: Error) => void
+  const events = new Promise<any[]>((_, fail) => { reject = fail })
+  const entry = prepareOverviewEntry('A', { projection: async () => null, events: () => events, image: async () => {}, code: async () => {} })
+  await entry.ready
+  const failure = new Error('calendar offline')
+  reject(failure)
+  await expect(entry.takeEvents('A')).rejects.toBe(failure)
 })

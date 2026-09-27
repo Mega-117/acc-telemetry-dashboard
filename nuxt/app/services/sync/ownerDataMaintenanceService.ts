@@ -10,12 +10,6 @@ import { clearOwnerDocumentCache, loadOwnerDocument } from '~/repositories/owner
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import {
-  auditOwnerData,
-  migrateOwnerTrackProjections,
-  rebuildOwnerProjections,
-  rebuildOwnerSessionListProjection,
-  reprocessOwnerCloudRawSummaries,
-  verifyOwnerMigrationLightweight,
   type OwnerCloudSummaryReprocessReport,
   type OwnerDataAuditReport,
   type OwnerProjectionRebuildReport,
@@ -649,6 +643,10 @@ export async function runOwnerDataMaintenanceGate(
       },
       assertActive
     })
+
+    // Healthy owners skip above without downloading repair/reprocessing code.
+    const { auditOwnerData, migrateOwnerTrackProjections, rebuildOwnerProjections, rebuildOwnerSessionListProjection, reprocessOwnerCloudRawSummaries, verifyOwnerMigrationLightweight } = await import('./ownerDataRepairService')
+    assertActive?.()
 
     let lightweightVerificationFailed = false
     let lightweightIssues: string[] = []

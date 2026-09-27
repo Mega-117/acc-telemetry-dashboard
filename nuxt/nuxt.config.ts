@@ -66,7 +66,7 @@ export default defineNuxtConfig({
     buildAssetsDir,
 
     // Page transitions
-    pageTransition: false, // Route content and active tab change together, without an exit-animation wait.
+    pageTransition: { name: 'page-fade', mode: 'default' }, // Crossfade without an empty out-in interval.
 
     // Meta tags e font
     head: {

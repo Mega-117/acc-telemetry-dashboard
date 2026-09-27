@@ -22,8 +22,11 @@ export function prepareOverviewEntry(uid: string, dependencies: {
 }, timeoutMs = 2500): OverviewEntry {
   const projection = Promise.resolve().then(dependencies.projection)
   const events = Promise.resolve().then(dependencies.events)
+  // Keep the shared calendar request, but never gate the primary content on it.
+  // Observe rejection immediately; the original promise still lets the card retry.
+  void events.catch(() => {})
   const work = Promise.allSettled([
-    projection.then(dependencies.image), events, Promise.resolve().then(dependencies.code),
+    projection.then(dependencies.image), Promise.resolve().then(dependencies.code),
   ])
   const ready = new Promise<void>(resolve => {
     const timer = setTimeout(resolve, timeoutMs)

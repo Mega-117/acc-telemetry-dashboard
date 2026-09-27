@@ -872,62 +872,6 @@ body:has(.sessions-page),
   .shell-motion-enter-from, .shell-motion-leave-to { transform: none !important; }
 }
 
-// === 2. WARP SPEED ===
-.dissolve-warp-enter-active,
-.dissolve-warp-leave-active {
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.dissolve-warp-enter-from {
-  opacity: 0;
-  transform: scaleX(0.8) translateY(20px);
-}
-
-.dissolve-warp-leave-to {
-  opacity: 0;
-  transform: scaleX(1.5) scaleY(0.5);
-  filter: blur(12px);
-}
-
-// === 3. PARTICLES (simulated with blur + scale) ===
-.dissolve-particles-enter-active {
-  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.dissolve-particles-leave-active {
-  transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.dissolve-particles-enter-from {
-  opacity: 0;
-  transform: scale(0.8);
-  filter: blur(20px);
-}
-
-.dissolve-particles-leave-to {
-  opacity: 0;
-  transform: scale(1.3);
-  filter: blur(30px) brightness(2);
-}
-
-// === 4. SLIDE UP ===
-.dissolve-slide-up-enter-active,
-.dissolve-slide-up-leave-active {
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.dissolve-slide-up-enter-from {
-  opacity: 0;
-  transform: translateY(40px);
-}
-
-.dissolve-slide-up-leave-to {
-  opacity: 0;
-  transform: translateY(-60px);
-  filter: blur(4px);
-}
-
-
 // Responsive
 @media (max-width: 768px) {
   .auth-card-standalone {

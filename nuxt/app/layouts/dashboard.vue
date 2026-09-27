@@ -100,6 +100,7 @@ const handleGoToSettings = () => {
 }
 
 .dashboard-viewport {
+  position: relative; // Anchor the outgoing page during the crossfade.
   flex: 1;
   width: 100%; min-height: 0; box-sizing: border-box;
   overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain;

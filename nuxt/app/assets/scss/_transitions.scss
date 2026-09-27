@@ -18,6 +18,13 @@
     transform: translateY(-10px);
 }
 
+.page-fade-leave-active {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    pointer-events: none;
+}
+
 // Profile route transition: focused card-like entrance/exit.
 .profile-zoom-enter-active,
 .profile-zoom-leave-active {
