@@ -1,1 +1,0 @@
-import{ag as s,cT as o,bs as t,bw as n,a8 as r,a4 as c,A as _}from"./CXB5xwH1.js";const p={class:"redirect-screen"},d=s({__name:"[...slug]",setup(u){const a=o();return t(()=>{a.replace("/panoramica")}),(i,e)=>(n(),r("div",p,[...e[0]||(e[0]=[c("p",null,"Reindirizzamento...",-1)])]))}}),m=_(d,[["__scopeId","data-v-5c5ada89"]]);export{m as default};
