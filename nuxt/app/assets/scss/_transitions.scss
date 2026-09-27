@@ -2,10 +2,10 @@
 // Page Transition Styles
 // ============================================
 
-// Fade transition
+// Crossfade both views without moving their content.
 .page-fade-enter-active,
 .page-fade-leave-active {
-    transition: opacity 0.2s ease;
+    transition: opacity 0.32s ease-in-out;
 }
 
 .page-fade-enter-from {
@@ -14,6 +14,11 @@
 
 .page-fade-leave-to {
     opacity: 0;
+}
+
+.page-fade-enter-to,
+.page-fade-leave-from {
+    opacity: 1;
 }
 
 .page-fade-leave-active {
