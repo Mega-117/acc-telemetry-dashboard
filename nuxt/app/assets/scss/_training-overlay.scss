@@ -600,12 +600,20 @@
   .launcher-tool-button[data-state='unavailable'] { color: #858585; }
   .launcher-tool-button[data-state='pending'] .quick-state-icon { animation: quick-state-spin 1.2s linear infinite; }
   .launcher-tool-button--pressure[data-state='ready'] {
-    --quick-action-color: #43d9f5;
-    --quick-action-border: #43d9f580;
-    --quick-action-bg: #43d9f51a;
+    --quick-action-color: #241c00;
+    --quick-action-border: #ffe27a;
+    --quick-action-bg: #ffd43b;
+    animation: quick-pressure-ready-pulse 2s ease-in-out infinite;
     box-shadow: none;
   }
   .launcher-tool-button--pressure.is-ready::before { display: none; animation: none; }
+  @keyframes quick-pressure-ready-pulse {
+    0%, 100% { filter: brightness(0.78); }
+    50% { filter: brightness(1.12); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .launcher-tool-button--pressure[data-state='ready'] { animation: none; }
+  }
   @keyframes quick-state-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .launcher-tool-button[data-state='pending'] .quick-state-icon { animation: none; } }
   .launcher-tools { gap: 12px; }
