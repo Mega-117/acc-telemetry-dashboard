@@ -328,16 +328,15 @@ watch(
       <div class="profile-container">
         <div class="profile-hero">
           <div class="avatar-container">
-            <svg class="avatar-helmet" viewBox="0 0 100 100" fill="none">
-              <defs>
-                <linearGradient id="helmetGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#ff0024" />
-                  <stop offset="100%" stop-color="#ff7188" />
-                </linearGradient>
-              </defs>
-              <path d="M50 10C30 10 15 25 15 45V60C15 75 25 85 40 88L45 90H55L60 88C75 85 85 75 85 60V45C85 25 70 10 50 10Z" stroke="url(#helmetGrad)" stroke-width="3" fill="none" />
-              <path d="M20 45H80C80 45 78 55 50 55C22 55 20 45 20 45Z" stroke="url(#helmetGrad)" stroke-width="2" fill="rgba(225,6,0,0.1)" />
-              <line x1="50" y1="15" x2="50" y2="85" stroke="url(#helmetGrad)" stroke-width="1.5" />
+            <svg class="avatar-helmet" viewBox="0 0 100 100" fill="none" aria-hidden="true" focusable="false">
+              <!-- Original full-face racing helmet, facing the direction of travel. -->
+              <path d="M13 56C13 31 29 14 53 14c17 0 29 9 34 25l-5 18 9 10-5 14-28 6-33-6-12-13Z" fill="#17191e" stroke="#f0f1f4" stroke-width="2.5" stroke-linejoin="round" />
+              <path d="M19 37c7-12 19-18 33-18 10 0 19 4 25 10L48 25 32 38Z" fill="#ff0024" />
+              <path d="m47 39 39 1-5 15-31 4-9-9Z" fill="#080b10" stroke="#f0f1f4" stroke-width="2" stroke-linejoin="round" />
+              <path d="m53 43 25 1-3 4-24 4" fill="#ffffff" opacity=".2" />
+              <circle cx="40" cy="47" r="5" fill="#17191e" stroke="#ff0024" stroke-width="2.5" />
+              <path d="m17 61 19 5 15 12 36-8-3 8-26 6-32-6-9-10Z" fill="#ff0024" />
+              <path d="m57 66 20-4m-18 9 16-4M24 49l5 1m-6 5 5 1" stroke="#f0f1f4" stroke-width="2.5" stroke-linecap="square" />
             </svg>
           </div>
 
@@ -364,6 +363,35 @@ watch(
         </nav>
 
         <section class="tab-panel account-grid">
+          <section class="profile-card account-preview" aria-labelledby="account-preview-title" aria-describedby="account-preview-note">
+            <div class="card-head">
+              <h3 id="account-preview-title" class="card-title">Account e sicurezza</h3>
+              <span class="account-preview__badge">In arrivo</span>
+            </div>
+            <p id="account-preview-note" class="account-preview__note">Anteprima delle prossime opzioni di gestione account. I controlli non sono ancora disponibili.</p>
+            <fieldset disabled class="account-preview__fields" aria-label="Gestione account non ancora disponibile">
+              <div class="account-preview__item">
+                <label for="profile-preview-name">Nome e cognome</label>
+                <input id="profile-preview-name" type="text" placeholder="Il tuo nome e cognome" disabled />
+                <button type="button" disabled>Modifica nome</button>
+              </div>
+              <div class="account-preview__item">
+                <label for="profile-preview-nickname">Nickname</label>
+                <input id="profile-preview-nickname" type="text" :value="displayName" disabled />
+                <button type="button" disabled>Modifica nickname</button>
+              </div>
+              <div class="account-preview__item">
+                <label for="profile-preview-email">Indirizzo email</label>
+                <input id="profile-preview-email" type="email" :value="userEmail" placeholder="La tua email" disabled />
+                <button type="button" disabled>Cambia email</button>
+              </div>
+              <div class="account-preview__item">
+                <label for="profile-preview-password">Password</label>
+                <input id="profile-preview-password" type="text" placeholder="Gestione della password" disabled />
+                <button type="button" disabled>Reimposta password</button>
+              </div>
+            </fieldset>
+          </section>
           <div class="profile-card equipment-card account-equipment-card" :class="{ 'equipment-card--coach': isCoachProfile }">
             <div class="card-head">
               <h3 class="card-title">Attrezzatura</h3>
@@ -655,8 +683,7 @@ $color-card: #121218;
 }
 
 .profile-main {
-  width: 100%; max-width: var(--app-content-max-width); margin-inline: auto; box-sizing: border-box;
-  padding: var(--app-content-top-space) 24px 42px;
+  @include controls.content-frame(42px);
 }
 
 .profile-container {
@@ -1376,7 +1403,19 @@ $color-card: #121218;
 .profile-page { @include controls.tokens; }
 .hero-copy h1 { @include controls.title; }.profile-page .primary-action { @include controls.primary; }.profile-page .slider-row input[type='range'] { @include controls.slider; }.profile-page .card-title { font-weight: 550; }.profile-page .summary-section h4 { font-weight: 500; }.profile-page .form-group span { font-weight: 500; }
 .profile-page--embedded { min-height: 0; }.profile-page--embedded .profile-main { padding-top: var(--app-content-top-space); }
-.profile-page .account-grid { max-width: 1120px; gap: 20px; }
+.profile-page .account-grid { width: 100%; gap: 20px; }
+.account-preview { grid-column: 1 / -1; border-color: #ffffff25; }
+.account-preview .card-title { color: #a4a4ad; border-left-color: #666670; }
+.account-preview__badge { padding: 5px 9px; border: 1px solid #ffffff25; color: #a4a4ad; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.account-preview__note { margin: 0 0 24px; color: #96969f; font-size: 13px; line-height: 1.5; }
+.account-preview__fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.account-preview__item { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0; }
+.account-preview__item label { color: #9898a1; font-size: 13px; }
+.account-preview__item input { @include controls.field; box-sizing: border-box; width: 100%; padding: 8px 12px; color: #85858f; border-color: #ffffff20; background: #ffffff03; cursor: not-allowed; text-overflow: ellipsis; }
+.account-preview__item input::placeholder { color: #787882; opacity: 1; }
+.account-preview__item button { @include controls.action; }
+@media (max-width: 1100px) { .account-preview__fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 600px) { .account-preview__fields { grid-template-columns: 1fr; } }
 .profile-page .profile-card--secondary { min-height: 0; }
 .profile-page .card-head { margin-bottom: 16px; }
 </style>

@@ -26,33 +26,35 @@ onMounted(async () => {
 
 <template>
   <div v-if="ready" class="settings-page">
-    <header class="settings-page__title">
-
-      <h1>Impostazioni</h1>
-      <span>Personalizza il programma e i controlli della tua postazione.</span>
-    </header>
-    <div class="settings-shell">
-      <aside aria-label="Sezioni impostazioni">
-        <button type="button" :class="{ 'is-active': section === 'commands' }" :aria-pressed="section === 'commands'" @click="section = 'commands'">
-          <Keyboard :size="22" aria-hidden="true" />
-          Comandi
-        </button>
-        <button type="button" :class="{ 'is-active': section === 'startup' }" :aria-pressed="section === 'startup'" @click="section = 'startup'">
-          <Power :size="22" aria-hidden="true" />
-          Avvio
-        </button>
-      </aside>
-      <main>
-        <SettingsCommandBindingsPanel v-show="section === 'commands'" />
-        <SettingsStartupPanel v-if="section === 'startup'" />
-      </main>
+    <div class="settings-content">
+      <header class="settings-page__title">
+        <h1>Impostazioni</h1>
+        <span>Personalizza il programma e i controlli della tua postazione.</span>
+      </header>
+      <div class="settings-shell">
+        <aside aria-label="Sezioni impostazioni">
+          <button type="button" :class="{ 'is-active': section === 'commands' }" :aria-pressed="section === 'commands'" @click="section = 'commands'">
+            <Keyboard :size="22" aria-hidden="true" />
+            Comandi
+          </button>
+          <button type="button" :class="{ 'is-active': section === 'startup' }" :aria-pressed="section === 'startup'" @click="section = 'startup'">
+            <Power :size="22" aria-hidden="true" />
+            Avvio
+          </button>
+        </aside>
+        <main>
+          <SettingsCommandBindingsPanel v-show="section === 'commands'" />
+          <SettingsStartupPanel v-if="section === 'startup'" />
+        </main>
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped lang="scss">
 @use '@/assets/scss/racing-settings' as controls;
-.settings-page { max-width: var(--app-content-max-width); margin: 0 auto; padding: var(--app-content-top-space) 24px 64px; color: #fff; box-sizing: border-box; }
+.settings-page { width: 100%; color: #fff; box-sizing: border-box; }
+.settings-content { @include controls.content-frame; }
 .settings-page__title { margin-bottom: 28px; }
 .settings-page__title h1 { margin: 0 0 8px; font-size: 34px; font-weight: 650; }
 .settings-page__title span { color: #aaa; font-size: 14px; }
@@ -67,6 +69,4 @@ main { min-width: 0; }
 @media(max-width:780px) { .settings-shell { grid-template-columns: 1fr; } aside { display: flex; gap: 12px; border-right: 0; border-bottom: 1px solid #ffffff35; padding: 0 0 12px; } aside button { margin: 0; } }
 .settings-page { @include controls.tokens; }
 .settings-page__title h1 { @include controls.title; }.settings-shell aside button { @include controls.navigation; }
-.settings-shell { max-width: 1220px; }
-.settings-shell:has(.startup-panel) { max-width: 940px; }
 </style>

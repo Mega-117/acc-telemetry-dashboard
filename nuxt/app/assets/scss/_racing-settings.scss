@@ -1,4 +1,13 @@
 // Shared surfaces and compact controls for account/settings screens.
+@mixin content-frame($bottom-space: 64px) {
+  width: 100%;
+  max-width: var(--app-content-max-width);
+  margin-inline: auto;
+  box-sizing: border-box;
+  padding: var(--app-content-top-space) 24px $bottom-space;
+  @media (max-width: 700px) { padding-inline: 16px; }
+}
+
 @mixin panel {
   background: #00000018;
   border: 1px solid #ffffff40;
