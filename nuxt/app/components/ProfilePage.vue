@@ -328,16 +328,14 @@ watch(
       <div class="profile-container">
         <div class="profile-hero">
           <div class="avatar-container">
-            <svg class="avatar-helmet" viewBox="0 0 100 100" fill="none" aria-hidden="true" focusable="false">
-              <!-- Original full-face racing helmet, facing the direction of travel. -->
-              <path d="M13 56C13 31 29 14 53 14c17 0 29 9 34 25l-5 18 9 10-5 14-28 6-33-6-12-13Z" fill="#17191e" stroke="#f0f1f4" stroke-width="2.5" stroke-linejoin="round" />
-              <path d="M19 37c7-12 19-18 33-18 10 0 19 4 25 10L48 25 32 38Z" fill="#ff0024" />
-              <path d="m47 39 39 1-5 15-31 4-9-9Z" fill="#080b10" stroke="#f0f1f4" stroke-width="2" stroke-linejoin="round" />
-              <path d="m53 43 25 1-3 4-24 4" fill="#ffffff" opacity=".2" />
-              <circle cx="40" cy="47" r="5" fill="#17191e" stroke="#ff0024" stroke-width="2.5" />
-              <path d="m17 61 19 5 15 12 36-8-3 8-26 6-32-6-9-10Z" fill="#ff0024" />
-              <path d="m57 66 20-4m-18 9 16-4M24 49l5 1m-6 5 5 1" stroke="#f0f1f4" stroke-width="2.5" stroke-linecap="square" />
-            </svg>
+            <img
+              class="avatar-helmet"
+              :src="`${brandBase}images/profile/helmet-selected.png`"
+              width="78"
+              height="78"
+              alt=""
+              aria-hidden="true"
+            />
           </div>
 
           <div class="hero-copy">
@@ -703,11 +701,15 @@ $color-card: #121218;
   width: 78px;
   height: 78px;
   flex: 0 0 auto;
+  box-sizing: border-box;
 }
 
+
 .avatar-helmet {
+  display: block;
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 
 .hero-copy {

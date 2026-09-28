@@ -1,0 +1,1 @@
+import{aA as s,dl as o,bT as t,bX as n,ar as r,an as _,V as c}from"./CweiI_iN.js";const d={class:"redirect-screen"},p=s({__name:"[...slug]",setup(l){const a=o();return t(()=>{a.replace("/panoramica")}),(u,e)=>(n(),r("div",d,[...e[0]||(e[0]=[_("p",null,"Reindirizzamento...",-1)])]))}}),m=c(p,[["__scopeId","data-v-5c5ada89"]]);export{m as default};
