@@ -20,7 +20,7 @@ describe('target voice renderer/IPC wiring contract', () => {
     expect(panel).toContain(':target="targetLapVoiceEnabled"')
     const controls = source('components/overlay/QuickPanelVoiceControls.vue')
     expect(controls).toContain('data-overlay-wheel-action="target-voice"')
-    expect(controls).toContain(':model-value="target"')
+    expect(controls).toContain(':aria-checked="target"')
     expect(panel).not.toContain('infoTargetVoiceDraft')
     expect(source('components/overlay/InfoTargetSetup.vue')).not.toContain('target-voice')
     const confirm = panel.slice(panel.indexOf('async function confirmInfoTarget'), panel.indexOf('async function confirmInfoTarget') + 600)
