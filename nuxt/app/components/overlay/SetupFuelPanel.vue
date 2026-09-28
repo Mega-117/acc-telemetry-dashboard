@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { Fuel } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
-const props = defineProps<{ api: any }>()
-const open = ref(false), minutes = ref(10), pending = ref(false), error = ref('')
+const props = defineProps<{ api: any; separateView?: boolean; editorOnly?: boolean }>()
+const emit = defineEmits<{ open: []; cancel: [] }>()
+const minutes = defineModel<number>('minutes', { default: 10 })
+const open = ref(props.editorOnly === true), pending = ref(false), error = ref('')
 const state = ref<any>(null)
 const previewPending = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -47,7 +50,7 @@ async function refresh(background = false) {
   if (token === generation && open.value) timer = setTimeout(() => refresh(true), 1500)
 }
 // Keep the displayed estimate mounted while recalculating; only a fresh preview can be applied.
-watch([open, minutes], () => { error.value = ''; if (open.value) void refresh(); else { generation++; clearTimeout(timer); state.value = null; previewPending.value = false } }, { flush: 'sync' })
+watch([open, minutes], () => { error.value = ''; if (open.value) void refresh(); else { generation++; clearTimeout(timer); state.value = null; previewPending.value = false } }, { flush: 'sync', immediate: true })
 function adjust(amount: number) {
   if (pending.value) return
   const current = Number(minutes.value)
@@ -111,10 +114,11 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
 </script>
 
 <template>
-  <section class="fuel-panel">
-    <button class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession">{{ pending ? 'Applicazione…' : 'Sessione' }}</button>
+  <section class="fuel-panel" :class="{ 'fuel-panel--editor': editorOnly }">
+    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><Fuel :size="22" aria-hidden="true" /><span>{{ pending ? 'Applicazione…' : 'Sessione' }}</span></button>
     <div v-if="!open && (pending || error)" class="fuel-status" role="status" aria-live="polite"><strong>Stato carburante</strong><p>{{ statusMessage }}</p></div>
-    <button class="fuel-open" type="button" data-overlay-wheel-action="fuel" aria-label="Carburante durata stint" :aria-expanded="open" :disabled="pending" @click="open = !open">Durata stint</button>
+    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel" aria-label="Carburante durata stint" :aria-expanded="open" :disabled="pending" @click="separateView ? emit('open') : open = !open"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8 3 5l3-2 2 3h10a2 2 0 0 1 2 2v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V10a2 2 0 0 1 1-2Z" /><path d="M10 6V3h7v3M8 11l8 6m0-6-8 6" /></svg><span>Durata stint</span></button>
+    <button v-if="editorOnly" type="button" class="utility-action overlay-menu-back" data-overlay-wheel-action="fuel-back" :disabled="pending" @click="emit('cancel')">← Torna al pannello</button>
     <div v-if="open" class="fuel-body">
       <strong>Prepara il carburante per lo stint</strong>
       <div class="fuel-duration" :inert="pending || undefined">

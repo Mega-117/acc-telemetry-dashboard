@@ -49,6 +49,8 @@ describe('Ctrl+K voice switches', () => {
     const buttons = [...host.querySelectorAll<HTMLButtonElement>('[role="switch"]')]
     expect(buttons.map(b => b.dataset.overlayWheelAction)).toEqual(['coach', 'references', 'pressure-audio', 'target-voice'])
     const labels = buttons.map(b => b.getAttribute('aria-label'))
+    expect(buttons.map(b => b.querySelector('small')?.textContent)).toEqual(['OFF', 'ON', 'OFF', 'ON'])
+    buttons.forEach(button => expect(button.querySelector('svg')).not.toBeNull())
     buttons[0]!.click(); await nextTick()
     expect(buttons[0]!.getAttribute('aria-checked')).toBe('true')
     selection.select('references'); selection.activate(); await nextTick()
@@ -56,6 +58,8 @@ describe('Ctrl+K voice switches', () => {
     selection.next(); selection.activate(); await nextTick()
     expect(values.value).toEqual({ coach: true, references: false, pressure: true, target: false })
     Object.values(calls).forEach(call => expect(call).toHaveBeenCalledTimes(1))
+    expect(buttons.map(b => b.querySelector('small')?.textContent)).toEqual(['ON', 'OFF', 'ON', 'OFF'])
+    expect(buttons.map(b => b.classList.contains('is-on'))).toEqual([true, false, true, false])
     expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual(labels)
     expect(host.textContent).not.toMatch(/Attiva|Disattiva/)
     expect(host.querySelectorAll('[data-overlay-selected]')).toHaveLength(1)

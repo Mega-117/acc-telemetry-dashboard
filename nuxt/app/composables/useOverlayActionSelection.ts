@@ -45,6 +45,8 @@ export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled
     void nextTick(refresh)
   }
   function refresh() {
+    // Hiding the entire overlay does not invalidate its remembered cursor.
+    if (enabled() && (!root.value || root.value.getClientRects().length === 0)) return
     if (!available().some(button => button.dataset.overlayWheelAction === selectedId.value)) first()
     else paint()
   }

@@ -31,7 +31,7 @@ import {
   resolveAutoAdvanceSeconds,
   type OverlayOriginCorner, type OverlayOriginMode,
 } from '~/composables/useOverlaySettings'
-import { CircleCheck, CircleMinus, Dumbbell, Power, Check, LoaderCircle } from '@lucide/vue'
+import { CircleCheck, CircleMinus, Dumbbell, Power, Check, LoaderCircle, Target, Flag } from '@lucide/vue'
 import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
 import QuickPanelVoiceControls from '~/components/overlay/QuickPanelVoiceControls.vue'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
@@ -115,7 +115,7 @@ const phase = ref<OverlayPhase>('loading')
 // Kept while the panel is hidden or an editor is open; no cloud preference.
 const quickPanelLayout = ref<'vertical' | 'horizontal'>('vertical')
 const isHorizontalQuickPanel = computed(() => phase.value === 'launcher'
-  && !isTargetSetupOpen.value && !isSectorReferenceSetupOpen.value
+  && !isTargetSetupOpen.value && !isSectorReferenceSetupOpen.value && !isFuelSetupOpen.value
   && quickPanelLayout.value === 'horizontal')
 const remainingMs = ref(0)
 const isElectronRuntime = ref(false)
@@ -146,6 +146,9 @@ const { selectedId: selectedWheelActionId, first: selectFirstWheelAction,
   next: selectNextWheelAction, activate: activateSelectedWheelAction } = actionSelection
 const preparingReopen = ref(false)
 const isPointerOnOverlaySurface = ref(false)
+const isFuelSetupOpen = ref(false)
+const fuelStintMinutes = ref(10)
+function closeFuelSetup() { isFuelSetupOpen.value = false; void nextTick(() => actionSelection.select('fuel')) }
 const isTargetSetupOpen = ref(false)
 const isSectorReferenceSetupOpen = ref(false)
 const customSectorsActive = ref(false)
@@ -570,6 +573,7 @@ function toggleCoachAudio() {
 }
 
 function returnToMainMenu() {
+  if (isFuelSetupOpen.value) { closeFuelSetup(); return }
   if (phase.value !== 'select') return
   closeShortcutStopConfirm()
   isTrainingPickerOpen.value = false
@@ -579,11 +583,13 @@ function returnToMainMenu() {
 }
 
 async function prepareOverlayReopen(revision?: number) {
+  const rememberedAction = selectedWheelActionId.value
   await refreshSectorReferenceState().catch(() => {})
   preparingReopen.value = true
   await nextTick()
   actionSelection.resetPointer()
   if (resetsOverlayMenuOnHide(phase.value)) {
+    isFuelSetupOpen.value = false
     cancelInfoTargetSetup()
     closeSectorReferenceSetup()
     isTrainingPickerOpen.value = false
@@ -600,7 +606,8 @@ async function prepareOverlayReopen(revision?: number) {
     if (Date.now() >= deadline) { preparingReopen.value = false; return }
     await new Promise(resolve => setTimeout(resolve, 16))
   }
-  selectFirstWheelAction()
+  actionSelection.select(rememberedAction)
+  actionSelection.refresh()
   await overlaySizeComp.applyOverlaySize(overlaySizePreset.value, true)
   await nextTick()
   // Settle the hidden card without its normal morph animation before acknowledging.
@@ -612,6 +619,7 @@ async function prepareOverlayReopen(revision?: number) {
 }
 
 function runBackAction() {
+  if (isFuelSetupOpen.value) { closeFuelSetup(); return }
   if (isSectorReferenceSetupOpen.value) { closeSectorReferenceSetup(); return }
   if (isTargetSetupOpen.value) { cancelInfoTargetSetup(); return }
   if (isShortcutStopConfirmOpen.value) { closeShortcutStopConfirm(); return }
@@ -632,6 +640,7 @@ function runMuteAction() {
 }
 
 function executePrimaryAction() {
+  if (isFuelSetupOpen.value) { activateSelectedWheelAction(); return }
   const now = Date.now()
   if (now - lastPrimaryActionAt < PRIMARY_ACTION_DEBOUNCE_MS) { setDebugEvent(`debounce ${primaryAction.value}`); return }
   lastPrimaryActionAt = now; setDebugEvent(`azione: ${primaryAction.value}`)
@@ -751,7 +760,7 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   if (command === 'next-action') selectNextWheelAction()
   if (command === 'previous-action') actionSelection.previous()
   if (command === 'activate-action') activateSelectedWheelAction()
-  if (command === 'reset-action-selection') selectFirstWheelAction()
+  if (command === 'reset-action-selection') actionSelection.refresh()
   if (command === 'back') runBackAction()
   if (command === 'mute') runMuteAction()
   if (command === 'stop') handleGlobalStop()
@@ -851,7 +860,7 @@ watch(isShortcutStopConfirmOpen, (open) => {
 
 watch(
   [phase, placementActive, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
-    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, isSectorReferenceSetupOpen, liveHudResizeKey],
+    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, isSectorReferenceSetupOpen, isFuelSetupOpen, liveHudResizeKey],
   () => { scheduleOverlaySizeSync(); actionSelection.refresh() },
   { flush: 'post' }
 )
@@ -957,14 +966,14 @@ onBeforeUnmount(() => {
               :class="[
                 'overlay-content',
                 `overlay-content--${overlaySizePreset}`,
-                { 'overlay-content--target': isTargetSetupOpen || isSectorReferenceSetupOpen,
+                { 'overlay-content--target': isTargetSetupOpen || isSectorReferenceSetupOpen || isFuelSetupOpen,
                   'overlay-content--target-lap': isTargetSetupOpen,
                   'overlay-content--horizontal': isHorizontalQuickPanel },
               ]"
             >
 
               <template v-if="phase === 'launcher'">
-                <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen" class="launcher-tools" aria-label="Strumenti live overlay">
+                <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen && !isFuelSetupOpen" class="launcher-tools" aria-label="Strumenti live overlay">
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
                     <QuickPanelLayoutToggle v-model="quickPanelLayout" />
@@ -972,11 +981,7 @@ onBeforeUnmount(() => {
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training quick-panel-training"
                       title="Allenamento"
-                      :class="{ 'is-selected': selectedWheelActionId === 'training' }"
-                      data-overlay-wheel-action="training"
                       :aria-label="primaryActionLabel"
-                      :aria-current="selectedWheelActionId === 'training' ? 'true' : undefined"
-                      @focus="selectedWheelActionId = 'training'"
                       @click="executePrimaryAction"
                     >
                       <Dumbbell :size="18" aria-hidden="true" />
@@ -995,7 +1000,7 @@ onBeforeUnmount(() => {
                       @toggle-pressure="togglePressureAudio"
                       @toggle-target="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
                     />
-                    <section class="quick-panel-section" aria-label="Riferimenti numerici">
+                    <section v-if="!fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
                       <h2 class="quick-panel-heading">Riferimenti</h2>
                       <div class="quick-panel-pair">
                     <div class="quick-reference" :class="{ 'is-active': infoTargetActive }">
@@ -1010,13 +1015,13 @@ onBeforeUnmount(() => {
                       @focus="selectedWheelActionId = 'target'"
                       @click="openInfoTargetSetup"
                     >
-                      <Check v-if="infoTargetActive" :size="12" aria-hidden="true" /> Target giro
+                      <Check v-if="infoTargetActive" class="quick-reference-check" :size="12" aria-hidden="true" /><Target :size="22" aria-hidden="true" /><span>Target giro</span>
                     </button>
                     <button v-if="infoTargetActive" class="quick-reference-off" data-overlay-wheel-action="target-disable" title="Disattiva target giro" aria-label="Disattiva target giro" :disabled="referenceBusy" @click="disableReference('target')"><Power :size="14" /></button>
                     </div>
                     <div class="quick-reference" :class="{ 'is-active': customSectorsActive }">
                     <button type="button" class="launcher-tool-button" :aria-pressed="customSectorsActive" title="Configura riferimenti settori" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
-                      <Check v-if="customSectorsActive" :size="12" aria-hidden="true" /> Settori
+                      <Check v-if="customSectorsActive" class="quick-reference-check" :size="12" aria-hidden="true" /><Flag :size="22" aria-hidden="true" /><span>Settori</span>
                     </button>
                     <button v-if="customSectorsActive" class="quick-reference-off" data-overlay-wheel-action="sector-disable" title="Disattiva personalizzati e ripristina il confronto abituale" aria-label="Disattiva riferimenti personalizzati" :disabled="referenceBusy" @click="disableReference('sectors')"><Power :size="14" /></button>
                     </div>
@@ -1024,7 +1029,7 @@ onBeforeUnmount(() => {
                     </section>
                     <section class="quick-panel-section quick-panel-automations" aria-label="Automazioni">
                       <h2 class="quick-panel-heading">Carburante</h2>
-                    <SetupFuelPanel :api="getOverlayApi()" />
+                    <SetupFuelPanel v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" separate-view @open="isFuelSetupOpen = true" />
                     <div class="quick-panel-pair quick-panel-secondary">
                     <PitwallOverlayButton
                       :api="getOverlayApi()"
@@ -1124,6 +1129,7 @@ onBeforeUnmount(() => {
                   @confirm="confirmInfoTarget"
                   @cancel="cancelInfoTargetSetup"
                 />
+                <SetupFuelPanel v-else-if="isFuelSetupOpen" v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" editor-only @cancel="closeFuelSetup" />
                 <SectorReferenceSetup v-else-if="isSectorReferenceSetupOpen" ref="sectorReferenceSetup" keyboard-overlay @cancel="closeSectorReferenceSetup" @saved="saveSectorReferenceSetup" />
               </template>
 

@@ -19,6 +19,41 @@ describe('shared overlay selection', () => {
     nav.first()
   })
   afterEach(() => { scope.stop(); root.remove(); vi.restoreAllMocks() })
+  it('remembers selection when visibility unmounts and remounts the panel', async () => {
+    const panel = ref<HTMLElement | null>(root)
+    const selection = scope.run(() => useOverlayActionSelection(panel, () => true))!
+    selection.select('start')
+    panel.value = null
+    await nextTick()
+    expect(selection.selectedId.value).toBe('start')
+    panel.value = root
+    await nextTick()
+    expect(selection.selectedId.value).toBe('start')
+    expect(root.querySelector('[data-overlay-selected]')?.getAttribute('data-overlay-wheel-action')).toBe('start')
+  })
+  it('keeps the cursor after activation and while the whole panel is hidden', async () => {
+    nav.select('start')
+    nav.activate()
+    await nextTick()
+    expect(nav.selectedId.value).toBe('start')
+    const rects = vi.spyOn(root, 'getClientRects').mockReturnValue([] as unknown as DOMRectList)
+    nav.refresh()
+    expect(nav.selectedId.value).toBe('start')
+    rects.mockReturnValue([{}] as unknown as DOMRectList)
+    nav.refresh()
+    expect(root.querySelector('[data-overlay-selected]')?.getAttribute('data-overlay-wheel-action')).toBe('start')
+  })
+  it('skips mouse-only controls without disabling their click handler', () => {
+    const training = document.createElement('button')
+    training.textContent = 'Allenamento'
+    const click = vi.fn()
+    training.addEventListener('click', click)
+    root.prepend(training)
+    nav.first(); expect(nav.selectedId.value).toBe('back')
+    nav.next(); expect(nav.selectedId.value).toBe('start')
+    nav.focus(training); expect(nav.selectedId.value).toBe('start')
+    training.click(); expect(click).toHaveBeenCalledOnce()
+  })
   it('previous wraps, skips unavailable actions and does not click', () => {
     const click = vi.fn()
     root.addEventListener('click', click)

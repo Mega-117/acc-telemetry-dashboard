@@ -155,3 +155,19 @@ it.each(['fuel-session','fuel-apply'])('renders immediate pending feedback befor
 it('unmount immediately after custom click prevents IPC',async()=>{
  const api=await mount();button('fuel-apply').click();app?.unmount();app=null;await flush();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled();
 })
+
+it('opens a dedicated view without expanding the launcher', async () => {
+ const open=vi.fn(); const el=document.createElement('div');document.body.append(el)
+ app=createApp(SetupFuelPanel,{api:{},separateView:true,onOpen:open});app.mount(el)
+ button('fuel').click();await flush()
+ expect(open).toHaveBeenCalledOnce();expect(document.querySelector('.fuel-body')).toBeNull()
+})
+it('dedicated editor previews immediately, retains supplied minutes and offers back', async () => {
+ const preview=vi.fn(async()=>({available:false}));const cancel=vi.fn();const update=vi.fn()
+ const el=document.createElement('div');document.body.append(el)
+ app=createApp(SetupFuelPanel,{api:{trainingOverlayPreviewSetupFuel:preview},editorOnly:true,minutes:27,onCancel:cancel,'onUpdate:minutes':update});app.mount(el);await flush()
+ expect(button('fuel')).toBeNull();expect(button('fuel-session')).toBeNull()
+ expect(preview).toHaveBeenCalledWith({mode:'minutes',minutes:27})
+ button('fuel-plus').click();await flush();expect(update).toHaveBeenCalledWith(28)
+ button('fuel-back').click();expect(cancel).toHaveBeenCalledOnce()
+})
