@@ -233,7 +233,10 @@ describe('social rooms with real Firebase rules', () => {
     expect((await X.requestLink('Y', 'always')).ok).toBe(true)
     expect((await X.requestLink('Y', 'always')).ok).toBe(true)
     expect(xFriends).toEqual([])
-    expect(await Y.readFriendView('X')).toMatchObject({ state: 'received', mineStatus: 'pending', theirsStatus: 'granted' })
+    // A write acknowledged to X can reach Y's Firebase listener/cache later.
+    await vi.waitFor(async () => {
+      expect(await Y.readFriendView('X')).toMatchObject({ state: 'received', mineStatus: 'pending', theirsStatus: 'granted' })
+    })
     expect((await Y.preAuthorise('X', 'always')).ok).toBe(true)
     await vi.waitFor(() => { expect(xFriends).toEqual(['Y']); expect(yFriends).toEqual(['X']) })
     const repeated = await Promise.all([X.requestLink('Y', 'always'), Y.requestLink('X', 'always')])
