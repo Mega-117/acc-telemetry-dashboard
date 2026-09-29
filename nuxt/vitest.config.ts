@@ -305,6 +305,7 @@ export default defineConfig({
         'app/components/overlay/OverlayPlacementLock.vue',
         'app/composables/useOverlayRegionApi.ts',
         'app/services/overlay/surfaceRegionBridge.ts',
+        'app/services/overlay/surfaceHealthReporter.ts',
         'app/composables/useRaceHudPage.ts',
         'app/composables/useOverlayInteractionRegions.ts',
         'app/composables/useOverlayInteractionContract.ts',
