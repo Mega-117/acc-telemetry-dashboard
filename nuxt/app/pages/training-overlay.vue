@@ -150,6 +150,7 @@ const isFuelSetupOpen = ref(false)
 const fuelStintMinutes = ref(10)
 function closeFuelSetup() { isFuelSetupOpen.value = false; void nextTick(() => actionSelection.select('fuel')) }
 const isTargetSetupOpen = ref(false)
+const targetSetup = ref<InstanceType<typeof InfoTargetSetup> | null>(null)
 const isSectorReferenceSetupOpen = ref(false)
 const customSectorsActive = ref(false)
 const referenceBusy = ref(false)
@@ -776,6 +777,7 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   setDebugEvent(`comando overlay: ${command || 'vuoto'}`)
   if (command === 'prepare-reopen') { void prepareOverlayReopen(typeof payload === 'string' ? undefined : payload.revision); return }
   if (command === 'main-menu') { returnToMainMenu(); return }
+  if (isTargetSetupOpen.value && targetSetup.value?.handleWheelCommand(command)) return
   if (command === 'primary') executePrimaryAction()
   if (command === 'next-action') selectNextWheelAction()
   if (command === 'previous-action') actionSelection.previous()
@@ -1049,7 +1051,8 @@ onBeforeUnmount(() => {
                       </div>
                     </section>
                     <section class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving }" aria-label="Automazioni">
-                    <SetupFuelPanel show-heading v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" separate-view @open="isFuelSetupOpen = true" />
+                    <div id="control-k-fuel-status" class="control-k-fuel-status" />
+                    <SetupFuelPanel show-heading v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" status-target="#control-k-fuel-status" separate-view @open="isFuelSetupOpen = true" />
                     <div class="quick-panel-pair quick-panel-secondary">
                     <h2 class="quick-panel-heading">Tools</h2>
                     <PitwallOverlayButton
@@ -1061,7 +1064,7 @@ onBeforeUnmount(() => {
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training launcher-tool-button--pressure"
-                      :class="{ 'is-ready': dryPressureState.state === 'ready', 'is-selected': selectedWheelActionId === 'pressure' }"
+                      :class="{ 'is-ready': dryPressureState.state === 'ready', 'is-awaiting-pit': dryPressureState.reason === 'pit_pause_required', 'is-selected': selectedWheelActionId === 'pressure' }"
                       data-overlay-wheel-action="pressure"
                       @focus="selectedWheelActionId = 'pressure'"
                       :aria-label="dryPressurePresentation.ariaLabel"
@@ -1081,6 +1084,7 @@ onBeforeUnmount(() => {
                     <button v-if="dryPressureState.qaAvailable" type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Genera raccomandazione TEST</button>
                     <p v-if="dryPressureState.qaAvailable" class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
                     <button v-if="dryPressureState.qaActive" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Rimuovi raccomandazione TEST</button>
+                    <div v-if="dryPressurePresentation.alert || dryPressureState.actionReasonCode || (!dryPressureState.consumed && dryPressureState.recommendation?.wheels && isCarStoppedWithEngineOff)" class="control-k-pressure-info">
                     <div
                       v-if="dryPressurePresentation.alert"
                       class="pressure-invalid-lap-alert"
@@ -1093,10 +1097,10 @@ onBeforeUnmount(() => {
                         <span>{{ dryPressurePresentation.alert.guidance }}</span>
                       </span>
                     </div>
-                  <p v-if="dryPressureState.actionReasonCode" id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
+                  <p v-if="dryPressureState.actionReasonCode && !dryPressurePresentation.alert" id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
                     Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
                   </p>
-                  <div v-if="dryPressureState.recommendation?.wheels && isCarStoppedWithEngineOff" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
+                  <div v-if="!dryPressureState.consumed && dryPressureState.recommendation?.wheels && isCarStoppedWithEngineOff" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <div class="pressure-plan__meta">
                       <span>{{ dryPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>
                       <span v-if="(dryPressureState.recommendation?.required_valid_laps ?? 1) > 0">{{ dryPressureState.recommendation?.valid_laps || 0 }}/{{ dryPressureState.recommendation?.required_valid_laps ?? 1 }} valido</span>
@@ -1114,6 +1118,7 @@ onBeforeUnmount(() => {
                     <p v-else class="pressure-plan__empty">{{ dryPressurePresentation.guidance }}</p>
                   </div>
 
+                    </div>
                     </section>
                     <details v-if="showQuickPanelDevTools" class="quick-panel-dev">
                       <summary>Strumenti sviluppo</summary>
@@ -1143,6 +1148,7 @@ onBeforeUnmount(() => {
                 </div>
                 <InfoTargetSetup
                   v-else-if="isTargetSetupOpen"
+                  ref="targetSetup"
                   appearance="quick-panel"
                   :target-time-ms="infoTargetTimeMs"
                   :tolerance-ms="infoTargetToleranceMs"

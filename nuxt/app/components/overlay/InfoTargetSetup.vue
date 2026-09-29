@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { formatInfoLapTime } from '~/utils/infoPresentation'
 import {
   adjustInfoTargetTime,
@@ -47,6 +47,20 @@ const toleranceControl = computed<PickerControl>(() => ({
   ariaLabel: 'Tolleranza massima',
 }))
 
+const editingControl = ref<PickerControl['id'] | null>(null)
+function handleWheelCommand(command: string | undefined): boolean {
+  if (!editingControl.value || props.appearance !== 'quick-panel') return false
+  if (command === 'activate-action' || command === 'primary' || command === 'back') {
+    editingControl.value = null
+    return true
+  }
+  if (command !== 'next-action' && command !== 'previous-action') return false
+  const control = [...timeControls.value, toleranceControl.value].find(value => value.id === editingControl.value)
+  if (control) adjustControl(control, command === 'next-action' ? 1 : -1)
+  return true
+}
+defineExpose({ handleWheelCommand })
+
 function adjustControl(control: PickerControl, direction: number) {
   if (control.id === 'tolerance') {
     emit('select-tolerance', adjustInfoTargetTolerance(props.toleranceMs, direction))
@@ -85,6 +99,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         v-for="control in timeControls"
         :key="control.id"
         class="target-drum"
+        :class="{ 'is-editing': editingControl === control.id }"
         tabindex="0"
         :aria-label="`${control.ariaLabel}: ${control.value}. Usa la rotella o le frecce.`"
         @wheel.prevent="onWheel(control, $event)"
@@ -93,18 +108,19 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         <button
           type="button"
           class="target-drum__arrow"
-          :data-overlay-wheel-action="`target-${control.id}-increase`"
+          :data-overlay-wheel-action="appearance === 'quick-panel' ? undefined : `target-${control.id}-increase`"
           :aria-label="`Aumenta ${control.ariaLabel}`"
           @click="adjustControl(control, 1)"
         >
           ▲
         </button>
-        <strong>{{ control.value }}</strong>
+        <button v-if="appearance === 'quick-panel'" type="button" class="target-field-value" :data-overlay-wheel-action="`target-${control.id}`" :aria-label="control.ariaLabel" :aria-pressed="editingControl === control.id" @click="editingControl = editingControl === control.id ? null : control.id">{{ control.value }}</button>
+        <strong v-else>{{ control.value }}</strong>
         <button
           type="button"
           class="target-drum__arrow"
           :aria-label="`Diminuisci ${control.ariaLabel}`"
-          :data-overlay-wheel-action="`target-${control.id}-decrease`"
+          :data-overlay-wheel-action="appearance === 'quick-panel' ? undefined : `target-${control.id}-decrease`"
           @click="adjustControl(control, -1)"
         >
           ▼
@@ -119,6 +135,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
       </div>
       <div
         class="target-tolerance__control"
+        :class="{ 'is-editing': editingControl === 'tolerance' }"
         tabindex="0"
         :aria-label="`${toleranceControl.ariaLabel}: ${toleranceControl.value}. Usa la rotella o i pulsanti meno e più.`"
         @wheel.prevent="onWheel(toleranceControl, $event)"
@@ -126,16 +143,17 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         <button
           type="button"
           aria-label="Diminuisci Tolleranza massima"
-          data-overlay-wheel-action="target-tolerance-decrease"
+          :data-overlay-wheel-action="appearance === 'quick-panel' ? undefined : 'target-tolerance-decrease'"
           @click="adjustControl(toleranceControl, -1)"
         >
           −
         </button>
-        <strong>{{ toleranceControl.value }}</strong>
+        <button v-if="appearance === 'quick-panel'" type="button" class="target-field-value" data-overlay-wheel-action="target-tolerance" aria-label="Tolleranza massima" :aria-pressed="editingControl === 'tolerance'" @click="editingControl = editingControl === 'tolerance' ? null : 'tolerance'">{{ toleranceControl.value }}</button>
+        <strong v-else>{{ toleranceControl.value }}</strong>
         <button
           type="button"
           aria-label="Aumenta Tolleranza massima"
-          data-overlay-wheel-action="target-tolerance-increase"
+          :data-overlay-wheel-action="appearance === 'quick-panel' ? undefined : 'target-tolerance-increase'"
           @click="adjustControl(toleranceControl, 1)"
         >
           +
@@ -147,6 +165,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
     <button
       type="button"
       class="target-keep"
+      v-if="appearance !== 'quick-panel'"
       title="Mantieni tra sessioni dello stesso server"
       data-overlay-wheel-action="target-keep"
       :class="{ 'is-active': keepBetweenSessions }"
@@ -157,6 +176,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
       <span>{{ appearance === 'quick-panel' ? 'Mantieni sullo stesso server' : 'Mantieni tra sessioni dello stesso server' }}</span>
     </button>
 
+    <p v-if="appearance === 'quick-panel' && editingControl" class="target-edit-hint" role="status">Successiva + · Precedente − · Conferma per terminare</p>
     <div class="target-actions">
       <button type="button" class="target-confirm" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
       <button type="button" class="target-cancel" data-overlay-wheel-action="target-cancel" @click="emit('cancel')">Annulla</button>
@@ -165,6 +185,10 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 </template>
 
 <style scoped>
+.target-field-value { border: 0; background: transparent; color: inherit; font: inherit; font-size: 22px; font-weight: 600; cursor: pointer; }
+.target-tolerance__control .target-field-value { font-size: 14px; }
+.info-target-setup--quick .is-editing { outline: 2px solid #00e5ff; outline-offset: 2px; background: #00e5ff18; }
+.target-edit-hint { margin: 0; font-size: 11px; color: #00e5ff; }
 .info-target-setup {
   display: grid;
   gap: 9px;
