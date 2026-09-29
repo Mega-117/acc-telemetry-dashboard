@@ -5,17 +5,30 @@ import type { OverlayPointerState } from './useOverlayInteractionContract'
 const SELECTOR = 'button[data-overlay-wheel-action]'
 
 /** One selection for native pointer, non-focusable Electron pointer and wheel input. */
-export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled: () => boolean) {
+export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled: () => boolean, visualOrder: () => boolean = () => false) {
   const selectedId = ref<string | null>(null)
   let movementRevision: number | undefined
   let nativePoint: string | null = null
 
   function available() {
     if (!enabled() || !root.value) return []
-    return Array.from(root.value.querySelectorAll<HTMLButtonElement>(SELECTOR)).filter(button =>
+    const buttons = Array.from(root.value.querySelectorAll<HTMLButtonElement>(SELECTOR)).filter(button =>
       !button.disabled && !button.closest('[hidden], [inert], [aria-hidden="true"], [aria-disabled="true"]')
       && button.getClientRects().length > 0 && getComputedStyle(button).visibility !== 'hidden',
     )
+    if (!visualOrder()) return buttons
+    // Sort into screen rows first; tolerate fractional layout rounding within a row.
+    const positioned = buttons.map(button => ({ button, rect: button.getBoundingClientRect() }))
+      .sort((a, b) => a.rect.top - b.rect.top)
+    const ordered: HTMLButtonElement[] = []
+    while (positioned.length) {
+      const top = positioned[0]!.rect.top
+      const row = positioned.filter(item => item.rect.top < top + 8)
+      positioned.splice(0, row.length)
+      row.sort((a, b) => a.rect.left - b.rect.left)
+      ordered.push(...row.map(item => item.button))
+    }
+    return ordered
   }
 
   function paint() {
@@ -37,7 +50,14 @@ export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled
     select(nextOverlayActionId(selectedId.value, available().map(button => button.dataset.overlayWheelAction!), direction), true)
   }
   function previous() { next(-1) }
+  function selectedBusyButton() {
+    return Array.from(root.value?.querySelectorAll<HTMLButtonElement>(SELECTOR) ?? [])
+      .find(button => button.dataset.overlayWheelAction === selectedId.value
+        && button.getAttribute('aria-busy') === 'true')
+  }
   function activate() {
+    // Pending is temporary: keep the cursor and never activate another command.
+    if (selectedBusyButton()) return
     const buttons = available()
     const decision = resolveOverlayActivation(selectedId.value, buttons.map(button => button.dataset.overlayWheelAction!))
     select(decision.selectedId)
@@ -47,6 +67,7 @@ export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled
   function refresh() {
     // Hiding the entire overlay does not invalidate its remembered cursor.
     if (enabled() && (!root.value || root.value.getClientRects().length === 0)) return
+    if (enabled() && selectedBusyButton()) { paint(); return }
     if (!available().some(button => button.dataset.overlayWheelAction === selectedId.value)) first()
     else paint()
   }
@@ -79,7 +100,7 @@ export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled
     if (element) {
       observer = new MutationObserver(refresh)
       observer.observe(element, { childList: true, subtree: true, attributes: true,
-        attributeFilter: ['disabled', 'hidden', 'inert', 'aria-hidden', 'aria-disabled', 'data-overlay-wheel-action'] })
+        attributeFilter: ['disabled', 'hidden', 'inert', 'aria-hidden', 'aria-disabled', 'aria-busy', 'data-overlay-wheel-action'] })
     }
     refresh()
   }, { flush: 'post', immediate: true })

@@ -7,15 +7,9 @@ import { PRODUCT } from '../../../shared/productIdentity'
 import { computed, ref, onMounted } from 'vue'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
-import TestModeBadge from '~/components/overlay/TestModeBadge.vue'
-import { useDevTestMode } from '~/composables/useDevTestMode'
 import PitwallConceptBell from '~/components/pitwall/concept/PitwallConceptBell.vue'
 
 const brandBase = useRuntimeConfig().app.baseURL
-
-// Badge test-mode dev (PIP-106): indicatore di sola lettura sulla dashboard.
-const { init: initTestMode } = useDevTestMode()
-onMounted(() => initTestMode())
 
 const props = defineProps<{
   userName?: string
@@ -162,8 +156,6 @@ onMounted(() => {
       <div class="topbar__brand">
         <img class="brand-logo" :src="`${brandBase}branding/racercore-horizontal-v1.svg`" :alt="PRODUCT.displayName" width="240" height="36" />
       </div>
-
-      <TestModeBadge />
 
       <!-- Spacer -->
       <div class="topbar__spacer"></div>

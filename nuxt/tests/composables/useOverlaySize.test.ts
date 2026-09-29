@@ -70,3 +70,13 @@ it('keeps the card inside native bounds when a monitor is narrower than the hori
   await controller.applyOverlaySize('launcher', true)
   expect(controller.cardSize.value?.width).toBe(620)
 })
+
+it('fits all horizontal actions and pressure preview beyond the former 810px cap', async () => {
+  const { root, surface, api } = setup(300)
+  controller.cleanup()
+  controller = useOverlaySize(() => api, () => 'launcher', ref(root), () => Number.POSITIVE_INFINITY)
+  Object.defineProperty(surface, 'scrollWidth', { configurable: true, value: 980 })
+  await controller.applyOverlaySize('launcher', true)
+  expect(api.trainingOverlaySetSize).toHaveBeenLastCalledWith({ preset: 'launcher', width: 1030, height: 450 })
+  expect(controller.cardSize.value?.width).toBe(1010)
+})

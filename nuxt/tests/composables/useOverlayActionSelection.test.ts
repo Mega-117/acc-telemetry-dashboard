@@ -19,6 +19,27 @@ describe('shared overlay selection', () => {
     nav.first()
   })
   afterEach(() => { scope.stop(); root.remove(); vi.restoreAllMocks() })
+  it('uses visual rows only when opted in, skipping disabled buttons and wrapping backwards', () => {
+    root.innerHTML = ['target', 'sector', 'session', 'minutes', 'pitwall', 'pressure'].map(id =>
+      `<button data-overlay-wheel-action="${id}">${id}</button>`).join('')
+    const positions: Record<string, [number, number]> = {
+      target: [160, 100], sector: [240, 101], session: [0, 100],
+      minutes: [0, 180], pitwall: [80, 100], pressure: [80, 180],
+    }
+    root.querySelectorAll<HTMLButtonElement>('button').forEach(button => {
+      const [left, top] = positions[button.dataset.overlayWheelAction!]!
+      button.getBoundingClientRect = () => ({ left, top, width: 64, height: 64 } as DOMRect)
+    })
+    let visual = true
+    const selection = scope.run(() => useOverlayActionSelection(ref(root), () => true, () => visual))!
+    expect(selection.available().map(b => b.dataset.overlayWheelAction)).toEqual(['session', 'pitwall', 'target', 'sector', 'minutes', 'pressure'])
+    selection.select('sector'); selection.next(); expect(selection.selectedId.value).toBe('minutes')
+    selection.first(); selection.previous(); expect(selection.selectedId.value).toBe('pressure')
+    root.querySelector<HTMLButtonElement>('[data-overlay-wheel-action="session"]')!.disabled = true
+    selection.first(); expect(selection.selectedId.value).toBe('pitwall')
+    visual = false
+    expect(selection.available()[0]!.dataset.overlayWheelAction).toBe('target')
+  })
   it('remembers selection when visibility unmounts and remounts the panel', async () => {
     const panel = ref<HTMLElement | null>(root)
     const selection = scope.run(() => useOverlayActionSelection(panel, () => true))!
@@ -42,6 +63,43 @@ describe('shared overlay selection', () => {
     rects.mockReturnValue([{}] as unknown as DOMRectList)
     nav.refresh()
     expect(root.querySelector('[data-overlay-selected]')?.getAttribute('data-overlay-wheel-action')).toBe('start')
+  })
+  it('keeps a pending action selected without confirming another button', async () => {
+    const button = root.querySelector<HTMLButtonElement>('[data-overlay-wheel-action="start"]')!
+    const other = vi.fn()
+    root.firstElementChild!.addEventListener('click', other)
+    nav.select('start')
+    button.disabled = true
+    button.setAttribute('aria-busy', 'true')
+    await nextTick()
+    nav.activate()
+    expect(nav.selectedId.value).toBe('start')
+    expect(other).not.toHaveBeenCalled()
+    button.disabled = false
+    button.setAttribute('aria-busy', 'false')
+    await nextTick()
+    expect(nav.selectedId.value).toBe('start')
+    expect(button.hasAttribute('data-overlay-selected')).toBe(true)
+    // An explicit navigation command can still leave the busy action.
+    button.disabled = true
+    button.setAttribute('aria-busy', 'true')
+    nav.next()
+    expect(nav.selectedId.value).toBe('back')
+  })
+  it('keeps an audio toggle selected through both state changes', async () => {
+    const button = root.querySelector<HTMLButtonElement>('[data-overlay-wheel-action="start"]')!
+    button.setAttribute('aria-checked', 'false')
+    button.addEventListener('click', () => {
+      button.setAttribute('aria-checked', String(button.getAttribute('aria-checked') !== 'true'))
+      button.innerHTML = `<span>Audio</span><small>${button.getAttribute('aria-checked')}</small>`
+    })
+    nav.select('start')
+    for (const expected of ['true', 'false']) {
+      nav.activate()
+      await nextTick()
+      expect(button.getAttribute('aria-checked')).toBe(expected)
+      expect(nav.selectedId.value).toBe('start')
+    }
   })
   it('skips mouse-only controls without disabling their click handler', () => {
     const training = document.createElement('button')

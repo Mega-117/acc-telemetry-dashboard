@@ -92,7 +92,6 @@ interface InfoTargetSettings {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const OVERLAY_WORK_AREA_SIZE: OverlaySize = { width: 472, height: 768 }
-const QUICK_PANEL_HORIZONTAL_WIDTH = 810
 const AUTO_DIM_DELAY_MS = 10_000
 const AUTO_DIM_RESTORE_MS = 10_000
 const AUTO_DIM_OPACITY = 0.6
@@ -141,6 +140,7 @@ const canUseSpotterControls = computed(() => resolveLocalRuntimeCapability({
 const overlayRoot = ref<HTMLElement | null>(null)
 const actionSelection = useOverlayActionSelection(overlayRoot, () =>
   phase.value !== 'loading',
+  () => !!overlayRoot.value?.querySelector('.overlay-content--launcher:not(.overlay-content--horizontal) .launcher-tools'),
 )
 const { selectedId: selectedWheelActionId, first: selectFirstWheelAction,
   next: selectNextWheelAction, activate: activateSelectedWheelAction } = actionSelection
@@ -180,7 +180,11 @@ async function disableReference(kind: 'target' | 'sectors') {
   finally { referenceBusy.value = false }
 }
 const sectorReferenceSetup = ref<InstanceType<typeof SectorReferenceSetup> | null>(null)
-function closeSectorReferenceSetup() { isSectorReferenceSetupOpen.value = false }
+function closeSectorReferenceSetup() {
+  if (!isSectorReferenceSetupOpen.value) return
+  isSectorReferenceSetupOpen.value = false
+  void nextTick(() => actionSelection.select('sector-references'))
+}
 async function saveSectorReferenceSetup() {
   await refreshSectorReferenceState()
   closeSectorReferenceSetup()
@@ -360,7 +364,7 @@ const voice = useQualifyingVoice(
 const { soundEnabled, primeStepAudio, playStepDoneSound, playCountdownBeep, enqueue: enqueueVoice, enqueueStepStart, stopVoice } = voice
 
 const overlaySizeComp = useOverlaySize(getOverlayApi, () => overlaySizePreset.value, overlayRoot,
-  () => isHorizontalQuickPanel.value ? QUICK_PANEL_HORIZONTAL_WIDTH : OVERLAY_WORK_AREA_SIZE.width)
+  () => isHorizontalQuickPanel.value ? Number.POSITIVE_INFINITY : OVERLAY_WORK_AREA_SIZE.width)
 const { cardSize, scheduleOverlaySizeSync, connectResizeObserver, disconnectResizeObserver, cleanup: cleanupSize } = overlaySizeComp
 watch(isHorizontalQuickPanel, () => { scheduleOverlaySizeSync(); nextTick(() => actionSelection.refresh()) })
 
@@ -415,6 +419,14 @@ const activeTask = computed(() => {
 })
 // Only the local development build exposes QA tools, never the installer build.
 const showQuickPanelDevTools = import.meta.dev
+const previewAllQuickPanelButtons = ref(false)
+const isCarStoppedWithEngineOff = computed(() => !fastState.value.isEngineRunning
+  && fastState.value.speedKmh !== null && Math.abs(fastState.value.speedKmh) <= 0.5)
+const showAllQuickPanelButtons = computed(() => isCarStoppedWithEngineOff.value
+  || (showQuickPanelDevTools && previewAllQuickPanelButtons.value))
+const hideStintWhileDriving = computed(() => !showAllQuickPanelButtons.value
+  && (fastState.value.isEngineRunning
+    || (fastState.value.speedKmh !== null && Math.abs(fastState.value.speedKmh) > 0.5)))
 const sessionOverlayOpacity = computed(() => {
   if (!autoDimDuringRun.value || phase.value !== 'running') return 1
   if (isPointerOnOverlaySurface.value) return 1
@@ -446,7 +458,7 @@ const overlayThemeStyle = computed(() => ({
   '--overlay-accent-rgb': phase.value === 'launcher' ? '229, 229, 229' : selectedTraining.value.accentRgb,
   '--overlay-accent-contrast': phase.value === 'launcher' ? '#101010' : selectedTraining.value.accentContrast,
   '--overlay-transform-origin': originCorner.value.replace('-', ' '),
-  '--overlay-work-area-width': `${isHorizontalQuickPanel.value ? QUICK_PANEL_HORIZONTAL_WIDTH : OVERLAY_WORK_AREA_SIZE.width}px`,
+  '--overlay-work-area-width': isHorizontalQuickPanel.value ? '100vw' : `${OVERLAY_WORK_AREA_SIZE.width}px`,
   '--overlay-work-area-height': `${OVERLAY_WORK_AREA_SIZE.height}px`,
   '--overlay-session-opacity': `${sessionOverlayOpacity.value}`,
   // Resize a due fasi (PIP-94): la card transiziona verso la dimensione target
@@ -536,9 +548,15 @@ function openInfoTargetSetup() {
   scheduleOverlaySizeSync()
 }
 
+function closeInfoTargetSetup() {
+  if (!isTargetSetupOpen.value) return
+  isTargetSetupOpen.value = false
+  void nextTick(() => actionSelection.select('target'))
+}
+
 function cancelInfoTargetSetup() {
   applyInfoTargetSettings(savedInfoTargetSettings)
-  isTargetSetupOpen.value = false
+  closeInfoTargetSetup()
   scheduleOverlaySizeSync()
 }
 
@@ -549,7 +567,7 @@ async function confirmInfoTarget() {
     keepBetweenSessions: infoTargetKeepBetweenSessions.value,
   }) as InfoTargetSettings | undefined
   applyInfoTargetSettings(saved)
-  isTargetSetupOpen.value = false
+  closeInfoTargetSetup()
   await getOverlayApi()?.trainingOverlayClose?.()
 }
 
@@ -583,7 +601,9 @@ function returnToMainMenu() {
 }
 
 async function prepareOverlayReopen(revision?: number) {
-  const rememberedAction = selectedWheelActionId.value
+  const rememberedAction = isTargetSetupOpen.value ? 'target'
+    : isSectorReferenceSetupOpen.value ? 'sector-references'
+      : isFuelSetupOpen.value ? 'fuel' : selectedWheelActionId.value
   await refreshSectorReferenceState().catch(() => {})
   preparingReopen.value = true
   await nextTick()
@@ -978,6 +998,7 @@ onBeforeUnmount(() => {
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
                     <QuickPanelLayoutToggle v-model="quickPanelLayout" />
                     <button
+                      v-if="!hideStintWhileDriving"
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training quick-panel-training"
                       title="Allenamento"
@@ -1000,7 +1021,7 @@ onBeforeUnmount(() => {
                       @toggle-pressure="togglePressureAudio"
                       @toggle-target="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
                     />
-                    <section v-if="!fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
+                    <section v-if="showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
                       <h2 class="quick-panel-heading">Riferimenti</h2>
                       <div class="quick-panel-pair">
                     <div class="quick-reference" :class="{ 'is-active': infoTargetActive }">
@@ -1027,10 +1048,10 @@ onBeforeUnmount(() => {
                     </div>
                       </div>
                     </section>
-                    <section class="quick-panel-section quick-panel-automations" aria-label="Automazioni">
-                      <h2 class="quick-panel-heading">Carburante</h2>
-                    <SetupFuelPanel v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" separate-view @open="isFuelSetupOpen = true" />
+                    <section class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving }" aria-label="Automazioni">
+                    <SetupFuelPanel show-heading v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" separate-view @open="isFuelSetupOpen = true" />
                     <div class="quick-panel-pair quick-panel-secondary">
+                    <h2 class="quick-panel-heading">Tools</h2>
                     <PitwallOverlayButton
                       :api="getOverlayApi()"
                       :selected="selectedWheelActionId === 'pitwall'"
@@ -1075,7 +1096,7 @@ onBeforeUnmount(() => {
                   <p v-if="dryPressureState.actionReasonCode" id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
                     Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
                   </p>
-                  <div v-if="dryPressureState.recommendation?.wheels" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
+                  <div v-if="dryPressureState.recommendation?.wheels && isCarStoppedWithEngineOff" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <div class="pressure-plan__meta">
                       <span>{{ dryPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>
                       <span v-if="(dryPressureState.recommendation?.required_valid_laps ?? 1) > 0">{{ dryPressureState.recommendation?.valid_laps || 0 }}/{{ dryPressureState.recommendation?.required_valid_laps ?? 1 }} valido</span>
@@ -1096,6 +1117,9 @@ onBeforeUnmount(() => {
                     </section>
                     <details v-if="showQuickPanelDevTools" class="quick-panel-dev">
                       <summary>Strumenti sviluppo</summary>
+                      <button type="button" class="launcher-tool-button" :aria-pressed="previewAllQuickPanelButtons" @click="previewAllQuickPanelButtons = !previewAllQuickPanelButtons; scheduleOverlaySizeSync()">
+                        {{ previewAllQuickPanelButtons ? 'Ripristina visibilità' : 'Mostra tutti i pulsanti' }}
+                      </button>
                       <button type="button" class="launcher-tool-button" :aria-pressed="isTestMode" @click="toggleTestMode">Test timer</button>
                       <button v-if="canUseVoicePointRecorder" type="button" class="launcher-tool-button" :aria-pressed="voicePointRecorderEnabled" @click="toggleVoicePointRecorder">Registra riferimenti</button>
                     <button
