@@ -2,7 +2,7 @@
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import OverlaySoftwareCursor from '~/components/overlay/OverlaySoftwareCursor.vue'
 import StandingsHud from '~/components/overlay/StandingsHud.vue'
 import { useHudOverlay } from '~/composables/useHudOverlay'
@@ -74,12 +74,23 @@ const canvasStyle = computed(() => ({
   transform: `scale(${overlay.scale.value})`,
 }))
 
+// Report semantic occupancy; the common HUD manager derives pixel geometry.
+const occupiedRows = computed(() => Math.max(1, model.value.rows.length + (model.value.message ? 1 : 0)))
+function syncRowCount() {
+  const api = getApi()
+  if (typeof api?.hudOverlaySetSize === 'function') {
+    void api.hudOverlaySetSize('standings', { rowCount: occupiedRows.value })
+  }
+}
+watch(occupiedRows, syncRowCount)
+
 onMounted(async () => {
   overlay.start(route.query.scale)
   void fastState.startFastStatePolling()
   overlay.startInteractionSurface()
   await overlay.loadSettings()
   standings.start()
+  syncRowCount()
   await overlay.notifyContentReady()
 })
 onUnmounted(() => {
