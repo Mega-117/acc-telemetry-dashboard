@@ -173,7 +173,7 @@ function onWheel(control: PickerControl, event: WheelEvent) {
       @click="emit('toggle-keep')"
     >
       <i aria-hidden="true">{{ keepBetweenSessions ? '✓' : '' }}</i>
-      <span>{{ appearance === 'quick-panel' ? 'Mantieni sullo stesso server' : 'Mantieni tra sessioni dello stesso server' }}</span>
+      <span>Mantieni tra sessioni dello stesso server</span>
     </button>
 
     <p v-if="appearance === 'quick-panel' && editingControl" class="target-edit-hint" role="status">Successiva + · Precedente − · Conferma per terminare</p>
