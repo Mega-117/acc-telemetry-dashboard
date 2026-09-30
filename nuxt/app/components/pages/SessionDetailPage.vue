@@ -2566,6 +2566,11 @@ const gripZones = computed(() => {
 
         <!-- NORMAL MODE: Single stint list with [+A] [+B] buttons -->
         <template v-else>
+          <div v-if="!comparisonOpen" class="stint-reference" aria-live="polite">
+            <span>Riferimento · Stint {{ effectiveStintNumber }}</span>
+            <strong>{{ (selectedStint?.type === 'Q' ? theoreticalTimes.theoQualy : theoreticalTimes.theoRace) ? formatLapTime(selectedStint?.type === 'Q' ? theoreticalTimes.theoQualy : theoreticalTimes.theoRace) : 'Non disponibile' }}</strong>
+            <small>Ogni Δ usa il riferimento del proprio stint.</small>
+          </div>
           <div class="stint-columns" aria-hidden="true"><span>#</span><span>Tipo</span><span>Giri</span><span v-if="!comparisonOpen">Δ rif.</span><span v-else>A / B</span></div>
           <div class="stint-list stint-list--builder">
             <div
@@ -6589,6 +6594,10 @@ const gripZones = computed(() => {
   .stint-list-heading span { font-size: 10px; color: var(--rc-muted); }
   .master-title { margin: 0; font-size: 12px; }
   .stint-list { gap: 4px; }
+  .stint-reference { display: grid; gap: 4px; padding: 0 0 12px; margin-bottom: 8px; border-bottom: 1px solid var(--rc-line); }
+  .stint-reference > span { font-size: 11px; color: var(--rc-muted); }
+  .stint-reference > strong { font-size: 20px; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  .stint-reference > small { font-size: 10px; line-height: 1.4; color: var(--rc-muted); }
   .stint-item.stint-item--builder { display: flex; gap: 8px; min-height: 44px; padding: 8px; background: transparent; border: 0; border-left: 2px solid transparent; border-bottom: 1px solid #ffffff12; border-radius: 0; }
   .stint-item:hover { background: #ffffff08; }
   .stint-item.selected, .stint-item.viewing { background: var(--rc-selection); border-left-color: var(--racing-race, #ff0024); }
