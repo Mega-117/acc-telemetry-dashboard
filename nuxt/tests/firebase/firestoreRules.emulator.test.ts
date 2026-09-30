@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { resolve } from 'node:path'
 import {
   assertFails,
@@ -525,10 +526,10 @@ describe('top-level profile authorization matrix', () => {
 })
 
 describe('canonical session synchronization', () => {
-  it('round-trips the Python V5 summary without reinterpretation', async () => {
+  it('round-trips the current Python summary without reinterpretation', async () => {
     const db = testEnv.authenticatedContext(PILOT_UID).firestore()
     const canonicalSummary = {
-      best_rules_version: 5,
+      best_rules_version: BEST_RULES_VERSION,
       laps: 2,
       lapsValid: 2,
       bestLap: 100000,

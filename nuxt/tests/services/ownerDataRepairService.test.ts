@@ -1,3 +1,4 @@
+import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const io = vi.hoisted(() => ({ get: vi.fn(), list: vi.fn(), set: vi.fn(), invalidate: vi.fn(), clear: vi.fn(), changed: vi.fn() }))
 vi.mock('~/services/sync/syncMirrorService', () => ({ invalidateSyncMirror: io.invalidate }))
@@ -21,7 +22,7 @@ import {
 import { buildTrackBestsIndexDocument } from '~/services/sync/trackBestsIndexProjectionService'
 
 describe('targeted track maintenance I/O', () => {
-  const bests = { version: 4, bestRulesVersion: 5, activity: { sessionCount: 666 }, lastSessionDate: '2026-09-22', bests: {} }
+  const bests = { version: 4, bestRulesVersion: BEST_RULES_VERSION, activity: { sessionCount: 666 }, lastSessionDate: '2026-09-22', bests: {} }
   beforeEach(() => {
     vi.clearAllMocks()
     io.list.mockImplementation(async ({ path }: { path: string }) => ({ docs:
@@ -73,11 +74,11 @@ describe('isLegacyTrackBestProjectionDoc', () => {
   })
 
   it('considera legacy un trackBests con schema vecchio anche se bestRulesVersion corrente', () => {
-    expect(isLegacyTrackBestProjectionDoc({ version: 3, bestRulesVersion: 5 })).toBe(true)
+    expect(isLegacyTrackBestProjectionDoc({ version: 3, bestRulesVersion: BEST_RULES_VERSION })).toBe(true)
   })
 
   it('accetta solo trackBests con schema e regole correnti', () => {
-    expect(isLegacyTrackBestProjectionDoc({ version: 4, bestRulesVersion: 5 })).toBe(false)
+    expect(isLegacyTrackBestProjectionDoc({ version: 4, bestRulesVersion: BEST_RULES_VERSION })).toBe(false)
   })
 })
 

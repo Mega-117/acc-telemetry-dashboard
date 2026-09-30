@@ -27,9 +27,17 @@ describe('raceFuelClassification', () => {
         expect(isHistoricalRaceFuel(fuel)).toBe(expected !== null)
     })
 
-    it('mantiene session_type=1 come qualifica anche con carburante alto', () => {
-        expect(classifyStintTypeFromFuel(90, 1)).toBe('Qualify')
-        expect(classifyHistoricalEligibility(90, 1)).toBe('qualy_historical')
+    it.each([0, 1, 2, null])('classifica dal fuel indipendentemente dalla sessione %s', (sessionType) => {
+        for (const [fuel, type, eligibility] of [
+            [20, 'Qualify', 'qualy_historical'],
+            [20.1, 'Race', 'race_non_historical'],
+            [40, 'Race', 'race_non_historical'],
+            [40.1, 'Race', 'race_historical'],
+            [120, 'Race', 'race_historical']
+        ] as const) {
+            expect(classifyStintTypeFromFuel(fuel, sessionType)).toBe(type)
+            expect(classifyHistoricalEligibility(fuel, sessionType, 'Qualify')).toBe(eligibility)
+        }
     })
 
     it('separa classificazione stint legacy da eligibility race storica', () => {

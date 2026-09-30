@@ -24,7 +24,7 @@ export type SessionSummarySource = 'canonical' | 'legacy_fallback' | 'missing_ca
 
 const VALID_GRIPS = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum'] as const
 
-export const BEST_RULES_VERSION = 5
+export const BEST_RULES_VERSION = 6
 
 function normalizeGrip(grip: string): string {
   if (grip === 'Opt') return 'Optimum'

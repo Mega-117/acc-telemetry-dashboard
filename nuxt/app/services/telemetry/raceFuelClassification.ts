@@ -27,18 +27,18 @@ export function isHistoricalRaceFuel(fuel: number | null | undefined): boolean {
 
 export function classifyStintTypeFromFuel(
   fuelStart: number | null | undefined,
-  sessionType: number | null | undefined
+  _sessionType: number | null | undefined
 ): StintFuelClassification {
-  if (sessionType === 1) return 'Qualify'
+  // ACC event type must not override the actual fuel load.
   return (parseFuel(fuelStart) ?? 0) > STINT_RACE_FUEL_THRESHOLD_L ? 'Race' : 'Qualify'
 }
 
 export function classifyHistoricalEligibility(
   fuelStart: number | null | undefined,
   sessionType: number | null | undefined,
-  stintType?: string | null
+  _stintType?: string | null
 ): HistoricalEligibility {
-  const effectiveStintType = stintType || classifyStintTypeFromFuel(fuelStart, sessionType)
-  if (sessionType === 1 || effectiveStintType === 'Qualify') return 'qualy_historical'
+  const effectiveStintType = classifyStintTypeFromFuel(fuelStart, sessionType)
+  if (effectiveStintType === 'Qualify') return 'qualy_historical'
   return isHistoricalRaceFuel(fuelStart) ? 'race_historical' : 'race_non_historical'
 }

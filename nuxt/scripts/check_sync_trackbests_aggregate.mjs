@@ -177,7 +177,7 @@ await applyTrackBestsProjectionDeltas({
     dateStart: '2026-05-17T15:00:00',
     car: 'ferrari_296_gt3',
     summary: {
-      best_rules_version: 5,
+      best_rules_version: 6,
       laps: 5,
       lapsValid: 5,
       totalTime: 500000,
@@ -234,14 +234,14 @@ await applyTrackBestsProjectionDeltas({
     setCalls++
     writes.push({ ref, data })
   },
-  bestRulesVersion: 5,
+  bestRulesVersion: 6,
   docFn: (_db, docPath) => ({ path: docPath })
 })
 
 assert.equal(getCalls, 2, 'missing merged document: one merged read plus one legacy trackBests read')
 assert.equal(setCalls, 1)
 assert.equal(writes[0].data.bests.version, 4)
-assert.equal(writes[0].data.bests.bestRulesVersion, 5)
+assert.equal(writes[0].data.bests.bestRulesVersion, 6)
 assert.equal(writes[0].data.bests.bests.GT3.Optimum.bestRace, 98000)
 assert.equal(writes[0].data.bests.bests.GT3.Optimum.bestRaceSessionId, 'monza-vnext')
 assert.equal(writes[0].data.bests.bests.GT3.Optimum.raceBestByFuelBucket['60-80'].timeMs, 98000)

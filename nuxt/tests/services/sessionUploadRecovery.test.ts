@@ -1,3 +1,4 @@
+import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { expect, it, vi } from 'vitest'
 
 // Synthetic persistence boundary: no Firebase connection or user data.
@@ -30,7 +31,7 @@ it('retries a failed session batch without data loss or duplicate upload', async
       ownerId: 'qa-owner',
       session_info: { track: 'spa', date_start: '2026-09-08T00:00:00Z', car_model: 'amr_v8_vantage_gt3', session_type: 2, laps_total: 2, laps_valid: 2, session_best_lap: 137000, avg_clean_lap: 138000, total_drive_time_ms: 280000 },
       stints: [{ laps: [{ lap_time_ms: 137000, is_valid: true }, { lap_time_ms: 139000, is_valid: true }] }],
-      summary: { best_rules_version: 5, laps: 2, lapsValid: 2, bestLap: 137000, avgCleanLap: 138000, totalTime: 280000, stintCount: 1, provenance: { source: 'qa-isolated' } }
+      summary: { best_rules_version: BEST_RULES_VERSION, laps: 2, lapsValid: 2, bestLap: 137000, avgCleanLap: 138000, totalTime: 280000, stintCount: 1, provenance: { source: 'qa-isolated' } }
     }
     const original = JSON.stringify(raw)
     const service = createSessionUploadService({

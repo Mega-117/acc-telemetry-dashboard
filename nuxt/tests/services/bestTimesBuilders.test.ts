@@ -1,3 +1,4 @@
+import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { describe, it, expect } from 'vitest'
 import {
     OVERVIEW_GRIP_PRIORITY,
@@ -64,7 +65,7 @@ function makeSession(overrides: Partial<{
 function makeTrackBestDoc(bests: any, overrides: Record<string, any> = {}) {
     return {
         version: 4,
-        bestRulesVersion: 5,
+        bestRulesVersion: BEST_RULES_VERSION,
         bests,
         ...overrides
     }

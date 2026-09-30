@@ -1,3 +1,4 @@
+import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -33,7 +34,7 @@ function canonicalRaw() {
     },
     stints: [{ laps: [{ lap_time_ms: 137000, is_valid: true }] }],
     summary: {
-      best_rules_version: 5,
+      best_rules_version: BEST_RULES_VERSION,
       laps: 2,
       lapsValid: 2,
       bestLap: 137000,
@@ -52,11 +53,11 @@ function makeService(chunkSize: number, assertActive: () => void = () => {}) {
     getExistingSession: async () => ({
       fileHash: 'old-hash',
       rawDataHash: 'old-raw-hash',
-      summaryRulesVersion: 5,
+      summaryRulesVersion: BEST_RULES_VERSION,
       rawSizeBytes: 240,
       rawEncoding: 'json-string',
       version: 1,
-      summary: { best_rules_version: 5 }
+      summary: { best_rules_version: BEST_RULES_VERSION }
     }),
     loadRegistryCache: async () => ({}),
     canSkipViaRegistry: () => false,
