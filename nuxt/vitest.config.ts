@@ -295,6 +295,8 @@ export default defineConfig({
         'app/composables/useStandingsHighlights.ts',
         'app/composables/useTimedHudPager.ts',
         'app/composables/useSessionOrchestrator.ts',
+          'app/composables/useQuickCountdown.ts',
+          'app/components/overlay/QuickCountdown.vue',
         'app/composables/useCoachInsights.ts',
         'app/composables/useRuntimeCapabilityGate.ts',
         // ── Phase 4: composables estratti da useTelemetryData ────────────

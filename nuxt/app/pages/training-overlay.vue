@@ -31,7 +31,9 @@ import {
   resolveAutoAdvanceSeconds,
   type OverlayOriginCorner, type OverlayOriginMode,
 } from '~/composables/useOverlaySettings'
-import { CircleCheck, CircleMinus, Dumbbell, Power, Check, LoaderCircle, Target, Flag } from '@lucide/vue'
+import { CircleCheck, CircleMinus, Dumbbell, Timer, Power, Check, LoaderCircle, Target, Flag } from '@lucide/vue'
+import QuickCountdown from '~/components/overlay/QuickCountdown.vue'
+import { useQuickCountdown } from '~/composables/useQuickCountdown'
 import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
 import QuickPanelVoiceControls from '~/components/overlay/QuickPanelVoiceControls.vue'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
@@ -114,7 +116,7 @@ const phase = ref<OverlayPhase>('loading')
 // Kept while the panel is hidden or an editor is open; no cloud preference.
 const quickPanelLayout = ref<'vertical' | 'horizontal'>('vertical')
 const isHorizontalQuickPanel = computed(() => phase.value === 'launcher'
-  && !isTargetSetupOpen.value && !isSectorReferenceSetupOpen.value && !isFuelSetupOpen.value
+  && !isTargetSetupOpen.value && !isSectorReferenceSetupOpen.value && !isFuelSetupOpen.value && !isQuickTimerOpen.value
   && quickPanelLayout.value === 'horizontal')
 const remainingMs = ref(0)
 const isElectronRuntime = ref(false)
@@ -147,6 +149,7 @@ const { selectedId: selectedWheelActionId, first: selectFirstWheelAction,
 const preparingReopen = ref(false)
 const isPointerOnOverlaySurface = ref(false)
 const isFuelSetupOpen = ref(false)
+const isQuickTimerOpen = ref(false)
 const fuelStintMinutes = ref(10)
 function closeFuelSetup() { isFuelSetupOpen.value = false; void nextTick(() => actionSelection.select('fuel')) }
 const isTargetSetupOpen = ref(false)
@@ -363,6 +366,19 @@ const voice = useQualifyingVoice(
   () => selectedTrainingId.value,
 )
 const { soundEnabled, primeStepAudio, playStepDoneSound, playCountdownBeep, enqueue: enqueueVoice, enqueueStepStart, stopVoice } = voice
+const quickTimer = useQuickCountdown(
+  () => { void getOverlayApi()?.trainingOverlayOpen?.().catch(() => {}) },
+  () => { playStepDoneSound(1, true) },
+)
+function startQuickTimer(seconds: number) {
+  void primeStepAudio(true)
+  quickTimer.start(seconds)
+}
+function closeQuickTimer() {
+  quickTimer.cancel()
+  isQuickTimerOpen.value = false
+  void nextTick(() => actionSelection.refresh())
+}
 
 const overlaySizeComp = useOverlaySize(getOverlayApi, () => overlaySizePreset.value, overlayRoot,
   () => isHorizontalQuickPanel.value ? Number.POSITIVE_INFINITY : OVERLAY_WORK_AREA_SIZE.width)
@@ -429,6 +445,8 @@ const hideStintWhileDriving = computed(() => !showAllQuickPanelButtons.value
   && (fastState.value.isEngineRunning
     || (fastState.value.speedKmh !== null && Math.abs(fastState.value.speedKmh) > 0.5)))
 const sessionOverlayOpacity = computed(() => {
+  if (isQuickTimerOpen.value) return quickTimer.status.value === 'running'
+    && quickTimer.remainingMs.value > 5000 && !isPointerOnOverlaySurface.value ? AUTO_DIM_OPACITY : 1
   if (!autoDimDuringRun.value || phase.value !== 'running') return 1
   if (isPointerOnOverlaySurface.value) return 1
   const totalMs = stepBudgetMs(activeStep.value)
@@ -440,7 +458,7 @@ const hudTransitionKey = computed(() => `${phase.value}-${activeStepIndex.value}
 // Le fasi di sessione condividono il contenuto: il cross-fade del contenitore
 // scatta solo tra macro-schermate; dentro la sessione anima OverlayHud.
 const contentKey = computed(() =>
-  ['running', 'paused', 'expired'].includes(phase.value) ? 'session' : phase.value
+  isQuickTimerOpen.value ? 'quick-timer' : ['running', 'paused', 'expired'].includes(phase.value) ? 'session' : phase.value
 )
 const overlaySizePreset = computed<OverlaySizePreset>(() => {
   if (phase.value === 'launcher') return 'launcher'
@@ -640,6 +658,7 @@ async function prepareOverlayReopen(revision?: number) {
 }
 
 function runBackAction() {
+  if (isQuickTimerOpen.value) { closeOverlay(); return }
   if (isFuelSetupOpen.value) { closeFuelSetup(); return }
   if (isSectorReferenceSetupOpen.value) { closeSectorReferenceSetup(); return }
   if (isTargetSetupOpen.value) { cancelInfoTargetSetup(); return }
@@ -661,6 +680,7 @@ function runMuteAction() {
 }
 
 function executePrimaryAction() {
+  if (isQuickTimerOpen.value) return
   if (isFuelSetupOpen.value) { activateSelectedWheelAction(); return }
   const now = Date.now()
   if (now - lastPrimaryActionAt < PRIMARY_ACTION_DEBOUNCE_MS) { setDebugEvent(`debounce ${primaryAction.value}`); return }
@@ -776,6 +796,7 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   if (placementActive.value) return
   setDebugEvent(`comando overlay: ${command || 'vuoto'}`)
   if (command === 'prepare-reopen') { void prepareOverlayReopen(typeof payload === 'string' ? undefined : payload.revision); return }
+  if (isQuickTimerOpen.value) { if (command === 'back') closeOverlay(); return }
   if (command === 'main-menu') { returnToMainMenu(); return }
   if (isTargetSetupOpen.value && targetSetup.value?.handleWheelCommand(command)) return
   if (command === 'primary') executePrimaryAction()
@@ -882,7 +903,7 @@ watch(isShortcutStopConfirmOpen, (open) => {
 
 watch(
   [phase, placementActive, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
-    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, isSectorReferenceSetupOpen, isFuelSetupOpen, liveHudResizeKey],
+    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, isSectorReferenceSetupOpen, isFuelSetupOpen, isQuickTimerOpen, quickTimer.status, liveHudResizeKey],
   () => { scheduleOverlaySizeSync(); actionSelection.refresh() },
   { flush: 'post' }
 )
@@ -988,17 +1009,21 @@ onBeforeUnmount(() => {
               :class="[
                 'overlay-content',
                 `overlay-content--${overlaySizePreset}`,
-                { 'overlay-content--target': isTargetSetupOpen || isSectorReferenceSetupOpen || isFuelSetupOpen,
+                { 'overlay-content--target': isTargetSetupOpen || isSectorReferenceSetupOpen || isFuelSetupOpen || isQuickTimerOpen,
                   'overlay-content--target-lap': isTargetSetupOpen,
                   'overlay-content--horizontal': isHorizontalQuickPanel },
               ]"
             >
 
               <template v-if="phase === 'launcher'">
-                <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen && !isFuelSetupOpen" class="launcher-tools" aria-label="Strumenti live overlay">
+                <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen && !isFuelSetupOpen && !isQuickTimerOpen" class="launcher-tools" aria-label="Strumenti live overlay">
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
                     <QuickPanelLayoutToggle v-model="quickPanelLayout" />
+                    <div class="quick-panel-header-actions">
+                    <button type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" @click="isQuickTimerOpen = true">
+                      <Timer :size="18" aria-hidden="true" />
+                    </button>
                     <button
                       v-if="!hideStintWhileDriving"
                       type="button"
@@ -1009,6 +1034,7 @@ onBeforeUnmount(() => {
                     >
                       <Dumbbell :size="18" aria-hidden="true" />
                     </button>
+                    </div>
                   </header>
                   <div class="launcher-tools__actions">
 
@@ -1146,6 +1172,7 @@ onBeforeUnmount(() => {
                     </details>
                   </div>
                 </div>
+                <QuickCountdown v-else-if="isQuickTimerOpen" :status="quickTimer.status.value" :display="quickTimer.display.value" @start="startQuickTimer" @cancel="closeQuickTimer" />
                 <InfoTargetSetup
                   v-else-if="isTargetSetupOpen"
                   ref="targetSetup"

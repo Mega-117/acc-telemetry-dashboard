@@ -40,21 +40,21 @@ export function useQualifyingVoice(
     return stepAudioContext
   }
 
-  async function primeStepAudio() {
-    if (!soundEnabled.value) return
+  async function primeStepAudio(force = false) {
+    if (!force && !soundEnabled.value) return
     const ctx = getStepAudioContext()
     if (!ctx) return
     if (ctx.state === 'suspended') await ctx.resume().catch(() => undefined)
   }
 
-  function playStepDoneSound() {
-    if (!soundEnabled.value) return
+  function playStepDoneSound(repetitions = 3, force = false) {
+    if (!force && !soundEnabled.value) return
     const ctx = getStepAudioContext()
     if (!ctx) return
     void ctx.resume().catch(() => undefined)
     const firstBeepAt = ctx.currentTime + 0.01
     const base = [0, 0.22, 0.44]
-    const offsets = [...base, ...base.map(o => o + 0.95), ...base.map(o => o + 1.90)]
+    const offsets = Array.from({ length: repetitions }, (_, i) => base.map(o => o + i * 0.95)).flat()
     offsets.forEach((offset) => {
       const t = firstBeepAt + offset
       const osc = ctx.createOscillator()

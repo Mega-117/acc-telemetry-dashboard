@@ -617,8 +617,9 @@
   @keyframes quick-state-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .launcher-tool-button[data-state='pending'] .quick-state-icon { animation: none; } }
   .launcher-tools { gap: 12px; }
-  .launcher-tools__header { display: grid; grid-template-columns: 56px minmax(0, 1fr) 34px; align-items: center; gap: 10px; }
-  .launcher-tools__header .quick-panel-training { width: 34px; height: 34px; min-height: 34px; padding: 0; display: grid; place-items: center; }
+  .launcher-tools__header { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+  .quick-panel-header-actions { display: flex; align-items: center; gap: 6px; }
+  .launcher-tools__header :is(.quick-panel-training, .quick-panel-timer) { width: 34px; height: 34px; min-height: 34px; padding: 0; display: grid; place-items: center; }
   .launcher-tools__header .quick-panel-layout { justify-self: center; opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
   &:hover .quick-panel-layout,
   .overlay-pointer-surface-hovered & .quick-panel-layout { opacity: 1; pointer-events: auto; }
@@ -2343,7 +2344,7 @@ button.is-active {
     position: relative; padding-left: 10px;
     &::before { content: ''; position: absolute; left: 0; top: 20px; height: 64px; width: 1px; background: #ffffff25; }
   }
-  .quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all):has([data-overlay-wheel-action='fuel-session']:disabled) {
+  .quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all) {
     > .fuel-panel { display: none; }
     > .quick-panel-secondary { padding-left: 0; &::before { display: none; } }
     grid-template-columns: max-content;
@@ -2352,7 +2353,7 @@ button.is-active {
   // Keep the pressure preview beside its action, without moving dev controls.
   .quick-panel-automations:has(> .control-k-pressure-info, > .control-k-request) { grid-template-columns: max-content max-content 220px; }
   .quick-panel-automations:has(> .control-k-pressure-info, > .control-k-request) > :not(.fuel-panel, .quick-panel-secondary, .control-k-pressure-info, .control-k-request) { grid-column: 1 / span 2; }
-  .quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all):has([data-overlay-wheel-action='fuel-session']:disabled):has(> .control-k-pressure-info, > .control-k-request) {
+  .quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all):has(> .control-k-pressure-info, > .control-k-request) {
     grid-template-columns: max-content 220px;
     > :not(.fuel-panel, .quick-panel-secondary, .control-k-pressure-info, .control-k-request) { grid-column: 1; }
   }
@@ -2469,7 +2470,7 @@ button.is-active {
   .quick-panel-automations > :not(.quick-panel-heading, .fuel-panel, .quick-panel-secondary) { grid-column: 1 / -1; }
   // Disabled/hidden fuel actions must not leave an empty titled column.
   .launcher-tools__actions:not(:has(.fuel-panel button:not(:disabled))),
-  .launcher-tools__actions:has(.quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all)):has([data-overlay-wheel-action='fuel-session']:disabled) {
+  .launcher-tools__actions:has(.quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all)) {
     .quick-panel-automations > .fuel-panel { display: none; }
     .quick-panel-secondary {
       grid-column: 1;
@@ -2479,7 +2480,7 @@ button.is-active {
   }
 }
 
-.training-overlay--launcher .quick-panel-automations.quick-panel-driving [data-overlay-wheel-action='fuel'] {
+.training-overlay--launcher .quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all) > .fuel-panel {
   display: none;
 }
 
@@ -2505,7 +2506,7 @@ button.is-active {
       grid-template-columns: max-content max-content 220px 220px;
       > .control-k-pressure-info, > .control-k-request { grid-column: -3 / -2; }
     }
-    &.quick-panel-driving:not(.quick-panel-show-all):has([data-overlay-wheel-action='fuel-session']:disabled) {
+    &.quick-panel-driving:not(.quick-panel-show-all) {
       grid-template-columns: max-content 220px;
       &:has(> .control-k-pressure-info, > .control-k-request) { grid-template-columns: max-content 220px 220px; }
       > :not(.fuel-panel, .quick-panel-secondary, .control-k-pressure-info, .control-k-request, .control-k-fuel-status) { grid-column: 1; }
