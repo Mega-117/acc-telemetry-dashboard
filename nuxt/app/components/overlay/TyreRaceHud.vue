@@ -23,6 +23,8 @@ const tyres = computed(() => ids.map((id, index) => {
     color: tyreTemperatureColor(tyre.coreTempC, props.fastState.tyreCompound === 'WET' ? 'WET' : 'DRY'),
     slip: raceSlip(tyre.wheelSlipRaw ?? tyre.wheelSlip),
     height: racePressureHeight(tyre.pressurePsi, props.fastState.tyreCompound),
+    average: hasPhysics.value && props.fastState.lapPressureAverage.status === 'available'
+      ? props.fastState.lapPressureAverage.values[id] : null,
     flash: hasPhysics.value ? racePressureFlash(tyre, Date.now()) : null,
   }
 }))
@@ -53,7 +55,8 @@ function brakeColor(tyre: FastStateTyre) {
       <rect width="166" height="241" rx="8" fill="#000" fill-opacity=".65" />
       <rect v-if="fastState.flag === 2" x="1" y="1" width="164" height="239" rx="8" fill="none" stroke="#ffd400" stroke-width="1.5" />
       <g v-for="tyre in tyres" :key="tyre.id" class="tyre-race__corner" :class="[`tyre-race__corner--${tyre.id.toLowerCase()}`, { 'tyre-race__corner--rear': tyre.rear }]" :data-wheel="tyre.id" :aria-label="tyre.id">
-        <text class="tyre-race__primary" :x="tyre.x + 25" :y="tyre.rear ? 235 : 25">{{ raceNumber(tyre.pressurePsi, 1) }}</text>
+        <text class="tyre-race__primary" :x="tyre.x + 25" :y="tyre.rear ? 225 : 17">{{ raceNumber(tyre.pressurePsi, 1) }}</text>
+        <text class="tyre-race__average" aria-label="Pressione media dell'ultimo giro concluso" :x="tyre.x + 25" :y="tyre.rear ? 239 : 31">AVG {{ raceNumber(tyre.average, 1) }}</text>
         <g :transform="`translate(${tyre.x} ${tyre.y})`" class="tyre-race__tyre">
           <rect width="50" height="56" rx="8" :fill="tyre.color" />
           <rect x="16" width="18" height="56" fill="#000" />
@@ -103,6 +106,7 @@ function brakeColor(tyre: FastStateTyre) {
 
 .tyre-race__matrix { display:block; width:100%; flex:1; min-height:0; overflow:visible; font-family:"Segoe UI",sans-serif; font-size:18px; font-weight:700; fill:#fff; text-anchor:middle; }
 .tyre-race__loss { fill:#ffa500; font-size:14px; }
+.tyre-race__average { fill:#cbd5e1; font-size:11.5px; }
 .tyre-race__temperature { paint-order:stroke; stroke:#000; stroke-width:.8px; stroke-opacity:.65; }
 .tyre-race__compound { font-size:16px; }
 .tyre-race__pressure-flash { fill:red; opacity:0; animation:race-pressure-flash 2s linear both; }

@@ -44,12 +44,13 @@ describe('Race HUD components', () => {
     for (const id of ['FL', 'FR', 'RL', 'RR']) expect(html).toContain(id)
     expect(html).toContain('--')
     expect(html).not.toContain('23.2')
+    expect(html.match(/AVG --/g)).toHaveLength(4)
   })
 
   it('rende la gerarchia gomme specchiata con slip, loss e freni', async () => {
     const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: fastState() }))
     expect(html).toContain('23.2')
-    expect(html).not.toContain('AVG ')
+    expect(html.match(/AVG 23.1/g)).toHaveLength(4)
     expect(html).toContain('0.18')
     expect(html).toContain('tyre-race__brake--front')
     expect(html).toContain('tyre-race__brake--rear')
@@ -68,6 +69,16 @@ describe('Race HUD components', () => {
     expect(html).toContain('0:21.00')
     expect(html).toContain('0:37.98')
     for (const label of ['FL', 'FR', 'RL', 'RR', '24%', '68%']) expect(html).toContain(label)
+  })
+
+  it('mostra AVG per ruota dal giro concluso, indipendente dalla pressione istantanea', async () => {
+    const state = fastState()
+    state.lapPressureAverage.values = { FL: 26.1, FR: 26.2, RL: 26.3, RR: 26.4 }
+    state.tyres[0]!.pressurePsi = 28.5
+    const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: state }))
+    for (const value of ['26.1', '26.2', '26.3', '26.4']) expect(html).toContain(`AVG ${value}`)
+    expect(html).toContain('28.5')
+    expect(html).not.toContain('AVG 28.5')
   })
 
   it('motore spento e limiter coesistono; i numeri freni appartengono alla ruota sinistra', async () => {
@@ -89,7 +100,7 @@ describe('Race HUD components', () => {
     const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: partial }))
 
     for (const id of ['fl', 'fr', 'rl', 'rr']) expect(html).toContain(`tyre-race__corner--${id}`)
-    expect(html).not.toContain('AVG ')
+    expect(html.match(/AVG --/g)).toHaveLength(4)
     expect(html).toContain('--')
     expect(html).not.toContain('LOSS 0.00')
   })
