@@ -7,6 +7,7 @@
  */
 
 export interface SessionMeta {
+  gameId?: string
   track: string
   car: string
   date_start: string

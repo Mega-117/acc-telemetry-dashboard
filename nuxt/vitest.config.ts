@@ -40,6 +40,7 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/services/telemetry/gameIdentity.ts',
         'app/services/pitwall/friendRequestQueue.ts',
         'app/composables/useControlKFriendRequests.ts',
         'app/components/overlay/ControlKFriendRequests.vue',

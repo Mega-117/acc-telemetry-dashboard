@@ -2,6 +2,7 @@ import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
 import type { FullSession, SessionDocument } from '~/types/telemetry'
 import { ensureLocalTelemetrySummariesCanonical } from '~/utils/localCanonicalSummary'
 import { isRegistryEntryCurrentForFile } from '~/services/sync/syncRegistryPolicy'
+import { recordingGame } from '~/services/telemetry/gameIdentity'
 
 export function isSessionFileCandidate(fileName: string, rawObj: any): boolean {
   const normalized = (fileName || '').toLowerCase()
@@ -34,7 +35,7 @@ export async function loadLocalTelemetrySessions(params: {
       if (typeof rawObj.ownerId !== 'string' || rawObj.ownerId !== ownerId) continue
 
       const { meta, summary, summarySource } = extractMetadata(rawObj)
-      const sessionId = generateSessionId(meta.date_start, meta.track)
+      const sessionId = generateSessionId(meta.date_start, meta.track, meta.gameId)
       const reg = registry[fileName]
       const isSynced = isRegistryEntryCurrentForFile({
         entry: reg,
@@ -85,7 +86,8 @@ export async function findLocalFullSessionById(params: {
     const sessionInfo = rawObj.session_info || {}
     const localSessionId = generateSessionId(
       sessionInfo.date_start || rawObj.date || '',
-      sessionInfo.track || rawObj.track || ''
+      sessionInfo.track || rawObj.track || '',
+      recordingGame(rawObj) ?? 'unknown'
     )
 
     if (localSessionId === sessionId) {

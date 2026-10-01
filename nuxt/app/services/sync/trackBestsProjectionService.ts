@@ -31,6 +31,7 @@ import {
 export const TRACK_BESTS_SCHEMA_VERSION = 4
 
 export interface TrackBestProjectionDelta {
+  gameId?: string
   trackId: string
   sessionId: string
   dateStart: string
@@ -255,6 +256,7 @@ function mergeTrackBestsDocument(params: {
   const newActivity = { ...existingActivity }
 
   for (const delta of deltas) {
+    if (delta.gameId !== undefined && delta.gameId !== 'acc') continue
     hasBestUpdates = applyBestDelta({ bests: newBests, delta, gripConditions }) || hasBestUpdates
     maxRulesVersion = Math.max(maxRulesVersion, Number(delta.summary?.best_rules_version || bestRulesVersion))
     lastSessionDate = maxDateString(lastSessionDate, delta.dateStart)
@@ -357,6 +359,7 @@ export async function applyTrackBestsProjectionDeltas(params: {
 
   const grouped = new Map<string, TrackBestProjectionDelta[]>()
   for (const delta of deltas) {
+    if (delta.gameId !== undefined && delta.gameId !== 'acc') continue
     const trackIdNorm = normalizeTrackId(delta.trackId)
     if (!trackIdNorm || !delta.sessionId) continue
     const bucket = grouped.get(trackIdNorm) || []

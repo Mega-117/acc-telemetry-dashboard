@@ -156,7 +156,7 @@ export function createSessionUploadService(params: {
           return { status: 'skipped' as const, fileName, reason: preparedSummary.reason }
         }
         const { meta, summary: summaryWithRules } = preparedSummary
-        const sessionId = generateSessionId(meta.date_start, meta.track)
+        const sessionId = generateSessionId(meta.date_start, meta.track, meta.gameId)
         const fileHash = options.precomputedHash || await calculateContentHash(rawText)
         const rawDataHash = await calculateRawDataHash(rawObj)
         const summaryHash = await calculateSummaryHash(summaryWithRules)
@@ -289,6 +289,7 @@ export function createSessionUploadService(params: {
         }
 
         const projectionDelta: TrackBestProjectionDelta = {
+          gameId: meta.gameId,
           trackId: meta.track,
           sessionId,
           dateStart: meta.date_start,

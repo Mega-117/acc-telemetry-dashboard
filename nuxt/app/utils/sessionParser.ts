@@ -6,6 +6,7 @@
 // compatibility fallback for legacy payloads that have not been reprocessed yet.
 
 import type { SessionMeta, SessionSummary } from '~/types/telemetry'
+import { recordingGame, canUseAccRules, isGameId } from '~/services/telemetry/gameIdentity'
 import {
   RACE_FUEL_BUCKETS,
   classifyHistoricalEligibility,
@@ -383,10 +384,12 @@ function buildLegacyCompatibilitySummary(rawObj: Record<string, unknown>, sessio
   }
 }
 
-export function generateSessionId(dateStart: string, track: string): string {
+export function generateSessionId(dateStart: string, track: string, gameId: string = 'acc'): string {
+  if (!isGameId(gameId)) throw new Error('invalid-game-identity')
   const normalized = dateStart.split('.')[0]
   const base = `${normalized}_${track}`.replace(/[^a-zA-Z0-9]/g, '_')
-  return base.substring(0, 100)
+  // Preserve existing ACC document IDs; new games get an explicit namespace.
+  return gameId === 'acc' ? base.substring(0, 100) : `${gameId}__${base.substring(0, 100)}`
 }
 
 export function extractMetadata(
@@ -397,15 +400,33 @@ export function extractMetadata(
   const stints: Record<string, unknown>[] = Array.isArray(rawObj?.['stints']) ? (rawObj['stints'] as Record<string, unknown>[]) : []
 
   const meta: SessionMeta = {
+    gameId: recordingGame(rawObj) ?? 'unknown',
     track: String(sessionInfo['track'] || rawObj?.['track'] || 'Unknown'),
     date_start: String(sessionInfo['date_start'] || rawObj?.['date'] || new Date().toISOString()),
     date_end: (sessionInfo['date_end'] as string | null) || null,
     car: String(sessionInfo['car_model'] || sessionInfo['car'] || rawObj?.['car'] || ''),
-    session_type: (sessionInfo['session_type'] as number) ?? 0,
+    session_type: (sessionInfo['session_type'] as number) ?? (recordingGame(rawObj) === 'acc' ? 0 : -1),
     driver: (sessionInfo['driver'] as string | null) || null
   }
 
-  const canonicalSummary = options.forceRawRebuild ? null : normalizeCanonicalSummary(rawObj, sessionInfo, stints)
+  if (rawObj?.['schema'] === 'racercore.session' && meta.gameId !== 'acc') {
+    const value = rawObj['summary'] as Record<string, unknown> | undefined
+    const common = value?.['schema'] === 'racercore.timing-summary' && value?.['version'] === 1
+    return {
+      meta,
+      summary: {
+        laps: common ? toNonNegativeInt(value['laps']) : 0,
+        lapsValid: common ? toNonNegativeInt(value['lapsValid']) : 0,
+        bestLap: common ? toPositiveNumber(value['bestLap']) : null,
+        avgCleanLap: null,
+        totalTime: common ? toNonNegativeInt(value['totalTime']) : 0,
+        stintCount: stints.length,
+      },
+      summarySource: common && meta.gameId !== 'unknown' ? 'canonical' : 'missing_canonical'
+    }
+  }
+
+  const canonicalSummary = options.forceRawRebuild || !canUseAccRules(rawObj) ? null : normalizeCanonicalSummary(rawObj, sessionInfo, stints)
   if (canonicalSummary) {
     return {
       meta,
@@ -414,7 +435,7 @@ export function extractMetadata(
     }
   }
 
-  if (options.allowLegacyFallback) {
+  if (options.allowLegacyFallback && canUseAccRules(rawObj)) {
     return {
       meta,
       summary: buildLegacyCompatibilitySummary(rawObj, sessionInfo, stints),

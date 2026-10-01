@@ -127,9 +127,9 @@ describe('extractMetadata — fallback valori mancanti', () => {
     expect(meta.track).toBe('Unknown')
   })
 
-  it('session_type default 0', () => {
+  it('session_type sconosciuto non diventa practice ACC', () => {
     const { meta } = extractMetadata({})
-    expect(meta.session_type).toBe(0)
+    expect(meta.session_type).toBe(-1)
   })
 
   it('non crasha su payload completamente vuoto', () => {
