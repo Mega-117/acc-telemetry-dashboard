@@ -3,7 +3,7 @@ import type { FastOverlayState } from '~/composables/useFastStatePoller'
 
 export type RaceHudPage = 'tyres' | 'damage'
 export const RACE_DAMAGE_AUTO_DURATION_MS = 12_000
-export const RACE_DAMAGE_FLASH_DURATION_MS = 650
+export const RACE_DAMAGE_FLASH_DURATION_MS = 200
 
 function contextKey(state: FastOverlayState): string {
   const context = state.context

@@ -68,8 +68,11 @@ describe('spectator HUD source contract', () => {
     const tyresPage = source('app/pages/tyres-overlay.vue')
     const shared = source('app/utils/tyreSlipPresentation.ts')
 
-    expect(tyresPage).toContain('resolveTyreHudStatus(fastState.value)')
-    expect(tyresPage).toContain("'data-unavailable': 'DATA N/A'")
+    for (const component of ['TyreRaceHud', 'DamageRaceHud']) {
+      const race = source(`app/components/overlay/${component}.vue`)
+      expect(race).toContain("props.fastState.dataSource !== 'focused'")
+      expect(race).toContain("fastState.dataSource === 'focused' ? 'DATA N/A' : 'NO DATA'")
+    }
     expect(tyresPage).not.toContain('v-show="raceVisible"')
     expect(tyresPage).not.toContain("telemetrySource.value !== 'focused'")
     expect(tyresPage).not.toContain('fastState.value.tyres.length === 4')

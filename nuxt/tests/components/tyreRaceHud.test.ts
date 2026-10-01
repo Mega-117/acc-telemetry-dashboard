@@ -63,12 +63,26 @@ describe('Race HUD components', () => {
 
   it('rende sagoma GT3, quattro body zone, sospensioni e totali', async () => {
     const html = await renderToString(createSSRApp(DamageRaceHud, { fastState: fastState() }))
-    expect(html).toContain('Sagoma GT3')
-    expect(html).toContain('SUSPENSION')
-    expect(html).toContain('TOTAL')
-    expect(html).toContain('0:21.00')
-    expect(html).toContain('0:37.98')
+    expect(html).toContain('Sagoma danni vettura')
+    expect(html).toContain('Suspension')
+    expect(html).toContain('Total')
+    expect(html).toContain('0:21.000')
+    expect(html).toContain('0:37.980')
     for (const label of ['FL', 'FR', 'RL', 'RR', '24%', '68%']) expect(html).toContain(label)
+  })
+
+  it('nasconde badge sani e mantiene meteo e colori raw nella pagina danni', async () => {
+    const state = fastState()
+    state.damage!.suspension.FL.percentage = 0
+    state.damage!.body.front.rawValue = 99
+    const html = await renderToString(createSSRApp(DamageRaceHud, { fastState: state, flash: true }))
+    expect(html.match(/class="damage-race__susp"/g)).toHaveLength(3)
+    expect(html).toContain('tyre-race__weather')
+    expect(html).toContain('damage-race__flash')
+    expect(html).toContain('fill="rgba(255,0,0,1)"')
+    const unavailable = await renderToString(createSSRApp(DamageRaceHud, { fastState: { ...state, dataSource: 'focused' } }))
+    expect(unavailable).toContain('DATA N/A')
+    expect(unavailable).not.toContain('class="damage-race__susp"')
   })
 
   it('mostra AVG per ruota dal giro concluso, indipendente dalla pressione istantanea', async () => {

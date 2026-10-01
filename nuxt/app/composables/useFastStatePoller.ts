@@ -81,6 +81,7 @@ export interface FastStateInfo {
 }
 
 export interface FastStateDamageBodyZone {
+  rawValue?: number | null
   percentage: number | null
   repairTimeMs: number | null
 }
@@ -92,6 +93,7 @@ export interface FastStateDamageSuspensionCorner {
 export interface FastStateDamage {
   version: number
   body: Record<'front' | 'rear' | 'left' | 'right', FastStateDamageBodyZone> & {
+    rawValue?: number | null
     repairTimeMs: number | null
   }
   suspension: Record<'FL' | 'FR' | 'RL' | 'RR', FastStateDamageSuspensionCorner> & {
@@ -348,6 +350,7 @@ function normalizeDamage(raw: any): FastStateDamage | null {
   if (!raw || typeof raw !== 'object' || raw.version !== 1) return null
   const bodyZone = (id: 'front' | 'rear' | 'left' | 'right'): FastStateDamageBodyZone => ({
     percentage: percentage(raw.body?.[id]?.percentage),
+    rawValue: nonNegative(raw.body?.[id]?.raw_value),
     repairTimeMs: nonNegative(raw.body?.[id]?.repair_time_ms),
   })
   const suspensionCorner = (id: 'FL' | 'FR' | 'RL' | 'RR'): FastStateDamageSuspensionCorner => ({
@@ -359,6 +362,7 @@ function normalizeDamage(raw: any): FastStateDamage | null {
       front: bodyZone('front'), rear: bodyZone('rear'),
       left: bodyZone('left'), right: bodyZone('right'),
       repairTimeMs: nonNegative(raw.body?.repair_time_ms),
+      rawValue: nonNegative(raw.body?.raw_value),
     },
     suspension: {
       FL: suspensionCorner('FL'), FR: suspensionCorner('FR'),

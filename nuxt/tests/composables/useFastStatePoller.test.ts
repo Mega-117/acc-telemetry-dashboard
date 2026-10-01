@@ -121,7 +121,7 @@ describe('useFastStatePoller', () => {
     const damage = {
       version: 1,
       body: {
-        front: { percentage: 24, repair_time_ms: 6780 }, rear: { percentage: 21, repair_time_ms: 2400 },
+        front: { percentage: 24, repair_time_ms: 6780, raw_value: 24.013 }, rear: { percentage: 21, repair_time_ms: 2400 },
         left: { percentage: 0, repair_time_ms: 0 }, right: { percentage: 68, repair_time_ms: 7800 },
         repair_time_ms: 9180,
       },
@@ -139,7 +139,7 @@ describe('useFastStatePoller', () => {
     await startFastStatePolling()
 
     expect(fastState.value.damage).toMatchObject({
-      body: { front: { percentage: 24, repairTimeMs: 6780 }, repairTimeMs: 9180 },
+      body: { front: { percentage: 24, repairTimeMs: 6780, rawValue: 24.013 }, repairTimeMs: 9180 },
       suspension: { FR: { percentage: 28 }, repairTimeMs: 12800 },
       totalRepairTimeMs: 21980, eventSeq: 4, eventTs: 12.5,
     })

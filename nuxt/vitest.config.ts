@@ -244,6 +244,7 @@ export default defineConfig({
         'app/utils/tyreSlipPresentation.ts',
         'app/utils/tyreTemperaturePresentation.ts',
         'app/utils/raceTyrePresentation.ts',
+          'app/utils/raceDamagePresentation.ts',
         'app/utils/raceWeatherPresentation.ts',
         'app/components/overlay/RaceWeatherIcon.vue',
         'app/utils/dashboardPresentation.ts',

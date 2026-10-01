@@ -1,96 +1,82 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { FastOverlayState } from '~/composables/useFastStatePoller'
+import RaceWeatherHud from './RaceWeatherHud.vue'
+import RaceVehicleStatus from './RaceVehicleStatus.vue'
+import { raceDamagePaths } from '~/utils/raceDamageGeometry'
+import { raceDamageColor, raceDamageZoneTime } from '~/utils/raceDamagePresentation'
+import { raceNumber, raceDamageTime } from '~/utils/raceTyrePresentation'
 
-const props = defineProps<{ fastState: FastOverlayState }>()
-const damage = computed(() => props.fastState.damage)
-function percent(value: number | null | undefined) { return value == null ? '--' : `${value.toFixed(0)}%` }
-function time(value: number | null | undefined) {
-  if (value == null) return '--:--.--'
-  const seconds = value / 1000
-  return `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(2).padStart(5, '0')}`
+const props = defineProps<{ fastState: FastOverlayState; flash?: boolean }>()
+const available = computed(() => props.fastState.isFresh && props.fastState.isLive && props.fastState.dataSource !== 'focused')
+const damage = computed(() => available.value ? props.fastState.damage : null)
+const zones = [
+  { id: 'front', x: 74, y: 24, anchor: 'middle', digits: 2 },
+  { id: 'left', x: 23.68, y: 102.2, anchor: 'start', digits: 1 },
+  { id: 'right', x: 124.32, y: 102.2, anchor: 'end', digits: 1 },
+  { id: 'rear', x: 74, y: 192.4, anchor: 'middle', digits: 2 },
+] as const
+const corners = [
+  { id: 'FL', x: 9.68, y: 50 }, { id: 'FR', x: 138.32, y: 50 },
+  { id: 'RL', x: 9.68, y: 144 }, { id: 'RR', x: 138.32, y: 144 },
+] as const
+// Repair times remain canonical; only presentation consumes these measurements.
+const suspensionSum = computed(() => damage.value ? corners.reduce((sum, c) => sum + (damage.value!.suspension[c.id].percentage ?? 0) / 100, 0) : 0)
+const totalSeverity = computed(() => (damage.value?.body.rawValue ?? 0) + suspensionSum.value)
+const suspensionSeverity = computed(() => suspensionSum.value * 30 * 2.9)
+function pathValue(path: typeof raceDamagePaths[number]) {
+  return path.suspension ? damage.value?.suspension[path.id as 'FL'].percentage : damage.value?.body[path.id as 'front'].rawValue
 }
-function severity(value: number | null | undefined) {
-  if (!value) return 'healthy'
-  if (value < 34) return 'yellow'
-  if (value < 67) return 'orange'
-  return 'red'
-}
+function percent(value: number | null | undefined) { return value == null ? '--' : `${raceNumber(value)}%` }
 </script>
 
 <template>
   <section class="damage-race" aria-label="Danni vettura">
-    <div class="damage-race__stage">
-      <svg class="damage-race__car" viewBox="0 0 220 430" role="img" aria-label="Sagoma GT3 vista dall'alto">
-        <path class="damage-race__zone damage-race__zone--front" :class="severity(damage?.body.front.percentage)" d="M59 41Q110 15 161 41L173 104Q110 126 47 104Z" />
-        <path class="damage-race__zone damage-race__zone--left" :class="severity(damage?.body.left.percentage)" d="M47 108L65 128L59 310L44 350L32 321L29 154Z" />
-        <path class="damage-race__zone damage-race__zone--right" :class="severity(damage?.body.right.percentage)" d="M173 108L155 128L161 310L176 350L188 321L191 154Z" />
-        <path class="damage-race__zone damage-race__zone--rear" :class="severity(damage?.body.rear.percentage)" d="M45 354L66 322Q110 338 154 322L175 354L161 390Q110 408 59 390Z" />
-        <path class="damage-race__cockpit" d="M70 128Q110 108 150 128L157 301Q110 322 63 301Z" />
-        <path class="damage-race__glass" d="M78 142Q110 128 142 142L148 191H72ZM69 231H151L146 286Q110 301 74 286Z" />
-        <path class="damage-race__line" d="M47 104Q110 126 173 104M59 390Q110 408 161 390" />
-        <path class="damage-race__wing" d="M39 25H181V39H39ZM30 389H190V408H30Z" />
-        <rect class="damage-race__wheel" x="16" y="96" width="29" height="86" rx="8" />
-        <rect class="damage-race__wheel" x="175" y="96" width="29" height="86" rx="8" />
-        <rect class="damage-race__wheel" x="16" y="274" width="29" height="86" rx="8" />
-        <rect class="damage-race__wheel" x="175" y="274" width="29" height="86" rx="8" />
-      </svg>
-
-      <div class="damage-race__body damage-race__body--front" :class="severity(damage?.body.front.percentage)">
-        <b>{{ percent(damage?.body.front.percentage) }}</b><span>{{ time(damage?.body.front.repairTimeMs) }}</span>
-      </div>
-      <div class="damage-race__body damage-race__body--left" :class="severity(damage?.body.left.percentage)">
-        <b>{{ percent(damage?.body.left.percentage) }}</b><span>{{ time(damage?.body.left.repairTimeMs) }}</span>
-      </div>
-      <div class="damage-race__body damage-race__body--right" :class="severity(damage?.body.right.percentage)">
-        <b>{{ percent(damage?.body.right.percentage) }}</b><span>{{ time(damage?.body.right.repairTimeMs) }}</span>
-      </div>
-      <div class="damage-race__body damage-race__body--rear" :class="severity(damage?.body.rear.percentage)">
-        <span>{{ time(damage?.body.rear.repairTimeMs) }}</span><b>{{ percent(damage?.body.rear.percentage) }}</b>
-      </div>
-
-      <div
-        v-for="id in ['FL','FR','RL','RR'] as const"
-        :key="id"
-        class="damage-race__susp"
-        :class="[`damage-race__susp--${id.toLowerCase()}`, severity(damage?.suspension[id].percentage)]"
-      >
-        <small>{{ id }}</small><b>{{ percent(damage?.suspension[id].percentage) }}</b>
-      </div>
-
-      <div class="damage-race__summary damage-race__summary--susp">
-        <small>SUSPENSION</small><strong>{{ time(damage?.suspension.repairTimeMs) }}</strong>
-      </div>
-      <div class="damage-race__summary damage-race__summary--total">
-        <small>TOTAL</small><strong>{{ time(damage?.totalRepairTimeMs) }}</strong>
-      </div>
-    </div>
+    <RaceWeatherHud :fast-state="fastState" />
+    <svg class="damage-race__matrix" viewBox="0 0 166 241" role="img" aria-label="Sagoma danni vettura vista dall'alto">
+      <rect width="166" height="241" rx="8" fill="#000" fill-opacity=".65" />
+      <rect v-if="fastState.flag === 2" x="1" y="1" width="164" height="239" rx="8" fill="none" stroke="#ffd400" stroke-width="1.5" />
+      <!-- Reference car 148x208, with its 5px vertical margin. -->
+      <g transform="translate(9 16.5)">
+        <path v-for="path in raceDamagePaths" :key="path.id" :data-zone="path.id" :d="path.d"
+          :transform="`translate(${path.x} ${path.y}) scale(${path.mirror ? -1 : 1} 1)`"
+          :fill="raceDamageColor(pathValue(path), path.suspension ? 100 : 150)"
+          :stroke="raceDamageColor(pathValue(path), path.suspension ? 100 : 150, false, true)" stroke-width="2" />
+        <g v-for="zone in zones" :key="zone.id" class="damage-race__body" :class="`damage-race__body--${zone.id}`" :text-anchor="zone.anchor">
+          <text class="damage-race__percentage" :x="zone.x" :y="zone.y">{{ percent(damage?.body[zone.id].percentage) }}</text>
+          <text class="damage-race__time" :x="zone.x" :y="zone.y + (zone.id === 'rear' ? -15 : 13)">{{ raceDamageZoneTime(damage?.body[zone.id].repairTimeMs, zone.digits) }}</text>
+        </g>
+        <g class="damage-race__summary damage-race__summary--susp">
+          <text x="74" y="61.6" class="damage-race__label">Suspension</text>
+          <text x="74" y="77.6" :fill="raceDamageColor(suspensionSeverity, 100, true)">{{ raceDamageTime(damage?.suspension.repairTimeMs) }}</text>
+        </g>
+        <g class="damage-race__summary damage-race__summary--total">
+          <text x="74" y="138.8" class="damage-race__label">Total</text>
+          <text x="74" y="154.8" class="damage-race__total-time" :fill="raceDamageColor(totalSeverity, 150, true)">{{ raceDamageTime(damage?.totalRepairTimeMs) }}</text>
+        </g>
+        <template v-for="corner in corners" :key="corner.id">
+          <g v-if="(damage?.suspension[corner.id].percentage ?? 0) > 0" class="damage-race__susp" :aria-label="corner.id" :transform="`translate(${corner.x} ${corner.y})`">
+            <rect x="-14" width="28" height="14" rx="2" fill="#000" fill-opacity=".6" />
+            <text y="10.5" font-size="11">{{ percent(damage?.suspension[corner.id].percentage) }}</text>
+          </g>
+        </template>
+      </g>
+      <rect v-if="flash" :key="fastState.damage?.eventSeq" class="damage-race__flash" width="166" height="241" rx="8" />
+      <RaceVehicleStatus :fast-state="fastState" :has-physics="available" />
+      <g v-if="!available" class="damage-race__unavailable">
+        <rect width="166" height="241" rx="8" fill="#000" fill-opacity=".7" />
+        <text x="83" y="114">{{ fastState.dataSource === 'focused' ? 'DATA N/A' : 'NO DATA' }}</text>
+      </g>
+    </svg>
   </section>
 </template>
 
 <style scoped>
-.damage-race { display:flex; flex:1; min-width:0; min-height:0; color:#f7f8fa; font-family:"Bahnschrift Condensed","Arial Narrow","Segoe UI",sans-serif; font-variant-numeric:tabular-nums; font-stretch:condensed; }
-.damage-race__stage { position:relative; flex:1; min-width:0; min-height:0; overflow:hidden; background:radial-gradient(circle at 50% 48%,rgba(255,255,255,.035),transparent 50%); }
-.damage-race__car { position:absolute; top:8%; left:50%; width:58%; height:84%; transform:translateX(-50%); overflow:visible; }
-.damage-race__zone { stroke:currentColor; stroke-width:3; vector-effect:non-scaling-stroke; fill:color-mix(in srgb,currentColor 25%,#050608); }
-.damage-race__zone.healthy{color:#64676e;opacity:.35}.damage-race__zone.yellow{color:#fff200}.damage-race__zone.orange{color:#ff9d00}.damage-race__zone.red{color:#ff2b2b}
-.damage-race__cockpit,.damage-race__glass,.damage-race__line,.damage-race__wing,.damage-race__wheel { fill:#07090c; stroke:#777b84; stroke-width:3; vector-effect:non-scaling-stroke; }
-.damage-race__glass{fill:#11141a}.damage-race__line{fill:none}.damage-race__wheel{fill:#030405;stroke:#a2a5ad}
-.damage-race__body { position:absolute; z-index:2; display:flex; align-items:center; justify-content:center; gap:calc(7px * var(--hud-scale,1)); color:#6e7178; font-weight:900; white-space:nowrap; text-shadow:0 2px 3px #000; }
-.damage-race__body b { font-size:max(24px,calc(32px * var(--hud-scale,1))); line-height:1; }
-.damage-race__body span { font-size:max(17px,calc(22px * var(--hud-scale,1))); line-height:1; }
-.damage-race__body--front{top:2%;left:50%;transform:translateX(-50%)}.damage-race__body--rear{bottom:2%;left:50%;transform:translateX(-50%)}
-.damage-race__body--left{top:49%;left:2%;flex-direction:column;transform:translateY(-50%)}.damage-race__body--right{top:49%;right:2%;flex-direction:column;transform:translateY(-50%)}
-.damage-race__body.healthy,.damage-race__susp.healthy{opacity:.38;color:#777b84}.damage-race__body.yellow,.damage-race__susp.yellow{color:#fff200}.damage-race__body.orange,.damage-race__susp.orange{color:#ff9d00}.damage-race__body.red,.damage-race__susp.red{color:#ff2b2b}
-.damage-race__susp { position:absolute; z-index:3; display:flex; align-items:baseline; justify-content:center; gap:calc(4px * var(--hud-scale,1)); min-width:calc(72px * var(--hud-scale,1)); padding:calc(3px * var(--hud-scale,1)) calc(5px * var(--hud-scale,1)); border:1px solid currentColor; border-radius:4px; color:#777b84; background:rgba(3,4,5,.88); transform:translate(-50%,-50%); box-sizing:border-box; }
-.damage-race__susp small{font-size:max(13px,calc(16px * var(--hud-scale,1)));font-weight:900}.damage-race__susp b{font-size:max(19px,calc(25px * var(--hud-scale,1)));line-height:1}
-.damage-race__susp--fl{top:26%;left:24%}.damage-race__susp--fr{top:26%;left:76%}.damage-race__susp--rl{top:72%;left:24%}.damage-race__susp--rr{top:72%;left:76%}
-.damage-race__summary { position:absolute; z-index:4; left:50%; display:grid; place-items:center; min-width:40%; padding:calc(5px * var(--hud-scale,1)); transform:translateX(-50%); border-radius:6px; background:rgba(3,4,5,.78); text-align:center; box-sizing:border-box; }
-.damage-race__summary small{font-size:max(17px,calc(21px * var(--hud-scale,1)));font-weight:900;line-height:1}.damage-race__summary strong{font-size:max(25px,calc(33px * var(--hud-scale,1)));font-weight:900;line-height:1.05;color:#ff9d00}
-.damage-race__summary--susp{top:34%}.damage-race__summary--total{top:55%}.damage-race__summary--total strong{color:#ff3b30}
-@media (max-width:280px) {
-  .damage-race__car{top:9%;width:62%;height:82%}.damage-race__body{gap:3px}.damage-race__body b{font-size:24px}.damage-race__body span{font-size:17px}
-  .damage-race__susp{min-width:53px;padding:2px}.damage-race__susp small{font-size:13px}.damage-race__susp b{font-size:19px}.damage-race__susp--fl,.damage-race__susp--rl{left:22%}.damage-race__susp--fr,.damage-race__susp--rr{left:78%}
-  .damage-race__summary{min-width:44%;padding:3px}.damage-race__summary small{font-size:17px}.damage-race__summary strong{font-size:25px}
-}
+.damage-race { display:flex; flex:1; flex-direction:column; min-width:0; min-height:0; color:#fff; font-family:"Segoe UI",sans-serif; font-variant-numeric:tabular-nums; }
+.damage-race__matrix { display:block; width:100%; flex:1; min-height:0; font-family:"Segoe UI",sans-serif; font-size:12px; font-weight:700; fill:#fff; text-anchor:middle; }
+.damage-race__time { font-size:10px; }
+.damage-race__label { font-size:14px; }
+.damage-race__flash { fill:red; opacity:0; animation:race-damage-flash .2s linear both; pointer-events:none; }
+@keyframes race-damage-flash { 0%,100% { opacity:0; } 50% { opacity:.7; } }
+@media (prefers-reduced-motion:reduce) { .damage-race__flash { animation:none; opacity:.15; } }
 </style>

@@ -12,7 +12,6 @@ import TyreRaceHud from '~/components/overlay/TyreRaceHud.vue'
 import DamageRaceHud from '~/components/overlay/DamageRaceHud.vue'
 import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 import { useRaceHudPage, type RaceHudPage } from '~/composables/useRaceHudPage'
-import { resolveTyreHudStatus } from '~/utils/tyreSlipPresentation'
 
 definePageMeta({ layout: 'hud-overlay' })
 
@@ -47,16 +46,6 @@ const { activePage: racePage, damageFlash: raceDamageFlash } = racePager
 // visibile il solo pannello opaco, cioe' il rettangolo nero segnalato dal
 // pilota quando passava alla visuale di un altro. Come Classico,
 // la griglia resta montata e una fascia dice perche' i valori sono `--`.
-const RACE_STATUS_LABELS: Record<string, string> = {
-  'no-data': 'NO DATA',
-  'data-unavailable': 'DATA N/A',
-  'engine-off': 'ENGINE OFF',
-  'pit-limiter': 'LIMITER ON',
-}
-const raceBanner = computed(() => {
-  const status = resolveTyreHudStatus(fastState.value)
-  return status === null ? null : RACE_STATUS_LABELS[status]
-})
 
 function selectRacePage(page: RaceHudPage) {
   racePager.selectPage(page)
@@ -94,11 +83,6 @@ onBeforeUnmount(() => {
       <section
         v-if="variant === 'race'"
         class="race-hud"
-        :class="{
-          'race-hud--yellow': fastState.flag === 2 && racePage === 'damage',
-          'race-hud--damage-flash': raceDamageFlash,
-          'race-hud--has-banner': !!raceBanner && racePage === 'damage',
-        }"
         :data-active-page="racePage"
       >
         <nav class="race-hud__switcher" data-overlay-interactive aria-label="Pagina Race HUD">
@@ -106,8 +90,7 @@ onBeforeUnmount(() => {
           <button type="button" :class="{ active: racePage === 'damage' }" @click="selectRacePage('damage')">DANNI</button>
         </nav>
         <TyreRaceHud v-if="racePage === 'tyres'" :fast-state="fastState" />
-        <DamageRaceHud v-else :fast-state="fastState" />
-        <div v-if="raceBanner && racePage === 'damage'" class="race-hud__banner">{{ raceBanner }}</div>
+        <DamageRaceHud v-else :fast-state="fastState" :flash="raceDamageFlash" />
       </section>
       <TyreSlipHud v-else :fast-state="fastState" />
     </div>
@@ -171,15 +154,11 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-.race-hud--has-banner { padding-bottom: calc(54px * var(--hud-scale)); }
-.race-hud--yellow { border-color: #ffd400; }
-.race-hud--damage-flash { border-color: #ff2525; box-shadow: inset 0 0 calc(24px * var(--hud-scale)) rgba(255, 20, 20, .55); }
 .race-hud__switcher { position:absolute; top:calc(7px * var(--hud-scale)); right:calc(7px * var(--hud-scale)); z-index:20; display:flex; overflow:hidden; border:1px solid #666; border-radius:999px; background:#050608; opacity:0; transition:opacity 120ms ease; -webkit-app-region:no-drag; }
 .hud-overlay__panel:hover .race-hud__switcher { opacity:1; }
 .race-hud__switcher button { min-width:calc(52px * var(--hud-scale)); padding:calc(4px * var(--hud-scale)) calc(7px * var(--hud-scale)); border:0; background:transparent; color:#aaa; font:900 max(10px,calc(11px * var(--hud-scale)))/1 Inter,"Segoe UI",sans-serif; cursor:pointer; }
 .race-hud__switcher button+button { border-left:1px solid #555; }.race-hud__switcher button.active { background:#f28a20;color:#050608; }
-.race-hud__banner { position:absolute; right:0; bottom:0; left:0; display:grid; place-items:center; height:calc(46px * var(--hud-scale)); background:#075be8; color:#fff; font:950 max(20px,calc(28px * var(--hud-scale)))/1 Inter,"Segoe UI",sans-serif; letter-spacing:.05em; }
-@media (prefers-reduced-motion: reduce) { .race-hud__switcher { transition:none; }.race-hud--damage-flash { box-shadow:none; } }
+@media (prefers-reduced-motion: reduce) { .race-hud__switcher { transition:none; } }
 
 // ── L'HUD riempie il pannello (niente spazio vuoto sopra/sotto) ──────────────
 .hud-overlay .tyre-slip-hud {
