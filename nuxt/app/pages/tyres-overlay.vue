@@ -95,9 +95,9 @@ onBeforeUnmount(() => {
         v-if="variant === 'race'"
         class="race-hud"
         :class="{
-          'race-hud--yellow': fastState.flag === 2,
+          'race-hud--yellow': fastState.flag === 2 && racePage === 'damage',
           'race-hud--damage-flash': raceDamageFlash,
-          'race-hud--has-banner': !!raceBanner,
+          'race-hud--has-banner': !!raceBanner && racePage === 'damage',
         }"
         :data-active-page="racePage"
       >
@@ -107,7 +107,7 @@ onBeforeUnmount(() => {
         </nav>
         <TyreRaceHud v-if="racePage === 'tyres'" :fast-state="fastState" />
         <DamageRaceHud v-else :fast-state="fastState" />
-        <div v-if="raceBanner" class="race-hud__banner">{{ raceBanner }}</div>
+        <div v-if="raceBanner && racePage === 'damage'" class="race-hud__banner">{{ raceBanner }}</div>
       </section>
       <TyreSlipHud v-else :fast-state="fastState" />
     </div>

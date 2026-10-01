@@ -103,6 +103,20 @@ describe('useFastStatePoller', () => {
     expect(fastState.value.tyres[0]?.discLifePct).toBe(99.9)
   })
 
+  it('preserva slip grezzo e variazione Race separata dalla perdita per automazioni', async () => {
+    const state = makeState()
+    const eventTs = freshTs()
+    Object.assign(state.tyres[0]!, { wheel_slip_raw: -0.3, race_pressure: { variation_psi: 0.15, event_seq: 4, event_ts: eventTs } })
+    const api = { getFastState: vi.fn(async () => state) }
+    const { fastState, startFastStatePolling } = useFastStatePoller(() => api)
+    await startFastStatePolling()
+    await flushPromises()
+    expect(fastState.value.tyres[0]?.wheelSlipRaw).toBe(-0.3)
+    expect(fastState.value.tyres[0]?.racePressure).toEqual({ variationPsi: 0.15, eventSeq: 4, eventTs })
+    expect(fastState.value.tyres[0]?.pressureLossPsi).toBe(0.04)
+    expect(fastState.value.tyres[1]?.racePressure).toBeNull()
+  })
+
   it('normalizza il danno opzionale e resta compatibile quando manca', async () => {
     const damage = {
       version: 1,

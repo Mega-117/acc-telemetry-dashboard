@@ -1,62 +1,43 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
 import { tyreTemperatureColor } from '~/utils/tyreTemperaturePresentation'
-import { buildBrakeAxlePresentation } from '~/utils/brakeAxlePresentation'
+import { brakeTemperatureColor } from '~/utils/brakeTemperaturePresentation'
 import { raceWeatherItem } from '~/utils/raceWeatherPresentation'
+import { raceSlip, racePressureHeight, raceNumber, raceDamageTime, racePressureFlash } from '~/utils/raceTyrePresentation'
 import RaceWeatherIcon from '~/components/overlay/RaceWeatherIcon.vue'
 
 const props = defineProps<{ fastState: FastOverlayState }>()
 const ids = ['FL', 'FR', 'RL', 'RR'] as const
-const emptyTyre = (id: FastStateTyre['id']): FastStateTyre => ({
-  id, wheelSlip: null, wheelSlipScaled: null, slipBand: 'white', slipState: 'ok',
-  slipRatio: null, pressurePsi: null, pressureLossPsi: null, coreTempC: null,
-  brakeTempC: null, brakeCompound: null, padLifePct: null, discLifePct: null,
-})
-const tyres = computed(() => Object.fromEntries(ids.map(id => [
-  id, props.fastState.tyres.find(tyre => tyre.id === id) ?? emptyTyre(id),
-])) as Record<FastStateTyre['id'], FastStateTyre>)
-const brakes = computed(() => ({
-  front: buildBrakeAxlePresentation(tyres.value.FL, tyres.value.FR),
-  rear: buildBrakeAxlePresentation(tyres.value.RL, tyres.value.RR),
+const expiredFlashKeys = ref<Record<string, string>>({})
+const hasPhysics = computed(() => props.fastState.isFresh && props.fastState.isLive && props.fastState.dataSource !== 'focused')
+const tyres = computed(() => ids.map((id, index) => {
+  const tyre = (hasPhysics.value ? props.fastState.tyres.find(item => item.id === id) : null) ?? {
+    id, wheelSlip: null, wheelSlipScaled: null, slipBand: 'white', slipState: 'ok', slipRatio: null,
+    pressurePsi: null, pressureLossPsi: null, coreTempC: null, brakeTempC: null,
+    brakeCompound: null, padLifePct: null, discLifePct: null,
+  } as FastStateTyre
+  return {
+    ...tyre, x: index % 2 === 0 ? 10 : 106, y: index < 2 ? 38 : 154,
+    rear: index > 1, right: index % 2 === 1,
+    color: tyreTemperatureColor(tyre.coreTempC, props.fastState.tyreCompound === 'WET' ? 'WET' : 'DRY'),
+    slip: raceSlip(tyre.wheelSlipRaw ?? tyre.wheelSlip),
+    height: racePressureHeight(tyre.pressurePsi, props.fastState.tyreCompound),
+    flash: hasPhysics.value ? racePressureFlash(tyre, Date.now()) : null,
+  }
 }))
-
-function value(number: number | null, digits = 0) {
-  return number === null ? '--' : number.toFixed(digits)
-}
-
-function average(id: FastStateTyre['id']) {
-  const average = props.fastState.lapPressureAverage
-  if (average.status !== 'available') return '--'
-  const number = average.values[id]
-  return number === null ? '--' : number.toFixed(1)
-}
-
-function loss(tyre: FastStateTyre) {
-  return tyre.pressureLossPsi === null ? '--' : Math.max(0, tyre.pressureLossPsi).toFixed(2)
-}
-
-function slipFill(tyre: FastStateTyre) {
-  if (tyre.wheelSlipScaled === null) return 0
-  return Math.max(0, Math.min(6, Math.ceil(Math.abs(tyre.wheelSlipScaled) / 3)))
-}
-
-function segmentActive(tyre: FastStateTyre, index: number) {
-  return index >= 6 - slipFill(tyre)
-}
-
-function tyreColor(tyre: FastStateTyre) {
-  return tyreTemperatureColor(tyre.coreTempC, props.fastState.tyreCompound === 'WET' ? 'WET' : 'DRY')
-}
-
+const axles = computed(() => [0, 2].map(index => ({
+  left: tyres.value[index]!, right: tyres.value[index + 1]!,
+  y: index === 0 ? 56 : 154, rear: index > 0,
+})))
 const weather = computed(() => [
   raceWeatherItem(props.fastState.rainIntensity, 0, props.fastState.isFresh && props.fastState.isLive),
   raceWeatherItem(props.fastState.rainIntensity10Min, 10, props.fastState.isFresh && props.fastState.isLive),
   raceWeatherItem(props.fastState.rainIntensity30Min, 30, props.fastState.isFresh && props.fastState.isLive),
 ])
-
-function brakeText(number: number | null, suffix: string) {
-  return number === null ? '--' : `${number.toFixed(0)}${suffix}`
+const unavailable = computed(() => !hasPhysics.value)
+function brakeColor(tyre: FastStateTyre) {
+  return brakeTemperatureColor(tyre.brakeTempC, tyre.id, tyre.brakeCompound)
 }
 </script>
 
@@ -68,63 +49,49 @@ function brakeText(number: number | null, suffix: string) {
       </div>
     </header>
 
-    <div class="tyre-race__matrix">
-      <article
-        v-for="id in ids"
-        :key="id"
-        class="tyre-race__corner"
-        :class="[
-          `tyre-race__corner--${id.toLowerCase()}`,
-          { 'tyre-race__corner--rear': id.startsWith('R') },
-        ]"
-      >
-        <div class="tyre-race__primary">
-          <b>{{ id }}</b>
-          <strong>{{ value(tyres[id].pressurePsi, 1) }}</strong>
-        </div>
-        <span class="tyre-race__average">AVG {{ average(id) }}</span>
-        <div
-          class="tyre-race__wheel-row"
-          :class="`tyre-race__wheel-row--${id.endsWith('L') ? 'left' : 'right'}`"
-        >
-          <div class="tyre-race__slip" :class="`tyre-race__slip--${tyres[id].slipBand}`">
-            <small>SLIP</small>
-            <i v-for="index in 6" :key="index" :class="{ active: segmentActive(tyres[id], index - 1) }" />
-          </div>
-          <div class="tyre-race__tyre" :style="{ '--tyre-temp-color': tyreColor(tyres[id]) }">
-            <b>{{ value(tyres[id].coreTempC) }}°</b>
-          </div>
-        </div>
-        <span class="tyre-race__loss" :class="{ alert: (tyres[id].pressureLossPsi ?? 0) >= .05 }">
-          LOSS {{ loss(tyres[id]) }}
-        </span>
-      </article>
-
-      <div v-for="axle in ['front', 'rear'] as const" :key="axle" class="tyre-race__brake" :class="`tyre-race__brake--${axle}`">
-        <div class="tyre-race__brake-bars">
-          <i :style="{ background: brakes[axle].leftTemperatureColor }" />
-          <i :style="{ background: brakes[axle].rightTemperatureColor }" />
-        </div>
-        <span class="tyre-race__brake-wear">{{ brakeText(brakes[axle].padLifeAveragePct, '%') }}</span>
-        <strong :style="{ color: brakes[axle].temperatureAverageColor }">
-          {{ brakeText(brakes[axle].temperatureAverageC, '°') }}
-        </strong>
-      </div>
-
-      <div class="tyre-race__compound">
-        <span>{{ fastState.tyreCompound ?? '--' }}</span>
-        <b>{{ fastState.tyreSetAvailable ? fastState.currentTyreSet ?? '--' : '--' }}</b>
-      </div>
-    </div>
+    <svg class="tyre-race__matrix" viewBox="0 0 166 241" aria-label="Stato quattro pneumatici" role="img">
+      <rect width="166" height="241" rx="8" fill="#000" fill-opacity=".65" />
+      <rect v-if="fastState.flag === 2" x="1" y="1" width="164" height="239" rx="8" fill="none" stroke="#ffd400" stroke-width="1.5" />
+      <g v-for="tyre in tyres" :key="tyre.id" class="tyre-race__corner" :class="[`tyre-race__corner--${tyre.id.toLowerCase()}`, { 'tyre-race__corner--rear': tyre.rear }]" :data-wheel="tyre.id" :aria-label="tyre.id">
+        <text class="tyre-race__primary" :x="tyre.x + 25" :y="tyre.rear ? 235 : 25">{{ raceNumber(tyre.pressurePsi, 1) }}</text>
+        <g :transform="`translate(${tyre.x} ${tyre.y})`" class="tyre-race__tyre">
+          <rect width="50" height="56" rx="8" :fill="tyre.color" />
+          <rect x="16" width="18" height="56" fill="#000" />
+          <rect x="18" width="14" :y="tyre.rear ? 0 : 56 - tyre.height" :height="tyre.height" :fill="tyre.color" class="tyre-race__pressure-shape" />
+          <svg :x="tyre.right ? 34 : 0" width="16" height="56" viewBox="0 0 16 56" overflow="hidden" :style="{ borderRadius: tyre.right ? '0 8px 8px 0' : '8px 0 0 8px' }">
+            <path :d="tyre.right ? 'M0 0H8Q16 0 16 8V48Q16 56 8 56H0Z' : 'M16 0H8Q0 0 0 8V48Q0 56 8 56H16Z'" fill="#808080" />
+            <rect :y="(56 - tyre.slip.height) / 2" width="16" :height="tyre.slip.height" :fill="tyre.slip.color" class="tyre-race__slip" />
+          </svg>
+          <text x="27" y="35" class="tyre-race__temperature">{{ raceNumber(tyre.coreTempC) }}&#176;</text>
+          <rect v-if="tyre.flash && expiredFlashKeys[tyre.id] !== tyre.flash.key" :key="tyre.flash.key" @animationend="expiredFlashKeys[tyre.id] = tyre.flash.key" width="50" height="56" rx="8" class="tyre-race__pressure-flash" :style="{ animationDelay: tyre.flash.delay }" />
+        </g>
+        <text :x="tyre.x + 25" :y="tyre.rear ? 147 : 112" class="tyre-race__loss">{{ raceNumber(tyre.racePressure?.variationPsi, 2) }}</text>
+      </g>
+      <g v-for="axle in axles" :key="axle.left.id" class="tyre-race__brake" :class="`tyre-race__brake--${axle.rear ? 'rear' : 'front'}`">
+        <rect x="65" :y="axle.y" width="15" height="38" rx="4" :fill="brakeColor(axle.left)" />
+        <rect x="85" :y="axle.y" width="15" height="38" rx="4" :fill="brakeColor(axle.right)" />
+        <text x="83" :y="axle.y + 25" class="tyre-race__temperature">{{ raceNumber(axle.left.brakeTempC) }}&#176;</text>
+        <text x="83" :y="axle.rear ? axle.y + 52 : axle.y - 7">{{ raceNumber(axle.left.padLifePct) }}%</text>
+      </g>
+      <text x="83" y="129" class="tyre-race__compound"><tspan class="tyre-race__damage-time">{{ raceDamageTime(hasPhysics ? fastState.damage?.totalRepairTimeMs : null) }}</tspan><tspan dx="5">{{ hasPhysics ? fastState.tyreCompound ?? '--' : '--' }} {{ hasPhysics && fastState.tyreSetAvailable ? fastState.currentTyreSet ?? '--' : '--' }}</tspan></text>
+      <g v-if="hasPhysics && fastState.isEngineRunning === false" class="tyre-race__engine-off">
+        <rect x="43" y="40" width="80" height="48" rx="8" fill="red" class="tyre-race__engine-pulse" />
+        <text x="83" y="60">ENGINE</text><text x="83" y="81">OFF</text>
+      </g>
+      <g v-if="hasPhysics && fastState.pitLimiterOn" class="tyre-race__limiter">
+        <rect x="43" y="152" width="80" height="48" rx="8" fill="blue" />
+        <text x="83" y="172">LIMITER</text><text x="83" y="193">ON</text>
+      </g>
+      <g v-if="unavailable" class="tyre-race__unavailable">
+        <rect width="166" height="241" rx="8" fill="black" fill-opacity=".7" />
+        <text x="83" y="114">{{ fastState.dataSource === 'focused' ? 'DATA N/A' : 'NO DATA' }}</text>
+      </g>
+    </svg>
   </section>
 </template>
 
 <style scoped>
-.tyre-race {
-  display:flex; flex:1; flex-direction:column; min-width:0; min-height:0;
-  color:#f7f8fa; font-family:"Bahnschrift Condensed","Arial Narrow","Segoe UI",sans-serif;
-  font-variant-numeric:tabular-nums; font-stretch:condensed;
-}
+.tyre-race { display:flex; flex:1; flex-direction:column; min-width:0; min-height:0; color:#fff; font-family:"Segoe UI",sans-serif; font-variant-numeric:tabular-nums; }
 .tyre-race__weather {
   display:grid; grid-template-columns:repeat(3,1fr); flex:0 0 calc(78px * var(--hud-scale,1));
   border-bottom:1px solid #45484e; background:#080a0e;
@@ -133,55 +100,15 @@ function brakeText(number: number | null, suffix: string) {
 .tyre-race__weather div+div { border-left:1px solid #303238; }
 .tyre-race__weather strong { font-size:max(18px,calc(25px * var(--hud-scale,1))); line-height:1; }
 .tyre-race__weather span { min-height:1em; font-size:max(21px,calc(30px * var(--hud-scale,1))); line-height:1.05; }
-.tyre-race__matrix {
-  display:grid; grid-template-columns:minmax(0,1fr) calc(94px * var(--hud-scale,1)) minmax(0,1fr);
-  grid-template-rows:minmax(0,1fr) calc(48px * var(--hud-scale,1)) minmax(0,1fr);
-  grid-template-areas:"fl bf fr" ". compound ." "rl br rr";
-  flex:1; min-height:0; padding:calc(9px * var(--hud-scale,1)); box-sizing:border-box;
-}
-.tyre-race__corner { display:grid; grid-template-rows:auto auto minmax(0,1fr) auto; grid-template-areas:"primary" "average" "wheel" "loss"; align-items:center; justify-items:center; min-width:0; min-height:0; padding:calc(4px * var(--hud-scale,1)); }
-.tyre-race__corner--fl{grid-area:fl}.tyre-race__corner--fr{grid-area:fr}.tyre-race__corner--rl{grid-area:rl}.tyre-race__corner--rr{grid-area:rr}
-.tyre-race__corner--rear { grid-template-rows:auto minmax(0,1fr) auto auto; grid-template-areas:"loss" "wheel" "average" "primary"; }
-.tyre-race__primary { grid-area:primary; display:flex; align-items:baseline; justify-content:center; gap:calc(7px * var(--hud-scale,1)); min-width:0; }
-.tyre-race__primary b { color:#9ca0a8; font-size:max(15px,calc(19px * var(--hud-scale,1))); line-height:1; }
-.tyre-race__primary strong { font-size:max(35px,calc(49px * var(--hud-scale,1))); font-weight:900; letter-spacing:-.035em; line-height:.96; }
-.tyre-race__average,.tyre-race__loss { font-size:max(15px,calc(19px * var(--hud-scale,1))); font-weight:800; line-height:1.05; white-space:nowrap; }
-.tyre-race__average { grid-area:average; color:#c6c8cd; }
-.tyre-race__loss { grid-area:loss; color:#ffab00; }
-.tyre-race__loss.alert { color:#ff3131; text-shadow:0 0 calc(8px * var(--hud-scale,1)) rgba(255,49,49,.75); }
-.tyre-race__wheel-row { grid-area:wheel; display:flex; align-items:center; justify-content:center; gap:calc(5px * var(--hud-scale,1)); min-height:0; }
-.tyre-race__wheel-row--right { flex-direction:row-reverse; }
-.tyre-race__tyre {
-  --tyre-temp-color:#1769ff; position:relative; display:grid; place-items:center;
-  width:calc(72px * var(--hud-scale,1)); height:calc(104px * var(--hud-scale,1));
-  border-radius:calc(11px * var(--hud-scale,1)); background:color-mix(in srgb,var(--tyre-temp-color) 82%,#030405);
-  box-shadow:inset 0 0 0 calc(2px * var(--hud-scale,1)) rgba(255,255,255,.16); overflow:hidden;
-}
-.tyre-race__tyre::before,.tyre-race__tyre::after { content:""; position:absolute; top:0; bottom:0; width:22%; background:color-mix(in srgb,var(--tyre-temp-color) 48%,#0a0b0d); }
-.tyre-race__tyre::before{left:0}.tyre-race__tyre::after{right:0}
-.tyre-race__tyre b { position:relative; z-index:1; font-size:max(26px,calc(35px * var(--hud-scale,1))); font-weight:900; text-shadow:0 2px 3px #000; }
-.tyre-race__slip { display:grid; grid-template-rows:auto repeat(6,1fr); gap:calc(3px * var(--hud-scale,1)); width:calc(25px * var(--hud-scale,1)); height:calc(110px * var(--hud-scale,1)); }
-.tyre-race__slip small { color:#a9abb1; font-size:max(11px,calc(12px * var(--hud-scale,1))); font-weight:900; line-height:1; text-align:center; }
-.tyre-race__slip i { display:block; min-height:4px; border-radius:2px; background:#303238; }
-.tyre-race__slip i.active { background:#19bdf2; box-shadow:0 0 5px rgba(25,189,242,.5); }
-.tyre-race__slip--yellow i.active{background:#fff200}.tyre-race__slip--orange i.active{background:#ff9d00}.tyre-race__slip--red i.active{background:#ff2b2b}
-.tyre-race__brake { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:0; }
-.tyre-race__brake--front{grid-area:bf}.tyre-race__brake--rear{grid-area:br}
-.tyre-race__brake-bars { display:flex; gap:calc(5px * var(--hud-scale,1)); height:calc(47px * var(--hud-scale,1)); }
-.tyre-race__brake-bars i { width:calc(19px * var(--hud-scale,1)); border-radius:calc(5px * var(--hud-scale,1)); box-shadow:inset 0 0 0 1px rgba(255,255,255,.18); }
-.tyre-race__brake strong { font-size:max(20px,calc(27px * var(--hud-scale,1))); font-weight:900; line-height:1; text-shadow:0 1px 2px #000; }
-.tyre-race__brake-wear { color:#f5f6f7; font-size:max(17px,calc(21px * var(--hud-scale,1))); font-weight:900; line-height:1; }
-.tyre-race__brake--front .tyre-race__brake-wear { order:-1; margin-bottom:calc(4px * var(--hud-scale,1)); }
-.tyre-race__brake--rear .tyre-race__brake-wear { order:3; margin-top:calc(4px * var(--hud-scale,1)); }
-.tyre-race__compound { grid-area:compound; display:flex; align-items:center; justify-content:center; gap:calc(7px * var(--hud-scale,1)); color:#fff; font-size:max(22px,calc(29px * var(--hud-scale,1))); font-weight:900; white-space:nowrap; }
-.tyre-race__compound::before,.tyre-race__compound::after { content:""; flex:1; height:1px; background:#74777e; }
-@media (max-width:280px) {
-  .tyre-race__weather{flex-basis:38px}.tyre-race__weather strong{font-size:18px}.tyre-race__weather span{font-size:21px}
-  .tyre-race__matrix{grid-template-columns:minmax(0,1fr) 50px minmax(0,1fr);grid-template-rows:minmax(0,1fr) 24px minmax(0,1fr);padding:2px}
-  .tyre-race__corner{padding:1px}.tyre-race__primary{gap:3px}.tyre-race__primary b{font-size:15px}.tyre-race__primary strong{font-size:35px}
-  .tyre-race__average,.tyre-race__loss{font-size:15px}.tyre-race__wheel-row{gap:2px}.tyre-race__tyre{width:48px;height:48px;border-radius:7px}.tyre-race__tyre b{font-size:26px}
-  .tyre-race__slip{width:15px;height:58px;gap:1px}.tyre-race__slip small{font-size:11px}.tyre-race__brake-bars{height:29px;gap:2px}.tyre-race__brake-bars i{width:11px;border-radius:3px}
-  .tyre-race__brake strong{font-size:20px}.tyre-race__brake-wear{font-size:17px}.tyre-race__compound{font-size:22px;gap:3px}
-}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+.tyre-race__matrix { display:block; width:100%; flex:1; min-height:0; overflow:visible; font-family:"Segoe UI",sans-serif; font-size:18px; font-weight:700; fill:#fff; text-anchor:middle; }
+.tyre-race__loss { fill:#ffa500; font-size:14px; }
+.tyre-race__temperature { paint-order:stroke; stroke:#000; stroke-width:.8px; stroke-opacity:.65; }
+.tyre-race__compound { font-size:16px; }
+.tyre-race__pressure-flash { fill:red; opacity:0; animation:race-pressure-flash 2s linear both; }
+.tyre-race__engine-pulse { animation:race-engine-pulse .8s linear infinite; }
+@keyframes race-pressure-flash { 0%,100% { opacity:0; } 50% { opacity:.9; } }
+@keyframes race-pressure-still { 0%,99% { opacity:.45; } 100% { opacity:0; } }
+@keyframes race-engine-pulse { 0%,100% { opacity:0; } 50% { opacity:.7; } }
+@media (prefers-reduced-motion:reduce) { .tyre-race__pressure-flash { animation-name:race-pressure-still; }.tyre-race__engine-pulse { animation:none; opacity:.5; } }
 </style>

@@ -20,6 +20,8 @@ export interface FastStateTyre {
   slipBand: FastStateSlipBand
   slipState: FastStateSlipState
   slipRatio: number | null
+  wheelSlipRaw?: number | null
+  racePressure?: { variationPsi: number | null; eventSeq: number; eventTs: number | null } | null
   pressurePsi: number | null
   pressureLossPsi: number | null
   coreTempC: number | null
@@ -398,6 +400,12 @@ function normalizeTyre(raw: any): FastStateTyre | null {
   return {
     id: raw.id,
     wheelSlip: toNumber(raw.wheel_slip),
+    wheelSlipRaw: toNumber(raw.wheel_slip_raw),
+    racePressure: raw.race_pressure && typeof raw.race_pressure === 'object' ? {
+      variationPsi: toNumber(raw.race_pressure.variation_psi),
+      eventSeq: Math.max(0, toNumber(raw.race_pressure.event_seq) ?? 0),
+      eventTs: toNumber(raw.race_pressure.event_ts),
+    } : null,
     wheelSlipScaled: toNumber(raw.wheel_slip_scaled),
     slipBand: normalizeBand(raw.slip_band),
     slipState: normalizeSlipState(raw.slip_state),

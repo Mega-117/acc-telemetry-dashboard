@@ -13,6 +13,7 @@ function fastState() {
     lapPressureAverage: { status: 'available', tyreSet: 2, values: { FL: 23.1, FR: 23.1, RL: 23.1, RR: 23.1 } },
     tyres: ids.map((id, index) => ({
       id, pressurePsi: 23.2 + index / 10, pressureLossPsi: index === 0 ? .18 : 0,
+      racePressure: { variationPsi: index === 0 ? .18 : 0, eventSeq: 0, eventTs: null },
       coreTempC: 76 + index, wheelSlipScaled: 3 + index * 3, slipBand: index === 0 ? 'red' : 'white',
       slipState: 'ok', wheelSlip: 1, slipRatio: 0, brakeTempC: 568 - index * 10,
       brakeCompound: index < 2 ? 1 : 2, padLifePct: 92 - index, discLifePct: 99,
@@ -48,15 +49,15 @@ describe('Race HUD components', () => {
   it('rende la gerarchia gomme specchiata con slip, loss e freni', async () => {
     const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: fastState() }))
     expect(html).toContain('23.2')
-    expect(html).toContain('AVG 23.1')
-    expect(html).toContain('LOSS 0.18')
+    expect(html).not.toContain('AVG ')
+    expect(html).toContain('0.18')
     expect(html).toContain('tyre-race__brake--front')
     expect(html).toContain('tyre-race__brake--rear')
     expect(html).toContain('tyre-race__compound')
     expect(html).toContain('DRY')
-    expect(html).toContain('>2<')
+    expect(html).toContain('DRY 2')
     expect(html.match(/tyre-race__corner--rear/g)).toHaveLength(2)
-    expect(html.match(/role=/g) ?? []).toHaveLength(0)
+    expect(html).toContain('viewBox="0 0 166 241"')
   })
 
   it('rende sagoma GT3, quattro body zone, sospensioni e totali', async () => {
@@ -69,6 +70,17 @@ describe('Race HUD components', () => {
     for (const label of ['FL', 'FR', 'RL', 'RR', '24%', '68%']) expect(html).toContain(label)
   })
 
+  it('motore spento e limiter coesistono; i numeri freni appartengono alla ruota sinistra', async () => {
+    const state = { ...fastState(), isEngineRunning: false, pitLimiterOn: true }
+    const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: state }))
+    expect(html).toContain('tyre-race__engine-off')
+    expect(html).toContain('tyre-race__limiter')
+    expect(html).toContain('568\u00b0')
+    expect(html).toContain('548\u00b0')
+    expect(html).not.toContain('563\u00b0')
+    expect(html).toContain('0:37.980')
+  })
+
   it('mantiene quattro posizioni e usa placeholder quando la telemetria locale e parziale', async () => {
     const partial = fastState()
     partial.tyres = partial.tyres.slice(0, 1)
@@ -77,8 +89,8 @@ describe('Race HUD components', () => {
     const html = await renderToString(createSSRApp(TyreRaceHud, { fastState: partial }))
 
     for (const id of ['fl', 'fr', 'rl', 'rr']) expect(html).toContain(`tyre-race__corner--${id}`)
-    expect(html).toContain('AVG --')
-    expect(html).toContain('LOSS --')
+    expect(html).not.toContain('AVG ')
+    expect(html).toContain('--')
     expect(html).not.toContain('LOSS 0.00')
   })
 })
