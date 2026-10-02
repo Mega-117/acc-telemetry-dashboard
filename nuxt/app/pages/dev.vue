@@ -24,6 +24,14 @@ const devTools: Array<{
   category: DevToolCategory
 }> = [
   {
+    title: 'Io vs Riferimento',
+    eyebrow: 'telemetria giri',
+    description: 'Confronto dei canali registrati con il riferimento, nello stesso gioco, pista, variante e auto.',
+    to: '/dev-telemetry-compare',
+    tone: 'blue',
+    category: 'local'
+  },
+  {
     title: 'Firebase Monitor',
     eyebrow: 'reads / writes',
     description: 'Scenario, caller, path e operazioni Firestore della sessione corrente.',

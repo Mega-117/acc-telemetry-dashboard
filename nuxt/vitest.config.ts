@@ -40,6 +40,7 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/pages/dev-telemetry-compare.vue',
         'app/repositories/telemetryCloudRepository.ts',
         'app/components/layout/GameSelector.vue',
         'app/components/pages/CommonGamePage.vue',

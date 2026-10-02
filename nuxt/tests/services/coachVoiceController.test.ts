@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   COACH_STATE_SCHEMA,
+  COMMON_COACH_STATE_SCHEMA,
+  coachMatchesContext,
   POST_CORNER_OFFSET,
   advancePostCorner,
   coachPhraseKey,
@@ -38,6 +40,28 @@ function makeReference(id: string, position: number, audioPath = `acc-voice://re
 }
 
 describe('normalizeCoachState', () => {
+  it('preserves unavailable braking and throttle deltas without turning them into zero', () => {
+    const state = normalizeCoachState({ schema: COMMON_COACH_STATE_SCHEMA, game_id: 'synthetic',
+      last_lap_corners: [{ corner_id: 1, brake_delta_m: null, throttle_delta_m: null },
+        { corner_id: 2, brake_delta_m: 0, throttle_delta_m: -2 }] })
+    expect(state?.lastLapCorners.map(row => [row.brake_delta_m, row.throttle_delta_m])).toEqual([[null, null], [0, -2]])
+  })
+  it('binds common advice to game, layout, car and live session', () => {
+    const raw = { schema: COMMON_COACH_STATE_SCHEMA, game_id: 'synthetic', track: 'Spa',
+      car: 'QA Electric', track_variant: 'short', session_id: 'current' }
+    const state = normalizeCoachState(raw)
+    const context = { gameId: 'synthetic', track: 'spa', variant: 'short', car: 'QA Electric', sessionId: 'current' }
+    expect(coachMatchesContext(state, context)).toBe(true)
+    for (const change of [{ gameId: 'acc' }, { variant: 'full' }, { car: 'other' }, { sessionId: 'previous' }, { sessionId: null }]) {
+      expect(coachMatchesContext(state, { ...context, ...change })).toBe(false)
+    }
+    expect(normalizeCoachState({ ...raw, schema: COACH_STATE_SCHEMA })).toBeNull()
+    expect(normalizeCoachState({ ...raw, game_id: undefined })).toBeNull()
+    const legacy = normalizeCoachState({ schema: COACH_STATE_SCHEMA, track: 'spa', car: 'car' })
+    expect(coachMatchesContext(legacy, { gameId: 'acc', track: 'spa', car: 'car', variant: null })).toBe(true)
+    expect(coachMatchesContext(legacy, { gameId: 'acc', track: 'spa', car: 'car', variant: null, sessionId: 'current' })).toBe(false)
+  })
+
   it('accetta lo schema v1 e scarta il resto', () => {
     expect(normalizeCoachState(null)).toBeNull()
     expect(normalizeCoachState({ schema: 'altro' })).toBeNull()

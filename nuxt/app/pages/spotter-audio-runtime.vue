@@ -18,7 +18,6 @@ import {
 import { createVoiceRuntimeDiagnostics } from '~/services/monitoring/voiceRuntimeDiagnostics'
 import {
   filterPlayableTrackVoiceReferences,
-  normalizeTrackName,
   referenceMatchesContext,
   type TrackVoiceReference,
 } from '~/services/spotter/trackVoiceReferences'
@@ -38,6 +37,7 @@ import {
   createPreCornerState,
   resolveCoachOverride,
   resolveCoachOverrides,
+  coachMatchesContext,
 } from '~/services/spotter/coachVoiceController'
 import { useCoachStatePoller } from '~/composables/useCoachStatePoller'
 import { createTargetLapVoiceRuntime } from '~/services/spotter/targetLapVoiceRuntime'
@@ -131,12 +131,13 @@ const coachAllowedForSession = computed(() => audioFeatureAvailable(fastState.va
   adaptiveCoachSessionModes.value,
   audioSessionType.value,
 ))
-const coachTrackMatches = computed(() => {
-  const state = coachState.value
-  return !!state && (state.gameId ?? 'acc') === (fastState.value.commonLive?.gameId ?? 'acc')
-    && (state.variant ?? null) === (fastState.value.commonLive?.identity?.variant ?? null)
-    && normalizeTrackName(state.track) === normalizeTrackName(liveLap.value.track)
-})
+const coachTrackMatches = computed(() => coachMatchesContext(coachState.value, {
+  gameId: fastState.value.commonLive?.gameId ?? 'acc',
+  variant: fastState.value.commonLive?.identity?.variant ?? null,
+  track: fastState.value.context?.track ?? liveLap.value.track,
+  car: fastState.value.context?.car ?? null,
+  sessionId: fastState.value.commonLive ? fastState.value.commonLive.sessionId : undefined,
+}))
 const activeCoachFocus = computed(() => {
   if (!coachAllowedForSession.value || !coachTrackMatches.value) return null
   return coachState.value?.focus ?? null

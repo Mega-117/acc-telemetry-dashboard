@@ -7,16 +7,19 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useCoachStatePoller } from '~/composables/useCoachStatePoller'
+import { coachMatchesContext } from '~/services/spotter/coachVoiceController'
 import {
   channelRange,
   normalizeLapTrace,
+  lapTraceContextMatches,
   polylinePoints,
   type ChartBox,
   type LapTraceView,
 } from '~/services/telemetry/lapTraceChart'
 
 definePageMeta({
-  layout: 'dashboard'
+  layout: 'dashboard',
+  middleware: 'dev-tools'
 })
 
 const BOX: ChartBox = { width: 1150, height: 300, padding: 42 }
@@ -33,7 +36,7 @@ function getRuntimeApi(): any | null {
   return (window as any).electronAPI || null
 }
 
-const { coachState, startCoachStatePolling, stopCoachStatePolling } = useCoachStatePoller(getRuntimeApi)
+const { coachState: rawCoachState, startCoachStatePolling, stopCoachStatePolling } = useCoachStatePoller(getRuntimeApi)
 
 const traceList = ref<{ id: string, label: string }[]>([])
 const referenceTrace = ref<LapTraceView | null>(null)
@@ -41,6 +44,13 @@ const lapTrace = ref<LapTraceView | null>(null)
 const selectedLapId = ref<string>('')
 const loadError = ref<string>('')
 const runtimeAvailable = ref(true)
+let requestRevision = 0
+const incompatible = computed(() => !!referenceTrace.value && !!lapTrace.value
+  && !lapTraceContextMatches(referenceTrace.value, lapTrace.value))
+const coachState = computed(() => {
+  const trace = lapTrace.value
+  return trace && !incompatible.value && coachMatchesContext(rawCoachState.value, trace) ? rawCoachState.value : null
+})
 
 const lapOptions = computed(() => traceList.value.filter(item => item.id !== 'reference'))
 
@@ -51,8 +61,8 @@ function fmtTime(seconds: number): string {
 
 const chartModels = computed(() => {
   const traces = [referenceTrace.value, lapTrace.value].filter(Boolean) as LapTraceView[]
-  if (!traces.length) return []
-  return CHARTS.map(({ channel, title, unit }) => {
+  if (!traces.length || incompatible.value) return []
+  return CHARTS.filter(({ channel }) => traces.some(trace => trace.channels[channel])).map(({ channel, title, unit }) => {
     const { yMin, yMax } = channelRange(traces, channel)
     return {
       channel,
@@ -81,34 +91,52 @@ const cornerMarkers = computed(() => {
 const cornerRows = computed(() => coachState.value?.lastLapCorners ?? [])
 
 async function loadTraces() {
+  const revision = ++requestRevision
   loadError.value = ''
+  referenceTrace.value = null
+  lapTrace.value = null
   const api = getRuntimeApi()
   if (typeof api?.listLapTraces !== 'function') {
     runtimeAvailable.value = false
     return
   }
   try {
-    traceList.value = (await api.listLapTraces()) ?? []
+    const list = (await api.listLapTraces()) ?? []
+    if (revision !== requestRevision) return
+    traceList.value = list
     const reference = traceList.value.find(item => item.id === 'reference')
-    referenceTrace.value = reference ? normalizeLapTrace(await api.readLapTrace('reference')) : null
+    const referenceValue = reference ? normalizeLapTrace(await api.readLapTrace('reference')) : null
+    if (revision !== requestRevision) return
+    referenceTrace.value = referenceValue
+    if (!lapOptions.value.some(item => item.id === selectedLapId.value)) selectedLapId.value = ''
     if (!selectedLapId.value && lapOptions.value.length) {
       selectedLapId.value = lapOptions.value[0]!.id
     }
     if (selectedLapId.value) {
-      lapTrace.value = normalizeLapTrace(await api.readLapTrace(selectedLapId.value))
+      const lapValue = normalizeLapTrace(await api.readLapTrace(selectedLapId.value))
+      if (revision !== requestRevision) return
+      lapTrace.value = lapValue
     }
     if (!referenceTrace.value && !lapTrace.value) {
       loadError.value = 'Nessun giro disponibile: gira con il logger acceso (PIP-253) su una pista con riferimento.'
     }
   } catch (error: any) {
+    if (revision !== requestRevision) return
     loadError.value = `Errore caricamento giri: ${error?.message ?? error}`
   }
 }
 
 async function onSelectLap() {
+  const revision = ++requestRevision
+  lapTrace.value = null
   const api = getRuntimeApi()
   if (typeof api?.readLapTrace !== 'function' || !selectedLapId.value) return
-  lapTrace.value = normalizeLapTrace(await api.readLapTrace(selectedLapId.value))
+  try {
+    const lapValue = normalizeLapTrace(await api.readLapTrace(selectedLapId.value))
+    if (revision === requestRevision) lapTrace.value = lapValue
+  } catch {
+    if (revision === requestRevision) loadError.value = 'Giro non disponibile.'
+  }
 }
 
 onMounted(() => {
@@ -117,6 +145,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  requestRevision++
   stopCoachStatePolling()
 })
 </script>
@@ -129,6 +158,7 @@ onBeforeUnmount(() => {
       Disponibile solo nell'app desktop (serve il runtime Electron per leggere i giri).
     </p>
     <p v-else-if="loadError" class="notice">{{ loadError }}</p>
+    <p v-if="incompatible" class="notice">Confronto non disponibile: gioco, pista, variante o auto differenti.</p>
 
     <section v-if="coachState" class="coach-box">
       <h2>Coach</h2>
@@ -155,7 +185,8 @@ onBeforeUnmount(() => {
       <span v-if="lapTrace" class="legend">
         <span :style="{ color: LAP_COLOR }">■</span> io {{ fmtTime(lapTrace.lapTimeS) }}
         <em v-if="!lapTrace.complete"> (parziale)</em>
-        <em v-if="!lapTrace.valid"> (invalido)</em>
+        <em v-if="lapTrace.valid === false"> (invalido)</em>
+        <em v-else-if="lapTrace.valid === null"> (validità non disponibile)</em>
       </span>
     </section>
 
@@ -203,9 +234,10 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .telemetry-compare { max-width: 1200px; margin: 0 auto; padding: 16px; }
-.notice { color: #b45309; }
+.notice { color: #fbbf24; }
 .coach-box { background: rgba(47, 126, 216, 0.08); border-radius: 8px; padding: 8px 14px; margin-bottom: 12px; }
 .selector { display: flex; align-items: center; gap: 14px; margin-bottom: 10px; flex-wrap: wrap; }
+.selector select { color-scheme: dark; background: #1e2128; color: #f4f4f5; border: 1px solid #5b606b; border-radius: 4px; padding: 6px 8px; max-width: 100%; }
 .legend em { opacity: 0.7; }
 .chart svg { width: 100%; background: rgba(127, 127, 127, 0.06); border: 1px solid rgba(127, 127, 127, 0.25); border-radius: 6px; }
 .corners table { border-collapse: collapse; }

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   LAP_TRACE_SCHEMA,
+  COMMON_LAP_TRACE_SCHEMA,
+  lapTraceContextMatches,
   channelRange,
   normalizeLapTrace,
   polylinePoints,
@@ -27,6 +29,29 @@ function makeTraceDict(overrides: Record<string, unknown> = {}) {
 }
 
 describe('normalizeLapTrace', () => {
+  it('preserves common identity, unknown validity/fuel and partial channels', () => {
+    const raw = makeTraceDict()
+    const view = normalizeLapTrace({ ...raw, schema: COMMON_LAP_TRACE_SCHEMA,
+      meta: { ...raw.meta, game_id: 'synthetic', track_variant: 'short', valid: null, fuel_l: null },
+      channels: { time_s: raw.channels.time_s, speed_kmh: raw.channels.speed_kmh } })!
+    expect(view).toMatchObject({ gameId: 'synthetic', variant: 'short', valid: null, fuelL: null })
+    expect(view.channels.brake_pct).toBeUndefined()
+    expect(lapTraceContextMatches(view, { ...view, variant: 'full' })).toBe(false)
+    expect(lapTraceContextMatches(view, { ...view, variant: null })).toBe(false)
+    expect(lapTraceContextMatches(view, { ...view, gameId: 'acc' })).toBe(false)
+    expect(lapTraceContextMatches(view, { ...view, car: 'other' })).toBe(false)
+    expect(lapTraceContextMatches(view, { ...view, track: ' SPA ' })).toBe(true)
+  })
+
+  it('rejects conflicting or missing game identity and malformed measurements', () => {
+    const raw = makeTraceDict()
+    expect(normalizeLapTrace({ ...raw, meta: { ...raw.meta, game_id: 'evo' } })).toBeNull()
+    expect(normalizeLapTrace({ ...raw, schema: COMMON_LAP_TRACE_SCHEMA })).toBeNull()
+    expect(normalizeLapTrace({ ...raw, meta: { ...raw.meta, track_variant: 3 } })).toBeNull()
+    expect(normalizeLapTrace({ ...raw, meta: { ...raw.meta, lap_time_s: null } })).toBeNull()
+    expect(normalizeLapTrace({ ...raw, channels: { ...raw.channels, brake_pct: raw.channels.brake_pct.map(() => NaN) } })).toBeNull()
+  })
+
   it('accetta lo schema v1 con canali coerenti', () => {
     const view = normalizeLapTrace(makeTraceDict())
     expect(view).not.toBeNull()

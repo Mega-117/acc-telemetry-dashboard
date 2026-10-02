@@ -6,15 +6,21 @@
  * gia' fatto dal motore coach in coach_state.last_lap_corners).
  */
 
+import { isGameId } from './gameIdentity'
+
 export const LAP_TRACE_SCHEMA = 'acc.laptrace.v1'
+export const COMMON_LAP_TRACE_SCHEMA = 'racercore.laptrace.v1'
 
 export interface LapTraceView {
+  gameId: string
+  variant: string | null
+  sessionId: string | null
   track: string
   car: string
   lapTimeS: number
   source: string
   complete: boolean
-  valid: boolean
+  valid: boolean | null
   fuelL: number | null
   gridStepM: number
   lengthM: number
@@ -25,35 +31,49 @@ const CORE_CHANNELS = ['time_s', 'speed_kmh', 'brake_pct', 'throttle_pct']
 
 export function normalizeLapTrace(raw: unknown): LapTraceView | null {
   const data = raw as Record<string, any> | null
-  if (!data || typeof data !== 'object' || data.schema !== LAP_TRACE_SCHEMA) return null
+  if (!data || typeof data !== 'object' || ![LAP_TRACE_SCHEMA, COMMON_LAP_TRACE_SCHEMA].includes(data.schema)) return null
   const meta = data.meta
   const channels = data.channels
   const gridStep = Number(data.grid_step_m)
   if (!meta || !channels || !Number.isFinite(gridStep) || gridStep <= 0) return null
+  const gameId = data.schema === LAP_TRACE_SCHEMA ? (meta.game_id ?? 'acc') : meta.game_id
+  if (!isGameId(gameId) || data.schema === LAP_TRACE_SCHEMA && gameId !== 'acc') return null
+  if (meta.track_variant != null && (typeof meta.track_variant !== 'string' || !meta.track_variant.trim())) return null
+  if (typeof meta.lap_time_s !== 'number' || !Number.isFinite(meta.lap_time_s) || meta.lap_time_s <= 0) return null
   const out: Record<string, number[]> = {}
   let length: number | null = null
   for (const name of Object.keys(channels)) {
     const values = channels[name]
     if (!Array.isArray(values) || values.length < 2) return null
+    if (values.some(value => typeof value !== 'number' || !Number.isFinite(value))) return null
     if (length === null) length = values.length
     if (values.length !== length) return null
     out[name] = values as number[]
   }
-  for (const required of CORE_CHANNELS) {
+  for (const required of data.schema === LAP_TRACE_SCHEMA ? CORE_CHANNELS : ['time_s']) {
     if (!out[required]) return null
   }
   return {
+    gameId,
+    variant: meta.track_variant ?? null,
+    sessionId: typeof meta.extra?.session_token === 'string' ? meta.extra.session_token : null,
     track: String(meta.track ?? ''),
     car: String(meta.car ?? ''),
     lapTimeS: Number(meta.lap_time_s) || 0,
     source: String(meta.source ?? ''),
     complete: meta.complete === true,
-    valid: meta.valid !== false,
-    fuelL: Number.isFinite(Number(meta.fuel_l)) ? Number(meta.fuel_l) : null,
+    valid: typeof meta.valid === 'boolean' ? meta.valid : null,
+    fuelL: typeof meta.fuel_l === 'number' && Number.isFinite(meta.fuel_l) ? meta.fuel_l : null,
     gridStepM: gridStep,
     lengthM: (length! - 1) * gridStep,
     channels: out,
   }
+}
+
+export function lapTraceContextMatches(a: Pick<LapTraceView, 'gameId' | 'track' | 'variant' | 'car'>, b: Pick<LapTraceView, 'gameId' | 'track' | 'variant' | 'car'>): boolean {
+  return a.gameId === b.gameId && a.variant === b.variant
+    && !!a.track.trim() && a.track.trim().toLowerCase() === b.track.trim().toLowerCase()
+    && !!a.car.trim() && a.car.trim().toLowerCase() === b.car.trim().toLowerCase()
 }
 
 export interface ChartBox {

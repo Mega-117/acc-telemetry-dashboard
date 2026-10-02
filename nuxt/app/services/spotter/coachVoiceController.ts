@@ -10,6 +10,7 @@
 
 import type { TrackVoiceReference } from '~/services/spotter/trackVoiceReferences'
 import coachVoiceScriptConfig from '~/config/coachVoiceScript.json'
+import { isGameId } from '~/services/telemetry/gameIdentity'
 
 /** Frasi disattivate dal Voice Lab ("Usa in pista" off): il coach ripiega
  * sul riferimento standard (pre-curva) o tace (esito post-curva). */
@@ -27,6 +28,7 @@ export function isCoachPhraseEnabled(
 }
 
 export const COACH_STATE_SCHEMA = 'acc.coach_state.v1'
+export const COMMON_COACH_STATE_SCHEMA = 'racercore.coach_state.v1'
 
 /** Finestra a monte dell'apex in cui cercare il marker della curva-focus. */
 export const PRE_CORNER_WINDOW = 0.06
@@ -57,6 +59,7 @@ export interface CoachCornerRow {
 export interface CoachVoiceState {
   gameId?: string
   variant?: string | null
+  sessionId?: string | null
   track: string
   car: string
   lapsObserved: number
@@ -93,7 +96,10 @@ function normalizeAdvice(raw: unknown): CoachFocus | null {
 
 export function normalizeCoachState(raw: unknown): CoachVoiceState | null {
   const data = raw as Record<string, unknown> | null
-  if (!data || typeof data !== 'object' || data.schema !== COACH_STATE_SCHEMA) return null
+  if (!data || typeof data !== 'object' || ![COACH_STATE_SCHEMA, COMMON_COACH_STATE_SCHEMA].includes(String(data.schema))) return null
+  const gameId = data.schema === COACH_STATE_SCHEMA ? (data.game_id ?? 'acc') : data.game_id
+  if (!isGameId(gameId) || data.schema === COACH_STATE_SCHEMA && gameId !== 'acc') return null
+  if (data.track_variant != null && (typeof data.track_variant !== 'string' || !data.track_variant.trim())) return null
   const focus = normalizeAdvice(data.focus)
   const outcome = typeof data.last_lap_outcome === 'string' && OUTCOMES.has(data.last_lap_outcome)
     ? data.last_lap_outcome as CoachVoiceState['lastLapOutcome']
@@ -105,9 +111,9 @@ export function normalizeCoachState(raw: unknown): CoachVoiceState | null {
           corner_id: Number(row.corner_id),
           corner_name: typeof row.corner_name === 'string' ? row.corner_name : null,
           apex_dist_m: Number(row.apex_dist_m) || 0,
-          brake_delta_m: Number.isFinite(Number(row.brake_delta_m)) ? Number(row.brake_delta_m) : null,
+          brake_delta_m: typeof row.brake_delta_m === 'number' && Number.isFinite(row.brake_delta_m) ? row.brake_delta_m : null,
           vmin_delta_kmh: Number(row.vmin_delta_kmh) || 0,
-          throttle_delta_m: Number.isFinite(Number(row.throttle_delta_m)) ? Number(row.throttle_delta_m) : null,
+          throttle_delta_m: typeof row.throttle_delta_m === 'number' && Number.isFinite(row.throttle_delta_m) ? row.throttle_delta_m : null,
           time_lost_s: Number(row.time_lost_s) || 0,
         }))
     : []
@@ -116,7 +122,8 @@ export function normalizeCoachState(raw: unknown): CoachVoiceState | null {
     : []
   return {
     track: typeof data.track === 'string' ? data.track : '',
-    ...(typeof data.game_id === 'string' ? { gameId: data.game_id } : {}),
+    gameId,
+    sessionId: typeof data.session_id === 'string' ? data.session_id : null,
     ...(typeof data.track_variant === 'string' ? { variant: data.track_variant } : {}),
     car: typeof data.car === 'string' ? data.car : '',
     lapsObserved: Number(data.laps_observed) || 0,
@@ -125,6 +132,17 @@ export function normalizeCoachState(raw: unknown): CoachVoiceState | null {
     lastLapCorners: rows,
     cornersAdvice,
   }
+}
+
+export function coachMatchesContext(state: CoachVoiceState | null, context: {
+  gameId: string; track: string | null; variant: string | null; car: string | null; sessionId?: string | null
+}): boolean {
+  if (!state || (state.gameId ?? 'acc') !== context.gameId || (state.variant ?? null) !== context.variant) return false
+  const same = (a: string | null, b: string | null) => !!a?.trim() && a.trim().toLowerCase() === b?.trim().toLowerCase()
+  if (!same(state.track, context.track) || !same(state.car, context.car)) return false
+  // Live callers supply the session. Legacy ACC state without it is compatible
+  // only with a legacy source; a normalized source must bind explicitly.
+  return context.sessionId === undefined || state.sessionId === context.sessionId && !!context.sessionId
 }
 
 /** PIP-260 "tutte le curve": un override per ogni verdetto che trova il suo
