@@ -18,6 +18,17 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); delete (window as any).electronAPI })
 
 describe('Impostazioni navigation', () => {
+  it('keeps a transition root while the desktop bridge is loading', async () => {
+    let finish!: () => void
+    mock.start.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve }))
+    const wrapper = mount(Impostazioni)
+    expect(wrapper.element.tagName).toBe('DIV')
+    expect(wrapper.find('.settings-content').exists()).toBe(false)
+    finish()
+    await flushPromises()
+    expect(wrapper.find('.settings-content').exists()).toBe(true)
+    wrapper.unmount()
+  })
   it('keeps Comandi and opens the actual Avvio panel', async () => {
     const wrapper = mount(Impostazioni, { global: { components: { SettingsStartupPanel: StartupPanel },
       stubs: { SettingsCommandBindingsPanel: { template: '<div>Bindings</div>' } } } })

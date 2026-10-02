@@ -5,6 +5,7 @@ import { applyTrackBestsProjectionDeltas, type TrackBestProjectionDelta } from '
 import { writeTrackDetailProjectionDocuments } from './trackDetailProjectionService'
 import { writeSessionListProjectionDocuments } from './sessionListProjectionService'
 import type { SessionDocument } from '~/types/telemetry'
+import { sessionGame } from '~/services/telemetry/gameIdentity'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import { updatePilotDirectoryActivity } from '~/services/pilotDirectoryProjectionService'
 
@@ -25,6 +26,7 @@ export async function rebuildTrackBestsProjection(params: {
   const deltas: TrackBestProjectionDelta[] = sessions
     .filter((session) => !!session?.meta?.track && !!session?.sessionId)
     .map((session) => ({
+      gameId: sessionGame(session) ?? 'unknown',
       trackId: session.meta.track,
       sessionId: session.sessionId,
       dateStart: session.meta.date_start,

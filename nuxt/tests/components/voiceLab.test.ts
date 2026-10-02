@@ -54,9 +54,9 @@ async function input(selector: string, value: string, event = 'input') {
   element.dispatchEvent(new Event(event, { bubbles: true }))
   await settle()
 }
-async function mount(section = 'script', admin = true) {
+async function mount(section = 'script', admin = true, query: Record<string, string> = {}) {
   mocks.auth.isAdmin = ref(admin)
-  vi.stubGlobal('useRoute', () => ({ query: { section } }))
+  vi.stubGlobal('useRoute', () => ({ query: { section, ...query } }))
   app = createApp(VoiceLab)
   app.config.warnHandler = () => {}
   app.mount(host)
@@ -106,6 +106,14 @@ afterEach(async () => {
 })
 
 describe('Voice Lab user interactions', () => {
+  it('opens the game and variant selected by the Spotter link', async () => {
+    mocks.runtime.readVoicePoints.mockResolvedValue({ tracks: ['Spa'], points: [clone(point),
+      { ...clone(point), game_id: 'evo', track_variant: 'short', text: 'EVO short' }] })
+    await mount('references', false, { game: 'evo', variant: 'short', track: 'Spa' })
+    expect(host.querySelector<HTMLTextAreaElement>('.reference-row textarea')!.value).toBe('EVO short')
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="Gioco riferimenti"]')!.value).toBe('evo')
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="Variante riferimenti"]')!.value).toBe('short')
+  })
   it('retains the original reference when autosave finishes after switching game and variant', async () => {
     mocks.runtime.readVoicePoints.mockResolvedValue({ tracks: ['Spa'], points: [clone(point),
       { ...clone(point), game_id: 'evo', text: 'EVO standard' },

@@ -9,7 +9,9 @@ import {
 } from '~/composables/useFirebaseTracker'
 import type { SessionDocument } from '~/types/telemetry'
 import { BEST_RULES_VERSION, extractMetadata } from '~/utils/sessionParser'
+import { sessionGame, recordingGame, canUseAccRules } from '~/services/telemetry/gameIdentity'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
+import { stableStringify } from '~/utils/stableStringify'
 import { normalizeTrackId } from '~/services/projections/trackMetadata'
 import { canonicalizeTelemetryPayload } from './canonicalSummaryBridge'
 import { reconstructRawPayloadFromChunks } from './legacySummaryMigrationService'
@@ -227,6 +229,13 @@ async function deleteDocTracked(ref: any) {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
+function summaryRulesState(data: any) {
+  const game = sessionGame(data)
+  const required = game === 'acc' ? BEST_RULES_VERSION : game ? 1 : Infinity
+  const version = Number(data?.summary?.best_rules_version || data?.summaryRulesVersion || 0)
+  return { version, required, current: version >= required }
+}
+
 function toSessionDocument(docSnap: any): SessionDocument {
   const data = docSnap.data() || {}
   return {
@@ -236,10 +245,11 @@ function toSessionDocument(docSnap: any): SessionDocument {
     uploadedAt: data.uploadedAt || null,
     meta: data.meta || {},
     summary: data.summary || {},
+    summaryRulesVersion: Number(data.summaryRulesVersion || 0),
     rawChunkCount: Number(data.rawChunkCount || 0),
     rawSizeBytes: Number(data.rawSizeBytes || 0),
     source: 'cloud',
-    summarySource: Number(data?.summary?.best_rules_version || data?.summaryRulesVersion || 0) >= BEST_RULES_VERSION
+    summarySource: summaryRulesState(data).current
       ? 'canonical'
       : 'legacy_fallback',
     syncState: 'synced'
@@ -248,7 +258,7 @@ function toSessionDocument(docSnap: any): SessionDocument {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function stableJson(value: any): string {
-  return JSON.stringify(sanitizeForFirestore(value))
+  return stableStringify(sanitizeForFirestore(value))
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
@@ -258,8 +268,17 @@ async function canonicalizeCloudRawPayload(rawObj: any): Promise<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   summary: any
   mode: 'local_domain' | 'cloud_raw_fallback'
+  summaryRulesVersion: number
 } | null> {
   const parsed = extractMetadata(rawObj, { allowLegacyFallback: true, forceRawRebuild: true })
+  if (!recordingGame(rawObj)) return null
+  if (!canUseAccRules(rawObj)) {
+    return parsed.summarySource === 'canonical'
+      // As in upload, preserve the canonical recording, including schema and
+      // provenance. The parser's normalized view is only for consumers.
+      ? { meta: parsed.meta, summary: rawObj.summary, mode: 'cloud_raw_fallback', summaryRulesVersion: 1 }
+      : null
+  }
 
   try {
     const localDomainResult = await canonicalizeTelemetryPayload(rawObj)
@@ -270,7 +289,8 @@ async function canonicalizeCloudRawPayload(rawObj: any): Promise<{
           ...localDomainResult.summary,
           best_rules_version: Number(localDomainResult.summary.best_rules_version || BEST_RULES_VERSION)
         },
-        mode: 'local_domain'
+        mode: 'local_domain',
+        summaryRulesVersion: BEST_RULES_VERSION
       }
     }
   } catch {
@@ -283,7 +303,8 @@ async function canonicalizeCloudRawPayload(rawObj: any): Promise<{
       ...parsed.summary,
       best_rules_version: Number(parsed.summary.best_rules_version || BEST_RULES_VERSION)
     },
-    mode: 'cloud_raw_fallback'
+    mode: 'cloud_raw_fallback',
+    summaryRulesVersion: BEST_RULES_VERSION
   }
 }
 
@@ -342,6 +363,7 @@ async function probeRawChunks(uid: string, session: SessionDocument): Promise<'p
 function getTrackIdsFromSessions(sessions: SessionDocument[]): string[] {
   return Array.from(new Set(
     sessions
+      .filter(session => sessionGame(session) === 'acc')
       .map((session) => normalizeTrackId(session.meta?.track || ''))
       .filter(Boolean)
   )).sort()
@@ -532,13 +554,13 @@ export async function auditOwnerData(uid: string): Promise<OwnerDataAuditReport>
     let incompleteCloudOnly = 0
 
     for (const session of sessions) {
-      const version = Number(session.summary?.best_rules_version || 0)
-      if (version >= BEST_RULES_VERSION) canonical += 1
-      if (version > 0 && version < BEST_RULES_VERSION) legacy += 1
+      const { version, current } = summaryRulesState(session)
+      if (current) canonical += 1
+      if (version > 0 && !current) legacy += 1
       if (version <= 0) missingCanonical += 1
       if (Number(session.summary?.laps || 0) <= 0) zeroLaps += 1
       const hasRaw = Number(session.rawChunkCount || 0) > 0 || Number(session.rawSizeBytes || 0) > 0
-      if (version < BEST_RULES_VERSION && !hasRaw) incompleteCloudOnly += 1
+      if (!current && !hasRaw) incompleteCloudOnly += 1
     }
 
     if (legacy > 0) {
@@ -724,6 +746,7 @@ export async function rebuildOwnerProjections(
     const deltas: TrackBestProjectionDelta[] = sessions
       .filter((session) => !!session.sessionId && !!session.meta?.track)
       .map((session) => ({
+        gameId: sessionGame(session) ?? 'unknown',
         trackId: session.meta.track,
         sessionId: session.sessionId,
         dateStart: session.meta.date_start,
@@ -916,8 +939,7 @@ export async function reprocessOwnerCloudRawSummaries(
     const eligibleDocs = sessionDocs.filter((docSnap: any) => {
       if (forceAll) return true
       const data = docSnap.data() || {}
-      const version = Number(data?.summary?.best_rules_version || data?.summaryRulesVersion || 0)
-      return version < BEST_RULES_VERSION
+      return !summaryRulesState(data).current
     })
 
     const report: OwnerCloudSummaryReprocessReport = {
@@ -965,7 +987,7 @@ export async function reprocessOwnerCloudRawSummaries(
         const nextPayload = sanitizeForFirestore({
           meta: canonical.meta || existingData.meta || {},
           summary: canonical.summary,
-          summaryRulesVersion: Number(canonical.summary.best_rules_version || BEST_RULES_VERSION)
+          summaryRulesVersion: canonical.summaryRulesVersion
         })
 
         const existingComparable = {

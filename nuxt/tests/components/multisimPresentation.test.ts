@@ -47,6 +47,7 @@ describe('common game surfaces', () => {
     useGameContext().selectGame('acc')
     fixture.admin=ref(false); fixture.live=ref({commonLive:null})
     const view=mount(GameSelector)
+    expect(view.get('option[value="evo"]').text()).toBe('Assetto Corsa EVO · sperimentale')
     expect(view.find('option[value="synthetic"]').exists()).toBe(false)
     await view.get('select').setValue('evo')
     fixture.live.value={commonLive:{connected:true,gameId:'acc'}}

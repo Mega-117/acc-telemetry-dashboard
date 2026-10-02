@@ -2,6 +2,7 @@ import { collection, doc, serverTimestamp } from 'firebase/firestore'
 import { trackedWriteBatch } from '~/composables/useFirebaseTracker'
 import type { TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { BEST_RULES_VERSION, extractMetadata, generateSessionId } from '~/utils/sessionParser'
+import { stableStringify } from '~/utils/stableStringify'
 import {
   cloudStateFromSessionDocument,
   knownRawChunkIds,
@@ -25,14 +26,6 @@ export async function calculateContentHash(input: string): Promise<string> {
   const data = new TextEncoder().encode(input)
   const hashBuffer = await crypto.subtle.digest('SHA-256', data)
   return Array.from(new Uint8Array(hashBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('')
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-function stableStringify(value: any): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(',')}]`
-  const keys = Object.keys(value).sort()
-  return `{${keys.map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(',')}}`
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type

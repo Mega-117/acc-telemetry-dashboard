@@ -1,4 +1,4 @@
-import { BEST_RULES_VERSION } from '~/utils/sessionParser'
+import { BEST_RULES_VERSION, extractMetadata } from '~/utils/sessionParser'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 const io = vi.hoisted(() => ({ get: vi.fn(), list: vi.fn(), set: vi.fn(), invalidate: vi.fn(), clear: vi.fn(), changed: vi.fn() }))
 vi.mock('~/services/sync/syncMirrorService', () => ({ invalidateSyncMirror: io.invalidate }))
@@ -7,7 +7,7 @@ vi.mock('~/services/cache/ownerCacheSignals', () => ({ notifyOwnerCacheChanged: 
 vi.mock('firebase/firestore', () => ({
   doc: (_db: unknown, path: string) => ({ path }),
   collection: (_db: unknown, path: string) => ({ path }),
-  query: (value: unknown) => value, limit: () => 1, serverTimestamp: () => 'server-time'
+  query: (value: unknown) => value, orderBy: () => null, limit: () => 1, serverTimestamp: () => 'server-time'
 }))
 vi.mock('~/config/firebase', () => ({ db: {} }))
 vi.mock('~/composables/useFirebaseTracker', () => ({
@@ -16,10 +16,69 @@ vi.mock('~/composables/useFirebaseTracker', () => ({
 }))
 import {
   isLegacyTrackBestProjectionDoc,
+  auditOwnerData,
+  reprocessOwnerCloudRawSummaries,
   runOwnerProjectionRepairWrites,
   migrateOwnerTrackProjections
 } from '~/services/sync/ownerDataRepairService'
 import { buildTrackBestsIndexDocument } from '~/services/sync/trackBestsIndexProjectionService'
+import { rebuildTrackBestsProjection } from '~/services/sync/projectionRebuildService'
+import { writeTrackDetailProjectionDocuments } from '~/services/sync/trackDetailProjectionService'
+
+describe('multisim owner maintenance', () => {
+  const raw = { schema: 'racercore.session', version: 1, game_id: 'evo', session_id: 'evo-test',
+    session_info: { track: 'Evo-only', car: 'Car', track_variant: 'short', date_start: '2026-10-02', session_kind: 'practice' },
+    stints: [], summary: { schema: 'racercore.timing-summary', version: 1, laps: 3, lapsValid: 1, bestLap: 90000, totalTime: 270000 } }
+  const meta = { gameId: 'evo', track: 'Evo-only', car: 'Car', date_start: '2026-10-02', trackVariant: 'short' }
+  beforeEach(() => { vi.clearAllMocks(); io.get.mockResolvedValue({ exists: () => false }); io.set.mockResolvedValue(undefined) })
+  it('does not rebuild ACC best or track detail documents from a non-ACC session', async () => {
+    const sessions = [{ sessionId: 'evo-test', meta, summary: { laps: 3, bestQualyMs: 90000, best_rules_version: 6 } }] as any
+    await rebuildTrackBestsProjection({ db: {}, uid: 'owner', sessions, resetAllTrackBests: vi.fn(async () => 0), getDocFn: io.get, setDocFn: io.set, bestRulesVersion: BEST_RULES_VERSION })
+    expect(io.set.mock.calls.every(([ref]) => !ref.path.includes('/trackProjections/'))).toBe(true)
+    io.set.mockClear()
+    await writeTrackDetailProjectionDocuments({ db: {}, uid: 'owner', sessions, setDocFn: io.set })
+    expect(io.set).not.toHaveBeenCalled()
+  })
+  it('recognizes the common summary version without requiring ACC rules or ACC track projections', async () => {
+    io.list.mockImplementation(async ({ path }) => ({ docs: path.endsWith('/sessions')
+      ? [{ id: 'evo-test', data: () => ({ meta, summary: { laps: 3 }, summaryRulesVersion: 1, rawChunkCount: 1 }) }] : [] }))
+    const report = await auditOwnerData('owner')
+    expect(report.sessions.canonical).toBe(1)
+    expect(report.sessions.missingCanonical).toBe(0)
+    expect(report.projections.missingTrackBests).toEqual([])
+    expect(io.set).not.toHaveBeenCalled()
+    const reprocess = await reprocessOwnerCloudRawSummaries('owner')
+    expect(reprocess.eligibleSessions).toBe(0)
+  })
+  it('rebuilds a common raw without adding best_rules_version or invoking the ACC domain', async () => {
+    io.list.mockImplementation(async ({ path }) => ({ docs: path.endsWith('/sessions')
+      ? [{ id: 'evo-test', ref: { path: 'users/owner/sessions/evo-test' }, data: () => ({ meta, summary: {}, summaryRulesVersion: 0 }) }]
+      : path.endsWith('/rawChunks') ? [{ data: () => ({ idx: 0, chunk: JSON.stringify(raw) }) }] : [] }))
+    const report = await reprocessOwnerCloudRawSummaries('owner', { forceAll: true })
+    expect(report.failedSessions).toBe(0)
+    expect(report.updatedSessions).toBe(1)
+    expect(io.set.mock.calls[0]![1]).toMatchObject({ meta: { gameId: 'evo', trackVariant: 'short' }, summaryRulesVersion: 1, summary: { bestLap: 90000, lapsValid: 1 } })
+    expect(io.set.mock.calls[0]![1].summary).not.toHaveProperty('best_rules_version')
+  })
+  it('does not relabel unknown raw schema as an ACC summary', async () => {
+    io.list.mockImplementation(async ({ path }) => ({ docs: path.endsWith('/sessions')
+      ? [{ id: 'unknown', ref: { path: 'users/owner/sessions/unknown' }, data: () => ({ meta, summary: {} }) }]
+      : path.endsWith('/rawChunks') ? [{ data: () => ({ idx: 0, chunk: JSON.stringify({ ...raw, version: 999 }) }) }] : [] }))
+    const report = await reprocessOwnerCloudRawSummaries('owner', { forceAll: true })
+    expect(report.failedSessions).toBe(1)
+    expect(io.set).not.toHaveBeenCalled()
+  })
+  it('does not rewrite unchanged summaries merely because Firestore changed key order', async () => {
+    const parsed = extractMetadata(raw)
+    const reordered = (value: object) => Object.fromEntries(Object.entries(value).reverse())
+    io.list.mockImplementation(async ({ path }) => ({ docs: path.endsWith('/sessions')
+      ? [{ id: 'evo-test', ref: { path: 'users/owner/sessions/evo-test' }, data: () => ({ meta: reordered(parsed.meta), summary: reordered(raw.summary), summaryRulesVersion: 1 }) }]
+      : path.endsWith('/rawChunks') ? [{ data: () => ({ idx: 0, chunk: JSON.stringify(raw) }) }] : [] }))
+    const report = await reprocessOwnerCloudRawSummaries('owner', { forceAll: true })
+    expect(report.unchangedSessions).toBe(1)
+    expect(io.set).not.toHaveBeenCalled()
+  })
+})
 
 describe('targeted track maintenance I/O', () => {
   const bests = { version: 4, bestRulesVersion: BEST_RULES_VERSION, activity: { sessionCount: 666 }, lastSessionDate: '2026-09-22', bests: {} }

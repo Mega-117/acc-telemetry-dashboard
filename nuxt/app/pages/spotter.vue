@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useGameContext } from '~/composables/useGameContext'
+import { gameLabel } from '~/services/telemetry/gameCatalog'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { spotterVoiceOptions, useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
-import { resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
+import { referenceMatchesContext, resolveTrackVoiceReferenceAudioPath } from '~/services/spotter/trackVoiceReferences'
 import { presentVoiceRuntimeMessage } from '~/services/spotter/voiceRuntimePresentation'
 import SessionModePicker from '~/components/spotter/SessionModePicker.vue'
 
@@ -14,6 +16,8 @@ type RuntimeState = 'checking' | 'online' | 'starting' | 'offline' | 'error'
 
 interface TrackVoicePoint {
   id: string
+  game_id?: string
+  track_variant?: string | null
   track: string
   type?: string
   normalized_car_position: number
@@ -32,6 +36,8 @@ interface TrackVoicePointCatalog {
 }
 
 const { isAdmin } = useFirebaseAuth()
+const { consultedGame } = useGameContext()
+const selectedVariant = ref('')
 const voiceLabRuntime = useVoiceLabRuntime()
 const {
   selectedVoice,
@@ -64,12 +70,21 @@ const runtimeState = ref<RuntimeState>('checking')
 const runtimeMessage = ref('Controllo motore vocale...')
 
 
-const availableTracks = computed(() => {
-  const tracks = catalog.value.tracks.length ? catalog.value.tracks : ['Spa']
-  return tracks.includes('Spa') ? tracks : ['Spa', ...tracks]
-})
+const availableVariants = computed(() => [...new Set(['', ...catalog.value.points
+  .filter(point => (point.game_id ?? 'acc') === consultedGame.value)
+  .map(point => point.track_variant ?? '')])])
+const scopedPoints = computed(() => catalog.value.points.filter(point =>
+  referenceMatchesContext(point, consultedGame.value, point.track, selectedVariant.value || null)))
+const availableTracks = computed(() => [...new Set([
+  ...(consultedGame.value === 'acc' && !selectedVariant.value ? catalog.value.tracks : []),
+  ...scopedPoints.value.map(point => point.track),
+])].sort())
+watch(consultedGame, () => { selectedVariant.value = '' }, { flush: 'sync' })
+watch(availableTracks, tracks => {
+  if (!tracks.includes(selectedTrack.value)) selectedTrack.value = tracks[0] ?? ''
+}, { flush: 'sync' })
 const selectedTrackPoints = computed(() => catalog.value.points
-  .filter(point => point.track === selectedTrack.value && point.type === 'braking_reference')
+  .filter(point => referenceMatchesContext(point, consultedGame.value, selectedTrack.value, selectedVariant.value || null) && point.type === 'braking_reference')
 )
 const activeReferences = computed(() => selectedTrackPoints.value.filter(point => point.enabled !== false))
 const readyReferences = computed(() => activeReferences.value.filter(point => resolveTrackVoiceReferenceAudioPath(point, selectedVoice.value)))
@@ -81,7 +96,7 @@ const referenceStatusLabel = computed(() => {
   if (missingReferences.value === 0) return 'Riferimenti audio pronti'
   return 'Audio da rigenerare'
 })
-const referenceVoiceLabLink = computed(() => `/dev-voice-lab?section=references&track=${encodeURIComponent(selectedTrack.value)}`)
+const referenceVoiceLabLink = computed(() => `/dev-voice-lab?section=references&game=${encodeURIComponent(consultedGame.value)}&variant=${encodeURIComponent(selectedVariant.value)}&track=${encodeURIComponent(selectedTrack.value)}`)
 
 
 async function loadCatalog() {
@@ -89,7 +104,7 @@ async function loadCatalog() {
   catalogError.value = ''
   try {
     catalog.value = await voiceLabRuntime.readVoicePoints<TrackVoicePointCatalog>()
-    if (!availableTracks.value.includes(selectedTrack.value)) selectedTrack.value = availableTracks.value[0] || 'Spa'
+    if (!availableTracks.value.includes(selectedTrack.value)) selectedTrack.value = availableTracks.value[0] ?? ''
   } catch (error: any) {
     catalogError.value = error?.data?.statusMessage || error?.message || 'Riferimenti non disponibili'
   } finally {
@@ -241,8 +256,13 @@ onMounted(() => {
         </div>
         <section class="reference-panel racing-panel">
           <h2>Riferimenti pista</h2>
+          <p>{{ gameLabel(consultedGame) }}</p>
+          <div v-if="availableVariants.length > 1" class="select-shell"><select v-model="selectedVariant" class="racing-select" aria-label="Variante riferimenti">
+            <option v-for="variant in availableVariants" :key="variant" :value="variant">{{ variant || 'Senza variante' }}</option>
+          </select></div>
           <div class="select-shell"><select
             v-model="selectedTrack"
+            :disabled="!availableTracks.length"
             class="racing-select"
             aria-label="Pista riferimenti"
           >

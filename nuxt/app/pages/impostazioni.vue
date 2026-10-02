@@ -25,8 +25,8 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div v-if="ready" class="settings-page">
-    <div class="settings-content">
+  <div class="settings-page">
+    <div v-if="ready" class="settings-content">
       <header class="settings-page__title">
         <h1>Impostazioni</h1>
         <span>Personalizza il programma e i controlli della tua postazione.</span>

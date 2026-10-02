@@ -21,7 +21,7 @@ function change(event: Event) {
   <label class="game-selector">
     <span :title="connectedLabel">GIOCO · {{ connectedLabel }}</span>
     <select aria-label="Gioco consultato" :value="consultedGame" @change="change">
-      <option v-for="game in GAME_OPTIONS" :key="game.id" :value="game.id">{{ game.label }}{{ game.available ? '' : ' · non disponibile' }}</option>
+      <option v-for="game in GAME_OPTIONS" :key="game.id" :value="game.id">{{ game.label }}{{ game.experimental ? ' · sperimentale' : game.available ? '' : ' · non disponibile' }}</option>
       <option v-if="canAccessDevTools" value="synthetic">Simulatore di test · DEV</option>
     </select>
   </label>

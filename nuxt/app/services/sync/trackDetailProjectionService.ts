@@ -366,7 +366,7 @@ export async function writeTrackDetailProjectionDocuments(params: {
   setDocFn: (ref: any, data: any, options?: any) => Promise<any>
 }): Promise<void> {
   const { db, uid, sessions, setDocFn } = params
-  const trackIds = Array.from(new Set(sessions.map((session) => normalizeTrackId(session.meta?.track)).filter(Boolean)))
+  const trackIds = Array.from(new Set(sessions.filter(session => sessionGame(session) === 'acc').map((session) => normalizeTrackId(session.meta?.track)).filter(Boolean)))
 
   for (const trackId of trackIds) {
     const projection = sanitizeForFirestore(buildTrackDetailProjectionDocument(trackId, sessions))

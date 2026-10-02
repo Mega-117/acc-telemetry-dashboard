@@ -260,6 +260,7 @@ export default defineConfig({
         'app/services/spotter/spotterSessionPolicy.ts',
         'app/services/spotter/voiceRuntimePresentation.ts',
         'app/utils/firestoreSanitize.ts',
+        'app/utils/stableStringify.ts',
         'app/utils/diagnosticsPresentation.ts',
         'app/utils/diagnosticsCostEstimate.ts',
         'app/utils/featureAccess.ts',

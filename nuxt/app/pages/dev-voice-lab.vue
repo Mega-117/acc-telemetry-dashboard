@@ -197,9 +197,9 @@ const lapTimeBatchTooLarge = computed(() => lapTimeRangeCount.value > LAP_TIME_B
 const lapTimePreviewEntry = computed(() => buildLapTimeVoiceEntry(lapTimeFromTenths.value, lapTimeVoiceId.value, lapTimeSpeed.value))
 
 // ─── Riferimenti frenata per pista (PIP-204) ─────────────────────────────────
-const selectedReferenceTrack = ref('Spa')
-const selectedReferenceGame = ref('acc')
-const selectedReferenceVariant = ref<string | null>(null)
+const selectedReferenceTrack = ref(typeof route.query.track === 'string' ? route.query.track : 'Spa')
+const selectedReferenceGame = ref(typeof route.query.game === 'string' ? route.query.game : 'acc')
+const selectedReferenceVariant = ref<string | null>(typeof route.query.variant === 'string' && route.query.variant ? route.query.variant : null)
 const referenceVoiceId = ref<SpotterVoiceId>('if_sara')
 const referenceCatalog = ref<TrackVoicePointCatalog>({ tracks: ['Spa'], points: [] })
 const referencesBusy = ref(false)
@@ -208,7 +208,7 @@ const referencesError = ref('')
 const referencesBatchBusy = ref(false)
 const referenceTasks = ref<Record<string, { state: RowState; message: string }>>({})
 const referencesWithStaleAudio = ref<Set<string>>(new Set())
-const availableReferenceGames = computed(() => [...new Set(['acc', ...referenceCatalog.value.points.map(point => point.game_id ?? 'acc')])])
+const availableReferenceGames = computed(() => [...new Set(['acc', selectedReferenceGame.value, ...referenceCatalog.value.points.map(point => point.game_id ?? 'acc')])])
 const availableReferenceVariants = computed(() => [...new Set([null, ...referenceCatalog.value.points
   .filter(point => (point.game_id ?? 'acc') === selectedReferenceGame.value)
   .map(point => point.track_variant ?? null)])])
@@ -386,7 +386,7 @@ async function loadReferences() {
   try {
     referenceCatalog.value = await voiceLabRuntime.readVoicePoints<TrackVoicePointCatalog>()
     if (!availableReferenceTracks.value.includes(selectedReferenceTrack.value)) {
-      selectedReferenceTrack.value = availableReferenceTracks.value[0] || 'Spa'
+      selectedReferenceTrack.value = availableReferenceTracks.value[0] ?? ''
     }
     syncReferenceVoiceFromTrack()
     referencesStatus.value = `${referenceRows.value.length} riferimenti caricati per ${selectedReferenceTrack.value}.`

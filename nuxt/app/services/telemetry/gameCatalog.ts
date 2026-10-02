@@ -1,6 +1,6 @@
 export const GAME_OPTIONS = [
-  { id: 'acc', label: 'ACC', name: 'Assetto Corsa Competizione', available: true },
-  { id: 'evo', label: 'Assetto Corsa EVO', name: 'Assetto Corsa EVO', available: false },
+  { id: 'acc', label: 'ACC', name: 'Assetto Corsa Competizione', available: true, experimental: false },
+  { id: 'evo', label: 'Assetto Corsa EVO', name: 'Assetto Corsa EVO', available: true, experimental: true },
 ] as const
 
 export function gameLabel(gameId: string | null | undefined): string {

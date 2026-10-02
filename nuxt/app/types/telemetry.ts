@@ -57,6 +57,7 @@ export interface SessionDocument {
   uploadedAt: any
   meta: SessionMeta
   summary: SessionSummary
+  summaryRulesVersion?: number
   rawChunkCount: number
   rawSizeBytes: number
   source?: 'cloud' | 'local'
