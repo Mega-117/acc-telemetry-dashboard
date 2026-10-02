@@ -6,13 +6,15 @@ import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import { checkFirebaseCacheFreshness, recordFirebaseJournalEvent } from '~/services/monitoring/firebaseOpsJournal'
 import { ownerDataCacheTtlFor } from '~/services/cache/cachePolicy'
 import { notifyOwnerCacheChanged } from '~/services/cache/ownerCacheSignals'
-import { sessionGame } from '~/services/telemetry/gameIdentity'
+import { sessionGame, normalizedSessionKind } from '~/services/telemetry/gameIdentity'
 
 export const SESSION_LIST_PROJECTION_SCHEMA_VERSION = 1
 export const SESSION_LIST_PROJECTION_PAGE_SIZE = 100
 
 export type SessionListProjectionEntry = {
   gameId?: string
+  trackVariant?: string | null
+  sessionKind?: string
   id: string
   date: string
   track: string
@@ -83,13 +85,15 @@ export function createSessionListEntry(session: SessionDocument): SessionListPro
   return {
     id: session.sessionId,
     gameId,
+    trackVariant: session.meta?.trackVariant ?? null,
+    sessionKind: normalizedSessionKind(gameId, session.meta?.sessionKind, session.meta?.session_type),
     date: session.meta?.date_start || '',
     track,
     trackKey: normalizeSessionListKey(track),
     car,
     carKey: normalizeSessionListKey(car),
     carCategory: gameId === 'acc' ? getCarCategory(car) : null,
-    type: Number(session.meta?.session_type ?? 0),
+    type: Number(session.meta?.session_type ?? (gameId === 'acc' ? 0 : -1)),
     laps,
     lapsValid: Number(summary.lapsValid || 0),
     stintCount: Number(summary.stintCount || 0),
@@ -105,6 +109,8 @@ export function createSessionListEntry(session: SessionDocument): SessionListPro
 
 export function createSessionListEntryFromDelta(delta: {
   gameId?: string
+  trackVariant?: string | null
+  sessionKind?: string
   sessionId: string
   dateStart?: string | null
   trackId?: string | null
@@ -124,13 +130,15 @@ export function createSessionListEntryFromDelta(delta: {
   return {
     id: delta.sessionId,
     gameId,
+    trackVariant: delta.trackVariant ?? null,
+    sessionKind: normalizedSessionKind(gameId, delta.sessionKind, delta.sessionType ?? undefined),
     date: delta.dateStart || '',
     track,
     trackKey: normalizeSessionListKey(track),
     car,
     carKey: normalizeSessionListKey(car),
     carCategory: gameId === 'acc' ? getCarCategory(car) : null,
-    type: Number(delta.sessionType ?? summary.sessionType ?? summary.session_type ?? 0),
+    type: Number(delta.sessionType ?? summary.sessionType ?? summary.session_type ?? (gameId === 'acc' ? 0 : -1)),
     laps,
     lapsValid: Number(summary.lapsValid || 0),
     stintCount: Number(summary.stintCount || 0),
@@ -152,6 +160,8 @@ export function sessionListEntryToSessionDocument(entry: SessionListProjectionEn
     uploadedAt: null,
     meta: {
       gameId: entry.gameId ?? 'acc',
+      trackVariant: entry.trackVariant ?? null,
+      sessionKind: normalizedSessionKind(entry.gameId ?? 'acc', entry.sessionKind, entry.type),
       track: entry.track,
       car: entry.car,
       date_start: entry.date,
@@ -461,6 +471,9 @@ export async function applySessionListProjectionDeltas(params: {
   db: any
   uid: string
   deltas: Array<{
+    gameId?: string
+    trackVariant?: string | null
+    sessionKind?: string
     sessionId: string
     status?: 'created' | 'updated'
     dateStart?: string | null

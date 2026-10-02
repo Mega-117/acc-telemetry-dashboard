@@ -9,7 +9,7 @@ import { buildActivityProjectionFromEntries } from '~/services/telemetry/activit
 import type { TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { applySessionListProjectionDeltas } from './sessionListProjectionService'
 import type { SessionContribution } from '~/types/trackProjections'
-import { gameScopedKey } from '~/services/telemetry/gameIdentity'
+import { gameScopedKey, normalizedSessionKind } from '~/services/telemetry/gameIdentity'
 
 export interface UserProjectionDelta extends TrackBestProjectionDelta {
   status: 'created' | 'updated'
@@ -17,6 +17,8 @@ export interface UserProjectionDelta extends TrackBestProjectionDelta {
 
 type SessionIndexEntry = {
   gameId?: string
+  trackVariant?: string | null
+  sessionKind?: string
   id: string
   date: string
   track: string
@@ -46,10 +48,12 @@ function toSessionIndexEntry(delta: UserProjectionDelta): SessionIndexEntry {
   return {
     id: delta.sessionId,
     gameId,
+    trackVariant: delta.trackVariant ?? null,
+    sessionKind: normalizedSessionKind(gameId, delta.sessionKind, delta.sessionType),
     date: delta.dateStart || '',
     track: delta.trackId || '',
     car: delta.car || '',
-    type: Number(delta.sessionType ?? summary.sessionType ?? summary.session_type ?? 0),
+    type: Number(delta.sessionType ?? summary.sessionType ?? summary.session_type ?? (gameId === 'acc' ? 0 : -1)),
     laps: Number(summary.laps || 0),
     lapsValid: Number(summary.lapsValid || 0),
     bestLap: summary.bestLap || null,
@@ -85,13 +89,15 @@ function buildActivity7d(entries: SessionIndexEntry[], now = new Date()) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function mergeTracksSummary(existing: any[], deltas: UserProjectionDelta[]) {
-  const tracks = new Map<string, { gameId: string; track: string; sessions: number; lastPlayed: string }>()
+  const tracks = new Map<string, { gameId: string; track: string; trackVariant: string | null; sessions: number; lastPlayed: string }>()
   for (const item of Array.isArray(existing) ? existing : []) {
     const track = String(item?.track || '')
     if (!track) continue
     const gameId = String(item?.gameId ?? 'acc')
-    tracks.set(gameScopedKey(gameId, track.toLowerCase()), {
+    const trackVariant = item?.trackVariant ?? null
+    tracks.set(gameScopedKey(gameId, track.toLowerCase(), trackVariant ?? ''), {
       gameId,
+      trackVariant,
       track,
       sessions: Number(item?.sessions || 0),
       lastPlayed: item?.lastPlayed || ''
@@ -103,8 +109,9 @@ function mergeTracksSummary(existing: any[], deltas: UserProjectionDelta[]) {
     const track = String(delta.trackId || '')
     if (!track) continue
     const gameId = delta.gameId ?? 'acc'
-    const key = gameScopedKey(gameId, track.toLowerCase())
-    const current = tracks.get(key) || { gameId, track, sessions: 0, lastPlayed: '' }
+    const trackVariant = delta.trackVariant ?? null
+    const key = gameScopedKey(gameId, track.toLowerCase(), trackVariant ?? '')
+    const current = tracks.get(key) || { gameId, track, trackVariant, sessions: 0, lastPlayed: '' }
     current.sessions += 1
     if (delta.dateStart && delta.dateStart > current.lastPlayed) {
       current.lastPlayed = delta.dateStart

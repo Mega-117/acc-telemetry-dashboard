@@ -37,11 +37,12 @@ $legacyPatterns = @(
     'useSessionPager\('
 )
 
-# Pagine esentate dal requisito useTelemetryGateway: NON consumano telemetria,
-# quindi forzare il gateway sarebbe una chiamata a vuoto solo per zittire il check.
+# Pagine senza letture dello storico: il gateway storico non e' necessario
+# per dati manuali, auth o canali live separati. I loro confini restano testati.
 # Aggiungere qui SOLO con motivo scritto.
 $gatewayExempt = @(
     'PilotAreaPage.vue',  # solo useFirebaseAuth per copy/visibilita per ruolo; nessuna telemetria (PIP-131)
+    'GaraPage.vue',      # PIP-469: piano manuale e copia esplicita dal poller live; nessuna query allo storico.
     'PitwallPage.vue'     # schermata front-end con dati mockati: nessuna fonte reale letta.
                           # RIMUOVERE questa riga quando la pitwall verra' agganciata ai dati veri
                           # (mfd_pressures / mfd_fuel / mfdTyreSet / isInPitLane).
@@ -53,6 +54,11 @@ $legacyHits = @()
 foreach ($file in $files) {
     $content = Get-Content -LiteralPath $file.FullName -Raw
     $normalized = Get-NormalizedPath $file.FullName
+
+    if ($file.Name -eq 'GaraPage.vue' -and
+        ($content -notmatch 'useFastStatePoller\(' -or $content -notmatch 'calculateRacePlan\(')) {
+        $legacyHits += "$normalized :: confine piano/live mancante"
+    }
 
     if ($normalized -like '*/components/pages/*' -and ($content -notmatch 'useTelemetryGateway\(')) {
         $fileName = Split-Path $normalized -Leaf

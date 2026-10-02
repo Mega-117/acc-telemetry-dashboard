@@ -45,6 +45,24 @@ const setDocFn = async (path: string, data: any, options?: { merge?: boolean; me
 }
 
 describe('PIP-446 new sessions do not shift historical pages', () => {
+  it('preserves non-ACC kind and circuit variant across incremental index and paginated cache', async () => {
+    seed(0)
+    for (const trackVariant of ['short', 'full']) {
+      await applyUserProjectionDeltas({ db: {}, uid: 'u', deltas: [{
+        ...delta('created', 2), sessionId: `evo-${trackVariant}`, gameId: 'evo',
+        trackVariant, sessionKind: 'time_attack', sessionType: -1,
+      }], getDocFn, setDocFn, docFn })
+    }
+    const index = store.get('users/u').sessionIndex
+    expect(index.tracksSummary.map((item: any) => item.trackVariant)).toEqual(['short', 'full'])
+    expect(index.sessionsList.map((item: any) => item.sessionKind)).toEqual(['time_attack', 'time_attack'])
+    expect(index.activityByGame.evo.byKind.time_attack.sessions).toBe(2)
+    expect(index.activityByGame.evo.practice.sessions).toBe(0)
+    clearSessionListProjectionCache()
+    const restored = await loadSessionListProjection({ db: {}, uid: 'u', getDocFn, docFn })
+    expect(restored!.map(item => item.meta.trackVariant).sort()).toEqual(['full', 'short'])
+    expect(restored!.every(item => item.meta.sessionKind === 'time_attack')).toBe(true)
+  })
   function seed(count: number) {
     const sessions = Array.from({ length: count }, (_, i) => ({ sessionId: `old-${i}`,
       meta: { date_start: new Date(Date.UTC(2025, 0, 1) + i * 60000).toISOString(), track: 'monza', car: 'ferrari_296_gt3' },

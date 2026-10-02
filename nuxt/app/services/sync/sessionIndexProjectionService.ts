@@ -2,17 +2,19 @@ import { buildGameActivity } from '~/services/telemetry/gameProjection'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { buildActivityProjectionFromEntries } from '~/services/telemetry/activityProjectionService'
 import type { SessionDocument } from '~/types/telemetry'
-import { sessionGame, gameScopedKey } from '~/services/telemetry/gameIdentity'
+import { sessionGame, gameScopedKey, normalizedSessionKind } from '~/services/telemetry/gameIdentity'
 
 export const SESSION_INDEX_SCHEMA_VERSION = 2
 export const SESSION_INDEX_MAX_ITEMS = 200
 const ACTIVITY_SESSION_TYPES = { PRACTICE: 0, QUALIFY: 1, RACE: 2 }
 
 export function buildSessionIndexProjection(allSessions: SessionDocument[], now: Date = new Date()) {
-  const tracksMap: Record<string, { gameId: string; track: string; sessions: number; lastPlayed: string }> = {}
+  const tracksMap: Record<string, { gameId: string; track: string; trackVariant: string | null; sessions: number; lastPlayed: string }> = {}
   const sessionsList: Array<{
     id: string
     gameId: string
+    trackVariant: string | null
+    sessionKind: string
     date: string
     track: string
     car: string
@@ -34,11 +36,12 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
     const gameId = sessionGame(session) ?? 'unknown'
     const dateStart = session.meta?.date_start || ''
     const track = session.meta?.track || ''
-    const trackKey = track ? gameScopedKey(gameId, track.toLowerCase()) : ''
+    const trackVariant = session.meta?.trackVariant ?? null
+    const trackKey = track ? gameScopedKey(gameId, track.toLowerCase(), trackVariant ?? '') : ''
 
     if (trackKey) {
       if (!tracksMap[trackKey]) {
-        tracksMap[trackKey] = { gameId, track, sessions: 0, lastPlayed: dateStart }
+        tracksMap[trackKey] = { gameId, track, trackVariant, sessions: 0, lastPlayed: dateStart }
       }
       tracksMap[trackKey].sessions++
       if (dateStart > tracksMap[trackKey].lastPlayed) {
@@ -51,10 +54,12 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
     sessionsList.push({
       id: session.sessionId,
       gameId,
+      trackVariant,
+      sessionKind: normalizedSessionKind(gameId, session.meta?.sessionKind, session.meta?.session_type),
       date: dateStart,
       track,
       car: session.meta?.car || '',
-      type: session.meta?.session_type ?? 0,
+      type: session.meta?.session_type ?? (gameId === 'acc' ? 0 : -1),
       laps: session.summary?.laps || 0,
       lapsValid: session.summary?.lapsValid || 0,
       bestLap: session.summary?.bestLap || null,

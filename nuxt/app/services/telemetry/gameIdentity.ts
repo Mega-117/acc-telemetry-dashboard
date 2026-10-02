@@ -41,6 +41,13 @@ export function gameScopedKey(gameId: string, ...parts: string[]): string {
   return JSON.stringify([gameId, ...parts])
 }
 
+/** Numeric session enums belong to ACC only; other adapters supply a named kind. */
+export function normalizedSessionKind(gameId: string, kind: unknown, legacyType?: number): string {
+  if (typeof kind === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(kind)) return kind
+  if (gameId === 'acc' && Number.isInteger(legacyType)) return ({ 0: 'practice', 1: 'qualify', 2: 'race' } as Record<number, string>)[legacyType!] ?? 'unknown'
+  return 'unknown'
+}
+
 export function canUseAccRules(raw: unknown): boolean {
   if (recordingGame(raw) !== 'acc' || !record(raw)) return false
   return raw.schema !== RECORDING_SCHEMA

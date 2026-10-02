@@ -292,6 +292,8 @@ export function createSessionUploadService(params: {
 
         const projectionDelta: TrackBestProjectionDelta = {
           gameId: meta.gameId,
+          trackVariant: meta.trackVariant,
+          sessionKind: meta.sessionKind,
           trackId: meta.track,
           sessionId,
           dateStart: meta.date_start,

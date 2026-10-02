@@ -6,7 +6,7 @@
 // compatibility fallback for legacy payloads that have not been reprocessed yet.
 
 import type { SessionMeta, SessionSummary } from '~/types/telemetry'
-import { recordingGame, canUseAccRules, isGameId } from '~/services/telemetry/gameIdentity'
+import { recordingGame, canUseAccRules, isGameId, normalizedSessionKind } from '~/services/telemetry/gameIdentity'
 import {
   RACE_FUEL_BUCKETS,
   classifyHistoricalEligibility,
@@ -401,6 +401,8 @@ export function extractMetadata(
 
   const meta: SessionMeta = {
     gameId: recordingGame(rawObj) ?? 'unknown',
+    trackVariant: typeof sessionInfo['track_variant'] === 'string' ? sessionInfo['track_variant'].trim() || null : null,
+    sessionKind: normalizedSessionKind(recordingGame(rawObj) ?? 'unknown', sessionInfo['session_kind'], sessionInfo['session_type'] as number),
     track: String(sessionInfo['track'] || rawObj?.['track'] || 'Unknown'),
     date_start: String(sessionInfo['date_start'] || rawObj?.['date'] || new Date().toISOString()),
     date_end: (sessionInfo['date_end'] as string | null) || null,
