@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // Overlay HUD Settori (PIP-175/PIP-276): Classico e Compatto condividono
@@ -252,6 +253,7 @@ onBeforeUnmount(() => {
     }"
   >
     <OverlayPlacementLock overlay-id="sectors" />
+    <TelemetryFeatureNotice :live="fastState.commonLive" feature="sectors" />
     <OverlaySoftwareCursor :state="pointerState" />
     <div
       class="hud-overlay__panel"

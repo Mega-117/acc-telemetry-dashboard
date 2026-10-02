@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { pointScopedId } from '../../shared/voicePointIdentity'
 import { PRODUCT } from '../../shared/productIdentity'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useAppNotifications } from '~/composables/useAppNotifications'
@@ -51,6 +52,8 @@ interface LapTimeCatalogRow extends LapTimeVoiceEntry {
 }
 
 interface TrackVoicePoint {
+  game_id?: string
+  track_variant?: string | null
   id: string
   track: string
   car?: string
@@ -195,6 +198,8 @@ const lapTimePreviewEntry = computed(() => buildLapTimeVoiceEntry(lapTimeFromTen
 
 // ─── Riferimenti frenata per pista (PIP-204) ─────────────────────────────────
 const selectedReferenceTrack = ref('Spa')
+const selectedReferenceGame = ref('acc')
+const selectedReferenceVariant = ref<string | null>(null)
 const referenceVoiceId = ref<SpotterVoiceId>('if_sara')
 const referenceCatalog = ref<TrackVoicePointCatalog>({ tracks: ['Spa'], points: [] })
 const referencesBusy = ref(false)
@@ -203,14 +208,22 @@ const referencesError = ref('')
 const referencesBatchBusy = ref(false)
 const referenceTasks = ref<Record<string, { state: RowState; message: string }>>({})
 const referencesWithStaleAudio = ref<Set<string>>(new Set())
+const availableReferenceGames = computed(() => [...new Set(['acc', ...referenceCatalog.value.points.map(point => point.game_id ?? 'acc')])])
+const availableReferenceVariants = computed(() => [...new Set([null, ...referenceCatalog.value.points
+  .filter(point => (point.game_id ?? 'acc') === selectedReferenceGame.value)
+  .map(point => point.track_variant ?? null)])])
+function matchesReferenceScope(point: TrackVoicePoint) {
+  return (point.game_id ?? 'acc') === selectedReferenceGame.value
+    && (point.track_variant ?? null) === selectedReferenceVariant.value
+}
 
 const availableReferenceTracks = computed(() => {
-  const tracks = referenceCatalog.value.tracks.length ? referenceCatalog.value.tracks : ['Spa']
-  return tracks.includes('Spa') ? tracks : ['Spa', ...tracks]
+  const legacy = selectedReferenceGame.value === 'acc' && selectedReferenceVariant.value === null ? referenceCatalog.value.tracks : []
+  return [...new Set([...legacy, ...referenceCatalog.value.points.filter(matchesReferenceScope).map(point => point.track)])].sort()
 })
 
 const referenceRows = computed(() => referenceCatalog.value.points
-  .filter(point => point.track === selectedReferenceTrack.value && point.type === 'braking_reference')
+  .filter(point => matchesReferenceScope(point) && point.track === selectedReferenceTrack.value && point.type === 'braking_reference')
   .map((point, index) => ({
     ...point,
     label: point.label?.trim() || `Riferimento ${index + 1}`,
@@ -227,7 +240,7 @@ function referenceAudioPath(entry: TrackVoicePoint, voice: SpotterVoiceId = refe
 }
 
 function referenceRowState(entry: TrackVoicePoint): RowState {
-  return referenceTasks.value[entry.id]?.state ?? 'idle'
+  return referenceTasks.value[pointScopedId(entry)]?.state ?? 'idle'
 }
 
 function referenceRowBusy(entry: TrackVoicePoint): boolean {
@@ -247,8 +260,8 @@ function markReferenceAudioCurrent(entryId: string) {
 
 function referenceNeedsAudioUpdate(entry: TrackVoicePoint): boolean {
   if (entry.enabled === false) return false
-  if (referencesWithStaleAudio.value.has(entry.id)) return true
-  const paths = collectReferenceAudioPaths(rawReferencePoint(entry.id) ?? entry)
+  if (referencesWithStaleAudio.value.has(pointScopedId(entry))) return true
+  const paths = collectReferenceAudioPaths(rawReferencePoint(pointScopedId(entry)) ?? entry)
   return KOKORO_ITALIAN_VOICE_IDS.some(voice => !paths[voice])
 }
 
@@ -264,11 +277,11 @@ function patchReferenceRow(entry: TrackVoicePoint, patch: Partial<TrackVoicePoin
   referenceCatalog.value = {
     ...referenceCatalog.value,
     points: referenceCatalog.value.points.map(point =>
-      point.id === entry.id ? { ...point, ...patch } : point
+      pointScopedId(point) === pointScopedId(entry) ? { ...point, ...patch } : point
     ),
   }
-  if (referenceTasks.value[entry.id]?.state === 'done') {
-    referenceTasks.value[entry.id] = { state: 'idle', message: 'Da salvare' }
+  if (referenceTasks.value[pointScopedId(entry)]?.state === 'done') {
+    referenceTasks.value[pointScopedId(entry)] = { state: 'idle', message: 'Da salvare' }
   }
 }
 
@@ -304,15 +317,15 @@ function handleVoiceLabPageHide() {
 }
 function updateReferenceText(entry: TrackVoicePoint, event: Event) {
   patchReferenceRow(entry, { text: (event.target as HTMLTextAreaElement).value })
-  markReferenceAudioStale(entry.id)
-  scheduleReferenceAutoSave(entry.id)
+  markReferenceAudioStale(pointScopedId(entry))
+  scheduleReferenceAutoSave(pointScopedId(entry))
 }
 
 function updateReferenceSpeed(entry: TrackVoicePoint, event: Event) {
   const speed = Number((event.target as HTMLInputElement).value)
   patchReferenceRow(entry, { speed: normalizeTrackVoiceSpeed(speed) })
-  markReferenceAudioStale(entry.id)
-  scheduleReferenceAutoSave(entry.id)
+  markReferenceAudioStale(pointScopedId(entry))
+  scheduleReferenceAutoSave(pointScopedId(entry))
 }
 
 const REFERENCE_TIMING_OFFSETS = Array.from(
@@ -331,13 +344,13 @@ function referenceTimingLabel(offset: number | null | undefined) {
 
 function updateReferenceTimingOffset(entry: TrackVoicePoint, event: Event) {
   patchReferenceRow(entry, { timing_offset_sec: clampReferenceTimingOffset((event.target as HTMLSelectElement).value) })
-  scheduleReferenceAutoSave(entry.id)
+  scheduleReferenceAutoSave(pointScopedId(entry))
 }
 
 
 function toggleReferenceEnabled(entry: TrackVoicePoint) {
   patchReferenceRow(entry, { enabled: entry.enabled === false })
-  scheduleReferenceAutoSave(entry.id)
+  scheduleReferenceAutoSave(pointScopedId(entry))
 }
 
 function setReferenceVoice(voice: SpotterVoiceId) {
@@ -348,7 +361,7 @@ function setReferenceVoice(voice: SpotterVoiceId) {
 
 function syncReferenceVoiceFromTrack() {
   const voices = referenceCatalog.value.points
-    .filter(point => point.track === selectedReferenceTrack.value && point.type === 'braking_reference')
+    .filter(point => matchesReferenceScope(point) && point.track === selectedReferenceTrack.value && point.type === 'braking_reference')
     .map(point => point.audio_voice)
     .filter((voice): voice is SpotterVoiceId => Boolean(voice && KOKORO_ITALIAN_VOICE_IDS.includes(voice as SpotterVoiceId)))
   const uniqueVoices = Array.from(new Set(voices))
@@ -358,6 +371,12 @@ function syncReferenceVoiceFromTrack() {
 function changeReferenceTrack() {
   syncReferenceVoiceFromTrack()
   referencesStatus.value = `${referenceRows.value.length} riferimenti caricati per ${selectedReferenceTrack.value}.`
+}
+
+function changeReferenceScope() {
+  if (!availableReferenceVariants.value.includes(selectedReferenceVariant.value)) selectedReferenceVariant.value = null
+  if (!availableReferenceTracks.value.includes(selectedReferenceTrack.value)) selectedReferenceTrack.value = availableReferenceTracks.value[0] ?? ''
+  changeReferenceTrack()
 }
 
 async function loadReferences() {
@@ -379,14 +398,14 @@ async function loadReferences() {
 }
 
 function rawReferencePoint(id: string) {
-  return referenceCatalog.value.points.find(point => point.id === id)
+  return referenceCatalog.value.points.find(point => pointScopedId(point) === id)
 }
 
 function withReferenceAudioPath(entry: TrackVoicePoint, voice: SpotterVoiceId, path: string): TrackVoicePoint {
   // PIP-223: base audio dal punto grezzo del catalogo, cosi' la modifica di
   // una voce non perde i WAV dell'altra (la riga computata riflette solo la
   // voce selezionata).
-  const raw = rawReferencePoint(entry.id) ?? entry
+  const raw = rawReferencePoint(pointScopedId(entry)) ?? entry
   const audioPaths = { ...collectReferenceAudioPaths(raw), ...(entry.audio_paths || {}) }
   if (path) audioPaths[voice] = path
   else delete audioPaths[voice]
@@ -396,21 +415,21 @@ function withReferenceAudioPath(entry: TrackVoicePoint, voice: SpotterVoiceId, p
 async function saveReference(entry: TrackVoicePoint, voice: SpotterVoiceId = referenceVoiceId.value): Promise<boolean> {
   // PIP-223: il salvataggio parte dal punto grezzo + campi editati; i WAV
   // esistenti (legacy o multi-voce) non vengono mai persi ne' riassegnati.
-  const raw = rawReferencePoint(entry.id) ?? entry
+  const raw = rawReferencePoint(pointScopedId(entry)) ?? entry
   const normalizedEntry = {
     ...buildReferenceSaveEntry(raw, entry, voice),
     enabled: entry.enabled !== false,
     timing_offset_sec: clampReferenceTimingOffset(entry.timing_offset_sec),
   }
-  referenceTasks.value[entry.id] = { state: 'saving', message: 'Salvo...' }
+  referenceTasks.value[pointScopedId(entry)] = { state: 'saving', message: 'Salvo...' }
   try {
     await voiceLabRuntime.writeVoicePoints({ points: [normalizedEntry] })
     publishTrackVoiceReferencesChanged()
     patchReferenceRow(entry, normalizedEntry)
-    referenceTasks.value[entry.id] = { state: 'done', message: 'Salvato' }
+    referenceTasks.value[pointScopedId(entry)] = { state: 'done', message: 'Salvato' }
     return true
   } catch (error: any) {
-    referenceTasks.value[entry.id] = { state: 'error', message: error?.data?.statusMessage || error?.message || 'errore' }
+    referenceTasks.value[pointScopedId(entry)] = { state: 'error', message: error?.data?.statusMessage || error?.message || 'errore' }
     return false
   }
 }
@@ -432,14 +451,16 @@ async function generateReference(entry: TrackVoicePoint, voice: SpotterVoiceId =
     const skippedEntry = withReferenceAudioPath({ ...entry, text: entry.text ?? '', enabled: entry.enabled !== false }, voice, '')
     patchReferenceRow(entry, skippedEntry)
     await saveReference(skippedEntry, voice)
-    referenceTasks.value[entry.id] = { state: 'done', message: entry.enabled === false ? 'Disattivato' : 'Vuoto' }
+    referenceTasks.value[pointScopedId(entry)] = { state: 'done', message: entry.enabled === false ? 'Disattivato' : 'Vuoto' }
     return true
   }
-  referenceTasks.value[entry.id] = { state: 'generating', message: `Genero ${voice}...` }
+  referenceTasks.value[pointScopedId(entry)] = { state: 'generating', message: `Genero ${voice}...` }
   kokoroLifecycle.beginWork()
   try {
     const blob = await synthesize(text, voice, entry.speed ?? 1.15)
     const response = await voiceLabRuntime.saveReferenceWav({
+      gameId: entry.game_id ?? 'acc',
+      trackVariant: entry.track_variant ?? null,
       track: entry.track,
       filename: referenceWavName(entry, voice),
       dataBase64: await blobToBase64(blob),
@@ -447,11 +468,11 @@ async function generateReference(entry: TrackVoicePoint, voice: SpotterVoiceId =
     const savedEntry = withReferenceAudioPath({ ...entry, enabled: true }, voice, response.path)
     patchReferenceRow(entry, savedEntry)
     await saveReference(savedEntry, voice)
-    referenceTasks.value[entry.id] = { state: 'done', message: `WAV ${voice === 'im_nicola' ? 'Nicola' : 'Sara'} aggiornato` }
+    referenceTasks.value[pointScopedId(entry)] = { state: 'done', message: `WAV ${voice === 'im_nicola' ? 'Nicola' : 'Sara'} aggiornato` }
     pushToast(`${entry.label || entry.text}: WAV ${voice === 'im_nicola' ? 'Nicola' : 'Sara'} generato`, 'success')
     return true
   } catch (error: any) {
-    referenceTasks.value[entry.id] = { state: 'error', message: error?.data?.statusMessage || error?.message || 'errore' }
+    referenceTasks.value[pointScopedId(entry)] = { state: 'error', message: error?.data?.statusMessage || error?.message || 'errore' }
     pushToast('Generazione riferimento fallita', 'error')
     return false
   } finally {
@@ -461,7 +482,7 @@ async function generateReference(entry: TrackVoicePoint, voice: SpotterVoiceId =
 }
 
 function latestReferenceRow(id: string) {
-  return referenceRows.value.find(point => point.id === id)
+  return rawReferencePoint(id)
 }
 
 async function resetAllReferenceTimingOffsets() {
@@ -476,7 +497,7 @@ async function resetAllReferenceTimingOffsets() {
   let ok = 0
   try {
     for (const row of referenceRows.value) {
-      const current = latestReferenceRow(row.id) || row
+      const current = latestReferenceRow(pointScopedId(row)) || row
       const resetEntry = { ...current, timing_offset_sec: 0 }
       patchReferenceRow(current, { timing_offset_sec: 0 })
       if (await saveReference(resetEntry)) ok += 1
@@ -497,7 +518,7 @@ async function generateAllReferences() {
   const total = rowsToGenerate.length * KOKORO_ITALIAN_VOICE_IDS.length
   try {
     for (let i = 0; i < rowsToGenerate.length; i += 1) {
-      const rowId = rowsToGenerate[i]!.id
+      const rowId = pointScopedId(rowsToGenerate[i]!)
       let rowOk = 0
       for (const voice of KOKORO_ITALIAN_VOICE_IDS) {
         const current = latestReferenceRow(rowId) || rowsToGenerate[i]!
@@ -1319,8 +1340,20 @@ onBeforeUnmount(() => {
           </div>
           <div class="reference-track-select">
             <label>
+              Gioco
+              <select v-model="selectedReferenceGame" aria-label="Gioco riferimenti" @change="changeReferenceScope">
+                <option v-for="game in availableReferenceGames" :key="game" :value="game">{{ game.toUpperCase() }}</option>
+              </select>
+            </label>
+            <label>
+              Variante
+              <select v-model="selectedReferenceVariant" aria-label="Variante riferimenti" @change="changeReferenceScope">
+                <option v-for="variant in availableReferenceVariants" :key="variant ?? 'default'" :value="variant">{{ variant ?? 'Standard' }}</option>
+              </select>
+            </label>
+            <label>
               Pista
-              <select v-model="selectedReferenceTrack" @change="changeReferenceTrack">
+              <select v-model="selectedReferenceTrack" aria-label="Pista riferimenti" @change="changeReferenceTrack">
                 <option v-for="track in availableReferenceTracks" :key="track" :value="track">{{ track }}</option>
               </select>
             </label>
@@ -1369,7 +1402,7 @@ onBeforeUnmount(() => {
 
         <div v-if="!referenceRows.length" class="empty-state">Nessun riferimento registrato per {{ selectedReferenceTrack }}.</div>
         <div v-else class="reference-rows">
-          <article v-for="(entry, index) in referenceRows" :key="entry.id" class="reference-row">
+          <article v-for="(entry, index) in referenceRows" :key="pointScopedId(entry)" class="reference-row">
             <header>
               <span class="step-order">{{ index + 1 }}</span>
               <div>
@@ -1408,7 +1441,7 @@ onBeforeUnmount(() => {
                 <strong>{{ entry.enabled === false ? 'Non attivo' : 'Attivo' }}</strong>
               </button>
 
-              <span class="row-status" :class="`row-status--${referenceRowState(entry)}`">{{ referenceTasks[entry.id]?.message || '' }}</span>
+              <span class="row-status" :class="`row-status--${referenceRowState(entry)}`">{{ referenceTasks[pointScopedId(entry)]?.message || '' }}</span>
               <button type="button" class="reference-listen" :disabled="entry.enabled === false || isSpeaking || !entry.text?.trim() || serverState !== 'online'" @click="playReference(entry)"><span aria-hidden="true">▶</span> Ascolta</button>
             </footer>
           </article>

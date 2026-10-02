@@ -8,6 +8,9 @@ function isKnownSessionType(value: unknown): value is number {
 }
 
 export function resolveSpotterSessionMode(sessionType: unknown): SpotterSessionMode | null {
+  // Canonical names come from each connector; numeric codes remain ACC legacy.
+  if (sessionType === 'race' || sessionType === 'qualify' || sessionType === 'practice') return sessionType
+  if (['hotlap', 'time_attack', 'hot_stint', 'cruise'].includes(String(sessionType))) return 'practice'
   if (!isKnownSessionType(sessionType)) return null
   switch (sessionType) {
     case 0: // Practice

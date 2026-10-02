@@ -1,7 +1,13 @@
 import { isGameId } from './gameIdentity'
 
 export type CommonMeasurement = { value: number | null; availability: 'available' | 'unknown' | 'unsupported' | 'stale'; unit: string }
-export type CommonLive = { gameId: string; sessionId: string | null; connected: boolean; fresh: boolean; fields: Record<string, CommonMeasurement>; capabilities: Record<string, boolean> }
+export type CommonLive = {
+  gameId: string; sessionId: string | null; connected: boolean; fresh: boolean
+  fields: Record<string, CommonMeasurement>; capabilities: Record<string, boolean>
+  identity?: { track: string | null; variant: string | null; car: string | null }
+  lifecycle?: 'off' | 'live' | 'paused' | 'replay'
+  sessionKind?: string | null
+}
 
 export function readCommonLive(raw: unknown, now = Date.now()): CommonLive | null {
   if (!raw || typeof raw !== 'object') return null
@@ -22,10 +28,26 @@ export function readCommonLive(raw: unknown, now = Date.now()): CommonLive | nul
     fields[key] = !connected && measurement.availability === 'available'
       ? { ...measurement, value: null, availability: 'stale' } : { ...measurement }
   }
-  return { gameId: frame.game_id, sessionId: frame.session_id, connected, fresh, fields, capabilities: { ...frame.capabilities } as Record<string, boolean> }
+  const identity = frame.identity && typeof frame.identity === 'object' && !Array.isArray(frame.identity)
+    ? frame.identity as Record<string, unknown> : {}
+  const label = (value: unknown): string | null => typeof value === 'string' && value.trim() ? value.trim() : null
+  const lifecycle = ['off', 'live', 'paused', 'replay'].includes(String(frame.lifecycle))
+    ? frame.lifecycle as NonNullable<CommonLive['lifecycle']> : undefined
+  return { gameId: frame.game_id, sessionId: frame.session_id, connected, fresh, fields, capabilities: { ...frame.capabilities } as Record<string, boolean>,
+    identity: { track: label(identity.track), variant: label(identity.variant), car: label(identity.car) },
+    lifecycle, sessionKind: label(frame.session_kind) }
 }
 
 export function commonValue(live: CommonLive, name: string, unit: string): number | null {
   const measurement = live.fields[name]
   return measurement?.availability === 'available' && measurement.unit === unit ? measurement.value : null
+}
+
+export function commonBoolean(live: CommonLive, name: string): boolean | null {
+  const value = commonValue(live, name, 'boolean')
+  return value === 1 ? true : value === 0 ? false : null
+}
+
+export function commonContextKey(live: CommonLive | null | undefined): string | null {
+  return live ? JSON.stringify([live.gameId, live.sessionId, live.identity?.track, live.identity?.variant, live.identity?.car]) : null
 }

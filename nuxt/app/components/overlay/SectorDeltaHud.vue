@@ -50,7 +50,7 @@ const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
   color: 'grey',
 }))
 
-const hasSectorData = computed(() => (props.sectorHud?.sectors?.length ?? 0) === 3)
+const hasSectorData = computed(() => (props.sectorHud?.sectors?.length ?? 0) > 0)
 const selectedReference = computed(() => normalizeSectorDeltaReference(props.deltaReference))
 const visibleSectors = computed(() => {
   const sectors = hasSectorData.value ? props.sectorHud!.sectors : idleSectors

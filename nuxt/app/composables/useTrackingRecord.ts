@@ -21,56 +21,73 @@ export function useTrackingRecord(
 ) {
   const activeTrainingId = ref<string | null>(null)
   const activeTrainingStartedAt = ref<string | null>(null)
+  let sourceKey: string | null = null
+  // Lifecycle IPC replies can arrive after a source change or a stop request.
+  // Serialize them, retaining the context captured when the user acted.
+  let pending: Promise<void> = Promise.resolve()
+  function serialize(operation: () => Promise<void>) {
+    const result = pending.then(operation)
+    pending = result.catch(() => {})
+    return result
+  }
+  const key = (lap: LiveLapState) => JSON.stringify([lap.gameId ?? 'acc', lap.sourceSessionId ?? null, lap.track, lap.trackVariant ?? null, lap.car])
 
   async function trackingStart() {
     const api = getApi()
     if (!api?.trainingStart) return
 
-    const lap = getLiveLap()
+    const lap = { ...getLiveLap() }
+    const startingSource = key(lap)
     const track = lap.track ?? ''
     const car = lap.car ?? ''
+    const trainingId = getTrainingId(), modeId = getModeId(), totalSteps = getTotalSteps()
 
-    try {
-      const result = await api.trainingStart({
-        trainingId: getTrainingId(),
-        modeId: getModeId(),
-        totalSteps: getTotalSteps(),
-        track,
-        car,
-      })
-      if (result?.ok) {
-        activeTrainingId.value = result.id
-        activeTrainingStartedAt.value = new Date().toISOString()
-      }
-    } catch { /* non critico */ }
+    return serialize(async () => {
+      try {
+        const result = await api.trainingStart({
+          trainingId, modeId, totalSteps,
+          gameId: lap.gameId ?? 'acc', sourceSessionId: lap.sourceSessionId ?? null,
+          trackVariant: lap.trackVariant ?? null, track, car,
+        })
+        if (result?.ok) {
+          if (key(getLiveLap()) !== startingSource) {
+            await api.trainingAbandon?.({ id: result.id, lapsCompleted: null, lapsValid: null, stepsCompleted: 0 })
+            return
+          }
+          sourceKey = startingSource
+          activeTrainingId.value = result.id
+          activeTrainingStartedAt.value = new Date().toISOString()
+        }
+      } catch { /* non critico */ }
+    })
   }
 
-  function buildPayload(stepsCompleted: number) {
-    const lap = getLiveLap()
+  function buildPayload(stepsCompleted: number, lap: LiveLapState) {
+    const sameSource = sourceKey === key(lap)
     return {
       id: activeTrainingId.value,
-      lapsCompleted: lap.lapsCompleted ?? 0,
-      lapsValid: lap.lapsValid ?? 0,
+      lapsCompleted: sameSource ? lap.lapsCompleted : null,
+      lapsValid: sameSource ? lap.lapsValid : null,
       stepsCompleted,
       startedAt: activeTrainingStartedAt.value,
     }
   }
 
-  async function trackingComplete(stepsCompleted: number) {
+  async function finish(method: 'trainingComplete' | 'trainingAbandon', stepsCompleted: number) {
     const api = getApi()
-    if (!api?.trainingComplete || !activeTrainingId.value) return
-    try { await api.trainingComplete(buildPayload(stepsCompleted)) } catch { /* non critico */ }
-    activeTrainingId.value = null
-    activeTrainingStartedAt.value = null
+    if (!api?.[method]) return
+    const lap = { ...getLiveLap() }
+    return serialize(async () => {
+      if (!activeTrainingId.value) return
+      try { await api[method](buildPayload(stepsCompleted, lap)) } catch { /* non critico */ }
+      activeTrainingId.value = null
+      activeTrainingStartedAt.value = null
+      sourceKey = null
+    })
   }
 
-  async function trackingAbandon(stepsCompleted: number) {
-    const api = getApi()
-    if (!api?.trainingAbandon || !activeTrainingId.value) return
-    try { await api.trainingAbandon(buildPayload(stepsCompleted)) } catch { /* non critico */ }
-    activeTrainingId.value = null
-    activeTrainingStartedAt.value = null
-  }
+  const trackingComplete = (stepsCompleted: number) => finish('trainingComplete', stepsCompleted)
+  const trackingAbandon = (stepsCompleted: number) => finish('trainingAbandon', stepsCompleted)
 
   return { activeTrainingId, activeTrainingStartedAt, trackingStart, trackingComplete, trackingAbandon }
 }

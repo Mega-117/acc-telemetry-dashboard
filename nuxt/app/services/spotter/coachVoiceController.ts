@@ -55,6 +55,8 @@ export interface CoachCornerRow {
 }
 
 export interface CoachVoiceState {
+  gameId?: string
+  variant?: string | null
   track: string
   car: string
   lapsObserved: number
@@ -114,6 +116,8 @@ export function normalizeCoachState(raw: unknown): CoachVoiceState | null {
     : []
   return {
     track: typeof data.track === 'string' ? data.track : '',
+    ...(typeof data.game_id === 'string' ? { gameId: data.game_id } : {}),
+    ...(typeof data.track_variant === 'string' ? { variant: data.track_variant } : {}),
     car: typeof data.car === 'string' ? data.car : '',
     lapsObserved: Number(data.laps_observed) || 0,
     focus,

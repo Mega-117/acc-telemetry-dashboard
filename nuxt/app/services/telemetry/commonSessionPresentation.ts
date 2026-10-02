@@ -1,6 +1,7 @@
 import { recordingGame } from './gameIdentity'
 import { gameLabel } from './gameCatalog'
 import { formatLapTime } from '~/utils/telemetryFormat'
+import { commonSessionAnalysis } from './commonSessionAnalysis'
 
 const time = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? formatLapTime(value) : '—'
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
@@ -26,5 +27,7 @@ export function commonSessionPresentation(raw: unknown) {
       }
     })
   })
-  return { gameId, game: gameLabel(gameId), track: text(info.track, 'Pista sconosciuta'), car: text(info.car, text(info.car_model, 'Auto sconosciuta')), date: text(info.date_start), laps }
+  const analysis = commonSessionAnalysis(raw)
+  return { gameId, game: gameLabel(gameId), track: text(info.track, 'Pista sconosciuta'), variant: text(info.track_variant), car: text(info.car, text(info.car_model, 'Auto sconosciuta')), date: text(info.date_start), laps,
+    analysis: analysis ? { ...analysis, best: time(analysis.bestMs), average: time(analysis.averageMs), theoretical: time(analysis.theoreticalMs), consistency: analysis.consistencyMs === null ? '—' : `${(analysis.consistencyMs / 1000).toFixed(3)} s` } : null }
 }

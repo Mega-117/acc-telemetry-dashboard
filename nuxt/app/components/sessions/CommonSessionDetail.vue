@@ -11,6 +11,14 @@ const model = computed(() => commonSessionPresentation(props.session))
       <p class="eyebrow">{{ model.game }} · SESSIONE</p>
       <h1>{{ model.track }}</h1>
       <p>{{ model.car }} · {{ model.date }}</p>
+      <p v-if="model.variant">Variante: {{ model.variant }}</p>
+      <dl v-if="model.analysis" class="common-analysis">
+        <dt>Giri completi e validi</dt><dd>{{ model.analysis.eligibleLaps }}</dd>
+        <dt>Migliore</dt><dd>{{ model.analysis.best }}</dd>
+        <dt>Media</dt><dd>{{ model.analysis.average }}</dd>
+        <dt>Variabilità dei tempi</dt><dd>{{ model.analysis.consistency }}</dd>
+        <dt>Teorico dai settori</dt><dd>{{ model.analysis.theoretical }}</dd>
+      </dl>
       <div class="racing-table-scroll">
         <table class="racing-day-table">
           <caption>Tempi registrati</caption>

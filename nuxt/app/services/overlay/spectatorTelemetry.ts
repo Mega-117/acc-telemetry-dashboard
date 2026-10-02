@@ -456,6 +456,11 @@ export function routeOverlayTelemetry(
   focusedState: StandingsStateEnvelope | null | undefined,
   focusWasRemote = false,
 ): RoutedOverlayTelemetry {
+  // Broadcasting is an ACC source; even a fresh envelope or latched remote
+  // camera must not replace another game's local facts.
+  if (local.commonLive && local.commonLive.gameId !== 'acc') {
+    return { source: 'local', fastState: local, sectorHud: local.sectorHud, focusedCar: null }
+  }
   if (focusedState?.status !== 'available' || !focusedState.snapshot) {
     if (focusWasRemote) return focusedUnavailable(local, null)
     return { source: 'local', fastState: local, sectorHud: null, focusedCar: null }

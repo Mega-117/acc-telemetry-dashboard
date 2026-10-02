@@ -1,48 +1,10 @@
 import { ref } from 'vue'
+import { readCommonLive, commonValue, commonBoolean } from '~/services/telemetry/commonLive'
+import { commonSectorHud } from '~/services/telemetry/commonSectorHud'
 import { usePresentationActivity } from './usePresentationVisibility'
 
-export interface LiveLapState {
-  currentLap: number | null
-  lapsCompleted: number | null
-  lapsValid: number | null
-  lapValid: boolean | null
-  lastLapValid: boolean | null
-  lastLapTimeMs: number | null
-  sectorHud: SectorHudState | null
-  // Contesto sessione dal logger: servono al Training Tracker (PIP-95).
-  track: string | null
-  car: string | null
-}
-
-export type SectorHudColor = 'purple' | 'green' | 'yellow' | 'red' | 'white' | 'grey'
-export type SectorHudMode = 'running' | 'last_lap'
-export type SectorHudEntryState = 'pending' | 'running' | 'complete'
-
-export interface SectorHudEntry {
-  index: 1 | 2 | 3
-  state: SectorHudEntryState
-  currentMs: number | null
-  referenceMs: number | null
-  bestMs: number | null
-  bestReferenceMs: number | null
-  deltaMs: number | null
-  color: SectorHudColor
-}
-
-export interface SectorHudState {
-  version: number
-  mode: SectorHudMode
-  lap: number | null
-  referenceLap: number | null
-  currentSectorIndex: number | null
-  currentLapTimeMs: number | null
-  lastLapTimeMs: number | null
-  bestLapTimeMs: number | null
-  lapValid: boolean | null
-  awaitingFlyingLap: boolean
-  holdUntilTs?: number | null
-  sectors: SectorHudEntry[]
-}
+import type { LiveLapState, SectorHudColor, SectorHudEntryState, SectorHudEntry, SectorHudState } from '~/types/liveTelemetry'
+export type { LiveLapState, SectorHudColor, SectorHudMode, SectorHudEntryState, SectorHudEntry, SectorHudState } from '~/types/liveTelemetry'
 
 const EMPTY_LAP_STATE: LiveLapState = {
   currentLap: null,
@@ -92,9 +54,9 @@ export function normalizeSectorHud(raw: any): SectorHudState | null {
   const sectors = raw.sectors
     .map((sector: any) => {
       const index = toNumber(sector?.index)
-      if (![1, 2, 3].includes(index ?? 0)) return null
+      if (index === null || !Number.isInteger(index) || index < 1 || index > 32) return null
       return {
-        index: index as 1 | 2 | 3,
+        index,
         state: normalizeSectorState(sector.state),
         currentMs: toNumber(sector.current_ms),
         referenceMs: toNumber(sector.reference_ms),
@@ -139,8 +101,25 @@ export function useLiveStatePoller(getApi: () => any | null, background = false)
   let revision = 0
 
   function applyState(state: any) {
+    const common = readCommonLive(state?.live ?? state)
+    if (common && common.gameId !== 'acc') {
+      const laps = commonValue(common, 'lap_count', 'count')
+      liveLap.value = common.connected ? {
+        ...EMPTY_LAP_STATE, currentLap: laps === null ? null : laps + 1, lapsCompleted: laps,
+        gameId: common.gameId, sourceSessionId: common.sessionId, trackVariant: common.identity?.variant ?? null,
+        lapValid: commonBoolean(common, 'lap_valid'), lastLapValid: commonBoolean(common, 'last_lap_valid'),
+        lastLapTimeMs: commonValue(common, 'last_lap_time', 'ms'), sectorHud: commonSectorHud(common),
+        track: common.identity?.track ?? null, car: common.identity?.car ?? null,
+      } : { ...EMPTY_LAP_STATE }
+      return
+    }
+    if ((state?.live || state?.schema === 'racercore.live') && (!common || !common.connected)) {
+      liveLap.value = { ...EMPTY_LAP_STATE }
+      return
+    }
     if (state && typeof state === 'object' && isLiveStateFresh(state.ts)) {
       liveLap.value = {
+        gameId: 'acc', sourceSessionId: common?.sessionId ?? null, trackVariant: null,
         currentLap: typeof state.current_lap === 'number' ? state.current_lap : null,
         lapsCompleted: typeof state.laps_completed === 'number' ? state.laps_completed : null,
         lapsValid: typeof state.laps_valid === 'number' ? state.laps_valid : null,

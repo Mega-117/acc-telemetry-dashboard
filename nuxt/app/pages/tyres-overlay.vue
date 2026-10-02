@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // Overlay HUD Gomme (PIP-175): finestra Electron indipendente. Dimensione decisa
@@ -73,6 +74,7 @@ onBeforeUnmount(() => {
     :class="{ 'hud-overlay--web': !isElectron }"
   >
     <OverlayPlacementLock overlay-id="tyres" />
+    <TelemetryFeatureNotice :live="fastState.commonLive" feature="tyrePressure" />
     <OverlaySoftwareCursor :state="pointerState" />
     <div
       class="hud-overlay__panel"

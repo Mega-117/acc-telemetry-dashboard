@@ -4,6 +4,8 @@ export type TrackReferencePhase = 'garage' | 'outlap' | 'active' | 'pit_lane_act
 
 export interface TrackVoiceReference {
   id: string
+  game_id?: string
+  track_variant?: string | null
   track: string
   type?: string
   normalized_car_position: number
@@ -14,6 +16,12 @@ export interface TrackVoiceReference {
   audio_paths?: Partial<Record<SpotterVoiceId | string, string>>
   enabled?: boolean
   timing_offset_sec?: number | null
+}
+
+export function referenceMatchesContext(point: TrackVoiceReference, gameId: string, track: string | null, variant: string | null): boolean {
+  return (point.game_id ?? 'acc') === gameId
+    && normalizeTrackName(point.track) === normalizeTrackName(track)
+    && (point.track_variant ?? null) === variant
 }
 
 export const TRACK_VOICE_SPEED_OPTIONS = [1, 1.25, 1.5, 2] as const

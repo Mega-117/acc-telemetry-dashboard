@@ -1,4 +1,5 @@
 import { readVoicePoints, writeVoicePoints } from '../../utils/devVoicePoints'
+import { pointScopedId } from '../../utils/trackVoicePointMerge'
 
 const SAFE_VOICE_IDS = new Set(['if_sara', 'im_nicola'])
 
@@ -46,11 +47,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const store = await readVoicePoints()
-  const byId = new Map(updates.map((point: any) => [String(point?.id || ''), point]))
+  const byId = new Map(updates.map((point: any) => [pointScopedId(point), point]))
   let updated = 0
 
   store.points = store.points.map(point => {
-    const update: any = byId.get(point.id)
+    const update: any = byId.get(pointScopedId(point))
     if (!update) return point
     updated += 1
     const next = { ...point }

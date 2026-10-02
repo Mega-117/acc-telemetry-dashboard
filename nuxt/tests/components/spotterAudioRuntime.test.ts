@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { createApp, nextTick, ref } from 'vue'
 import SpotterAudio from '~/pages/spotter-audio-runtime.vue'
+import { commonFastPresentation } from '~/services/telemetry/commonFastPresentation'
 
 const mocks = vi.hoisted(() => ({ fast: {} as any, live: {} as any, settings: {} as any, played: [] as string[] }))
 vi.mock('~/composables/useFastStatePoller', () => ({ useFastStatePoller: () => ({ fastState: mocks.fast, startFastStatePolling() {}, stopFastStatePolling() {} }) }))
@@ -79,6 +80,20 @@ it('pressure still speaks when lap times are disabled', async () => {
   mocks.settings.coachEnabled.value = false
   await feed(0, 'A'); await feed(1, 'A'); await feed(2, 'A'); await feed(3, 'A')
   expect(mocks.played).toEqual(['/voice/qualifying/pressureAdjustmentNeeded-if_sara.wav'])
+})
+
+it('announces a normalized non-ACC lap through the real audio component without pressure rules', async () => {
+  for (let lap = 0; lap <= 2; lap++) {
+    mocks.fast.value = { tyreSetup: { pressureRecommendation: null }, ...commonFastPresentation({
+      gameId: 'synthetic', sessionId: 'common-one', connected: true, fresh: true, lifecycle: 'live', sessionKind: 'practice',
+      identity: { track: 'Spa', car: 'EV', variant: null }, capabilities: { lap_timing: true, lap_validity: true },
+      fields: { lap_count: { value: lap, availability: 'available', unit: 'count' },
+        last_lap_time: { value: 101900, availability: 'available', unit: 'ms' },
+        last_lap_valid: { value: 1, availability: 'available', unit: 'boolean' } },
+    }) }
+    await settle()
+  }
+  expect(mocks.played).toEqual(['/voice/qualifying/lap-time-1019-if_sara.wav', '/voice/qualifying/lap-time-1019-if_sara.wav'])
 })
 
 it('target broadcasts beat an older initial IPC response and work independently of lap/pressure voice', async () => {

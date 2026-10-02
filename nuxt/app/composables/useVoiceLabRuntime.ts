@@ -108,7 +108,7 @@ export function useVoiceLabRuntime() {
     return ''
   }
 
-  async function saveReferenceWav(payload: { track: string; filename: string; dataBase64: string }): Promise<{ path: string }> {
+  async function saveReferenceWav(payload: { track: string; filename: string; dataBase64: string; gameId?: string; trackVariant?: string | null }): Promise<{ path: string }> {
     const api = desktopApi()
     if (api?.voiceLabSaveReferenceWav) {
       const result = await api.voiceLabSaveReferenceWav(payload)

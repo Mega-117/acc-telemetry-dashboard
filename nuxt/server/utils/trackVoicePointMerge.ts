@@ -1,5 +1,9 @@
+export { pointScopedId } from '../../shared/voicePointIdentity'
+
 export interface TrackVoicePoint {
   id: string
+  game_id?: string
+  track_variant?: string | null
   track: string
   car?: string
   type?: string
@@ -24,7 +28,8 @@ export interface TrackVoicePointStore {
 }
 
 function pointGroupKey(point: TrackVoicePoint) {
-  return `${String(point.track || '').trim().toLowerCase()}::${String(point.type || '').trim().toLowerCase()}`
+  return JSON.stringify([point.game_id ?? 'acc', point.track_variant ?? null,
+    String(point.track || '').trim().toLowerCase(), String(point.type || '').trim().toLowerCase()])
 }
 
 function groupPoints(points: TrackVoicePoint[]) {

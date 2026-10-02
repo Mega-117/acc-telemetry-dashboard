@@ -23,9 +23,9 @@ export function createFinishLineVoiceRuntime(options: {
     const recommendation = frame.tyreSetup.pressureRecommendation
     const identity = frame.context?.sessionUid || recommendation?.sessionId
     if (!identity) return
-    const key = JSON.stringify([identity, frame.context?.track, frame.context?.sessionType, frame.context?.sessionIndex])
+    const key = JSON.stringify([frame.commonLive?.gameId ?? frame.context?.gameId ?? 'acc', identity, frame.context?.track, frame.context?.variant, frame.context?.sessionType, frame.context?.sessionIndex])
     const lap = frame.lapsCompleted
-    if (!Number.isInteger(lap) || lap < 0) return
+    if (lap === null || !Number.isInteger(lap) || lap < 0) return
     if (session !== key || (lastLap !== null && lap < lastLap)) {
       session = key
       generation += 1

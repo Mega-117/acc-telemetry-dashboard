@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   mergeTrackVoicePointStores,
+  pointScopedId,
   type TrackVoicePoint,
   type TrackVoicePointStore,
 } from '../../server/utils/trackVoicePointMerge'
@@ -15,6 +16,16 @@ const defaultSpa: TrackVoicePoint[] = [
 ]
 
 describe('trackVoicePointMerge', () => {
+  it('isolates identical IDs and positions across games and variants; legacy remains ACC', () => {
+    const base = defaultSpa[0]!
+    const evo = { ...base, game_id: 'evo', text: 'EVO' }
+    const variant = { ...evo, track_variant: 'short', text: 'short' }
+    const merged = mergeTrackVoicePointStores(store([base]), store([evo, variant]))
+    expect(merged.points).toEqual([base, evo, variant])
+    expect(new Set(merged.points.map(pointScopedId)).size).toBe(3)
+    expect(pointScopedId(base)).toBe(pointScopedId({ ...base, game_id: 'acc' }))
+    expect(mergeTrackVoicePointStores(store([base]), store([{ ...base, game_id: 'acc', text: 'custom' }])).points).toHaveLength(1)
+  })
   it('preserva le personalizzazioni locali quando il numero riferimenti pista resta uguale', () => {
     const localSpa: TrackVoicePoint[] = [
       { ...defaultSpa[0], text: 'utente uno', speed: 1.3, enabled: false, audio_paths: { im_nicola: '/local-nicola-1.wav' } },

@@ -16,7 +16,6 @@ const loading = ref(false)
 const error = ref(false)
 const timingSurface = computed(() => !props.surface || ['panoramica', 'piste'].includes(props.surface))
 async function load() {
-  if (gameId === 'evo' || !timingSurface.value) return
   loading.value = true
   error.value = false
   try {
@@ -31,9 +30,9 @@ onMounted(load)
   <section class="common-game racing-data">
     <p class="eyebrow">GIOCO CONSULTATO</p>
     <h1>{{ title }}</h1>
-    <p v-if="gameId === 'evo'">Il connettore Assetto Corsa EVO non è ancora disponibile. Le sessioni di altri giochi restano nelle rispettive viste.</p>
-    <p v-else-if="!timingSurface">Questa funzione richiede capacità non disponibili per {{ title }}. Puoi consultare le sessioni e i tempi registrati.</p>
-    <template v-else>
+    <p v-if="gameId === 'evo'">Connettore sperimentale: la disponibilità dei dati dipende dalla versione del gioco.</p>
+    <p v-if="!timingSurface">I dati registrati di {{ title }} sono disponibili qui. Le funzioni in tempo reale dipendono dai dati del gioco connesso.</p>
+    <template>
       <h2>{{ track || 'Sessioni recenti' }}</h2>
       <p v-if="loading" role="status">Caricamento sessioni…</p>
       <p v-else-if="error" role="alert">Impossibile caricare le sessioni. <button @click="load">Riprova</button></p>

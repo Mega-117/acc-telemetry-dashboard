@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
+import { audioContextKey, audioFeatureAvailable, bindAudioCue } from '~/services/spotter/audioSourceContext'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
@@ -18,6 +19,7 @@ import { createVoiceRuntimeDiagnostics } from '~/services/monitoring/voiceRuntim
 import {
   filterPlayableTrackVoiceReferences,
   normalizeTrackName,
+  referenceMatchesContext,
   type TrackVoiceReference,
 } from '~/services/spotter/trackVoiceReferences'
 import {
@@ -94,12 +96,12 @@ const voiceQueue = createVoicePlaybackQueue({
 
 const pressureVoiceRuntime = createPressureRecommendationVoiceRuntime({
   getVoice: () => selectedVoice.value,
-  canAnnounce: () => canRunSpotterAudio.value && isSpotterFeatureAllowed(
+  canAnnounce: () => canRunSpotterAudio.value && audioFeatureAvailable(fastState.value, 'pressureRecommendation') && isSpotterFeatureAllowed(
     pressureWarningsEnabled.value,
     pressureWarningSessionModes.value,
-    fastState.value.sessionType,
+    audioSessionType.value,
   ),
-  enqueue: cue => voiceQueue.enqueue(cue),
+  enqueue: cue => voiceQueue.enqueue(bindAudioCue(cue, () => fastState.value)),
   onEvent: event => voiceRuntimeDiagnostics.record({
     kind: event.kind,
     cueId: event.cue?.id,
@@ -113,19 +115,27 @@ const getRuntimeApi = useOverlayRegionApi()
 
 const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getRuntimeApi, true)
 const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(getRuntimeApi, true)
+const audioSessionType = computed(() => fastState.value.commonLive?.gameId !== 'acc' && fastState.value.commonLive
+  ? fastState.value.commonLive.sessionKind : fastState.value.sessionType)
+const matchingReferences = computed(() => trackVoiceReferences.value.filter(point => referenceMatchesContext(
+  point, fastState.value.commonLive?.gameId ?? 'acc', fastState.value.context?.track ?? liveLap.value.track,
+  fastState.value.commonLive?.identity?.variant ?? null,
+)))
 // PIP-256: stato coach adattivo; attivo solo se pista coach = pista corrente
 // e se la voce dedicata "Feedback coach" lo consente (PIP-260)
 const { coachState, startCoachStatePolling, stopCoachStatePolling } = useCoachStatePoller(getRuntimeApi)
 let postCornerState = createPostCornerState()
 let preCornerState = createPreCornerState()
-const coachAllowedForSession = computed(() => isSpotterFeatureAllowed(
+const coachAllowedForSession = computed(() => audioFeatureAvailable(fastState.value, 'adaptiveCoach') && isSpotterFeatureAllowed(
   adaptiveCoachEnabled.value,
   adaptiveCoachSessionModes.value,
-  fastState.value.sessionType,
+  audioSessionType.value,
 ))
 const coachTrackMatches = computed(() => {
   const state = coachState.value
-  return !!state && normalizeTrackName(state.track) === normalizeTrackName(liveLap.value.track)
+  return !!state && (state.gameId ?? 'acc') === (fastState.value.commonLive?.gameId ?? 'acc')
+    && (state.variant ?? null) === (fastState.value.commonLive?.identity?.variant ?? null)
+    && normalizeTrackName(state.track) === normalizeTrackName(liveLap.value.track)
 })
 const activeCoachFocus = computed(() => {
   if (!coachAllowedForSession.value || !coachTrackMatches.value) return null
@@ -138,15 +148,15 @@ const activeCoachAdvices = computed(() => {
   if (adaptiveCoachMode.value === 'all') return coachState.value?.cornersAdvice ?? []
   return activeCoachFocus.value ? [activeCoachFocus.value] : []
 })
-const referencesAllowedForSession = computed(() => isSpotterFeatureAllowed(
+const referencesAllowedForSession = computed(() => audioFeatureAvailable(fastState.value, 'trackReferences') && isSpotterFeatureAllowed(
   referencesEnabled.value,
   referenceSessionModes.value,
-  fastState.value.sessionType,
+  audioSessionType.value,
 ))
-const lapTimesAllowedForSession = computed(() => isSpotterFeatureAllowed(
+const lapTimesAllowedForSession = computed(() => audioFeatureAvailable(fastState.value, 'lapAnnouncement') && isSpotterFeatureAllowed(
   lapTimeAnnouncementsEnabled.value,
   lapTimeSessionModes.value,
-  fastState.value.sessionType,
+  audioSessionType.value,
 ))
 
 function enqueueAudioPath(path: string, metadata: {
@@ -171,7 +181,7 @@ function enqueueAudioPath(path: string, metadata: {
     scenarioId: cue.scenarioId,
     source: cue.source,
   })
-  voiceQueue.enqueue(cue)
+  voiceQueue.enqueue(bindAudioCue(cue, () => fastState.value))
 }
 
 /** PIP-256: prova la correzione coach; se il WAV manca/fallisce suona il
@@ -189,7 +199,7 @@ function enqueueAudioPathWithFallback(primaryPath: string, fallbackPath: string)
     cueId: cue.id,
     source: cue.source,
   })
-  voiceQueue.enqueue(cue)
+  voiceQueue.enqueue(bindAudioCue(cue, () => fastState.value))
 }
 
 function stopSpotterAudio() {
@@ -229,14 +239,13 @@ function stopRuntimeAudioForLogout() {
 function tickTrackVoiceReferences() {
   if (!canRunSpotterAudio.value || !referencesAllowedForSession.value) return
   const currentPosition = fastState.value.normalizedCarPosition
-  const track = normalizeTrackName(liveLap.value.track)
   const outcome = advanceTrackVoiceReferenceRuntime(trackVoiceReferenceRuntimeState.value, {
     phase: fastState.value.trackReferencePhase,
     eligible: fastState.value.trackReferencesEligible,
     legacyLapsCompleted: liveLap.value.lapsCompleted,
-    position: currentPosition,
+    position: fastState.value.trackReferencesEligible ? currentPosition : null,
     now: Date.now(),
-    references: trackVoiceReferences.value.filter(point => normalizeTrackName(point.track) === track),
+    references: matchingReferences.value,
   })
   trackVoiceReferenceRuntimeState.value = outcome.state
   // PIP-256/260: sui marker delle curve con verdetto suona la correzione
@@ -244,7 +253,7 @@ function tickTrackVoiceReferences() {
   // tutte in modalita' "tutte le curve"); il resto e' invariato.
   const coachOverrides = resolveCoachOverrides(
     activeCoachAdvices.value,
-    trackVoiceReferences.value.filter(point => normalizeTrackName(point.track) === track),
+    matchingReferences.value,
     selectedVoice.value,
   )
   for (const reference of outcome.toAnnounce) {
@@ -262,7 +271,7 @@ function tickTrackVoiceReferences() {
   // ha nessun marker in finestra, la correzione suona su base posizionale.
   const focusMarkerOverride = resolveCoachOverride(
     activeCoachFocus.value,
-    trackVoiceReferences.value.filter(point => normalizeTrackName(point.track) === track),
+    matchingReferences.value,
     selectedVoice.value,
   )
   const preCorner = advancePreCorner(preCornerState, {
@@ -306,8 +315,8 @@ let targetSettingsDisposed = false
 const targetLapVoiceRuntime = createTargetLapVoiceRuntime({
   getTarget: () => targetSettings,
   getVoice: () => selectedVoice.value,
-  canAnnounce: () => canRunSpotterAudio.value && targetLapVoiceEnabled.value,
-  enqueue: cue => voiceQueue.enqueue(cue),
+  canAnnounce: () => canRunSpotterAudio.value && targetLapVoiceEnabled.value && audioFeatureAvailable(fastState.value, 'lapAnnouncement'),
+  enqueue: cue => voiceQueue.enqueue(bindAudioCue(cue, () => fastState.value)),
 })
 
 const finishLineVoiceRuntime = createFinishLineVoiceRuntime({
@@ -337,6 +346,8 @@ onMounted(async () => {
   startFastStatePolling()
   startCoachStatePolling()
 })
+
+watch(() => audioContextKey(fastState.value), () => stopRuntimeAudioForLogout(), { flush: 'sync' })
 
 watch(fastState, frame => {
   if (canRunSpotterAudio.value) {

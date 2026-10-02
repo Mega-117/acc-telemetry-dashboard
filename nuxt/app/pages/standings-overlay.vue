@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
@@ -61,7 +62,8 @@ const localDriver = stableComputed(() => {
   }
 })
 const model = stableComputed(() => buildStandingsPresentation(
-  standings.state.value,
+  fastState.fastState.value.commonLive && fastState.fastState.value.commonLive.gameId !== 'acc'
+    ? { status: 'unavailable', reason: 'unsupported-game-feed', snapshot: null } : standings.state.value,
   options.value,
   standings.nowMs.value,
   standingsHighlights.highlights.value,
@@ -104,6 +106,7 @@ onUnmounted(() => {
 <template>
   <main class="overlay-root">
     <OverlayPlacementLock overlay-id="standings" />
+    <TelemetryFeatureNotice :live="fastState.fastState.value.commonLive" feature="standings" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
     <div
       class="overlay-canvas"

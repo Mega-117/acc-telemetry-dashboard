@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { usePresentationInterval } from '~/composables/usePresentationVisibility'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
@@ -83,6 +84,7 @@ onUnmounted(() => {
 <template>
   <main class="overlay-root">
     <OverlayPlacementLock overlay-id="info" />
+    <TelemetryFeatureNotice :live="telemetry.fastState.value.commonLive" feature="lapTiming" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
     <div
       ref="canvasElement"

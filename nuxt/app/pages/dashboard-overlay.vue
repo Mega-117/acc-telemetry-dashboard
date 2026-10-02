@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
@@ -58,6 +59,7 @@ onUnmounted(() => {
     <OverlayPlacementLock overlay-id="dashboard" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
     <DashboardHud :model="model" class="overlay-canvas" :style="canvasStyle" />
+    <TelemetryFeatureNotice :live="telemetry.fastState.value.commonLive" feature="speed" />
   </main>
 </template>
 

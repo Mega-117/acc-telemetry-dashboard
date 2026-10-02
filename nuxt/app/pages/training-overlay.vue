@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
+import { trainingAvailability } from '~/services/telemetry/trainingAvailability'
+import { availabilityLabel } from '~/services/telemetry/featureAvailability'
+import { commonContextKey } from '~/services/telemetry/commonLive'
 import { usePresentationInterval, usePresentationVisibility } from '~/composables/usePresentationVisibility'
 const presentationVisible = usePresentationVisibility()
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
@@ -541,6 +544,33 @@ const {
   () => spotterEnabled.value,
 )
 
+let trainingSourceKey: string | null = null
+function trainingSourceReady(): boolean {
+  const live = fastState.value.commonLive
+  if (trainingSourceKey && commonContextKey(live) !== trainingSourceKey) {
+    showVoicePointNotice('La sessione di guida è cambiata. Ferma e riavvia l’allenamento.', 'error')
+    return false
+  }
+  if (!live || live.gameId === 'acc') return true
+  const availability = trainingAvailability(live, selectedTrainingId.value)
+  if (!availability.available || live.lifecycle !== 'live') {
+    showVoicePointNotice(availability.available ? 'Riprendi la guida per avviare l’allenamento.' : availabilityLabel(availability.reason), 'error')
+    return false
+  }
+  return true
+}
+watch(fastState, () => {
+  if (!['running', 'expired'].includes(phase.value) || !trainingSourceKey) return
+  const live = fastState.value.commonLive
+  const changed = commonContextKey(live) !== trainingSourceKey
+  const unavailable = live?.gameId !== 'acc' && (!live || !trainingAvailability(live, selectedTrainingId.value).available || live.lifecycle !== 'live')
+  if (changed || unavailable) {
+    cancelAutoAdvance()
+    pauseSession()
+    stopVoice()
+  }
+})
+
 async function closeOverlay() { await getOverlayApi()?.trainingOverlayClose?.() }
 function applyInfoTargetSettings(settings: InfoTargetSettings | null | undefined) {
   if (!settings) return
@@ -691,12 +721,16 @@ function executePrimaryAction() {
   const actions: Record<PrimaryOverlayAction, () => void> = {
     'open-selection': openTrainingSelection,
     start: () => {
+      trainingSourceKey = null
+      if (!trainingSourceReady()) return
+      trainingSourceKey = commonContextKey(fastState.value.commonLive)
       isSaving.value = true
       try { startSession() } finally { isSaving.value = false }
     },
-    pause: pauseSession, resume: resumeSession,
+    pause: pauseSession, resume: () => { if (trainingSourceReady()) resumeSession() },
     'complete-step': completeCurrentStep,
     next: () => {
+      if (!trainingSourceReady()) return
       isSaving.value = true
       try { goNextStep() } finally { isSaving.value = false }
     },
@@ -773,6 +807,8 @@ async function recordVoicePointFromCurrentPosition() {
   }
   try {
     const result = await api.recordVoicePoint({
+      gameId: fastState.value.commonLive?.gameId ?? 'acc',
+      trackVariant: fastState.value.commonLive?.identity?.variant ?? null,
       track,
       car,
       type: 'braking_reference',

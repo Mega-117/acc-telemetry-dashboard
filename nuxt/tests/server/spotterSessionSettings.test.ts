@@ -23,7 +23,7 @@ describe('Spotter session settings wiring', () => {
     expect(runtime).toContain('referencesAllowedForSession')
     expect(runtime).toContain('lapTimesAllowedForSession')
     expect(runtime).toContain('coachAllowedForSession')
-    expect(runtime).toContain('canAnnounce: () => canRunSpotterAudio.value && isSpotterFeatureAllowed(')
+    expect(runtime).toContain("canAnnounce: () => canRunSpotterAudio.value && audioFeatureAvailable(fastState.value, 'pressureRecommendation') && isSpotterFeatureAllowed(")
     expect(runtime).toContain('pressureWarningSessionModes.value')
     expect(runtime).toContain('isSpotterFeatureAllowed(')
     expect(runtime).toContain('fastState.value.sessionType')

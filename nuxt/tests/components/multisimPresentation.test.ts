@@ -27,12 +27,12 @@ describe('common game surfaces', () => {
     expect(useGameContext().consultedGame.value).toBe('synthetic')
     view.unmount(); useGameContext().selectGame('acc')
   })
-  it('shows unsupported EVO without loading another game history', async () => {
-    fixture.gateway.mockClear(); useGameContext().selectGame('evo')
+  it('loads experimental EVO history with its own game scope', async () => {
+    fixture.gateway.mockClear(); fixture.gateway.mockResolvedValueOnce({sessions:[]}); useGameContext().selectGame('evo')
     const view=mount(CommonGamePage,{global:{stubs:{NuxtLink:{template:'<a><slot /></a>'}}}})
     await flushPromises()
-    expect(fixture.gateway).not.toHaveBeenCalled()
-    expect(view.text()).toContain('non è ancora disponibile')
+    expect(fixture.gateway).toHaveBeenCalledWith('qa',{gameId:'evo',track:undefined,hideEmpty:true},1,25)
+    expect(view.text()).toContain('Connettore sperimentale')
     view.unmount(); useGameContext().selectGame('acc')
   })
   it('loads only selected game with track scope and offers retry on error', async () => {

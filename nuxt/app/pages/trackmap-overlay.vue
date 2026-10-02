@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
+import { buildCommonTrackMapScene } from '~/services/sim/commonTrackMapScene'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
@@ -26,24 +28,26 @@ import { buildAccTrackMapScene, type AccStandingsCar } from '~/services/sim/acc/
 definePageMeta({ layout: 'hud-overlay' })
 
 const BASE_SIZE = 300
-const SIM = 'acc'
 
 const route = useRoute()
 const getApi = useOverlayRegionApi()
 const overlay = useHudOverlay('trackmap', getApi)
 const standings = useStandingsState(getApi)
 const telemetry = useFastStatePoller(getApi)
+const sim = computed(() => telemetry.fastState.value.commonLive?.gameId ?? 'acc')
 
 const outline = ref<TrackMapPoint[]>([])
 const rotationDeg = ref(0)
 let requestedTrack: string | null | undefined
 async function loadTrackMap (track: string | null) {
-  if (track === requestedTrack) return
-  requestedTrack = track
+  const key = JSON.stringify([sim.value, track, telemetry.fastState.value.commonLive?.identity?.variant])
+  if (key === requestedTrack) return
+  requestedTrack = key
+  outline.value = []
   try {
-    const map = await getApi()?.hudOverlayGetTrackMap?.(track, SIM)
+    const map = await getApi()?.hudOverlayGetTrackMap?.(track, sim.value, telemetry.fastState.value.commonLive?.identity?.variant)
     // Una risposta arrivata dopo un altro cambio pista non deve sovrascrivere quella nuova.
-    if (requestedTrack !== track) return
+    if (requestedTrack !== key) return
     // Rotazione e riempimento li dichiara chi fornisce i dati della mappa.
     const available = map?.status === 'available'
     rotationDeg.value = available && Number.isFinite(map.rotationDeg) ? map.rotationDeg : 0
@@ -53,7 +57,7 @@ async function loadTrackMap (track: string | null) {
       available && map.fill > 0 ? map.fill : 1,
     )
   } catch {
-    if (requestedTrack === track) outline.value = []
+    if (requestedTrack === key) outline.value = []
   }
 }
 // Vista a cerchio (il "Circle of Doom" di ACC Drive): stessa spline, stessi
@@ -61,14 +65,14 @@ async function loadTrackMap (track: string | null) {
 const track = computed(() => overlay.settings.value?.circleView === true
   ? TRACK_MAP_CIRCLE_KEY
   : telemetry.fastState.value.context?.track ?? null)
-watch(track, value => { void loadTrackMap(value) })
+watch([track, sim, () => telemetry.fastState.value.commonLive?.identity?.variant], ([value]) => { void loadTrackMap(value) })
 
 const view = stableComputed(() => {
   const fast = telemetry.fastState.value
   const snapshot = standings.state.value.snapshot as {
     cars?: AccStandingsCar[], freshness?: { ttl_ms?: number }, session?: { focused_car_index?: number | null }
   } | null
-  const scene = buildAccTrackMapScene({
+  const scene = sim.value !== 'acc' ? buildCommonTrackMapScene(fast.commonLive) : buildAccTrackMapScene({
     cars: snapshot?.cars ?? [],
     focusedCarIndex: snapshot?.session?.focused_car_index ?? null,
     localCarIndex: fast.localDriver?.carIndex ?? null,
@@ -111,6 +115,7 @@ onUnmounted(() => {
 <template>
   <main class="overlay-root">
     <OverlayPlacementLock overlay-id="trackmap" />
+    <TelemetryFeatureNotice :live="telemetry.fastState.value.commonLive" :feature="overlay.settings.value?.circleView ? 'trackReferences' : 'trackMap'" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
     <TrackMapHud :view="view" :outline="outline" :rotation-deg="rotationDeg" class="overlay-canvas" :style="canvasStyle" />
   </main>

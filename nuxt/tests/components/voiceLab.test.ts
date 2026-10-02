@@ -106,6 +106,25 @@ afterEach(async () => {
 })
 
 describe('Voice Lab user interactions', () => {
+  it('retains the original reference when autosave finishes after switching game and variant', async () => {
+    mocks.runtime.readVoicePoints.mockResolvedValue({ tracks: ['Spa'], points: [clone(point),
+      { ...clone(point), game_id: 'evo', text: 'EVO standard' },
+      { ...clone(point), game_id: 'evo', track_variant: 'short', text: 'EVO short' }] })
+    await mount('references')
+    await input('.reference-row textarea', 'Edited ACC')
+    await input('[aria-label="Gioco riferimenti"]', 'evo', 'change')
+    expect(host.querySelector<HTMLTextAreaElement>('.reference-row textarea')!.value).toBe('EVO standard')
+    await input('[aria-label="Variante riferimenti"]', 'short', 'change')
+    expect(host.querySelector<HTMLTextAreaElement>('.reference-row textarea')!.value).toBe('EVO short')
+    await vi.advanceTimersByTimeAsync(650); await settle()
+    expect(mocks.runtime.writeVoicePoints).toHaveBeenLastCalledWith({ points: [expect.objectContaining({ text: 'Edited ACC' })] })
+    expect(mocks.runtime.writeVoicePoints.mock.calls.at(-1)![0].points[0].game_id).toBeUndefined()
+    await input('.reference-row textarea', 'Edited short')
+    await vi.advanceTimersByTimeAsync(650); await settle()
+    expect(mocks.runtime.writeVoicePoints).toHaveBeenLastCalledWith({ points: [expect.objectContaining({ game_id: 'evo', track_variant: 'short', text: 'Edited short' })] })
+    await input('[aria-label="Gioco riferimenti"]', 'acc', 'change')
+    expect(host.querySelector<HTMLTextAreaElement>('.reference-row textarea')!.value).toBe('Edited ACC')
+  })
   it('regenerates edited steps in both voices and keeps failed edits retryable', async () => {
     await mount()
     await click('.mode-tabs', '60 min'); await click('.mode-tabs', '30 min')
@@ -180,7 +199,7 @@ describe('Voice Lab user interactions', () => {
     window.dispatchEvent(new Event('pagehide')); await settle()
     expect(mocks.runtime.writeVoicePoints.mock.lastCall![0].points[0].enabled).toBe(false)
     expect(button('.reference-row', '▶ Ascolta').disabled).toBe(true)
-    await input('.reference-track-select select', 'Monza', 'change')
+    await input('[aria-label="Pista riferimenti"]', 'Monza', 'change')
     expect(host.textContent).toContain('Nessun riferimento registrato per Monza')
   })
 
