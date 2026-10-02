@@ -7,8 +7,8 @@ vi.mock('~/composables/useFastStatePoller',()=>({useFastStatePoller:()=>({fastSt
 let app:ReturnType<typeof createApp>|null=null
 const flush=async()=>{for(let i=0;i<6;i++)await nextTick()}
 afterEach(()=>{app?.unmount();app=null;document.body.innerHTML='';vi.clearAllMocks()})
-async function setup(keyboardOverlay=false){
- fixture.state=ref({isFresh:true,dataSource:'local',context:{track:'Imola',car:'BMW'}})
+async function setup(keyboardOverlay=false, initial: Record<string, unknown> = {}){
+ fixture.state=ref({isFresh:true,dataSource:'local',context:{track:'Imola',car:'BMW'}, ...initial})
  const api={hudOverlayGetSettings:vi.fn(async()=>({deltaReference:'bestSector',customSectorReferences:{}})),hudOverlaySaveSettings:vi.fn(async(_id:any,payload:any)=>payload),trainingOverlayKeyboardEditing:vi.fn(async()=>true)}
  ;(window as any).electronAPI=api
  const saved=vi.fn(),cancel=vi.fn(); const el=document.createElement('div');document.body.append(el)
@@ -20,6 +20,14 @@ async function setup(keyboardOverlay=false){
 async function fill(values=['32,5','27.0','16,8']){document.querySelectorAll('input').forEach((el,i)=>{el.value=values[i]!;el.dispatchEvent(new Event('input',{bubbles:true}))});await flush()}
 function button(id:string){return document.querySelector(`[data-overlay-wheel-action="${id}"]`) as HTMLButtonElement}
 describe('sector reference editor',()=>{
+ it('edits all declared sectors and blocks saving after a variant switch',async()=>{
+  const {api}=await setup(false,{context:{gameId:'qa-orbit-v1',track:'Spa',car:'BMW',variant:'reverse'},sectorHud:{sectors:[{},{},{},{}]}})
+  expect(document.querySelectorAll('input')).toHaveLength(4)
+  await fill(['10.0','20.0','30.0','40.0']);button('sector-save').click();await flush()
+  expect(api.hudOverlaySaveSettings).toHaveBeenCalledWith('sectors',{deltaReference:'custom',customSectorReference:{gameId:'qa-orbit-v1',track:'Spa',car:'BMW',variant:'reverse',sectorCount:4,timesMs:[10000,20000,30000,40000]}})
+  fixture.state.value.context.variant='forward';await flush()
+  expect(button('sector-save').disabled).toBe(true)
+ })
  it('types decimal values and atomically saves all three for the bound context',async()=>{
   const {api,saved}=await setup();expect(button('sector-save').disabled).toBe(true)
   await fill();button('sector-save').click();await flush()

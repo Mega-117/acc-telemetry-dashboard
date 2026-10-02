@@ -14,8 +14,16 @@ const settings = ref<HudOverlaySettings | null>(null)
 const loaded = ref(false), saving = ref(false), error = ref('')
 const mode = ref<SectorDeltaReference>('custom')
 const draft = ref(['', '', ''])
-const boundContext = ref<{ track: string, car: string } | null>(null)
-const liveContext = computed(() => fastState.value.isFresh && fastState.value.dataSource !== 'focused' ? fastState.value.context : null)
+const boundContext = ref<{ track: string, car: string, gameId?: string, variant?: string | null, sectorCount?: number } | null>(null)
+const liveContext = computed(() => {
+  const state = fastState.value, context = state.context
+  if (!state.isFresh || state.dataSource === 'focused' || !context) return null
+  if (context.gameId && context.gameId !== 'acc') {
+    const sectorCount = state.sectorHud?.sectors.length
+    return sectorCount ? { ...context, sectorCount } : null
+  }
+  return context
+})
 const contextKey = computed(() => sectorReferenceContextKey(liveContext.value))
 const boundKey = computed(() => sectorReferenceContextKey(boundContext.value))
 const contextChanged = computed(() => boundKey.value !== null && boundKey.value !== contextKey.value)
@@ -29,9 +37,12 @@ let disposed = false
 function bindContext() {
   if (!loaded.value || boundKey.value || !contextKey.value) return
   const context = liveContext.value!
-  boundContext.value = { track: context.track!, car: context.car! }
+  boundContext.value = { track: context.track!, car: context.car!,
+    ...(context.gameId ? { gameId: context.gameId } : {}),
+    ...(context.variant != null ? { variant: context.variant } : {}),
+    ...('sectorCount' in context ? { sectorCount: context.sectorCount as number } : {}) }
   const times = resolveCustomSectorTimes(settings.value?.customSectorReferences, context)
-  draft.value = times ? times.map(ms => (ms / 1000).toFixed(1).replace('.', ',')) : ['', '', '']
+  draft.value = times ? times.map(ms => (ms / 1000).toFixed(1).replace('.', ',')) : Array(boundContext.value.sectorCount ?? 3).fill('')
 }
 watch([contextKey, loaded], bindContext)
 function adjust(index: number, amount: number) { draft.value[index] = adjustSectorReferenceTime(draft.value[index]!, amount) }
@@ -83,13 +94,13 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="sector-reference-setup" :class="{ 'sector-reference-setup--quick': keyboardOverlay }" data-overlay-interactive aria-label="Riferimenti settori" @keydown="onKey">
-    <header><span v-if="!keyboardOverlay">SETTORI</span><h2>Riferimenti settori</h2><p>{{ boundContext ? `${boundContext.track} · ${boundContext.car}` : 'Avvia ACC e seleziona pista e vettura.' }}</p></header>
+    <header><span v-if="!keyboardOverlay">SETTORI</span><h2>Riferimenti settori</h2><p>{{ boundContext ? `${boundContext.track} · ${boundContext.car}${boundContext.variant ? ` · ${boundContext.variant}` : ''}` : 'Avvia il gioco e seleziona pista e vettura.' }}</p></header>
     <div class="sector-reference-modes" role="group" aria-label="Confronta con">
       <button v-for="item in modes" :key="item.id" type="button" :data-overlay-wheel-action="`sector-mode-${item.id}`" :aria-pressed="mode === item.id" :disabled="saving" @click="mode = item.id">{{ item.label }}</button>
     </div>
     <template v-if="mode === 'custom'">
       <p class="sector-reference-help">Da 10,0 a 70,0 secondi per settore.</p>
-      <div class="sector-reference-drums">
+      <div class="sector-reference-drums" :style="{ gridTemplateColumns: `repeat(${Math.min(draft.length, 4)},minmax(0,1fr))` }">
         <article v-for="(_, index) in draft" :key="index" class="sector-reference-drum" @wheel.prevent="!saving && boundKey && !contextChanged && $event.deltaY !== 0 && adjust(index, $event.deltaY < 0 ? 1 : -1)">
           <label :for="`sector-reference-${index}`">S{{ index + 1 }}</label>
           <div class="sector-reference-arrows">
@@ -102,8 +113,8 @@ onBeforeUnmount(() => {
         </article>
       </div>
       <p class="sector-reference-help">Totale: <strong>{{ total }} s</strong><span v-if="!keyboardOverlay"> · Il target giro resta indipendente.</span></p>
-      <p v-if="contextChanged" role="alert">Pista o vettura cambiate. Chiudi e riapri il pannello.</p>
-      <p v-else-if="draft.some(value => value !== '') && !valid" role="status">Inserisci tutti e tre i tempi, con al massimo un decimale.</p>
+      <p v-if="contextChanged" role="alert">Gioco, pista, variante o vettura cambiati. Chiudi e riapri il pannello.</p>
+      <p v-else-if="draft.some(value => value !== '') && !valid" role="status">Inserisci tutti i tempi, con al massimo un decimale.</p>
     </template>
     <p v-if="error" role="alert">{{ error }}</p>
     <footer><button type="button" class="sector-reference-save" data-overlay-wheel-action="sector-save" :disabled="!loaded || !valid || saving" @click="submit">{{ saving ? 'Salvataggio…' : 'Salva e usa' }}</button><button type="button" data-overlay-wheel-action="sector-cancel" :disabled="saving" @click="emit('cancel')">Annulla</button></footer>

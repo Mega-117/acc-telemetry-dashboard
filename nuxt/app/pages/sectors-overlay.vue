@@ -90,7 +90,9 @@ const showBest = computed(() => settings.value?.showBest !== false)
 const showCurrentLap = computed(() => settings.value?.showCurrentLap !== false)
 const deltaReference = computed(() => normalizeSectorDeltaReference(settings.value?.deltaReference))
 const customSectorTimes = computed(() => fastState.value.isFresh
-  ? resolveCustomSectorTimes(settings.value?.customSectorReferences, fastState.value.context) : null)
+  ? resolveCustomSectorTimes(settings.value?.customSectorReferences, { ...fastState.value.context,
+    sectorCount: fastState.value.context?.gameId && fastState.value.context.gameId !== 'acc'
+      ? fastState.value.sectorHud?.sectors.length ?? 0 : 3 }) : null)
 const variant = computed(() => settings.value?.variant === 'compact' ? 'compact' : 'classic')
 const onTargetPage = computed(() => variant.value === 'compact' && compactPage.value === 'target')
 const localCompactPresentation = computed(() => resolveLocalCompactPresentation(fastState.value))
