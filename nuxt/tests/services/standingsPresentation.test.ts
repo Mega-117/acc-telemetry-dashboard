@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { StandingsPublicPathResolver } from '../../app/services/overlay/standingsManufacturer'
+import type { CommonLive } from '../../app/services/telemetry/commonLive'
 import {
   buildStandingsPresentation as buildStandingsPresentationRaw,
   formatStandingsDriverName,
@@ -9,6 +10,8 @@ import {
   formatStandingsSessionType,
   formatStandingsTemperatures,
   selectStandingsCars,
+  scopeStandingsForLive,
+  commonStandingsLocal,
   standingsNumberPlateVariant,
   type StandingsCarSnapshot,
   type StandingsHighlightMap,
@@ -18,6 +21,48 @@ import {
 } from '../../app/services/overlay/standingsPresentation'
 
 const NOW_MS = 1_785_956_769_847
+
+describe('common roster context and presentation', () => {
+  function common() {
+    const value = state([car(8, { car_location: 'pitbox' }), car(9)], 108)
+    Object.assign(value.snapshot!, { schema: 'racercore.standings', game_id: 'synthetic', session_id: 'session-a',
+      identity: { track: 'Spa', variant: 'short', car: 'QA' } })
+    value.snapshot!.freshness.ttl_ms = 1000
+    Object.assign(value.snapshot!.session, { session_kind: 'race', remaining_time_ms: 90000 })
+    return value
+  }
+  const live = (): CommonLive => ({ gameId: 'synthetic', sessionId: 'session-a', fresh: true, connected: true,
+    lifecycle: 'live', capabilities: { standings: true }, fields: {}, identity: { track: 'Spa', variant: 'short', car: 'QA' } })
+
+  it('shows common facts without interpreting ACC enums or class colours', () => {
+    const scoped = scopeStandingsForLive(common(), live(), NOW_MS)
+    const local = commonStandingsLocal(scoped, NOW_MS)
+    expect(local).toMatchObject({ carIndex: 108, firstName: 'Alex', position: 8 })
+    const result = buildStandingsPresentation(scoped, {}, NOW_MS, {}, local)
+    expect(result.visible).toBe(true)
+    expect(result.header).toMatchObject({ sessionType: 'Race', timeLeft: '00:01:30' })
+    expect(result.rows.find(row => row.carIndex === 108)).toMatchObject({ inPitLane: true, carNumberVariant: 'neutral' })
+  })
+  it.each<Partial<CommonLive>>([{ gameId: 'evo' }, { sessionId: 'session-b' }, { connected: false },
+    { fresh: false }, { lifecycle: 'replay' }, { capabilities: { standings: false } },
+    { identity: { track: 'Spa', variant: 'full', car: 'QA' } }])('rejects incompatible live context %j', patch => {
+    expect(scopeStandingsForLive(common(), { ...live(), ...patch }, NOW_MS).status).toBe('unavailable')
+  })
+  it('expires cached roster and local car and does not borrow the spectator identity', () => {
+    const value = common()
+    expect(scopeStandingsForLive(value, live(), NOW_MS + 1000).status).toBe('unavailable')
+    value.snapshot!.cars[0]!.realtime_updated_at_ms = NOW_MS - 1001
+    expect(commonStandingsLocal(value, NOW_MS)).toBeNull()
+    value.snapshot!.session.local_car_index = null
+    expect(commonStandingsLocal(value, NOW_MS)).toBeNull()
+  })
+  it('keeps an unknown driver unknown and rejects legacy ACC in another game', () => {
+    const value = common()
+    value.snapshot!.cars[0]!.current_driver_index = null
+    expect(commonStandingsLocal(value, NOW_MS)).toMatchObject({ firstName: null, lastName: null })
+    expect(scopeStandingsForLive(state([car(8)]), live(), NOW_MS).status).toBe('unavailable')
+  })
+})
 const STANDINGS_LAYOUT = {
   width: 600,
   height: 424,

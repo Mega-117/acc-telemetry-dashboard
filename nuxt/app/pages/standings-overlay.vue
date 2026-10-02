@@ -13,7 +13,7 @@ import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useStandingsHighlights } from '~/composables/useStandingsHighlights'
 import { useStandingsState } from '~/composables/useStandingsState'
 import { usePublicPath } from '~/composables/usePublicPath'
-import { buildStandingsPresentation, DEFAULT_STANDINGS_OPTIONS } from '~/services/overlay/standingsPresentation'
+import { buildStandingsPresentation, DEFAULT_STANDINGS_OPTIONS, scopeStandingsForLive, commonStandingsLocal } from '~/services/overlay/standingsPresentation'
 
 definePageMeta({ layout: 'hud-overlay' })
 
@@ -34,7 +34,8 @@ const getApi = useOverlayRegionApi()
 const overlay = useHudOverlay('standings', getApi)
 const standings = useStandingsState(getApi)
 const fastState = useFastStatePoller(getApi)
-const standingsHighlights = useStandingsHighlights(standings.state, standings.nowMs)
+const scopedStandings = computed(() => scopeStandingsForLive(standings.state.value, fastState.fastState.value.commonLive, standings.nowMs.value))
+const standingsHighlights = useStandingsHighlights(scopedStandings, standings.nowMs)
 const { backgroundOpacity } = useHudOverlayBackground(overlay.settings, 'standings')
 const { getPublicPath } = usePublicPath()
 function setting<K extends keyof HudOverlaySettings>(key: K): HudOverlaySettings[K] | undefined {
@@ -54,6 +55,7 @@ const options = computed(() => ({
 }))
 const localDriver = stableComputed(() => {
   const state = fastState.fastState.value
+  if (scopedStandings.value.snapshot?.schema === 'racercore.standings' || (state.commonLive && state.commonLive.gameId !== 'acc')) return commonStandingsLocal(scopedStandings.value, standings.nowMs.value)
   if (!state.localDriver) return null
   return {
     ...state.localDriver,
@@ -62,8 +64,7 @@ const localDriver = stableComputed(() => {
   }
 })
 const model = stableComputed(() => buildStandingsPresentation(
-  fastState.fastState.value.commonLive && fastState.fastState.value.commonLive.gameId !== 'acc'
-    ? { status: 'unavailable', reason: 'unsupported-game-feed', snapshot: null } : standings.state.value,
+  scopedStandings.value,
   options.value,
   standings.nowMs.value,
   standingsHighlights.highlights.value,

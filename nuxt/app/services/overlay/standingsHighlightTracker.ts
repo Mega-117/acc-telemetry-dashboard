@@ -57,6 +57,7 @@ function isValidPersonalBest(car: StandingsCarSnapshot): boolean {
 }
 
 function sessionKey(snapshot: StandingsSnapshot): string {
+  if (snapshot.schema === 'racercore.standings') return JSON.stringify([snapshot.game_id, snapshot.session_id, snapshot.identity])
   return `${String(snapshot.session.event_index)}:${String(snapshot.session.session_index)}`
 }
 

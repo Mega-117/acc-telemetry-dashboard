@@ -9,6 +9,7 @@ import { useHeaderBack } from "~/composables/useHeaderBack";
 import PitwallConceptPitStop from "~/components/pitwall/concept/PitwallConceptPitStop.vue";
 import PitwallConceptSearch from "~/components/pitwall/concept/PitwallConceptSearch.vue";
 import PitwallConceptWall from "~/components/pitwall/concept/PitwallConceptWall.vue";
+import PitwallLocalCrew from "~/components/pitwall/PitwallLocalCrew.vue";
 import { usePitwallStore } from "~/composables/usePitwallStore";
 import {
   searchPitwallConceptDirectory,
@@ -90,6 +91,7 @@ function leave() {
       @close="state.closeRace(race.id)"
     />
 
+    <PitwallLocalCrew v-if="race && race.id === state.myRoom.value?.id" />
     <PitwallConceptPitStop :race="race" />
 
     <div

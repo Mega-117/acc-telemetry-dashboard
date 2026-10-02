@@ -4,6 +4,7 @@ import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useGameContext } from '~/composables/useGameContext'
 import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
 import { GAME_OPTIONS, gameLabel } from '~/services/telemetry/gameCatalog'
+import SourceChoice from './SourceChoice.vue'
 const { consultedGame, selectGame } = useGameContext()
 const { canAccessDevTools } = useDevToolsAccess()
 const live = useFastStatePoller(() => typeof window === 'undefined' ? null : (window as Window & { electronAPI?: unknown }).electronAPI)
@@ -24,6 +25,7 @@ function change(event: Event) {
       <option v-if="canAccessDevTools" value="synthetic">Simulatore di test · DEV</option>
     </select>
   </label>
+  <SourceChoice />
 </template>
 
 <style scoped lang="scss">

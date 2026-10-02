@@ -1,4 +1,5 @@
 import { EMPTY_STANDINGS_LAYOUT, normalizeStandingsLayout, type StandingsLayout } from './standingsLayout'
+import type { CommonLive } from '~/services/telemetry/commonLive'
 import {
   standingsManufacturerLogo,
   type StandingsPublicPathResolver,
@@ -52,6 +53,8 @@ export interface StandingsCarSnapshot {
 }
 
 export interface StandingsSessionSnapshot {
+  session_kind?: unknown
+  remaining_time_ms?: unknown
   event_index?: unknown
   session_index?: unknown
   focused_car_index: number
@@ -79,6 +82,10 @@ export interface FocusedPitExitTrafficSnapshot {
 }
 
 export interface StandingsSnapshot {
+  schema?: string
+  game_id?: string
+  session_id?: string
+  identity?: { track?: string | null; variant?: string | null; car?: string | null }
   focused_flag?: { available?: unknown, reason?: unknown, flag?: unknown }
   freshness: { generated_at_ms: number, ttl_ms: number }
   session: StandingsSessionSnapshot
@@ -106,6 +113,29 @@ export interface StandingsStateEnvelope {
   status: 'available' | 'unavailable'
   reason: string | null
   snapshot: StandingsSnapshot | null
+}
+
+export function scopeStandingsForLive(state: StandingsStateEnvelope, live: CommonLive | null | undefined, now = Date.now()): StandingsStateEnvelope {
+  const denied: StandingsStateEnvelope = { status: 'unavailable', reason: 'source-context-mismatch', snapshot: null }
+  const snapshot = state.snapshot
+  if (snapshot?.schema !== 'racercore.standings') return live && live.gameId !== 'acc' ? denied : state
+  const age = now - snapshot.freshness.generated_at_ms
+  return live?.connected && live.fresh && ['live', 'paused'].includes(live.lifecycle || '')
+    && live.capabilities.standings === true && live.gameId === snapshot.game_id && live.sessionId === snapshot.session_id
+    && age >= -1000 && age <= snapshot.freshness.ttl_ms
+    && (['track', 'variant', 'car'] as const).every(key => (live.identity?.[key] ?? null) === (snapshot.identity?.[key] ?? null))
+    ? state : denied
+}
+
+export function commonStandingsLocal(state: StandingsStateEnvelope, now: number): StandingsLocalDriverSnapshot | null {
+  const snapshot = state.status === 'available' ? state.snapshot : null
+  if (snapshot?.schema !== 'racercore.standings') return null
+  const local = snapshot.cars.find(car => car.car_index === snapshot.session.local_car_index)
+  if (!local?.has_identity || !local.has_realtime || !isFreshCar(local, now, snapshot.freshness.ttl_ms)) return null
+  const index = local.current_driver_index
+  const driver = typeof index === 'number' && Number.isInteger(index) ? local.drivers[index] : null
+  return { isFresh: true, isLive: true, carIndex: local.car_index, firstName: safeText(driver?.first_name, 60),
+    lastName: safeText(driver?.last_name, 60), position: finiteNumber(local.position) }
 }
 
 export interface StandingsPresentationOptions {
@@ -257,6 +287,7 @@ function isFreshCar(car: StandingsCarSnapshot, nowMs: number, ttlMs: number): bo
 }
 
 export function formatStandingsDriverName(car: StandingsCarSnapshot): string {
+  if (car.current_driver_index === null || car.current_driver_index === undefined) return 'NoData'
   const index = Number(car.current_driver_index)
   if (!Number.isInteger(index) || index < 0 || index >= car.drivers.length) return 'NoData'
   const driver = car.drivers[index]
@@ -504,7 +535,10 @@ export function buildStandingsPresentation(
     .filter((value): value is number => value !== null)
     .reduce<number | null>((best, value) => best === null || value < best ? value : best, null)
 
-  const sessionType = formatStandingsSessionType(snapshot?.session.session_type)
+  const common = snapshot?.schema === 'racercore.standings'
+  const commonKinds: Record<string, string> = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race', time_attack: 'Time attack', cruise: 'Guida libera' }
+  const sessionType = common ? commonKinds[String(snapshot.session.session_kind)] ?? null
+    : formatStandingsSessionType(snapshot?.session.session_type)
   const showProgressData = options.showLapProgressBar
 
   let rows = selectedCars
@@ -513,7 +547,7 @@ export function buildStandingsPresentation(
       const isLocal = car.car_index === localCarIndex
       const bestLapMs = lapTime(car, 'best')
       const raceNumber = finiteNumber(car.race_number)
-      const inPitLane = finiteNumber(car.car_location) === 2
+      const inPitLane = common ? ['pitlane', 'pitbox'].includes(String(car.car_location)) : finiteNumber(car.car_location) === 2
       const highlight = highlights[car.car_index]
       const progressPercent = standingsProgressPercent(car, showProgressData)
       const manufacturer = standingsManufacturerLogo(car.manufacturer_key, resolvePublicPath)
@@ -530,7 +564,7 @@ export function buildStandingsPresentation(
         positionFlash: isLocal ? null : (highlight?.positionFlash ?? null),
         carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
           ? String(Math.round(raceNumber)) : null,
-        carNumberVariant: standingsNumberPlateVariant(car.cup_category),
+        carNumberVariant: common ? 'neutral' : standingsNumberPlateVariant(car.cup_category),
         manufacturerLogoSrc: manufacturer.src,
         manufacturerName: manufacturer.name,
         driverName: isLocal ? formatLocalDriverName(sharedLocal) : formatStandingsDriverName(car),
@@ -551,7 +585,7 @@ export function buildStandingsPresentation(
   if (hasLocal && rows.every(row => row.local !== true)) {
     const localName = formatLocalDriverName(sharedLocal)
     const raceNumber = finiteNumber(udpLocal?.race_number)
-    const localInPitLane = finiteNumber(udpLocal?.car_location) === 2
+    const localInPitLane = common ? ['pitlane', 'pitbox'].includes(String(udpLocal?.car_location)) : finiteNumber(udpLocal?.car_location) === 2
     const localProgressPercent = standingsProgressPercent(udpLocal ?? null, showProgressData)
     const manufacturer = standingsManufacturerLogo(udpLocal?.manufacturer_key, resolvePublicPath)
     rows = [{
@@ -560,7 +594,7 @@ export function buildStandingsPresentation(
       positionFlash: null,
       carNumber: options.showCarNumber && raceNumber !== null && Number.isInteger(raceNumber) && raceNumber >= 0
         ? String(Math.round(raceNumber)) : null,
-      carNumberVariant: standingsNumberPlateVariant(udpLocal?.cup_category),
+      carNumberVariant: common ? 'neutral' : standingsNumberPlateVariant(udpLocal?.cup_category),
       manufacturerLogoSrc: manufacturer.src,
       manufacturerName: manufacturer.name,
       driverName: localName,
@@ -596,7 +630,7 @@ export function buildStandingsPresentation(
     message,
     header: {
       sessionType,
-      timeLeft: formatStandingsRemainingTime(
+      timeLeft: common ? formatStandingsRemainingTime(0, snapshot.session.remaining_time_ms) : formatStandingsRemainingTime(
         snapshot?.session.session_time_ms,
         snapshot?.session.session_end_time_ms,
       ),

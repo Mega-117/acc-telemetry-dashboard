@@ -311,7 +311,9 @@ describe('Pitwall wiring', () => {
     expect(concept).toContain('@back="go(\'home\')"')
     // Le Crew non esistono piu': collegarsi non passa dal fondare una squadra.
     expect(concept).not.toMatch(/crew/i)
-    expect(conceptLive).not.toMatch(/crew/i)
+    // The simulator's local crew is read-only and does not restore team creation.
+    expect(conceptLive).toContain('<PitwallLocalCrew v-if="race && race.id === state.myRoom.value?.id"')
+    expect(conceptLive).not.toContain('PITWALL_CONCEPT_CREW_IMAGES')
     expect(concept).not.toContain('PITWALL_CONCEPT_CREW_IMAGES')
     expect(concept).not.toContain('Copertina')
   })
