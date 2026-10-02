@@ -138,7 +138,8 @@ export function createSyncScanService(params: {
           ownerId,
           sessionId,
           fileHash,
-          bestRulesVersion: Number(rawObj?.summary?.best_rules_version)
+          bestRulesVersion: Number(meta.gameId === 'acc' ? rawObj?.summary?.best_rules_version : rawObj?.summary?.version),
+          minimumBestRulesVersion: meta.gameId === 'acc' ? undefined : 1
         })
 
         if (registryHit) {

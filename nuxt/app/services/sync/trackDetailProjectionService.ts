@@ -9,6 +9,7 @@ import {
   type CarCategory
 } from '~/utils/telemetryFormat'
 import type { SessionDocument } from '~/types/telemetry'
+import { sessionGame } from '~/services/telemetry/gameIdentity'
 import type { UserProjectionDelta } from './syncUserProjectionDeltaService'
 import { normalizeTrackId } from '~/services/projections/trackMetadata'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
@@ -255,6 +256,7 @@ export async function applyTrackDetailProjectionDeltas(params: {
 
   const byTrack = new Map<string, UserProjectionDelta[]>()
   for (const delta of deltas) {
+    if (delta.gameId && delta.gameId !== 'acc') continue
     const trackId = normalizeTrackId(delta.trackId)
     if (!trackId) continue
     byTrack.set(trackId, [...(byTrack.get(trackId) || []), delta])
@@ -332,7 +334,8 @@ export function buildTrackDetailProjectionDocument(
   sessions: SessionDocument[]
 ): TrackDetailProjectionDocument {
   const normalizedTrackId = normalizeTrackId(trackId)
-  const trackSessions = sessions.filter((session) => normalizeTrackId(session.meta?.track) === normalizedTrackId)
+  const trackSessions = sessions.filter((session) => sessionGame(session) === 'acc'
+    && normalizeTrackId(session.meta?.track) === normalizedTrackId)
   const categories: Partial<Record<CarCategory, TrackDetailProjectionCategoryDocument>> = {}
 
   for (const category of CAR_CATEGORIES) {

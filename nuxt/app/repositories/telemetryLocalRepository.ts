@@ -41,7 +41,8 @@ export async function loadLocalTelemetrySessions(params: {
         entry: reg,
         file,
         ownerId,
-        sessionId
+        sessionId,
+        minimumBestRulesVersion: meta.gameId === 'acc' ? undefined : 1
       })
 
       sessions.push({

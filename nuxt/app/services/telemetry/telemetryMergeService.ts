@@ -1,13 +1,15 @@
 import type { SessionDocument } from '~/types/telemetry'
+import { gameScopedKey } from './gameIdentity'
 
 export function normalizeTrackKey(track: string): string {
   return (track || '').toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
 }
 
-export function buildLogicalSessionKey(meta: { date_start?: string; track?: string }): string {
+export function buildLogicalSessionKey(meta: { date_start?: string; track?: string; gameId?: string }): string {
   const dateKey = (meta?.date_start || '').split('.')[0]
   const trackKey = normalizeTrackKey(meta?.track || '')
-  return `${dateKey}_${trackKey}`
+  const legacyKey = `${dateKey}_${trackKey}`
+  return !meta.gameId || meta.gameId === 'acc' ? legacyKey : gameScopedKey(meta.gameId, legacyKey)
 }
 
 function toEpochMs(value: any): number {
@@ -43,6 +45,9 @@ export function dedupeCloudSessions(cloudSessions: SessionDocument[]): SessionDo
 }
 
 export function mergeSessionLocalPreferred(localSession: SessionDocument, cloudSession: SessionDocument): SessionDocument {
+  if ((localSession.meta.gameId ?? 'acc') !== (cloudSession.meta.gameId ?? 'acc')) {
+    throw new Error('cross-game-session-merge')
+  }
   return {
     ...cloudSession,
     ...localSession,
@@ -66,30 +71,31 @@ export function mergeSessionsDeterministic(
 ): SessionDocument[] {
   const byLogical = new Map<string, SessionDocument>()
   const bySessionId = new Map<string, string>()
+  const scopedId = (session: SessionDocument) => gameScopedKey(session.meta.gameId ?? 'acc', session.sessionId)
 
   const addCloud = (session: SessionDocument) => {
     const logicalKey = buildLogicalSessionKey(session.meta || {}) || session.sessionId
     byLogical.set(logicalKey, session)
-    if (session.sessionId) bySessionId.set(session.sessionId, logicalKey)
+    if (session.sessionId) bySessionId.set(scopedId(session), logicalKey)
   }
 
   const addLocal = (session: SessionDocument) => {
     if (!options.includeSyncedLocal && session.syncState === 'synced') return
 
     const logicalKey = buildLogicalSessionKey(session.meta || {}) || session.sessionId
-    const idKey = session.sessionId ? bySessionId.get(session.sessionId) : null
+    const idKey = session.sessionId ? bySessionId.get(scopedId(session)) : null
     const targetKey = idKey || logicalKey
     const existing = byLogical.get(targetKey)
 
     if (!existing) {
       byLogical.set(targetKey, session)
-      if (session.sessionId) bySessionId.set(session.sessionId, targetKey)
+      if (session.sessionId) bySessionId.set(scopedId(session), targetKey)
       return
     }
 
     if (options.localWins) {
       byLogical.set(targetKey, mergeSessionLocalPreferred(session, existing))
-      if (session.sessionId) bySessionId.set(session.sessionId, targetKey)
+      if (session.sessionId) bySessionId.set(scopedId(session), targetKey)
     }
   }
 
@@ -110,11 +116,12 @@ export function mergeLocalFirst(localSessions: SessionDocument[], cloudSessions:
 
 export function mergePendingLocal(cloudPage: SessionDocument[], localSessions: SessionDocument[], includeLocal: boolean): SessionDocument[] {
   if (!includeLocal) return cloudPage
-  const cloudIds = new Set(cloudPage.map((session) => session.sessionId))
+  const scopedId = (session: SessionDocument) => gameScopedKey(session.meta.gameId ?? 'acc', session.sessionId)
+  const cloudIds = new Set(cloudPage.map(scopedId))
   const cloudLogicalKeys = new Set(cloudPage.map((session) => buildLogicalSessionKey(session.meta || {})))
   const pending = localSessions.filter((local) =>
     local.syncState !== 'synced'
-      && !cloudIds.has(local.sessionId)
+      && !cloudIds.has(scopedId(local))
       && !cloudLogicalKeys.has(buildLogicalSessionKey(local.meta || {}))
   )
   const merged = [...pending, ...cloudPage]

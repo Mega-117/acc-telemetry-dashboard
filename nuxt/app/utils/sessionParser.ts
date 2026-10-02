@@ -409,7 +409,7 @@ export function extractMetadata(
     driver: (sessionInfo['driver'] as string | null) || null
   }
 
-  if (rawObj?.['schema'] === 'racercore.session' && meta.gameId !== 'acc') {
+  if (rawObj?.['schema'] === 'racercore.session' && !canUseAccRules(rawObj)) {
     const value = rawObj['summary'] as Record<string, unknown> | undefined
     const common = value?.['schema'] === 'racercore.timing-summary' && value?.['version'] === 1
     return {

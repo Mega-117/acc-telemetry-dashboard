@@ -1,15 +1,17 @@
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { buildActivityProjectionFromEntries } from '~/services/telemetry/activityProjectionService'
 import type { SessionDocument } from '~/types/telemetry'
+import { sessionGame, gameScopedKey } from '~/services/telemetry/gameIdentity'
 
 export const SESSION_INDEX_SCHEMA_VERSION = 2
 export const SESSION_INDEX_MAX_ITEMS = 200
 const ACTIVITY_SESSION_TYPES = { PRACTICE: 0, QUALIFY: 1, RACE: 2 }
 
 export function buildSessionIndexProjection(allSessions: SessionDocument[], now: Date = new Date()) {
-  const tracksMap: Record<string, { track: string; sessions: number; lastPlayed: string }> = {}
+  const tracksMap: Record<string, { gameId: string; track: string; sessions: number; lastPlayed: string }> = {}
   const sessionsList: Array<{
     id: string
+    gameId: string
     date: string
     track: string
     car: string
@@ -28,13 +30,14 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
   }> = []
 
   for (const session of allSessions) {
+    const gameId = sessionGame(session) ?? 'unknown'
     const dateStart = session.meta?.date_start || ''
     const track = session.meta?.track || ''
-    const trackKey = track.toLowerCase()
+    const trackKey = track ? gameScopedKey(gameId, track.toLowerCase()) : ''
 
     if (trackKey) {
       if (!tracksMap[trackKey]) {
-        tracksMap[trackKey] = { track, sessions: 0, lastPlayed: dateStart }
+        tracksMap[trackKey] = { gameId, track, sessions: 0, lastPlayed: dateStart }
       }
       tracksMap[trackKey].sessions++
       if (dateStart > tracksMap[trackKey].lastPlayed) {
@@ -43,9 +46,10 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
     }
 
     const bestRulesVersion = Number(session.summary?.best_rules_version || 0)
-    const raceRuleCompatible = bestRulesVersion >= BEST_RULES_VERSION
+    const raceRuleCompatible = gameId === 'acc' && bestRulesVersion >= BEST_RULES_VERSION
     sessionsList.push({
       id: session.sessionId,
+      gameId,
       date: dateStart,
       track,
       car: session.meta?.car || '',

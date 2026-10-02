@@ -9,6 +9,7 @@ import { createSyncScanService } from '~/services/sync/syncScanService'
 function makeSession(ownerId: string | null, lapsTotal = 3) {
   return {
     ownerId,
+    stints: [],
     session_info: {
       date_start: '2026-08-17T20:00:00.000Z',
       track: 'monza',

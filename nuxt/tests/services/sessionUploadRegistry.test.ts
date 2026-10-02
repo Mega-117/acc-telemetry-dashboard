@@ -65,6 +65,25 @@ beforeEach(() => {
 })
 
 describe('PIP-444 registro con stato cloud', () => {
+  it('uploads common timing once without migrating it to ACC rules', async () => {
+    const synthetic = {
+      ...raw(2), schema: 'racercore.session', version: 1, game_id: 'synthetic',
+      summary: { schema: 'racercore.timing-summary', version: 1, laps: 2, lapsValid: 0, bestLap: null, totalTime: 124000, stintCount: 1 }
+    }
+    const io = { getExistingSession: vi.fn(async () => null), listExistingChunks: vi.fn(async () => []) }
+    const created = await makeService({}, io).uploadOrUpdateSession(synthetic, JSON.stringify(synthetic), FILE, UID, { precomputedHash: 'generic' })
+    expect(created.status).toBe('created')
+    expect(created.sessionId).toMatch(/^synthetic__/)
+    expect(created.cloudState?.summaryRulesVersion).toBe(1)
+    expect(created.projectionDelta?.gameId).toBe('synthetic')
+    const uploaded = state.docs.get(`users/${UID}/sessions/${created.sessionId}`)
+    expect(uploaded.meta.gameId).toBe('synthetic')
+    expect(uploaded.summary).toEqual(synthetic.summary)
+    const cached = { [FILE]: registryEntry(created.cloudState, { bestRulesVersion: 1 }) }
+    const replay = await makeService(cached, io, true).uploadOrUpdateSession(synthetic, JSON.stringify(synthetic), FILE, UID, { precomputedHash: 'generic' })
+    expect(replay.status).toBe('unchanged')
+    expect(state.commits).toBe(1)
+  })
   it('primo caricamento (registro vuoto): legge sessions/{id} come prima, non scrive uploads/{hash}, restituisce lo stato cloud', async () => {
     const io = { getExistingSession: vi.fn(async () => null), listExistingChunks: vi.fn(async () => []) }
     const result = await makeService({}, io).uploadOrUpdateSession(raw(2), JSON.stringify(raw(2)), FILE, UID, { precomputedHash: 'hash-1' })

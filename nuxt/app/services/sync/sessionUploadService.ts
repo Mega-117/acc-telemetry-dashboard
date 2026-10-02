@@ -156,6 +156,8 @@ export function createSessionUploadService(params: {
           return { status: 'skipped' as const, fileName, reason: preparedSummary.reason }
         }
         const { meta, summary: summaryWithRules } = preparedSummary
+        const requiredRulesVersion = meta.gameId === 'acc' ? BEST_RULES_VERSION : 1
+        const summaryVersion = meta.gameId === 'acc' ? summaryWithRules.best_rules_version : summaryWithRules.version
         const sessionId = generateSessionId(meta.date_start, meta.track, meta.gameId)
         const fileHash = options.precomputedHash || await calculateContentHash(rawText)
         const rawDataHash = await calculateRawDataHash(rawObj)
@@ -177,7 +179,7 @@ export function createSessionUploadService(params: {
         // interrogano i raw chunk. Registro assente o incoerente: letture come prima.
         const knownCloud = resolveKnownCloudSession({ entry: registryEntry, ownerId: uid, sessionId })
         if (canSkipViaRegistry(registry, fileName, { fileHash, rawDataHash, summaryHash }, uid)) {
-          if (knownCloud && knownCloud.fileHash === fileHash && knownCloud.summaryRulesVersion >= BEST_RULES_VERSION) {
+          if (knownCloud && knownCloud.fileHash === fileHash && knownCloud.summaryRulesVersion >= requiredRulesVersion) {
             return { status: 'unchanged' as const, fileName, sessionId, reason: 'registry_cache_hit', cloudState: knownCloud }
           }
           if (!knownCloud) {
@@ -185,7 +187,7 @@ export function createSessionUploadService(params: {
             assertActive()
             existingChecked = true
             const existingRulesVersion = getExistingRulesVersion(existing)
-            if (existing && existing.fileHash === fileHash && existingRulesVersion >= BEST_RULES_VERSION) {
+            if (existing && existing.fileHash === fileHash && existingRulesVersion >= requiredRulesVersion) {
               return {
                 status: 'unchanged' as const,
                 fileName,
@@ -213,7 +215,7 @@ export function createSessionUploadService(params: {
         if (existing) {
           isUpdate = true
           const existingRulesVersion = getExistingRulesVersion(existing)
-          const needsRulesMigration = existingRulesVersion < BEST_RULES_VERSION
+          const needsRulesMigration = existingRulesVersion < requiredRulesVersion
           const existingRawDataHash = String(existing.rawDataHash || '')
           const registryMatchesExistingUpload = !!registryEntry
             && registryEntry.uploadedBy === uid
@@ -263,7 +265,7 @@ export function createSessionUploadService(params: {
           uploadedAt: serverTimestamp(),
           meta,
           summary: summaryWithRules,
-          summaryRulesVersion: Number(summaryWithRules.best_rules_version || BEST_RULES_VERSION),
+          summaryRulesVersion: Number(summaryVersion),
           rawChunkCount: chunksNeedUpdate ? chunks.length : (existing?.rawChunkCount || 0),
           rawSizeBytes: chunksNeedUpdate ? rawText.length : (existing?.rawSizeBytes || rawText.length),
           rawEncoding: existing?.rawEncoding || 'json-string',

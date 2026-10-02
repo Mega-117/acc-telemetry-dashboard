@@ -6,18 +6,20 @@ import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
 import { checkFirebaseCacheFreshness, recordFirebaseJournalEvent } from '~/services/monitoring/firebaseOpsJournal'
 import { ownerDataCacheTtlFor } from '~/services/cache/cachePolicy'
 import { notifyOwnerCacheChanged } from '~/services/cache/ownerCacheSignals'
+import { sessionGame } from '~/services/telemetry/gameIdentity'
 
 export const SESSION_LIST_PROJECTION_SCHEMA_VERSION = 1
 export const SESSION_LIST_PROJECTION_PAGE_SIZE = 100
 
 export type SessionListProjectionEntry = {
+  gameId?: string
   id: string
   date: string
   track: string
   trackKey: string
   car: string
   carKey: string
-  carCategory: CarCategory
+  carCategory: CarCategory | null
   type: number
   laps: number
   lapsValid: number
@@ -70,21 +72,23 @@ export function normalizeSessionListKey(value: string): string {
 }
 
 export function createSessionListEntry(session: SessionDocument): SessionListProjectionEntry {
+  const gameId = sessionGame(session) ?? 'unknown'
   const summary = session.summary || {}
   const bestRulesVersion = Number(summary.best_rules_version || BEST_RULES_VERSION)
-  const raceRuleCompatible = bestRulesVersion >= BEST_RULES_VERSION
+  const raceRuleCompatible = gameId === 'acc' && bestRulesVersion >= BEST_RULES_VERSION
   const track = session.meta?.track || ''
   const car = session.meta?.car || ''
   const laps = Number(summary.laps || 0)
 
   return {
     id: session.sessionId,
+    gameId,
     date: session.meta?.date_start || '',
     track,
     trackKey: normalizeSessionListKey(track),
     car,
     carKey: normalizeSessionListKey(car),
-    carCategory: getCarCategory(car),
+    carCategory: gameId === 'acc' ? getCarCategory(car) : null,
     type: Number(session.meta?.session_type ?? 0),
     laps,
     lapsValid: Number(summary.lapsValid || 0),
@@ -100,6 +104,7 @@ export function createSessionListEntry(session: SessionDocument): SessionListPro
 }
 
 export function createSessionListEntryFromDelta(delta: {
+  gameId?: string
   sessionId: string
   dateStart?: string | null
   trackId?: string | null
@@ -108,21 +113,23 @@ export function createSessionListEntryFromDelta(delta: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
   summary?: any
 }): SessionListProjectionEntry {
+  const gameId = delta.gameId ?? 'acc' // Existing projection deltas predate explicit game identity.
   const summary = delta.summary || {}
   const bestRulesVersion = Number(summary.best_rules_version || BEST_RULES_VERSION)
-  const raceRuleCompatible = bestRulesVersion >= BEST_RULES_VERSION
+  const raceRuleCompatible = gameId === 'acc' && bestRulesVersion >= BEST_RULES_VERSION
   const track = delta.trackId || ''
   const car = delta.car || ''
   const laps = Number(summary.laps || 0)
 
   return {
     id: delta.sessionId,
+    gameId,
     date: delta.dateStart || '',
     track,
     trackKey: normalizeSessionListKey(track),
     car,
     carKey: normalizeSessionListKey(car),
-    carCategory: getCarCategory(car),
+    carCategory: gameId === 'acc' ? getCarCategory(car) : null,
     type: Number(delta.sessionType ?? summary.sessionType ?? summary.session_type ?? 0),
     laps,
     lapsValid: Number(summary.lapsValid || 0),
@@ -144,6 +151,7 @@ export function sessionListEntryToSessionDocument(entry: SessionListProjectionEn
     fileName: '',
     uploadedAt: null,
     meta: {
+      gameId: entry.gameId ?? 'acc',
       track: entry.track,
       car: entry.car,
       date_start: entry.date,

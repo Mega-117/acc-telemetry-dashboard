@@ -8,12 +8,14 @@ import { buildActivityProjectionFromEntries } from '~/services/telemetry/activit
 import type { TrackBestProjectionDelta } from './trackBestsProjectionService'
 import { applySessionListProjectionDeltas } from './sessionListProjectionService'
 import type { SessionContribution } from '~/types/trackProjections'
+import { gameScopedKey } from '~/services/telemetry/gameIdentity'
 
 export interface UserProjectionDelta extends TrackBestProjectionDelta {
   status: 'created' | 'updated'
 }
 
 type SessionIndexEntry = {
+  gameId?: string
   id: string
   date: string
   track: string
@@ -35,12 +37,14 @@ type SessionIndexEntry = {
 const ACTIVITY_SESSION_TYPES = { PRACTICE: 0, QUALIFY: 1, RACE: 2 }
 
 function toSessionIndexEntry(delta: UserProjectionDelta): SessionIndexEntry {
+  const gameId = delta.gameId ?? 'acc'
   const summary = delta.summary || {}
   const bestRulesVersion = Number(summary.best_rules_version || BEST_RULES_VERSION)
-  const raceRuleCompatible = bestRulesVersion >= BEST_RULES_VERSION
+  const raceRuleCompatible = gameId === 'acc' && bestRulesVersion >= BEST_RULES_VERSION
 
   return {
     id: delta.sessionId,
+    gameId,
     date: delta.dateStart || '',
     track: delta.trackId || '',
     car: delta.car || '',
@@ -80,11 +84,13 @@ function buildActivity7d(entries: SessionIndexEntry[], now = new Date()) {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
 function mergeTracksSummary(existing: any[], deltas: UserProjectionDelta[]) {
-  const tracks = new Map<string, { track: string; sessions: number; lastPlayed: string }>()
+  const tracks = new Map<string, { gameId: string; track: string; sessions: number; lastPlayed: string }>()
   for (const item of Array.isArray(existing) ? existing : []) {
     const track = String(item?.track || '')
     if (!track) continue
-    tracks.set(track.toLowerCase(), {
+    const gameId = String(item?.gameId ?? 'acc')
+    tracks.set(gameScopedKey(gameId, track.toLowerCase()), {
+      gameId,
       track,
       sessions: Number(item?.sessions || 0),
       lastPlayed: item?.lastPlayed || ''
@@ -95,8 +101,9 @@ function mergeTracksSummary(existing: any[], deltas: UserProjectionDelta[]) {
     if (delta.status !== 'created') continue
     const track = String(delta.trackId || '')
     if (!track) continue
-    const key = track.toLowerCase()
-    const current = tracks.get(key) || { track, sessions: 0, lastPlayed: '' }
+    const gameId = delta.gameId ?? 'acc'
+    const key = gameScopedKey(gameId, track.toLowerCase())
+    const current = tracks.get(key) || { gameId, track, sessions: 0, lastPlayed: '' }
     current.sessions += 1
     if (delta.dateStart && delta.dateStart > current.lastPlayed) {
       current.lastPlayed = delta.dateStart

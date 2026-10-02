@@ -329,6 +329,7 @@ function sessionFromIndexEntry(entry: any): SessionDocument {
         fileName: '',
         uploadedAt: null,
         meta: {
+            gameId: entry.gameId ?? 'acc',
             track: entry.track,
             car: entry.car,
             date_start: entry.date,
@@ -446,6 +447,7 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
             fileName: '',
             uploadedAt: null,
             meta: {
+                gameId: entry.gameId ?? 'acc',
                 track: entry.track,
                 car: entry.car,
                 date_start: entry.date,
@@ -629,6 +631,7 @@ async function loadCloudIdentitySet(targetUserId: string): Promise<{ ids: Set<st
             for (const entry of list) {
                 if (entry?.id) ids.add(String(entry.id))
                 const logicalKey = buildLogicalSessionKey({
+                    gameId: entry?.gameId,
                     date_start: entry?.date,
                     track: entry?.track
                 })
