@@ -1,237 +1,13 @@
 <script setup lang="ts">
-// ============================================
-// DEV UPLOAD - Development panel for uploading JSON sessions
-// ============================================
-
 import { ref } from 'vue'
-import { doc, collection, serverTimestamp } from 'firebase/firestore'
-import { db } from '~/config/firebase'
-import { extractMetadata, generateSessionId } from '~/utils/sessionParser'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
-import { trackedDeleteDoc, trackedGetDoc, trackedGetDocs, trackedSetDoc } from '~/composables/useFirebaseTracker'
-import { invalidateTelemetryCaches } from '~/services/cache/telemetryCacheInvalidationService'
+import { importSessionFile } from '~/services/sync/sessionFileImportService'
 
-const CALLER = 'DevUpload'
-
-definePageMeta({
-  layout: false,
-  middleware: 'dev-tools'
-})
-
+definePageMeta({ layout: false, middleware: 'dev-tools' })
 const { currentUser, isAuthenticated } = useFirebaseAuth()
-
-// === STATE ===
 const uploadResults = ref<any[]>([])
 const isUploading = ref(false)
 const selectedFiles = ref<File[]>([])
-
-// Constants
-const CHUNK_SIZE = 400000
-
-// === HELPERS ===
-
-async function calculateHash(input: string): Promise<string> {
-  const data = new TextEncoder().encode(input)
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
-}
-
-function splitIntoChunks(str: string, size: number): string[] {
-  const chunks: string[] = []
-  for (let i = 0; i < str.length; i += size) {
-    chunks.push(str.slice(i, i + size))
-  }
-  return chunks
-}
-
-async function deleteOldChunks(uid: string, sessionId: string) {
-  try {
-    const chunksRef = collection(db, `users/${uid}/sessions/${sessionId}/rawChunks`)
-    const snapshot = await trackedGetDocs(chunksRef as any, CALLER)
-    const deletePromises = snapshot.docs.map(d => trackedDeleteDoc(d.ref, CALLER))
-    await Promise.all(deletePromises)
-  } catch (e: any) {
-    console.warn('[UPLOAD] Error deleting old chunks:', e.message)
-  }
-}
-
-async function getExistingSession(uid: string, sessionId: string) {
-  const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
-  const snap = await trackedGetDoc(sessionRef, CALLER)
-  return snap.exists() ? { id: sessionId, ...snap.data() } : null
-}
-
-// === TRACKBESTS UPDATE ===
-// Updates the trackBests collection when a new session is uploaded
-async function updateTrackBests(
-  uid: string, 
-  trackId: string, 
-  sessionId: string,
-  dateStart: string,
-  summary: any
-) {
-  const trackIdNorm = trackId.toLowerCase().replace(/\s+/g, '_')
-  const trackBestsRef = doc(db, `users/${uid}/trackBests/${trackIdNorm}`)
-  
-  try {
-    // Get existing trackBests
-    const existingSnap = await trackedGetDoc(trackBestsRef, CALLER)
-    const existing = existingSnap.exists() ? existingSnap.data() : null
-    
-    const gripConditions = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum']
-    // Support both formats: existing.bests (new) OR existing at root (legacy)
-    const newBests: Record<string, any> = existing?.bests || 
-      (existing ? Object.fromEntries(gripConditions.filter(g => existing[g]).map(g => [g, existing[g]])) : {})
-    let hasUpdates = false
-    
-    // Check each grip condition for improvements
-    gripConditions.forEach(grip => {
-      const sessionBest = summary.best_by_grip?.[grip]
-      if (!sessionBest) return
-      
-      if (!newBests[grip]) {
-        newBests[grip] = {
-          bestQualy: null, bestQualyTemp: null, bestQualySessionId: null, bestQualyDate: null,
-          bestRace: null, bestRaceTemp: null, bestRaceSessionId: null, bestRaceDate: null,
-          bestAvgRace: null, bestAvgRaceTemp: null, bestAvgRaceSessionId: null, bestAvgRaceDate: null
-        }
-      }
-      
-      // Check if new session has better qualy time
-      if (sessionBest.bestQualy && (!newBests[grip].bestQualy || sessionBest.bestQualy < newBests[grip].bestQualy)) {
-        newBests[grip].bestQualy = sessionBest.bestQualy
-        newBests[grip].bestQualyTemp = sessionBest.bestQualyTemp
-        newBests[grip].bestQualySessionId = sessionId
-        newBests[grip].bestQualyDate = dateStart
-        hasUpdates = true
-      }
-      
-      // Check if new session has better race time
-      if (sessionBest.bestRace && (!newBests[grip].bestRace || sessionBest.bestRace < newBests[grip].bestRace)) {
-        newBests[grip].bestRace = sessionBest.bestRace
-        newBests[grip].bestRaceTemp = sessionBest.bestRaceTemp
-        newBests[grip].bestRaceSessionId = sessionId
-        newBests[grip].bestRaceDate = dateStart
-        hasUpdates = true
-      }
-      
-      // Check if new session has better avg race time
-      if (sessionBest.bestAvgRace && (!newBests[grip].bestAvgRace || sessionBest.bestAvgRace < newBests[grip].bestAvgRace)) {
-        newBests[grip].bestAvgRace = sessionBest.bestAvgRace
-        newBests[grip].bestAvgRaceTemp = sessionBest.bestAvgRaceTemp
-        newBests[grip].bestAvgRaceSessionId = sessionId
-        newBests[grip].bestAvgRaceDate = dateStart
-        hasUpdates = true
-      }
-    })
-    
-    // Save if there were any updates
-    if (hasUpdates) {
-      await trackedSetDoc(trackBestsRef, {
-        trackId: trackIdNorm,
-        bests: newBests,
-        lastUpdated: serverTimestamp()
-      }, CALLER)
-      console.log(`[UPLOAD] ✅ Updated trackBests for ${trackIdNorm}`)
-    } else {
-      console.log(`[UPLOAD] ℹ️ No improvements for ${trackIdNorm}, skipping trackBests update`)
-    }
-    
-    return hasUpdates
-  } catch (e: any) {
-    console.warn(`[UPLOAD] ⚠️ Error updating trackBests for ${trackIdNorm}:`, e.message)
-    return false
-  }
-}
-
-// === UPLOAD LOGIC ===
-
-async function uploadSession(rawObj: any, rawText: string, fileName: string, uid: string) {
-  try {
-    // Zero-lap guard: skip sessions with no completed laps
-    const totalLaps = rawObj.session_info?.laps_total || 0
-    if (totalLaps === 0) {
-      return {
-        status: 'skipped',
-        fileName,
-        reason: 'Session has 0 laps (empty session)'
-      }
-    }
-
-    // Owner validation
-    const fileOwnerId = rawObj.ownerId || null
-    if (fileOwnerId && fileOwnerId !== uid) {
-      return {
-        status: 'skipped',
-        fileName,
-        reason: `Owner mismatch (file: ${fileOwnerId.substring(0, 8)}..., you: ${uid.substring(0, 8)}...)`
-      }
-    }
-
-    const { meta, summary } = extractMetadata(rawObj, { allowLegacyFallback: true })
-    const sessionId = generateSessionId(meta.date_start, meta.track, meta.gameId, meta)
-    const fileHash = await calculateHash(rawText)
-    const existing = await getExistingSession(uid, sessionId)
-
-    let isUpdate = false
-    let chunksNeedUpdate = true
-    
-    if (existing) {
-      isUpdate = true
-      // Only rewrite chunks if content actually changed
-      if ((existing as any).fileHash === fileHash) {
-        chunksNeedUpdate = false
-      } else {
-        await deleteOldChunks(uid, sessionId)
-      }
-    }
-
-    const chunks = splitIntoChunks(rawText, CHUNK_SIZE)
-
-    // Save session document (always update to refresh summary)
-    const sessionRef = doc(db, `users/${uid}/sessions/${sessionId}`)
-    await trackedSetDoc(sessionRef, {
-      fileHash,
-      fileName,
-      uploadedAt: serverTimestamp(),
-      meta,
-      summary,
-      rawChunkCount: chunks.length,
-      rawSizeBytes: rawText.length,
-      rawEncoding: 'json-string',
-      version: ((existing as any)?.version || 0) + 1
-    }, CALLER)
-
-    // Save upload reference
-    const uploadRef = doc(db, `users/${uid}/uploads/${fileHash}`)
-    await trackedSetDoc(uploadRef, { fileName, uploadedAt: serverTimestamp(), sessionId }, CALLER)
-
-    // Save chunks only if needed
-    if (chunksNeedUpdate) {
-      for (let idx = 0; idx < chunks.length; idx++) {
-        const chunkRef = doc(db, `users/${uid}/sessions/${sessionId}/rawChunks/${idx}`)
-        await trackedSetDoc(chunkRef, { idx, chunk: chunks[idx] }, CALLER)
-      }
-    }
-
-    // === TRACKBESTS UPDATE ===
-    // Update trackBests collection with this session's best times
-    const trackBestsUpdated = await updateTrackBests(uid, meta.track, sessionId, meta.date_start, summary)
-
-    return {
-      status: isUpdate ? (chunksNeedUpdate ? 'updated' : 'refreshed') : 'created',
-      fileName,
-      sessionId,
-      meta,
-      summary,
-      trackBestsUpdated
-    }
-
-  } catch (error: any) {
-    return { status: 'error', fileName, error: error.message }
-  }
-}
 
 // === FILE HANDLERS ===
 
@@ -272,17 +48,13 @@ async function uploadSelectedFiles() {
 
   for (const file of selectedFiles.value) {
     try {
-      const rawText = await file.text()
-      const rawObj = JSON.parse(rawText)
-      const result = await uploadSession(rawObj, rawText, file.name, uid)
+      const result = await importSessionFile(file, uid, () => {
+        if (currentUser.value?.uid !== uid) throw new Error('Account cambiato durante importazione')
+      })
       uploadResults.value.push(result)
     } catch (e: any) {
       uploadResults.value.push({ status: 'error', fileName: file.name, error: e.message })
     }
-  }
-
-  if (uploadResults.value.some((result) => ['created', 'updated', 'refreshed'].includes(result.status))) {
-    invalidateTelemetryCaches({ uid, scope: 'sync' })
   }
 
   isUploading.value = false

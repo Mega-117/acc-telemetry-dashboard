@@ -7,6 +7,7 @@ const model = computed(() => commonSessionPresentation(props.session))
 
 <template>
   <section class="common-session racing-data">
+    <slot name="actions" />
     <template v-if="model">
       <p class="eyebrow">{{ model.game }} · SESSIONE</p>
       <h1>{{ model.track }}</h1>

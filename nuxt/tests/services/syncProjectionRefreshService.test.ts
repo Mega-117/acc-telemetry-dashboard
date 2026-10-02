@@ -85,6 +85,17 @@ describe('refreshSyncProjections', () => {
   })
 
   // PIP-444: due scritture sullo stesso documento nel piano = un documento Firestore.
+  it('preserves game identity in the full-history fallback', async () => {
+    const session = { sessionId: 'evo-s', meta: { gameId: 'evo', track: 'Spa', car: 'Mercedes', date_start: '2026-10-02' }, summary: { bestLap: 131000 } }
+    const input = params(async () => [session] as any)
+    input.trackBestDeltas = []
+    input.userProjectionDeltas = []
+    await refreshSyncProjections(input)
+    expect(mocks.applyTrackBestsProjectionDeltas).toHaveBeenCalledWith(expect.objectContaining({
+      deltas: [expect.objectContaining({ gameId: 'evo', sessionId: 'evo-s' })]
+    }))
+  })
+
   it('combineProjectionWrites: unisce mergeFields, fonde merge, un set pieno vince', () => {
     const bests = { ref: 'p', data: { schemaVersion: 1, trackId: 't', bests: { a: 1 }, updatedAt: 'x' }, options: { mergeFields: ['schemaVersion', 'trackId', 'bests', 'updatedAt'] } }
     const detail = { ref: 'p', data: { schemaVersion: 1, trackId: 't', detail: { b: 2 }, updatedAt: 'y' }, options: { mergeFields: ['schemaVersion', 'trackId', 'detail', 'updatedAt'] } }

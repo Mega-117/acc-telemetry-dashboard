@@ -1,0 +1,67 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+const mocks = vi.hoisted(() => ({ upload: vi.fn(), refresh: vi.fn(), invalidate: vi.fn(), mirror: vi.fn(), batch: { set: vi.fn(), commit: vi.fn() }, get: vi.fn(), list: vi.fn(), set: vi.fn(), options: null as any }))
+vi.mock('~/config/firebase', () => ({ db: {} }))
+vi.mock('firebase/firestore', () => ({ doc: (_db: unknown, path: string) => path, collection: (_db: unknown, path: string) => path }))
+vi.mock('~/composables/useFirebaseTracker', () => ({ trackedGetDoc: mocks.get, trackedGetDocs: mocks.list, trackedSetDoc: mocks.set, trackedWriteBatch: () => mocks.batch }))
+vi.mock('~/services/sync/sessionUploadService', () => ({ createSessionUploadService: (options: any) => { mocks.options = options; return { uploadOrUpdateSession: mocks.upload } } }))
+vi.mock('~/services/sync/syncProjectionRefreshService', () => ({ refreshSyncProjections: mocks.refresh }))
+vi.mock('~/services/sync/ownerDataRepairService', () => ({ loadOwnerSessions: vi.fn() }))
+vi.mock('~/services/cache/telemetryCacheInvalidationService', () => ({ invalidateTelemetryCaches: mocks.invalidate }))
+vi.mock('~/services/sync/syncMirrorService', () => ({ invalidateSyncMirror: mocks.mirror }))
+import { importSessionFile } from '~/services/sync/sessionFileImportService'
+
+describe('manual recording import', () => {
+  const raw = { schema: 'racercore.session', version: 1, game_id: 'evo', ownerId: 'qa' }
+  const file = (value = raw) => ({ name: 'session_qa.json', text: async () => JSON.stringify(value) })
+  beforeEach(() => { vi.clearAllMocks(); mocks.upload.mockResolvedValue({ status: 'created' }); mocks.refresh.mockResolvedValue({}); })
+  it('passes the original recording and owner to canonical upload then repairs projections', async () => {
+    const guard = vi.fn()
+    await expect(importSessionFile(file(), 'qa', guard)).resolves.toEqual({ status: 'created' })
+    expect(mocks.upload).toHaveBeenCalledWith(raw, JSON.stringify(raw), 'session_qa.json', 'qa')
+    expect(mocks.options.assertActive).toBe(guard)
+    const options = mocks.refresh.mock.calls[0]![0]
+    expect(options.uid).toBe('qa')
+    expect(options.rebuildTrackBests).toBeUndefined()
+    expect(mocks.mirror).toHaveBeenCalledWith('qa')
+    await expect(options.resetAllTrackBests()).rejects.toThrow('destructive')
+    options.clearTrackDerivedCaches()
+    mocks.get.mockResolvedValue({ exists: () => true, data: () => ({ version: 1 }) })
+    expect(await mocks.options.getExistingSession('qa', 's')).toEqual({ version: 1 })
+    mocks.get.mockResolvedValue({ exists: () => false })
+    expect(await mocks.options.getExistingSession('qa', 's')).toBeNull()
+    mocks.list.mockResolvedValue({ docs: [{ id: '0', ref: 'chunk' }] })
+    expect(await mocks.options.listExistingChunks('qa', 's')).toEqual([{ id: '0', ref: 'chunk' }])
+    expect(await mocks.options.loadRegistryCache()).toEqual({})
+    expect(mocks.options.canSkipViaRegistry()).toBe(false)
+    await options.getDocFn('r'); await options.setDocFn('r', {}); await options.setDocFn('r', {}, { merge: true })
+    await options.commitWrites([{ ref: 'r', data: {} }, { ref: 's', data: {}, options: { merge: true } }])
+    expect(mocks.batch.commit).toHaveBeenCalledOnce()
+  })
+  it.each(['created', 'updated', 'unchanged'])('repairs projections after %s, including retry of an interrupted import', async status => {
+    mocks.upload.mockResolvedValue({ status })
+    await importSessionFile(file(), 'qa', () => {})
+    expect(mocks.refresh).toHaveBeenCalledOnce()
+  })
+  it('rejects unknown schemas and changed owner before writes', async () => {
+    await expect(importSessionFile(file({ ...raw, version: 2 }), 'qa', () => {})).rejects.toThrow('non supportato')
+    await expect(importSessionFile(file(), 'qa', () => { throw new Error('owner changed') })).rejects.toThrow('owner changed')
+    expect(mocks.upload).not.toHaveBeenCalled()
+  })
+  it.each(['owner_mismatch', 'owner_missing', 'zero_laps'])('does not build projections for rejected %s', async reason => {
+    mocks.upload.mockResolvedValue({ status: 'skipped', reason })
+    await importSessionFile(file(), 'qa', () => {})
+    expect(mocks.refresh).not.toHaveBeenCalled()
+    expect(mocks.invalidate).not.toHaveBeenCalled()
+  })
+  it('retains committed evidence and invalidates caches when upload reports a postcommit error', async () => {
+    mocks.upload.mockResolvedValue({ status: 'error', committedStatus: 'created', error: 'owner changed' })
+    expect((await importSessionFile(file(), 'qa', () => {})).status).toBe('error')
+    expect(mocks.mirror).toHaveBeenCalledWith('qa')
+    expect(mocks.refresh).not.toHaveBeenCalled()
+  })
+  it('propagates projection failure so UI does not claim completion', async () => {
+    mocks.refresh.mockRejectedValueOnce(new Error('projection denied'))
+    await expect(importSessionFile(file(), 'qa', () => {})).rejects.toThrow('projection denied')
+    expect(mocks.invalidate).toHaveBeenCalled()
+  })
+})

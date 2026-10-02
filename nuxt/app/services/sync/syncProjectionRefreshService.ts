@@ -11,6 +11,7 @@ import {
 } from './syncMirrorService'
 import { extractOwnerRevision } from '~/services/cache/ownerRevision'
 import type { SessionDocument } from '~/types/telemetry'
+import { sessionGame } from '~/services/telemetry/gameIdentity'
 
 export interface ProjectionWrite {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- injected Firestore boundary
@@ -257,6 +258,7 @@ export async function refreshSyncProjections(params: {
       indexMode: 'full',
       getDocFn: async () => ({ exists: () => false }),
       deltas: freshSessions.filter(session => session.meta?.track && session.sessionId).map(session => ({
+        gameId: sessionGame(session) ?? 'unknown',
         trackId: session.meta.track, sessionId: session.sessionId,
         dateStart: session.meta.date_start, car: session.meta.car, summary: session.summary
       }))

@@ -103,6 +103,19 @@ describe('session upload raw chunk atomicity', () => {
     expect(new Set(documents.map((call: any[]) => call[0].path)).size).toBe(2)
   })
 
+  it('does not rewrite shared data on a whitespace-only export/reimport', async () => {
+    const raw = canonicalRaw()
+    const hash = '00'.repeat(32)
+    const service = createSessionUploadService({ db: {}, chunkSize: 400000,
+      getExistingSession: async () => ({ fileHash: 'different-format', rawDataHash: hash, summaryHash: hash,
+        summaryRulesVersion: BEST_RULES_VERSION, isPublic: true, version: 7, rawChunkCount: 1 }),
+      loadRegistryCache: async () => ({}), canSkipViaRegistry: () => false, listExistingChunks: vi.fn() })
+    const result = await service.uploadOrUpdateSession(raw, JSON.stringify(raw, null, 2), 'session_export.json', 'pilot-a')
+    expect(result).toMatchObject({ status: 'unchanged', reason: 'recording_hash_match' })
+    expect(mocks.batch.set).not.toHaveBeenCalled()
+    expect(mocks.batch.commit).not.toHaveBeenCalled()
+  })
+
   it('sostituisce chunk e tail obsoleti nello stesso unico batch', async () => {
     const raw = canonicalRaw()
     const rawText = JSON.stringify(raw)

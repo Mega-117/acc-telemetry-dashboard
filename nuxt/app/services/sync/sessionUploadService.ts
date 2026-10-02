@@ -210,6 +210,11 @@ export function createSessionUploadService(params: {
           const existingRulesVersion = getExistingRulesVersion(existing)
           const needsRulesMigration = existingRulesVersion < requiredRulesVersion
           const existingRawDataHash = String(existing.rawDataHash || '')
+          // Export formatting changes the file hash, not the recording. Avoid
+          // rewriting identical chunks (and their sharing flags) on reimport.
+          if (!needsRulesMigration && existingRawDataHash === rawDataHash && existing.summaryHash === summaryHash) {
+            return { status: 'unchanged' as const, fileName, sessionId, reason: 'recording_hash_match', cloudState: cloudStateFromSessionDocument(sessionId, existing) }
+          }
           const registryMatchesExistingUpload = !!registryEntry
             && registryEntry.uploadedBy === uid
             && registryEntry.sessionId === sessionId

@@ -42,6 +42,8 @@ import { runSessionValidation } from '~/composables/useDebugValidator'
 import { usePilotContext } from '~/composables/usePilotContext'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { shareSessionLink } from '~/services/session-detail/sessionShareService'
+import { canShareOwnedSession, downloadSession } from '~/services/session-detail/sessionFileService'
+import SessionFileActions from '~/components/session-detail/SessionFileActions.vue'
 import { autoSelectComparisonStints } from '~/services/session-detail/sessionCompareService'
 import { canUseAccRules } from '~/services/telemetry/gameIdentity'
 import CommonSessionDetail from '~/components/sessions/CommonSessionDetail.vue'
@@ -185,14 +187,22 @@ const loadError = ref<string | null>(null)
 // ========================================
 const isSharing = ref(false)
 const shareSuccess = ref(false)
+const fileActionError = ref<string | null>(null)
+const canShare = computed(() => canShareOwnedSession(comparisonCurrentUser.value?.uid, props.externalUserId || targetUserId.value))
+function exportSession() {
+  fileActionError.value = null
+  try { downloadSession(commonSession.value || fullSession.value, props.sessionId) }
+  catch (error) { fileActionError.value = error instanceof Error ? error.message : 'Esportazione non riuscita' }
+}
 const showAutoSelectToast = ref(false)
 let autoSelectToastTimer: ReturnType<typeof setTimeout> | null = null
 
 async function shareSession() {
-  if (!props.sessionId || isSharing.value) return
+  if (!props.sessionId || isSharing.value || !canShare.value) return
 
   isSharing.value = true
   shareSuccess.value = false
+  fileActionError.value = null
 
   try {
     const link = await shareSessionLink({
@@ -207,6 +217,7 @@ async function shareSession() {
       shareSuccess.value = false
     }, 2000)
   } catch (e) {
+    fileActionError.value = 'Condivisione non riuscita. Riprova dalla tua sessione sincronizzata.'
     console.error('[SHARE] Error sharing session:', e)
   } finally {
     isSharing.value = false
@@ -2328,7 +2339,11 @@ const gripZones = computed(() => {
 </script>
 
 <template>
-  <CommonSessionDetail v-if="commonSession" :session="commonSession" />
+  <CommonSessionDetail v-if="commonSession" :session="commonSession">
+    <template #actions>
+      <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" @export="exportSession" />
+    </template>
+  </CommonSessionDetail>
   <div v-else class="session-detail-wrapper">
   <!-- Share Success Notification (teleported to body for fixed position) -->
   <Teleport to="body">
@@ -2383,9 +2398,7 @@ const gripZones = computed(() => {
         Apri pista
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
       </button>
-        <button class="share-session-btn" @click="shareSession" title="Condividi questa sessione">
-          Condividi
-        </button>
+        <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" @export="exportSession" />
       </div>
       <div class="header-meta">
         <span>{{ session.date }}</span>
