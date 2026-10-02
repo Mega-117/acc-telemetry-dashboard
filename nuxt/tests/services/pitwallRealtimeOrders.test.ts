@@ -8,7 +8,8 @@ describe('concurrent send diagnosis', () => {
   it.each(['active', 'expired', 'other-driver', 'unreadable'])('only explains a confirmed active target lease: %s', async state => {
     const denied = new Error('PERMISSION_DENIED: Permission denied')
     const write = vi.fn().mockRejectedValue(denied)
-    const read = vi.fn(async () => {
+    const read = vi.fn(async (path: string) => {
+      if (path.includes('/mfd/')) return null // Legacy Standard peer.
       if (state === 'unreadable') throw denied
       return { uid: state === 'other-driver' ? 'someone-else' : 'driver', connectionId: 'dc', orderId: 'first',
         leaseUntilMs: state === 'expired' ? 900 : 2000 }
@@ -24,6 +25,25 @@ describe('concurrent send diagnosis', () => {
       ? 'Il pilota sta applicando un’altra strategia. Attendi l’esito, poi invia di nuovo manualmente.' : denied.message)
     expect(write).toHaveBeenCalledOnce()
     expect(read).toHaveBeenCalledWith('rooms/room/control/driver/claim')
+  })
+})
+
+describe('declared simulator command capabilities', () => {
+  it.each(['unsupported', 'reconnected', 'available'])('checks Standard before publishing: %s', async mode => {
+    let connectionId = 'dc'
+    const write = vi.fn()
+    const read = vi.fn(async () => {
+      if (mode === 'reconnected') connectionId = 'new'
+      return { uid: 'driver', connectionId: 'dc', strategy: { applicationMethods: mode === 'unsupported' ? [] : ['standard'] } }
+    })
+    const io = { namespace: 'pitwallRoomsV1', online: () => true, serverNow: () => 1000, read, write }
+    const orders = createPitwallRealtimeOrders({ io: io as unknown as PitwallRealtimeTransport,
+      session: { uid: 'engineer', isReady: () => true, connectionId: () => 'ec' } as unknown as PitwallRealtimeSession,
+      connections: () => [{ protocolVersion: 3, uid: 'driver', connectionId, runtimeSessionId: 'runtime',
+        roomId: 'room', nickname: 'Driver', kind: 'driver', driving: true, sourceValid: true, updatedAt: 1000 }] })
+    const result = await orders.sendOrder('room', { orderId: 'command', revision: 1, plan: { fuelToAdd: 15 }, targetUid: 'driver' })
+    expect(result.ok).toBe(mode === 'available')
+    expect(write).toHaveBeenCalledTimes(mode === 'available' ? 1 : 0)
   })
 })
 describe('order confirmation deadline', () => {

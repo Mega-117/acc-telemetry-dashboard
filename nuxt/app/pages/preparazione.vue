@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useGameContext } from '~/composables/useGameContext'
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -757,8 +756,7 @@ const activeStep = computed(() => {
 </script>
 
 <template>
-  <PagesCommonGamePage v-if="useGameContext().consultedGame.value !== 'acc'" surface="preparazione" />
-  <LayoutPageContainer v-else>
+  <LayoutPageContainer>
     <div class="prep-page" :class="toneClass">
       <nav class="training-tabs" aria-label="Cambia allenamento">
         <button
@@ -795,7 +793,7 @@ const activeStep = computed(() => {
 
         <div class="quick-facts" aria-label="Setup allenamento">
           <div>
-            <span>Modalita ACC</span>
+            <span>Modalita di sessione</span>
             <strong>{{ selectedPlan.sessionType }}</strong>
           </div>
           <div>

@@ -52,6 +52,8 @@ export default defineConfig({
         'app/services/telemetry/commonLive.ts',
         'app/services/telemetry/featureAvailability.ts',
         'app/services/telemetry/trainingAvailability.ts',
+        'app/services/telemetry/racePlan.ts',
+        'app/components/pages/GaraPage.vue',
         'app/services/telemetry/commonSessionAnalysis.ts',
         'app/services/spotter/audioSourceContext.ts',
         'app/services/telemetry/commonFastPresentation.ts',

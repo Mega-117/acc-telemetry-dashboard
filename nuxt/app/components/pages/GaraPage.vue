@@ -1,190 +1,90 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
+import { useGameContext } from '~/composables/useGameContext'
+import { useFastStatePoller } from '~/composables/useFastStatePoller'
+import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
+import { commonContextKey } from '~/services/telemetry/commonLive'
+import { calculateRacePlan, racePlanLiveInputs } from '~/services/telemetry/racePlan'
+import { gameLabel } from '~/services/telemetry/gameCatalog'
 
-const router = useRouter()
-const route = useRoute()
-const telemetryGateway = useTelemetryGateway()
-void telemetryGateway
-
-const getQueryValue = (value: unknown, fallback: string) => {
-  if (typeof value === 'string' && value.trim()) return value.trim()
-  if (Array.isArray(value) && typeof value[0] === 'string' && value[0].trim()) return value[0].trim()
-  return fallback
+const router = useRouter(), route = useRoute()
+const { consultedGame } = useGameContext()
+const { fastState, startFastStatePolling, stopFastStatePolling } = useFastStatePoller(useOverlayRegionApi())
+onMounted(startFastStatePolling)
+onBeforeUnmount(stopFastStatePolling)
+const query = (name: string) => typeof route.query[name] === 'string' ? route.query[name] as string : ''
+const pista = ref(query('pista')), auto = ref(query('auto')), variante = ref('')
+const durataMinuti = ref<number | string>(60), tempoGiro = ref<number | string>('')
+const consumo = ref<number | string>(''), riservaGiri = ref<number | string>(0), soste = ref<number | string>(0)
+const importedSource = ref<string | null>(null)
+const live = computed(() => racePlanLiveInputs(fastState.value.commonLive, consultedGame.value))
+const number = (value: number | string) => value === '' ? null : Number(value)
+const plan = computed(() => calculateRacePlan({ durationMinutes: number(durataMinuti.value), lapSeconds: number(tempoGiro.value),
+  fuelPerLap: number(consumo.value), reserveLaps: number(riservaGiri.value) ?? NaN, stops: number(soste.value) ?? NaN }))
+const liters = (value: number | null) => value === null ? '—' : `${value.toFixed(1)} L`
+function useLiveInputs() {
+  const inputs = live.value
+  if (!inputs) return
+  pista.value = inputs.track; auto.value = inputs.car; variante.value = inputs.variant ?? ''
+  tempoGiro.value = inputs.lapSeconds ?? ''; consumo.value = inputs.fuelPerLap ?? ''
+  importedSource.value = commonContextKey(fastState.value.commonLive)
 }
-
-const baseTrackOptions = ['Monza', 'Spa-Francorchamps', 'Imola', 'Paul Ricard', 'Suzuka']
-const baseCarOptions = ['Ferrari 296 GT3', 'McLaren 720S GT3 Evo', 'Porsche 992 GT3 R', 'Aston Martin V8 Vantage GT3']
-
-const optionMatches = (options: string[], selected: string) => {
-  const normalizedSelected = selected.trim().toLowerCase()
-  return options.some(option => option.trim().toLowerCase() === normalizedSelected)
+function clearContext() {
+  pista.value = ''; auto.value = ''; variante.value = ''; tempoGiro.value = ''; consumo.value = ''
+  importedSource.value = null
 }
-
-const canonicalOption = (options: string[], selected: string) => {
-  return options.find(option => option.trim().toLowerCase() === selected.trim().toLowerCase()) || selected
-}
-
-// Form Data
-const pista = ref(canonicalOption(baseTrackOptions, getQueryValue(route.query.pista, 'Monza')))
-const durataMinuti = ref(60)
-const sostaObbligatoria = ref(true)
-const auto = ref(canonicalOption(baseCarOptions, getQueryValue(route.query.auto, 'Ferrari 296 GT3')))
-const targetPasso = ref('1:48.500')
-
-const trackOptions = computed(() => {
-  return optionMatches(baseTrackOptions, pista.value) ? baseTrackOptions : [pista.value, ...baseTrackOptions]
-})
-
-const carOptions = computed(() => {
-  return optionMatches(baseCarOptions, auto.value) ? baseCarOptions : [auto.value, ...baseCarOptions]
-})
-
-const selectedTrackLabel = computed(() => {
-  return baseTrackOptions.find(option => option.trim().toLowerCase() === pista.value.trim().toLowerCase()) || pista.value
-})
-
-const selectedCarLabel = computed(() => {
-  return baseCarOptions.find(option => option.trim().toLowerCase() === auto.value.trim().toLowerCase()) || auto.value
-})
-
-// Fuel Estimation (mock logic for MVP)
-const consumoMedio = ref(3.1) // L/lap
-const tempoGiroStimato = ref(108) // 1:48 in seconds
-const extraGiri = ref(2)
-
-const giriTotali = computed(() => {
-  return Math.ceil((durataMinuti.value * 60) / tempoGiroStimato.value)
-})
-
-const fuelTotale = computed(() => {
-  return Math.ceil((giriTotali.value + extraGiri.value) * consumoMedio.value)
-})
-
-const fuelPerStint = computed(() => {
-  if (sostaObbligatoria.value) {
-    return Math.ceil(fuelTotale.value / 2) + 5 // +5L margin per stint
-  }
-  return fuelTotale.value
-})
-
-const stintPlan = computed(() => {
-  if (sostaObbligatoria.value) {
-    return [
-      { id: 1, type: 'Start', fuel: fuelPerStint.value, laps: Math.ceil(giriTotali.value / 2), tires: 'Nuove' },
-      { id: 2, type: 'Pit Stop', fuel: fuelPerStint.value, laps: giriTotali.value - Math.ceil(giriTotali.value / 2), tires: 'Nuove' }
-    ]
-  } else {
-    return [
-      { id: 1, type: 'Race', fuel: fuelTotale.value, laps: giriTotali.value, tires: 'Nuove' }
-    ]
-  }
+watch(consultedGame, clearContext)
+watch(() => commonContextKey(fastState.value.commonLive), key => {
+  if (importedSource.value && key !== importedSource.value) clearContext()
 })
 </script>
 
 <template>
   <LayoutPageContainer>
     <div class="gara-header">
-      <button class="nav-btn" @click="router.push('/panoramica')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-        Torna alla Home
-      </button>
-      <h1 class="page-title">Preparazione Gara</h1>
-      <p class="subtitle">Pianifica la tua strategia e definisci i target.</p>
+      <button class="nav-btn" @click="router.push('/panoramica')">Torna alla Home</button>
+      <h1 class="page-title">Preparazione Gara · {{ gameLabel(consultedGame) }}</h1>
+      <p class="subtitle">Pianifica durata, passo e carichi dai tuoi parametri.</p>
     </div>
-
     <div class="gara-layout">
-      <!-- SINISTRA: Parametri -->
       <div class="gara-sidebar card-panel">
         <h2 class="section-title">Parametri Evento</h2>
-        
-        <div class="form-group">
-          <label>Pista</label>
-          <select v-model="pista" class="form-control">
-            <option v-for="trackOption in trackOptions" :key="trackOption">{{ trackOption }}</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label>Auto</label>
-          <select v-model="auto" class="form-control">
-            <option v-for="carOption in carOptions" :key="carOption">{{ carOption }}</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label>Durata Gara (minuti)</label>
-          <input type="number" v-model="durataMinuti" class="form-control" />
-        </div>
-
-        <div class="form-group checkbox-group">
-          <input type="checkbox" id="pit" v-model="sostaObbligatoria" />
-          <label for="pit">Sosta Obbligatoria (Cambio Gomme)</label>
-        </div>
-
-        <div class="form-group">
-          <label>Target Passo Gara</label>
-          <input type="text" v-model="targetPasso" class="form-control" placeholder="es. 1:48.500" />
-        </div>
+        <button class="nav-btn" :disabled="!live" @click="useLiveInputs">Usa dati del gioco connesso</button>
+        <p v-if="!live" role="status">Nessuna sorgente aggiornata per il gioco consultato. Puoi inserire i parametri manualmente.</p>
+        <div class="form-group"><label for="race-track">Pista</label><input id="race-track" v-model="pista" class="form-control"></div>
+        <div class="form-group"><label for="race-variant">Variante</label><input id="race-variant" v-model="variante" class="form-control"></div>
+        <div class="form-group"><label for="race-car">Auto</label><input id="race-car" v-model="auto" class="form-control"></div>
+        <div class="form-group"><label for="race-duration">Durata gara (minuti)</label><input id="race-duration" v-model="durataMinuti" type="number" min="1" class="form-control"></div>
+        <div class="form-group"><label for="race-pace">Passo previsto (secondi per giro)</label><input id="race-pace" v-model="tempoGiro" type="number" min="0.001" step="0.001" placeholder="es. 108.500" class="form-control"></div>
+        <div class="form-group"><label for="race-fuel">Consumo (litri per giro)</label><input id="race-fuel" v-model="consumo" type="number" min="0.001" step="0.01" placeholder="Se disponibile" class="form-control"></div>
+        <div class="form-group"><label for="race-stops">Soste pianificate</label><input id="race-stops" v-model="soste" type="number" min="0" max="20" class="form-control"></div>
+        <div class="form-group"><label for="race-reserve">Giri di riserva per stint</label><input id="race-reserve" v-model="riservaGiri" type="number" min="0" max="100" class="form-control"></div>
       </div>
-
-      <!-- DESTRA: Strategia Generata -->
       <div class="gara-content">
-        
-        <div class="insight-banner card-panel positive">
-          <h2 class="section-title">Piano di Gara Generato</h2>
-          <p>La strategia ottimale per <strong>{{ durataMinuti }} minuti</strong> a <strong>{{ selectedTrackLabel }}</strong> con <strong>{{ selectedCarLabel }}</strong>.</p>
+        <div class="insight-banner card-panel">
+          <h2 class="section-title">Piano stimato</h2>
+          <p>{{ pista || 'Pista da scegliere' }}{{ variante ? ` · ${variante}` : '' }} · {{ auto || 'Auto da scegliere' }}</p>
+          <p>Ripartizione uniforme dei giri tra le soste scelte. Verifica regolamento, capienza del serbatoio, rifornimenti e gomme per il tuo evento.</p>
+          <p v-if="importedSource">Parametri copiati dalla sessione connessa; puoi correggerli per la gara.</p>
         </div>
-
         <div class="stats-grid">
-          <div class="stat-card">
-            <span class="stat-label">Giri Stimati</span>
-            <span class="stat-value">{{ giriTotali }}</span>
-          </div>
-          <div class="stat-card highlight">
-            <span class="stat-label">Fuel Totale Richiesto</span>
-            <span class="stat-value">{{ fuelTotale }} L</span>
-          </div>
-          <div class="stat-card">
-            <span class="stat-label">Fuel per Stint</span>
-            <span class="stat-value">{{ fuelPerStint }} L</span>
-          </div>
+          <div class="stat-card"><span class="stat-label">Giri stimati</span><span class="stat-value" data-test="race-laps">{{ plan.laps ?? '—' }}</span></div>
+          <div class="stat-card"><span class="stat-label">Carichi totali, riserva inclusa</span><span class="stat-value" data-test="race-fuel">{{ liters(plan.fuel) }}</span></div>
         </div>
-
-        <div class="card-panel">
-          <h3 class="subsection-title">Stint Plan</h3>
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Stint</th>
-                <th>Fase</th>
-                <th>Carburante</th>
-                <th>Giri (stimati)</th>
-                <th>Gomme</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="stint in stintPlan" :key="stint.id">
-                <td>#{{ stint.id }}</td>
-                <td>{{ stint.type }}</td>
-                <td>{{ stint.fuel }} L</td>
-                <td>~{{ stint.laps }}</td>
-                <td>{{ stint.tires }}</td>
-              </tr>
-            </tbody>
+        <p v-if="plan.laps === null" role="status">Inserisci durata, passo e un numero di soste compatibile con i giri stimati.</p>
+        <p v-else-if="plan.fuel === null" role="status">Consumo non disponibile: la stima dei giri resta utilizzabile.</p>
+        <div v-if="plan.stints.length" class="card-panel">
+          <h3 class="subsection-title">Stint pianificati</h3>
+          <table class="data-table"><thead><tr><th>Stint</th><th>Giri</th><th>Carico con riserva</th></tr></thead>
+            <tbody><tr v-for="stint in plan.stints" :key="stint.id"><td>{{ stint.id }}</td><td>{{ stint.laps }}</td><td>{{ liters(stint.fuel) }}</td></tr></tbody>
           </table>
         </div>
-
-        <div class="card-panel checklist">
-          <h3 class="subsection-title">Checklist Pre-Gara</h3>
-          <ul>
-            <li><input type="checkbox"> Pressioni settate per le temperature previste</li>
-            <li><input type="checkbox"> Mappatura motore impostata su Gara</li>
-            <li><input type="checkbox"> Brake bias regolato per serbatoio pieno</li>
-            <li><input type="checkbox"> Pit stop macro configurata sul volante</li>
-          </ul>
-        </div>
+        <div class="card-panel checklist"><h3 class="subsection-title">Prima della gara</h3><ul>
+          <li><label><input type="checkbox"> Regolamento e soste verificati</label></li>
+          <li><label><input type="checkbox"> Parametri provati con la stessa auto e variante</label></li>
+          <li><label><input type="checkbox"> Comandi disponibili verificati nel gioco</label></li>
+        </ul></div>
       </div>
     </div>
   </LayoutPageContainer>
