@@ -284,6 +284,7 @@ const dashboardRoutePrefixes = [
   '/profilo',
   '/impostazioni',
   '/preparazione',
+  '/gara',
   '/piloti',
   '/admin',
   '/admin-diagnostics'
