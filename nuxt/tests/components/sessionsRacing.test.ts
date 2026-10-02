@@ -38,6 +38,21 @@ beforeEach(() => {
 afterEach(() => { disposeScrollbars(); wrappers.splice(0).forEach(w => w.unmount()); vi.useRealTimers() })
 
 describe('Sessioni racing single table', () => {
+  it('keeps named common qualifications visible and unknown kinds out of the filter', async () => {
+    const common = (id: string, sessionKind: string) => {
+      const row = session(id, '2026-09-25', 1)
+      return { ...row, meta: { ...row.meta, gameId: 'evo', sessionKind } }
+    }
+    fake.gateway.pagerSessions.value = [common('declared-qualify', 'qualify'), common('unknown', 'unknown')]
+    const w = render(); await flushPromises()
+    await w.get('[aria-label="Filtra gioco"]').setValue('evo')
+    expect(w.findAll('tbody tr')).toHaveLength(2)
+    await w.findAll('.racing-filter-tabs button')[2]!.trigger('click')
+    expect(w.findAll('tbody tr')).toHaveLength(1)
+    expect(w.get('.session-open').attributes('aria-label')).toContain('QUALIFICA')
+    await w.get('.session-open').trigger('click')
+    expect(w.emitted('go-to-session')).toEqual([['declared-qualify']])
+  })
   it('uses the prepared page immediately without a second initial request', async () => {
     const w = render(true)
     expect(w.find('.sessions-pagination').exists()).toBe(true)

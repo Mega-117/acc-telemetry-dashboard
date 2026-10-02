@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recordingGame, sessionGame, gameScopedKey, canUseAccRules } from '../../app/services/telemetry/gameIdentity'
+import { recordingGame, sessionGame, gameScopedKey, canUseAccRules, sessionFilterType } from '../../app/services/telemetry/gameIdentity'
 import { extractMetadata, generateSessionId } from '../../app/utils/sessionParser'
 
 const legacy = {
@@ -8,6 +8,16 @@ const legacy = {
 }
 
 describe('game identity', () => {
+  it('filters declared common kinds without borrowing numeric enums from another game', () => {
+    for (const [sessionKind, expected] of [['practice', 0], ['qualify', 1], ['race', 2]] as const) {
+      expect(sessionFilterType({ meta: { gameId: 'evo', sessionKind, session_type: 99 } })).toBe(expected)
+    }
+    expect(sessionFilterType({ meta: { gameId: 'synthetic', session_type: 1 } })).toBeNull()
+    expect(sessionFilterType({ meta: { gameId: 'evo', sessionKind: 'unknown', session_type: 0 } })).toBeNull()
+    expect(sessionFilterType({ meta: legacy.session_info })).toBe(0)
+    expect(sessionFilterType({ meta: { gameId: 'acc', session_type: 2 } })).toBe(2)
+    expect(sessionFilterType({ meta: { gameId: 'unknown', sessionKind: 'race' } })).toBeNull()
+  })
   it('recognizes only the known ACC legacy format', () => {
     expect(recordingGame(legacy)).toBe('acc')
     expect(recordingGame({ session_info: { track: 'Spa' }, stints: [] })).toBeNull()

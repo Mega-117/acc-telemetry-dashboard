@@ -7,7 +7,7 @@
 import { useGameContext } from '~/composables/useGameContext'
 import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
 import { GAME_OPTIONS, gameLabel } from '~/services/telemetry/gameCatalog'
-import { sessionGame } from '~/services/telemetry/gameIdentity'
+import { sessionGame, sessionFilterType } from '~/services/telemetry/gameIdentity'
 import RacingSessionList from '~/components/sessions/RacingSessionList.vue'
 import { ref, computed, onBeforeUnmount, onMounted, watch, nextTick } from 'vue'
 import { 
@@ -188,7 +188,8 @@ watch(
 // Transform Firebase sessions to display format
 const sessions = computed<DisplaySession[]>(() => {
   return rawSessions.value.map(s => {
-    const sessionType = sessionGame(s) === 'acc' ? getSessionTypeLabel(s.meta.session_type) : 'unknown'
+    const filterType = sessionFilterType(s)
+    const sessionType = filterType === null ? 'unknown' : getSessionTypeLabel(filterType)
     const dateStr = s.meta.date_start?.split('T')[0] || ''
     const sessionRaceTime = sessionGame(s) === 'acc'
       ? s.summary.best_session_race_ms || s.summary.best_race_ms || null : null

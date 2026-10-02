@@ -48,6 +48,15 @@ export function normalizedSessionKind(gameId: string, kind: unknown, legacyType?
   return 'unknown'
 }
 
+/** UI filter IDs are common categories; numeric source enums are ACC-only. */
+export function sessionFilterType(session: { meta?: { gameId?: string; sessionKind?: string; session_type?: number; track?: string; car?: string; date_start?: string } }): number | null {
+  const game = sessionGame(session)
+  if (!game) return null
+  if (game === 'acc') return Number.isInteger(session.meta?.session_type) ? session.meta!.session_type! : null
+  const kind = normalizedSessionKind(game, session.meta?.sessionKind)
+  return ({ practice: 0, qualify: 1, race: 2 } as Record<string, number>)[kind] ?? null
+}
+
 export function canUseAccRules(raw: unknown): boolean {
   if (recordingGame(raw) !== 'acc' || !record(raw)) return false
   return raw.schema !== RECORDING_SCHEMA

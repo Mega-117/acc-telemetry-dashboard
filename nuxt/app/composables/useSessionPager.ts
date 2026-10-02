@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { sessionGame } from '~/services/telemetry/gameIdentity'
+import { sessionGame, sessionFilterType } from '~/services/telemetry/gameIdentity'
 import {
     collection,
     doc,
@@ -151,8 +151,8 @@ function matchesToken(filterValue: string | null | undefined, candidates: Array<
 function matchesClientFilters(session: SessionDocument, filters: SessionPagerFilters): boolean {
     if (filters.gameId && sessionGame(session) !== filters.gameId) return false
     const types = (filters.sessionTypes || []).filter((t) => Number.isFinite(t))
-    const type = Number(session.meta?.session_type ?? -1)
-    if (types.length > 0 && !types.includes(type)) return false
+    const type = sessionFilterType(session)
+    if (types.length > 0 && (type === null || !types.includes(type))) return false
 
     const fromMs = normalizeIso(filters.fromDateIso) ? Date.parse(normalizeIso(filters.fromDateIso) as string) : null
     const toMs = normalizeIso(filters.toDateIso) ? Date.parse(normalizeIso(filters.toDateIso) as string) : null
@@ -398,7 +398,7 @@ export async function loadLightweightSessionSource(targetUserId: string): Promis
 
 async function resolveTotals(targetUserId: string, filters: SessionPagerFilters): Promise<number | null> {
     try {
-        if (!filters.gameId && !filters.track && !filters.car && !filters.carCategory) {
+        if (!filters.gameId && !filters.track && !filters.car && !filters.carCategory && !filters.sessionTypes?.length) {
             const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
             const constraints: QueryConstraint[] = []
             const types = (filters.sessionTypes || []).filter((t) => Number.isFinite(t))
@@ -456,6 +456,7 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
             uploadedAt: null,
             meta: {
                 gameId: entry.gameId ?? 'acc',
+                sessionKind: entry.sessionKind,
                 track: entry.track,
                 car: entry.car,
                 date_start: entry.date,
@@ -483,7 +484,7 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
 
 async function resolveCloudTotalsOnly(targetUserId: string, filters: SessionPagerFilters): Promise<number | null> {
     try {
-        if (filters.gameId || filters.track || filters.car || filters.carCategory) return null
+        if (filters.gameId || filters.track || filters.car || filters.carCategory || filters.sessionTypes?.length) return null
 
         const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
         const constraints: QueryConstraint[] = []
@@ -519,7 +520,8 @@ async function queryCloudPage(
     const baseConstraints: QueryConstraint[] = [orderBy('meta.date_start', 'desc')]
     const filteredConstraints: QueryConstraint[] = []
 
-    const types = (filters.sessionTypes || []).filter((t) => Number.isFinite(t))
+    // Cross-game reads must not discard named kinds before the common client filter.
+    const types = filters.gameId === 'acc' ? (filters.sessionTypes || []).filter((t) => Number.isFinite(t)) : []
     if (types.length === 1) {
         filteredConstraints.push(where('meta.session_type', '==', types[0]!))
     } else if (types.length > 1 && types.length <= 10) {
