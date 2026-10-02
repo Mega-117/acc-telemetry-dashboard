@@ -86,6 +86,7 @@ export function boundPitwallTyreCondition(value: unknown): PitwallTyreCondition 
 
 export interface PitwallStrategySnapshot {
   applicationMethods?: string[]
+  applicationMethodsKnown?: boolean
   mfdV4?: { ready: boolean, reason: string | null, contextId: string | null }
   fuelToAdd: number | null
   tyreSet: number | null
@@ -220,6 +221,7 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
     compound?: unknown
     verifiedFields?: unknown
     applicationMethods?: unknown
+    applicationMethodsKnown?: unknown
     mfdV4?: PitwallStrategySnapshot['mfdV4']
   }
   const wheels = ['FL', 'FR', 'RL', 'RR'] as const
@@ -234,7 +236,12 @@ export function boundPitwallStrategy(strategy: unknown, nowIso: string): Pitwall
     : null
   return {
     fuelToAdd: finiteOrNull(source.fuelToAdd),
-    ...(Array.isArray(source.applicationMethods) ? { applicationMethods: ['standard', 'mfd-v4'].filter(method => (source.applicationMethods as unknown[]).includes(method)) } : {}),
+    // RTDB drops empty arrays. Keep an explicit scalar so "no methods" cannot
+    // turn into a legacy client whose capabilities were never declared.
+    ...(Array.isArray(source.applicationMethods) || source.applicationMethodsKnown === true ? {
+      applicationMethodsKnown: true,
+      applicationMethods: ['standard', 'mfd-v4'].filter(method => Array.isArray(source.applicationMethods) && source.applicationMethods.includes(method)),
+    } : {}),
     ...(source.mfdV4 ? { mfdV4: { ready: source.mfdV4.ready === true,
       reason: typeof source.mfdV4.reason === 'string' ? source.mfdV4.reason.slice(0, 240) : null,
       contextId: typeof source.mfdV4.contextId === 'string' && /^[a-f0-9]{64}$/.test(source.mfdV4.contextId) ? source.mfdV4.contextId : null } } : {}),

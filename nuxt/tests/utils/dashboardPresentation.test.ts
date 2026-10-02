@@ -67,6 +67,15 @@ function focusedCar(): StandingsCarSnapshot {
 }
 
 describe('dashboardPresentation', () => {
+  it('non presenta accensione ignota o RPM assenti come spento o zero', () => {
+    const commonLive = { gameId: 'synthetic', sessionId: 'qa', connected: true, fresh: true, fields: {}, capabilities: {} }
+    expect(buildDashboardPresentation(state({ commonLive, ignitionOn: false, isEngineRunning: false })).ignitionLabel).toBe('—')
+    expect(buildDashboardPresentation(state({ rpm: null })).ignitionLabel).toBe('—')
+    expect(buildDashboardPresentation(state({ commonLive: { ...commonLive, fields: {
+      ignition_on: { value: 0, availability: 'available', unit: 'boolean' },
+      engine_running: { value: 0, availability: 'available', unit: 'boolean' },
+    } }, ignitionOn: false, isEngineRunning: false })).ignitionLabel).toBe('IGNITION OFF')
+  })
   it('formatta i dati e la convenzione marce R/N/1+', () => {
     expect(buildDashboardPresentation(state({ gear: -1 })).gear).toBe('R')
     expect(buildDashboardPresentation(state({ gear: 0 })).gear).toBe('N')

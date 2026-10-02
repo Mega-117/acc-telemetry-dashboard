@@ -57,6 +57,15 @@ async function send(engineer: PitwallRealtimeRoomService, roomId: string) {
 }
 
 describe('Pitwall RTDB rules and integrated services', () => {
+  it('withdraws Standard sends when the recipient switches to a source without input capability', async () => {
+    const { driver, engineer, roomId } = await openRoom()
+    await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'synthetic-session',
+      strategy: { applicationMethods: [] } })
+    await vi.waitFor(async () => expect((await engineer.io.read<any>(`rooms/${roomId}/mfd`))?.strategy?.applicationMethodsKnown).toBe(true))
+    const result = await engineer.sendOrder(roomId, { plan, revision: 1 })
+    expect(result.ok).toBe(false)
+    expect((await get(ref(driver.io.database, `pitwallV3/rooms/${roomId}/orders`))).exists()).toBe(false)
+  })
   it('V4 requires a current recipient context, freezes it and keeps its outcome method', async () => {
     const { driver, engineer, roomId } = await openRoom()
     const contextId = 'a'.repeat(64)

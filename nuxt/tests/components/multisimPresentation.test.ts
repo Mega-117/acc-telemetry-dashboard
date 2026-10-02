@@ -33,6 +33,8 @@ describe('common game surfaces', () => {
     await flushPromises()
     expect(fixture.gateway).toHaveBeenCalledWith('qa',{gameId:'evo',track:undefined,hideEmpty:true},1,25)
     expect(view.text()).toContain('Connettore sperimentale')
+    expect(view.find('template').exists()).toBe(false)
+    expect(view.get('h2').text()).toBe('Sessioni recenti')
     view.unmount(); useGameContext().selectGame('acc')
   })
   it('loads only selected game with track scope and offers retry on error', async () => {

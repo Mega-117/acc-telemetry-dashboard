@@ -47,7 +47,7 @@ onBeforeUnmount(() => { revision++ })
     <h1>{{ title }}</h1>
     <p v-if="gameId === 'evo'">Connettore sperimentale: la disponibilità dei dati dipende dalla versione del gioco.</p>
     <p v-if="!timingSurface">I dati registrati di {{ title }} sono disponibili qui. Le funzioni in tempo reale dipendono dai dati del gioco connesso.</p>
-    <template>
+    <div class="common-history">
       <h2>{{ track || 'Sessioni recenti' }}</h2>
       <p v-if="loading" role="status">Caricamento sessioni…</p>
       <p v-else-if="error" role="alert">Impossibile caricare le sessioni. <button @click="load()">Riprova</button></p>
@@ -63,7 +63,7 @@ onBeforeUnmount(() => { revision++ })
         <span>Pagina {{ pageNumber }}</span>
         <button :disabled="loading || !hasNext" @click="load(pageNumber + 1)">Successive</button>
       </nav>
-    </template>
+    </div>
     <NuxtLink to="/sessioni">Apri Sessioni</NuxtLink>
   </section>
 </template>

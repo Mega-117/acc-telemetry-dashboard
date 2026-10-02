@@ -6,6 +6,7 @@ import {
 } from '~/services/overlay/standingsPresentation'
 import type { StandingsCarSnapshot, StandingsLapSnapshot } from '~/services/overlay/standingsPresentation'
 import { SESSION_TYPES } from '~/utils/telemetryFormat'
+import { commonBoolean } from '~/services/telemetry/commonLive'
 
 export interface DashboardOptions {
   electronicsReference: boolean
@@ -256,6 +257,10 @@ export function buildDashboardPresentation(
   focusedCar: StandingsCarSnapshot | null = null,
 ): DashboardPresentation {
   const spectatorMode = state.dataSource === 'focused'
+  const ignitionUnknown = state.commonLive != null && (
+    commonBoolean(state.commonLive, 'ignition_on') === null
+    || commonBoolean(state.commonLive, 'engine_running') === null
+  )
   const rpmValid = typeof state.rpm === 'number' && Number.isFinite(state.rpm) && state.rpm >= 0
   const rpm = rpmValid ? state.rpm as number : 0
   const maxRpm = state.maxRpm && state.maxRpm > 0 ? state.maxRpm : null
@@ -270,10 +275,10 @@ export function buildDashboardPresentation(
   const remainingValue = oneDecimal(state.fuelLapsRemaining)
 
   return {
-    ignitionLabel: spectatorMode
+    ignitionLabel: spectatorMode || ignitionUnknown
       ? '—'
       : state.ignitionOn && state.isEngineRunning
-        ? state.pitLimiterOn ? 'PIT LIMITER ON' : String(Math.round(rpm))
+        ? state.pitLimiterOn ? 'PIT LIMITER ON' : rpmValid ? String(Math.round(rpm)) : '—'
         : 'IGNITION OFF',
     speed: spectatorMode && state.speedKmh === null ? '—' : integer(state.speedKmh),
     speedDelta: referenceVisible && options.speedDelta && state.speedDeltaKmh !== null

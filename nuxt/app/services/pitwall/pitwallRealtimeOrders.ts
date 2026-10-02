@@ -54,12 +54,12 @@ export function createPitwallRealtimeOrders(options: {
       if (input.plan.method != null && input.plan.method !== 'standard' && input.plan.method !== 'mfd-v4') throw new Error('Metodo strategia non supportato: usa Standard o V4.');
       if (input.plan.mfdV3 != null || input.plan.mfdV2 != null || input.plan.accDrive != null) throw new Error('Payload strategia non supportato.');
       const mfdPath = `rooms/${roomId}/mfd${io.namespace === PITWALL_SOCIAL_ROOT ? `/${target.uid}/${target.connectionId}` : ''}`
-      const mfd = await io.read<{ uid: string, connectionId: string, strategy?: { applicationMethods?: string[], mfdV4?: { ready: boolean, contextId: string | null } } }>(mfdPath)
+      const mfd = await io.read<{ uid: string, connectionId: string, strategy?: { applicationMethodsKnown?: boolean, applicationMethods?: string[], mfdV4?: { ready: boolean, contextId: string | null } } }>(mfdPath)
       // Older Standard clients omitted this field; an explicit capability list
       // from a current client is authoritative, including an empty list.
-      if (Array.isArray(mfd?.strategy?.applicationMethods)
+      if ((mfd?.strategy?.applicationMethodsKnown === true || Array.isArray(mfd?.strategy?.applicationMethods))
         && (mfd.uid !== target.uid || mfd.connectionId !== target.connectionId
-          || !mfd.strategy.applicationMethods.includes(String(input.plan.method ?? 'standard')))) {
+          || !mfd.strategy?.applicationMethods?.includes(String(input.plan.method ?? 'standard')))) {
         throw new Error('Il metodo richiesto non è disponibile sul PC del pilota.')
       }
       if (input.plan.method === 'mfd-v4') {
