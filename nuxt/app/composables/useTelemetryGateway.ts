@@ -1,7 +1,8 @@
 import { computed, ref } from 'vue'
 import { useGameContext } from './useGameContext'
 import { sessionGame } from '~/services/telemetry/gameIdentity'
-import { scopeSessionIndex } from '~/services/telemetry/gameProjection'
+import { scopeSessionIndex, buildCommonHistoryOverview } from '~/services/telemetry/gameProjection'
+import { mergePendingLocal } from '~/services/telemetry/telemetryMergeService'
 import { useTelemetryData } from './useTelemetryData'
 import {
     type CarCategory,
@@ -14,7 +15,7 @@ import {
     getCarCategory
 } from '~/utils/telemetryFormat'
 import type { FullSession, LoadSessionsSourceMode, SessionDocument } from '~/types/telemetry'
-import { useSessionPager, type SessionPagerFilters } from './useSessionPager'
+import { useSessionPager, loadLightweightSessionSource, type SessionPagerFilters } from './useSessionPager'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { buildTrackOverviewProjection } from '~/services/projections/buildTrackOverviewProjection'
 import { buildTrackDetailProjection } from '~/services/projections/buildTrackDetailProjection'
@@ -152,8 +153,8 @@ function pushGatewayDiagnostic(event: Omit<PipelineDiagnosticEvent, 'at'>): void
     console.log(`[PIPELINE] source=${withTimestamp.source} action=${withTimestamp.action} user=${withTimestamp.targetUserId || 'none'}${detailText}`)
 }
 
-export function useTelemetryGateway() {
-    const gameId = useGameContext().consultedGame.value
+export function useTelemetryGateway(explicitGameId?: string) {
+    const gameId = explicitGameId ?? useGameContext().consultedGame.value
     const telemetry = useTelemetryData(gameId)
     const pager = useSessionPager()
     const { currentUser, userDisplayName } = useFirebaseAuth()
@@ -506,6 +507,17 @@ export function useTelemetryGateway() {
         }
     }
 
+    async function getCommonHistoryOverview(targetUserId: string, selectedGame: string, track?: string) {
+        const uid = resolveTargetUserId(targetUserId)
+        if (!uid) return null
+        const source = await loadLightweightSessionSource(uid)
+        if (!source) return null // A bounded fallback cannot prove whole-archive totals.
+        const local = isElectron.value && uid === currentUser.value?.uid
+            ? await loadLocalTelemetrySessions({ electronAPI: (window as any).electronAPI, ownerId: uid,
+                isOnline: typeof navigator === 'undefined' || navigator.onLine }) : []
+        return buildCommonHistoryOverview(mergePendingLocal(source.sessions, local, true), selectedGame, track)
+    }
+
     async function getSessionsPage(
         targetUserId?: string,
         filters: SessionPagerFilters = {},
@@ -817,6 +829,7 @@ export function useTelemetryGateway() {
         getOverviewSnapshot,
         getOverviewProjection,
         getSessionsPage,
+        getCommonHistoryOverview,
         getTrackSnapshot,
         getTracksOverviewProjection,
         getTrackDetailProjection,

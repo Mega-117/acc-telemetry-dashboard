@@ -384,12 +384,21 @@ function buildLegacyCompatibilitySummary(rawObj: Record<string, unknown>, sessio
   }
 }
 
-export function generateSessionId(dateStart: string, track: string, gameId: string = 'acc'): string {
+export function generateSessionId(dateStart: string, track: string, gameId: string = 'acc', identity: Pick<SessionMeta, 'sourceSessionId' | 'trackVariant' | 'car'> = { car: '' }): string {
   if (!isGameId(gameId)) throw new Error('invalid-game-identity')
   const normalized = dateStart.split('.')[0]
   const base = `${normalized}_${track}`.replace(/[^a-zA-Z0-9]/g, '_')
   // Preserve existing ACC document IDs; new games get an explicit namespace.
-  return gameId === 'acc' ? base.substring(0, 100) : `${gameId}__${base.substring(0, 100)}`
+  if (gameId === 'acc') return base.substring(0, 100)
+  // Preserve the source identity and exact variant; lossy punctuation stripping
+  // or second-level timestamps would overwrite independent recordings.
+  const bytes = new TextEncoder().encode(JSON.stringify([identity.sourceSessionId ?? null,
+    dateStart, track, identity.trackVariant ?? null, identity.car]))
+  if (bytes.length > 1000) throw new Error('session-identity-too-long')
+  const encoded = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const id = `${gameId}__v2__${encoded}`
+  if (id.length > 1400) throw new Error('session-identity-too-long')
+  return id
 }
 
 export function extractMetadata(
@@ -400,6 +409,8 @@ export function extractMetadata(
   const stints: Record<string, unknown>[] = Array.isArray(rawObj?.['stints']) ? (rawObj['stints'] as Record<string, unknown>[]) : []
 
   const meta: SessionMeta = {
+    ...(rawObj?.['schema'] === 'racercore.session' && typeof rawObj['session_id'] === 'string'
+      ? { sourceSessionId: rawObj['session_id'] } : {}),
     gameId: recordingGame(rawObj) ?? 'unknown',
     trackVariant: typeof sessionInfo['track_variant'] === 'string' ? sessionInfo['track_variant'].trim() || null : null,
     sessionKind: normalizedSessionKind(recordingGame(rawObj) ?? 'unknown', sessionInfo['session_kind'], sessionInfo['session_type'] as number),

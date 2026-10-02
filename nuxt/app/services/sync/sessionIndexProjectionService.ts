@@ -11,6 +11,7 @@ const ACTIVITY_SESSION_TYPES = { PRACTICE: 0, QUALIFY: 1, RACE: 2 }
 export function buildSessionIndexProjection(allSessions: SessionDocument[], now: Date = new Date()) {
   const tracksMap: Record<string, { gameId: string; track: string; trackVariant: string | null; sessions: number; lastPlayed: string }> = {}
   const sessionsList: Array<{
+    sourceSessionId?: string
     id: string
     gameId: string
     trackVariant: string | null
@@ -53,6 +54,7 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
     const raceRuleCompatible = gameId === 'acc' && bestRulesVersion >= BEST_RULES_VERSION
     sessionsList.push({
       id: session.sessionId,
+      ...(session.meta.sourceSessionId ? { sourceSessionId: session.meta.sourceSessionId } : {}),
       gameId,
       trackVariant,
       sessionKind: normalizedSessionKind(gameId, session.meta?.sessionKind, session.meta?.session_type),

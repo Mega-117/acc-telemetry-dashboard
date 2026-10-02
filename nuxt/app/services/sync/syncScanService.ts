@@ -127,7 +127,7 @@ export function createSyncScanService(params: {
         }
 
         const { meta } = extractMetadata(rawObj)
-        const sessionId = generateSessionId(meta.date_start, meta.track, meta.gameId)
+        const sessionId = generateSessionId(meta.date_start, meta.track, meta.gameId, meta)
         const rawText = JSON.stringify(rawObj)
         const fileHash = await calculateContentHash(rawText)
         const rawDataHash = await calculateRawDataHash(rawObj)

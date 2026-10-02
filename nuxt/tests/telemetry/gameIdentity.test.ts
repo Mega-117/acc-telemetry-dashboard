@@ -27,6 +27,14 @@ describe('game identity', () => {
     expect(gameScopedKey('acc', 'a|b', 'c')).not.toBe(gameScopedKey('acc', 'a', 'b|c'))
     expect(gameScopedKey('acc', 'Spa')).not.toBe(gameScopedKey('evo', 'Spa'))
   })
+  it('keeps source IDs, variants, vehicles and subsecond starts distinct without lossy encoding', () => {
+    const make = (sourceSessionId: string, trackVariant = 'short', car = 'QA', date = '2026-10-02T12:00:00.001Z') =>
+      generateSessionId(date, 'Spa', 'evo', { sourceSessionId, trackVariant, car })
+    const ids = [make('a/b'), make('a_b'), make('a/b', 'full'), make('a/b', 'short', 'Other'), make('a/b', 'short', 'QA', '2026-10-02T12:00:00.002Z')]
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(ids.every(id => !id.includes('/'))).toBe(true)
+    expect(() => make('x'.repeat(2000))).toThrow('session-identity-too-long')
+  })
   it('reads known projected metadata but does not default unknown objects to ACC', () => {
     expect(sessionGame({ meta: legacy.session_info })).toBe('acc')
     expect(sessionGame({ meta: { track: 'Spa' } })).toBeNull()

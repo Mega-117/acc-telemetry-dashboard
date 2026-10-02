@@ -1,7 +1,39 @@
 import { buildActivityProjectionFromEntries, getRecentActivityDateKeys, getTelemetryActivityDateKey } from './activityProjectionService'
-import { normalizedSessionKind } from './gameIdentity'
+import { normalizedSessionKind, sessionGame, gameScopedKey } from './gameIdentity'
+import type { SessionDocument } from '~/types/telemetry'
 
 type IndexEntry = { gameId?: string; date?: string; type?: number; sessionKind?: string; totalTime?: number }
+
+/** Aggregate recorded summaries within comparable game/track/variant/car groups. */
+export function buildCommonHistoryOverview(input: SessionDocument[], gameId: string, track?: string, now = new Date()) {
+  const sessions = [...new Map(input.filter(session => sessionGame(session) === gameId
+    && (!track || session.meta.track.toLowerCase() === track.toLowerCase()))
+    .map(session => [session.sessionId, session])).values()]
+  const finiteCount = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+  const groups = new Map<string, { key: string; track: string; variant: string | null; car: string; sessions: number; laps: number; validLaps: number; bestMs: number | null }>()
+  for (const session of sessions) {
+    const { meta, summary } = session
+    const key = gameScopedKey(gameId, meta.track, meta.trackVariant ?? '', meta.car)
+    const group = groups.get(key) ?? { key, track: meta.track, variant: meta.trackVariant ?? null,
+      car: meta.car, sessions: 0, laps: 0, validLaps: 0, bestMs: null }
+    group.sessions++
+    group.laps += finiteCount(summary.laps)
+    group.validLaps += finiteCount(summary.lapsValid)
+    const best = summary.bestLap
+    if (summary.lapsValid > 0 && typeof best === 'number' && Number.isFinite(best) && best > 0) {
+      group.bestMs = group.bestMs === null ? best : Math.min(group.bestMs, best)
+    }
+    groups.set(key, group)
+  }
+  return { gameId, sessions: sessions.length,
+    laps: sessions.reduce((sum, session) => sum + finiteCount(session.summary.laps), 0),
+    validLaps: sessions.reduce((sum, session) => sum + finiteCount(session.summary.lapsValid), 0),
+    totalTimeMs: sessions.reduce((sum, session) => sum + finiteCount(session.summary.totalTime), 0),
+    groups: [...groups.values()].sort((a, b) => a.track.localeCompare(b.track) || (a.variant ?? '').localeCompare(b.variant ?? '') || a.car.localeCompare(b.car)),
+    activity: buildGameActivity(sessions.map(session => ({ gameId, date: session.meta.date_start,
+      sessionKind: session.meta.sessionKind, type: session.meta.session_type, totalTime: session.summary.totalTime })), now)[gameId]?.byKind ?? {},
+  }
+}
 const ACTIVITY_KINDS = new Map([['practice', 0], ['qualify', 1], ['race', 2]])
 
 export function buildGameActivity(entries: IndexEntry[], now = new Date()) {

@@ -25,8 +25,11 @@ const idleTyres: FastStateTyre[] = (['FL', 'FR', 'RL', 'RR'] as const).map((id) 
   discLifePct: null,
 }))
 
-const hasLiveTyres = computed(() => props.fastState.isLive && props.fastState.tyres.length === 4)
-const visibleTyres = computed(() => hasLiveTyres.value ? props.fastState.tyres : idleTyres)
+const hasLiveTyres = computed(() => props.fastState.isLive && props.fastState.isFresh && props.fastState.tyres.length > 0)
+// Partial connectors publish only measured corners; preserve each known value.
+const visibleTyres = computed(() => idleTyres.map(idle => hasLiveTyres.value
+  ? props.fastState.tyres.find(tyre => tyre.id === idle.id) ?? idle : idle))
+const hasAccSlipPolicy = computed(() => !props.fastState.commonLive || props.fastState.commonLive.gameId === 'acc')
 const speedLabel = computed(() => props.fastState.speedKmh !== null
   ? `${Math.round(props.fastState.speedKmh)} km/h`
   : 'in attesa')
@@ -59,7 +62,7 @@ function formatSlip(tyre: FastStateTyre) {
       >
         <div class="tyre-slip__topline">
           <strong>{{ tyre.id }}</strong>
-          <span class="tyre-slip__state">{{ tyreSlipStateLabel(tyre.slipState, hasLiveTyres) }}</span>
+          <span class="tyre-slip__state">{{ tyreSlipStateLabel(tyre.slipState, hasLiveTyres && hasAccSlipPolicy && tyre.wheelSlip !== null) }}</span>
         </div>
         <div class="tyre-slip__bar" aria-hidden="true">
           <span :style="tyreFillStyle(tyre)" />

@@ -170,7 +170,7 @@ async function uploadSession(rawObj: any, rawText: string, fileName: string, uid
     }
 
     const { meta, summary } = extractMetadata(rawObj, { allowLegacyFallback: true })
-    const sessionId = generateSessionId(meta.date_start, meta.track)
+    const sessionId = generateSessionId(meta.date_start, meta.track, meta.gameId, meta)
     const fileHash = await calculateHash(rawText)
     const existing = await getExistingSession(uid, sessionId)
 

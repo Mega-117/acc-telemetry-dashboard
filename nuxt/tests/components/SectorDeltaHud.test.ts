@@ -40,6 +40,14 @@ async function renderHud(props: Record<string, unknown>): Promise<string> {
 }
 
 describe('SectorDeltaHud', () => {
+  it('keeps two and four sectors on the same classic row instead of clipping a fourth sector', async () => {
+    for (const count of [2, 3, 4]) {
+      const sectors = Array.from({ length: count }, (_, i) => ({ ...entry(1), index: i + 1 }))
+      const html = await renderHud({ sectorHud: { ...sectorHud, sectors } })
+      expect(html).toContain(`grid-template-columns:repeat(${count}, minmax(0, 1fr))`)
+      expect(html.match(/class="sector-delta__label"/g)).toHaveLength(count)
+    }
+  })
   it('labels outside feedback only on the valid compact time, leaving classic unchanged', async () => {
     const props = { compactDisplayLap: { timeMs: 91_000, valid: true }, targetOutcome: 'outside' }
     const compact = await renderHud({ ...props, variant: 'compact' })

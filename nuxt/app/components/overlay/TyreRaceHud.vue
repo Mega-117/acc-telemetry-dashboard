@@ -11,6 +11,7 @@ const props = defineProps<{ fastState: FastOverlayState }>()
 const ids = ['FL', 'FR', 'RL', 'RR'] as const
 const expiredFlashKeys = ref<Record<string, string>>({})
 const hasPhysics = computed(() => props.fastState.isFresh && props.fastState.isLive && props.fastState.dataSource !== 'focused')
+const hasAccTyrePolicy = computed(() => !props.fastState.commonLive || props.fastState.commonLive.gameId === 'acc')
 const tyres = computed(() => ids.map((id, index) => {
   const tyre = (hasPhysics.value ? props.fastState.tyres.find(item => item.id === id) : null) ?? {
     id, wheelSlip: null, wheelSlipScaled: null, slipBand: 'white', slipState: 'ok', slipRatio: null,
@@ -20,9 +21,9 @@ const tyres = computed(() => ids.map((id, index) => {
   return {
     ...tyre, x: index % 2 === 0 ? 10 : 106, y: index < 2 ? 38 : 154,
     rear: index > 1, right: index % 2 === 1,
-    color: tyreTemperatureColor(tyre.coreTempC, props.fastState.tyreCompound === 'WET' ? 'WET' : 'DRY'),
-    slip: raceSlip(tyre.wheelSlipRaw ?? tyre.wheelSlip),
-    height: racePressureHeight(tyre.pressurePsi, props.fastState.tyreCompound),
+    color: hasAccTyrePolicy.value ? tyreTemperatureColor(tyre.coreTempC, props.fastState.tyreCompound === 'WET' ? 'WET' : 'DRY') : '#6b7280',
+    slip: hasAccTyrePolicy.value ? raceSlip(tyre.wheelSlipRaw ?? tyre.wheelSlip) : { height: 0, color: '#6b7280' },
+    height: hasAccTyrePolicy.value ? racePressureHeight(tyre.pressurePsi, props.fastState.tyreCompound) : 56,
     average: hasPhysics.value && props.fastState.lapPressureAverage.status === 'available'
       ? props.fastState.lapPressureAverage.values[id] : null,
     flash: hasPhysics.value ? racePressureFlash(tyre, Date.now()) : null,
@@ -34,7 +35,7 @@ const axles = computed(() => [0, 2].map(index => ({
 })))
 const unavailable = computed(() => !hasPhysics.value)
 function brakeColor(tyre: FastStateTyre) {
-  return brakeTemperatureColor(tyre.brakeTempC, tyre.id, tyre.brakeCompound)
+  return hasAccTyrePolicy.value ? brakeTemperatureColor(tyre.brakeTempC, tyre.id, tyre.brakeCompound) : '#6b7280'
 }
 </script>
 

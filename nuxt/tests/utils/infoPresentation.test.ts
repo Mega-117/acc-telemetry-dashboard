@@ -36,6 +36,13 @@ const state = {
 } as any
 
 describe('Info presentation', () => {
+  it('does not present an unavailable common delta as a measured zero', () => {
+    const common = { ...state, commonLive: { gameId: 'synthetic' },
+      info: { ...state.info, delta: { ms: 0, available: false, side: 'positive', ratio: 1, purple: true } } }
+    expect(buildInfoPresentation(common).delta).toMatchObject({ value: '—', side: 'zero', ratio: 0, purple: false })
+    common.info.delta.available = true
+    expect(buildInfoPresentation(common).delta.value).toBe('+0.000')
+  })
   it('formatta delta e tempi come il riferimento', () => {
     expect(formatInfoDelta(-245)).toBe('-0.245')
     expect(formatInfoDelta(0)).toBe('+0.000')

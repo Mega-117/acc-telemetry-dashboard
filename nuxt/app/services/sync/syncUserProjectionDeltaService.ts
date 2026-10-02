@@ -16,6 +16,7 @@ export interface UserProjectionDelta extends TrackBestProjectionDelta {
 }
 
 type SessionIndexEntry = {
+  sourceSessionId?: string
   gameId?: string
   trackVariant?: string | null
   sessionKind?: string
@@ -47,6 +48,7 @@ function toSessionIndexEntry(delta: UserProjectionDelta): SessionIndexEntry {
 
   return {
     id: delta.sessionId,
+    ...(delta.sourceSessionId ? { sourceSessionId: delta.sourceSessionId } : {}),
     gameId,
     trackVariant: delta.trackVariant ?? null,
     sessionKind: normalizedSessionKind(gameId, delta.sessionKind, delta.sessionType),

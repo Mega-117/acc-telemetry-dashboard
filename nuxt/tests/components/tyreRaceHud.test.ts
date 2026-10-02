@@ -3,6 +3,7 @@ import { renderToString } from 'vue/server-renderer'
 import { describe, expect, it } from 'vitest'
 import TyreRaceHud from '~/components/overlay/TyreRaceHud.vue'
 import DamageRaceHud from '~/components/overlay/DamageRaceHud.vue'
+import TyreSlipHud from '~/components/overlay/TyreSlipHud.vue'
 
 function fastState() {
   const ids = ['FL', 'FR', 'RL', 'RR'] as const
@@ -34,6 +35,23 @@ function fastState() {
 }
 
 describe('Race HUD components', () => {
+  it('keeps one measured corner visible without applying ACC tyre rules to another game', async () => {
+    const base = fastState()
+    const partial = { ...base, commonLive: { gameId: 'synthetic' }, tyreCompound: null,
+      lapPressureAverage: { status: 'unavailable', values: {} },
+      tyres: [{ ...base.tyres[0], pressurePsi: 26.7, coreTempC: 80, wheelSlip: null, wheelSlipScaled: null }] }
+    const classic = await renderToString(createSSRApp(TyreSlipHud, { fastState: partial }))
+    expect(classic).toContain('26.7 psi')
+    expect(classic.match(/WAIT/g)).toHaveLength(4)
+    expect(classic).not.toContain('>OK<')
+    const race = await renderToString(createSSRApp(TyreRaceHud, { fastState: partial }))
+    expect(race).toContain('26.7')
+    expect(race).toContain('80')
+    expect(race).toContain('fill="#6b7280"')
+    expect(race).not.toContain('rgb(0, 200, 0)')
+    const stale = await renderToString(createSSRApp(TyreSlipHud, { fastState: { ...partial, isFresh: false } }))
+    expect(stale).not.toContain('26.7 psi')
+  })
   it('con la fisica dell auto osservata assente la griglia resta, coi valori a --', async () => {
     // PIP-270: prima la pagina spegneva l'intera sezione e restava solo il
     // pannello nero. Il Broadcasting UDP non espone la fisica ruota di un

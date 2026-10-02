@@ -35,7 +35,7 @@ export async function loadLocalTelemetrySessions(params: {
       if (typeof rawObj.ownerId !== 'string' || rawObj.ownerId !== ownerId) continue
 
       const { meta, summary, summarySource } = extractMetadata(rawObj)
-      const sessionId = generateSessionId(meta.date_start, meta.track, meta.gameId)
+      const sessionId = generateSessionId(meta.date_start, meta.track, meta.gameId, meta)
       const reg = registry[fileName]
       const isSynced = isRegistryEntryCurrentForFile({
         entry: reg,
@@ -88,7 +88,8 @@ export async function findLocalFullSessionById(params: {
     const localSessionId = generateSessionId(
       sessionInfo.date_start || rawObj.date || '',
       sessionInfo.track || rawObj.track || '',
-      recordingGame(rawObj) ?? 'unknown'
+      recordingGame(rawObj) ?? 'unknown',
+      extractMetadata(rawObj).meta
     )
 
     if (localSessionId === sessionId) {

@@ -7,6 +7,7 @@
  */
 
 export interface SessionMeta {
+  sourceSessionId?: string
   gameId?: string
   trackVariant?: string | null
   sessionKind?: string

@@ -178,6 +178,8 @@ export function buildInfoPresentation(
   options: InfoOptions = DEFAULT_INFO_OPTIONS,
 ): InfoPresentation {
   const info: FastStateInfo | null = state.info
+  const unknownCommonDelta = state.commonLive != null && state.commonLive.gameId !== 'acc'
+    && info?.delta.available !== true
   const traffic = trafficValue(info?.pitExitTraffic ?? null)
   const rows: InfoRow[] = []
   if (options.showStint) rows.push({ id: 'stint', label: 'Stint:', value: formatInfoStintDuration(info?.stintTimeLeftMs), tone: 'default' })
@@ -194,10 +196,10 @@ export function buildInfoPresentation(
     yellowFlagActive: options.showYellowFlag && state.flag === 2,
     delta: {
       visible: options.showDelta,
-      value: formatInfoDelta(info?.delta.ms),
-      side: info?.delta.side || 'zero',
-      ratio: clamp(info?.delta.ratio ?? 0, 0, 1),
-      purple: info?.delta.purple === true,
+      value: unknownCommonDelta ? '—' : formatInfoDelta(info?.delta.ms),
+      side: unknownCommonDelta ? 'zero' : info?.delta.side || 'zero',
+      ratio: unknownCommonDelta ? 0 : clamp(info?.delta.ratio ?? 0, 0, 1),
+      purple: !unknownCommonDelta && info?.delta.purple === true,
     },
     rows,
   }

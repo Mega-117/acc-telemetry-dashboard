@@ -257,6 +257,7 @@ export function buildDashboardPresentation(
   focusedCar: StandingsCarSnapshot | null = null,
 ): DashboardPresentation {
   const spectatorMode = state.dataSource === 'focused'
+  const commonGame = state.commonLive != null && state.commonLive.gameId !== 'acc'
   const ignitionUnknown = state.commonLive != null && (
     commonBoolean(state.commonLive, 'ignition_on') === null
     || commonBoolean(state.commonLive, 'engine_running') === null
@@ -264,7 +265,7 @@ export function buildDashboardPresentation(
   const rpmValid = typeof state.rpm === 'number' && Number.isFinite(state.rpm) && state.rpm >= 0
   const rpm = rpmValid ? state.rpm as number : 0
   const maxRpm = state.maxRpm && state.maxRpm > 0 ? state.maxRpm : null
-  const threshold = resolveOptimalShiftRpm(state.context?.car)
+  const threshold = commonGame ? null : resolveOptimalShiftRpm(state.context?.car)
   const fuelCriticalThreshold = normalizeFuelCriticalLapsThreshold(options.fuelCriticalLapsThreshold)
   const referenceVisible = state.isFresh && state.isLive && state.ignitionOn && state.isEngineRunning
   const fuelUrgency = resolveFuelUrgency(state, fuelCriticalThreshold)
@@ -309,7 +310,7 @@ export function buildDashboardPresentation(
     tractionControlOffWarning: referenceVisible && state.tractionControl === 0,
     absActive: interventionVisible(state, state.absInAction),
     brakeBias: state.brakeBiasPct === null ? '--.-' : state.brakeBiasPct.toFixed(1),
-    cornerSpeed: spectatorMode ? '-' : integer(cornerValue, '0'),
+    cornerSpeed: spectatorMode ? '-' : integer(cornerValue, commonGame ? '—' : '0'),
     cornerSpeedTone: cornerDelta === null || cornerDelta === 0
       ? 'neutral'
       : cornerDelta > 0 ? 'faster' : 'slower',

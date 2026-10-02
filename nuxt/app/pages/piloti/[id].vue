@@ -3,11 +3,12 @@
 // Pilot Detail View - Coach shadowing a pilot
 // ============================================
 
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { doc } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import CoachLessonsPanel from '~/components/coach/CoachLessonsPanel.vue'
 import { providePilotContext } from '~/composables/usePilotContext'
+import { useGameContext } from '~/composables/useGameContext'
 import { endFirebaseScenario, startFirebaseScenario, trackedGetDoc } from '~/composables/useFirebaseTracker'
 
 definePageMeta({
@@ -16,6 +17,7 @@ definePageMeta({
 })
 
 const route = useRoute()
+const { consultedGame } = useGameContext()
 const pilotId = route.params.id as string
 
 // Provide pilot context to all child components
@@ -36,6 +38,7 @@ const activeTab = ref<'panoramica' | 'sessioni' | 'piste' | 'lezioni'>('panorami
 const detailView = ref<'none' | 'track' | 'session'>('none')
 const selectedTrackId = ref<string | null>(null)
 const selectedSessionId = ref<string | null>(null)
+watch(consultedGame, () => { detailView.value = 'none'; selectedTrackId.value = null; selectedSessionId.value = null })
 
 // Pilot navigation tabs
 const pilotTabs = [
@@ -112,6 +115,7 @@ function goBackToList() {
     </div>
 
     <!-- Pilot Sub-Tabs (hidden when showing detail view) -->
+    <LayoutGameSelector />
     <nav v-if="detailView === 'none'" class="pilot-tabs" aria-label="Sezioni del pilota">
       <button 
         v-for="tab in pilotTabs" 
@@ -143,7 +147,8 @@ function goBackToList() {
       <template v-else>
         <!-- Show detail views when selected -->
         <template v-if="detailView === 'track' && selectedTrackId">
-          <PagesTrackDetailPage 
+          <PagesCommonGamePage v-if="consultedGame !== 'acc'" surface="piste" :track="selectedTrackId" embedded @go-to-session="handleGoToSession" @go-to-track="handleGoToTrack" @open-sessions="activeTab = 'sessioni'; goBackToList()" />
+          <PagesTrackDetailPage v-else
             :track-id="selectedTrackId" 
             @back="goBackToList"
             @go-to-session="handleGoToSession" 
@@ -162,7 +167,8 @@ function goBackToList() {
         <template v-else>
           <!-- Panoramica -->
           <div v-if="activeTab === 'panoramica'" class="tab-content">
-            <PagesPanoramicaPage @go-to-track="handleGoToTrack" @go-to-session="handleGoToSession" />
+            <PagesCommonGamePage v-if="consultedGame !== 'acc'" surface="panoramica" embedded @go-to-session="handleGoToSession" @go-to-track="handleGoToTrack" @open-sessions="activeTab = 'sessioni'" />
+            <PagesPanoramicaPage v-else @go-to-track="handleGoToTrack" @go-to-session="handleGoToSession" />
           </div>
 
           <!-- Sessioni -->
@@ -172,7 +178,8 @@ function goBackToList() {
 
           <!-- Piste -->
           <div v-if="activeTab === 'piste'" class="tab-content">
-            <PagesPistePage @go-to-track="handleGoToTrack" />
+            <PagesCommonGamePage v-if="consultedGame !== 'acc'" surface="piste" embedded @go-to-session="handleGoToSession" @go-to-track="handleGoToTrack" @open-sessions="activeTab = 'sessioni'" />
+            <PagesPistePage v-else @go-to-track="handleGoToTrack" />
           </div>
 
           <!-- Pilota: contesto, calendario e lezioni -->

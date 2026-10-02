@@ -11,7 +11,7 @@ definePageMeta({
   layout: 'dashboard'
 })
 const uid = useTargetUserId().value
-const gateway = useTelemetryGateway()
+const gateway = useTelemetryGateway('acc')
 const entry = inject(overviewEntryKey, null)
 const baseURL = useRuntimeConfig().app.baseURL
 async function prepare() {
@@ -29,6 +29,7 @@ async function prepare() {
 }
 const prepared = shallowRef(await prepare())
 async function retry() { prepared.value = await prepare() }
+watch(useGameContext().consultedGame, game => { if (game === 'acc') void retry() })
 </script>
 
 <template>

@@ -7,7 +7,7 @@ import { responsiveImage, TRACK_CARD_SIZES } from '~/utils/responsiveImage'
 definePageMeta({
   layout: 'dashboard'
 })
-const gateway = useTelemetryGateway()
+const gateway = useTelemetryGateway('acc')
 const baseURL = useRuntimeConfig().app.baseURL
 async function prepare() {
   if (useGameContext().consultedGame.value !== 'acc') return { ok: false as const }
@@ -22,6 +22,7 @@ async function prepare() {
 }
 const prepared = shallowRef(await prepare())
 async function retry() { prepared.value = await prepare() }
+watch(useGameContext().consultedGame, game => { if (game === 'acc') void retry() })
 </script>
 
 <template>

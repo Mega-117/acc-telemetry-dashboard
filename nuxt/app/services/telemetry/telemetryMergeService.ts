@@ -5,11 +5,12 @@ export function normalizeTrackKey(track: string): string {
   return (track || '').toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
 }
 
-export function buildLogicalSessionKey(meta: { date_start?: string; track?: string; gameId?: string }): string {
+export function buildLogicalSessionKey(meta: { date_start?: string; track?: string; gameId?: string; trackVariant?: string | null; car?: string; sourceSessionId?: string }): string {
   const dateKey = (meta?.date_start || '').split('.')[0]
   const trackKey = normalizeTrackKey(meta?.track || '')
   const legacyKey = `${dateKey}_${trackKey}`
-  return !meta.gameId || meta.gameId === 'acc' ? legacyKey : gameScopedKey(meta.gameId, legacyKey)
+  return !meta.gameId || meta.gameId === 'acc' ? legacyKey
+    : gameScopedKey(meta.gameId, meta.sourceSessionId ?? '', meta.date_start ?? '', meta.track ?? '', meta.trackVariant ?? '', meta.car ?? '')
 }
 
 function toEpochMs(value: any): number {
@@ -47,6 +48,10 @@ export function dedupeCloudSessions(cloudSessions: SessionDocument[]): SessionDo
 export function mergeSessionLocalPreferred(localSession: SessionDocument, cloudSession: SessionDocument): SessionDocument {
   if ((localSession.meta.gameId ?? 'acc') !== (cloudSession.meta.gameId ?? 'acc')) {
     throw new Error('cross-game-session-merge')
+  }
+  if (localSession.meta.gameId && localSession.meta.gameId !== 'acc'
+    && buildLogicalSessionKey(localSession.meta) !== buildLogicalSessionKey(cloudSession.meta)) {
+    throw new Error('cross-context-session-merge')
   }
   return {
     ...cloudSession,

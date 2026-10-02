@@ -68,6 +68,9 @@ export async function loadCloudSessionIndexList(params: {
     uploadedAt: null,
     meta: {
       gameId: entry.gameId ?? 'acc',
+      sourceSessionId: entry.sourceSessionId,
+      trackVariant: entry.trackVariant ?? null,
+      sessionKind: entry.sessionKind,
       track: entry.track,
       car: entry.car,
       date_start: entry.date,

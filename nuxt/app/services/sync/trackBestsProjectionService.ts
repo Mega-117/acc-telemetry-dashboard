@@ -31,6 +31,7 @@ import {
 export const TRACK_BESTS_SCHEMA_VERSION = 4
 
 export interface TrackBestProjectionDelta {
+  sourceSessionId?: string
   gameId?: string
   trackVariant?: string | null
   sessionKind?: string

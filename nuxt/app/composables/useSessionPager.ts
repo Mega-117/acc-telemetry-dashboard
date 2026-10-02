@@ -334,6 +334,9 @@ function sessionFromIndexEntry(entry: any): SessionDocument {
         uploadedAt: null,
         meta: {
             gameId: entry.gameId ?? 'acc',
+            sourceSessionId: entry.sourceSessionId,
+            trackVariant: entry.trackVariant ?? null,
+            sessionKind: entry.sessionKind,
             track: entry.track,
             car: entry.car,
             date_start: entry.date,
@@ -371,7 +374,7 @@ async function loadCompleteSessionIndex(targetUserId: string): Promise<SessionDo
     return list.map(sessionFromIndexEntry)
 }
 
-async function loadLightweightSessionSource(targetUserId: string): Promise<{
+export async function loadLightweightSessionSource(targetUserId: string): Promise<{
     sessions: SessionDocument[]
     source: 'session_list_projection' | 'session_index'
 } | null> {

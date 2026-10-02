@@ -85,6 +85,24 @@ describe('session upload raw chunk atomicity', () => {
     }
   })
 
+  it('uploads same-time non-ACC variants to distinct documents with source identity', async () => {
+    const service = createSessionUploadService({ db: {}, chunkSize: 10000, getExistingSession: async () => null,
+      loadRegistryCache: async () => ({}), canSkipViaRegistry: () => false, listExistingChunks: async () => [] })
+    const ids = []
+    for (const variant of ['short', 'full']) {
+      const raw = { ...canonicalRaw(), schema: 'racercore.session', version: 1, game_id: 'evo', session_id: `source-${variant}`,
+        session_info: { ...canonicalRaw().session_info, track_variant: variant },
+        summary: { schema: 'racercore.timing-summary', version: 1, laps: 1, lapsValid: 1, bestLap: 120000, totalTime: 120000 } }
+      const result = await service.uploadOrUpdateSession(raw, JSON.stringify(raw), `${variant}.json`, 'pilot-a')
+      expect(result.status).toBe('created')
+      expect(result.projectionDelta).toMatchObject({ sourceSessionId: `source-${variant}`, trackVariant: variant, gameId: 'evo' })
+      ids.push(result.sessionId)
+    }
+    expect(new Set(ids).size).toBe(2)
+    const documents = mocks.batch.set.mock.calls.filter((call: any[]) => call[1]?.meta)
+    expect(new Set(documents.map((call: any[]) => call[0].path)).size).toBe(2)
+  })
+
   it('sostituisce chunk e tail obsoleti nello stesso unico batch', async () => {
     const raw = canonicalRaw()
     const rawText = JSON.stringify(raw)

@@ -1,10 +1,26 @@
 import { describe, expect, it, beforeEach } from 'vitest'
 import { useGameContext } from '~/composables/useGameContext'
-import { buildGameActivity, scopeSessionIndex } from '~/services/telemetry/gameProjection'
+import { buildGameActivity, scopeSessionIndex, buildCommonHistoryOverview } from '~/services/telemetry/gameProjection'
+import type { SessionDocument } from '~/types/telemetry'
 import { commonSessionPresentation } from '~/services/telemetry/commonSessionPresentation'
 import { gameLabel } from '~/services/telemetry/gameCatalog'
 
 describe('consulted game and recorded facts', () => {
+  it('aggregates only matching game and comparable variants/cars with proven valid laps', () => {
+    const session = (id: string, gameId: string, variant: string, car: string, valid: number, best: number | null) => ({
+      sessionId: id, meta: { gameId, track: 'Spa', trackVariant: variant, car, date_start: '2026-10-02', sessionKind: 'time_attack', session_type: -1 },
+      summary: { laps: 2, lapsValid: valid, bestLap: best, totalTime: 120000 },
+    } as SessionDocument)
+    const a = session('a', 'evo', 'short', 'Car A', 1, 60000)
+    const result = buildCommonHistoryOverview([a, a, session('b', 'evo', 'full', 'Car A', 1, 120000),
+      session('c', 'evo', 'short', 'Car B', 0, 45000), session('d', 'acc', 'short', 'Car A', 1, 50000)], 'evo', undefined, new Date('2026-10-02T12:00:00'))
+    expect(result).toMatchObject({ sessions: 3, laps: 6, validLaps: 2, totalTimeMs: 360000 })
+    expect(result.groups).toHaveLength(3)
+    expect(result.groups.find(group => group.car === 'Car B')?.bestMs).toBeNull()
+    expect(result.activity.time_attack).toEqual({ sessions: 3, minutes: 6 })
+    expect(buildCommonHistoryOverview([a], 'synthetic').sessions).toBe(0)
+    expect(buildCommonHistoryOverview([a], 'evo', 'Monza').sessions).toBe(0)
+  })
   beforeEach(() => useGameContext().selectGame('acc'))
   it('accepts a deliberate game choice and rejects unknown or unauthorized dev choices', () => {
     const context = useGameContext()

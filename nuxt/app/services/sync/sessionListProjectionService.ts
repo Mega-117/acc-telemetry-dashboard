@@ -12,6 +12,7 @@ export const SESSION_LIST_PROJECTION_SCHEMA_VERSION = 1
 export const SESSION_LIST_PROJECTION_PAGE_SIZE = 100
 
 export type SessionListProjectionEntry = {
+  sourceSessionId?: string
   gameId?: string
   trackVariant?: string | null
   sessionKind?: string
@@ -84,6 +85,7 @@ export function createSessionListEntry(session: SessionDocument): SessionListPro
 
   return {
     id: session.sessionId,
+    ...(session.meta.sourceSessionId ? { sourceSessionId: session.meta.sourceSessionId } : {}),
     gameId,
     trackVariant: session.meta?.trackVariant ?? null,
     sessionKind: normalizedSessionKind(gameId, session.meta?.sessionKind, session.meta?.session_type),
@@ -108,6 +110,7 @@ export function createSessionListEntry(session: SessionDocument): SessionListPro
 }
 
 export function createSessionListEntryFromDelta(delta: {
+  sourceSessionId?: string
   gameId?: string
   trackVariant?: string | null
   sessionKind?: string
@@ -129,6 +132,7 @@ export function createSessionListEntryFromDelta(delta: {
 
   return {
     id: delta.sessionId,
+    ...(delta.sourceSessionId ? { sourceSessionId: delta.sourceSessionId } : {}),
     gameId,
     trackVariant: delta.trackVariant ?? null,
     sessionKind: normalizedSessionKind(gameId, delta.sessionKind, delta.sessionType ?? undefined),
@@ -159,6 +163,7 @@ export function sessionListEntryToSessionDocument(entry: SessionListProjectionEn
     fileName: '',
     uploadedAt: null,
     meta: {
+      ...(entry.sourceSessionId ? { sourceSessionId: entry.sourceSessionId } : {}),
       gameId: entry.gameId ?? 'acc',
       trackVariant: entry.trackVariant ?? null,
       sessionKind: normalizedSessionKind(entry.gameId ?? 'acc', entry.sessionKind, entry.type),
@@ -471,6 +476,7 @@ export async function applySessionListProjectionDeltas(params: {
   db: any
   uid: string
   deltas: Array<{
+    sourceSessionId?: string
     gameId?: string
     trackVariant?: string | null
     sessionKind?: string

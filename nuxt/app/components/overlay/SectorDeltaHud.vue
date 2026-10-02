@@ -213,7 +213,7 @@ function ariaLabel(sector: SectorHudEntry): string {
         <span class="sector-delta-hud__title">SETTORI</span>
         <em class="sector-delta-hud__comparison">VS {{ comparisonToken }}</em>
       </div>
-      <div class="sector-delta-hud__grid">
+      <div class="sector-delta-hud__grid" :style="{ gridTemplateColumns: `repeat(${visibleSectors.length}, minmax(0, 1fr))` }">
         <div
           v-for="sector in visibleSectors"
           :key="sector.index"

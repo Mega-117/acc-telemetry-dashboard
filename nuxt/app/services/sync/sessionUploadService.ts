@@ -158,7 +158,7 @@ export function createSessionUploadService(params: {
         const { meta, summary: summaryWithRules } = preparedSummary
         const requiredRulesVersion = meta.gameId === 'acc' ? BEST_RULES_VERSION : 1
         const summaryVersion = meta.gameId === 'acc' ? summaryWithRules.best_rules_version : summaryWithRules.version
-        const sessionId = generateSessionId(meta.date_start, meta.track, meta.gameId)
+        const sessionId = generateSessionId(meta.date_start, meta.track, meta.gameId, meta)
         const fileHash = options.precomputedHash || await calculateContentHash(rawText)
         const rawDataHash = await calculateRawDataHash(rawObj)
         const summaryHash = await calculateSummaryHash(summaryWithRules)
@@ -291,6 +291,7 @@ export function createSessionUploadService(params: {
         }
 
         const projectionDelta: TrackBestProjectionDelta = {
+          sourceSessionId: meta.sourceSessionId,
           gameId: meta.gameId,
           trackVariant: meta.trackVariant,
           sessionKind: meta.sessionKind,

@@ -15,6 +15,19 @@ function session(gameId: string): SessionDocument {
 }
 
 describe('multi-simulator projection identity', () => {
+  it('preserves source identity in projection deltas and prevents same-time variant merges', () => {
+    const short = session('synthetic'), full = session('synthetic')
+    short.meta.trackVariant = 'short'; short.meta.sourceSessionId = 'source-short'
+    full.meta.trackVariant = 'full'; full.meta.sourceSessionId = 'source-full'; full.sessionId = 'separate-id'
+    const entry = createSessionListEntry(short)
+    expect(sessionListEntryToSessionDocument(JSON.parse(JSON.stringify(entry))).meta.sourceSessionId).toBe('source-short')
+    const fromDelta = createSessionListEntryFromDelta({ gameId: 'synthetic', sourceSessionId: 'source-short',
+      sessionId: short.sessionId, trackId: short.meta.track, trackVariant: 'short', car: short.meta.car, dateStart: short.meta.date_start, summary: short.summary })
+    expect(fromDelta.sourceSessionId).toBe('source-short')
+    expect(dedupeCloudSessions([short, full])).toHaveLength(2)
+    expect(mergeLocalFirst([full], [short])).toHaveLength(2)
+    expect(() => mergeSessionLocalPreferred(full, short)).toThrow('cross-context')
+  })
   it('preserves named session kind and variant from recorder through upload delta and cache', () => {
     const { meta, summary } = extractMetadata({
       schema: 'racercore.session', version: 1, game_id: 'evo',
