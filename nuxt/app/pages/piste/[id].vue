@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useGameContext } from '~/composables/useGameContext'
 definePageMeta({
   layout: 'dashboard'
 })
@@ -21,7 +22,8 @@ function handleGoToSession(sessionId: string, routePath?: string) {
 </script>
 
 <template>
-  <PagesTrackDetailPage 
+  <PagesCommonGamePage v-if="useGameContext().consultedGame.value !== 'acc'" surface="piste" :track="trackId" />
+  <PagesTrackDetailPage v-else
     :track-id="trackId"
     :from-session="fromSession"
     @back="handleBack"

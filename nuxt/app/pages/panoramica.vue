@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useGameContext } from '~/composables/useGameContext'
 import { preparePage, preparePageFonts } from '~/services/ui/pagePreparation'
 import { overviewEntryKey, decodeOverviewImage } from '~/services/auth/overviewEntryPreparation'
 import { useTargetUserId } from '~/composables/usePilotContext'
@@ -14,6 +15,7 @@ const gateway = useTelemetryGateway()
 const entry = inject(overviewEntryKey, null)
 const baseURL = useRuntimeConfig().app.baseURL
 async function prepare() {
+  if (useGameContext().consultedGame.value !== 'acc') return { ok: false as const }
   return preparePage(async () => {
     if (!uid) throw new Error('No owner')
     const [projection, events] = await Promise.all([
@@ -30,6 +32,7 @@ async function retry() { prepared.value = await prepare() }
 </script>
 
 <template>
-  <PagesPanoramicaPage v-if="prepared.ok" :prepared="prepared.value" />
+  <PagesCommonGamePage v-if="useGameContext().consultedGame.value !== 'acc'" surface="panoramica" />
+  <PagesPanoramicaPage v-else-if="prepared.ok" :prepared="prepared.value" />
   <LayoutPagePreparationError v-else @retry="retry" />
 </template>

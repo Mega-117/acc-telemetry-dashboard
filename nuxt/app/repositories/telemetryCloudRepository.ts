@@ -1,6 +1,7 @@
 import { collection, doc, limit, orderBy, query, where } from 'firebase/firestore'
 import type { FullSession, SessionDocument } from '~/types/telemetry'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
+import { recordingGame } from '~/services/telemetry/gameIdentity'
 
 export async function loadCloudSessionsBounded(params: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
@@ -39,7 +40,7 @@ export async function loadCloudSessionsBounded(params: {
       rawChunkCount: data.rawChunkCount || 0,
       rawSizeBytes: data.rawSizeBytes || 0,
       source: 'cloud',
-      summarySource: bestRulesVersion >= BEST_RULES_VERSION ? 'canonical' : 'legacy_fallback',
+      summarySource: bestRulesVersion >= (data.meta?.gameId && data.meta.gameId !== 'acc' ? 1 : BEST_RULES_VERSION) ? 'canonical' : 'legacy_fallback',
       syncState: 'synced'
     } as SessionDocument
   })
@@ -66,6 +67,7 @@ export async function loadCloudSessionIndexList(params: {
     fileName: '',
     uploadedAt: null,
     meta: {
+      gameId: entry.gameId ?? 'acc',
       track: entry.track,
       car: entry.car,
       date_start: entry.date,
@@ -92,7 +94,7 @@ export async function loadCloudSessionIndexList(params: {
     rawChunkCount: 0,
     rawSizeBytes: 0,
     source: 'cloud',
-    summarySource: Number(entry.bestRulesVersion || 0) >= BEST_RULES_VERSION ? 'canonical' : 'legacy_fallback',
+    summarySource: Number(entry.bestRulesVersion || 0) >= (entry.gameId && entry.gameId !== 'acc' ? 1 : BEST_RULES_VERSION) ? 'canonical' : 'legacy_fallback',
     syncState: 'synced'
   } as SessionDocument))
 }
@@ -135,8 +137,10 @@ export async function fetchCloudFullSession(params: {
   if (!rawText) return null
 
   const payload = JSON.parse(rawText) as FullSession
+  const payloadGame = recordingGame(payload)
+  if (sessionData.meta?.gameId && sessionData.meta.gameId !== payloadGame) throw new Error('session-game-identity-mismatch')
   const summaryVersion = Number(sessionData?.summary?.best_rules_version || sessionData?.summaryRulesVersion || 0)
-  if (sessionData?.summary && summaryVersion >= BEST_RULES_VERSION) {
+  if (sessionData?.summary && summaryVersion >= (payloadGame && payloadGame !== 'acc' ? 1 : BEST_RULES_VERSION)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
     ;(payload as any).summary = sessionData.summary
   }

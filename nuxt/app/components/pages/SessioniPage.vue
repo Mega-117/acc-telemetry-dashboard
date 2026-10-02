@@ -4,6 +4,10 @@
 // Uses server-side pagination + local offline fallback
 // ============================================
 
+import { useGameContext } from '~/composables/useGameContext'
+import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
+import { GAME_OPTIONS, gameLabel } from '~/services/telemetry/gameCatalog'
+import { sessionGame } from '~/services/telemetry/gameIdentity'
 import RacingSessionList from '~/components/sessions/RacingSessionList.vue'
 import { ref, computed, onBeforeUnmount, onMounted, watch, nextTick } from 'vue'
 import { 
@@ -28,12 +32,17 @@ const emit = defineEmits<{
 
 // Types
 type SessionType = 'practice' | 'qualify' | 'race'
+type DisplaySessionType = SessionType | 'unknown'
+const { consultedGame } = useGameContext()
+const { canAccessDevTools } = useDevToolsAccess()
+const filterGame = ref(consultedGame.value)
 
 interface DisplaySession {
   id: string
   date: string
   time: string
-  type: SessionType
+  type: DisplaySessionType
+  game?: string
   track: string
   trackRaw: string
   car: string
@@ -127,6 +136,7 @@ function normalizeCatalogCategory(category: string): CarCategory {
 
 function buildServerFilters(): SessionPagerFilters {
   return {
+    gameId: filterGame.value === 'all' ? null : filterGame.value,
     sessionTypes: filterType.value === 'all' ? [] : [filterTypeToNumeric[filterType.value]],
     fromDateIso: getRangeStartIso(filterTimeRange.value),
     toDateIso: filterTimeRange.value === 'all' ? null : new Date().toISOString(),
@@ -178,12 +188,14 @@ watch(
 // Transform Firebase sessions to display format
 const sessions = computed<DisplaySession[]>(() => {
   return rawSessions.value.map(s => {
-    const sessionType = getSessionTypeLabel(s.meta.session_type)
+    const sessionType = sessionGame(s) === 'acc' ? getSessionTypeLabel(s.meta.session_type) : 'unknown'
     const dateStr = s.meta.date_start?.split('T')[0] || ''
-    const sessionRaceTime = s.summary.best_session_race_ms || s.summary.best_race_ms || null
+    const sessionRaceTime = sessionGame(s) === 'acc'
+      ? s.summary.best_session_race_ms || s.summary.best_race_ms || null : null
     
     return {
       id: s.sessionId,
+      game: gameLabel(sessionGame(s)),
       date: dateStr,
       time: formatTime(s.meta.date_start),
       type: sessionType,
@@ -196,7 +208,7 @@ const sessions = computed<DisplaySession[]>(() => {
       lapsValid: s.summary.lapsValid || 0,
       stints: s.summary.stintCount ?? 0,
       // Use stint-based best times (fuel-band classified)
-      bestQualy: s.summary.best_qualy_ms 
+      bestQualy: sessionGame(s) === 'acc' && s.summary.best_qualy_ms
         ? formatLapTime(s.summary.best_qualy_ms) 
         : undefined,
       bestRace: sessionRaceTime 
@@ -217,7 +229,7 @@ const filterTimeRange = ref<'today' | '7d' | '30d' | 'all'>('all')
 let filterReloadTimer: ReturnType<typeof setTimeout> | null = null
 
 watch(
-  [filterType, filterTrack, filterCarCategory, filterCar, filterTimeRange],
+  [filterGame, filterType, filterTrack, filterCarCategory, filterCar, filterTimeRange],
   () => {
     if (filterReloadTimer) clearTimeout(filterReloadTimer)
     filterReloadTimer = setTimeout(() => {
@@ -232,8 +244,10 @@ watch(filterCarCategory, () => {
   }
 })
 
-const trackOptions = computed(() => ACC_TRACK_OPTIONS)
+watch(filterGame, () => { filterTrack.value = 'all'; filterCar.value = 'all'; filterCarCategory.value = 'all'; filterType.value = 'all' })
+const trackOptions = computed(() => filterGame.value === 'acc' ? ACC_TRACK_OPTIONS : [...new Set(rawSessions.value.map(s => s.meta.track))].map(id => ({ id, name: id })))
 const carOptions = computed(() => {
+  if (filterGame.value !== 'acc') return [...new Set(rawSessions.value.map(s => s.meta.car))].map(id => ({ id, name: id }))
   return ACC_CAR_OPTIONS
     .filter(car => filterCarCategory.value === 'all' || normalizeCatalogCategory(car.category) === filterCarCategory.value)
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -373,6 +387,11 @@ function goToSession(id: string) {
         </button>
       </div>
       <div class="racing-filter-selects">
+        <select v-model="filterGame" class="racing-select racing-select--compact" aria-label="Filtra gioco">
+          <option value="all">Tutti i giochi</option>
+          <option v-for="game in GAME_OPTIONS" :key="game.id" :value="game.id">{{ game.label }}</option>
+          <option v-if="canAccessDevTools" value="synthetic">Simulatore di test · DEV</option>
+        </select>
         <select
           v-model="filterTrack"
           class="racing-select racing-select--compact"
@@ -391,6 +410,7 @@ function goToSession(id: string) {
         </select>
         <select
           v-model="filterCarCategory"
+          :disabled="filterGame !== 'acc'"
           class="racing-select racing-select--compact"
           aria-label="Filtra categoria auto"
         >

@@ -1,3 +1,4 @@
+import { buildGameActivity } from '~/services/telemetry/gameProjection'
 import { doc } from 'firebase/firestore'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { sanitizeForFirestore } from '~/utils/firestoreSanitize'
@@ -200,6 +201,7 @@ export async function applyUserProjectionDeltas(params: {
       sessionsList,
       totalSessions,
       activity7d,
+      activityByGame: buildGameActivity(sessionsList),
       tracksSummary,
       updatedAt: now
     }

@@ -1,4 +1,7 @@
 import { computed, ref } from 'vue'
+import { useGameContext } from './useGameContext'
+import { sessionGame } from '~/services/telemetry/gameIdentity'
+import { scopeSessionIndex } from '~/services/telemetry/gameProjection'
 import { useTelemetryData } from './useTelemetryData'
 import {
     type CarCategory,
@@ -150,7 +153,8 @@ function pushGatewayDiagnostic(event: Omit<PipelineDiagnosticEvent, 'at'>): void
 }
 
 export function useTelemetryGateway() {
-    const telemetry = useTelemetryData()
+    const gameId = useGameContext().consultedGame.value
+    const telemetry = useTelemetryData(gameId)
     const pager = useSessionPager()
     const { currentUser, userDisplayName } = useFirebaseAuth()
 
@@ -174,7 +178,7 @@ export function useTelemetryGateway() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         const electronAPI = (window as any).electronAPI
         if (!electronAPI) return []
-        const cacheKey = `${targetUserId}:pending`
+        const cacheKey = `${targetUserId}:${gameId}:pending`
         const cached = pendingLocalOverlayCache.get(cacheKey)
         if (cached && Date.now() - cached.cachedAt <= PENDING_LOCAL_OVERLAY_CACHE_TTL_MS) {
             return cached.sessions
@@ -184,7 +188,7 @@ export function useTelemetryGateway() {
             ownerId: targetUserId,
             isOnline: true
         })
-        const pendingSessions = localSessions.filter((session) => session.syncState && session.syncState !== 'synced')
+        const pendingSessions = localSessions.filter((session) => sessionGame(session) === gameId && session.syncState && session.syncState !== 'synced')
         pendingLocalOverlayCache.set(cacheKey, {
             cachedAt: Date.now(),
             sessions: pendingSessions
@@ -212,6 +216,7 @@ export function useTelemetryGateway() {
         const isOnline = typeof window === 'undefined' ? true : navigator.onLine
         const cacheKey = [
             resolvedUserId,
+            gameId,
             sourceMode,
             isElectron.value ? 'electron' : 'web',
             isOnline ? 'online' : 'offline'
@@ -287,6 +292,7 @@ export function useTelemetryGateway() {
     }
 
     async function collectTrackBestTimes(trackIds: string[], targetUserId: string | undefined, category: CarCategory): Promise<Record<string, TrackBestTimes>> {
+        if (gameId !== 'acc') return {}
         const uniqueTrackIds = Array.from(new Set(trackIds.map((trackId) => normalizeTrackKey(trackId)).filter(Boolean)))
         if (uniqueTrackIds.length === 0) return {}
         const resolvedUserId = resolveTargetUserId(targetUserId)
@@ -351,7 +357,7 @@ export function useTelemetryGateway() {
             }
 
             const pendingSessions = await loadPendingLocalOverlay(resolvedUserId)
-            const sessionIndex = userProjection?.sessionIndex || {}
+            const sessionIndex = scopeSessionIndex(userProjection?.sessionIndex || {}, gameId)
             const trackStats = mergePendingTrackStats(buildTrackStatsFromSessionIndex(sessionIndex), pendingSessions)
             const reference = selectOverviewLastSession(sessionIndex.sessionsList || [], pendingSessions)
             const newest = getNewestSessionEntry(sessionIndex, pendingSessions)
@@ -360,7 +366,7 @@ export function useTelemetryGateway() {
                 ...(reference?.track ? [normalizeTrackKey(reference.track)] : []),
                 ...trackStats.slice(0, 2).map((track) => normalizeTrackKey(track.track)),
             ])].slice(0, 2)
-            const bestDocs = await Promise.all(relevantTrackIds.map((trackId) => loadTrackBest(resolvedUserId, trackId)))
+            const bestDocs = gameId === 'acc' ? await Promise.all(relevantTrackIds.map((trackId) => loadTrackBest(resolvedUserId, trackId))) : []
             const bestsByTrack = mergePendingOverviewBestsByTrack(
                 Object.fromEntries(relevantTrackIds.map((trackId, index) => [normalizeTrackKey(trackId), buildOverviewBestTimesFromTrackBestDoc(bestDocs[index], category)])),
                 pendingSessions, category
@@ -450,6 +456,8 @@ export function useTelemetryGateway() {
     }
 
     async function getTracksOverviewProjection(targetUserId?: string): Promise<TrackOverviewProjectionItem[]> {
+        // This projection includes ACC's fixed track catalogue and best rules.
+        if (gameId !== 'acc') return []
         const resolvedUserId = resolveTargetUserId(targetUserId)
         const scenarioId = startFirebaseScenario('page.piste.projection', { targetUserId: resolvedUserId })
         try {
@@ -464,10 +472,10 @@ export function useTelemetryGateway() {
             }
 
             const [trackBestDocs, pendingSessions] = await Promise.all([
-                loadTrackBestsMap(resolvedUserId),
+                gameId === 'acc' ? loadTrackBestsMap(resolvedUserId) : Promise.resolve({}),
                 loadPendingLocalOverlay(resolvedUserId)
             ])
-            const trackStats = mergePendingTrackStats(buildTrackStatsFromSessionIndex(userProjection?.sessionIndex), pendingSessions)
+            const trackStats = mergePendingTrackStats(buildTrackStatsFromSessionIndex(scopeSessionIndex(userProjection?.sessionIndex || {}, gameId)), pendingSessions)
             const trackBestsMap = mergePendingBestsByTrack(buildTrackBestsMapFromDocs(trackBestDocs), pendingSessions)
 
             pushGatewayDiagnostic({
@@ -656,6 +664,7 @@ export function useTelemetryGateway() {
         options: { category?: CarCategory; grip?: string } = {}
     ): Promise<TrackDetailProjection | null> {
         const resolvedUserId = resolveTargetUserId(targetUserId)
+        if (gameId !== 'acc') return null
         const category = options.category || 'GT3'
         const selectedGrip = options.grip || 'Optimum'
         const scenarioId = startFirebaseScenario('page.trackDetail.projection', {
@@ -667,7 +676,7 @@ export function useTelemetryGateway() {
         try {
             if (!resolvedUserId) return null
             const normalizedTrackId = normalizeTrackKey(trackId)
-            const cacheKey = `${resolvedUserId}:${normalizedTrackId}`
+            const cacheKey = `${resolvedUserId}:${gameId}:${normalizedTrackId}`
             let cached = trackDetailProjectionCache.get(cacheKey)
             if (!checkFirebaseCacheFreshness('gateway.trackDetail', cached?.cachedAt, ownerDataCacheTtlFor(resolvedUserId))) cached = undefined
             const generation = gatewayCacheGeneration

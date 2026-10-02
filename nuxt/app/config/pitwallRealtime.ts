@@ -1,5 +1,6 @@
 import { connectDatabaseEmulator, getDatabase } from 'firebase/database'
 import { app } from './firebase'
+import { FIREBASE_DATABASE_EMULATOR_PORT } from './firebaseRuntimeTarget'
 import { createPitwallRealtimeTransport } from '~/services/pitwall/pitwallRealtimeTransport'
 import { PITWALL_SOCIAL_ROOT } from '~/services/pitwall/pitwallSocialRoom'
 import { combinePitwallIoMetrics } from '~/services/pitwall/pitwallIoMetrics'
@@ -25,7 +26,7 @@ export function getPitwallRealtime() {
     ? 'https://accsuite117-default-rtdb.europe-west1.firebasedatabase.app' : undefined)
   if (!url && !emulated) throw new Error('Pitwall in aggiornamento: collegamento non ancora disponibile.')
   const database = getDatabase(app, url || 'https://demo-pitwall-audit-default-rtdb.firebaseio.com')
-  if (emulated) connectDatabaseEmulator(database, '127.0.0.1', 9000)
+  if (emulated) connectDatabaseEmulator(database, '127.0.0.1', FIREBASE_DATABASE_EMULATOR_PORT)
   transport = createPitwallRealtimeTransport(database)
   return transport
 }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useGameContext } from '~/composables/useGameContext'
 import { preparePage, preparePageFonts } from '~/services/ui/pagePreparation'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 definePageMeta({
@@ -8,7 +9,7 @@ const gateway = useTelemetryGateway()
 async function prepare() {
   return preparePage(async () => {
     await Promise.all([
-      gateway.getSessionsPage(undefined, { sessionTypes: [], fromDateIso: null, toDateIso: null, track: null, car: null, carCategory: null, hideEmpty: true }, 1, 25),
+      gateway.getSessionsPage(undefined, { gameId: useGameContext().consultedGame.value, sessionTypes: [], fromDateIso: null, toDateIso: null, track: null, car: null, carCategory: null, hideEmpty: true }, 1, 25),
       preparePageFonts(),
     ])
     return true

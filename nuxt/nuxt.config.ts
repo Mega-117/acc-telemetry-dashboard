@@ -6,6 +6,9 @@ import { join } from 'node:path'
 
 // Determina baseURL: '/' per dev locale, path completo per produzione
 const isDev = process.env.NODE_ENV === 'development'
+const qaEmulatorPorts = isDev ? [process.env.VITE_ACC_AUTH_EMULATOR_PORT, process.env.VITE_ACC_FIRESTORE_EMULATOR_PORT, process.env.VITE_ACC_DATABASE_EMULATOR_PORT]
+  .map(Number).filter(port => Number.isInteger(port) && port >= 1024 && port <= 65535) : []
+const qaEmulatorSources = [...new Set(qaEmulatorPorts)].map(port => ` http://127.0.0.1:${port} ws://127.0.0.1:${port}`).join('')
 const baseURL = isDev ? '/' : '/acc-telemetry-dashboard/docs/'
 // The source ICO is mirrored from the suite root; its hash invalidates browser caches.
 const iconRevision = createHash('sha256')
@@ -92,7 +95,8 @@ export default defineNuxtConfig({
             // acc-voice: e' il protocollo Electron che serve i WAV locali dei
             // riferimenti nella release desktop (PIP-211).
             "media-src 'self' data: blob: acc-voice: http://127.0.0.1:5112 http://localhost:5112",
-            `connect-src 'self' http://127.0.0.1:5112 http://localhost:5112${isDev ? ' http://127.0.0.1:8080 http://localhost:8080 http://127.0.0.1:9099 http://localhost:9099 http://127.0.0.1:9000 http://localhost:9000 ws://127.0.0.1:9000 ws://localhost:9000' : ''} https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app`,
+            `connect-src 'self' http://127.0.0.1:5112 http://localhost:5112${isDev ? ' http://127.0.0.1:8080 http://localhost:8080 http://127.0.0.1:9099 http://localhost:9099 http://127.0.0.1:9000 http://localhost:9000 ws://127.0.0.1:9000 ws://localhost:9000' : ''}${qaEmulatorSources} https://*.googleapis.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app`,
+
             "frame-ancestors 'none'",
           ].join('; ')
         }

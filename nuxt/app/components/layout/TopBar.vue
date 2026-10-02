@@ -234,6 +234,7 @@ onMounted(() => {
       <!-- User Dropdown -->
       <div class="topbar__user">
         <!-- La campanella del Pit Wall: sempre montata, suona anche fuori da /pitwall. -->
+        <LayoutGameSelector />
         <PitwallConceptBell />
         <UiNotificationBell v-if="showNotificationBell" />
         <UiUserDropdown

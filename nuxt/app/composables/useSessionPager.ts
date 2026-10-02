@@ -1,4 +1,5 @@
 import { computed, ref } from 'vue'
+import { sessionGame } from '~/services/telemetry/gameIdentity'
 import {
     collection,
     doc,
@@ -39,6 +40,7 @@ const CLOUD_IDENTITY_CACHE_TTL_MS = 3000
 type SessionSyncState = 'synced' | 'pending_sync' | 'local_only' | 'sync_failed'
 
 export type SessionPagerFilters = {
+    gameId?: string | null
     sessionTypes?: number[]
     fromDateIso?: string | null
     toDateIso?: string | null
@@ -77,6 +79,7 @@ type PagerState = {
     }
 }
 
+let pageRequestRevision = 0
 const globalSessions = ref<SessionDocument[]>([])
 const globalState = ref<PagerState>({
     currentPage: 1,
@@ -146,6 +149,7 @@ function matchesToken(filterValue: string | null | undefined, candidates: Array<
 }
 
 function matchesClientFilters(session: SessionDocument, filters: SessionPagerFilters): boolean {
+    if (filters.gameId && sessionGame(session) !== filters.gameId) return false
     const types = (filters.sessionTypes || []).filter((t) => Number.isFinite(t))
     const type = Number(session.meta?.session_type ?? -1)
     if (types.length > 0 && !types.includes(type)) return false
@@ -391,7 +395,7 @@ async function loadLightweightSessionSource(targetUserId: string): Promise<{
 
 async function resolveTotals(targetUserId: string, filters: SessionPagerFilters): Promise<number | null> {
     try {
-        if (!filters.track && !filters.car && !filters.carCategory) {
+        if (!filters.gameId && !filters.track && !filters.car && !filters.carCategory) {
             const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
             const constraints: QueryConstraint[] = []
             const types = (filters.sessionTypes || []).filter((t) => Number.isFinite(t))
@@ -427,6 +431,7 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
         const hasServerFilters = (filters.sessionTypes?.length || 0) > 0
             || !!filters.fromDateIso
             || !!filters.toDateIso
+            || !!filters.gameId
             || !!filters.track
             || !!filters.car
             || !!filters.carCategory
@@ -475,7 +480,7 @@ async function resolveTotals(targetUserId: string, filters: SessionPagerFilters)
 
 async function resolveCloudTotalsOnly(targetUserId: string, filters: SessionPagerFilters): Promise<number | null> {
     try {
-        if (filters.track || filters.car || filters.carCategory) return null
+        if (filters.gameId || filters.track || filters.car || filters.carCategory) return null
 
         const sessionsRef = collection(db, `users/${targetUserId}/sessions`)
         const constraints: QueryConstraint[] = []
@@ -587,7 +592,8 @@ async function ensureCursorForPage(
     targetUserId: string,
     page: number,
     pageSize: number,
-    filters: SessionPagerFilters
+    filters: SessionPagerFilters,
+    isCurrent = () => true
 ): Promise<number> {
     if (page <= 1) return 1
     let reachablePage = 1
@@ -601,6 +607,7 @@ async function ensureCursorForPage(
 
         const startCursor = globalCursorMap.get(p) || null
         const result = await queryCloudPage(targetUserId, pageSize, startCursor, filters)
+        if (!isCurrent()) return 1
         if (result.hasNext && result.lastDoc) {
             globalCursorMap.set(p + 1, result.lastDoc)
             reachablePage = p + 1
@@ -757,6 +764,8 @@ export function useSessionPager() {
     })
 
     async function loadPage(targetUserIdInput?: string, options: PageLoadOptions = {}): Promise<SessionDocument[]> {
+        const requestRevision = ++pageRequestRevision
+        const isCurrent = () => pageRequestRevision === requestRevision
         const targetUserId = targetUserIdInput || currentUser.value?.uid
         if (!targetUserId) return []
 
@@ -789,7 +798,9 @@ export function useSessionPager() {
         try {
             const isOwner = targetUserId === currentUser.value?.uid
             const localSessions = (isElectron.value ? await getLocalSessionsForUser(targetUserId) : [])
+            if (!isCurrent()) return []
             const lightweightSource = await loadLightweightSessionSource(targetUserId)
+            if (!isCurrent()) return []
 
             if (lightweightSource) {
                 const filteredCloudSessions = applyClientFilters(lightweightSource.sessions, filters)
@@ -824,6 +835,7 @@ export function useSessionPager() {
                     localSessions
                 )
 
+                if (!isCurrent()) return []
                 globalSessions.value = mergedResult.pageSessions
                 globalState.value.currentPage = mergedResult.currentPage
                 globalState.value.hasPrev = mergedResult.hasPrev
@@ -866,9 +878,13 @@ export function useSessionPager() {
                 return globalSessions.value
             }
 
-            const reachablePage = await ensureCursorForPage(targetUserId, requestedPage, pageSize, filters)
+            const reachablePage = await ensureCursorForPage(targetUserId, requestedPage, pageSize, filters, isCurrent)
+            if (!isCurrent()) return []
             const startCursor = globalCursorMap.get(reachablePage) || null
             const cloudResult = await queryCloudPage(targetUserId, pageSize, startCursor, filters)
+            if (!isCurrent()) return []
+            const totalItems = await resolveTotals(targetUserId, filters)
+            if (!isCurrent()) return []
 
             if (cloudResult.hasNext && cloudResult.lastDoc) {
                 globalCursorMap.set(reachablePage + 1, cloudResult.lastDoc)
@@ -876,14 +892,14 @@ export function useSessionPager() {
 
             let pageSessions = cloudResult.sessions
             if (isOwner && isElectron.value && reachablePage === 1) {
-                pageSessions = mergePendingLocal(pageSessions, localSessions, true)
+                pageSessions = mergePendingLocal(pageSessions, applyClientFilters(localSessions, filters), true)
             }
 
             globalSessions.value = pageSessions
             globalState.value.currentPage = reachablePage
             globalState.value.hasPrev = reachablePage > 1
             globalState.value.hasNext = cloudResult.hasNext
-            globalState.value.totalItems = await resolveTotals(targetUserId, filters)
+            globalState.value.totalItems = totalItems
             globalState.value.diagnostics = {
                 source: pageSessions.some((session) => session.source === 'local') ? 'mixed' : 'cloud_page',
                 cloudCount: pageSessions.filter((session) => session.source !== 'local').length,
@@ -895,11 +911,12 @@ export function useSessionPager() {
             return globalSessions.value
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
         } catch (e: any) {
+            if (!isCurrent()) return []
             globalError.value = e?.message || 'Errore caricamento sessioni paginato'
             console.error('[PAGER] loadPage error:', e)
             return []
         } finally {
-            globalState.value.loading = false
+            if (isCurrent()) globalState.value.loading = false
         }
     }
 

@@ -1,3 +1,4 @@
+import { buildGameActivity } from '~/services/telemetry/gameProjection'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { buildActivityProjectionFromEntries } from '~/services/telemetry/activityProjectionService'
 import type { SessionDocument } from '~/types/telemetry'
@@ -83,6 +84,7 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
     schemaVersion: SESSION_INDEX_SCHEMA_VERSION,
     sessionsList: sessionsList.slice(0, SESSION_INDEX_MAX_ITEMS),
     totalSessions: allSessions.length,
+    activityByGame: buildGameActivity(sessionsList, now),
     activity7d: {
       practice: activityProjection.totals.practice,
       qualify: activityProjection.totals.qualify,

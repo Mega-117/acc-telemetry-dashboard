@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useGameContext } from '~/composables/useGameContext'
+const { consultedGame } = useGameContext()
 // ============================================
 // App.vue - Main Application with Auth Flow
 // ============================================
@@ -618,7 +620,7 @@ provide('goToSettings', handleGoToSettings)
         <!-- Dashboard -->
         <div v-else-if="appState === 'dashboard'" key="dashboard" class="dashboard-wrapper">
           <NuxtLayout>
-            <NuxtPage />
+            <NuxtPage :page-key="route => `${consultedGame}:${route.fullPath}`" />
           </NuxtLayout>
         </div>
 

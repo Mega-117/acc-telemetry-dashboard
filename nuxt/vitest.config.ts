@@ -40,6 +40,15 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/repositories/telemetryCloudRepository.ts',
+        'app/components/layout/GameSelector.vue',
+        'app/components/pages/CommonGamePage.vue',
+        'app/components/sessions/CommonSessionDetail.vue',
+        'app/composables/useGameContext.ts',
+        'app/services/telemetry/gameCatalog.ts',
+        'app/services/telemetry/gameProjection.ts',
+        'app/services/telemetry/commonSessionPresentation.ts',
+        'app/services/telemetry/commonLive.ts',
         'app/services/telemetry/gameIdentity.ts',
         'app/services/pitwall/friendRequestQueue.ts',
         'app/composables/useControlKFriendRequests.ts',

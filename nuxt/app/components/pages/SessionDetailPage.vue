@@ -43,6 +43,8 @@ import { usePilotContext } from '~/composables/usePilotContext'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { shareSessionLink } from '~/services/session-detail/sessionShareService'
 import { autoSelectComparisonStints } from '~/services/session-detail/sessionCompareService'
+import { canUseAccRules } from '~/services/telemetry/gameIdentity'
+import CommonSessionDetail from '~/components/sessions/CommonSessionDetail.vue'
 import { getSessionDetailLoadError } from '~/services/session-detail/loadSessionDetailViewModel'
 import {
   buildBestSectorSummary,
@@ -172,6 +174,7 @@ function zoomOut() {
 const telemetryGateway = useTelemetryGateway()
 
 const { getTheoreticalTimes, generateShareLink, fetchSessionFull } = telemetryGateway
+const commonSession = ref<FullSession | null>(null)
 const fullSession = ref<FullSession | null>(null)
 
 const isLoading = ref(true)
@@ -224,7 +227,12 @@ onMounted(async () => {
     })
 
     currentUserNickname.value = result.currentUserNickname
-    fullSession.value = result.fullSession
+    if (result.fullSession && !canUseAccRules(result.fullSession)) {
+      commonSession.value = result.fullSession
+      fullSession.value = null
+    } else {
+      fullSession.value = result.fullSession
+    }
     loadError.value = result.loadError
 
     if (result.fullSession) {
@@ -2320,7 +2328,8 @@ const gripZones = computed(() => {
 </script>
 
 <template>
-  <div class="session-detail-wrapper">
+  <CommonSessionDetail v-if="commonSession" :session="commonSession" />
+  <div v-else class="session-detail-wrapper">
   <!-- Share Success Notification (teleported to body for fixed position) -->
   <Teleport to="body">
     <Transition name="slide-notification">

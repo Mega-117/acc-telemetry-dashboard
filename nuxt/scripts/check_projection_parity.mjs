@@ -114,6 +114,8 @@ function getSessionTypeLabel(type) {
 }
 
 const legacyRaceNonHistoricalRaw = {
+  // A recognized pre-versioning ACC export, not an arbitrary legacy object.
+  static_data: { sectorCount: 3 },
   session_info: {
     date_start: '2026-04-21T19:57:00',
     track: 'silverstone',

@@ -1,4 +1,6 @@
 import { computed } from 'vue'
+import { useGameContext } from './useGameContext'
+import { sessionGame } from '~/services/telemetry/gameIdentity'
 
 import {
     CAR_CATEGORIES,
@@ -19,14 +21,14 @@ import type { SessionDocument } from '~/types/telemetry'
 
 // === COMPOSABLE ===
 
-export function useTelemetryData() {
+export function useTelemetryData(gameId = useGameContext().consultedGame.value) {
     // --- Sub-composables ---
     const sessionLoader = useSessionLoader()
     const trackBests = useTrackBests()
     const sessionSharing = useSessionSharing()
 
     // Expose shared state directly from sessionLoader
-    const sessions = sessionLoader.sessions
+    const sessions = computed(() => sessionLoader.sessions.value.filter(session => sessionGame(session) === gameId))
     const isLoading = sessionLoader.isLoading
     const error = sessionLoader.error
 
@@ -274,7 +276,7 @@ export function useTelemetryData() {
         getBestAvgRaceForTrack,
         getBestTimesForGrip: trackBests.getBestTimesForGrip,
         getTheoreticalTimes: trackBests.getTheoreticalTimes,
-        getTrackBests: trackBests.getTrackBests,
+        getTrackBests: (...args: Parameters<typeof trackBests.getTrackBests>): ReturnType<typeof trackBests.getTrackBests> => gameId === 'acc' ? trackBests.getTrackBests(...args) : Promise.resolve({}),
         clearTrackDerivedCaches: trackBests.clearTrackDerivedCaches,
         invalidateTrackBests: trackBests.invalidateTrackBests,
         forceRecalculateTrackBests: trackBests.forceRecalculateTrackBests,

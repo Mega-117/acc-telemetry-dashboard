@@ -52,6 +52,22 @@ function makeState(overrides: Record<string, any> = {}) {
 }
 
 describe('useFastStatePoller', () => {
+  it('uses common ACC measurements without falling back from unknown to legacy zero', async () => {
+    const api = { getFastState: vi.fn(async () => makeState({ speed_kmh: 0, last_lap_time_ms: 0, live: {
+      schema: 'racercore.live', version: 1, game_id: 'acc', session_id: 'qa', observed_at_ms: Date.now(), ttl_ms: 1000,
+      connected: true, capabilities: { fuel: false }, fields: {
+        speed: { value: 125, availability: 'available', unit: 'km/h' },
+        last_lap_time: { value: null, availability: 'unknown', unit: 'ms' },
+      },
+    } })) }
+    const poller = useFastStatePoller(() => api)
+    await poller.startFastStatePolling()
+    expect(poller.fastState.value.speedKmh).toBe(125)
+    expect(poller.fastState.value.lastLapTimeMs).toBeNull()
+    expect(poller.fastState.value.fuelL).toBeNull()
+    expect(poller.fastState.value.tyres).toHaveLength(4)
+    poller.stopFastStatePolling()
+  })
   beforeEach(() => {
     vi.useFakeTimers()
     vi.spyOn(console, 'warn').mockImplementation(() => {})

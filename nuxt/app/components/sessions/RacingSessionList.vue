@@ -2,7 +2,8 @@
 export interface RacingSessionRow {
   id: string
   time: string
-  type: 'practice' | 'qualify' | 'race'
+  type: 'practice' | 'qualify' | 'race' | 'unknown'
+  game?: string
   track: string
   car: string
   laps: number
@@ -23,7 +24,7 @@ function formatDateHeader(dateStr: string) {
   return Number.isNaN(date.getTime()) ? 'DATA NON DISPONIBILE' : date.toLocaleDateString('it-IT', { day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()
 }
 function getTypeLabel(type: RacingSessionRow['type']) {
-  return { practice: 'PROVE LIBERE', qualify: 'QUALIFICA', race: 'GARA' }[type]
+  return { practice: 'PROVE LIBERE', qualify: 'QUALIFICA', race: 'GARA', unknown: 'SESSIONE' }[type]
 }
 function openSession(event: MouseEvent, id: string) {
   event.stopPropagation()
@@ -99,6 +100,7 @@ function openSession(event: MouseEvent, id: string) {
                     >
                       {{ session.track }}
                     </component>
+                    <small class="session-game">{{ session.game || 'ACC' }}</small>
                   </td>
                   <td
                     class="session-car"
@@ -139,6 +141,7 @@ function openSession(event: MouseEvent, id: string) {
 @use '@/assets/scss/racing-settings' as controls;
 .racing-session-list { @include controls.tokens; }
 .session-open { text-decoration: none; }
+.session-game { display: block; color: var(--racing-data-muted); font-size: 10px; margin-top: 4px; }
 .racing-session-list--track {
   .racing-day-table { min-width: 720px; }
   .col-type { width: 12%; }

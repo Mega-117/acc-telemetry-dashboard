@@ -1,4 +1,5 @@
 import { computed, shallowRef } from 'vue'
+import { readCommonLive, commonValue, type CommonLive } from '~/services/telemetry/commonLive'
 import { usePresentationActivity } from './usePresentationVisibility'
 import { retainUnchanged } from '~/services/overlay/stableTelemetry'
 import { createTelemetryRegistry } from '~/services/overlay/sharedTelemetryLease'
@@ -122,6 +123,7 @@ export interface FastStatePitPrediction {
 }
 
 export interface FastOverlayState {
+  commonLive?: CommonLive | null
   dataSource?: 'local' | 'focused'
   context: FastStateContext | null
   localDriver: FastStateLocalDriver | null
@@ -472,6 +474,19 @@ export function normalizePitPrediction(raw: any): FastStatePitPrediction | null 
 }
 
 function normalizeFastState(state: any): FastOverlayState {
+  const common = readCommonLive(state?.live ?? state)
+  if ((state?.live || state?.schema === 'racercore.live') && !common) return { ...EMPTY_FAST_STATE }
+  if (common && !common.connected) return { ...EMPTY_FAST_STATE, commonLive: common }
+  if (common && common.gameId !== 'acc') {
+    return {
+      ...EMPTY_FAST_STATE, commonLive: common,
+      isFresh: common.fresh, isLive: common.connected,
+      speedKmh: commonValue(common, 'speed', 'km/h'),
+      currentLapTimeMs: commonValue(common, 'current_lap_time', 'ms'),
+      lastLapTimeMs: commonValue(common, 'last_lap_time', 'ms'),
+      fuelL: common.capabilities.fuel ? commonValue(common, 'fuel', 'L') : null,
+    }
+  }
   if (!state || typeof state !== 'object' || !isFastStateFresh(state.ts)) {
     return { ...EMPTY_FAST_STATE }
   }
@@ -482,6 +497,7 @@ function normalizeFastState(state: any): FastOverlayState {
 
   return {
     dataSource: 'local',
+    commonLive: common,
     context: normalizeContext(state.context),
     localDriver: normalizeLocalDriver(state.local_driver),
     info: normalizeInfo(state.info),
@@ -490,8 +506,8 @@ function normalizeFastState(state: any): FastOverlayState {
     pitPrediction: normalizePitPrediction(state.pit_prediction),
     flag: toNumber(state.flag),
     lapsCompleted: toNumber(state.laps_completed) ?? 0,
-    currentLapTimeMs: toNumber(state.current_lap_time_ms),
-    lastLapTimeMs: toNumber(state.last_lap_time_ms),
+    currentLapTimeMs: common ? commonValue(common, 'current_lap_time', 'ms') : toNumber(state.current_lap_time_ms),
+    lastLapTimeMs: common ? commonValue(common, 'last_lap_time', 'ms') : toNumber(state.last_lap_time_ms),
     bestLapTimeMs: toNumber(state.best_lap_time_ms),
     lapValid: typeof state.lap_valid === 'boolean' ? state.lap_valid : null,
     isFresh: true,
@@ -502,7 +518,7 @@ function normalizeFastState(state: any): FastOverlayState {
     isInPitLane: state.is_in_pit_lane === true,
     sessionType: toNumber(state.session_type),
     normalizedCarPosition: toNumber(state.normalized_car_position),
-    speedKmh: toNumber(state.speed_kmh),
+    speedKmh: common ? commonValue(common, 'speed', 'km/h') : toNumber(state.speed_kmh),
     speedDeltaKmh: toNumber(state.speed_delta_kmh),
     referenceSpeedKmh: toNumber(state.reference_speed_kmh),
     referenceRpm: toNumber(state.reference_rpm),
@@ -516,7 +532,7 @@ function normalizeFastState(state: any): FastOverlayState {
     rpm: toNumber(state.rpm),
     maxRpm: toNumber(state.max_rpm),
     gear: toNumber(state.gear),
-    fuelL: toNumber(state.fuel_l),
+    fuelL: common ? (common.capabilities.fuel ? commonValue(common, 'fuel', 'L') : null) : toNumber(state.fuel_l),
     fuelPerLapL: toNumber(state.fuel_per_lap_l),
     fuelLapsRemaining: toNumber(state.fuel_laps_remaining),
     fuelLeftTimeMs: toNumber(state.fuel_left_time_ms),
@@ -560,7 +576,7 @@ function createFastStatePoller(getApi: () => any | null) {
   let fastStateInterval: ReturnType<typeof setInterval> | null = null
   let removePushListener: (() => void) | null = null
   let revision = 0
-  let lastRaw: { ts?: unknown } | null = null
+  let lastRaw: { ts?: unknown; live?: unknown; schema?: unknown } | null = null
   let lastPushAt = -Infinity
 
   function applyState(state: any) {
@@ -613,7 +629,12 @@ function createFastStatePoller(getApi: () => any | null) {
     const firstPoll = pollOnce()
     fastStateInterval = setInterval(() => {
       // Expiry remains active even with a stalled pull. Healthy pushes need no pull.
-      if (lastRaw && !isFastStateFresh(lastRaw.ts)) applyState(null)
+      if (lastRaw) {
+        const common = readCommonLive(lastRaw.live ?? lastRaw)
+        if (common) {
+          if (!common.fresh) applyState(lastRaw)
+        } else if (!isFastStateFresh(lastRaw.ts)) applyState(null)
+      }
       if (Date.now() - lastPushAt >= FAST_STATE_POLL_MS) void pollOnce()
     }, FAST_STATE_POLL_MS)
     return firstPoll
