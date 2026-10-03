@@ -3,6 +3,9 @@ import type { TrackReferencePhase } from '~/services/spotter/trackVoiceReference
 import type { TyreSetupViewModel } from '~/services/overlay/tyreSetupViewModel'
 
 export interface LiveLapState {
+  /** Accepted local-driver laps; live/observed car counters are separate. */
+  personalLapsCompleted?: number | null
+  personalLapsValid?: number | null
   gameId?: string
   sourceSessionId?: string | null
   trackVariant?: string | null

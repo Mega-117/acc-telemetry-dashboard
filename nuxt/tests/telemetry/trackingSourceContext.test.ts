@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { useTrackingRecord } from '~/composables/useTrackingRecord'
 import type { LiveLapState } from '~/types/liveTelemetry'
 
-const lap = (session = 'one') => ({ gameId: 'evo', sourceSessionId: session, track: 'Spa', trackVariant: 'GP', car: 'GT3', lapsCompleted: 4, lapsValid: 3 }) as LiveLapState
+const lap = (session = 'one') => ({ gameId: 'synthetic', sourceSessionId: session, track: 'Spa', trackVariant: 'GP', car: 'GT3', lapsCompleted: 24, lapsValid: 23, personalLapsCompleted: 4, personalLapsValid: 3 }) as LiveLapState
 function setup() {
   let current = lap()
   let resolveStart!: (value: unknown) => void
@@ -16,11 +16,19 @@ function setup() {
 }
 
 describe('training IPC source context', () => {
+  it('never falls back to the observed car when personal counters are unavailable', async () => {
+    const state = setup()
+    state.setLap({ ...lap(), personalLapsCompleted: null, personalLapsValid: undefined })
+    const start = state.record.trackingStart()
+    await Promise.resolve(); state.resolve(); await start
+    await state.record.trackingComplete(1)
+    expect(state.api.trainingComplete).toHaveBeenCalledWith(expect.objectContaining({ lapsCompleted: null, lapsValid: null }))
+  })
   it('abandons a late start for the old source without adopting the new source counts', async () => {
     const state = setup()
     const start = state.record.trackingStart()
     await Promise.resolve()
-    expect(state.api.trainingStart).toHaveBeenCalledWith(expect.objectContaining({ gameId: 'evo', sourceSessionId: 'one', trackVariant: 'GP' }))
+    expect(state.api.trainingStart).toHaveBeenCalledWith(expect.objectContaining({ gameId: 'synthetic', sourceSessionId: 'one', trackVariant: 'GP' }))
     state.setLap(lap('two'))
     state.resolve(); await start
     expect(state.record.activeTrainingId.value).toBeNull()

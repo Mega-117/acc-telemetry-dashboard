@@ -27,6 +27,24 @@ async function flushPromises() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('useLiveStatePoller', () => {
+  it.each(['acc', 'synthetic'])('keeps personal counts separate from %s car/HUD counts', async (gameId) => {
+    const state = gameId === 'acc' ? {
+      ts: freshTs(), laps_completed: 24, laps_valid: 23,
+      personal_laps_completed: 4, personal_laps_valid: 3,
+    } : {
+      schema: 'racercore.live', version: 1, game_id: gameId, session_id: 'own',
+      observed_at_ms: Date.now(), ttl_ms: 1500, connected: true, capabilities: {},
+      fields: Object.fromEntries(Object.entries({ lap_count: 24, personal_laps_completed: 4, personal_laps_valid: 3 })
+        .map(([key, value]) => [key, { value, availability: 'available', unit: 'count' }])),
+    }
+    const poller = useLiveStatePoller(() => makeApi(async () => state))
+    poller.startLiveStatePolling()
+    await flushPromises()
+    expect(poller.liveLap.value.lapsCompleted).toBe(24)
+    expect(poller.liveLap.value.personalLapsCompleted).toBe(4)
+    expect(poller.liveLap.value.personalLapsValid).toBe(3)
+    poller.stopLiveStatePolling()
+  })
   it.each([false, true, undefined])('keeps completed validity %s separate from current validity', async (valid) => {
     const poller = useLiveStatePoller(() => makeApi(async () => ({
       ts: freshTs(), laps_completed: 1, lap_valid: true, last_lap_valid: valid,

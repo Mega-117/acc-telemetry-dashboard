@@ -66,8 +66,10 @@ export function useTrackingRecord(
     const sameSource = sourceKey === key(lap)
     return {
       id: activeTrainingId.value,
-      lapsCompleted: sameSource ? lap.lapsCompleted : null,
-      lapsValid: sameSource ? lap.lapsValid : null,
+      // A car counter can include a teammate's stint or an observed car.
+      // Only the connector's accepted personal counters may enter history.
+      lapsCompleted: sameSource ? lap.personalLapsCompleted ?? null : null,
+      lapsValid: sameSource ? lap.personalLapsValid ?? null : null,
       stepsCompleted,
       startedAt: activeTrainingStartedAt.value,
     }

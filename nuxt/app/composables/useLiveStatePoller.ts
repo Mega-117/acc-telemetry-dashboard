@@ -106,6 +106,8 @@ export function useLiveStatePoller(getApi: () => any | null, background = false)
       const laps = commonValue(common, 'lap_count', 'count')
       liveLap.value = common.connected ? {
         ...EMPTY_LAP_STATE, currentLap: laps === null ? null : laps + 1, lapsCompleted: laps,
+        personalLapsCompleted: commonValue(common, 'personal_laps_completed', 'count'),
+        personalLapsValid: commonValue(common, 'personal_laps_valid', 'count'),
         gameId: common.gameId, sourceSessionId: common.sessionId, trackVariant: common.identity?.variant ?? null,
         lapValid: commonBoolean(common, 'lap_valid'), lastLapValid: commonBoolean(common, 'last_lap_valid'),
         lastLapTimeMs: commonValue(common, 'last_lap_time', 'ms'), sectorHud: commonSectorHud(common),
@@ -122,6 +124,8 @@ export function useLiveStatePoller(getApi: () => any | null, background = false)
         gameId: 'acc', sourceSessionId: common?.sessionId ?? null, trackVariant: null,
         currentLap: typeof state.current_lap === 'number' ? state.current_lap : null,
         lapsCompleted: typeof state.laps_completed === 'number' ? state.laps_completed : null,
+        personalLapsCompleted: toNumber(state.personal_laps_completed),
+        personalLapsValid: toNumber(state.personal_laps_valid),
         lapsValid: typeof state.laps_valid === 'number' ? state.laps_valid : null,
         lapValid: typeof state.lap_valid === 'boolean' ? state.lap_valid : null,
         lastLapValid: typeof state.last_lap_valid === 'boolean' ? state.last_lap_valid : null,
