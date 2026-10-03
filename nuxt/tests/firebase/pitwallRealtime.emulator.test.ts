@@ -57,6 +57,25 @@ async function send(engineer: PitwallRealtimeRoomService, roomId: string) {
 }
 
 describe('Pitwall RTDB rules and integrated services', () => {
+  it.each(['acc', 'evo', 'synthetic'])('PIP-469 keeps %s source presence owner-bound without inventing remote input', async (gameId) => {
+    const { driver, engineer, roomId } = await openRoom()
+    const methods = gameId === 'acc' ? ['standard'] : []
+    expect((await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true,
+      runtimeSessionId: `${gameId}-session`, strategy: { applicationMethods: methods } })).ok).toBe(true)
+    const path = `pitwallV3/rooms/${roomId}/mfd`
+    await vi.waitFor(async () => expect((await get(ref(driver.io.database, path))).val()?.strategy?.applicationMethodsKnown).toBe(true))
+    const snapshot = (await assertSucceeds(get(ref(driver.io.database, path)))).val()
+    expect(snapshot.uid).toBe('driver')
+    expect(snapshot.strategy.applicationMethodsKnown).toBe(true)
+    await assertFails(get(ref(db('stranger'), path)))
+    await assertFails(set(ref(db('stranger'), path), snapshot))
+    await assertFails(set(ref(engineer.io.database, path), snapshot))
+    if (gameId !== 'acc') {
+      await vi.waitFor(async () => expect((await engineer.io.read<any>(`rooms/${roomId}/mfd`))?.strategy?.applicationMethodsKnown).toBe(true))
+      expect((await engineer.sendOrder(roomId, { plan, revision: 1 })).ok).toBe(false)
+      expect((await get(ref(driver.io.database, `pitwallV3/rooms/${roomId}/orders`))).exists()).toBe(false)
+    }
+  })
   it('withdraws Standard sends when the recipient switches to a source without input capability', async () => {
     const { driver, engineer, roomId } = await openRoom()
     await driver.publishPresence(roomId, { nickname: 'Driver', kind: 'driver', driving: true, runtimeSessionId: 'synthetic-session',

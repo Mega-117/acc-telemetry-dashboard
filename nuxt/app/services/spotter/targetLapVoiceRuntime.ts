@@ -27,6 +27,7 @@ export function createTargetLapVoiceRuntime(options: {
     if (state.holdStartedAtMs === null || state.holdStartedAtMs === previous.holdStartedAtMs
       && state.observedLapsCompleted === previous.observedLapsCompleted) return
     // Resolve even when muted: enabling the switch never replays an old lap.
+    const target = { ...options.getTarget() }
     const outcome = evaluateInfoTarget(state.heldLapTimeMs, state.heldLapValid === true, options.getTarget())
     if (outcome === 'neutral' || !options.canAnnounce()) return
     const snapshot = state
@@ -37,10 +38,16 @@ export function createTargetLapVoiceRuntime(options: {
       scenarioId,
       path: `${QUALIFYING_VOICE_AUDIO_DIR}/${scenarioId}-${options.getVoice()}.wav`,
       // Let an ongoing phrase finish; drop queued feedback once it is obsolete.
-      canPlay: () => options.canAnnounce() && state.contextKey === snapshot.contextKey
-        && state.observedLapsCompleted === snapshot.observedLapsCompleted
-        && state.holdStartedAtMs === snapshot.holdStartedAtMs
-        && now() < snapshot.holdUntilMs!,
+      canPlay: () => {
+        const currentTarget = options.getTarget()
+        return options.canAnnounce() && currentTarget?.active === true
+          && currentTarget.targetTimeMs === target.targetTimeMs
+          && currentTarget.toleranceMs === target.toleranceMs
+          && state.contextKey === snapshot.contextKey
+          && state.observedLapsCompleted === snapshot.observedLapsCompleted
+          && state.holdStartedAtMs === snapshot.holdStartedAtMs
+          && now() < snapshot.holdUntilMs!
+      },
     })
   }
   return { update, reset }

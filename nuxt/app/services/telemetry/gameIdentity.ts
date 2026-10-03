@@ -1,3 +1,5 @@
+import { getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
+
 /** Game identity at the raw/persisted boundary. Unknown data never becomes ACC. */
 export const RECORDING_SCHEMA = 'racercore.session'
 export const RECORDING_VERSION = 1
@@ -34,6 +36,11 @@ export function sessionGame(session: { meta?: { gameId?: string; track?: string;
   if (meta.gameId !== undefined) return isGameId(meta.gameId) && meta.gameId !== 'unknown' ? meta.gameId : null
   return typeof meta.track === 'string' && typeof meta.car === 'string'
     && typeof meta.date_start === 'string' && typeof meta.session_type === 'number' ? 'acc' : null
+}
+
+/** ACC name matching is a game policy, never a cross-game class catalog. */
+export function sessionCarCategory(session: Parameters<typeof sessionGame>[0]): CarCategory | null {
+  return sessionGame(session) === 'acc' ? getCarCategory(session.meta?.car || '') : null
 }
 
 export function gameScopedKey(gameId: string, ...parts: string[]): string {

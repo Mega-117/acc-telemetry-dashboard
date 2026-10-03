@@ -100,10 +100,13 @@ export function polylinePoints(
   const innerH = box.height - 2 * box.padding
   const lastIndex = Math.max(values.length - 1, 1)
   const parts: string[] = []
-  for (let i = 0; i < values.length; i += decimate) {
+  const step = Number.isFinite(decimate) ? Math.max(1, Math.floor(decimate)) : 1
+  for (let i = 0; ; i = Math.min(i + step, lastIndex)) {
     const x = box.padding + (i / lastIndex) * innerW
     const y = box.height - box.padding - ((values[i]! - yMin) / span) * innerH
     parts.push(`${x.toFixed(1)},${y.toFixed(1)}`)
+    // Keep the finish line even when decimation does not land on the last sample.
+    if (i === lastIndex) break
   }
   return parts.join(' ')
 }

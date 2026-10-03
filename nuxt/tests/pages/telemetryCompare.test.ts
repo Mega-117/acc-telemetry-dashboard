@@ -19,6 +19,18 @@ beforeEach(() => vi.stubGlobal('definePageMeta', vi.fn()))
 afterEach(() => { vi.unstubAllGlobals(); delete (window as any).electronAPI })
 
 describe('common LapTrace comparison page', () => {
+  it('does not plot a speed in m/s as km/h and explains the missing comparable channel', async () => {
+    const otherUnit = { ...trace(), channels: { time_s: [0, 1, 2], speed_mps: [30, 31, 32] } }
+    ;(window as any).electronAPI = {
+      listLapTraces: vi.fn().mockResolvedValue(['reference', 'lap'].map(id => ({ id, label: id }))),
+      readLapTrace: vi.fn((id: string) => Promise.resolve(id === 'reference' ? trace() : otherUnit)),
+    }
+    const view = mount(ComparePage)
+    await flushPromises()
+    expect(view.findAll('polyline')).toHaveLength(1)
+    expect(view.text()).toContain('Giro: canale velocità non disponibile in km/h.')
+    view.unmount()
+  })
   it('renders available channels and refuses comparison across layouts', async () => {
     ;(window as any).electronAPI = {
       listLapTraces: vi.fn().mockResolvedValue(['reference', 'full', 'short'].map(id => ({ id, label: id }))),

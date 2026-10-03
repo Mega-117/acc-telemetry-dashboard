@@ -49,6 +49,46 @@ const FRESH_PILOT_EMAIL = 'qa-fresh-pilot@accsuite.invalid'
 
 let testEnv: RulesTestEnvironment
 
+it.each(['acc', 'evo', 'synthetic'])('PIP-469 isolates uploaded %s raw chunks and index from foreign users', async (gameId) => {
+  const owner = testEnv.authenticatedContext(PILOT_UID).firestore()
+  const foreign = testEnv.authenticatedContext(SECOND_PILOT_UID).firestore()
+  const raw = { schema: 'racercore.session', version: 1, game_id: gameId,
+    session_id: `rules-${gameId}`, ownerId: PILOT_UID, capabilities: {},
+    session_info: { track: 'Spa', track_variant: 'long', car: 'Mercedes',
+      date_start: '2026-10-02T20:00:00Z', session_kind: 'unknown', laps_total: 1 },
+    stints: [{ stint_number: 1, laps: [{ lap_number: 1, lap_time_ms: 131000,
+      sector_times_ms: [], validity: 'valid', completeness: 'complete' }] }],
+    recording_state: 'stopped', summary: { schema: 'racercore.timing-summary', version: 1,
+      laps: 1, lapsValid: 1, bestLap: 131000, avgCleanLap: null, totalTime: 131000, stintCount: 1 } }
+  const text = JSON.stringify(raw)
+  const service = createSessionUploadService({ db: owner, chunkSize: 200,
+    getExistingSession: async () => null, loadRegistryCache: async () => ({}),
+    canSkipViaRegistry: () => false, listExistingChunks: async () => [] })
+  const result = await service.uploadOrUpdateSession(raw, text, `${gameId}.json`, PILOT_UID)
+  expect(result.status, JSON.stringify(result)).toBe('created')
+  const path = `users/${PILOT_UID}/sessions/${result.sessionId}`
+  const saved = (await assertSucceeds(getDoc(doc(owner, path)))).data()!
+  expect(saved.meta.gameId).toBe(gameId)
+  const chunks = await getDocs(collection(owner, `${path}/rawChunks`))
+  expect(chunks.size).toBeGreaterThan(1)
+  expect(chunks.docs.map(item => item.data()).sort((a, b) => a.idx - b.idx)
+    .map(item => item.chunk).join('')).toBe(text)
+  await assertFails(getDoc(doc(foreign, path)))
+  await assertFails(setDoc(doc(foreign, path), saved))
+  for (const chunk of chunks.docs) {
+    await assertFails(getDoc(doc(foreign, chunk.ref.path)))
+    await assertFails(setDoc(doc(foreign, chunk.ref.path), chunk.data()))
+  }
+  await refreshSyncProjections({ db: owner, uid: PILOT_UID, changedCount: 1,
+    loadFullHistory: async () => [{ sessionId: result.sessionId, meta: saved.meta, summary: saved.summary }] as any,
+    clearTrackDerivedCaches: () => {}, resetAllTrackBests: async () => 0,
+    getDocFn: getDoc, setDocFn: setDoc, bestRulesVersion: BEST_RULES_VERSION, reason: 'multisim-owner-rules' })
+  const user = (await getDoc(doc(owner, `users/${PILOT_UID}`))).data()!
+  expect(user.sessionIndex.sessionsList).toHaveLength(1)
+  expect(user.sessionIndex.sessionsList[0].gameId).toBe(gameId)
+  await assertFails(updateDoc(doc(foreign, `users/${PILOT_UID}`), { sessionIndex: user.sessionIndex }))
+})
+
 it('PIP-436 commits the complete projection plan atomically under real owner rules', async () => {
   const db = testEnv.authenticatedContext(PILOT_UID, { email_verified: true }).firestore()
   const date = new Date().toISOString()

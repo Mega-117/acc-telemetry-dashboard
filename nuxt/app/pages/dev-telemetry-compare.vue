@@ -192,6 +192,8 @@ onBeforeUnmount(() => {
 
     <section v-for="model in chartModels" :key="model.channel" class="chart">
       <h3>{{ model.title }} <small>({{ model.unit }})</small></h3>
+      <p v-if="lapTrace && !model.lap" class="notice">Giro: canale {{ model.title.toLowerCase() }} non disponibile in {{ model.unit }}.</p>
+      <p v-if="referenceTrace && !model.reference" class="notice">Riferimento: canale {{ model.title.toLowerCase() }} non disponibile in {{ model.unit }}.</p>
       <svg :viewBox="`0 0 ${BOX.width} ${BOX.height}`">
         <line
           v-for="marker in cornerMarkers"

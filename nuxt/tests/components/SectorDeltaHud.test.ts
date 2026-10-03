@@ -40,6 +40,14 @@ async function renderHud(props: Record<string, unknown>): Promise<string> {
 }
 
 describe('SectorDeltaHud', () => {
+  it.each(['classic', 'compact'])('does not invent ACC sectors when a common source has no cardinality (%s)', async variant => {
+    const html = await renderHud({ sectorHud: null, idleSectorCount: 0, variant })
+    expect(html).toContain('Settori non disponibili')
+    expect(html).not.toMatch(/>S[123]</)
+    const acc = await renderHud({ sectorHud: null, idleSectorCount: 3, variant })
+    expect(acc).not.toContain('Settori non disponibili')
+    expect(acc).toContain('S3')
+  })
   it('keeps two and four sectors on the same classic row instead of clipping a fourth sector', async () => {
     for (const count of [2, 3, 4]) {
       const sectors = Array.from({ length: count }, (_, i) => ({ ...entry(1), index: i + 1 }))

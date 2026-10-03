@@ -12,6 +12,8 @@ import {
 
 const props = withDefaults(defineProps<{
   sectorHud: SectorHudState | null
+  // Only the ACC caller may retain its known three-sector idle layout.
+  idleSectorCount?: number
   // Mostra anche i tempi dei settori del giro di riferimento/precedente (PIP-175).
   showReference?: boolean
   // Mostra anche il best settore persistente del contesto corrente (PIP-181).
@@ -37,10 +39,11 @@ const props = withDefaults(defineProps<{
 }>(), {
   showCurrentLap: true,
   targetOutcome: 'neutral',
+  idleSectorCount: 3,
 })
 
-const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
-  index,
+const idleSectors = computed<SectorHudEntry[]>(() => Array.from({ length: props.idleSectorCount }, (_, offset) => ({
+  index: offset + 1,
   state: 'pending',
   currentMs: null,
   referenceMs: null,
@@ -48,12 +51,12 @@ const idleSectors: SectorHudEntry[] = ([1, 2, 3] as const).map((index) => ({
   deltaMs: null,
   bestReferenceMs: null,
   color: 'grey',
-}))
+})))
 
 const hasSectorData = computed(() => (props.sectorHud?.sectors?.length ?? 0) > 0)
 const selectedReference = computed(() => normalizeSectorDeltaReference(props.deltaReference))
 const visibleSectors = computed(() => {
-  const sectors = hasSectorData.value ? props.sectorHud!.sectors : idleSectors
+  const sectors = props.sectorHud?.sectors ?? idleSectors.value
   return sectors.map((sector) => ({
     ...sector,
     ...resolveSectorDeltaPresentation(sector, selectedReference.value, props.customSectorTimes?.[sector.index - 1] ?? null),
@@ -162,6 +165,7 @@ function ariaLabel(sector: SectorHudEntry): string {
     }"
     aria-label="Delta settori"
   >
+    <p v-if="visibleSectors.length === 0" role="status">Settori non disponibili</p>
     <template v-if="variant === 'compact'">
       <div class="sector-compact__header">
         <div class="sector-compact__title">

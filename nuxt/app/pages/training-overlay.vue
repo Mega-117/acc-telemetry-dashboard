@@ -3,6 +3,7 @@ import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { trainingAvailability } from '~/services/telemetry/trainingAvailability'
 import { availabilityLabel } from '~/services/telemetry/featureAvailability'
 import { commonContextKey } from '~/services/telemetry/commonLive'
+import { completedLapHoldSample } from '~/utils/completedLapHoldSample'
 import { usePresentationInterval, usePresentationVisibility } from '~/composables/usePresentationVisibility'
 const presentationVisible = usePresentationVisibility()
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
@@ -608,6 +609,15 @@ function cancelInfoTargetSetup() {
   closeInfoTargetSetup()
   scheduleOverlaySizeSync()
 }
+
+// A draft belongs to the source/session in which the driver opened it.
+// The same identity already governs completed laps and their target feedback.
+watch(() => completedLapHoldSample(fastState.value).contextKey, (next, previous) => {
+  if (next === previous) return
+  if (isTargetSetupOpen.value) cancelInfoTargetSetup()
+  if (isSectorReferenceSetupOpen.value) closeSectorReferenceSetup()
+  if (isFuelSetupOpen.value) closeFuelSetup()
+}, { flush: 'sync' })
 
 async function confirmInfoTarget() {
   const saved = await getOverlayApi()?.infoTargetSaveSettings?.({

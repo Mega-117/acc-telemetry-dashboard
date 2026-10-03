@@ -1,4 +1,5 @@
-import { type CarCategory, getCarCategory } from '~/utils/telemetryFormat'
+import { type CarCategory } from '~/utils/telemetryFormat'
+import { sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import { normalizeTrackId as normalizeTrackProjectionId } from '~/services/projections/trackMetadata'
 import { isSupportedTrackBestProjection } from '~/services/projections/trackBestProjectionGuard'
 import type { SessionDocument } from '~/types/telemetry'
@@ -123,7 +124,7 @@ export function mergePendingBestsByTrack(
 ): Record<string, TrackBestTimes> {
     const merged: Record<string, TrackBestTimes> = { ...baseBests }
     for (const session of pendingSessions) {
-        if (getCarCategory(session.meta?.car || '') !== 'GT3') continue
+        if (sessionCarCategory(session) !== 'GT3') continue
         const trackId = normalizeTrackKey(session.meta?.track)
         if (!trackId) continue
         // Spread to avoid mutating the original baseBests entries (shallow copy of inner object)
@@ -145,7 +146,7 @@ export function mergePendingOverviewBestsByTrack(
 ): Record<string, TrackBestTimes> {
     const merged: Record<string, TrackBestTimes> = { ...baseBests }
     for (const session of pendingSessions) {
-        if (getCarCategory(session.meta?.car || '') !== category) continue
+        if (sessionCarCategory(session) !== category) continue
         const trackId = normalizeTrackKey(session.meta?.track)
         if (!trackId) continue
         const current = { ...(merged[trackId] || {

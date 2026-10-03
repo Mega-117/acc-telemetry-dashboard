@@ -4,6 +4,18 @@ import { describe, expect, it } from 'vitest'
 
 const source = (name: string) => readFileSync(resolve(process.cwd(), 'app', name), 'utf8')
 describe('target voice renderer/IPC wiring contract', () => {
+  it('invalidates open drafts on the same source/session boundary as completed laps', () => {
+    for (const page of ['pages/training-overlay.vue', 'pages/sectors-overlay.vue']) {
+      const code = source(page)
+      expect(code).toContain('watch(() => completedLapHoldSample(fastState.value).contextKey')
+      expect(code).toContain("{ flush: 'sync' }")
+    }
+    const panel = source('pages/training-overlay.vue')
+    expect(panel).toContain('if (isTargetSetupOpen.value) cancelInfoTargetSetup()')
+    expect(panel).toContain('if (isSectorReferenceSetupOpen.value) closeSectorReferenceSetup()')
+    expect(panel).toContain('if (isFuelSetupOpen.value) closeFuelSetup()')
+    expect(source('pages/sectors-overlay.vue')).toContain("if (next !== previous && compactPage.value === 'target') cancelTarget()")
+  })
   it('runs behind existing audio capability, after other finish-line messages', () => {
     const audio = source('pages/spotter-audio-runtime.vue')
     expect(audio).toContain('canAnnounce: () => canRunSpotterAudio.value && targetLapVoiceEnabled.value')

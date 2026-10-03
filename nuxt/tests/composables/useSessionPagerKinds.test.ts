@@ -40,6 +40,11 @@ beforeEach(() => {
 })
 
 describe('session kind filtering without projections', () => {
+  it('excludes another game from ACC category filters even for an identical car name', async () => {
+    const pager = useSessionPager()
+    const rows = await pager.loadPage('qa', { reset: true, filters: { gameId: null, carCategory: 'GT3' } })
+    expect(rows.map(row => row.sessionId)).toEqual(['acc-qualify'])
+  })
   it.each(['evo', null])('keeps declared kinds in cloud fallback for %s', async (gameId) => {
     const pager = useSessionPager()
     const rows = await pager.loadPage('qa', { reset: true, filters: { gameId, sessionTypes: [1] } })

@@ -71,6 +71,13 @@ function makeTrackBestDoc(bests: any, overrides: Record<string, any> = {}) {
     }
 }
 
+it.each(['evo', 'synthetic', 'unknown'])('keeps %s pending records out of ACC class bests even with ACC-named fields', gameId => {
+    const session = makeSession({ bestQualy: 1, bestRace: 2, bestAvgRace: 3 })
+    session.meta.gameId = gameId
+    expect(mergePendingBestsByTrack({}, [session])).toEqual({})
+    expect(mergePendingOverviewBestsByTrack({}, [session], 'GT3')).toEqual({})
+})
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────

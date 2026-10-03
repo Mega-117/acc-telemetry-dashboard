@@ -7,7 +7,7 @@
 import { useGameContext } from '~/composables/useGameContext'
 import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
 import { GAME_OPTIONS, gameLabel } from '~/services/telemetry/gameCatalog'
-import { sessionGame, sessionFilterType } from '~/services/telemetry/gameIdentity'
+import { sessionGame, sessionFilterType, sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import RacingSessionList from '~/components/sessions/RacingSessionList.vue'
 import { ref, computed, onBeforeUnmount, onMounted, watch, nextTick } from 'vue'
 import { 
@@ -16,7 +16,6 @@ import {
   formatTrackName,
   formatTime,
   getSessionTypeLabel,
-  getCarCategory,
   CAR_CATEGORIES,
   type CarCategory
 } from '~/utils/telemetryFormat'
@@ -47,7 +46,7 @@ interface DisplaySession {
   trackRaw: string
   car: string
   carRaw: string
-  carCategory: CarCategory
+  carCategory: CarCategory | null
   laps: number
   lapsValid: number
   stints: number
@@ -204,7 +203,7 @@ const sessions = computed<DisplaySession[]>(() => {
       trackRaw: s.meta.track || '',
       car: formatCarName(s.meta.car),
       carRaw: s.meta.car || '',
-      carCategory: getCarCategory(s.meta.car || ''),
+      carCategory: sessionCarCategory(s),
       laps: s.summary.laps || 0,
       lapsValid: s.summary.lapsValid || 0,
       stints: s.summary.stintCount ?? 0,

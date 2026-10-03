@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { sessionGame, sessionFilterType } from '~/services/telemetry/gameIdentity'
+import { sessionGame, sessionFilterType, sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import {
     collection,
     doc,
@@ -17,7 +17,7 @@ import { checkFirebaseCacheFreshness } from '~/services/monitoring/firebaseOpsJo
 import { ownerDataCacheTtlFor } from '~/services/cache/cachePolicy'
 import { useFirebaseAuth } from './useFirebaseAuth'
 import { db } from '~/config/firebase'
-import { formatCarName, formatTrackName, getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
+import { formatCarName, formatTrackName, type CarCategory } from '~/utils/telemetryFormat'
 import type { SessionDocument } from '~/types/telemetry'
 import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
 // PIP-442: `users/{uid}` e' letto una volta per avvio e condiviso con gli altri chiamanti.
@@ -162,7 +162,7 @@ function matchesClientFilters(session: SessionDocument, filters: SessionPagerFil
 
     if (filters.hideEmpty && Number(session.summary?.laps || 0) === 0) return false
 
-    if (filters.carCategory && getCarCategory(session.meta?.car || '') !== filters.carCategory) {
+    if (filters.carCategory && sessionCarCategory(session) !== filters.carCategory) {
         return false
     }
 

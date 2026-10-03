@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue'
 import { useGameContext } from './useGameContext'
-import { sessionGame } from '~/services/telemetry/gameIdentity'
+import { sessionGame, sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import { scopeSessionIndex, buildCommonHistoryOverview } from '~/services/telemetry/gameProjection'
 import { mergePendingLocal } from '~/services/telemetry/telemetryMergeService'
 import { useTelemetryData } from './useTelemetryData'
@@ -625,7 +625,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
         const visibleSessions = snapshot.sessions
             // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
             .filter((session) => Number((session.summary as any)?.laps || 0) > 0)
-            .filter((session) => getCarCategory(session.meta.car) === category)
+            .filter((session) => sessionCarCategory(session) === category)
             .sort((a, b) => (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))
 
         const metadata = resolveTrackMetadata(snapshot.normalizedTrackId || trackId)

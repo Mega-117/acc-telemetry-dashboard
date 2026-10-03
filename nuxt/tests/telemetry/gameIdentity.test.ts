@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { recordingGame, sessionGame, gameScopedKey, canUseAccRules, sessionFilterType } from '../../app/services/telemetry/gameIdentity'
+import { recordingGame, sessionGame, gameScopedKey, canUseAccRules, sessionFilterType, sessionCarCategory } from '../../app/services/telemetry/gameIdentity'
 import { extractMetadata, generateSessionId } from '../../app/utils/sessionParser'
 
 const legacy = {
@@ -8,6 +8,15 @@ const legacy = {
 }
 
 describe('game identity', () => {
+  it('does not assign ACC name-based classes to another game or an unknown identity', () => {
+    for (const car of ['Mercedes', 'porsche_cup', 'bmw_gt4']) {
+      for (const gameId of ['evo', 'synthetic', 'unknown']) {
+        expect(sessionCarCategory({ meta: { gameId, car } })).toBeNull()
+      }
+    }
+    expect(sessionCarCategory({ meta: { gameId: 'acc', car: 'bmw_gt4' } })).toBe('GT4')
+    expect(sessionCarCategory({ meta: { track: 'Spa', car: 'porsche_cup', date_start: '2026-10-02', session_type: 0 } })).toBe('CUP')
+  })
   it('filters declared common kinds without borrowing numeric enums from another game', () => {
     for (const [sessionKind, expected] of [['practice', 0], ['qualify', 1], ['race', 2]] as const) {
       expect(sessionFilterType({ meta: { gameId: 'evo', sessionKind, session_type: 99 } })).toBe(expected)

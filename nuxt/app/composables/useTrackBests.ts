@@ -1,6 +1,7 @@
 // @description Calcola, memorizza nella cache e invalida i best times per tracciato, organizzati per categoria vettura e condizione di grip, con prefetch batch da Firebase.
 
 import { ref, computed } from 'vue'
+import { sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { collection, query, doc, deleteField, type Query } from 'firebase/firestore'
 import { trackedGetDocs, trackedSetDoc, trackedDeleteDoc, trackedWriteBatch } from './useFirebaseTracker'
@@ -13,7 +14,6 @@ import {
     CAR_CATEGORIES,
     type CarCategory,
     formatDriveTime,
-    getCarCategory,
 } from '~/utils/telemetryFormat'
 import {
     type GripBestTimes,
@@ -117,6 +117,7 @@ export function useTrackBests() {
         if (userId && userId !== currentUser.value?.uid) return { bests: categoryBests, lastSessionDate: null }
 
         const trackSessionsList = sessions.value.filter((s: SessionDocument) => {
+            if (!sessionCarCategory(s)) return false
             const sessionTrackId = s.meta.track.toLowerCase().replace(/[^a-z0-9]/g, '_')
             return sessionTrackId.includes(trackIdNorm) || trackIdNorm.includes(sessionTrackId)
         })
@@ -137,7 +138,8 @@ export function useTrackBests() {
 
             if (!bestByGrip) continue
 
-            const category = getCarCategory(session.meta.car)
+            const category = sessionCarCategory(session)
+            if (!category) continue
 
             for (const grip of gripConditions) {
                 const sessionBest = bestByGrip[grip]

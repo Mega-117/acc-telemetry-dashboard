@@ -64,7 +64,7 @@ interface HudReplayStatus {
 
 const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string }> = [
   { id: 'tyres', title: 'Gomme', description: 'Temperature e pressioni per ogni pneumatico.' },
-  { id: 'sectors', title: 'Settori', description: 'Tempi e delta dei tre settori.' },
+  { id: 'sectors', title: 'Settori', description: 'Tempi e delta dei settori disponibili.' },
   { id: 'dashboard', title: 'Dashboard', description: 'Marcia, carburante ed elettronica.' },
   { id: 'info', title: 'Info', description: 'Delta, stint, carburante, grip, tempi e danni.' },
   { id: 'standings', title: 'Standings', description: 'Classifica di classe con top e auto intorno al pilota.' },

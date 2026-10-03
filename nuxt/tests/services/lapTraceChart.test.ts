@@ -76,6 +76,16 @@ describe('normalizeLapTrace', () => {
 describe('polylinePoints / channelRange', () => {
   const box = { width: 100, height: 50, padding: 10 }
 
+  it.each([32, 64, 127, 128])('keeps both endpoints for %i samples at the default decimation', (count) => {
+    const raw = makeTraceDict()
+    const channels = Object.fromEntries(Object.keys(raw.channels).map(name =>
+      [name, Array.from({ length: count }, (_, i) => i / (count - 1))]))
+    const trace = normalizeLapTrace({ ...raw, grid_step_m: 1000 / (count - 1), channels })!
+    const points = polylinePoints(trace, 'speed_kmh', box, 0, 1).split(' ')
+    expect(points[0]).toBe('10.0,40.0')
+    expect(points.at(-1)).toBe('90.0,10.0')
+  })
+
   it('scala i punti dentro il box, partenza e traguardo sempre allineati', () => {
     const view = normalizeLapTrace(makeTraceDict())!
     const points = polylinePoints(view, 'speed_kmh', box, 100, 200, 1)

@@ -52,8 +52,16 @@ describe('useTrackBests', () => {
 
   // ───────────────────────────────────────────────────
   describe('calculateAllBestTimesForTrack', () => {
+    it('excludes non-ACC records from local class bests and their latest-session date', async () => {
+      globalSessions.value = ['evo', 'synthetic'].map(gameId => ({ sessionId: gameId,
+        meta: { gameId, track: 'monza', car: 'ferrari_296_gt3', date_start: '2026-10-03' },
+        summary: { best_by_grip: { Optimum: { bestQualy: 1 } } } })) as any
+      const own = await useTrackBests().calculateAllBestTimesForTrack('monza', 'user-tb')
+      expect(own.lastSessionDate).toBeNull()
+      expect(own.bests.GT3.Optimum.bestQualy).toBeNull()
+    })
     it('mantiene bucket distinti e non usa lo storico del visitatore per altri piloti', async () => {
-      globalSessions.value = [{ sessionId: 'bucket-fixture', meta: { track: 'monza', car: 'ferrari_296_gt3' }, summary: { best_by_grip: { Optimum: {
+      globalSessions.value = [{ sessionId: 'bucket-fixture', meta: { gameId: 'acc', track: 'monza', car: 'ferrari_296_gt3' }, summary: { best_by_grip: { Optimum: {
         bestQualy: 99000,
         raceBestByFuelBucket: { '40-60': { timeMs: 100000, fuel: 50 }, '100+': { timeMs: 102000, fuel: 110 } },
         raceAvgByFuelBucket: { '40-60': { timeMs: 101000, fuel: 50 }, '100+': { timeMs: 103000, fuel: 110 } }
@@ -82,6 +90,7 @@ describe('useTrackBests', () => {
         {
           sessionId: 'sess-001',
           meta: {
+            gameId: 'acc',
             track: 'Monza',
             car: 'BMW M4 GT3',
             date_start: '2024-06-01T10:00:00',
@@ -116,14 +125,14 @@ describe('useTrackBests', () => {
       globalSessions.value = [
         {
           sessionId: 'sess-slow',
-          meta: { track: 'Spa', car: 'BMW M4 GT3', date_start: '2024-05-01' },
+          meta: { gameId: 'acc', track: 'Spa', car: 'BMW M4 GT3', date_start: '2024-05-01' },
           summary: {
             best_by_grip: { Optimum: { bestQualy: 140000, bestQualyTemp: 20, bestQualyFuel: 5 } },
           },
         } as any,
         {
           sessionId: 'sess-fast',
-          meta: { track: 'Spa', car: 'BMW M4 GT3', date_start: '2024-05-02' },
+          meta: { gameId: 'acc', track: 'Spa', car: 'BMW M4 GT3', date_start: '2024-05-02' },
           summary: {
             best_by_grip: { Optimum: { bestQualy: 135000, bestQualyTemp: 22, bestQualyFuel: 5 } },
           },

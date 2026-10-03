@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { completedLapHoldSample } from '~/utils/completedLapHoldSample'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
@@ -175,6 +176,10 @@ function cancelTarget() {
   returnToLive()
 }
 
+watch(() => completedLapHoldSample(fastState.value).contextKey, (next, previous) => {
+  if (next !== previous && compactPage.value === 'target') cancelTarget()
+}, { flush: 'sync' })
+
 watch(
   [heldLap, targetLoaded],
   ([lap, loaded]) => {
@@ -277,6 +282,7 @@ onBeforeUnmount(() => {
         <template #live>
           <SectorDeltaHud
             :sector-hud="visibleSectorHud"
+            :idle-sector-count="fastState.context?.gameId === 'acc' ? 3 : 0"
             :show-reference="showReference"
             :show-best="showBest"
             :show-current-lap="showCurrentLap"
@@ -307,6 +313,7 @@ onBeforeUnmount(() => {
       <SectorDeltaHud
         v-else
         :sector-hud="visibleSectorHud"
+        :idle-sector-count="fastState.context?.gameId === 'acc' ? 3 : 0"
         :show-reference="showReference"
         :show-best="showBest"
         :show-current-lap="showCurrentLap"

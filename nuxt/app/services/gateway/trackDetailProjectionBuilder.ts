@@ -1,11 +1,11 @@
 import {
     type CarCategory,
-    getCarCategory,
     formatLapTime,
     formatDriveTime,
     formatCarName,
     getSessionTypeLabel
 } from '~/utils/telemetryFormat'
+import { sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import { normalizeTrackId as normalizeTrackProjectionId, resolveTrackMetadata } from '~/services/projections/trackMetadata'
 import { isSupportedTrackBestProjection } from '~/services/projections/trackBestProjectionGuard'
 import type { SessionDocument } from '~/types/telemetry'
@@ -338,7 +338,7 @@ export function buildTrackDetailFromProjectionDocument(params: {
     const baseActivity = normalizeActivity(categoryDoc?.activity)
     const pendingValidSessions = pendingSessions
         .filter((session) => trackMatches(session.meta?.track, normalizedTrackId))
-        .filter((session) => getCarCategory(session.meta?.car || '') === category)
+        .filter((session) => sessionCarCategory(session) === category)
         .filter((session) => Number(session.summary?.laps || 0) > 0)
         .sort((a, b) => (b.meta.date_start || '').localeCompare(a.meta.date_start || ''))
     const pendingActivity = buildActivityFromSessions(pendingValidSessions)

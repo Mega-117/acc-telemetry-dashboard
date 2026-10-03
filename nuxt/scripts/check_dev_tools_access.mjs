@@ -16,7 +16,8 @@ const requiredFiles = [
   'app/pages/dev-rebuild.vue',
   'app/pages/dev-cleanup.vue',
   'app/pages/dev-data-audit.vue',
-  'app/pages/dev-upload.vue'
+  'app/pages/dev-upload.vue',
+  'app/pages/dev-telemetry-compare.vue'
 ]
 
 for (const relativePath of requiredFiles) {

@@ -73,7 +73,7 @@ describe('target lap voice shares the compact HUD verdict', () => {
     runtime.update(frame(6, 90_000, true, { context })); expect(cues).toHaveLength(3)
     expect(new Set(cues.map(cue => cue.id)).size).toBe(3)
   })
-  it.each(['muted', 'expired', 'context', 'reset', 'next-lap'] as const)('drops queued feedback when %s without interrupting other audio', async reason => {
+  it.each(['muted', 'expired', 'context', 'reset', 'next-lap', 'target-disabled', 'target-time', 'target-tolerance'] as const)('drops queued feedback when %s without interrupting other audio', async reason => {
     const { runtime, cues, control } = setup()
     runtime.update(frame(0)); runtime.update(frame(1)); expect(cues[0]?.canPlay?.()).toBe(true)
     if (reason === 'muted') control.enabled = false
@@ -81,6 +81,9 @@ describe('target lap voice shares the compact HUD verdict', () => {
     if (reason === 'context') runtime.update(frame(1, 90_000, true, { context: null }))
     if (reason === 'reset') runtime.reset()
     if (reason === 'next-lap') runtime.update(frame(2))
+    if (reason === 'target-disabled') control.target.active = false
+    if (reason === 'target-time') control.target.targetTimeMs = 80_000
+    if (reason === 'target-tolerance') control.target.toleranceMs = 100
     expect(cues[0]?.canPlay?.()).toBe(false)
     const played: string[] = []
     const queue = createVoicePlaybackQueue({ createAudio: path => { played.push(path); return {} as any }, play: async () => 'ended' })
