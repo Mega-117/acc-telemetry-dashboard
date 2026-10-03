@@ -3,6 +3,33 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { voiceScript, getScenarioVoicePhrase, getStepVoicePhrase } from '~/config/voiceScript'
 import { trainingOverlayCatalog, trainingOverlayOrder } from '~/config/trainingOverlayCatalog'
+import { getStepStartAudioPath, qualifyingVoiceOptions } from '~/config/qualifyingVoiceNotifications'
+
+const trainingPlans = trainingOverlayOrder.flatMap(trainingId =>
+  Object.values(trainingOverlayCatalog[trainingId].modes).map(mode => ({ trainingId, mode })),
+)
+
+describe.each(trainingPlans)('training assets $trainingId/$mode.id', ({ trainingId, mode }) => {
+  it('mantiene durata totale e identita degli step del piano', () => {
+    expect(mode.steps.reduce((minutes, step) => minutes + step.durationMinutes, 0)).toBe(mode.duration)
+    expect(new Set(mode.steps.map(step => step.id)).size).toBe(mode.steps.length)
+    for (const step of mode.steps) {
+      expect(step.durationMinutes).toBeGreaterThan(0)
+      expect(getStepVoicePhrase(trainingId, mode.id, step.id)).toBeDefined()
+    }
+  })
+
+  it.each(qualifyingVoiceOptions)('risolve WAV reali per ogni step, voce $id', ({ id }) => {
+    for (const step of mode.steps) {
+      // The orchestrator namespaces the training ID with the selected duration.
+      const relative = getStepStartAudioPath(`${trainingId}-${mode.id}`, step.id, id)
+      const bytes = readFileSync(resolve(process.cwd(), 'public', relative.slice(1)))
+      expect(bytes.subarray(0, 4).toString('ascii'), relative).toBe('RIFF')
+      expect(bytes.subarray(8, 12).toString('ascii'), relative).toBe('WAVE')
+      expect(bytes.length, relative).toBeGreaterThan(44)
+    }
+  })
+})
 
 // Il copione è la fonte unica delle frasi (PIP-98): deve coprire ogni step
 // del catalogo, senza voci orfane. Questo test sostituisce i commenti
