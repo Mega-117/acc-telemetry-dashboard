@@ -2,6 +2,8 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
+import RaceWeatherHud from '~/components/overlay/RaceWeatherHud.vue'
+import TrackMapHud from '~/components/overlay/TrackMapHud.vue'
 import type { CommonLive } from '~/services/telemetry/commonLive'
 import { commonFastPresentation } from '~/services/telemetry/commonFastPresentation'
 import type { FastOverlayState } from '~/composables/useFastStatePoller'
@@ -23,9 +25,28 @@ const live = (): CommonLive => ({ gameId: 'synthetic', sessionId: '1', connected
 const frame = (source = live()) => ({ ...commonFastPresentation(source), sectorHud: null } as FastOverlayState)
 
 describe('multisim HUD and audio isolation', () => {
+  it('distinguishes missing forecasts, map geometry and the lap origin', async () => {
+    const source = live(); source.gameId = 'evo'
+    const weather = mount(RaceWeatherHud, { props: { fastState: frame(source) } })
+    expect(weather.text()).toContain('Previsioni meteo non disponibili')
+    expect(weather.findAll('[data-rain-intensity]')).toHaveLength(0)
+    weather.unmount()
+    const notice = mount(TelemetryFeatureNotice, { props: { live: source, feature: 'trackMap', unsupportedText: 'Sagoma pista non disponibile: vista circolare' } })
+    expect(notice.text()).toContain('Sagoma pista')
+    await notice.setProps({ live: { ...source, fresh: false } })
+    expect(notice.text()).toContain('In attesa')
+    notice.unmount()
+    const map = mount(TrackMapHud, { props: { view: { outlinePath: '', caption: null, dots: [], markers: [] }, outline: [{ x: 10, y: 20 }, { x: 30, y: 40 }], showStart: true } })
+    expect(map.get('.track-map__start').attributes('transform')).toBe('translate(10 20)')
+    await map.setProps({ showStart: false })
+    expect(map.find('.track-map__start').exists()).toBe(false)
+    map.unmount()
+  })
   it('presents EVO tyre and timing facts without ACC tyre rules or invented sectors', () => {
     const source = live()
     source.gameId = 'evo'
+    source.fields.initial_track_grip = { value: 0, availability: 'available', unit: 'evo-grip' }
+    source.fields['tyre.FL.temperature_target_ratio'] = { value: .5, availability: 'available', unit: 'ratio' }
     source.capabilities = { tyre_pressure: true, lap_timing: true, lap_validity: true }
     for (const id of ['FL', 'FR', 'RL', 'RR']) {
       source.fields[`tyre.${id}.pressure`] = { value: 24.5, availability: 'available', unit: 'psi' }
@@ -39,6 +60,9 @@ describe('multisim HUD and audio isolation', () => {
     expect(state.tyres[0]).toMatchObject({ pressurePsi: 24.5, coreTempC: 60, wheelSlipScaled: null })
     expect(featureAvailability(source, TELEMETRY_FEATURES.tyrePressure).available).toBe(true)
     const info = buildInfoPresentation(state)
+    expect(info.rows.find(row => row.id === 'grip')).toMatchObject({ label: 'Grip iniziale:', value: 'Green' })
+    expect(state.tyres[0]?.temperatureTargetRatio).toBe(.5)
+    expect(state.info?.grip).toBeNull()
     expect(info.rows.find(row => row.id === 'best')?.value).toBe('1:54.876')
     expect(state.info?.delta).toMatchObject({ ms: -396, available: true, side: 'negative' })
     expect(state.info?.stintTimeLeftMs).toBeNull()

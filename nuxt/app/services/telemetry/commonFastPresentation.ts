@@ -10,12 +10,15 @@ export function commonFastPresentation(live: CommonLive): Partial<FastOverlaySta
   const bestLap = value('best_lap_time', 'ms')
   const delta = value('lap_delta', 'ms')
   const valid = commonBoolean(live, 'lap_valid')
+  const initialGrip = live.gameId === 'evo' ? value('initial_track_grip', 'evo-grip') : null
   const tyres: FastStateTyre[] = []
   for (const id of ['FL', 'FR', 'RL', 'RR'] as const) {
     const prefix = `tyre.${id}.`
     if (!Object.keys(live.fields).some(name => name.startsWith(prefix))) continue
     tyres.push({ id, pressurePsi: value(prefix + 'pressure', 'psi'), coreTempC: value(prefix + 'core_temperature', 'C'),
       brakeTempC: value(prefix + 'brake_temperature', 'C'), pressureLossPsi: value(prefix + 'pressure_loss', 'psi'),
+      temperatureTargetRatio: value(prefix + 'temperature_target_ratio', 'ratio'),
+      brakeTemperatureTargetRatio: value(prefix + 'brake_temperature_target_ratio', 'ratio'),
       wheelSlip: value(prefix + 'slip', 'ratio'), wheelSlipScaled: null, slipBand: 'white', slipState: 'ok',
       slipRatio: value(prefix + 'slip_ratio', 'ratio'), brakeCompound: null,
       padLifePct: value(prefix + 'pad_life', '%'), discLifePct: value(prefix + 'disc_life', '%') })
@@ -37,6 +40,7 @@ export function commonFastPresentation(live: CommonLive): Partial<FastOverlaySta
       stintTimeLeftMs: value('stint_time_remaining', 'ms'), fuelLabel: '', fuelNeededL: null,
       fuelLeftTimeMs: value('fuel_time_remaining', 'ms'), fuelLeftReferenceLapMs: null,
       incidents: value('incidents', 'count'), grip: null, pitExitTraffic: null,
+      initialGrip: initialGrip === 0 ? 'Green' : initialGrip === 1 ? 'Fast' : initialGrip === 2 ? 'Optimum' : null,
       optimalLapTimeMs: value('optimal_lap_time', 'ms'), bestLapTimeMs: bestLap, damageTimeMs: null,
       currentLapTimeMs: currentLap, lastLapTimeMs: lastLap, lapValid: valid,
       lastLapValid: commonBoolean(live, 'last_lap_valid'), lapsCompleted: lapCount,

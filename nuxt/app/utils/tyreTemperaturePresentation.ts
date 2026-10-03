@@ -1,5 +1,13 @@
 export type TyreTemperatureCompound = 'DRY' | 'WET'
 
+// Source-relative scale: blue below target, green at target, red above.
+// It is not an ACC compound temperature recommendation. Zero is unpopulated.
+export function temperatureTargetColor(ratio: number | null | undefined): string {
+  if (typeof ratio !== 'number' || !Number.isFinite(ratio) || ratio <= 0) return '#6b7280'
+  const hue = 240 - Math.min(ratio, 2) * 120
+  return `hsl(${hue}, 100%, 45%)`
+}
+
 interface TemperatureRange {
   min: number
   max: number

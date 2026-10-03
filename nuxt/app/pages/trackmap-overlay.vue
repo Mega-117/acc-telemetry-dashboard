@@ -115,9 +115,9 @@ onUnmounted(() => {
 <template>
   <main class="overlay-root">
     <OverlayPlacementLock overlay-id="trackmap" />
-    <TelemetryFeatureNotice :live="telemetry.fastState.value.commonLive" :feature="overlay.settings.value?.circleView ? 'trackReferences' : 'trackMap'" />
+    <TelemetryFeatureNotice :live="telemetry.fastState.value.commonLive" :feature="overlay.settings.value?.circleView ? 'trackReferences' : 'trackMap'" unsupported-text="Sagoma pista non disponibile: vista circolare" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
-    <TrackMapHud :view="view" :outline="outline" :rotation-deg="rotationDeg" class="overlay-canvas" :style="canvasStyle" />
+    <TrackMapHud :view="view" :outline="outline" :rotation-deg="rotationDeg" :show-start="sim === 'evo'" class="overlay-canvas" :style="canvasStyle" />
   </main>
 </template>
 

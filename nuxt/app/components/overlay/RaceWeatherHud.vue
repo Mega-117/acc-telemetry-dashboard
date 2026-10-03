@@ -4,6 +4,7 @@ import type { FastOverlayState } from '~/composables/useFastStatePoller'
 import { raceWeatherItem } from '~/utils/raceWeatherPresentation'
 import RaceWeatherIcon from './RaceWeatherIcon.vue'
 const props = defineProps<{ fastState: FastOverlayState }>()
+const unavailableForecast = computed(() => props.fastState.commonLive?.gameId === 'evo')
 const weather = computed(() => [
   raceWeatherItem(props.fastState.rainIntensity, 0, props.fastState.isFresh && props.fastState.isLive),
   raceWeatherItem(props.fastState.rainIntensity10Min, 10, props.fastState.isFresh && props.fastState.isLive),
@@ -12,9 +13,10 @@ const weather = computed(() => [
 </script>
 <template>
     <header class="tyre-race__weather">
-      <div v-for="item in weather" :key="item.horizon" :title="item.title" :aria-label="item.title" :data-rain-intensity="item.intensity">
+      <small v-if="unavailableForecast" class="tyre-race__weather-unavailable" role="status">Previsioni meteo non disponibili</small>
+      <template v-else><div v-for="item in weather" :key="item.horizon" :title="item.title" :aria-label="item.title" :data-rain-intensity="item.intensity">
         <strong>{{ item.horizon }}</strong><span><RaceWeatherIcon :item="item" /></span>
-      </div>
+      </div></template>
     </header>
 </template>
 <style scoped>
@@ -22,6 +24,7 @@ const weather = computed(() => [
   display:grid; grid-template-columns:repeat(3,1fr); flex:0 0 calc(78px * var(--hud-scale,1));
   border-bottom:1px solid #45484e; background:#080a0e;
 }
+.tyre-race__weather-unavailable { grid-column:1/-1; align-self:center; padding:8px; text-align:center; color:#cbd5e1; font:12px/1.3 system-ui,sans-serif; }
 .tyre-race__weather div { display:grid; place-items:center; align-content:center; }
 .tyre-race__weather div+div { border-left:1px solid #303238; }
 .tyre-race__weather strong { font-size:max(18px,calc(25px * var(--hud-scale,1))); line-height:1; }

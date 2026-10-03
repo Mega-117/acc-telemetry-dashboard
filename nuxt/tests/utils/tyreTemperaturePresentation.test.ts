@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { tyreTemperatureColor } from '../../app/utils/tyreTemperaturePresentation'
+import { tyreTemperatureColor, temperatureTargetColor } from '../../app/utils/tyreTemperaturePresentation'
 
 describe('tyre temperature presentation', () => {
+  it('uses source-relative temperature targets without coloring missing ratios', () => {
+    expect(temperatureTargetColor(.5)).toBe('hsl(180, 100%, 45%)')
+    expect(temperatureTargetColor(1)).toBe('hsl(120, 100%, 45%)')
+    expect(temperatureTargetColor(2)).toBe('hsl(0, 100%, 45%)')
+    for (const ratio of [0, -1, null, undefined, NaN, Infinity]) expect(temperatureTargetColor(ratio)).toBe('#6b7280')
+  })
   it('matches the verified ACC Drive dry thresholds', () => {
     expect(tyreTemperatureColor(50)).toBe('rgb(0, 0, 200)')
     expect(tyreTemperatureColor(51)).toBe('rgb(0, 0, 200)')

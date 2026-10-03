@@ -21,7 +21,9 @@ const props = withDefaults(defineProps<{
   view: TrackMapView
   outline: ReadonlyArray<TrackMapPoint>
   rotationDeg?: number
+  showStart?: boolean
 }>(), { rotationDeg: 0 })
+const startPoint = computed(() => props.showStart ? pointAtSpline(props.outline, 0) : null)
 
 // Ogni elemento si muove LUNGO la linea: si anima la posizione sul giro e la si
 // riproietta sul tracciato a ogni frame. Animare x/y (una transizione CSS) fa
@@ -106,6 +108,9 @@ const captionX = computed(() => center - captionWidth.value / 2)
     <g :transform="rotation">
       <polyline class="track-map__edge" :points="view.outlinePath" />
       <polyline class="track-map__asphalt" :points="view.outlinePath" />
+      <g v-if="startPoint" class="track-map__start" :transform="`translate(${startPoint.x} ${startPoint.y})`">
+        <g :transform="upright"><rect x="-5" y="-17" width="10" height="34" fill="white" /><text x="16" y="-20" fill="white" font-size="24">S/F</text></g>
+      </g>
 
       <g
         v-for="dot in view.dots"

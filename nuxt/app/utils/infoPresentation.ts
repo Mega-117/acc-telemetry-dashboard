@@ -186,7 +186,7 @@ export function buildInfoPresentation(
   if (options.showQFuel) rows.push({ id: 'q-fuel', label: `${info?.fuelLabel || 'Q-Fuel'}:`, value: fuelValue(info?.fuelNeededL ?? null), tone: fuelTone(info?.fuelNeededL ?? null) })
   if (options.showFuelLeft) rows.push({ id: 'fuel-left', label: 'Fuel Left:', value: formatInfoFuelDuration(info?.fuelLeftTimeMs), tone: fuelLeftTone(info?.fuelLeftTimeMs, info?.fuelLeftReferenceLapMs) })
   if (options.showIncidents) rows.push({ id: 'incidents', label: 'Incidents:', value: info?.incidents === null || info?.incidents === undefined ? '--' : String(info.incidents), tone: 'default' })
-  if (options.showGrip) rows.push({ id: 'grip', label: 'Grip:', value: info?.grip || '--', tone: 'default' })
+  if (options.showGrip) rows.push({ id: 'grip', label: !info?.grip && info?.initialGrip ? 'Grip iniziale:' : 'Grip:', value: info?.grip || info?.initialGrip || '--', tone: 'default' })
   if (options.showPitExitTraffic && state.sessionType === 2) rows.push({ id: 'pit-exit', label: 'Pit Exit:', value: traffic.value, tone: traffic.tone })
   if (options.showOptimal) rows.push({ id: 'optimal', label: 'Optimal:', value: formatInfoLapTime(info?.optimalLapTimeMs), tone: 'default' })
   if (options.showBest) rows.push({ id: 'best', label: 'Best:', value: formatInfoLapTime(info?.bestLapTimeMs), tone: 'default' })

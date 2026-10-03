@@ -56,6 +56,8 @@ export type FastStateSlipBand = 'white' | 'green' | 'yellow' | 'orange' | 'red'
 export type FastStateSlipState = 'ok' | 'limit' | 'sliding' | 'wheelspin' | 'lockup'
 
 export interface FastStateTyre {
+  temperatureTargetRatio?: number | null
+  brakeTemperatureTargetRatio?: number | null
   id: 'FL' | 'FR' | 'RL' | 'RR'
   wheelSlip: number | null
   wheelSlipScaled: number | null
@@ -99,6 +101,7 @@ export interface FastStateLocalDriver {
 }
 
 export interface FastStateInfo {
+  initialGrip?: string | null
   delta: {
     ms: number
     available: boolean

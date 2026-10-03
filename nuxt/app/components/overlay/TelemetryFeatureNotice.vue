@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { CommonLive } from '~/services/telemetry/commonLive'
 import { availabilityLabel, featureAvailability, TELEMETRY_FEATURES } from '~/services/telemetry/featureAvailability'
 
-const props = defineProps<{ live?: CommonLive | null; feature: keyof typeof TELEMETRY_FEATURES }>()
+const props = defineProps<{ live?: CommonLive | null; feature: keyof typeof TELEMETRY_FEATURES; unsupportedText?: string }>()
 const availability = computed(() => featureAvailability(props.live, TELEMETRY_FEATURES[props.feature]))
 // Legacy ACC HUDs already own detailed recovery messages. New connectors use
 // this notice until each feature has its own richer presenter.
@@ -11,7 +11,7 @@ const visible = computed(() => props.live && props.live.gameId !== 'acc' && !ava
 </script>
 
 <template>
-  <div v-if="visible" class="telemetry-feature-notice" role="status">{{ availabilityLabel(availability.reason) }}</div>
+  <div v-if="visible" class="telemetry-feature-notice" role="status">{{ availability.reason === 'unsupported' && unsupportedText ? unsupportedText : availabilityLabel(availability.reason) }}</div>
 </template>
 
 <style scoped>

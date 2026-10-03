@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
-import { tyreTemperatureColor } from '~/utils/tyreTemperaturePresentation'
+import { tyreTemperatureColor, temperatureTargetColor } from '~/utils/tyreTemperaturePresentation'
 import { brakeTemperatureColor } from '~/utils/brakeTemperaturePresentation'
 import { raceSlip, racePressureHeight, raceNumber, raceDamageTime, racePressureFlash } from '~/utils/raceTyrePresentation'
 import RaceWeatherHud from './RaceWeatherHud.vue'
@@ -21,7 +21,7 @@ const tyres = computed(() => ids.map((id, index) => {
   return {
     ...tyre, x: index % 2 === 0 ? 10 : 106, y: index < 2 ? 38 : 154,
     rear: index > 1, right: index % 2 === 1,
-    color: hasAccTyrePolicy.value ? tyreTemperatureColor(tyre.coreTempC, props.fastState.tyreCompound === 'WET' ? 'WET' : 'DRY') : '#6b7280',
+    color: hasAccTyrePolicy.value ? tyreTemperatureColor(tyre.coreTempC, props.fastState.tyreCompound === 'WET' ? 'WET' : 'DRY') : temperatureTargetColor(tyre.temperatureTargetRatio),
     slip: hasAccTyrePolicy.value ? raceSlip(tyre.wheelSlipRaw ?? tyre.wheelSlip) : { height: 0, color: '#6b7280' },
     height: hasAccTyrePolicy.value ? racePressureHeight(tyre.pressurePsi, props.fastState.tyreCompound) : 56,
     average: hasPhysics.value && props.fastState.lapPressureAverage.status === 'available'
@@ -35,7 +35,7 @@ const axles = computed(() => [0, 2].map(index => ({
 })))
 const unavailable = computed(() => !hasPhysics.value)
 function brakeColor(tyre: FastStateTyre) {
-  return hasAccTyrePolicy.value ? brakeTemperatureColor(tyre.brakeTempC, tyre.id, tyre.brakeCompound) : '#6b7280'
+  return hasAccTyrePolicy.value ? brakeTemperatureColor(tyre.brakeTempC, tyre.id, tyre.brakeCompound) : temperatureTargetColor(tyre.brakeTemperatureTargetRatio)
 }
 </script>
 
