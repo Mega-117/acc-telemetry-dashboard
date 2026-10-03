@@ -11,6 +11,8 @@ import { referenceMatchesContext } from '~/services/spotter/trackVoiceReferences
 import { resolveSpotterSessionMode } from '~/services/spotter/spotterSessionPolicy'
 import { routeOverlayTelemetry } from '~/services/overlay/spectatorTelemetry'
 import { commonSectorHud } from '~/services/telemetry/commonSectorHud'
+import { featureAvailability, TELEMETRY_FEATURES } from '~/services/telemetry/featureAvailability'
+import { buildInfoPresentation } from '~/utils/infoPresentation'
 
 const live = (): CommonLive => ({ gameId: 'synthetic', sessionId: '1', connected: true, fresh: true,
   lifecycle: 'live', sessionKind: 'race', identity: { track: 'Spa', car: 'EV', variant: 'short' },
@@ -21,6 +23,29 @@ const live = (): CommonLive => ({ gameId: 'synthetic', sessionId: '1', connected
 const frame = (source = live()) => ({ ...commonFastPresentation(source), sectorHud: null } as FastOverlayState)
 
 describe('multisim HUD and audio isolation', () => {
+  it('presents EVO tyre and timing facts without ACC tyre rules or invented sectors', () => {
+    const source = live()
+    source.gameId = 'evo'
+    source.capabilities = { tyre_pressure: true, lap_timing: true, lap_validity: true }
+    for (const id of ['FL', 'FR', 'RL', 'RR']) {
+      source.fields[`tyre.${id}.pressure`] = { value: 24.5, availability: 'available', unit: 'psi' }
+      source.fields[`tyre.${id}.core_temperature`] = { value: 60, availability: 'available', unit: 'C' }
+    }
+    for (const [key, value] of Object.entries({ best_lap_time: 114876, optimal_lap_time: 113200, lap_delta: -396 })) {
+      source.fields[key] = { value, availability: 'available', unit: 'ms' }
+    }
+    const state = frame(source)
+    expect(state.tyres).toHaveLength(4)
+    expect(state.tyres[0]).toMatchObject({ pressurePsi: 24.5, coreTempC: 60, wheelSlipScaled: null })
+    expect(featureAvailability(source, TELEMETRY_FEATURES.tyrePressure).available).toBe(true)
+    const info = buildInfoPresentation(state)
+    expect(info.rows.find(row => row.id === 'best')?.value).toBe('1:54.876')
+    expect(state.info?.delta).toMatchObject({ ms: -396, available: true, side: 'negative' })
+    expect(state.info?.stintTimeLeftMs).toBeNull()
+    expect(state.sectorHud).toBeNull()
+    source.fields.lap_delta = { value: null, availability: 'stale', unit: 'ms' }
+    expect(frame(source).info?.delta.available).toBe(false)
+  })
   it('uses declared sector cardinality with independent references and incomplete splits', () => {
     const source = live()
     source.capabilities.sector_timing = true

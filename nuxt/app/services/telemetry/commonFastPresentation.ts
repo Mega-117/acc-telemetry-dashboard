@@ -8,6 +8,7 @@ export function commonFastPresentation(live: CommonLive): Partial<FastOverlaySta
   const currentLap = value('current_lap_time', 'ms')
   const lastLap = value('last_lap_time', 'ms')
   const bestLap = value('best_lap_time', 'ms')
+  const delta = value('lap_delta', 'ms')
   const valid = commonBoolean(live, 'lap_valid')
   const tyres: FastStateTyre[] = []
   for (const id of ['FL', 'FR', 'RL', 'RR'] as const) {
@@ -30,7 +31,9 @@ export function commonFastPresentation(live: CommonLive): Partial<FastOverlaySta
     bestLapTimeMs: value('best_lap_time', 'ms'), lapValid: commonBoolean(live, 'lap_valid'),
     lapsCompleted: lapCount,
     info: {
-      delta: { ms: 0, available: false, side: 'zero', ratio: 0, purple: false },
+      delta: { ms: delta ?? 0, available: delta !== null,
+        side: delta === null || delta === 0 ? 'zero' : delta < 0 ? 'negative' : 'positive',
+        ratio: delta === null ? 0 : Math.min(Math.abs(delta) / 1000, 1), purple: false },
       stintTimeLeftMs: value('stint_time_remaining', 'ms'), fuelLabel: '', fuelNeededL: null,
       fuelLeftTimeMs: value('fuel_time_remaining', 'ms'), fuelLeftReferenceLapMs: null,
       incidents: value('incidents', 'count'), grip: null, pitExitTraffic: null,
