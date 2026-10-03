@@ -359,6 +359,12 @@ export function useTelemetryGateway(explicitGameId?: string) {
 
             const pendingSessions = await loadPendingLocalOverlay(resolvedUserId)
             const sessionIndex = scopeSessionIndex(userProjection?.sessionIndex || {}, gameId)
+            if (sessionIndex.activityRequiresFallback) {
+                pushProjectionFallback(resolvedUserId, 'getOverviewProjection', {
+                    reason: 'activity_window_not_covered_by_index'
+                })
+                return await getOverviewProjectionFallback(targetUserId)
+            }
             const trackStats = mergePendingTrackStats(buildTrackStatsFromSessionIndex(sessionIndex), pendingSessions)
             const reference = selectOverviewLastSession(sessionIndex.sessionsList || [], pendingSessions)
             const newest = getNewestSessionEntry(sessionIndex, pendingSessions)

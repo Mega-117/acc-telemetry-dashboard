@@ -6,6 +6,40 @@ import { commonSessionPresentation } from '~/services/telemetry/commonSessionPre
 import { gameLabel } from '~/services/telemetry/gameCatalog'
 
 describe('consulted game and recorded facts', () => {
+  it('includes a session added by a legacy writer despite a stale per-game aggregate', () => {
+    const now = new Date(2026, 9, 3, 22)
+    const prior = [{ date: '2026-10-03', type: 1, totalTime: 115970 },
+      { date: '2026-10-03', type: 1, totalTime: 355954 }]
+    const entries = [...prior, { date: '2026-10-03', type: 0, totalTime: 3300652 }]
+    const index = { totalSessions: 3, sessionsList: entries,
+      activity7d: buildGameActivity(entries, now).acc, activityByGame: buildGameActivity(prior, now) }
+    const before = JSON.stringify(index)
+    const actual = scopeSessionIndex(index, 'acc', now)
+    expect(actual.activity7d).toMatchObject({ practice: { minutes: 55, sessions: 1 }, qualify: { minutes: 8, sessions: 2 },
+      byDay: [{ date: '2026-10-03', P: 55, Q: 8, R: 0 }] })
+    expect(actual.activityRequiresFallback).toBe(false)
+    expect(JSON.stringify(index)).toBe(before)
+  })
+  it('recalculates only the selected game and rolls the calendar window forward', () => {
+    const entries = [{ gameId: 'acc', date: '2026-10-03', type: 0, totalTime: 60000 },
+      { gameId: 'synthetic', date: '2026-10-03', sessionKind: 'practice', totalTime: 600000 }]
+    const index = { totalSessions: 2, sessionsList: entries }
+    expect(scopeSessionIndex(index, 'acc', new Date(2026, 9, 3)).activity7d).toMatchObject({ practice: { minutes: 1 } })
+    expect(scopeSessionIndex(index, 'synthetic', new Date(2026, 9, 3)).activity7d).toMatchObject({ practice: { minutes: 10 } })
+    expect(scopeSessionIndex(index, 'evo', new Date(2026, 9, 3)).activity7d).toMatchObject({ practice: { minutes: 0 } })
+    expect(scopeSessionIndex(index, 'acc', new Date(2026, 9, 10)).activity7d).toMatchObject({ practice: { minutes: 0 } })
+  })
+  it('requires fallback for a truncated recent window but not when the sorted index reaches before it', () => {
+    const now = new Date(2026, 9, 3)
+    const recent = { date: '2026-09-27', type: 0, totalTime: 60000 }
+    const index = { totalSessions: 201, sessionsList: [recent], activityByGame: buildGameActivity([recent], now) }
+    expect(scopeSessionIndex(index, 'acc', now).activityRequiresFallback).toBe(true)
+    expect(scopeSessionIndex({ ...index, sessionsList: [recent, { ...recent, date: '2026-09-26' }] }, 'acc', now)
+      .activityRequiresFallback).toBe(false)
+    expect(scopeSessionIndex({ ...index, sessionsList: [{ ...recent, date: 'invalid' }] }, 'acc', now)
+      .activityRequiresFallback).toBe(true)
+    expect(scopeSessionIndex({ totalSessions: 0, sessionsList: [] }, 'acc', now).activityRequiresFallback).toBe(false)
+  })
   it('aggregates only matching game and comparable variants/cars with proven valid laps', () => {
     const session = (id: string, gameId: string, variant: string, car: string, valid: number, best: number | null) => ({
       sessionId: id, meta: { gameId, track: 'Spa', trackVariant: variant, car, date_start: '2026-10-02', sessionKind: 'time_attack', session_type: -1 },

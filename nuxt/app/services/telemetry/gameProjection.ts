@@ -60,13 +60,25 @@ export function buildGameActivity(entries: IndexEntry[], now = new Date()) {
 }
 
 /** Legacy indexes contain ACC only; new indexes carry per-game activity. */
-export function scopeSessionIndex<T extends Record<string, unknown>>(index: T, gameId: string): T {
+export function scopeSessionIndex<T extends Record<string, unknown>>(index: T, gameId: string, now = new Date()): T & { activityRequiresFallback: boolean; activity7d: unknown } {
   const activity = index.activityByGame && typeof index.activityByGame === 'object'
     ? index.activityByGame as Record<string, unknown> : {}
+  const entries: IndexEntry[] = Array.isArray(index.sessionsList) ? index.sessionsList : []
+  const dates = entries.map(entry => getTelemetryActivityDateKey(entry.date))
+  const firstDay = getRecentActivityDateKeys(7, now)[0]!
+  // Both writers maintain this newest-first index. Legacy writers do not update
+  // activityByGame, so its existence cannot establish freshness (even if its
+  // bars and totals agree). Reuse the index only when it covers the whole window.
+  const ordered = dates.every((date, i) => date !== null && (i === 0 || date <= dates[i - 1]!))
+  const complete = ordered && ((typeof index.totalSessions === 'number' && index.totalSessions === entries.length)
+    || (dates.length > 0 && dates[dates.length - 1]! < firstDay))
+  const recalculated = complete ? buildGameActivity(entries, now)[gameId]
+    ?? buildGameActivity([{ gameId }], now)[gameId] : undefined
   return {
     ...index,
-    sessionsList: (Array.isArray(index.sessionsList) ? index.sessionsList : []).filter((row: IndexEntry) => (row.gameId ?? 'acc') === gameId),
+    sessionsList: entries.filter((row: IndexEntry) => (row.gameId ?? 'acc') === gameId),
     tracksSummary: (Array.isArray(index.tracksSummary) ? index.tracksSummary : []).filter((row: { gameId?: string }) => (row.gameId ?? 'acc') === gameId),
-    activity7d: activity[gameId] ?? (gameId === 'acc' ? index.activity7d : {}),
+    activity7d: recalculated ?? activity[gameId] ?? (gameId === 'acc' ? index.activity7d : {}),
+    activityRequiresFallback: !complete,
   }
 }
