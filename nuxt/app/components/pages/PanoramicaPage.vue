@@ -153,7 +153,7 @@ function goToSession() {
       </section>
 
       <aside class="racing-overview__side">
-        <OverviewUpcomingRacesCard :game-id="consultedGame" @loading="calendarBusy = $event" :user-id="targetUserId" :initial-events="prepared?.events" :initial-user-id="prepared?.uid" racing />
+        <OverviewUpcomingRacesCard :user-id="targetUserId" :game-id="consultedGame" @loading="calendarBusy = $event" :initial-events="prepared?.events" :initial-user-id="prepared?.uid" racing />
         <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" :other-total="overviewProjection?.otherActivity" racing :aria-busy="isOverviewPlaceholder" />
         <section class="training-panel racing-panel">
           <div><h2>Allenamenti</h2><p>Migliora il tuo tempo in pista</p></div>
