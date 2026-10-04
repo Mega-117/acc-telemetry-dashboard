@@ -66,7 +66,15 @@ const carImages: Record<string, string> = {
   emil_frey: jaguarImg,
 }
 
-export function getOverviewCarImage(rawName?: string | null): string {
+export function getOverviewCarImage(rawName?: string | null, gameId = 'acc'): string {
+  if (gameId !== 'acc') {
+    // EVO includes road cars: matching a manufacturer alone would show the wrong car.
+    const exact = (rawName || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (exact.includes('296gt3') && (exact.includes('ferrari') || exact.startsWith('f296'))) return ferrariImg
+    return ({ ferrari296gt3: ferrariImg, ferrari488gt3: ferrari488Img,
+      fordmustanggt3: mustangImg, bmwm4gt3: bmwImg, mercedesamggt3: mercedesImg,
+      mclaren720sgt3: mclarenImg } as Record<string, string>)[exact] ?? defaultCarImg
+  }
   const carName = (rawName || '').toLowerCase()
   for (const [key, image] of Object.entries(carImages)) {
     if (carName.includes(key)) return image

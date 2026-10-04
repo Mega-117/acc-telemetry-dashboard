@@ -24,11 +24,14 @@ export interface OverviewActivityDataPoint {
   practice: number
   qualify: number
   race: number
+  other?: number
 }
 
 import type { OverviewSessionPerformance } from '~/services/projections/overviewLastSession'
 
 export interface OverviewProjection {
+  performanceColumns?: { label: string; best: string; session: string; grip?: string | null }[]
+  otherActivity?: { minutes: number; sessions: number }
   lastSession?: OverviewSessionPerformance | null
   lastCar: OverviewCarProjection
   lastTrack: OverviewTrackProjection | null

@@ -167,8 +167,7 @@ function goBackToList() {
         <template v-else>
           <!-- Panoramica -->
           <div v-if="activeTab === 'panoramica'" class="tab-content">
-            <PagesCommonGamePage v-if="consultedGame !== 'acc'" surface="panoramica" embedded @go-to-session="handleGoToSession" @go-to-track="handleGoToTrack" @open-sessions="activeTab = 'sessioni'" />
-            <PagesPanoramicaPage v-else @go-to-track="handleGoToTrack" @go-to-session="handleGoToSession" />
+            <PagesPanoramicaPage :key="consultedGame" @go-to-track="handleGoToTrack" @go-to-session="handleGoToSession" />
           </div>
 
           <!-- Sessioni -->

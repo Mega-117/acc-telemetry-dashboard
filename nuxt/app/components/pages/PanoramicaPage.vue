@@ -8,6 +8,7 @@ import { useRouter } from 'vue-router'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { usePilotContext, useTargetUserId } from '~/composables/usePilotContext'
 import { useOverviewProjection } from '~/composables/useOverviewProjection'
+import { useGameContext } from '~/composables/useGameContext'
 import { OVERVIEW_CAR_SIZES } from '~/utils/responsiveImage'
 import { getOverviewCarImage } from '~/utils/overviewCarImage'
 import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
@@ -18,11 +19,14 @@ const props = defineProps<{ prepared?: { uid: string; projection: OverviewProjec
 
 const pilotContext = usePilotContext()
 const targetUserId = useTargetUserId()
-const telemetryGateway = useTelemetryGateway()
+const { consultedGame } = useGameContext()
+// The legacy projection is ACC-only; common requests carry their explicit game.
+const telemetryGateway = useTelemetryGateway('acc')
 const entry = inject(overviewEntryKey, null)
 const overview = useOverviewProjection(uid => {
+  if (consultedGame.value !== 'acc') return telemetryGateway.getCommonOverviewProjection(uid, consultedGame.value)
   return entry?.value?.takeProjection(uid) || telemetryGateway.getOverviewProjection(uid)
-}, props.prepared?.uid === targetUserId.value ? props.prepared : undefined)
+}, consultedGame.value === 'acc' && props.prepared?.uid === targetUserId.value ? props.prepared : undefined)
 const { projection: overviewProjection, status: overviewStatus } = overview
 const isOverviewPlaceholder = computed(() => !overviewProjection.value && overviewStatus.value !== 'empty')
 const emptyActivityTotals = {
@@ -48,13 +52,14 @@ function handleCacheInvalidated(event: Event) {
 
 let initial = true
 watch(
-  () => targetUserId.value,
+  () => [targetUserId.value, consultedGame.value],
   async () => {
-    if (initial && props.prepared?.uid === targetUserId.value) {
+    if (initial && consultedGame.value === 'acc' && props.prepared?.uid === targetUserId.value) {
       initial = false
       return
     }
     initial = false
+    overviewProjection.value = null
     await loadOverview()
   },
   { immediate: true, flush: 'sync' }
@@ -72,14 +77,14 @@ onBeforeUnmount(() => {
 const activityData = computed(() => overviewProjection.value?.activity7d || [])
 const activityTotals = computed(() => overviewProjection.value?.activityTotals || emptyActivityTotals)
 
-const lastCarImage = computed(() => getOverviewCarImage(overviewProjection.value?.lastCar.rawName))
+const lastCarImage = computed(() => getOverviewCarImage(overviewProjection.value?.lastCar.rawName, consultedGame.value))
 
 const lastCarName = computed(() => overviewProjection.value?.lastCar.displayName || 'Nessuna auto')
 const lastCarDate = computed(() => overviewProjection.value?.lastCar.lastUsedDate || 'Nessuna sessione registrata')
 const lastTrack = computed(() => overviewProjection.value?.lastTrack || null)
 const lastTrackName = computed(() => lastTrack.value?.name || 'La tua prossima pista')
 const lastSession = computed(() => overviewProjection.value?.lastSession || null)
-const performanceColumns = computed(() => [
+const performanceColumns = computed(() => overviewProjection.value?.performanceColumns ?? [
   { label: 'Qualifica', best: lastTrack.value?.bestQualy, grip: lastTrack.value?.bestQualyGrip, session: lastSession.value?.bestQualy },
   { label: 'Gara', best: lastTrack.value?.bestRace, grip: lastTrack.value?.bestRaceGrip, session: lastSession.value?.bestRace },
   { label: 'Media gara', best: lastTrack.value?.bestAvgRace, grip: lastTrack.value?.bestAvgRaceGrip, session: lastSession.value?.bestAvgRace },
@@ -121,7 +126,7 @@ function goToSession() {
             <tbody>
               <tr>
                 <td v-for="column in performanceColumns" :key="column.label">
-                  <span class="time-label">Migliore · {{ column.label }}</span>
+                  <span class="time-label">{{ consultedGame === 'acc' ? 'Migliore' : 'Storico' }} · {{ column.label }}</span>
                   <strong>{{ column.best || '--:--.---' }}</strong>
                   <abbr v-if="column.grip" class="grip-badge" :title="column.grip">{{ column.grip.slice(0, 3).toUpperCase() }}</abbr>
                 </td>
@@ -144,7 +149,7 @@ function goToSession() {
 
       <aside class="racing-overview__side">
         <OverviewUpcomingRacesCard :user-id="targetUserId" :initial-events="prepared?.events" :initial-user-id="prepared?.uid" racing />
-        <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" racing :aria-busy="isOverviewPlaceholder" />
+        <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" :other-total="overviewProjection?.otherActivity" racing :aria-busy="isOverviewPlaceholder" />
         <section class="training-panel racing-panel">
           <div><h2>Allenamenti</h2><p>Migliora il tuo tempo in pista</p></div>
           <NuxtLink to="/preparazione?scenario=tracktitan_input" class="racing-button racing-button--primary">Esplora allenamenti</NuxtLink>

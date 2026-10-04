@@ -15,7 +15,7 @@ const gateway = useTelemetryGateway('acc')
 const entry = inject(overviewEntryKey, null)
 const baseURL = useRuntimeConfig().app.baseURL
 async function prepare() {
-  if (useGameContext().consultedGame.value !== 'acc') return { ok: false as const }
+  if (useGameContext().consultedGame.value !== 'acc') return { ok: true as const, value: undefined }
   return preparePage(async () => {
     if (!uid) throw new Error('No owner')
     const [projection, events] = await Promise.all([
@@ -33,7 +33,6 @@ watch(useGameContext().consultedGame, game => { if (game === 'acc') void retry()
 </script>
 
 <template>
-  <PagesCommonGamePage v-if="useGameContext().consultedGame.value !== 'acc'" surface="panoramica" />
-  <PagesPanoramicaPage v-else-if="prepared.ok" :prepared="prepared.value" />
+  <PagesPanoramicaPage v-if="prepared.ok || useGameContext().consultedGame.value !== 'acc'" :prepared="prepared.ok ? prepared.value : undefined" />
   <LayoutPagePreparationError v-else @retry="retry" />
 </template>

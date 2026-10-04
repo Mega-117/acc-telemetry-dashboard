@@ -49,6 +49,7 @@ export default defineConfig({
         'app/composables/useTrackingRecord.ts',
         'app/services/telemetry/gameCatalog.ts',
         'app/services/telemetry/gameProjection.ts',
+        'app/services/projections/buildCommonOverviewProjection.ts',
         'app/services/telemetry/commonSessionPresentation.ts',
         'app/services/telemetry/commonLive.ts',
         'app/services/telemetry/featureAvailability.ts',

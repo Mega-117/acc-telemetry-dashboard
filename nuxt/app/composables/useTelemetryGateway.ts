@@ -2,6 +2,7 @@ import { computed, ref } from 'vue'
 import { useGameContext } from './useGameContext'
 import { sessionGame, sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import { scopeSessionIndex, buildCommonHistoryOverview } from '~/services/telemetry/gameProjection'
+import { buildCommonOverviewProjection } from '~/services/projections/buildCommonOverviewProjection'
 import { mergePendingLocal } from '~/services/telemetry/telemetryMergeService'
 import { useTelemetryData } from './useTelemetryData'
 import {
@@ -513,7 +514,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
         }
     }
 
-    async function getCommonHistoryOverview(targetUserId: string, selectedGame: string, track?: string) {
+    async function loadCommonOverviewSessions(targetUserId: string) {
         const uid = resolveTargetUserId(targetUserId)
         if (!uid) return null
         const source = await loadLightweightSessionSource(uid)
@@ -521,7 +522,18 @@ export function useTelemetryGateway(explicitGameId?: string) {
         const local = isElectron.value && uid === currentUser.value?.uid
             ? await loadLocalTelemetrySessions({ electronAPI: (window as any).electronAPI, ownerId: uid,
                 isOnline: typeof navigator === 'undefined' || navigator.onLine }) : []
-        return buildCommonHistoryOverview(mergePendingLocal(source.sessions, local, true), selectedGame, track)
+        return mergePendingLocal(source.sessions, local, true)
+    }
+
+    async function getCommonOverviewProjection(targetUserId: string, selectedGame: string) {
+        const sessions = await loadCommonOverviewSessions(targetUserId)
+        if (!sessions) throw new Error('Complete session index unavailable')
+        return buildCommonOverviewProjection(sessions, selectedGame)
+    }
+
+    async function getCommonHistoryOverview(targetUserId: string, selectedGame: string, track?: string) {
+        const sessions = await loadCommonOverviewSessions(targetUserId)
+        return sessions ? buildCommonHistoryOverview(sessions, selectedGame, track) : null
     }
 
     async function getSessionsPage(
@@ -836,6 +848,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
         getOverviewProjection,
         getSessionsPage,
         getCommonHistoryOverview,
+        getCommonOverviewProjection,
         getTrackSnapshot,
         getTracksOverviewProjection,
         getTrackDetailProjection,

@@ -14,6 +14,7 @@ type DayData = {
   practice: number
   qualify: number
   race: number
+  other?: number
 }
 
 const props = defineProps<{
@@ -22,6 +23,7 @@ const props = defineProps<{
   practiceTotal?: { minutes: number; sessions: number }
   qualifyTotal?: { minutes: number; sessions: number }
   raceTotal?: { minutes: number; sessions: number }
+  otherTotal?: { minutes: number; sessions: number }
 }>()
 
 // Animation state
@@ -36,7 +38,7 @@ onMounted(() => {
 onBeforeUnmount(() => clearTimeout(animationTimer))
 
 // Day total
-const dayTotal = (day: { practice: number; qualify: number; race: number }) => day.practice + day.qualify + day.race
+const dayTotal = (day: DayData) => day.practice + day.qualify + day.race + (day.other || 0)
 
 // Mock data - will be replaced with real API data
 const chartData = computed(() => props.data || [
@@ -51,7 +53,7 @@ const chartData = computed(() => props.data || [
 
 // Max value for Y axis
 const maxValue = computed(() => {
-  const totals = chartData.value.map(d => d.practice + d.qualify + d.race)
+  const totals = chartData.value.map(dayTotal)
   return Math.max(...totals, 60)
 })
 
@@ -125,6 +127,7 @@ const formatYLabel = (minutes: number): string => {
               :style="{ height: `${(dayTotal(day) / maxValue) * 100}%` }"
             >
               <!-- Race (Red) - Top -->
+              <div v-if="day.other" class="bar bar--other" :style="{ height: isAnimated ? `${(day.other / dayTotal(day)) * 100}%` : '0%' }"></div>
               <div 
                 v-if="day.race > 0"
                 class="bar bar--race"
@@ -192,6 +195,8 @@ const formatYLabel = (minutes: number): string => {
       </div>
     </div>
 
+    <p v-if="otherTotal?.sessions" class="other-activity"><span></span>Altre sessioni · {{ formatYLabel(otherTotal.minutes) }} · {{ otherTotal.sessions }} sess.</p>
+
     <!-- Accent glow -->
     <div class="accent-glow"></div>
   </div>
@@ -202,6 +207,9 @@ const formatYLabel = (minutes: number): string => {
 @use 'sass:color';
 
 // Session colors
+.bar--other { background: #a78bfa; }
+.other-activity { font-size: 12px; color: #ccc; margin: 10px 0 0; }
+.other-activity span { display: inline-block; width: 8px; height: 8px; background: #a78bfa; margin-right: 7px; }
 $color-practice: $accent-info;    // Blue
 $color-qualify: $accent-warning;  // Yellow
 $color-race: $racing-red;         // Red
