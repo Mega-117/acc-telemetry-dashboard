@@ -17,7 +17,7 @@ describe('vehicle and category history', () => {
     const raw = session('fuel')
     raw.summary = { laps: 1, lapsValid: 1, bestLap: 100000, totalTime: 100000, stintCount: 1,
       schema: 'racercore.timing-summary', version: 1,
-      fuel_history: { best_rules_version: 6, best_qualy_ms: null, best_session_race_ms: 100000, best_race_ms: null } } as any
+      fuel_history: { best_rules_version: 7, best_qualy_ms: null, best_session_race_ms: 100000, best_race_ms: null } } as any
     const indexed = sessionListEntryToSessionDocument(createSessionListEntry(raw))
     for (const value of [raw, indexed]) {
       expect(sessionTiming(value)).toEqual({ qualyMs: null, raceMs: 100000 })

@@ -1,5 +1,5 @@
 export const STINT_RACE_FUEL_THRESHOLD_L = 20
-export const BEST_RULES_VERSION = 6
+export const BEST_RULES_VERSION = 7
 export const HISTORICAL_RACE_FUEL_THRESHOLD_L = 40
 
 export const RACE_FUEL_BUCKETS = ['40-60', '60-80', '80-100', '100+'] as const

@@ -16,10 +16,10 @@ describe('recorded EVO session uses ACC detail models', () => {
   it('preserves raw export and supplies real sectors to the shared table and theoretical sector sum', () => {
     const source = raw(), original = JSON.stringify(source), adapted = recordedSessionForDetail(source)!
     const laps = buildSessionDetailLaps(adapted.stints[0]!.laps, formatLapTime)
-    expect(laps[0]).toMatchObject({ fuel: 48, airTemp: 26, roadTemp: 35, grip: 'Unknown', valid: true })
+    expect(laps[0]).toMatchObject({ fuel: 48, airTemp: 26, roadTemp: 35, grip: 'Green', valid: true })
     expect(buildBestSectorSummary(laps)).toEqual({ s1: 36693, s2: 40107, s3: 38172, lapMs: 114972 })
     expect(buildBoundaryLapExclusions(normalizeLapSeries({ laps, source: 'a', strategy: 'A', stintNumber: 1 })).size).toBe(0)
-    expect(adapted.session_info).toMatchObject({ start_track_grip: 'Unknown', initial_track_grip_status: 'Green' })
+    expect(adapted.session_info).toMatchObject({ start_track_grip: 'Green', initial_track_grip_status: 'Green' })
     expect(sessionDetailTrackId(adapted)).toBe('layout:["monza","gp"]')
     expect(JSON.stringify(source)).toBe(original)
   })

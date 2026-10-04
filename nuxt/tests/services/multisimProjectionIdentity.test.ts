@@ -19,7 +19,7 @@ describe('multi-simulator projection identity', () => {
     const raw = { schema: 'racercore.session', version: 1, game_id: 'evo',
       session_info: { track: 'Monza', track_variant: 'GP', car: 'Ferrari', date_start: '2026-10-04' }, stints: [],
       summary: { schema: 'racercore.timing-summary', version: 1, laps: 5, lapsValid: 5, bestLap: 100000,
-        fuel_history: { best_rules_version: 6, best_qualy_ms: 100000, best_by_grip: { Unknown: { bestQualy: 100000, bestQualyFuel: 10 } } } } }
+        fuel_history: { best_rules_version: 7, best_qualy_ms: 100000, best_by_grip: { Unknown: { bestQualy: 100000, bestQualyFuel: 10 } } } } }
     const parsed = extractMetadata(raw)
     const entry = createSessionListEntry({ ...session('evo'), ...parsed })
     const restored = sessionListEntryToSessionDocument(JSON.parse(JSON.stringify(entry)))

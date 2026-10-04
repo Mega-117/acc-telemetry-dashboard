@@ -2828,7 +2828,6 @@ const gripZones = computed(() => {
               <div><dt>Aria</dt><dd>{{ isEvoSession ? formatRecordedNumber(selectedStintLaps.find(lap => Number.isFinite(lap.airTemp))?.airTemp, '°') : `${stintConditions.airTemp.avg || stintConditions.airTemp.start}°` }}</dd></div>
               <div><dt>Grip</dt><dd>{{ stintConditions.grip.dominant }}</dd></div>
               <div><dt>Asfalto</dt><dd>{{ formatRecordedNumber(selectedStintLaps.find(lap => Number.isFinite(lap.roadTemp))?.roadTemp, '°') }}</dd></div>
-              <div v-if="isEvoSession && fullSession?.session_info.initial_track_grip_status"><dt>Grip iniziale</dt><dd>{{ fullSession.session_info.initial_track_grip_status }}</dd></div>
               <div class="stint-context-fuel" data-testid="stint-start-fuel"><dt>Carburante iniziale</dt><dd>{{ formatFuelStart(displayedStint?.fuelStart) }}</dd></div>
             </dl>
             <div v-if="selectedStint?.type === 'R' && consistencyStats.total > 0" class="stint-target">

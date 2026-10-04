@@ -120,10 +120,6 @@ function updateBest<TConditions extends BestConditions | null>(
   return [currentValue, currentConditions]
 }
 
-function lapBucketFuel(lap: Record<string, unknown>): number | null {
-  return toPositiveNumber(lap?.['fuel_start']) ?? toPositiveNumber(lap?.['fuel_remaining'])
-}
-
 function buildBucketRecord({
   timeMs,
   fuel,
@@ -259,7 +255,7 @@ function buildLegacyCompatibilitySummary(rawObj: Record<string, unknown>, sessio
       const lapTime = toPositiveNumber(lap?.['lap_time_ms'])
       if (!lapTime || !lap?.['is_valid'] || lap?.['has_pit_stop'] || lap?.['pit_out_lap']) return
 
-      const lapFuelReference = lapBucketFuel(lap)
+      const lapFuelReference = stintFuelStart
       const effectiveStintType = classifyStintTypeFromFuel(lapFuelReference ?? stintFuelStart, sessionType)
       const historicalEligibility = classifyHistoricalEligibility(
         lapFuelReference ?? stintFuelStart,

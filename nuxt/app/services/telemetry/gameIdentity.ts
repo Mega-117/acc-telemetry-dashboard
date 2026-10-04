@@ -23,7 +23,7 @@ export function recordingGame(raw: unknown): string | null {
   if (!record(info) || !Array.isArray(raw.stints)) return null
   const summary = raw.summary
   const knownSummary = record(summary) && Number.isInteger(summary.best_rules_version)
-    && Number(summary.best_rules_version) >= 1 && Number(summary.best_rules_version) <= 6
+    && Number(summary.best_rules_version) >= 1 && Number(summary.best_rules_version) <= 7
   return ['track', 'date_start', 'laps_total'].every(key => key in info)
     && ('car' in info || 'car_model' in info) && Number.isInteger(info.session_type)
     && ((record(staticData) && 'sectorCount' in staticData) || knownSummary) ? 'acc' : null

@@ -4,7 +4,21 @@ import { createSSRApp, h } from 'vue'
 import { renderToString } from '@vue/server-renderer'
 import { describe, expect, it } from 'vitest'
 import SectorDeltaHud from '~/components/overlay/SectorDeltaHud.vue'
+import { commonSectorHud } from '~/services/telemetry/commonSectorHud'
+import type { CommonLive } from '~/services/telemetry/commonLive'
 import type { SectorHudEntry, SectorHudState } from '~/composables/useLiveStatePoller'
+
+it.each(['compact', 'classic'])('renders the three EVO game-log splits through the shared %s HUD', async variant => {
+  const source: CommonLive = { gameId: 'evo', sessionId: 'monza', connected: true, fresh: true,
+    lifecycle: 'live', sessionKind: 'practice', identity: { track: 'Monza', car: 'Ferrari', variant: 'GP' },
+    capabilities: { sector_timing: true }, fields: {
+      sector_count: { value: 3, availability: 'available', unit: 'count' },
+      ...Object.fromEntries([36276, 38997, 37581].map((value, i) => [`sector.${i + 1}.time`, { value, availability: 'available', unit: 'ms' }])),
+    } }
+  const html = await renderToString(createSSRApp({ render: () => h(SectorDeltaHud, { sectorHud: commonSectorHud(source), variant: variant as 'compact' | 'classic' }) }))
+  for (const split of ['36.276', '38.997', '37.581']) expect(html).toContain(split)
+  expect(commonSectorHud({ ...source, fresh: false })).toBeNull()
+})
 
 function entry(index: 1 | 2 | 3): SectorHudEntry {
   return {

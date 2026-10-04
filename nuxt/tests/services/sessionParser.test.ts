@@ -206,15 +206,15 @@ describe('extractMetadata — forced raw rebuild', () => {
     expect(summary.best_race_ms).toBeNull()
   })
 
-  it('con forceRawRebuild ricostruisce il best race dai giri fuel > 40L', () => {
+  it('con forceRawRebuild mantiene tutti i giri nel bucket del carburante iniziale dello stint', () => {
     const { summarySource, summary } = extractMetadata(makeCurrentButStaleRaceRaw(), {
       allowLegacyFallback: true,
       forceRawRebuild: true
     })
 
     expect(summarySource).toBe('legacy_fallback')
-    expect(summary.best_race_ms).toBe(105862)
-    expect((summary.best_by_grip as any).Optimum.raceBestByFuelBucket['40-60'].timeMs).toBe(105862)
+    expect(summary.best_race_ms).toBe(105072)
+    expect((summary.best_by_grip as any).Optimum.raceBestByFuelBucket['40-60'].timeMs).toBe(105072)
     expect(summary.best_qualy_ms).toBeNull()
   })
 })

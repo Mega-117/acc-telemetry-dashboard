@@ -60,7 +60,7 @@ describe('multisim HUD and audio isolation', () => {
     expect(state.tyres[0]).toMatchObject({ pressurePsi: 24.5, coreTempC: 60, wheelSlipScaled: null })
     expect(featureAvailability(source, TELEMETRY_FEATURES.tyrePressure).available).toBe(true)
     const info = buildInfoPresentation(state)
-    expect(info.rows.find(row => row.id === 'grip')).toMatchObject({ label: 'Grip iniziale:', value: 'Green' })
+    expect(info.rows.find(row => row.id === 'grip')).toMatchObject({ label: 'Grip:', value: 'Green' })
     expect(state.tyres[0]?.temperatureTargetRatio).toBe(.5)
     expect(state.info?.grip).toBeNull()
     expect(info.rows.find(row => row.id === 'best')?.value).toBe('1:54.876')
@@ -88,6 +88,11 @@ describe('multisim HUD and audio isolation', () => {
     }
     expect(commonSectorHud({ ...source, fresh: false })).toBeNull()
     expect(commonSectorHud(live())).toBeNull()
+    source.fields.sector_count = { value: 3, availability: 'available', unit: 'count' }
+    source.fields.sector_last_lap = { value: 1, availability: 'available', unit: 'boolean' }
+    source.fields.sector_lap_valid = { value: 0, availability: 'available', unit: 'boolean' }
+    source.fields.lap_valid = { value: 1, availability: 'available', unit: 'boolean' }
+    expect(commonSectorHud(source)).toMatchObject({ mode: 'last_lap', lapValid: false })
   })
   it('renders a local map without ACC roster and rejects stale or unavailable position', () => {
     const source = live()

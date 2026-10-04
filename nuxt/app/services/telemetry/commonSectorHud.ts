@@ -8,9 +8,10 @@ export function commonSectorHud(live: CommonLive): SectorHudState | null {
   const count = value('sector_count', 'count')
   if (count === null || !Number.isInteger(count) || count < 1 || count > 32) return null
   const active = value('current_sector', 'index')
-  return { version: 1, mode: 'running', lap: value('lap_count', 'count'), referenceLap: null,
+  const showingLast = commonBoolean(live, 'sector_last_lap') === true
+  return { version: 1, mode: showingLast ? 'last_lap' : 'running', lap: value('lap_count', 'count'), referenceLap: null,
     currentSectorIndex: active, currentLapTimeMs: value('current_lap_time'), lastLapTimeMs: value('last_lap_time'),
-    bestLapTimeMs: value('best_lap_time'), lapValid: commonBoolean(live, 'lap_valid'), awaitingFlyingLap: false,
+    bestLapTimeMs: value('best_lap_time'), lapValid: commonBoolean(live, showingLast ? 'sector_lap_valid' : 'lap_valid'), awaitingFlyingLap: false,
     sectors: Array.from({ length: count }, (_, offset) => {
       const index = offset + 1
       const currentMs = value(`sector.${index}.time`)
