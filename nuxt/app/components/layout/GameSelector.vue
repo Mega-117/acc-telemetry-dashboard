@@ -9,8 +9,9 @@ import SourceChoice from './SourceChoice.vue'
 const { consultedGame, selectGame } = useGameContext()
 const { canAccessDevTools } = useDevToolsAccess()
 const live = useFastStatePoller(() => typeof window === 'undefined' ? null : (window as Window & { electronAPI?: unknown }).electronAPI)
-const connectedLabel = computed(() => live.fastState.value.commonLive?.connected
-  ? `Connesso: ${gameLabel(live.fastState.value.commonLive.gameId)}` : 'Nessun gioco connesso')
+const isConnected = computed(() => !!live.fastState.value.commonLive?.connected)
+const connectedLabel = computed(() => isConnected.value
+  ? `Collegato: ${gameLabel(live.fastState.value.commonLive!.gameId)}` : 'Nessun gioco collegato')
 const menu = ref<HTMLDetailsElement | null>(null)
 let selectionRevision = 0
 let activeTransition: { skipTransition: () => void } | undefined
@@ -55,10 +56,9 @@ function change(gameId: string) {
 
 <template>
   <div class="game-selector">
-    <span class="connection" :title="connectedLabel">GIOCO · {{ connectedLabel }}</span>
     <details ref="menu" @keydown.esc.prevent="menu && (menu.open = false)">
       <summary :aria-label="`Gioco consultato: ${gameLabel(consultedGame)}. Cambia gioco`">
-        <GameLogo :game-id="consultedGame" /><span>{{ gameLabel(consultedGame) }}</span><span aria-hidden="true">⌄</span>
+        <GameLogo :game-id="consultedGame" /><span aria-hidden="true">⌄</span>
       </summary>
       <div class="game-options" aria-label="Scegli il gioco">
         <button v-for="game in GAME_OPTIONS" :key="game.id" type="button" :aria-pressed="consultedGame === game.id" @click="change(game.id)">
@@ -67,17 +67,22 @@ function change(gameId: string) {
         <button v-if="canAccessDevTools" type="button" @click="change('synthetic')">Simulatore di test · DEV</button>
       </div>
     </details>
+    <span class="connection" :class="{ 'is-connected': isConnected }" :title="connectedLabel" role="status">
+      <span class="connection__dot" aria-hidden="true" />{{ connectedLabel }}
+    </span>
   </div>
   <SourceChoice />
 </template>
 
 <style scoped lang="scss">
-.game-selector { display: flex; flex-direction: column; gap: 3px; width: 260px; max-width: 100%; }
-.connection { font-size: 9px; letter-spacing: .1em; color: var(--rc-text-muted, #a6abb6); }
+.game-selector { position: relative; width: 190px; max-width: 100%; height: 46px; }
+.connection { position: absolute; top: calc(100% + 4px); left: 0; display: flex; align-items: center; gap: 6px; padding-inline: 2px; font-size: 10px; line-height: 14px; white-space: nowrap; color: var(--rc-text-muted, #a6abb6); }
+.connection__dot { flex: 0 0 5px; height: 5px; border-radius: 50%; background: #777d87; }
+.connection.is-connected .connection__dot { background: #42cda5; }
 details { position: relative; }
-summary { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 5px 10px; border: 1px solid #ffffff40; background: #1d2027; cursor: pointer; font-size: 12px; }
+summary { display: flex; align-items: center; gap: 14px; box-sizing: border-box; height: 46px; padding: 5px 14px; border: 1px solid #ffffff40; background: #1d2027; cursor: pointer; font-size: 12px; }
 summary::-webkit-details-marker { display: none; }
-summary :deep(.game-logo) { width: 62px; height: 26px; }
+summary :deep(.game-logo) { width: 120px; height: 32px; }
 summary > span:last-child { margin-left: auto; }
 .game-options { position: absolute; top: calc(100% + 6px); right: 0; width: min(320px, 85vw); z-index: 100; border: 1px solid #ffffff40; background: #141417; box-shadow: 0 10px 30px #000a; padding: 5px; }
 .game-options button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; text-align: left; background: transparent; border: 0; color: #eee; cursor: pointer; font: inherit; font-size: 12px; }
@@ -85,5 +90,5 @@ summary > span:last-child { margin-left: auto; }
 .game-options :deep(.game-logo) { width: 90px; height: 36px; }
 .game-options small { display: block; color: #aaa; margin-top: 4px; }
 summary:focus-visible, button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-@media (max-width: 700px) { .game-selector { width: 160px; } summary > span:not(:last-child) { display: none; } }
+@media (max-width: 700px) { .game-selector { width: 160px; } summary { padding-inline: 10px; gap: 10px; } summary :deep(.game-logo) { width: 104px; } }
 </style>
