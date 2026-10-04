@@ -15,7 +15,7 @@
   :deep(.dropdown-menu), :deep(.pwc-notices) { border-radius: 0; background: #090909; border-color: #ffffff70; box-shadow: 0 16px 35px #000b; }
   :deep(.pwc-notices) { top: calc(100% + 8px); }
   :deep(.dropdown-item) { border-radius: 0; }
-  :deep(.dropdown-item:hover:not(:disabled)) { background: #ff002414; }
+  :deep(.dropdown-item:hover:not(:disabled)) { background: #ffffff12; }
   :deep(.pwc-notices header strong) { font: italic 700 18px 'Racer Display', sans-serif; text-transform: uppercase; }
   :deep(.dropdown-trigger:focus-visible), :deep(.pwc-bell:focus-visible) { outline: 2px solid #fff; outline-offset: 3px; }
   // Reserve the connection-status line and keep it clear of the navigation.
