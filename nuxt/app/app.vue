@@ -621,7 +621,8 @@ provide('goToSettings', handleGoToSettings)
         <!-- Dashboard -->
         <div v-else-if="appState === 'dashboard'" key="dashboard" class="dashboard-wrapper">
           <NuxtLayout>
-            <NuxtPage :page-key="route => `${consultedGame}:${route.fullPath}`" />
+            <!-- Overview owns its game-change sequence; remounting skips the logo hold. -->
+            <NuxtPage :page-key="route => route.name === 'panoramica' ? route.fullPath : `${consultedGame}:${route.fullPath}`" />
           </NuxtLayout>
         </div>
 

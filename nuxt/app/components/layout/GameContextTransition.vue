@@ -15,12 +15,13 @@ watch(() => props.gameId, () => {
   revealing.value = false
   switching.value = true
   minimumElapsed.value = false
-  minimumTimer = setTimeout(() => { minimumElapsed.value = true }, 600)
+  // 300 ms outgoing fade, then one full second with the destination logo.
+  minimumTimer = setTimeout(() => { minimumElapsed.value = true }, 1300)
 }, { flush: 'sync' })
 watch(covered, (value, previous) => {
   if (previous && !value) {
     revealing.value = true
-    revealTimer = setTimeout(() => { revealing.value = false; switching.value = false }, 440)
+    revealTimer = setTimeout(() => { revealing.value = false; switching.value = false }, 300)
   }
 }, { flush: 'post' })
 onBeforeUnmount(() => { clearTimeout(minimumTimer); clearTimeout(revealTimer) })
@@ -40,7 +41,7 @@ onBeforeUnmount(() => { clearTimeout(minimumTimer); clearTimeout(revealTimer) })
 .game-context { position: relative; min-height: 360px; display: flex; flex-direction: column; flex: 1 0 auto; }
 .game-context__content { display: flex; flex-direction: column; flex: 1 0 auto; }
 .game-context__content.is-covered { visibility: hidden; }
-.game-context__content.is-revealing { animation: game-reveal 440ms cubic-bezier(.22, .61, .36, 1) both; transform-origin: center; }
+.game-context__content.is-revealing { animation: game-reveal 300ms cubic-bezier(.22, .61, .36, 1) both; transform-origin: center; }
 .game-context__cover { position: absolute; inset: 0; min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: radial-gradient(ellipse at center, #19191b, #09090b 72%); animation: game-cover 120ms ease-out both; }
 .game-context__cover :deep(.game-logo) { width: min(260px, 65%); height: 90px; max-height: 90px; }
 .game-context__cover span { color: #bfc1c7; font-size: 12px; letter-spacing: .08em; }
@@ -54,9 +55,9 @@ onBeforeUnmount(() => { clearTimeout(minimumTimer); clearTimeout(revealTimer) })
 html.game-switch-motion { view-transition-name: none; }
 html.game-switch-motion .game-context { view-transition-name: game-overview; }
 ::view-transition-group(game-overview) { animation: none; }
-::view-transition-old(game-overview) { animation: overview-zoom-out 360ms ease-in both; transform-origin: center; }
-::view-transition-new(game-overview) { animation: overview-cover-in 200ms 300ms ease-out both; }
-@keyframes overview-zoom-out { to { opacity: 0; transform: scale(.94); } }
+::view-transition-old(game-overview) { animation: overview-zoom-away 300ms ease-in both; transform-origin: center; }
+::view-transition-new(game-overview) { animation: overview-cover-in 300ms ease-out both; }
+@keyframes overview-zoom-away { to { opacity: 0; transform: scale(1.06); } }
 @keyframes overview-cover-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-old(game-overview), ::view-transition-new(game-overview) { animation: none; }
