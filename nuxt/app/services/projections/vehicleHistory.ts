@@ -78,6 +78,15 @@ export function vehicleTrackDetail(input: SessionDocument[], gameId: string, tra
     formatLapTime, formatDriveTime, formatCarName, getSessionTypeLabel })
   // Preserve full dates for chart periods rather than using display labels as identity.
   projection.historicalTimes.forEach(p => { p.dateStart = sessions.find(s => s.sessionId === p.sessionId)?.meta.date_start })
+  if (gameId === 'evo') {
+    // Legacy track projections use zero for missing temperatures. The EVO
+    // presentation must keep an unreported value absent instead.
+    for (const [condition, temperature] of [['bestQualyConditions', best.bestQualyTemp],
+      ['bestRaceConditions', best.bestRaceTemp], ['bestAvgRaceConditions', best.bestAvgRaceTemp]] as const) {
+      const value = projection.track[condition]
+      if (value) value.airTemp = typeof temperature === 'number' && Number.isFinite(temperature) ? temperature : Number.NaN
+    }
+  }
   projection.recentSessions.forEach(p => {
     const source = sessions.find(s => s.sessionId === p.id)
     p.dateStart = source?.meta.date_start

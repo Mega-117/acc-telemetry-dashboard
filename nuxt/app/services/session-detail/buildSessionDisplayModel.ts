@@ -1,6 +1,7 @@
 import type { FullSession } from '~/types/telemetry'
 import { buildRawStintMetrics, isCleanSessionLap } from './sessionStintMetrics'
 import type { SessionDisplayModel, SessionDisplayLap, SessionDisplayStint } from '~/types/sessionDisplayModel'
+import { sessionDetailTrackId } from './recordedSessionAdapter'
 
 export function createEmptySessionDisplayModel(sessionId: string): SessionDisplayModel {
   return {
@@ -65,8 +66,8 @@ export function buildSessionDisplayModel(params: {
 
     return {
       number: stint.stint_number,
-      type: stint.type === 'Qualify' ? 'Q' : 'R',
-      intent: stint.type === 'Qualify' ? 'Qualy Push' : 'Race Pace',
+      type: stint.type === 'Qualify' ? 'Q' : stint.type === 'Race' ? 'R' : '—',
+      intent: stint.type === 'Qualify' ? 'Qualy Push' : stint.type === 'Race' ? 'Race Pace' : 'Carburante non disponibile',
       fuelStart: stint.fuel_start,
       laps: stint.laps.length,
       validLapsCount,
@@ -99,9 +100,11 @@ export function buildSessionDisplayModel(params: {
       sectors: lap.sector_times_ms?.map((sector) => (sector / 1000).toFixed(3)) || ['-', '-', '-'],
       sector_times_ms: lap.sector_times_ms || [],
       fuel: Math.round(lap.fuel_remaining),
-      airTemp: lap.air_temp || 0,
+      airTemp: lap.air_temp,
+      roadTemp: lap.road_temp,
       weather: lap.rain_intensity || 'No Rain',
-      grip: lap.track_grip_status || 'Opt'
+      grip: lap.track_grip_status || 'Unknown',
+      completeness: lap.completeness, validity: lap.validity
     }))
   })
 
@@ -135,9 +138,9 @@ export function buildSessionDisplayModel(params: {
 
   return {
     id: sessionId,
-    track: info.track,
-    trackId: info.track.toLowerCase().replace(/[^a-z0-9]/g, '_'),
-    type: getSessionTypeLabel(info.session_type),
+    track: [info.track, info.track_variant].filter(Boolean).join(' · '),
+    trackId: sessionDetailTrackId(fs),
+    type: info.session_type < 0 ? 'unknown' : getSessionTypeLabel(info.session_type),
     date: formatDateFull(info.date_start),
     time: formatTime(info.date_start),
     car: formatCarName(info.car),

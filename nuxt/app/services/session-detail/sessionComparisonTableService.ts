@@ -66,6 +66,9 @@ export function buildSessionDetailLaps(
       air: lap.air_temp,
       airTemp: lap.air_temp,
       air_temp: lap.air_temp,
+      roadTemp: lap.road_temp,
+      completeness: lap.completeness,
+      validity: lap.validity,
       grip: lap.grip_level || lap.track_grip_status || 'Opt',
       grip_level: lap.grip_level,
       track_grip_status: lap.track_grip_status

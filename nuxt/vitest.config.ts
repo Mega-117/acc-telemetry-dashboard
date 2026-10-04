@@ -192,6 +192,8 @@ export default defineConfig({
         'app/services/runtime/rendererRuntimeBootstrapAdapter.ts',
         'app/services/runtime/runtimeWindowBridge.ts',
         'app/services/session-detail/sessionMath.ts',
+        'app/services/session-detail/recordedSessionAdapter.ts',
+        'app/services/session-detail/vehicleSessionReferences.ts',
         'app/services/session-detail/sessionFileService.ts',
         'app/services/sync/sessionFileImportService.ts',
         'app/components/session-detail/SessionFileActions.vue',

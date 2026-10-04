@@ -36,7 +36,7 @@ import {
   getCarCategory,
   MAX_REASONABLE_LAP_MS
 } from '~/utils/telemetryFormat'
-import type { FullSession } from '~/types/telemetry'
+import type { FullSession, SessionDocument } from '~/types/telemetry'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { runSessionValidation } from '~/composables/useDebugValidator'
 import { usePilotContext } from '~/composables/usePilotContext'
@@ -45,7 +45,9 @@ import { shareSessionLink } from '~/services/session-detail/sessionShareService'
 import { canShareOwnedSession, downloadSession } from '~/services/session-detail/sessionFileService'
 import SessionFileActions from '~/components/session-detail/SessionFileActions.vue'
 import { autoSelectComparisonStints } from '~/services/session-detail/sessionCompareService'
-import { canUseAccRules } from '~/services/telemetry/gameIdentity'
+import { recordingGame } from '~/services/telemetry/gameIdentity'
+import { recordedSessionForDetail, sessionDetailTrackId, formatRecordedNumber, compatibleRecordedSession } from '~/services/session-detail/recordedSessionAdapter'
+import { vehicleSessionReferences } from '~/services/session-detail/vehicleSessionReferences'
 import CommonSessionDetail from '~/components/sessions/CommonSessionDetail.vue'
 import { getSessionDetailLoadError } from '~/services/session-detail/loadSessionDetailViewModel'
 import {
@@ -177,7 +179,9 @@ const telemetryGateway = useTelemetryGateway()
 
 const { getTheoreticalTimes, generateShareLink, fetchSessionFull } = telemetryGateway
 const commonSession = ref<FullSession | null>(null)
+const originalSession = ref<FullSession | null>(null)
 const fullSession = ref<FullSession | null>(null)
+const isEvoSession = computed(() => recordingGame(originalSession.value) === 'evo')
 
 const isLoading = ref(true)
 const loadError = ref<string | null>(null)
@@ -191,7 +195,7 @@ const fileActionError = ref<string | null>(null)
 const canShare = computed(() => canShareOwnedSession(comparisonCurrentUser.value?.uid, props.externalUserId || targetUserId.value))
 function exportSession() {
   fileActionError.value = null
-  try { downloadSession(commonSession.value || fullSession.value, props.sessionId) }
+  try { downloadSession(originalSession.value || commonSession.value || fullSession.value, props.sessionId) }
   catch (error) { fileActionError.value = error instanceof Error ? error.message : 'Esportazione non riuscita' }
 }
 const showAutoSelectToast = ref(false)
@@ -238,11 +242,13 @@ onMounted(async () => {
     })
 
     currentUserNickname.value = result.currentUserNickname
-    if (result.fullSession && !canUseAccRules(result.fullSession)) {
+    originalSession.value = result.fullSession
+    const sharedInput = recordedSessionForDetail(result.fullSession)
+    if (result.fullSession && !sharedInput) {
       commonSession.value = result.fullSession
       fullSession.value = null
     } else {
-      fullSession.value = result.fullSession
+      fullSession.value = sharedInput
     }
     loadError.value = result.loadError
 
@@ -262,7 +268,7 @@ onMounted(async () => {
     isLoading.value = false
 
     // DEV: Auto-run validation tests
-    if (import.meta.env.DEV && fullSession.value) {
+    if (import.meta.env.DEV && fullSession.value && !isEvoSession.value) {
       // Use nextTick to ensure session computed is updated
       nextTick(() => {
         runSessionValidation(session.value, fullSession.value)
@@ -375,9 +381,11 @@ async function handleSessionBSelect(sessionId: string, userId?: string, nickname
     crossSessionId.value = sessionId
     crossSessionUserId.value = ownerId
     crossSessionNickname.value = nickname || (ownerId === comparisonCurrentUser.value?.uid ? currentUserNickname.value : null)
-    crossSessionData.value = data
+    const sharedInput = recordedSessionForDetail(data)
+    if (!sharedInput || !fullSession.value || !compatibleRecordedSession(fullSession.value, sharedInput)) throw new Error('Gioco o variante pista non compatibile')
+    crossSessionData.value = sharedInput
     activeTableTab.value = 'COMPARE'
-    autoSelectBestStints(data)
+    autoSelectBestStints(sharedInput)
   } catch {
     if (version === comparisonLoadVersion) comparisonLoadError.value = 'Impossibile caricare la sessione da confrontare.'
   }
@@ -1560,7 +1568,7 @@ function getStintConditions(stintLaps: SessionDetailLap[]) {
 
   // Calculate percentages and find dominant
   const percentages: { grip: string; pct: number }[] = []
-  let dominant = 'Optimum'  // Default fallback
+  let dominant = 'Unknown'
   let maxCount = 0
 
   for (const grip of gripOrder) {  // Iterate in first-occurrence order
@@ -1605,14 +1613,25 @@ watch(
     for (const [source, fs, owner] of [['a', primary, primaryOwner], ['b', secondary, secondaryOwner || primaryOwner]] as const) {
       if (!fs) continue
       const info = fs.session_info
-      const trackId = (info.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
+      const trackId = sessionDetailTrackId(fs)
+      const evo = recordingGame(fs) === 'evo'
+      let vehicleHistory: SessionDocument[] = []
+      if (evo) {
+        try { vehicleHistory = await useTelemetryGateway('evo').getVehicleHistory(owner || undefined, trackId) }
+        catch { /* Missing owner history leaves references empty. */ }
+      }
+      if (stale) return
       // Sequential reads let the gateway reuse its cached projection for every stint.
       for (const stint of fs.stints) {
         const conditions = getStintConditions(buildSessionDetailLaps(stint.laps, formatLapTime))
         const dominantGrip = conditions.grip.dominant
-        const stintTemp = conditions.airTemp.avg || Math.round(info.start_air_temp || 23)
+        const availableTemperatures = stint.laps.map(lap => lap.air_temp).filter(Number.isFinite)
+        const stintTemp = evo ? (availableTemperatures.length
+          ? availableTemperatures.reduce((sum, value) => sum + value, 0) / availableTemperatures.length : Number.NaN)
+          : conditions.airTemp.avg || Math.round(info.start_air_temp || 23)
         try {
-          const theo = await getTheoreticalTimes(trackId, dominantGrip, stintTemp, getCarCategory(info.car || ''), owner || undefined, stint.type === 'Qualify' ? null : stint.fuel_start)
+          const theo = evo ? vehicleSessionReferences(fs, vehicleHistory, dominantGrip, stintTemp, stint.type === 'Qualify' ? Number.NaN : stint.fuel_start)
+            : await getTheoreticalTimes(trackId, dominantGrip, stintTemp, getCarCategory(info.car || ''), owner || undefined, stint.type === 'Qualify' ? null : stint.fuel_start)
           if (stale) return
           stintTheoreticals.value = { ...stintTheoreticals.value, [`${source}:${stint.stint_number}`]: { ...theo, dominantGrip, stintTemp } }
         } catch {
@@ -2080,7 +2099,7 @@ const chartOptions = {
 // ========================================
 // HELPERS
 // ========================================
-function getTypeLabel(t: string) { return { practice: 'LIBERE', qualify: 'QUALIFICA', race: 'GARA' }[t] || t.toUpperCase() }
+function getTypeLabel(t: string) { return { practice: 'LIBERE', qualify: 'QUALIFICA', race: 'GARA', unknown: 'SESSIONE' }[t] || t.toUpperCase() }
 // Delta color scheme: green=on-target/faster, yellow=close, orange=margin, red=far
 function getDeltaClass(d: string | undefined) {
   if (!d || d === '-') return 'far'
@@ -2806,8 +2825,10 @@ const gripZones = computed(() => {
           <aside class="stint-context" aria-label="Condizioni dello stint">
             <dl class="stint-context-data">
               <div class="stint-context-duration"><dt>Durata</dt><dd>{{ stintDuration.formatted }}</dd></div>
-              <div><dt>Aria</dt><dd>{{ stintConditions.airTemp.avg || stintConditions.airTemp.start }}°</dd></div>
+              <div><dt>Aria</dt><dd>{{ isEvoSession ? formatRecordedNumber(selectedStintLaps.find(lap => Number.isFinite(lap.airTemp))?.airTemp, '°') : `${stintConditions.airTemp.avg || stintConditions.airTemp.start}°` }}</dd></div>
               <div><dt>Grip</dt><dd>{{ stintConditions.grip.dominant }}</dd></div>
+              <div><dt>Asfalto</dt><dd>{{ formatRecordedNumber(selectedStintLaps.find(lap => Number.isFinite(lap.roadTemp))?.roadTemp, '°') }}</dd></div>
+              <div v-if="isEvoSession && fullSession?.session_info.initial_track_grip_status"><dt>Grip iniziale</dt><dd>{{ fullSession.session_info.initial_track_grip_status }}</dd></div>
               <div class="stint-context-fuel" data-testid="stint-start-fuel"><dt>Carburante iniziale</dt><dd>{{ formatFuelStart(displayedStint?.fuelStart) }}</dd></div>
             </dl>
             <div v-if="selectedStint?.type === 'R' && consistencyStats.total > 0" class="stint-target">
@@ -3096,8 +3117,8 @@ const gripZones = computed(() => {
                   <td :class="['sector', { 'sector--best': isBestSector(lap, 0) }]">{{ formatSectorTime(lap.sectors?.[0] || lap.s1) }}</td>
                   <td :class="['sector', { 'sector--best': isBestSector(lap, 1) }]">{{ formatSectorTime(lap.sectors?.[1] || lap.s2) }}</td>
                   <td :class="['sector', { 'sector--best': isBestSector(lap, 2) }]">{{ formatSectorTime(lap.sectors?.[2] || lap.s3) }}</td>
-                  <td>{{ lap.fuel }}L</td>
-                  <td>{{ Math.round(lap.airTemp || lap.air || 0) }}°</td>
+                  <td>{{ formatRecordedNumber(lap.fuel, 'L') }}</td>
+                  <td>{{ formatRecordedNumber(lap.airTemp ?? lap.air, '°') }}</td>
                   <td><abbr :title="lap.grip">{{ gripAbbreviation(lap.grip) }}</abbr></td>
                 </tr>
               </tbody>
@@ -3116,6 +3137,8 @@ const gripZones = computed(() => {
   <UiSessionPickerModal
     :is-open="showSessionPicker"
     :current-track="session?.track || ''"
+    :current-track-id="fullSession ? sessionDetailTrackId(fullSession) : undefined"
+    :game-id="fullSession ? recordingGame(fullSession) || undefined : undefined"
     :exclude-session-id="props.sessionId"
     @close="showSessionPicker = false"
     @select="handleSessionBSelect"

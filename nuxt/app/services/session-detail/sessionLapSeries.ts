@@ -118,9 +118,9 @@ export function buildBoundaryLapExclusions(points: NormalizedLapPoint[]): Set<st
   }
   const excluded = new Set<string>()
   for (const group of groups.values()) {
-    if (group[0]) excluded.add(group[0].exclusionKey)
+    if (group[0] && group[0].raw.completeness !== 'complete') excluded.add(group[0].exclusionKey)
     const last = group[group.length - 1]
-    if (last) excluded.add(last.exclusionKey)
+    if (last && last.raw.completeness !== 'complete') excluded.add(last.exclusionKey)
   }
   return excluded
 }

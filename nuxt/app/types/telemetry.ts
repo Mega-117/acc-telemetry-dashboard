@@ -66,6 +66,8 @@ export interface SessionDocument {
 }
 
 export interface LapData {
+  completeness?: string
+  validity?: string
   lap_number: number
   lap_time_ms: number
   elapsed_time_ms: number
@@ -93,7 +95,13 @@ export interface StintData {
 }
 
 export interface FullSession {
+  schema?: string
+  version?: number
+  game_id?: string
+  capabilities?: Record<string, boolean>
   session_info: {
+    track_variant?: string
+    initial_track_grip_status?: string
     track: string
     car: string
     driver: string

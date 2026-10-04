@@ -21,6 +21,9 @@ export interface SessionDetailUserIdentity {
  * aliases consumed by the session-detail table and chart.
  */
 export interface SessionDetailLap extends Partial<SessionDisplayLap> {
+  roadTemp?: number
+  completeness?: string
+  validity?: string
   lapNumber?: number
   lap_number?: number
   number?: number

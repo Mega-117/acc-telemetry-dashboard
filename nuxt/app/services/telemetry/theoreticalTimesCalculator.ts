@@ -222,10 +222,21 @@ export function createGetTheoreticalTimes(
         stintFuelStart?: number | null
     ): Promise<TheoreticalTimes> {
         const bests = await getBestTimesForGrip(trackId, grip, category, userId)
+        return calculateTheoreticalTimes(bests, grip, stintTemp, stintFuelStart)
+    }
+}
+
+/** Shared calculation, independent of category/vehicle history lookup. */
+export function calculateTheoreticalTimes(
+    bests: Partial<GripBestTimes>, grip: string, stintTemp: number,
+    stintFuelStart?: number | null
+): TheoreticalTimes {
         const stintReferenceFuelBucket = getRaceFuelBucket(stintFuelStart)
-        const raceReference = resolveRaceReference(bests, stintReferenceFuelBucket)
-        const avgRaceReference = resolveAvgRaceReference(bests, stintReferenceFuelBucket)
-        const qualyTheoreticalReference = buildTheoreticalReference('qualy', null, bests.bestQualy, bests.bestQualyTemp, stintTemp)
+        const referenceBests = { ...bests, bestRace: bests.bestRace ?? null, bestRaceTemp: bests.bestRaceTemp ?? null,
+            bestAvgRace: bests.bestAvgRace ?? null, bestAvgRaceTemp: bests.bestAvgRaceTemp ?? null } as GripBestTimes
+        const raceReference = resolveRaceReference(referenceBests, stintReferenceFuelBucket)
+        const avgRaceReference = resolveAvgRaceReference(referenceBests, stintReferenceFuelBucket)
+        const qualyTheoreticalReference = buildTheoreticalReference('qualy', null, bests.bestQualy ?? null, bests.bestQualyTemp ?? null, stintTemp)
         const raceTheoreticalReference = buildTheoreticalReference('raceBest', stintReferenceFuelBucket, raceReference.time, raceReference.temp, stintTemp)
         const avgRaceTheoreticalReference = buildTheoreticalReference('raceAvg', stintReferenceFuelBucket, avgRaceReference.time, avgRaceReference.temp, stintTemp)
 
@@ -233,8 +244,8 @@ export function createGetTheoreticalTimes(
             theoQualy: qualyTheoreticalReference.adjustedMs,
             theoRace: raceTheoreticalReference.adjustedMs,
             theoAvgRace: avgRaceTheoreticalReference.adjustedMs,
-            historicQualy: bests.bestQualy,
-            historicQualyTemp: bests.bestQualyTemp,
+            historicQualy: bests.bestQualy ?? null,
+            historicQualyTemp: bests.bestQualyTemp ?? null,
             historicRace: raceReference.time,
             historicRaceTemp: raceReference.temp,
             historicAvgRace: avgRaceReference.time,
@@ -246,5 +257,4 @@ export function createGetTheoreticalTimes(
             raceReference: raceTheoreticalReference,
             avgRaceReference: avgRaceTheoreticalReference
         }
-    }
 }

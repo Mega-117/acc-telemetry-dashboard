@@ -50,6 +50,7 @@ describe('vehicle and category history', () => {
     expect(result.recentSessions.map(s => s.id)).toEqual(['ferrari'])
     expect(result.historicalTimes.map(s => s.sessionId)).toEqual(['ferrari'])
     expect(result.recentSessions[0]?.type).toBe('unknown')
+    expect(Number.isNaN(result.track.bestQualyConditions?.airTemp)).toBe(true)
     a.meta.sessionKind = 'qualify'
     expect(vehicleTrackDetail([a], 'evo', historyTrackId('Monza', 'GP'), {}, 'Unknown').recentSessions[0]?.type).toBe('qualify')
     expect(historyBest(filterHistory([a, b], 'evo', { car: a.meta.car })).bestQualy).toBe(100000)

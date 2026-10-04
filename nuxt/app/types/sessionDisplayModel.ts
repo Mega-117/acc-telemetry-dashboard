@@ -28,6 +28,8 @@ export interface SessionDisplayStint {
 }
 
 export interface SessionDisplayLap {
+  completeness?: string
+  validity?: string
   lap: number
   time: string
   lap_time_ms: number
@@ -38,6 +40,7 @@ export interface SessionDisplayLap {
   sector_times_ms: number[]
   fuel: number
   airTemp: number
+  roadTemp?: number
   weather: string
   grip: string
 }
@@ -46,7 +49,7 @@ export interface SessionDisplayModel {
   id: string
   track: string
   trackId: string
-  type: SessionType
+  type: SessionType | 'unknown'
   date: string
   time: string
   car: string

@@ -10,10 +10,15 @@ import {
 import type { SessionDocument } from '~/types/telemetry'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
+import { onHistoryTrack } from '~/services/projections/vehicleHistory'
+import { sessionGame, sessionFilterType } from '~/services/telemetry/gameIdentity'
+import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
 
 const props = defineProps<{
   isOpen: boolean
   currentTrack: string
+  currentTrackId?: string
+  gameId?: string
   excludeSessionId: string
 }>()
 
@@ -102,23 +107,26 @@ const filteredSessions = computed(() => {
     .filter(s => {
       // Exclude current session
       if (s.sessionId === props.excludeSessionId) return false
+      if (props.gameId && sessionGame(s) !== props.gameId) return false
+      if (props.currentTrackId) return onHistoryTrack(s, props.currentTrackId)
       
       // Match track
       const sessionTrack = (s.meta?.track || '').toLowerCase().replace(/[^a-z0-9]/g, '_')
       return sessionTrack.includes(trackNorm) || trackNorm.includes(sessionTrack)
     })
     .map(s => {
-      const sessionRaceTime = s.summary?.best_session_race_ms || s.summary?.best_race_ms || null
+      const timing = sessionTiming(s)
+      const filterType = sessionFilterType(s)
       return {
         id: s.sessionId,
         date: formatDateShort(s.meta?.date_start || ''),
         time: formatTime(s.meta?.date_start || ''),
-        type: getSessionTypeLabel(Number(s.meta?.session_type ?? -1)),
+        type: filterType === null ? 'sessione' : getSessionTypeLabel(filterType),
         car: formatCarName(s.meta?.car || ''),
         laps: s.summary?.laps || 0,
         stints: s.summary?.stintCount ?? 0,
-        bestQualy: s.summary?.best_qualy_ms ? formatLapTime(s.summary.best_qualy_ms) : null,
-        bestRace: sessionRaceTime ? formatLapTime(sessionRaceTime) : null
+        bestQualy: timing.qualyMs ? formatLapTime(timing.qualyMs) : null,
+        bestRace: timing.raceMs ? formatLapTime(timing.raceMs) : null
       }
     })
 })

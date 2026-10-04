@@ -326,9 +326,13 @@ function goToSession(id: string) {
           <div class="track-filter track-filter--grip">
             <label for="track-grip">Grip</label>
             <select id="track-grip" v-model="selectedGrip">
-              <option v-for="grip in gripConditions" :key="grip" :value="grip">{{ grip }}</option>
+              <option v-for="grip in gripConditions" :key="grip" :value="grip">{{ grip === 'Unknown' ? 'Non disponibile' : grip }}</option>
             </select>
           </div>
+
+          <p v-if="consultedGame === 'evo' && selectedGrip === 'Unknown'" class="reference-empty-note">
+            Grip del giro non disponibile. Il grip iniziale resta distinto.
+          </p>
 
           <div class="best-reference-stack">
             <button
@@ -343,7 +347,7 @@ function goToSession(id: string) {
               <span class="reference-card-meta">
                 <template v-if="track.bestQualyDate">{{ formatShortDate(track.bestQualyDate) }}</template>
                 <template v-if="track.bestQualyFuel != null"> • {{ Math.round(track.bestQualyFuel) }}L</template>
-                <template v-if="track.bestQualyConditions"> • {{ track.bestQualyConditions.airTemp }}°C</template>
+                <template v-if="track.bestQualyConditions && Number.isFinite(track.bestQualyConditions.airTemp)"> • {{ track.bestQualyConditions.airTemp }}°C</template>
               </span>
               <span v-if="track.bestQualySessionId" class="fuel-cell-action" aria-hidden="true">↗</span>
             </button>
@@ -421,6 +425,7 @@ function goToSession(id: string) {
 </template>
 
 <style lang="scss" scoped>
+.reference-empty-note { color: #999; font-size: 12px; line-height: 1.5; margin: 10px 0; }
 @use '@/assets/scss/racing-settings' as controls;
 
 .track-detail { @include controls.tokens; --rc-control-height: 34px; }
