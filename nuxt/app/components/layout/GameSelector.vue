@@ -58,7 +58,10 @@ function change(gameId: string) {
   <div class="game-selector">
     <details ref="menu" @keydown.esc.prevent="menu && (menu.open = false)">
       <summary :aria-label="`Gioco consultato: ${gameLabel(consultedGame)}. Cambia gioco`">
-        <GameLogo :game-id="consultedGame" /><span aria-hidden="true">⌄</span>
+        <GameLogo :game-id="consultedGame" />
+        <svg class="arrow-icon" width="18" height="18" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+          <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
       </summary>
       <div class="game-options" aria-label="Scegli il gioco">
         <button v-for="game in GAME_OPTIONS" :key="game.id" type="button" :aria-pressed="consultedGame === game.id" @click="change(game.id)">
@@ -80,10 +83,11 @@ function change(gameId: string) {
 .connection__dot { flex: 0 0 5px; height: 5px; border-radius: 50%; background: #777d87; }
 .connection.is-connected .connection__dot { background: #42cda5; }
 details { position: relative; }
-summary { display: flex; align-items: center; gap: 14px; box-sizing: border-box; height: 46px; padding: 5px 14px; border: 1px solid #ffffff40; background: #1d2027; cursor: pointer; font-size: 12px; }
+summary { display: flex; align-items: center; gap: 14px; box-sizing: border-box; height: 46px; padding: 5px 14px; border: 1px solid #ffffff85; background: transparent; color: #eee; cursor: pointer; font-size: 12px; }
 summary::-webkit-details-marker { display: none; }
 summary :deep(.game-logo) { width: 120px; height: 32px; }
-summary > span:last-child { margin-left: auto; }
+.arrow-icon { margin-left: auto; flex-shrink: 0; color: #ddd; transition: transform .2s ease; }
+details[open] .arrow-icon { transform: rotate(180deg); }
 .game-options { position: absolute; top: calc(100% + 6px); right: 0; width: min(320px, 85vw); z-index: 100; border: 1px solid #ffffff40; background: #141417; box-shadow: 0 10px 30px #000a; padding: 5px; }
 .game-options button { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px; text-align: left; background: transparent; border: 0; color: #eee; cursor: pointer; font: inherit; font-size: 12px; }
 .game-options button:hover, .game-options button[aria-pressed=true] { background: #ffffff12; }
@@ -91,4 +95,5 @@ summary > span:last-child { margin-left: auto; }
 .game-options small { display: block; color: #aaa; margin-top: 4px; }
 summary:focus-visible, button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
 @media (max-width: 700px) { .game-selector { width: 160px; } summary { padding-inline: 10px; gap: 10px; } summary :deep(.game-logo) { width: 104px; } }
+@media (prefers-reduced-motion: reduce) { .arrow-icon { transition: none; } }
 </style>
