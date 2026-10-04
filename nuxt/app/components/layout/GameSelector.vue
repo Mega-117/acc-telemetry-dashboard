@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref } from 'vue'
 import GameLogo from './GameLogo.vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useGameContext } from '~/composables/useGameContext'
@@ -12,14 +12,44 @@ const live = useFastStatePoller(() => typeof window === 'undefined' ? null : (wi
 const connectedLabel = computed(() => live.fastState.value.commonLive?.connected
   ? `Connesso: ${gameLabel(live.fastState.value.commonLive.gameId)}` : 'Nessun gioco connesso')
 const menu = ref<HTMLDetailsElement | null>(null)
+let selectionRevision = 0
+let activeTransition: { skipTransition: () => void } | undefined
 function dismiss(event: PointerEvent) {
   if (menu.value && !menu.value.contains(event.target as Node)) menu.value.open = false
 }
 onMounted(() => { void live.startFastStatePolling(); document.addEventListener('pointerdown', dismiss) })
-onBeforeUnmount(() => { live.stopFastStatePolling(); document.removeEventListener('pointerdown', dismiss) })
+onBeforeUnmount(() => {
+  selectionRevision++
+  activeTransition?.skipTransition()
+  document.documentElement.classList.remove('game-switch-motion')
+  live.stopFastStatePolling(); document.removeEventListener('pointerdown', dismiss)
+})
 function change(gameId: string) {
-  selectGame(gameId, canAccessDevTools.value)
   if (menu.value) { menu.value.open = false; menu.value.querySelector('summary')?.focus() }
+  const revision = ++selectionRevision
+  activeTransition?.skipTransition()
+  document.documentElement.classList.remove('game-switch-motion')
+  const update = async () => {
+    if (revision !== selectionRevision) return
+    selectGame(gameId, canAccessDevTools.value)
+    await nextTick()
+  }
+  // Capture the outgoing overview before its game-scoped data is cleared.
+  // Other pages keep their existing navigation and older browsers still switch.
+  if (gameId === consultedGame.value || !document.startViewTransition ||
+      !document.querySelector('.game-context') || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    void update()
+    return
+  }
+  document.documentElement.classList.add('game-switch-motion')
+  const transition = document.startViewTransition(update)
+  activeTransition = transition
+  void transition.ready.catch(() => {}) // A rapid selection may skip the snapshot.
+  void transition.finished.catch(() => {}).finally(() => {
+    if (revision !== selectionRevision) return
+    activeTransition = undefined
+    document.documentElement.classList.remove('game-switch-motion')
+  })
 }
 </script>
 

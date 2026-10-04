@@ -70,6 +70,58 @@ describe('common game surfaces', () => {
     expect(view.get('h2').text()).toBe('Sessioni recenti')
     view.unmount(); useGameContext().selectGame('acc')
   })
+  it('captures the outgoing overview and ignores superseded snapshot callbacks', async () => {
+    useGameContext().selectGame('acc')
+    fixture.admin=ref(false); fixture.live=ref({commonLive:null})
+    const overview=document.createElement('div'); overview.className='game-context'; document.body.append(overview)
+    const callbacks: Array<() => Promise<void>>=[]
+    const finishers: Array<() => void>=[]
+    const skip=vi.fn()
+    const start=vi.fn((callback: () => Promise<void>) => {
+      callbacks.push(callback)
+      return {skipTransition:skip, ready:Promise.resolve(), finished:new Promise<void>(resolve=>finishers.push(resolve))}
+    })
+    Object.defineProperty(document,'startViewTransition',{configurable:true,value:start})
+    const view=mount(GameSelector)
+    try {
+      await view.findAll('.game-options button')[1]!.trigger('click')
+      expect(useGameContext().consultedGame.value).toBe('acc')
+      expect(document.documentElement.classList.contains('game-switch-motion')).toBe(true)
+      await view.findAll('.game-options button')[0]!.trigger('click')
+      await callbacks[0]!()
+      expect(skip).toHaveBeenCalled()
+      expect(useGameContext().consultedGame.value).toBe('acc')
+      finishers[0]!(); await flushPromises()
+      await view.findAll('.game-options button')[1]!.trigger('click')
+      await callbacks[1]!()
+      expect(useGameContext().consultedGame.value).toBe('evo')
+      finishers[1]!(); await flushPromises()
+      expect(document.documentElement.classList.contains('game-switch-motion')).toBe(false)
+    } finally {
+      view.unmount(); overview.remove()
+      Reflect.deleteProperty(document,'startViewTransition')
+      useGameContext().selectGame('acc')
+    }
+  })
+  it('switches without snapshots when reduced motion is requested', async () => {
+    useGameContext().selectGame('acc')
+    fixture.admin=ref(false); fixture.live=ref({commonLive:null})
+    const overview=document.createElement('div'); overview.className='game-context'; document.body.append(overview)
+    const start=vi.fn()
+    Object.defineProperty(document,'startViewTransition',{configurable:true,value:start})
+    vi.stubGlobal('matchMedia',()=>({matches:true}))
+    const view=mount(GameSelector)
+    try {
+      await view.findAll('.game-options button')[1]!.trigger('click')
+      expect(useGameContext().consultedGame.value).toBe('evo')
+      expect(start).not.toHaveBeenCalled()
+      expect(document.documentElement.classList.contains('game-switch-motion')).toBe(false)
+    } finally {
+      view.unmount(); overview.remove(); vi.unstubAllGlobals()
+      Reflect.deleteProperty(document,'startViewTransition')
+      useGameContext().selectGame('acc')
+    }
+  })
   it('loads only selected game with track scope and offers retry on error', async () => {
     useGameContext().selectGame('synthetic',true)
     fixture.gateway.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({sessions:[]})
