@@ -173,7 +173,7 @@ function goToSession() {
 // The image fades onto black, not onto the animated background behind the card.
 .last-drive__hero { position: relative; isolation: isolate; background: #020202; flex: 1; min-height: 340px; }
 .last-drive__image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 42%; mask-image: linear-gradient(#000 55%, #000b 74%, transparent 100%); }
-.last-drive__hero::after { content: ''; position: absolute; top: 0; right: 0; width: 260px; max-width: 80%; height: 170px; pointer-events: none; clip-path: polygon(0 0, 100% 0, 100% 100%); background: linear-gradient(to bottom left, #000e, #0008 28%, transparent 50%); }
+.last-drive__hero::after { content: ''; position: absolute; top: 0; right: 0; width: 320px; max-width: 80%; height: 210px; pointer-events: none; clip-path: polygon(0 0, 100% 0, 100% 100%); background: linear-gradient(to bottom left, #000b, #0007 24%, #0003 40%, transparent 50%); }
 .last-drive__game { position: absolute; top: 12px; right: 12px; width: clamp(120px, 13vw, 180px); padding: 14px 16px; z-index: 1; }
 .last-drive__identity { position: absolute; bottom: 20px; left: 24px; right: 24px; text-shadow: 0 2px 12px #000; }
 .last-drive__identity h1, .last-drive__identity h2 { margin: 0; font-family: 'Racer Display', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; line-height: 1.13; }
