@@ -18,7 +18,7 @@ function event(id: string, startsAt: string, extra: Record<string, unknown> = {}
 describe('raceCalendarIndexProjectionService', () => {
   it('normalizza gli eventi come il lettore della collection (null -> stringa vuota)', () => {
     expect(normalizeRaceCalendarIndexEvent('e1', { title: 'Sprint', startsAt: '2026-10-01T18:00:00.000Z', carName: null })).toEqual({
-      id: 'e1', title: 'Sprint', startsAt: '2026-10-01T18:00:00.000Z', trackName: '', carName: '', simGridUrl: '', raceUrl: '',
+      id: 'e1', gameId: 'acc', title: 'Sprint', startsAt: '2026-10-01T18:00:00.000Z', trackName: '', carName: '', simGridUrl: '', raceUrl: '',
       createdBy: '', createdByRole: '', createdAt: '', updatedAt: ''
     })
     expect(raceCalendarIndexPath('u1')).toBe('users/u1/raceCalendarIndex/v1')

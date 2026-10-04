@@ -16,6 +16,7 @@ vi.mock('firebase/firestore', () => ({
   collection: (_db: unknown, ...parts: string[]) => parts.join('/'),
   query: (value: unknown, ...clauses: any[]) => ({ path: value, clauses }),
   orderBy: (field: string, direction: string) => ({ orderBy: field, direction }),
+  startAfter: (cursor: any) => ({ after: cursor.id }),
   limit: (value: number) => ({ limit: value })
 }))
 vi.mock('~/composables/useFirebaseTracker', () => ({
@@ -42,6 +43,7 @@ import {
   createRaceCalendarEvent,
   deleteRaceCalendarEvent,
   loadRaceCalendarEvents,
+  loadUpcomingRaceCalendarEvents,
   updateRaceCalendarEvent
 } from '~/repositories/raceCalendarRepository'
 import { buildRaceCalendarIndexDocument } from '~/services/projections/raceCalendarIndexProjectionService'
@@ -66,7 +68,9 @@ beforeEach(() => {
   })
   fake.getDocs.mockReset().mockImplementation(async (q: any) => {
     const max = q.clauses.find((clause: any) => clause.limit)?.limit ?? Infinity
-    const sorted = [...events].sort((a, b) => a.data.startsAt.localeCompare(b.data.startsAt)).slice(0, max)
+    const ordered = [...events].sort((a, b) => a.data.startsAt.localeCompare(b.data.startsAt))
+    const after = q.clauses.find((clause: any) => clause.after)?.after
+    const sorted = ordered.slice(after ? ordered.findIndex(e => e.id === after) + 1 : 0).slice(0, max)
     return { docs: sorted.map((item) => ({ id: item.id, data: () => item.data })) }
   })
   fake.setDoc.mockReset().mockImplementation(async (ref: any, data: any) => { summaries.set(ref.path, data) })
@@ -187,4 +191,32 @@ describe('raceCalendarRepository', () => {
     expect(summary.events).toHaveLength(25)
     expect(summary.events[0].id).toBe('auto-id')
   })
+})
+
+
+it('keeps legacy ACC and explicit EVO separate using a complete index', async () => {
+ summaries.set('users/u1/raceCalendarIndex/v1', buildRaceCalendarIndexDocument([
+  {id:'old', ...eventData('2099-01-01')}, {id:'evo', ...eventData('2099-01-02'), gameId:'evo'}
+ ]))
+ expect((await loadUpcomingRaceCalendarEvents('u1','evo')).map(e=>e.id)).toEqual(['evo'])
+ expect((await loadUpcomingRaceCalendarEvents('u1','acc')).map(e=>e.id)).toEqual(['old'])
+ expect(fake.getDocs).not.toHaveBeenCalled()
+})
+it('finds EVO beyond a truncated mixed index without writing a migration', async () => {
+ events=Array.from({length:101},(_,i)=>({id:`e${i}`,data:{...eventData('2099-01-01'),gameId:i===100?'evo':'acc'}}))
+ summaries.set('users/u1/raceCalendarIndex/v1',buildRaceCalendarIndexDocument(events.map(e=>({id:e.id,...e.data}))))
+ expect((await loadUpcomingRaceCalendarEvents('u1','evo')).map(e=>e.id)).toEqual(['e100'])
+ expect(fake.getDocs).toHaveBeenCalledTimes(2)
+ expect(fake.setDoc).not.toHaveBeenCalled()
+})
+it('writes EVO identity in event and index, and preserves it on legacy edits', async () => {
+ const data={...eventData('2099-01-01'),gameId:'evo',createdByRole:'pilot' as const}
+ summaries.set('users/u1/raceCalendarIndex/v1',buildRaceCalendarIndexDocument([]))
+ await createRaceCalendarEvent('u1',data)
+ expect(fake.batches[0][0].data.gameId).toBe('evo')
+ expect(fake.batches[0][1].data.events[0].gameId).toBe('evo')
+ const {gameId,...patch}=data
+ await updateRaceCalendarEvent('u1','auto-id',{...patch,title:'changed'})
+ expect(fake.batches[1][0].data).not.toHaveProperty('gameId')
+ expect(fake.batches[1][1].data.events[0].gameId).toBe(gameId)
 })

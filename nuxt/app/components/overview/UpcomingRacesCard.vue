@@ -9,19 +9,24 @@ import {
   createRaceCalendarEvent,
   deleteRaceCalendarEvent,
   loadRaceCalendarEvents,
+  loadUpcomingRaceCalendarEvents,
   updateRaceCalendarEvent,
   type RaceCalendarEvent,
   type RaceCalendarEventInput,
 } from '~/repositories/raceCalendarRepository'
+import { gameLabel } from '~/services/telemetry/gameCatalog'
+import { preparePage } from '~/services/ui/pagePreparation'
 import { getRaceCalendarCountdown } from '~/utils/raceCalendarCountdown'
 
 const props = defineProps<{
   userId: string | null | undefined
   racing?: boolean
+  gameId?: string
   initialEvents?: RaceCalendarEvent[]
   initialUserId?: string
 }>()
 
+const emit = defineEmits<{ loading: [value: boolean] }>()
 type ModalMode = 'create' | 'edit' | 'delete'
 
 const { currentUser, userRole } = useFirebaseAuth()
@@ -32,6 +37,7 @@ const entry = inject(overviewEntryKey, null)
 let loadRevision = 0
 const calendarLoadError = ref(false)
 const isLoading = ref(false)
+watch(isLoading, value => emit('loading', value), { immediate: true, flush: 'sync' })
 const isSaving = ref(false)
 const errorMessage = ref('')
 const modalMode = ref<ModalMode>('create')
@@ -53,7 +59,7 @@ const upcomingEvents = computed(() => {
   return events.value
     .filter((event) => {
       const startsAtMs = Date.parse(event.startsAt)
-      return Number.isFinite(startsAtMs) && startsAtMs >= now
+      return (!props.gameId || (event.gameId || 'acc') === props.gameId) && Number.isFinite(startsAtMs) && startsAtMs >= now
     })
     .sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt))
 })
@@ -158,6 +164,7 @@ function validateForm(): RaceCalendarEventInput | null {
     return null
   }
   return {
+    gameId: selectedEvent.value?.gameId || props.gameId || 'acc',
     title: form.value.title,
     startsAt: form.value.startsAt,
     trackName: form.value.trackName,
@@ -180,9 +187,12 @@ async function refreshEvents() {
   }
   isLoading.value = true
   try {
-    const prepared = entry?.value?.takeEvents(uid)
-    const result = await (prepared || loadRaceCalendarEvents(uid, 25))
-    if (revision === loadRevision) events.value = result
+    const prepared = !props.gameId ? entry?.value?.takeEvents(uid) : null
+    const result = await preparePage(() => props.gameId ? loadUpcomingRaceCalendarEvents(uid, props.gameId) : (prepared || loadRaceCalendarEvents(uid, 25)))
+    if (revision === loadRevision) {
+      if (result.ok) events.value = result.value
+      else calendarLoadError.value = true
+    }
   } catch {
     if (revision === loadRevision) calendarLoadError.value = true
   } finally {
@@ -229,9 +239,15 @@ function handleCacheInvalidated(event: Event) {
 }
 
 watch(
-  () => props.userId,
-  () => void refreshEvents(),
-  { immediate: !(props.initialEvents && props.initialUserId === props.userId) },
+  () => [props.userId, props.gameId],
+  () => {
+    events.value = []
+    isModalOpen.value = false
+    selectedEvent.value = null
+    resetForm()
+    void refreshEvents()
+  },
+  { immediate: !!props.gameId || !(props.initialEvents && props.initialUserId === props.userId), flush: 'sync' },
 )
 
 onMounted(() => {
@@ -342,7 +358,7 @@ onBeforeUnmount(() => {
         <form class="race-modal" :class="{ 'race-modal--racing': racing }" role="dialog" aria-modal="true" :aria-label="modalTitle" @keydown.esc="closeModal" @submit.prevent="submitModal">
           <header>
             <div>
-              <span class="eyebrow">Calendario pilota</span>
+              <span class="eyebrow">Calendario pilota<span v-if="gameId"> · {{ gameLabel(gameId) }}</span></span>
               <h2>{{ modalTitle }}</h2>
             </div>
             <button type="button" class="modal-close" aria-label="Chiudi" @click="closeModal"><X :size="20" aria-hidden="true" /></button>

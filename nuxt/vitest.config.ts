@@ -43,6 +43,8 @@ export default defineConfig({
         'app/pages/dev-telemetry-compare.vue',
         'app/repositories/telemetryCloudRepository.ts',
         'app/components/layout/GameSelector.vue',
+        'app/components/layout/GameLogo.vue',
+        'app/components/layout/GameContextTransition.vue',
         'app/components/pages/CommonGamePage.vue',
         'app/components/sessions/CommonSessionDetail.vue',
         'app/composables/useGameContext.ts',

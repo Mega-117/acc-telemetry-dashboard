@@ -15,6 +15,7 @@ export function raceCalendarIndexPath(uid: string): string {
 
 export interface RaceCalendarIndexEvent {
   id: string
+  gameId?: string
   title: string
   startsAt: string
   trackName: string
@@ -41,6 +42,7 @@ export function normalizeRaceCalendarIndexEvent(id: string, data: any): RaceCale
   const source = data || {}
   return {
     id,
+    gameId: typeof source.gameId === 'string' && source.gameId ? source.gameId : 'acc',
     title: source.title || '',
     startsAt: source.startsAt || '',
     trackName: source.trackName || '',

@@ -3,7 +3,9 @@
 // PanoramicaPage - latest drive and racing overview
 // ============================================
 
-import { computed, inject, onBeforeUnmount, onMounted, watch } from 'vue'
+import GameContextTransition from '~/components/layout/GameContextTransition.vue'
+import GameLogo from '~/components/layout/GameLogo.vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import { usePilotContext, useTargetUserId } from '~/composables/usePilotContext'
@@ -28,6 +30,7 @@ const overview = useOverviewProjection(uid => {
   return entry?.value?.takeProjection(uid) || telemetryGateway.getOverviewProjection(uid)
 }, consultedGame.value === 'acc' && props.prepared?.uid === targetUserId.value ? props.prepared : undefined)
 const { projection: overviewProjection, status: overviewStatus } = overview
+const calendarBusy = ref(false)
 const isOverviewPlaceholder = computed(() => !overviewProjection.value && overviewStatus.value !== 'empty')
 const emptyActivityTotals = {
   practice: { minutes: 0, sessions: 0 },
@@ -108,6 +111,7 @@ function goToSession() {
 
 <template>
   <LayoutPageContainer>
+    <GameContextTransition :game-id="consultedGame" :busy="overviewStatus === 'pending' || calendarBusy">
     <p v-if="overviewStatus === 'error'" class="overview-error" role="status">
       Dati non disponibili. <button type="button" @click="loadOverview">Riprova</button>
     </p>
@@ -115,6 +119,7 @@ function goToSession() {
       <section class="last-drive racing-panel" :class="{ 'overview-placeholder': isOverviewPlaceholder }" :inert="isOverviewPlaceholder" aria-label="Ultima sessione e migliori tempi">
         <div class="last-drive__hero">
           <UiResponsiveImage :src="lastCarImage" :alt="lastCarName" :sizes="OVERVIEW_CAR_SIZES" loading="eager" fetchpriority="high" class="last-drive__image" />
+          <div class="last-drive__game"><GameLogo :game-id="consultedGame" /></div>
           <div class="last-drive__identity">
             <h1>{{ lastTrackName }}</h1>
             <h2>{{ lastCarName }}</h2>
@@ -148,7 +153,7 @@ function goToSession() {
       </section>
 
       <aside class="racing-overview__side">
-        <OverviewUpcomingRacesCard :user-id="targetUserId" :initial-events="prepared?.events" :initial-user-id="prepared?.uid" racing />
+        <OverviewUpcomingRacesCard :game-id="consultedGame" @loading="calendarBusy = $event" :user-id="targetUserId" :initial-events="prepared?.events" :initial-user-id="prepared?.uid" racing />
         <CardsActivityCard class="overview-activity" :data="activityData" :practice-total="activityTotals.practice" :qualify-total="activityTotals.qualify" :race-total="activityTotals.race" :other-total="overviewProjection?.otherActivity" racing :aria-busy="isOverviewPlaceholder" />
         <section class="training-panel racing-panel">
           <div><h2>Allenamenti</h2><p>Migliora il tuo tempo in pista</p></div>
@@ -156,6 +161,7 @@ function goToSession() {
         </section>
       </aside>
     </div>
+    </GameContextTransition>
   </LayoutPageContainer>
 </template>
 
@@ -167,6 +173,7 @@ function goToSession() {
 // The image fades onto black, not onto the animated background behind the card.
 .last-drive__hero { position: relative; isolation: isolate; background: #020202; flex: 1; min-height: 340px; }
 .last-drive__image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 42%; mask-image: linear-gradient(#000 55%, #000b 74%, transparent 100%); }
+.last-drive__game { position: absolute; top: 12px; right: 12px; width: clamp(120px, 13vw, 180px); padding: 14px 16px; background: radial-gradient(ellipse, #000c 15%, #0008 50%, transparent 75%); filter: drop-shadow(0 2px 4px #0009); }
 .last-drive__identity { position: absolute; bottom: 20px; left: 24px; right: 24px; text-shadow: 0 2px 12px #000; }
 .last-drive__identity h1, .last-drive__identity h2 { margin: 0; font-family: 'Racer Display', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; line-height: 1.13; }
 .last-drive__identity h1 { font-size: clamp(28px, 3vw, 48px); letter-spacing: -.025em; }
@@ -204,7 +211,8 @@ function goToSession() {
 }
 @media (max-width: 1050px) { .racing-overview { grid-template-columns: 1.2fr 1fr; gap: 12px; } .last-drive__results { padding-inline: 12px; } .performance-table td { padding-inline: 10px; } .training-panel { flex-direction: column; align-items: stretch; } .last-drive__actions { gap: 12px; } }
 @media (max-width: 800px) { .racing-overview { grid-template-columns: 1fr; } .last-drive__hero { min-height: 390px; } .training-panel { flex-direction: row; } }
-@media (max-width: 480px) { .last-drive__hero { min-height: 310px; } .last-drive__identity { left: 16px; } .performance-table td { padding-inline: 6px; } .time-label { font-size: 10px; } .grip-badge { display: block; margin: 3px 0 0; } .training-panel { flex-direction: column; } .last-drive__actions button { padding-inline: 8px; font-size: 12px; } }
+@media (max-width: 480px) { .last-drive__hero { min-height: 310px; } .last-drive__game { position: absolute; top: 12px; right: 12px; width: clamp(120px, 13vw, 180px); padding: 14px 16px; background: radial-gradient(ellipse, #000c 15%, #0008 50%, transparent 75%); filter: drop-shadow(0 2px 4px #0009); }
+.last-drive__identity { left: 16px; } .performance-table td { padding-inline: 6px; } .time-label { font-size: 10px; } .grip-badge { display: block; margin: 3px 0 0; } .training-panel { flex-direction: column; } .last-drive__actions button { padding-inline: 8px; font-size: 12px; } }
 .racing-overview { @include controls.tokens; }
 .racing-overview .racing-button { @include controls.action; text-transform: none; }
 .racing-overview .racing-button::before { display: none; }

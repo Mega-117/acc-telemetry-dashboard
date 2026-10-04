@@ -1,4 +1,4 @@
-import { collection, doc, limit, orderBy, query } from 'firebase/firestore'
+import { collection, doc, limit, orderBy, query, startAfter, type QueryConstraint, type QueryDocumentSnapshot } from 'firebase/firestore'
 import { db } from '~/config/firebase'
 import { trackedGetDoc, trackedGetDocs, trackedSetDoc, trackedWriteBatch } from '~/composables/useFirebaseTracker'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
@@ -32,6 +32,7 @@ type SummaryCacheEntry = {
 
 export interface RaceCalendarEvent {
   id: string
+  gameId?: string
   title: string
   startsAt: string
   trackName: string
@@ -45,6 +46,7 @@ export interface RaceCalendarEvent {
 }
 
 export interface RaceCalendarEventInput {
+  gameId?: string
   title: string
   startsAt: string
   trackName: string
@@ -147,6 +149,25 @@ async function queryEvents(userId: string, maxItems: number): Promise<RaceCalend
   return snap.docs.map(mapEvent)
 }
 
+/** Read-only scoped view. A truncated mixed index cannot prove a game has no races. */
+export async function loadUpcomingRaceCalendarEvents(userId: string, gameId: string, nowMs = Date.now()): Promise<RaceCalendarEvent[]> {
+  const matches = (event: RaceCalendarEvent) => (event.gameId || 'acc') === gameId && Date.parse(event.startsAt) >= nowMs
+  const summary = await loadSummary(userId)
+  if (summary && !summary.truncated) return (summary.events as RaceCalendarEvent[]).filter(matches)
+  const result: RaceCalendarEvent[] = []
+  let cursor: QueryDocumentSnapshot | undefined
+  // Read ordered pages until 25 matching upcoming events or the collection ends.
+  // No composite game index or legacy data migration is required.
+  for (;;) {
+    const clauses: QueryConstraint[] = [orderBy('startsAt', 'asc'), limit(100)]
+    if (cursor) clauses.push(startAfter(cursor))
+    const page = await trackedGetDocs(query(eventCollection(userId), ...clauses), CALLER)
+    result.push(...page.docs.map(mapEvent).filter(matches))
+    if (page.docs.length < 100 || result.length >= 25) return result.slice(0, 25)
+    cursor = page.docs[page.docs.length - 1]
+  }
+}
+
 export async function loadRaceCalendarEvents(userId: string, maxItems = 25): Promise<RaceCalendarEvent[]> {
   const key = cacheKey(userId, maxItems)
   const cached = eventsCache.get(key)
@@ -204,6 +225,7 @@ async function buildSummaryAfterMutation(
 
 function buildEventPayload(input: RaceCalendarEventInput, now: string) {
   return {
+    ...(input.gameId ? { gameId: input.gameId } : {}),
     title: input.title.trim(),
     startsAt: input.startsAt,
     trackName: input.trackName.trim(),
@@ -244,6 +266,7 @@ export async function createRaceCalendarEvent(userId: string, input: RaceCalenda
 export async function updateRaceCalendarEvent(userId: string, eventId: string, input: RaceCalendarEventInput) {
   const now = new Date().toISOString()
   const patch = {
+    ...(input.gameId ? { gameId: input.gameId } : {}),
     title: input.title.trim(),
     startsAt: input.startsAt,
     trackName: input.trackName.trim(),
@@ -257,6 +280,7 @@ export async function updateRaceCalendarEvent(userId: string, eventId: string, i
     eventId,
     // Solo i campi modificabili, normalizzati come il lettore ('' al posto di null).
     patch: {
+      ...(input.gameId ? { gameId: input.gameId } : {}),
       title: patch.title,
       startsAt: patch.startsAt,
       trackName: patch.trackName,
