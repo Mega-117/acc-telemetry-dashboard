@@ -173,7 +173,8 @@ function goToSession() {
 // The image fades onto black, not onto the animated background behind the card.
 .last-drive__hero { position: relative; isolation: isolate; background: #020202; flex: 1; min-height: 340px; }
 .last-drive__image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 42%; mask-image: linear-gradient(#000 55%, #000b 74%, transparent 100%); }
-.last-drive__game { position: absolute; top: 12px; right: 12px; width: clamp(120px, 13vw, 180px); padding: 14px 16px; background: radial-gradient(ellipse, #000c 15%, #0008 50%, transparent 75%); filter: drop-shadow(0 2px 4px #0009); }
+.last-drive__hero::after { content: ''; position: absolute; top: 0; right: 0; width: 260px; max-width: 80%; height: 170px; pointer-events: none; clip-path: polygon(0 0, 100% 0, 100% 100%); background: linear-gradient(to bottom left, #000e, #0008 28%, transparent 50%); }
+.last-drive__game { position: absolute; top: 12px; right: 12px; width: clamp(120px, 13vw, 180px); padding: 14px 16px; z-index: 1; }
 .last-drive__identity { position: absolute; bottom: 20px; left: 24px; right: 24px; text-shadow: 0 2px 12px #000; }
 .last-drive__identity h1, .last-drive__identity h2 { margin: 0; font-family: 'Racer Display', sans-serif; font-style: italic; font-weight: 700; text-transform: uppercase; line-height: 1.13; }
 .last-drive__identity h1 { font-size: clamp(28px, 3vw, 48px); letter-spacing: -.025em; }
@@ -211,7 +212,7 @@ function goToSession() {
 }
 @media (max-width: 1050px) { .racing-overview { grid-template-columns: 1.2fr 1fr; gap: 12px; } .last-drive__results { padding-inline: 12px; } .performance-table td { padding-inline: 10px; } .training-panel { flex-direction: column; align-items: stretch; } .last-drive__actions { gap: 12px; } }
 @media (max-width: 800px) { .racing-overview { grid-template-columns: 1fr; } .last-drive__hero { min-height: 390px; } .training-panel { flex-direction: row; } }
-@media (max-width: 480px) { .last-drive__hero { min-height: 310px; } .last-drive__game { position: absolute; top: 12px; right: 12px; width: clamp(120px, 13vw, 180px); padding: 14px 16px; background: radial-gradient(ellipse, #000c 15%, #0008 50%, transparent 75%); filter: drop-shadow(0 2px 4px #0009); }
+@media (max-width: 480px) { .last-drive__hero { min-height: 310px; }
 .last-drive__identity { left: 16px; } .performance-table td { padding-inline: 6px; } .time-label { font-size: 10px; } .grip-badge { display: block; margin: 3px 0 0; } .training-panel { flex-direction: column; } .last-drive__actions button { padding-inline: 8px; font-size: 12px; } }
 .racing-overview { @include controls.tokens; }
 .racing-overview .racing-button { @include controls.action; text-transform: none; }
