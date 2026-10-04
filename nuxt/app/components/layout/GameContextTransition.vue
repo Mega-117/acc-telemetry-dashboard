@@ -42,7 +42,7 @@ onBeforeUnmount(() => { clearTimeout(minimumTimer); clearTimeout(revealTimer) })
 .game-context__content { display: flex; flex-direction: column; flex: 1 0 auto; }
 .game-context__content.is-covered { visibility: hidden; }
 .game-context__content.is-revealing { animation: game-reveal 300ms cubic-bezier(.22, .61, .36, 1) both; transform-origin: center; }
-.game-context__cover { position: absolute; inset: 0; min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: radial-gradient(ellipse at center, #19191b, #09090b 72%); animation: game-cover 120ms ease-out both; }
+.game-context__cover { position: absolute; inset: 0; min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; animation: game-cover 120ms ease-out both; }
 .game-context__cover :deep(.game-logo) { width: min(260px, 65%); height: 90px; max-height: 90px; }
 .game-context__cover span { color: #bfc1c7; font-size: 12px; letter-spacing: .08em; }
 @keyframes game-cover { from { opacity: .4; } to { opacity: 1; } }
