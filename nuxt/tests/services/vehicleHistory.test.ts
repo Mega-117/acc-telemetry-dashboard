@@ -3,6 +3,8 @@ import type { SessionDocument } from '~/types/telemetry'
 import { filterHistory, historyBest, historyOptions, historyTrackId, historyTrackParts, vehicleTrackDetail } from '~/services/projections/vehicleHistory'
 import { buildCommonTrackOverview } from '~/services/projections/buildCommonTrackOverview'
 import { gameTrackCatalogue } from '~/services/projections/gameTrackCatalogue'
+import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
+import { createSessionListEntry, sessionListEntryToSessionDocument } from '~/services/sync/sessionListProjectionService'
 
 const session = (id: string, game = 'evo', car = 'Ferrari 296 GT3', time = 100000, variant: string | null = 'GP') => ({
   sessionId: id, meta: { gameId: game, track: 'Monza', trackVariant: variant, car, date_start: '2026-10-04T12:00:00Z', session_type: 0 },
@@ -11,6 +13,22 @@ const session = (id: string, game = 'evo', car = 'Ferrari 296 GT3', time = 10000
 } as SessionDocument)
 
 describe('vehicle and category history', () => {
+  it('uses the same session Q/G through nested EVO summary, list index and track recent sessions', () => {
+    const raw = session('fuel')
+    raw.summary = { laps: 1, lapsValid: 1, bestLap: 100000, totalTime: 100000, stintCount: 1,
+      schema: 'racercore.timing-summary', version: 1,
+      fuel_history: { best_rules_version: 6, best_qualy_ms: null, best_session_race_ms: 100000, best_race_ms: null } } as any
+    const indexed = sessionListEntryToSessionDocument(createSessionListEntry(raw))
+    for (const value of [raw, indexed]) {
+      expect(sessionTiming(value)).toEqual({ qualyMs: null, raceMs: 100000 })
+      const detail = vehicleTrackDetail([value], 'evo', historyTrackId('Monza', 'GP'), {}, 'Unknown')
+      expect(detail.recentSessions[0]).toMatchObject({ bestQualy: undefined, bestRace: '1:40.000' })
+      expect(detail.track.bestRace).toBeNull()
+    }
+    delete (raw.summary as any).fuel_history
+    expect(sessionTiming(raw)).toEqual({ qualyMs: null, raceMs: null })
+    expect(sessionTiming(session('other', 'synthetic'))).toEqual({ qualyMs: null, raceMs: null })
+  })
   it('isolates simulator, layout and exact car, including duplicate archive entries', () => {
     const a = session('a')
     expect(filterHistory([a, a, session('acc', 'acc'), session('car', 'evo', 'Ford'), session('layout', 'evo', a.meta.car, 1, 'Short')],

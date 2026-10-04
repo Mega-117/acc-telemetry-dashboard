@@ -16,6 +16,7 @@ import { buildCommonTrackOverview } from '~/services/projections/buildCommonTrac
 import { historyOptions, type HistoryFilter } from '~/services/projections/vehicleHistory'
 import type { SessionDocument } from '~/types/telemetry'
 import GameContextTransition from '~/components/layout/GameContextTransition.vue'
+import TrackImagePlaceholder from '~/components/cards/TrackImagePlaceholder.vue'
 const { consultedGame } = useGameContext()
 
 const { getPublicPath } = usePublicPath()
@@ -120,14 +121,14 @@ function goToTrack(id: string) {
         <div class="track-card__surface">
           <div class="card-image-section">
             <UiResponsiveImage
-              v-if="track.image"
+              v-if="track.image && !track.image.endsWith('/track_nordschleife_placeholder.svg')"
               :src="track.image"
               :sizes="TRACK_CARD_SIZES"
               :alt="track.name"
               class="card-track-image"
               :loading="index < 6 ? 'eager' : 'lazy'"
             />
-            <span v-else class="track-placeholder">{{ track.name }}</span>
+            <TrackImagePlaceholder v-else :name="track.name" class="card-track-image" />
           </div>
           <div class="card-content">
             <h2 class="track-name">{{ track.name }}</h2>
@@ -175,7 +176,6 @@ function goToTrack(id: string) {
 .track-card--unplayed .card-track-image { opacity: .55; }
 .track-card--unplayed .card-content { opacity: .65; }
 .card-image-section { aspect-ratio: 1; overflow: hidden; background: #090b0e; }
-.track-placeholder { display: flex; height: 100%; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; text-align: center; font-size: 24px; font-style: italic; }
 .common-best-label, .track-reference { color: var(--rc-muted); font-size: 10px; align-self: center; }
 .card-track-image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center top; }
 .card-content { padding: 12px; }

@@ -285,15 +285,16 @@ function buildLegacyCompatibilitySummary(rawObj: Record<string, unknown>, sessio
         return
       }
 
-      const bucket = getRaceFuelBucket(lapFuelReference)
-      if (historicalEligibility !== 'race_historical' || !bucket) return
-
       ;[bestSessionRaceMs, bestSessionRaceConditions] = updateBest(
         bestSessionRaceMs,
         bestSessionRaceConditions,
         lapTime,
         conditions
       )
+
+      // The session race time includes >20 L; historical references need >40 L.
+      const bucket = getRaceFuelBucket(lapFuelReference)
+      if (historicalEligibility !== 'race_historical' || !bucket) return
 
       if (historicalEligibility === 'race_historical') {
         ;[bestRaceMs, bestRaceConditions] = updateBest(

@@ -204,7 +204,7 @@ const { summary: legacySummary, summarySource: legacySummarySource } = extractMe
   { allowLegacyFallback: true }
 )
 assert.equal(legacySummarySource, 'legacy_fallback')
-assert.equal(legacySummary.best_session_race_ms, null)
+assert.equal(legacySummary.best_session_race_ms, 118900)
 assert.equal(legacySummary.best_race_ms, null)
 assert.equal(legacySummary.best_by_grip.Optimum.bestRace, null)
 assert.deepEqual(legacySummary.best_by_grip.Optimum.raceBestByFuelBucket['40-60'], {})

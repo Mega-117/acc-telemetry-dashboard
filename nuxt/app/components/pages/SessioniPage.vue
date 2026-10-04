@@ -9,6 +9,7 @@ import { gameLabel } from '~/services/telemetry/gameCatalog'
 import GameContextTransition from '~/components/layout/GameContextTransition.vue'
 import { sessionGame, sessionFilterType, sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import RacingSessionList from '~/components/sessions/RacingSessionList.vue'
+import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
 import { ref, computed, onBeforeUnmount, onMounted, watch, nextTick } from 'vue'
 import { 
   formatLapTime, 
@@ -190,8 +191,7 @@ const sessions = computed<DisplaySession[]>(() => {
     const filterType = sessionFilterType(s)
     const sessionType = filterType === null ? 'unknown' : getSessionTypeLabel(filterType)
     const dateStr = s.meta.date_start?.split('T')[0] || ''
-    const sessionRaceTime = sessionGame(s) === 'acc'
-      ? s.summary.best_session_race_ms || s.summary.best_race_ms || null : null
+    const timing = sessionTiming(s)
     
     return {
       id: s.sessionId,
@@ -208,11 +208,11 @@ const sessions = computed<DisplaySession[]>(() => {
       lapsValid: s.summary.lapsValid || 0,
       stints: s.summary.stintCount ?? 0,
       // Use stint-based best times (fuel-band classified)
-      bestQualy: sessionGame(s) === 'acc' && s.summary.best_qualy_ms
-        ? formatLapTime(s.summary.best_qualy_ms) 
+      bestQualy: timing.qualyMs
+        ? formatLapTime(timing.qualyMs)
         : undefined,
-      bestRace: sessionRaceTime 
-        ? formatLapTime(sessionRaceTime) 
+      bestRace: timing.raceMs
+        ? formatLapTime(timing.raceMs)
         : undefined,
       bestLap: s.summary.lapsValid > 0 && s.summary.bestLap != null && s.summary.bestLap > 0 ? formatLapTime(s.summary.bestLap) : undefined,
       source: s.source as 'cloud' | 'local' | undefined,
@@ -498,7 +498,7 @@ function goToSession(id: string) {
         class="session-days"
         :aria-busy="isLoading || isChangingPage"
       >
-        <RacingSessionList :groups="paginatedSessionsByDay" :common-timing="consultedGame !== 'acc'" @go-to-session="goToSession" />
+        <RacingSessionList :groups="paginatedSessionsByDay" @go-to-session="goToSession" />
       </div>
     </UiScrollArea>
     <UiPaginationControls

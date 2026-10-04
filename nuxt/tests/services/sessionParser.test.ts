@@ -143,6 +143,17 @@ describe('extractMetadata — fallback valori mancanti', () => {
 // extractMetadata — forced raw rebuild
 // ─────────────────────────────────────────────────────────────────────────────
 describe('extractMetadata — forced raw rebuild', () => {
+  it.each([20, 20.1, 30, 40, 40.1])('separates session race time and historical eligibility at %s L', (fuel) => {
+    const raw = {
+      session_info: { track: 'monza', date_start: '2026-10-04T12:00:00Z', car_model: 'ferrari_296_gt3', session_type: 0, laps_total: 1, laps_valid: 1 },
+      static_data: { sectorCount: 3 },
+      stints: [{ fuel_start: fuel, laps: [{ lap_time_ms: 100000, fuel_start: fuel, is_valid: true, track_grip_status: 'Optimum' }] }]
+    }
+    const { summary } = extractMetadata(raw, { allowLegacyFallback: true })
+    expect(summary.best_qualy_ms).toBe(fuel <= 20 ? 100000 : null)
+    expect(summary.best_session_race_ms).toBe(fuel > 20 ? 100000 : null)
+    expect(summary.best_race_ms).toBe(fuel > 40 ? 100000 : null)
+  })
   function makeCurrentButStaleRaceRaw() {
     return {
       session_info: {

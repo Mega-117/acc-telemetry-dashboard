@@ -15,7 +15,6 @@ export interface RacingSessionRow {
 defineProps<{
   groups: { date: string; sessions: RacingSessionRow[] }[]
   hideTrack?: boolean
-  commonTiming?: boolean
   sessionHref?: (id: string) => string
 }>()
 const emit = defineEmits<{ 'go-to-session': [id: string] }>()
@@ -72,7 +71,7 @@ function openSession(event: MouseEvent, id: string) {
                   </th><th scope="col">
                     Stint
                   </th><th scope="col">
-                    {{ commonTiming ? 'Miglior giro' : 'Tempo qualifica' }}
+                    Tempo qualifica
                   </th><th scope="col">
                     Tempo gara
                   </th>
@@ -126,10 +125,10 @@ function openSession(event: MouseEvent, id: string) {
                     {{ session.stints }} <span>stint</span>
                   </td>
                   <td class="session-best session-best--qualify">
-                    <abbr class="best-label" :title="commonTiming ? 'Miglior giro valido' : 'Tempo di qualifica'">{{ commonTiming ? 'B' : 'Q' }}</abbr><span :class="{ 'is-empty': !(commonTiming ? session.bestLap : session.bestQualy) }">{{ (commonTiming ? session.bestLap : session.bestQualy) || '–' }}</span>
+                    <abbr class="best-label" title="Tempo di qualifica">Q</abbr><span :class="{ 'is-empty': !session.bestQualy }">{{ session.bestQualy || '–' }}</span>
                   </td>
                   <td class="session-best session-best--race">
-                    <template v-if="!commonTiming"><abbr class="best-label" title="Tempo di gara">G</abbr><span :class="{ 'is-empty': !session.bestRace }">{{ session.bestRace || '–' }}</span></template>
+                    <abbr class="best-label" title="Tempo di gara">G</abbr><span :class="{ 'is-empty': !session.bestRace }">{{ session.bestRace || '–' }}</span>
                   </td>
                 </tr>
               </tbody>

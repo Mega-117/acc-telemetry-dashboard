@@ -1,4 +1,5 @@
 import type { SessionDocument } from '~/types/telemetry'
+import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
 import type { CarCategory } from '~/utils/telemetryFormat'
 import { RACE_FUEL_BUCKETS, getRaceFuelBucket } from '~/services/telemetry/raceFuelClassification'
 import type { TrackDetailProjection, TrackFuelBucketReference, TrackHistoricalPointProjection, TrackRecentSessionProjection } from '~/types/trackProjections'
@@ -62,15 +63,15 @@ export function buildTrackDetailProjection(params: {
 
   const recentSessions: TrackRecentSessionProjection[] = visibleSessions.map((session) => {
     const summary = session.summary || {}
-    const sessionRaceTime = (summary as any)?.best_session_race_ms || summary.best_race_ms || null
+    const timing = sessionTiming(session)
     let bestQualy: string | undefined
     let bestRace: string | undefined
 
-    if (summary.best_qualy_ms) {
-      bestQualy = formatLapTime(summary.best_qualy_ms)
+    if (timing.qualyMs) {
+      bestQualy = formatLapTime(timing.qualyMs)
     }
-    if (sessionRaceTime) {
-      bestRace = formatLapTime(sessionRaceTime)
+    if (timing.raceMs) {
+      bestRace = formatLapTime(timing.raceMs)
     }
 
     const dateObj = new Date(session.meta.date_start)

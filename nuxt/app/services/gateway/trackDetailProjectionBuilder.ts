@@ -6,6 +6,7 @@ import {
     getSessionTypeLabel
 } from '~/utils/telemetryFormat'
 import { sessionCarCategory } from '~/services/telemetry/gameIdentity'
+import { sessionTiming } from '~/services/telemetry/fuelHistorySummary'
 import { normalizeTrackId as normalizeTrackProjectionId, resolveTrackMetadata } from '~/services/projections/trackMetadata'
 import { isSupportedTrackBestProjection } from '~/services/projections/trackBestProjectionGuard'
 import type { SessionDocument } from '~/types/telemetry'
@@ -95,7 +96,7 @@ export function buildRecentSessionProjection(session: SessionDocument): TrackRec
     const summary = session.summary || {}
     const dateObj = new Date(session.meta.date_start)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TODO: add precise type
-    const sessionRaceTime = (summary as any)?.best_session_race_ms || summary.best_race_ms || null
+    const timing = sessionTiming(session)
     return {
         id: session.sessionId,
         date: session.meta.date_start?.split('T')[0] || '',
@@ -104,8 +105,8 @@ export function buildRecentSessionProjection(session: SessionDocument): TrackRec
         car: formatCarName(session.meta.car),
         laps: summary.laps || 0,
         stints: summary.stintCount || 0,
-        bestQualy: summary.best_qualy_ms ? formatLapTime(summary.best_qualy_ms) : undefined,
-        bestRace: sessionRaceTime ? formatLapTime(sessionRaceTime) : undefined
+        bestQualy: timing.qualyMs ? formatLapTime(timing.qualyMs) : undefined,
+        bestRace: timing.raceMs ? formatLapTime(timing.raceMs) : undefined
     }
 }
 
