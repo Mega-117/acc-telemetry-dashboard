@@ -8,7 +8,7 @@
     background: transparent; color: #eee;
   }
   :deep(.pwc-bell) { width: 46px; }
-  :deep(.dropdown-trigger) { padding: 0 18px; gap: 16px; align-items: center; }
+  :deep(.dropdown-trigger) { padding: 0 15px 0 18px; gap: 16px; align-items: center; }
   :deep(.user-name) { display: block; font: italic 500 18px/1 'Racer Display', sans-serif; text-transform: uppercase; transform: translateY(1px); }
   :deep(.arrow-icon) { color: #ddd; width: 18px; height: 18px; flex-shrink: 0; }
   :deep(.dropdown-trigger:hover), :deep(.pwc-bell:hover), :deep(.pwc-bell.is-open) { border-color: var(--racing-accent); background: #ff002414; }
