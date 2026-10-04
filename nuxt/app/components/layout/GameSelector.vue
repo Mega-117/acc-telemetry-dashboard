@@ -78,7 +78,7 @@ function change(gameId: string) {
 </template>
 
 <style scoped lang="scss">
-.game-selector { position: relative; width: 190px; max-width: 100%; height: 46px; }
+.game-selector { position: relative; width: 190px; max-width: 100%; height: 46px; margin-right: 8px; }
 .connection { position: absolute; top: calc(100% + 4px); left: 0; display: flex; align-items: center; gap: 6px; padding-inline: 2px; font-size: 10px; line-height: 14px; white-space: nowrap; color: var(--rc-text-muted, #a6abb6); }
 .connection__dot { flex: 0 0 5px; height: 5px; border-radius: 50%; background: #777d87; }
 .connection.is-connected .connection__dot { background: #42cda5; }
