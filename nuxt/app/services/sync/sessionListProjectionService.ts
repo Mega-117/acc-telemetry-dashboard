@@ -1,4 +1,5 @@
 import { doc } from 'firebase/firestore'
+import { readFuelHistory } from '~/services/telemetry/fuelHistorySummary'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { getCarCategory, type CarCategory } from '~/utils/telemetryFormat'
 import type { SessionDocument } from '~/types/telemetry'
@@ -10,6 +11,18 @@ import { sessionGame, normalizedSessionKind } from '~/services/telemetry/gameIde
 
 export const SESSION_LIST_PROJECTION_SCHEMA_VERSION = 1
 export const SESSION_LIST_PROJECTION_PAGE_SIZE = 100
+
+function compactHistoricalSummary(summary: Partial<SessionDocument['summary']>, compatible: boolean) {
+  if (!compatible || summary.best_by_grip === undefined) return {}
+  const history = {
+    best_by_grip: Object.fromEntries(Object.entries(summary.best_by_grip).filter(([, value]) => value.bestQualy || value.bestRace || value.bestAvgRace)),
+    best_avg_race_ms: summary.best_avg_race_ms ?? null,
+    best_avg_race_conditions: summary.best_avg_race_conditions ?? null,
+  }
+  // Pages hold 100 sessions. Large histories stay in their original summary;
+  // the detail gateway hydrates them instead of exceeding Firestore's document limit.
+  return new TextEncoder().encode(JSON.stringify(history)).length <= 4096 ? history : {}
+}
 
 export type SessionListProjectionEntry = {
   sourceSessionId?: string
@@ -32,6 +45,7 @@ export type SessionListProjectionEntry = {
   bestRaceMs: number | null
   bestSessionRaceMs: number | null
   bestRulesVersion: number
+  historicalSummary?: Pick<SessionDocument["summary"], "best_by_grip" | "best_avg_race_ms" | "best_avg_race_conditions">
   hasLaps: boolean
   totalTimeMs: number
 }
@@ -76,9 +90,9 @@ export function normalizeSessionListKey(value: string): string {
 
 export function createSessionListEntry(session: SessionDocument): SessionListProjectionEntry {
   const gameId = sessionGame(session) ?? 'unknown'
-  const summary = session.summary || {}
+  const summary = { ...session.summary, ...readFuelHistory(session.summary, gameId) }
   const bestRulesVersion = Number(summary.best_rules_version || BEST_RULES_VERSION)
-  const raceRuleCompatible = gameId === 'acc' && bestRulesVersion >= BEST_RULES_VERSION
+  const raceRuleCompatible = ['acc', 'evo'].includes(gameId) && bestRulesVersion >= BEST_RULES_VERSION
   const track = session.meta?.track || ''
   const car = session.meta?.car || ''
   const laps = Number(summary.laps || 0)
@@ -104,6 +118,7 @@ export function createSessionListEntry(session: SessionDocument): SessionListPro
     bestSessionRaceMs: summary.best_session_race_ms || null,
     bestRaceMs: raceRuleCompatible ? (summary.best_race_ms || null) : null,
     bestRulesVersion,
+    historicalSummary: compactHistoricalSummary(summary, raceRuleCompatible),
     hasLaps: laps > 0,
     totalTimeMs: Number(summary.totalTime || 0)
   }
@@ -123,9 +138,9 @@ export function createSessionListEntryFromDelta(delta: {
   summary?: any
 }): SessionListProjectionEntry {
   const gameId = delta.gameId ?? 'acc' // Existing projection deltas predate explicit game identity.
-  const summary = delta.summary || {}
+  const summary = { ...delta.summary, ...readFuelHistory(delta.summary, gameId) }
   const bestRulesVersion = Number(summary.best_rules_version || BEST_RULES_VERSION)
-  const raceRuleCompatible = gameId === 'acc' && bestRulesVersion >= BEST_RULES_VERSION
+  const raceRuleCompatible = ['acc', 'evo'].includes(gameId) && bestRulesVersion >= BEST_RULES_VERSION
   const track = delta.trackId || ''
   const car = delta.car || ''
   const laps = Number(summary.laps || 0)
@@ -151,6 +166,7 @@ export function createSessionListEntryFromDelta(delta: {
     bestSessionRaceMs: summary.best_session_race_ms || null,
     bestRaceMs: raceRuleCompatible ? (summary.best_race_ms || null) : null,
     bestRulesVersion,
+    historicalSummary: compactHistoricalSummary(summary, raceRuleCompatible),
     hasLaps: laps > 0,
     totalTimeMs: Number(summary.totalTime || 0)
   }
@@ -184,6 +200,7 @@ export function sessionListEntryToSessionDocument(entry: SessionListProjectionEn
       best_qualy_ms: entry.bestQualyMs,
       best_session_race_ms: entry.bestSessionRaceMs,
       best_race_ms: entry.bestRaceMs,
+      ...entry.historicalSummary,
       best_rules_version: entry.bestRulesVersion
     },
     rawChunkCount: 0,

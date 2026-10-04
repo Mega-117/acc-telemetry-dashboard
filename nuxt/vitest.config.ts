@@ -40,6 +40,9 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/services/projections/vehicleHistory.ts',
+        'app/services/telemetry/fuelHistorySummary.ts',
+        'app/services/projections/gameTrackCatalogue.ts',
         'app/services/ui/gameSwitchDestination.ts',
         'app/services/projections/buildCommonTrackOverview.ts',
         'app/pages/dev-telemetry-compare.vue',

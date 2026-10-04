@@ -32,6 +32,8 @@ export interface TrackOverviewProjectionItem {
   lastSessionFull?: string
   bestQualy?: string
   bestRace?: string
+  bestQualyCar?: string
+  bestRaceCar?: string
   bestLap?: string
   referenceLabel?: string
 }
@@ -84,7 +86,7 @@ export interface TrackRecentSessionProjection {
   dateStart?: string
   date: string
   time: string
-  type: 'practice' | 'qualify' | 'race'
+  type: 'practice' | 'qualify' | 'race' | 'unknown'
   car: string
   laps: number
   // PIP-436: contributo all'attivita', per sostituire una sessione aggiornata senza ricalcolo.

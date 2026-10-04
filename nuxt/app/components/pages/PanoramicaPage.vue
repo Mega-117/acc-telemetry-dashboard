@@ -5,6 +5,7 @@
 
 import GameContextTransition from '~/components/layout/GameContextTransition.vue'
 import GameLogo from '~/components/layout/GameLogo.vue'
+import { getCarCategory } from '~/utils/telemetryFormat'
 import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
@@ -131,7 +132,7 @@ function goToSession() {
             <tbody>
               <tr>
                 <td v-for="column in performanceColumns" :key="column.label">
-                  <span class="time-label">{{ consultedGame === 'acc' ? 'Migliore' : 'Storico' }} · {{ column.label }}</span>
+                  <span class="time-label">{{ consultedGame === 'acc' ? `Storico ${getCarCategory(overviewProjection?.lastCar.rawName || '')}` : 'Storico vettura' }} · {{ column.label }}</span>
                   <strong>{{ column.best || '--:--.---' }}</strong>
                   <abbr v-if="column.grip" class="grip-badge" :title="column.grip">{{ column.grip.slice(0, 3).toUpperCase() }}</abbr>
                 </td>

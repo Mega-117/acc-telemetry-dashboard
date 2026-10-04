@@ -15,6 +15,24 @@ function session(gameId: string): SessionDocument {
 }
 
 describe('multi-simulator projection identity', () => {
+  it('preserves EVO canonical fuel records through list serialization without inventing missing history', () => {
+    const raw = { schema: 'racercore.session', version: 1, game_id: 'evo',
+      session_info: { track: 'Monza', track_variant: 'GP', car: 'Ferrari', date_start: '2026-10-04' }, stints: [],
+      summary: { schema: 'racercore.timing-summary', version: 1, laps: 5, lapsValid: 5, bestLap: 100000,
+        fuel_history: { best_rules_version: 6, best_qualy_ms: 100000, best_by_grip: { Unknown: { bestQualy: 100000, bestQualyFuel: 10 } } } } }
+    const parsed = extractMetadata(raw)
+    const entry = createSessionListEntry({ ...session('evo'), ...parsed })
+    const restored = sessionListEntryToSessionDocument(JSON.parse(JSON.stringify(entry)))
+    expect(restored.summary.best_by_grip?.Unknown).toEqual({ bestQualy: 100000, bestQualyFuel: 10 })
+    expect(restored.summary.best_qualy_ms).toBe(100000)
+    const cloudDelta = createSessionListEntryFromDelta({ gameId: 'evo', sessionId: 'cloud-evo', trackId: 'Monza',
+      car: 'Ferrari', dateStart: '2026-10-04', summary: raw.summary })
+    expect(sessionListEntryToSessionDocument(cloudDelta).summary.best_by_grip?.Unknown?.bestQualy).toBe(100000)
+    expect(sessionListEntryToSessionDocument(createSessionListEntry(session('evo'))).summary.best_by_grip).toBeUndefined()
+    expect(extractMetadata({ ...raw, game_id: 'synthetic' }).summary.best_by_grip).toBeUndefined()
+    const large = { ...parsed.summary, best_by_grip: { Unknown: { bestQualy: 1, provenance: 'x'.repeat(5000) } } }
+    expect(createSessionListEntry({ ...session('evo'), summary: large }).historicalSummary).toEqual({})
+  })
   it('preserves source identity in projection deltas and prevents same-time variant merges', () => {
     const short = session('synthetic'), full = session('synthetic')
     short.meta.trackVariant = 'short'; short.meta.sourceSessionId = 'source-short'

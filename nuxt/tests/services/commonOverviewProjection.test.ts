@@ -12,6 +12,8 @@ describe('shared overview projection', () => {
   it('keeps identity, bests and activity in the selected game and comparable car/variant', () => {
     const a = session('latest')
     const old = session('old', { meta: { ...a.meta, date_start: '2026-09-01' }, summary: { ...a.summary, bestLap: 114000, avgCleanLap: 116000 } })
+    a.summary.best_by_grip = { Unknown: { bestQualy: 114972 } }
+    old.summary.best_by_grip = { Unknown: { bestQualy: 114000 } }
     const wrong = ['acc', 'other-car', 'other-variant'].map((kind, i) => session(kind, {
       meta: { ...a.meta, date_start: '2026-10-03', gameId: i === 0 ? 'acc' : 'evo', car: i === 1 ? 'Ford' : a.meta.car, trackVariant: i === 2 ? 'short' : 'GP' },
       summary: { ...a.summary, bestLap: 1, avgCleanLap: 1 },
@@ -19,7 +21,7 @@ describe('shared overview projection', () => {
     const result = build([a, a, old, ...wrong], 'evo', now)
     expect(result.lastSession?.id).toBe('latest')
     expect(result.lastTrack?.name).toBe('Monza · GP')
-    expect(result.performanceColumns?.map(c => c.best)).toEqual(['1:54.000', '1:55.500', '--:--.---'])
+    expect(result.performanceColumns?.map(c => c.best)).toEqual(['1:54.000', '--:--.---', '--:--.---'])
     expect(result.performanceColumns?.[0]?.session).toBe('1:54.972')
     expect(result.activityTotals.practice).toEqual({ minutes: 12, sessions: 3 })
     expect(result.activity7d).toHaveLength(7)

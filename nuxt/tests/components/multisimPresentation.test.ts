@@ -8,8 +8,8 @@ import CommonGamePage from '~/components/pages/CommonGamePage.vue'
 import { useGameContext } from '~/composables/useGameContext'
 vi.stubGlobal('useRouter', () => ({ currentRoute: ref({ path: '/panoramica' }), replace: vi.fn().mockResolvedValue(undefined) }))
 const fixture = vi.hoisted(() => ({ gateway: vi.fn(), overview: vi.fn().mockResolvedValue(null), live: null as any, admin: null as any }))
-vi.mock('~/composables/useTelemetryGateway', () => ({ useTelemetryGateway: () => ({ getSessionsPage: fixture.gateway, getCommonHistoryOverview: fixture.overview }) }))
-vi.mock('~/composables/usePilotContext', () => ({ useTargetUserId: () => ref('qa') }))
+vi.mock('~/composables/useTelemetryGateway', () => ({ useTelemetryGateway: () => ({ getVehicleHistory: async () => [], getSessionsPage: fixture.gateway, getCommonHistoryOverview: fixture.overview }) }))
+vi.mock('~/composables/usePilotContext', () => ({ useTargetUserId: () => ref('qa'), usePilotContext: () => ref(null) }))
 vi.mock('~/composables/useDevToolsAccess', () => ({ useDevToolsAccess: () => ({ canAccessDevTools: fixture.admin }) }))
 vi.mock('~/composables/useFastStatePoller', () => ({ useFastStatePoller: () => ({ fastState: fixture.live, startFastStatePolling: vi.fn(), stopFastStatePolling: vi.fn() }) }))
 describe('common game surfaces', () => {

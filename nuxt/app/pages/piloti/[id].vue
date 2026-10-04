@@ -151,8 +151,7 @@ function goBackToList() {
       <template v-else>
         <!-- Show detail views when selected -->
         <template v-if="detailView === 'track' && selectedTrackId">
-          <PagesCommonGamePage v-if="consultedGame !== 'acc'" surface="piste" :track="selectedTrackId" embedded @go-to-session="handleGoToSession" @go-to-track="handleGoToTrack" @open-sessions="activeTab = 'sessioni'; goBackToList()" />
-          <PagesTrackDetailPage v-else
+          <PagesTrackDetailPage
             :track-id="selectedTrackId" 
             @back="goBackToList"
             @go-to-session="handleGoToSession" 

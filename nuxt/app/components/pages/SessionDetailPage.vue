@@ -2339,7 +2339,7 @@ const gripZones = computed(() => {
 </script>
 
 <template>
-  <CommonSessionDetail v-if="commonSession" :session="commonSession">
+  <CommonSessionDetail v-if="commonSession" :session="commonSession" :owner-id="externalUserId">
     <template #actions>
       <SessionFileActions :can-share="canShare" :sharing="isSharing" :success="shareSuccess" :error="fileActionError" @share="shareSession" @export="exportSession" />
     </template>

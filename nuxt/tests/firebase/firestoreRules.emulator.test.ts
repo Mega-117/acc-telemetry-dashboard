@@ -59,7 +59,9 @@ it.each(['acc', 'evo', 'synthetic'])('PIP-469 isolates uploaded %s raw chunks an
     stints: [{ stint_number: 1, laps: [{ lap_number: 1, lap_time_ms: 131000,
       sector_times_ms: [], validity: 'valid', completeness: 'complete' }] }],
     recording_state: 'stopped', summary: { schema: 'racercore.timing-summary', version: 1,
-      laps: 1, lapsValid: 1, bestLap: 131000, avgCleanLap: null, totalTime: 131000, stintCount: 1 } }
+      laps: 1, lapsValid: 1, bestLap: 131000, avgCleanLap: null, totalTime: 131000, stintCount: 1,
+      ...(gameId === 'evo' ? { fuel_history: { best_rules_version: BEST_RULES_VERSION,
+        best_qualy_ms: 131000, best_by_grip: { Unknown: { bestQualy: 131000, bestQualyFuel: 10 } } } } : {}) } }
   const text = JSON.stringify(raw)
   const service = createSessionUploadService({ db: owner, chunkSize: 200,
     getExistingSession: async () => null, loadRegistryCache: async () => ({}),
@@ -69,6 +71,10 @@ it.each(['acc', 'evo', 'synthetic'])('PIP-469 isolates uploaded %s raw chunks an
   const path = `users/${PILOT_UID}/sessions/${result.sessionId}`
   const saved = (await assertSucceeds(getDoc(doc(owner, path)))).data()!
   expect(saved.meta.gameId).toBe(gameId)
+  if (gameId === 'evo') {
+    expect(saved.summary.fuel_history.best_qualy_ms).toBe(131000)
+    expect(saved.summary.fuel_history.best_by_grip.Unknown.bestQualyFuel).toBe(10)
+  }
   const chunks = await getDocs(collection(owner, `${path}/rawChunks`))
   expect(chunks.size).toBeGreaterThan(1)
   expect(chunks.docs.map(item => item.data()).sort((a, b) => a.idx - b.idx)

@@ -22,8 +22,7 @@ function handleGoToSession(sessionId: string, routePath?: string) {
 </script>
 
 <template>
-  <PagesCommonGamePage v-if="useGameContext().consultedGame.value !== 'acc'" surface="piste" :track="trackId" />
-  <PagesTrackDetailPage v-else
+  <PagesTrackDetailPage
     :track-id="trackId"
     :from-session="fromSession"
     @back="handleBack"

@@ -4,6 +4,8 @@ import { sessionGame, sessionCarCategory } from '~/services/telemetry/gameIdenti
 import { scopeSessionIndex, buildCommonHistoryOverview } from '~/services/telemetry/gameProjection'
 import { buildCommonOverviewProjection } from '~/services/projections/buildCommonOverviewProjection'
 import { buildCommonTrackOverview } from '~/services/projections/buildCommonTrackOverview'
+import { filterHistory, historyTrackId } from '~/services/projections/vehicleHistory'
+import { readFuelHistory } from '~/services/telemetry/fuelHistorySummary'
 import { mergePendingLocal } from '~/services/telemetry/telemetryMergeService'
 import { useTelemetryData } from './useTelemetryData'
 import {
@@ -532,10 +534,39 @@ export function useTelemetryGateway(explicitGameId?: string) {
         return mergePendingLocal(source.sessions, local, true)
     }
 
+    async function getVehicleHistory(targetUserId?: string, trackId?: string, references = false): Promise<SessionDocument[]> {
+        const uid = resolveTargetUserId(targetUserId)
+        if (!uid) return []
+        const source = await loadCommonOverviewSessions(uid)
+        if (!source) throw new Error('Indice completo delle sessioni non disponibile')
+        const sessions = filterHistory(source, gameId, {}, trackId)
+        if (!references) return sessions
+        return hydrateHistorySummaries(uid, sessions)
+    }
+
+    async function hydrateHistorySummaries(uid: string, sessions: SessionDocument[]): Promise<SessionDocument[]> {
+        // Older list projections omitted grip/fuel records. Hydrate summary documents
+        // only for the requested track; no raw lap chunks or cloud writes.
+        const result: SessionDocument[] = []
+        for (let offset = 0; offset < sessions.length; offset += 6) {
+            result.push(...await Promise.all(sessions.slice(offset, offset + 6).map(async session => {
+                if (session.summary.best_by_grip !== undefined) return session
+                const summary = await loadOverviewSessionSummary(uid, session.sessionId)
+                return summary ? { ...session, summary: { ...session.summary, ...summary, ...readFuelHistory(summary, sessionGame(session) || 'unknown') } } : session
+            })))
+        }
+        return result
+    }
+
     async function getCommonOverviewProjection(targetUserId: string, selectedGame: string) {
         const sessions = await loadCommonOverviewSessions(targetUserId)
         if (!sessions) throw new Error('Complete session index unavailable')
-        return buildCommonOverviewProjection(sessions, selectedGame)
+        const latest = filterHistory(sessions, selectedGame)[0]
+        if (!latest) return buildCommonOverviewProjection([], selectedGame)
+        const references = await hydrateHistorySummaries(targetUserId,
+            filterHistory(sessions, selectedGame, { car: latest.meta.car }, historyTrackId(latest.meta.track, latest.meta.trackVariant)))
+        const summaries = new Map(references.map(s => [s.sessionId, s.summary]))
+        return buildCommonOverviewProjection(sessions.map(s => ({ ...s, summary: summaries.get(s.sessionId) ?? s.summary })), selectedGame)
     }
 
     async function getCommonHistoryOverview(targetUserId: string, selectedGame: string, track?: string) {
@@ -854,6 +885,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
         getOverviewSnapshot,
         getOverviewProjection,
         getSessionsPage,
+        getVehicleHistory,
         getCommonHistoryOverview,
         getCommonOverviewProjection,
         getTrackSnapshot,

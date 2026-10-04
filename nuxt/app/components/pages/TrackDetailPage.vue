@@ -3,14 +3,15 @@
 // TrackDetailPage - Track detail with projection-first data
 // ============================================
 
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useGameContext } from '~/composables/useGameContext'
+import { historyOptions, vehicleTrackDetail, HISTORY_GRIPS, type HistoryFilter } from '~/services/projections/vehicleHistory'
+import type { SessionDocument } from '~/types/telemetry'
+import { formatCarName, getCarCategory } from '~/utils/telemetryFormat'
 import RacingSessionList from '~/components/sessions/RacingSessionList.vue'
 import PaginationControls from '~/components/ui/PaginationControls.vue'
 import TrackTimesChart from '~/components/charts/TrackTimesChart.vue'
-import {
-  CAR_CATEGORIES,
-  type CarCategory
-} from '~/utils/telemetryFormat'
+import type { CarCategory } from '~/utils/telemetryFormat'
 import { usePilotContext } from '~/composables/usePilotContext'
 import { useHeaderBack } from '~/composables/useHeaderBack'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
@@ -28,7 +29,7 @@ const emit = defineEmits<{
   'go-to-session': [sessionId: string, routePath: string]
 }>()
 
-const telemetryGateway = useTelemetryGateway()
+const { consultedGame } = useGameContext()
 const headerBack = useHeaderBack(() => emit('back'), () => props.fromSession ? 'Torna alla sessione' : 'Torna alle piste')
 const targetUserId = usePilotContext()
 
@@ -40,38 +41,42 @@ function formatShortDate(isoDate: string | null): string {
   return `${parseInt(day, 10)} ${months[parseInt(month, 10) - 1] ?? ''} ${year}`
 }
 
-const gripConditions = ['Optimum', 'Fast', 'Green', 'Greasy', 'Damp', 'Wet', 'Flood']
+const gripConditions = HISTORY_GRIPS
 const RACE_FUEL_BUCKET_FILTERS = RACE_FUEL_BUCKETS
 const selectedGrip = ref('Optimum')
-const selectedCategory = ref<CarCategory>('GT3')
+const selectedCategory = ref<CarCategory | ''>('')
+const selectedCar = ref('')
 const selectedRaceReferenceBucket = ref('100+')
-const trackProjection = ref<TrackDetailProjection | null>(null)
+const history = ref<SessionDocument[]>([])
 const isProjectionLoading = ref(false)
-
+const loadError = ref(false)
+const savedFilters = useState<Record<string, HistoryFilter & { active?: boolean }>>('track-history-filters', () => ({}))
+const options = computed(() => historyOptions(history.value, consultedGame.value, props.trackId))
+const cars = computed(() => historyOptions(history.value.filter(s => !selectedCategory.value || getCarCategory(s.meta.car) === selectedCategory.value), consultedGame.value).cars)
+const trackProjection = computed<TrackDetailProjection | null>(() => vehicleTrackDetail(history.value, consultedGame.value, props.trackId,
+  { category: selectedCategory.value, car: selectedCar.value }, selectedGrip.value))
+let revision = 0
 async function loadTrackProjection() {
+  const ticket = ++revision
+  history.value = []
   isProjectionLoading.value = true
+  loadError.value = false
   try {
-    trackProjection.value = await telemetryGateway.getTrackDetailProjection(
-      props.trackId,
-      targetUserId.value || undefined,
-      {
-        category: selectedCategory.value,
-        grip: selectedGrip.value
-      }
-    )
-  } finally {
-    isProjectionLoading.value = false
-  }
+    const data = await useTelemetryGateway(consultedGame.value).getVehicleHistory(targetUserId.value || undefined, props.trackId, true)
+    if (ticket !== revision) return
+    history.value = data
+    const saved = savedFilters.value[`${targetUserId.value || 'self'}:${consultedGame.value}`]
+    selectedCategory.value = consultedGame.value === 'acc' ? (saved?.active ? saved.category || '' : options.value.defaultCategory || '') : ''
+    selectedCar.value = saved?.active ? saved.car || '' : consultedGame.value === 'acc' ? '' : options.value.defaultCar
+    const availableGrips = [...new Set(data.flatMap(s => Object.entries(s.summary.best_by_grip || {}).filter(([, g]) => g.bestQualy || g.bestRace || g.bestAvgRace).map(([g]) => g)))]
+    selectedGrip.value = availableGrips.includes('Optimum') ? 'Optimum' : availableGrips[0] || (consultedGame.value === 'acc' ? 'Optimum' : 'Unknown')
+  } catch { if (ticket === revision) loadError.value = true }
+  finally { if (ticket === revision) isProjectionLoading.value = false }
 }
-
 onMounted(loadTrackProjection)
-
-watch(
-  () => [props.trackId, targetUserId.value, selectedCategory.value, selectedGrip.value],
-  async () => {
-    await loadTrackProjection()
-  }
-)
+watch(() => [props.trackId, targetUserId.value, consultedGame.value], loadTrackProjection)
+watch(selectedCategory, () => { if (selectedCar.value && !cars.value.includes(selectedCar.value)) selectedCar.value = '' })
+onBeforeUnmount(() => { revision++ })
 
 const emptyTrack = {
   id: props.trackId,
@@ -165,7 +170,7 @@ const sessionGroups = computed(() => {
   }))
 })
 
-watch(() => [props.trackId, targetUserId.value, selectedCategory.value], () => { currentPage.value = 1 })
+watch(() => [props.trackId, targetUserId.value, selectedCategory.value, selectedCar.value], () => { currentPage.value = 1 })
 
 watch(totalPages, (pages) => {
   if (currentPage.value > pages) {
@@ -267,12 +272,22 @@ function goToSession(id: string) {
         </div>
       </div>
     </div>
-      <div class="track-filter track-filter--category">
+    <div class="track-history-filters">
+      <div v-if="consultedGame === 'acc'" class="track-filter track-filter--category">
         <label for="track-category">Categoria</label>
         <select id="track-category" v-model="selectedCategory">
-          <option v-for="cat in CAR_CATEGORIES" :key="cat" :value="cat">{{ cat }}</option>
+          <option value="">Tutte le categorie</option>
+          <option v-for="cat in options.categories" :key="cat" :value="cat">{{ cat }}</option>
         </select>
       </div>
+      <div class="track-filter track-filter--car">
+        <label for="track-car">Vettura</label>
+        <select id="track-car" v-model="selectedCar">
+          <option value="">Tutte le vetture</option>
+          <option v-for="car in cars" :key="car" :value="car">{{ formatCarName(car) }}</option>
+        </select>
+      </div>
+    </div>
     <div class="track-header-activity" aria-label="Attivita pista">
         <div class="activity-summary-item">
           <span class="activity-summary-label">Sessioni</span>
@@ -295,7 +310,7 @@ function goToSession(id: string) {
     <!-- 2-Column Layout -->
     <div class="page-layout">
       <div class="main-content">
-        <TrackTimesChart :key="`${trackId}-${targetUserId}-${selectedCategory}`" :history="historicalTimes" :loading="isProjectionLoading" />
+        <TrackTimesChart :key="`${trackId}-${targetUserId}-${selectedCategory}-${selectedCar}`" :history="historicalTimes" :loading="isProjectionLoading" />
       </div>
       <!-- /main-content -->
 
@@ -381,7 +396,7 @@ function goToSession(id: string) {
             </div>
           </div>
           <p v-if="!hasRaceFuelBucketData" class="no-data-hint no-data-hint--block">
-            Nessun riferimento gara per {{ selectedCategory }} / {{ selectedGrip }}.
+            Nessun riferimento gara per {{ selectedCar || selectedCategory || 'questa selezione' }} / {{ selectedGrip }}.
           </p>
         </div>
 
@@ -430,7 +445,9 @@ function goToSession(id: string) {
 .track-filter { display: flex; flex-direction: column; gap: 8px; }
 .track-filter label { font-size: 11px; color: var(--rc-muted); }
 .track-filter select, .race-reference-card__select { @include controls.select; background-color: transparent; width: 148px; }
-.track-filter--category { flex-direction: row; align-items: center; gap: 12px; margin-bottom: 24px; }
+.track-history-filters { display: flex; flex-wrap: wrap; gap: 16px 24px; margin-bottom: 24px; }
+.track-filter--category, .track-filter--car { flex-direction: row; align-items: center; gap: 12px; }
+.track-filter--car select { width: min(260px, 65vw); }
 .track-filter--category select { width: 112px; }
 .track-filter--grip { flex-direction: row; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .page-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 28px; align-items: start; grid-template-areas: "chart references" "sessions references"; }

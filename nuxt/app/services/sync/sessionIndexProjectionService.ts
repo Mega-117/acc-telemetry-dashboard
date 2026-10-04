@@ -1,4 +1,5 @@
 import { buildGameActivity } from '~/services/telemetry/gameProjection'
+import { readFuelHistory } from '~/services/telemetry/fuelHistorySummary'
 import { BEST_RULES_VERSION } from '~/utils/sessionParser'
 import { buildActivityProjectionFromEntries } from '~/services/telemetry/activityProjectionService'
 import type { SessionDocument } from '~/types/telemetry'
@@ -9,6 +10,8 @@ export const SESSION_INDEX_MAX_ITEMS = 200
 const ACTIVITY_SESSION_TYPES = { PRACTICE: 0, QUALIFY: 1, RACE: 2 }
 
 export function buildSessionIndexProjection(allSessions: SessionDocument[], now: Date = new Date()) {
+  allSessions = allSessions.map(session => ({ ...session, summary: { ...session.summary,
+    ...readFuelHistory(session.summary, sessionGame(session) || 'unknown') } }))
   const tracksMap: Record<string, { gameId: string; track: string; trackVariant: string | null; sessions: number; lastPlayed: string }> = {}
   const sessionsList: Array<{
     sourceSessionId?: string
@@ -51,7 +54,7 @@ export function buildSessionIndexProjection(allSessions: SessionDocument[], now:
     }
 
     const bestRulesVersion = Number(session.summary?.best_rules_version || 0)
-    const raceRuleCompatible = gameId === 'acc' && bestRulesVersion >= BEST_RULES_VERSION
+    const raceRuleCompatible = ['acc', 'evo'].includes(gameId) && bestRulesVersion >= BEST_RULES_VERSION
     sessionsList.push({
       id: session.sessionId,
       ...(session.meta.sourceSessionId ? { sourceSessionId: session.meta.sourceSessionId } : {}),

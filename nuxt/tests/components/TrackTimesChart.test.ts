@@ -5,12 +5,14 @@ import { ref } from 'vue'
 import TrackTimesChart from '../../app/components/charts/TrackTimesChart.vue'
 import TrackDetailPage from '../../app/components/pages/TrackDetailPage.vue'
 
-const gateway = vi.hoisted(() => ({ getTrackDetailProjection: vi.fn() }))
+const gateway = vi.hoisted(() => ({ getVehicleHistory: vi.fn() }))
 vi.mock('~/composables/useTelemetryGateway', () => ({ useTelemetryGateway: () => gateway }))
 vi.mock('~/composables/usePilotContext', () => ({ usePilotContext: () => ref(null) }))
 vi.mock('~/composables/usePublicPath', () => ({ usePublicPath: () => ({ getPublicPath: (path: string) => path }) }))
 
 vi.mock('vue-chartjs', () => ({ Line: { name: 'Line', props: ['data', 'options'], template: '<canvas />' } }))
+vi.stubGlobal('useState', (_key: string, init: () => unknown) => ref(init()))
+const doc = (id: string, track: string, date: string, laps = 3, car = 'Ferrari') => ({sessionId: id, meta: { gameId: 'acc', track, car, date_start: date, session_type: 0 }, summary: { laps, lapsValid: laps, totalTime: 300000, best_race_ms: 114000 }})
 const history = Array.from({ length: 20 }, (_, i) => ({
   sessionId: `2026_09_20T12_${String(i).padStart(2, '0')}_00_nurburgring`, date: '20 set', bestRace: i === 10 ? '2:41.500' : '1:54.000',
 }))
@@ -23,9 +25,7 @@ describe('TrackTimesChart controls and consumer data', () => {
       id: `s${i}`, date: i < 26 ? '2026-09-20' : '2026-09-21',
       time: `12:${String(i).padStart(2, '0')}`, type: 'practice', car: 'Ferrari', laps: 3, stints: 1,
     }))
-    gateway.getTrackDetailProjection.mockReset().mockResolvedValue({
-      historicalTimes: [], recentSessions: [...rows, { ...rows[0], id: 'empty', laps: 0 }],
-    })
+    gateway.getVehicleHistory.mockReset().mockResolvedValue([...rows.map(r => doc(r.id, 'imola', `${r.date}T${r.time}:00`)), doc('empty', 'imola', '2026-09-20T12:00:00', 0), doc('gt4', 'imola', '2026-09-20T12:00:00', 3, 'Mercedes AMG GT4')])
     HTMLElement.prototype.scrollTo = vi.fn()
     const wrapper = mount(TrackDetailPage, { props: { trackId: 'imola' }, global: { stubs: { LayoutPageContainer: { template: '<main data-page-scroll><slot /></main>' } } } })
     await flushPromises()
@@ -41,11 +41,16 @@ describe('TrackTimesChart controls and consumer data', () => {
     await flushPromises()
     expect(wrapper.findAll('.session-row')).toHaveLength(2)
     expect(wrapper.get('.session-open').attributes('href')).toBe('/sessioni/s1')
-    expect(gateway.getTrackDetailProjection).toHaveBeenCalledTimes(1)
+    expect(gateway.getVehicleHistory).toHaveBeenCalledTimes(1)
+    await wrapper.get('#track-car').setValue('Ferrari')
+    await flushPromises()
+    expect(wrapper.get('#track-car').findAll('option').map(o => o.text())).toContain('Ferrari')
     await wrapper.get('#track-category').setValue('GT4')
     await flushPromises()
-    expect(wrapper.get('.pagination').text()).toContain('Pagina 1 di 2')
-    expect(gateway.getTrackDetailProjection).toHaveBeenLastCalledWith('imola', undefined, { category: 'GT4', grip: 'Optimum' })
+    expect(wrapper.findAll('.session-row')).toHaveLength(1)
+    expect((wrapper.get('#track-car').element as HTMLSelectElement).value).toBe('')
+    expect(wrapper.get('.session-open').attributes('href')).toBe('/sessioni/gt4')
+    expect(gateway.getVehicleHistory).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
   it('defaults to 30 days and Focus; exposes the original outside value and restores it with one click', async () => {
@@ -104,21 +109,17 @@ describe('TrackTimesChart controls and consumer data', () => {
     wrapper.unmount()
   })
   it('wires real page data without refetching or changing cards/list when chart controls change', async () => {
-    gateway.getTrackDetailProjection.mockReset().mockResolvedValue({
-      historicalTimes: history,
-      recentSessions: [{ id: 'session-link', date: '2026-09-20', time: '12:00', type: 'race', car: 'car', laps: 8, stints: 1, bestRace: '1:54.000' }],
-      activity: { sessionCount: 117, totalLaps: 1213, validLaps: 931, validPercent: 77, totalTimeFormatted: '37h 30m' },
-    })
+    gateway.getVehicleHistory.mockReset().mockResolvedValue([doc('session-link', 'nurburgring', '2026-09-20T12:00:00')])
     const wrapper = mount(TrackDetailPage, { props: { trackId: 'nurburgring' }, global: { stubs: { LayoutPageContainer: { template: '<main><slot /></main>' } } } })
     await flushPromises()
-    expect(gateway.getTrackDetailProjection).toHaveBeenCalledTimes(1)
+    expect(gateway.getVehicleHistory).toHaveBeenCalledTimes(1)
     const header = wrapper.get('.track-header-activity').text()
     const sessions = wrapper.get('.sessions-list').text()
     const cards = wrapper.get('aside').text()
     await wrapper.get('[aria-label="Periodo del grafico"]').setValue('7')
     await wrapper.get('.track-times__toggle button:last-child').trigger('click')
     await flushPromises()
-    expect(gateway.getTrackDetailProjection).toHaveBeenCalledTimes(1)
+    expect(gateway.getVehicleHistory).toHaveBeenCalledTimes(1)
     expect(wrapper.get('.track-header-activity').text()).toBe(header)
     expect(wrapper.get('.sessions-list').text()).toBe(sessions)
     expect(wrapper.get('aside').text()).toBe(cards)

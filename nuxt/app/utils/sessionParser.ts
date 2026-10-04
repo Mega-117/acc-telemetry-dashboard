@@ -25,7 +25,9 @@ export type SessionSummarySource = 'canonical' | 'legacy_fallback' | 'missing_ca
 
 const VALID_GRIPS = ['Flood', 'Wet', 'Damp', 'Greasy', 'Green', 'Fast', 'Optimum'] as const
 
-export const BEST_RULES_VERSION = 6
+import { BEST_RULES_VERSION } from '~/services/telemetry/raceFuelClassification'
+import { readFuelHistory } from '~/services/telemetry/fuelHistorySummary'
+export { BEST_RULES_VERSION }
 
 function normalizeGrip(grip: string): string {
   if (grip === 'Opt') return 'Optimum'
@@ -434,6 +436,7 @@ export function extractMetadata(
         avgCleanLap: null,
         totalTime: common ? toNonNegativeInt(value['totalTime']) : 0,
         stintCount: stints.length,
+        ...readFuelHistory(value, meta.gameId || 'unknown'),
       },
       summarySource: common && meta.gameId !== 'unknown' ? 'canonical' : 'missing_canonical'
     }

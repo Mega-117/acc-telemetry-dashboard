@@ -27,7 +27,7 @@ it('uses one layout, clears another game immediately and rejects its late respon
   expect(mocks.evo).toHaveBeenCalledWith('qa', 'evo')
   expect(wrapper.get('.last-drive__identity').text()).toContain('Ferrari EVO')
   expect(wrapper.findAll('.performance-table td')).toHaveLength(6)
-  expect(wrapper.text()).toContain('Storico · Miglior giro')
+  expect(wrapper.text()).toContain('Storico vettura · Qualifica')
   resolveAcc(projection('ACC delayed'))
   await flushPromises()
   expect(wrapper.text()).not.toContain('ACC delayed')
@@ -36,7 +36,7 @@ it('uses one layout, clears another game immediately and rejects its late respon
   mocks.acc.mockResolvedValue({ ...projection('ACC current'), performanceColumns: undefined })
   game.value = 'acc'
   await flushPromises()
-  expect(wrapper.text()).toContain('Migliore · Qualifica')
+  expect(wrapper.text()).toContain('Storico GT3 · Qualifica')
   expect(wrapper.text()).not.toContain('Ferrari EVO')
   wrapper.unmount()
 })
