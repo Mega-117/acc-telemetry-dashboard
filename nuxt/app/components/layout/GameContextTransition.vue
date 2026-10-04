@@ -31,7 +31,7 @@ onBeforeUnmount(() => { clearTimeout(minimumTimer); clearTimeout(revealTimer) })
     <div class="game-context__content" :class="{ 'is-covered': covered, 'is-revealing': revealing }" :inert="covered" :aria-hidden="covered || undefined">
       <slot />
     </div>
-    <div v-if="covered" class="game-context__cover" role="status" aria-live="polite" :aria-label="`${busy ? 'Caricamento' : 'Panoramica'} · ${gameLabel(gameId)}`">
+    <div v-if="covered" class="game-context__cover" role="status" aria-live="polite" :aria-label="`${busy ? 'Caricamento' : 'Gioco selezionato'} · ${gameLabel(gameId)}`">
       <GameLogo :key="gameId" :game-id="gameId" />
     </div>
   </div>

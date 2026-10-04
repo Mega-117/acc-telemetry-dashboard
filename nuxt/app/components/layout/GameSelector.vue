@@ -6,6 +6,8 @@ import { useGameContext } from '~/composables/useGameContext'
 import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
 import { GAME_OPTIONS, gameLabel } from '~/services/telemetry/gameCatalog'
 import SourceChoice from './SourceChoice.vue'
+import { gameSwitchDestination } from '~/services/ui/gameSwitchDestination'
+const router = useRouter()
 const { consultedGame, selectGame } = useGameContext()
 const { canAccessDevTools } = useDevToolsAccess()
 const live = useFastStatePoller(() => typeof window === 'undefined' ? null : (window as Window & { electronAPI?: unknown }).electronAPI)
@@ -32,11 +34,17 @@ function change(gameId: string) {
   document.documentElement.classList.remove('game-switch-motion')
   const update = async () => {
     if (revision !== selectionRevision) return
+    if (gameId !== consultedGame.value) {
+      const destination = gameSwitchDestination(router.currentRoute.value.path)
+      selectGame(gameId, canAccessDevTools.value)
+      if (destination) await router.replace(destination)
+      if (revision !== selectionRevision) return
+    }
     selectGame(gameId, canAccessDevTools.value)
     await nextTick()
   }
-  // Capture the outgoing overview before its game-scoped data is cleared.
-  // Other pages keep their existing navigation and older browsers still switch.
+  // Capture the outgoing shared page before clearing its game-scoped data.
+  // Detail routes return to their parent list; unsupported browsers still switch.
   if (gameId === consultedGame.value || !document.startViewTransition ||
       !document.querySelector('.game-context') || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
     void update()

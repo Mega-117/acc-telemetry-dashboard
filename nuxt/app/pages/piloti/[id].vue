@@ -38,7 +38,11 @@ const activeTab = ref<'panoramica' | 'sessioni' | 'piste' | 'lezioni'>('panorami
 const detailView = ref<'none' | 'track' | 'session'>('none')
 const selectedTrackId = ref<string | null>(null)
 const selectedSessionId = ref<string | null>(null)
-watch(consultedGame, () => { detailView.value = 'none'; selectedTrackId.value = null; selectedSessionId.value = null })
+watch(consultedGame, () => {
+  if (detailView.value === 'track') activeTab.value = 'piste'
+  if (detailView.value === 'session') activeTab.value = 'sessioni'
+  detailView.value = 'none'; selectedTrackId.value = null; selectedSessionId.value = null
+})
 
 // Pilot navigation tabs
 const pilotTabs = [
@@ -177,8 +181,7 @@ function goBackToList() {
 
           <!-- Piste -->
           <div v-if="activeTab === 'piste'" class="tab-content">
-            <PagesCommonGamePage v-if="consultedGame !== 'acc'" surface="piste" embedded @go-to-session="handleGoToSession" @go-to-track="handleGoToTrack" @open-sessions="activeTab = 'sessioni'" />
-            <PagesPistePage v-else @go-to-track="handleGoToTrack" />
+            <PagesPistePage @go-to-track="handleGoToTrack" />
           </div>
 
           <!-- Pilota: contesto, calendario e lezioni -->

@@ -32,6 +32,8 @@ export interface TrackOverviewProjectionItem {
   lastSessionFull?: string
   bestQualy?: string
   bestRace?: string
+  bestLap?: string
+  referenceLabel?: string
 }
 
 export interface TrackHeaderProjection {

@@ -3,6 +3,7 @@ import { useGameContext } from './useGameContext'
 import { sessionGame, sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import { scopeSessionIndex, buildCommonHistoryOverview } from '~/services/telemetry/gameProjection'
 import { buildCommonOverviewProjection } from '~/services/projections/buildCommonOverviewProjection'
+import { buildCommonTrackOverview } from '~/services/projections/buildCommonTrackOverview'
 import { mergePendingLocal } from '~/services/telemetry/telemetryMergeService'
 import { useTelemetryData } from './useTelemetryData'
 import {
@@ -465,7 +466,13 @@ export function useTelemetryGateway(explicitGameId?: string) {
 
     async function getTracksOverviewProjection(targetUserId?: string): Promise<TrackOverviewProjectionItem[]> {
         // This projection includes ACC's fixed track catalogue and best rules.
-        if (gameId !== 'acc') return []
+        if (gameId !== 'acc') {
+            const uid = resolveTargetUserId(targetUserId)
+            if (!uid) return []
+            const sessions = await loadCommonOverviewSessions(uid)
+            if (!sessions) throw new Error('Complete session index unavailable')
+            return buildCommonTrackOverview(sessions, gameId)
+        }
         const resolvedUserId = resolveTargetUserId(targetUserId)
         const scenarioId = startFirebaseScenario('page.piste.projection', { targetUserId: resolvedUserId })
         try {

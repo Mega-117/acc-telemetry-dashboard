@@ -10,6 +10,9 @@ import { usePilotContext } from '~/composables/usePilotContext'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useTelemetryGateway } from '~/composables/useTelemetryGateway'
 import type { TrackOverviewProjectionItem } from '~/types/trackProjections'
+import { useGameContext } from '~/composables/useGameContext'
+import GameContextTransition from '~/components/layout/GameContextTransition.vue'
+const { consultedGame } = useGameContext()
 
 const { getPublicPath } = usePublicPath()
 
@@ -19,14 +22,24 @@ const emit = defineEmits<{
   'go-to-track': [trackId: string]
 }>()
 
-const telemetryGateway = useTelemetryGateway()
 const targetUserId = usePilotContext()
 const props = defineProps<{ initialTracks?: TrackDisplay[] }>()
 const sortedTracks = ref<TrackDisplay[]>(props.initialTracks || [])
+const loading = ref(false)
+const failed = ref(false)
+let revision = 0
 
 
 async function loadTracks() {
-  sortedTracks.value = await telemetryGateway.getTracksOverviewProjection(targetUserId.value || undefined)
+  const ticket = ++revision
+  sortedTracks.value = []
+  loading.value = true
+  failed.value = false
+  try {
+    const tracks = await useTelemetryGateway(consultedGame.value).getTracksOverviewProjection(targetUserId.value || undefined)
+    if (ticket === revision) sortedTracks.value = tracks
+  } catch { if (ticket === revision) failed.value = true }
+  finally { if (ticket === revision) loading.value = false }
 }
 
 function handleCacheInvalidated(event: Event) {
@@ -36,13 +49,14 @@ function handleCacheInvalidated(event: Event) {
   }
 }
 
-watch(() => targetUserId.value, loadTracks, { immediate: !props.initialTracks })
+watch([targetUserId, consultedGame], loadTracks, { immediate: !props.initialTracks, flush: 'sync' })
 
 onMounted(() => {
   window.addEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
 })
 
 onBeforeUnmount(() => {
+  revision++
   window.removeEventListener('acc:telemetry-cache-invalidated', handleCacheInvalidated)
 })
 
@@ -62,6 +76,9 @@ function goToTrack(id: string) {
 </script>
 <template>
   <LayoutPageContainer>
+    <GameContextTransition :game-id="consultedGame" :busy="loading">
+    <p v-if="failed" role="alert">Impossibile caricare le piste. <button @click="loadTracks">Riprova</button></p>
+    <p v-else-if="!loading && !sortedTracks.length">Nessuna pista registrata per questo gioco.</p>
     <p class="page-subtitle">
       {{ sortedTracks.filter(t => t.sessions > 0).length }} piste visitate su {{ sortedTracks.length }} totali
     </p>
@@ -69,7 +86,7 @@ function goToTrack(id: string) {
       <a
         v-for="(track, index) in sortedTracks"
         :key="track.id"
-        :href="getPublicPath(`/piste/${track.id}`)"
+        :href="getPublicPath(`/piste/${encodeURIComponent(track.id)}`)"
         class="track-card"
         :class="{ 'track-card--unplayed': track.sessions === 0 }"
         :aria-label="`Dettaglio pista ${track.name}`"
@@ -85,6 +102,7 @@ function goToTrack(id: string) {
               class="card-track-image"
               :loading="index < 6 ? 'eager' : 'lazy'"
             />
+            <span v-else class="track-placeholder">{{ track.name }}</span>
           </div>
           <div class="card-content">
             <h2 class="track-name">{{ track.name }}</h2>
@@ -92,7 +110,7 @@ function goToTrack(id: string) {
               <span>{{ track.sessions }} {{ track.sessions === 1 ? 'sessione' : 'sessioni' }}</span>
               <template v-if="track.lastSession"><span aria-hidden="true">·</span><span :title="`Ultima sessione: ${formatDateDisplay(track.lastSession)}`">{{ formatDateDisplay(track.lastSession) }}</span></template>
             </div>
-            <div class="track-times">
+            <div v-if="consultedGame === 'acc'" class="track-times">
               <span
                 class="time-badge time-badge--qualy"
                 :class="{ 'time-badge--empty': !track.bestQualy }"
@@ -104,10 +122,16 @@ function goToTrack(id: string) {
                 :aria-label="`Gara ${track.bestRace || 'non disponibile'}`"
               >{{ track.bestRace || '—:—.---' }}</span>
             </div>
+            <div v-else class="track-times" :title="track.referenceLabel">
+              <span class="time-badge time-badge--qualy" :aria-label="`Miglior giro: ${track.bestLap || 'non disponibile'}. ${track.referenceLabel || ''}`">{{ track.bestLap || '—:—.---' }}</span>
+              <span class="common-best-label">Miglior giro</span>
+            </div>
+            <p v-if="consultedGame !== 'acc'" class="track-reference">{{ track.referenceLabel }}</p>
           </div>
         </div>
       </a>
     </div>
+    </GameContextTransition>
   </LayoutPageContainer>
 </template>
 
@@ -126,6 +150,8 @@ function goToTrack(id: string) {
 .track-card--unplayed .card-track-image { opacity: .55; }
 .track-card--unplayed .card-content { opacity: .65; }
 .card-image-section { aspect-ratio: 1; overflow: hidden; background: #090b0e; }
+.track-placeholder { display: flex; height: 100%; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; text-align: center; font-size: 24px; font-style: italic; }
+.common-best-label, .track-reference { color: var(--rc-muted); font-size: 10px; align-self: center; }
 .card-track-image { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center top; }
 .card-content { padding: 12px; }
 .track-name { margin: 0 0 6px; font-size: 14px; font-weight: 600; line-height: 18px; overflow-wrap: anywhere; }

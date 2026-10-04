@@ -6,12 +6,28 @@ import CommonSessionDetail from '~/components/sessions/CommonSessionDetail.vue'
 import GameSelector from '~/components/layout/GameSelector.vue'
 import CommonGamePage from '~/components/pages/CommonGamePage.vue'
 import { useGameContext } from '~/composables/useGameContext'
+vi.stubGlobal('useRouter', () => ({ currentRoute: ref({ path: '/panoramica' }), replace: vi.fn().mockResolvedValue(undefined) }))
 const fixture = vi.hoisted(() => ({ gateway: vi.fn(), overview: vi.fn().mockResolvedValue(null), live: null as any, admin: null as any }))
 vi.mock('~/composables/useTelemetryGateway', () => ({ useTelemetryGateway: () => ({ getSessionsPage: fixture.gateway, getCommonHistoryOverview: fixture.overview }) }))
 vi.mock('~/composables/usePilotContext', () => ({ useTargetUserId: () => ref('qa') }))
 vi.mock('~/composables/useDevToolsAccess', () => ({ useDevToolsAccess: () => ({ canAccessDevTools: fixture.admin }) }))
 vi.mock('~/composables/useFastStatePoller', () => ({ useFastStatePoller: () => ({ fastState: fixture.live, startFastStatePolling: vi.fn(), stopFastStatePolling: vi.fn() }) }))
 describe('common game surfaces', () => {
+  it('selects the destination game before preparing its parent list', async () => {
+    useGameContext().selectGame('evo')
+    fixture.admin=ref(false); fixture.live=ref({commonLive:null})
+    const replace = vi.fn(async (path: string) => {
+      expect(path).toBe('/piste')
+      expect(useGameContext().consultedGame.value).toBe('acc')
+    })
+    vi.stubGlobal('useRouter', () => ({currentRoute:ref({path:'/piste/Monza'}),replace}))
+    const view=mount(GameSelector)
+    await view.findAll('.game-options button')[0]!.trigger('click')
+    await flushPromises()
+    expect(replace).toHaveBeenCalledTimes(1)
+    view.unmount()
+    vi.stubGlobal('useRouter', () => ({currentRoute:ref({path:'/panoramica'}),replace:vi.fn()}))
+  })
   it('keeps session navigation inside the provided pilot context', async () => {
     fixture.gateway.mockReset().mockResolvedValue({ sessions: [{ sessionId: 'pilot-session', meta: { track: 'Spa', car: 'QA' }, summary: { laps: 2 } }] })
     fixture.overview.mockResolvedValue(null)

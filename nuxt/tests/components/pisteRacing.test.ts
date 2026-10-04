@@ -3,6 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { ref } from 'vue'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import PistePage from '~/components/pages/PistePage.vue'
+import { useGameContext } from '~/composables/useGameContext'
 
 const mock = vi.hoisted(() => ({ load: vi.fn() }))
 vi.mock('~/composables/useTelemetryGateway', () => ({ useTelemetryGateway: () => ({ getTracksOverviewProjection: mock.load }) }))
@@ -12,6 +13,21 @@ let wrapper: ReturnType<typeof mount> | undefined
 afterEach(() => { wrapper?.unmount(); vi.clearAllMocks() })
 
 describe('Piste racing grid', () => {
+  it('discards old-game responses after switching while a load is pending', async () => {
+    useGameContext().selectGame('acc')
+    let oldResult!: (value: any) => void
+    mock.load.mockImplementationOnce(() => new Promise(resolve => { oldResult=resolve }))
+      .mockResolvedValueOnce([{id:'Monza',name:'EVO Monza',sessions:1}])
+    wrapper=mount(PistePage,{global:{stubs:{LayoutPageContainer:{template:'<main><slot /></main>'}}}})
+    useGameContext().selectGame('evo')
+    await flushPromises()
+    oldResult([{id:'spa',name:'OLD ACC',sessions:4}])
+    await flushPromises()
+    expect(wrapper.text()).toContain('EVO Monza')
+    expect(wrapper.text()).not.toContain('OLD ACC')
+    wrapper.unmount()
+    useGameContext().selectGame('acc')
+  })
   it('renders prepared cards in the first frame without reloading them', () => {
     wrapper = mount(PistePage, { props: { initialTracks: [{ id: 'spa', name: 'Spa', sessions: 0 }] as any }, global: { stubs: { LayoutPageContainer: { template: '<main><slot /></main>' } } } })
     expect(wrapper.text()).toContain('Spa')

@@ -7,26 +7,24 @@ import { responsiveImage, TRACK_CARD_SIZES } from '~/utils/responsiveImage'
 definePageMeta({
   layout: 'dashboard'
 })
-const gateway = useTelemetryGateway('acc')
 const baseURL = useRuntimeConfig().app.baseURL
 async function prepare() {
-  if (useGameContext().consultedGame.value !== 'acc') return { ok: false as const }
+  const gameId = useGameContext().consultedGame.value
+  const gateway = useTelemetryGateway(gameId)
   return preparePage(async () => {
     const [tracks] = await Promise.all([gateway.getTracksOverviewProjection(), preparePageFonts()])
     // The small responsive catalog is prepared as a unit: wide windows may
     // expose more than the six eager cards before the first scroll.
     await Promise.allSettled(tracks.filter(track => track.image).map(track =>
       decodeOverviewImage(responsiveImage(track.image!, baseURL, TRACK_CARD_SIZES))))
-    return tracks
+    return { tracks, gameId }
   })
 }
 const prepared = shallowRef(await prepare())
 async function retry() { prepared.value = await prepare() }
-watch(useGameContext().consultedGame, game => { if (game === 'acc') void retry() })
 </script>
 
 <template>
-  <PagesCommonGamePage v-if="useGameContext().consultedGame.value !== 'acc'" surface="piste" />
-  <PagesPistePage v-else-if="prepared.ok" :initial-tracks="prepared.value" @go-to-track="navigateTo(`/piste/${$event}`)" />
+  <PagesPistePage v-if="prepared.ok" :initial-tracks="prepared.value.gameId === useGameContext().consultedGame.value ? prepared.value.tracks : undefined" @go-to-track="navigateTo(`/piste/${encodeURIComponent($event)}`)" />
   <LayoutPagePreparationError v-else @retry="retry" />
 </template>

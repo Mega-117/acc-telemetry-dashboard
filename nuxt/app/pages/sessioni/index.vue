@@ -7,12 +7,13 @@ definePageMeta({
 })
 const gateway = useTelemetryGateway()
 async function prepare() {
+  const gameId = useGameContext().consultedGame.value
   return preparePage(async () => {
     await Promise.all([
-      gateway.getSessionsPage(undefined, { gameId: useGameContext().consultedGame.value, sessionTypes: [], fromDateIso: null, toDateIso: null, track: null, car: null, carCategory: null, hideEmpty: true }, 1, 25),
+      gateway.getSessionsPage(undefined, { gameId, sessionTypes: [], fromDateIso: null, toDateIso: null, track: null, car: null, carCategory: null, hideEmpty: true }, 1, 25),
       preparePageFonts(),
     ])
-    return true
+    return gameId
   })
 }
 const prepared = shallowRef(await prepare())
@@ -20,6 +21,6 @@ async function retry() { prepared.value = await prepare() }
 </script>
 
 <template>
-  <PagesSessioniPage v-if="prepared.ok" initially-prepared @go-to-session="navigateTo(`/sessioni/${$event}`)" />
+  <PagesSessioniPage v-if="prepared.ok" :initially-prepared="prepared.value === useGameContext().consultedGame.value" @go-to-session="navigateTo(`/sessioni/${$event}`)" />
   <LayoutPagePreparationError v-else @retry="retry" />
 </template>

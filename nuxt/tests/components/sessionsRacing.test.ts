@@ -3,6 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { ref, nextTick } from 'vue'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import SessioniPage from '~/components/pages/SessioniPage.vue'
+import { useGameContext } from '~/composables/useGameContext'
 import PaginationControls from '~/components/ui/PaginationControls.vue'
 import ScrollArea from '~/components/ui/ScrollArea.vue'
 import { installScrollbarActivity } from '~/services/ui/scrollbarActivity'
@@ -23,6 +24,7 @@ function render(initiallyPrepared = false) {
   return w
 }
 beforeEach(() => {
+  useGameContext().selectGame('acc')
   vi.useFakeTimers(); disposeScrollbars = installScrollbarActivity()
   vi.setSystemTime(new Date('2026-09-25T12:00:00'))
   fake.uid = ref('pilot')
@@ -45,7 +47,8 @@ describe('Sessioni racing single table', () => {
     }
     fake.gateway.pagerSessions.value = [common('declared-qualify', 'qualify'), common('unknown', 'unknown')]
     const w = render(); await flushPromises()
-    await w.get('[aria-label="Filtra gioco"]').setValue('evo')
+    useGameContext().selectGame('evo')
+    await nextTick()
     expect(w.findAll('tbody tr')).toHaveLength(2)
     await w.findAll('.racing-filter-tabs button')[2]!.trigger('click')
     expect(w.findAll('tbody tr')).toHaveLength(1)
@@ -124,8 +127,8 @@ describe('Sessioni racing single table', () => {
     expect(w.findAll('caption').map(x => x.text())).toEqual(['25 SETTEMBRE 2026', '24 SETTEMBRE 2026'])
     expect(w.findAll('table')[0]!.findAll('tbody tr')).toHaveLength(2)
     expect(w.findAll('tbody tr')).toHaveLength(3)
-    expect(w.findAll('select')).toHaveLength(5)
-    expect(w.get('[aria-label="Filtra gioco"]').text()).toContain('Tutti i giochi')
+    expect(w.findAll('select')).toHaveLength(4)
+    expect(w.find('[aria-label="Filtra gioco"]').exists()).toBe(false)
     expect(w.find('[title="Vista card"]').exists()).toBe(false)
     expect(w.find('input[type="checkbox"]').exists()).toBe(false)
     expect(fake.gateway.getSessionsPage).toHaveBeenCalledWith('pilot', expect.objectContaining({ hideEmpty: true }), 1, 25, false)

@@ -5,8 +5,8 @@
 // ============================================
 
 import { useGameContext } from '~/composables/useGameContext'
-import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
-import { GAME_OPTIONS, gameLabel } from '~/services/telemetry/gameCatalog'
+import { gameLabel } from '~/services/telemetry/gameCatalog'
+import GameContextTransition from '~/components/layout/GameContextTransition.vue'
 import { sessionGame, sessionFilterType, sessionCarCategory } from '~/services/telemetry/gameIdentity'
 import RacingSessionList from '~/components/sessions/RacingSessionList.vue'
 import { ref, computed, onBeforeUnmount, onMounted, watch, nextTick } from 'vue'
@@ -33,8 +33,7 @@ const emit = defineEmits<{
 type SessionType = 'practice' | 'qualify' | 'race'
 type DisplaySessionType = SessionType | 'unknown'
 const { consultedGame } = useGameContext()
-const { canAccessDevTools } = useDevToolsAccess()
-const filterGame = ref(consultedGame.value)
+const filterGame = consultedGame
 
 interface DisplaySession {
   id: string
@@ -52,6 +51,7 @@ interface DisplaySession {
   stints: number
   bestQualy?: string
   bestRace?: string
+  bestLap?: string
   source?: 'cloud' | 'local'
   syncState?: 'synced' | 'pending_sync' | 'local_only' | 'sync_failed'
 }
@@ -186,7 +186,7 @@ watch(
 
 // Transform Firebase sessions to display format
 const sessions = computed<DisplaySession[]>(() => {
-  return rawSessions.value.map(s => {
+  return rawSessions.value.filter(s => sessionGame(s) === filterGame.value).map(s => {
     const filterType = sessionFilterType(s)
     const sessionType = filterType === null ? 'unknown' : getSessionTypeLabel(filterType)
     const dateStr = s.meta.date_start?.split('T')[0] || ''
@@ -214,6 +214,7 @@ const sessions = computed<DisplaySession[]>(() => {
       bestRace: sessionRaceTime 
         ? formatLapTime(sessionRaceTime) 
         : undefined,
+      bestLap: s.summary.lapsValid > 0 && s.summary.bestLap != null && s.summary.bestLap > 0 ? formatLapTime(s.summary.bestLap) : undefined,
       source: s.source as 'cloud' | 'local' | undefined,
       syncState: s.syncState as 'synced' | 'pending_sync' | 'local_only' | 'sync_failed' | undefined
     }
@@ -355,6 +356,7 @@ function goToSession(id: string) {
 
 <template>
   <LayoutPageContainer class="sessions-page racing-data">
+    <GameContextTransition :game-id="consultedGame" :busy="isLoading">
     <h1 class="racing-sr-only">
       Sessioni
     </h1>
@@ -387,11 +389,6 @@ function goToSession(id: string) {
         </button>
       </div>
       <div class="racing-filter-selects">
-        <select v-model="filterGame" class="racing-select racing-select--compact" aria-label="Filtra gioco">
-          <option value="all">Tutti i giochi</option>
-          <option v-for="game in GAME_OPTIONS" :key="game.id" :value="game.id">{{ game.label }}</option>
-          <option v-if="canAccessDevTools" value="synthetic">Simulatore di test · DEV</option>
-        </select>
         <select
           v-model="filterTrack"
           class="racing-select racing-select--compact"
@@ -501,7 +498,7 @@ function goToSession(id: string) {
         class="session-days"
         :aria-busy="isLoading || isChangingPage"
       >
-        <RacingSessionList :groups="paginatedSessionsByDay" @go-to-session="goToSession" />
+        <RacingSessionList :groups="paginatedSessionsByDay" :common-timing="consultedGame !== 'acc'" @go-to-session="goToSession" />
       </div>
     </UiScrollArea>
     <UiPaginationControls
@@ -515,12 +512,14 @@ function goToSession(id: string) {
       item-label="sessioni"
       @page-change="onPageChange"
     />
+    </GameContextTransition>
   </LayoutPageContainer>
 </template>
 
 <style lang="scss" scoped>
 @use '@/assets/scss/racing-settings' as controls;
 .sessions-page { width: 100%; padding-top: var(--app-content-top-space); padding-bottom: 0; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.sessions-page :deep(.game-context), .sessions-page :deep(.game-context__content) { flex: 1 1 0%; min-height: 0; }
 .session-filters { margin-bottom: 24px; flex: 0 0 auto; }
 .sessions-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   overscroll-behavior-y: contain; scrollbar-gutter: stable;
