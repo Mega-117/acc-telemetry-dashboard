@@ -143,12 +143,19 @@ export function normalizeTrackOutline (
 }
 
 /** ACC Drive `ComputeMapPosition`: index `(n - 1) * spline`, no interpolation. */
-export function pointAtSpline (outline: ReadonlyArray<TrackMapPoint>, spline: unknown): TrackMapPoint | null {
+export function pointAtSpline (outline: ReadonlyArray<TrackMapPoint>, spline: unknown, interpolate = false): TrackMapPoint | null {
   const value = finite(spline)
   if (outline.length === 0 || value === null || value < 0) return null
   const wrapped = value > 1 ? value - 1 : value
   if (wrapped > 1) return null
-  return outline[Math.floor((outline.length - 1) * wrapped)] ?? null
+  const position = (outline.length - 1) * wrapped
+  const index = Math.floor(position)
+  const start = outline[index]
+  const end = outline[index + 1]
+  if (!start) return null
+  if (!interpolate || !end) return start
+  const fraction = position - index
+  return { x: start.x + (end.x - start.x) * fraction, y: start.y + (end.y - start.y) * fraction }
 }
 
 const MOTION_TAU_MS = 120

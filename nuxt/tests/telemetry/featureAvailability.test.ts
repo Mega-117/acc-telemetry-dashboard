@@ -17,6 +17,23 @@ const source = () => ({ schema: 'racercore.live', version: 1, game_id: 'evo', se
   } })
 
 describe('per-feature multisim consumers', () => {
+  it('routes measured EVO BB, stint, fuel and complete pressure averages without a fake tyre set', () => {
+    const live = readCommonLive(source(), 1100)!
+    for (const [name, value, unit] of [
+      ['brake_bias', 58.8, '%'], ['stint_time_elapsed', 120000, 'ms'],
+      ['fuel_time_remaining', 225000, 'ms'], ['fuel_reference_lap', 90000, 'ms'],
+      ['pressure_average_lap', 5, 'count'],
+      ...['FL','FR','RL','RR'].map(w => [`tyre.${w}.lap_pressure_average`, 26.8, 'psi']),
+    ] as [string, number, string][]) live.fields[name] = { value, unit, availability: 'available' }
+    const hud = commonFastPresentation(live)
+    expect(hud.brakeBiasPct).toBe(58.8)
+    expect(hud.info).toMatchObject({ stintTimeLeftMs: null, stintTimeElapsedMs: 120000, fuelLeftTimeMs: 225000, fuelLeftReferenceLapMs: 90000 })
+    expect(hud.lapPressureAverage).toMatchObject({ status: 'available', lap: 5, tyreSet: null, values: { FL: 26.8, RR: 26.8 } })
+    delete live.fields['tyre.RR.lap_pressure_average']
+    expect(commonFastPresentation(live).lapPressureAverage?.status).toBe('waiting_for_full_lap')
+    const expired = readCommonLive({ ...source(), fields: live.fields }, 3000)!
+    expect(commonFastPresentation(expired).brakeBiasPct).toBeNull()
+  })
   it('keeps motion, inputs and engine available when fuel and ACC rules are unsupported', () => {
     const live = readCommonLive(source(), 1100)!
     for (const key of ['speed', 'dashboardInputs', 'engine'] as const) expect(featureAvailability(live, TELEMETRY_FEATURES[key]).available).toBe(true)

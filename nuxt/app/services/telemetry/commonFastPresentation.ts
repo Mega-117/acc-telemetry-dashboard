@@ -11,6 +11,10 @@ export function commonFastPresentation(live: CommonLive): Partial<FastOverlaySta
   const delta = value('lap_delta', 'ms')
   const valid = commonBoolean(live, 'lap_valid')
   const initialGrip = live.gameId === 'evo' ? value('initial_track_grip', 'evo-grip') : null
+  const pressureAverage = {
+    FL: value('tyre.FL.lap_pressure_average', 'psi'), FR: value('tyre.FR.lap_pressure_average', 'psi'),
+    RL: value('tyre.RL.lap_pressure_average', 'psi'), RR: value('tyre.RR.lap_pressure_average', 'psi'),
+  }
   const tyres: FastStateTyre[] = []
   for (const id of ['FL', 'FR', 'RL', 'RR'] as const) {
     const prefix = `tyre.${id}.`
@@ -37,8 +41,8 @@ export function commonFastPresentation(live: CommonLive): Partial<FastOverlaySta
       delta: { ms: delta ?? 0, available: delta !== null,
         side: delta === null || delta === 0 ? 'zero' : delta < 0 ? 'negative' : 'positive',
         ratio: delta === null ? 0 : Math.min(Math.abs(delta) / 1000, 1), purple: false },
-      stintTimeLeftMs: value('stint_time_remaining', 'ms'), fuelLabel: '', fuelNeededL: null,
-      fuelLeftTimeMs: value('fuel_time_remaining', 'ms'), fuelLeftReferenceLapMs: null,
+      stintTimeLeftMs: value('stint_time_remaining', 'ms'), stintTimeElapsedMs: value('stint_time_elapsed', 'ms'), fuelLabel: '', fuelNeededL: null,
+      fuelLeftTimeMs: value('fuel_time_remaining', 'ms'), fuelLeftReferenceLapMs: value('fuel_reference_lap', 'ms'),
       incidents: value('incidents', 'count'), grip: null, pitExitTraffic: null,
       initialGrip: initialGrip === 0 ? 'Green' : initialGrip === 1 ? 'Fast' : initialGrip === 2 ? 'Optimum' : null,
       optimalLapTimeMs: value('optimal_lap_time', 'ms'), bestLapTimeMs: bestLap, damageTimeMs: null,
@@ -58,5 +62,9 @@ export function commonFastPresentation(live: CommonLive): Partial<FastOverlaySta
     isInPitLane: commonBoolean(live, 'in_pit_lane') === true, pitLimiterOn: commonBoolean(live, 'pit_limiter_on') === true,
     tractionControlInAction: commonBoolean(live, 'tc_active') === true, absInAction: commonBoolean(live, 'abs_active') === true,
     tyres,
+    lapPressureAverage: {
+      status: Object.values(pressureAverage).every(pressure => pressure !== null) ? 'available' : 'waiting_for_full_lap',
+      lap: value('pressure_average_lap', 'count'), tyreSet: null, values: pressureAverage,
+    },
   }
 }

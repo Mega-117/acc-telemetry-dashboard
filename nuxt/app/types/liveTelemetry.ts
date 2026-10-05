@@ -110,6 +110,7 @@ export interface FastStateInfo {
     purple: boolean
   }
   stintTimeLeftMs: number | null
+  stintTimeElapsedMs?: number | null
   fuelLabel: string
   fuelNeededL: number | null
   fuelLeftTimeMs: number | null

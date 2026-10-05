@@ -182,7 +182,7 @@ export function buildInfoPresentation(
     && info?.delta.available !== true
   const traffic = trafficValue(info?.pitExitTraffic ?? null)
   const rows: InfoRow[] = []
-  if (options.showStint) rows.push({ id: 'stint', label: 'Stint:', value: formatInfoStintDuration(info?.stintTimeLeftMs), tone: 'default' })
+  if (options.showStint) rows.push({ id: 'stint', label: 'Stint:', value: formatInfoStintDuration(info?.stintTimeLeftMs ?? info?.stintTimeElapsedMs), tone: 'default' })
   if (options.showQFuel) rows.push({ id: 'q-fuel', label: `${info?.fuelLabel || 'Q-Fuel'}:`, value: fuelValue(info?.fuelNeededL ?? null), tone: fuelTone(info?.fuelNeededL ?? null) })
   if (options.showFuelLeft) rows.push({ id: 'fuel-left', label: 'Fuel Left:', value: formatInfoFuelDuration(info?.fuelLeftTimeMs), tone: fuelLeftTone(info?.fuelLeftTimeMs, info?.fuelLeftReferenceLapMs) })
   if (options.showIncidents) rows.push({ id: 'incidents', label: 'Incidents:', value: info?.incidents === null || info?.incidents === undefined ? '--' : String(info.incidents), tone: 'default' })

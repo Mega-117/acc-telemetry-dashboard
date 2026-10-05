@@ -54,6 +54,14 @@ describe('normalizeTrackOutline', () => {
 
 describe('pointAtSpline', () => {
   const outline = normalizeTrackOutline(RECTANGLE)
+  it('interpolates EVO marker positions continuously between outline samples', () => {
+    const line = [{ x: 0, y: 0 }, { x: 100, y: 50 }]
+    expect(pointAtSpline(line, .251, true)).toEqual({ x: 25.1, y: 12.55 })
+    expect(pointAtSpline(line, .252, true)).toEqual({ x: 25.2, y: 12.6 })
+    expect(pointAtSpline(line, 1, true)).toBe(line[1])
+    expect(pointAtSpline([line[0]!], .5, true)).toBe(line[0])
+    expect(pointAtSpline([], .5, true)).toBeNull()
+  })
 
   it('uses the index (n - 1) * spline without interpolation', () => {
     expect(pointAtSpline(outline, 0)).toBe(outline[0])

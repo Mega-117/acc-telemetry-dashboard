@@ -22,6 +22,7 @@ const props = withDefaults(defineProps<{
   outline: ReadonlyArray<TrackMapPoint>
   rotationDeg?: number
   showStart?: boolean
+  interpolatePositions?: boolean
 }>(), { rotationDeg: 0 })
 const startPoint = computed(() => props.showStart ? pointAtSpline(props.outline, 0) : null)
 
@@ -69,7 +70,7 @@ function animate (now: number) {
 }
 
 function place (key: string, item: { spline: number, x: number, y: number }) {
-  const point = pointAtSpline(props.outline, shown.value[key] ?? item.spline) ?? item
+  const point = pointAtSpline(props.outline, shown.value[key] ?? item.spline, props.interpolatePositions) ?? item
   return { transform: `translate(${point.x}px, ${point.y}px)` }
 }
 
