@@ -1,10 +1,12 @@
 <script setup lang="ts">
+import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
+
 import { computed } from 'vue'
 import type { FastOverlayState } from '~/composables/useFastStatePoller'
 import { raceWeatherItem } from '~/utils/raceWeatherPresentation'
 import RaceWeatherIcon from './RaceWeatherIcon.vue'
 const props = defineProps<{ fastState: FastOverlayState }>()
-const unavailableForecast = computed(() => props.fastState.commonLive?.gameId === 'evo')
+const unavailableForecast = computed(() => !hudSourcePolicy(props.fastState).weatherForecast)
 const weather = computed(() => [
   raceWeatherItem(props.fastState.rainIntensity, 0, props.fastState.isFresh && props.fastState.isLive),
   raceWeatherItem(props.fastState.rainIntensity10Min, 10, props.fastState.isFresh && props.fastState.isLive),

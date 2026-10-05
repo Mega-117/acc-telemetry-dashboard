@@ -31,7 +31,7 @@ describe('sector reference editor',()=>{
  it('types decimal values and atomically saves all three for the bound context',async()=>{
   const {api,saved}=await setup();expect(button('sector-save').disabled).toBe(true)
   await fill();button('sector-save').click();await flush()
-  expect(api.hudOverlaySaveSettings).toHaveBeenCalledWith('sectors',{deltaReference:'custom',customSectorReference:{track:'Imola',car:'BMW',timesMs:[32500,27000,16800]}})
+  expect(api.hudOverlaySaveSettings).toHaveBeenCalledWith('sectors',{deltaReference:'custom',customSectorReference:{track:'Imola',car:'BMW',sectorCount:3,timesMs:[32500,27000,16800]}})
   expect(saved).toHaveBeenCalledTimes(1)
  })
  it('blocks invalid limits, incomplete input and context changes',async()=>{

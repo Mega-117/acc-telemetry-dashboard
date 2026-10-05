@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usesLegacyHudInput } from '~/services/sim/hudSourceAdapter'
+
 import { computed } from 'vue'
 import type { CommonLive } from '~/services/telemetry/commonLive'
 import { availabilityLabel, featureAvailability, TELEMETRY_FEATURES } from '~/services/telemetry/featureAvailability'
@@ -7,7 +9,7 @@ const props = defineProps<{ live?: CommonLive | null; feature: keyof typeof TELE
 const availability = computed(() => featureAvailability(props.live, TELEMETRY_FEATURES[props.feature]))
 // Legacy ACC HUDs already own detailed recovery messages. New connectors use
 // this notice until each feature has its own richer presenter.
-const visible = computed(() => props.live && props.live.gameId !== 'acc' && !availability.value.available)
+const visible = computed(() => props.live && !usesLegacyHudInput(props.live) && !availability.value.available)
 </script>
 
 <template>

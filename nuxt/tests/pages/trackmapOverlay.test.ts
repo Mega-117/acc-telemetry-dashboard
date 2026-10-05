@@ -39,7 +39,8 @@ describe('Track Map overlay window contract', () => {
     const component = read('app/components/overlay/TrackMapHud.vue')
     expect(component).not.toMatch(/pitTime|lapTime|stopTime|walkBack/i)
     expect(component).toContain('advanceTrackMapMotion')
-    expect(page).toContain('nowMs: standings.nowMs.value')
+    expect(page).toContain('hudTrackMapScene(fast, snapshot, standings.nowMs.value)')
+    expect(read('app/services/sim/hudSourceAdapter.ts')).toContain('sessionType: fast.sessionType, nowMs, ttlMs: snapshot?.freshness?.ttl_ms')
     expect(component).not.toMatch(/transition:\s*transform/)
   })
 

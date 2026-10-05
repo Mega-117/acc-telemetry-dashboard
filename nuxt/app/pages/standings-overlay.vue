@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { usesLegacyHudInput } from '~/services/sim/hudSourceAdapter'
+
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
@@ -55,7 +57,7 @@ const options = computed(() => ({
 }))
 const localDriver = stableComputed(() => {
   const state = fastState.fastState.value
-  if (scopedStandings.value.snapshot?.schema === 'racercore.standings' || (state.commonLive && state.commonLive.gameId !== 'acc')) return commonStandingsLocal(scopedStandings.value, standings.nowMs.value)
+  if (scopedStandings.value.snapshot?.schema === 'racercore.standings' || !usesLegacyHudInput(state.commonLive)) return commonStandingsLocal(scopedStandings.value, standings.nowMs.value)
   if (!state.localDriver) return null
   return {
     ...state.localDriver,

@@ -40,6 +40,10 @@ export default defineConfig({
       // Aggiungere qui ogni nuovo file quando si scrivono i suoi test.
       // Questo rende le thresholds un contratto verificabile, non un numero illusorio.
       include: [
+        'app/services/sim/hudSourceAdapter.ts',
+        'app/services/sim/acc/fastStateAdapter.ts',
+        'app/services/telemetry/fastStateIngress.ts',
+        'app/services/telemetry/emptyFastState.ts',
         'app/services/projections/vehicleHistory.ts',
         'app/services/telemetry/fuelHistorySummary.ts',
         'app/services/projections/gameTrackCatalogue.ts',

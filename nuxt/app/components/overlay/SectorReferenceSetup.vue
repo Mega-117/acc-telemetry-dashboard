@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
+
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
@@ -18,11 +20,8 @@ const boundContext = ref<{ track: string, car: string, gameId?: string, variant?
 const liveContext = computed(() => {
   const state = fastState.value, context = state.context
   if (!state.isFresh || state.dataSource === 'focused' || !context) return null
-  if (context.gameId && context.gameId !== 'acc') {
-    const sectorCount = state.sectorHud?.sectors.length
-    return sectorCount ? { ...context, sectorCount } : null
-  }
-  return context
+  const sectorCount = hudSourcePolicy(state).sectorCount
+  return sectorCount ? { ...context, sectorCount } : null
 })
 const contextKey = computed(() => sectorReferenceContextKey(liveContext.value))
 const boundKey = computed(() => sectorReferenceContextKey(boundContext.value))

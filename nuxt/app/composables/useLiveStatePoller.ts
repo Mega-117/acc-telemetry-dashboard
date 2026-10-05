@@ -1,3 +1,4 @@
+import { usesLegacyHudInput } from '~/services/sim/hudSourceAdapter'
 import { ref } from 'vue'
 import { readCommonLive, commonValue, commonBoolean } from '~/services/telemetry/commonLive'
 import { commonSectorHud } from '~/services/telemetry/commonSectorHud'
@@ -102,7 +103,7 @@ export function useLiveStatePoller(getApi: () => any | null, background = false)
 
   function applyState(state: any) {
     const common = readCommonLive(state?.live ?? state)
-    if (common && common.gameId !== 'acc') {
+    if (common && !usesLegacyHudInput(common)) {
       const laps = commonValue(common, 'lap_count', 'count')
       liveLap.value = common.connected ? {
         ...EMPTY_LAP_STATE, currentLap: laps === null ? null : laps + 1, lapsCompleted: laps,

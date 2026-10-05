@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
-import { buildCommonTrackMapScene } from '~/services/sim/commonTrackMapScene'
+import { hudTrackMapScene, hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
@@ -23,7 +23,7 @@ import {
 // L'UNICO punto della minimappa che conosce un simulatore: l'adattatore traduce
 // il suo feed nella scena neutra che il disegno consuma. Un altro simulatore =
 // un altro adattatore (e la sua cartella di mappe), nient'altro.
-import { buildAccTrackMapScene, type AccStandingsCar } from '~/services/sim/acc/accTrackMapScene'
+import { type AccStandingsCar } from '~/services/sim/acc/accTrackMapScene'
 
 definePageMeta({ layout: 'hud-overlay' })
 
@@ -72,16 +72,7 @@ const view = stableComputed(() => {
   const snapshot = standings.state.value.snapshot as {
     cars?: AccStandingsCar[], freshness?: { ttl_ms?: number }, session?: { focused_car_index?: number | null }
   } | null
-  const scene = sim.value !== 'acc' ? buildCommonTrackMapScene(fast.commonLive) : buildAccTrackMapScene({
-    cars: snapshot?.cars ?? [],
-    focusedCarIndex: snapshot?.session?.focused_car_index ?? null,
-    localCarIndex: fast.localDriver?.carIndex ?? null,
-    localLapPosition: fast.isLive ? fast.normalizedCarPosition : null,
-    sessionType: fast.sessionType,
-    // Chi ha lasciato il server resta in lista ma smette di aggiornarsi: non si disegna.
-    nowMs: standings.nowMs.value,
-    ttlMs: snapshot?.freshness?.ttl_ms ?? null,
-  })
+  const scene = hudTrackMapScene(fast, snapshot, standings.nowMs.value)
   return buildTrackMapView({
     outline: outline.value,
     scene,
@@ -117,7 +108,7 @@ onUnmounted(() => {
     <OverlayPlacementLock overlay-id="trackmap" />
     <TelemetryFeatureNotice :live="telemetry.fastState.value.commonLive" :feature="overlay.settings.value?.circleView ? 'trackReferences' : 'trackMap'" unsupported-text="Sagoma pista non disponibile: vista circolare" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
-    <TrackMapHud :view="view" :outline="outline" :rotation-deg="rotationDeg" :show-start="sim === 'evo'" :interpolate-positions="sim === 'evo'" class="overlay-canvas" :style="canvasStyle" />
+    <TrackMapHud :view="view" :outline="outline" :rotation-deg="rotationDeg" :show-start="hudSourcePolicy(telemetry.fastState.value).mapStartMarker" :interpolate-positions="hudSourcePolicy(telemetry.fastState.value).interpolateMap" class="overlay-canvas" :style="canvasStyle" />
   </main>
 </template>
 

@@ -1,3 +1,4 @@
+import { usesLegacyHudInput } from '~/services/sim/hudSourceAdapter'
 import { EMPTY_STANDINGS_LAYOUT, normalizeStandingsLayout, type StandingsLayout } from './standingsLayout'
 import type { CommonLive } from '~/services/telemetry/commonLive'
 import {
@@ -118,7 +119,7 @@ export interface StandingsStateEnvelope {
 export function scopeStandingsForLive(state: StandingsStateEnvelope, live: CommonLive | null | undefined, now = Date.now()): StandingsStateEnvelope {
   const denied: StandingsStateEnvelope = { status: 'unavailable', reason: 'source-context-mismatch', snapshot: null }
   const snapshot = state.snapshot
-  if (snapshot?.schema !== 'racercore.standings') return live && live.gameId !== 'acc' ? denied : state
+  if (snapshot?.schema !== 'racercore.standings') return !usesLegacyHudInput(live) ? denied : state
   const age = now - snapshot.freshness.generated_at_ms
   return live?.connected && live.fresh && ['live', 'paused'].includes(live.lifecycle || '')
     && live.capabilities.standings === true && live.gameId === snapshot.game_id && live.sessionId === snapshot.session_id

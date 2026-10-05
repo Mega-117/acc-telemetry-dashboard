@@ -10,7 +10,7 @@ export function commonFastPresentation(live: CommonLive): Partial<FastOverlaySta
   const bestLap = value('best_lap_time', 'ms')
   const delta = value('lap_delta', 'ms')
   const valid = commonBoolean(live, 'lap_valid')
-  const initialGrip = live.gameId === 'evo' ? value('initial_track_grip', 'evo-grip') : null
+  const initialGrip = value('initial_track_grip', 'track-grip')
   const pressureAverage = {
     FL: value('tyre.FL.lap_pressure_average', 'psi'), FR: value('tyre.FR.lap_pressure_average', 'psi'),
     RL: value('tyre.RL.lap_pressure_average', 'psi'), RR: value('tyre.RR.lap_pressure_average', 'psi'),
@@ -29,7 +29,7 @@ export function commonFastPresentation(live: CommonLive): Partial<FastOverlaySta
   }
   return {
     sectorHud: commonSectorHud(live),
-    commonLive: live, isFresh: live.fresh, isLive: live.connected && live.lifecycle !== 'paused' && live.lifecycle !== 'replay',
+    commonLive: live, isFresh: live.fresh, isLive: live.connected && live.lifecycle === 'live',
     context: { track: live.identity?.track ?? null, car: live.identity?.car ?? null, sessionUid: live.sessionId,
       sessionType: null, sessionIndex: null, serverId: null, gameId: live.gameId, variant: live.identity?.variant ?? null },
     speedKmh: value('speed', 'km/h'), rpm: value('rpm', 'rpm'), maxRpm: value('max_rpm', 'rpm'),

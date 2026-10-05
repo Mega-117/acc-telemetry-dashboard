@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
+
 import { computed } from 'vue'
 import type { FastOverlayState, FastStateTyre } from '~/composables/useFastStatePoller'
 import { tyreSlipBarStyle, tyreSlipStateLabel } from '~/utils/tyreSlipPresentation'
@@ -29,7 +31,7 @@ const hasLiveTyres = computed(() => props.fastState.isLive && props.fastState.is
 // Partial connectors publish only measured corners; preserve each known value.
 const visibleTyres = computed(() => idleTyres.map(idle => hasLiveTyres.value
   ? props.fastState.tyres.find(tyre => tyre.id === idle.id) ?? idle : idle))
-const hasAccSlipPolicy = computed(() => !props.fastState.commonLive || props.fastState.commonLive.gameId === 'acc')
+const hasSlipPolicy = computed(() => hudSourcePolicy(props.fastState).slipBands)
 const speedLabel = computed(() => props.fastState.speedKmh !== null
   ? `${Math.round(props.fastState.speedKmh)} km/h`
   : 'in attesa')
@@ -62,7 +64,7 @@ function formatSlip(tyre: FastStateTyre) {
       >
         <div class="tyre-slip__topline">
           <strong>{{ tyre.id }}</strong>
-          <span class="tyre-slip__state">{{ tyreSlipStateLabel(tyre.slipState, hasLiveTyres && hasAccSlipPolicy && tyre.wheelSlip !== null) }}</span>
+          <span class="tyre-slip__state">{{ tyreSlipStateLabel(tyre.slipState, hasLiveTyres && hasSlipPolicy && tyre.wheelSlip !== null) }}</span>
         </div>
         <div class="tyre-slip__bar" aria-hidden="true">
           <span :style="tyreFillStyle(tyre)" />

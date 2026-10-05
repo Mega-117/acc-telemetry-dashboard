@@ -45,7 +45,7 @@ describe('multisim HUD and audio isolation', () => {
   it('presents EVO tyre and timing facts without ACC tyre rules or invented sectors', () => {
     const source = live()
     source.gameId = 'evo'
-    source.fields.initial_track_grip = { value: 0, availability: 'available', unit: 'evo-grip' }
+    source.fields.initial_track_grip = { value: 0, availability: 'available', unit: 'track-grip' }
     source.fields['tyre.FL.temperature_target_ratio'] = { value: .5, availability: 'available', unit: 'ratio' }
     source.capabilities = { tyre_pressure: true, lap_timing: true, lap_validity: true }
     for (const id of ['FL', 'FR', 'RL', 'RR']) {

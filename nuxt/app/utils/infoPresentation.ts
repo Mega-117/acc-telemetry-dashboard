@@ -1,3 +1,4 @@
+import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 import type { FastOverlayState, FastStateInfo } from '~/composables/useFastStatePoller'
 
 export interface InfoOptions {
@@ -178,7 +179,7 @@ export function buildInfoPresentation(
   options: InfoOptions = DEFAULT_INFO_OPTIONS,
 ): InfoPresentation {
   const info: FastStateInfo | null = state.info
-  const unknownCommonDelta = state.commonLive != null && state.commonLive.gameId !== 'acc'
+  const unknownCommonDelta = hudSourcePolicy(state).explicitDeltaAvailability
     && info?.delta.available !== true
   const traffic = trafficValue(info?.pitExitTraffic ?? null)
   const rows: InfoRow[] = []

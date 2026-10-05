@@ -1,3 +1,4 @@
+import { usesLegacyHudInput } from '~/services/sim/hudSourceAdapter'
 import type {
   FastOverlayState,
   FastStateInfo,
@@ -458,7 +459,7 @@ export function routeOverlayTelemetry(
 ): RoutedOverlayTelemetry {
   // Broadcasting is an ACC source; even a fresh envelope or latched remote
   // camera must not replace another game's local facts.
-  if (local.commonLive && local.commonLive.gameId !== 'acc') {
+  if (!usesLegacyHudInput(local.commonLive)) {
     return { source: 'local', fastState: local, sectorHud: local.sectorHud, focusedCar: null }
   }
   if (focusedState?.status !== 'available' || !focusedState.snapshot) {

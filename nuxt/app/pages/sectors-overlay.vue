@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
+
 import { completedLapHoldSample } from '~/utils/completedLapHoldSample'
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
@@ -92,8 +94,7 @@ const showCurrentLap = computed(() => settings.value?.showCurrentLap !== false)
 const deltaReference = computed(() => normalizeSectorDeltaReference(settings.value?.deltaReference))
 const customSectorTimes = computed(() => fastState.value.isFresh
   ? resolveCustomSectorTimes(settings.value?.customSectorReferences, { ...fastState.value.context,
-    sectorCount: fastState.value.context?.gameId && fastState.value.context.gameId !== 'acc'
-      ? fastState.value.sectorHud?.sectors.length ?? 0 : 3 }) : null)
+    sectorCount: hudSourcePolicy(fastState.value).sectorCount }) : null)
 const variant = computed(() => settings.value?.variant === 'compact' ? 'compact' : 'classic')
 const onTargetPage = computed(() => variant.value === 'compact' && compactPage.value === 'target')
 const localCompactPresentation = computed(() => resolveLocalCompactPresentation(fastState.value))
@@ -282,7 +283,7 @@ onBeforeUnmount(() => {
         <template #live>
           <SectorDeltaHud
             :sector-hud="visibleSectorHud"
-            :idle-sector-count="fastState.context?.gameId === 'acc' ? 3 : 0"
+            :idle-sector-count="hudSourcePolicy(fastState).sectorCount"
             :show-reference="showReference"
             :show-best="showBest"
             :show-current-lap="showCurrentLap"
@@ -313,7 +314,7 @@ onBeforeUnmount(() => {
       <SectorDeltaHud
         v-else
         :sector-hud="visibleSectorHud"
-        :idle-sector-count="fastState.context?.gameId === 'acc' ? 3 : 0"
+        :idle-sector-count="hudSourcePolicy(fastState).sectorCount"
         :show-reference="showReference"
         :show-best="showBest"
         :show-current-lap="showCurrentLap"
