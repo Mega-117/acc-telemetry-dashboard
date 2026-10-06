@@ -54,6 +54,15 @@ async function renderHud(props: Record<string, unknown>): Promise<string> {
 }
 
 describe('SectorDeltaHud', () => {
+  it.each(['classic', 'compact'])('identifies previous lap during hold and clears the label afterwards (%s)', async variant => {
+    const held = await renderHud({ variant, sectorHud: { ...sectorHud, mode: 'last_lap' }, compactDisplayLap: { timeMs: 91000, valid: true } })
+    const label = variant === 'compact' ? 'LAST LAP' : 'ULTIMO GIRO'
+    expect(held).toContain(label)
+    expect(await renderHud({ variant })).not.toContain(label)
+    if (variant === 'compact') {
+      expect(await renderHud({ variant, sectorHud: { ...sectorHud, mode: 'last_lap' }, compactDisplayLap: { timeMs: 91000, valid: true }, targetOutcome: 'inside' })).toContain('LAST LAP · NEL TARGET')
+    }
+  })
   it.each(['classic', 'compact'])('does not invent ACC sectors when a common source has no cardinality (%s)', async variant => {
     const html = await renderHud({ sectorHud: null, idleSectorCount: 0, variant })
     expect(html).toContain('Settori non disponibili')

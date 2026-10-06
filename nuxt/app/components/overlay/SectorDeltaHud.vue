@@ -186,7 +186,7 @@ function ariaLabel(sector: SectorHudEntry): string {
           class="sector-compact__lap-label"
           :class="{ 'sector-compact__lap-label--target': targetOutcome !== 'neutral' && compactCurrentLapValid === true }"
         >{{ compactCurrentLapValid === true && targetOutcome !== 'neutral'
-          ? (targetOutcome === 'inside' ? 'NEL TARGET' : 'FUORI TARGET') : 'CURRENT LAP' }}</small>
+          ? `${sectorHud?.mode === 'last_lap' ? 'LAST LAP · ' : ''}${targetOutcome === 'inside' ? 'NEL TARGET' : 'FUORI TARGET'}` : (sectorHud?.mode === 'last_lap' ? 'LAST LAP' : 'CURRENT LAP') }}</small>
       </div>
       <div class="sector-compact__rows">
         <div
@@ -214,7 +214,7 @@ function ariaLabel(sector: SectorHudEntry): string {
     </template>
     <template v-else>
       <div class="sector-delta-hud__header sector-delta-hud__header--classic">
-        <span class="sector-delta-hud__title">SETTORI</span>
+        <span class="sector-delta-hud__title">{{ sectorHud?.mode === 'last_lap' ? 'SETTORI · ULTIMO GIRO' : 'SETTORI' }}</span>
         <em class="sector-delta-hud__comparison">VS {{ comparisonToken }}</em>
       </div>
       <div class="sector-delta-hud__grid" :style="{ gridTemplateColumns: `repeat(${visibleSectors.length}, minmax(0, 1fr))` }">

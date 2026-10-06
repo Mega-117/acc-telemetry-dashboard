@@ -13,6 +13,11 @@ const raw = () => ({ schema: 'racercore.session', version: 1, game_id: 'evo', ca
     air_temp: 26, road_temp: 35, sector_times_ms: [36693, 40107, 38172] }] }] })
 
 describe('recorded EVO session uses ACC detail models', () => {
+  it('uses the same truncated mean as persisted history', () => {
+    const source = raw(), template = source.stints[0]!.laps[0]!
+    source.stints[0]!.laps = [94345, 89020, 89310, 87777, 87487].map((ms, i) => ({ ...template, lap_number: i + 1, lap_time_ms: ms }))
+    expect(recordedSessionForDetail(source)!.stints[0]!.avg_clean_lap).toBe(89587)
+  })
   it('preserves raw export and supplies real sectors to the shared table and theoretical sector sum', () => {
     const source = raw(), original = JSON.stringify(source), adapted = recordedSessionForDetail(source)!
     const laps = buildSessionDetailLaps(adapted.stints[0]!.laps, formatLapTime)

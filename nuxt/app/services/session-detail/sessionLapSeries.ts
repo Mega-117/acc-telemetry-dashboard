@@ -1,4 +1,4 @@
-import { timeToSeconds } from '~/services/session-detail/sessionMath'
+import { averageLapMilliseconds, timeToSeconds } from '~/services/session-detail/sessionMath'
 import type {
   LapSeriesSource,
   LapSeriesSummary,
@@ -135,7 +135,7 @@ export function buildIncludedLapSummary(
     return best == null ? point.timeSeconds : Math.min(best, point.timeSeconds)
   }, null)
   const avgMs = valid.length >= minAverageLaps
-    ? Math.round(valid.reduce((sum, point) => sum + point.timeSeconds * 1000, 0) / valid.length)
+    ? averageLapMilliseconds(valid.map(point => point.timeSeconds * 1000))
     : null
 
   return {

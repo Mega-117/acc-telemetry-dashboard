@@ -1,6 +1,7 @@
 import type { FullSession, LapData } from '~/types/telemetry'
 import { canUseAccRules, recordingGame } from '~/services/telemetry/gameIdentity'
 import { historyTrackId } from '~/services/projections/vehicleHistory'
+import { averageLapMilliseconds } from '~/services/session-detail/sessionMath'
 
 const object = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
 const text = (value: unknown, fallback = '') => typeof value === 'string' ? value : fallback
@@ -36,7 +37,7 @@ export function recordedSessionForDetail(raw: unknown): FullSession | null {
     const trimmed = clean.filter(lap => lap.lap_time_ms <= best * 1.15)
     return { stint_number: positive(stint.stint_number) || index + 1,
       type: fuel > 0 ? fuel <= 20 ? 'Qualify' : 'Race' : 'Unknown', fuel_start: fuel,
-      avg_clean_lap: trimmed.length >= 5 ? Math.round(trimmed.reduce((sum, lap) => sum + lap.lap_time_ms, 0) / trimmed.length) : 0,
+      avg_clean_lap: trimmed.length >= 5 ? averageLapMilliseconds(trimmed.map(lap => lap.lap_time_ms)) ?? 0 : 0,
       stint_drive_time_ms: laps.filter(lap => lap.completeness === 'complete').reduce((sum, lap) => sum + lap.lap_time_ms, 0), laps }
   })
   const laps = stints.flatMap(stint => stint.laps), valid = laps.filter(lap => lap.is_valid)

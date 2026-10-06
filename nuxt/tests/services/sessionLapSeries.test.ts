@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { averageLapMilliseconds } from '~/services/session-detail/sessionMath'
 import {
   buildIncludedLapSummary,
   buildBoundaryLapExclusions,
@@ -11,6 +12,15 @@ import {
 } from '~/services/session-detail/sessionLapSeries'
 
 describe('sessionLapSeries', () => {
+  it('matches saved integer-ms averages without floating point loss', () => {
+    const points = normalizeLapSeries({
+      laps: ['1:34.345', '1:29.020', '1:29.310', '1:27.777', '1:27.487'].map(time => ({ time, valid: true })),
+      source: 'a', strategy: 'A', stintNumber: 1
+    })
+    expect(buildIncludedLapSummary(points).avgMs).toBe(89587)
+    expect(averageLapMilliseconds(Array(5).fill(1.001 * 1000))).toBe(1001)
+    expect(averageLapMilliseconds([])).toBeNull()
+  })
   it('esclude gli estremi di ogni stint senza mutare dati, durata o origine', () => {
     const points = ['a', 'b'].flatMap(source => [1, 2].flatMap(stintNumber => normalizeLapSeries({
       laps: [150, 101, 102, 160].map((seconds, i) => ({ lap: i + 1, time: `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}.000`, valid: true })),

@@ -10,3 +10,9 @@ export function secondsToTime(seconds: number): string {
   const minutes = Math.floor(seconds / 60)
   return `${minutes}:${(seconds % 60).toFixed(3).padStart(6, '0')}`
 }
+
+/** Match persisted history: average integer milliseconds, dropping sub-ms remainder. */
+export function averageLapMilliseconds(times: readonly number[]): number | null {
+  if (!times.length) return null
+  return Math.trunc(times.reduce((sum, ms) => sum + Math.round(ms), 0) / times.length)
+}
