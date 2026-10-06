@@ -18,7 +18,7 @@ export function gameUiSupport(gameId: string | null | undefined) {
   const full = gameId === 'acc'
   return { pitwall: full, adaptiveCoach: full, pressureAdvice: full,
     quickAutomations: full, quickVoiceControls: full || gameId === 'evo',
-    extendedVoiceControls: full, fullStandings: full,
+    extendedVoiceControls: full, quickSectorReferences: full, fullStandings: full,
     mapOptions: full }
 }
 

@@ -339,6 +339,7 @@ const { fastState, startFastStatePolling, stopFastStatePolling } =
   useFastStatePoller(getOverlayApi, true)
 const support = computed(() => gameUiSupport(fastState.value.commonLive?.gameId))
 watch(() => support.value.quickAutomations, allowed => { if (!allowed) isFuelSetupOpen.value = false }, { flush: 'sync' })
+watch(() => support.value.quickSectorReferences, allowed => { if (!allowed) isSectorReferenceSetupOpen.value = false }, { flush: 'sync' })
 
 const { trackingStart, trackingComplete, trackingAbandon } = useTrackingRecord(
   getOverlayApi,
@@ -1119,7 +1120,7 @@ onBeforeUnmount(() => {
                     </button>
                     <button v-if="infoTargetActive" class="quick-reference-off" data-overlay-wheel-action="target-disable" title="Disattiva target giro" aria-label="Disattiva target giro" :disabled="referenceBusy" @click="disableReference('target')"><Power :size="14" /></button>
                     </div>
-                    <div class="quick-reference" :class="{ 'is-active': customSectorsActive }">
+                    <div v-if="support.quickSectorReferences" class="quick-reference" :class="{ 'is-active': customSectorsActive }">
                     <button type="button" class="launcher-tool-button" :aria-pressed="customSectorsActive" title="Configura riferimenti settori" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
                       <Check v-if="customSectorsActive" class="quick-reference-check" :size="12" aria-hidden="true" /><Flag :size="22" aria-hidden="true" /><span>Settori</span>
                     </button>
@@ -1240,7 +1241,7 @@ onBeforeUnmount(() => {
                   @cancel="cancelInfoTargetSetup"
                 />
                 <SetupFuelPanel v-else-if="isFuelSetupOpen && support.quickAutomations" v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" editor-only @cancel="closeFuelSetup" />
-                <SectorReferenceSetup v-else-if="isSectorReferenceSetupOpen" ref="sectorReferenceSetup" keyboard-overlay @cancel="closeSectorReferenceSetup" @saved="saveSectorReferenceSetup" />
+                <SectorReferenceSetup v-else-if="isSectorReferenceSetupOpen && support.quickSectorReferences" ref="sectorReferenceSetup" keyboard-overlay @cancel="closeSectorReferenceSetup" @saved="saveSectorReferenceSetup" />
               </template>
 
               <template v-else-if="phase === 'completed'">
