@@ -7,6 +7,7 @@ export interface HudOverlaySettings {
   enabled: boolean
   locked: boolean
   scale: number
+  viewportScale?: number
   bounds: unknown
   showReference?: boolean
   showBest?: boolean
@@ -166,6 +167,12 @@ export function useHudOverlay(overlayId: string, getApi: () => HudOverlayBridge 
     return getApi()
   }
 
+  function applySettingsScale(value: HudOverlaySettings): void {
+    const preferred = clampScale(value.scale, overlayId)
+    const fitted = Number(value.viewportScale)
+    scale.value = Number.isFinite(fitted) && fitted > 0 ? Math.min(preferred, fitted) : preferred
+  }
+
   const interactionContract = useOverlayInteractionContract({
     getApi,
     isForcedCapture: () => isPlacing.value,
@@ -193,7 +200,7 @@ export function useHudOverlay(overlayId: string, getApi: () => HudOverlayBridge 
     const loaded = await bridge.hudOverlayGetSettings(overlayId)
     settingsLoaded = loaded !== null
     settings.value = loaded ?? null
-    if (loaded?.scale !== undefined) scale.value = clampScale(loaded.scale, overlayId)
+    if (loaded?.scale !== undefined) applySettingsScale(loaded)
     return settings.value
   }
 
@@ -241,7 +248,7 @@ export function useHudOverlay(overlayId: string, getApi: () => HudOverlayBridge 
     if (typeof bridge.onHudOverlaySettings === 'function') {
       unsubscribers.push(bridge.onHudOverlaySettings((value: HudOverlaySettings) => {
         settings.value = value ?? null
-        if (value?.scale !== undefined) scale.value = clampScale(value.scale, overlayId)
+        if (value?.scale !== undefined) applySettingsScale(value)
       }))
     }
   }

@@ -36,6 +36,20 @@ describe('HUD_OVERLAY_INTERACTIONS', () => {
 })
 
 describe('useHudOverlay', () => {
+  it('adatta il rendering al monitor senza perdere la scala preferita e la ripristina', async () => {
+    const { api, cbs } = makeApi()
+    api.hudOverlayGetSettings.mockResolvedValue({ enabled: true, locked: true, scale: 1.4, bounds: null, viewportScale: 0.4 } as any)
+    const hud = useHudOverlay('tyres', () => api)
+    hud.start()
+    await hud.loadSettings()
+    expect(hud.scale.value).toBe(0.4)
+    expect(hud.settings.value?.scale).toBe(1.4)
+    cbs.settings?.({ enabled: true, locked: true, scale: 1.4, bounds: null })
+    expect(hud.scale.value).toBe(1.4)
+    cbs.settings?.({ scale: 1.4, viewportScale: -1 })
+    expect(hud.scale.value).toBe(1.4)
+    hud.stop()
+  })
   afterEach(() => vi.unstubAllGlobals())
 
   it('start imposta isElectron e la scala iniziale, e si iscrive agli eventi', () => {
