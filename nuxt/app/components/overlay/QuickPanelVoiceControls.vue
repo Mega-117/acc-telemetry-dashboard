@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { Flag, Route, Gauge, Target } from '@lucide/vue'
 
-defineProps<{
+withDefaults(defineProps<{
   coach: boolean
   references: boolean
   pressure: boolean
   target: boolean
   disabled: boolean
-}>()
+  extendedControls?: boolean
+}>(), { extendedControls: true })
 const emit = defineEmits<{
   'toggle-coach': []
   'toggle-references': []
@@ -26,19 +27,19 @@ const emit = defineEmits<{
         <Flag :size="20" aria-hidden="true" /><span>Giri</span>
         <small aria-hidden="true">{{ coach ? 'ON' : 'OFF' }}</small>
       </button>
-      <button type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': references }"
+      <button v-if="extendedControls" type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': references }"
         :aria-checked="references" aria-label="Riferimenti giro" :disabled="disabled"
         data-overlay-wheel-action="references" @click="emit('toggle-references')">
         <Route :size="20" aria-hidden="true" /><span>Riferimenti</span>
         <small aria-hidden="true">{{ references ? 'ON' : 'OFF' }}</small>
       </button>
-      <button type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': pressure }"
+      <button v-if="extendedControls" type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': pressure }"
         :aria-checked="pressure" aria-label="Avvisi pressioni" :disabled="disabled"
         data-overlay-wheel-action="pressure-audio" @click="emit('toggle-pressure')">
         <Gauge :size="20" aria-hidden="true" /><span>Pressioni</span>
         <small aria-hidden="true">{{ pressure ? 'ON' : 'OFF' }}</small>
       </button>
-      <button type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': target }"
+      <button v-if="extendedControls" type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': target }"
         :aria-checked="target" aria-label="Voce target giro" :disabled="disabled"
         data-overlay-wheel-action="target-voice" @click="emit('toggle-target')">
         <Target :size="20" aria-hidden="true" /><span>Target</span>

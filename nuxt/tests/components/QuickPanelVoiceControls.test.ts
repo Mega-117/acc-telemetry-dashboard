@@ -4,11 +4,35 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import QuickPanelVoiceControls from '~/components/overlay/QuickPanelVoiceControls.vue'
 import PitwallOverlayButton from '~/components/pitwall/PitwallOverlayButton.vue'
 import { useOverlayActionSelection } from '~/composables/useOverlayActionSelection'
+import { gameUiSupport } from '~/services/telemetry/gameCatalog'
 
 let app: ReturnType<typeof createApp> | undefined
 afterEach(() => { app?.unmount(); document.body.innerHTML = ''; vi.restoreAllMocks() })
 
 describe('Ctrl+K voice switches', () => {
+  it('keeps the lap announcement toggle usable on EVO and restores all ACC controls', async () => {
+    const game = ref('evo')
+    const enabled = ref(false)
+    const toggle = vi.fn(() => { enabled.value = !enabled.value })
+    const host = document.createElement('div'); document.body.append(host)
+    app = createApp({ setup: () => () => {
+      const support = gameUiSupport(game.value)
+      return support.quickVoiceControls ? h(QuickPanelVoiceControls, {
+        coach: enabled.value, references: true, pressure: true, target: true, disabled: false,
+        extendedControls: support.extendedVoiceControls, 'onToggle-coach': toggle,
+      }) : null
+    } })
+    app.mount(host)
+    expect([...host.querySelectorAll('button')].map(b => b.getAttribute('aria-label'))).toEqual(['Avvisi giro'])
+    host.querySelector<HTMLButtonElement>('button')!.click(); await nextTick()
+    expect(toggle).toHaveBeenCalledTimes(1)
+    expect(host.querySelector('button')!.getAttribute('aria-checked')).toBe('true')
+    game.value = 'acc'; await nextTick()
+    expect(host.querySelectorAll('button')).toHaveLength(4)
+    expect(host.querySelector('button')!.getAttribute('aria-checked')).toBe('true')
+    game.value = 'unknown'; await nextTick()
+    expect(host.querySelectorAll('button')).toHaveLength(0)
+  })
   it('shows real Pitwall states independently of pointer selection, without changing its visible label', async () => {
     let update: (value: { state: string; available: boolean; roomId: null; reason: null }) => void = () => {}
     const host = document.createElement('div'); document.body.append(host)

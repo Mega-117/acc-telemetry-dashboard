@@ -17,7 +17,8 @@ export function gameLabel(gameId: string | null | undefined): string {
 export function gameUiSupport(gameId: string | null | undefined) {
   const full = gameId === 'acc'
   return { pitwall: full, adaptiveCoach: full, pressureAdvice: full,
-    quickAutomations: full, quickVoiceControls: full, fullStandings: full,
+    quickAutomations: full, quickVoiceControls: full || gameId === 'evo',
+    extendedVoiceControls: full, fullStandings: full,
     mapOptions: full }
 }
 

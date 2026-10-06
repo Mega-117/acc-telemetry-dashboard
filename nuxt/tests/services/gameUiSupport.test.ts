@@ -3,7 +3,10 @@ import { gameUiSupport, hudSettingSupported } from '~/services/telemetry/gameCat
 describe('product support separate from live data', () => {
   it('preserves full ACC settings and restricts EVO and unknown games', () => {
     expect(Object.values(gameUiSupport('acc')).every(Boolean)).toBe(true)
-    for (const game of ['evo', 'unknown', null]) expect(Object.values(gameUiSupport(game)).some(Boolean)).toBe(false)
+    for (const game of ['unknown', null]) expect(Object.values(gameUiSupport(game)).some(Boolean)).toBe(false)
+    expect(gameUiSupport('evo').quickVoiceControls).toBe(true)
+    expect(gameUiSupport('evo').extendedVoiceControls).toBe(false)
+    expect(gameUiSupport('evo').quickAutomations).toBe(false)
     expect(hudSettingSupported('acc', 'info', 'showDamage')).toBe(true)
     expect(hudSettingSupported('evo', 'info', 'showDamage')).toBe(false)
     expect(hudSettingSupported('evo', 'info', 'showStint')).toBe(true)

@@ -1088,6 +1088,7 @@ onBeforeUnmount(() => {
                   <div class="launcher-tools__actions">
 
                     <QuickPanelVoiceControls v-if="support.quickVoiceControls"
+                      :extended-controls="support.extendedVoiceControls"
                       :coach="spotterEnabled"
                       :references="trackVoiceReferencesEnabled"
                       :pressure="pressureWarningsEnabled"
