@@ -1086,7 +1086,7 @@ onBeforeUnmount(() => {
                     </div>
                   </header>
                   <div class="launcher-tools__actions">
-
+                    <div class="quick-panel-main">
                     <QuickPanelVoiceControls v-if="support.quickVoiceControls"
                       :extended-controls="support.extendedVoiceControls"
                       :coach="spotterEnabled"
@@ -1099,6 +1099,7 @@ onBeforeUnmount(() => {
                       @toggle-pressure="togglePressureAudio"
                       @toggle-target="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
                     />
+                    <div class="quick-panel-categories">
                     <section v-if="!support.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
                       <h2 class="quick-panel-heading">Riferimenti</h2>
                       <div class="quick-panel-pair">
@@ -1196,6 +1197,8 @@ onBeforeUnmount(() => {
 
                     </div>
                     </section>
+                    </div>
+                    </div>
                     <details v-if="showQuickPanelDevTools" class="quick-panel-dev">
                       <summary>Strumenti sviluppo</summary>
                       <button type="button" class="launcher-tool-button" :aria-pressed="previewAllQuickPanelButtons" @click="previewAllQuickPanelButtons = !previewAllQuickPanelButtons; scheduleOverlaySizeSync()">
