@@ -10,20 +10,24 @@ let app: ReturnType<typeof createApp> | undefined
 afterEach(() => { app?.unmount(); document.body.innerHTML = ''; vi.restoreAllMocks() })
 
 describe('Ctrl+K voice switches', () => {
-  it('keeps the lap announcement toggle usable on EVO and restores all ACC controls', async () => {
+  it('keeps lap and reference voice toggles usable on EVO and restores all ACC controls', async () => {
     const game = ref('evo')
     const enabled = ref(false)
     const toggle = vi.fn(() => { enabled.value = !enabled.value })
+    const toggleReferences = vi.fn()
     const host = document.createElement('div'); document.body.append(host)
     app = createApp({ setup: () => () => {
       const support = gameUiSupport(game.value)
       return support.quickVoiceControls ? h(QuickPanelVoiceControls, {
         coach: enabled.value, references: true, pressure: true, target: true, disabled: false,
         extendedControls: support.extendedVoiceControls, 'onToggle-coach': toggle,
+        'onToggle-references': toggleReferences,
       }) : null
     } })
     app.mount(host)
-    expect([...host.querySelectorAll('button')].map(b => b.getAttribute('aria-label'))).toEqual(['Avvisi giro'])
+    expect([...host.querySelectorAll('button')].map(b => b.getAttribute('aria-label'))).toEqual(['Avvisi giro', 'Riferimenti giro'])
+    host.querySelector<HTMLButtonElement>('[aria-label="Riferimenti giro"]')!.click(); await nextTick()
+    expect(toggleReferences).toHaveBeenCalledTimes(1)
     host.querySelector<HTMLButtonElement>('button')!.click(); await nextTick()
     expect(toggle).toHaveBeenCalledTimes(1)
     expect(host.querySelector('button')!.getAttribute('aria-checked')).toBe('true')

@@ -27,7 +27,7 @@ const emit = defineEmits<{
         <Flag :size="20" aria-hidden="true" /><span>Giri</span>
         <small aria-hidden="true">{{ coach ? 'ON' : 'OFF' }}</small>
       </button>
-      <button v-if="extendedControls" type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': references }"
+      <button type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': references }"
         :aria-checked="references" aria-label="Riferimenti giro" :disabled="disabled"
         data-overlay-wheel-action="references" @click="emit('toggle-references')">
         <Route :size="20" aria-hidden="true" /><span>Riferimenti</span>
