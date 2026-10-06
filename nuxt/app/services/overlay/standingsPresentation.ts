@@ -1,8 +1,9 @@
 import { usesLegacyHudInput } from '~/services/sim/hudSourceAdapter'
 import { EMPTY_STANDINGS_LAYOUT, normalizeStandingsLayout, type StandingsLayout } from './standingsLayout'
-import type { CommonLive } from '~/services/telemetry/commonLive'
+import { commonValue, commonBoolean, type CommonLive } from '~/services/telemetry/commonLive'
 import {
   standingsManufacturerLogo,
+  standingsManufacturerFromModel,
   type StandingsPublicPathResolver,
 } from './standingsManufacturer'
 
@@ -108,6 +109,11 @@ export interface StandingsLocalDriverSnapshot {
   firstName: string | null
   lastName: string | null
   position: number | null
+  personal?: {
+    carModel: string | null; bestLapMs: number | null; lastLapMs: number | null
+    inPitLane: boolean; progress: number | null; sessionKind: string | null
+    timeLeftMs: number | null; airTemp: number | null; roadTemp: number | null
+  }
 }
 
 export interface StandingsStateEnvelope {
@@ -128,8 +134,20 @@ export function scopeStandingsForLive(state: StandingsStateEnvelope, live: Commo
     ? state : denied
 }
 
-export function commonStandingsLocal(state: StandingsStateEnvelope, now: number): StandingsLocalDriverSnapshot | null {
+export function commonStandingsLocal(state: StandingsStateEnvelope, now: number, live?: CommonLive | null): StandingsLocalDriverSnapshot | null {
   const snapshot = state.status === 'available' ? state.snapshot : null
+  if (live?.capabilities.personal_standings === true && live.capabilities.standings !== true) {
+    if (!live.fresh || !live.connected || live.lifecycle !== 'live' || !live.sessionId) return null
+    const value = (name: string, unit: string) => commonValue(live, name, unit)
+    return { isFresh: true, isLive: true, carIndex: null,
+      firstName: safeText(live.driver?.firstName, 60), lastName: safeText(live.driver?.lastName, 60),
+      // A personal feed does not certify a classified position or opponent gap.
+      position: null,
+      personal: { carModel: safeText(live.identity?.car), bestLapMs: value('best_lap_time', 'ms'),
+        lastLapMs: value('last_lap_time', 'ms'), inPitLane: commonBoolean(live, 'in_pit_lane') === true || commonBoolean(live, 'in_pit_box') === true,
+        progress: value('normalized_position', 'ratio'), sessionKind: live.sessionKind ?? null,
+        timeLeftMs: value('session_time_remaining', 'ms'), airTemp: value('air_temperature', 'C'), roadTemp: value('road_temperature', 'C') } }
+  }
   if (snapshot?.schema !== 'racercore.standings') return null
   const local = snapshot.cars.find(car => car.car_index === snapshot.session.local_car_index)
   if (!local?.has_identity || !local.has_realtime || !isFreshCar(local, now, snapshot.freshness.ttl_ms)) return null
@@ -171,6 +189,7 @@ export interface StandingsPresentationRow {
   manufacturerLogoSrc: string
   manufacturerName: string
   driverName: string
+  carModel?: string | null
   inPitLane: boolean
   relativeGap: string
   relativeGapTone: StandingsRelativeGapTone
@@ -487,6 +506,7 @@ export function buildStandingsPresentation(
     ? localDriverInput
     : null
   const sharedCarIndex = finiteNumber(sharedLocal?.carIndex)
+  const personal = sharedLocal?.personal
   const localCarIndex = Number.isInteger(sharedCarIndex) && sharedCarIndex !== null && sharedCarIndex >= 0
     ? sharedCarIndex
     : null
@@ -537,8 +557,8 @@ export function buildStandingsPresentation(
     .reduce<number | null>((best, value) => best === null || value < best ? value : best, null)
 
   const common = snapshot?.schema === 'racercore.standings'
-  const commonKinds: Record<string, string> = { practice: 'Practice', qualifying: 'Qualifying', race: 'Race', time_attack: 'Time attack', cruise: 'Guida libera' }
-  const sessionType = common ? commonKinds[String(snapshot.session.session_kind)] ?? null
+  const commonKinds: Record<string, string> = { practice: 'Practice', qualify: 'Qualifying', qualifying: 'Qualifying', race: 'Race', time_attack: 'Time attack', hotlap: 'Hotlap', hot_stint: 'Hot stint', cruise: 'Guida libera' }
+  const sessionType = personal ? commonKinds[String(personal.sessionKind)] ?? null : common ? commonKinds[String(snapshot.session.session_kind)] ?? null
     : formatStandingsSessionType(snapshot?.session.session_type)
   const showProgressData = options.showLapProgressBar
 
@@ -586,9 +606,11 @@ export function buildStandingsPresentation(
   if (hasLocal && rows.every(row => row.local !== true)) {
     const localName = formatLocalDriverName(sharedLocal)
     const raceNumber = finiteNumber(udpLocal?.race_number)
-    const localInPitLane = common ? ['pitlane', 'pitbox'].includes(String(udpLocal?.car_location)) : finiteNumber(udpLocal?.car_location) === 2
-    const localProgressPercent = standingsProgressPercent(udpLocal ?? null, showProgressData)
-    const manufacturer = standingsManufacturerLogo(udpLocal?.manufacturer_key, resolvePublicPath)
+    const localInPitLane = personal ? personal.inPitLane : common ? ['pitlane', 'pitbox'].includes(String(udpLocal?.car_location)) : finiteNumber(udpLocal?.car_location) === 2
+    const localProgressPercent = personal
+      ? showProgressData && personal.progress !== null && personal.progress >= 0 && personal.progress <= 1 ? Math.round(personal.progress * 1000) / 10 : null
+      : standingsProgressPercent(udpLocal ?? null, showProgressData)
+    const manufacturer = standingsManufacturerLogo(personal ? standingsManufacturerFromModel(personal.carModel) : udpLocal?.manufacturer_key, resolvePublicPath)
     rows = [{
       carIndex: localCarIndex,
       position: localPosition,
@@ -599,11 +621,12 @@ export function buildStandingsPresentation(
       manufacturerLogoSrc: manufacturer.src,
       manufacturerName: manufacturer.name,
       driverName: localName,
+      carModel: personal?.carModel,
       inPitLane: localInPitLane,
       relativeGap: '--.-',
       relativeGapTone: 'neutral',
-      lastLap: options.showLastLap ? formatStandingsLapTime(udpLocal ? lapTime(udpLocal, 'last') : null) : null,
-      bestLap: options.showFastestLap ? formatStandingsLapTime(udpLocal ? lapTime(udpLocal, 'best') : null) : null,
+      lastLap: options.showLastLap ? formatStandingsLapTime(personal ? personal.lastLapMs : udpLocal ? lapTime(udpLocal, 'last') : null) : null,
+      bestLap: options.showFastestLap ? formatStandingsLapTime(personal ? personal.bestLapMs : udpLocal ? lapTime(udpLocal, 'best') : null) : null,
       fastestInClass: false,
       lastLapPersonalBest: null,
       progressPercent: localProgressPercent,
@@ -618,7 +641,7 @@ export function buildStandingsPresentation(
   const realtimeComplete = snapshot?.cars.length
     ? snapshot.cars.every(car => car.has_realtime === true && isFreshCar(car, clockMs, snapshot.freshness.ttl_ms))
     : false
-  const message = !snapshot || !hasLocal || !localClass || !rosterComplete || !realtimeComplete
+  const message = personal ? 'Solo dati personali · Classifica avversari non disponibile' : !snapshot || !hasLocal || !localClass || !rosterComplete || !realtimeComplete
     ? 'Classifica in aggiornamento…'
     : null
   if (message && rows.length >= options.standingsLayout.rowCapacity) {
@@ -631,11 +654,11 @@ export function buildStandingsPresentation(
     message,
     header: {
       sessionType,
-      timeLeft: common ? formatStandingsRemainingTime(0, snapshot.session.remaining_time_ms) : formatStandingsRemainingTime(
+      timeLeft: personal ? formatStandingsRemainingTime(0, personal.timeLeftMs) : common ? formatStandingsRemainingTime(0, snapshot.session.remaining_time_ms) : formatStandingsRemainingTime(
         snapshot?.session.session_time_ms,
         snapshot?.session.session_end_time_ms,
       ),
-      temperatures: formatStandingsTemperatures(snapshot?.session.weather),
+      temperatures: formatStandingsTemperatures(personal ? { ambient_temp: personal.airTemp, track_temp: personal.roadTemp } : snapshot?.session.weather),
     },
     rows,
     columns: {

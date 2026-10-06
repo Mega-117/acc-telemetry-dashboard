@@ -7,6 +7,7 @@ export type CommonLive = {
   identity?: { track: string | null; variant: string | null; car: string | null }
   lifecycle?: 'off' | 'live' | 'paused' | 'replay'
   sessionKind?: string | null
+  driver?: { firstName: string | null; lastName: string | null }
 }
 
 export function readCommonLive(raw: unknown, now = Date.now()): CommonLive | null {
@@ -33,9 +34,12 @@ export function readCommonLive(raw: unknown, now = Date.now()): CommonLive | nul
   const label = (value: unknown): string | null => typeof value === 'string' && value.trim() ? value.trim() : null
   const lifecycle = ['off', 'live', 'paused', 'replay'].includes(String(frame.lifecycle))
     ? frame.lifecycle as NonNullable<CommonLive['lifecycle']> : undefined
+  const driver = frame.driver && typeof frame.driver === 'object' && !Array.isArray(frame.driver)
+    ? frame.driver as Record<string, unknown> : {}
   return { gameId: frame.game_id, sessionId: frame.session_id, connected, fresh, fields, capabilities: { ...frame.capabilities } as Record<string, boolean>,
     identity: { track: label(identity.track), variant: label(identity.variant), car: label(identity.car) },
-    lifecycle, sessionKind: label(frame.session_kind) }
+    lifecycle, sessionKind: label(frame.session_kind),
+    driver: { firstName: label(driver.first_name)?.slice(0, 60) ?? null, lastName: label(driver.last_name)?.slice(0, 60) ?? null } }
 }
 
 export function commonValue(live: CommonLive, name: string, unit: string): number | null {

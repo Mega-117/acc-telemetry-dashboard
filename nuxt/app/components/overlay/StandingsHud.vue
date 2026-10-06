@@ -87,7 +87,7 @@ const gridTemplateColumns = computed(() => [
           class="standings-row__position"
           :class="!row.local && row.positionFlash ? `is-${row.positionFlash}` : null"
         >{{ row.position ?? '—' }}</strong>
-        <strong class="standings-row__driver">{{ row.driverName }}</strong>
+        <strong class="standings-row__driver" :title="row.carModel ?? undefined">{{ row.driverName }}<small v-if="row.carModel" class="standings-row__car-model">{{ row.carModel }}</small></strong>
         <span class="standings-row__vehicle">
           <span
             class="standings-row__manufacturer"
@@ -166,6 +166,7 @@ const gridTemplateColumns = computed(() => [
 .standings-row__position.is-worsened { color:white;background:red; }
 .standings-row.is-local .standings-row__position { color:#00141c;background:#4de3ff; }
 .standings-row__driver { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.standings-row__car-model { display:block;overflow:hidden;text-overflow:ellipsis;font-size:10px;line-height:12px;font-weight:400;color:#b9c5d6; }
 .standings-row__vehicle { position:relative;z-index:1;display:flex;min-width:0;gap:var(--standings-vehicle-gap);align-items:center; }
 .standings-row__manufacturer { display:flex;flex:0 0 var(--standings-manufacturer-width);width:var(--standings-manufacturer-width);height:calc(var(--standings-row-height) - 6px);align-items:center;justify-content:center;overflow:hidden;background:#f2f2f2;outline:1px solid rgba(0,0,0,0.1);outline-offset:-1px; }
 .standings-row__manufacturer-logo { display:block;width:34px;height:calc(var(--standings-row-height) - 6px);object-fit:contain;object-position:center;user-select:none; }

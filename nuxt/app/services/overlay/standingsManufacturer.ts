@@ -6,6 +6,12 @@ export interface StandingsManufacturerLogo {
 
 export type StandingsPublicPathResolver = (path: string) => string
 
+/** Match an explicit make prefix only, without inferring classes or numbers. */
+export function standingsManufacturerFromModel(model: string | null): string | null {
+  const normalized = model?.trim().toLowerCase().replace(/[_\s]+/g, '-') ?? ''
+  return Object.keys(LOGOS).find(key => normalized === key || normalized.startsWith(key + '-')) ?? null
+}
+
 const identityPublicPath: StandingsPublicPathResolver = path => path
 
 const LOGO_ROOT = '/standings/manufacturers'

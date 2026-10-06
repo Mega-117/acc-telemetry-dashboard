@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { StandingsPublicPathResolver } from '../../app/services/overlay/standingsManufacturer'
-import type { CommonLive } from '../../app/services/telemetry/commonLive'
+import { readCommonLive, type CommonLive } from '../../app/services/telemetry/commonLive'
 import {
   buildStandingsPresentation as buildStandingsPresentationRaw,
   formatStandingsDriverName,
@@ -61,6 +61,57 @@ describe('common roster context and presentation', () => {
     value.snapshot!.cars[0]!.current_driver_index = null
     expect(commonStandingsLocal(value, NOW_MS)).toMatchObject({ firstName: null, lastName: null })
     expect(scopeStandingsForLive(state([car(8)]), live(), NOW_MS).status).toBe('unavailable')
+  })
+})
+
+describe('personal Standing without an opponent roster', () => {
+  const unavailable: StandingsStateEnvelope = { status: 'unavailable', reason: 'unsupported', snapshot: null }
+  function live(): CommonLive {
+    const fields = Object.fromEntries(Object.entries({ best_lap_time: [86523, 'ms'], last_lap_time: [86877, 'ms'],
+      normalized_position: [0.42, 'ratio'], in_pit_lane: [0, 'boolean'], in_pit_box: [1, 'boolean'],
+      session_time_remaining: [90000, 'ms'], air_temperature: [29.4, 'C'], road_temperature: [30, 'C'],
+      position: [5, 'position'] }).map(([k, [value, unit]]) => [k, { value, unit, availability: 'available' }]))
+    return readCommonLive({ schema: 'racercore.live', version: 1, game_id: 'evo', session_id: 'personal-a',
+      observed_at_ms: NOW_MS, ttl_ms: 1000, connected: true, lifecycle: 'live', session_kind: 'practice',
+      identity: { track: 'Brands Hatch', variant: 'GP', car: 'Ferrari 296 GT3' },
+      driver: { first_name: 'QA', last_name: 'Driver' }, capabilities: { personal_standings: true, standings: false }, fields }, NOW_MS)!
+  }
+  it('renders all personal facts through the common ingress and existing layout', () => {
+    const source = live()
+    const result = buildStandingsPresentation(unavailable, {}, NOW_MS, {}, commonStandingsLocal(unavailable, NOW_MS, source))
+    expect(result.header).toEqual({ sessionType: 'Practice', timeLeft: '00:01:30', temperatures: '29/30°' })
+    expect(result.rows).toHaveLength(1)
+    expect(result.rows[0]).toMatchObject({ driverName: 'Q. Driver', carModel: 'Ferrari 296 GT3', manufacturerName: 'Ferrari',
+      bestLap: '1:26.523', lastLap: '1:26.877', inPitLane: true, progressPercent: 42,
+      position: null, carNumber: null, relativeGap: '--.-', fastestInClass: false })
+    expect(result.message).toContain('Classifica avversari non disponibile')
+  })
+  it.each<Partial<CommonLive>>([{ fresh: false }, { connected: false }, { lifecycle: 'paused' }, { lifecycle: 'replay' },
+    { sessionId: null }, { capabilities: { personal_standings: false, standings: false } }])('clears unsafe personal input %j', patch => {
+    expect(commonStandingsLocal(unavailable, NOW_MS, { ...live(), ...patch })).toBeNull()
+  })
+  it('keeps missing facts missing and does not borrow an ACC roster across a switch', () => {
+    const source = live()
+    source.fields = {}
+    source.driver = { firstName: null, lastName: null }
+    source.identity = { track: 'New track', variant: null, car: 'Unknown car' }
+    const scoped = scopeStandingsForLive(state([car(8)]), source, NOW_MS)
+    const result = buildStandingsPresentation(scoped, {}, NOW_MS, {}, commonStandingsLocal(scoped, NOW_MS, source))
+    expect(result.rows).toHaveLength(1)
+    expect(result.rows[0]).toMatchObject({ driverName: 'Pilota locale', position: null, progressPercent: null, inPitLane: false,
+      fastestInClass: false, carNumber: null, manufacturerName: 'Costruttore non disponibile' })
+    expect(result.header.temperatures).toBeNull()
+    expect(result.header.timeLeft).toBeNull()
+  })
+  it('respects hidden columns, pressure-unit mistakes, unknown session and out-of-range progress', () => {
+    const source = live()
+    source.sessionKind = 'unknown'
+    source.fields.air_temperature!.unit = 'psi'
+    source.fields.normalized_position!.value = 4
+    const result = buildStandingsPresentation(unavailable, { showFastestLap: false, showLastLap: false }, NOW_MS, {}, commonStandingsLocal(unavailable, NOW_MS, source))
+    expect(result.header.sessionType).toBeNull()
+    expect(result.header.temperatures).toBeNull()
+    expect(result.rows[0]).toMatchObject({ bestLap: null, lastLap: null, progressPercent: null })
   })
 })
 const STANDINGS_LAYOUT = {

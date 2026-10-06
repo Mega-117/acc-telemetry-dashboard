@@ -57,7 +57,7 @@ const options = computed(() => ({
 }))
 const localDriver = stableComputed(() => {
   const state = fastState.fastState.value
-  if (scopedStandings.value.snapshot?.schema === 'racercore.standings' || !usesLegacyHudInput(state.commonLive)) return commonStandingsLocal(scopedStandings.value, standings.nowMs.value)
+  if (scopedStandings.value.snapshot?.schema === 'racercore.standings' || !usesLegacyHudInput(state.commonLive)) return commonStandingsLocal(scopedStandings.value, standings.nowMs.value, state.commonLive)
   if (!state.localDriver) return null
   return {
     ...state.localDriver,
@@ -109,7 +109,7 @@ onUnmounted(() => {
 <template>
   <main class="overlay-root">
     <OverlayPlacementLock overlay-id="standings" />
-    <TelemetryFeatureNotice :live="fastState.fastState.value.commonLive" feature="standings" />
+    <TelemetryFeatureNotice v-if="!localDriver?.personal" :live="fastState.fastState.value.commonLive" feature="standings" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
     <div
       class="overlay-canvas"
