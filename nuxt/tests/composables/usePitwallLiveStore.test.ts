@@ -1,3 +1,4 @@
+import { useGameContext } from '~/composables/useGameContext'
 // La presa vera del Pit Wall, provata con stanza e permessi finti (PIP-360).
 //
 // Ogni riga della tabella di traduzione ha qui il suo ramo: i permessi nelle
@@ -156,6 +157,7 @@ async function settle() {
 }
 
 beforeEach(async () => {
+  useGameContext().selectGame('acc')
   store.halt()
   link.rooms.value = []
   link.room.value = null
@@ -644,4 +646,24 @@ describe('la gara chiusa mentre si e dentro', () => {
     await nextTick()
     expect(link.selectRoom).not.toHaveBeenCalled()
   })
+})
+
+it('stops the Pitwall data lifecycle synchronously for EVO and refuses restart/open', async () => {
+  store.start(true)
+  expect(link.start).toHaveBeenCalledOnce()
+  useGameContext().selectGame('evo')
+  expect(link.stop).toHaveBeenCalledOnce()
+  expect(trust.stop).toHaveBeenCalledOnce()
+  expect(store.inboxAccount.value).toBeNull()
+  store.start(true); store.startPitwall()
+  link.selectRoom.mockClear()
+  store.selectRace('hidden-room'); store.enterRace('hidden-room'); store.inviteToRace('hidden-room', 'friend')
+  await nextTick()
+  expect(link.selectRoom).not.toHaveBeenCalled()
+  expect(link.start).toHaveBeenCalledOnce()
+  expect(trust.watchLive).toHaveBeenCalledOnce()
+  expect(store.meId.value).toBeNull()
+  useGameContext().selectGame('acc'); store.start(true)
+  expect(link.start).toHaveBeenCalledTimes(2)
+  store.halt()
 })

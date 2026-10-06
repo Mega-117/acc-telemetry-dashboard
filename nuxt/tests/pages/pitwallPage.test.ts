@@ -8,7 +8,8 @@ const valueField = read('app/components/pitwall/PitwallValueField.vue')
 const orderBar = read('app/components/pitwall/PitwallOrderBar.vue')
 const carCard = read('app/components/pitwall/PitwallCarCard.vue')
 const carSvg = read('public/images/pitwall-car-top.svg')
-const page = read('app/pages/pitwall.vue')
+const page = read('app/components/pitwall/PitwallAvailablePage.vue')
+const route = read('app/pages/pitwall.vue')
 const tabsBar = read('app/components/layout/TabsBarRouter.vue')
 const dashboardLayout = read('app/layouts/dashboard.vue')
 const concept = read('app/components/pitwall/concept/PitwallConcept.vue')
@@ -259,7 +260,7 @@ describe('Pitwall ordine reale e MFD onesto', () => {
 describe('Pitwall wiring', () => {
   it('monta la pagina nel layout dashboard e nella navbar', () => {
     expect(page).toContain("import PitwallPage from '~/components/pages/PitwallPage.vue'")
-    expect(page).toContain("layout: 'dashboard'")
+    expect(route).toContain("layout: 'dashboard'")
     expect(tabsBar).toContain("{ id: 'pitwall', label: 'PITWALL', to: '/pitwall' }")
     expect(dashboardLayout).toContain("if (path.startsWith('/pitwall')) return 'pitwall'")
   })

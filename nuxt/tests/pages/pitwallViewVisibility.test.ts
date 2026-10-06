@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { computed, ref } from 'vue'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import * as hostAccess from '~/utils/devToolsAccess'
-import Page from '~/pages/pitwall.vue'
+import Page from '~/components/pitwall/PitwallAvailablePage.vue'
 
 vi.mock('~/components/pitwall/PitwallV4Local.vue', () => ({ default: { template: '<div data-view="v4-local" />' } }))
 vi.mock('~/components/pages/PitwallPage.vue', () => ({ default: { template: '<div data-view="legacy" />' } }))

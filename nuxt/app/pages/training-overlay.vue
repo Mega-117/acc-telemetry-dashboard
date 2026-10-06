@@ -2,6 +2,7 @@
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { trainingAvailability } from '~/services/telemetry/trainingAvailability'
 import { availabilityLabel } from '~/services/telemetry/featureAvailability'
+import { gameUiSupport } from '~/services/telemetry/gameCatalog'
 import { commonContextKey } from '~/services/telemetry/commonLive'
 import { completedLapHoldSample } from '~/utils/completedLapHoldSample'
 import { usePresentationInterval, usePresentationVisibility } from '~/composables/usePresentationVisibility'
@@ -336,6 +337,8 @@ const { liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap } =
   useLiveStatePoller(getOverlayApi, true)
 const { fastState, startFastStatePolling, stopFastStatePolling } =
   useFastStatePoller(getOverlayApi, true)
+const support = computed(() => gameUiSupport(fastState.value.commonLive?.gameId))
+watch(() => support.value.quickAutomations, allowed => { if (!allowed) isFuelSetupOpen.value = false }, { flush: 'sync' })
 
 const { trackingStart, trackingComplete, trackingAbandon } = useTrackingRecord(
   getOverlayApi,
@@ -948,7 +951,7 @@ watch(isShortcutStopConfirmOpen, (open) => {
 }, { flush: 'post' })
 
 watch(
-  [phase, placementActive, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
+  [() => fastState.value.commonLive?.gameId, phase, placementActive, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
     spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, isSectorReferenceSetupOpen, isFuelSetupOpen, isQuickTimerOpen, quickTimer.status, liveHudResizeKey],
   () => { scheduleOverlaySizeSync(); actionSelection.refresh() },
   { flush: 'post' }
@@ -1084,7 +1087,7 @@ onBeforeUnmount(() => {
                   </header>
                   <div class="launcher-tools__actions">
 
-                    <QuickPanelVoiceControls
+                    <QuickPanelVoiceControls v-if="support.quickVoiceControls"
                       :coach="spotterEnabled"
                       :references="trackVoiceReferencesEnabled"
                       :pressure="pressureWarningsEnabled"
@@ -1095,7 +1098,7 @@ onBeforeUnmount(() => {
                       @toggle-pressure="togglePressureAudio"
                       @toggle-target="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
                     />
-                    <section v-if="showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
+                    <section v-if="!support.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
                       <h2 class="quick-panel-heading">Riferimenti</h2>
                       <div class="quick-panel-pair">
                     <div class="quick-reference" :class="{ 'is-active': infoTargetActive }">
@@ -1122,7 +1125,7 @@ onBeforeUnmount(() => {
                     </div>
                       </div>
                     </section>
-                    <section class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving }" aria-label="Automazioni">
+                    <section v-if="support.quickAutomations" class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving }" aria-label="Automazioni">
                     <div id="control-k-fuel-status" class="control-k-fuel-status" />
                     <SetupFuelPanel show-heading v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" status-target="#control-k-fuel-status" separate-view @open="isFuelSetupOpen = true" />
                     <div class="quick-panel-pair quick-panel-secondary">
@@ -1232,7 +1235,7 @@ onBeforeUnmount(() => {
                   @confirm="confirmInfoTarget"
                   @cancel="cancelInfoTargetSetup"
                 />
-                <SetupFuelPanel v-else-if="isFuelSetupOpen" v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" editor-only @cancel="closeFuelSetup" />
+                <SetupFuelPanel v-else-if="isFuelSetupOpen && support.quickAutomations" v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" editor-only @cancel="closeFuelSetup" />
                 <SectorReferenceSetup v-else-if="isSectorReferenceSetupOpen" ref="sectorReferenceSetup" keyboard-overlay @cancel="closeSectorReferenceSetup" @saved="saveSectorReferenceSetup" />
               </template>
 

@@ -1,3 +1,4 @@
+import { hudSettingSupported } from '~/services/telemetry/gameCatalog'
 import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 import type { FastOverlayState, FastStateInfo } from '~/composables/useFastStatePoller'
 
@@ -178,6 +179,10 @@ export function buildInfoPresentation(
   state: FastOverlayState,
   options: InfoOptions = DEFAULT_INFO_OPTIONS,
 ): InfoPresentation {
+  if (state.commonLive) {
+    options = Object.fromEntries(Object.entries(options).map(([key, enabled]) =>
+      [key, enabled && hudSettingSupported(state.commonLive!.gameId, 'info', key)])) as unknown as InfoOptions
+  }
   const info: FastStateInfo | null = state.info
   const unknownCommonDelta = hudSourcePolicy(state).explicitDeltaAvailability
     && info?.delta.available !== true

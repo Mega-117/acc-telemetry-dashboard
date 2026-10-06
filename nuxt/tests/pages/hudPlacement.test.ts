@@ -1,3 +1,4 @@
+import { useGameContext } from '~/composables/useGameContext'
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
@@ -27,6 +28,7 @@ function makeApi() {
 function lockSwitch() { return wrapper!.get('button[aria-label="Blocca posizioni"]') }
 async function render() { wrapper = mount(HudPage, { global: { components: { UiRacingSwitch: RacingSwitch } } }); await flushPromises() }
 beforeEach(() => {
+  useGameContext().selectGame('acc')
   vi.stubGlobal('definePageMeta', vi.fn())
   active = false
   api = makeApi()
@@ -116,4 +118,22 @@ describe('HUD placement commands', () => {
     expect(wrapper!.get('[role="alert"]').text()).toContain('Impossibile confermare')
     expect(lockSwitch().attributes('disabled')).toBeUndefined()
   })
+})
+
+it('filters EVO settings and restores ACC controls without writing preferences', async () => {
+  useGameContext().selectGame('evo'); await render()
+  const items = wrapper!.findAll('.hud-overlay-list__item')
+  await items[4]!.trigger('click')
+  expect(wrapper!.text()).toContain('Riepilogo personale')
+  expect(wrapper!.find('[aria-label="Auto in testa"]').exists()).toBe(false)
+  expect(wrapper!.text()).not.toContain('Numero auto')
+  await items[5]!.trigger('click')
+  expect(wrapper!.text()).toContain('Mappa circolare')
+  expect(wrapper!.text()).not.toContain('Pit prediction')
+  await items[3]!.trigger('click')
+  expect(wrapper!.text()).not.toContain('Traffico uscita box')
+  expect(wrapper!.text()).not.toContain('Danni')
+  expect(wrapper!.text()).toContain('Tempo stint')
+  useGameContext().selectGame('acc'); await flushPromises()
+  expect(wrapper!.text()).toContain('Traffico uscita box')
 })

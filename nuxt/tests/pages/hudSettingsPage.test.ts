@@ -61,7 +61,7 @@ describe('HUD settings page layout contract', () => {
     expect(source).toContain("v-else-if=\"selectedOverlayId === 'dashboard'\"")
     expect(source).toContain("v-else-if=\"selectedOverlayId === 'standings'\"")
     expect(source).toContain("v-else-if=\"selectedOverlayId === 'info'\"")
-    expect(source).toContain("v-else-if=\"selectedOverlayId === 'trackmap'\"")
+    expect(source).toContain("v-else-if=\"selectedOverlayId === 'trackmap' && support.mapOptions\"")
     expect(source).toContain('supportsHudOverlayBackground(selectedOverlayId)')
     expect(source).toContain("v-if=\"sectorSupports('sectorCurrentLap')\"")
     expect(source).toContain(':disabled="selectedSettingsDisabled || !option.supported"')

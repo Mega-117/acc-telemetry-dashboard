@@ -73,3 +73,17 @@ describe('Spotter racing controls', () => {
     expect(wrapper.text()).toContain('Gestisci in Voice Lab')
   })
 })
+
+it('hides unsupported EVO advice without altering ACC preferences', async () => {
+  useGameContext().selectGame('evo')
+  wrapper = mount(Spotter, { global: { components: { UiRacingSwitch: RacingSwitch } } })
+  await flushPromises()
+  expect(wrapper.text()).not.toContain('Feedback coach')
+  expect(wrapper.text()).not.toContain('Avvisi pressioni')
+  expect(wrapper.text()).toContain('Avvisi giro')
+  useGameContext().selectGame('acc'); await flushPromises()
+  expect(wrapper.text()).toContain('Feedback coach')
+  expect(wrapper.text()).toContain('Avvisi pressioni')
+  expect(fake.settings.toggleAdaptiveCoach).not.toHaveBeenCalled()
+  expect(fake.settings.togglePressureWarnings).not.toHaveBeenCalled()
+})

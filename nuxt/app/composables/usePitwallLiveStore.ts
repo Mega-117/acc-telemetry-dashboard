@@ -12,6 +12,8 @@
 // ============================================
 
 import { computed, effectScope, ref, watch, type Ref } from 'vue'
+import { useGameContext } from '~/composables/useGameContext'
+import { gameUiSupport } from '~/services/telemetry/gameCatalog'
 import { db } from '~/config/firebase'
 import { createPitwallRealtimeEngineerService, stopPitwallRealtimeEngineerAccount } from '~/services/pitwall/pitwallRealtimeEngineerService'
 import { stopPitwallRealtimeAccount } from '~/services/pitwall/pitwallRealtimeRoomService'
@@ -63,7 +65,9 @@ export const NOTICE_PREFIX = { request: 'req:', invite: 'inv:', granted: 'grant:
 
 function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, halt: () => void, standardController: ReturnType<typeof usePitwallController>, inboxAccount: Ref<string | null>, respondFriendRequest: (personId: string, accept: boolean) => Promise<boolean> } {
   const { currentUser } = useFirebaseAuth()
-  const uid = () => currentUser.value?.uid ?? null
+  const { consultedGame } = useGameContext()
+  const allowed = computed(() => gameUiSupport(consultedGame.value).pitwall)
+  const uid = () => allowed.value ? currentUser.value?.uid ?? null : null
   const link = usePitwallRoom({ uid })
   const trust = usePitwallLink({ engineerUid: uid, inlineSearchFeedback: true })
   const controller = usePitwallController(link, trust)
@@ -293,10 +297,12 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
   // ---- Il mio Pitwall -------------------------------------------------------
   const { pitwallIntent } = usePitwallIntent()
   function startPitwall(): void {
+    if (!allowed.value) return
     link.clearFeedback()
     void requestPitwallOpen().then((result) => { if (!result.ok) link.notice.value = result.reason })
   }
   function closePitwall(): void {
+    if (!allowed.value) return
     link.clearFeedback()
     if (myRoom.value && pitwallIntent.value.roomId !== myRoom.value.id) {
       void inRoom(myRoom.value.id, () => link.leave())
@@ -307,12 +313,14 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
 
   // ---- Azioni sulla gara ----------------------------------------------------
   async function inRoom(raceId: string, action: () => Promise<void>): Promise<void> {
+    if (!allowed.value) return
     if (link.selectedRoomId.value !== raceId) await link.selectRoom(raceId)
-    if (link.selectedRoomId.value !== raceId) return
+    if (!allowed.value || link.selectedRoomId.value !== raceId) return
     await action()
   }
-  function selectRace(raceId: string): void { void link.selectRoom(raceId) }
+  function selectRace(raceId: string): void { if (allowed.value) void link.selectRoom(raceId) }
   function enterRace(raceId: string): void {
+    if (!allowed.value) return
     link.clearFeedback()
     dismissedInvites.value.delete(raceId)
     saveSet(`${DISMISSED_INVITES_KEY}:${uid()}`, dismissedInvites.value)
@@ -393,6 +401,7 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
   let accountUid: string | null = null
   const inboxAccount = ref<string | null>(null)
   function start(full = true): void {
+    if (!allowed.value) { halt(); return }
     if (!uid()) return
     if (started && accountUid !== uid()) halt()
     if (started && fullStarted === full) return
@@ -429,6 +438,9 @@ function createLiveStore(): PitwallStore & { start: (full?: boolean) => void, ha
     ownNickname.value = null
     if (searchTimer) clearTimeout(searchTimer)
   }
+
+  // Stop listeners and invalidate pending room reads before any EVO view renders.
+  watch(allowed, value => { if (!value) halt() }, { flush: 'sync' })
 
   return {
     inboxAccount,

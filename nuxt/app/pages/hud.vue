@@ -12,6 +12,8 @@ import { usePresentationInterval } from '~/composables/usePresentationVisibility
 // - Per ogni overlay: on/off + formato fisso (Piccolo/Medio/Grande).
 // Self-contained (come dev.vue): fuori dal contratto useTelemetryGateway.
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { useGameContext } from '~/composables/useGameContext'
+import { gameUiSupport, hudSettingSupported, gameLabel } from '~/services/telemetry/gameCatalog'
 import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
@@ -62,6 +64,8 @@ interface HudReplayStatus {
 }
 
 
+const { consultedGame } = useGameContext()
+const support = computed(() => gameUiSupport(consultedGame.value))
 const hudOverlays: Array<{ id: HudOverlayId; title: string; description: string }> = [
   { id: 'tyres', title: 'Gomme', description: 'Temperature e pressioni per ogni pneumatico.' },
   { id: 'sectors', title: 'Settori', description: 'Tempi e delta dei settori disponibili.' },
@@ -192,8 +196,17 @@ const standingsBooleanOptions: Array<{
 ]
 
 function getInfoOptions(keys: InfoSettingKey[]) {
-  return infoOptionDefinitions.filter(option => keys.includes(option.key))
+  return infoOptionDefinitions.filter(option => keys.includes(option.key) && hudSettingSupported(consultedGame.value, 'info', option.key))
 }
+const visibleInfoGroups = computed(() => infoSettingGroups.filter(group => getInfoOptions(group.keys).length))
+const visibleStandingsOptions = computed(() => standingsBooleanOptions.filter(option => hudSettingSupported(consultedGame.value, 'standings', option.key)))
+const selectedDescription = computed(() => {
+  if (support.value.fullStandings) return selectedOverlay.value.description
+  if (selectedOverlayId.value === 'standings') return 'Riepilogo personale: pilota, vettura, best e ultimo giro. Classifica avversari non disponibile.'
+  if (selectedOverlayId.value === 'trackmap') return 'Mappa circolare con la tua posizione sul giro.'
+  if (selectedOverlayId.value === 'info') return 'Stint, carburante, grip, delta e tempi personali disponibili.'
+  return selectedOverlay.value.description
+})
 const positioning = ref(false)
 const placementBusy = ref(false)
 const placementError = ref('')
@@ -877,7 +890,8 @@ async function toggleTraining() {
               >
                 {{ selectedOverlay.title }}
               </h2>
-              <p>{{ selectedOverlay.description }}</p>
+              <p>{{ selectedDescription }}</p>
+              <small>Impostazioni per {{ gameLabel(consultedGame) }}</small>
             </div>
           </header>
 
@@ -1121,7 +1135,7 @@ async function toggleTraining() {
                   </label>
                 </template>
 
-                <template v-else-if="selectedOverlayId === 'trackmap'">
+                <template v-else-if="selectedOverlayId === 'trackmap' && support.mapOptions">
                   <label class="hud-control">
                     <span><strong>Pit prediction</strong></span>
                     <input
@@ -1153,7 +1167,7 @@ async function toggleTraining() {
                 </template>
 
                 <template v-else-if="selectedOverlayId === 'standings'">
-                  <div class="hud-slider-grid">
+                  <div v-if="support.fullStandings" class="hud-slider-grid">
                   <label class="hud-control hud-control--slider">
                     <span><strong>Auto in testa</strong></span>
                     <span class="hud-control__range">
@@ -1208,7 +1222,7 @@ async function toggleTraining() {
                   </div>
                   <div class="hud-checkbox-grid">
                   <label
-                    v-for="option in standingsBooleanOptions"
+                    v-for="option in visibleStandingsOptions"
                     :key="option.key"
                     class="hud-control hud-control--standings"
                     :class="{ 'is-unavailable': !option.supported }"
@@ -1231,7 +1245,7 @@ async function toggleTraining() {
                 <template v-else-if="selectedOverlayId === 'info'">
                   <div class="hud-info-columns">
                   <section
-                    v-for="group in infoSettingGroups"
+                    v-for="group in visibleInfoGroups"
                     :key="group.id"
                     class="hud-info-group"
                     :class="'hud-info-group--' + group.id"

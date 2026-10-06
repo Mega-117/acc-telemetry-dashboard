@@ -124,12 +124,15 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     loading.value = true
     rawError.value = null
     try {
-      outgoing.value = await engineer.listOutgoingLinks()
+      const rows = await engineer.listOutgoingLinks()
+      if (serviceRef.value !== engineer || !options.engineerUid()) return
+      outgoing.value = rows
       if (selectedDriverUid.value && !pilots.value.some(p => p.driverUid === selectedDriverUid.value)) {
         // Il collegamento e' stato revocato mentre la pagina era aperta.
         selectPilot(null)
       }
     } catch (error) {
+      if (serviceRef.value !== engineer || !options.engineerUid()) return
       rawError.value = (error as Error)?.message || 'Elenco piloti non disponibile.'
       outgoing.value = []
     } finally {
@@ -259,13 +262,16 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     const engineer = service()
     if (!engineer) return
     try {
-      searchResults.value = await engineer.searchUsers(searchTerm.value)
+      const results = await engineer.searchUsers(searchTerm.value)
+      if (serviceRef.value !== engineer || !options.engineerUid()) return
+      searchResults.value = results
       if (!options.inlineSearchFeedback && searchTerm.value.trim().length >= 2 && searchResults.value.length === 0) {
         notice.value = 'Nessun utente trovato con questo nome.'
       } else {
         notice.value = null
       }
     } catch (error) {
+      if (serviceRef.value !== engineer || !options.engineerUid()) return
       rawError.value = (error as Error)?.message || 'Ricerca non disponibile.'
       searchResults.value = []
     }
@@ -279,8 +285,11 @@ export function usePitwallLink(options: PitwallLinkOptions) {
       return
     }
     try {
-      incoming.value = await engineer.listIncomingRequests()
+      const rows = await engineer.listIncomingRequests()
+      if (serviceRef.value !== engineer || !options.engineerUid()) return
+      incoming.value = rows
     } catch (error) {
+      if (serviceRef.value !== engineer || !options.engineerUid()) return
       rawError.value = (error as Error)?.message || 'Richieste non disponibili.'
       incoming.value = []
     }
@@ -370,12 +379,13 @@ export function usePitwallLink(options: PitwallLinkOptions) {
 
     if (stopIncomingWatch) return
     stopIncomingWatch = engineer.watchIncomingRequests(
-      (requests) => { incoming.value = requests },
+      (requests) => { if (serviceRef.value === engineer && options.engineerUid()) incoming.value = requests },
       (error) => { rawError.value = error?.message || 'Richieste non disponibili.' }
     )
 
     stopGrantedWatch = engineer.watchOutgoingLinks(
       (links) => {
+        if (serviceRef.value !== engineer || !options.engineerUid()) return
         const previous = new Map(outgoing.value.map(link => [link.driverUid, link]))
         outgoing.value = links.map(link => {
           const cached = previous.get(link.driverUid)
@@ -396,7 +406,7 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     const engineer = service()
     if (!engineer || stopIncomingWatch) return
     stopIncomingWatch = engineer.watchIncomingRequests(
-      requests => { incoming.value = requests },
+      requests => { if (serviceRef.value === engineer && options.engineerUid()) incoming.value = requests },
       error => { rawError.value = error?.message || 'Richieste non disponibili.' },
       true
     )
@@ -414,6 +424,8 @@ export function usePitwallLink(options: PitwallLinkOptions) {
     serviceUid = null
     outgoing.value = []
     incoming.value = []
+    searchResults.value = []
+    searchTerm.value = ''
     selectedDriverUid.value = null
   }
 

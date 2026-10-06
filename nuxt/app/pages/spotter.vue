@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useGameContext } from '~/composables/useGameContext'
-import { gameLabel } from '~/services/telemetry/gameCatalog'
+import { gameLabel, gameUiSupport } from '~/services/telemetry/gameCatalog'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { spotterVoiceOptions, useSpotterVoiceSettings } from '~/composables/useSpotterVoiceSettings'
 import { useVoiceLabRuntime } from '~/composables/useVoiceLabRuntime'
@@ -37,6 +37,7 @@ interface TrackVoicePointCatalog {
 
 const { isAdmin } = useFirebaseAuth()
 const { consultedGame } = useGameContext()
+const support = computed(() => gameUiSupport(consultedGame.value))
 const selectedVariant = ref('')
 const voiceLabRuntime = useVoiceLabRuntime()
 const {
@@ -192,7 +193,7 @@ onMounted(() => {
                 @update:model-value="setReferenceSessionModes"
               />
             </div>
-            <div class="feature-row">
+            <div v-if="support.adaptiveCoach" class="feature-row">
               <h3>Feedback coach</h3>
               <div class="feature-control">
                 <UiRacingSwitch
@@ -235,7 +236,7 @@ onMounted(() => {
                 @update:model-value="setLapTimeSessionModes"
               />
             </div>
-            <div class="feature-row">
+            <div v-if="support.pressureAdvice" class="feature-row">
               <h3 title="Correzioni pressioni alla fine del terzo giro di ogni stint">
                 Avvisi pressioni
               </h3>

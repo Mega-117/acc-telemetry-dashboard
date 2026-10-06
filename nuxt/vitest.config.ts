@@ -59,6 +59,8 @@ export default defineConfig({
         'app/composables/useGameContext.ts',
         'app/composables/useTrackingRecord.ts',
         'app/services/telemetry/gameCatalog.ts',
+        'app/pages/pitwall.vue',
+        'app/components/pitwall/PitwallAvailablePage.vue',
         'app/services/telemetry/gameProjection.ts',
         'app/services/projections/buildCommonOverviewProjection.ts',
         'app/services/telemetry/commonSessionPresentation.ts',

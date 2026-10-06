@@ -14,6 +14,7 @@ import { useActivityFeed } from '~/composables/useActivityFeed'
 import { useKokoroVoiceLabLifecycle } from '~/composables/useKokoroVoiceLabLifecycle'
 import { useClientDiagnostics } from '~/composables/useClientDiagnostics'
 import { usePrimaryCloudOwner } from '~/composables/usePrimaryCloudOwner'
+import { gameUiSupport } from '~/services/telemetry/gameCatalog'
 import { usePitwallLiveStore } from '~/composables/usePitwallLiveStore'
 import { useControlKFriendRequests } from '~/composables/useControlKFriendRequests'
 import { providePitwallStore } from '~/composables/usePitwallStore'
@@ -59,6 +60,7 @@ onBeforeMount(refreshBrowserOverlayLocation)
 const normalizedRoutePath = computed(() => route.path.replace(/\/+$/, '') || '/')
 // Il Pit Wall e' reale ovunque: la campanella deve suonare anche fuori da
 // /pitwall, quindi lo store vive qui e parte con la dashboard (piu' sotto).
+const pitwallAllowed = computed(() => gameUiSupport(consultedGame.value).pitwall)
 const pitwallStore = usePitwallLiveStore()
 providePitwallStore(pitwallStore)
 const cloudJobsAllowed = computed(() => true)
@@ -183,9 +185,10 @@ const { runConfirmedLogout } = useConfirmedLogout(firebaseLogout)
 // Lato pilota del Pit Wall: annuncia il pilota e ascolta gli ordini in arrivo.
 // Vive qui perche' questa e' la finestra che possiede la sessione Firebase; si
 // disattiva da sola fuori da Electron e quando i lavori cloud sono di un'altra.
-const pitwallDemand = computed(() => normalizedRoutePath.value === '/pitwall'
-  || !!pitwallStore.myRoom.value || !!pitwallStore.pitwall.value.roomId)
-usePitwallDriverPresence({ jobsEnabled: primaryCloudOwner.jobsEnabled, demand: pitwallDemand })
+const pitwallDemand = computed(() => pitwallAllowed.value && (normalizedRoutePath.value === '/pitwall'
+  || !!pitwallStore.myRoom.value || !!pitwallStore.pitwall.value.roomId))
+const pitwallJobsEnabled = computed(() => primaryCloudOwner.jobsEnabled.value && pitwallAllowed.value)
+usePitwallDriverPresence({ jobsEnabled: pitwallJobsEnabled, demand: pitwallDemand })
 useControlKFriendRequests(pitwallStore, primaryCloudOwner.jobsEnabled)
 const isProtectedRuntimeRoute = computed(() => (
   isTrainingOverlayIntent.value
@@ -261,9 +264,9 @@ watch(
   { flush: 'post' }
 )
 watch(
-  [appState, currentUser, canEnterApp, pitwallDemand],
-  ([state, user, canEnter, needsPitwall]) => {
-    if (state !== 'dashboard' || !user || !canEnter) pitwallStore.halt()
+  [appState, currentUser, canEnterApp, pitwallDemand, pitwallAllowed],
+  ([state, user, canEnter, needsPitwall, allowed]) => {
+    if (!allowed || state !== 'dashboard' || !user || !canEnter) pitwallStore.halt()
     else pitwallStore.start(needsPitwall)
   },
   { flush: 'post' }

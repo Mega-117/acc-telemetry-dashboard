@@ -36,6 +36,17 @@ const state = {
 } as any
 
 describe('Info presentation', () => {
+  it('hides unsupported EVO rows without erasing saved ACC preferences', () => {
+    const options = Object.fromEntries(Object.keys(DEFAULT_INFO_OPTIONS).map(key => [key, true])) as typeof DEFAULT_INFO_OPTIONS
+    const evo = buildInfoPresentation({ ...state, commonLive: { gameId: 'evo' } } as any, options)
+    expect(evo.rows.map(row => row.id)).toEqual(['stint', 'fuel-left', 'grip', 'best', 'local-time'])
+    expect(evo.yellowFlagActive).toBe(false)
+    expect(evo.delta.visible).toBe(true)
+    expect(options.showDamage).toBe(true)
+    const acc = buildInfoPresentation({ ...state, commonLive: { gameId: 'acc' } } as any, options)
+    expect(acc.rows.map(row => row.id)).toContain('damage')
+    expect(acc.rows.map(row => row.id)).toContain('q-fuel')
+  })
   it('does not present an unavailable common delta as a measured zero', () => {
     const common = { ...state, commonLive: { gameId: 'synthetic' },
       info: { ...state.info, delta: { ms: 0, available: false, side: 'positive', ratio: 1, purple: true } } }

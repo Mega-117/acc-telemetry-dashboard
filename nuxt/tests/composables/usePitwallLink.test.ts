@@ -21,13 +21,16 @@ const mocks = vi.hoisted(() => ({
   calls: [] as unknown[][],
   refuse: false,
   orderWatch: null as ((doc: unknown) => void) | null,
+  search: null as (() => Promise<unknown[]>) | null,
+  listOutgoing: null as (() => Promise<unknown[]>) | null,
+  outgoingCallback: null as ((rows: unknown[]) => void) | null,
 }))
 
 vi.mock('~/config/firebase', () => ({ db: {} }))
 
 vi.mock('~/services/pitwall/pitwallRealtimeEngineerService', () => ({
   createPitwallRealtimeEngineerService: () => ({
-    listOutgoingLinks: async () => mocks.outgoing,
+    listOutgoingLinks: async () => mocks.listOutgoing ? mocks.listOutgoing() : mocks.outgoing,
     listIncomingRequests: async () => mocks.incoming,
     requestLink: async (...args: unknown[]) => {
       mocks.calls.push(['requestLink', ...args])
@@ -49,7 +52,7 @@ vi.mock('~/services/pitwall/pitwallRealtimeEngineerService', () => ({
       mocks.calls.push(['updateGrantExpiry', ...args])
       return { ok: true as const }
     },
-    searchUsers: async () => [],
+    searchUsers: async () => mocks.search ? mocks.search() : [],
     readPilotPresence: async (driverUid: string) => {
       mocks.reads.push(driverUid)
       return { session: null, reachable: false }
@@ -69,7 +72,7 @@ vi.mock('~/services/pitwall/pitwallRealtimeEngineerService', () => ({
         : { ok: true as const, orderId: 'ordine-1' }
     },
     watchIncomingRequests: () => () => {},
-    watchOutgoingLinks: (callback: (rows: unknown[]) => void) => { callback(mocks.outgoing); return () => {} },
+    watchOutgoingLinks: (callback: (rows: unknown[]) => void) => { mocks.outgoingCallback = callback; callback(mocks.outgoing); return () => {} },
     watchOrder: (_driverUid: string, _orderId: string, onChange: (doc: unknown) => void) => {
       mocks.orderWatch = onChange
       return () => { mocks.orderWatch = null }
@@ -106,6 +109,9 @@ beforeEach(() => {
   mocks.calls = []
   mocks.refuse = false
   mocks.orderWatch = null
+  mocks.search = null
+  mocks.listOutgoing = null
+  mocks.outgoingCallback = null
 })
 
 afterEach(() => {
@@ -298,6 +304,31 @@ describe('presenza RTDB e navigazione', () => {
 
 
 describe('search feedback placement', () => {
+  it('ignores late roster reads and detached listener callbacks after stop', async () => {
+    let finish!: (rows: unknown[]) => void
+    mocks.listOutgoing = () => new Promise(resolve => { finish = resolve })
+    const link = start()
+    link.watchLive()
+    const lateCallback = mocks.outgoingCallback!
+    const pending = link.refreshPilots()
+    link.stop()
+    lateCallback([outgoing('late-listener')])
+    finish([outgoing('late-read')])
+    await pending
+    expect(link.pilots.value).toEqual([])
+    expect(mocks.watches.size).toBe(0)
+  })
+  it('discards a search completed after stop and clears cached results', async () => {
+    let finish!: (rows: unknown[]) => void
+    mocks.search = () => new Promise(resolve => { finish = resolve })
+    const link = start()
+    const pending = link.search('pilota')
+    link.stop()
+    finish([{ uid: 'late-pilot', nickname: 'Late' }])
+    await pending
+    expect(link.searchResults.value).toEqual([])
+    expect(link.searchTerm.value).toBe('')
+  })
   it.each([true, false])('preserves results and uses inline feedback when configured: %s', async inlineSearchFeedback => {
     const link = usePitwallLink({ engineerUid: () => 'me', inlineSearchFeedback })
     link.searchTerm.value = 'nessuno'
