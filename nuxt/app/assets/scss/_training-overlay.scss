@@ -2410,6 +2410,31 @@ button.is-active {
   [data-overlay-wheel-action='pressure']:disabled:not(.is-awaiting-pit) { display: none; }
 }
 
+// Personal-only panels have no automation columns to reserve. Keep the full
+// ACC composition and editor widths intact; fit only the launcher to its actions.
+.training-overlay--launcher .overlay-content--launcher:has(> .launcher-tools):not(:has(.quick-panel-automations)) {
+  --overlay-preferred-content-width: 0px;
+  width: max-content;
+  .quick-panel-voice-grid {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: 64px;
+    justify-content: center;
+    gap: 8px;
+  }
+  &.overlay-content--horizontal .launcher-tools__actions {
+    grid-template-columns: repeat(2, max-content);
+  }
+  &:not(.overlay-content--horizontal) {
+    .launcher-tools__actions { grid-template-columns: max-content; }
+    .launcher-tools__actions .quick-panel-section[aria-label='Riferimenti numerici'] {
+      grid-column: 1;
+      grid-row: auto;
+      &::before { display: none; }
+    }
+  }
+}
+
 // Development preview exposes unavailable controls without enabling their actions.
 .training-overlay--launcher .quick-panel-automations.quick-panel-show-all {
   [data-overlay-wheel-action='fuel-session']:disabled,
