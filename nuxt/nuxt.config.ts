@@ -6,10 +6,11 @@ import { join } from 'node:path'
 
 // Determina baseURL: '/' per dev locale, path completo per produzione
 const isDev = process.env.NODE_ENV === 'development'
+const desktopBundle = process.env.ACC_DESKTOP_BUNDLE === '1'
 const qaEmulatorPorts = isDev ? [process.env.VITE_ACC_AUTH_EMULATOR_PORT, process.env.VITE_ACC_FIRESTORE_EMULATOR_PORT, process.env.VITE_ACC_DATABASE_EMULATOR_PORT]
   .map(Number).filter(port => Number.isInteger(port) && port >= 1024 && port <= 65535) : []
 const qaEmulatorSources = [...new Set(qaEmulatorPorts)].map(port => ` http://127.0.0.1:${port} ws://127.0.0.1:${port}`).join('')
-const baseURL = isDev ? '/' : '/acc-telemetry-dashboard/docs/'
+const baseURL = isDev || desktopBundle ? '/' : '/acc-telemetry-dashboard/docs/'
 // The source ICO is mirrored from the suite root; its hash invalidates browser caches.
 const iconRevision = createHash('sha256')
   .update(readFileSync(new URL('./public/favicon.ico', import.meta.url)))
@@ -18,7 +19,7 @@ const iconRevision = createHash('sha256')
 const buildAssetsDir = isDev ? '/_nuxt/' : '/assets/'
 const ignoredRuntimePaths = ['**/.tmp_edge_profile/**', '**/.tmp_edge_profile', '**/dist/**', '**/dist']
 const staticPublicDir = process.env.ACC_NUXT_PUBLIC_DIR
-const standingsSmokeBuildDir = process.env.STANDINGS_SMOKE_BUILD_DIR?.trim()
+const standingsSmokeBuildDir = (process.env.ACC_NUXT_BUILD_DIR || process.env.STANDINGS_SMOKE_BUILD_DIR)?.trim()
 const standingsSmokeWithoutOptimizeDeps = process.env.STANDINGS_SMOKE_DISABLE_OPTIMIZER === '1'
 
 async function patchWindowsNitroPrerenderImports(dir: string) {
@@ -51,6 +52,7 @@ async function patchWindowsNitroPrerenderImports(dir: string) {
 
 export default defineNuxtConfig({
   ssr: false,
+  runtimeConfig: { public: { desktopUiContract: desktopBundle ? 1 : 0 } },
   ignore: ignoredRuntimePaths,
   plugins: isDev ? ['~/plugins/firebase-emulators.client'] : [],
   ...(standingsSmokeBuildDir ? { buildDir: standingsSmokeBuildDir } : {}),
@@ -118,19 +120,20 @@ export default defineNuxtConfig({
       link: [
         { rel: 'icon', type: 'image/x-icon', href: `${baseURL}favicon.ico?v=${iconRevision}` },
         // Google Fonts: Inter + Outfit
-        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
-        { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
+        ...(desktopBundle ? [] : [{ rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+          { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' as const },
         {
           rel: 'stylesheet',
           href: 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700&display=swap'
-        }
+        }])
       ]
     }
   },
 
   // === CSS GLOBALE ===
   css: [
-    '~/assets/scss/main.scss'
+    '~/assets/scss/main.scss',
+    ...(desktopBundle ? ['~/assets/scss/_desktop-fonts.scss'] : [])
   ],
 
   vite: {
