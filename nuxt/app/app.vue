@@ -161,6 +161,11 @@ const {
   canEnterApp,
   logout: firebaseLogout
 } = useFirebaseAuth()
+watch([cloudSessionReady, canEnterApp], ([cloudReady]) => {
+  if (typeof window === 'undefined') return
+  const api = (window as Window & { electronAPI?: { reportRuntimeHealth?: (value: { cloud: string }) => void } }).electronAPI
+  api?.reportRuntimeHealth?.({ cloud: cloudReady ? 'ready' : 'waiting' })
+}, { immediate: true })
 const primaryCloudOwner = usePrimaryCloudOwner({
   currentUser,
   canEnterApp: cloudSessionReady,
