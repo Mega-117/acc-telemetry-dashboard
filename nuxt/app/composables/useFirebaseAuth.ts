@@ -21,12 +21,17 @@ import {
     clearLocalUserIdentity,
     isSecondaryLocalRuntimeRenderer,
     requestLocalRuntimeAttestation,
+    restoreLocalProfile,
+    type LocalProfile,
     requiresLocalIdentityBridge,
     saveLocalUserIdentity,
     shouldObserveFirebaseAuth
 } from '~/services/auth/localIdentityBridge'
 
 const currentUser = ref<User | null>(null)
+const localProfile = ref<LocalProfile | null>(null)
+const networkOnline = ref(typeof navigator === 'undefined' || navigator.onLine !== false)
+let networkListenersInstalled = false
 const userRole = ref<string>('pilot')
 const firestoreNickname = ref<string>('')
 const isLoading = ref(true)
@@ -57,6 +62,7 @@ function clearOwnedIdentity(): Promise<void> {
             throw new Error('Arresto del programma non confermato. Riprova il logout prima di accedere.')
         }
         localIdentityCleared = true
+        localProfile.value = null
     })().finally(() => { pendingIdentityClear = null })
     return pendingIdentityClear
 }
@@ -134,8 +140,7 @@ async function syncAuthenticatedUser(
     if (refreshResult.status === 'recoverable') {
         console.warn('[AUTH] Persisted session refresh deferred:', refreshResult.errorCode)
         if (!isCurrentRevision()) return { status: 'recoverable', user: null }
-        // Firebase persistence remains untouched. Only the derived local
-        // identity/runtime is revoked until an authoritative retry succeeds.
+        // Cloud renewal cannot revoke an already prepared local profile.
         await syncLoggedOutUser()
         return { status: 'recoverable', user: null }
     }
@@ -148,7 +153,7 @@ async function syncAuthenticatedUser(
         currentUserProfile.value = null
         userRole.value = 'pilot'
         firestoreNickname.value = user.displayName || user.email?.split('@')[0] || ''
-        if (ownsLocalIdentityBridge()) await clearOwnedIdentity()
+        if (ownsLocalIdentityBridge() && !localProfile.value) await clearOwnedIdentity()
         return { status: 'unverified', user }
     }
 
@@ -177,9 +182,13 @@ async function syncAuthenticatedUser(
             authError.value = 'Avvio del programma non riuscito. Riprova il login.'
             console.error('[AUTH] Local runtime rejected identity; signing out fail-closed')
             await logoutCurrentUser().catch(() => {})
+            localProfile.value = null
             await syncLoggedOutUser()
             return { status: 'signed-out', user: null }
         }
+        const restored = await restoreLocalProfile()
+        if (!isCurrentRevision()) return { status: 'recoverable', user: null }
+        if (restored?.uid === user.uid) localProfile.value = restored
     }
     return { status: 'ready', user }
 }
@@ -191,7 +200,7 @@ async function syncLoggedOutUser() {
     userProfileCache.clear()
     userProfileRequests.clear()
     currentUserProfile.value = null
-    if (ownsLocalIdentityBridge()) await clearOwnedIdentity()
+    if (ownsLocalIdentityBridge() && !localProfile.value) await clearOwnedIdentity()
 }
 
 async function loadCachedUserProfile(uid: string, { force = false } = {}) {
@@ -287,6 +296,13 @@ async function processObservedAuthUser(
     const previousObservedUid = observation.previousUid
     const observedAuthUid = observation.uid
     const previousUid = currentUser.value?.uid || null
+    if (localProfile.value && user && localProfile.value.uid !== user.uid) {
+        currentUser.value = null
+        authSessionStatus.value = 'signed-out'
+        authError.value = 'Il cloud usa un altro account. Esci dal profilo locale prima di cambiare utente.'
+        isLoading.value = false
+        return
+    }
     if (!user || previousUid !== user.uid) {
         // Never keep the previous user's dashboard/settings visible while
         // provisioning, switching account or revoking an expired session.
@@ -296,6 +312,7 @@ async function processObservedAuthUser(
 
     if (
         ownsLocalIdentityBridge()
+        && !localProfile.value
         && previousObservedUid
         && previousObservedUid !== observedAuthUid
     ) {
@@ -353,6 +370,31 @@ async function initializeAuthListener() {
         return
     }
     authRecoveryCoordinator.installTriggers()
+    if (requiresLocalIdentityBridge()) {
+        const startupRevision = authRevisionLease.invalidate()
+        const restored = await restoreLocalProfile()
+        if (restored && authRevisionLease.isRevisionCurrent(startupRevision)) {
+            localProfile.value = restored
+            localIdentityCleared = false
+            isLoading.value = false
+        }
+        if (!networkListenersInstalled && typeof window !== 'undefined') {
+            networkListenersInstalled = true
+            window.addEventListener('offline', () => {
+                networkOnline.value = false
+                const user = currentUser.value
+                if (!localProfile.value || !user) return
+                invalidatePendingAuthWork()
+                recoverableAuthTarget = { kind: 'user', user }
+                currentUser.value = null
+                authSessionStatus.value = 'recoverable'
+            })
+            window.addEventListener('online', () => {
+                networkOnline.value = true
+                void retryRecoverableAuthSession()
+            })
+        }
+    }
     let authRuntime
     try {
         authRuntime = await getAuthDependencies()
@@ -382,16 +424,21 @@ async function initAuthListener() {
 }
 
 export function useFirebaseAuth() {
-    const isAuthenticated = computed(() => !!currentUser.value)
+    const profileUser = computed(() => localProfile.value || currentUser.value)
+    const cloudSessionReady = computed(() => authSessionStatus.value === 'ready' && !!currentUser.value
+        && (!localProfile.value || localProfile.value.uid === currentUser.value.uid)
+        && (!requiresLocalIdentityBridge() || networkOnline.value))
+    const isAuthenticated = computed(() => !!profileUser.value)
     const isEmailVerified = computed(() => currentUser.value?.emailVerified ?? false)
     const needsEmailVerification = computed(() => authSessionStatus.value === 'unverified')
     const canEnterApp = computed(() => (
+        !!localProfile.value || (
         authSessionStatus.value === 'ready'
         && !!currentUser.value
         && (!AUTH_EMAIL_VERIFICATION_REQUIRED || currentUser.value.emailVerified)
-    ))
-    const userEmail = computed(() => currentUser.value?.email ?? '')
-    const userDisplayName = computed(() => firestoreNickname.value || currentUser.value?.displayName || '')
+    )))
+    const userEmail = computed(() => profileUser.value?.email ?? '')
+    const userDisplayName = computed(() => firestoreNickname.value || profileUser.value?.displayName || '')
     const isCoach = computed(() => userRole.value === 'coach')
     const isAdmin = computed(() => userRole.value === 'admin')
 
@@ -427,7 +474,10 @@ export function useFirebaseAuth() {
         let translateError: ((code: string) => string) | null = null
         try {
             // A failed stop cannot be bypassed by submitting another login.
-            await clearOwnedIdentity()
+            if (localProfile.value && email.trim().toLowerCase() !== localProfile.value.email?.toLowerCase()) {
+                return { success: false, error: 'Esci dal profilo locale prima di accedere con un altro account.' }
+            }
+            if (!localProfile.value) await clearOwnedIdentity()
             const { auth, loginWithEmail, translateAuthError } = await getAuthDependencies()
             translateError = translateAuthError
             const { user } = await loginWithEmail(email, password)
@@ -453,6 +503,7 @@ export function useFirebaseAuth() {
     const performLogout = async () => {
         invalidatePendingAuthWork()
         currentUser.value = null
+        localProfile.value = null
         authSessionStatus.value = 'initializing'
         try {
             await authSync.whenIdle()
@@ -612,6 +663,9 @@ export function useFirebaseAuth() {
 
     return {
         currentUser,
+        localProfile,
+        profileUser,
+        cloudSessionReady,
         isLoading,
         authSessionStatus,
         isSecondaryLocalRuntime,

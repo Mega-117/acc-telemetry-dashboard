@@ -151,6 +151,9 @@ onMounted(async () => {
 // === FIREBASE AUTH ===
 const { 
   currentUser, 
+  localProfile,
+  profileUser,
+  cloudSessionReady,
   isLoading: authLoading, 
   isSecondaryLocalRuntime,
   isLocalRuntimeAttested,
@@ -160,13 +163,13 @@ const {
 } = useFirebaseAuth()
 const primaryCloudOwner = usePrimaryCloudOwner({
   currentUser,
-  canEnterApp,
+  canEnterApp: cloudSessionReady,
   cloudEnabled: cloudJobsAllowed
 })
 // PIP-442: cache proiezioni owner (memoria + file locale in Electron) legate all'account:
 // idratate prima di mostrare la dashboard, svuotate a logout/cambio account.
-const ownerCacheLifecycle = useOwnerCacheLifecycle({ currentUser, canEnterApp })
-watch(primaryCloudOwner.jobsEnabled, (enabled) => {
+const ownerCacheLifecycle = useOwnerCacheLifecycle({ currentUser: profileUser, canEnterApp, cloudReady: cloudSessionReady })
+watch(canEnterApp, (enabled) => {
   const api = typeof window === 'undefined' ? null : (window as Window & { electronAPI?: { localIdentityRole?: string } }).electronAPI
   if (enabled && isPrimaryClientRuntime.value && api?.localIdentityRole === 'primary') {
     void wheelInputBridge.start().catch(() => wheelInputBridge.stop())
@@ -237,8 +240,8 @@ const preparingDashboard = ref(false)
 const overviewEntry = shallowRef<OverviewEntry | null>(null)
 provide(overviewEntryKey, overviewEntry)
 const entryLeases = createAuthRevisionLeaseCoordinator()
-watch([() => currentUser.value?.uid, canEnterApp], () => {
-  entryLeases.observe(currentUser.value?.uid || null)
+watch([() => profileUser.value?.uid, canEnterApp], () => {
+  entryLeases.observe(profileUser.value?.uid || null)
   preparingDashboard.value = false
   overviewEntry.value = null
 }, { immediate: true, flush: 'sync' })
@@ -253,7 +256,7 @@ const showDevFirebaseProbe = computed(() => {
 // Gli ascolti globali (feed attivita', Pit Wall) vivono quanto la dashboard di
 // un utente che puo' entrare: al logout si spengono, al login ripartono.
 watch(
-  [appState, currentUser, canEnterApp],
+  [appState, currentUser, cloudSessionReady],
   ([state, user, canEnter]) => {
     if (state !== 'dashboard' || !user || !canEnter) {
       stopListening()
@@ -264,7 +267,7 @@ watch(
   { flush: 'post' }
 )
 watch(
-  [appState, currentUser, canEnterApp, pitwallDemand, pitwallAllowed],
+  [appState, currentUser, cloudSessionReady, pitwallDemand, pitwallAllowed],
   ([state, user, canEnter, needsPitwall, allowed]) => {
     if (!allowed || state !== 'dashboard' || !user || !canEnter) pitwallStore.halt()
     else pitwallStore.start(needsPitwall)
@@ -344,9 +347,9 @@ const showEmailVerificationGate = () => {
 
 let terminalAuthStartupOutcomePublished = false
 let lastAuthStartupOutcome: string | null = null
-watch(authSessionStatus, (status) => {
+watch([authSessionStatus, localProfile], ([status, profile]) => {
   if (!isPrimaryClientRuntime.value || terminalAuthStartupOutcomePublished) return
-  const outcome = toAuthStartupOutcome(status)
+  const outcome = toAuthStartupOutcome(profile ? 'ready' : status)
   if (!outcome || outcome === lastAuthStartupOutcome) return
   lastAuthStartupOutcome = outcome
   void publishAuthStartupOutcome(outcome).then((accepted) => {
@@ -355,7 +358,7 @@ watch(authSessionStatus, (status) => {
 }, { immediate: true })
 
 // Restore the owner cache for entries that bypass enterDashboard.
-watch([appState, () => currentUser.value?.uid || null], ([state, uid]) => {
+watch([appState, () => profileUser.value?.uid || null], ([state, uid]) => {
   if (state === 'dashboard' && uid && canEnterApp.value) void ownerCacheLifecycle.prepare(uid)
 })
 
@@ -370,16 +373,16 @@ watch(appState, state => {
 })
 
 const enterDashboard = async () => {
-  if (!canEnterApp.value || !currentUser.value) {
+  if (!canEnterApp.value || !profileUser.value) {
     showEmailVerificationGate()
     return
   }
   if (appState.value === 'dashboard' || preparingDashboard.value) return
-  const uid = currentUser.value.uid
+  const uid = profileUser.value.uid
   const lease = entryLeases.capture(uid)
   if (!lease) return
   const destination = pendingSpaRedirectPath.value || (isDashboardRoute(normalizedRoutePath.value) ? route.fullPath : '/panoramica')
-  const isCurrent = () => entryLeases.isLeaseCurrent(lease, currentUser.value?.uid) && canEnterApp.value
+  const isCurrent = () => entryLeases.isLeaseCurrent(lease, profileUser.value?.uid) && canEnterApp.value
   preparingDashboard.value = true
   try {
     // Hydrate local projections before the overview preparation starts cloud reads.
@@ -388,7 +391,7 @@ const enterDashboard = async () => {
     if (destination.split(/[?#]/)[0] === '/panoramica') {
       const entry = prepareOverviewEntry(uid, {
         projection: () => telemetryGateway.getOverviewProjection(uid),
-        events: () => loadRaceCalendarEvents(uid, 25),
+        events: () => cloudSessionReady.value ? loadRaceCalendarEvents(uid, 25) : Promise.resolve([]),
         image: projection => decodeOverviewImage(responsiveImage(getOverviewCarImage(projection?.lastCar.rawName), appBaseURL, OVERVIEW_CAR_SIZES)),
         code: warmDashboardCode,
       })
@@ -409,6 +412,11 @@ const enterDashboard = async () => {
 }
 
 const applyAuthSessionToShell = (status: AuthSessionStatus) => {
+  if (localProfile.value) {
+    userEmail.value = localProfile.value.email || ''
+    void enterDashboard()
+    return
+  }
   if (status === 'initializing' || status === 'recoverable') {
     if (status === 'recoverable' || appState.value !== 'auth') appState.value = 'loading'
     stopListening()
@@ -438,7 +446,7 @@ const applyAuthSessionToShell = (status: AuthSessionStatus) => {
 }
 
 // A single canonical auth status owns initial bootstrap and later transitions.
-watch([authLoading, authSessionStatus], ([loading, status]) => {
+watch([authLoading, authSessionStatus, localProfile], ([loading, status]) => {
   if (isTrainingOverlayIntent.value || isHudOverlayRoute.value || isStandaloneRuntimeRoute.value || isStandaloneDevRoute.value) {
     hasInitialized.value = true
     return

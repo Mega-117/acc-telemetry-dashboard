@@ -29,6 +29,8 @@ export function createSyncQueueService(params?: {
   const onStatusChange = params?.onStatusChange
   let status: SyncQueueStatus = 'idle'
   const queue = new Map<string, PendingSyncFile>()
+  let generation = 0
+  let draining = false
 
   function setStatus(nextStatus: SyncQueueStatus) {
     status = nextStatus
@@ -44,6 +46,7 @@ export function createSyncQueueService(params?: {
   }
 
   function clear() {
+    generation += 1
     queue.clear()
     setStatus('idle')
   }
@@ -66,6 +69,7 @@ export function createSyncQueueService(params?: {
   async function drain<ResultType>(
     processor: (item: PendingSyncFile) => Promise<SyncQueueProcessOutcome<ResultType>>
   ): Promise<SyncQueueDrainResult<ResultType>> {
+    if (draining) throw new Error('SYNC_QUEUE_DRAIN_IN_PROGRESS')
     if (queue.size === 0) {
       setStatus('idle')
       return {
@@ -83,20 +87,30 @@ export function createSyncQueueService(params?: {
     const dirtyTracks = new Set<string>()
     let changedCount = 0
 
-    const items = Array.from(queue.values())
-    queue.clear()
-
-    for (const item of items) {
-      const outcome = await processor(item)
-      results.push(outcome.result)
-      if (outcome.didChange) {
-        changedCount++
-        if (outcome.dirtySessionId) dirtySessionIds.add(outcome.dirtySessionId)
-        if (outcome.dirtyTrack) dirtyTracks.add(outcome.dirtyTrack)
+    const items = Array.from(queue.entries())
+    const startedGeneration = generation
+    draining = true
+    try {
+      for (const [key, item] of items) {
+        if (generation !== startedGeneration) break
+        const outcome = await processor(item)
+        if (generation !== startedGeneration) break
+        // Keep unprocessed work on failure; a logout never resurrects old-owner work.
+        if (queue.get(key) === item) queue.delete(key)
+        results.push(outcome.result)
+        if (outcome.didChange) {
+          changedCount++
+          if (outcome.dirtySessionId) dirtySessionIds.add(outcome.dirtySessionId)
+          if (outcome.dirtyTrack) dirtyTracks.add(outcome.dirtyTrack)
+        }
       }
+      setStatus(queue.size ? 'queued' : 'idle')
+    } catch (error) {
+      if (generation === startedGeneration) setStatus('error')
+      throw error
+    } finally {
+      draining = false
     }
-
-    setStatus('idle')
     return {
       results,
       dirtySessionIds: Array.from(dirtySessionIds),

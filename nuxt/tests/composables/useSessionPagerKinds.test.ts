@@ -4,7 +4,7 @@ import { useSessionPager, clearSessionPagerCache } from '~/composables/useSessio
 
 const fake = vi.hoisted(() => ({ queries: [] as any[], rows: [] as any[] }))
 vi.mock('~/config/firebase', () => ({ db: {} }))
-vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ currentUser: ref({ uid: 'qa' }) }) }))
+vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ profileUser: ref({ uid: 'qa' }), cloudSessionReady: ref(true) }) }))
 vi.mock('~/repositories/ownerDocumentRepository', () => ({ loadOwnerDocument: async () => ({ exists: false }) }))
 vi.mock('~/repositories/telemetryLocalRepository', () => ({ loadLocalTelemetrySessions: async () => [] }))
 vi.mock('~/services/sync/sessionListProjectionService', () => ({

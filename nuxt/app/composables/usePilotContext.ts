@@ -33,7 +33,7 @@ export function usePilotContext(): Ref<string | null> {
  * Returns pilotId if in coach mode, otherwise current user's UID.
  */
 export function useTargetUserId() {
-    const { currentUser } = useFirebaseAuth()
+    const { profileUser: currentUser } = useFirebaseAuth()
     const pilotId = usePilotContext()
 
     return computed(() => pilotId.value || currentUser.value?.uid || null)

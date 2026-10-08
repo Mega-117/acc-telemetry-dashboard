@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref } from 'vue'
+import { loadLocalTelemetrySessions } from '~/repositories/telemetryLocalRepository'
+import { loadCloudSessionsBounded, loadCloudSessionIndexList, fetchCloudFullSession } from '~/repositories/telemetryCloudRepository'
 
 // ─── Firebase / config mocks ────────────────────────────────────────────────
 vi.mock('~/config/firebase', () => ({ db: {} }))
@@ -23,8 +25,10 @@ vi.mock('~/services/telemetry/telemetryMergeService', () => ({
 
 // ─── Auth mock ───────────────────────────────────────────────────────────────
 const mockCurrentUser = ref<{ uid: string } | null>(null)
+const mockCloudReady = ref(true)
+beforeEach(() => { mockCloudReady.value = true })
 vi.mock('~/composables/useFirebaseAuth', () => ({
-  useFirebaseAuth: () => ({ currentUser: mockCurrentUser }),
+  useFirebaseAuth: () => ({ profileUser: mockCurrentUser, cloudSessionReady: mockCloudReady }),
 }))
 
 // ─── Import dopo i mock ───────────────────────────────────────────────────────
@@ -34,11 +38,39 @@ import {
   globalIsLoading,
   globalError,
   globalLastUserId,
+  clearSessionLoaderCache,
 } from '~/composables/useSessionLoader'
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('useSessionLoader', () => {
+  it('does not repopulate the previous owner cache after logout during a cloud request', async () => {
+    mockCurrentUser.value = { uid: 'old-owner' }
+    let resolve!: (value: any[]) => void
+    vi.mocked(loadCloudSessionIndexList).mockReturnValueOnce(new Promise(r => { resolve = r }))
+    const pending = useSessionLoader().loadSessions(undefined, true)
+    clearSessionLoaderCache('old-owner')
+    mockCurrentUser.value = { uid: 'new-owner' }
+    resolve([{ sessionId: 'old-private-session' }])
+    expect(await pending).toEqual([])
+    expect(globalSessions.value).toEqual([])
+    expect(globalLastUserId.value).toBeNull()
+  })
+  it('uses local files without attempting cloud reads when local profile is active and cloud login is absent', async () => {
+    vi.stubGlobal('window', { electronAPI: {} })
+    mockCurrentUser.value = { uid: 'offline-owner' }
+    mockCloudReady.value = false
+    vi.mocked(loadLocalTelemetrySessions).mockResolvedValueOnce([{ sessionId: 'saved', syncState: 'synced' }] as any)
+    const loader = useSessionLoader()
+    const result = await loader.loadSessions(undefined, true)
+    expect(result[0]?.sessionId).toBe('saved')
+    expect(result[0]?.syncState).toBe('synced')
+    expect(loadCloudSessionsBounded).not.toHaveBeenCalled()
+    expect(loadCloudSessionIndexList).not.toHaveBeenCalled()
+    expect(await loader.fetchSessionFull('not-on-disk')).toBeNull()
+    expect(fetchCloudFullSession).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
   beforeEach(() => {
     mockCurrentUser.value = null
     globalSessions.value = []

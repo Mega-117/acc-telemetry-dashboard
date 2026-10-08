@@ -28,7 +28,7 @@ vi.mock('~/services/telemetry/activityProjectionService', () => ({
 // ─── Auth mock ───────────────────────────────────────────────────────────────
 const mockCurrentUser = ref<{ uid: string } | null>(null)
 vi.mock('~/composables/useFirebaseAuth', () => ({
-  useFirebaseAuth: () => ({ currentUser: mockCurrentUser }),
+  useFirebaseAuth: () => ({ profileUser: mockCurrentUser, cloudSessionReady: ref(true) }),
 }))
 
 // ─── Import dopo i mock ───────────────────────────────────────────────────────

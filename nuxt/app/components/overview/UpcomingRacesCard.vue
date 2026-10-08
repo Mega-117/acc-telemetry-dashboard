@@ -29,8 +29,10 @@ const props = defineProps<{
 const emit = defineEmits<{ loading: [value: boolean] }>()
 type ModalMode = 'create' | 'edit' | 'delete'
 
-const { currentUser, userRole } = useFirebaseAuth()
-const cloudWriteGate = useRuntimeCapabilityGate().gate('cloudWrite')
+const { currentUser, userRole, cloudSessionReady } = useFirebaseAuth()
+const runtimeWriteGate = useRuntimeCapabilityGate().gate('cloudWrite')
+const cloudWriteGate = computed(() => cloudSessionReady.value ? runtimeWriteGate.value
+  : { allowed: false, message: 'Ricollega il cloud per modificare il calendario.' })
 
 const events = ref<RaceCalendarEvent[]>(props.initialUserId === props.userId ? props.initialEvents || [] : [])
 const entry = inject(overviewEntryKey, null)
@@ -180,6 +182,7 @@ async function refreshEvents() {
   const revision = ++loadRevision
   const uid = props.userId
   calendarLoadError.value = false
+  if (!cloudSessionReady.value) { isLoading.value = false; return }
   if (!uid) {
     events.value = []
     isLoading.value = false
@@ -239,7 +242,7 @@ function handleCacheInvalidated(event: Event) {
 }
 
 watch(
-  () => [props.userId, props.gameId],
+  () => [props.userId, props.gameId, cloudSessionReady.value],
   () => {
     events.value = []
     isModalOpen.value = false
@@ -272,7 +275,8 @@ onBeforeUnmount(() => {
       <button class="race-action" type="button" aria-label="Aggiungi gara" :disabled="!cloudWriteGate.allowed" :title="cloudWriteGate.allowed ? 'Aggiungi gara' : cloudWriteGate.message" @click="openCreateModal"><CirclePlus v-if="racing" :size="32" :stroke-width="1.5" aria-hidden="true" /><span v-else>Aggiungi gara</span></button>
     </div>
 
-    <div v-if="isLoading" class="race-empty">Caricamento gare...</div>
+    <div v-if="!cloudSessionReady" class="race-empty" role="status">Calendario non disponibile offline.</div>
+    <div v-else-if="isLoading" class="race-empty">Caricamento gare...</div>
     <div v-else-if="calendarLoadError" class="race-empty" role="status">
       <span>Calendario non disponibile.</span>
       <button type="button" class="race-action" @click="refreshEvents">Riprova</button>

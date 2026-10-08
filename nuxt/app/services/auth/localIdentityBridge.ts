@@ -1,10 +1,13 @@
 import type { User } from 'firebase/auth'
 import type { AuthStartupOutcome } from './authSessionPolicy'
 
+export type LocalProfile = { uid: string; email: string | null; displayName: string; offlineReady: boolean }
+
 type ElectronAPI = {
     isElectron?: boolean
     localIdentityRole?: 'primary' | 'consumer'
     attestLocalRuntime?: () => Promise<boolean>
+    restoreLocalProfile?: () => Promise<unknown>
     saveUserIdentity?: (payload: {
         userId: string
         email: string | null
@@ -32,6 +35,21 @@ function getElectronAPI(): ElectronAPI | null {
 export function requiresLocalIdentityBridge() {
     const electronAPI = getElectronAPI()
     return electronAPI?.localIdentityRole === 'primary'
+}
+
+export async function restoreLocalProfile(): Promise<LocalProfile | null> {
+    const api = getElectronAPI()
+    if (api?.localIdentityRole !== 'primary' || !api.restoreLocalProfile) return null
+    try {
+        const result = await api.restoreLocalProfile() as { status?: string; offlineReady?: boolean;
+            profile?: { userId?: string; email?: string | null; displayName?: string } }
+        if (result?.status !== 'ready' || !result.profile?.userId) return null
+        return { uid: result.profile.userId, email: result.profile.email || null,
+            displayName: result.profile.displayName || '', offlineReady: result.offlineReady === true }
+    } catch {
+        console.warn('[AUTH] Local profile unavailable; online preparation required')
+        return null
+    }
 }
 
 export function isSecondaryLocalRuntimeRenderer() {

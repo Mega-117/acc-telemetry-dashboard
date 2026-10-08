@@ -7,7 +7,7 @@ import Activity from '~/components/cards/ActivityCard.vue'
 import { overviewEntryKey } from '~/services/auth/overviewEntryPreparation'
 
 const mocks = vi.hoisted(() => ({ load: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn() }))
-vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ currentUser: ref({ uid: 'qa' }), userRole: ref('pilot') }) }))
+vi.mock('~/composables/useFirebaseAuth', () => ({ useFirebaseAuth: () => ({ currentUser: ref({ uid: 'qa' }), profileUser: ref({ uid: 'qa' }), cloudSessionReady: ref(true), userRole: ref('pilot') }) }))
 vi.mock('~/composables/useRuntimeCapabilityGate', () => ({ useRuntimeCapabilityGate: () => ({ gate: () => ref({ allowed: true }) }) }))
 vi.mock('~/repositories/raceCalendarRepository', () => ({ loadRaceCalendarEvents: mocks.load, loadUpcomingRaceCalendarEvents: mocks.load, createRaceCalendarEvent: mocks.create, updateRaceCalendarEvent: mocks.update, deleteRaceCalendarEvent: mocks.remove }))
 const event = { id: 'event', title: 'Gara QA', startsAt: '2099-10-01T19:00', trackName: 'Monza', carName: 'Ferrari' }

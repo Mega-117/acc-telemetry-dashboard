@@ -68,7 +68,8 @@ function journal(reason: string, extra: { bytes?: number } = {}) {
 export async function hydrateOwnerCachesFromDisk(
   uid: string,
   revision: string | null,
-  bridge: OwnerCacheBridge | null = resolveOwnerCacheBridge()
+  bridge: OwnerCacheBridge | null = resolveOwnerCacheBridge(),
+  options: { offline?: boolean; isCurrent?: () => boolean } = {}
 ): Promise<OwnerCacheHydration> {
   if (!bridge) return 'unavailable'
   let raw: unknown = null
@@ -80,11 +81,12 @@ export async function hydrateOwnerCachesFromDisk(
     return 'missing'
   }
   const payload = parseOwnerCachePayload(raw, uid)
+  if (options.isCurrent && !options.isCurrent()) return 'unavailable'
   if (!payload) {
     journal('missing')
     return 'missing'
   }
-  if (!shouldHydrateOwnerCache(payload, revision)) {
+  if (!options.offline && !shouldHydrateOwnerCache(payload, revision)) {
     journal('stale')
     try { await bridge.ownerCacheClear(uid) } catch { /* il file verra' comunque sovrascritto */ }
     return 'stale'

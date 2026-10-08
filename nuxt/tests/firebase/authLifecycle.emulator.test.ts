@@ -15,6 +15,7 @@ vi.mock('~/services/auth/localIdentityBridge', () => ({
   requiresLocalIdentityBridge: () => true,
   shouldObserveFirebaseAuth: () => true,
   requestLocalRuntimeAttestation: async () => false,
+  restoreLocalProfile: async () => null,
 }))
 let app: FirebaseApp
 const password = 'LocalOnly-PIP404-123!'

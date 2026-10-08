@@ -228,7 +228,7 @@ function getElectronApi(): any | null {
 }
 
 export function useElectronSync() {
-    const { currentUser, canEnterApp } = useFirebaseAuth()
+    const { currentUser, cloudSessionReady: canEnterApp } = useFirebaseAuth()
     const { resetAllTrackBests, clearTrackDerivedCaches } = useTelemetryData()
     const ownerDataMaintenance = useOwnerDataMaintenance()
 

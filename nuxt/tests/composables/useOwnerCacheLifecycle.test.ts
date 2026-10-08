@@ -55,12 +55,28 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('useOwnerCacheLifecycle', () => {
+  it('offline preparation performs no cloud read and reconnecting preserves local ownership', async () => {
+    const scope = effectScope()
+    const cloudReady = ref(false)
+    const lifecycle = scope.run(() => useOwnerCacheLifecycle({ currentUser: ref({ uid: 'a' }),
+      canEnterApp: ref(true), cloudReady, bridge }))!
+    expect(await lifecycle.prepare('a')).toBe('hydrated')
+    expect(fake.getDoc).not.toHaveBeenCalled()
+    expect(mocks.hydrate).toHaveBeenCalledWith('a', null, bridge, expect.objectContaining({ offline: true }))
+    expect(mocks.startWatch).not.toHaveBeenCalled()
+    cloudReady.value = true
+    await lifecycle.prepare('a')
+    expect(fake.getDoc).toHaveBeenCalledOnce()
+    expect(mocks.clearDisk).not.toHaveBeenCalled()
+    expect(mocks.invalidate).not.toHaveBeenCalled()
+    scope.stop()
+  })
   it('prepare: legge users/{uid} una volta, idrata con la revisione e avvia salvataggio e controllo', async () => {
     const { lifecycle, scope } = setup()
     expect(await lifecycle.prepare('a')).toBe('hydrated')
     expect(getCacheOwnerUid()).toBe('a')
     expect(fake.getDoc).toHaveBeenCalledTimes(1)
-    expect(mocks.hydrate).toHaveBeenCalledWith('a', 'rev-a', bridge)
+    expect(mocks.hydrate).toHaveBeenCalledWith('a', 'rev-a', bridge, expect.objectContaining({ offline: false }))
     expect(mocks.startWatch).toHaveBeenCalledWith(expect.objectContaining({ uid: 'a', revision: 'rev-a' }))
     // Idempotente: la seconda chiamata non rilegge e non riavvia nulla.
     expect(await lifecycle.prepare('a')).toBe('skipped')
@@ -106,7 +122,7 @@ describe('useOwnerCacheLifecycle', () => {
     await Promise.resolve()
     expect(mocks.clearDisk).toHaveBeenCalledWith('a', bridge)
     expect(await lifecycle.prepare('b')).toBe('hydrated')
-    expect(mocks.hydrate).toHaveBeenLastCalledWith('b', 'rev-b', bridge)
+    expect(mocks.hydrate).toHaveBeenLastCalledWith('b', 'rev-b', bridge, expect.objectContaining({ offline: false }))
     expect(mocks.hydrate).not.toHaveBeenCalledWith('b', 'rev-a', bridge)
     scope.stop()
   })

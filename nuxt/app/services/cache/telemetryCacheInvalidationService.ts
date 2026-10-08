@@ -1,5 +1,6 @@
 import { clearTelemetryGatewayCache } from '~/composables/useTelemetryGateway'
 import { clearSessionPagerCache } from '~/composables/useSessionPager'
+import { clearSessionLoaderCache } from '~/composables/useSessionLoader'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
 import { clearCoachDirectoryCache } from '~/repositories/coachDirectoryRepository'
 import { clearCoachLessonsCache } from '~/repositories/coachLessonsRepository'
@@ -33,6 +34,7 @@ export function invalidateTelemetryCaches(options: TelemetryCacheInvalidationOpt
     clearTelemetryProjectionRepositoryCache(uid)
     clearTelemetryGatewayCache(uid)
     clearSessionPagerCache(uid)
+    clearSessionLoaderCache(uid)
   }
 
   // PIP-444: il mirror della sync sopravvive allo scope `sync` (lo pubblica la sync stessa

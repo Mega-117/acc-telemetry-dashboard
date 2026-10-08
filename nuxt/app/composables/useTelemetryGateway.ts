@@ -161,7 +161,8 @@ export function useTelemetryGateway(explicitGameId?: string) {
     const gameId = explicitGameId ?? useGameContext().consultedGame.value
     const telemetry = useTelemetryData(gameId)
     const pager = useSessionPager()
-    const { currentUser, userDisplayName } = useFirebaseAuth()
+    const { profileUser: currentUser, userDisplayName, cloudSessionReady } = useFirebaseAuth()
+    const canReadCloud = () => cloudSessionReady.value && (typeof navigator === 'undefined' || navigator.onLine !== false)
 
     const isElectron = computed(() => {
         if (typeof window === 'undefined') return false
@@ -218,7 +219,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
         if (!resolvedUserId) return null
 
         const sourceMode = resolveOverviewSource(resolvedUserId)
-        const isOnline = typeof window === 'undefined' ? true : navigator.onLine
+        const isOnline = canReadCloud()
         const cacheKey = [
             resolvedUserId,
             gameId,
@@ -297,6 +298,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
     }
 
     async function collectTrackBestTimes(trackIds: string[], targetUserId: string | undefined, category: CarCategory): Promise<Record<string, TrackBestTimes>> {
+        if (!canReadCloud()) return {}
         if (gameId !== 'acc') return {}
         const uniqueTrackIds = Array.from(new Set(trackIds.map((trackId) => normalizeTrackKey(trackId)).filter(Boolean)))
         if (uniqueTrackIds.length === 0) return {}
@@ -349,6 +351,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
 
     async function getOverviewProjection(targetUserId?: string): Promise<OverviewProjection | null> {
         const resolvedUserId = resolveTargetUserId(targetUserId)
+        if (resolvedUserId && !canReadCloud()) return getCommonOverviewProjection(resolvedUserId, gameId)
         const scenarioId = startFirebaseScenario('page.panoramica.projection', { targetUserId: resolvedUserId })
         try {
             if (!resolvedUserId) return null
@@ -468,7 +471,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
 
     async function getTracksOverviewProjection(targetUserId?: string): Promise<TrackOverviewProjectionItem[]> {
         // This projection includes ACC's fixed track catalogue and best rules.
-        if (gameId !== 'acc') {
+        if (gameId !== 'acc' || !canReadCloud()) {
             const uid = resolveTargetUserId(targetUserId)
             if (!uid) return []
             const sessions = await loadCommonOverviewSessions(uid)
@@ -526,11 +529,12 @@ export function useTelemetryGateway(explicitGameId?: string) {
     async function loadCommonOverviewSessions(targetUserId: string) {
         const uid = resolveTargetUserId(targetUserId)
         if (!uid) return null
-        const source = await loadLightweightSessionSource(uid)
-        if (!source) return null // A bounded fallback cannot prove whole-archive totals.
         const local = isElectron.value && uid === currentUser.value?.uid
             ? await loadLocalTelemetrySessions({ electronAPI: (window as any).electronAPI, ownerId: uid,
-                isOnline: typeof navigator === 'undefined' || navigator.onLine }) : []
+                isOnline: canReadCloud() }) : []
+        if (!canReadCloud()) return local // The shell labels this as the archive on this computer.
+        const source = await loadLightweightSessionSource(uid)
+        if (!source) return null // A bounded fallback cannot prove whole-archive totals.
         return mergePendingLocal(source.sessions, local, true)
     }
 
@@ -545,6 +549,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
     }
 
     async function hydrateHistorySummaries(uid: string, sessions: SessionDocument[]): Promise<SessionDocument[]> {
+        if (!canReadCloud()) return sessions
         // Older list projections omitted grip/fuel records. Hydrate summary documents
         // only for the requested track; no raw lap chunks or cloud writes.
         const result: SessionDocument[] = []
@@ -600,7 +605,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
                 filters
             })
 
-            const isOnline = typeof window === 'undefined' ? true : navigator.onLine
+            const isOnline = canReadCloud()
             const hasLocalSource = sessions.some((item) => item.source === 'local')
             const source: PipelineSource = hasLocalSource ? 'mixed' : (isOnline ? 'cloud_page' : 'local_offline')
             pushGatewayDiagnostic({
@@ -735,6 +740,7 @@ export function useTelemetryGateway(explicitGameId?: string) {
         if (gameId !== 'acc') return null
         const category = options.category || 'GT3'
         const selectedGrip = options.grip || 'Optimum'
+        if (!canReadCloud()) return getTrackDetailProjectionFallback(trackId, targetUserId, category, selectedGrip)
         const scenarioId = startFirebaseScenario('page.trackDetail.projection', {
             targetUserId: resolvedUserId,
             trackId,

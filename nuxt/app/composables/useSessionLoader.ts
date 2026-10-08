@@ -32,13 +32,23 @@ export const globalSessions = ref<SessionDocument[]>([])
 export const globalIsLoading = ref(false)
 export const globalError = ref<string | null>(null)
 export const globalLastUserId = ref<string | null>(null)
+let requestRevision = 0
+export function clearSessionLoaderCache(uid?: string) {
+    if (uid && uid !== globalLastUserId.value) return
+    requestRevision += 1
+    globalLastUserId.value = null
+    globalSessions.value = []
+    globalIsLoading.value = false
+    globalError.value = null
+}
 
 export function useSessionLoader() {
     const sessions = globalSessions
     const isLoading = globalIsLoading
     const error = globalError
 
-    const { currentUser } = useFirebaseAuth()
+    const { profileUser: currentUser, cloudSessionReady } = useFirebaseAuth()
+    const canReadCloud = () => cloudSessionReady.value && (typeof navigator === 'undefined' || navigator.onLine !== false)
 
     const isElectron = computed(() => {
         if (typeof window === 'undefined') return false
@@ -60,11 +70,12 @@ export function useSessionLoader() {
         return loadLocalTelemetrySessions({
             electronAPI,
             ownerId: ownerId || currentUser.value?.uid,
-            isOnline: typeof window === 'undefined' ? true : navigator.onLine
+            isOnline: canReadCloud()
         })
     }
 
     async function loadFromFirebase(targetUserId: string, maxItems: number = FIREBASE_SESSIONS_FALLBACK_LIMIT): Promise<SessionDocument[]> {
+        if (!canReadCloud()) return []
         return loadCloudSessionsBounded({
             db,
             targetUserId,
@@ -96,12 +107,15 @@ export function useSessionLoader() {
         }
 
         globalLastUserId.value = targetUserId
+        const revision = ++requestRevision
+        const owner = currentUser.value?.uid
+        const isCurrent = () => revision === requestRevision && owner === currentUser.value?.uid
         isLoading.value = true
         error.value = null
 
         try {
             const isLoadingOwnData = !userId || userId === currentUser.value?.uid
-            const isOnline = typeof window === 'undefined' ? true : navigator.onLine
+            const isOnline = canReadCloud()
             const shouldTrySessionIndex = sourceMode !== 'cloud_fresh'
             let usedSessionIndex = false
             let sourceLabel = 'cloudQuery'
@@ -117,6 +131,7 @@ export function useSessionLoader() {
                 }
             }
 
+            if (!isCurrent()) return []
             // Offline owner: local cache/outbox only.
             if (isElectron.value && isLoadingOwnData && !isOnline) {
                 sessions.value = localSessions.map((session) => ({
@@ -128,6 +143,7 @@ export function useSessionLoader() {
             }
 
             let cloudSessions: SessionDocument[] = []
+            if (!isOnline) return []
 
             if (shouldTrySessionIndex) {
                 try {
@@ -146,6 +162,7 @@ export function useSessionLoader() {
                 cloudSessions = await loadFromFirebase(targetUserId, FIREBASE_SESSIONS_FALLBACK_LIMIT)
             }
 
+            if (!isCurrent()) return []
             const uniqueCloudSessions = dedupeCloudSessionsService(cloudSessions)
             let mergedSessions = uniqueCloudSessions
 
@@ -173,11 +190,12 @@ export function useSessionLoader() {
             console.log(`[SESSION_LOADER] Loaded ${sessions.value.length} sessions (mode=${sourceMode}, source=${sourceLabel}, context=${context})`)
             return sessions.value
         } catch (e: any) {
+            if (!isCurrent()) return []
             console.error('[SESSION_LOADER] Error loading sessions:', e)
             error.value = e.message
             return []
         } finally {
-            isLoading.value = false
+            if (isCurrent()) isLoading.value = false
         }
     }
 
@@ -204,6 +222,10 @@ export function useSessionLoader() {
             }
         }
 
+        if (!canReadCloud()) {
+            error.value = 'Dettaglio non disponibile su questo computer. Riconnetti il cloud per scaricarlo.'
+            return null
+        }
         try {
             const isExternalSession = targetUserId !== currentUser.value?.uid && !isCoachAccess
             const raw = await fetchCloudFullSession({

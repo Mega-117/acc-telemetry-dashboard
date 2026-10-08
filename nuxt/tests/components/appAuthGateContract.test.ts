@@ -67,13 +67,14 @@ describe('App protected runtime route contract', () => {
     expect(revisionGuard).toBeLessThan(bridgeSave)
   })
 
-  it('usa un solo stato auth per shell e startup Electron', () => {
+  it('riconcilia cloud e profilo locale nella shell e nello startup Electron', () => {
     const overlaySource = readFileSync(
       fileURLToPath(new URL('../../app/components/auth/AuthOverlay.vue', import.meta.url)),
       'utf8',
     )
 
-    expect(appSource).toContain('watch([authLoading, authSessionStatus]')
+    expect(appSource).toContain('watch([authLoading, authSessionStatus, localProfile]')
+    expect(appSource).toContain("toAuthStartupOutcome(profile ? 'ready' : status)")
     expect(appSource).toContain('applyAuthSessionToShell(status)')
     expect(appSource).toContain('publishAuthStartupOutcome(outcome)')
     expect(appSource).not.toContain('handleLoginSuccess = (email: string, emailVerified: boolean)')
@@ -135,10 +136,10 @@ describe('App protected runtime route contract', () => {
     expect(appSource).toContain('providePitwallStore(pitwallStore)')
     expect(appSource).toContain('cloudEnabled: cloudJobsAllowed')
     expect(appSource).toContain('&& cloudJobsAllowed.value')
-    expect(appSource).toContain('[appState, currentUser, canEnterApp]')
+    expect(appSource).toContain('[appState, currentUser, cloudSessionReady]')
     expect(appSource).toContain("if (state !== 'dashboard' || !user || !canEnter)")
     expect(appSource).toContain('pitwallStore.halt()')
-    expect(appSource).toContain('[appState, currentUser, canEnterApp, pitwallDemand, pitwallAllowed]')
+    expect(appSource).toContain('[appState, currentUser, cloudSessionReady, pitwallDemand, pitwallAllowed]')
     expect(appSource).toContain("if (!allowed || state !== 'dashboard' || !user || !canEnter) pitwallStore.halt()")
     expect(appSource).toContain('jobsEnabled: pitwallJobsEnabled, demand: pitwallDemand')
     expect(appSource).toContain('pitwallStore.start(needsPitwall)')

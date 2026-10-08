@@ -91,7 +91,7 @@ const emptyGripBests = (): GripBestTimes => ({
 })
 
 export function useTrackBests() {
-    const { currentUser } = useFirebaseAuth()
+    const { profileUser: currentUser, cloudSessionReady } = useFirebaseAuth()
     const sessions = globalSessions
 
     const isElectron = computed(() => {
@@ -293,7 +293,7 @@ export function useTrackBests() {
             }
         }
 
-        if (targetUserId) {
+        if (targetUserId && cloudSessionReady.value) {
             try {
                 // PIP-441: servito dall'indice piste in cache (0 letture) o da un documento singolo;
                 // il repository scarta schemi/regole legacy (isSupportedTrackBestProjection).
@@ -366,6 +366,7 @@ export function useTrackBests() {
     }
 
     async function resetAllTrackBests(userId?: string): Promise<number> {
+        if (!cloudSessionReady.value) throw new Error('Ricollega il cloud prima di modificare lo storico remoto.')
         const targetUserId = userId || currentUser.value?.uid
         if (!targetUserId) {
             console.warn('[TRACK_BESTS] No user ID, cannot reset trackBests')
@@ -409,6 +410,7 @@ export function useTrackBests() {
     }
 
     async function prefetchAllTrackBests(userId?: string): Promise<number> {
+        if (!cloudSessionReady.value) return 0
         const targetUserId = userId || currentUser.value?.uid
         if (!targetUserId) {
             console.warn('[PREFETCH] No user ID, skipping prefetch')

@@ -7,6 +7,7 @@ const mock = vi.hoisted(() => ({
   save: vi.fn(),
   signIn: vi.fn(),
   signOut: vi.fn(),
+  restore: vi.fn(),
 }))
 vi.mock('firebase/auth', () => ({
   onAuthStateChanged: (_: any, callback: any) => { mock.observe = callback; void callback(mock.auth.currentUser) },
@@ -27,11 +28,13 @@ vi.mock('~/services/auth/localIdentityBridge', () => ({
   requiresLocalIdentityBridge: () => true,
   shouldObserveFirebaseAuth: () => true,
   requestLocalRuntimeAttestation: async () => false,
+  restoreLocalProfile: () => mock.restore(),
 }))
 beforeEach(() => {
   vi.resetModules()
   vi.clearAllMocks()
   mock.auth.currentUser = null
+  mock.restore.mockResolvedValue(null)
   mock.clear.mockResolvedValue(true)
   mock.save.mockResolvedValue(true)
   mock.signIn.mockImplementation(async (uid: string) => {
@@ -89,4 +92,42 @@ it('riconcilia il ri-login same-UID anche se Firebase non emette un nuovo observ
   mock.signIn.mockImplementationOnce(async () => ({ user: mock.auth.currentUser }))
   expect((await auth.login('A', 'fixture')).success).toBe(true)
   expect(auth.canEnterApp.value).toBe(true)
+})
+
+const offlineProfile = { uid: 'A', email: 'a@example.invalid', displayName: 'Local A', offlineReady: true }
+it('cold start without Firebase session restores local use but never grants cloud authority', async () => {
+  mock.restore.mockResolvedValue(offlineProfile)
+  const auth = await initialized()
+  expect(auth.profileUser.value?.uid).toBe('A')
+  expect(auth.canEnterApp.value).toBe(true)
+  expect(auth.currentUser.value).toBeNull()
+  expect(auth.cloudSessionReady.value).toBe(false)
+  expect(mock.clear).not.toHaveBeenCalled()
+  expect((await auth.login('other@example.invalid', 'fixture')).success).toBe(false)
+  expect(mock.signIn).not.toHaveBeenCalled()
+  expect((await auth.logout()).success).toBe(true)
+  expect(auth.canEnterApp.value).toBe(false)
+  expect(mock.clear).toHaveBeenCalledOnce()
+})
+it.each(['auth/network-request-failed', 'auth/user-token-expired'])('cloud error %s leaves prepared local use intact', async code => {
+  mock.restore.mockResolvedValue(offlineProfile)
+  const auth = await initialized()
+  const user = { uid: 'A', email: offlineProfile.email, emailVerified: true,
+    reload: async () => { throw Object.assign(new Error(code), { code }) }, getIdToken: async () => 'fixture' }
+  mock.auth.currentUser = user
+  await mock.observe(user)
+  expect(auth.canEnterApp.value).toBe(true)
+  expect(auth.cloudSessionReady.value).toBe(false)
+  expect(auth.currentUser.value).toBeNull()
+  expect(mock.clear).not.toHaveBeenCalled()
+})
+it('another observed cloud account never replaces the prepared owner', async () => {
+  mock.restore.mockResolvedValue(offlineProfile)
+  const auth = await initialized()
+  const foreign = { uid: 'B' }
+  mock.auth.currentUser = foreign
+  await mock.observe(foreign)
+  expect(auth.profileUser.value?.uid).toBe('A')
+  expect(auth.cloudSessionReady.value).toBe(false)
+  expect(mock.save).not.toHaveBeenCalled()
 })

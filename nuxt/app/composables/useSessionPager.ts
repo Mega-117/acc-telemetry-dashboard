@@ -759,7 +759,8 @@ async function buildMergedOnlineOwnerPage(
 }
 
 export function useSessionPager() {
-    const { currentUser } = useFirebaseAuth()
+    const { profileUser: currentUser, cloudSessionReady } = useFirebaseAuth()
+    const canReadCloud = computed(() => globalOnline.value && cloudSessionReady.value)
     ensureInit()
 
     const isElectron = computed(() => {
@@ -804,7 +805,7 @@ export function useSessionPager() {
             const isOwner = targetUserId === currentUser.value?.uid
             const localSessions = (isElectron.value ? await getLocalSessionsForUser(targetUserId) : [])
             if (!isCurrent()) return []
-            const lightweightSource = await loadLightweightSessionSource(targetUserId)
+            const lightweightSource = canReadCloud.value ? await loadLightweightSessionSource(targetUserId) : null
             if (!isCurrent()) return []
 
             if (lightweightSource) {
@@ -831,7 +832,7 @@ export function useSessionPager() {
                 return globalSessions.value
             }
 
-            if (isOwner && isElectron.value && globalOnline.value) {
+            if (isOwner && isElectron.value && canReadCloud.value) {
                 const mergedResult = await buildMergedOnlineOwnerPage(
                     targetUserId,
                     requestedPage,
@@ -857,14 +858,14 @@ export function useSessionPager() {
                 return globalSessions.value
             }
 
-            if (isOwner && isElectron.value && !globalOnline.value) {
+            if (isOwner && isElectron.value && !canReadCloud.value) {
                 const localAll = applyClientFilters(localSessions, filters)
                 const total = localAll.length
                 const safePage = Math.min(requestedPage, Math.max(1, Math.ceil(total / pageSize)))
                 const start = (safePage - 1) * pageSize
                 const pageSlice = localAll.slice(start, start + pageSize).map((session) => ({
                     ...session,
-                    syncState: 'local_only' as SessionSyncState
+                    syncState: session.syncState || 'local_only' as SessionSyncState
                 }))
 
                 globalSessions.value = pageSlice
@@ -877,12 +878,13 @@ export function useSessionPager() {
                     cloudCount: 0,
                     localCount: localSessions.length,
                     localOverlayCount: pageSlice.length,
-                    pendingLocalCount: pageSlice.length
+                    pendingLocalCount: localAll.filter(session => session.syncState !== 'synced').length
                 }
                 writePageCache(safePage, globalSessions.value)
                 return globalSessions.value
             }
 
+            if (!canReadCloud.value) return []
             const reachablePage = await ensureCursorForPage(targetUserId, requestedPage, pageSize, filters, isCurrent)
             if (!isCurrent()) return []
             const startCursor = globalCursorMap.get(reachablePage) || null
@@ -938,7 +940,7 @@ export function useSessionPager() {
     return {
         sessions: globalSessions,
         state: computed(() => globalState.value),
-        isOnline: computed(() => globalOnline.value),
+        isOnline: canReadCloud,
         error: globalError,
         loadPage,
         nextPage,

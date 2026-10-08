@@ -47,6 +47,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T
 export function useOwnerCacheLifecycle(options: {
   currentUser: Ref<{ uid: string } | null>
   canEnterApp: Ref<boolean>
+  cloudReady?: Ref<boolean>
   bridge?: OwnerCacheBridge | null
 }): OwnerCacheLifecycle {
   const bridge = options.bridge === undefined ? resolveOwnerCacheBridge() : options.bridge
@@ -77,11 +78,14 @@ export function useOwnerCacheLifecycle(options: {
   async function startSession(uid: string, startRevision: number): Promise<OwnerCacheHydration | 'skipped'> {
     // Da qui le cache di questo uid non scadono a tempo (controllo di revisione al posto del TTL).
     setCacheOwnerUid(uid)
-    const snapshot = peekOwnerDocument(uid) || await loadOwnerDocument(uid)
+    const online = options.cloudReady?.value !== false
+    const snapshot = online ? peekOwnerDocument(uid) || await withTimeout(
+      loadOwnerDocument(uid), OWNER_CACHE_PREPARE_TIMEOUT_MS, null
+    ) : null
     if (!isActive(uid, startRevision)) return 'skipped'
 
     const outcome = await withTimeout(
-      hydrateOwnerCachesFromDisk(uid, snapshot.revision, bridge),
+      hydrateOwnerCachesFromDisk(uid, snapshot?.revision ?? null, bridge, { offline: !snapshot, isCurrent: () => isActive(uid, startRevision) }),
       OWNER_CACHE_PREPARE_TIMEOUT_MS,
       'unavailable' as OwnerCacheHydration
     )
@@ -89,18 +93,18 @@ export function useOwnerCacheLifecycle(options: {
 
     const saver = createOwnerCacheSaver({ uid, bridge })
     const unsubscribe = onOwnerCacheChanged((changedUid) => {
-      if (changedUid === uid) saver.schedule()
+      if (changedUid === uid && options.cloudReady?.value !== false) saver.schedule()
     })
-    const watcher = startOwnerRevisionWatch({
+    const watcher = snapshot ? startOwnerRevisionWatch({
       uid,
       revision: snapshot.revision,
       onChanged: (next, previous) => {
         console.info(`[OWNER_REVISION] changed ${previous || 'none'} -> ${next || 'none'}: caches invalidated`)
         invalidateTelemetryCaches({ uid, scope: 'sync' })
       }
-    })
+    }) : { stop: () => {} } as OwnerRevisionWatcher
     session = { uid, saver, watcher, unsubscribe }
-    console.info(`[OWNER_CACHE] prepared uid=${uid.slice(0, 6)}… disk=${outcome} revision=${snapshot.revision || 'none'}`)
+    console.info(`[OWNER_CACHE] prepared uid=${uid.slice(0, 6)}… disk=${outcome} revision=${snapshot?.revision || 'offline'}`)
     return outcome
   }
 
@@ -135,8 +139,21 @@ export function useOwnerCacheLifecycle(options: {
     { flush: 'sync' }
   )
 
+  // A cloud outage changes freshness, never ownership or the local archive.
+  const stopCloudWatch = options.cloudReady ? watch(options.cloudReady, () => {
+    revision += 1
+    preparing = null
+    session?.watcher.stop()
+    session?.saver.dispose()
+    session?.unsubscribe()
+    session = null
+    const uid = options.currentUser.value?.uid
+    if (uid && options.canEnterApp.value) void prepare(uid)
+  }, { flush: 'sync' }) : () => {}
+
   onScopeDispose(() => {
     stopWatch()
+    stopCloudWatch()
     void release('dispose')
   })
 

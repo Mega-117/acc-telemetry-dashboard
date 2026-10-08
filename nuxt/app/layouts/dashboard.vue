@@ -71,6 +71,7 @@ const handleGoToSettings = () => {
       <LayoutTabsBarRouter :active-tab="activeTab" :back-label="headerBack?.label()" @back="headerBack?.run()" />
     </div>
 
+    <ElectronLocalProfileStatus />
     <!-- Page Content with transitions -->
     <main class="dashboard-viewport">
       <slot></slot>
