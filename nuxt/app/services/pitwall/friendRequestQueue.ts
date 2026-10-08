@@ -17,7 +17,7 @@ export interface FriendRequestBridge {
 
 /** The authenticated renderer owns the queue. IPC carries projections, never credentials. */
 export function createFriendRequestQueue(options: {
-  publish: (state: FriendRequestSnapshot) => void
+  publish: (state: FriendRequestSnapshot) => void | boolean | Promise<unknown>
   respond: (personId: string, accept: boolean) => Promise<boolean>
   token: () => string
 }) {
@@ -25,14 +25,42 @@ export function createFriendRequestQueue(options: {
   let state: FriendRequestSnapshot = { session: null, requests: [], busy: false, error: null }
   const completed = new Set<string>()
   let lastPublication = ''
+  let ready = true
+  let disposed = false
+  let generation = 0
+  let inFlight = false
   function publish(force = false) {
+    if (!ready || disposed || inFlight) return
     const signature = JSON.stringify(state)
     if (!force && signature === lastPublication) return
-    lastPublication = signature
-    options.publish({ ...state, requests: state.requests.map(row => ({ ...row })) })
+    const sentGeneration = generation
+    const finish = (accepted: boolean) => {
+      inFlight = false
+      if (disposed) return
+      if (accepted && ready && sentGeneration === generation) lastPublication = signature
+      // Coalesce changes while IPC was pending; never retry an unchanged rejection in a loop.
+      if (sentGeneration !== generation || signature !== JSON.stringify(state)) publish()
+    }
+    inFlight = true
+    try {
+      const result = options.publish({ ...state, requests: state.requests.map(row => ({ ...row })) })
+      if (result && typeof (result as Promise<unknown>).then === 'function') {
+        void Promise.resolve(result).then(value => finish(value === true), () => finish(false))
+      } else finish(result !== false)
+    } catch { finish(false) }
+  }
+  function setReady(value: boolean) {
+    if (ready !== value) {
+      generation++
+      lastPublication = ''
+      ready = value
+    }
+    if (ready) publish()
   }
   function sync(uid: string | null, incoming: { personId: string; nickname: string }[]) {
     if (uid !== account) {
+      generation++
+      lastPublication = ''
       account = uid
       completed.clear()
       state = { session: uid ? options.token() : null, requests: [], busy: false, error: null }
@@ -69,5 +97,5 @@ export function createFriendRequestQueue(options: {
     }
     publish()
   }
-  return { sync, decide }
+  return { sync, decide, setReady, dispose: () => { disposed = true; generation++ } }
 }

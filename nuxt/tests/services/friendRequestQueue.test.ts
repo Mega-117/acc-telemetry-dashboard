@@ -11,6 +11,48 @@ function setup() {
   return { queue, respond, sync, decide, state: () => state }
 }
 describe('Control K friendship queue', () => {
+  it('does not send before readiness and retries the latest rejected snapshot on readiness', async () => {
+    const publish = vi.fn().mockRejectedValueOnce(new Error('AUTH_REQUIRED')).mockResolvedValue(true)
+    const queue = createFriendRequestQueue({ publish, respond: vi.fn(), token: () => 'token' })
+    queue.setReady(false)
+    queue.sync('me', [{ personId: 'A', nickname: 'A' }])
+    expect(publish).not.toHaveBeenCalled()
+    queue.setReady(true)
+    await Promise.resolve()
+    expect(publish).toHaveBeenCalledTimes(1)
+    queue.setReady(false)
+    queue.sync('me', [{ personId: 'B', nickname: 'B' }])
+    queue.setReady(true)
+    await Promise.resolve()
+    expect(publish).toHaveBeenCalledTimes(2)
+    expect(publish.mock.lastCall![0].requests[0].personId).toBe('B')
+    queue.sync('me', [{ personId: 'B', nickname: 'B' }])
+    expect(publish).toHaveBeenCalledTimes(2)
+  })
+  it('coalesces in-flight changes and ignores an ACK from the previous account', async () => {
+    let finish!: (value: boolean) => void
+    const publish = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve })).mockResolvedValue(true)
+    let serial = 0
+    const queue = createFriendRequestQueue({ publish, respond: vi.fn(), token: () => String(++serial) })
+    queue.sync('old', [{ personId: 'A', nickname: 'A' }])
+    queue.sync(null, [])
+    queue.sync('new', [{ personId: 'B', nickname: 'B' }])
+    expect(publish).toHaveBeenCalledTimes(1)
+    finish(true); await Promise.resolve(); await Promise.resolve()
+    expect(publish).toHaveBeenCalledTimes(2)
+    expect(publish.mock.lastCall![0].requests[0].personId).toBe('B')
+    queue.dispose()
+    queue.sync('new', [])
+    expect(publish).toHaveBeenCalledTimes(2)
+  })
+  it('does not acknowledge a false IPC response or retry it continuously', async () => {
+    const publish = vi.fn().mockResolvedValueOnce(false).mockResolvedValue(true)
+    const queue = createFriendRequestQueue({ publish, respond: vi.fn(), token: () => 'token' })
+    queue.sync('me', []); await Promise.resolve()
+    expect(publish).toHaveBeenCalledTimes(1)
+    queue.sync('me', []); await Promise.resolve()
+    expect(publish).toHaveBeenCalledTimes(2)
+  })
   it('does not republish unchanged snapshots on background presence ticks', () => {
     const publish = vi.fn()
     const queue = createFriendRequestQueue({ publish, respond: vi.fn(), token: () => 'token' })

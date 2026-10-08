@@ -20,6 +20,7 @@ const router = useRouter()
 const isElectronVisible = ref(false)
 const isMaximized = ref(false)
 const isRefreshing = ref(false)
+const developerRefreshVisible = import.meta.dev
 
 // Sync composable
 const { isSyncing, syncTelemetryFiles, syncResults, pendingNotification, dataMaintenance } = useElectronSync()
@@ -180,7 +181,7 @@ const closeMaintenanceNotification = () => {
     
     <!-- Left buttons: Refresh & Sync -->
     <div class="titlebar-buttons-left">
-      <button 
+      <button v-if="developerRefreshVisible"
         class="titlebar-btn" 
         :class="{ 'refreshing': isRefreshing }"
         :title="isRefreshing ? 'Aggiornamento in corso...' : 'Aggiorna pagina (Smart Refresh)'"

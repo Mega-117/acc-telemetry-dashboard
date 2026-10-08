@@ -197,7 +197,7 @@ const pitwallDemand = computed(() => pitwallAllowed.value && (normalizedRoutePat
   || !!pitwallStore.myRoom.value || !!pitwallStore.pitwall.value.roomId))
 const pitwallJobsEnabled = computed(() => primaryCloudOwner.jobsEnabled.value && pitwallAllowed.value)
 usePitwallDriverPresence({ jobsEnabled: pitwallJobsEnabled, demand: pitwallDemand })
-useControlKFriendRequests(pitwallStore, primaryCloudOwner.jobsEnabled)
+useControlKFriendRequests(pitwallStore, primaryCloudOwner.jobsEnabled, undefined, canEnterApp)
 const isProtectedRuntimeRoute = computed(() => (
   isTrainingOverlayIntent.value
   || isHudOverlayRoute.value
