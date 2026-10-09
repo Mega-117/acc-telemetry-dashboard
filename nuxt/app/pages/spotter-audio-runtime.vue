@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
+import { pitStrategyAppliedCue } from '~/services/spotter/pitStrategyVoice'
 import { audioContextKey, audioFeatureAvailable, bindAudioCue } from '~/services/spotter/audioSourceContext'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
@@ -78,6 +79,7 @@ const voiceLabRuntime = useVoiceLabRuntime()
 const trackVoiceReferences = ref<TrackVoiceReference[]>([])
 const trackVoiceReferenceRuntimeState = ref(createTrackVoiceReferenceRuntimeState())
 let removeTrackVoiceReferenceChangeListener = () => {}
+let removePitStrategyListener: (() => void) | undefined
 let cueSequence = 0
 
 const voiceRuntimeDiagnostics = createVoiceRuntimeDiagnostics()
@@ -326,6 +328,11 @@ const finishLineVoiceRuntime = createFinishLineVoiceRuntime({
 })
 
 onMounted(async () => {
+  removePitStrategyListener = getRuntimeApi()?.onPitwallOrderOutcome?.((event: unknown) => {
+    if (!canRunSpotterAudio.value) return
+    const cue = pitStrategyAppliedCue(event, selectedVoice.value)
+    if (cue) voiceQueue.enqueue({ ...cue, canPlay: () => canRunSpotterAudio.value })
+  })
   loadSpotterVoiceSettings()
   const api = getRuntimeApi()
   removeTargetSettingsListener = api?.onInfoTargetSettings?.((next: InfoTargetSettings) => {
@@ -412,6 +419,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  removePitStrategyListener?.()
   targetSettingsDisposed = true
   removeTargetSettingsListener?.()
   removeTrackVoiceReferenceChangeListener()

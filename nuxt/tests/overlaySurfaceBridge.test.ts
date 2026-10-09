@@ -2,6 +2,22 @@ import { describe, expect, it, vi } from 'vitest'
 import { createSurfaceRegionBridge } from '~/services/overlay/surfaceRegionBridge'
 
 describe('surface region bridge', () => {
+  it('delivers a strategy completion only to the addressed audio region', () => {
+    const listeners: Array<(event: any) => void> = []
+    const dispose = vi.fn()
+    const api = { onOverlaySurfaceEvent: (fn: (event: any) => void) => { listeners.push(fn); return dispose } }
+    const audio = createSurfaceRegionBridge(api, 'spotter-audio-runtime')
+    const training = createSurfaceRegionBridge(api, 'training')
+    const played = vi.fn(); const other = vi.fn()
+    const unsubscribe = audio.onPitwallOrderOutcome(played)
+    training.onPitwallOrderOutcome(other)
+    const payload = { orderId: 'strategy-1', operation: 'strategy', outcome: { status: 'applied', method: 'mfd-v4' } }
+    listeners.forEach(fn => fn({ id: 'spotter-audio-runtime', channel: 'pitwall:order-outcome', payload }))
+    expect(played).toHaveBeenCalledExactlyOnceWith(payload)
+    expect(other).not.toHaveBeenCalled()
+    unsubscribe()
+    expect(dispose).toHaveBeenCalledOnce()
+  })
   it('binds placement requests to its region and isolates lock events', () => {
     const listeners: Array<(event: any) => void> = []
     const api = { hudOverlaySetPlacement: vi.fn(), hudOverlayGetPlacement: vi.fn(),

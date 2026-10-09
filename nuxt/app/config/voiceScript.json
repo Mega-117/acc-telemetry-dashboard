@@ -7,6 +7,12 @@
   "defaultSpeed": 1.2,
   "scenarios": [
     {
+      "id": "pitStrategyApplied",
+      "origin": "system",
+      "text": "strategia pit stop applicata.",
+      "speed": 1.2
+    },
+    {
       "id": "lastMinute",
       "origin": "system",
       "text": "ultimo minuto. chiudilo bene.",

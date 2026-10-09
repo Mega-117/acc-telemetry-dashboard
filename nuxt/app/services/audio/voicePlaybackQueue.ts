@@ -4,7 +4,7 @@ import {
   type PlayableAudio,
 } from './audioPlayback'
 
-export type VoiceCueSource = 'lap-time' | 'target-lap' | 'pressure-warning' | 'track-reference' | 'coach'
+export type VoiceCueSource = 'lap-time' | 'target-lap' | 'pressure-warning' | 'track-reference' | 'coach' | 'pit-strategy'
 export type VoiceCuePathRole = 'primary' | 'fallback'
 
 export interface VoiceCue {
