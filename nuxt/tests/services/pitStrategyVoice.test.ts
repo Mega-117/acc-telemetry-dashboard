@@ -16,11 +16,15 @@ describe('pit strategy completion voice', () => {
     expect(wav.length).toBeGreaterThan(24000)
     expect(voiceScript.scenarios.find(s => s.id === cue.scenarioId)?.text).toBe('strategia pit stop applicata.')
   })
-  it.each([null, {}, { ...event, operation: 'preset' }, { ...event, outcome: { method: 'mfd-v4', status: 'partial' } },
+  it.each([null, {}, { ...event, operation: 'other' }, { ...event, outcome: { method: 'mfd-v4', status: 'partial' } },
     { ...event, outcome: { status: 'applied' } }, { ...event, orderId: '' }, { ...event, orderId: 'x'.repeat(97) }])('rejects incomplete or non-success event %j', value => {
     expect(pitStrategyAppliedCue(value, 'if_sara')).toBeNull()
   })
   it('does not guess an unsupported voice', () => expect(pitStrategyAppliedCue(event, 'unknown')).toBeNull())
+  it.each(['if_sara', 'im_nicola'])('reuses %s for verified presets only', voice => {
+    expect(pitStrategyAppliedCue({ ...event, operation: 'preset' }, voice)).toEqual(pitStrategyAppliedCue(event, voice))
+    expect(pitStrategyAppliedCue({ ...event, operation: 'preset', outcome: { method: 'mfd-v4', status: 'partial' } }, voice)).toBeNull()
+  })
   it('uses the shared queue to deduplicate a completion, even after a voice change', async () => {
     const play = vi.fn(async () => 'ended' as const)
     const queue = createVoicePlaybackQueue({ createAudio: () => ({} as any), play })

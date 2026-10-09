@@ -29,10 +29,11 @@ function message(wrapper: ReturnType<typeof mount>, type: string, value: unknown
   const iframe = wrapper.get('iframe').element as HTMLIFrameElement
   window.dispatchEvent(new MessageEvent('message', { source: source || iframe.contentWindow, data: { channel: 'mfd-v4-online', type, value } }))
 }
-it.each(['partial', 'failed', 'rejected'])('explains an unavailable preset for %s while retaining raw diagnostics', async status => {
+it.each(['partial', 'failed', 'rejected', 'stalled'])('explains an unavailable preset for %s while retaining raw diagnostics', async status => {
   const p = port()
-  p.orderStatus.value = status
+  p.orderStatus.value = status === 'stalled' ? 'partial' : status
   p.orderReason.value = '/preset → 400: Verifica preset: Preset richiesto non disponibile: selezione ferma o limite raggiunto. Puoi inviare una nuova strategia. [rif. 8c734ed71d78]'
+  if (status === 'stalled') p.orderReason.value = 'Preset non applicato: selezione non avanzata entro il tempo previsto. Richiesto 2, ultimo confermato 1.'
   p.orderFields.value = { pitStrategy: { requested: 2, observed: null, outcome: 'unknown' } }
   const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
   try {

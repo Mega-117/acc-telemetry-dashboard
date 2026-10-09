@@ -48,7 +48,8 @@ const result = computed(() => {
   if (['partial', 'failed', 'rejected'].includes(port.orderStatus.value)
     && Object.keys(port.orderFields.value).length === 1
     && typeof preset === 'number' && Number.isInteger(preset) && preset >= 1 && preset <= 30
-    && detail?.includes('Preset richiesto non disponibile: selezione ferma o limite raggiunto.')) {
+    && (detail?.includes('Preset richiesto non disponibile: selezione ferma o limite raggiunto.')
+      || detail?.includes('Preset non applicato: selezione non avanzata entro il tempo previsto.'))) {
     return { ...status, label: `Preset ${preset} non applicato`,
       reason: 'Il MFD non ha consentito di selezionare il preset richiesto.' }
   }

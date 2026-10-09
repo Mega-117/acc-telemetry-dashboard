@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 bd63bb6a7f443552547ca5d155d8cb7de52a30f5de90704aef7fbe7c79fa22bd -->
+<!-- Generated V4 online; SHA256 3ce723ffbf3ba0c96a8b337568dea274955e7326f47fd3d1453ab5a5d03012f5 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1172,7 +1172,7 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
     }
     finally {
       var performanceReport = null;
-      try { performanceReport = typeof finishPerformanceV4 === 'function' ? await finishPerformanceV4(observed) : null; }
+      try { performanceReport = typeof finishPerformanceV4 === 'function' ? await finishPerformanceV4(observed, failure) : null; }
       catch (_) { performanceReport = {version:1, unavailable:true}; }
       if (performanceReport) originalLog('info', 'Diagnostica ordine (tempi inclusivi): ' + JSON.stringify(performanceReport));
       leggiPannello = originalPanel; selectDriverV4 = originalDriver;
