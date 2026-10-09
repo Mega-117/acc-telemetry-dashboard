@@ -1,9 +1,38 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createPitwallRealtimeOrders } from '~/services/pitwall/pitwallRealtimeOrders'
+import { createPitwallRealtimeOrders, boundMfdPerformance } from '~/services/pitwall/pitwallRealtimeOrders'
 import type { PitwallRealtimeTransport } from '~/services/pitwall/pitwallRealtimeTransport'
 import type { PitwallRealtimeSession } from '~/services/pitwall/pitwallRealtimeSession'
+import { createPitwallRoomOutcomeRecovery } from '~/services/pitwall/pitwallRoomOutcomeRecovery'
 
 afterEach(() => vi.useRealTimers())
+
+it('recovers diagnostics from the durable outcome without applying again', async () => {
+  const performance = { version: 1, correctionPasses: 1, counts: { ocr: 12 } }
+  const publishOutcome = vi.fn(async () => ({ ok: true as const, value: true as const }))
+  const confirm = vi.fn(async () => 1)
+  const recovery = createPitwallRoomOutcomeRecovery({ uid: 'driver', isStopped: () => false, log: console,
+    rooms: { publishOutcome, readOrder: vi.fn() }, electronApi: {
+      pitwallPendingOutcomes: async () => [{ method: 'mfd-v4', orderId: 'order', roomId: 'room', driverUid: 'driver', status: 'applied', reason: null, fields: {}, appliedAt: '2026-10-09', performance }],
+      pitwallConfirmOutcomes: confirm,
+    } })
+  await recovery.drainPendingOutcomes()
+  expect(publishOutcome).toHaveBeenCalledWith('room', 'order', expect.objectContaining({ performance }))
+  expect(confirm).toHaveBeenCalledWith(['order'])
+})
+
+it('preserves bounded optional V4 diagnostics when publishing the result', async () => {
+  const performance = { version: 1, correctionPasses: 1, counts: { captures: 5, ocr: 8 }, corrections: [{ field: 'FL', before: 24, after: 26 }] }
+  expect(boundMfdPerformance(performance)).toEqual(performance)
+  expect(boundMfdPerformance({ version: 1, extra: 'x'.repeat(4096) })).toBeNull()
+  expect(boundMfdPerformance({ version: 2 })).toBeNull()
+  const write = vi.fn()
+  const io = { namespace: 'pitwallRoomsV1', serverNow: () => 1000, write,
+    read: vi.fn(async (path: string) => path.endsWith('/claim') ? null : { status: 'applying', claimedBy: 'driver', targetConnectionId: 'dc' }) }
+  const orders = createPitwallRealtimeOrders({ io: io as unknown as PitwallRealtimeTransport,
+    session: { uid: 'driver' } as unknown as PitwallRealtimeSession, connections: () => [] })
+  expect((await orders.publishOutcome('room', 'order', { status: 'applied', method: 'mfd-v4', performance })).ok).toBe(true)
+  expect(write.mock.calls[0]![1]['orders/order'].result.performance).toEqual(performance)
+})
 describe('concurrent send diagnosis', () => {
   it.each(['active', 'expired', 'other-driver', 'unreadable'])('only explains a confirmed active target lease: %s', async state => {
     const denied = new Error('PERMISSION_DENIED: Permission denied')

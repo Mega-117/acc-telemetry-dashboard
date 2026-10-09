@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 5af8312a58578e12b697e6795d491ca16545d8fe1fa0e0014f87e0a55215e038 -->
+<!-- Generated V4 online; SHA256 bd63bb6a7f443552547ca5d155d8cb7de52a30f5de90704aef7fbe7c79fa22bd -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1109,6 +1109,7 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
       return result;
     };
     try {
+      if (typeof beginPerformanceV4 === 'function') await beginPerformanceV4();
       if (typeof v4FinalObservation !== 'undefined') { v4FinalObservation = null; v4CorrectionPasses = 0; }
       globalThis.v4VerificationReached = false;
       globalThis.v4PresetObserved = null;
@@ -1170,11 +1171,16 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
       if (typeof v4FinalObservation !== 'undefined') observed = v4FinalObservation || {};
     }
     finally {
+      var performanceReport = null;
+      try { performanceReport = typeof finishPerformanceV4 === 'function' ? await finishPerformanceV4(observed) : null; }
+      catch (_) { performanceReport = {version:1, unavailable:true}; }
+      if (performanceReport) originalLog('info', 'Diagnostica ordine (tempi inclusivi): ' + JSON.stringify(performanceReport));
       leggiPannello = originalPanel; selectDriverV4 = originalDriver;
       log = originalLog;
       window.mfdV4Runner.complete({ observed: observed, failure: failure,
-        metrics: { durationMs: Date.now() - started, inputCount: presses,
-          correctionPasses: typeof v4CorrectionPasses === 'number' ? v4CorrectionPasses : 0 },
+        metrics: { durationMs: Date.now() - started, inputCount: performanceReport?.counts?.inputs ?? presses,
+          correctionPasses: typeof v4CorrectionPasses === 'number' ? v4CorrectionPasses : 0,
+          ...(performanceReport ? {performance:performanceReport} : {}) },
         diary: logEl.innerText.slice(-24000) });
     }
   });

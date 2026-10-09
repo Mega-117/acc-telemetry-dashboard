@@ -67,7 +67,7 @@ export function createPitwallRoomOutcomeRecovery(options: PitwallRoomOutcomeReco
         reason: outcome.reason,
         fields: outcome.fields,
         ...(outcome.method ? { method: outcome.method } : {}),
-        ...(outcome.method === 'mfd-v4' ? { diary: outcome.diary || '' } : {}),
+        ...(outcome.method === 'mfd-v4' ? { diary: outcome.diary || '', performance: outcome.performance } : {}),
         ...(outcome.tyreSetCondition ? { tyreSetCondition: outcome.tyreSetCondition } : {}),
       })
       if (published.ok) {

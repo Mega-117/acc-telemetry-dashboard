@@ -83,6 +83,7 @@ export const PITWALL_ORDER_MAX_ATTEMPTS = 40
 export interface PitwallPendingOutcome {
   method?: string
   diary?: string
+  performance?: unknown
   orderId: string
   roomId: string
   driverUid: string | null
@@ -111,6 +112,9 @@ export interface PitwallDriverElectronApi {
     reason?: string | null
     orderId?: string | null
     fields?: unknown
+    method?: string
+    diary?: string
+    performance?: unknown
     tyreSetCondition?: unknown
     /** L'ordine non e' applicabile adesso ma lo sara': non va concluso. */
     retryable?: boolean

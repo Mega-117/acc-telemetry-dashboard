@@ -15,7 +15,17 @@ export interface RealtimeClaim {
   claimedAtMs: number
   leaseUntilMs: number
 }
-type Outcome = { status: 'applied' | 'partial' | 'failed' | 'rejected', reason?: string | null, fields?: unknown, tyreSetCondition?: unknown, method?: string, diary?: string, sourceStatus?: string, events?: unknown, selectedDriverId?: number }
+type Outcome = { status: 'applied' | 'partial' | 'failed' | 'rejected', reason?: string | null, fields?: unknown, tyreSetCondition?: unknown, method?: string, diary?: string, performance?: unknown, sourceStatus?: string, events?: unknown, selectedDriverId?: number }
+
+// Main already emits the canonical sanitized schema. Keep the optional report
+// bounded at the cloud boundary; absence never changes the application result.
+export function boundMfdPerformance(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || (value as { version?: unknown }).version !== 1) return null
+  try {
+    const encoded = JSON.stringify(value)
+    return new TextEncoder().encode(encoded).length <= 4096 ? JSON.parse(encoded) as Record<string, unknown> : null
+  } catch { return null }
+}
 const terminal = (order: RealtimeOrder) => ['applied', 'partial', 'failed', 'rejected'].includes(order.status)
 const fail = (error: unknown): { ok: false, reason: string } => ({ ok: false, reason: error instanceof Error ? error.message : String(error) })
 
@@ -207,6 +217,7 @@ export function createPitwallRealtimeOrders(options: {
       const completed = { ...order, status: outcome.status, appliedAt: new Date(io.serverNow()).toISOString(), result: { reason: outcome.reason ?? null, fields: outcome.fields ?? {}, ...(boundPitwallTyreCondition(outcome.tyreSetCondition) ? { tyreSetCondition: boundPitwallTyreCondition(outcome.tyreSetCondition) } : {}),
         ...(['mfd-v2', 'mfd-v3', 'mfd-v4'].includes(outcome.method ?? '') ? { method: outcome.method } : {}),
         ...(outcome.method === 'mfd-v4' ? { diary: typeof outcome.diary === 'string' ? outcome.diary.slice(-6000) : '' } : {}),
+        ...(outcome.method === 'mfd-v4' && boundMfdPerformance(outcome.performance) ? { performance: boundMfdPerformance(outcome.performance) } : {}),
         ...(outcome.method === 'acc-drive-7.8.1' ? { method: outcome.method, sourceStatus: outcome.sourceStatus ?? null, events: outcome.events ?? [], selectedDriverId: outcome.selectedDriverId ?? null } : {}) } }
       const claim = await io.read<RealtimeClaim>(controlPath(roomId))
       const changes: Record<string, unknown> = { [`orders/${orderId}`]: completed }

@@ -215,6 +215,7 @@ export function createPitwallRoomOrders(options: PitwallRoomOrdersOptions) {
   async function publishOutcome(roomId: string, orderId: string, outcome: {
     method?: string
     diary?: string
+    performance?: unknown
     status: 'applied' | 'partial' | 'failed' | 'rejected'
     reason?: string | null
     fields?: unknown
