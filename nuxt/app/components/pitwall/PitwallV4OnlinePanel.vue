@@ -37,11 +37,23 @@ const reason = computed(() => !props.port?.canSend.value ? props.port?.sendReadi
     : !car.value.mfdV4?.ready ? car.value.mfdV4?.reason || 'V4 non disponibile sul PC del pilota.' : null)
 const outcome = computed(() => props.port?.orderMethod.value === 'mfd-v4'
   ? [props.port.orderDiary?.value, props.port.orderReason.value, ...Object.entries(props.port.orderFields.value).map(([key, value]) => `${key}: ${JSON.stringify(value)}`)].filter(Boolean).join('\n') : '')
-const result = computed(() => error.value
-  ? { label: 'Non inviata', reason: error.value, problem: true }
-  : props.port?.orderMethod.value === 'mfd-v4' && props.port.orderStatus.value
-    ? { ...describePitwallOrderStatus(props.port.orderStatus.value), reason: props.port.orderReason.value }
-    : null)
+const result = computed(() => {
+  if (error.value) return { label: 'Non inviata', reason: error.value, problem: true }
+  const port = props.port
+  if (port?.orderMethod.value !== 'mfd-v4' || !port.orderStatus.value) return null
+  const status = describePitwallOrderStatus(port.orderStatus.value)
+  const detail = port.orderReason.value
+  // Use the completed order, never the editable draft. Keep the raw reason in outcome/console.
+  const preset = (port.orderFields.value.pitStrategy as { requested?: unknown } | undefined)?.requested
+  if (['partial', 'failed', 'rejected'].includes(port.orderStatus.value)
+    && Object.keys(port.orderFields.value).length === 1
+    && typeof preset === 'number' && Number.isInteger(preset) && preset >= 1 && preset <= 30
+    && detail?.includes('Preset richiesto non disponibile: selezione ferma o limite raggiunto.')) {
+    return { ...status, label: `Preset ${preset} non applicato`,
+      reason: 'Il MFD non ha consentito di selezionare il preset richiesto.' }
+  }
+  return { ...status, reason: detail }
+})
 function publish() {
   if (!frameReady.value) return
   // The room and draft contain nested Vue proxies, which postMessage cannot clone.

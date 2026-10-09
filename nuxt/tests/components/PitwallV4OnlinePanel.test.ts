@@ -29,6 +29,37 @@ function message(wrapper: ReturnType<typeof mount>, type: string, value: unknown
   const iframe = wrapper.get('iframe').element as HTMLIFrameElement
   window.dispatchEvent(new MessageEvent('message', { source: source || iframe.contentWindow, data: { channel: 'mfd-v4-online', type, value } }))
 }
+it.each(['partial', 'failed', 'rejected'])('explains an unavailable preset for %s while retaining raw diagnostics', async status => {
+  const p = port()
+  p.orderStatus.value = status
+  p.orderReason.value = '/preset → 400: Verifica preset: Preset richiesto non disponibile: selezione ferma o limite raggiunto. Puoi inviare una nuova strategia. [rif. 8c734ed71d78]'
+  p.orderFields.value = { pitStrategy: { requested: 2, observed: null, outcome: 'unknown' } }
+  const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
+  try {
+    const post = vi.spyOn((w.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
+    message(w, 'ready', null)
+    message(w, 'draft', { applyPitStrategy: true, pitStrategy: 3 })
+    await flushPromises()
+    const snapshot = post.mock.calls.at(-1)![0].value
+    expect(snapshot.result).toMatchObject({ label: 'Preset 2 non applicato', reason: 'Il MFD non ha consentito di selezionare il preset richiesto.', problem: true, busy: false })
+    expect(snapshot.outcome).toContain(p.orderReason.value)
+    expect(snapshot.verification.fields).toEqual(p.orderFields.value)
+  } finally { w.unmount() }
+})
+it.each(['unreadable', 'strategy', 'applied', 'missing-request'])('preserves the original presentation for %s', kind => {
+  const p = port()
+  p.orderStatus.value = kind === 'applied' ? 'applied' : 'partial'
+  p.orderReason.value = kind === 'unreadable' ? 'Numero preset non leggibile' : 'Preset richiesto non disponibile: selezione ferma o limite raggiunto.'
+  p.orderFields.value = kind === 'strategy' ? { fuelLiters: { requested: 2 } } : { pitStrategy: { requested: kind === 'missing-request' ? null : 2 } }
+  const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
+  try {
+    const post = vi.spyOn((w.get('iframe').element as HTMLIFrameElement).contentWindow!, 'postMessage')
+    message(w, 'ready', null)
+    const result = post.mock.calls.at(-1)![0].value.result
+    expect(result.label).toBe(kind === 'applied' ? 'Impostata e confermata' : 'Impostata in parte: alcuni campi non sono confermabili')
+    expect(result.reason).toBe(p.orderReason.value)
+  } finally { w.unmount() }
+})
 it('publishes structured field verification with its original order context', () => {
   const p = { ...port(), orderId: ref('order-one'), orderContextId: ref('original-context') }
   p.orderFields.value = { brakes: { requested: false, observed: false, outcome: 'verified', source: 'visual' } }
