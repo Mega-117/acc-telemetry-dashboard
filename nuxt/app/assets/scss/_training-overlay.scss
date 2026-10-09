@@ -2452,9 +2452,79 @@ button.is-active {
   .launcher-tools:has(.control-k-fuel-status > .fuel-status):has(.control-k-pressure-info, .control-k-request) .launcher-tools__header { width: calc(100% - 456px); }
 }
 
-// Shared composition: content determines track count, never simulator identity.
+// Vertical quick panel: three categories sharing the existing actions.
+.training-overlay--launcher .overlay-content--launcher:has(.quick-panel-automations):not(.overlay-content--horizontal) {
+  .launcher-tools__actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px 10px;
+    align-items: start;
+  }
+  .quick-panel-section[aria-label='Avvisi vocali'],
+  .quick-panel-dev { grid-column: 1 / -1; }
+  .quick-panel-section[aria-label='Avvisi vocali'] {
+    padding-bottom: 8px;
+    border-bottom: 1px solid #ffffff1a;
+  }
+  .quick-panel-heading { line-height: 12px; }
+  .quick-panel-automations { display: contents; }
+  .quick-panel-automations > .fuel-panel,
+  .quick-panel-secondary,
+  .quick-panel-section[aria-label='Riferimenti numerici'] {
+    display: grid;
+    grid-row: 2;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    justify-items: center;
+    align-self: stretch;
+    gap: 8px;
+    padding: 12px 0 0;
+    margin: 0;
+    border: 0;
+    position: relative;
+  }
+  .quick-panel-automations > .fuel-panel { grid-column: 1; }
+  .quick-panel-secondary { grid-column: 2; }
+  .quick-panel-section[aria-label='Riferimenti numerici'] { grid-column: 3 / span 2; }
+  .quick-panel-secondary::before,
+  .quick-panel-section[aria-label='Riferimenti numerici']::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 32px; // 12px group padding + 12px title + 8px gap.
+    bottom: 0;
+    width: 1px;
+    background: #ffffff25;
+    pointer-events: none;
+  }
+  .quick-panel-section[aria-label='Riferimenti numerici'] > .quick-panel-pair {
+    grid-template-columns: repeat(2, 64px);
+    gap: 8px;
+  }
+  .fuel-panel > .fuel-open { grid-row: auto; }
+  .fuel-panel > [data-overlay-wheel-action='fuel'] { order: 1; }
+  .fuel-panel > [data-overlay-wheel-action='fuel-session'] { order: 2; }
+  .quick-panel-automations > :not(.quick-panel-heading, .fuel-panel, .quick-panel-secondary) { grid-column: 1 / -1; }
+  // Disabled/hidden fuel actions must not leave an empty titled column.
+  .launcher-tools__actions:not(:has(.fuel-panel button:not(:disabled))),
+  .launcher-tools__actions:has(.quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all)) {
+    .quick-panel-automations > .fuel-panel { display: none; }
+    .quick-panel-secondary {
+      grid-column: 1;
+      &::before { display: none; }
+    }
+    .quick-panel-section[aria-label='Riferimenti numerici'] { grid-column: 2 / span 2; }
+  }
+}
+
+
+// Preserve the original ACC grid through the shared structural wrappers.
+.training-overlay--launcher .overlay-content--launcher:has(.quick-panel-automations) {
+  .quick-panel-main, .quick-panel-categories { display: contents; }
+}
+
+// Compact composition for panels without setup automations (EVO).
 // Editor panels are outside this selector and keep their own preferred width.
-.training-overlay--launcher .overlay-content--launcher:has(> .launcher-tools) {
+.training-overlay--launcher .overlay-content--launcher:has(> .launcher-tools):not(:has(.quick-panel-automations)) {
   --overlay-preferred-content-width: 0px;
   width: max-content;
   .launcher-tools__actions { display: flex; flex-direction: column; gap: 14px; }

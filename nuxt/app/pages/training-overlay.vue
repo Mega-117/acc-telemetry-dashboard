@@ -81,6 +81,7 @@ type OverlaySize = { width: number; height: number }
 type PrimaryOverlayAction = 'open-selection' | 'start' | 'pause' | 'resume' | 'complete-step' | 'next' | 'reset' | 'none'
 
 interface TrainingOverlaySettings {
+  quickPanelLayout?: 'vertical' | 'horizontal'
   hasConfiguredPosition?: boolean; lastTrainingId?: string
   lastDurationId?: TrainingOverlayDurationModeId; soundEnabled?: boolean
   spotterEnabled?: boolean
@@ -118,8 +119,16 @@ const selectedTrainingId = ref<TrainingOverlayId>('tracktitan_input')
 const selectedModeId = ref<TrainingOverlayDurationModeId>('short30')
 const activeStepIndex = ref(0)
 const phase = ref<OverlayPhase>('loading')
-// Kept while the panel is hidden or an editor is open; no cloud preference.
+// Restored from the existing local Electron preferences before showing the launcher.
 const quickPanelLayout = ref<'vertical' | 'horizontal'>('vertical')
+async function setQuickPanelLayout(value: 'vertical' | 'horizontal') {
+  quickPanelLayout.value = value
+  try {
+    await getOverlayApi()?.trainingOverlaySavePreferences?.({ quickPanelLayout: value })
+  } catch (error) {
+    console.error('[CONTROL_K] Layout preference save failed:', error)
+  }
+}
 const isHorizontalQuickPanel = computed(() => phase.value === 'launcher'
   && !isTargetSetupOpen.value && !isSectorReferenceSetupOpen.value && !isFuelSetupOpen.value && !isQuickTimerOpen.value
   && quickPanelLayout.value === 'horizontal')
@@ -444,6 +453,29 @@ const activeTask = computed(() => {
 })
 // Only the local development build exposes QA tools, never the installer build.
 const showQuickPanelDevTools = import.meta.dev
+const accMenuStateLogMessage = ref('')
+const isCheckingPauseMenu = ref(false)
+async function checkPauseMenu() {
+  if (isCheckingPauseMenu.value) return
+  isCheckingPauseMenu.value = true
+  try {
+    await getOverlayApi()?.trainingOverlayCheckPauseMenu?.()
+  } catch (_) {
+    console.error('[PRESSIONI] Comando verifica menu Pausa non disponibile.')
+  } finally {
+    isCheckingPauseMenu.value = false
+    scheduleOverlaySizeSync()
+  }
+}
+async function logAccMenuState() {
+  try {
+    const response = await getOverlayApi()?.trainingOverlayLogAccMenuState?.()
+    accMenuStateLogMessage.value = response?.reason || 'Comando disponibile nel programma desktop.'
+  } catch (_) {
+    accMenuStateLogMessage.value = 'Impossibile scrivere gli stati ACC nel log.'
+  }
+  scheduleOverlaySizeSync()
+}
 const previewAllQuickPanelButtons = ref(false)
 const isCarStoppedWithEngineOff = computed(() => !fastState.value.isEngineRunning
   && fastState.value.speedKmh !== null && Math.abs(fastState.value.speedKmh) <= 0.5)
@@ -891,6 +923,7 @@ onMounted(async () => {
   const api = getOverlayApi()
   isElectronRuntime.value = !!api
   const settings = await api?.trainingOverlayGetSettings?.() as TrainingOverlaySettings | undefined
+  quickPanelLayout.value = settings?.quickPanelLayout === 'horizontal' ? 'horizontal' : 'vertical'
   await refreshSectorReferenceState().catch(() => {})
   const targetSettings = await api?.infoTargetGetSettings?.() as InfoTargetSettings | undefined
   applyInfoTargetSettings(targetSettings)
@@ -1069,7 +1102,7 @@ onBeforeUnmount(() => {
                 <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen && !isFuelSetupOpen && !isQuickTimerOpen" class="launcher-tools" aria-label="Strumenti live overlay">
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
-                    <QuickPanelLayoutToggle v-model="quickPanelLayout" />
+                    <QuickPanelLayoutToggle :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
                     <div class="quick-panel-header-actions">
                     <button type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" @click="isQuickTimerOpen = true">
                       <Timer :size="18" aria-hidden="true" />
@@ -1159,9 +1192,6 @@ onBeforeUnmount(() => {
                     </button>
                     </div>
                     <ControlKFriendRequests :api="getOverlayApi()" />
-                    <button v-if="dryPressureState.qaAvailable" type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Genera raccomandazione TEST</button>
-                    <p v-if="dryPressureState.qaAvailable" class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
-                    <button v-if="dryPressureState.qaActive" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Rimuovi raccomandazione TEST</button>
                     <div v-if="dryPressurePresentation.alert || dryPressureState.actionReasonCode || (!dryPressureState.consumed && dryPressureState.recommendation?.wheels && isCarStoppedWithEngineOff)" class="control-k-pressure-info">
                     <div
                       v-if="dryPressurePresentation.alert"
@@ -1202,6 +1232,14 @@ onBeforeUnmount(() => {
                     </div>
                     <details v-if="showQuickPanelDevTools" class="quick-panel-dev">
                       <summary>Strumenti sviluppo</summary>
+                    <template v-if="support.quickAutomations">
+                    <button v-if="dryPressureState.qaAvailable" type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Genera raccomandazione TEST</button>
+                    <p v-if="dryPressureState.qaAvailable" class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
+                    <button v-if="dryPressureState.qaActive" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Rimuovi raccomandazione TEST</button>
+                    </template>
+                      <button type="button" class="launcher-tool-button" :disabled="isCheckingPauseMenu" :aria-busy="isCheckingPauseMenu" @click="checkPauseMenu">{{ isCheckingPauseMenu ? 'Verifica in corso…' : 'Verifica menu Pausa' }}</button>
+                      <button type="button" class="launcher-tool-button" @click="logAccMenuState">Scrivi stati menu ACC nel log</button>
+                      <p v-if="accMenuStateLogMessage" class="launcher-hint" role="status">{{ accMenuStateLogMessage }}</p>
                       <button type="button" class="launcher-tool-button" :aria-pressed="previewAllQuickPanelButtons" @click="previewAllQuickPanelButtons = !previewAllQuickPanelButtons; scheduleOverlaySizeSync()">
                         {{ previewAllQuickPanelButtons ? 'Ripristina visibilità' : 'Mostra tutti i pulsanti' }}
                       </button>
