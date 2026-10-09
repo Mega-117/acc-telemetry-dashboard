@@ -189,7 +189,7 @@ const standingsBooleanOptions: Array<{
   { key: 'showCarNumber', label: 'Numero auto', supported: true },
   { key: 'showFastestLap', label: 'Giro migliore', supported: true },
   { key: 'showLastLap', label: 'Ultimo giro', supported: true },
-  { key: 'showStintTimer', label: 'Tempo stint', supported: false, dependency: 'Richiede telemetria stint avversari.' },
+  { key: 'showStintTimer', label: 'Tempo stint', supported: true },
   { key: 'showLapProgressBar', label: 'Avanzamento giro', supported: true },
   { key: 'showIncidents', label: 'Incidenti', supported: false, dependency: 'Richiede provider incidenti.' },
   { key: 'showTurnNumber', label: 'Numero curva', supported: false, dependency: 'Richiede mappa curve autorevole.' },

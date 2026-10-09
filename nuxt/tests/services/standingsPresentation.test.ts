@@ -133,6 +133,7 @@ const STANDINGS_LAYOUT = {
     pit: 22,
     bestLap: 92,
     lastLap: 92,
+    stint: 84,
     progress: 76,
     gap: 72,
   },
@@ -426,7 +427,7 @@ describe('standingsPresentation', () => {
     }, NOW_MS)
     expect(model.rows.map(row => row.position)).toEqual([1, 2, 3])
     expect(model.rows[0].fastestInClass).toBe(true)
-    expect(model.columns).toEqual({ carNumber: false, lastLap: false, bestLap: true, progress: false })
+    expect(model.columns).toEqual({ carNumber: false, lastLap: false, bestLap: true, progress: false, stint: true })
     expect(model.rows.every(row => row.carNumber === null && row.lastLap === null && row.progressPercent === null)).toBe(true)
   })
 
@@ -556,5 +557,35 @@ describe('standingsPresentation', () => {
     const cars = [car(1), car(2)]
     expect(selectStandingsCars(cars, 1, { topCars: 5, carsAhead: 5, carsBehind: 5 })).toEqual(cars)
     expect(selectStandingsCars(cars, -1, { topCars: 3, carsAhead: 3, carsBehind: 3 })).toEqual([])
+  })
+})
+
+describe('observed stint column', () => {
+  it.each([[0, '00:00'], [754999, '12:34'], [4334000, '1:12:14'], [null, null],
+    [undefined, null], [-1, null], [NaN, null], [Infinity, null], ['12000', null]])('formats %s without inventing history', (input, expected) => {
+    const value = buildStandingsPresentation(state([car(8, { stint_elapsed_ms: input }), car(9, { stint_elapsed_ms: input })]))
+    expect(value.columns.stint).toBe(true)
+    expect(value.rows.map(row => row.stintTime)).toEqual([expected, expected])
+  })
+  it('does not freshen stale local stint when local identity is still live', () => {
+    const value = buildStandingsPresentation(state([car(8, { stint_elapsed_ms: 12000, realtime_updated_at_ms: NOW_MS - 6000 }), car(9)]))
+    expect(value.rows.find(row => row.local)?.stintTime).toBeNull()
+  })
+  it('rejects stale snapshot and future car timestamps, including local-only fallback', () => {
+    const source = state([car(8, { stint_elapsed_ms: 12000, car_class: null })])
+    expect(buildStandingsPresentation(source).rows[0]?.stintTime).toBe('00:12')
+    source.snapshot!.freshness.generated_at_ms = NOW_MS - 6000
+    expect(buildStandingsPresentation(source).rows[0]?.stintTime).toBeNull()
+    source.snapshot!.freshness.generated_at_ms = NOW_MS
+    source.snapshot!.cars[0]!.realtime_updated_at_ms = NOW_MS + 2000
+    expect(buildStandingsPresentation(source).rows[0]?.stintTime).toBeNull()
+  })
+  it('honours disabled column and old managers without a stint width', () => {
+    const source = state([car(8, { stint_elapsed_ms: 12000 })])
+    const disabled = buildStandingsPresentation(source, { showStintTimer: false })
+    expect(disabled.columns.stint).toBe(false)
+    expect(disabled.rows[0]?.stintTime).toBeNull()
+    const { stint: _stint, ...columns } = STANDINGS_LAYOUT.columnWidths
+    expect(buildStandingsPresentationRaw(source, { standingsLayout: { ...STANDINGS_LAYOUT, columnWidths: columns } }, NOW_MS).columns.stint).toBe(false)
   })
 })

@@ -1,4 +1,5 @@
 import { usesLegacyHudInput } from '~/services/sim/hudSourceAdapter'
+import { formatInfoStintDuration } from '~/utils/infoPresentation'
 import { EMPTY_STANDINGS_LAYOUT, normalizeStandingsLayout, type StandingsLayout } from './standingsLayout'
 import { commonValue, commonBoolean, type CommonLive } from '~/services/telemetry/commonLive'
 import {
@@ -164,6 +165,7 @@ export interface StandingsPresentationOptions {
   showCarNumber: boolean
   showFastestLap: boolean
   showLastLap: boolean
+  showStintTimer: boolean
   showLapProgressBar: boolean
   standingsLayout: StandingsLayout | null
 }
@@ -194,6 +196,7 @@ export interface StandingsPresentationRow {
   relativeGap: string
   relativeGapTone: StandingsRelativeGapTone
   lastLap: string | null
+  stintTime: string | null
   bestLap: string | null
   fastestInClass: boolean
   lastLapPersonalBest: StandingsPersonalBestFlash | null
@@ -215,6 +218,7 @@ export interface StandingsPresentation {
   columns: {
     carNumber: boolean
     lastLap: boolean
+    stint: boolean
     bestLap: boolean
     progress: boolean
   }
@@ -228,6 +232,7 @@ export const DEFAULT_STANDINGS_OPTIONS: Readonly<StandingsPresentationOptions> =
   showCarNumber: true,
   showFastestLap: true,
   showLastLap: true,
+  showStintTimer: true,
   showLapProgressBar: true,
   standingsLayout: null,
 })
@@ -253,6 +258,7 @@ function hiddenPresentation(options: StandingsPresentationOptions): StandingsPre
     columns: {
       carNumber: options.showCarNumber,
       lastLap: options.showLastLap,
+      stint: options.showStintTimer && (options.standingsLayout?.columnWidths.stint ?? 0) > 0,
       bestLap: options.showFastestLap,
       progress: options.showLapProgressBar,
     },
@@ -304,6 +310,16 @@ function isFreshCar(car: StandingsCarSnapshot, nowMs: number, ttlMs: number): bo
   if (updatedAtMs === null) return false
   const ageMs = nowMs - updatedAtMs
   return ageMs >= -FUTURE_TOLERANCE_MS && ageMs <= ttlMs
+}
+
+/** Use observed per-car history only; local identity cannot freshen old UDP data. */
+function stintTime(car: StandingsCarSnapshot | null, snapshot: StandingsSnapshot | null, nowMs: number): string | null {
+  if (!car?.has_realtime || !snapshot || !isFreshCar(car, nowMs, snapshot.freshness.ttl_ms)) return null
+  const age = nowMs - snapshot.freshness.generated_at_ms
+  const value = car.stint_elapsed_ms
+  if (age < -FUTURE_TOLERANCE_MS || age > snapshot.freshness.ttl_ms
+    || typeof value !== 'number' || !Number.isFinite(value) || value < 0) return null
+  return formatInfoStintDuration(value)
 }
 
 export function formatStandingsDriverName(car: StandingsCarSnapshot): string {
@@ -488,6 +504,7 @@ export function buildStandingsPresentation(
     showCarNumber: optionsInput.showCarNumber ?? DEFAULT_STANDINGS_OPTIONS.showCarNumber,
     showFastestLap: optionsInput.showFastestLap ?? DEFAULT_STANDINGS_OPTIONS.showFastestLap,
     showLastLap: optionsInput.showLastLap ?? DEFAULT_STANDINGS_OPTIONS.showLastLap,
+    showStintTimer: optionsInput.showStintTimer ?? DEFAULT_STANDINGS_OPTIONS.showStintTimer,
     showLapProgressBar: optionsInput.showLapProgressBar ?? DEFAULT_STANDINGS_OPTIONS.showLapProgressBar,
     standingsLayout: normalizeStandingsLayout(optionsInput.standingsLayout),
   }
@@ -593,6 +610,7 @@ export function buildStandingsPresentation(
         relativeGap: relativeGap.text,
         relativeGapTone: relativeGap.tone,
         lastLap: options.showLastLap ? formatStandingsLapTime(lapTime(car, 'last')) : null,
+        stintTime: options.showStintTimer ? stintTime(isLocal ? udpLocal : car, snapshot, clockMs) : null,
         bestLap: options.showFastestLap ? formatStandingsLapTime(bestLapMs) : null,
         fastestInClass: options.showFastestLap && bestLapMs !== null && bestLapMs === bestInClassMs,
         lastLapPersonalBest: highlight?.lastLapPersonalBest ?? null,
@@ -626,6 +644,7 @@ export function buildStandingsPresentation(
       relativeGap: '--.-',
       relativeGapTone: 'neutral',
       lastLap: options.showLastLap ? formatStandingsLapTime(personal ? personal.lastLapMs : udpLocal ? lapTime(udpLocal, 'last') : null) : null,
+      stintTime: options.showStintTimer && !personal ? stintTime(udpLocal, snapshot, clockMs) : null,
       bestLap: options.showFastestLap ? formatStandingsLapTime(personal ? personal.bestLapMs : udpLocal ? lapTime(udpLocal, 'best') : null) : null,
       fastestInClass: false,
       lastLapPersonalBest: null,
@@ -664,6 +683,7 @@ export function buildStandingsPresentation(
     columns: {
       carNumber: options.showCarNumber,
       lastLap: options.showLastLap,
+      stint: options.showStintTimer && (options.standingsLayout.columnWidths.stint ?? 0) > 0,
       bestLap: options.showFastestLap,
       progress: options.showLapProgressBar,
     },

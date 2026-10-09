@@ -35,6 +35,7 @@ const gridTemplateColumns = computed(() => [
   `${props.model.layout.columnWidths.pit}px`,
   ...(props.model.columns.bestLap ? [`${props.model.layout.columnWidths.bestLap}px`] : []),
   ...(props.model.columns.lastLap ? [`${props.model.layout.columnWidths.lastLap}px`] : []),
+  ...(props.model.columns.stint ? [`${props.model.layout.columnWidths.stint}px`] : []),
   `${props.model.layout.columnWidths.gap}px`,
 ].join(' '))
 </script>
@@ -71,6 +72,7 @@ const gridTemplateColumns = computed(() => [
         <span></span>
         <strong v-if="model.columns.bestLap">Best</strong>
         <strong v-if="model.columns.lastLap">Last</strong>
+        <strong v-if="model.columns.stint">Stint</strong>
         <strong>Gap</strong>
       </div>
     </header>
@@ -123,6 +125,7 @@ const gridTemplateColumns = computed(() => [
           class="standings-row__last"
           :class="row.lastLapPersonalBest ? `is-pb-${row.lastLapPersonalBest}` : null"
         >{{ row.lastLap }}</strong>
+        <strong v-if="model.columns.stint" class="standings-row__stint">{{ row.stintTime ?? '—' }}</strong>
         <strong
           class="standings-row__gap"
           :class="`is-${row.relativeGapTone}`"
@@ -178,6 +181,7 @@ const gridTemplateColumns = computed(() => [
 .standings-row__pit { display:flex;width:100%;height:calc(var(--standings-row-height) - 6px);align-items:center;justify-content:center;overflow:hidden;background:transparent;color:white;text-align:center; }
 .standings-row__pit.is-active { color:#000;background:#fff; }
 .standings-row__best,.standings-row__last { text-align:right; }
+.standings-row__stint { text-align:right; }
 .standings-row__gap { overflow:hidden;text-align:right;text-overflow:clip;font-size:17px; }
 .standings-row__gap.is-ahead { color:#ff9d00; }
 .standings-row__gap.is-behind { color:#00e7f0; }

@@ -26,6 +26,14 @@ const layout = {
 }
 
 describe('standingsLayout', () => {
+  it('accetta la colonna stint opzionale solo con una larghezza valida', () => {
+    const withStint = (stint: unknown) => ({ ...layout, columnWidths: { ...layout.columnWidths, stint } })
+    expect(normalizeStandingsLayout(withStint(84))?.columnWidths.stint).toBe(84)
+    for (const invalid of [0, -1, NaN, Infinity, null, 'invalid']) {
+      expect(normalizeStandingsLayout(withStint(invalid))).toBeNull()
+    }
+  })
+
   it('accetta e normalizza soltanto il layout completo ricevuto dal manager', () => {
     expect(normalizeStandingsLayout(layout)).toEqual(layout)
     const { rowGap: _rowGap, ...legacyLayout } = layout

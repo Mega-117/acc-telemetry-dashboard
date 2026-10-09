@@ -65,7 +65,7 @@ describe('HUD settings page layout contract', () => {
     expect(source).toContain('supportsHudOverlayBackground(selectedOverlayId)')
     expect(source).toContain("v-if=\"sectorSupports('sectorCurrentLap')\"")
     expect(source).toContain(':disabled="selectedSettingsDisabled || !option.supported"')
-    expect(source).toContain('Richiede telemetria stint avversari.')
+    expect(source).toContain("key: 'showStintTimer', label: 'Tempo stint', supported: true")
   })
 
   it('provides keyboard-visible selection semantics', () => {

@@ -52,6 +52,7 @@ const options = computed(() => ({
   showCarNumber: setting('showCarNumber') ?? DEFAULT_STANDINGS_OPTIONS.showCarNumber,
   showFastestLap: setting('showFastestLap') ?? DEFAULT_STANDINGS_OPTIONS.showFastestLap,
   showLastLap: setting('showLastLap') ?? DEFAULT_STANDINGS_OPTIONS.showLastLap,
+  showStintTimer: setting('showStintTimer') ?? DEFAULT_STANDINGS_OPTIONS.showStintTimer,
   showLapProgressBar: setting('showLapProgressBar') ?? DEFAULT_STANDINGS_OPTIONS.showLapProgressBar,
   standingsLayout: setting('standingsLayout') ?? null,
 }))

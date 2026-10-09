@@ -17,6 +17,7 @@ export interface StandingsLayout {
     pit: number
     bestLap: number
     lastLap: number
+    stint?: number
     progress: number
     gap: number
   }
@@ -41,6 +42,7 @@ export const EMPTY_STANDINGS_LAYOUT: Readonly<StandingsLayout> = Object.freeze({
     pit: 0,
     bestLap: 0,
     lastLap: 0,
+    stint: 0,
     progress: 0,
     gap: 0,
   }),
@@ -68,6 +70,9 @@ export function normalizeStandingsLayout(value: unknown): StandingsLayout | null
   ) return null
   const rowGap = source.rowGap === undefined ? 0 : Number(source.rowGap)
   if (!Number.isFinite(rowGap) || rowGap < 0) return null
+  // Older desktop managers do not reserve space for this optional column.
+  const stint = columns.stint === undefined ? undefined : Number(columns.stint)
+  if (stint !== undefined && (!Number.isFinite(stint) || stint <= 0)) return null
   return {
     width: Number(source.width),
     height: Number(source.height),
@@ -79,8 +84,8 @@ export function normalizeStandingsLayout(value: unknown): StandingsLayout | null
     rowGap,
     columnGap: Number(source.columnGap),
     vehicleGap: Number(source.vehicleGap),
-    columnWidths: Object.fromEntries(
+    columnWidths: { ...Object.fromEntries(
       columnKeys.map(key => [key, Number(columns[key])]),
-    ) as StandingsLayout['columnWidths'],
+    ), ...(stint === undefined ? {} : { stint }) } as StandingsLayout['columnWidths'],
   }
 }

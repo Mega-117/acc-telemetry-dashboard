@@ -31,6 +31,7 @@ function model(): StandingsPresentation {
         pit: 28,
         bestLap: 92,
         lastLap: 92,
+        stint: 84,
         progress: 76,
         gap: 72,
       },
@@ -48,6 +49,7 @@ function model(): StandingsPresentation {
       relativeGap: '--.-',
       relativeGapTone: 'neutral',
       lastLap: '2:17.001',
+      stintTime: '12:34',
       bestLap: '2:16.500',
       fastestInClass: true,
       lastLapPersonalBest: 'focused',
@@ -57,7 +59,7 @@ function model(): StandingsPresentation {
       local: true,
     }],
     message: null,
-    columns: { carNumber: true, lastLap: true, bestLap: true, progress: true },
+    columns: { stint: true, carNumber: true, lastLap: true, bestLap: true, progress: true },
   }
 }
 
@@ -68,7 +70,7 @@ describe('StandingsHud DOM', () => {
       backgroundOpacity: 0.5,
     }))
 
-    const headerValues = ['Practice', '01:02:03', '22/32°', 'Best', 'Last', 'Gap']
+    const headerValues = ['Practice', '01:02:03', '22/32°', 'Best', 'Last', 'Stint', 'Gap']
     const indexes = headerValues.map(value => html.indexOf(value))
     expect(indexes.every(index => index >= 0)).toBe(true)
     expect(indexes).toEqual([...indexes].sort((left, right) => left - right))
@@ -182,4 +184,13 @@ describe('StandingsHud DOM', () => {
     }))
     expect(html).not.toContain('class="standings-hud"')
   })
+})
+
+it('renders unknown stint as a dash and removes the whole column when disabled', async () => {
+  const value = model()
+  value.rows[0]!.stintTime = null
+  const render = () => renderToString(createSSRApp(StandingsHud, { model: value, backgroundOpacity: 0.5 }))
+  expect(await render()).toMatch(/class="standings-row__stint"[^>]*>\u2014<\/strong>/)
+  value.columns.stint = false
+  expect(await render()).not.toContain('standings-row__stint')
 })

@@ -94,7 +94,7 @@ describe('Standings overlay contract', () => {
   })
 
   it('non renderizza celle prive di provider', () => {
-    expect(hud).not.toMatch(/LFM|Safety Rating|Elo|Incident|Stint|BoP|turn/i)
+    expect(hud).not.toMatch(/LFM|Safety Rating|Elo|Incident|BoP|turn/i)
     expect(settings).not.toMatch(/showLfm|LFM Safety Rating|LFM Elo Rating|LFM BOP/)
     expect(settings).toContain("{ key: 'showIncidents', label: 'Incidenti', supported: false")
     expect(settings).toContain(':disabled="selectedSettingsDisabled || !option.supported"')
@@ -117,4 +117,11 @@ describe('Standings overlay contract', () => {
       'Incidenti', 'Numero curva',
     ]) expect(settings).toContain(`label: '${label}'`)
   })
+})
+
+it('wires the existing stint preference to the route and enables its settings control', () => {
+  const page = readFileSync(resolve(process.cwd(), 'app/pages/standings-overlay.vue'), 'utf8')
+  const settings = readFileSync(resolve(process.cwd(), 'app/pages/hud.vue'), 'utf8')
+  expect(page).toContain("showStintTimer: setting('showStintTimer')")
+  expect(settings).toContain("{ key: 'showStintTimer', label: 'Tempo stint', supported: true }")
 })
