@@ -1,4 +1,4 @@
-<!-- Generated V4 online; SHA256 eee4ac8b8e64b8805b84a2adc2c9134076d9326d956eaf481ff874e0f6cbfd80 -->
+<!-- Generated V4 online; SHA256 5af8312a58578e12b697e6795d491ca16545d8fe1fa0e0014f87e0a55215e038 -->
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -1109,6 +1109,7 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
       return result;
     };
     try {
+      if (typeof v4FinalObservation !== 'undefined') { v4FinalObservation = null; v4CorrectionPasses = 0; }
       globalThis.v4VerificationReached = false;
       globalThis.v4PresetObserved = null;
       globalThis.v4PresetCompleted = false;
@@ -1122,6 +1123,12 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
         brakeFront: plan.brakeFront, brakeRear: plan.brakeRear, brakeFrontNow: null, brakeRearNow: null,
         driverIdx: null, driverEntryIndex: plan.driverId ?? null, susp: plan.repairSuspension, body: plan.repairBodywork };
       await apply(intent);
+      if (plan.operation !== 'preset' && typeof v4FinalObservation !== 'undefined') {
+        observed = v4FinalObservation || {};
+        if (!globalThis.v4VerificationReached || LIM_TOCCATO || PROBLEMI.length)
+          failure = lastError || 'Applicazione interrotta prima della verifica completa.';
+        return;
+      }
       if (plan.operation === 'preset') {
         if (!globalThis.v4PresetCompleted || !globalThis.v4PresetObserved?.verified || globalThis.v4PresetObserved.preset !== plan.pitStrategy)
           throw new Error(lastError || 'Preset richiesto non verificato nel MFD.');
@@ -1158,12 +1165,16 @@ log('info','la prima volta, lettura della forma del menu — pensa lui.');
         if (plan.brakes) { put('brakeFront', visual.brakeFront, 'visual'); put('brakeRear', visual.brakeRear, 'visual'); }
       }
       if (driver) put('driverId', driver.driverIndex, 'visual-name');
-    } catch (error) { failure = error.message; }
+    } catch (error) {
+      failure = error.message;
+      if (typeof v4FinalObservation !== 'undefined') observed = v4FinalObservation || {};
+    }
     finally {
       leggiPannello = originalPanel; selectDriverV4 = originalDriver;
       log = originalLog;
       window.mfdV4Runner.complete({ observed: observed, failure: failure,
-        metrics: { durationMs: Date.now() - started, inputCount: presses },
+        metrics: { durationMs: Date.now() - started, inputCount: presses,
+          correctionPasses: typeof v4CorrectionPasses === 'number' ? v4CorrectionPasses : 0 },
         diary: logEl.innerText.slice(-24000) });
     }
   });
@@ -1224,6 +1235,15 @@ function validatePlan(p) {
 }
 
 function normalizeV4Order(raw) {
+    // Draft normalization may retain disabled controls. A transmitted order is
+    // already an explicit intent: never silently drop incompatible requests.
+    const intent = raw?.mfdV4;
+    if (intent?.operation === 'strategy' && (
+        (!intent.changeTyres && ['compound', 'tyreSet', 'pressures'].some(k => intent[k] != null)) ||
+        (intent.compound === 'wet' && intent.tyreSet != null) ||
+        (!intent.brakes && ['brakeFront', 'brakeRear'].some(k => intent[k] != null)))) {
+        return { ok: false, reason: 'Ordine V4 con parametri non applicabili: correggi gomme, mescola o freni.' };
+    }
     const parsed = validatePlan(raw?.mfdV4);
     if (!parsed.ok) return parsed;
     if (raw?.method !== METHOD || typeof raw.orderId !== 'string' || !raw.orderId.trim() || typeof raw.senderId !== 'string' || !raw.senderId.trim() || !Number.isSafeInteger(raw.revision) || raw.revision < 0 || ['fuelLiters', 'changeTyres', 'compound', 'tyreSet', 'pressures', 'brakes', 'brakeFront', 'brakeRear', 'driverId', 'repairBodywork', 'repairSuspension', 'pitStrategy', 'accDrive', 'mfdV2', 'mfdV3'].some(k => raw[k] != null)) return {
