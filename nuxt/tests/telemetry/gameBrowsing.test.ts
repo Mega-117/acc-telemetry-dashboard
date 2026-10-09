@@ -74,7 +74,7 @@ describe('consulted game and recorded facts', () => {
       { gameId: 'synthetic', date: '2026-10-02T13:00:00Z', type: 0, totalTime: 600000 },
     ]
     const index = { sessionsList: entries, tracksSummary: [{ gameId: 'acc', track: 'Spa' }, { gameId: 'synthetic', track: 'Spa' }], activityByGame: buildGameActivity(entries, new Date('2026-10-02T14:00:00Z')) }
-    const acc = scopeSessionIndex(index, 'acc')
+    const acc = scopeSessionIndex(index, 'acc', new Date('2026-10-02T14:00:00Z'))
     expect(acc.sessionsList).toEqual([entries[0]])
     expect(acc.tracksSummary).toHaveLength(1)
     expect((acc as any).activity7d.practice.minutes).toBe(1)
