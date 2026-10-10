@@ -12,9 +12,9 @@ const spotterPage = readFileSync(resolve(process.cwd(), 'app/pages/spotter.vue')
 
 describe('kokoro VoiceLab lifecycle', () => {
   it('non spegne processi Kokoro non gestiti da ACC Suite', () => {
-    expect(stopRoute).toContain('getManagedKokoroPid()')
-    expect(stopRoute).toContain("reason: 'not-managed'")
-    expect(stopRoute).toContain('stopManagedKokoroProcess()')
+    // Ownership is enforced by the same controller used by Electron.
+    expect(stopRoute).toContain('managedKokoro().stop()')
+    expect(stopRoute).not.toMatch(/process\.kill|taskkill|spawn\(/)
   })
 
   it('usa una finestra idle di 10 secondi fuori dal VoiceLab', () => {

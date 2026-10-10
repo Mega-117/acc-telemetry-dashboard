@@ -12,7 +12,7 @@
     "firebase:emulators": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/firebase-emulators.ps1 -Mode start",
     "test:firebase": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/firebase-emulators.ps1 -Mode test",
     "test:firebase:rules": "vitest run --config vitest.firebase.config.ts --maxWorkers=1",
-    "voice:kokoro": "python scripts/kokoro_tts_server.py",
+    "voice:kokoro": "node scripts/managed-kokoro.cjs",
     "postinstall": "nuxt prepare",
     "check:parity": "node scripts/check_projection_parity.mjs",
     "check:firebase-tracking": "node scripts/check_firebase_tracking.mjs",

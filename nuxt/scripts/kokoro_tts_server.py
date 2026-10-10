@@ -4,6 +4,7 @@ import argparse
 import io
 import json
 import os
+import sys
 import tempfile
 import threading
 import time
@@ -406,6 +407,9 @@ class KokoroHandler(BaseHTTPRequestHandler):
                     "ok": True,
                     "engine": "kokoro",
                     "runtime": ENGINE,
+                    "protocolVersion": 1,
+                    "serviceIdentity": os.environ.get("ACC_KOKORO_SERVICE_ID"),
+                    "isolated": bool(sys.flags.isolated and sys.flags.no_user_site),
                     "readiness": readiness_payload(),
                 })
             elif parsed.path == "/ready":

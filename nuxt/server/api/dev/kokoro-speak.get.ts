@@ -1,4 +1,6 @@
-const KOKORO_URL = 'http://localhost:5111'
+import { readKokoroRuntimeStatus } from '../../utils/kokoroRuntimeStatus'
+
+const KOKORO_URL = 'http://127.0.0.1:5111'
 const SAFE_VOICE = /^[a-z]{2}_[a-z0-9_]+$/i
 
 export default defineEventHandler(async (event) => {
@@ -21,6 +23,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Velocita non valida' })
   }
 
+  const status = await readKokoroRuntimeStatus()
+  if (status.state !== 'online') throw createError({ statusCode: 503, statusMessage: status.message || 'Runtime Kokoro non verificato' })
   const url = `${KOKORO_URL}/speak?text=${encodeURIComponent(text.slice(0, 600))}&voice=${encodeURIComponent(voice)}&speed=${encodeURIComponent(String(speed))}`
   const response = await fetch(url, { signal: AbortSignal.timeout(60_000) })
   if (!response.ok) {

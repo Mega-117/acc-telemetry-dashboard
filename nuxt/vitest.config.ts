@@ -328,6 +328,7 @@ export default defineConfig({
         'server/utils/chatterboxVoiceCatalog.ts',
         'shared/chatterboxProsody.ts',
         'server/utils/kokoroRuntimeStatus.ts',
+        'server/utils/managedKokoro.ts',
         'server/utils/trackVoicePointMerge.ts',
         'server/utils/voiceScriptNormalize.ts',
         'server/utils/coachVoiceScriptValidate.ts',
