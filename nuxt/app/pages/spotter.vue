@@ -308,6 +308,7 @@ onMounted(() => {
         </section>
       </div>
           <p
+            v-if="isAdmin"
             class="runtime-status"
             role="status"
             :class="{ 'is-warning': runtimeState !== 'online' }"
