@@ -5,6 +5,7 @@ const props = defineProps<{ api: any; separateView?: boolean; editorOnly?: boole
 const emit = defineEmits<{ open: []; cancel: [] }>()
 const minutes = defineModel<number>('minutes', { default: 10 })
 const open = ref(props.editorOnly === true), pending = ref(false), error = ref('')
+const applicationSucceeded = ref(false)
 const state = ref<any>(null)
 const previewPending = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
@@ -33,6 +34,14 @@ const statusMessage = computed(() => pending.value ? 'Preparazione carburante…
   : error.value || state.value?.conflict || state.value?.unavailableReason
   || (plan.value && !plan.value.ok ? plan.value.reason : '')
   || state.value?.result?.reason || (state.value?.available ? 'Pronto: premi Applica dal menu Pausa; la schermata verrà verificata.' : 'Verifica delle condizioni…'))
+// The minutes editor shows actionable problems, never successful sequence diagnostics.
+const minutesProblem = computed(() => {
+  if (pending.value) return ''
+  return (!applicationSucceeded.value ? error.value : '')
+    || state.value?.conflict || state.value?.unavailableReason
+    || (plan.value?.ok === false ? plan.value.reason : '')
+    || (state.value?.available === false ? 'Carburante non disponibile: verifica le condizioni nel gioco.' : '')
+})
 async function refresh(background = false) {
   if (disposed || pending.value) return
   const token = ++generation
@@ -44,13 +53,13 @@ async function refresh(background = false) {
     state.value = value
     if (value && typeof value.sessionType === 'number') sessionType.value = value.sessionType
     if (value && error.value.startsWith('Anteprima carburante')) error.value = ''
-    if (!value) error.value = 'Riavvia Racer Core per attivare il comando carburante.'
-  } catch { if (token === generation) { state.value = null; error.value = 'Anteprima carburante non disponibile. Riprovo automaticamente.' } }
+    if (!value) { applicationSucceeded.value = false; error.value = 'Riavvia Racer Core per attivare il comando carburante.' }
+  } catch { if (token === generation) { state.value = null; applicationSucceeded.value = false; error.value = 'Anteprima carburante non disponibile. Riprovo automaticamente.' } }
   finally { if (token === generation) previewPending.value = false }
   if (token === generation && open.value) timer = setTimeout(() => refresh(true), 1500)
 }
 // Keep the displayed estimate mounted while recalculating; only a fresh preview can be applied.
-watch([open, minutes], () => { error.value = ''; if (open.value) void refresh(); else { generation++; clearTimeout(timer); state.value = null; previewPending.value = false } }, { flush: 'sync', immediate: true })
+watch([open, minutes], () => { error.value = ''; applicationSucceeded.value = false; if (open.value) void refresh(); else { generation++; clearTimeout(timer); state.value = null; previewPending.value = false } }, { flush: 'sync', immediate: true })
 function adjust(amount: number) {
   if (pending.value) return
   const current = Number(minutes.value)
@@ -70,13 +79,14 @@ async function keyboard(event: PointerEvent) {
   }
 }
 async function beginApplication() {
-  pending.value = true; error.value = ''; generation++; clearTimeout(timer)
+  pending.value = true; error.value = ''; applicationSucceeded.value = false; generation++; clearTimeout(timer)
   previewPending.value = false
   // Commit the pending message before IPC can hide Ctrl+K.
   await nextTick()
 }
 async function applyPlan(mode: 'auto' | 'minutes', expected: any) {
   const result = await props.api.trainingOverlayApplySetupFuel({ mode, minutes: Number(minutes.value), contextKey: expected.contextKey, totalLitres: expected.totalLitres })
+  applicationSucceeded.value = result?.ok === true
   error.value = result?.reason || 'Esito non disponibile.'
 }
 function finishApplication() {
@@ -130,7 +140,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
         <button type="button" data-overlay-wheel-action="fuel-plus" aria-label="Un minuto in più" @click="adjust(1)">+</button>
       </div>
       <button class="fuel-apply" type="button" data-overlay-wheel-action="fuel-apply" :aria-busy="pending" :aria-label="pending ? 'Applicazione in corso' : undefined" :disabled="!state?.available || pending || previewPending" @click="apply"><template v-if="pending">Applicazione<span class="fuel-pending-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></template><template v-else>{{ `Applica carburante${plan?.ok ? ` · ${plan.totalLitres} L` : ''}` }}</template></button>
-      <div class="fuel-status" role="status" aria-live="polite"><strong>Stato carburante</strong><p>{{ statusMessage }}</p></div>
+      <div v-if="minutesProblem" class="fuel-status" role="status" aria-live="polite"><strong>Problema carburante</strong><p>{{ minutesProblem }}</p></div>
     </div>
   </section>
 </template>
