@@ -102,7 +102,7 @@ const initials = (id: string) => pitwallConceptInitialsById(id, props.people);
         class="pwc-chip"
         :class="member.driving ? 'is-always' : 'is-waiting'"
       >
-        {{ member.driving ? 'Al volante' : member.reconnecting ? 'Riconnessione' : member.role === 'invited' ? describePitwallConceptMember(member) : 'Al muretto' }}
+        {{ member.driving ? 'Al volante' : member.reconnecting ? 'Riconnessione' : member.connecting ? 'Collegamento in corso' : member.role === 'invited' ? describePitwallConceptMember(member) : 'Guida non segnalata' }}
       </span>
       <span class="pwc-person__actions">
         <button

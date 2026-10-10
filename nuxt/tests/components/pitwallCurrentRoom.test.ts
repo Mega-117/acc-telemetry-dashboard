@@ -8,6 +8,23 @@ import Friends from '../../app/components/pitwall/concept/PitwallConceptFriends.
 import Wall from '../../app/components/pitwall/concept/PitwallConceptWall.vue'
 
 describe('current social party presentation', () => {
+  it.each([
+    [{ driving: false }, 'Guida non segnalata'],
+    [{ driving: true }, 'Al volante'],
+    [{ driving: false, reconnecting: true }, 'Riconnessione'],
+    [{ driving: false, connecting: true }, 'Collegamento in corso'],
+  ])('does not infer a wall role from unavailable driving evidence (%s)', (state, expected) => {
+    const wrapper = mount(Wall, { props: {
+      meId: 'A', people: [], race: { id: 'one', membershipModel: 'social', hostId: 'A', carNumber: 0, carModel: '', track: '', session: '', closed: false,
+        reason: { kind: 'grant', personId: 'A' },
+        members: [{ personId: 'A', role: 'member', online: true, ...state }],
+      },
+    } })
+    expect(wrapper.find('.pwc-chip').text()).toBe(expected)
+    expect(wrapper.text()).not.toContain('Al muretto')
+    wrapper.unmount()
+  })
+
   it('shows the retained room while its own connection is recovering', () => {
     const wrapper = mount(MyRoom, { props: {
       meId: 'A', people: [], pitwall: { available: true, state: 'open', roomId: 'one', reason: null },
