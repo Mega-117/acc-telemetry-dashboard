@@ -2335,7 +2335,6 @@ button.is-active {
   }
   .quick-panel-automations:not(.quick-panel-show-all):has([data-overlay-wheel-action='fuel-session']:disabled) > .fuel-panel,
   .quick-panel-automations.quick-panel-driving > .fuel-panel,
-  .quick-panel-automations:not(.quick-panel-show-all):has([data-overlay-wheel-action='pressure']:disabled:not(.is-awaiting-pit)) > .quick-panel-secondary { grid-template-columns: 64px; }
   .quick-panel-automations .fuel-panel > .quick-panel-heading,
   .quick-panel-secondary > .quick-panel-heading { grid-column: 1 / -1; grid-row: 1; }
   .quick-panel-automations .fuel-open,
@@ -2406,8 +2405,7 @@ button.is-active {
   .quick-panel-secondary > .launcher-tool-button > svg { width: 22px; height: 22px; flex-shrink: 0; }
   .quick-reference-check { position: absolute; left: 3px; top: 3px; }
   .quick-reference-off { position: absolute; top: 0; right: 0; width: 20px; height: 20px; border-left: 0; }
-  [data-overlay-wheel-action='fuel-session']:disabled,
-  [data-overlay-wheel-action='pressure']:disabled:not(.is-awaiting-pit) { display: none; }
+  [data-overlay-wheel-action='fuel-session']:disabled { display: none; }
 }
 
 // Development preview exposes unavailable controls without enabling their actions.

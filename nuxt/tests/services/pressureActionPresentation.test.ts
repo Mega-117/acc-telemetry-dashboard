@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { pressureActionPresentation } from '~/services/overlay/pressureActionPresentation'
 
 describe('pressureActionPresentation', () => {
+  it('keeps the actual reason visible for recoverable and uncertain failures', () => {
+    expect(pressureActionPresentation({ state: 'ready', actionReasonCode: 'pressure_precondition_failed', reason: 'Telemetria non fresca.' }).guidance).toBe('Telemetria non fresca.')
+    expect(pressureActionPresentation({ state: 'blocked', reason: 'Esito incerto: controlla i PSI.' }).guidance).toBe('Esito incerto: controlla i PSI.')
+  })
   it('shows pit-only notice while retaining a ready recommendation', () => {
     const result = pressureActionPresentation({ state: 'unavailable', reason: 'pit_pause_required', recommendation: { status: 'ready' } })
     expect(result.alert?.guidance).toContain('Torna ai box')

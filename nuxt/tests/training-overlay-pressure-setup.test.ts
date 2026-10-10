@@ -25,6 +25,8 @@ describe('training overlay Setup pressure contract', () => {
   })
 
   it('keeps the pressure action visible, disabled outside ready and pulsing only when ready', () => {
+    expect(styles).not.toContain("[data-overlay-wheel-action='pressure']:disabled:not(.is-awaiting-pit) { display: none; }")
+    expect(source).toContain('<p id="pressure-action-status"')
     expect(source).toContain("'is-ready': dryPressureState.state === 'ready'")
     expect(source).toContain(":disabled=\"isDryPressureApplying || dryPressureState.state !== 'ready'\"")
     expect(source).toContain('launcher-tool-button--pressure')

@@ -70,6 +70,13 @@ export function pressureActionPresentation(input: PressureActionInput | null | u
   const state = input?.state || 'unavailable'
 
   if (state === 'ready') {
+    if (input?.actionReasonCode === 'pressure_precondition_failed') {
+      return {
+        stateLabel: 'Da riprovare',
+        guidance: input.reason || 'Controlla lo stato di ACC e riprova. Nessuna pressione modificata.',
+        ariaLabel: 'Regola pressioni: avvio non riuscito, correzione non consumata',
+      }
+    }
     if (input?.actionReasonCode === 'pit_pause_required') {
       return {
         stateLabel: 'Pronto',
@@ -107,7 +114,7 @@ export function pressureActionPresentation(input: PressureActionInput | null | u
   if (state === 'blocked') {
     return {
       stateLabel: 'Bloccato',
-      guidance: 'Regolazione non disponibile: controlla lo stato di ACC.',
+      guidance: input?.reason || 'Regolazione non disponibile: controlla lo stato di ACC.',
       ariaLabel: 'Regola pressioni nel Setup ACC: regolazione bloccata',
     }
   }

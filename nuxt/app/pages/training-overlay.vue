@@ -1179,6 +1179,7 @@ onBeforeUnmount(() => {
                       data-overlay-wheel-action="pressure"
                       @focus="selectedWheelActionId = 'pressure'"
                       :aria-label="dryPressurePresentation.ariaLabel"
+                      aria-describedby="pressure-action-status"
                       :title="dryPressurePresentation.ariaLabel + ': ' + dryPressurePresentation.guidance"
                       :data-state="isDryPressureApplying ? 'pending' : dryPressureState.state === 'ready' ? 'ready' : 'unavailable'"
                       :aria-busy="isDryPressureApplying"
@@ -1192,7 +1193,7 @@ onBeforeUnmount(() => {
                     </button>
                     </div>
                     <ControlKFriendRequests :api="getOverlayApi()" />
-                    <div v-if="dryPressurePresentation.alert || dryPressureState.actionReasonCode || (!dryPressureState.consumed && dryPressureState.recommendation?.wheels && isCarStoppedWithEngineOff)" class="control-k-pressure-info">
+                    <div class="control-k-pressure-info">
                     <div
                       v-if="dryPressurePresentation.alert"
                       class="pressure-invalid-lap-alert"
@@ -1205,7 +1206,7 @@ onBeforeUnmount(() => {
                         <span>{{ dryPressurePresentation.alert.guidance }}</span>
                       </span>
                     </div>
-                  <p v-if="dryPressureState.actionReasonCode && !dryPressurePresentation.alert" id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
+                  <p id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
                     Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
                   </p>
                   <div v-if="!dryPressureState.consumed && dryPressureState.recommendation?.wheels && isCarStoppedWithEngineOff" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
