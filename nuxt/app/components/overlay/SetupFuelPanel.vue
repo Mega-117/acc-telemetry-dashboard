@@ -116,7 +116,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
 <template>
   <section class="fuel-panel" :class="{ 'fuel-panel--editor': editorOnly }">
     <h2 v-if="showHeading && !editorOnly" class="quick-panel-heading">Benzina</h2>
-    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :aria-busy="pending" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><LoaderCircle v-if="pending" class="fuel-pending-spinner" :size="16" aria-hidden="true" /><Fuel v-else :size="22" aria-hidden="true" /><span>{{ pending ? 'Applicazione…' : 'Sessione' }}</span></button>
+    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :aria-busy="pending" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><LoaderCircle v-if="pending" class="fuel-pending-spinner" :size="16" aria-hidden="true" /><Fuel v-else :size="22" aria-hidden="true" /><span>Sessione</span></button>
     <Teleport defer :to="statusTarget || 'body'" :disabled="!statusTarget">
       <div v-if="!open && (pending || error)" class="fuel-status" role="status" aria-live="polite"><strong>Stato carburante</strong><p>{{ statusMessage }}</p></div>
     </Teleport>

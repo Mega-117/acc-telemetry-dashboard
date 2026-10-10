@@ -157,7 +157,7 @@ it.each(['fuel-session','fuel-apply'])('keeps %s pending animated, accessible an
  api.trainingOverlayApplySetupFuel.mockImplementation(()=>new Promise(resolve=>{done=resolve}));
  button(id).click();await flush();await flush();
  expect(button(id).disabled).toBe(true);expect(button(id).getAttribute('aria-busy')).toBe('true');
- if(id==='fuel-session') expect(button(id).querySelector('.fuel-pending-spinner')).not.toBeNull();
+ if(id==='fuel-session') {expect(button(id).querySelector('.fuel-pending-spinner')).not.toBeNull();expect(button(id).textContent?.trim()).toBe('Sessione')}
  else {expect(button(id).querySelectorAll('.fuel-pending-dots span')).toHaveLength(3);expect(button(id).getAttribute('aria-label')).toBe('Applicazione in corso')}
  button(id).click();expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledTimes(1);
  done({ok:false,reason:'Apri il menu Pausa'});await flush();
