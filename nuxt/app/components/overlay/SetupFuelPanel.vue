@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Fuel } from '@lucide/vue'
+import { Fuel, LoaderCircle } from '@lucide/vue'
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 const props = defineProps<{ api: any; separateView?: boolean; editorOnly?: boolean; showHeading?: boolean; statusTarget?: string }>()
 const emit = defineEmits<{ open: []; cancel: [] }>()
@@ -116,7 +116,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
 <template>
   <section class="fuel-panel" :class="{ 'fuel-panel--editor': editorOnly }">
     <h2 v-if="showHeading && !editorOnly" class="quick-panel-heading">Benzina</h2>
-    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><Fuel :size="22" aria-hidden="true" /><span>{{ pending ? 'Applicazione…' : 'Sessione' }}</span></button>
+    <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :aria-busy="pending" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><LoaderCircle v-if="pending" class="fuel-pending-spinner" :size="16" aria-hidden="true" /><Fuel v-else :size="22" aria-hidden="true" /><span>{{ pending ? 'Applicazione…' : 'Sessione' }}</span></button>
     <Teleport defer :to="statusTarget || 'body'" :disabled="!statusTarget">
       <div v-if="!open && (pending || error)" class="fuel-status" role="status" aria-live="polite"><strong>Stato carburante</strong><p>{{ statusMessage }}</p></div>
     </Teleport>
@@ -129,12 +129,18 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
         <label><input v-model.number="minutes" type="number" min="1" max="180" step="1" aria-label="Minuti stint" :disabled="pending" @wheel="wheelMinutes" @pointerdown="keyboard" @keydown.stop @blur="api?.trainingOverlayKeyboardEditing?.(false)"> min</label>
         <button type="button" data-overlay-wheel-action="fuel-plus" aria-label="Un minuto in più" @click="adjust(1)">+</button>
       </div>
-      <button class="fuel-apply" type="button" data-overlay-wheel-action="fuel-apply" :disabled="!state?.available || pending || previewPending" @click="apply">{{ pending ? 'Applicazione…' : `Applica carburante${plan?.ok ? ` · ${plan.totalLitres} L` : ''}` }}</button>
+      <button class="fuel-apply" type="button" data-overlay-wheel-action="fuel-apply" :aria-busy="pending" :aria-label="pending ? 'Applicazione in corso' : undefined" :disabled="!state?.available || pending || previewPending" @click="apply"><template v-if="pending">Applicazione<span class="fuel-pending-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></template><template v-else>{{ `Applica carburante${plan?.ok ? ` · ${plan.totalLitres} L` : ''}` }}</template></button>
       <div class="fuel-status" role="status" aria-live="polite"><strong>Stato carburante</strong><p>{{ statusMessage }}</p></div>
     </div>
   </section>
 </template>
 
 <style scoped>
+.fuel-pending-spinner{animation:fuel-pending-spin 1.2s linear infinite}
+.fuel-pending-dots span{animation:fuel-pending-dot 1.2s steps(1,end) infinite}
+.fuel-pending-dots span:nth-child(2){animation-delay:.2s}.fuel-pending-dots span:nth-child(3){animation-delay:.4s}
+@keyframes fuel-pending-spin{to{transform:rotate(360deg)}}
+@keyframes fuel-pending-dot{0%,20%{opacity:0}40%,100%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.fuel-pending-spinner,.fuel-pending-dots span{animation:none}}
 .fuel-status{padding:10px;border:1px solid #6d604b;border-radius:8px;background:#24211c}.fuel-status strong{display:block;margin-bottom:4px}.fuel-panel{width:100%;text-align:left;display:grid;gap:8px}.fuel-open,.fuel-apply{width:100%;min-height:34px;border:1px solid #805126;border-radius:8px;background:#252019;color:#fff;font-weight:800}.fuel-body{padding:12px;border:1px solid #48423b;border-radius:10px;background:#131819;display:grid;gap:10px;font-size:12px;color:#d9e1e5}.fuel-body p{margin:0;line-height:1.4}.fuel-modes,.fuel-duration{display:flex;gap:8px;align-items:center}.fuel-body button{cursor:pointer;min-height:32px}.fuel-modes button,.fuel-duration button{background:#222b30;color:white;border:1px solid #526069;border-radius:6px;padding:5px 10px}.fuel-modes button[aria-pressed=true]{border-color:#ff9638;color:#ffae62}.fuel-duration input{width:62px;font-size:22px;text-align:center;color:white;background:#101516;border:1px solid #526069;border-radius:6px}.fuel-total{font-size:30px;font-weight:900}.fuel-total small{font-size:13px}.fuel-apply{background:#ff9638;color:#111}.fuel-open:disabled,.fuel-apply:disabled{opacity:.45;cursor:default}.fuel-body summary{cursor:pointer;color:#aeb9c0}.fuel-hint{margin:-4px 0 0;font-size:11px;color:#aeb9c0}.fuel-source{color:#aeb9c0}button:focus-visible,input:focus-visible{outline:2px solid #ffb257;outline-offset:2px}
 </style>

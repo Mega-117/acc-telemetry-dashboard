@@ -6,6 +6,12 @@ const source = readFileSync(fileURLToPath(new URL('../app/pages/training-overlay
 const styles = readFileSync(fileURLToPath(new URL('../app/assets/scss/_training-overlay.scss', import.meta.url)), 'utf8')
 
 describe('training overlay Setup pressure contract', () => {
+  it('keeps disabled fuel actions visible while applying in both panel orientations', () => {
+    expect(styles).not.toContain("[data-overlay-wheel-action='fuel-session']:disabled { display: none; }")
+    expect(styles).toContain("[data-overlay-wheel-action='fuel-session']:disabled:not([aria-busy='true']) { display: none; }")
+    expect(styles).toContain(":not(:has(.fuel-panel button:not(:disabled), .fuel-panel button[aria-busy='true']))")
+    expect(styles).toContain(".fuel-panel:not(:has(button:not(:disabled), button[aria-busy='true']))")
+  })
   it('offers an accessible independent audio action on the existing wheel navigation', () => {
     expect(source).toContain(':pressure="pressureWarningsEnabled"')
     expect(source).toContain('@toggle-pressure="togglePressureAudio"')

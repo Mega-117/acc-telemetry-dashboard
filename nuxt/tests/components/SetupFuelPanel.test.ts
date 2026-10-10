@@ -152,6 +152,19 @@ it.each(['fuel-session','fuel-apply'])('renders immediate pending feedback befor
  api.trainingOverlayApplySetupFuel.mockImplementation(async()=>{pendingSeen=!!document.querySelector('[role="status"]')?.textContent?.includes('Preparazione carburante');return {ok:true,reason:'25 L verificati'}});
  button(id).click();await flush();await flush();expect(pendingSeen).toBe(true);
 })
+it.each(['fuel-session','fuel-apply'])('keeps %s pending animated, accessible and disabled until outcome', async id => {
+ const api=await mount();let done:any;
+ api.trainingOverlayApplySetupFuel.mockImplementation(()=>new Promise(resolve=>{done=resolve}));
+ button(id).click();await flush();await flush();
+ expect(button(id).disabled).toBe(true);expect(button(id).getAttribute('aria-busy')).toBe('true');
+ if(id==='fuel-session') expect(button(id).querySelector('.fuel-pending-spinner')).not.toBeNull();
+ else {expect(button(id).querySelectorAll('.fuel-pending-dots span')).toHaveLength(3);expect(button(id).getAttribute('aria-label')).toBe('Applicazione in corso')}
+ button(id).click();expect(api.trainingOverlayApplySetupFuel).toHaveBeenCalledTimes(1);
+ done({ok:false,reason:'Apri il menu Pausa'});await flush();
+ expect(button(id).getAttribute('aria-busy')).toBe('false');
+ expect(button(id).querySelector('.fuel-pending-spinner,.fuel-pending-dots')).toBeNull();
+ expect(document.body.textContent).toContain('Apri il menu Pausa');
+})
 it('unmount immediately after custom click prevents IPC',async()=>{
  const api=await mount();button('fuel-apply').click();app?.unmount();app=null;await flush();expect(api.trainingOverlayApplySetupFuel).not.toHaveBeenCalled();
 })
