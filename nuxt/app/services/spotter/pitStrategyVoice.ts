@@ -15,3 +15,15 @@ export function pitStrategyAppliedCue(event: unknown, voice: string): VoiceCue |
     scenarioId: 'pitStrategyApplied',
   }
 }
+
+/** Live Setup completion only. Both fuel modes share the same Voice Lab phrase. */
+export function setupAutomationCompletedCue(event: unknown, voice: string): VoiceCue | null {
+  if (!event || typeof event !== 'object' || !['if_sara', 'im_nicola'].includes(voice)) return null
+  const value = event as { requestId?: unknown, operation?: unknown, status?: unknown }
+  if (value.status !== 'completed' || typeof value.requestId !== 'string' || !value.requestId.trim() || value.requestId.length > 96) return null
+  const scenarioId = value.operation === 'pressures' ? 'setupPressuresCompleted'
+    : ['fuel-session', 'fuel-minutes'].includes(String(value.operation)) ? 'setupFuelCompleted' : null
+  if (!scenarioId) return null
+  return { id: `setup:${value.requestId}`, path: `/voice/qualifying/${scenarioId}-${voice}.wav`,
+    source: 'setup-automation', correlationId: value.requestId, scenarioId }
+}

@@ -7,6 +7,7 @@ const EVENTS: Record<string, string> = {
   onTrainingOverlayCommand: 'training-overlay-command',
   onPitwallIntentState: 'pitwall:intent-state',
   onPitwallOrderOutcome: 'pitwall:order-outcome',
+  onSetupAutomationCompleted: 'setup:automation-completed',
   onFriendRequestsState: 'friend-requests:state',
 }
 

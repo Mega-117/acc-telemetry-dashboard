@@ -13,6 +13,18 @@
       "speed": 1.2
     },
     {
+      "id": "setupPressuresCompleted",
+      "origin": "system",
+      "text": "regolazioni pressioni completate.",
+      "speed": 1.2
+    },
+    {
+      "id": "setupFuelCompleted",
+      "origin": "system",
+      "text": "rifornimento completato.",
+      "speed": 1.2
+    },
+    {
       "id": "lastMinute",
       "origin": "system",
       "text": "ultimo minuto. chiudilo bene.",

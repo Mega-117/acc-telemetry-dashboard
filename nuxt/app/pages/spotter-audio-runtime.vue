@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
-import { pitStrategyAppliedCue } from '~/services/spotter/pitStrategyVoice'
+import { pitStrategyAppliedCue, setupAutomationCompletedCue } from '~/services/spotter/pitStrategyVoice'
 import { audioContextKey, audioFeatureAvailable, bindAudioCue } from '~/services/spotter/audioSourceContext'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
@@ -80,6 +80,7 @@ const trackVoiceReferences = ref<TrackVoiceReference[]>([])
 const trackVoiceReferenceRuntimeState = ref(createTrackVoiceReferenceRuntimeState())
 let removeTrackVoiceReferenceChangeListener = () => {}
 let removePitStrategyListener: (() => void) | undefined
+let removeSetupCompletionListener: (() => void) | undefined
 let cueSequence = 0
 
 const voiceRuntimeDiagnostics = createVoiceRuntimeDiagnostics()
@@ -328,6 +329,11 @@ const finishLineVoiceRuntime = createFinishLineVoiceRuntime({
 })
 
 onMounted(async () => {
+  removeSetupCompletionListener = getRuntimeApi()?.onSetupAutomationCompleted?.((event: unknown) => {
+    if (!canRunSpotterAudio.value) return
+    const cue = setupAutomationCompletedCue(event, selectedVoice.value)
+    if (cue) voiceQueue.enqueue({ ...cue, canPlay: () => canRunSpotterAudio.value })
+  })
   removePitStrategyListener = getRuntimeApi()?.onPitwallOrderOutcome?.((event: unknown) => {
     if (!canRunSpotterAudio.value) return
     const cue = pitStrategyAppliedCue(event, selectedVoice.value)
@@ -420,6 +426,7 @@ watch(
 
 onBeforeUnmount(() => {
   removePitStrategyListener?.()
+  removeSetupCompletionListener?.()
   targetSettingsDisposed = true
   removeTargetSettingsListener?.()
   removeTrackVoiceReferenceChangeListener()
