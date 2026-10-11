@@ -8,7 +8,7 @@ import { completedLapHoldSample } from '~/utils/completedLapHoldSample'
 import { usePresentationInterval, usePresentationVisibility } from '~/composables/usePresentationVisibility'
 const presentationVisible = usePresentationVisibility()
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, shallowRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   resolveTrainingOverlayModeId,
   resolveTrainingOverlayTrainingId,
@@ -123,6 +123,7 @@ const phase = ref<OverlayPhase>('loading')
 const quickPanelLayout = ref<'vertical' | 'horizontal'>('vertical')
 async function setQuickPanelLayout(value: 'vertical' | 'horizontal') {
   quickPanelLayout.value = value
+  if (isFullQuickPanelPreview.value) return
   try {
     await getOverlayApi()?.trainingOverlaySavePreferences?.({ quickPanelLayout: value })
   } catch (error) {
@@ -235,7 +236,7 @@ const getOverlayApi = useOverlayRegionApi()
 // The logger owns recommendation facts; Electron owns Setup input; this page
 // only presents the versioned plan and never computes pressure corrections.
 const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not_fresh' })
-const dryPressurePresentation = computed(() => pressureActionPresentation(dryPressureState.value))
+const dryPressurePresentation = computed(() => pressureActionPresentation(quickPanelPressureState.value))
 const isDryPressurePreviewOpen = ref(false)
 const isDryPressureApplying = ref(false)
 const dryPressureBridgeStatus = ref('Nessuna raccomandazione TEST attiva.')
@@ -477,6 +478,34 @@ async function logAccMenuState() {
   scheduleOverlaySizeSync()
 }
 const previewAllQuickPanelButtons = ref(false)
+let layoutBeforePreview: 'vertical' | 'horizontal' = 'vertical'
+const quickPanelPreview = shallowRef<ReturnType<typeof import('~/services/overlay/quickPanelPreview').createQuickPanelPreview> | null>(null)
+const isFullQuickPanelPreview = computed(() => showQuickPanelDevTools && previewAllQuickPanelButtons.value)
+const quickPanelPressureState = computed(() => isFullQuickPanelPreview.value ? quickPanelPreview.value!.pressure : dryPressureState.value)
+const quickPanelSupport = computed(() => isFullQuickPanelPreview.value ? gameUiSupport('acc') : support.value)
+let blockPreviewAction: ((event: Event, preview: boolean) => void) | undefined
+async function toggleQuickPanelPreview() {
+  if (!import.meta.dev) return
+  if (!quickPanelPreview.value) {
+    const module = await import('~/services/overlay/quickPanelPreview')
+    quickPanelPreview.value = module.createQuickPanelPreview()
+    blockPreviewAction = module.blockQuickPanelPreviewAction
+  }
+  if (!previewAllQuickPanelButtons.value) layoutBeforePreview = quickPanelLayout.value
+  else quickPanelLayout.value = layoutBeforePreview
+  previewAllQuickPanelButtons.value = !previewAllQuickPanelButtons.value
+  scheduleOverlaySizeSync()
+  await nextTick()
+  actionSelection.refresh()
+}
+function guardQuickPanelPreview(event: Event) {
+  blockPreviewAction?.(event, isFullQuickPanelPreview.value)
+}
+function guardQuickPanelDevTools(event: Event) {
+  if ((event.target as HTMLElement)?.closest('[data-quick-panel-preview], summary')) return
+  guardQuickPanelPreview(event)
+}
+
 const isCarStoppedWithEngineOff = computed(() => !fastState.value.isEngineRunning
   && fastState.value.speedKmh !== null && Math.abs(fastState.value.speedKmh) <= 0.5)
 const showAllQuickPanelButtons = computed(() => isCarStoppedWithEngineOff.value
@@ -878,6 +907,7 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   if (placementActive.value) return
   setDebugEvent(`comando overlay: ${command || 'vuoto'}`)
   if (command === 'prepare-reopen') { void prepareOverlayReopen(typeof payload === 'string' ? undefined : payload.revision); return }
+  if (isFullQuickPanelPreview.value) return
   if (isQuickTimerOpen.value) { if (command === 'back') closeOverlay(); return }
   if (command === 'main-menu') { returnToMainMenu(); return }
   if (isTargetSetupOpen.value && targetSetup.value?.handleWheelCommand(command)) return
@@ -893,6 +923,10 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
 
 function handleLocalShortcut(event: KeyboardEvent) {
   if (placementActive.value) return
+  if (isFullQuickPanelPreview.value) {
+    if (resolveOverlayKeyboardCommand(event) || event.code === 'Space') event.preventDefault()
+    return
+  }
   if (voicePointRecorderEnabled.value && event.code === 'Space' && !event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey) {
     event.preventDefault()
     if (!event.repeat) void recordVoicePointFromCurrentPosition()
@@ -1094,7 +1128,8 @@ onBeforeUnmount(() => {
                 `overlay-content--${overlaySizePreset}`,
                 { 'overlay-content--target': isTargetSetupOpen || isSectorReferenceSetupOpen || isFuelSetupOpen || isQuickTimerOpen,
                   'overlay-content--target-lap': isTargetSetupOpen,
-                  'overlay-content--horizontal': isHorizontalQuickPanel },
+                  'overlay-content--horizontal': isHorizontalQuickPanel,
+                  'overlay-content--preview': isFullQuickPanelPreview },
               ]"
             >
 
@@ -1103,7 +1138,7 @@ onBeforeUnmount(() => {
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
                     <QuickPanelLayoutToggle :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
-                    <div class="quick-panel-header-actions">
+                    <div class="quick-panel-header-actions" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <button type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" @click="isQuickTimerOpen = true">
                       <Timer :size="18" aria-hidden="true" />
                     </button>
@@ -1120,54 +1155,55 @@ onBeforeUnmount(() => {
                     </div>
                   </header>
                   <div class="launcher-tools__actions">
-                    <div class="quick-panel-main">
-                    <QuickPanelVoiceControls v-if="support.quickVoiceControls"
-                      :extended-controls="support.extendedVoiceControls"
-                      :coach="spotterEnabled"
-                      :references="trackVoiceReferencesEnabled"
-                      :pressure="pressureWarningsEnabled"
-                      :target="targetLapVoiceEnabled"
-                      :disabled="!canUseSpotterControls"
+                    <div class="quick-panel-main" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
+                    <QuickPanelVoiceControls v-if="quickPanelSupport.quickVoiceControls"
+                      :extended-controls="quickPanelSupport.extendedVoiceControls"
+                      :coach="isFullQuickPanelPreview || spotterEnabled"
+                      :references="isFullQuickPanelPreview || trackVoiceReferencesEnabled"
+                      :pressure="isFullQuickPanelPreview || pressureWarningsEnabled"
+                      :target="isFullQuickPanelPreview || targetLapVoiceEnabled"
+                      :disabled="!isFullQuickPanelPreview && !canUseSpotterControls"
                       @toggle-coach="toggleCoachAudio"
                       @toggle-references="toggleTrackVoiceReferences"
                       @toggle-pressure="togglePressureAudio"
                       @toggle-target="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
                     />
                     <div class="quick-panel-categories">
-                    <section v-if="!support.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
+                    <section v-if="!quickPanelSupport.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
                       <h2 class="quick-panel-heading">Riferimenti</h2>
                       <div class="quick-panel-pair">
-                    <div class="quick-reference" :class="{ 'is-active': infoTargetActive }">
+                    <div class="quick-reference" :class="{ 'is-active': (isFullQuickPanelPreview || infoTargetActive) }">
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--target"
-                      :class="{ 'is-active': infoTargetActive, 'is-selected': selectedWheelActionId === 'target' }"
+                      :class="{ 'is-active': (isFullQuickPanelPreview || infoTargetActive), 'is-selected': selectedWheelActionId === 'target' }"
                       data-overlay-wheel-action="target"
-                      :aria-pressed="infoTargetActive"
+                      :aria-pressed="(isFullQuickPanelPreview || infoTargetActive)"
                       :aria-current="selectedWheelActionId === 'target' ? 'true' : undefined"
                       aria-label="Configura Target giro HUD Info"
                       @focus="selectedWheelActionId = 'target'"
                       @click="openInfoTargetSetup"
                     >
-                      <Check v-if="infoTargetActive" class="quick-reference-check" :size="12" aria-hidden="true" /><Target :size="22" aria-hidden="true" /><span>Target giro</span>
+                      <Check v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Target :size="22" aria-hidden="true" /><span>Target giro</span>
                     </button>
-                    <button v-if="infoTargetActive" class="quick-reference-off" data-overlay-wheel-action="target-disable" title="Disattiva target giro" aria-label="Disattiva target giro" :disabled="referenceBusy" @click="disableReference('target')"><Power :size="14" /></button>
+                    <button v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-off" data-overlay-wheel-action="target-disable" title="Disattiva target giro" aria-label="Disattiva target giro" :disabled="referenceBusy" @click="disableReference('target')"><Power :size="14" /></button>
                     </div>
-                    <div v-if="support.quickSectorReferences" class="quick-reference" :class="{ 'is-active': customSectorsActive }">
-                    <button type="button" class="launcher-tool-button" :aria-pressed="customSectorsActive" title="Configura riferimenti settori" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
-                      <Check v-if="customSectorsActive" class="quick-reference-check" :size="12" aria-hidden="true" /><Flag :size="22" aria-hidden="true" /><span>Settori</span>
+                    <div v-if="quickPanelSupport.quickSectorReferences" class="quick-reference" :class="{ 'is-active': (isFullQuickPanelPreview || customSectorsActive) }">
+                    <button type="button" class="launcher-tool-button" :aria-pressed="(isFullQuickPanelPreview || customSectorsActive)" title="Configura riferimenti settori" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
+                      <Check v-if="(isFullQuickPanelPreview || customSectorsActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Flag :size="22" aria-hidden="true" /><span>Settori</span>
                     </button>
-                    <button v-if="customSectorsActive" class="quick-reference-off" data-overlay-wheel-action="sector-disable" title="Disattiva personalizzati e ripristina il confronto abituale" aria-label="Disattiva riferimenti personalizzati" :disabled="referenceBusy" @click="disableReference('sectors')"><Power :size="14" /></button>
+                    <button v-if="(isFullQuickPanelPreview || customSectorsActive)" class="quick-reference-off" data-overlay-wheel-action="sector-disable" title="Disattiva personalizzati e ripristina il confronto abituale" aria-label="Disattiva riferimenti personalizzati" :disabled="referenceBusy" @click="disableReference('sectors')"><Power :size="14" /></button>
                     </div>
                       </div>
                     </section>
-                    <section v-if="support.quickAutomations" class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving }" aria-label="Automazioni">
+                    <section v-if="quickPanelSupport.quickAutomations" class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving }" aria-label="Automazioni">
                     <div id="control-k-fuel-status" class="control-k-fuel-status" />
-                    <SetupFuelPanel show-heading v-model:minutes="fuelStintMinutes" :api="getOverlayApi()" status-target="#control-k-fuel-status" separate-view @open="isFuelSetupOpen = true" />
+                    <SetupFuelPanel :key="isFullQuickPanelPreview ? 'preview' : 'live'" :preview-expanded="isFullQuickPanelPreview" :body-target="isFullQuickPanelPreview ? '#control-k-fuel-preview' : undefined" show-heading :minutes="isFullQuickPanelPreview ? 30 : fuelStintMinutes" @update:minutes="!isFullQuickPanelPreview && (fuelStintMinutes = $event)" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" status-target="#control-k-fuel-status" separate-view @open="isFuelSetupOpen = true" />
                     <div class="quick-panel-pair quick-panel-secondary">
                     <h2 class="quick-panel-heading">Tools</h2>
                     <PitwallOverlayButton
-                      :api="getOverlayApi()"
+                      :key="isFullQuickPanelPreview ? 'preview' : 'live'"
+                      :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()"
                       :selected="selectedWheelActionId === 'pitwall'"
                       data-overlay-wheel-action="pitwall"
                       @focus="selectedWheelActionId = 'pitwall'"
@@ -1175,24 +1211,25 @@ onBeforeUnmount(() => {
                     <button
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training launcher-tool-button--pressure"
-                      :class="{ 'is-ready': dryPressureState.state === 'ready', 'is-awaiting-pit': dryPressureState.reason === 'pit_pause_required', 'is-selected': selectedWheelActionId === 'pressure' }"
+                      :class="{ 'is-ready': quickPanelPressureState.state === 'ready', 'is-awaiting-pit': quickPanelPressureState.reason === 'pit_pause_required', 'is-selected': selectedWheelActionId === 'pressure' }"
                       data-overlay-wheel-action="pressure"
                       @focus="selectedWheelActionId = 'pressure'"
                       :aria-label="dryPressurePresentation.ariaLabel"
                       aria-describedby="pressure-action-status"
                       :title="dryPressurePresentation.ariaLabel + ': ' + dryPressurePresentation.guidance"
-                      :data-state="isDryPressureApplying ? 'pending' : dryPressureState.state === 'ready' ? 'ready' : 'unavailable'"
+                      :data-state="isDryPressureApplying ? 'pending' : quickPanelPressureState.state === 'ready' ? 'ready' : 'unavailable'"
                       :aria-busy="isDryPressureApplying"
-                      :disabled="isDryPressureApplying || dryPressureState.state !== 'ready'"
+                      :disabled="isDryPressureApplying || quickPanelPressureState.state !== 'ready'"
                       @click="applyDryPressure"
                     >
                       <LoaderCircle v-if="isDryPressureApplying" class="quick-state-icon" :size="16" aria-hidden="true" />
-                      <CircleCheck v-else-if="dryPressureState.state === 'ready'" class="quick-state-icon" :size="16" aria-hidden="true" />
+                      <CircleCheck v-else-if="quickPanelPressureState.state === 'ready'" class="quick-state-icon" :size="16" aria-hidden="true" />
                       <CircleMinus v-else class="quick-state-icon" :size="16" aria-hidden="true" />
                       <span>Pressioni</span>
                     </button>
                     </div>
-                    <ControlKFriendRequests :api="getOverlayApi()" />
+                    <div v-if="isFullQuickPanelPreview" id="control-k-fuel-preview" class="control-k-fuel-preview" />
+                    <ControlKFriendRequests :key="isFullQuickPanelPreview ? 'preview' : 'live'" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" />
                     <div class="control-k-pressure-info">
                     <div
                       v-if="dryPressurePresentation.alert"
@@ -1209,21 +1246,21 @@ onBeforeUnmount(() => {
                   <p id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
                     Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
                   </p>
-                  <div v-if="!dryPressureState.consumed && dryPressureState.recommendation?.wheels && isCarStoppedWithEngineOff" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
+                  <div v-if="!quickPanelPressureState.consumed && quickPanelPressureState.recommendation?.wheels && (isFullQuickPanelPreview || isCarStoppedWithEngineOff)" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <div class="pressure-plan__meta">
-                      <span>{{ dryPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>
-                      <span v-if="(dryPressureState.recommendation?.required_valid_laps ?? 1) > 0">{{ dryPressureState.recommendation?.valid_laps || 0 }}/{{ dryPressureState.recommendation?.required_valid_laps ?? 1 }} valido</span>
-                      <strong>{{ dryPressureState.recommendation?.compound || '—' }}</strong>
+                      <span>{{ quickPanelPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>
+                      <span v-if="(quickPanelPressureState.recommendation?.required_valid_laps ?? 1) > 0">{{ quickPanelPressureState.recommendation?.valid_laps || 0 }}/{{ quickPanelPressureState.recommendation?.required_valid_laps ?? 1 }} valido</span>
+                      <strong>{{ quickPanelPressureState.recommendation?.compound || '—' }}</strong>
                     </div>
-                    <table v-if="dryPressureState.recommendation?.wheels" class="pressure-plan__table">
+                    <table v-if="quickPanelPressureState.recommendation?.wheels" class="pressure-plan__table">
                       <thead><tr><th>Gomma</th><th>AVG</th><th>Persa</th><th>Comp.</th><th>Target</th><th>± click</th></tr></thead>
                       <tbody>
-                        <tr v-for="row in dryPressureState.preview || []" :key="row.wheel">
+                        <tr v-for="row in quickPanelPressureState.preview || []" :key="row.wheel">
                           <th>{{ row.wheel }}</th><td>{{ row.averagePsi?.toFixed?.(2) ?? '—' }}</td><td>{{ row.totalLossPsi?.toFixed?.(1) ?? '—' }}</td><td>{{ row.compensatedPsi?.toFixed?.(1) ?? '—' }}</td><td>{{ row.targetPsi?.toFixed?.(1) ?? '—' }}</td><td class="pressure-plan__clicks">{{ row.clicks > 0 ? '+' : '' }}{{ row.clicks ?? '—' }}</td>
                         </tr>
                       </tbody>
                     </table>
-                    <p v-if="dryPressureState.recommendation?.wheels" class="pressure-plan__note">AVG + persa = compensata · il setup cambia dei click indicati.</p>
+                    <p v-if="quickPanelPressureState.recommendation?.wheels" class="pressure-plan__note">AVG + persa = compensata · il setup cambia dei click indicati.</p>
                     <p v-else class="pressure-plan__empty">{{ dryPressurePresentation.guidance }}</p>
                   </div>
 
@@ -1231,19 +1268,21 @@ onBeforeUnmount(() => {
                     </section>
                     </div>
                     </div>
-                    <details v-if="showQuickPanelDevTools" class="quick-panel-dev">
+                    <details v-if="showQuickPanelDevTools" class="quick-panel-dev" @click.capture="guardQuickPanelDevTools">
                       <summary>Strumenti sviluppo</summary>
-                    <template v-if="support.quickAutomations">
-                    <button v-if="dryPressureState.qaAvailable" type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Genera raccomandazione TEST</button>
-                    <p v-if="dryPressureState.qaAvailable" class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
-                    <button v-if="dryPressureState.qaActive" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Rimuovi raccomandazione TEST</button>
+                      <button type="button" class="launcher-tool-button" :aria-pressed="previewAllQuickPanelButtons" data-quick-panel-preview @click="toggleQuickPanelPreview">
+                        {{ previewAllQuickPanelButtons ? 'Ripristina visibilità' : 'Anteprima completa Ctrl+K' }}
+                      </button>
+                      <p v-if="isFullQuickPanelPreview" class="launcher-hint" role="status">Anteprima visiva · dati dimostrativi, comandi disattivati.</p>
+                    <template v-if="quickPanelSupport.quickAutomations">
+                    <button v-if="quickPanelPressureState.qaAvailable" type="button" class="launcher-tool-button launcher-tool-button--target" @click="testDryPressure">Genera raccomandazione TEST</button>
+                    <p v-if="quickPanelPressureState.qaAvailable" class="launcher-hint" role="status">Test pressioni: {{ dryPressureBridgeStatus }}</p>
+                    <button v-if="quickPanelPressureState.qaActive" type="button" class="launcher-tool-button launcher-tool-button--target" @click="restoreTestDryPressure">Rimuovi raccomandazione TEST</button>
                     </template>
                       <button type="button" class="launcher-tool-button" :disabled="isCheckingPauseMenu" :aria-busy="isCheckingPauseMenu" @click="checkPauseMenu">{{ isCheckingPauseMenu ? 'Verifica in corso…' : 'Verifica menu Pausa' }}</button>
                       <button type="button" class="launcher-tool-button" @click="logAccMenuState">Scrivi stati menu ACC nel log</button>
                       <p v-if="accMenuStateLogMessage" class="launcher-hint" role="status">{{ accMenuStateLogMessage }}</p>
-                      <button type="button" class="launcher-tool-button" :aria-pressed="previewAllQuickPanelButtons" @click="previewAllQuickPanelButtons = !previewAllQuickPanelButtons; scheduleOverlaySizeSync()">
-                        {{ previewAllQuickPanelButtons ? 'Ripristina visibilità' : 'Mostra tutti i pulsanti' }}
-                      </button>
+
                       <button type="button" class="launcher-tool-button" :aria-pressed="isTestMode" @click="toggleTestMode">Test timer</button>
                       <button v-if="canUseVoicePointRecorder" type="button" class="launcher-tool-button" :aria-pressed="voicePointRecorderEnabled" @click="toggleVoicePointRecorder">Registra riferimenti</button>
                     <button

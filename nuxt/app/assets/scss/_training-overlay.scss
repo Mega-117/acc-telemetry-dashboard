@@ -2602,3 +2602,9 @@ button.is-active {
   .quick-panel-secondary:not(:has(button)),
   .fuel-panel:not(:has(button)) { display: none; }
 }
+
+// Development stress preview keeps the shared fuel editor out of the 64px action column.
+.training-overlay--launcher .overlay-content--preview {
+  max-height: calc(100vh - 50px);
+  .control-k-fuel-preview { grid-column: 1 / -1 !important; min-width: 0; }
+}
