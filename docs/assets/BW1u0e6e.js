@@ -1,1 +1,0 @@
-import{aI as s,dN as t,ca as o,ce as n,ax as r,at as c,Y as _}from"./DAPKezd1.js";const d={class:"redirect-screen"},p=s({__name:"[...slug]",setup(u){const a=t();return o(()=>{a.replace("/panoramica")}),(i,e)=>(n(),r("div",d,[...e[0]||(e[0]=[c("p",null,"Reindirizzamento...",-1)])]))}}),m=_(p,[["__scopeId","data-v-5c5ada89"]]);export{m as default};
