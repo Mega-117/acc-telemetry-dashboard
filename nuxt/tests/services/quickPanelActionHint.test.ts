@@ -6,10 +6,16 @@ import { useOverlayActionSelection } from '~/composables/useOverlayActionSelecti
 
 describe('vertical quick panel command help', () => {
   it.each([
-    ['coach', 'Giri:'], ['references', 'Riferimenti:'], ['pressure-audio', 'Pressioni:'],
-    ['target-voice', 'Target:'], ['fuel', 'A minuti:'], ['fuel-session', 'Sessione:'],
-    ['pitwall', 'Pitwall:'], ['pressure', 'Pressioni:'], ['target', 'Tempo giro:'],
-    ['target-disable', 'Tempo giro:'], ['sector-references', 'Settori:'], ['sector-disable', 'Settori:'],
+    ['coach', 'Annuncia il tempo sul giro.'], ['references', 'Annuncia i riferimenti di frenata.'],
+    ['pressure-audio', 'Avvisa quando le pressioni non sono ottimali.'],
+    ['target-voice', 'Annuncia se il giro è dentro o fuori target.'],
+    ['fuel', 'Imposta il carburante per i minuti scelti.'],
+    ['fuel-session', 'Imposta il carburante per l’intera sessione.'],
+    ['pitwall', 'Apri o chiudi la stanza Pitwall.'],
+    ['pressure', 'Regola le pressioni ai valori ottimali.'],
+    ['target', 'Imposta il tempo sul giro di riferimento.'],
+    ['target-disable', 'Tempo giro:'],
+    ['sector-references', 'Imposta i tempi di riferimento dei settori.'], ['sector-disable', 'Settori:'],
     ['Timer', 'Timer:'], ['Layout verticale', 'Layout:'], ['Layout orizzontale', 'Layout:'],
     ['fuel-minus', 'Durata:'], ['fuel-plus', 'Durata:'], ['fuel-apply', 'Carburante:'],
     ['friend-accept:demo-1', 'Amicizia: accetta'], ['friend-reject:demo-1', 'Amicizia: rifiuta'],
@@ -34,11 +40,11 @@ describe('vertical quick panel command help', () => {
       const navigation = scope.run(() => useOverlayActionSelection(ref(root), () => true))!
       const hint = computed(() => quickPanelActionHint(navigation.selectedId.value))
       navigation.first()
-      expect(hint.value).toContain('A minuti:')
+      expect(hint.value).toBe('Imposta il carburante per i minuti scelti.')
       navigation.next()
-      expect(hint.value).toContain('Sessione:')
+      expect(hint.value).toBe('Imposta il carburante per l’intera sessione.')
       navigation.previous()
-      expect(hint.value).toContain('A minuti:')
+      expect(hint.value).toBe('Imposta il carburante per i minuti scelti.')
       await nextTick()
       expect(click).not.toHaveBeenCalled()
     } finally {
