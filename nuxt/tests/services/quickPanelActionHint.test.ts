@@ -8,8 +8,8 @@ describe('vertical quick panel command help', () => {
   it.each([
     ['coach', 'Giri:'], ['references', 'Riferimenti:'], ['pressure-audio', 'Pressioni:'],
     ['target-voice', 'Target:'], ['fuel', 'A minuti:'], ['fuel-session', 'Sessione:'],
-    ['pitwall', 'Pitwall:'], ['pressure', 'Pressioni:'], ['target', 'Target giro:'],
-    ['target-disable', 'Target giro:'], ['sector-references', 'Settori:'], ['sector-disable', 'Settori:'],
+    ['pitwall', 'Pitwall:'], ['pressure', 'Pressioni:'], ['target', 'Tempo giro:'],
+    ['target-disable', 'Tempo giro:'], ['sector-references', 'Settori:'], ['sector-disable', 'Settori:'],
     ['Timer', 'Timer:'], ['Layout verticale', 'Layout:'], ['Layout orizzontale', 'Layout:'],
     ['fuel-minus', 'Durata:'], ['fuel-plus', 'Durata:'], ['fuel-apply', 'Carburante:'],
     ['friend-accept:demo-1', 'Amicizia: accetta'], ['friend-reject:demo-1', 'Amicizia: rifiuta'],

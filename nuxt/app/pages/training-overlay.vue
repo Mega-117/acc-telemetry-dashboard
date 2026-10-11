@@ -1190,13 +1190,13 @@ onBeforeUnmount(() => {
                       data-overlay-wheel-action="target"
                       :aria-pressed="(isFullQuickPanelPreview || infoTargetActive)"
                       :aria-current="selectedWheelActionId === 'target' ? 'true' : undefined"
-                      aria-label="Configura Target giro HUD Info"
+                      aria-label="Configura Tempo giro HUD Info"
                       @focus="selectedWheelActionId = 'target'"
                       @click="openInfoTargetSetup"
                     >
-                      <Check v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Target :size="22" aria-hidden="true" /><span>Target giro</span>
+                      <Check v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Target :size="22" aria-hidden="true" /><span>Tempo giro</span>
                     </button>
-                    <button v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-off" data-overlay-wheel-action="target-disable" title="Disattiva target giro" aria-label="Disattiva target giro" :disabled="referenceBusy" @click="disableReference('target')"><Power :size="14" /></button>
+                    <button v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-off" data-overlay-wheel-action="target-disable" title="Disattiva tempo giro" aria-label="Disattiva tempo giro" :disabled="referenceBusy" @click="disableReference('target')"><Power :size="14" /></button>
                     </div>
                     <div v-if="quickPanelSupport.quickSectorReferences" class="quick-reference" :class="{ 'is-active': (isFullQuickPanelPreview || customSectorsActive) }">
                     <button type="button" class="launcher-tool-button" :aria-pressed="(isFullQuickPanelPreview || customSectorsActive)" title="Configura riferimenti settori" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
