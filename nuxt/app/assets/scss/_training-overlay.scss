@@ -2421,6 +2421,30 @@ button.is-active {
 
 .control-k-pressure-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .control-k-pressure-info > .pressure-invalid-lap-alert { margin: 0; }
+.training-overlay--launcher .overlay-content:not(.overlay-content--horizontal) {
+  .quick-panel-pressure-status {
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 7px 8px;
+    border: 1px solid #ffffff30;
+    background: #ffffff05;
+    white-space: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    &::-webkit-scrollbar { display: none; }
+  }
+  .quick-panel-action-hint {
+    min-width: 0;
+    margin: 5px 0 0;
+    color: #aaa;
+    font-size: 10px;
+    line-height: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
 
 .control-k-fuel-status:empty { display: none; }
 .overlay-content--launcher:not(.overlay-content--horizontal) .control-k-fuel-status {

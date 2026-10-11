@@ -98,6 +98,7 @@ export default defineConfig({
         'app/components/ui/RacingSwitch.vue',
         'app/components/overlay/QuickPanelVoiceControls.vue',
         'app/services/overlay/quickPanelPreview.ts',
+        'app/services/overlay/quickPanelActionHint.ts',
         'app/components/pages/PistePage.vue',
         'app/pages/spotter.vue',
         'app/components/spotter/SessionModePicker.vue',

@@ -45,7 +45,7 @@ describe('complete quick panel visual fixture', () => {
     await mount(ControlKFriendRequests, { api: createQuickPanelPreview().api })
     expect(document.querySelector('.control-k-request__sender')?.textContent).toContain('Endurance Racing Team')
     expect(document.querySelector('.control-k-request__count')?.textContent).toContain('+2')
-    expect(document.querySelector('[role="alert"]')?.textContent).toContain('nessuna risposta')
+    expect(document.querySelector('[role="alert"]')).toBeNull()
   })
   it('renders Pitwall open without contacting the real bridge', async () => {
     await mount(PitwallOverlayButton, { api: createQuickPanelPreview().api })

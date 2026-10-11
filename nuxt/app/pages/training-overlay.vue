@@ -41,6 +41,7 @@ import QuickCountdown from '~/components/overlay/QuickCountdown.vue'
 import { useQuickCountdown } from '~/composables/useQuickCountdown'
 import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
 import QuickPanelVoiceControls from '~/components/overlay/QuickPanelVoiceControls.vue'
+import { quickPanelActionHint } from '~/services/overlay/quickPanelActionHint'
 import OverlaySelectSetup from '~/components/overlay/OverlaySelectSetup.vue'
 import OverlayHud from '~/components/overlay/OverlayHud.vue'
 import SetupFuelPanel from '~/components/overlay/SetupFuelPanel.vue'
@@ -161,6 +162,13 @@ const actionSelection = useOverlayActionSelection(overlayRoot, () =>
 )
 const { selectedId: selectedWheelActionId, first: selectFirstWheelAction,
   next: selectNextWheelAction, activate: activateSelectedWheelAction } = actionSelection
+const hoveredQuickPanelAction = ref<string | null>(null)
+const quickPanelHint = computed(() => quickPanelActionHint(hoveredQuickPanelAction.value ?? selectedWheelActionId.value))
+function updateQuickPanelHint(event: Event) {
+  const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button') : null
+  hoveredQuickPanelAction.value = button?.dataset.overlayWheelAction ?? button?.getAttribute('aria-label') ?? null
+}
+watch(selectedWheelActionId, () => { hoveredQuickPanelAction.value = null })
 const preparingReopen = ref(false)
 const isPointerOnOverlaySurface = ref(false)
 const isFuelSetupOpen = ref(false)
@@ -1134,7 +1142,9 @@ onBeforeUnmount(() => {
             >
 
               <template v-if="phase === 'launcher'">
-                <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen && !isFuelSetupOpen && !isQuickTimerOpen" class="launcher-tools" aria-label="Strumenti live overlay">
+                <div v-if="!isTargetSetupOpen && !isSectorReferenceSetupOpen && !isFuelSetupOpen && !isQuickTimerOpen" class="launcher-tools" aria-label="Strumenti live overlay"
+                  @pointerover="updateQuickPanelHint" @pointerleave="hoveredQuickPanelAction = null"
+                  @focusin="updateQuickPanelHint" @focusout="hoveredQuickPanelAction = null">
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
                     <QuickPanelLayoutToggle :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
@@ -1231,9 +1241,11 @@ onBeforeUnmount(() => {
                     <div v-if="isFullQuickPanelPreview" id="control-k-fuel-preview" class="control-k-fuel-preview" />
                     <ControlKFriendRequests :key="isFullQuickPanelPreview ? 'preview' : 'live'" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" />
                     <div class="control-k-pressure-info">
-                  <p id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
+                  <p id="pressure-action-status" class="launcher-hint quick-panel-pressure-status" role="status" aria-live="polite"
+                    :title="`Pressioni: ${dryPressurePresentation.stateLabel} · ${dryPressurePresentation.guidance}`">
                     Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
                   </p>
+                  <p v-if="!isHorizontalQuickPanel" class="quick-panel-action-hint" role="status" aria-live="polite" :title="quickPanelHint">{{ quickPanelHint }}</p>
                   <div v-if="!quickPanelPressureState.consumed && quickPanelPressureState.recommendation?.wheels && (isFullQuickPanelPreview || isCarStoppedWithEngineOff)" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <div class="pressure-plan__meta">
                       <span>{{ quickPanelPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>

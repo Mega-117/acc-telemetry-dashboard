@@ -19,7 +19,7 @@ export function createQuickPanelPreview() {
         state: 'open', roomId: 'visual-preview', available: true, reason: null,
       }),
       friendRequestsGet: async () => ({
-        session: 'visual-preview', busy: false, error: 'Anteprima: nessuna risposta sarà inviata.',
+        session: 'visual-preview', busy: false, error: null,
         requests: [
           { id: 'demo-1', personId: 'demo-1', nickname: 'Pilota dimostrativo · Endurance Racing Team' },
           { id: 'demo-2', personId: 'demo-2', nickname: 'Secondo pilota' },
