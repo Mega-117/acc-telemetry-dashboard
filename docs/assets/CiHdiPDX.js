@@ -1,0 +1,1 @@
+import{bw as n,cG as o,dx as s,ar as u,cx as i}from"./BsHxwftv.js";const r=Symbol("pilotContext");function c(e){const t=o(e);return i(r,t),t}function a(){return n(r,o(null))}function p(){const{profileUser:e}=s(),t=a();return u(()=>t.value||e.value?.uid||null)}export{p as a,c as p,a as u};
