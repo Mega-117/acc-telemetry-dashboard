@@ -2334,7 +2334,6 @@ button.is-active {
     display: grid; grid-template-columns: repeat(2, 64px); grid-auto-columns: 64px;
     grid-auto-flow: column; gap: 8px 6px; margin: 0; padding: 0; border: 0;
   }
-  .quick-panel-automations:not(.quick-panel-show-all):has([data-overlay-wheel-action='fuel-session']:disabled:not([aria-busy='true'])) > .fuel-panel,
   .quick-panel-automations.quick-panel-driving > .fuel-panel,
   .quick-panel-automations .fuel-panel > .quick-panel-heading,
   .quick-panel-secondary > .quick-panel-heading { grid-column: 1 / -1; grid-row: 1; }
@@ -2406,7 +2405,6 @@ button.is-active {
   .quick-panel-secondary > .launcher-tool-button > svg { width: 22px; height: 22px; flex-shrink: 0; }
   .quick-reference-check { position: absolute; left: 3px; top: 3px; }
   .quick-reference-off { position: absolute; top: 0; right: 0; width: 20px; height: 20px; border-left: 0; }
-  [data-overlay-wheel-action='fuel-session']:disabled:not([aria-busy='true']) { display: none; }
 }
 
 // Development preview exposes unavailable controls without enabling their actions.
@@ -2613,7 +2611,7 @@ button.is-active {
     .quick-panel-pair:not(.quick-panel-secondary) { gap: 10px; }
     .quick-panel-section { padding-top: 0; border-top: 0; }
     .quick-panel-automations { border: 0; padding-left: 10px; position: relative; }
-    .quick-panel-automations:not(:has(> .control-k-pressure-info, > .control-k-request, > .control-k-fuel-status > .fuel-status)) {
+    .quick-panel-automations:not(:has(> .control-k-pressure-info--preview, > .control-k-request, > .control-k-fuel-status > .fuel-status)) {
       grid-template-columns: none;
       grid-auto-flow: column;
       grid-auto-columns: max-content;
