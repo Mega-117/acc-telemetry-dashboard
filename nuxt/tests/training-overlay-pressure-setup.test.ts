@@ -47,16 +47,14 @@ describe('training overlay Setup pressure contract', () => {
     expect(source).toContain('actionReasonCode: response?.reasonCode || null')
   })
 
-  it('shows a static prominent alert when the latest completed lap is invalid', () => {
-    expect(source).toContain('v-if="dryPressurePresentation.alert"')
-    expect(source).toContain('pressure-invalid-lap-alert')
+  it('removes the yellow alert while retaining pressure guidance in both layouts', () => {
+    expect(source).not.toContain('v-if="dryPressurePresentation.alert"')
+    expect(source).not.toContain('pressure-invalid-lap-alert')
     expect(source).toContain(':title="dryPressurePresentation.ariaLabel')
-    expect(source).toContain('dryPressurePresentation.alert.title')
-    expect(source).toContain('dryPressurePresentation.alert.guidance')
+    expect(source).toContain('id="pressure-action-status"')
+    expect(source).toContain('dryPressurePresentation.guidance')
     expect(source).not.toContain("dryPressureState.reason || 'Attendo tre giri completi")
-    expect(styles).toContain('border: 1px solid rgba(251, 191, 36, 0.78)')
-    expect(styles).toMatch(/pressure-invalid-lap-alert[\s\S]*background:[\s\S]*245, 158, 11/)
-    expect(styles).not.toMatch(/pressure-invalid-lap-alert[^{]*\{[^}]*animation:/)
+    expect(styles).toContain('.launcher-tools__header .quick-panel-training { display: none; }')
   })
 
   it('does not present Pit MFD values or a hardcoded dry-only product label', () => {

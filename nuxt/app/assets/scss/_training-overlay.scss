@@ -620,6 +620,7 @@
   .launcher-tools__header { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
   .quick-panel-header-actions { display: flex; align-items: center; gap: 6px; }
   .launcher-tools__header :is(.quick-panel-training, .quick-panel-timer) { width: 34px; height: 34px; min-height: 34px; padding: 0; display: grid; place-items: center; }
+  .launcher-tools__header .quick-panel-training { display: none; }
   .launcher-tools__header .quick-panel-layout { justify-self: center; opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
   &:hover .quick-panel-layout,
   .overlay-pointer-surface-hovered & .quick-panel-layout { opacity: 1; pointer-events: auto; }

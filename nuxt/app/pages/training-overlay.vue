@@ -1231,18 +1231,6 @@ onBeforeUnmount(() => {
                     <div v-if="isFullQuickPanelPreview" id="control-k-fuel-preview" class="control-k-fuel-preview" />
                     <ControlKFriendRequests :key="isFullQuickPanelPreview ? 'preview' : 'live'" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" />
                     <div class="control-k-pressure-info">
-                    <div
-                      v-if="dryPressurePresentation.alert"
-                      class="pressure-invalid-lap-alert"
-                      role="status"
-                      aria-live="polite"
-                    >
-                      <span class="pressure-invalid-lap-alert__icon" aria-hidden="true">!</span>
-                      <span class="pressure-invalid-lap-alert__copy">
-                        <strong>{{ dryPressurePresentation.alert.title }}</strong>
-                        <span>{{ dryPressurePresentation.alert.guidance }}</span>
-                      </span>
-                    </div>
                   <p id="pressure-action-status" class="launcher-hint" role="status" aria-live="polite">
                     Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
                   </p>
