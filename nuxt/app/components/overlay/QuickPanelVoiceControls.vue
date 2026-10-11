@@ -40,9 +40,9 @@ const emit = defineEmits<{
         <small aria-hidden="true">{{ pressure ? 'ON' : 'OFF' }}</small>
       </button>
       <button v-if="extendedControls" type="button" role="switch" class="quick-panel-voice-button" :class="{ 'is-on': target }"
-        :aria-checked="target" aria-label="Voce target giro" :disabled="disabled"
+        :aria-checked="target" aria-label="Voce tempo target" :disabled="disabled"
         data-overlay-wheel-action="target-voice" @click="emit('toggle-target')">
-        <Target :size="20" aria-hidden="true" /><span>Target</span>
+        <Target :size="20" aria-hidden="true" /><span>Tempo target</span>
         <small aria-hidden="true">{{ target ? 'ON' : 'OFF' }}</small>
       </button>
     </div>

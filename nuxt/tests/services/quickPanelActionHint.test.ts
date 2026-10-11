@@ -7,7 +7,7 @@ import { useOverlayActionSelection } from '~/composables/useOverlayActionSelecti
 describe('vertical quick panel command help', () => {
   it.each([
     ['coach', 'Giri:'], ['references', 'Riferimenti:'], ['pressure-audio', 'Pressioni:'],
-    ['target-voice', 'Target:'], ['fuel', 'A minuti:'], ['fuel-session', 'Sessione:'],
+    ['target-voice', 'Tempo target:'], ['fuel', 'A minuti:'], ['fuel-session', 'Sessione:'],
     ['pitwall', 'Pitwall:'], ['pressure', 'Pressioni:'], ['target', 'Tempo giro:'],
     ['target-disable', 'Tempo giro:'], ['sector-references', 'Settori:'], ['sector-disable', 'Settori:'],
     ['Timer', 'Timer:'], ['Layout verticale', 'Layout:'], ['Layout orizzontale', 'Layout:'],
