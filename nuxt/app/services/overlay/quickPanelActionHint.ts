@@ -2,7 +2,7 @@ const hints: Record<string, string> = {
   coach: 'Giri: attiva o disattiva gli avvisi vocali.',
   references: 'Riferimenti: gestisci i richiami vocali.',
   'pressure-audio': 'Pressioni: gestisci gli avvisi vocali.',
-  'target-voice': 'Tempo target: gestisci il confronto vocale.',
+  'target-voice': 'Target: gestisci il confronto vocale.',
   fuel: 'A minuti: prepara il carburante dello stint.',
   'fuel-session': 'Sessione: imposta il carburante necessario.',
   pitwall: 'Pitwall: apri o chiudi la tua stanza.',
