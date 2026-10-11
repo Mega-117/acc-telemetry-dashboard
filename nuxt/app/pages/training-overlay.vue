@@ -36,7 +36,7 @@ import {
   resolveAutoAdvanceSeconds,
   type OverlayOriginCorner, type OverlayOriginMode,
 } from '~/composables/useOverlaySettings'
-import { CircleCheck, CircleMinus, Dumbbell, Timer, Power, Check, LoaderCircle, Target, Flag } from '@lucide/vue'
+import { CircleCheck, CircleMinus, Dumbbell, Timer, Power, Check, LoaderCircle, Target, Flag, Info } from '@lucide/vue'
 import QuickCountdown from '~/components/overlay/QuickCountdown.vue'
 import { useQuickCountdown } from '~/composables/useQuickCountdown'
 import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
@@ -1245,7 +1245,10 @@ onBeforeUnmount(() => {
                     :title="`Pressioni: ${dryPressurePresentation.stateLabel} · ${dryPressurePresentation.guidance}`">
                     Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
                   </p>
-                  <p v-if="!isHorizontalQuickPanel" class="quick-panel-action-hint" role="status" aria-live="polite" :title="quickPanelHint">{{ quickPanelHint }}</p>
+                  <p v-if="!isHorizontalQuickPanel" class="quick-panel-action-hint" role="status" aria-live="polite" :title="quickPanelHint">
+                    <Info :size="12" aria-hidden="true" />
+                    <span>{{ quickPanelHint }}</span>
+                  </p>
                   <div v-if="!quickPanelPressureState.consumed && quickPanelPressureState.recommendation?.wheels && (isFullQuickPanelPreview || isCarStoppedWithEngineOff)" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <div class="pressure-plan__meta">
                       <span>{{ quickPanelPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>

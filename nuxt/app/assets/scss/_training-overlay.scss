@@ -2435,14 +2435,23 @@ button.is-active {
     &::-webkit-scrollbar { display: none; }
   }
   .quick-panel-action-hint {
+    display: flex;
+    align-items: center;
+    gap: 5px;
     min-width: 0;
     margin: 5px 0 0;
     color: #aaa;
     font-size: 10px;
     line-height: 16px;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    svg {
+      flex-shrink: 0;
+    }
+    span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
   }
 }
 
