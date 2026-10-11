@@ -490,6 +490,9 @@ let layoutBeforePreview: 'vertical' | 'horizontal' = 'vertical'
 const quickPanelPreview = shallowRef<ReturnType<typeof import('~/services/overlay/quickPanelPreview').createQuickPanelPreview> | null>(null)
 const isFullQuickPanelPreview = computed(() => showQuickPanelDevTools && previewAllQuickPanelButtons.value)
 const quickPanelPressureState = computed(() => isFullQuickPanelPreview.value ? quickPanelPreview.value!.pressure : dryPressureState.value)
+const showQuickPanelPressurePreview = computed(() => !quickPanelPressureState.value.consumed
+  && !!quickPanelPressureState.value.recommendation?.wheels
+  && (isFullQuickPanelPreview.value || isCarStoppedWithEngineOff.value))
 const quickPanelSupport = computed(() => isFullQuickPanelPreview.value ? gameUiSupport('acc') : support.value)
 let blockPreviewAction: ((event: Event, preview: boolean) => void) | undefined
 async function toggleQuickPanelPreview() {
@@ -1240,16 +1243,20 @@ onBeforeUnmount(() => {
                     </div>
                     <div v-if="isFullQuickPanelPreview" id="control-k-fuel-preview" class="control-k-fuel-preview" />
                     <ControlKFriendRequests :key="isFullQuickPanelPreview ? 'preview' : 'live'" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" />
-                    <div class="control-k-pressure-info">
+                    <div class="control-k-pressure-info" :class="{ 'control-k-pressure-info--preview': showQuickPanelPressurePreview }">
+                  <Teleport defer to="#quick-panel-horizontal-feedback" :disabled="!isHorizontalQuickPanel">
+                  <div class="quick-panel-feedback">
                   <p id="pressure-action-status" class="launcher-hint quick-panel-pressure-status" role="status" aria-live="polite"
                     :title="`Pressioni: ${dryPressurePresentation.stateLabel} · ${dryPressurePresentation.guidance}`">
                     Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
                   </p>
-                  <p v-if="!isHorizontalQuickPanel" class="quick-panel-action-hint" role="status" aria-live="polite" :title="quickPanelHint">
+                  <p class="quick-panel-action-hint" role="status" aria-live="polite" :title="quickPanelHint">
                     <Info :size="12" aria-hidden="true" />
                     <span>{{ quickPanelHint }}</span>
                   </p>
-                  <div v-if="!quickPanelPressureState.consumed && quickPanelPressureState.recommendation?.wheels && (isFullQuickPanelPreview || isCarStoppedWithEngineOff)" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
+                  </div>
+                  </Teleport>
+                  <div v-if="showQuickPanelPressurePreview" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <div class="pressure-plan__meta">
                       <span>{{ quickPanelPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>
                       <span v-if="(quickPanelPressureState.recommendation?.required_valid_laps ?? 1) > 0">{{ quickPanelPressureState.recommendation?.valid_laps || 0 }}/{{ quickPanelPressureState.recommendation?.required_valid_laps ?? 1 }} valido</span>
@@ -1271,6 +1278,7 @@ onBeforeUnmount(() => {
                     </section>
                     </div>
                     </div>
+                    <div v-show="isHorizontalQuickPanel" id="quick-panel-horizontal-feedback" class="quick-panel-horizontal-feedback" />
                     <details v-if="showQuickPanelDevTools" class="quick-panel-dev" @click.capture="guardQuickPanelDevTools">
                       <summary>Strumenti sviluppo</summary>
                       <button type="button" class="launcher-tool-button" :aria-pressed="previewAllQuickPanelButtons" data-quick-panel-preview @click="toggleQuickPanelPreview">

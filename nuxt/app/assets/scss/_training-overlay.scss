@@ -2351,13 +2351,13 @@ button.is-active {
   }
   .quick-panel-automations > :not(.fuel-panel, .quick-panel-secondary, .control-k-pressure-info, .control-k-request) { grid-column: 1 / -1; }
   // Keep the pressure preview beside its action, without moving dev controls.
-  .quick-panel-automations:has(> .control-k-pressure-info, > .control-k-request) { grid-template-columns: max-content max-content 220px; }
-  .quick-panel-automations:has(> .control-k-pressure-info, > .control-k-request) > :not(.fuel-panel, .quick-panel-secondary, .control-k-pressure-info, .control-k-request) { grid-column: 1 / span 2; }
-  .quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all):has(> .control-k-pressure-info, > .control-k-request) {
+  .quick-panel-automations:has(> .control-k-pressure-info--preview, > .control-k-request) { grid-template-columns: max-content max-content 220px; }
+  .quick-panel-automations:has(> .control-k-pressure-info--preview, > .control-k-request) > :not(.fuel-panel, .quick-panel-secondary, .control-k-pressure-info, .control-k-request) { grid-column: 1 / span 2; }
+  .quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all):has(> .control-k-pressure-info--preview, > .control-k-request) {
     grid-template-columns: max-content 220px;
     > :not(.fuel-panel, .quick-panel-secondary, .control-k-pressure-info, .control-k-request) { grid-column: 1; }
   }
-  .launcher-tools:has(.control-k-pressure-info, .control-k-request) .launcher-tools__header {
+  .launcher-tools:has(.control-k-pressure-info--preview, .control-k-request) .launcher-tools__header {
     // Reserve the preview column above it as well as beside the actions.
     width: calc(100% - 226px);
   }
@@ -2375,7 +2375,7 @@ button.is-active {
     padding: 10px;
     border: 1px solid #ffffff25;
   }
-  .quick-panel-automations:has(> .control-k-pressure-info) > .control-k-request {
+  .quick-panel-automations:has(> .control-k-pressure-info--preview) > .control-k-request {
     grid-row: 2;
     margin-top: 0;
   }
@@ -2421,7 +2421,7 @@ button.is-active {
 
 .control-k-pressure-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .control-k-pressure-info > .pressure-invalid-lap-alert { margin: 0; }
-.training-overlay--launcher .overlay-content:not(.overlay-content--horizontal) {
+.training-overlay--launcher .quick-panel-feedback {
   .quick-panel-pressure-status {
     min-width: 0;
     max-width: 100%;
@@ -2455,6 +2455,17 @@ button.is-active {
   }
 }
 
+.training-overlay--launcher .overlay-content--horizontal {
+  .control-k-pressure-info:not(.control-k-pressure-info--preview) { display: none; }
+  .quick-panel-horizontal-feedback {
+    grid-column: 1 / -1;
+    min-width: 0;
+    padding-top: 8px;
+    border-top: 1px solid #ffffff1a;
+  }
+  .quick-panel-dev { border-top: 0; padding-top: 0; }
+}
+
 .control-k-fuel-status:empty { display: none; }
 .overlay-content--launcher:not(.overlay-content--horizontal) .control-k-fuel-status {
   grid-column: 1 / -1;
@@ -2470,18 +2481,18 @@ button.is-active {
     > .control-k-fuel-status .fuel-status { font-size: 12px; overflow-wrap: anywhere; }
     > .control-k-fuel-status p { margin: 0; }
     > :not(.fuel-panel, .quick-panel-secondary, .control-k-pressure-info, .control-k-request, .control-k-fuel-status) { grid-column: 1 / span 2; }
-    &:has(> .control-k-pressure-info, > .control-k-request) {
+    &:has(> .control-k-pressure-info--preview, > .control-k-request) {
       grid-template-columns: max-content max-content 220px 220px;
       > .control-k-pressure-info, > .control-k-request { grid-column: -3 / -2; }
     }
     &.quick-panel-driving:not(.quick-panel-show-all) {
       grid-template-columns: max-content 220px;
-      &:has(> .control-k-pressure-info, > .control-k-request) { grid-template-columns: max-content 220px 220px; }
+      &:has(> .control-k-pressure-info--preview, > .control-k-request) { grid-template-columns: max-content 220px 220px; }
       > :not(.fuel-panel, .quick-panel-secondary, .control-k-pressure-info, .control-k-request, .control-k-fuel-status) { grid-column: 1; }
     }
   }
   .launcher-tools:has(.control-k-fuel-status > .fuel-status) .launcher-tools__header { width: calc(100% - 226px); }
-  .launcher-tools:has(.control-k-fuel-status > .fuel-status):has(.control-k-pressure-info, .control-k-request) .launcher-tools__header { width: calc(100% - 456px); }
+  .launcher-tools:has(.control-k-fuel-status > .fuel-status):has(.control-k-pressure-info--preview, .control-k-request) .launcher-tools__header { width: calc(100% - 456px); }
 }
 
 // Vertical quick panel: three categories sharing the existing actions.
