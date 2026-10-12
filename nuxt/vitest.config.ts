@@ -119,6 +119,7 @@ export default defineConfig({
         'app/pages/hud.vue',
         'app/pages/dev-voice-lab.vue',
         'shared/productIdentity.ts',
+        'shared/desktopBundleRoutes.ts',
         'shared/voicePointIdentity.ts',
         'scripts/cloudflare-package.mjs',
         'app/services/monitoring/windowOpeningProbe.ts',

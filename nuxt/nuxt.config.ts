@@ -1,5 +1,6 @@
 import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { PRODUCT } from './shared/productIdentity'
+import { removeDesktopExcludedPages } from './shared/desktopBundleRoutes'
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { join } from 'node:path'
@@ -56,6 +57,8 @@ export default defineNuxtConfig({
   ignore: ignoredRuntimePaths,
   plugins: isDev ? ['~/plugins/firebase-emulators.client'] : [],
   ...(standingsSmokeBuildDir ? { buildDir: standingsSmokeBuildDir } : {}),
+  // Installed desktop bundle: developer pages are not built at all (F5, PIP-501).
+  ...(desktopBundle ? { hooks: { 'pages:extend': removeDesktopExcludedPages } } : {}),
 
   // === COMPATIBILITÀ ===
   compatibilityDate: '2025-01-11',
