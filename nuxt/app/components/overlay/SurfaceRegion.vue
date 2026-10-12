@@ -8,6 +8,7 @@ const props = defineProps<{
   region: { id: string, generation: number, bounds: { x: number, y: number, width: number, height: number }, visible: boolean, opacity: number, movable: boolean, order: number }
   origin: { x: number, y: number }
   component: Component
+  dataStale?: boolean
 }>()
 const api = (window as any).electronAPI
 const windowVisible = useWindowPresentationVisibility()
@@ -49,11 +50,13 @@ onBeforeUnmount(up)
   <section :data-surface-region="region.id" :data-presentation-hidden="!presentationVisible" class="surface-region" :style="style"
     @pointerdown="down" @pointermove="move" @pointerup="up" @pointercancel="up" @lostpointercapture="up">
     <component :is="component" />
+    <span v-if="dataStale && !['runtime-bootstrap', 'spotter-audio-runtime'].includes(region.id)" class="hud-stale-status">Dati non aggiornati</span>
   </section>
 </template>
 
 <style>
 .surface-region { position: absolute; contain: layout; padding: 0; margin: 0; overflow: visible; }
+.hud-stale-status { position: absolute; bottom: 2px; right: 4px; padding: 2px 5px; font: 11px sans-serif; color: #f7d77c; background: #171717e8; border-radius: 3px; pointer-events: none; }
 .surface-region[data-presentation-hidden="true"] *, .surface-region[data-presentation-hidden="true"] *::before, .surface-region[data-presentation-hidden="true"] *::after { animation-play-state: paused !important; }
 .surface-region, .surface-region * { -webkit-app-region: no-drag !important; }
 .surface-region .training-overlay { width: 100%; height: 100%; position: absolute; }

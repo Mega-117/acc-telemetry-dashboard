@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import { hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 
 import { completedLapHoldSample } from '~/utils/completedLapHoldSample'
@@ -98,21 +99,24 @@ const customSectorTimes = computed(() => fastState.value.isFresh
 const variant = computed(() => settings.value?.variant === 'compact' ? 'compact' : 'classic')
 const onTargetPage = computed(() => variant.value === 'compact' && compactPage.value === 'target')
 const localCompactPresentation = computed(() => resolveLocalCompactPresentation(fastState.value))
-const compactDisplayLap = computed(() => telemetry.source.value === 'focused'
+const liveCompactDisplayLap = computed(() => telemetry.source.value === 'focused'
   ? { timeMs: focusedDisplayedLapTimeMs.value, valid: focusedDisplayedLapValid.value }
   : localCompactPresentation.value.displayLap)
 const heldLap = computed(() => telemetry.source.value === 'focused'
   ? focusedHeldLap.value
   : localCompactPresentation.value.heldLap)
-const liveCurrentLapTimeMs = computed(() => telemetry.source.value === 'focused'
+const currentLapTimeMs = computed(() => telemetry.source.value === 'focused'
   ? fastState.value.info?.currentLapTimeMs ?? null
   : fastState.value.sectorHud?.currentLapTimeMs ?? fastState.value.info?.currentLapTimeMs ?? null)
 const rootScale = computed(() => onTargetPage.value ? 1 : scale.value)
-const visibleSectorHud = computed(() => telemetry.source.value === 'focused'
+const liveSectorHud = computed(() => telemetry.source.value === 'focused'
   ? telemetry.sectorHud.value
   : variant.value === 'compact'
     ? fastState.value.sectorHud
     : liveLap.value.sectorHud)
+const compactDisplayLap = useHudPresentationMemory(liveCompactDisplayLap, fastState)
+const liveCurrentLapTimeMs = useHudPresentationMemory(currentLapTimeMs, fastState)
+const visibleSectorHud = useHudPresentationMemory(liveSectorHud, fastState)
 function contextualTargetTimeMs(): number {
   const contextual = fastState.value.info?.bestLapTimeMs
     || fastState.value.info?.lastLapTimeMs

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
+import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
@@ -34,12 +35,13 @@ const options = computed(() => ({
     overlay.settings.value?.fuelCriticalLapsThreshold,
   ),
 }))
-const model = stableComputed(() => buildDashboardPresentation(
+const liveModel = stableComputed(() => buildDashboardPresentation(
   telemetry.fastState.value,
   options.value,
   telemetry.focusedCar.value,
 ))
 const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
+const model = useHudPresentationMemory(liveModel, telemetry.fastState)
 
 onMounted(async () => {
   overlay.start(route.query.scale)

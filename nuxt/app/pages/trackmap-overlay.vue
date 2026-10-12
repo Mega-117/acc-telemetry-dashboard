@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
+import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import { hudTrackMapScene, hudSourcePolicy } from '~/services/sim/hudSourceAdapter'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
@@ -67,7 +68,7 @@ const track = computed(() => overlay.settings.value?.circleView === true
   : telemetry.fastState.value.context?.track ?? null)
 watch([track, sim, () => telemetry.fastState.value.commonLive?.identity?.variant], ([value]) => { void loadTrackMap(value) })
 
-const view = stableComputed(() => {
+const liveView = stableComputed(() => {
   const fast = telemetry.fastState.value
   const snapshot = standings.state.value.snapshot as {
     cars?: AccStandingsCar[], freshness?: { ttl_ms?: number }, session?: { focused_car_index?: number | null }
@@ -81,6 +82,9 @@ const view = stableComputed(() => {
     showCarNumbers: overlay.settings.value?.showCarNumbers ?? true,
   })
 })
+const view = useHudPresentationMemory(liveView, telemetry.fastState)
+const displayOutline = useHudPresentationMemory(outline, telemetry.fastState)
+const displayRotation = useHudPresentationMemory(rotationDeg, telemetry.fastState)
 const canvasStyle = computed(() => ({
   width: `${BASE_SIZE}px`,
   height: `${BASE_SIZE}px`,
@@ -108,7 +112,7 @@ onUnmounted(() => {
     <OverlayPlacementLock overlay-id="trackmap" />
     <TelemetryFeatureNotice :live="telemetry.fastState.value.commonLive" :feature="overlay.settings.value?.circleView ? 'trackReferences' : 'trackMap'" unsupported-text="Sagoma pista non disponibile: vista circolare" />
     <OverlaySoftwareCursor :state="overlay.pointerState" />
-    <TrackMapHud :view="view" :outline="outline" :rotation-deg="rotationDeg" :show-start="hudSourcePolicy(telemetry.fastState.value).mapStartMarker" :interpolate-positions="hudSourcePolicy(telemetry.fastState.value).interpolateMap" class="overlay-canvas" :style="canvasStyle" />
+    <TrackMapHud :view="view" :outline="displayOutline" :rotation-deg="displayRotation" :show-start="hudSourcePolicy(telemetry.fastState.value).mapStartMarker" :interpolate-positions="hudSourcePolicy(telemetry.fastState.value).interpolateMap" class="overlay-canvas" :style="canvasStyle" />
   </main>
 </template>
 

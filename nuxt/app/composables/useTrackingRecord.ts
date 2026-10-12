@@ -91,5 +91,13 @@ export function useTrackingRecord(
   const trackingComplete = (stepsCompleted: number) => finish('trainingComplete', stepsCompleted)
   const trackingAbandon = (stepsCompleted: number) => finish('trainingAbandon', stepsCompleted)
 
-  return { activeTrainingId, activeTrainingStartedAt, trackingStart, trackingComplete, trackingAbandon }
+  function recoverySnapshot() {
+    return activeTrainingId.value && sourceKey ? { id: activeTrainingId.value,
+      startedAt: activeTrainingStartedAt.value, sourceKey } : null
+  }
+  function restoreCheckpoint(saved: ReturnType<typeof recoverySnapshot>) {
+    if (!saved) return
+    activeTrainingId.value = saved.id; activeTrainingStartedAt.value = saved.startedAt; sourceKey = saved.sourceKey
+  }
+  return { activeTrainingId, activeTrainingStartedAt, trackingStart, trackingComplete, trackingAbandon, recoverySnapshot, restoreCheckpoint }
 }

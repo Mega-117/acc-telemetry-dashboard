@@ -56,6 +56,18 @@ function setup(opts: { autoAdvance?: boolean, seconds?: number, canAdvance?: boo
 describe('useSessionOrchestrator - countdown auto-advance', () => {
   beforeEach(() => { vi.useFakeTimers() })
   afterEach(() => { vi.useRealTimers() })
+  it('ripristina un checkpoint in pausa senza riannunciare l’ultimo minuto', async () => {
+    const { phase, remainingMs, orchestrator, enqueueVoice } = setup()
+    remainingMs.value = 45000
+    orchestrator.restorePausedCheckpoint()
+    expect(phase.value).toBe('paused')
+    vi.advanceTimersByTime(10000)
+    expect(remainingMs.value).toBe(45000)
+    orchestrator.resumeSession()
+    vi.advanceTimersByTime(1000); await nextTick()
+    expect(enqueueVoice).not.toHaveBeenCalledWith('lastMinute')
+    orchestrator.clearTimer()
+  })
 
   it('a scadenza naturale mostra il countdown e avanza allo step successivo a zero', async () => {
     const { phase, activeStepIndex, orchestrator } = setup({ seconds: 10 })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { markRaw, onMounted, onBeforeUnmount, onErrorCaptured, nextTick, shallowRef, watch, type Component } from 'vue'
 import { createSurfaceHealthReporter } from '~/services/overlay/surfaceHealthReporter'
+import { appliedTelemetry, receivedTelemetry } from '~/services/overlay/telemetryRecovery'
 import SurfaceRegion from '~/components/overlay/SurfaceRegion.vue'
 import Tyres from './tyres-overlay.vue'
 import Sectors from './sectors-overlay.vue'
@@ -28,7 +29,7 @@ onMounted(async () => {
   if (!api?.overlaySurfaceGetState) return
   // A running older desktop may receive this page through Nuxt HMR before restart.
   if (typeof api.overlaySurfaceHealth === 'function') {
-    health = createSurfaceHealthReporter((epoch, revision, healthy) => api.overlaySurfaceHealth(epoch, revision, healthy))
+    health = createSurfaceHealthReporter((epoch, revision, healthy) => api.overlaySurfaceHealth(epoch, revision, healthy, appliedTelemetry(), appliedTelemetry('live'), 1, receivedTelemetry()))
   }
   let received = false
   unsubscribe = api.onOverlaySurfaceState((next: unknown) => { received = true; state.value = next })
@@ -42,7 +43,7 @@ onBeforeUnmount(() => { disposed = true; health?.fail(); unsubscribe?.() })
   <main class="overlay-surface">
     <template v-if="state">
       <SurfaceRegion v-for="region in state.regions" :key="`${region.id}:${region.generation}`"
-        :region="region" :origin="state.bounds" :component="components[region.id]!" />
+        :region="region" :origin="state.bounds" :component="components[region.id]!" :data-stale="state.dataStale" />
     </template>
   </main>
 </template>

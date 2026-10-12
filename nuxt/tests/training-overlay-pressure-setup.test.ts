@@ -8,9 +8,10 @@ const styles = readFileSync(fileURLToPath(new URL('../app/assets/scss/_training-
 describe('training overlay Setup pressure contract', () => {
   it('keeps disabled fuel actions visible while applying in both panel orientations', () => {
     expect(styles).not.toContain("[data-overlay-wheel-action='fuel-session']:disabled { display: none; }")
-    expect(styles).toContain("[data-overlay-wheel-action='fuel-session']:disabled:not([aria-busy='true']) { display: none; }")
-    expect(styles).toContain(":not(:has(.fuel-panel button:not(:disabled), .fuel-panel button[aria-busy='true']))")
+    // The current layout gates the whole panel rather than hiding each action.
+    // Busy actions must keep the vertical panel present; horizontal hides only empty panels.
     expect(styles).toContain(".fuel-panel:not(:has(button:not(:disabled), button[aria-busy='true']))")
+    expect(styles).toContain('.fuel-panel:not(:has(button)) { display: none; }')
   })
   it('offers an accessible independent audio action on the existing wheel navigation', () => {
     expect(source).toContain(':pressure="isFullQuickPanelPreview || pressureWarningsEnabled"')

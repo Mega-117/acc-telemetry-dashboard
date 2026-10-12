@@ -135,7 +135,7 @@ describe('useLiveStatePoller', () => {
       expect(getLiveState).toHaveBeenCalledTimes(3)
     })
 
-    it('dopo 3 errori il polling si ferma: tick successivi non chiamano più getLiveState', async () => {
+    it('dopo 3 errori il polling continua senza richiedere una transizione di visibilità', async () => {
       const getLiveState = vi.fn(async () => { throw new Error('IPC error') })
       const { startLiveStatePolling } = useLiveStatePoller(() => makeApi(getLiveState))
 
@@ -149,11 +149,11 @@ describe('useLiveStatePoller', () => {
 
       const countAfter3 = getLiveState.mock.calls.length
 
-      // Avanziamo altri 3 tick — il polling deve essere fermato
+      // Errori transitori non rimuovono il lettore.
       await vi.advanceTimersByTimeAsync(6000)
       await flushPromises()
 
-      expect(getLiveState.mock.calls.length).toBe(countAfter3)
+      expect(getLiveState.mock.calls.length).toBe(countAfter3 + 3)
     })
 
     it('dopo errore seguito da successo, errorCount si azzera e isPollingActive torna true', async () => {
@@ -190,7 +190,7 @@ describe('useLiveStatePoller', () => {
 
       await vi.advanceTimersByTimeAsync(2000)
       await flushPromises()
-      expect(isPollingActive.value).toBe(true) // 1 errore post-reset → polling ancora attivo
+      expect(isPollingActive.value).toBe(false) // la lettura fallita non è salute live
     })
   })
 

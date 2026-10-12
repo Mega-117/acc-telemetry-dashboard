@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { readCommonLive, commonValue, commonBoolean } from '~/services/telemetry/commonLive'
 import { commonSectorHud } from '~/services/telemetry/commonSectorHud'
 import { usePresentationActivity } from './usePresentationVisibility'
+import { createTelemetryPull, telemetryApplied } from '~/services/overlay/telemetryRecovery'
 
 import type { LiveLapState, SectorHudColor, SectorHudEntryState, SectorHudEntry, SectorHudState } from '~/types/liveTelemetry'
 export type { LiveLapState, SectorHudColor, SectorHudMode, SectorHudEntryState, SectorHudEntry, SectorHudState } from '~/types/liveTelemetry'
@@ -19,7 +20,6 @@ const EMPTY_LAP_STATE: LiveLapState = {
   car: null,
 }
 
-const MAX_CONSECUTIVE_ERRORS = 3
 // Gating freschezza (PIP-94/PIP-140): live_state.json resta su disco dopo la
 // chiusura del logger; senza un ts recente il lap counter mostrerebbe dati
 // fantasma. In pista pero' live_state e' event-driven sui settori/giri: teniamo
@@ -89,8 +89,8 @@ export function normalizeSectorHud(raw: any): SectorHudState | null {
 
 /**
  * @description Polls the Electron IPC API at a fixed interval to keep live lap state
- * (currentLap, lapsCompleted, lapsValid, lapValid) up to date. Stops automatically
- * after too many consecutive errors.
+ * (currentLap, lapsCompleted, lapsValid, lapValid) up to date. Transient errors
+ * end only the bounded pull attempt; subsequent pulls and pushes remain active.
  * @param getApi - Factory that returns the current Electron API instance, or null if unavailable.
  * @returns Object with liveLap ref, isPollingActive ref, startLiveStatePolling, stopLiveStatePolling, resetLiveLap.
  */
@@ -99,10 +99,11 @@ export function useLiveStatePoller(getApi: () => any | null, background = false)
   const isPollingActive = ref(false)
   let liveStateInterval: ReturnType<typeof setInterval> | null = null
   let removePushListener: (() => void) | null = null
-  let revision = 0
+  let pull: ReturnType<typeof createTelemetryPull> | null = null
 
   function applyState(state: any) {
     const common = readCommonLive(state?.live ?? state)
+    telemetryApplied(state, common ? common.connected : !!state && isLiveStateFresh(state.ts), 'live')
     if (common && !usesLegacyHudInput(common)) {
       const laps = commonValue(common, 'lap_count', 'count')
       liveLap.value = common.connected ? {
@@ -153,36 +154,22 @@ export function useLiveStatePoller(getApi: () => any | null, background = false)
     // traguardo; il polling sotto resta come rete di sicurezza e per il
     // gating freschezza quando il file smette di essere scritto.
     if (typeof api.onLiveStateUpdate === 'function') {
-      removePushListener = api.onLiveStateUpdate(applyState)
+      removePushListener = api.onLiveStateUpdate((state: any) => {
+        pull?.invalidate(); isPollingActive.value = true; applyState(state)
+      })
     }
 
-    let errorCount = 0
-    const requestRevision = revision
-
-    async function pollOnce() {
-      try {
-        const state = await api.getLiveState()
-        if (requestRevision !== revision) return
-        errorCount = 0
-        isPollingActive.value = true
-        applyState(state)
-      } catch (err: any) {
-        if (requestRevision !== revision) return
-        errorCount++
-        console.warn(`[LiveStatePoller] IPC error (attempt ${errorCount}):`, err?.message ?? err)
-        if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
-          isPollingActive.value = false
-          stopLiveStatePolling()
-        }
-      }
-    }
+    pull = createTelemetryPull(() => api.getLiveState(), state => {
+      isPollingActive.value = true; applyState(state)
+    }, reason => { isPollingActive.value = false; api.reportHudTelemetryError?.(reason) })
+    const pollOnce = pull.poll
 
     void pollOnce()
     liveStateInterval = setInterval(pollOnce, 2000)
   }
 
   function stopLiveStatePolling() {
-    revision++
+    pull?.stop(); pull = null
     if (liveStateInterval) {
       clearInterval(liveStateInterval)
       liveStateInterval = null

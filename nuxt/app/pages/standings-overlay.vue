@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import { usesLegacyHudInput } from '~/services/sim/hudSourceAdapter'
 
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
@@ -66,7 +67,7 @@ const localDriver = stableComputed(() => {
     isLive: state.isLive,
   }
 })
-const model = stableComputed(() => buildStandingsPresentation(
+const liveModel = stableComputed(() => buildStandingsPresentation(
   scopedStandings.value,
   options.value,
   standings.nowMs.value,
@@ -74,6 +75,7 @@ const model = stableComputed(() => buildStandingsPresentation(
   localDriver.value,
   getPublicPath,
 ))
+const model = useHudPresentationMemory(liveModel, fastState.fastState)
 const canvasStyle = computed(() => ({
   width: `${model.value.layout.width}px`,
   height: `${model.value.layout.height}px`,

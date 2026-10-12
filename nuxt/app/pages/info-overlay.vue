@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
+import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { usePresentationInterval } from '~/composables/usePresentationVisibility'
 import { stableComputed } from '~/services/overlay/stableTelemetry'
@@ -42,7 +43,8 @@ const options = computed(() => ({
   showDamage: overlay.settings.value?.showDamage ?? DEFAULT_INFO_OPTIONS.showDamage,
   showTime: overlay.settings.value?.showTime ?? DEFAULT_INFO_OPTIONS.showTime,
 }))
-const model = stableComputed(() => buildInfoPresentation(telemetry.fastState.value, options.value))
+const liveModel = stableComputed(() => buildInfoPresentation(telemetry.fastState.value, options.value))
+const model = useHudPresentationMemory(liveModel, telemetry.fastState)
 const localTimeValue = computed(() => formatInfoLocalTime(clockMs.value))
 const canvasStyle = computed(() => ({ transform: `scale(${overlay.scale.value})` }))
 

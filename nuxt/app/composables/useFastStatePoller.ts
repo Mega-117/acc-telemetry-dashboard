@@ -6,24 +6,25 @@ import { isFastStateFresh } from '~/services/sim/acc/fastStateAdapter'
 import { usePresentationActivity } from './usePresentationVisibility'
 import { retainUnchanged } from '~/services/overlay/stableTelemetry'
 import { createTelemetryRegistry } from '~/services/overlay/sharedTelemetryLease'
+import { createTelemetryPull, telemetryApplied } from '~/services/overlay/telemetryRecovery'
 import type { FastOverlayState } from '~/types/liveTelemetry'
 export { normalizePitPrediction } from '~/services/sim/acc/fastStateAdapter'
 export type { FastStateSlipBand, FastStateSlipState, FastStateTyre, FastStateLapPressureAverage, FastStateContext, FastStateLocalDriver, FastStateInfo, FastStateDamageBodyZone, FastStateDamageSuspensionCorner, FastStateDamage, FastStatePitConfidence, FastStatePitPrediction, FastOverlayState } from '~/types/liveTelemetry'
 const FAST_STATE_POLL_MS = 250
-const MAX_CONSECUTIVE_ERRORS = 3
 
 function createFastStatePoller(getApi: () => any | null) {
   const fastState = shallowRef<FastOverlayState>({ ...EMPTY_FAST_STATE })
   const isFastStateActive = computed(() => fastState.value.isLive && fastState.value.tyres.length === 4)
   let fastStateInterval: ReturnType<typeof setInterval> | null = null
   let removePushListener: (() => void) | null = null
-  let revision = 0
   let lastRaw: { ts?: unknown; live?: unknown; schema?: unknown } | null = null
   let lastPushAt = -Infinity
+  let pull: ReturnType<typeof createTelemetryPull> | null = null
 
   function applyState(state: any) {
     lastRaw = state
     fastState.value = retainUnchanged(fastState.value, normalizeFastState(state))
+    telemetryApplied(state, fastState.value.isFresh && fastState.value.isLive)
   }
 
   function startFastStatePolling(): Promise<void> {
@@ -37,36 +38,15 @@ function createFastStatePoller(getApi: () => any | null) {
 
     if (typeof api.onFastStateUpdate === 'function') {
       removePushListener = api.onFastStateUpdate((state: any) => {
-        revision++
+        pull?.invalidate()
         lastPushAt = Date.now()
         applyState(state)
       })
     }
 
-    let errorCount = 0
-    let inFlight = false
-
-    async function pollOnce() {
-      if (inFlight) return
-      inFlight = true
-      const requestRevision = revision
-      try {
-        const state = await api.getFastState()
-        if (requestRevision !== revision) return
-        errorCount = 0
-        applyState(state)
-      } catch (err: any) {
-        if (requestRevision !== revision) return
-        errorCount++
-        console.warn(`[FastStatePoller] IPC error (attempt ${errorCount}):`, err?.message ?? err)
-        if (errorCount >= MAX_CONSECUTIVE_ERRORS) {
-          stopFastStatePolling()
-          applyState(null)
-        }
-      } finally {
-        inFlight = false
-      }
-    }
+    pull = createTelemetryPull(() => api.getFastState(), applyState,
+      reason => api.reportHudTelemetryError?.(reason))
+    const pollOnce = pull.poll
 
     const firstPoll = pollOnce()
     fastStateInterval = setInterval(() => {
@@ -83,7 +63,7 @@ function createFastStatePoller(getApi: () => any | null) {
   }
 
   function stopFastStatePolling() {
-    revision++
+    pull?.stop(); pull = null
     lastPushAt = -Infinity
     if (fastStateInterval) {
       clearInterval(fastStateInterval)

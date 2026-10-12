@@ -361,6 +361,8 @@ export default defineConfig({
         'app/composables/useOverlayRegionApi.ts',
         'app/services/overlay/surfaceRegionBridge.ts',
         'app/services/overlay/surfaceHealthReporter.ts',
+        'app/services/overlay/telemetryRecovery.ts',
+        'app/services/overlay/hudPresentationMemory.ts',
         'app/composables/useRaceHudPage.ts',
         'app/composables/useOverlayInteractionRegions.ts',
         'app/composables/useOverlayInteractionContract.ts',

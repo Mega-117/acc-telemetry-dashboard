@@ -8,6 +8,7 @@ import { completedLapHoldSample } from '~/utils/completedLapHoldSample'
 import { usePresentationInterval, usePresentationVisibility } from '~/composables/usePresentationVisibility'
 const presentationVisible = usePresentationVisibility()
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
+import { withRecoveryDeadline } from '~/services/overlay/telemetryRecovery'
 import { computed, shallowRef, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   resolveTrainingOverlayModeId,
@@ -359,7 +360,7 @@ const support = computed(() => gameUiSupport(fastState.value.commonLive?.gameId)
 watch(() => support.value.quickAutomations, allowed => { if (!allowed) isFuelSetupOpen.value = false }, { flush: 'sync' })
 watch(() => support.value.quickSectorReferences, allowed => { if (!allowed) isSectorReferenceSetupOpen.value = false }, { flush: 'sync' })
 
-const { trackingStart, trackingComplete, trackingAbandon } = useTrackingRecord(
+const { trackingStart, trackingComplete, trackingAbandon, recoverySnapshot, restoreCheckpoint } = useTrackingRecord(
   getOverlayApi,
   () => liveLap.value,
   () => selectedTrainingId.value,
@@ -610,7 +611,7 @@ const {
   startStep, startSession, openTrainingSelection,
   pauseSession, resumeSession, completeCurrentStep, skipPausedStep,
   goNextStep, stopSession, resetCompleted,
-  autoAdvanceRemainingSec, cancelAutoAdvance,
+  autoAdvanceRemainingSec, cancelAutoAdvance, restorePausedCheckpoint,
 } = useSessionOrchestrator(
   phase, activeStepIndex, remainingMs, selectedTrainingId, selectedModeId, isSettingsOpen,
   selectedMode, canManuallyAdvanceStep, autoAdvanceStep, autoAdvanceSeconds, closeShortcutStopConfirm, cancelStopHold,
@@ -623,6 +624,7 @@ const {
 
 let trainingSourceKey: string | null = null
 function trainingSourceReady(): boolean {
+  if (!fastState.value.isFresh || !fastState.value.isLive) return false
   const live = fastState.value.commonLive
   if (trainingSourceKey && commonContextKey(live) !== trainingSourceKey) {
     showVoicePointNotice('La sessione di guida è cambiata. Ferma e riavvia l’allenamento.', 'error')
@@ -961,6 +963,21 @@ function handleLocalShortcut(event: KeyboardEvent) {
 let removeCommandListener: (() => void) | undefined
 let removeInfoTargetListener: (() => void) | undefined
 let removePlacementListener: (() => void) | undefined
+let checkpointReady = false
+let checkpointTimer: ReturnType<typeof setInterval> | null = null
+let checkpointPending = false
+function saveRecoveryCheckpoint() {
+  if (!checkpointReady || checkpointPending) return
+  const active = ['running', 'paused', 'expired'].includes(phase.value)
+  const key = trainingSourceKey || commonContextKey(fastState.value.commonLive)
+  checkpointPending = true
+  void withRecoveryDeadline(() => Promise.resolve(getOverlayApi()?.trainingCheckpointSave?.(active && key ? {
+    version: 1, trainingId: selectedTrainingId.value, modeId: selectedModeId.value,
+    step: activeStepIndex.value, remainingMs: remainingMs.value, sourceKey: key, tracking: recoverySnapshot(),
+  } : null)), false).finally(() => { checkpointPending = false })
+}
+watch([phase, activeStepIndex], saveRecoveryCheckpoint, { flush: 'post' })
+onBeforeUnmount(() => { if (checkpointTimer) clearInterval(checkpointTimer); checkpointReady = false })
 
 onMounted(async () => {
   document.body.classList.add('training-overlay-runtime')
@@ -988,6 +1005,18 @@ onMounted(async () => {
   loadSpotterVoiceSettings()
   startLiveStatePolling()
   startFastStatePolling()
+  const checkpoint = await withRecoveryDeadline(() => Promise.resolve(api?.trainingCheckpointGet?.()), null)
+  if (checkpoint?.version === 1 && resolveTrainingOverlayTrainingId(checkpoint.trainingId) === checkpoint.trainingId
+    && resolveTrainingOverlayModeId(checkpoint.modeId) === checkpoint.modeId) {
+    selectedTrainingId.value = checkpoint.trainingId; selectedModeId.value = checkpoint.modeId
+    if (Number.isInteger(checkpoint.step) && selectedMode.value.steps[checkpoint.step]) {
+      activeStepIndex.value = checkpoint.step; remainingMs.value = checkpoint.remainingMs
+      trainingSourceKey = checkpoint.sourceKey; restoreCheckpoint(checkpoint.tracking)
+      restorePausedCheckpoint()
+    }
+  }
+  checkpointReady = true
+  checkpointTimer = setInterval(saveRecoveryCheckpoint, 1000)
   await refreshDryPressureState()
   dryPressureActivity.start()
   await refreshQaBotState()

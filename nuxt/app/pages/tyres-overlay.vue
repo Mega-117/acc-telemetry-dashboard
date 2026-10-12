@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import TelemetryFeatureNotice from '~/components/overlay/TelemetryFeatureNotice.vue'
+import { useHudPresentationMemory } from '~/services/overlay/hudPresentationMemory'
 import OverlayPlacementLock from '~/components/overlay/OverlayPlacementLock.vue'
 import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // Overlay HUD Gomme (PIP-175): finestra Electron indipendente. Dimensione decisa
@@ -25,6 +26,7 @@ const getApi = useOverlayRegionApi()
 
 const route = useRoute()
 const { fastState, startFastStatePolling, stopFastStatePolling } = useOverlayTelemetrySource(getApi)
+const displayFastState = useHudPresentationMemory(fastState, fastState)
 const overlay = useHudOverlay('tyres', getApi)
 const {
   isElectron,
@@ -91,10 +93,10 @@ onBeforeUnmount(() => {
           <button type="button" :class="{ active: racePage === 'tyres' }" @click="selectRacePage('tyres')">GOMME</button>
           <button type="button" :class="{ active: racePage === 'damage' }" @click="selectRacePage('damage')">DANNI</button>
         </nav>
-        <TyreRaceHud v-if="racePage === 'tyres'" :fast-state="fastState" />
-        <DamageRaceHud v-else :fast-state="fastState" :flash="raceDamageFlash" />
+        <TyreRaceHud v-if="racePage === 'tyres'" :fast-state="displayFastState" />
+        <DamageRaceHud v-else :fast-state="displayFastState" :flash="raceDamageFlash" />
       </section>
-      <TyreSlipHud v-else :fast-state="fastState" />
+      <TyreSlipHud v-else :fast-state="displayFastState" />
     </div>
   </div>
   </div>

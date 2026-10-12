@@ -241,6 +241,11 @@ export function useSessionOrchestrator(
   }
 
   return {
+    restorePausedCheckpoint() {
+      clearTimer(); clearAutoAdvance(); stopVoice(); phase.value = 'paused'
+      // Announcements before the checkpoint have uncertain outcomes; never replay them.
+      lastMinuteAnnounced = remainingMs.value <= 60000
+    },
     clearTimer,
     startStep, startSession, openTrainingSelection,
     pauseSession, resumeSession, completeCurrentStep, skipPausedStep,
