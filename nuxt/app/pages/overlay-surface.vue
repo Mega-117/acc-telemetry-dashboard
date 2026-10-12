@@ -36,7 +36,9 @@ onMounted(async () => {
   const initial = await api.overlaySurfaceGetState()
   if (!received) state.value = initial
 })
-onBeforeUnmount(() => { disposed = true; health?.fail(); unsubscribe?.() })
+// Unmount (HMR, navigation, shutdown) is not a UI error: stop the heartbeat and
+// let the main heartbeat deadline decide. Real render errors still call fail().
+onBeforeUnmount(() => { disposed = true; health?.stop(); unsubscribe?.() })
 </script>
 
 <template>

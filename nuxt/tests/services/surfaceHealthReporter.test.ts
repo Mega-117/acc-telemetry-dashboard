@@ -34,6 +34,22 @@ it('fails closed on component error and tolerates IPC rejection', async () => {
   await Promise.resolve()
 })
 
+it('stop on unmount never reports the surface as failed', () => {
+  vi.useFakeTimers()
+  const report = vi.fn().mockResolvedValue(true)
+  const h = createSurfaceHealthReporter(report, () => 1, () => {})
+  h.update({ epoch: 3, presentationRevision: 7 }); h.stop()
+  vi.advanceTimersByTime(5000)
+  expect(report.mock.calls.some(call => call[2] === false)).toBe(false)
+})
+
+it('overlay surface page stops (not fails) the reporter on unmount', async () => {
+  const { readFileSync } = await import('node:fs')
+  const page = readFileSync(new URL('../../app/pages/overlay-surface.vue', import.meta.url), 'utf8')
+  expect(page).toMatch(/onBeforeUnmount\(\(\) => \{[^}]*health\?\.stop\(\)/)
+  expect(page).toMatch(/onErrorCaptured\(\(\) => \{ health\?\.fail\(\) \}\)/)
+})
+
 it('prepares layout with timers even while native window is hidden', () => {
   vi.useFakeTimers()
   const layout = vi.fn()
