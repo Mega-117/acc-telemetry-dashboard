@@ -124,6 +124,25 @@ describe('social rooms with real Firebase rules', () => {
     expect((await A.publishOutcome(roomId, sent.value, { status: 'applied', method: 'mfd-v4', diary: 'verified' })).ok).toBe(true)
     expect((await get(ref(db, path))).val().result.diary).toBe('verified')
   })
+  it('PIP-507: a V4 context computed in the box after a session change reaches the room when the driver drives again', async () => {
+    const A = await participant('A')
+    const created = await A.ensureRoomForVehicle({ fingerprint: '', label: 'Session change' })
+    if (!created.ok) throw new Error(created.reason)
+    const roomId = created.value.roomId
+    const strategy = (contextId: string) => ({ applicationMethods: ['standard', 'mfd-v4'], mfdV4: { ready: true, reason: null, contextId }, fuelToAdd: 0 })
+    const drive = (driving: boolean, contextId: string) => A.publishPresence(roomId, { nickname: 'A', kind: 'driver', driving,
+      runtimeSessionId: 'A', strategy: strategy(contextId) })
+    const published = async () => (await A.io.read<any>(`rooms/${roomId}/mfd/A/${A.session.connectionId()}`))?.strategy?.mfdV4?.contextId
+    expect((await drive(true, 'a'.repeat(64))).ok).toBe(true)
+    await vi.waitFor(async () => expect(await published()).toBe('a'.repeat(64)))
+    // New session: box/menu (not driving) while the desktop already has the new context.
+    expect((await drive(false, 'b'.repeat(64))).ok).toBe(true)
+    await new Promise(resolve => setTimeout(resolve, 300))
+    expect(await published()).toBe('a'.repeat(64))
+    // Back on track with the same (new) context: it must be written now.
+    expect((await drive(true, 'b'.repeat(64))).ok).toBe(true)
+    await vi.waitFor(async () => expect(await published()).toBe('b'.repeat(64)))
+  })
   it('coalesces simultaneous open requests into one party', async () => {
     const A = await participant('A')
     const results = await Promise.all([

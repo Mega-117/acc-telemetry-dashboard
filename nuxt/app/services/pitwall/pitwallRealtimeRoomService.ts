@@ -48,10 +48,13 @@ function buildPitwallRealtimeRoomService(uid: string, io: PitwallRealtimeTranspo
   const mfdPublisher = createPitwallChangePublisher(async (snapshot: NonNullable<typeof mfdWanted>) => {
     const connectionId = session.connectionId()
     const roomId = session.roomId()
-    if (!roomId || !connectionId || localPresence?.kind !== 'driver' || !localPresence.sourceValid) return
+    // Not yet the active driver (box/menu after a session change): skip without
+    // consuming the snapshot, so the new V4 context is written later (PIP-507).
+    if (!roomId || !connectionId || localPresence?.kind !== 'driver' || !localPresence.sourceValid) return false
     await io.write(`rooms/${roomId}`, { [social ? `mfd/${uid}/${connectionId}` : 'mfd']: { uid, connectionId, crew: snapshot.crew,
       strategy: snapshot.strategy ? { ...snapshot.strategy, updatedAt: new Date(io.serverNow()).toISOString() } : null,
       updatedAt: io.serverTimestamp() } })
+    return true
   }, error => { lastError = new Error(failure(error).reason) })
   let invalidatedConditionAt: unknown = null
   function discardInvalidatedCondition() {

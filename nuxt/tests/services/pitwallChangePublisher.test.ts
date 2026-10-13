@@ -30,6 +30,21 @@ describe('MFD change publication', () => {
     p.stop(); p.offer(2); await vi.advanceTimersByTimeAsync(100)
     expect(publish).toHaveBeenCalledTimes(2)
   })
+  it('PIP-507: a deliberately skipped write does not consume the snapshot', async () => {
+    vi.useFakeTimers()
+    let eligible = false
+    const written: unknown[] = []
+    const publish = vi.fn(async (value: unknown) => { if (!eligible) return false; written.push(value); return true })
+    const p = createPitwallChangePublisher(publish, vi.fn())
+    p.offer({ contextId: 'new' }); await vi.advanceTimersByTimeAsync(100)
+    expect(written).toEqual([])
+    eligible = true
+    p.offer({ contextId: 'new' }); await vi.advanceTimersByTimeAsync(100)
+    expect(written).toEqual([{ contextId: 'new' }])
+    p.offer({ contextId: 'new' }); await vi.advanceTimersByTimeAsync(100)
+    expect(publish).toHaveBeenCalledTimes(2)
+    p.stop()
+  })
   it('serializes publications and retains the latest change while a write is pending', async () => {
     vi.useFakeTimers()
     let done!: () => void

@@ -6,8 +6,13 @@ export function stablePitwallValue(value: unknown): string {
   return JSON.stringify(value) ?? 'null'
 }
 
-/** Coalesce local changes; never retry a failed write on a periodic timer. */
-export function createPitwallChangePublisher<T>(publish: (value: T) => Promise<void>, onError: (error: unknown) => void, delayMs = 100) {
+/**
+ * Coalesce local changes; never retry a failed write on a periodic timer.
+ * `publish` resolves `false` when it deliberately skipped the write (e.g. not
+ * the active driver yet): the value is then not marked as published, so the
+ * same snapshot is written once the writer becomes eligible (PIP-507).
+ */
+export function createPitwallChangePublisher<T>(publish: (value: T) => Promise<void | boolean>, onError: (error: unknown) => void, delayMs = 100) {
   let last = ''
   let latest: T | undefined
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -23,7 +28,7 @@ export function createPitwallChangePublisher<T>(publish: (value: T) => Promise<v
     if (signature === last) return
     const epoch = generation
     busy = true
-    try { await publish(value); if (epoch === generation) last = signature }
+    try { const written = await publish(value); if (epoch === generation && written !== false) last = signature }
     catch (error) { onError(error) }
     finally { busy = false; if (!stopped && latest !== undefined) schedule() }
   }
