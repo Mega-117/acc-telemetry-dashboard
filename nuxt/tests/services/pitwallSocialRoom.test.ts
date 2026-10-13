@@ -42,4 +42,12 @@ describe('explicit strategy recipient', () => {
     expect(resolveSocialTarget([driver('C')], 'A', true)).toEqual({ selectedUid: 'A', target: null })
     expect(resolveSocialTarget([driver('C')], null, true).target).toBeNull()
   })
+  it('PIP-515: an automatic recipient follows the single driver and is cleared when several drive', () => {
+    expect(resolveSocialTarget([driver('C')], 'A', true, true)).toMatchObject({ selectedUid: 'C' }) // driver change
+    expect(resolveSocialTarget([driver('A'), driver('C')], 'A', true, true)).toEqual({ selectedUid: null, target: null })
+    expect(resolveSocialTarget([], 'A', true, true)).toEqual({ selectedUid: 'A', target: null }) // nobody drives: keep
+    // An explicit choice is never changed by the system.
+    expect(resolveSocialTarget([driver('A'), driver('C')], 'A', true, false).selectedUid).toBe('A')
+    expect(resolveSocialTarget([driver('C')], 'A', true, false).selectedUid).toBe('A')
+  })
 })

@@ -48,8 +48,17 @@ export function eligibleSocialDrivers<T extends { uid: string, connectionId?: st
   return drivers.filter(member => counts.get(member.uid) === 1)
 }
 
-/** Selection survives unavailability; only an untouched initial selection auto-fills. */
-export function resolveSocialTarget<T extends { uid: string }>(drivers: T[], selectedUid: string | null, touched: boolean): { selectedUid: string | null, target: T | null } {
-  const uid = selectedUid ?? (!touched && drivers.length === 1 ? drivers[0]!.uid : null)
+/**
+ * An explicit selection survives unavailability; only an untouched initial
+ * selection auto-fills. PIP-515: an automatic selection follows the single
+ * driver at the wheel (driver change in endurance) and is cleared when two or
+ * more members drive, so the engineer chooses instead of the system guessing.
+ */
+export function resolveSocialTarget<T extends { uid: string }>(drivers: T[], selectedUid: string | null, touched: boolean, automatic = false): { selectedUid: string | null, target: T | null } {
+  let uid = selectedUid ?? (!touched && drivers.length === 1 ? drivers[0]!.uid : null)
+  if (automatic && selectedUid) {
+    if (drivers.length === 1) uid = drivers[0]!.uid
+    else if (drivers.length > 1) uid = null
+  }
   return { selectedUid: uid, target: drivers.find(driver => driver.uid === uid) ?? null }
 }

@@ -239,3 +239,19 @@ it('publishes the order result and reason for the normal panel', async () => {
     expect(post.mock.calls.at(-1)![0].value.result.label).toBe('Impostata e confermata')
   } finally { w.unmount() }
 })
+it('PIP-515: asks for the recipient at send time when several drivers are at the wheel', async () => {
+  const p = port() as ReturnType<typeof port> & { availableTargets: any, selectTarget: any }
+  p.availableTargets = ref([{ uid: 'rico', nickname: 'Rico117' }, { uid: 'popo', nickname: 'Popo' }])
+  p.selectTarget = vi.fn((uid: string | null) => { p.selectedTargetUid.value = uid as string })
+  p.selectedTargetUid.value = null as unknown as string
+  const w = mount(Panel, { attachTo: document.body, props: { port: p as never } })
+  try {
+    const select = w.get('select[aria-label="Destinatario strategia"]')
+    expect(w.text()).toContain('Più piloti al volante')
+    await select.setValue('popo')
+    expect(p.selectTarget).toHaveBeenCalledWith('popo')
+    p.availableTargets.value = [{ uid: 'popo', nickname: 'Popo' }]; await flushPromises()
+    expect(w.find('select[aria-label="Destinatario strategia"]').exists()).toBe(false)
+    expect(w.get('.v4-recipient').text()).toContain('Popo')
+  } finally { w.unmount() }
+})

@@ -29,6 +29,11 @@ async function associate(save = false) {
 }
 const development = ref(false)
 const recipientLabel = computed(() => props.port?.availableTargets?.value.find(target => target.uid === props.port?.selectedTargetUid?.value)?.nickname || '')
+// PIP-515: ask at send time whenever the recipient is not unambiguous.
+const recipientChoiceNeeded = computed(() => {
+  const targets = props.port?.availableTargets?.value ?? []
+  return targets.length > 1 || (targets.length > 0 && !recipientLabel.value)
+})
 const error = ref('')
 const busy = computed(() => props.port?.sending.value || ['pending', 'applying'].includes(props.port?.orderStatus.value ?? ''))
 const car = computed(() => boundPitwallStrategy(props.port?.carSnapshot.value?.strategy, ''))
@@ -103,7 +108,15 @@ onBeforeUnmount(() => window.removeEventListener('message', message))
 <template>
   <div class="v4-online">
     <p v-if="error || (!frameReady && reason)" role="status">{{ error || reason }}</p>
-    <p class="v4-recipient">Destinatario strategia <strong>{{ recipientLabel || 'Nessun pilota disponibile' }}</strong></p>
+    <label v-if="port?.availableTargets && recipientChoiceNeeded" class="v4-target v4-target--choice">
+      <span>Più piloti al volante: scegli a chi inviare la strategia</span>
+      <select :value="port.selectedTargetUid.value ?? ''" :disabled="busy" aria-label="Destinatario strategia"
+        @change="port.selectTarget(($event.target as HTMLSelectElement).value || null)">
+        <option value="">Seleziona un pilota</option>
+        <option v-for="target in port.availableTargets.value" :key="target.uid" :value="target.uid">{{ target.nickname }}</option>
+      </select>
+    </label>
+    <p v-else class="v4-recipient">Destinatario strategia <strong>{{ recipientLabel || 'Nessun pilota disponibile' }}</strong></p>
     <details v-if="development" class="v4-tools">
       <summary>Strumenti di sviluppo</summary>
       <label v-if="port?.availableTargets" class="v4-target">
@@ -143,4 +156,5 @@ onBeforeUnmount(() => window.removeEventListener('message', message))
 .v4-tools summary { cursor: pointer; }
 .v4-target { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
 .v4-target select { padding: 8px 12px; color: #e8e8eb; background: #101014; border: 1px solid #ffffff30; }
+.v4-target--choice { margin: 0 16px 12px; color: #ffc400; font-size: 12px; }
 </style>

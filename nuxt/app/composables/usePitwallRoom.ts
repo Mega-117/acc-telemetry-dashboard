@@ -166,10 +166,20 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   }
   watch(selectedTargetUid, recoverOrder)
   const availableTargets = computed(() => eligibleSocialDrivers(members.value.filter(member => isPitwallMemberFresh(member, nowTick.value))))
+  // PIP-515: true while the recipient was chosen by the system, not the engineer.
+  const targetAutomatic = ref(false)
   watch(availableTargets, drivers => {
-    const resolved = resolveSocialTarget(drivers, selectedTargetUid.value, targetTouched.value)
-    if (resolved.selectedUid) { selectedTargetUid.value = resolved.selectedUid; targetTouched.value = true }
-    else if (drivers.length > 1) targetTouched.value = true
+    // Never retarget while an order is on its way to the current recipient.
+    const orderInFlight = sending.value || orderStatus.value === 'pending' || orderStatus.value === 'applying'
+    const autoFill = !selectedTargetUid.value && !targetTouched.value && drivers.length === 1
+    const resolved = resolveSocialTarget(drivers, selectedTargetUid.value, targetTouched.value, targetAutomatic.value && !orderInFlight)
+    if (resolved.selectedUid) {
+      selectedTargetUid.value = resolved.selectedUid; targetTouched.value = true
+      if (autoFill) targetAutomatic.value = true
+    } else {
+      if (targetAutomatic.value && selectedTargetUid.value && !orderInFlight) { selectedTargetUid.value = null; targetAutomatic.value = false }
+      if (drivers.length > 1) targetTouched.value = true
+    }
   }, { flush: 'sync' })
   function selectTarget(uid: string | null) {
     if (sending.value || orderStatus.value === 'pending' || orderStatus.value === 'applying') return
@@ -178,6 +188,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     orderMethod.value = 'standard'; orderDiary.value = ''
     selectedTargetUid.value = uid
     targetTouched.value = true
+    targetAutomatic.value = false
     recoverOrder()
     emitPitwallDiagnostic('target_selected', { uid: myUid.value ?? undefined, targetUid: uid ?? undefined, roomId: selectedRoomId.value ?? undefined })
   }
@@ -355,6 +366,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     roomGeneration++
     selectedTargetUid.value = null
     targetTouched.value = false
+    targetAutomatic.value = false
     stopOrderWatch?.()
     stopOrderWatch = null
     orderId.value = null
