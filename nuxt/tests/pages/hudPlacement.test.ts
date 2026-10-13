@@ -25,7 +25,7 @@ function makeApi() {
     trainingOverlaySetOriginCorner: vi.fn(async (originCorner: string) => ({ originCorner })),
   }
 }
-function lockSwitch() { return wrapper!.get('button[aria-label="Blocca posizioni"]') }
+function lockNow() { return wrapper!.get('.hud-placement-lock-now') }
 async function render() { wrapper = mount(HudPage, { global: { components: { UiRacingSwitch: RacingSwitch } } }); await flushPromises() }
 beforeEach(() => {
   useGameContext().selectGame('acc')
@@ -60,63 +60,43 @@ describe('HUD placement commands', () => {
     expect(wrapper!.find('select[aria-label="Angolo di apertura Ctrl+K"]').exists()).toBe(false)
   })
 
-  it('supports Edit / Save / Edit using confirmed runtime state', async () => {
+  it('PIP-504: no global unlock or "Sempre visibili"; the page explains the padlocks', async () => {
     await render()
-    await lockSwitch().trigger('click'); await flushPromises()
-    expect(lockSwitch().attributes('disabled')).toBeUndefined()
-    await lockSwitch().trigger('click'); await flushPromises()
-    expect(lockSwitch().attributes('aria-checked')).toBe('true')
-    await lockSwitch().trigger('click'); await flushPromises()
-    expect(api.hudOverlaySetAllPlacement.mock.calls).toEqual([[true], [false], [true]])
+    expect(wrapper!.find('button[aria-label="Blocca posizioni"]').exists()).toBe(false)
+    expect(wrapper!.find('button[aria-label="Sempre visibili"]').exists()).toBe(false)
+    expect(wrapper!.text()).toContain('apri il suo lucchetto')
+    expect(wrapper!.text()).toContain('30 s senza trascinarlo')
+    expect(wrapper!.find('.hud-placement-lock-now').exists()).toBe(false)
+    expect(api.hudOverlaySetAllPlacement).not.toHaveBeenCalled()
+  })
+
+  it('PIP-504: "Blocca ora" appears while a padlock is open and only locks', async () => {
+    active = true
+    await render()
+    expect(wrapper!.get('[role="status"]').text()).toContain('Posizionamento attivo')
+    await lockNow().trigger('click'); await flushPromises()
+    expect(api.hudOverlaySetAllPlacement.mock.calls).toEqual([[false]])
+    expect(wrapper!.find('.hud-placement-lock-now').exists()).toBe(false)
     expect(wrapper!.find('[role="alert"]').exists()).toBe(false)
   })
 
-  it('shows failure and allows a successful retry', async () => {
-    api.hudOverlaySetAllPlacement.mockRejectedValueOnce(new Error('IPC unavailable'))
-    await render()
-    await lockSwitch().trigger('click'); await flushPromises()
-    expect(wrapper!.get('[role="alert"]').text()).toContain('Impossibile confermare la modifica')
-    expect(lockSwitch().attributes('disabled')).toBeUndefined()
-    await lockSwitch().trigger('click'); await flushPromises()
-    expect(wrapper!.find('[role="alert"]').exists()).toBe(false)
-    expect(active).toBe(true)
-  })
-
-  it('keeps Save available if saving fails, without claiming success', async () => {
+  it('keeps "Blocca ora" available if locking fails, without claiming success', async () => {
     active = true
     api.hudOverlaySetAllPlacement.mockRejectedValueOnce(new Error('IPC unavailable'))
     await render()
-    await lockSwitch().trigger('click'); await flushPromises()
+    await lockNow().trigger('click'); await flushPromises()
     expect(wrapper!.get('[role="alert"]').text()).toContain('salvataggio e il blocco')
-    expect(lockSwitch().attributes('aria-checked')).toBe('false')
-    expect(lockSwitch().attributes('disabled')).toBeUndefined()
+    expect(lockNow().attributes('disabled')).toBeUndefined()
+    await lockNow().trigger('click'); await flushPromises()
+    expect(active).toBe(false)
   })
 
-  it('disables both commands while awaiting the runtime', async () => {
-    let complete!: (value: boolean) => void
-    api.hudOverlaySetAllPlacement.mockImplementationOnce(() => new Promise(resolve => { complete = resolve }))
+  it('rejects an unconfirmed lock instead of displaying success', async () => {
+    active = true
+    api.hudOverlaySetAllPlacement.mockResolvedValueOnce(true)
     await render()
-    await lockSwitch().trigger('click')
-    expect(lockSwitch().attributes('disabled')).toBeDefined()
-    active = true; complete(true); await flushPromises()
-    expect(api.hudOverlaySetAllPlacement).toHaveBeenCalledTimes(1)
-    expect(lockSwitch().attributes('disabled')).toBeUndefined()
-  })
-
-  it('reports status read failure while retaining the acknowledged command state', async () => {
-    await render()
-    api.hudOverlayGetPlacementStatus.mockRejectedValue(new Error('read failed'))
-    await lockSwitch().trigger('click'); await flushPromises()
+    await lockNow().trigger('click'); await flushPromises()
     expect(wrapper!.get('[role="alert"]').text()).toContain('Impossibile confermare')
-    expect(lockSwitch().attributes('disabled')).toBeUndefined()
-  })
-
-  it('rejects an unconfirmed response instead of displaying success', async () => {
-    api.hudOverlaySetAllPlacement.mockResolvedValueOnce(false)
-    await render()
-    await lockSwitch().trigger('click'); await flushPromises()
-    expect(wrapper!.get('[role="alert"]').text()).toContain('Impossibile confermare')
-    expect(lockSwitch().attributes('disabled')).toBeUndefined()
   })
 })
 

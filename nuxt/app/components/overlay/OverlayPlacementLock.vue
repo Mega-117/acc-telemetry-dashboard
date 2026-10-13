@@ -42,7 +42,7 @@ async function toggle() {
   <button v-if="available" type="button" class="overlay-placement-lock" data-overlay-interactive
     :class="{ 'is-unlocked': active, 'has-error': error }" :aria-pressed="active" :disabled="pending"
     :aria-label="active ? 'Blocca posizione overlay' : 'Sblocca posizione overlay'"
-    :title="error || (active ? 'Trascina il pannello. Clicca per bloccare; blocco automatico dopo 60 s di inattività.' : 'Sblocca e sposta questo overlay')"
+    :title="error || (active ? 'Trascina il pannello: la posizione si salva quando lo lasci. Clicca per bloccare; si blocca da solo dopo 30 s senza trascinarlo.' : 'Sblocca e sposta questo overlay')"
     @pointerdown.stop @click.stop="toggle">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
       <rect x="4" y="10" width="16" height="11" rx="2" />

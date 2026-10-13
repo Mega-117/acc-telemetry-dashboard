@@ -33,8 +33,10 @@ describe('HUD settings page layout contract', () => {
     expect(source).toContain('class="hud-info-group"')
     expect(source).not.toContain('hudSettingsLayout')
     expect(source).not.toContain('hud-layout-preview')
-    expect(source).toContain(':model-value="!positioning"')
-    expect(source).toContain('@update:model-value="$event ? saveAndLock() : startPositioning()"')
+    // PIP-504: no global unlock and no "Sempre visibili"; only "Blocca ora" while a padlock is open.
+    expect(source).not.toContain('startPositioning')
+    expect(source).not.toContain('alwaysVisible')
+    expect(source).toContain('@click="saveAndLock()"')
     expect(source).toContain('placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000)')
   })
 

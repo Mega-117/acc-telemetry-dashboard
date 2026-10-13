@@ -8,7 +8,7 @@ if (import.meta.client) markHudRouteModulePhase('route-module-evaluated')
 import { usePresentationInterval } from '~/composables/usePresentationVisibility'
 /* eslint-disable max-lines -- Legacy self-contained Electron bridge; split tracked separately from PIP-281 layout scope. */
 // HUD (PIP-209): pagina overlay protetta da capability centralizzata.
-// - Interruttore GLOBALE di posizionamento: sblocca/blocca TUTTI gli overlay.
+// - Posizionamento con il lucchetto di ogni overlay (PIP-504); qui solo stato e "Blocca ora".
 // - Per ogni overlay: on/off + formato fisso (Piccolo/Medio/Grande).
 // Self-contained (come dev.vue): fuori dal contratto useTelemetryGateway.
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
@@ -17,7 +17,7 @@ import { gameUiSupport, hudSettingSupported, gameLabel } from '~/services/teleme
 import SectorReferenceSetup from '~/components/overlay/SectorReferenceSetup.vue'
 import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
-import { ChartNoAxesCombined, CircleDot, Clock3, Eye, Flag, Info, LayoutDashboard, ListOrdered, LockKeyhole, Map as MapIcon, Trophy } from '@lucide/vue'
+import { ChartNoAxesCombined, CircleDot, Clock3, Flag, Info, LayoutDashboard, ListOrdered, LockKeyhole, Map as MapIcon, Trophy } from '@lucide/vue'
 import {
   supportsHudOverlayPresentationControl,
   type HudOverlayPresentationControl,
@@ -216,10 +216,8 @@ const trainingOpen = ref(false)
 const driving = ref(false)
 const positionSaved = ref(false)
 const placementDeadlineMs = ref<number | null>(null)
-const placementAutoSaveMs = ref(60000)
+const placementAutoSaveMs = ref(30000)
 const nowMs = ref(Date.now())
-// Override "Sempre visibili" (PIP-177): forza la comparsa ignorando il rilevamento.
-const alwaysVisible = ref(false)
 const replayStatus = ref<HudReplayStatus>({
   available: false,
   running: false,
@@ -275,7 +273,7 @@ function applyPlacementStatus(status: any) {
   nowMs.value = Date.now()
   positioning.value = status.active === true
   placementDeadlineMs.value = Number.isFinite(Number(status.deadlineMs)) ? Number(status.deadlineMs) : null
-  placementAutoSaveMs.value = Number.isFinite(Number(status.autoSaveMs)) ? Number(status.autoSaveMs) : 60000
+  placementAutoSaveMs.value = Number.isFinite(Number(status.autoSaveMs)) ? Number(status.autoSaveMs) : 30000
 }
 
 async function refreshPlacementStatus(strict = false) {
@@ -352,9 +350,6 @@ async function refreshState() {
   if (typeof api.hudOverlayGetDrivingState === 'function') {
     try { driving.value = await api.hudOverlayGetDrivingState() } catch { driving.value = false }
   }
-  if (typeof api.hudOverlayGetAlwaysVisible === 'function') {
-    try { alwaysVisible.value = await api.hudOverlayGetAlwaysVisible() } catch { alwaysVisible.value = false }
-  }
 }
 
 function applyReplayStatus(status: any) {
@@ -418,16 +413,6 @@ async function stopHudReplay() {
   }
 }
 
-async function toggleAlwaysVisible() {
-  const api = getApi()
-  if (!apiReady.value || !api?.hudOverlaySetAlwaysVisible) return
-  const next = !alwaysVisible.value
-  alwaysVisible.value = next
-  const saved = await api.hudOverlaySetAlwaysVisible(next)
-  if (typeof saved === 'boolean') alwaysVisible.value = saved
-  await refreshOverlayVisibility()
-}
-
 async function observeHudInitialReady() {
   markHudRoutePhase('mounted')
   const nextPaint = afterHudNextPaint().then(() => markHudRoutePhase('next-paint'))
@@ -469,10 +454,6 @@ onUnmounted(() => {
 
 async function saveAndLock() {
   await changePlacement(false)
-}
-
-async function startPositioning() {
-  await changePlacement(true)
 }
 
 async function changePlacement(active: boolean) {
@@ -700,7 +681,7 @@ async function toggleTraining() {
           ></span>
           <span>
             <strong>{{ driving ? 'In guida' : 'Nei menu' }}</strong>
-            <em>{{ alwaysVisible ? 'Sempre visibili attivo' : (driving ? 'Gli overlay abilitati possono apparire' : 'Gli overlay abilitati appariranno quando inizi a guidare') }}</em>
+            <em>{{ driving ? 'Gli overlay abilitati possono apparire' : 'Gli overlay abilitati appariranno quando inizi a guidare' }}</em>
           </span>
         </p>
         <p
@@ -718,29 +699,30 @@ async function toggleTraining() {
       </header>
 
       <div class="test-hud__global">
-        <div class="hud-global-control">
-          <span class="hud-global-label"><Eye :size="22" aria-hidden="true" />Sempre visibili</span><UiRacingSwitch
-            label="Sempre visibili"
-            :model-value="alwaysVisible"
-            :disabled="!apiReady"
-            @update:model-value="toggleAlwaysVisible"
-          />
-        </div>
-        <div class="hud-global-control">
-          <span class="hud-global-label"><LockKeyhole :size="22" aria-hidden="true" />Blocca posizioni</span><UiRacingSwitch
-            label="Blocca posizioni"
-            :model-value="!positioning"
-            :disabled="!apiReady || placementBusy"
-            @update:model-value="$event ? saveAndLock() : startPositioning()"
-          />
-        </div>
-        <p
-          v-if="positioning && !placementError"
-          class="hud-placement-status"
-          role="status"
-        >
-          Blocco automatico tra {{ placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }}s di inattività · include Ctrl+K
+        <p class="hud-placement-hint">
+          <LockKeyhole :size="18" aria-hidden="true" />
+          Per spostare un overlay apri il suo lucchetto: resta visibile finché lo sposti e si blocca da solo dopo {{ Math.round(placementAutoSaveMs / 1000) }} s senza trascinarlo.
         </p>
+        <div
+          v-if="positioning"
+          class="hud-global-control"
+        >
+          <p
+            v-if="!placementError"
+            class="hud-placement-status"
+            role="status"
+          >
+            Posizionamento attivo · blocco automatico tra {{ placementRemainingSeconds ?? Math.round(placementAutoSaveMs / 1000) }} s
+          </p>
+          <button
+            type="button"
+            class="hud-placement-lock-now"
+            :disabled="!apiReady || placementBusy"
+            @click="saveAndLock()"
+          >
+            Blocca ora
+          </button>
+        </div>
         <p
           v-if="placementError"
           class="hud-placement-status"
@@ -1338,6 +1320,11 @@ async function toggleTraining() {
 .test-hud__hero { grid-column: 1; grid-row: 1; }
 .test-hud__global { position: relative; grid-column: 3; grid-row: 1; padding: 8px 14px; gap: 10px 16px; }
 .hud-placement-status { position: absolute; top: calc(100% + 8px); left: 0; right: 0; line-height: 16px; }
+/* PIP-504: padlocks own placement; the page only explains and offers "Blocca ora". */
+.hud-placement-hint { display: flex; align-items: center; gap: 10px; max-width: 360px; margin: 0; color: var(--hud-text-muted); font-size: 11px; line-height: 15px; }
+.hud-placement-hint svg { flex-shrink: 0; color: #d8dde5; }
+.hud-placement-lock-now { padding: 6px 12px; border: 1px solid var(--racing-qualify); background: transparent; color: var(--racing-qualify); font-size: 12px; cursor: pointer; }
+.hud-placement-lock-now:disabled { opacity: .5; cursor: default; }
 .test-hud__replay { grid-column: 2; grid-row: 1; order: 0; align-self: center; position: relative; padding: 10px 12px; }
 .test-hud__replay summary { align-items: center; gap: 16px; list-style: none; }
 .test-hud__replay summary b { font-size: 10px; color: #b3b3b8; }
