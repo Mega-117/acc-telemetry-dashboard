@@ -52,7 +52,6 @@ function unavailableGuidance(input: PressureActionInput): string {
   if (reason === 'within_tolerance') return 'Pressioni già nella fascia ottimale.'
   if (reason === 'ready' && input.testReady !== true) return 'Ferma l’auto ai box e apri il menu Pausa.'
   if (reason === 'waiting_for_valid_lap') return 'Completa almeno un giro valido.'
-  if (reason === 'waiting_for_stable_pressure') return 'Completa un altro giro regolare per stabilizzare le pressioni.'
   if (reason === 'compound_unavailable') return 'Mescola non ancora rilevata.'
   if (reason === 'source_unavailable') return 'Dati delle pressioni non ancora disponibili.'
   if (reason === 'click_limit_exceeded') return 'Correzione oltre il limite di sicurezza.'
@@ -159,6 +158,16 @@ export function pressureActionPresentation(input: PressureActionInput | null | u
         title: 'ULTIMO GIRO NON VALIDO',
         guidance,
       },
+    }
+  }
+
+  // Not a fault: the tyres are still warming, so say so instead of "Non disponibile".
+  if (recommendationReason(input || {}) === 'waiting_for_stable_pressure' && input?.consumed !== true) {
+    const guidance = 'Pressioni ancora in assestamento: completa un altro giro.'
+    return {
+      stateLabel: 'In assestamento',
+      guidance,
+      ariaLabel: `Regola pressioni nel Setup ACC: ${guidance}`,
     }
   }
 
