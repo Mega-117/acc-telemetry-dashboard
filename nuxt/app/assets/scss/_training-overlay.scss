@@ -2502,9 +2502,11 @@ button.is-active {
   }
   .quick-panel-section[aria-label='Avvisi vocali'],
   .quick-panel-dev { grid-column: 1 / -1; }
+  // PIP-509: audio alerts are the last row, after every other button group.
   .quick-panel-section[aria-label='Avvisi vocali'] {
-    padding-bottom: 8px;
-    border-bottom: 1px solid #ffffff1a;
+    order: 98;
+    padding-top: 8px;
+    border-top: 1px solid #ffffff1a;
   }
   .quick-panel-heading { line-height: 12px; }
   .quick-panel-automations { display: contents; }
@@ -2512,7 +2514,7 @@ button.is-active {
   .quick-panel-secondary,
   .quick-panel-section[aria-label='Riferimenti numerici'] {
     display: grid;
-    grid-row: 2;
+    grid-row: 1;
     grid-template-columns: minmax(0, 1fr);
     align-content: start;
     justify-items: center;
@@ -2583,7 +2585,7 @@ button.is-active {
     // Four full-size voice controls retain the established full-panel width.
     .quick-panel-main:has(.quick-panel-voice-grid > button:nth-child(4)) { min-width: 300px; }
     .quick-panel-voice-grid:has(> button:nth-child(4)) { justify-content: space-between; }
-    .quick-panel-section[aria-label='Avvisi vocali'] { padding-bottom: 8px; border-bottom: 1px solid #ffffff1a; }
+    .quick-panel-section[aria-label='Avvisi vocali'] { padding-top: 8px; border-top: 1px solid #ffffff1a; }
     .quick-panel-automations { display: contents; }
     .quick-panel-categories { justify-content: space-between; }
     .quick-panel-section[aria-label='Riferimenti numerici'],
@@ -2650,4 +2652,12 @@ button.is-active {
 .training-overlay--launcher .overlay-content--preview {
   max-height: calc(100vh - 50px);
   .control-k-fuel-preview { grid-column: 1 / -1 !important; min-width: 0; }
+}
+
+// PIP-509: no simulator detected yet. A small rectangular placeholder replaces
+// partial tools; the chosen layout returns as soon as the game is detected.
+.training-overlay--launcher .quick-panel-waiting {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 220px; min-height: 56px; margin: 0; padding: 12px 18px;
+  border: 1px dashed #ffffff35; color: #d8dde5; font-size: 13px; letter-spacing: .02em;
 }

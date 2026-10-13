@@ -522,6 +522,13 @@ const isCarStoppedWithEngineOff = computed(() => !fastState.value.isEngineRunnin
   && fastState.value.speedKmh !== null && Math.abs(fastState.value.speedKmh) <= 0.5)
 const showAllQuickPanelButtons = computed(() => isCarStoppedWithEngineOff.value
   || (showQuickPanelDevTools && previewAllQuickPanelButtons.value))
+// PIP-509: while driving a disabled Pressioni button is noise: show it only when usable.
+const showPressureButton = computed(() => isFullQuickPanelPreview.value || !hideStintWhileDriving.value
+  || isDryPressureApplying.value || quickPanelPressureState.value.state === 'ready')
+// PIP-509: no supported simulator detected -> waiting placeholder (dev synthetic source excluded).
+const waitingForSimulator = computed(() => !isFullQuickPanelPreview.value
+  && fastState.value.commonLive?.gameId !== 'synthetic'
+  && !quickPanelSupport.value.quickVoiceControls && !quickPanelSupport.value.quickAutomations)
 const hideStintWhileDriving = computed(() => !showAllQuickPanelButtons.value
   && (fastState.value.isEngineRunning
     || (fastState.value.speedKmh !== null && Math.abs(fastState.value.speedKmh) > 0.5)))
@@ -1197,19 +1204,9 @@ onBeforeUnmount(() => {
                     </div>
                   </header>
                   <div class="launcher-tools__actions">
-                    <div class="quick-panel-main" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
-                    <QuickPanelVoiceControls v-if="quickPanelSupport.quickVoiceControls"
-                      :extended-controls="quickPanelSupport.extendedVoiceControls"
-                      :coach="isFullQuickPanelPreview || spotterEnabled"
-                      :references="isFullQuickPanelPreview || trackVoiceReferencesEnabled"
-                      :pressure="isFullQuickPanelPreview || pressureWarningsEnabled"
-                      :target="isFullQuickPanelPreview || targetLapVoiceEnabled"
-                      :disabled="!isFullQuickPanelPreview && !canUseSpotterControls"
-                      @toggle-coach="toggleCoachAudio"
-                      @toggle-references="toggleTrackVoiceReferences"
-                      @toggle-pressure="togglePressureAudio"
-                      @toggle-target="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
-                    />
+                    <!-- PIP-509: no simulator yet -> a small waiting placeholder instead of partial tools. -->
+                    <p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">In attesa del simulatore</p>
+                    <div v-else class="quick-panel-main" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <div class="quick-panel-categories">
                     <section v-if="!quickPanelSupport.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
                       <h2 class="quick-panel-heading">Riferimenti</h2>
@@ -1251,6 +1248,7 @@ onBeforeUnmount(() => {
                       @focus="selectedWheelActionId = 'pitwall'"
                     />
                     <button
+                      v-if="showPressureButton"
                       type="button"
                       class="launcher-tool-button launcher-tool-button--training launcher-tool-button--pressure"
                       :class="{ 'is-ready': quickPanelPressureState.state === 'ready', 'is-awaiting-pit': quickPanelPressureState.reason === 'pit_pause_required', 'is-selected': selectedWheelActionId === 'pressure' }"
@@ -1306,6 +1304,19 @@ onBeforeUnmount(() => {
                     </div>
                     </section>
                     </div>
+                    <!-- PIP-509: audio alerts are always the last row (vertical) or last column (horizontal). -->
+                    <QuickPanelVoiceControls v-if="quickPanelSupport.quickVoiceControls"
+                      :extended-controls="quickPanelSupport.extendedVoiceControls"
+                      :coach="isFullQuickPanelPreview || spotterEnabled"
+                      :references="isFullQuickPanelPreview || trackVoiceReferencesEnabled"
+                      :pressure="isFullQuickPanelPreview || pressureWarningsEnabled"
+                      :target="isFullQuickPanelPreview || targetLapVoiceEnabled"
+                      :disabled="!isFullQuickPanelPreview && !canUseSpotterControls"
+                      @toggle-coach="toggleCoachAudio"
+                      @toggle-references="toggleTrackVoiceReferences"
+                      @toggle-pressure="togglePressureAudio"
+                      @toggle-target="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
+                    />
                     </div>
                     <div v-show="isHorizontalQuickPanel" id="quick-panel-horizontal-feedback" class="quick-panel-horizontal-feedback" />
                     <details v-if="showQuickPanelDevTools" class="quick-panel-dev" @click.capture="guardQuickPanelDevTools">
