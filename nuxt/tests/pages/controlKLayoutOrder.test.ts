@@ -24,6 +24,12 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toContain('v-if="showPressureButton"')
     expect(source).toMatch(/const showPressureButton = computed\(\(\) => isFullQuickPanelPreview\.value \|\| !hideStintWhileDriving\.value\s*\|\| isDryPressureApplying\.value \|\| quickPanelPressureState\.value\.state === 'ready'\)/)
   })
+  it('PIP-509: the horizontal Tools group reserves no column for a hidden button', () => {
+    const horizontal = styles.slice(styles.indexOf('.overlay-content--horizontal'))
+    expect(horizontal).toMatch(/\.quick-panel-secondary \{\s*position: relative; padding-left: 10px;\s*\/\/ PIP-509[^\n]*\n\s*grid-template-columns: none;/)
+    // The full-width status line takes the buttons' width instead of widening their columns.
+    expect(styles).toMatch(/\.quick-panel-horizontal-feedback \{\s*grid-column: 1 \/ -1;[\s\S]{0,200}?width: 0;\s*min-width: 100%;/)
+  })
   it('shows a waiting placeholder instead of partial tools when no simulator is detected', () => {
     expect(source).toContain(`<p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>`)
     expect(source).toContain('<div v-else class="quick-panel-main"')

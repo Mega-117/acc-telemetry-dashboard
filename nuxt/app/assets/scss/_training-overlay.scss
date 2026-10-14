@@ -2341,7 +2341,10 @@ button.is-active {
   .quick-panel-secondary > .launcher-tool-button { grid-row: 2; }
   .quick-panel-secondary {
     position: relative; padding-left: 10px;
+    // PIP-509: only rendered buttons create columns; a hidden Pressioni leaves no hole.
+    grid-template-columns: none;
     &::before { content: ''; position: absolute; left: 0; top: 20px; height: 64px; width: 1px; background: #ffffff25; }
+    > .quick-panel-heading { white-space: nowrap; }
   }
   .quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all) {
     > .fuel-panel { display: none; }
@@ -2457,7 +2460,12 @@ button.is-active {
   .control-k-pressure-info:not(.control-k-pressure-info--preview) { display: none; }
   .quick-panel-horizontal-feedback {
     grid-column: 1 / -1;
-    min-width: 0;
+    // PIP-509: a long status line must not widen the button columns (hole
+    // after Pitwall while driving): it takes the buttons' width and wraps.
+    width: 0;
+    min-width: 100%;
+    overflow-wrap: anywhere;
+    .quick-panel-pressure-status { white-space: normal; }
     padding-top: 8px;
     border-top: 1px solid #ffffff1a;
   }
