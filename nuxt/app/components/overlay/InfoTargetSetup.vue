@@ -132,19 +132,19 @@ function onWheel(control: PickerControl, event: WheelEvent) {
         <button
           type="button"
           class="target-drum__arrow"
-          :data-overlay-wheel-action="appearance === 'quick-panel' ? undefined : `target-${control.id}-increase`"
+          :data-overlay-wheel-action="`target-${control.id}-increase`"
           :aria-label="`Aumenta ${control.ariaLabel}`"
           @click="adjustControl(control, 1)"
         >
           ▲
         </button>
-        <button v-if="appearance === 'quick-panel'" type="button" class="target-field-value" :data-overlay-wheel-action="`target-${control.id}`" :aria-label="control.ariaLabel" :aria-pressed="editingControl === control.id" @click="editingControl = editingControl === control.id ? null : control.id">{{ control.value }}</button>
-        <strong v-else>{{ control.value }}</strong>
+        <!-- PIP-526: Ctrl+K edits one time value instead (target-quick above). -->
+        <strong>{{ control.value }}</strong>
         <button
           type="button"
           class="target-drum__arrow"
           :aria-label="`Diminuisci ${control.ariaLabel}`"
-          :data-overlay-wheel-action="appearance === 'quick-panel' ? undefined : `target-${control.id}-decrease`"
+          :data-overlay-wheel-action="`target-${control.id}-decrease`"
           @click="adjustControl(control, -1)"
         >
           ▼
