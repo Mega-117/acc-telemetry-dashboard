@@ -98,3 +98,42 @@ describe('order confirmation deadline', () => {
     expect(callback).toHaveBeenCalledTimes(count)
   })
 })
+
+describe('PIP-516 room orders in flight', () => {
+  it('follows an order from pending through applying to its outcome, for every member', () => {
+    vi.useFakeTimers(); vi.setSystemTime(1000)
+    const watchers = new Map<string, (value: unknown) => void>()
+    const stops: string[] = []
+    const io = { serverNow: () => Date.now(), watch: (path: string, cb: (value: unknown) => void) => { watchers.set(path, cb); return () => { stops.push(path); watchers.delete(path) } } }
+    const orders = createPitwallRealtimeOrders({ io: io as unknown as PitwallRealtimeTransport,
+      session: { uid: 'member' } as PitwallRealtimeSession, connections: () => [] })
+    const seen: unknown[][] = []
+    const stop = orders.watchRoomOrdersInFlight('room', list => seen.push(list.map(order => order.status)))
+    watchers.get('rooms/room/pending')!({ o1: true })
+    const order = { orderId: 'o1', targetUid: 'p', senderId: 'e', status: 'pending', expiresAtMs: 60_000 }
+    watchers.get('rooms/room/orders/o1')!(order)
+    expect(seen.at(-1)).toEqual(['pending'])
+    watchers.get('rooms/room/pending')!(null)   // claimed: no longer pending, still in flight
+    watchers.get('rooms/room/orders/o1')!({ ...order, status: 'applying', leaseUntilMs: 30_000 })
+    expect(seen.at(-1)).toEqual(['applying'])
+    watchers.get('rooms/room/orders/o1')!({ ...order, status: 'applied' })
+    expect(seen.at(-1)).toEqual([])
+    expect(stops).toContain('rooms/room/orders/o1')
+    stop()
+    expect(stops).toContain('rooms/room/pending')
+  })
+  it('drops an order whose lease or deadline expired without an outcome', () => {
+    vi.useFakeTimers(); vi.setSystemTime(1000)
+    const watchers = new Map<string, (value: unknown) => void>()
+    const io = { serverNow: () => Date.now(), watch: (path: string, cb: (value: unknown) => void) => { watchers.set(path, cb); return () => watchers.delete(path) } }
+    const orders = createPitwallRealtimeOrders({ io: io as unknown as PitwallRealtimeTransport,
+      session: { uid: 'member' } as PitwallRealtimeSession, connections: () => [] })
+    const seen: unknown[][] = []
+    orders.watchRoomOrdersInFlight('room', list => seen.push(list.map(order => order.orderId)))
+    watchers.get('rooms/room/pending')!({ o2: true })
+    watchers.get('rooms/room/orders/o2')!({ orderId: 'o2', status: 'applying', expiresAtMs: 60_000, leaseUntilMs: 3000 })
+    expect(seen.at(-1)).toEqual(['o2'])
+    vi.advanceTimersByTime(2001)
+    expect(seen.at(-1)).toEqual([])
+  })
+})

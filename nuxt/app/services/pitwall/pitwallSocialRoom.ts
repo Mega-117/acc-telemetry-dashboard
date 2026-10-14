@@ -48,6 +48,32 @@ export function eligibleSocialDrivers<T extends { uid: string, connectionId?: st
   return drivers.filter(member => counts.get(member.uid) === 1)
 }
 
+export type DriverReceiveState = 'ready' | 'menu' | 'not-connected' | 'offline' | 'applying' | 'none'
+export interface RoomOrderInFlight { orderId: string, targetUid: string, senderUid: string, status: 'pending' | 'applying' }
+
+/**
+ * PIP-516: can the selected (or only) driver receive a strategy now, and if
+ * not, why. "In guida" is the same signal as the HUDs: in the car with live
+ * physics; menus, ESC and the setup screen are not driving. One order at a
+ * time per room: an order already on its way blocks the next one.
+ */
+export function driverReceiveState<T extends { uid: string, nickname: string, kind: string, driving: boolean, inCar?: boolean, sourceValid?: boolean }>(
+  freshMembers: T[], allMembers: T[], selectedUid: string | null, inFlight: RoomOrderInFlight | null,
+): { state: DriverReceiveState, label: string, uid: string | null } {
+  const name = (uid: string | null) => allMembers.find(member => member.uid === uid)?.nickname || 'il pilota'
+  if (inFlight) return { state: 'applying', label: `Strategia in corso verso ${name(inFlight.targetUid)}`, uid: inFlight.targetUid }
+  const drivers = (list: T[]) => list.filter(member => member.kind === 'driver' && (!selectedUid || member.uid === selectedUid))
+  const fresh = drivers(freshMembers)
+  const target = fresh.find(member => member.driving) ?? (fresh.length === 1 ? fresh[0] : null)
+  if (target?.driving) return { state: 'ready', label: `${target.nickname}: può ricevere la strategia`, uid: target.uid }
+  if (target && target.sourceValid === false) return { state: 'not-connected', label: `${target.nickname}: gioco non collegato`, uid: target.uid }
+  if (target) return { state: 'menu', label: `${target.nickname} non è in guida: invio possibile quando torna in pista`, uid: target.uid }
+  if (fresh.length > 1) return { state: 'none', label: 'Più piloti nella stanza: scegli il destinatario', uid: null }
+  const known = drivers(allMembers)
+  if (known.length) return { state: 'offline', label: `${known[0]!.nickname} è offline`, uid: known[0]!.uid }
+  return { state: 'none', label: 'Nessun pilota nella stanza', uid: null }
+}
+
 /**
  * An explicit selection survives unavailability; only an untouched initial
  * selection auto-fills. PIP-515: an automatic selection follows the single

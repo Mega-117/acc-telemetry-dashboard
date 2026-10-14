@@ -37,7 +37,11 @@ const recipientChoiceNeeded = computed(() => {
 const error = ref('')
 const busy = computed(() => props.port?.sending.value || ['pending', 'applying'].includes(props.port?.orderStatus.value ?? ''))
 const car = computed(() => boundPitwallStrategy(props.port?.carSnapshot.value?.strategy, ''))
-const reason = computed(() => !props.port?.canSend.value ? props.port?.sendReadiness.value.reason || 'Seleziona una stanza con un solo pilota disponibile.'
+// PIP-516: the driver state explains a blocked button (menus, offline, order in flight).
+const receive = computed(() => props.port?.driverReceive?.value ?? null)
+const reason = computed(() => !props.port?.canSend.value
+  ? (receive.value && receive.value.state !== 'ready' ? receive.value.label : null)
+    || props.port?.sendReadiness.value.reason || 'Seleziona una stanza con un solo pilota disponibile.'
   : !car.value?.applicationMethods?.includes('mfd-v4') ? 'Il PC del pilota non annuncia V4 online.'
     : !car.value.mfdV4?.ready ? car.value.mfdV4?.reason || 'V4 non disponibile sul PC del pilota.' : null)
 const outcome = computed(() => props.port?.orderMethod.value === 'mfd-v4'
@@ -117,6 +121,7 @@ onBeforeUnmount(() => window.removeEventListener('message', message))
       </select>
     </label>
     <p v-else class="v4-recipient">Destinatario strategia <strong>{{ recipientLabel || 'Nessun pilota disponibile' }}</strong></p>
+    <p v-if="receive" class="v4-receive" :class="`v4-receive--${receive.state}`" role="status">{{ receive.label }}</p>
     <details v-if="development" class="v4-tools">
       <summary>Strumenti di sviluppo</summary>
       <label v-if="port?.availableTargets" class="v4-target">
@@ -157,4 +162,7 @@ onBeforeUnmount(() => window.removeEventListener('message', message))
 .v4-target { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
 .v4-target select { padding: 8px 12px; color: #e8e8eb; background: #101014; border: 1px solid #ffffff30; }
 .v4-target--choice { margin: 0 16px 12px; color: #ffc400; font-size: 12px; }
+.v4-online > p.v4-receive { margin: -4px 16px 12px; color: #e0b84a; font-size: 12px; }
+.v4-online > p.v4-receive--ready { color: #42cda5; }
+.v4-online > p.v4-receive--applying { color: #8fb8ff; }
 </style>

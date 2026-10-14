@@ -51,3 +51,20 @@ describe('explicit strategy recipient', () => {
     expect(resolveSocialTarget([driver('C')], 'A', true, false).selectedUid).toBe('A')
   })
 })
+
+describe('PIP-516 driver receive state', () => {
+  const driver = (extra: Record<string, unknown> = {}) => ({ uid: 'p', nickname: 'Pilota', kind: 'driver', driving: true, inCar: true, sourceValid: true, ...extra })
+  it('covers ready, menus, game not connected, offline, several drivers, order in flight and empty room', async () => {
+    const { driverReceiveState } = await import('~/services/pitwall/pitwallSocialRoom')
+    expect(driverReceiveState([driver()], [driver()], null, null).state).toBe('ready')
+    expect(driverReceiveState([driver({ driving: false, inCar: false })], [driver()], null, null).state).toBe('menu')
+    expect(driverReceiveState([driver({ driving: false, sourceValid: false })], [driver()], null, null).state).toBe('not-connected')
+    expect(driverReceiveState([], [driver()], null, null)).toMatchObject({ state: 'offline', label: 'Pilota è offline' })
+    const two = [driver({ driving: false }), driver({ uid: 'q', nickname: 'Altro', driving: false })]
+    expect(driverReceiveState(two, two, null, null).state).toBe('none')
+    expect(driverReceiveState(two, two, 'q', null)).toMatchObject({ state: 'menu', uid: 'q' })
+    expect(driverReceiveState([driver()], [driver()], null, { orderId: 'o', targetUid: 'p', senderUid: 'e', status: 'pending' }))
+      .toMatchObject({ state: 'applying', label: 'Strategia in corso verso Pilota' })
+    expect(driverReceiveState([], [], null, null)).toMatchObject({ state: 'none', label: 'Nessun pilota nella stanza' })
+  })
+})

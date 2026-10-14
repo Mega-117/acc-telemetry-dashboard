@@ -52,6 +52,8 @@ export function memberFromRealtime(connection: RealtimeConnection, mfd: Realtime
   const ownMfd = mfd?.uid === connection.uid && mfd.connectionId === connection.connectionId ? mfd : null
   return { uid: connection.uid, nickname: connection.nickname, kind: connection.kind,
     runtimeSessionId: connection.runtimeSessionId, driving: connection.driving && connection.sourceValid,
+    // PIP-516: keep the two facts apart so the engineer sees why a driver cannot receive.
+    inCar: connection.driving, sourceValid: connection.sourceValid,
     updatedAtMs: connection.updatedAt, protocolVersion: 3, connected: true, connectionId: connection.connectionId,
     crew: ownMfd?.crew, strategy: ownMfd?.strategy }
 }

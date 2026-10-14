@@ -154,6 +154,10 @@ export interface PitwallRoomMember {
   nickname: string
   kind: PitwallMemberKind
   driving: boolean
+  /** PIP-516: in macchina con la fisica viva, prima della verifica del gioco collegato. */
+  inCar?: boolean
+  /** PIP-516: il PC del pilota pubblica una strategia (gioco collegato). */
+  sourceValid?: boolean
   runtimeSessionId: string
   /** Millisecondi del battito, dall'orologio del server. */
   updatedAtMs: number

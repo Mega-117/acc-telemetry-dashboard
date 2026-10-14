@@ -170,6 +170,38 @@ export function createPitwallRealtimeOrders(options: {
     return () => { stop(); stopConnection(); if (expiryTimer) clearTimeout(expiryTimer); for (const unsubscribe of stops.values()) unsubscribe(); entries.clear() }
   }
 
+  /**
+   * PIP-516: orders of this room still on their way (pending or applying),
+   * visible to every member. An order is followed from the moment it appears
+   * in `pending` until it reaches a terminal state or expires.
+   */
+  function watchRoomOrdersInFlight(roomId: string, callback: (orders: RealtimeOrder[]) => void) {
+    const entries = new Map<string, RealtimeOrder>()
+    const stops = new Map<string, () => void>()
+    let expiryTimer: ReturnType<typeof setTimeout> | null = null
+    const forget = (id: string) => { stops.get(id)?.(); stops.delete(id); entries.delete(id) }
+    const emit = () => {
+      if (expiryTimer) clearTimeout(expiryTimer)
+      const now = io.serverNow()
+      const deadline = (order: RealtimeOrder) => order.status === 'applying' ? Math.min(order.expiresAtMs, order.leaseUntilMs ?? order.expiresAtMs) : order.expiresAtMs
+      for (const [id, order] of entries) if (terminal(order) || deadline(order) <= now) forget(id)
+      const live = [...entries.values()]
+      if (live.length) expiryTimer = setTimeout(emit, Math.max(1, Math.min(...live.map(deadline)) - now + 1))
+      callback(live)
+    }
+    const stop = io.watch(`rooms/${roomId}/pending`, value => {
+      for (const id of Object.keys((value ?? {}) as Record<string, true>)) if (!stops.has(id)) {
+        stops.set(id, () => {})
+        stops.set(id, io.watch(orderPath(roomId, id), order => {
+          if (order) entries.set(id, order as RealtimeOrder); else entries.delete(id)
+          emit()
+        }, () => { forget(id); emit() }))
+      }
+      emit()
+    }, () => { for (const id of [...stops.keys()]) forget(id); emit() })
+    return () => { stop(); if (expiryTimer) clearTimeout(expiryTimer); for (const id of [...stops.keys()]) forget(id) }
+  }
+
   async function claimOrder(roomId: string, orderId: string): Promise<{ ok: true } | { ok: false, reason: 'conflict' | 'expired' | 'gone' | 'error', detail: string }> {
     const connectionId = session.connectionId()
     try {
@@ -238,5 +270,5 @@ export function createPitwallRealtimeOrders(options: {
 
   // Outcomes own release atomically. Compatibility callers must not blindly unlock in finally.
   async function releaseClaim(_roomId: string): Promise<void> {}
-  return { sendReadiness, sendOrder, watchOrder, readOrder, watchPendingOrders, claimOrder, acknowledgedOrder, publishOutcome, rejectOrder, releaseClaim }
+  return { sendReadiness, sendOrder, watchOrder, readOrder, watchPendingOrders, watchRoomOrdersInFlight, claimOrder, acknowledgedOrder, publishOutcome, rejectOrder, releaseClaim }
 }

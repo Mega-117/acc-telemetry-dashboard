@@ -10,7 +10,7 @@
 // ============================================
 
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
-import { eligibleSocialDrivers, resolveSocialTarget } from '~/services/pitwall/pitwallSocialRoom'
+import { driverReceiveState, eligibleSocialDrivers, resolveSocialTarget, type RoomOrderInFlight } from '~/services/pitwall/pitwallSocialRoom'
 import { emitPitwallDiagnostic } from '~/services/pitwall/pitwallDiagnostics'
 import { db } from '~/config/firebase'
 import { createPitwallRealtimeEngineerService } from '~/services/pitwall/pitwallRealtimeEngineerService'
@@ -87,6 +87,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
   let stopRoomWatch: (() => void) | null = null
   let stopMembersWatch: (() => void) | null = null
   let stopOrderWatch: (() => void) | null = null
+  let stopInFlightWatch: (() => void) | null = null
+  const roomOrdersInFlight = ref<Array<{ orderId: string, targetUid: string, senderId: string, status: string }>>([])
   let roomGeneration = 0
   let accountGeneration = 0
   let tickTimer: ReturnType<typeof setInterval> | null = null
@@ -276,6 +278,15 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
    * volante. Con nessuno o due, il bottone resta spento e la pagina dice
    * perche' - invece di accettare un ordine che poi scadrebbe da solo.
    */
+  /** PIP-516: the order of this room still on its way, whoever sent it. */
+  const roomOrderInFlight = computed<RoomOrderInFlight | null>(() => {
+    const order = roomOrdersInFlight.value.find(value => value.status === 'pending' || value.status === 'applying')
+    return order ? { orderId: order.orderId, targetUid: order.targetUid, senderUid: order.senderId, status: order.status as RoomOrderInFlight['status'] } : null
+  })
+  /** PIP-516: why the selected/only driver can or cannot receive a strategy now. */
+  const driverReceive = computed(() => driverReceiveState(
+    members.value.filter(member => isPitwallMemberFresh(member, nowTick.value)), members.value,
+    selectedTargetUid.value, roomOrderInFlight.value))
   const canSend = computed(() => (
     amMember.value
     && !roomClosed.value
@@ -283,6 +294,7 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     && !sending.value
     && sendReadiness.value.ready
     && orderStatus.value !== 'pending' && orderStatus.value !== 'applying'
+    && !roomOrderInFlight.value
   ))
   const sendReadiness = computed(() => {
     void readinessRevision.value; void members.value; void nowTick.value
@@ -378,8 +390,11 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     sending.value = false
     stopRoomWatch?.()
     stopMembersWatch?.()
+    stopInFlightWatch?.()
     stopRoomWatch = null
     stopMembersWatch = null
+    stopInFlightWatch = null
+    roomOrdersInFlight.value = []
     members.value = []
     membersLoaded.value = false
   }
@@ -490,7 +505,11 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
         rawError.value = error?.message || 'Equipaggio non leggibile.'
       }
     )
-
+    // PIP-516: every member sees an order already on its way, not only its sender.
+    stopInFlightWatch = service_.watchRoomOrdersInFlight?.(roomId, (orders) => {
+      if (generation !== roomGeneration) return
+      roomOrdersInFlight.value = orders
+    }) ?? null
   }
 
   /**
@@ -511,6 +530,11 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
       return false
     }
     if (orderStatus.value === 'pending' || orderStatus.value === 'applying') return false
+    // PIP-516: another member's order is on its way: one order at a time per room.
+    if (roomOrderInFlight.value) {
+      rawError.value = driverReceive.value.label
+      return false
+    }
 
     sending.value = true
     const generation = roomGeneration
@@ -717,6 +741,8 @@ export function usePitwallRoom(options: PitwallRoomOptions) {
     loading,
     sending,
     canSend,
+    roomOrderInFlight,
+    driverReceive,
     sendReadiness,
     lastError,
     notice,

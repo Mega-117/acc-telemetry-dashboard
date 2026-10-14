@@ -30,6 +30,7 @@ const fakes = vi.hoisted(() => ({
   pushRoom: null as ((room: unknown) => void) | null,
   pushRooms: null as ((list: unknown[]) => void) | null,
   pushOrder: null as ((order: unknown) => void) | null,
+  pushInFlight: null as ((orders: unknown[]) => void) | null,
   calls: [] as string[],
   roomDoc: null as Record<string, unknown> | null,
   sendOk: true,
@@ -62,6 +63,7 @@ vi.mock('~/services/pitwall/pitwallRealtimeRoomService', () => ({
     watchRooms: (onList: (list: unknown[]) => void) => { fakes.pushRooms = onList; return () => {} },
     sendOrder: async () => { fakes.calls.push('send'); return fakes.sendOk ? { ok: true, value: 'ord-1' } : { ok: false, reason: 'Gara chiusa.' } },
     watchOrder: (_id: string, _orderId: string, onOrder: (order: unknown) => void) => { fakes.pushOrder = onOrder; return () => {} },
+    watchRoomOrdersInFlight: (_id: string, onOrders: (orders: unknown[]) => void) => { fakes.pushInFlight = onOrders; return () => { if (fakes.pushInFlight === onOrders) fakes.pushInFlight = null } },
     invite: async (_id: string, who: string) => { fakes.calls.push(`invite:${who}`); return who === 'nessuno' ? { ok: false, reason: 'Troppe persone invitate a questa gara.' } : { ok: true, value: true } },
     revoke: async (_id: string, who: string) => { fakes.calls.push(`revoke:${who}`); return { ok: true, value: true } },
     promote: async (_id: string, who: string) => { fakes.calls.push(`promote:${who}`); return { ok: true, value: true } },
@@ -530,5 +532,39 @@ describe('driver swap without reloading the room', () => {
     expect(link.canSend.value).toBe(false)
     link.selectTarget('popo')
     expect(link.executor.value.executor?.uid).toBe('popo')
+  })
+})
+
+describe('PIP-516 il pilota può ricevere la strategia', () => {
+  it('sends only while the driver is driving and says why otherwise', async () => {
+    const link = await open([member({ uid: 'popo', nickname: 'popo', driving: false, inCar: false, sourceValid: true })])
+    expect(link.driverReceive.value).toMatchObject({ state: 'menu', label: 'popo non è in guida: invio possibile quando torna in pista' })
+    expect(link.canSend.value).toBe(false)
+    fakes.pushMembers?.([member({ uid: 'popo', nickname: 'popo', driving: true, inCar: true, sourceValid: true })])
+    await settle()
+    expect(link.driverReceive.value.state).toBe('ready')
+    expect(link.canSend.value).toBe(true)
+  })
+
+  it('shows an order already on its way to every member and blocks a second one', async () => {
+    const link = await open([member({ uid: 'popo', nickname: 'popo', driving: true, inCar: true, sourceValid: true })])
+    fakes.pushInFlight?.([{ orderId: 'other', targetUid: 'popo', senderId: 'someone-else', status: 'applying' }])
+    await settle()
+    expect(link.roomOrderInFlight.value).toMatchObject({ orderId: 'other', targetUid: 'popo', status: 'applying' })
+    expect(link.driverReceive.value).toMatchObject({ state: 'applying', label: 'Strategia in corso verso popo' })
+    expect(link.canSend.value).toBe(false)
+    expect(await link.sendPlan({ method: 'standard' })).toBe(false)
+    expect(fakes.calls).not.toContain('send')
+    fakes.pushInFlight?.([])
+    await settle()
+    expect(link.canSend.value).toBe(true)
+  })
+
+  it('stops following in-flight orders when leaving the room', async () => {
+    const link = await open([member()])
+    expect(fakes.pushInFlight).not.toBeNull()
+    link.stop()
+    expect(fakes.pushInFlight).toBeNull()
+    expect(link.roomOrderInFlight.value).toBeNull()
   })
 })
