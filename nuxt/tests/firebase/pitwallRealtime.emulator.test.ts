@@ -238,6 +238,21 @@ describe('Pitwall RTDB rules and integrated services', () => {
     expect((await replacement.claimOrder(roomId, next)).ok).toBe(true)
     expect((await replacement.publishOutcome(roomId, next, { status: 'applied' })).ok).toBe(true)
   })
+  it('PIP-516 shows an order in flight to a member who is not driving until it closes', async () => {
+    const { driver, engineer, roomId } = await openRoom()
+    const spectator = await participant('spectator')
+    expect((await driver.invite(roomId, spectator.uid)).ok).toBe(true)
+    expect((await spectator.joinRoom(roomId)).ok).toBe(true)
+    await spectator.publishPresence(roomId, { nickname: 'Spectator', kind: 'engineer', driving: false, runtimeSessionId: 'browser-spectator' })
+    let inFlight: any[] = []
+    disposers.push(spectator.watchRoomOrdersInFlight(roomId, orders => { inFlight = orders }))
+    const orderId = await send(engineer, roomId)
+    await vi.waitFor(() => expect(inFlight.map(order => [order.orderId ?? orderId, order.targetUid, order.status])).toEqual([[orderId, 'driver', 'pending']]))
+    expect((await driver.claimOrder(roomId, orderId)).ok).toBe(true)          // pending -> applying: still in flight
+    await vi.waitFor(() => expect(inFlight.map(order => order.status)).toEqual(['applying']))
+    expect((await driver.publishOutcome(roomId, orderId, { status: 'applied' })).ok).toBe(true)
+    await vi.waitFor(() => expect(inFlight).toEqual([]))
+  })
   it('allows several engineers but only one simultaneous order claim', async () => {
     const { driver, engineer, roomId } = await openRoom()
     const second = await participant('engineer-two')
