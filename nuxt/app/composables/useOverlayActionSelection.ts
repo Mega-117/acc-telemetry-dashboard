@@ -16,9 +16,12 @@ export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled
       !button.disabled && !button.closest('[hidden], [inert], [aria-hidden="true"], [aria-disabled="true"]')
       && button.getClientRects().length > 0 && getComputedStyle(button).visibility !== 'hidden',
     )
-    if (!visualOrder()) return buttons
+    // PIP-526: header tools (timer) close the cycle wherever the layout puts them,
+    // so the first button stays the first group (Pitwall).
+    const last = buttons.filter(button => button.hasAttribute('data-overlay-wheel-last'))
+    if (!visualOrder()) return [...buttons.filter(button => !last.includes(button)), ...last]
     // Sort into screen rows first; tolerate fractional layout rounding within a row.
-    const positioned = buttons.map(button => ({ button, rect: button.getBoundingClientRect() }))
+    const positioned = buttons.filter(button => !last.includes(button)).map(button => ({ button, rect: button.getBoundingClientRect() }))
       .sort((a, b) => a.rect.top - b.rect.top)
     const ordered: HTMLButtonElement[] = []
     while (positioned.length) {
@@ -28,7 +31,7 @@ export function useOverlayActionSelection(root: Ref<HTMLElement | null>, enabled
       row.sort((a, b) => a.rect.left - b.rect.left)
       ordered.push(...row.map(item => item.button))
     }
-    return ordered
+    return [...ordered, ...last]
   }
 
   function paint() {

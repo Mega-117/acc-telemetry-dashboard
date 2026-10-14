@@ -45,12 +45,23 @@ describe('sector reference editor',()=>{
   button('sector-mode-bestSector').click();await flush();button('sector-save').click();await flush()
   expect(api.hudOverlaySaveSettings).toHaveBeenCalledWith('sectors',{deltaReference:'bestSector'})
  })
- it('supports controller action buttons, explicit typing focus and cleanup',async()=>{
-  const {api}=await setup(true);expect(api.trainingOverlayKeyboardEditing).not.toHaveBeenCalled()
-  button('sector-0-plus-1').click();await flush();expect((document.querySelector('input') as HTMLInputElement).value).toBe('10,0')
-  document.querySelector('input')!.dispatchEvent(new Event('pointerdown',{bubbles:true,cancelable:true}));await flush()
-  expect(api.trainingOverlayKeyboardEditing).toHaveBeenCalledWith(true)
-  app!.unmount();app=null;expect(api.trainingOverlayKeyboardEditing).toHaveBeenLastCalledWith(false);expect(fixture.stop).toHaveBeenCalled()
+ // PIP-526: in Ctrl+K one value per sector, pre-filled from the best sectors,
+ // edited with OK + Up/Down (0,1 s) and left with OK or Back.
+ it('starts from the best sectors and edits one sector from the wheel',async()=>{
+  const sectorHud={sectors:[{bestMs:31_249},{bestMs:42_050},{bestMs:30_970}]}
+  const {api}=await setup(true,{sectorHud})
+  expect([...document.querySelectorAll('.sector-reference-value')].map(el=>el.textContent)).toEqual(['31,2','42,1','31,0'])
+  expect(document.querySelector('input')).toBeNull()
+  const editor=(app as any)._instance.exposed as {handleWheelCommand(command:string):boolean}
+  expect(editor.handleWheelCommand('next-action')).toBe(false)
+  button('sector-1').click();await flush()
+  expect(editor.handleWheelCommand('next-action')).toBe(true);expect(editor.handleWheelCommand('next-action')).toBe(true)
+  expect(editor.handleWheelCommand('previous-action')).toBe(true)
+  expect(editor.handleWheelCommand('back')).toBe(true);await flush()
+  expect(editor.handleWheelCommand('next-action')).toBe(false)
+  button('sector-save').click();await flush()
+  expect(api.hudOverlaySaveSettings).toHaveBeenCalledWith('sectors',expect.objectContaining({customSectorReference:expect.objectContaining({timesMs:[31200,42200,31000]})}))
+  app!.unmount();app=null;expect(fixture.stop).toHaveBeenCalled()
  })
  it('keeps the editor open and retryable when persistence fails',async()=>{
   const {api,saved}=await setup();api.hudOverlaySaveSettings.mockRejectedValueOnce(new Error('Disco non disponibile'))
@@ -58,10 +69,14 @@ describe('sector reference editor',()=>{
  })
 })
 
-it('does not claim keyboard focus when IPC denies it',async()=>{
- const {api}=await setup(true);api.trainingOverlayKeyboardEditing.mockResolvedValue(false)
- document.querySelector('input')!.dispatchEvent(new Event('pointerdown',{bubbles:true,cancelable:true}));await flush()
- expect(document.body.textContent).toContain('Tastiera non disponibile')
+it('offers the best sectors again after manual changes',async()=>{
+ await setup(true,{sectorHud:{sectors:[{bestMs:31_000},{bestMs:42_000},{bestMs:31_000}]}})
+ button('sector-0').click();await flush()
+ const editor=(app as any)._instance.exposed as {handleWheelCommand(command:string):boolean}
+ editor.handleWheelCommand('next-action');editor.handleWheelCommand('back');await flush()
+ expect(document.querySelector('.sector-reference-value')!.textContent).toBe('31,1')
+ button('sector-use-best').click();await flush()
+ expect(document.querySelector('.sector-reference-value')!.textContent).toBe('31,0')
 })
 it('restores existing times and ignores late settings after unmount',async()=>{
  const {api}=await setup();app!.unmount();app=null

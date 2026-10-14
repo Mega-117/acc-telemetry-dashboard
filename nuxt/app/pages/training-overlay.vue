@@ -184,6 +184,8 @@ const isFuelSetupOpen = ref(false)
 const isQuickTimerOpen = ref(false)
 const fuelStintMinutes = ref(10)
 function closeFuelSetup() { isFuelSetupOpen.value = false; void nextTick(() => actionSelection.select('fuel')) }
+// PIP-526: the minutes editor opens on "+", never on "Torna al pannello".
+function openFuelSetup() { isFuelSetupOpen.value = true; void nextTick(() => actionSelection.select('fuel-plus')) }
 const isTargetSetupOpen = ref(false)
 const targetSetup = ref<InstanceType<typeof InfoTargetSetup> | null>(null)
 const isSectorReferenceSetupOpen = ref(false)
@@ -425,7 +427,18 @@ function startQuickTimer(seconds: number) {
 function closeQuickTimer() {
   quickTimer.cancel()
   isQuickTimerOpen.value = false
-  void nextTick(() => actionSelection.refresh())
+  void nextTick(() => actionSelection.select('timer'))
+}
+// PIP-526: opening a sub-panel puts the wheel on its value, never on Back.
+function openQuickTimer() {
+  isQuickTimerOpen.value = true
+  void nextTick(() => actionSelection.select(quickTimer.status.value === 'idle' ? 'timer-start' : 'timer-end'))
+}
+function leaveQuickTimer() {
+  // A running timer hides Ctrl+K as before and brings it back at the end.
+  if (quickTimer.status.value !== 'idle') { closeOverlay(); return }
+  isQuickTimerOpen.value = false
+  void nextTick(() => actionSelection.select('timer'))
 }
 
 const overlaySizeComp = useOverlaySize(getOverlayApi, () => overlaySizePreset.value, overlayRoot,
@@ -711,7 +724,7 @@ function openInfoTargetSetup() {
     }
   }
   isTargetSetupOpen.value = true
-  selectedWheelActionId.value = 'target'
+  selectedWheelActionId.value = 'target-time'
   scheduleOverlaySizeSync()
 }
 
@@ -815,7 +828,7 @@ async function prepareOverlayReopen(revision?: number) {
 }
 
 function runBackAction() {
-  if (isQuickTimerOpen.value) { closeOverlay(); return }
+  if (isQuickTimerOpen.value) { leaveQuickTimer(); return }
   if (isFuelSetupOpen.value) { closeFuelSetup(); return }
   if (isSectorReferenceSetupOpen.value) { closeSectorReferenceSetup(); return }
   if (isTargetSetupOpen.value) { cancelInfoTargetSetup(); return }
@@ -960,9 +973,11 @@ function handleOverlayCommand(payload: OverlayCommand | { command?: OverlayComma
   setDebugEvent(`comando overlay: ${command || 'vuoto'}`)
   if (command === 'prepare-reopen') { void prepareOverlayReopen(typeof payload === 'string' ? undefined : payload.revision); return }
   if (isFullQuickPanelPreview.value) return
-  if (isQuickTimerOpen.value) { if (command === 'back') closeOverlay(); return }
+  if (isQuickTimerOpen.value && !['back', 'next-action', 'previous-action', 'activate-action'].includes(command || '')) return
   if (command === 'main-menu') { returnToMainMenu(); return }
+  // PIP-526: a value being edited takes Next/Previous/OK/Back first.
   if (isTargetSetupOpen.value && targetSetup.value?.handleWheelCommand(command)) return
+  if (isSectorReferenceSetupOpen.value && sectorReferenceSetup.value?.handleWheelCommand?.(command)) return
   if (command === 'primary') executePrimaryAction()
   if (command === 'next-action') selectNextWheelAction()
   if (command === 'previous-action') actionSelection.previous()
@@ -1040,7 +1055,8 @@ onMounted(async () => {
   remainingMs.value = selectedMode.value.steps[0]!.durationMinutes * 60_000
   phase.value = 'launcher'
   await nextTick()
-  selectFirstWheelAction()
+  // PIP-526: the first open starts on Pitwall (falls back to the first button).
+  actionSelection.select('pitwall'); actionSelection.refresh()
   loadSpotterVoiceSettings()
   startLiveStatePolling()
   startFastStatePolling()
@@ -1220,7 +1236,8 @@ onBeforeUnmount(() => {
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
                     <QuickPanelLayoutToggle :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
                     <div class="quick-panel-header-actions" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
-                    <button type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" @click="isQuickTimerOpen = true">
+                    <!-- PIP-526: reachable from the wheel, last in the cycle (data-overlay-wheel-last). -->
+                    <button type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" data-overlay-wheel-action="timer" data-overlay-wheel-last @click="openQuickTimer">
                       <Timer :size="18" aria-hidden="true" />
                     </button>
                     <button
@@ -1251,17 +1268,17 @@ onBeforeUnmount(() => {
                       data-overlay-wheel-action="target"
                       :aria-pressed="(isFullQuickPanelPreview || infoTargetActive)"
                       :aria-current="selectedWheelActionId === 'target' ? 'true' : undefined"
-                      aria-label="Configura Tempo giro HUD Info"
+                      aria-label="Configura Giro obiettivo HUD Info"
                       @focus="selectedWheelActionId = 'target'"
                       @click="openInfoTargetSetup"
                     >
-                      <Check v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Target :size="22" aria-hidden="true" /><span>Tempo giro</span>
+                      <Check v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Target :size="22" aria-hidden="true" /><span>Giro obiettivo</span>
                     </button>
                     <button v-if="(isFullQuickPanelPreview || infoTargetActive)" class="quick-reference-off" data-overlay-wheel-action="target-disable" title="Disattiva tempo giro" aria-label="Disattiva tempo giro" :disabled="referenceBusy" @click="disableReference('target')"><Power :size="14" /></button>
                     </div>
                     <div v-if="quickPanelSupport.quickSectorReferences" class="quick-reference" :class="{ 'is-active': (isFullQuickPanelPreview || customSectorsActive) }">
                     <button type="button" class="launcher-tool-button" :aria-pressed="(isFullQuickPanelPreview || customSectorsActive)" title="Configura riferimenti settori" data-overlay-wheel-action="sector-references" @click="isSectorReferenceSetupOpen = true">
-                      <Check v-if="(isFullQuickPanelPreview || customSectorsActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Flag :size="22" aria-hidden="true" /><span>Settori</span>
+                      <Check v-if="(isFullQuickPanelPreview || customSectorsActive)" class="quick-reference-check" :size="12" aria-hidden="true" /><Flag :size="22" aria-hidden="true" /><span>Settori obiettivo</span>
                     </button>
                     <button v-if="(isFullQuickPanelPreview || customSectorsActive)" class="quick-reference-off" data-overlay-wheel-action="sector-disable" title="Disattiva personalizzati e ripristina il confronto abituale" aria-label="Disattiva riferimenti personalizzati" :disabled="referenceBusy" @click="disableReference('sectors')"><Power :size="14" /></button>
                     </div>
@@ -1269,7 +1286,7 @@ onBeforeUnmount(() => {
                     </section>
                     <section v-if="quickPanelSupport.quickAutomations" class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving }" aria-label="Automazioni">
                     <div id="control-k-fuel-status" class="control-k-fuel-status" />
-                    <SetupFuelPanel :key="isFullQuickPanelPreview ? 'preview' : 'live'" :preview-expanded="isFullQuickPanelPreview" :body-target="isFullQuickPanelPreview ? '#control-k-fuel-preview' : undefined" show-heading :minutes="isFullQuickPanelPreview ? 30 : fuelStintMinutes" @update:minutes="!isFullQuickPanelPreview && (fuelStintMinutes = $event)" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" :status-target="isHorizontalQuickPanel ? '#quick-panel-horizontal-fuel-status' : '#control-k-fuel-status'" separate-view @open="isFuelSetupOpen = true" />
+                    <SetupFuelPanel :key="isFullQuickPanelPreview ? 'preview' : 'live'" :preview-expanded="isFullQuickPanelPreview" :body-target="isFullQuickPanelPreview ? '#control-k-fuel-preview' : undefined" show-heading :minutes="isFullQuickPanelPreview ? 30 : fuelStintMinutes" @update:minutes="!isFullQuickPanelPreview && (fuelStintMinutes = $event)" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" :status-target="isHorizontalQuickPanel ? '#quick-panel-horizontal-fuel-status' : '#control-k-fuel-status'" separate-view @open="openFuelSetup" />
                     <div class="quick-panel-pair quick-panel-secondary">
                     <h2 class="quick-panel-heading">Pit</h2>
                     <PitwallOverlayButton
@@ -1411,6 +1428,8 @@ onBeforeUnmount(() => {
                   :target-time-ms="infoTargetTimeMs"
                   :tolerance-ms="infoTargetToleranceMs"
                   :keep-between-sessions="infoTargetKeepBetweenSessions"
+                  :best-lap-ms="fastState.info?.bestLapTimeMs ?? null"
+                  :last-lap-ms="fastState.info?.lastLapTimeMs ?? null"
                   @set-target-time="infoTargetTimeMs = $event"
                   @select-tolerance="infoTargetToleranceMs = $event"
                   @toggle-keep="infoTargetKeepBetweenSessions = !infoTargetKeepBetweenSessions"

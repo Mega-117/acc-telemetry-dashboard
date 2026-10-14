@@ -41,7 +41,26 @@ function bindContext() {
     ...(context.variant != null ? { variant: context.variant } : {}),
     ...('sectorCount' in context ? { sectorCount: context.sectorCount as number } : {}) }
   const times = resolveCustomSectorTimes(settings.value?.customSectorReferences, context)
-  draft.value = times ? times.map(ms => (ms / 1000).toFixed(1).replace('.', ',')) : Array(boundContext.value.sectorCount ?? 3).fill('')
+  // PIP-526: nothing saved yet -> start from the best sectors, so a few presses do.
+  draft.value = times ? times.map(formatSectorTime) : bestSectorDraft() ?? Array(boundContext.value.sectorCount ?? 3).fill('')
+}
+const formatSectorTime = (ms: number) => (Math.round(ms / 100) / 10).toFixed(1).replace('.', ',')
+function bestSectorDraft(): string[] | null {
+  const sectors = fastState.value.sectorHud?.sectors ?? []
+  const count = boundContext.value?.sectorCount ?? 3
+  const bests = Array.from({ length: count }, (_, index) => sectors[index]?.bestMs ?? null)
+  return bests.every(ms => typeof ms === 'number' && ms > 0) ? bests.map(ms => formatSectorTime(ms!)) : null
+}
+const bestAvailable = computed(() => !!bestSectorDraft())
+function useBestSectors() { const best = bestSectorDraft(); if (best) draft.value = best }
+// Wheel editing: OK on a sector edits it, Up/Down change 0,1 s, OK/Back leave.
+const editingSector = ref<number | null>(null)
+function handleWheelCommand(command: string | undefined): boolean {
+  if (!props.keyboardOverlay || editingSector.value === null) return false
+  if (command === 'activate-action' || command === 'primary' || command === 'back') { editingSector.value = null; return true }
+  if (command !== 'next-action' && command !== 'previous-action') return false
+  adjust(editingSector.value, command === 'next-action' ? 1 : -1)
+  return true
 }
 watch([contextKey, loaded], bindContext)
 function adjust(index: number, amount: number) { draft.value[index] = adjustSectorReferenceTime(draft.value[index]!, amount) }
@@ -76,7 +95,7 @@ function onKey(event: KeyboardEvent) {
   if (event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); void submit() }
   if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); if (!saving.value) emit('cancel') }
 }
-defineExpose({ submit })
+defineExpose({ submit, handleWheelCommand })
 onMounted(async () => {
   try {
     const results = await Promise.all([getApi()?.hudOverlayGetSettings?.('sectors'), startFastStatePolling()])
@@ -98,15 +117,21 @@ onBeforeUnmount(() => {
       <button v-for="item in modes" :key="item.id" type="button" :data-overlay-wheel-action="`sector-mode-${item.id}`" :aria-pressed="mode === item.id" :disabled="saving" @click="mode = item.id">{{ item.label }}</button>
     </div>
     <template v-if="mode === 'custom'">
-      <p class="sector-reference-help">Da 10,0 a 70,0 secondi per settore.</p>
+      <p class="sector-reference-help">{{ keyboardOverlay
+        ? (editingSector === null ? 'OK su un settore per modificarlo · da 10,0 a 70,0 s' : 'Su/Giù cambia di 0,1 s (tieni premuto per andare veloce) · OK conferma')
+        : 'Da 10,0 a 70,0 secondi per settore.' }}</p>
+      <button v-if="keyboardOverlay && bestAvailable" type="button" class="sector-reference-best" data-overlay-wheel-action="sector-use-best" :disabled="saving || !boundKey || contextChanged" @click="useBestSectors">Usa i miei migliori settori</button>
       <div class="sector-reference-drums" :style="{ gridTemplateColumns: `repeat(${Math.min(draft.length, 4)},minmax(0,1fr))` }">
         <article v-for="(_, index) in draft" :key="index" class="sector-reference-drum" @wheel.prevent="!saving && boundKey && !contextChanged && $event.deltaY !== 0 && adjust(index, $event.deltaY < 0 ? 1 : -1)">
           <label :for="`sector-reference-${index}`">S{{ index + 1 }}</label>
-          <div class="sector-reference-arrows">
+          <button v-if="keyboardOverlay" type="button" class="sector-reference-value" :class="{ 'is-editing': editingSector === index }"
+            :data-overlay-wheel-action="`sector-${index}`" :aria-pressed="editingSector === index" :aria-label="`Tempo S${index + 1}`"
+            :disabled="saving || !boundKey || contextChanged" @click="editingSector = editingSector === index ? null : index">{{ draft[index] || '—' }}</button>
+          <div v-if="!keyboardOverlay" class="sector-reference-arrows">
             <button v-for="step in [10, 1]" :key="step" type="button" :disabled="saving || !boundKey || contextChanged" :data-overlay-wheel-action="`sector-${index}-plus-${step}`" :aria-label="`Aumenta S${index + 1} di ${step === 10 ? 'un secondo' : 'un decimo'}`" @click="adjust(index, step)">▲<small>{{ step === 10 ? '1 s' : '0,1 s' }}</small></button>
           </div>
-          <input :id="`sector-reference-${index}`" v-model="draft[index]" type="text" inputmode="decimal" maxlength="4" placeholder="—" :disabled="saving || !boundKey || contextChanged" :aria-invalid="draft[index] !== '' && parsed[index] === null" :aria-label="`Tempo S${index + 1} in secondi`" @pointerdown="requestKeyboard" />
-          <div class="sector-reference-arrows">
+          <input v-if="!keyboardOverlay" :id="`sector-reference-${index}`" v-model="draft[index]" type="text" inputmode="decimal" maxlength="4" placeholder="—" :disabled="saving || !boundKey || contextChanged" :aria-invalid="draft[index] !== '' && parsed[index] === null" :aria-label="`Tempo S${index + 1} in secondi`" @pointerdown="requestKeyboard" />
+          <div v-if="!keyboardOverlay" class="sector-reference-arrows">
             <button v-for="step in [10, 1]" :key="step" type="button" :disabled="saving || !boundKey || contextChanged" :data-overlay-wheel-action="`sector-${index}-minus-${step}`" :aria-label="`Riduci S${index + 1} di ${step === 10 ? 'un secondo' : 'un decimo'}`" @click="adjust(index, -step)">▼<small>{{ step === 10 ? '1 s' : '0,1 s' }}</small></button>
           </div>
         </article>
@@ -139,6 +164,9 @@ footer{display:flex;gap:8px}footer button{padding:12px 10px;font-size:12px}.sect
 .sector-reference-setup--quick .sector-reference-modes button { padding:7px 4px;min-height:34px;font-size:11px; }
 .sector-reference-setup--quick .sector-reference-modes button[aria-pressed=true] { color:#fff;border-color:#ffffff70;background:#ffffff12;box-shadow:inset 0 -2px #ff0024; }
 .sector-reference-setup--quick .sector-reference-help { font-size:11px; }
+.sector-reference-setup--quick .sector-reference-value { display:block;width:100%;margin-top:4px;padding:6px 0;border:1px solid #ffffff30;background:transparent;font-size:22px;font-weight:600;font-variant-numeric:tabular-nums; }
+.sector-reference-setup--quick .sector-reference-value.is-editing { outline:2px solid #00e5ff;outline-offset:2px;background:#00e5ff18; }
+.sector-reference-setup--quick .sector-reference-best { min-height:32px;font-size:11px; }
 .sector-reference-setup--quick .sector-reference-drum { border-radius:0;padding:6px 4px; }
 .sector-reference-setup--quick .sector-reference-drum label { font-size:10px;font-weight:600; }
 .sector-reference-setup--quick .sector-reference-drum input { border-radius:0;font-size:22px;font-weight:600;padding:4px 0; }

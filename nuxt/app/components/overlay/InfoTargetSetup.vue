@@ -14,9 +14,14 @@ const props = withDefaults(defineProps<{
   keepBetweenSessions: boolean
   contextLabel?: string
   appearance?: 'default' | 'sectors' | 'quick-panel'
+  // PIP-526: Ctrl+K starts from real laps instead of three separate digits.
+  bestLapMs?: number | null
+  lastLapMs?: number | null
 }>(), {
   contextLabel: 'HUD Info',
   appearance: 'default',
+  bestLapMs: null,
+  lastLapMs: null,
 })
 
 const emit = defineEmits<{
@@ -47,7 +52,11 @@ const toleranceControl = computed<PickerControl>(() => ({
   ariaLabel: 'Tolleranza massima',
 }))
 
-const editingControl = ref<PickerControl['id'] | null>(null)
+const editingControl = ref<PickerControl['id'] | 'time' | null>(null)
+const usableLap = (value: number | null | undefined) => typeof value === 'number' && value >= 1_000 ? value : null
+function useLap(valueMs: number) {
+  emit('set-target-time', Math.round(valueMs / 100) * 100)
+}
 function handleWheelCommand(command: string | undefined): boolean {
   if (!editingControl.value || props.appearance !== 'quick-panel') return false
   if (command === 'activate-action' || command === 'primary' || command === 'back') {
@@ -55,8 +64,14 @@ function handleWheelCommand(command: string | undefined): boolean {
     return true
   }
   if (command !== 'next-action' && command !== 'previous-action') return false
+  const direction = command === 'next-action' ? 1 : -1
+  if (editingControl.value === 'time') {
+    // One value, one step (0,1 s); holding the button repeats it (PIP-526).
+    emit('set-target-time', adjustInfoTargetTime(props.targetTimeMs, 'tenths', direction))
+    return true
+  }
   const control = [...timeControls.value, toleranceControl.value].find(value => value.id === editingControl.value)
-  if (control) adjustControl(control, command === 'next-action' ? 1 : -1)
+  if (control) adjustControl(control, direction)
   return true
 }
 defineExpose({ handleWheelCommand })
@@ -84,17 +99,26 @@ function onWheel(control: PickerControl, event: WheelEvent) {
   >
     <header>
       <span v-if="appearance !== 'quick-panel'">{{ contextLabel }}</span>
-      <strong>Target giro</strong>
+      <strong>{{ appearance === 'quick-panel' ? 'Giro obiettivo' : 'Target giro' }}</strong>
       <p v-if="appearance !== 'quick-panel'">Imposta il riferimento del giro completo.</p>
-      <output v-else aria-label="Tempo target" aria-live="polite">{{ formatInfoLapTime(targetTimeMs) }}</output>
     </header>
+
+    <div v-if="appearance === 'quick-panel'" class="target-quick" role="group" aria-label="Tempo obiettivo">
+      <button type="button" class="target-field-value target-quick__time" data-overlay-wheel-action="target-time"
+        aria-label="Tempo obiettivo" :aria-pressed="editingControl === 'time'" :class="{ 'is-editing': editingControl === 'time' }"
+        @click="editingControl = editingControl === 'time' ? null : 'time'">{{ formatInfoLapTime(targetTimeMs) }}</button>
+      <div class="target-quick__sources">
+        <button v-if="usableLap(bestLapMs)" type="button" data-overlay-wheel-action="target-use-best" @click="useLap(bestLapMs!)">Usa best {{ formatInfoLapTime(Math.round(bestLapMs! / 100) * 100) }}</button>
+        <button v-if="usableLap(lastLapMs)" type="button" data-overlay-wheel-action="target-use-last" @click="useLap(lastLapMs!)">Usa ultimo {{ formatInfoLapTime(Math.round(lastLapMs! / 100) * 100) }}</button>
+      </div>
+    </div>
 
     <div v-if="appearance !== 'quick-panel'" class="target-preview" aria-live="polite">
       <span>Tempo target</span>
       <strong>{{ formatInfoLapTime(targetTimeMs) }}</strong>
     </div>
 
-    <div class="target-picker" role="group" aria-label="Tempo target">
+    <div v-if="appearance !== 'quick-panel'" class="target-picker" role="group" aria-label="Tempo target">
       <article
         v-for="control in timeControls"
         :key="control.id"
@@ -176,7 +200,9 @@ function onWheel(control: PickerControl, event: WheelEvent) {
       <span>Mantieni tra sessioni dello stesso server</span>
     </button>
 
-    <p v-if="appearance === 'quick-panel' && editingControl" class="target-edit-hint" role="status">Successiva + · Precedente − · Conferma per terminare</p>
+    <p v-if="appearance === 'quick-panel'" class="target-edit-hint" role="status">{{ editingControl
+      ? 'Su/Giù cambia il valore (tieni premuto per andare veloce) · OK conferma'
+      : 'OK sul tempo per modificarlo · Indietro per uscire' }}</p>
     <div class="target-actions">
       <button type="button" class="target-confirm" data-overlay-wheel-action="target-confirm" @click="emit('confirm')">Conferma</button>
       <button type="button" class="target-cancel" data-overlay-wheel-action="target-cancel" @click="emit('cancel')">Annulla</button>
@@ -186,6 +212,10 @@ function onWheel(control: PickerControl, event: WheelEvent) {
 
 <style scoped>
 .target-field-value { border: 0; background: transparent; color: inherit; font: inherit; font-size: 22px; font-weight: 600; cursor: pointer; }
+.target-quick { display: grid; gap: 8px; }
+.target-quick__time { width: 100%; padding: 10px 0; border: 1px solid #ffffff30; font-size: 30px; font-variant-numeric: tabular-nums; }
+.target-quick__sources { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.target-quick__sources button { min-height: 32px; border: 1px solid #ffffff30; border-radius: 0; background: #ffffff05; color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
 .target-tolerance__control .target-field-value { font-size: 14px; }
 .info-target-setup--quick .is-editing { outline: 2px solid #00e5ff; outline-offset: 2px; background: #00e5ff18; }
 .target-edit-hint { margin: 0; font-size: 11px; color: #00e5ff; }

@@ -73,6 +73,20 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(styles).not.toContain('width: calc(100% - 226px)')
     expect(styles).not.toContain('width: calc(100% - 456px)')
   })
+  it('PIP-526: wheel Back everywhere, timer last in the cycle, first open on Pitwall', () => {
+    const selection = readFileSync(fileURLToPath(new URL('../../app/composables/useOverlayActionSelection.ts', import.meta.url)), 'utf8')
+    expect(source).toContain('data-overlay-wheel-action="timer" data-overlay-wheel-last @click="openQuickTimer"')
+    expect(selection).toContain("button.hasAttribute('data-overlay-wheel-last')")
+    expect(selection).toContain('return [...ordered, ...last]')
+    expect(source).toContain("actionSelection.select('pitwall'); actionSelection.refresh()")
+    // A value being edited consumes the wheel first; Back leaves the timer for the panel.
+    expect(source).toContain('sectorReferenceSetup.value?.handleWheelCommand?.(command)')
+    expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isQuickTimerOpen\.value\) \{ leaveQuickTimer\(\); return \}/)
+    expect(source).toContain("function openFuelSetup() { isFuelSetupOpen.value = true; void nextTick(() => actionSelection.select('fuel-plus')) }")
+    expect(source).toContain("selectedWheelActionId.value = 'target-time'")
+    expect(source).toContain('<span>Giro obiettivo</span>')
+    expect(source).toContain('<span>Settori obiettivo</span>')
+  })
   it('shows a waiting placeholder instead of partial tools when no simulator is detected', () => {
     expect(source).toContain(`<p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>`)
     expect(source).toContain('<div v-else class="quick-panel-main"')

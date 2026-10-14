@@ -9,10 +9,10 @@ import {
 
 const actions: Array<{ id: WheelControlAction; title: string; description: string }> = [
   { id: 'togglePalette', title: 'Apri / chiudi Control K', description: 'Mostra o nasconde il pannello comandi.' },
-  { id: 'nextAction', title: 'Voce successiva', description: 'Passa alla voce successiva del pannello.' },
-  { id: 'previousAction', title: 'Voce precedente', description: 'Passa alla voce precedente del pannello.' },
+  { id: 'nextAction', title: 'Voce successiva', description: 'Passa alla voce successiva; dentro un valore lo aumenta. Tienilo premuto per ripetere.' },
+  { id: 'previousAction', title: 'Voce precedente', description: 'Passa alla voce precedente; dentro un valore lo diminuisce. Tienilo premuto per ripetere.' },
   { id: 'activateAction', title: 'Conferma', description: 'Attiva la voce selezionata.' },
-  { id: 'mainMenu', title: 'Menu principale', description: 'Torna al menu allenamenti. Non attivo durante i timer.' },
+  { id: 'mainMenu', title: 'Indietro', description: 'Esce dal valore che stai modificando, poi dal pannello aperto, poi chiude Ctrl+K.' },
 ]
 
 const {
