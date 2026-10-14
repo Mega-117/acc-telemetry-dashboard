@@ -10,7 +10,6 @@ import { useOverlayRegionApi } from '~/composables/useOverlayRegionApi'
 // telemetria, riferimento delta e target runtime. TARGET e' solo un secondo
 // accesso alla stessa configurazione usata da Ctrl+K.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
 import { useHudOverlay } from '~/composables/useHudOverlay'
 import { useOverlayTelemetrySource } from '~/composables/useOverlayTelemetrySource'
 import { useCompletedLapHold } from '~/composables/useCompletedLapHold'
@@ -53,7 +52,6 @@ const pagerPages: PagerPage[] = [
 const getApi = useOverlayRegionApi()
 
 const route = useRoute()
-const { liveLap, startLiveStatePolling, stopLiveStatePolling } = useLiveStatePoller(getApi)
 const telemetry = useOverlayTelemetrySource(getApi)
 const { fastState, startFastStatePolling, stopFastStatePolling } = telemetry
 const {
@@ -109,11 +107,10 @@ const currentLapTimeMs = computed(() => telemetry.source.value === 'focused'
   ? fastState.value.info?.currentLapTimeMs ?? null
   : fastState.value.sectorHud?.currentLapTimeMs ?? fastState.value.info?.currentLapTimeMs ?? null)
 const rootScale = computed(() => onTargetPage.value ? 1 : scale.value)
+// PIP-524: compact and classic read the same 20 Hz source.
 const liveSectorHud = computed(() => telemetry.source.value === 'focused'
   ? telemetry.sectorHud.value
-  : variant.value === 'compact'
-    ? fastState.value.sectorHud
-    : liveLap.value.sectorHud)
+  : fastState.value.sectorHud)
 const compactDisplayLap = useHudPresentationMemory(liveCompactDisplayLap, fastState)
 const liveCurrentLapTimeMs = useHudPresentationMemory(currentLapTimeMs, fastState)
 const visibleSectorHud = useHudPresentationMemory(liveSectorHud, fastState)
@@ -215,7 +212,6 @@ watch(scale, () => {
 })
 
 onMounted(async () => {
-  startLiveStatePolling()
   startFastStatePolling()
   start(route.query.scale)
   await loadSettings()
@@ -248,7 +244,6 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   void setTransientViewport({ active: false, key: TARGET_VIEWPORT_KEY })
   removeTargetListener?.()
-  stopLiveStatePolling()
   stopFastStatePolling()
   stop()
 })

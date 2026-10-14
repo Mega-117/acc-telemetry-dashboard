@@ -103,7 +103,7 @@ const sectorVariant = ref<'classic' | 'compact'>('classic')
 const showSectorReference = ref(true)
 const showSectorBest = ref(true)
 const showSectorCurrentLap = ref(true)
-const sectorDeltaReference = ref<SectorDeltaReference>('previousLap')
+const sectorDeltaReference = ref<SectorDeltaReference>('bestSector')
 const sectorReferenceEditorOpen = ref(false)
 function sectorReferencesSaved(settings: HudOverlaySettings) {
   sectorDeltaReference.value = normalizeSectorDeltaReference(settings.deltaReference)
@@ -526,7 +526,7 @@ async function setSectorDeltaReference(value: string) {
   if (value === 'custom') { sectorReferenceEditorOpen.value = true; return }
   const api = getApi()
   if (!apiReady.value || !api?.hudOverlaySaveSettings) return
-  const next = value === 'bestSector' ? 'bestSector' : 'previousLap'
+  const next = 'bestSector'
   sectorDeltaReference.value = next
   const settings = await api.hudOverlaySaveSettings('sectors', { deltaReference: next })
   sectorDeltaReference.value = normalizeSectorDeltaReference(settings?.deltaReference)
@@ -999,7 +999,6 @@ async function toggleTraining() {
                       :disabled="selectedSettingsDisabled"
                       @change="onSectorReferenceChange"
                     >
-                      <option value="previousLap">Giro precedente</option>
                       <option value="bestSector">Miglior settore</option>
                       <option value="custom">Personalizzati</option>
                     </select>

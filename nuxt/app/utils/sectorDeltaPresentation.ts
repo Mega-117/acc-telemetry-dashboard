@@ -1,6 +1,7 @@
 import type { SectorHudColor, SectorHudEntry } from '~/composables/useLiveStatePoller'
 
-export type SectorDeltaReference = 'previousLap' | 'bestSector' | 'custom'
+// PIP-524: the previous-lap comparison is gone; a saved 'previousLap' reads as best.
+export type SectorDeltaReference = 'bestSector' | 'custom'
 
 export interface SectorDeltaPresentation {
   deltaMs: number | null
@@ -8,11 +9,11 @@ export interface SectorDeltaPresentation {
 }
 
 export function normalizeSectorDeltaReference(value: unknown): SectorDeltaReference {
-  return value === 'custom' ? 'custom' : value === 'bestSector' ? 'bestSector' : 'previousLap'
+  return value === 'custom' ? 'custom' : 'bestSector'
 }
 
-export function sectorDeltaReferenceToken(reference: SectorDeltaReference): 'BEST' | 'LAST' | 'CUSTOM' {
-  return reference === 'custom' ? 'CUSTOM' : reference === 'bestSector' ? 'BEST' : 'LAST'
+export function sectorDeltaReferenceToken(reference: SectorDeltaReference): 'BEST' | 'CUSTOM' {
+  return reference === 'custom' ? 'CUSTOM' : 'BEST'
 }
 
 /**
@@ -24,27 +25,26 @@ export function resolveSectorDeltaPresentation(
   reference: SectorDeltaReference,
   customReferenceMs: number | null = null,
 ): SectorDeltaPresentation {
-  // Il default conserva senza reinterpretazioni il contratto storico del logger.
-  if (reference === 'previousLap') {
-    return { deltaMs: sector.deltaMs, color: sector.color }
-  }
-
   if (sector.state !== 'complete' || sector.currentMs === null) {
     return { deltaMs: null, color: sector.color }
   }
+  // Pit-lane sectors and invalid laps arrive neutral from the logger: they
+  // keep their time and delta but never a judgement colour (PIP-524).
+  const neutral = sector.color === 'grey'
 
   if (reference === 'custom') {
     if (customReferenceMs === null || !Number.isFinite(customReferenceMs)) return { deltaMs: null, color: 'white' }
     const deltaMs = sector.currentMs - customReferenceMs
-    return { deltaMs, color: deltaMs <= 0 ? 'green' : 'red' }
+    return { deltaMs, color: neutral ? 'grey' : deltaMs <= 0 ? 'green' : 'red' }
   }
 
   const bestReferenceMs = sector.bestReferenceMs
-  if (bestReferenceMs === null) {
+  if (bestReferenceMs == null || !Number.isFinite(bestReferenceMs)) {
     return { deltaMs: null, color: 'white' }
   }
 
   const deltaMs = sector.currentMs - bestReferenceMs
+  if (neutral) return { deltaMs, color: 'grey' }
   if (sector.currentMs < bestReferenceMs) {
     return { deltaMs, color: 'purple' }
   }

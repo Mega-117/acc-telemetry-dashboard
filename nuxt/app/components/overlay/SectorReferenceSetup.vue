@@ -6,7 +6,7 @@ import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import type { HudOverlaySettings } from '~/composables/useHudOverlay'
 import { adjustSectorReferenceTime, parseSectorReferenceTime, resolveCustomSectorTimes,
   sectorReferenceContextKey } from '~/utils/customSectorReferences'
-import type { SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
+import { normalizeSectorDeltaReference, type SectorDeltaReference } from '~/utils/sectorDeltaPresentation'
 
 const props = withDefaults(defineProps<{ keyboardOverlay?: boolean }>(), { keyboardOverlay: false })
 const emit = defineEmits<{ saved: [settings: HudOverlaySettings], cancel: [] }>()
@@ -30,7 +30,7 @@ const parsed = computed(() => draft.value.map(parseSectorReferenceTime))
 const valid = computed(() => mode.value !== 'custom' || !!boundKey.value && !contextChanged.value && parsed.value.every(ms => ms !== null))
 const total = computed(() => parsed.value.every(ms => ms !== null) ? (parsed.value.reduce<number>((sum, ms) => sum + (ms || 0), 0) / 1000).toFixed(1).replace('.', ',') : '—')
 const modes: { id: SectorDeltaReference, label: string }[] = [
-  { id: 'previousLap', label: 'Giro precedente' }, { id: 'bestSector', label: 'Miglior settore' }, { id: 'custom', label: 'Personalizzati' },
+  { id: 'bestSector', label: 'Miglior settore' }, { id: 'custom', label: 'Personalizzati' },
 ]
 let disposed = false
 function bindContext() {
@@ -82,7 +82,7 @@ onMounted(async () => {
     const results = await Promise.all([getApi()?.hudOverlayGetSettings?.('sectors'), startFastStatePolling()])
     if (disposed) return
     if (!results[0]) throw new Error('Impostazioni non disponibili. Riapri il pannello.')
-    settings.value = results[0]; mode.value = results[0].deltaReference || 'previousLap'; loaded.value = true
+    settings.value = results[0]; mode.value = normalizeSectorDeltaReference(results[0].deltaReference); loaded.value = true
   } catch (cause) { if (!disposed) error.value = cause instanceof Error ? cause.message : 'Caricamento non riuscito.' }
 })
 onBeforeUnmount(() => {

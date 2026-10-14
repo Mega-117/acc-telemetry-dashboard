@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { formatCustomSectorDelta, type CustomSectorTimes } from '~/utils/customSectorReferences'
+import type { CustomSectorTimes } from '~/utils/customSectorReferences'
 import type { SectorHudState, SectorHudEntry } from '~/composables/useLiveStatePoller'
 import type { InfoTargetOutcome } from '~/utils/infoPresentation'
 import {
@@ -94,14 +94,10 @@ function formatTime(ms: number | null): string {
 
 function formatDelta(ms: number | null): string {
   if (ms === null) return '--'
-  if (props.variant === 'compact') {
-    const milliseconds = Math.round(Math.abs(ms))
-    return `${ms < 0 && milliseconds > 0 ? '−' : '+'}${(milliseconds / 1000).toFixed(3)}`
-  }
-  if (selectedReference.value === 'custom') return formatCustomSectorDelta(ms)
-  if (Math.abs(ms) <= 0) return '+0.000'
-  const sign = ms < 0 ? '-' : '+'
-  return `${sign}${(Math.abs(ms) / 1000).toFixed(3)}`
+  // PIP-524: one format for both layouts and every reference (custom included):
+  // thousandths and the same minus sign, so text and colour always agree.
+  const milliseconds = Math.round(Math.abs(ms))
+  return `${ms < 0 && milliseconds > 0 ? '−' : '+'}${(milliseconds / 1000).toFixed(3)}`
 }
 
 function formatLapTime(ms: number): string {

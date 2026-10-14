@@ -132,7 +132,7 @@ describe('SectorDeltaHud', () => {
     expect(html).toContain('VS BEST')
   })
 
-  it('le checkbox di visibilità non cambiano il delta del giro precedente', async () => {
+  it('PIP-524: le checkbox di visibilità non cambiano il delta, sempre contro il best', async () => {
     const html = await renderHud({
       showBest: false,
       showReference: false,
@@ -141,9 +141,10 @@ describe('SectorDeltaHud', () => {
 
     expect(html).not.toContain('sector-delta__best')
     expect(html).not.toContain('sector-delta__ref')
-    expect(html).toContain('-0.200')
+    // A saved previous-lap reference now reads as best: 30_801 - 30_501.
+    expect(html).toContain('+0.300')
     expect(html).toContain('SETTORI')
-    expect(html).toContain('VS LAST')
+    expect(html).toContain('VS BEST')
   })
 
   it('mostra wait senza fallback quando manca il best selezionato', async () => {
@@ -178,7 +179,7 @@ describe('SectorDeltaHud', () => {
       }),
     }))
 
-    expect(html).toContain('SECTORS · VS · LAST')
+    expect(html).toContain('SECTORS · VS · BEST')
     expect(html).toContain('01:23.456')
     expect(html).toContain('CURRENT LAP')
     expect((html.match(/sector-compact__label/g) || []).length).toBe(3)
@@ -195,7 +196,7 @@ describe('SectorDeltaHud', () => {
       compactDisplayLap: { timeMs: 83_456, valid: true },
     })
 
-    expect(html).toContain('SECTORS · VS · LAST')
+    expect(html).toContain('SECTORS · VS · BEST')
     expect(html).not.toContain('01:23.456')
     expect(html).not.toContain('CURRENT LAP')
     expect(html).not.toContain('sector-compact__lap--invalid')
@@ -318,8 +319,10 @@ describe('SectorDeltaHud', () => {
     const previous = await renderHud({ variant: 'compact', deltaReference: 'previousLap' })
     const best = await renderHud({ variant: 'compact', deltaReference: 'bestSector' })
 
-    expect(previous).toContain('SECTORS · VS · LAST')
+    // PIP-524: there is no LAST comparison any more.
+    expect(previous).toContain('SECTORS · VS · BEST')
     expect(best).toContain('SECTORS · VS · BEST')
+    expect(previous).not.toContain('LAST')
   })
 
   it('mostra il current lap Info disponibile senza sbloccare i settori ancora in Wait', async () => {
@@ -408,20 +411,20 @@ describe('SectorDeltaHud', () => {
 
 })
 
-it.each(['compact','classic'])('renders custom independent deltas at the layout precision in %s', async variant => {
+// PIP-524: both layouts show custom deltas in thousandths with the same minus
+// sign, so a "+0.0" can no longer be green in one case and red in another.
+it.each(['compact','classic'])('renders custom independent deltas in thousandths in %s', async variant => {
  const html=await renderHud({variant, deltaReference:'custom', customSectorTimes:[31000,30000,32000]})
  expect(html).toContain('CUSTOM')
- expect(html).toContain(variant === 'compact' ? '>−0.199</small>' : '>−0.2</small>')
- expect(html).toContain(variant === 'compact' ? '>+0.802</small>' : '>+0.8</small>')
- expect(html).toContain(variant === 'compact' ? '>−1.197</small>' : '>−1.2</small>')
- if (variant === 'classic') expect(html).not.toContain('+0.802')
+ expect(html).toContain('>−0.199</small>')
+ expect(html).toContain('>+0.802</small>')
+ expect(html).toContain('>−1.197</small>')
 })
 
-it.each(['compact','classic'])('keeps exactly zero custom delta at the layout precision in %s', async variant => {
+it.each(['compact','classic'])('keeps exactly zero custom delta in thousandths in %s', async variant => {
  const exact={...sectorHud,sectors:sectorHud.sectors.map((entry,index)=>({...entry,currentMs:[32500,27000,16800][index]}))}
  const html=await renderHud({sectorHud:exact,variant,deltaReference:'custom',customSectorTimes:[32500,27000,16800]})
- expect(html).toContain(variant === 'compact' ? '>+0.000</small>' : '>+0.0</small>')
- if (variant === 'classic') expect(html).not.toContain('+0.000')
+ expect(html).toContain('>+0.000</small>')
 })
 
 describe.each(['custom', 'previousLap', 'bestSector'])('compact %s millisecond precision', deltaReference => {

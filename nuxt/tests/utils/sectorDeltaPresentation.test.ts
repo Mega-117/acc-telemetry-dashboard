@@ -21,22 +21,23 @@ function sector(overrides: Partial<SectorHudEntry> = {}): SectorHudEntry {
 }
 
 describe('sectorDeltaPresentation', () => {
-  it('normalizza sul giro precedente per compatibilità con impostazioni mancanti o invalide', () => {
-    expect(normalizeSectorDeltaReference(undefined)).toBe('previousLap')
-    expect(normalizeSectorDeltaReference('other')).toBe('previousLap')
-    expect(normalizeSectorDeltaReference('bestSector')).toBe('bestSector')
+  it('PIP-524: reads a saved previous-lap or missing reference as best sector', () => {
+    expect(normalizeSectorDeltaReference(undefined)).toBe('bestSector')
+    expect(normalizeSectorDeltaReference('previousLap')).toBe('bestSector')
+    expect(normalizeSectorDeltaReference('other')).toBe('bestSector')
+    expect(normalizeSectorDeltaReference('custom')).toBe('custom')
   })
 
-  it('espone un solo token BEST/LAST consumato da entrambi i layout', () => {
-    expect(sectorDeltaReferenceToken('previousLap')).toBe('LAST')
+  it('espone un solo token BEST/CUSTOM consumato da entrambi i layout', () => {
     expect(sectorDeltaReferenceToken('bestSector')).toBe('BEST')
+    expect(sectorDeltaReferenceToken('custom')).toBe('CUSTOM')
   })
 
-  it('preserva delta e colore esistenti con Giro precedente', () => {
-    expect(resolveSectorDeltaPresentation(sector(), 'previousLap')).toEqual({
-      deltaMs: -200,
-      color: 'green',
-    })
+  it('PIP-524: pit-lane and invalid sectors stay neutral against best and custom', () => {
+    expect(resolveSectorDeltaPresentation(sector({ currentMs: 30_300, color: 'grey' }), 'bestSector'))
+      .toEqual({ deltaMs: -200, color: 'grey' })
+    expect(resolveSectorDeltaPresentation(sector({ currentMs: 30_300, color: 'grey' }), 'custom', 31_000))
+      .toEqual({ deltaMs: -700, color: 'grey' })
   })
 
   it('calcola delta contro il best esistente e mantiene la semantica colori', () => {

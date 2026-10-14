@@ -12,8 +12,8 @@ export interface HudOverlaySettings {
   showReference?: boolean
   showBest?: boolean
   showCurrentLap?: boolean
-  deltaReference?: 'previousLap' | 'bestSector' | 'custom'
-  normalDeltaReference?: 'previousLap' | 'bestSector'
+  deltaReference?: 'bestSector' | 'custom'
+  normalDeltaReference?: 'bestSector'
   customSectorReferences?: CustomSectorReferences
   variant?: 'classic' | 'advanced' | 'race' | 'compact'
   electronicsReference?: boolean

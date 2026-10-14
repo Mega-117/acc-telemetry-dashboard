@@ -24,7 +24,8 @@ describe('spectator HUD source contract', () => {
     expect(content).toContain(':sector-hud="visibleSectorHud"')
     expect(content).toContain('valid: focusedDisplayedLapValid.value')
     expect(content).toContain('resolveLocalCompactPresentation(fastState.value)')
-    expect(content).toContain('? fastState.value.sectorHud')
+    // PIP-524: compact and classic share the fast-state sector source.
+    expect(content).toContain(': fastState.value.sectorHud)')
     expect(content).not.toContain('resolveCurrentLapValidity(')
     expect(content).not.toContain(':live-lap-valid=')
   })

@@ -32,6 +32,7 @@ describe('custom sector references', () => {
   expect(resolveSectorDeltaPresentation(sector,'custom',27100)).toEqual({deltaMs:-50,color:'green'})
   expect(resolveSectorDeltaPresentation(sector,'custom')).toEqual({deltaMs:null,color:'white'})
   expect(resolveSectorDeltaPresentation({...sector,state:'running'},'custom',27100).deltaMs).toBeNull()
-  expect(resolveSectorDeltaPresentation(sector,'previousLap')).toEqual({deltaMs:-10,color:'purple'})
+  // PIP-524: a saved previous-lap reference reads as best (no best here -> wait).
+  expect(resolveSectorDeltaPresentation(sector,'previousLap')).toEqual({deltaMs:null,color:'white'})
  })
 })

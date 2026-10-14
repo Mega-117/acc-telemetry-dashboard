@@ -76,13 +76,14 @@ describe('multisim HUD and audio isolation', () => {
     for (const count of [0, 2, 3, 4, 33]) {
       source.fields.sector_count = { value: count, availability: 'available', unit: 'count' }
       source.fields['sector.1.time'] = { value: 30000, availability: 'available', unit: 'ms' }
-      source.fields['sector.1.reference'] = { value: 31000, availability: 'available', unit: 'ms' }
+      source.fields['sector.1.best_reference'] = { value: 31000, availability: 'available', unit: 'ms' }
       source.fields.current_sector = { value: 2, availability: 'available', unit: 'index' }
       const hud = commonSectorHud(source)
       if (count === 0 || count === 33) expect(hud).toBeNull()
       else {
         expect(hud?.sectors).toHaveLength(count)
-        expect(hud?.sectors[0]).toMatchObject({ state: 'complete', deltaMs: -1000, color: 'green' })
+        // PIP-524: same rule as ACC, compared with the best: faster = purple.
+        expect(hud?.sectors[0]).toMatchObject({ state: 'complete', deltaMs: -1000, color: 'purple' })
         expect(hud?.sectors[1]).toMatchObject({ state: 'running', currentMs: null, deltaMs: null })
       }
     }
