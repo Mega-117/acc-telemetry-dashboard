@@ -4,16 +4,17 @@ import GameLogo from './GameLogo.vue'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useGameContext } from '~/composables/useGameContext'
 import { useDevToolsAccess } from '~/composables/useDevToolsAccess'
-import { GAME_OPTIONS, gameLabel } from '~/services/telemetry/gameCatalog'
+import { GAME_OPTIONS, gameLabel, simulatorConnection } from '~/services/telemetry/gameCatalog'
 import SourceChoice from './SourceChoice.vue'
 import { gameSwitchDestination } from '~/services/ui/gameSwitchDestination'
 const router = useRouter()
 const { consultedGame, selectGame } = useGameContext()
 const { canAccessDevTools } = useDevToolsAccess()
 const live = useFastStatePoller(() => typeof window === 'undefined' ? null : (window as Window & { electronAPI?: unknown }).electronAPI)
-const isConnected = computed(() => !!live.fastState.value.commonLive?.connected)
-const connectedLabel = computed(() => isConnected.value
-  ? `Collegato: ${gameLabel(live.fastState.value.commonLive!.gameId)}` : 'Nessun gioco collegato')
+// PIP-510: "ACC avviato" from the menus on, "Collegato: ACC" once data flows.
+const connection = computed(() => simulatorConnection(live.fastState.value.commonLive))
+const isConnected = computed(() => connection.value.state === 'connected')
+const connectedLabel = computed(() => connection.value.label)
 const menu = ref<HTMLDetailsElement | null>(null)
 let selectionRevision = 0
 let activeTransition: { skipTransition: () => void } | undefined
@@ -78,7 +79,7 @@ function change(gameId: string) {
         <button v-if="canAccessDevTools" type="button" @click="change('synthetic')">Simulatore di test · DEV</button>
       </div>
     </details>
-    <span class="connection" :class="{ 'is-connected': isConnected }" :title="connectedLabel" role="status">
+    <span class="connection" :class="{ 'is-connected': isConnected, 'is-started': connection.state === 'started' }" :title="connectedLabel" role="status">
       <span class="connection__dot" aria-hidden="true" />{{ connectedLabel }}
     </span>
   </div>
@@ -90,6 +91,7 @@ function change(gameId: string) {
 .connection { position: absolute; top: calc(100% + 4px); left: 0; display: flex; align-items: center; gap: 6px; padding-inline: 2px; font-size: 10px; line-height: 14px; white-space: nowrap; color: var(--rc-text-muted, #a6abb6); }
 .connection__dot { flex: 0 0 5px; height: 5px; border-radius: 50%; background: #777d87; }
 .connection.is-connected .connection__dot { background: #42cda5; }
+.connection.is-started .connection__dot { background: #e0b84a; }
 details { position: relative; }
 summary { display: flex; align-items: center; gap: 14px; box-sizing: border-box; height: 46px; padding: 5px 14px; border: 1px solid #ffffff85; background: transparent; color: #eee; cursor: pointer; font-size: 12px; }
 summary::-webkit-details-marker { display: none; }

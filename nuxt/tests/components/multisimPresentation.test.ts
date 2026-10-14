@@ -76,6 +76,12 @@ describe('common game surfaces', () => {
     expect(view.get('summary').attributes('aria-label')).toContain('EVO')
     expect(view.get('.connection').text()).toBe('Collegato: ACC')
     expect(view.get('.connection').classes()).toContain('is-connected')
+    // PIP-510: game open in the menus, no driving data yet.
+    fixture.live.value={commonLive:{connected:false,fresh:true,running:true,gameId:'acc'}}
+    await flushPromises()
+    expect(view.get('.connection').text()).toBe('ACC avviato')
+    expect(view.get('.connection').classes()).toEqual(expect.arrayContaining(['is-started']))
+    expect(view.get('.connection').classes()).not.toContain('is-connected')
     fixture.admin.value=true; await flushPromises()
     await view.findAll('.game-options button')[2]!.trigger('click')
     expect(useGameContext().consultedGame.value).toBe('synthetic')

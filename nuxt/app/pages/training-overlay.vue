@@ -24,6 +24,7 @@ import {
   type QualifyingVoiceScenario
 } from '~/config/qualifyingVoiceNotifications'
 import { useLiveStatePoller } from '~/composables/useLiveStatePoller'
+import { useSimulatorPresence } from '~/composables/useSimulatorPresence'
 import { useFastStatePoller } from '~/composables/useFastStatePoller'
 import { useTrackingRecord } from '~/composables/useTrackingRecord'
 import { useStopHold } from '~/composables/useStopHold'
@@ -356,7 +357,10 @@ const { liveLap, startLiveStatePolling, stopLiveStatePolling, resetLiveLap } =
   useLiveStatePoller(getOverlayApi, true)
 const { fastState, startFastStatePolling, stopFastStatePolling } =
   useFastStatePoller(getOverlayApi, true)
-const support = computed(() => gameUiSupport(fastState.value.commonLive?.gameId))
+// PIP-510: the game is known from the menus on (not only when driving) and the
+// layout never flickers on a silent source; see useSimulatorPresence.
+const simulatorPresence = useSimulatorPresence(computed(() => fastState.value.commonLive))
+const support = computed(() => gameUiSupport(simulatorPresence.gameId.value))
 watch(() => support.value.quickAutomations, allowed => { if (!allowed) isFuelSetupOpen.value = false }, { flush: 'sync' })
 watch(() => support.value.quickSectorReferences, allowed => { if (!allowed) isSectorReferenceSetupOpen.value = false }, { flush: 'sync' })
 
@@ -527,7 +531,7 @@ const showPressureButton = computed(() => isFullQuickPanelPreview.value || !hide
   || isDryPressureApplying.value || quickPanelPressureState.value.state === 'ready')
 // PIP-509: no supported simulator detected -> waiting placeholder (dev synthetic source excluded).
 const waitingForSimulator = computed(() => !isFullQuickPanelPreview.value
-  && fastState.value.commonLive?.gameId !== 'synthetic'
+  && simulatorPresence.gameId.value !== 'synthetic'
   && !quickPanelSupport.value.quickVoiceControls && !quickPanelSupport.value.quickAutomations)
 const hideStintWhileDriving = computed(() => !showAllQuickPanelButtons.value
   && (fastState.value.isEngineRunning
@@ -1205,7 +1209,7 @@ onBeforeUnmount(() => {
                   </header>
                   <div class="launcher-tools__actions">
                     <!-- PIP-509: no simulator yet -> a small waiting placeholder instead of partial tools. -->
-                    <p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">In attesa del simulatore</p>
+                    <p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>
                     <div v-else class="quick-panel-main" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <div class="quick-panel-categories">
                     <section v-if="!quickPanelSupport.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">

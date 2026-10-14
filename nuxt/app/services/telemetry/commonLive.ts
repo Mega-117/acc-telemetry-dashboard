@@ -8,7 +8,14 @@ export type CommonLive = {
   lifecycle?: 'off' | 'live' | 'paused' | 'replay'
   sessionKind?: string | null
   driver?: { firstName: string | null; lastName: string | null }
+  /** PIP-510: the game process is open (menus/lobby) even without driving data. */
+  running?: boolean
+  /** PIP-510: two simulators open and no choice made yet. */
+  choiceRequired?: boolean
 }
+
+/** Same constant as `RUNNING_TTL_MS` in `logger_core/simulators/live.py`. */
+export const RUNNING_TTL_MS = 5000
 
 export function readCommonLive(raw: unknown, now = Date.now()): CommonLive | null {
   if (!raw || typeof raw !== 'object') return null
@@ -39,7 +46,10 @@ export function readCommonLive(raw: unknown, now = Date.now()): CommonLive | nul
   return { gameId: frame.game_id, sessionId: frame.session_id, connected, fresh, fields, capabilities: { ...frame.capabilities } as Record<string, boolean>,
     identity: { track: label(identity.track), variant: label(identity.variant), car: label(identity.car) },
     lifecycle, sessionKind: label(frame.session_kind),
-    driver: { firstName: label(driver.first_name)?.slice(0, 60) ?? null, lastName: label(driver.last_name)?.slice(0, 60) ?? null } }
+    driver: { firstName: label(driver.first_name)?.slice(0, 60) ?? null, lastName: label(driver.last_name)?.slice(0, 60) ?? null },
+    running: frame.running === true && typeof frame.running_at_ms === 'number'
+      && now >= frame.running_at_ms - 1000 && now - frame.running_at_ms <= RUNNING_TTL_MS,
+    choiceRequired: frame.choice_required === true && fresh }
 }
 
 export function commonValue(live: CommonLive, name: string, unit: string): number | null {

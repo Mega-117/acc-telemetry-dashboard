@@ -339,6 +339,7 @@ export default defineConfig({
         'app/composables/useLiveStatePoller.ts',
         'app/composables/useSpotterVoiceSettings.ts',
         'app/composables/useFastStatePoller.ts',
+        'app/composables/useSimulatorPresence.ts',
         'app/components/layout/SourceChoice.vue',
         'app/composables/useCompletedLapHold.ts',
         'app/composables/useHudOverlayBackground.ts',
