@@ -14,9 +14,10 @@ describe('training overlay Setup pressure contract', () => {
     expect(styles).toContain('.fuel-panel:not(:has(button)) { display: none; }')
   })
   it('offers an accessible independent audio action on the existing wheel navigation', () => {
-    expect(source).toContain(':pressure="isFullQuickPanelPreview || pressureWarningsEnabled"')
+    // PIP-533: the button shows and changes the pressure alert for the session being driven.
+    expect(source).toContain(':pressure="isFullQuickPanelPreview || pressureVoiceOn"')
     expect(source).toContain('@toggle-pressure="togglePressureAudio"')
-    expect(source).toMatch(/function togglePressureAudio\(\) \{\s*if \(!canUseSpotterControls.value\) return\s*togglePressureWarnings\(\)/)
+    expect(source).toMatch(/function togglePressureAudio\(\) \{\s*if \(!canUseSpotterControls.value\) return\s*toggleVoiceForSession\(pressureVoiceOn.value, pressureWarningsEnabled.value, setPressureWarningsEnabled,/)
     expect(source).toContain(':disabled="isDryPressureApplying || quickPanelPressureState.state !== \'ready\'"')
   })
   it('presents the neutral product action without the retired popup', () => {
