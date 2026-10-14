@@ -70,7 +70,8 @@ describe('StandingsHud DOM', () => {
       backgroundOpacity: 0.5,
     }))
 
-    const headerValues = ['Practice', '01:02:03', '22/32°', 'Best', 'Last', 'Stint', 'Gap']
+    // Stint is the last column on the right (14/10).
+    const headerValues = ['Practice', '01:02:03', '22/32°', 'Best', 'Last', 'Gap', 'Stint']
     const indexes = headerValues.map(value => html.indexOf(value))
     expect(indexes.every(index => index >= 0)).toBe(true)
     expect(indexes).toEqual([...indexes].sort((left, right) => left - right))

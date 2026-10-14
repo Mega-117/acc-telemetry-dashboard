@@ -35,8 +35,8 @@ const gridTemplateColumns = computed(() => [
   `${props.model.layout.columnWidths.pit}px`,
   ...(props.model.columns.bestLap ? [`${props.model.layout.columnWidths.bestLap}px`] : []),
   ...(props.model.columns.lastLap ? [`${props.model.layout.columnWidths.lastLap}px`] : []),
-  ...(props.model.columns.stint ? [`${props.model.layout.columnWidths.stint}px`] : []),
   `${props.model.layout.columnWidths.gap}px`,
+  ...(props.model.columns.stint ? [`${props.model.layout.columnWidths.stint}px`] : []),
 ].join(' '))
 </script>
 
@@ -72,8 +72,8 @@ const gridTemplateColumns = computed(() => [
         <span></span>
         <strong v-if="model.columns.bestLap">Best</strong>
         <strong v-if="model.columns.lastLap">Last</strong>
-        <strong v-if="model.columns.stint">Stint</strong>
         <strong>Gap</strong>
+        <strong v-if="model.columns.stint">Stint</strong>
       </div>
     </header>
 
@@ -125,11 +125,12 @@ const gridTemplateColumns = computed(() => [
           class="standings-row__last"
           :class="row.lastLapPersonalBest ? `is-pb-${row.lastLapPersonalBest}` : null"
         >{{ row.lastLap }}</strong>
-        <strong v-if="model.columns.stint" class="standings-row__stint">{{ row.stintTime ?? '—' }}</strong>
         <strong
           class="standings-row__gap"
           :class="`is-${row.relativeGapTone}`"
         >{{ row.relativeGap }}</strong>
+        <!-- Stint is the last column on the right (user request 14/10). -->
+        <strong v-if="model.columns.stint" class="standings-row__stint">{{ row.stintTime ?? '—' }}</strong>
         <span
           v-if="model.columns.progress"
           class="standings-row__progress-track"
