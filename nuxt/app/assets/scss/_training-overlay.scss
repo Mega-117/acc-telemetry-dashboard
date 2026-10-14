@@ -619,7 +619,7 @@
   .launcher-tools { gap: 12px; }
   .launcher-tools__header { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; align-items: center; gap: 10px; }
   .quick-panel-header-actions { display: flex; align-items: center; gap: 6px; }
-  .launcher-tools__header :is(.quick-panel-training, .quick-panel-timer) { width: 34px; height: 34px; min-height: 34px; padding: 0; display: grid; place-items: center; }
+  .launcher-tools__header :is(.quick-panel-training, .quick-panel-timer, .quick-panel-notifications-button) { width: 34px; height: 34px; min-height: 34px; padding: 0; display: grid; place-items: center; }
   .launcher-tools__header .quick-panel-training { display: none; }
   .launcher-tools__header .quick-panel-layout { justify-self: center; opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
   &:hover .quick-panel-layout,
@@ -2552,8 +2552,13 @@ button.is-active {
     justify-content: space-between; flex: none; width: 66px; height: 84px; gap: 0;
   }
   // PIP-527: the layout switch sits in the top-right corner of Ctrl+K (on hover).
-  .launcher-tools__header .quick-panel-layout { position: absolute; top: -12px; right: -12px; justify-self: auto; }
-  .launcher-tools__header .quick-panel-layout button { width: 26px; height: 22px; }
+  // PIP-532: inside the panel; outside it the icons were clipped and not clickable.
+  // Compact (18 px tall) so it sits above the last button instead of covering it.
+  .launcher-tools__header .quick-panel-layout { position: absolute; top: 0; right: 0; justify-self: auto; z-index: 2; padding: 1px; }
+  .launcher-tools__header .quick-panel-layout button { width: 22px; height: 14px; min-height: 0; }
+  .launcher-tools__header .quick-panel-layout svg { width: 13px; height: 13px; }
+  // PIP-532: timer and the notifications button side by side under the logo.
+  .launcher-tools__header { width: auto; min-width: 66px; }
   .launcher-tools__actions { flex: 1 1 auto; }
 }
 
@@ -2610,6 +2615,34 @@ button.is-active {
   grid-template-columns: 56px minmax(0, 1fr) auto auto;
   .quick-panel-layout { grid-column: 3; grid-row: 1; justify-self: end; }
   .quick-panel-header-actions { grid-column: 4; grid-row: 1; }
+}
+
+// PIP-532: the Notifiche view takes the place of the buttons, full panel width.
+.training-overlay--launcher {
+  .quick-panel-main--behind-notifications { display: none !important; }
+  .quick-panel-notifications-button { position: relative; }
+  .quick-panel-notifications {
+    display: grid; gap: 10px; align-content: start; min-width: 0;
+    grid-column: 1 / -1; flex: 1 1 100%; order: 6;
+  }
+  .quick-panel-notifications__header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .quick-panel-notifications__close { width: 30px; height: 30px; min-height: 30px; padding: 0; display: grid; place-items: center; }
+  .quick-panel-notifications__body {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start;
+    > div { flex: 1 1 220px; min-width: 0; }
+    > div:not(:has(*)) { display: none; }
+    > .control-k-fuel-status { order: -1; }   // fuel errors are the most frequent: first
+    .control-k-request { margin-top: 0; padding: 10px; border: 1px solid #ffffff25; }
+    .fuel-status { font-size: 12px; overflow-wrap: anywhere; }
+    .fuel-status p { margin: 0; }
+    .quick-panel-pressure-status { margin: 0 0 8px; }
+    .quick-panel-pressure-status--ok { border-color: #21ff8355; color: #86efac; }
+    .quick-panel-pressure-status--error { border-color: #ff6b6b66; color: #fecaca; }
+    .quick-panel-pressure-status--progress { border-color: #ffc40060; color: #ffe08a; }
+  }
+  // Horizontal: without the buttons nothing decides the width; cards keep 240 px.
+  .overlay-content--horizontal .quick-panel-notifications { flex: 0 1 auto; width: max-content; max-width: 760px; }
+  .overlay-content--horizontal .quick-panel-notifications__body > div { flex: 0 0 240px; }
 }
 
 // PIP-526/527: two-word names ("Giro obiettivo", "Settori obiettivo") wrap

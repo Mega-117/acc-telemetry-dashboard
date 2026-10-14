@@ -22,7 +22,8 @@ describe('Ctrl+K layout order (PIP-509)', () => {
   })
   it('hides a disabled Pressioni button while driving, keeps it when usable or in the box', () => {
     expect(source).toContain('v-if="showPressureButton"')
-    expect(source).toMatch(/const showPressureButton = computed\(\(\) => isFullQuickPanelPreview\.value \|\| !hideStintWhileDriving\.value\s*\|\| isDryPressureApplying\.value \|\| quickPanelPressureState\.value\.state === 'ready'\)/)
+    // PIP-532: ...or while the lap measurement runs (its badge must be seen while driving).
+    expect(source).toMatch(/const showPressureButton = computed\(\(\) => isFullQuickPanelPreview\.value \|\| !hideStintWhileDriving\.value\s*\|\| isDryPressureApplying\.value \|\| quickPanelPressureState\.value\.state === 'ready' \|\| !!pressureBadge\.value\)/)
   })
   it('PIP-509: the horizontal Tools group reserves no column for a hidden button', () => {
     const horizontal = styles.slice(styles.indexOf('.overlay-content--horizontal'))
@@ -39,14 +40,9 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(block).toContain('.training-overlay--launcher .overlay-content--horizontal:has(.quick-panel-automations) {')
     expect(block).toMatch(/\.quick-panel-automations > \.fuel-panel \{ order: 2; width: auto; \}/)       // never the whole row
     expect(block).toMatch(/> \.quick-panel-heading \{ position: absolute; top: 0; left: 0; width: 100%;/) // Tools title over its buttons
-    // Messages, fuel status, pressure plan and friend requests share the last column.
-    for (const id of ['quick-panel-horizontal-feedback', 'quick-panel-horizontal-fuel-status', 'quick-panel-horizontal-pressure', 'quick-panel-horizontal-requests']) {
-      expect(source.indexOf(`id="${id}"`), id).toBeGreaterThan(source.indexOf('class="quick-panel-horizontal-side"'))
-    }
-    expect(source).toContain(`:status-target="isHorizontalQuickPanel ? '#quick-panel-horizontal-fuel-status' : '#control-k-fuel-status'"`)
-    expect(source).toContain('<Teleport defer to="#quick-panel-horizontal-pressure" :disabled="!isHorizontalQuickPanel">')
-    expect(source).toContain('<Teleport defer to="#quick-panel-horizontal-requests" :disabled="!isHorizontalQuickPanel">')
-    expect(source).toContain('v-show="isHorizontalQuickPanel && !waitingForSimulator" class="quick-panel-horizontal-side" :inert="isFullQuickPanelPreview || undefined"')
+    // The one-line hint stays under the row; PIP-532 moved everything else to Notifiche.
+    expect(source.indexOf('id="quick-panel-horizontal-feedback"')).toBeGreaterThan(source.indexOf('class="quick-panel-horizontal-side"'))
+    expect(source).toContain('v-show="isHorizontalQuickPanel && !waitingForSimulator && !isNotificationsOpen" class="quick-panel-horizontal-side" :inert="isFullQuickPanelPreview || undefined"')
     // The wheel follows the screen order in both layouts.
     expect(source).toContain("() => !!overlayRoot.value?.querySelector('.overlay-content--launcher .launcher-tools'),")
   })
@@ -67,7 +63,11 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     const block = styles.slice(styles.indexOf('// PIP-522: horizontal header'), styles.indexOf('// PIP-522: lap progress'))
     expect(block).toContain('.launcher-tools { display: flex; align-items: flex-start; gap: 12px; }')
     expect(block).toMatch(/flex-direction: column;[\s\S]*?width: 66px; height: 84px;/)
-    expect(block).toContain('.quick-panel-layout { position: absolute; top: -12px; right: -12px;')
+    // PIP-532: inside the panel (at -12 px the icons were clipped and not clickable).
+    expect(block).toContain('.quick-panel-layout { position: absolute; top: 0; right: 0;')
+    expect(block).toContain('.quick-panel-layout button { width: 22px; height: 14px; min-height: 0; }')
+    expect(source).toContain('<QuickPanelLayoutToggle v-show="!isNotificationsOpen"')
+    expect(block).not.toMatch(/quick-panel-layout \{ position: absolute; top: -/)
     // The logo stays: the switch no longer covers it (PIP-527).
     expect(styles).not.toContain('.quick-panel-logo { opacity: 0; }')
     // Vertical: the timer keeps the corner, the switch appears just left of it.
@@ -90,11 +90,35 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source).toContain("actionSelection.select('pitwall'); actionSelection.refresh()")
     // A value being edited consumes the wheel first; Back leaves the timer for the panel.
     expect(source).toContain('sectorReferenceSetup.value?.handleWheelCommand?.(command)')
-    expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isQuickTimerOpen\.value\) \{ leaveQuickTimer\(\); return \}/)
+    // PIP-532: the notifications view is closed first, then the timer.
+    expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isNotificationsOpen\.value\) \{ closeNotifications\(\); return \}\s*if \(isQuickTimerOpen\.value\) \{ leaveQuickTimer\(\); return \}/)
     expect(source).toContain("function openFuelSetup() { isFuelSetupOpen.value = true; void nextTick(() => actionSelection.select('fuel-plus')) }")
     expect(source).toContain("selectedWheelActionId.value = 'target-time'")
     expect(source).toContain('<span>Giro obiettivo</span>')
     expect(source).toContain('<span>Settori obiettivo</span>')
+  })
+  it('PIP-532: notifications view next to the timer replaces the buttons; pressure badge seen while driving', () => {
+    // Everything worth reading is teleported into the Notifiche view, in both layouts.
+    for (const id of ['quick-panel-notification-fuel', 'quick-panel-notification-pressure', 'quick-panel-notification-requests']) {
+      expect(source.indexOf(`id="${id}"`), id).toBeGreaterThan(source.indexOf('class="quick-panel-notifications"'))
+    }
+    expect(source).toContain('status-target="#quick-panel-notification-fuel"')
+    expect(source).toContain('<Teleport defer to="#quick-panel-notification-pressure">')
+    expect(source).toContain('<Teleport defer to="#quick-panel-notification-requests">')
+    expect(source).not.toContain('quick-panel-horizontal-fuel-status')
+    // The bell sits next to the timer and only exists while there is something to read.
+    const timer = source.indexOf('data-overlay-wheel-action="timer"')
+    const bell = source.indexOf('data-overlay-wheel-action="notifications"')
+    expect(bell).toBeGreaterThan(timer)
+    expect(source).toContain('v-if="notificationCount > 0 && !isNotificationsOpen"')
+    // Open view hides the buttons; X / wheel Back closes it; a new error opens it.
+    expect(source).toContain(":class=\"{ 'quick-panel-main--behind-notifications': isNotificationsOpen }\"")
+    expect(styles).toContain('.quick-panel-main--behind-notifications { display: none !important; }')
+    expect(source).toMatch(/function runBackAction\(\) \{\s*if \(isNotificationsOpen\.value\) \{ closeNotifications\(\); return \}/)
+    expect(source).toContain('if (errors > notificationErrorCount) openNotifications()')
+    expect(source).toContain('data-overlay-wheel-action="notifications-close" @click="closeNotifications"')
+    // The lap badge keeps the Pressioni button visible while the measurement runs.
+    expect(source).toMatch(/quickPanelPressureState\.value\.state === 'ready' \|\| !!pressureBadge\.value\)/)
   })
   it('shows a waiting placeholder instead of partial tools when no simulator is detected', () => {
     expect(source).toContain(`<p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>`)

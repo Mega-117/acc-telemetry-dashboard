@@ -38,7 +38,7 @@ import {
   resolveAutoAdvanceSeconds,
   type OverlayOriginCorner, type OverlayOriginMode,
 } from '~/composables/useOverlaySettings'
-import { CircleCheck, CircleMinus, Dumbbell, Timer, Power, Check, LoaderCircle, Target, Flag, Info } from '@lucide/vue'
+import { Bell, CircleCheck, CircleMinus, Dumbbell, Timer, Power, Check, LoaderCircle, Target, Flag, Info, X } from '@lucide/vue'
 import QuickCountdown from '~/components/overlay/QuickCountdown.vue'
 import { useQuickCountdown } from '~/composables/useQuickCountdown'
 import QuickPanelLayoutToggle from '~/components/overlay/QuickPanelLayoutToggle.vue'
@@ -182,6 +182,44 @@ const preparingReopen = ref(false)
 const isPointerOnOverlaySurface = ref(false)
 const isFuelSetupOpen = ref(false)
 const isQuickTimerOpen = ref(false)
+// PIP-532: errors, pressure plan, friend requests and fuel status live in one
+// "Notifiche" view instead of stretching the panel under the buttons. The
+// components stay mounted (running automations keep their state); only the
+// view decides what is shown.
+const isNotificationsOpen = ref(false)
+const notificationsBody = ref<HTMLElement | null>(null)
+const notificationCount = ref(0)
+let notificationErrorCount = 0
+let notificationObserver: MutationObserver | null = null
+const NOTIFICATION_ITEMS = '.fuel-status, .pressure-plan, .control-k-request, .quick-panel-pressure-status'
+const NOTIFICATION_ERRORS = '.fuel-status--error, .quick-panel-pressure-status--error, .control-k-request__error'
+function countNotifications() {
+  const body = notificationsBody.value
+  const count = body ? body.querySelectorAll(NOTIFICATION_ITEMS).length : 0
+  const errors = body ? body.querySelectorAll(NOTIFICATION_ERRORS).length : 0
+  notificationCount.value = count
+  // A new error opens the view by itself; an empty view closes.
+  if (errors > notificationErrorCount) openNotifications()
+  notificationErrorCount = errors
+  if (!count && isNotificationsOpen.value) closeNotifications()
+}
+function openNotifications() {
+  isNotificationsOpen.value = true
+  void nextTick(() => actionSelection.select('notifications-close'))
+}
+function closeNotifications() {
+  isNotificationsOpen.value = false
+  void nextTick(() => actionSelection.select('pitwall'))
+}
+watch(notificationsBody, (body) => {
+  notificationObserver?.disconnect()
+  notificationObserver = null
+  if (!body || typeof MutationObserver === 'undefined') { countNotifications(); return }
+  notificationObserver = new MutationObserver(countNotifications)
+  notificationObserver.observe(body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] })
+  countNotifications()
+}, { flush: 'post' })
+onBeforeUnmount(() => notificationObserver?.disconnect())
 const fuelStintMinutes = ref(10)
 function closeFuelSetup() { isFuelSetupOpen.value = false; void nextTick(() => actionSelection.select('fuel')) }
 // PIP-526: the minutes editor opens on "+", never on "Torna al pannello".
@@ -573,8 +611,9 @@ const isCarStoppedWithEngineOff = computed(() => !fastState.value.isEngineRunnin
 const showAllQuickPanelButtons = computed(() => isCarStoppedWithEngineOff.value
   || (showQuickPanelDevTools && previewAllQuickPanelButtons.value))
 // PIP-509: while driving a disabled Pressioni button is noise: show it only when usable.
+// PIP-532: ...and while the measurement is running, so its lap badge is seen in driving.
 const showPressureButton = computed(() => isFullQuickPanelPreview.value || !hideStintWhileDriving.value
-  || isDryPressureApplying.value || quickPanelPressureState.value.state === 'ready')
+  || isDryPressureApplying.value || quickPanelPressureState.value.state === 'ready' || !!pressureBadge.value)
 // PIP-509: no supported simulator detected -> waiting placeholder (dev synthetic source excluded).
 const waitingForSimulator = computed(() => !isFullQuickPanelPreview.value
   && simulatorPresence.gameId.value !== 'synthetic'
@@ -833,6 +872,7 @@ async function prepareOverlayReopen(revision?: number) {
 }
 
 function runBackAction() {
+  if (isNotificationsOpen.value) { closeNotifications(); return }
   if (isQuickTimerOpen.value) { leaveQuickTimer(); return }
   if (isFuelSetupOpen.value) { closeFuelSetup(); return }
   if (isSectorReferenceSetupOpen.value) { closeSectorReferenceSetup(); return }
@@ -1120,7 +1160,7 @@ watch(isShortcutStopConfirmOpen, (open) => {
 
 watch(
   [() => fastState.value.commonLive?.gameId, phase, placementActive, selectedTrainingId, selectedModeId, soundEnabled, originMode, originCorner,
-    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, isSectorReferenceSetupOpen, isFuelSetupOpen, isQuickTimerOpen, quickTimer.status, liveHudResizeKey],
+    spotterEnabled, trackVoiceReferencesEnabled, isTrainingPickerOpen, isSettingsOpen, isTargetSetupOpen, isSectorReferenceSetupOpen, isFuelSetupOpen, isQuickTimerOpen, isNotificationsOpen, notificationCount, quickTimer.status, liveHudResizeKey],
   () => { scheduleOverlaySizeSync(); actionSelection.refresh() },
   { flush: 'post' }
 )
@@ -1239,11 +1279,19 @@ onBeforeUnmount(() => {
                   @focusin="updateQuickPanelHint" @focusout="hoveredQuickPanelAction = null">
                   <header class="launcher-tools__header">
                     <img class="quick-panel-logo" src="/branding/auth/racercore-rc.svg" alt="Racer Core" width="56" height="28">
-                    <QuickPanelLayoutToggle :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
+                    <!-- PIP-532: the Notifiche view owns the corner (its X); the switch steps aside. -->
+                    <QuickPanelLayoutToggle v-show="!isNotificationsOpen" :model-value="quickPanelLayout" @update:model-value="setQuickPanelLayout" />
                     <div class="quick-panel-header-actions" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <!-- PIP-526: reachable from the wheel, last in the cycle (data-overlay-wheel-last). -->
                     <button type="button" class="launcher-tool-button quick-panel-timer" title="Timer" aria-label="Timer" data-overlay-wheel-action="timer" data-overlay-wheel-last @click="openQuickTimer">
                       <Timer :size="18" aria-hidden="true" />
+                    </button>
+                    <!-- PIP-532: next to the timer only while something is waiting to be read. -->
+                    <button v-if="notificationCount > 0 && !isNotificationsOpen" type="button" class="launcher-tool-button quick-panel-notifications-button"
+                      :title="`Notifiche (${notificationCount})`" :aria-label="`Apri notifiche (${notificationCount})`"
+                      data-overlay-wheel-action="notifications" data-overlay-wheel-last @click="openNotifications">
+                      <Bell :size="18" aria-hidden="true" />
+                      <small class="quick-action-badge" aria-hidden="true">{{ notificationCount }}</small>
                     </button>
                     <button
                       v-if="!hideStintWhileDriving"
@@ -1260,7 +1308,7 @@ onBeforeUnmount(() => {
                   <div class="launcher-tools__actions">
                     <!-- PIP-509: no simulator yet -> a small waiting placeholder instead of partial tools. -->
                     <p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>
-                    <div v-else class="quick-panel-main" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
+                    <div v-else class="quick-panel-main" :class="{ 'quick-panel-main--behind-notifications': isNotificationsOpen }" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                     <div class="quick-panel-categories">
                     <section v-if="!quickPanelSupport.quickAutomations || showAllQuickPanelButtons || !fastState.isEngineRunning" class="quick-panel-section" aria-label="Riferimenti numerici">
                       <h2 class="quick-panel-heading">Riferimenti</h2>
@@ -1290,8 +1338,7 @@ onBeforeUnmount(() => {
                       </div>
                     </section>
                     <section v-if="quickPanelSupport.quickAutomations" class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving }" aria-label="Automazioni">
-                    <div id="control-k-fuel-status" class="control-k-fuel-status" />
-                    <SetupFuelPanel :key="isFullQuickPanelPreview ? 'preview' : 'live'" :preview-expanded="isFullQuickPanelPreview" :body-target="isFullQuickPanelPreview ? '#control-k-fuel-preview' : undefined" show-heading :minutes="isFullQuickPanelPreview ? 30 : fuelStintMinutes" @update:minutes="!isFullQuickPanelPreview && (fuelStintMinutes = $event)" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" :status-target="isHorizontalQuickPanel ? '#quick-panel-horizontal-fuel-status' : '#control-k-fuel-status'" separate-view @open="openFuelSetup" />
+                    <SetupFuelPanel :key="isFullQuickPanelPreview ? 'preview' : 'live'" :preview-expanded="isFullQuickPanelPreview" :body-target="isFullQuickPanelPreview ? '#control-k-fuel-preview' : undefined" show-heading :minutes="isFullQuickPanelPreview ? 30 : fuelStintMinutes" @update:minutes="!isFullQuickPanelPreview && (fuelStintMinutes = $event)" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" status-target="#quick-panel-notification-fuel" separate-view @open="openFuelSetup" />
                     <div class="quick-panel-pair quick-panel-secondary">
                     <h2 class="quick-panel-heading">Pit</h2>
                     <PitwallOverlayButton
@@ -1324,7 +1371,7 @@ onBeforeUnmount(() => {
                     </button>
                     </div>
                     <div v-if="isFullQuickPanelPreview" id="control-k-fuel-preview" class="control-k-fuel-preview" />
-                    <Teleport defer to="#quick-panel-horizontal-requests" :disabled="!isHorizontalQuickPanel">
+                    <Teleport defer to="#quick-panel-notification-requests">
                     <ControlKFriendRequests :key="isFullQuickPanelPreview ? 'preview' : 'live'" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" />
                     </Teleport>
                     <div class="control-k-pressure-info" :class="{ 'control-k-pressure-info--preview': showQuickPanelPressurePreview }">
@@ -1335,17 +1382,17 @@ onBeforeUnmount(() => {
                   <p id="pressure-action-status" class="quick-panel-visually-hidden">
                     Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
                   </p>
-                  <p v-if="pressureOutcome" class="launcher-hint quick-panel-pressure-status" :class="`quick-panel-pressure-status--${pressureOutcome.tone}`"
-                    role="status" aria-live="polite" :title="pressureOutcome.text">
-                    {{ pressureOutcome.text }}
-                  </p>
                   <p class="quick-panel-action-hint" role="status" aria-live="polite" :title="quickPanelHint">
                     <Info :size="12" aria-hidden="true" />
                     <span>{{ quickPanelHint }}</span>
                   </p>
                   </div>
                   </Teleport>
-                  <Teleport defer to="#quick-panel-horizontal-pressure" :disabled="!isHorizontalQuickPanel">
+                  <Teleport defer to="#quick-panel-notification-pressure">
+                  <p v-if="pressureOutcome" class="launcher-hint quick-panel-pressure-status" :class="`quick-panel-pressure-status--${pressureOutcome.tone}`"
+                    role="status" aria-live="polite" :title="pressureOutcome.text">
+                    {{ pressureOutcome.text }}
+                  </p>
                   <div v-if="showQuickPanelPressurePreview" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <!-- PIP-527: one target for all tyres in the header; per tyre only the
                          measured (compensated) pressure and the clicks to apply. -->
@@ -1383,12 +1430,25 @@ onBeforeUnmount(() => {
                     />
                     </div>
                     <!-- PIP-518: horizontal layout keeps every message in one column, last on the right. -->
-                    <div v-show="isHorizontalQuickPanel && !waitingForSimulator" class="quick-panel-horizontal-side" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
+                    <div v-show="isHorizontalQuickPanel && !waitingForSimulator && !isNotificationsOpen" class="quick-panel-horizontal-side" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
                       <div id="quick-panel-horizontal-feedback" class="quick-panel-horizontal-feedback" />
-                      <div id="quick-panel-horizontal-fuel-status" class="control-k-fuel-status" />
-                      <div id="quick-panel-horizontal-pressure" class="quick-panel-horizontal-pressure" />
-                      <div id="quick-panel-horizontal-requests" class="quick-panel-horizontal-requests" />
                     </div>
+                    <!-- PIP-532: one view for everything worth reading; the buttons give way to it. -->
+                    <section v-show="isNotificationsOpen && !waitingForSimulator" class="quick-panel-notifications" aria-label="Notifiche"
+                      :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
+                      <header class="quick-panel-notifications__header">
+                        <h2 class="quick-panel-heading">Notifiche</h2>
+                        <button type="button" class="launcher-tool-button quick-panel-notifications__close" title="Chiudi notifiche" aria-label="Chiudi notifiche"
+                          data-overlay-wheel-action="notifications-close" @click="closeNotifications">
+                          <X :size="16" aria-hidden="true" />
+                        </button>
+                      </header>
+                      <div ref="notificationsBody" class="quick-panel-notifications__body">
+                        <div id="quick-panel-notification-fuel" class="control-k-fuel-status" />
+                        <div id="quick-panel-notification-pressure" class="quick-panel-notification-pressure" />
+                        <div id="quick-panel-notification-requests" class="quick-panel-notification-requests" />
+                      </div>
+                    </section>
                     <details v-if="showQuickPanelDevTools" class="quick-panel-dev" @click.capture="guardQuickPanelDevTools">
                       <summary>Strumenti sviluppo</summary>
                       <button type="button" class="launcher-tool-button" :aria-pressed="previewAllQuickPanelButtons" data-quick-panel-preview @click="toggleQuickPanelPreview">
