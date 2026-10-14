@@ -160,7 +160,8 @@ const canUseSpotterControls = computed(() => resolveLocalRuntimeCapability({
 const overlayRoot = ref<HTMLElement | null>(null)
 const actionSelection = useOverlayActionSelection(overlayRoot, () =>
   phase.value !== 'loading',
-  () => !!overlayRoot.value?.querySelector('.overlay-content--launcher:not(.overlay-content--horizontal) .launcher-tools'),
+  // PIP-518: both layouts reorder sections with CSS, so the wheel follows the screen.
+  () => !!overlayRoot.value?.querySelector('.overlay-content--launcher .launcher-tools'),
 )
 const { selectedId: selectedWheelActionId, first: selectFirstWheelAction,
   next: selectNextWheelAction, activate: activateSelectedWheelAction } = actionSelection
@@ -1241,7 +1242,7 @@ onBeforeUnmount(() => {
                     </section>
                     <section v-if="quickPanelSupport.quickAutomations" class="quick-panel-section quick-panel-automations" :class="{ 'quick-panel-show-all': showAllQuickPanelButtons, 'quick-panel-driving': hideStintWhileDriving }" aria-label="Automazioni">
                     <div id="control-k-fuel-status" class="control-k-fuel-status" />
-                    <SetupFuelPanel :key="isFullQuickPanelPreview ? 'preview' : 'live'" :preview-expanded="isFullQuickPanelPreview" :body-target="isFullQuickPanelPreview ? '#control-k-fuel-preview' : undefined" show-heading :minutes="isFullQuickPanelPreview ? 30 : fuelStintMinutes" @update:minutes="!isFullQuickPanelPreview && (fuelStintMinutes = $event)" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" status-target="#control-k-fuel-status" separate-view @open="isFuelSetupOpen = true" />
+                    <SetupFuelPanel :key="isFullQuickPanelPreview ? 'preview' : 'live'" :preview-expanded="isFullQuickPanelPreview" :body-target="isFullQuickPanelPreview ? '#control-k-fuel-preview' : undefined" show-heading :minutes="isFullQuickPanelPreview ? 30 : fuelStintMinutes" @update:minutes="!isFullQuickPanelPreview && (fuelStintMinutes = $event)" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" :status-target="isHorizontalQuickPanel ? '#quick-panel-horizontal-fuel-status' : '#control-k-fuel-status'" separate-view @open="isFuelSetupOpen = true" />
                     <div class="quick-panel-pair quick-panel-secondary">
                     <h2 class="quick-panel-heading">Tools</h2>
                     <PitwallOverlayButton
@@ -1273,7 +1274,9 @@ onBeforeUnmount(() => {
                     </button>
                     </div>
                     <div v-if="isFullQuickPanelPreview" id="control-k-fuel-preview" class="control-k-fuel-preview" />
+                    <Teleport defer to="#quick-panel-horizontal-requests" :disabled="!isHorizontalQuickPanel">
                     <ControlKFriendRequests :key="isFullQuickPanelPreview ? 'preview' : 'live'" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" />
+                    </Teleport>
                     <div class="control-k-pressure-info" :class="{ 'control-k-pressure-info--preview': showQuickPanelPressurePreview }">
                   <Teleport defer to="#quick-panel-horizontal-feedback" :disabled="!isHorizontalQuickPanel">
                   <div class="quick-panel-feedback">
@@ -1287,6 +1290,7 @@ onBeforeUnmount(() => {
                   </p>
                   </div>
                   </Teleport>
+                  <Teleport defer to="#quick-panel-horizontal-pressure" :disabled="!isHorizontalQuickPanel">
                   <div v-if="showQuickPanelPressurePreview" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
                     <div class="pressure-plan__meta">
                       <span>{{ quickPanelPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>
@@ -1304,6 +1308,7 @@ onBeforeUnmount(() => {
                     <p v-if="quickPanelPressureState.recommendation?.wheels" class="pressure-plan__note">AVG + persa = compensata · il setup cambia dei click indicati.</p>
                     <p v-else class="pressure-plan__empty">{{ dryPressurePresentation.guidance }}</p>
                   </div>
+                  </Teleport>
 
                     </div>
                     </section>
@@ -1322,7 +1327,13 @@ onBeforeUnmount(() => {
                       @toggle-target="setTargetLapVoiceEnabled(!targetLapVoiceEnabled)"
                     />
                     </div>
-                    <div v-show="isHorizontalQuickPanel" id="quick-panel-horizontal-feedback" class="quick-panel-horizontal-feedback" />
+                    <!-- PIP-518: horizontal layout keeps every message in one column, last on the right. -->
+                    <div v-show="isHorizontalQuickPanel && !waitingForSimulator" class="quick-panel-horizontal-side" :inert="isFullQuickPanelPreview || undefined" @click.capture="guardQuickPanelPreview">
+                      <div id="quick-panel-horizontal-feedback" class="quick-panel-horizontal-feedback" />
+                      <div id="quick-panel-horizontal-fuel-status" class="control-k-fuel-status" />
+                      <div id="quick-panel-horizontal-pressure" class="quick-panel-horizontal-pressure" />
+                      <div id="quick-panel-horizontal-requests" class="quick-panel-horizontal-requests" />
+                    </div>
                     <details v-if="showQuickPanelDevTools" class="quick-panel-dev" @click.capture="guardQuickPanelDevTools">
                       <summary>Strumenti sviluppo</summary>
                       <button type="button" class="launcher-tool-button" :aria-pressed="previewAllQuickPanelButtons" data-quick-panel-preview @click="toggleQuickPanelPreview">

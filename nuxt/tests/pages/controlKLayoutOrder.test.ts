@@ -30,6 +30,26 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     // The full-width status line takes the buttons' width instead of widening their columns.
     expect(styles).toMatch(/\.quick-panel-horizontal-feedback \{\s*grid-column: 1 \/ -1;[\s\S]{0,200}?width: 0;\s*min-width: 100%;/)
   })
+  it('PIP-518: horizontal ACC row is Tools, Benzina, Riferimenti, Avvisi vocali, messages column', () => {
+    const block = styles.slice(styles.indexOf('// PIP-518'), styles.indexOf('// Vertical quick panel'))
+    const order = (selector: string) => Number(block.match(new RegExp(`${selector.replace(/[[\]().>]/g, m => `\\${m}`)} \\{[^}]*?order: (\\d+)`))?.[1])
+    expect([order('.quick-panel-secondary'), order('.quick-panel-automations > .fuel-panel'),
+      order(".quick-panel-section[aria-label='Riferimenti numerici']"), order(".quick-panel-section[aria-label='Avvisi vocali']"),
+      order('.quick-panel-horizontal-side')]).toEqual([1, 2, 3, 4, 5])
+    expect(block).toContain('.training-overlay--launcher .overlay-content--horizontal:has(.quick-panel-automations) {')
+    expect(block).toMatch(/\.quick-panel-automations > \.fuel-panel \{ order: 2; width: auto; \}/)       // never the whole row
+    expect(block).toMatch(/> \.quick-panel-heading \{ position: absolute; top: 0; left: 0; width: 100%;/) // Tools title over its buttons
+    // Messages, fuel status, pressure plan and friend requests share the last column.
+    for (const id of ['quick-panel-horizontal-feedback', 'quick-panel-horizontal-fuel-status', 'quick-panel-horizontal-pressure', 'quick-panel-horizontal-requests']) {
+      expect(source.indexOf(`id="${id}"`), id).toBeGreaterThan(source.indexOf('class="quick-panel-horizontal-side"'))
+    }
+    expect(source).toContain(`:status-target="isHorizontalQuickPanel ? '#quick-panel-horizontal-fuel-status' : '#control-k-fuel-status'"`)
+    expect(source).toContain('<Teleport defer to="#quick-panel-horizontal-pressure" :disabled="!isHorizontalQuickPanel">')
+    expect(source).toContain('<Teleport defer to="#quick-panel-horizontal-requests" :disabled="!isHorizontalQuickPanel">')
+    expect(source).toContain('v-show="isHorizontalQuickPanel && !waitingForSimulator" class="quick-panel-horizontal-side" :inert="isFullQuickPanelPreview || undefined"')
+    // The wheel follows the screen order in both layouts.
+    expect(source).toContain("() => !!overlayRoot.value?.querySelector('.overlay-content--launcher .launcher-tools'),")
+  })
   it('shows a waiting placeholder instead of partial tools when no simulator is detected', () => {
     expect(source).toContain(`<p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>`)
     expect(source).toContain('<div v-else class="quick-panel-main"')

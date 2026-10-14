@@ -2501,6 +2501,53 @@ button.is-active {
   .launcher-tools:has(.control-k-fuel-status > .fuel-status):has(.control-k-pressure-info--preview, .control-k-request) .launcher-tools__header { width: calc(100% - 456px); }
 }
 
+// PIP-518: ACC horizontal panel is one row in a fixed order:
+// Tools | Benzina | Riferimenti | Avvisi vocali | messages column.
+// Hidden sections leave no space; the messages column follows the last button.
+.training-overlay--launcher .overlay-content--horizontal:has(.quick-panel-automations) {
+  .launcher-tools__header { width: auto; }
+  .launcher-tools__actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; }
+  .quick-panel-automations { display: contents; &::before { display: none; } }
+  .quick-panel-heading { text-align: center; }
+  // Tools: a row of buttons with the title over all of them (one or two buttons).
+  .quick-panel-secondary {
+    order: 1; padding: 20px 0 0; position: relative;
+    display: flex; flex-direction: row; gap: 6px;
+    &::before { display: none; }
+    > .quick-panel-heading { position: absolute; top: 0; left: 0; width: 100%; margin: 0; }
+  }
+  // The component's own width: 100% would take the whole row.
+  .quick-panel-automations > .fuel-panel { order: 2; width: auto; }
+  .quick-panel-section[aria-label='Riferimenti numerici'] { order: 3; }
+  .quick-panel-section[aria-label='Avvisi vocali'] { order: 4; }
+  .quick-panel-horizontal-side { order: 5; }
+  .quick-panel-automations > :not(.fuel-panel, .quick-panel-secondary),
+  .quick-panel-dev { order: 6; flex-basis: 100%; }
+  .quick-panel-automations > .control-k-pressure-info,
+  .quick-panel-automations > .control-k-fuel-status { display: none; }
+  // One divider before every group after Tools (Tools always holds Pitwall).
+  .quick-panel-automations > .fuel-panel,
+  .quick-panel-section[aria-label='Riferimenti numerici'],
+  .quick-panel-section[aria-label='Avvisi vocali'],
+  .quick-panel-horizontal-side {
+    position: relative; padding-left: 10px; border-left: 0;
+    &::before { content: ''; position: absolute; left: 0; top: 20px; height: 64px; width: 1px; background: #ffffff25; }
+  }
+  .quick-panel-horizontal-side {
+    display: flex; flex-direction: column; gap: 8px; width: 220px; min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .quick-panel-horizontal-feedback { width: auto; min-width: 0; padding-top: 0; border-top: 0; }
+  .quick-panel-horizontal-side .control-k-fuel-status {
+    .fuel-status { font-size: 12px; overflow-wrap: anywhere; }
+    p { margin: 0; }
+  }
+  .quick-panel-horizontal-pressure:not(:has(.pressure-plan)),
+  .quick-panel-horizontal-requests:not(:has(.control-k-request)),
+  .quick-panel-horizontal-side > .control-k-fuel-status:not(:has(.fuel-status)) { display: none; }
+  .quick-panel-horizontal-requests .control-k-request { margin-top: 0; padding: 10px; border: 1px solid #ffffff25; }
+}
+
 // Vertical quick panel: three categories sharing the existing actions.
 .training-overlay--launcher .overlay-content--launcher:has(.quick-panel-automations):not(.overlay-content--horizontal) {
   .launcher-tools__actions {
