@@ -23,8 +23,11 @@ describe('training overlay Setup pressure contract', () => {
     expect(source).toContain('Regola pressioni')
     expect(source).toContain('quickPanelPressureState.qaActive')
     expect(source).toContain('isFullQuickPanelPreview.value ? quickPanelPreview.value!.pressure : dryPressureState.value')
-    expect(source).toContain('row.totalLossPsi')
-    expect(source).toContain('row.targetPsi')
+    // PIP-527: one target in the header; per tyre measured pressure and clicks only.
+    expect(source).toContain('row.compensatedPsi')
+    expect(source).not.toContain('row.totalLossPsi')
+    expect(source).toContain('<thead><tr><th>Gomma</th><th>Misurata</th><th>Click</th></tr></thead>')
+    expect(source).toContain('row?.targetPsi')
     expect(source).toContain('pressure-plan__table')
     expect(source).not.toContain('pressurePopupVisible')
     expect(source).not.toContain('pressureNotification')

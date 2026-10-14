@@ -63,15 +63,24 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     expect(source.indexOf('watch(() => pressureOutcomeMessage(quickPanelPressureState.value)'))
       .toBeGreaterThan(source.indexOf('const quickPanelPressureState = computed('))
   })
-  it('PIP-522: the horizontal header is the first column, the layout switch replaces the logo on hover', () => {
+  it('PIP-522/527: horizontal header column; the layout switch in the top-right corner on hover', () => {
     const block = styles.slice(styles.indexOf('// PIP-522: horizontal header'), styles.indexOf('// PIP-522: lap progress'))
     expect(block).toContain('.launcher-tools { display: flex; align-items: flex-start; gap: 12px; }')
     expect(block).toMatch(/flex-direction: column;[\s\S]*?width: 66px; height: 84px;/)
-    expect(block).toContain('.quick-panel-layout { position: absolute; top: 0; left: 0;')
-    expect(block).toContain('.quick-panel-logo { opacity: 0; }')
+    expect(block).toContain('.quick-panel-layout { position: absolute; top: -12px; right: -12px;')
+    // The logo stays: the switch no longer covers it (PIP-527).
+    expect(styles).not.toContain('.quick-panel-logo { opacity: 0; }')
+    // Vertical: the timer keeps the corner, the switch appears just left of it.
+    expect(styles).toContain('.quick-panel-layout { grid-column: 3; grid-row: 1; justify-self: end; }')
     // The old header widths reserved for messages over the row no longer exist.
     expect(styles).not.toContain('width: calc(100% - 226px)')
     expect(styles).not.toContain('width: calc(100% - 456px)')
+  })
+  it('PIP-527: messages under the row, centred and never wider; vertical driving on one row', () => {
+    const block = styles.slice(styles.indexOf('// PIP-527: messages, fuel status'), styles.indexOf('// Vertical quick panel'))
+    expect(block).toMatch(/\.quick-panel-horizontal-side \{\s*order: 6; flex-basis: 100%; width: 0; min-width: 100%;/)
+    expect(block).toContain('justify-content: center')
+    expect(block).toMatch(/quick-panel-main:has\(\.quick-panel-automations\.quick-panel-driving:not\(\.quick-panel-show-all\)\) \{[\s\S]{0,120}?display: flex; flex-direction: row;/)
   })
   it('PIP-526: wheel Back everywhere, timer last in the cycle, first open on Pitwall', () => {
     const selection = readFileSync(fileURLToPath(new URL('../../app/composables/useOverlayActionSelection.ts', import.meta.url)), 'utf8')

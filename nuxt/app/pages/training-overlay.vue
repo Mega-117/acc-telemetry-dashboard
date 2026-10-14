@@ -257,6 +257,11 @@ const getOverlayApi = useOverlayRegionApi()
 const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not_fresh' })
 const dryPressurePresentation = computed(() => pressureActionPresentation(quickPanelPressureState.value))
 const pressureBadge = computed(() => pressureProgressBadge(quickPanelPressureState.value))
+// PIP-527: the target is the same for every tyre: shown once in the box header.
+const pressurePlanTargetPsi = computed<number | null>(() => {
+  const value = (quickPanelPressureState.value.preview || []).find((row: any) => Number.isFinite(row?.targetPsi))?.targetPsi
+  return Number.isFinite(value) ? value : null
+})
 // PIP-522: a success message leaves after 5 s; errors stay until the next action.
 const PRESSURE_SUCCESS_VISIBLE_MS = 5000
 const dismissedPressureOutcome = ref<string | null>(null)
@@ -1342,20 +1347,20 @@ onBeforeUnmount(() => {
                   </Teleport>
                   <Teleport defer to="#quick-panel-horizontal-pressure" :disabled="!isHorizontalQuickPanel">
                   <div v-if="showQuickPanelPressurePreview" class="pressure-plan" role="status" aria-label="Anteprima regolazione pressioni Setup">
+                    <!-- PIP-527: one target for all tyres in the header; per tyre only the
+                         measured (compensated) pressure and the clicks to apply. -->
                     <div class="pressure-plan__meta">
-                      <span>{{ quickPanelPressureState.recommendation?.completed_laps || 0 }}/3 giri</span>
-                      <span v-if="(quickPanelPressureState.recommendation?.required_valid_laps ?? 1) > 0">{{ quickPanelPressureState.recommendation?.valid_laps || 0 }}/{{ quickPanelPressureState.recommendation?.required_valid_laps ?? 1 }} valido</span>
-                      <strong>{{ quickPanelPressureState.recommendation?.compound || '—' }}</strong>
+                      <strong v-if="pressurePlanTargetPsi !== null">Obiettivo {{ pressurePlanTargetPsi.toFixed(1).replace('.', ',') }} psi</strong>
+                      <span>{{ quickPanelPressureState.recommendation?.completed_laps || 0 }}/3 giri · {{ quickPanelPressureState.recommendation?.compound || '—' }}</span>
                     </div>
                     <table v-if="quickPanelPressureState.recommendation?.wheels" class="pressure-plan__table">
-                      <thead><tr><th>Gomma</th><th>AVG</th><th>Persa</th><th>Comp.</th><th>Target</th><th>± click</th></tr></thead>
+                      <thead><tr><th>Gomma</th><th>Misurata</th><th>Click</th></tr></thead>
                       <tbody>
                         <tr v-for="row in quickPanelPressureState.preview || []" :key="row.wheel">
-                          <th>{{ row.wheel }}</th><td>{{ row.averagePsi?.toFixed?.(2) ?? '—' }}</td><td>{{ row.totalLossPsi?.toFixed?.(1) ?? '—' }}</td><td>{{ row.compensatedPsi?.toFixed?.(1) ?? '—' }}</td><td>{{ row.targetPsi?.toFixed?.(1) ?? '—' }}</td><td class="pressure-plan__clicks">{{ row.clicks > 0 ? '+' : '' }}{{ row.clicks ?? '—' }}</td>
+                          <th>{{ row.wheel }}</th><td>{{ row.compensatedPsi?.toFixed?.(1)?.replace('.', ',') ?? '—' }}</td><td class="pressure-plan__clicks">{{ row.clicks > 0 ? '+' : '' }}{{ row.clicks ?? '—' }}</td>
                         </tr>
                       </tbody>
                     </table>
-                    <p v-if="quickPanelPressureState.recommendation?.wheels" class="pressure-plan__note">AVG + persa = compensata · il setup cambia dei click indicati.</p>
                     <p v-else class="pressure-plan__empty">{{ dryPressurePresentation.guidance }}</p>
                   </div>
                   </Teleport>
@@ -1603,19 +1608,20 @@ onBeforeUnmount(() => {
   font-size: 9px;
   font-weight: 800;
 
-  strong { margin-left: auto; color: #f6fff9; }
+  strong { color: #f6fff9; font-size: 10px; }
+  span { margin-left: auto; }
 }
 
 .pressure-plan__table {
   width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1.15;
   text-align: right;
 
   th, td { padding: 3px 2px; white-space: nowrap; }
-  thead th { color: rgba(226, 238, 247, 0.5); font-size: 7px; font-weight: 850; }
+  thead th { color: rgba(226, 238, 247, 0.5); font-size: 8px; font-weight: 850; }
   thead th:first-child, tbody th { text-align: left; }
   tbody tr { border-top: 1px solid rgba(255, 255, 255, 0.06); }
   tbody th { color: #f6fff9; font-weight: 950; }

@@ -2546,16 +2546,16 @@ button.is-active {
 // own: logo over the timer; on hover the layout switch takes the logo's place.
 .training-overlay--launcher .overlay-content--horizontal:has(.quick-panel-automations) {
   .launcher-tools { display: flex; align-items: flex-start; gap: 12px; }
+  .launcher-tools { position: relative; }
   .launcher-tools__header {
-    position: relative; display: flex; flex-direction: column; align-items: center;
+    display: flex; flex-direction: column; align-items: center;
     justify-content: space-between; flex: none; width: 66px; height: 84px; gap: 0;
   }
-  .launcher-tools__header .quick-panel-logo { transition: opacity 120ms ease; }
-  .launcher-tools__header .quick-panel-layout { position: absolute; top: 0; left: 0; justify-self: auto; }
+  // PIP-527: the layout switch sits in the top-right corner of Ctrl+K (on hover).
+  .launcher-tools__header .quick-panel-layout { position: absolute; top: -12px; right: -12px; justify-self: auto; }
+  .launcher-tools__header .quick-panel-layout button { width: 26px; height: 22px; }
   .launcher-tools__actions { flex: 1 1 auto; }
 }
-.training-overlay--launcher:hover .overlay-content--horizontal .launcher-tools__header .quick-panel-logo,
-.overlay-pointer-surface-hovered .training-overlay--launcher .overlay-content--horizontal .launcher-tools__header .quick-panel-logo { opacity: 0; }
 
 // PIP-522: lap progress on the Pressioni button and command outcomes as messages.
 .training-overlay--launcher {
@@ -2571,6 +2571,51 @@ button.is-active {
 .quick-panel-visually-hidden {
   position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+// PIP-527: messages, fuel status, pressure plan and friend requests go under the
+// button row, centred, never wider than it (the row decides the panel width).
+.training-overlay--launcher .overlay-content--horizontal:has(.quick-panel-automations) {
+  .quick-panel-horizontal-side {
+    order: 6; flex-basis: 100%; width: 0; min-width: 100%; padding-left: 0;
+    flex-direction: row; flex-wrap: wrap; justify-content: center; align-items: flex-start;
+    &::before { display: none; }
+  }
+  .quick-panel-horizontal-feedback { flex-basis: 100%; }
+  .quick-panel-horizontal-feedback .quick-panel-action-hint { justify-content: center; }
+  .quick-panel-horizontal-pressure,
+  .quick-panel-horizontal-requests,
+  .quick-panel-horizontal-side > .control-k-fuel-status { width: 240px; }
+  .quick-panel-dev { order: 7; }
+}
+
+// PIP-527: vertical layout while driving: Pitwall and the four voice alerts on one row.
+.training-overlay--launcher .overlay-content--launcher:not(.overlay-content--horizontal)
+  .quick-panel-main:has(.quick-panel-automations.quick-panel-driving:not(.quick-panel-show-all)) {
+  // Five buttons must fit the fixed vertical width: 56 px each, 5 px apart.
+  // The main box is normally transparent in the 4-column grid: span it all.
+  grid-column: 1 / -1;
+  display: flex; flex-direction: row; align-items: flex-end; gap: 5px; min-width: 0;
+  .quick-panel-secondary {
+    display: flex; flex-direction: column; align-items: center; flex: none; width: 56px; padding: 12px 0 0; gap: 8px;
+  }
+  .quick-panel-section[aria-label='Avvisi vocali'] { flex: none; padding-top: 0; border-top: 0; }
+  .quick-panel-voice-grid { gap: 5px; justify-content: flex-start; }
+  .quick-panel-voice-grid > button,
+  .quick-panel-secondary > .launcher-tool-button { width: 56px; min-width: 56px; flex: none; }
+}
+// PIP-527: vertical header: logo on the left, timer, then the switch in the corner.
+.training-overlay--launcher .overlay-content--launcher:not(.overlay-content--horizontal) .launcher-tools__header {
+  // The timer keeps the corner; the switch appears just left of it on hover.
+  grid-template-columns: 56px minmax(0, 1fr) auto auto;
+  .quick-panel-layout { grid-column: 3; grid-row: 1; justify-self: end; }
+  .quick-panel-header-actions { grid-column: 4; grid-row: 1; }
+}
+
+// PIP-526/527: two-word names ("Giro obiettivo", "Settori obiettivo") wrap
+// inside the 64 px square instead of being clipped.
+.training-overlay--launcher .quick-reference > .launcher-tool-button span {
+  white-space: normal; text-align: center; line-height: 1.1; overflow-wrap: normal;
 }
 
 // Vertical quick panel: three categories sharing the existing actions.
