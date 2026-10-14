@@ -65,6 +65,27 @@ function unavailableGuidance(input: PressureActionInput): string {
   return `Completa ${required} giri, di cui almeno ${requiredValid} valido (${completed}/${required}, validi ${valid}/${requiredValid}).`
 }
 
+/**
+ * PIP-522: the lap progress lives on the Pressioni button (`1/3`) instead of a
+ * permanent status line. Only while laps are still missing; null otherwise.
+ */
+export function pressureProgressBadge(input: PressureActionInput | null | undefined): string | null {
+  const recommendation = input?.recommendation
+  if (!recommendation || input?.state === 'ready' || input?.state === 'running' || input?.consumed === true) return null
+  const completed = finiteCount(recommendation.completed_laps, 0)
+  const required = finiteCount(recommendation.required_completed_laps, 3)
+  return required > 0 && completed < required ? `${completed}/${required}` : null
+}
+
+/** PIP-522: outcomes of a pressure command are messages; idle states are not. */
+export function pressureOutcomeMessage(input: PressureActionInput | null | undefined): { text: string; tone: 'ok' | 'error' | 'progress' } | null {
+  const presentation = pressureActionPresentation(input)
+  if (input?.state === 'running') return { text: presentation.guidance, tone: 'progress' }
+  if (input?.state === 'completed') return { text: presentation.guidance, tone: 'ok' }
+  if (input?.state === 'blocked' || (input?.state === 'ready' && input?.actionReasonCode)) return { text: presentation.guidance, tone: 'error' }
+  return null
+}
+
 export function pressureActionPresentation(input: PressureActionInput | null | undefined): PressureActionPresentation {
   const state = input?.state || 'unavailable'
 

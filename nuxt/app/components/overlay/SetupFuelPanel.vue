@@ -9,6 +9,8 @@ const applicationSucceeded = ref(false)
 const state = ref<any>(null)
 const previewPending = ref(false)
 let timer: ReturnType<typeof setTimeout> | undefined
+let successTimer: ReturnType<typeof setTimeout> | undefined
+const SUCCESS_VISIBLE_MS = 5000
 let generation = 0
 let disposed = false
 const plan = computed(() => state.value?.plan)
@@ -88,6 +90,11 @@ async function applyPlan(mode: 'auto' | 'minutes', expected: any) {
   const result = await props.api.trainingOverlayApplySetupFuel({ mode, minutes: Number(minutes.value), contextKey: expected.contextKey, totalLitres: expected.totalLitres })
   applicationSucceeded.value = result?.ok === true
   error.value = result?.reason || 'Esito non disponibile.'
+  // PIP-522: a success message leaves after 5 s; a failure stays until the next action.
+  clearTimeout(successTimer)
+  if (applicationSucceeded.value) successTimer = setTimeout(() => {
+    if (applicationSucceeded.value && !pending.value && !disposed) error.value = ''
+  }, SUCCESS_VISIBLE_MS)
 }
 function finishApplication() {
   pending.value = false
@@ -120,7 +127,7 @@ async function apply() {
   catch { error.value = 'Applicazione interrotta: controlla il carburante nel setup.' }
   finally { finishApplication() }
 }
-onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clearTimeout(sessionTimer); void props.api?.trainingOverlayKeyboardEditing?.(false) })
+onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clearTimeout(successTimer); clearTimeout(sessionTimer); void props.api?.trainingOverlayKeyboardEditing?.(false) })
 </script>
 
 <template>
@@ -128,7 +135,7 @@ onBeforeUnmount(() => { disposed = true; generation++; clearTimeout(timer); clea
     <h2 v-if="showHeading && !editorOnly" class="quick-panel-heading">Benzina</h2>
     <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel-session" aria-label="Carburante intera sessione" :aria-busy="pending" :disabled="pending || !sessionAllowsAuto" :title="sessionAllowsAuto ? undefined : sessionHint" @click="applySession"><LoaderCircle v-if="pending" class="fuel-pending-spinner" :size="16" aria-hidden="true" /><Fuel v-else :size="22" aria-hidden="true" /><span>Sessione</span></button>
     <Teleport defer :to="statusTarget || 'body'" :disabled="!statusTarget">
-      <div v-if="!open && (pending || error)" class="fuel-status" role="status" aria-live="polite"><strong>Stato carburante</strong><p>{{ statusMessage }}</p></div>
+      <div v-if="!open && (pending || error)" class="fuel-status" role="status" aria-live="polite"><strong>{{ pending ? 'Carburante' : applicationSucceeded ? 'Carburante impostato' : 'Problema carburante' }}</strong><p>{{ statusMessage }}</p></div>
     </Teleport>
     <button v-if="!editorOnly" class="fuel-open" type="button" data-overlay-wheel-action="fuel" aria-label="Carburante durata stint" :aria-expanded="open" :disabled="pending" @click="separateView ? emit('open') : open = !open"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8 3 5l3-2 2 3h10a2 2 0 0 1 2 2v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V10a2 2 0 0 1 1-2Z" /><path d="M10 6V3h7v3M8 11l8 6m0-6-8 6" /></svg><span>A minuti</span></button>
     <button v-if="editorOnly" type="button" class="utility-action overlay-menu-back" data-overlay-wheel-action="fuel-back" :disabled="pending" @click="emit('cancel')">← Torna al pannello</button>

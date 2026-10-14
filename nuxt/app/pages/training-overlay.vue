@@ -61,7 +61,7 @@ import {
   qaBotPresentation,
   type QaBotSnapshot,
 } from '~/services/overlay/qaBotPresentation'
-import { pressureActionPresentation } from '~/services/overlay/pressureActionPresentation'
+import { pressureActionPresentation, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
 import { usePublicPath } from '~/composables/usePublicPath'
 import { useDevTestMode } from '~/composables/useDevTestMode'
 import { useFirebaseAuth } from '~/composables/useFirebaseAuth'
@@ -166,7 +166,13 @@ const actionSelection = useOverlayActionSelection(overlayRoot, () =>
 const { selectedId: selectedWheelActionId, first: selectFirstWheelAction,
   next: selectNextWheelAction, activate: activateSelectedWheelAction } = actionSelection
 const hoveredQuickPanelAction = ref<string | null>(null)
-const quickPanelHint = computed(() => quickPanelActionHint(hoveredQuickPanelAction.value ?? selectedWheelActionId.value))
+// PIP-522: one context line. A selected Pressioni that cannot run says why
+// instead of what it does; every other action keeps its description.
+const quickPanelHint = computed(() => {
+  const actionId = hoveredQuickPanelAction.value ?? selectedWheelActionId.value
+  if (actionId === 'pressure' && quickPanelPressureState.value.state !== 'ready') return `Pressioni: ${dryPressurePresentation.value.guidance}`
+  return quickPanelActionHint(actionId)
+})
 function updateQuickPanelHint(event: Event) {
   const button = event.target instanceof Element ? event.target.closest<HTMLButtonElement>('button') : null
   hoveredQuickPanelAction.value = button?.dataset.overlayWheelAction ?? button?.getAttribute('aria-label') ?? null
@@ -248,6 +254,15 @@ const getOverlayApi = useOverlayRegionApi()
 // only presents the versioned plan and never computes pressure corrections.
 const dryPressureState = ref<any>({ state: 'unavailable', reason: 'telemetry_not_fresh' })
 const dryPressurePresentation = computed(() => pressureActionPresentation(quickPanelPressureState.value))
+const pressureBadge = computed(() => pressureProgressBadge(quickPanelPressureState.value))
+// PIP-522: a success message leaves after 5 s; errors stay until the next action.
+const PRESSURE_SUCCESS_VISIBLE_MS = 5000
+const dismissedPressureOutcome = ref<string | null>(null)
+const pressureOutcome = computed(() => {
+  const outcome = pressureOutcomeMessage(quickPanelPressureState.value)
+  return outcome && outcome.text !== dismissedPressureOutcome.value ? outcome : null
+})
+
 const isDryPressurePreviewOpen = ref(false)
 const isDryPressureApplying = ref(false)
 const dryPressureBridgeStatus = ref('Nessuna raccomandazione TEST attiva.')
@@ -308,6 +323,7 @@ async function refreshDryPressureState() {
 async function applyDryPressure() {
   if (isDryPressureApplying.value) return
   isDryPressureApplying.value = true
+  dismissedPressureOutcome.value = null
   isDryPressurePreviewOpen.value = true
   await nextTick()
   try {
@@ -499,6 +515,17 @@ const quickPanelPressureState = computed(() => isFullQuickPanelPreview.value ? q
 const showQuickPanelPressurePreview = computed(() => !quickPanelPressureState.value.consumed
   && !!quickPanelPressureState.value.recommendation?.wheels
   && (isFullQuickPanelPreview.value || isCarStoppedWithEngineOff.value))
+let pressureOutcomeTimer: ReturnType<typeof setTimeout> | null = null
+watch(() => pressureOutcomeMessage(quickPanelPressureState.value), (outcome) => {
+  if (pressureOutcomeTimer) clearTimeout(pressureOutcomeTimer)
+  pressureOutcomeTimer = null
+  if (outcome?.tone !== 'ok' || outcome.text === dismissedPressureOutcome.value) return
+  pressureOutcomeTimer = setTimeout(() => {
+    dismissedPressureOutcome.value = outcome.text
+    pressureOutcomeTimer = null
+    scheduleOverlaySizeSync()
+  }, PRESSURE_SUCCESS_VISIBLE_MS)
+}, { deep: true })
 const quickPanelSupport = computed(() => isFullQuickPanelPreview.value ? gameUiSupport('acc') : support.value)
 let blockPreviewAction: ((event: Event, preview: boolean) => void) | undefined
 async function toggleQuickPanelPreview() {
@@ -1244,7 +1271,7 @@ onBeforeUnmount(() => {
                     <div id="control-k-fuel-status" class="control-k-fuel-status" />
                     <SetupFuelPanel :key="isFullQuickPanelPreview ? 'preview' : 'live'" :preview-expanded="isFullQuickPanelPreview" :body-target="isFullQuickPanelPreview ? '#control-k-fuel-preview' : undefined" show-heading :minutes="isFullQuickPanelPreview ? 30 : fuelStintMinutes" @update:minutes="!isFullQuickPanelPreview && (fuelStintMinutes = $event)" :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()" :status-target="isHorizontalQuickPanel ? '#quick-panel-horizontal-fuel-status' : '#control-k-fuel-status'" separate-view @open="isFuelSetupOpen = true" />
                     <div class="quick-panel-pair quick-panel-secondary">
-                    <h2 class="quick-panel-heading">Tools</h2>
+                    <h2 class="quick-panel-heading">Pit</h2>
                     <PitwallOverlayButton
                       :key="isFullQuickPanelPreview ? 'preview' : 'live'"
                       :api="isFullQuickPanelPreview ? quickPanelPreview!.api : getOverlayApi()"
@@ -1271,6 +1298,7 @@ onBeforeUnmount(() => {
                       <CircleCheck v-else-if="quickPanelPressureState.state === 'ready'" class="quick-state-icon" :size="16" aria-hidden="true" />
                       <CircleMinus v-else class="quick-state-icon" :size="16" aria-hidden="true" />
                       <span>Pressioni</span>
+                      <small v-if="pressureBadge" class="quick-action-badge" aria-hidden="true">{{ pressureBadge }}</small>
                     </button>
                     </div>
                     <div v-if="isFullQuickPanelPreview" id="control-k-fuel-preview" class="control-k-fuel-preview" />
@@ -1280,9 +1308,14 @@ onBeforeUnmount(() => {
                     <div class="control-k-pressure-info" :class="{ 'control-k-pressure-info--preview': showQuickPanelPressurePreview }">
                   <Teleport defer to="#quick-panel-horizontal-feedback" :disabled="!isHorizontalQuickPanel">
                   <div class="quick-panel-feedback">
-                  <p id="pressure-action-status" class="launcher-hint quick-panel-pressure-status" role="status" aria-live="polite"
-                    :title="`Pressioni: ${dryPressurePresentation.stateLabel} · ${dryPressurePresentation.guidance}`">
+                  <!-- PIP-522: the permanent pressure line became the button badge and
+                       the context line; only command outcomes are shown as messages. -->
+                  <p id="pressure-action-status" class="quick-panel-visually-hidden">
                     Pressioni: {{ dryPressurePresentation.stateLabel }} · {{ dryPressurePresentation.guidance }}
+                  </p>
+                  <p v-if="pressureOutcome" class="launcher-hint quick-panel-pressure-status" :class="`quick-panel-pressure-status--${pressureOutcome.tone}`"
+                    role="status" aria-live="polite" :title="pressureOutcome.text">
+                    {{ pressureOutcome.text }}
                   </p>
                   <p class="quick-panel-action-hint" role="status" aria-live="polite" :title="quickPanelHint">
                     <Info :size="12" aria-hidden="true" />

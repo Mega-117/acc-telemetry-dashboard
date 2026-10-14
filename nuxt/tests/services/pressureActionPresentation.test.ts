@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pressureActionPresentation } from '~/services/overlay/pressureActionPresentation'
+import { pressureActionPresentation, pressureOutcomeMessage, pressureProgressBadge } from '~/services/overlay/pressureActionPresentation'
 
 describe('pressureActionPresentation', () => {
   it('keeps the actual reason visible for recoverable and uncertain failures', () => {
@@ -156,5 +156,24 @@ describe('pressureActionPresentation', () => {
     ['blocked', 'Bloccato', 'Regolazione non disponibile: controlla lo stato di ACC.'],
   ])('presenta lo stato %s senza invito al clic', (state, stateLabel, guidance) => {
     expect(pressureActionPresentation({ state })).toMatchObject({ stateLabel, guidance })
+  })
+})
+
+describe('PIP-522 badge and outcome messages', () => {
+  it('shows lap progress on the button only while laps are missing', () => {
+    expect(pressureProgressBadge({ state: 'unavailable', recommendation: { completed_laps: 1, required_completed_laps: 3 } })).toBe('1/3')
+    expect(pressureProgressBadge({ state: 'unavailable', recommendation: { completed_laps: 3, required_completed_laps: 3 } })).toBeNull()
+    expect(pressureProgressBadge({ state: 'ready', recommendation: { completed_laps: 0 } })).toBeNull()
+    expect(pressureProgressBadge({ state: 'unavailable', consumed: true, recommendation: { completed_laps: 0 } })).toBeNull()
+    expect(pressureProgressBadge({ state: 'unavailable' })).toBeNull()
+  })
+  it('turns only command outcomes into messages', () => {
+    expect(pressureOutcomeMessage({ state: 'unavailable', reason: 'waiting_for_valid_lap' })).toBeNull()
+    expect(pressureOutcomeMessage({ state: 'ready' })).toBeNull()
+    expect(pressureOutcomeMessage({ state: 'unavailable', reason: 'pit_pause_required', actionReasonCode: 'pit_pause_required' })).toBeNull()
+    expect(pressureOutcomeMessage({ state: 'completed' })).toEqual({ text: 'Pressioni regolate.', tone: 'ok' })
+    expect(pressureOutcomeMessage({ state: 'running' })?.tone).toBe('progress')
+    expect(pressureOutcomeMessage({ state: 'blocked', reason: 'Setup non trovato.' })).toEqual({ text: 'Setup non trovato.', tone: 'error' })
+    expect(pressureOutcomeMessage({ state: 'ready', actionReasonCode: 'pause_menu_required' })?.tone).toBe('error')
   })
 })

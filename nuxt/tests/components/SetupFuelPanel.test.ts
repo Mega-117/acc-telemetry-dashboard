@@ -200,3 +200,23 @@ it('dedicated editor previews immediately, retains supplied minutes and offers b
  button('fuel-plus').click();await flush();expect(update).toHaveBeenCalledWith(28)
  button('fuel-back').click();expect(cancel).toHaveBeenCalledOnce()
 })
+describe('PIP-522 fuel outcome messages',()=>{
+ async function mountWithStatus(result:any){
+  const api={trainingOverlayPreviewSetupFuel:vi.fn(async()=>({available:true,sessionType:2,plan:{ok:true,totalLitres:25,contextKey:'session',durationMs:600000,consumption:2.9,referenceLapMs:102000,notes:[]}})),trainingOverlayApplySetupFuel:vi.fn(async()=>result),trainingOverlayKeyboardEditing:vi.fn(async()=>true)}
+  const target=document.createElement('div');target.id='fuel-status-target';document.body.append(target)
+  const el=document.createElement('div');document.body.append(el);app=createApp(SetupFuelPanel,{api,statusTarget:'#fuel-status-target'});app.mount(el);await flush()
+  button('fuel-session').click();await flush();await flush();return target
+ }
+ it('a success message leaves after 5 s',async()=>{
+  vi.useFakeTimers({toFake:['setTimeout','clearTimeout']})
+  const target=await mountWithStatus({ok:true,reason:'25 L verificati'})
+  expect(target.textContent).toContain('Carburante impostato');expect(target.textContent).toContain('25 L verificati')
+  vi.advanceTimersByTime(5000);await nextTick();expect(target.querySelector('.fuel-status')).toBeNull()
+ })
+ it('a failure stays until the next action',async()=>{
+  vi.useFakeTimers({toFake:['setTimeout','clearTimeout']})
+  const target=await mountWithStatus({ok:false,reason:'Ferma la vettura, poi riprova.'})
+  vi.advanceTimersByTime(10000);await nextTick()
+  expect(target.textContent).toContain('Problema carburante');expect(target.textContent).toContain('Ferma la vettura')
+ })
+})

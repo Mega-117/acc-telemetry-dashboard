@@ -50,6 +50,29 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     // The wheel follows the screen order in both layouts.
     expect(source).toContain("() => !!overlayRoot.value?.querySelector('.overlay-content--launcher .launcher-tools'),")
   })
+  it('PIP-522: Pit title, lap badge, one context line and outcomes only as messages', () => {
+    expect(source).toContain('<h2 class="quick-panel-heading">Pit</h2>')
+    expect(source).not.toContain('<h2 class="quick-panel-heading">Tools</h2>')
+    expect(source).toContain('<small v-if="pressureBadge" class="quick-action-badge" aria-hidden="true">{{ pressureBadge }}</small>')
+    // The permanent pressure line is gone from view; screen readers keep it.
+    expect(source).toContain('<p id="pressure-action-status" class="quick-panel-visually-hidden">')
+    expect(source).toMatch(/<p v-if="pressureOutcome" class="launcher-hint quick-panel-pressure-status"/)
+    expect(source).toContain("if (actionId === 'pressure' && quickPanelPressureState.value.state !== 'ready') return `Pressioni: ${dryPressurePresentation.value.guidance}`")
+    expect(source).toContain('const PRESSURE_SUCCESS_VISIBLE_MS = 5000')
+    // The watcher reads the pressure state at setup: it must come after its declaration.
+    expect(source.indexOf('watch(() => pressureOutcomeMessage(quickPanelPressureState.value)'))
+      .toBeGreaterThan(source.indexOf('const quickPanelPressureState = computed('))
+  })
+  it('PIP-522: the horizontal header is the first column, the layout switch replaces the logo on hover', () => {
+    const block = styles.slice(styles.indexOf('// PIP-522: horizontal header'), styles.indexOf('// PIP-522: lap progress'))
+    expect(block).toContain('.launcher-tools { display: flex; align-items: flex-start; gap: 12px; }')
+    expect(block).toMatch(/flex-direction: column;[\s\S]*?width: 66px; height: 84px;/)
+    expect(block).toContain('.quick-panel-layout { position: absolute; top: 0; left: 0;')
+    expect(block).toContain('.quick-panel-logo { opacity: 0; }')
+    // The old header widths reserved for messages over the row no longer exist.
+    expect(styles).not.toContain('width: calc(100% - 226px)')
+    expect(styles).not.toContain('width: calc(100% - 456px)')
+  })
   it('shows a waiting placeholder instead of partial tools when no simulator is detected', () => {
     expect(source).toContain(`<p v-if="waitingForSimulator" class="quick-panel-waiting" role="status">{{ simulatorPresence.choiceRequired.value ? 'Scegli il gioco nella webapp' : 'In attesa del simulatore' }}</p>`)
     expect(source).toContain('<div v-else class="quick-panel-main"')
