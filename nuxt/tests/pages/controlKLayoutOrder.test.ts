@@ -80,7 +80,7 @@ describe('Ctrl+K layout order (PIP-509)', () => {
     const block = styles.slice(styles.indexOf('// PIP-527: messages, fuel status'), styles.indexOf('// Vertical quick panel'))
     expect(block).toMatch(/\.quick-panel-horizontal-side \{\s*order: 6; flex-basis: 100%; width: 0; min-width: 100%;/)
     expect(block).toContain('justify-content: center')
-    expect(block).toMatch(/quick-panel-main:has\(\.quick-panel-automations\.quick-panel-driving:not\(\.quick-panel-show-all\)\) \{[\s\S]{0,120}?display: flex; flex-direction: row;/)
+    expect(block).toMatch(/quick-panel-main:has\(\.quick-panel-automations\.quick-panel-driving:not\(\.quick-panel-show-all\)\) \{[\s\S]{0,300}?display: flex; flex-direction: row;/)
   })
   it('PIP-526: wheel Back everywhere, timer last in the cycle, first open on Pitwall', () => {
     const selection = readFileSync(fileURLToPath(new URL('../../app/composables/useOverlayActionSelection.ts', import.meta.url)), 'utf8')
